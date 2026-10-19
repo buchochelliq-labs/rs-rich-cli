@@ -1,8 +1,9 @@
 # scope-tui rebuilt on intuiTUIve (examples/scope.rs): the test signal
 # moving in the oscilloscope and the vectorscope, then held still and
 # paused for the screenshots, so they are the same on every run, in each
-# of the three scopes. Paused, the scope still counts frames, as
-# scope-tui's does, so the frame rate is masked.
+# of the three scopes, and the keys of the spectroscope (each scope's
+# own are listed only while it shows). Paused, the scope still counts
+# frames, as scope-tui's does, so the frame rate is masked.
 Set Title "scope · scope-tui on intuiTUIve"
 Set Size 110x26
 Set TypingDelay 40ms
@@ -42,7 +43,9 @@ Wait /spectro::scope-tui/
 Sleep 300ms
 Screenshot spectroscope
 Type "?"
-Wait /Keys/
+Wait /Help/
+Down 8
+Wait /Hann window/
 Sleep 300ms
 Screenshot keys
 Escape

@@ -48,8 +48,9 @@ pub fn keys(names: &str) -> Vec<Key> {
 }
 
 /// Keys from names separated by spaces or commas, or the first name that
-/// does not parse. A name in quotes (`"#"`, `','`, `"ctrl+,"`) is taken as
-/// it is, which is how to write the comma key, or the hash key in a file
+/// does not parse. The comma key is named `comma` (`ctrl+comma`). A name in
+/// quotes (`"#"`, `','`, `"ctrl+,"`) is taken as it is, which is the other
+/// way to write the comma key, and how to write the hash key in a file
 /// where `#` starts a comment. Text that holds only separators (a bare `,`)
 /// is an error, not "no keys"; text with nothing in it is no keys.
 ///
@@ -57,6 +58,7 @@ pub fn keys(names: &str) -> Vec<Key> {
 /// use rich_interact::keymap::try_keys;
 /// use rich_interact::Key;
 ///
+/// assert_eq!(try_keys("comma ctrl+n").unwrap(), [Key::char(','), Key::ctrl('n')]);
 /// assert_eq!(try_keys("\",\" ctrl+n").unwrap(), [Key::char(','), Key::ctrl('n')]);
 /// assert_eq!(try_keys("").unwrap(), []);
 /// assert!(try_keys(",").is_err());
@@ -450,7 +452,7 @@ impl Overrides {
             }
             let keys = try_keys(names.as_ref()).map_err(|name| {
                 if name.contains([',', '"', '\'']) {
-                    format!("{id}: no key in {name:?} (quote a comma key: \",\")")
+                    format!("{id}: no key in {name:?} (the comma key is `comma`, or quoted: \",\")")
                 } else {
                     format!("{id}: unknown key {name:?}")
                 }

@@ -136,34 +136,11 @@ pub fn to_rich_color(color: RColor) -> Color {
     }
 }
 
-/// The console style of a colour named as ratatui reads one, or `None` when
-/// ratatui would not read it: everything [`Color::from_str`](RColor) accepts.
-///
-/// That is the 16 names in any case and spacing (`DarkGray`, `light red`,
-/// `bright_red`, `grey`, `silver`), `reset`, a `#rrggbb` hex triplet and an
-/// indexed colour's number (`208`). The result is rich's canonical name for
-/// the same terminal colour (see [`to_rich_color`]), ready for a style string
-/// or a markup tag: ratatui's `Gray` is ANSI white (`white`), its `DarkGray`
-/// bright black (`bright_black`) and its `White` bright white; `reset` is
-/// rich's `default` and `208` is `color(208)`. A command-line option that
-/// takes ratatui colour names (`--axis-color DarkGray`) maps straight onto a
-/// rich style with it.
-///
-/// ```
-/// use rich_ratatui::style_from_color_name;
-///
-/// assert_eq!(style_from_color_name("DarkGray").as_deref(), Some("bright_black"));
-/// assert_eq!(style_from_color_name("light red").as_deref(), Some("bright_red"));
-/// assert_eq!(style_from_color_name("#FF8800").as_deref(), Some("#ff8800"));
-/// assert_eq!(style_from_color_name("208").as_deref(), Some("color(208)"));
-/// assert_eq!(style_from_color_name("reset").as_deref(), Some("default"));
-/// assert_eq!(style_from_color_name("chartreuse"), None);
-/// ```
-pub fn style_from_color_name(name: &str) -> Option<String> {
-    name.parse::<RColor>()
-        .ok()
-        .map(|colour| to_rich_color(colour).name)
-}
+/// The console style of a colour named as ratatui reads one: rs-rich-ext's
+/// [`rich_ext::palette::style_from_color_name`], which needs no ratatui,
+/// re-exported here. A test checks it against ratatui's own
+/// `Color::from_str` and [`to_rich_color`].
+pub use rich_ext::palette::style_from_color_name;
 
 /// Map a rich style to a ratatui style.
 ///
@@ -337,5 +314,63 @@ mod tests {
         // The lossy ones: dropped, not mistranslated.
         let lossy = Style::parse("underline2 frame encircle overline").unwrap();
         assert_eq!(to_ratatui_style(&lossy), RStyle::default());
+    }
+
+    #[test]
+    fn the_re_exported_parser_agrees_with_ratatuis() {
+        let names = [
+            "black",
+            "Red",
+            "GREEN",
+            "yellow",
+            "blue",
+            "magenta",
+            "cyan",
+            "gray",
+            "grey",
+            "silver",
+            "dark gray",
+            "DarkGray",
+            "dark-grey",
+            "light_red",
+            "LightGreen",
+            "bright yellow",
+            "BrightBlue",
+            "light magenta",
+            "lightcyan",
+            "white",
+            "light white",
+            "bright white",
+            "light gray",
+            "bright black",
+            "light black",
+            "reset",
+            "Reset",
+            "0",
+            "15",
+            "16",
+            "208",
+            "255",
+            "256",
+            "+3",
+            "-1",
+            "#000000",
+            "#FF8800",
+            "#ff8800",
+            "#12345",
+            "#1234567",
+            "#gggggg",
+            "ff8800",
+            "",
+            " ",
+            "chartreuse",
+            "darkred",
+            "rgb(1,2,3)",
+        ];
+        for name in names {
+            let ours = style_from_color_name(name);
+            let theirs = name.parse::<RColor>().ok().map(|c| to_rich_color(c).name);
+            assert_eq!(ours, theirs, "{name:?}");
+        }
     }
 }

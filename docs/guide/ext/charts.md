@@ -350,7 +350,16 @@ let chart = Chart::new(vec![cpu])
     y labels' alignment in their column, and how the first x label sits
     against the y axis line;
   - a scale: `Linear` or `Log`, where log labels fall on powers of ten;
-  - a style.
+  - a style;
+  - `grid([..])`: lines across the plot at those values (the x axis's up
+    the plot, the y axis's along it), drawn under the datasets in
+    `.grid_style(..)` (else the axis's style) with `.grid_marker(..)`
+    (else the chart's `.marker(..)`, else the first dataset's, else
+    Braille, so a grid before the first data looks as it will after).
+    With `Layering::PerDataset` each line is a layer of its own, the y
+    axis's first, so the traces break the grid where they cross it, and
+    the x lines the y lines, as scope-tui's reference lines, drawn as
+    datasets, break.
 
   An axis with an empty `Values` list draws its line and takes no room
   for labels; with `Labels::None` it draws no line either, as a ratatui
@@ -373,12 +382,17 @@ let chart = Chart::new(vec![cpu])
   under the trace). A line, bar or area segment with an end outside the
   bounds is clipped at them; `.out_of_bounds(OutOfBounds::Drop)` leaves it
   out, as ratatui 0.29 does.
+- **The chart's own style**, `.style("..")`, is ratatui's `Chart::style`:
+  it goes under every cell (a background fills the chart) and the legend's
+  box takes it. `.style("none")` is a ratatui chart with no style: the
+  terminal's colours, the legend's box too (`.legend_unstyled()` says that
+  by name).
 - **The legend** is a box in a corner (`LegendPosition`). It hides itself
   when it would cover more than `hidden_legend_fraction` of the plot. Its
-  box takes the x axis's style unless `.legend_style("..")` gives it one
-  of its own, and it clears the plot under it; `.legend_clear(false)`
-  leaves what the datasets drew there, unstyled around the names, as
-  ratatui does.
+  box takes the chart's style, or else the x axis's, unless
+  `.legend_style("..")` gives it one of its own, and it clears the plot
+  under it; `.legend_clear(false)` leaves what the datasets drew there,
+  unstyled around the names, as ratatui does.
 - **The layout** is ratatui's:
   - the y labels sit left of a `│` line and the x labels under a `─` line,
     meeting at `└`;
@@ -478,6 +492,90 @@ Natural Earth.
 - Both default to the theme keys `chart.gauge.filled` and
   `chart.gauge.unfilled`. On an ASCII console the bar is `#` (`=` for a
   half) and the line `-`.
+
+### Level meters and spectrograms
+
+Two charts for sound, after a DAW's meters and cava's or Audacity's
+spectrogram:
+
+```rust
+use std::time::{Duration, Instant};
+use rich_ext::chart::{AxisScale, LevelMeter, MeterScale, PeakHold, Spectrogram};
+
+// A peak meter in decibels, its peak held for a second.
+let mut hold = PeakHold::new(Duration::from_secs(1));
+let held = hold.update(peak, Instant::now());
+let meter = LevelMeter::new(rms)
+    .peak(peak)
+    .held(held)
+    .scale(MeterScale::Decibels { floor: -60.0 })
+    .label("L")
+    .readout(true);
+
+// A waterfall: the newest spectrum at the top, 40 kept.
+let mut waterfall = Spectrogram::new(40)
+    .resolution(rate / n as f64)
+    .scale(AxisScale::Log)
+    .bounds(20.0, 20_000.0);
+waterfall.push(spectrum.iter().map(|(_, m)| 20.0 * m.log10()));
+```
+
+- **`LevelMeter::new(level)`** is a bar that fills to the level in eighths
+  of a cell, then a `─` track to its end, with `.label(..)` before it and
+  `.readout(true)` after (`0.42`, or `-12.3 dB`, at a fixed width so the
+  bar keeps its place). Its cells are `chart.ok` (green) up to 70% of the
+  bar, `chart.warning` (yellow) to 90% and `chart.critical` (red) past it
+  (`.bands(warning, critical)`). `.peak(p)` and `.held(h)` put a `│`
+  mark at each. `MeterScale::Linear` (0 to 1 or `.range(..)`) or
+  `Decibels { floor }`: amplitudes drawn by their decibels, from the floor
+  to 0 dB. `.orientation(Orientation::Vertical)` stands it up, filling the
+  height it is given from the bottom.
+- **`PeakHold::new(hold)`** keeps a peak: `update(peak, now)` returns the
+  highest peak of the last `hold`, then drops to the peak then
+  (`.fall(per_second)` lets it fall at a rate instead).
+- **`Spectrogram::new(rows)`** keeps the newest `rows` spectra;
+  `push(levels)` adds one at the top. Each row is the levels as a
+  `Heatmap`'s shades (` ░▒▓█`, ASCII ` .:-=+*#%@`, and the `chart.heat.N`
+  colours, cold to hot), scaled between the lowest and highest kept or
+  `.range(..)`. The bins are spread across the width, evenly or by their
+  logarithm (`.scale(AxisScale::Log)`, each octave as wide);
+  `.resolution(hz)` and `.bounds(low, high)` say which frequencies the
+  width covers. A column over several bins shows the loudest. It fills
+  the height it is given.
+
+### Bar spectra and persistence
+
+cava's bars and an analogue scope's phosphor:
+
+```rust
+use rich_ext::chart::{BarSpectrum, Chart, Layering, Persistence};
+use rich_ext::dsp::{bands, Falloff};
+
+// 24 bands from 50 Hz to 10 kHz, falling under gravity, mirrored.
+let mut falloff = Falloff::gravity(0.02);
+let levels = falloff.update(&bands(&spectrum, 24, 50.0, 10_000.0)).to_vec();
+let bars = BarSpectrum::new(levels).mirror(true).bar_width(2);
+
+// The last eight traces, each older one fainter.
+let fading = Persistence::new(traces).style("#33ff66").fade(0.2);
+let scope = Chart::new(fading.datasets()).layering(Layering::PerDataset);
+```
+
+- **`BarSpectrum::new(bands)`** draws each band as a column from the
+  bottom, its top in eighths of a cell (`#`s to the whole cell in ASCII),
+  scaled to the loudest band or `.range(max)`, `.bar_width(n)` cells wide
+  and `.gap(n)` apart, centred. `.mirror(true)` draws the bands twice,
+  the low ones in the middle; `BarSpectrum::stereo(left, right)` puts a
+  channel on each side. Too narrow, it drops the gaps, then narrows the
+  bars, then lets bands share a column. It fills the height it is given.
+- **`Persistence::new(frames)`** takes the last frames of a trace, oldest
+  first, and makes them datasets in the frame's style, each older one's
+  colour faded towards `.background(..)` (black) down to `.fade(floor)`
+  of it. Draw them with `Layering::PerDataset`, so the newest is on top.
+
+intuiTUIve draws these as nodes with its `viz` feature: `meter(level,
+peak).hold(d)`, `spectrogram(|| rows)` and `bar_spectrum(|| bands)`; see
+[intuiTUIve's levels](../intuituive/index.md#levels-sparklines-and-big-text).
 
 ## In tables and panels
 
@@ -835,6 +933,11 @@ ratatui's `style::palette` and its `palette` feature have:
   bright bands.
 - **`blend(a, b, t)`** mixes two colours, and **`gradient(&stops, t)`**
   picks a colour along several spaced evenly.
+- **`style_from_color_name(name)`** reads a colour named as ratatui reads
+  one (`DarkGray`, `light red`, `#FF8800`, `208`) as rich's name for the
+  same terminal colour (`bright_black`, `bright_red`, `#ff8800`,
+  `color(208)`), or `None`: a ported app's colour options, without
+  ratatui. rs-rich-ratatui re-exports it.
 
 ```rust
 --8<-- "crates/rich-ext/examples/guide_charts.rs:palette"

@@ -120,6 +120,38 @@ pub trait Widget: Any {
         None
     }
 
+    /// What assistive technology reads for it, as it is now: a meter's
+    /// `Level 42%`, where its cells are block glyphs. A widget that says
+    /// something is read as text (unless its [`role`](Self::role) is
+    /// another), its accessible name what this returns, after a
+    /// [`label`](crate::Node::label) code gave it; the accessibility tree,
+    /// [linear](crate::App::linear) mode and a screen reader use it. Called
+    /// after a draw, so it can say what the last one showed. Default: none,
+    /// and the widget's cells are read.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widget::{Canvas, DrawCx};
+    ///
+    /// struct Meter(u8);
+    /// impl Widget for Meter {
+    ///     fn draw(&mut self, _cx: &mut DrawCx, canvas: &mut Canvas) {
+    ///         canvas.print(0, 0, &"█".repeat(self.0 as usize / 10), None);
+    ///     }
+    ///     fn access_text(&self) -> Option<String> {
+    ///         Some(format!("Level {}%", self.0))
+    ///     }
+    /// }
+    ///
+    /// let app = App::new(|| widget(Meter(42)));
+    /// let mut driver = app.driver(10, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.accessibility()[0].name, "Level 42%");
+    /// ```
+    fn access_text(&self) -> Option<String> {
+        None
+    }
+
     /// Cells along `axis` the widget needs, given `width` x `height` (a
     /// height of 0: as tall as it likes). Called for a [`Size::Auto`]
     /// node, and by a modal sized to its content. Default: all it is
@@ -144,6 +176,14 @@ pub trait Widget: Any {
     /// waiting to be shown again): forgotten with the widget.
     fn hidden_children(&self) -> Vec<&Node> {
         Vec::new()
+    }
+
+    /// The child whose own size, minimum and maximum the widget's node
+    /// takes while it is sized [`Size::Auto`](crate::Size::Auto): a
+    /// [`switch`](crate::switch)'s shown page, chosen now. Default: none.
+    #[doc(hidden)]
+    fn sized_by(&mut self) -> Option<&Node> {
+        None
     }
 
     /// Where each of its children goes, in the order of
@@ -659,6 +699,33 @@ pub struct DrawCx<'a> {
 }
 
 impl DrawCx<'_> {
+    /// The app's clock: the time since it started, as its loop (or a test's
+    /// [`Driver::update`](crate::Driver::update) and
+    /// [`advance`](crate::Driver::advance)) last gave it. A peak that holds
+    /// for a second, a stall noticed after five, tested frame by frame.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widget::{Canvas, DrawCx};
+    /// use std::time::Duration;
+    ///
+    /// struct Clock;
+    /// impl Widget for Clock {
+    ///     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+    ///         canvas.print(0, 0, &format!("{}ms", cx.now().as_millis()), None);
+    ///     }
+    /// }
+    ///
+    /// let app = App::new(|| widget(Clock));
+    /// let mut driver = app.driver(10, 1);
+    /// driver.update(Duration::from_millis(250));
+    /// driver.render();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "250ms");
+    /// ```
+    pub fn now(&self) -> std::time::Duration {
+        crate::reactive::Runtime::current().now.get()
+    }
+
     /// The console the app renders with: render any rich renderable with
     /// it, and look up theme styles by name.
     pub fn console(&self) -> &Console {
@@ -673,6 +740,33 @@ impl DrawCx<'_> {
     /// This widget's node.
     pub fn id(&self) -> NodeId {
         self.id
+    }
+
+    /// Where the widget is on the screen (as [`EventCx::rect`] tells a
+    /// handler): for what is drawn outside the cells and must know where
+    /// they are, a terminal graphic placed over the widget. Inside a
+    /// [viewport](Widget::viewport) it is the rectangle in the viewport's
+    /// content, which [`pointer`](Self::pointer) and the canvas share.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widget::{widget, Canvas, DrawCx, Widget};
+    ///
+    /// struct Where;
+    /// impl Widget for Where {
+    ///     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+    ///         let r = cx.rect();
+    ///         canvas.print(0, 0, &format!("{},{} {}x{}", r.x, r.y, r.width, r.height), None);
+    ///     }
+    /// }
+    ///
+    /// let app = App::new(|| column([label("top").fixed(1), widget(Where)]));
+    /// let mut driver = app.driver(12, 3);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "0,1 12x2");
+    /// ```
+    pub fn rect(&self) -> Rect {
+        self.rect
     }
 
     /// Whether everything must be drawn, on a clear canvas: always for a
@@ -728,6 +822,32 @@ impl DrawCx<'_> {
     /// A theme style by name (`"accent"`, `"selected"`), or `fallback`.
     pub fn style(&self, name: &str, fallback: &str) -> Style {
         theme_style(self.console, name, fallback)
+    }
+
+    /// From the widget's own cells to the screen's: where its column `x`
+    /// and row `y` are.
+    pub(crate) fn to_screen(&self, x: u16, y: u16) -> (u16, u16) {
+        let sx = self.rect.x as i32 + x as i32 - self.shift.0;
+        let sy = self.rect.y as i32 + y as i32 - self.shift.1;
+        (
+            sx.clamp(0, u16::MAX as i32) as u16,
+            sy.clamp(0, u16::MAX as i32) as u16,
+        )
+    }
+
+    /// Draw `float` over the neighbours (or, `None`, stop): it stays until
+    /// the widget sets another, and goes with the node.
+    pub(crate) fn float(&self, float: Option<crate::float::Float>) {
+        let runtime = crate::reactive::Runtime::current();
+        let mut floats = runtime.floats.borrow_mut();
+        match float {
+            Some(float) => {
+                floats.insert(self.id, float);
+            }
+            None => {
+                floats.remove(&self.id);
+            }
+        }
     }
 }
 
@@ -926,6 +1046,45 @@ impl Canvas<'_> {
             let lines = console.render_lines(renderable, &options, false);
             self.screen.write_lines(area, &lines);
             self.written.push(area);
+        }
+    }
+
+    /// Set the cell at `x`, `y` to `ch` with foreground `fg` and background
+    /// `bg` in true colour (either missing), without building a segment or
+    /// a style: the fast way to draw a picture a cell at a time, as the
+    /// [`pixels`](crate::pixels::pixels) node does. `ch` takes one cell (a
+    /// wide character becomes a space); off the canvas nothing is written.
+    /// See [`Screen::put_rgb`](rich_ext::surface::Screen::put_rgb).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widget::{widget, Canvas, DrawCx, Widget};
+    ///
+    /// struct Gradient;
+    /// impl Widget for Gradient {
+    ///     fn draw(&mut self, _cx: &mut DrawCx, canvas: &mut Canvas) {
+    ///         for x in 0..canvas.width() {
+    ///             let v = (x * 60) as u8;
+    ///             canvas.put_rgb(x, 0, '▀', Some([v, 0, 0]), Some([0, 0, v]));
+    ///         }
+    ///     }
+    /// }
+    ///
+    /// let mut driver = App::new(|| widget(Gradient)).driver(4, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "▀▀▀▀");
+    /// ```
+    pub fn put_rgb(&mut self, x: u16, y: u16, ch: char, fg: Option<[u8; 3]>, bg: Option<[u8; 3]>) {
+        if x >= self.rect.width || y >= self.rect.height {
+            return;
+        }
+        let (sx, sy) = (self.rect.x + x, self.rect.y + y);
+        self.screen.put_rgb(sx, sy, ch, fg, bg);
+        // A row drawn left to right is one rectangle of damage.
+        match self.written.last_mut() {
+            Some(last) if last.y == sy && last.height == 1 && last.right() == sx => last.width += 1,
+            Some(last) if last.contains(sx, sy) => {}
+            _ => self.written.push(Rect::new(sx, sy, 1, 1)),
         }
     }
 

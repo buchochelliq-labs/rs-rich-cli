@@ -125,6 +125,8 @@ fn key(key: K, held: M) -> Option<Key> {
         K::Escape => KeyCode::Escape,
         K::Delete => KeyCode::Delete,
         K::Insert => KeyCode::Insert,
+        // The menu key, as termwiz names it (Windows' `VK_APPS`).
+        K::Applications => KeyCode::Menu,
         K::UpArrow | K::ApplicationUpArrow => KeyCode::Up,
         K::DownArrow | K::ApplicationDownArrow => KeyCode::Down,
         K::LeftArrow | K::ApplicationLeftArrow => KeyCode::Left,

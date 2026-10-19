@@ -8,6 +8,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
 
+use crate::keyboard::{Event as KeyEvent, Press};
 use crate::render::{cast, html, raster, svg, video, Look};
 use crate::screen::{Snapshot, Theme};
 use crate::session::{Session, Timeline, FRAME_RATE, MAX_VIDEO};
@@ -19,6 +20,12 @@ const PROMPT: &str = "❯";
 const EXEC_TIMEOUT: Duration = Duration::from_secs(60);
 /// How much of an `Exec` command's error output is kept for its report.
 const EXEC_STDERR: u64 = 64 * 1024;
+/// A held key's autorepeat unless the tape sets one (`Set KeyRepeat`): the
+/// delay before the first repeat, then the interval between repeats.
+pub const KEY_REPEAT: (Duration, Duration) =
+    (Duration::from_millis(200), Duration::from_millis(33));
+/// The text size of video frames unless the tape sets one, in pixels.
+pub const FONT_SIZE: u16 = 16;
 
 /// Whether `stem` may name a recording: its output directory, the prefix of
 /// its cast, GIF and MP4, and its workspace. Not empty, `.` or `..`, and no
@@ -48,6 +55,8 @@ pub struct Options {
     /// fixtures from the repository.
     pub repo: Option<PathBuf>,
     pub theme: Theme,
+    /// Video frames a second, over the tape's `Set Framerate`.
+    pub frame_rate: Option<f64>,
 }
 
 /// How a recording is presented: `Set WindowFrame`, `Set Caption` and
@@ -60,6 +69,8 @@ pub struct Presentation {
     pub caption: Option<String>,
     /// Show each key as it is pressed, in video and the page's player.
     pub key_overlay: bool,
+    /// The text size of video frames, in pixels (`Set FontSize`).
+    pub font_size: u16,
 }
 
 impl Default for Presentation {
@@ -68,6 +79,7 @@ impl Default for Presentation {
             window: true,
             caption: None,
             key_overlay: true,
+            font_size: FONT_SIZE,
         }
     }
 }
@@ -86,6 +98,9 @@ pub struct Recording {
     /// The tape's `Mask` rewrites, applied to text grids.
     pub masks: Vec<(fancy_regex::Regex, String)>,
     pub timeline: Timeline,
+    /// Video frames a second: the tape's `Set Framerate` (or
+    /// [`Options::frame_rate`]), else [`FRAME_RATE`].
+    pub frame_rate: f64,
 }
 
 /// A temporary directory, removed on drop.
@@ -239,12 +254,109 @@ fn failed(session: &Session, line: usize) -> Result<(), TapeError> {
     }
 }
 
+/// The keys a tape holds down, and their autorepeat.
+#[derive(Debug)]
+struct Held {
+    /// Each held key, in the order pressed; only the last repeats, as a
+    /// keyboard's does.
+    keys: Vec<Press>,
+    /// When the last pressed key next repeats.
+    next: Option<Instant>,
+    repeat: (Duration, Duration),
+}
+
+impl Held {
+    fn new(repeat: (Duration, Duration)) -> Held {
+        Held {
+            keys: Vec::new(),
+            next: None,
+            repeat,
+        }
+    }
+
+    /// Send `key`'s `event`, as the program's keyboard flags have it.
+    fn send(
+        session: &mut Session,
+        key: Press,
+        event: KeyEvent,
+        label: bool,
+    ) -> std::io::Result<()> {
+        match key.bytes(event, session.keyboard_flags()) {
+            Some(bytes) => session.send(&bytes, label.then(|| key.label())),
+            None => Ok(()),
+        }
+    }
+
+    fn press(&mut self, session: &mut Session, key: Press) -> std::io::Result<()> {
+        self.keys.retain(|held| *held != key);
+        self.keys.push(key);
+        self.next = Some(Instant::now() + self.repeat.0);
+        Held::send(session, key, KeyEvent::Press, true)
+    }
+
+    /// Let `key` go; false when it was not held.
+    fn release(&mut self, session: &mut Session, key: Press) -> std::io::Result<bool> {
+        let Some(at) = self.keys.iter().position(|held| *held == key) else {
+            return Ok(false);
+        };
+        self.keys.remove(at);
+        if at == self.keys.len() {
+            // The repeating key went: a keyboard repeats none until the
+            // next press.
+            self.next = None;
+        }
+        Held::send(session, key, KeyEvent::Release, false)?;
+        Ok(true)
+    }
+
+    fn release_all(&mut self, session: &mut Session) -> std::io::Result<()> {
+        while let Some(&key) = self.keys.last() {
+            self.release(session, key)?;
+        }
+        Ok(())
+    }
+
+    /// Send the repeats that are due.
+    fn pump(&mut self, session: &mut Session) -> std::io::Result<()> {
+        let (Some(&key), Some(mut next)) = (self.keys.last(), self.next) else {
+            return Ok(());
+        };
+        let now = Instant::now();
+        while next <= now {
+            Held::send(session, key, KeyEvent::Repeat, false)?;
+            next += self.repeat.1;
+        }
+        self.next = Some(next);
+        Ok(())
+    }
+
+    /// Wait `delay`, repeating the held key meanwhile.
+    fn pause(&mut self, session: &mut Session, delay: Duration) -> std::io::Result<()> {
+        let end = Instant::now() + delay;
+        loop {
+            self.pump(session)?;
+            let now = Instant::now();
+            if now >= end {
+                return Ok(());
+            }
+            let until = self.next.map_or(end, |next| next.min(end));
+            std::thread::sleep(
+                until
+                    .saturating_duration_since(now)
+                    .max(Duration::from_millis(1)),
+            );
+        }
+    }
+}
+
 fn wait_for(
-    session: &Session,
+    session: &mut Session,
+    held: &mut Held,
     pattern: &Pattern,
     limit: Duration,
     line: usize,
 ) -> Result<(), TapeError> {
+    let io = |e: std::io::Error| TapeError::new(line, e.to_string());
     let end = Instant::now() + limit;
     while Instant::now() < end {
         if session.seen(|screen| pattern.is_match(screen)) {
@@ -254,7 +366,7 @@ fn wait_for(
         if !session.alive() {
             break;
         }
-        std::thread::sleep(Duration::from_millis(20));
+        held.pause(session, Duration::from_millis(20)).map_err(io)?;
     }
     failed(session, line)?;
     Err(TapeError::new(
@@ -355,11 +467,15 @@ pub fn record(tape: &Tape, stem: &str, options: &Options) -> Result<Recording, T
     let mut timeout = Duration::from_secs(15);
     let prompt = Pattern::Text(PROMPT.into());
     let mut shots = Vec::new();
+    let frame_rate = options.frame_rate.or(tape.frame_rate).unwrap_or(FRAME_RATE);
+    session.set_frame_rate(frame_rate);
+    session.set_kitty_keyboard(tape.kitty_keyboard);
+    let mut held = Held::new(tape.key_repeat.unwrap_or(KEY_REPEAT));
     // Start hidden, on a cleared screen at the prompt.
-    wait_for(&session, &prompt, timeout, 0)?;
+    wait_for(&mut session, &mut held, &prompt, timeout, 0)?;
     session.send("clear\r", None).map_err(io)?;
     std::thread::sleep(Duration::from_millis(200));
-    wait_for(&session, &prompt, timeout, 0)?;
+    wait_for(&mut session, &mut held, &prompt, timeout, 0)?;
     session.show();
     for (line, step) in &tape.steps {
         let io = |e: std::io::Error| TapeError::new(*line, e.to_string());
@@ -373,34 +489,75 @@ pub fn record(tape: &Tape, stem: &str, options: &Options) -> Result<Recording, T
             Step::Timeout(limit) => timeout = *limit,
             Step::Type(text) => {
                 for c in text.chars() {
-                    session.send(&c.to_string(), None).map_err(io)?;
-                    std::thread::sleep(typing);
+                    // As typed on a keyboard: a press and, when the program
+                    // hears them, a release.
+                    let flags = session.keyboard_flags();
+                    let key = Press::Char(c);
+                    let bytes = match key.bytes(KeyEvent::Press, flags) {
+                        Some(press) if flags != 0 && !c.is_control() => {
+                            press + &key.bytes(KeyEvent::Release, flags).unwrap_or_default()
+                        }
+                        _ => c.to_string(),
+                    };
+                    session.send(&bytes, None).map_err(io)?;
+                    held.pause(&mut session, typing).map_err(io)?;
                 }
             }
             Step::Key { key, count } => {
+                let key = Press::Key(*key);
                 for _ in 0..*count {
-                    session.send(&key.bytes(), Some(key.label())).map_err(io)?;
-                    std::thread::sleep(typing.max(Duration::from_millis(120)));
+                    let flags = session.keyboard_flags();
+                    let mut bytes = key.bytes(KeyEvent::Press, flags).unwrap_or_default();
+                    bytes += &key.bytes(KeyEvent::Release, flags).unwrap_or_default();
+                    session.send(&bytes, Some(key.label())).map_err(io)?;
+                    held.pause(&mut session, typing.max(Duration::from_millis(120)))
+                        .map_err(io)?;
                 }
+            }
+            Step::KeyDown(key) => held.press(&mut session, *key).map_err(io)?,
+            Step::KeyUp(key) => {
+                if !held.release(&mut session, *key).map_err(io)? {
+                    return Err(TapeError::new(
+                        *line,
+                        format!(
+                            "KeyUp {}: the key is not held (KeyDown it first)",
+                            key.label()
+                        ),
+                    ));
+                }
+            }
+            Step::Hold { key, duration } => {
+                held.press(&mut session, *key).map_err(io)?;
+                held.pause(&mut session, *duration).map_err(io)?;
+                held.release(&mut session, *key).map_err(io)?;
             }
             Step::Mouse(mouse) => {
                 for _ in 0..mouse.count {
                     for (i, report) in mouse.reports().iter().enumerate() {
                         let label = (i == 0).then(|| mouse.label());
                         session.send(report, label).map_err(io)?;
-                        std::thread::sleep(Duration::from_millis(30));
+                        held.pause(&mut session, Duration::from_millis(30))
+                            .map_err(io)?;
                     }
-                    std::thread::sleep(typing.max(Duration::from_millis(120)));
+                    held.pause(&mut session, typing.max(Duration::from_millis(120)))
+                        .map_err(io)?;
                 }
             }
-            Step::Sleep(delay) => std::thread::sleep(*delay),
+            Step::Sleep(delay) => held.pause(&mut session, *delay).map_err(io)?,
             Step::Wait {
                 pattern,
                 timeout: limit,
-            } => wait_for(&session, pattern, limit.unwrap_or(timeout), *line)?,
+            } => wait_for(
+                &mut session,
+                &mut held,
+                pattern,
+                limit.unwrap_or(timeout),
+                *line,
+            )?,
             Step::Screenshot(name) => {
                 // Let a repaint in flight land.
-                std::thread::sleep(Duration::from_millis(150));
+                held.pause(&mut session, Duration::from_millis(150))
+                    .map_err(io)?;
                 shots.push((name.clone(), session.snapshot()));
             }
             Step::Hide => session.hide(),
@@ -424,6 +581,7 @@ pub fn record(tape: &Tape, stem: &str, options: &Options) -> Result<Recording, T
         }
         failed(&session, *line)?;
     }
+    held.release_all(&mut session).map_err(io)?;
     std::thread::sleep(Duration::from_millis(300));
     failed(&session, 0)?;
     let timeline = session.finish();
@@ -436,6 +594,7 @@ pub fn record(tape: &Tape, stem: &str, options: &Options) -> Result<Recording, T
             window: tape.window_frame.unwrap_or(true),
             caption: tape.caption.clone(),
             key_overlay: tape.key_overlay.unwrap_or(true),
+            font_size: tape.font_size.unwrap_or(FONT_SIZE),
         },
         outputs: tape.outputs.clone(),
         columns: tape.columns,
@@ -443,6 +602,7 @@ pub fn record(tape: &Tape, stem: &str, options: &Options) -> Result<Recording, T
         shots,
         masks: tape.masks.clone(),
         timeline,
+        frame_rate,
     })
 }
 
@@ -485,6 +645,8 @@ pub struct Formats {
     pub svg: bool,
     pub cast: bool,
     pub gif: bool,
+    /// An animated PNG.
+    pub apng: bool,
     /// Only when FFmpeg is installed.
     pub mp4: bool,
     /// The page with a player and the screenshots.
@@ -497,12 +659,14 @@ impl Formats {
         svg: true,
         cast: true,
         gif: true,
+        apng: true,
         mp4: true,
         html: true,
     };
     /// Everything but video encoding.
     pub const NO_VIDEO: Formats = Formats {
         gif: false,
+        apng: false,
         mp4: false,
         ..Formats::ALL
     };
@@ -512,6 +676,7 @@ impl Formats {
         svg: false,
         cast: false,
         gif: false,
+        apng: false,
         mp4: false,
         html: false,
     };
@@ -522,6 +687,7 @@ impl Formats {
             Format::Svg => self.svg,
             Format::Cast => self.cast,
             Format::Gif => self.gif,
+            Format::Apng => self.apng,
             Format::Mp4 => self.mp4,
             Format::Html => self.html,
         }
@@ -533,6 +699,7 @@ impl Formats {
             Format::Svg => self.svg = on,
             Format::Cast => self.cast = on,
             Format::Gif => self.gif = on,
+            Format::Apng => self.apng = on,
             Format::Mp4 => self.mp4 = on,
             Format::Html => self.html = on,
         }
@@ -762,11 +929,11 @@ pub fn write(
     }
     // The HTML page's player plays the same timeline, so it would stop at the
     // cut as silently as a video would.
-    let video = formats.gif || formats.mp4 || formats.html;
+    let video = formats.gif || formats.apng || formats.mp4 || formats.html;
     if video && recording.timeline.truncated {
         return Err(invalid(format!(
             "the recording is longer than {}s, too long for video; record it without \
-             GIF, MP4 or the HTML player (--no-video), or shorten the tape",
+             GIF, APNG, MP4 or the HTML player (--no-video), or shorten the tape",
             MAX_VIDEO.as_secs()
         )));
     }
@@ -775,6 +942,7 @@ pub fn write(
         title: &recording.title,
         window: presentation.window,
         caption: presentation.caption.as_deref(),
+        text_size: f32::from(presentation.font_size),
     };
     let still = raster::Frame {
         title: &recording.title,
@@ -789,7 +957,11 @@ pub fn write(
         }
     }
     let samples = if video {
-        video::sample_with(&recording.timeline, FRAME_RATE, presentation.key_overlay)
+        video::sample_with(
+            &recording.timeline,
+            recording.frame_rate,
+            presentation.key_overlay,
+        )
     } else {
         Vec::new()
     };
@@ -873,18 +1045,50 @@ pub fn write(
         }
     }
     let mut mp4 = if formats.mp4 && video::ffmpeg_available() {
-        Some(video::Mp4::start(&mp4_path, video_width, video_height)?)
+        Some(video::Mp4::start_at(
+            &mp4_path,
+            video_width,
+            video_height,
+            recording.frame_rate,
+        )?)
+    } else {
+        None
+    };
+    let apng_path = dir.join(recording.output_path(Format::Apng, stem));
+    let mut apng = if formats.apng && !samples.is_empty() {
+        if let Some(parent) = apng_path.parent() {
+            std::fs::create_dir_all(parent)?;
+        }
+        let file = std::io::BufWriter::new(std::fs::File::create(&apng_path)?);
+        Some(raster::Apng::start(
+            file,
+            video_width,
+            video_height,
+            samples.len(),
+        )?)
     } else {
         None
     };
     let timeline = &recording.timeline;
+    let encode_others = mp4.is_some() || apng.is_some();
+    // Each frame drawn once for the MP4 and the APNG (the GIF's first pass,
+    // when there is a GIF).
+    let mut others = |canvas: &raster::Canvas, seconds: f64| -> std::io::Result<()> {
+        if let Some(mp4) = mp4.as_mut() {
+            mp4.write(canvas, seconds)?;
+        }
+        if let Some(apng) = apng.as_mut() {
+            apng.write(canvas, seconds)?;
+        }
+        Ok(())
+    };
     if formats.gif {
         let gif_path = dir.join(recording.output_path(Format::Gif, stem));
         if let Some(parent) = gif_path.parent() {
             std::fs::create_dir_all(parent)?;
         }
         let mut file = std::io::BufWriter::new(std::fs::File::create(&gif_path)?);
-        // The GIF draws every frame twice; the MP4 takes them on the first.
+        // The GIF draws every frame twice; the others take them on the first.
         let mut pass = 0;
         raster::gif_streamed(
             video_width,
@@ -893,9 +1097,7 @@ pub fn write(
                 pass += 1;
                 video::render_each(timeline, &samples, theme, fonts, &look, &mut |canvas, s| {
                     if pass == 1 {
-                        if let Some(mp4) = mp4.as_mut() {
-                            mp4.write(&canvas, s)?;
-                        }
+                        others(&canvas, s)?;
                     }
                     sink(canvas, s)
                 })
@@ -904,14 +1106,18 @@ pub fn write(
         )?;
         std::io::Write::flush(&mut file)?;
         written.push(gif_path);
-    } else if let Some(mp4) = mp4.as_mut() {
+    } else if encode_others {
         video::render_each(timeline, &samples, theme, fonts, &look, &mut |canvas, s| {
-            mp4.write(&canvas, s)
+            others(&canvas, s)
         })?;
     }
     let mp4_written = mp4.is_some();
     if let Some(mp4) = mp4 {
         mp4.finish()?;
+    }
+    if let Some(apng) = apng {
+        apng.finish()?;
+        written.push(apng_path);
     }
     if let Some((tape_path, tape_bytes)) = provenance {
         let output = |program: &str, args: &[&str]| {
@@ -964,8 +1170,9 @@ mod tests {
             rows: 3,
             shots: vec![("shot".into(), snapshot.clone())],
             masks: Vec::new(),
+            frame_rate: FRAME_RATE,
             timeline: Timeline {
-                frames: vec![(0.0, snapshot)],
+                frames: vec![(0.0, crate::screen::Packed::from(&snapshot))],
                 ..Timeline::default()
             },
         }
@@ -1242,6 +1449,7 @@ mod tests {
             window: false,
             caption: Some("A caption".into()),
             key_overlay: false,
+            ..Presentation::default()
         };
         write(
             &recording,

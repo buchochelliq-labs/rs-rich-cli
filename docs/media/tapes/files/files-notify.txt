@@ -1,0 +1,26 @@
+~/project/src                                      ╭─ Create ─────────────────────────────────────╮
+ 1 project  2 src                                  │ "../outside" must stay inside this directory │
+  src       │ lib.rs                               ╰──────────────────────────────────────────────╯
+  tests     │ render.rs                                  271B │
+  run.sh    │ main.rs                                    289B │mod event_loop;
+  scripts.t…│ event_loop.rs                              611B │mod render;
+  Cargo.toml│                                                 │
+  logo.png  │                                                 │fn main() {
+  readme-li…│                                                 │    let workers = std::env::args()
+  README.md │                                                 │        .skip_while(|arg| arg != "--
+            │                                                 │        .nth(1)
+            │                                                 │        .and_then(|n| n.parse().ok()
+            │                                                 │        .unwrap_or(4);
+            │                                                 │    event_loop::run(workers);
+            │                                                 │}
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+ NOR  289B  main.rs                                                          -rw-r--r--  75%   3/4

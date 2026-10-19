@@ -44,7 +44,7 @@ fn a_rule_takes_the_panels_kind_and_its_focus_colour() {
 }
 
 #[test]
-fn a_rule_inside_padding_does_not_reach_the_border() {
+fn a_rule_inside_padding_runs_across_it_and_joins_the_border() {
     let app = App::new(|| {
         column([label("a"), rule(), label("b")])
             .padding(0, 1)
@@ -52,7 +52,48 @@ fn a_rule_inside_padding_does_not_reach_the_border() {
     });
     let mut driver = app.driver(7, 5);
     driver.settle();
-    assert_eq!(rows(&driver)[2], "│ ─── │");
+    assert_eq!(rows(&driver)[1], "│ a   │");
+    assert_eq!(rows(&driver)[2], "├─────┤");
+}
+
+#[test]
+fn a_rule_reaches_through_nested_padding_on_one_side_only() {
+    // Padded twice on the left: the rule runs across both to the side.
+    let app = App::new(|| {
+        column([label("a"), rule(), label("b")])
+            .padding(0, 1)
+            .padding(0, 1)
+            .panel("")
+    });
+    let mut driver = app.driver(9, 5);
+    driver.settle();
+    assert_eq!(rows(&driver)[2], "├───────┤");
+    // A rule that stops short of a side does not join it.
+    let app = App::new(|| {
+        column([
+            label("a"),
+            row([rule().flex(1), label("x").fixed(1)]).fixed(1),
+        ])
+        .padding(0, 1)
+        .panel("")
+    });
+    let mut driver = app.driver(8, 4);
+    driver.settle();
+    assert_eq!(rows(&driver)[2], "├────x │");
+}
+
+#[test]
+fn a_stylesheets_panel_padding_does_not_keep_a_rule_from_the_border() {
+    let app = App::new(|| {
+        column([label("a"), rule(), label("b")])
+            .panel("")
+            .name("box")
+    })
+    .stylesheet("#box { padding: 0 2; }");
+    let mut driver = app.driver(9, 5);
+    driver.settle();
+    assert_eq!(rows(&driver)[1], "│  a    │");
+    assert_eq!(rows(&driver)[2], "├───────┤");
 }
 
 #[test]

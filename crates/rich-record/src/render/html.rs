@@ -17,7 +17,7 @@ use rich_ext::frame::HtmlOptions;
 use serde_json::json;
 
 use crate::render::Look;
-use crate::screen::{Cell, Snapshot, Theme};
+use crate::screen::{PackedRow, Snapshot, Theme};
 use crate::session::Timeline;
 
 /// How long a key stays in the player's overlay, in seconds, as in video.
@@ -135,17 +135,17 @@ button {{ font: inherit; padding: .25rem .9rem; }}
 /// numbers, and the keys. `<` is escaped, so the JSON can sit in a script.
 fn player_data(timeline: &Timeline, theme: &Theme, keys: bool) -> String {
     let mut rows: Vec<String> = Vec::new();
-    let mut seen: HashMap<&[Cell], usize> = HashMap::new();
+    let mut seen: HashMap<&PackedRow, usize> = HashMap::new();
     let mut frames = Vec::with_capacity(timeline.frames.len());
-    for (t, snapshot) in &timeline.frames {
-        let numbers: Vec<usize> = snapshot
-            .rows
+    for (t, packed) in &timeline.frames {
+        let numbers: Vec<usize> = packed
+            .rows()
             .iter()
             .map(|row| {
-                *seen.entry(row.as_slice()).or_insert_with(|| {
+                *seen.entry(row.as_ref()).or_insert_with(|| {
                     let one = Snapshot {
-                        rows: vec![row.clone()],
-                        cursor: None,
+                        rows: vec![row.cells()],
+                        ..Snapshot::default()
                     };
                     rows.push(screen_html(&one, theme));
                     rows.len() - 1
@@ -221,6 +221,7 @@ const PLAYER: &str = r#"(() => {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::screen::Packed;
 
     fn snapshot(bytes: &[u8]) -> Snapshot {
         let mut parser = vt100::Parser::new(2, 12, 0);
@@ -232,18 +233,19 @@ mod tests {
     fn a_page_holds_the_player_and_the_screenshots() {
         let timeline = Timeline {
             frames: vec![
-                (0.0, snapshot(b"$ ")),
-                (0.5, snapshot(b"$ l")),
-                (1.0, snapshot(b"$ ls\r\n\x1b[31m<a>\x1b[0m")),
+                (0.0, Packed::from(&snapshot(b"$ "))),
+                (0.5, Packed::from(&snapshot(b"$ l"))),
+                (1.0, Packed::from(&snapshot(b"$ ls\r\n\x1b[31m<a>\x1b[0m"))),
             ],
             keys: vec![(1.0, "⏎".into())],
             ..Timeline::default()
         };
-        let shots = vec![("done".to_string(), timeline.frames[2].1.clone())];
+        let shots = vec![("done".to_string(), timeline.frames[2].1.snapshot())];
         let look = Look {
             title: "A & B",
             window: true,
             caption: Some("Listing"),
+            ..Look::window("")
         };
         let page = page(&look, &shots, &timeline, &Theme::default(), true);
         assert!(page.starts_with("<!DOCTYPE html>"));

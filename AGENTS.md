@@ -45,12 +45,15 @@ rich-cli ──▶ rich-data ──▶ rich-ext ──▶ rich       (tabular da
                                                  reports and SQL result sets)
                  └──▶ rich-diagram           (optional, the `er` feature: ER diagrams of a schema)
              rich-ratatui ──▶ rich, ratatui-core   (ratatui interop: `RichWidget`, style and buffer conversions;
+                  ├──▶ rich-ext (no defaults)   its colour names re-exported from `rich_ext::palette`;
                   └ ─ ▶ rich-interact          `RatatuiComponent` behind its `interact` feature. Nothing in
                                                  the workspace depends on it, or on ratatui)
              rich-intuituive ──▶ rich-interact ──▶ rich-ext ──▶ rich   (intuiTUIve, the TUI framework:
-                  └ ─ ▶ rich-art, cpal, notify   signals, retained tree, cell screen; ratatui only as a
-                                                 dev-dependency, for its benchmark gate. Its off-by-default
-                                                 `art` (image nodes), `audio` and `watch` features)
+                  └ ─ ▶ rich-art, cpal, notify,  signals, retained tree, cell screen; ratatui only as a
+                        hound, rich-micro        dev-dependency, for its benchmark gate. Its off-by-default
+                                                 `art` (image nodes, big text, sprite sheets), `audio`
+                                                 (with `pulse`), `wav`, `watch`, `viz` and `micro`
+                                                 (micro assets as sprites) features)
              rich-embed ──▶ rich-intuituive, rich-record   (a terminal pane and a web view: `PtyHost`
                   └ ─ ▶ tungstenite, image       (portable-pty), `WebEngine`; Chrome over DevTools behind
                                                  its `chrome` feature, Browsh behind `browsh`)
@@ -139,6 +142,16 @@ version.
 If you find yourself editing a faithful-port library module to add non-upstream
 behavior, stop and move it to `rich-ext`.
 
+**intuiTUIve's core components are generic.** `crates/rich-intuituive`'s
+always-compiled code holds only components other components can reuse: no
+domain types, names or parameters (files and paths, audio, one app, one
+data source). A domain component is a plugin (an off-by-default feature
+module such as `files`, `pcm`/`audio`, `watch`, `art`, or another crate),
+built on a generic core piece where one exists (`files::miller` on
+`miller_of`, `files::tasks` on `jobs`). A non-generic proposal is not
+accepted into core; reshape it as a generic core piece plus a plugin. See
+[the demo gaps' intro](docs/design/intuituive-demo-gaps.md).
+
 ---
 
 ## Porting a module (parity workflow)
@@ -215,6 +228,25 @@ through public APIs / extension traits. If a sync forces an `rich-ext` change,
 that's a signal the coupling was too tight — prefer widening a core trait.
 
 ---
+
+## Long-running and delegated work: save state as you go
+
+Sessions and agents can end without warning (a time or usage limit, a
+restarted container). Work that exists only in a worktree is lost with it.
+
+- **Commit at every milestone**, not only at the end. Unfinished work is
+  committed too, marked `WIP` in the message with a line saying what is
+  done, partial and left.
+- **When a session may run out**, every running agent commits its state at
+  once, and the lead pushes each in-flight branch to a backup branch named
+  `<working branch>-wip-<name>` (never onto the working branch itself), so
+  nothing lives only on the machine.
+- **Keep a handoff note** for a multi-step effort
+  ([docs/design/intuituive-status.md](docs/design/intuituive-status.md) is
+  the demo loop's): what is merged, what is in flight on which branch, and
+  what is next, updated whenever that changes. A new session starts there.
+- **Delegated agents** are told the same in their brief: commit at
+  milestones, mark WIP, and list what is left.
 
 ## Before you commit
 

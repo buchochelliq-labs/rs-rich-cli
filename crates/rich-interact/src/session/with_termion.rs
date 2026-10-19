@@ -18,6 +18,7 @@ use std::time::Duration;
 
 use termion::raw::{IntoRawMode, RawTerminal};
 
+use super::WakeFd;
 use crate::event::{from_termion, Event, HeldButton};
 
 /// termion's raw mode on the terminal, kept where the panic hook and the
@@ -194,21 +195,18 @@ impl Reader {
     }
 
     /// Wait up to `wait` for input or a resize: (input, resized).
-    fn wait(&self, wait: Duration) -> io::Result<(bool, bool)> {
+    fn wait(&self, wait: Duration, wake: Option<WakeFd>) -> io::Result<(bool, bool)> {
         use filedescriptor::{poll, pollfd, POLLIN};
-        let mut ready = [
-            pollfd {
-                fd: self.tty.as_raw_fd(),
-                events: POLLIN,
-                revents: 0,
-            },
-            pollfd {
-                fd: self.resized.as_raw_fd(),
-                events: POLLIN,
-                revents: 0,
-            },
-        ];
+        let fd = |fd| pollfd {
+            fd,
+            events: POLLIN,
+            revents: 0,
+        };
+        // A wake (the waker's pipe, last) ends the wait with nothing.
+        let mut ready = vec![fd(self.tty.as_raw_fd()), fd(self.resized.as_raw_fd())];
+        ready.extend(wake.map(fd));
         match poll(&mut ready, Some(wait)) {
+            Ok(_) if ready.get(2).is_some_and(|woken| woken.revents != 0) => Ok((false, false)),
             Ok(_) => Ok((ready[0].revents != 0, ready[1].revents != 0)),
             // A signal (SIGWINCH, SIGCONT): look again next time.
             Err(filedescriptor::Error::Poll(e)) if e.kind() == io::ErrorKind::Interrupted => {
@@ -287,12 +285,17 @@ impl Reader {
         self.drain(false);
     }
 
-    /// The next event, waiting up to `wait` for one.
-    pub(super) fn next(&mut self, wait: Duration) -> io::Result<Option<Event>> {
+    /// The next event, waiting up to `wait` for one, or until a wake on
+    /// `wake`.
+    pub(super) fn next(
+        &mut self,
+        wait: Duration,
+        wake: Option<WakeFd>,
+    ) -> io::Result<Option<Event>> {
         if let Some(event) = self.events.pop_front() {
             return Ok(Some(event));
         }
-        let (input, resized) = self.wait(wait)?;
+        let (input, resized) = self.wait(wait, wake)?;
         if resized {
             let mut drained = [0u8; 64];
             while matches!(self.resized.read(&mut drained), Ok(n) if n > 0) {}
@@ -313,7 +316,7 @@ impl Reader {
                 } else {
                     escape
                 };
-                if self.pending.is_empty() || !self.wait(timeout)?.0 {
+                if self.pending.is_empty() || !self.wait(timeout, None)?.0 {
                     break;
                 }
                 self.fill()?;
@@ -498,7 +501,11 @@ mod tests {
             let mut reader = reader(pending);
             let (sent, done) = std::sync::mpsc::channel();
             std::thread::spawn(move || {
-                let _ = sent.send(reader.next(Duration::from_millis(10)).map_err(|e| e.kind()));
+                let _ = sent.send(
+                    reader
+                        .next(Duration::from_millis(10), None)
+                        .map_err(|e| e.kind()),
+                );
             });
             assert_eq!(
                 done.recv_timeout(Duration::from_secs(5)),

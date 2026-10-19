@@ -1,4 +1,4 @@
-//! Screenshots and video frames as pixels: PNG and GIF.
+//! Screenshots and video frames as pixels: PNG, GIF and animated PNG.
 //!
 //! Glyphs come from DejaVu Sans Mono, embedded in the crate (Bitstream Vera
 //! licence, `fonts/LICENSE-DejaVu`), so output is identical on every machine.
@@ -7,16 +7,19 @@
 //! Twemoji (CC BY 4.0, `fonts/LICENSE-Twemoji`), in colour. Box-drawing,
 //! block and braille characters are drawn as geometry over the whole cell, so
 //! borders join and images and bars have no seams whatever the line height.
+//! Images a program drew ([`crate::graphics`]) are drawn over their cells,
+//! nearest pixel first, so pixel art stays sharp.
 
 use std::collections::HashMap;
 use std::io::Write;
-use std::sync::Mutex;
+use std::sync::{Arc, Mutex};
 
 use fontdue::{Font, FontSettings, Metrics};
 use unicode_width::UnicodeWidthChar;
 
+use crate::graphics::{Image, Tile};
 use crate::render::emoji::Emoji;
-use crate::screen::{Rgb, Snapshot, Theme};
+use crate::screen::{Cell, Rgb, Snapshot, Theme};
 
 const REGULAR: &[u8] = include_bytes!("../../fonts/DejaVuSansMono.ttf");
 const BOLD: &[u8] = include_bytes!("../../fonts/DejaVuSansMono-Bold.ttf");
@@ -646,6 +649,14 @@ pub fn render(snapshot: &Snapshot, theme: &Theme, fonts: &Fonts, options: &Frame
     }
     let top = bar + pad;
     let baseline_offset = (line - size as f64 * 1.17) / 2.0 + ascent;
+    let geometry = Grid {
+        left: pad,
+        top,
+        cell,
+        line,
+        baseline_offset,
+        size,
+    };
     for (y, row) in snapshot.rows.iter().enumerate() {
         let row_top = top + y as f64 * line;
         for (x, cell_info) in row.iter().enumerate() {
@@ -654,7 +665,6 @@ pub fn render(snapshot: &Snapshot, theme: &Theme, fonts: &Fonts, options: &Frame
             }
             let left = pad + x as f64 * cell;
             let span = cell_info.width.max(1) as f64;
-            let mut fg = cell_info.fg;
             if cell_info.bg != theme.background {
                 canvas.fill_rect(
                     left.round() as i64,
@@ -672,64 +682,36 @@ pub fn render(snapshot: &Snapshot, theme: &Theme, fonts: &Fonts, options: &Frame
                     line as i64,
                     theme.foreground,
                 );
-                fg = theme.background;
             }
-            let baseline = row_top + baseline_offset;
-            let text = cell_info.text.as_str();
-            let mut chars = text.chars();
-            let only = match (chars.next(), chars.next()) {
-                (Some(c), None) => Some(c),
-                _ => None,
-            };
-            let (w, h) = (span * cell, line);
-            if let Some(lines) = only.and_then(box_lines) {
-                draw_box(&mut canvas, lines, left, row_top, cell, line, size, fg);
-            } else if let Some((rects, alpha)) = only.and_then(blocks) {
-                draw_blocks(&mut canvas, &rects, alpha, left, row_top, w, h, fg);
-            } else if let Some(dots) = only
-                .filter(|c| ('\u{2800}'..='\u{28ff}').contains(c))
-                .map(|c| (c as u32 - 0x2800) as u8)
-            {
-                draw_braille(&mut canvas, dots, left, row_top, w, h, fg);
-            } else if !(fonts.is_emoji(text, cell_info.width >= 2) && {
-                // A narrow emoji (❤️, 1️⃣) spreads into a blank cell after
-                // it, as terminals draw it.
-                let spread = cell_info.width == 1
-                    && row.get(x + 1).is_some_and(|next| {
-                        next.text == " " && next.bg == cell_info.bg && !next.underline
-                    });
-                let w = if spread { 2.0 * cell } else { w };
-                fonts.draw_emoji(&mut canvas, text, left, row_top, w, h)
-            }) {
-                // Joiners, selectors and tags the face lacks are
-                // invisible, not tofu.
-                let face = fonts.face(cell_info.bold);
-                for c in text
-                    .chars()
-                    .filter(|c| *c != ' ' && (c.width() != Some(0) || face.has_glyph(*c)))
-                {
-                    fonts.draw(
-                        &mut canvas,
-                        c,
-                        cell_info.bold,
-                        size,
-                        left,
-                        baseline,
-                        span,
-                        fg,
-                    );
+            draw_text(&mut canvas, snapshot, theme, fonts, &geometry, (x, y));
+        }
+    }
+    if !snapshot.images.is_empty() {
+        let mut decoded = HashMap::new();
+        // Under the text: drawn over the cells, whose text is drawn again.
+        draw_tiles(&mut canvas, &snapshot.images, true, &geometry, &mut decoded);
+        for tile in snapshot.images.iter().filter(|tile| tile.below_text) {
+            for y in tile.row..tile.row.saturating_add(tile.rows) {
+                for x in tile.column..tile.column.saturating_add(tile.columns) {
+                    let (x, y) = (usize::from(x), usize::from(y));
+                    let blank = snapshot
+                        .rows
+                        .get(y)
+                        .and_then(|row| row.get(x))
+                        .is_none_or(|cell| cell.text.trim().is_empty() && !cell.underline);
+                    if !blank {
+                        draw_text(&mut canvas, snapshot, theme, fonts, &geometry, (x, y));
+                    }
                 }
             }
-            if cell_info.underline {
-                canvas.fill_rect(
-                    left.round() as i64,
-                    (row_top + line - 3.0) as i64,
-                    (span * cell).round() as i64,
-                    1.max((size / 16.0) as i64),
-                    fg,
-                );
-            }
         }
+        draw_tiles(
+            &mut canvas,
+            &snapshot.images,
+            false,
+            &geometry,
+            &mut decoded,
+        );
     }
     if let Some(key) = options.key {
         let label_size = size;
@@ -763,6 +745,147 @@ pub fn render(snapshot: &Snapshot, theme: &Theme, fonts: &Fonts, options: &Frame
         }
     }
     canvas
+}
+
+/// Where a frame's cells are, in pixels.
+struct Grid {
+    left: f64,
+    top: f64,
+    cell: f64,
+    line: f64,
+    baseline_offset: f64,
+    size: f32,
+}
+
+/// Draw the text of the cell at (`x`, `y`): its glyphs, or the geometry of
+/// a box-drawing, block or braille character, and its underline.
+fn draw_text(
+    canvas: &mut Canvas,
+    snapshot: &Snapshot,
+    theme: &Theme,
+    fonts: &Fonts,
+    grid: &Grid,
+    (x, y): (usize, usize),
+) {
+    let Some(row) = snapshot.rows.get(y) else {
+        return;
+    };
+    let Some(cell_info) = row.get(x).filter(|cell| !cell.is_continuation()) else {
+        return;
+    };
+    let (cell, line, size) = (grid.cell, grid.line, grid.size);
+    let left = grid.left + x as f64 * cell;
+    let row_top = grid.top + y as f64 * line;
+    let span = cell_info.width.max(1) as f64;
+    let fg = if snapshot.cursor == Some((x as u16, y as u16)) {
+        theme.background
+    } else {
+        cell_info.fg
+    };
+    let baseline = row_top + grid.baseline_offset;
+    let text = cell_info.text.as_str();
+    let mut chars = text.chars();
+    let only = match (chars.next(), chars.next()) {
+        (Some(c), None) => Some(c),
+        _ => None,
+    };
+    let (w, h) = (span * cell, line);
+    if let Some(lines) = only.and_then(box_lines) {
+        draw_box(canvas, lines, left, row_top, cell, line, size, fg);
+    } else if let Some((rects, alpha)) = only.and_then(blocks) {
+        draw_blocks(canvas, &rects, alpha, left, row_top, w, h, fg);
+    } else if let Some(dots) = only
+        .filter(|c| ('\u{2800}'..='\u{28ff}').contains(c))
+        .map(|c| (c as u32 - 0x2800) as u8)
+    {
+        draw_braille(canvas, dots, left, row_top, w, h, fg);
+    } else if !(fonts.is_emoji(text, cell_info.width >= 2) && {
+        // A narrow emoji (❤️, 1️⃣) spreads into a blank cell after
+        // it, as terminals draw it.
+        let spread = cell_info.width == 1
+            && row.get(x + 1).is_some_and(|next: &Cell| {
+                next.text == " " && next.bg == cell_info.bg && !next.underline
+            });
+        let w = if spread { 2.0 * cell } else { w };
+        fonts.draw_emoji(canvas, text, left, row_top, w, h)
+    }) {
+        // Joiners, selectors and tags the face lacks are
+        // invisible, not tofu.
+        let face = fonts.face(cell_info.bold);
+        for c in text
+            .chars()
+            .filter(|c| *c != ' ' && (c.width() != Some(0) || face.has_glyph(*c)))
+        {
+            fonts.draw(canvas, c, cell_info.bold, size, left, baseline, span, fg);
+        }
+    }
+    if cell_info.underline {
+        canvas.fill_rect(
+            left.round() as i64,
+            (row_top + line - 3.0) as i64,
+            (span * cell).round() as i64,
+            1.max((size / 16.0) as i64),
+            fg,
+        );
+    }
+}
+
+/// Draw the tiles that go under the text (`below`) or over it, each pixel
+/// of their cells taking the nearest pixel of the part of the image shown.
+/// `decoded` keeps each image's pixels for the frame, decoded once.
+fn draw_tiles(
+    canvas: &mut Canvas,
+    tiles: &[Tile],
+    below: bool,
+    grid: &Grid,
+    decoded: &mut HashMap<*const Image, Option<Vec<u8>>>,
+) {
+    for tile in tiles.iter().filter(|tile| tile.below_text == below) {
+        let pixels = decoded
+            .entry(Arc::as_ptr(&tile.image))
+            .or_insert_with(|| tile.image.pixels());
+        let Some(pixels) = pixels.as_ref() else {
+            continue;
+        };
+        let (iw, ih) = (tile.image.width() as i64, tile.image.height() as i64);
+        let edge =
+            |cells: u16, from: f64, size: f64| (from + f64::from(cells) * size).round() as i64;
+        let (x0, x1) = (
+            edge(tile.column, grid.left, grid.cell),
+            edge(
+                tile.column.saturating_add(tile.columns),
+                grid.left,
+                grid.cell,
+            ),
+        );
+        let (y0, y1) = (
+            edge(tile.row, grid.top, grid.line),
+            edge(tile.row.saturating_add(tile.rows), grid.top, grid.line),
+        );
+        if x1 <= x0 || y1 <= y0 {
+            continue;
+        }
+        let [sx, sy, sw, sh] = tile.source.map(f64::from);
+        let sample = |p: i64, p0: i64, p1: i64, s0: f64, s: f64| {
+            (s0 + ((p - p0) as f64 + 0.5) / (p1 - p0) as f64 * s).floor() as i64
+        };
+        let (left, right) = (x0.max(0), x1.min(canvas.width as i64));
+        let columns: Vec<i64> = (left..right).map(|px| sample(px, x0, x1, sx, sw)).collect();
+        for py in y0.max(0)..y1.min(canvas.height as i64) {
+            let iy = sample(py, y0, y1, sy, sh);
+            if iy < 0 || iy >= ih {
+                continue;
+            }
+            for (px, &ix) in (left..right).zip(&columns) {
+                if ix < 0 || ix >= iw {
+                    continue;
+                }
+                let at = ((iy * iw + ix) * 4) as usize;
+                let [r, g, b, a] = [pixels[at], pixels[at + 1], pixels[at + 2], pixels[at + 3]];
+                canvas.blend(px, py, (r, g, b), a);
+            }
+        }
+    }
 }
 
 /// The smallest rectangle (x, y, width, height) where `a` and `b` differ.
@@ -997,6 +1120,99 @@ pub fn gif(frames: &[(Canvas, f64)], out: impl Write) -> std::io::Result<()> {
     )
 }
 
+/// An animated PNG being written frame by frame, in full colour, looping
+/// forever. After the first, each frame stores only the rectangle that
+/// changed, drawn over the frame before; smaller frames are centred.
+pub struct Apng<W: Write> {
+    writer: png::Writer<W>,
+    width: usize,
+    height: usize,
+    previous: Option<Canvas>,
+}
+
+fn png_error(error: png::EncodingError) -> std::io::Error {
+    match error {
+        png::EncodingError::IoError(error) => error,
+        other => std::io::Error::other(other),
+    }
+}
+
+impl<W: Write> Apng<W> {
+    /// Start a `width` x `height` APNG of exactly `frames` frames.
+    pub fn start(out: W, width: usize, height: usize, frames: usize) -> std::io::Result<Apng<W>> {
+        let limit = u32::MAX as usize;
+        if width == 0 || height == 0 || width > limit || height > limit || frames == 0 {
+            return Err(std::io::Error::new(
+                std::io::ErrorKind::InvalidInput,
+                format!("an APNG of {frames} frames of {width}x{height} pixels cannot be written"),
+            ));
+        }
+        let mut encoder = png::Encoder::new(out, width as u32, height as u32);
+        encoder.set_color(png::ColorType::Rgb);
+        encoder.set_depth(png::BitDepth::Eight);
+        encoder.set_compression(png::Compression::Balanced);
+        encoder
+            .set_animated(u32::try_from(frames).unwrap_or(u32::MAX), 0)
+            .map_err(png_error)?;
+        let writer = encoder.write_header().map_err(png_error)?;
+        Ok(Apng {
+            writer,
+            width,
+            height,
+            previous: None,
+        })
+    }
+
+    /// Add `canvas` for `seconds`. A frame where nothing changed is stored
+    /// as one pixel.
+    pub fn write(&mut self, canvas: &Canvas, seconds: f64) -> std::io::Result<()> {
+        let canvas = fit(canvas.clone(), self.width, self.height);
+        let (x, y, w, h) = region(self.previous.as_ref(), &canvas).unwrap_or((0, 0, 1, 1));
+        let writer = &mut self.writer;
+        writer.reset_frame_position().map_err(png_error)?;
+        writer
+            .set_frame_dimension(w as u32, h as u32)
+            .map_err(png_error)?;
+        writer
+            .set_frame_position(x as u32, y as u32)
+            .map_err(png_error)?;
+        let millis = (seconds * 1000.0).round().clamp(1.0, f64::from(u16::MAX)) as u16;
+        writer.set_frame_delay(millis, 1000).map_err(png_error)?;
+        writer
+            .set_dispose_op(png::DisposeOp::None)
+            .map_err(png_error)?;
+        writer
+            .set_blend_op(png::BlendOp::Source)
+            .map_err(png_error)?;
+        let mut data = Vec::with_capacity(w * h * 3);
+        for row in y..y + h {
+            let start = (row * canvas.width + x) * 3;
+            data.extend_from_slice(&canvas.pixels[start..start + w * 3]);
+        }
+        writer.write_image_data(&data).map_err(png_error)?;
+        self.previous = Some(canvas);
+        Ok(())
+    }
+
+    /// Write the end of the file. Fails unless as many frames were written
+    /// as [`Apng::start`] was told.
+    pub fn finish(self) -> std::io::Result<()> {
+        self.writer.finish().map_err(png_error)
+    }
+}
+
+/// Encode frames already drawn as an APNG, on a canvas the size of the
+/// largest.
+pub fn apng(frames: &[(Canvas, f64)], out: impl Write) -> std::io::Result<()> {
+    let width = frames.iter().map(|(c, _)| c.width).max().unwrap_or(1);
+    let height = frames.iter().map(|(c, _)| c.height).max().unwrap_or(1);
+    let mut writer = Apng::start(out, width, height, frames.len())?;
+    for (canvas, seconds) in frames {
+        writer.write(canvas, *seconds)?;
+    }
+    writer.finish()
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -1070,6 +1286,85 @@ mod tests {
             reference_rounded(&mut slow, x, y, w, h, r, (200, 100, 50));
             assert!(fast == slow, "shape {:?} differs", (x, y, w, h, r));
         }
+    }
+
+    #[test]
+    fn images_are_drawn_over_their_cells() {
+        let fonts = Fonts::embedded();
+        let theme = Theme::default();
+        let mut snapshot = shot(b"ab");
+        // Red, green; blue, transparent: over 2x2 cells from (2, 1).
+        let image = Image::rgba(
+            2,
+            2,
+            &[255, 0, 0, 255, 0, 255, 0, 255, 0, 0, 255, 255, 0, 0, 0, 0],
+        )
+        .unwrap();
+        snapshot.images.push(Tile {
+            image: Arc::new(image),
+            column: 2,
+            row: 1,
+            columns: 2,
+            rows: 2,
+            source: [0.0, 0.0, 2.0, 2.0],
+            below_text: false,
+        });
+        let frame = Frame {
+            title: "",
+            key: None,
+            size: 16.0,
+            window: false,
+            caption: None,
+        };
+        let canvas = render(&snapshot, &theme, &fonts, &frame);
+        let (cell, _) = fonts.metrics(16.0);
+        let (line, pad, bar) = layout(&frame);
+        let at = |column: f64, row: f64| {
+            let (x, y) = (pad + column * cell, bar + pad + row * line);
+            let i = (y as usize * canvas.width + x as usize) * 3;
+            (canvas.pixels[i], canvas.pixels[i + 1], canvas.pixels[i + 2])
+        };
+        assert_eq!(at(2.5, 1.5), (255, 0, 0));
+        assert_eq!(at(3.5, 1.5), (0, 255, 0));
+        assert_eq!(at(2.5, 2.5), (0, 0, 255));
+        // Transparent: the background shows.
+        assert_eq!(at(3.5, 2.5), theme.background);
+        assert_eq!(at(4.5, 1.5), theme.background);
+    }
+
+    #[test]
+    fn apng_stores_every_frame_and_only_what_changed() {
+        let a = Canvas::new(20, 20, (0, 0, 0));
+        let mut b = a.clone();
+        b.fill_rect(5, 6, 3, 2, (255, 255, 255));
+        let mut out = Vec::new();
+        apng(
+            &[(a.clone(), 0.5), (b, 0.25), (a.clone(), 1.0), (a, 1.0)],
+            &mut out,
+        )
+        .unwrap();
+        let decoder = png::Decoder::new(std::io::Cursor::new(&out));
+        let mut reader = decoder.read_info().unwrap();
+        let control = reader.info().animation_control.unwrap();
+        assert_eq!((control.num_frames, control.num_plays), (4, 0));
+        let mut frames = Vec::new();
+        let mut buffer = vec![0; reader.output_buffer_size().unwrap()];
+        for _ in 0..4 {
+            reader.next_frame(&mut buffer).unwrap();
+            let fc = reader.info().frame_control.unwrap();
+            frames.push((fc.x_offset, fc.y_offset, fc.width, fc.height, fc.delay_num));
+        }
+        assert_eq!(
+            frames,
+            [
+                (0, 0, 20, 20, 500),
+                (5, 6, 3, 2, 250),
+                (5, 6, 3, 2, 1000),
+                // Nothing changed: one pixel.
+                (0, 0, 1, 1, 1000),
+            ]
+        );
+        assert!(apng(&[], Vec::new()).is_err());
     }
 
     #[test]

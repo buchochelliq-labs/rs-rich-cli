@@ -19,7 +19,7 @@
 
 use std::any::Any;
 use std::cell::{Cell, RefCell};
-use std::collections::{HashMap, HashSet};
+use std::collections::{HashMap, HashSet, VecDeque};
 use std::marker::PhantomData;
 use std::panic::Location;
 use std::rc::Rc;
@@ -73,18 +73,30 @@ struct Graph {
     quiet: HashSet<NodeId>,
 }
 
+/// What a key-hint footer shows: each binding's keys and description.
+pub(crate) type Hints = Vec<crate::help::Hint>;
+
 /// One app's reactive state.
 pub(crate) struct Runtime {
-    id: u32,
+    pub(crate) id: u32,
     values: RefCell<Vec<Box<dyn Any>>>,
     graph: RefCell<Graph>,
     /// Closures sent from other threads, run on the app's thread.
     inbox: mpsc::Receiver<Job>,
     outbox: mpsc::Sender<Job>,
+    /// What wakes the loop's wait when another thread sends a closure.
+    pub(crate) wake: Arc<WakeSlot>,
     /// Tasks started and not yet delivered.
     pub(crate) tasks: Arc<AtomicUsize>,
+    /// The clock [`latest`](crate::latest) threads keep to, and the
+    /// threads waiting for the app to start running (`None` once it has).
+    pub(crate) clock: Arc<crate::task::ThreadClock>,
+    threads: RefCell<Option<Vec<StartThread>>>,
     /// Each watch's step: read its source, and call back if it changed.
     watches: RefCell<HashMap<usize, WatchStep>>,
+    /// The [`on_write`] watches of each slot, with what keeps each write
+    /// for its watch.
+    writes: RefCell<HashMap<usize, Vec<(usize, Keep)>>>,
     next_watch: Cell<usize>,
     /// How deep in [`Signal::update`]s (or passing changes on) this is;
     /// changes made meanwhile wait in `queued`, so no reader computes
@@ -102,6 +114,34 @@ pub(crate) struct Runtime {
     watch_sites: RefCell<HashMap<usize, &'static Location<'static>>>,
     /// What the inspector traces while it is open.
     pub(crate) tracer: crate::inspect::Tracer,
+    /// One-shot timers [`after`](crate::after) made, with how long each
+    /// waits, until the app takes them onto its clock.
+    pub(crate) afters: RefCell<Vec<crate::app::After>>,
+    /// The app's clock at the top of its last turn.
+    pub(crate) now: Cell<std::time::Duration>,
+    /// The state behind each [`Timer`](crate::Timer) handle.
+    pub(crate) timers: RefCell<crate::app::TimerTable>,
+    /// What a [`key_hints`](crate::widgets::key_hints) footer shows, once
+    /// one is made: each binding's keys and description.
+    pub(crate) hints: Cell<Option<Signal<Hints>>>,
+    /// The keys held down, as [`held_keys`](crate::held_keys) reads them.
+    pub(crate) held_keys: Cell<Option<Signal<Vec<rich_interact::Key>>>>,
+    /// [`spawn_then`](crate::spawn_then)'s continuations, by number, kept
+    /// on the app's thread while their work runs.
+    pub(crate) locals: RefCell<HashMap<u64, Box<dyn Any>>>,
+    pub(crate) next_local: Cell<u64>,
+    /// How many screens are open (the first, and those over it), for
+    /// [`Ctx::is_modal`](crate::Ctx::is_modal) and the bindings that ask.
+    pub(crate) layers: Cell<usize>,
+    /// The path from the root to the focused node, once the app made it:
+    /// what [`focused`](crate::focus::focused) and
+    /// [`has_focus`](crate::focus::has_focus) read.
+    pub(crate) focus: Cell<Option<Signal<Vec<NodeId>>>>,
+    /// A container whose first focusable node takes the focus once it is
+    /// laid out ([`Ctx::focus_within`](crate::Ctx::focus_within)).
+    pub(crate) focus_later: Cell<Option<NodeId>>,
+    /// What widgets draw over their neighbours ([`crate::float`]), by node.
+    pub(crate) floats: RefCell<HashMap<NodeId, crate::float::Float>>,
 }
 
 thread_local! {
@@ -111,6 +151,17 @@ thread_local! {
 }
 
 impl Runtime {
+    /// The focus path now, untracked; `None` before the app made it.
+    pub(crate) fn focus_path(&self) -> Option<Vec<NodeId>> {
+        self.focus.get().map(|path| path.get_untracked())
+    }
+
+    /// Focus the first focusable node inside `container` once it is laid
+    /// out (now, if it is).
+    pub(crate) fn focus_within_later(&self, container: NodeId) {
+        self.focus_later.set(Some(container));
+    }
+
     pub(crate) fn new() -> Rc<Runtime> {
         let (outbox, inbox) = mpsc::channel();
         RUNTIMES.with(|all| {
@@ -121,8 +172,12 @@ impl Runtime {
                 graph: RefCell::new(Graph::default()),
                 inbox,
                 outbox,
+                wake: Arc::default(),
                 tasks: Arc::new(AtomicUsize::new(0)),
+                clock: crate::task::ThreadClock::new(),
+                threads: RefCell::new(Some(Vec::new())),
                 watches: RefCell::new(HashMap::new()),
+                writes: RefCell::new(HashMap::new()),
                 next_watch: Cell::new(0),
                 batch: Cell::new(0),
                 queued: RefCell::new(Vec::new()),
@@ -131,6 +186,17 @@ impl Runtime {
                 sites: RefCell::new(Vec::new()),
                 watch_sites: RefCell::new(HashMap::new()),
                 tracer: Default::default(),
+                afters: RefCell::new(Vec::new()),
+                now: Cell::new(std::time::Duration::ZERO),
+                timers: Default::default(),
+                hints: Cell::new(None),
+                held_keys: Cell::new(None),
+                layers: Cell::new(1),
+                focus: Cell::new(None),
+                focus_later: Cell::new(None),
+                floats: RefCell::new(HashMap::new()),
+                locals: RefCell::new(HashMap::new()),
+                next_local: Cell::new(0),
             });
             all.push(Some(runtime.clone()));
             runtime
@@ -147,12 +213,17 @@ impl Runtime {
     }
 
     /// Runtime `id`, if its app is still there.
-    fn try_get(id: u32) -> Option<Rc<Runtime>> {
+    pub(crate) fn try_get(id: u32) -> Option<Rc<Runtime>> {
         RUNTIMES.with(|all| all.borrow().get(id as usize).and_then(Clone::clone))
     }
 
     pub(crate) fn current() -> Rc<Runtime> {
         Runtime::current_for("this")
+    }
+
+    /// The current runtime, if an app is built or running.
+    pub(crate) fn try_current() -> Option<Rc<Runtime>> {
+        CURRENT.with(|current| current.borrow().last().cloned())
     }
 
     /// The current runtime, or a panic that names `what` was called
@@ -196,8 +267,31 @@ impl Runtime {
         result
     }
 
+    /// Start a thread with `start` once the app runs, or now if it does.
+    pub(crate) fn start_thread(&self, start: StartThread) {
+        let mut threads = self.threads.borrow_mut();
+        match threads.as_mut() {
+            Some(waiting) => waiting.push(start),
+            None => {
+                drop(threads);
+                start();
+            }
+        }
+    }
+
+    /// The app runs: start the threads that waited for it, keeping to the
+    /// app's clock if `manual`.
+    pub(crate) fn start_threads(&self, manual: bool) {
+        self.clock.set_manual(manual);
+        let waiting = self.threads.borrow_mut().take();
+        for start in waiting.into_iter().flatten() {
+            start();
+        }
+    }
+
     /// Drop the runtime from the registry (the app is finished).
     pub(crate) fn close(&self) {
+        self.clock.close();
         RUNTIMES.with(|all| {
             if let Some(slot) = all.borrow_mut().get_mut(self.id as usize) {
                 *slot = None;
@@ -311,6 +405,12 @@ impl Runtime {
     /// so no reader computes while a signal's value is out of its slot.
     fn changed(&self, slot: usize) {
         self.queued.borrow_mut().push(slot);
+        self.pass_changes_on();
+    }
+
+    /// Reach the readers of the slots changed meanwhile, unless inside an
+    /// update (whose end does it).
+    fn pass_changes_on(&self) {
         if self.batch.get() > 0 {
             return;
         }
@@ -449,9 +549,37 @@ impl Runtime {
         ran
     }
 
+    /// Slot `slot` was written: keep the value for its [`on_write`]
+    /// watches, and set them off.
+    fn wrote(&self, slot: usize) {
+        let keeps = self.writes.borrow().get(&slot).cloned();
+        let Some(keeps) = keeps else { return };
+        {
+            let values = self.values.borrow();
+            for (_, keep) in &keeps {
+                keep(&*values[slot]);
+            }
+        }
+        let mut graph = self.graph.borrow_mut();
+        for (id, _) in keeps {
+            if !graph.pending.contains(&id) {
+                graph.pending.push(id);
+            }
+        }
+    }
+
+    /// Whether watches wait to run: their sources changed since they last
+    /// ran (a frame's layout moved a rect they read).
+    pub(crate) fn has_pending_watches(&self) -> bool {
+        !self.graph.borrow().pending.is_empty()
+    }
+
     /// Stop the watch `id`.
     pub(crate) fn drop_watch(&self, id: usize) {
         self.watches.borrow_mut().remove(&id);
+        for keeps in self.writes.borrow_mut().values_mut() {
+            keeps.retain(|(watch, _)| *watch != id);
+        }
         self.watch_sites.borrow_mut().remove(&id);
         let mut graph = self.graph.borrow_mut();
         Runtime::unsubscribe(&mut graph, self.id, Observer::Watch(id));
@@ -505,7 +633,10 @@ impl Runtime {
     }
 
     pub(crate) fn proxy(&self) -> Proxy {
-        Proxy(self.outbox.clone())
+        Proxy {
+            outbox: self.outbox.clone(),
+            wake: self.wake.clone(),
+        }
     }
 }
 
@@ -609,6 +740,7 @@ impl<T: 'static> Signal<T> {
         f(value.downcast_mut::<T>().expect("signal type"));
         runtime.values.borrow_mut()[self.slot] = value;
         runtime.batch.set(runtime.batch.get() - 1);
+        runtime.wrote(self.slot);
         runtime.changed(self.slot);
         if let Some(outer) = traced {
             runtime.tracer.end_write(crate::inspect::Write {
@@ -619,6 +751,39 @@ impl<T: 'static> Signal<T> {
                 outer,
             });
         }
+    }
+}
+
+impl<T: 'static> Signal<T> {
+    /// Lend the value to `f`, which may write other signals meanwhile (not
+    /// this one, nor read it): it is out of the table while `f` runs, and
+    /// what `f` changes reaches its readers after.
+    pub(crate) fn lend<R>(&self, f: impl FnOnce(&T) -> R) -> R {
+        let runtime = self.runtime();
+        runtime.batch.set(runtime.batch.get() + 1);
+        let value = std::mem::replace(
+            &mut runtime.values.borrow_mut()[self.slot],
+            Box::new(Updating),
+        );
+        let result = f(value.downcast_ref::<T>().expect("signal type"));
+        runtime.values.borrow_mut()[self.slot] = value;
+        runtime.batch.set(runtime.batch.get() - 1);
+        runtime.pass_changes_on();
+        result
+    }
+
+    /// Replace the value and return the old one. Every reader updates,
+    /// whether the value changed or not: [`set`](Self::set) for a type
+    /// without `PartialEq` (a handle, a closure, a list of watchers).
+    ///
+    /// # Panics
+    /// While a memo computes, as [`update`](Self::update).
+    #[track_caller]
+    pub fn replace(&self, value: T) -> T {
+        let mut new = Some(value);
+        let mut old = None;
+        self.update(|slot| old = new.take().map(|new| std::mem::replace(slot, new)));
+        old.expect("the update ran")
     }
 }
 
@@ -781,7 +946,190 @@ pub fn watch<T: PartialEq + Clone + 'static>(
     crate::app::building_watch(id);
 }
 
+/// Call `on_write` with the value of `signal` after every write to it, in
+/// turn: [`update`](Signal::update), [`replace`](Signal::replace), a
+/// [`set`](Signal::set) that changed it, a [`latest`](crate::latest)
+/// thread's delivery. Where [`watch`] runs when a value changes, and sees
+/// two equal values as one, this sees each write: counting the frames a
+/// thread sends when two of them can be equal (the silence of a sound
+/// card). Not called at the start; like a watch's, the callback runs on
+/// the app's thread between frames, with a [`Ctx`], and stops with the
+/// screen it was made for.
+///
+/// ```
+/// use intuituive::prelude::*;
+///
+/// let app = App::new(|| {
+///     let frame = signal(0);
+///     let (changes, writes) = (signal(0), signal(0));
+///     watch(move || frame.get(), move |_, _| changes.update(|n| *n += 1));
+///     on_write(frame, move |_, _| writes.update(|n| *n += 1));
+///     // Three writes of an equal value: one change (the start), three writes.
+///     text!("{changes} {writes}").on_key("w", move |_| frame.update(|f| *f = 0))
+/// });
+/// let mut driver = app.driver(10, 1);
+/// driver.press("w w w");
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "1 3");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app, or for a signal of another app.
+#[track_caller]
+pub fn on_write<T: Clone + 'static>(
+    signal: Signal<T>,
+    on_write: impl FnMut(T, &mut Ctx) + 'static,
+) {
+    on_write_map(signal, T::clone, on_write);
+}
+
+/// [`on_write`], keeping `project` of each value written (a part of it, a
+/// shared handle to it) rather than a clone: what `on_write` gets.
+#[track_caller]
+pub(crate) fn on_write_map<T: 'static, U: 'static>(
+    signal: Signal<T>,
+    project: impl Fn(&T) -> U + 'static,
+    mut on_write: impl FnMut(U, &mut Ctx) + 'static,
+) {
+    let runtime = Runtime::current_for("on_write()");
+    assert_eq!(
+        signal.runtime, runtime.id,
+        "on_write() follows a signal of the app it is called in"
+    );
+    let id = runtime.next_watch.get();
+    runtime.next_watch.set(id + 1);
+    runtime
+        .watch_sites
+        .borrow_mut()
+        .insert(id, Location::caller());
+    let written: Rc<RefCell<VecDeque<U>>> = Rc::default();
+    let kept = written.clone();
+    let keep: Keep = Rc::new(move |value: &dyn Any| {
+        let value = value.downcast_ref::<T>().expect("signal type");
+        kept.borrow_mut().push_back(project(value));
+    });
+    runtime
+        .writes
+        .borrow_mut()
+        .entry(signal.slot)
+        .or_default()
+        .push((id, keep));
+    runtime.watches.borrow_mut().insert(
+        id,
+        Box::new(move |cx: &mut Ctx| loop {
+            // Taken one at a time: the callback may write the signal again.
+            let next = written.borrow_mut().pop_front();
+            match next {
+                Some(value) => on_write(value, cx),
+                None => break,
+            }
+        }),
+    );
+    crate::app::building_watch(id);
+}
+
+/// [`on_write`] without cloning: `on_write` gets a borrow of `signal`'s
+/// value, between frames, after a turn that wrote it (an update, a
+/// [`latest`](crate::latest) delivery). The value is the signal's as it is
+/// then: a turn that wrote it twice (two updates in one handler) calls back
+/// once, with the last, where [`on_write`] keeps a clone of each. A feed
+/// writes once a turn, so a big value (a buffer, a frame) is seen each
+/// time it comes, and never copied. Not called at the start.
+///
+/// While `on_write` runs, the value is lent out of the signal: it may read
+/// and write other signals, not this one.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::on_write_ref;
+///
+/// let app = App::new(|| {
+///     let frame = signal(vec![0u8; 4096]);
+///     let sum = signal(0u32);
+///     on_write_ref(frame, move |bytes: &Vec<u8>, _| {
+///         sum.set(bytes.iter().map(|b| *b as u32).sum())
+///     });
+///     text!("{sum}").on_key("w", move |_| frame.update(|f| f.fill(1)))
+/// });
+/// let mut driver = app.driver(10, 1);
+/// driver.press("w");
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "4096");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app, or for a signal of another app.
+#[track_caller]
+pub fn on_write_ref<T: 'static>(
+    signal: Signal<T>,
+    mut on_write: impl FnMut(&T, &mut Ctx) + 'static,
+) {
+    let runtime = Runtime::current_for("on_write_ref()");
+    assert_eq!(
+        signal.runtime, runtime.id,
+        "on_write_ref() follows a signal of the app it is called in"
+    );
+    let id = runtime.next_watch.get();
+    runtime.next_watch.set(id + 1);
+    runtime
+        .watch_sites
+        .borrow_mut()
+        .insert(id, Location::caller());
+    let written = Rc::new(Cell::new(false));
+    let marked = written.clone();
+    let keep: Keep = Rc::new(move |_: &dyn Any| marked.set(true));
+    runtime
+        .writes
+        .borrow_mut()
+        .entry(signal.slot)
+        .or_default()
+        .push((id, keep));
+    runtime.watches.borrow_mut().insert(
+        id,
+        Box::new(move |cx: &mut Ctx| {
+            if written.replace(false) {
+                signal.lend(|value| on_write(value, cx));
+            }
+        }),
+    );
+    crate::app::building_watch(id);
+}
+
+/// A counter of the writes to `signal` (as [`on_write`] sees them), for
+/// [`rate`](crate::rate): nothing is cloned. It stops counting with the
+/// screen it was made for.
+pub(crate) fn count_writes<T: 'static>(signal: Signal<T>) -> Rc<Cell<u32>> {
+    let runtime = Runtime::current_for("rate()");
+    assert_eq!(
+        signal.runtime, runtime.id,
+        "rate() follows a signal of the app it is called in"
+    );
+    let id = runtime.next_watch.get();
+    runtime.next_watch.set(id + 1);
+    let count = Rc::new(Cell::new(0u32));
+    let counted = count.clone();
+    let keep: Keep = Rc::new(move |_: &dyn Any| counted.set(counted.get().saturating_add(1)));
+    runtime
+        .writes
+        .borrow_mut()
+        .entry(signal.slot)
+        .or_default()
+        .push((id, keep));
+    // Nothing to run between frames; a watch all the same, so it stops
+    // with its screen.
+    runtime
+        .watches
+        .borrow_mut()
+        .insert(id, Box::new(|_: &mut Ctx| {}));
+    crate::app::building_watch(id);
+    count
+}
+
 impl<T: 'static> Memo<T> {
+    /// `signal`, read only: a value the crate writes and its readers only
+    /// read.
+    pub(crate) fn of(signal: Signal<T>) -> Memo<T> {
+        Memo { inner: signal }
+    }
+
     pub fn with<R>(&self, f: impl FnOnce(&T) -> R) -> R {
         self.inner.with(f)
     }
@@ -816,10 +1164,41 @@ impl<T: Clone + 'static> Memo<T> {
 /// });
 /// ```
 #[derive(Clone)]
-pub struct Proxy(mpsc::Sender<Job>);
+pub struct Proxy {
+    outbox: mpsc::Sender<Job>,
+    wake: Arc<WakeSlot>,
+}
+
+/// What wakes the app's loop from a wait on the terminal (the backend's
+/// waker, set by [`Driver::set_waker`](crate::Driver::set_waker)), shared
+/// by every [`Proxy`].
+#[derive(Default)]
+pub(crate) struct WakeSlot(std::sync::Mutex<Option<Waking>>);
+
+/// Wakes the app's loop.
+pub(crate) type Waking = Arc<dyn Fn() + Send + Sync>;
+
+impl WakeSlot {
+    pub(crate) fn set(&self, wake: Option<Waking>) {
+        *self.0.lock().unwrap_or_else(|e| e.into_inner()) = wake;
+    }
+
+    fn wake(&self) {
+        let wake = self.0.lock().unwrap_or_else(|e| e.into_inner()).clone();
+        if let Some(wake) = wake {
+            wake();
+        }
+    }
+}
 
 /// One run of a watch: read its source, call back if it changed.
 type WatchStep = Box<dyn FnMut(&mut Ctx)>;
+
+/// Starts a [`latest`](crate::latest) thread, once the app runs.
+pub(crate) type StartThread = Box<dyn FnOnce()>;
+
+/// Keeps a write's value (a clone) for an [`on_write`] watch.
+type Keep = Rc<dyn Fn(&dyn Any)>;
 
 /// A closure another thread sent to run on the app's thread.
 pub(crate) type Job = Box<dyn FnOnce(&mut Ctx) + Send>;
@@ -847,9 +1226,23 @@ impl Proxy {
         }))
     }
 
-    /// Send `job` as it is: a task's delivery, which traces itself.
+    /// Send `job` as it is: a task's delivery, which traces itself. The
+    /// loop's wait on the terminal ends, so it runs at once.
     pub(crate) fn send(&self, job: Job) -> bool {
-        self.0.send(job).is_ok()
+        let sent = self.outbox.send(job).is_ok();
+        if sent {
+            self.wake.wake();
+        }
+        sent
+    }
+}
+
+/// Run `f` subscribing no one to what it reads in the app running on this
+/// thread (or as it is, outside one).
+pub(crate) fn untracked<R>(f: impl FnOnce() -> R) -> R {
+    match CURRENT.with(|current| current.borrow().last().cloned()) {
+        Some(runtime) => runtime.untracked(f),
+        None => f(),
     }
 }
 

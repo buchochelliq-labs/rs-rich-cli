@@ -25,18 +25,21 @@ covers both. Three complete ports show where it leads:
 - **A Yazi-style file manager.** [Yazi](https://github.com/sxyazi/yazi) is
   the most-starred app built on ratatui. It is rebuilt on intuiTUIve in
   [`examples/files.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/files.rs)
-  (`cargo run -p rs-rich-intuituive --example files`), with Yazi's layout,
-  theme, status line and default keymap (chords and their which-key pop-up
-  included), previews loaded and highlighted in the background, selection
-  and visual mode, yank, paste, trash, delete, create and rename, find,
-  filter, sorting, tabs and the help. See
+  (`cargo run -p rs-rich-intuituive --features files --example files`), on
+  the `files` plugin's Miller columns, with Yazi's layout, theme, status
+  line and default keymap (chords and their which-key pop-up included),
+  previews by type loaded in the background, selection and visual mode,
+  yank and paste, trash and delete as background tasks, create and rename,
+  find, filter, sorting, git signs, archives, a fuzzy finder, tabs and the
+  help. See
   [the walkthrough](#worked-example-a-yazi-style-file-manager) below.
 - **An oscilloscope.** [scope-tui](https://github.com/alemidev/scope-tui)
   draws audio as an oscilloscope, a vectorscope and a spectroscope, twenty
   or more times a second. It is rebuilt in
   [`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
-  (`cargo run -p rs-rich-intuituive --example scope`), with its keys,
-  options, trigger, averaging and Braille plots. See
+  (`cargo run -p rs-rich-intuituive --example scope --features pcm`), with its keys,
+  options, trigger, averaging, Braille plots and live capture (with the
+  `audio` feature). See
   [the walkthrough](#worked-example-scope-tui-an-oscilloscope) below.
 
 ## What changes, in one table
@@ -293,36 +296,53 @@ way in for an app too big to port at once: move one pane at a time.
 
 [`examples/files.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/files.rs)
 reproduces Yazi as it looks and behaves out of the box: its 1:4:3 columns,
-its default dark theme, header, tab strip and status line, and its default
-keymap. It is built only from the framework's ready-made components, with
-no widget of its own. Its tests are in `tests/files.rs`. It does not reuse
-any of Yazi's code: it is a rebuild of the behaviour, showing how a large
-ratatui app's ideas map.
+its default dark theme, icons and type colours, header, tab strip and
+status line, and its default keymap. It is built only from the
+framework's ready-made components: the core's bars, help, fuzzy lists and
+dialogs, and the `files` plugin's Miller columns, previews, tabs,
+selection, yank, openers, tasks, finder, frecency, search, shell, bulk
+rename and spotter. What it writes itself is Yazi's keymap and what each
+key does (about 1,200 lines, down from round 3's 1,450). Its tests are in `tests/files.rs`. It does not
+reuse any of Yazi's code: it is a rebuild of the behaviour, showing how a
+large ratatui app's ideas map.
+
+    cargo run -p rs-rich-intuituive --features files --example files
+    cargo run -p rs-rich-intuituive --features files,archive,watch,art --example files
 
 !!! note "Credit"
     Ported from [Yazi](https://github.com/sxyazi/yazi), by sxyazi and its
     contributors (MIT licence). Its layout, keys, theme and behaviour are
-    theirs. The optional icons (`--icons`, for a Nerd Font) are the glyphs
-    Yazi's theme picks, from nvim-web-devicons (MIT).
+    theirs. The icons and type colours (`--icons`, for a Nerd Font) are
+    Yazi's defaults, through rs-rich-ext's `filetype`, whose glyphs come
+    from nvim-web-devicons (MIT).
 
 ![The file manager: parent, current directory and a highlighted preview](../../media/tapes/files/files.png)
 
 | Yazi does | The rebuild uses |
 |---|---|
-| Three columns, parent, current and preview, in a 1:4:3 ratio, with rails the mouse drags | `hsplit(parent, hsplit(current, preview, inner), outer)`; the theme's `split.divider` is Yazi's gray |
-| The hovered row reversed across the column, in the entry's colour (a blue bar on a directory) | a `list` per column: its `row_style` gives each row its type's colour and the theme's `selected` reverses it |
-| Line modes (size, permissions, times, owner) at the right of the rows | a second `list` on the same cursor, as wide as its widest cell |
-| Markers for selected, visual-range and yanked rows, and their count in the header | markup at the start of each row; a `text` in the header |
-| A status line: mode, size and name; permissions, `Top`/`Bot`/percent and position | two `text`s in a `row`, coloured as Yazi's theme |
-| Keys: one keymap, chords (`gg`, `,s`, `cc`, `tt`) with a which-key pop-up | the root takes the focus and holds every binding; the first key of a chord opens a `cx.popup` at the bottom whose bindings run the second |
-| Previews loaded and highlighted off the UI thread | a `watch` on the hovered entry starts a `spawn`; a generation counter drops stale results, and a slow one clears the pane |
-| Prompts for find, filter, create, rename and `cd`, applied as typed | `input(signal)` in a `cx.popup` at Yazi's place, a `watch` on the signal |
-| Confirmations before trashing, deleting and overwriting | `cx.modal` with the files and the two buttons |
-| The help, searchable | `cx.modal` holding an `input` and a `list` |
-| fzf and zoxide jumps (`z`, `Z`) | rs-rich-interact's `Jump` component in a modal: files below here, directories visited |
-| Tabs (`tt`, 1–9, `[ ]`, Ctrl+C) | a signal of tabs, `tabs(titles, active)` shown once there are two |
-| Watches the disk | `every(2s)` looks at the directories' modification times; a listing is read again only when one moved |
-| (not in Yazi) a command palette and a right-click menu | `.palette_key("ctrl+p")`, from the bindings' descriptions; `context_menu(cx, items)` in the list's `on_mouse` |
+| Three columns, parent, current and preview, in a 1:4:3 ratio, with rails the mouse drags; each directory remembers its hovered entry; a click in the parent column goes there, one in a directory's preview enters it | `files::miller(start)`: `cwd`, `cursor`, `hovered`, `hidden`, `sort`, `linemode` and `find` are its signals; `arrow`, `page`, `enter`, `leave`, `cd` and `refresh` its moves; `view_with(MillerOptions)` draws it |
+| One row per entry: icon, the type's colour (sniffed from the first bytes) across the row, the hovered row reversed with rounded ends on a Nerd Font, markers, find matches with `[2/5]`, git signs and a line mode at the right | the plugin's `file_list` inside the columns; `MillerOptions::markers(Yank::markers(yanked))`, `.git(git_status(model))`, `.hovered_caps(..)`; `Linemode::{Size, Permissions, Mtime, Btime, Owner}` |
+| The cursor stays on its entry through a sort, a filter, hidden files and a refresh | Miller's cursor is kept by path (the list's `cursor_by`) |
+| Selection: Space, Ctrl+A, Ctrl+R, `v` and `V`, what `y`, `x`, `d` and `r` act on | `files::selection(m)` (the core's `multi_select`), marked in the columns; `m.targets()` |
+| Yank, cut and paste, the copied and cut markers | `files::Yank` in a signal: `Yank::markers`, `yank.paste(into, conflict)` |
+| Find (`/`, `?`), `n` and `N` | `m.find` and `m.find_next(previous)` (the core's `list_search`) |
+| A directory listing sorted, filtered, followed on disk | each column's `DirModel` (`m.current.filter`, `m.sort`, `m.hidden`); with `watch` it follows the disk |
+| Previews by type, off the UI thread, stale results dropped: code highlighted, images, archives, directories, a binary file as `file` classifies it | the plugin's `preview` inside the columns, `MillerOptions::binary(BinaryPreview::FileType)`; `archive` lists tar and zip, `art` draws images; `rich_ext::syntax::preload` warms the grammars at start-up |
+| Header: the path cut from the left, `~` for home, `(filter: x)`, and the selected or yanked count | `files::path_crumb(cwd).crumb_suffix(..)` in the theme's `breadcrumb` styles (cyan) beside a `text` |
+| A status line: mode, size and name; a task progress gauge, permissions, `Top`/`Bot`/percent and position, with rounded caps on a Nerd Font | `status_bar(left, right)` of `seg(..).style_with(..)` segments and `seg_gauge` over `Tasks::summary()`, `.caps(Caps::Rounded)` with icons; `files::coloured_permissions` |
+| Tabs (`tt`, 1–9, `[ ]`, Ctrl+C), the strip shown from two tabs, each tab with its own history (`H`, `L`) | `files::tabs(m)` (the core's `tab_set` and `history`); `tabs(titles, active).fit().auto_hide()` |
+| One keymap that wins over the focused column, with sequences (`gg`, `,s`, `cc`, `tt`) and a which-key pop-up | the root column `.previews_keys()` holds every `bind` and `bind_sequence` (`"comma s"`) in a `section("mgr", ..)`; `App::which_key(true)` in Yazi's which-key colours |
+| Prompts for find, filter, create and `cd` at the top centre, 50 wide; rename below the hovered row with the caret before the extension | `cx.prompt_with(title, text, PromptOptions::new().title_style("default").on_change(..).on_cancel(..), ..)`; `.at(Origin::At(row), ..)` from `m.row_rects()` and `.caret(Caret::At(n))` |
+| Confirmations before trashing and deleting (70 x 20), overwriting (50 x 15) and quitting with tasks running | `cx.confirm_with(title, body, files, ConfirmOptions::new().size(..), on_yes)` |
+| Enter and `o` open with the first opener for the type; `O` picks one below the row | `files::opener_rules()` (Yazi's `[open]` rules) and `files::open_with_tasks`; `cx.pick_with("Open with:", Origin::At(row), ..)`; `extract` runs as a task |
+| Copy, move, trash (the system's trash) and delete as background tasks with progress; `w` shows them; a failure told once | `files::tasks().on_fail(..)` with rs-rich-ext's `file_ops::Op`; `tasks_panel_with(jobs, JobsPanelOptions::new().failed_title(false))` in a modal |
+| fzf and zoxide jumps (`z`, `Z`), zoxide's ranks kept between sessions | `files::finder_with(walk(cwd), ..)` and the core's `fuzzy_list_with` over `files::frecency().follow(m)`'s `ranked()`, in the same look |
+| Search by name and content (`s`, `S`, Ctrl+S) into the current column | `files::search(cwd, query, SearchKind::Name \| Grep)` and `m.show_search(..)` |
+| A shell command on the selection (`;`, `:`) and bulk rename in `$EDITOR` (`r` on a selection) | `files::shell(cx, paths, ShellOptions::new().block(..).tasks(jobs))`, `files::bulk_rename(cx, paths, ..)` |
+| The spotter (Tab) | `files::spot(path)`, the core's `facts`, in a modal |
+| Errors as notifications at the top right | `cx.notify(Level::Error, ..)` and `App::toasts_at(Corner::TopRight)` |
+| The help, searchable, keys in Vim's notation | `cx.help_with(HelpOptions::new().title("mgr.help").key_format(KeyFormat::Vim).filter_first(true))` |
+| (not in Yazi) a command palette and a right-click menu | `.palette_key("ctrl+p")`; `MillerOptions::on_context(..)` opening `context_menu` |
 
 ![The which-key pop-up after `,`](../../media/tapes/files/files-which.png)
 
@@ -332,37 +352,54 @@ ratatui app's ideas map.
 
 ![The filter, applied as it is typed](../../media/tapes/files/files-filter.png)
 
+![An image preview, with the `art` feature](../../media/tapes/files/files-image.png)
+
+![An archive's entries, with the `archive` feature](../../media/tapes/files/files-archive.png)
+
+![The rename prompt below the hovered row, the caret before the extension](../../media/tapes/files/files-rename.png)
+
+![The finder (`z`), its walk streaming in](../../media/tapes/files/files-finder.png)
+
+![The task manager (`w`) with a failed move, and its notification](../../media/tapes/files/files-tasks.png)
+
+![A notification at the top right](../../media/tapes/files/files-notify.png)
+
 Where it differs from Yazi, and why:
 
-- **Trash** goes to a `.trash` folder in the directory the app started in,
-  not the system's trash, so nothing outside it changes.
-- **Opening a file** (Enter, `o`) is left to the shell: the demo opens
-  directories only. Images are described, not drawn; there is no task
-  manager, shell (`;`), `fd`/`rg` search or bulk rename.
-- **Icons** are off unless `--icons` is given, since they need a Nerd Font;
-  without it the rows and the status line are plain text, as Yazi with its
-  icons turned off.
-- **Times** are in UTC and owners are numbers: the standard library has no
-  time zones or user names.
+- **Opening**: `$EDITOR` (split on spaces) and the system opener cover
+  Yazi's `edit`, `open`, `play` and `reveal`, and `extract` with the
+  `archive` feature.
+- **Images** are drawn in half blocks: the `image` node places no Kitty
+  or Sixel graphics yet.
+- **The selection and visual mode** are one for all tabs (Yazi keeps
+  them per tab); switching tabs ends visual mode.
+- **`h` in a search's listing** goes up from the directory searched,
+  where Yazi goes back to it.
+- **The help** filters as you type, where Yazi's moves with j/k and
+  filters after `/`.
+- **Icons** are off unless `--icons` is given or `RICH_NERD_FONT=1` says a
+  Nerd Font is in use: an installed Nerd Font may not be the terminal's.
 
 Two things the port shows:
 
 1. **Slow work belongs on a worker, including rendering.** Highlighting a
    language for the first time compiles its grammar, which takes seconds
-   in a debug build for Markdown and its embedded languages. The preview
-   worker therefore highlights the text too, at the pane's size, and the
-   app's thread only copies the finished lines onto the screen. Yazi does
-   this for the same reason.
-2. **The listing is data, the lists are views.** One memo holds the
-   filtered, sorted entries. The columns, the header, the status line and
-   the preview `watch` all read it, and each updates only when the part it
-   read changes.
+   in a debug build for Markdown and its embedded languages. The app warms
+   the likely grammars at start-up, and the preview worker highlights the
+   text at the pane's size, so the app's thread only copies the finished
+   lines onto the screen. Yazi does this for the same reason.
+2. **The components are signals, so they compose by watching.**
+   Miller's columns know nothing of tabs or selections; `files::tabs`
+   and `files::selection` watch `m.cwd` to keep each tab's history and
+   drop a visual range, and the app reads `m.hovered`, `m.cursor` and
+   `m.current` for its status line, as Yazi's Lua components read its
+   `cx`.
 
 ## Worked example: scope-tui, an oscilloscope
 
 [`examples/scope.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-intuituive/examples/scope.rs)
 rebuilds [scope-tui](https://github.com/alemidev/scope-tui) in about 1,300
-lines. Its tests are in `tests/scope.rs`. Like the file manager, it reuses
+lines, built only from intuiTUIve's components and rs-rich-ext's. Its tests are in `tests/scope.rs`. Like the file manager, it reuses
 none of the original's code. Where the file manager redraws when you press
 a key, this app redraws whenever a new buffer of audio arrives.
 
@@ -375,14 +412,24 @@ a key, this app redraws whenever a new buffer of audio arrives.
 
 | scope-tui does | The rebuild uses |
 |---|---|
-| A loop that blocks on the audio source, then draws | `every(buffer period)` pulls the source's newest buffer into a `frame` signal |
-| Audio from PulseAudio or cpal | raw PCM from a file or stdin (audio piped from `parec`), read on its own thread; a built-in test signal |
+| A loop that blocks on the audio source, then draws | each source is a signal of the newest buffer: the test signal is made every buffer period by `latest_every(…)`, a file or a pipe is read on a `latest(…)` thread kept to its beat by `Latest::sleep`, and a sound card is `audio::open(…)` before the app with `capture.samples()` inside it. `on_write` takes every buffer, two equal ones (silence) included |
+| `fps`, counted as it reads | `rate(samples)`, the writes a second |
+| Audio from cpal (`audio`) and PulseAudio (`pulse`) | intuiTUIve's `audio` feature, on cpal: `audio [DEVICE] [--list] [--timeout S]`, with `--list` printing each device's configurations (`Device::configs`) as scope-tui does and `--timeout` ending the app when `capture.status()` says `Stalled`; `pulse [DEVICE] [--server-buffer N]` on the `pulse` feature's PulseAudio host, every source and sink monitor by name, `--server-buffer` as `AudioOptions::latency` |
+| Raw s16le PCM from a file or a pipe | `audio::pcm(reader, Format::S16Le, …)` |
 | Three `DisplayMode` trait objects, mutated by key handlers | one signal per mode's settings, and one per shared setting (`Graph`) |
-| The header, a `Table` with percentage columns | a `row` of `text` cells with `.percent(…)` and `.gap(1)` |
-| `Chart` with Braille `Dataset`s, axis titles and a legend, and axes without labels (so without lines) | rs-rich-ext's `Chart`, laid out as ratatui's, with the same `Dataset`s and `Labels::None`; the spectroscope's frequencies on a log `Axis`; points outside the bounds turned into NaN, so lines to them are left out as ratatui's canvas leaves them |
-| `rustfft` for the spectrum | a radix-2 FFT, with Bluestein's for other lengths, in the example |
-| Shift ×10, Ctrl ×5, Alt ×⅕ on every step | the same bindings, made in a loop over the modifiers |
+| The header, a one-row `Table` with percentage columns | `cells([(35, …), (25, …), …])`, ratatui's one-row table, styled as the table is with `.style(…)` |
+| `Chart` with Braille `Dataset`s, axis titles and a legend, and axes without labels (so without lines) | rs-rich-ext's `Chart`, laid out as ratatui's, with the same `Dataset`s and `Labels::None`, and drawn as ratatui 0.29 draws: `out_of_bounds(OutOfBounds::Drop)`, `layering(Layering::PerDataset)`, `style("none")` (the legend takes it) and `legend_clear(false)`; the spectroscope's frequencies on a log `Axis` |
+| Reference lines as datasets (29 in the spectroscope) | `Axis::grid([…])` in the axis colour, under the traces |
+| `rustfft` for the spectrum; a trigger search | `rich_ext::dsp::spectrum_full`, `fft`, `hann`; `dsp::trigger(…, Edge::Rising)` |
+| `--tune NOTE`, from a table of pitches | `dsp::note_hz` |
+| Colours parsed by ratatui (`--axis-color DarkGray`) | `rich_ext::palette::style_from_color_name` |
+| Tab through the modes | `.bind_cycle("tab", …, mode, &Mode::ALL)` |
+| Shift ×10, Ctrl ×5, Alt ×⅕ on every step | `.bind_scaled(key, &[("", 1.0), ("shift", 10.0), ("ctrl", 5.0), ("alt", 0.2)], …)`, one help row each |
 | `h` hides the interface | `switch` on the `show_ui` setting |
+
+The test signal is made of `dsp::partials`, `tone`, `noise(..).low_pass(..)`
+and `mix`, and `?` opens the framework's help, each scope's keys in a
+section of its own (`.bind_in("oscilloscope", …)`).
 
 ![The vectorscope: left against right, a Lissajous figure](../../media/tapes/scope/vectorscope.png)
 
@@ -393,23 +440,43 @@ What the port shows:
    draws once a second, and the other cells draw only when a key changes
    them. While the scope is paused nothing draws at all, and identical
    buffers (the `--still` test signal) draw nothing either.
-2. **Take the newest frame from a stream rather than queueing them.** A
-   reader thread keeps only the latest buffer. When the terminal falls
-   behind, the app skips old buffers rather than drawing a backlog.
+2. **Take the newest frame from a stream rather than queueing them.**
+   `latest`, `latest_every` and a capture's `samples()` keep only the
+   newest buffer, so when the terminal falls behind the app skips old
+   buffers rather than drawing a backlog. `on_write` sees every write, so
+   two buffers of silence count as two frames, as in scope-tui.
+3. **Threads can keep to the app's clock.** Under `wait_for_tasks(true)`
+   the test signal and a file's beat run on the app's clock, so the tests
+   count frames exactly.
+4. **Ported layouts can keep ratatui's arithmetic.** `cells` places the
+   header's cells in the same columns as scope-tui's table at every width,
+   and cuts them as a table cell is cut.
 
 It differs from scope-tui in a few deliberate ways:
 
-- It has no audio-device backends (`audio`, `pulse`): pipe audio into
-  `file -` instead. Without a source it draws a test signal.
+- `audio` and `pulse` need the crate's `audio` feature (and ALSA's headers
+  on Linux); without it they say so and point at `file -`. With `audio`
+  alone, `pulse` opens ALSA's `pulse` device (PulseAudio's default
+  source); the `pulse` feature reaches every PulseAudio and PipeWire
+  source.
 - Its `file` source reads a whole buffer per channel. scope-tui 0.3.5's
   reads half of one, so its waveform fills half the width and its
   spectroscope stops at the first frame; this one draws what scope-tui's
-  audio sources do.
+  audio sources do. Past the end of a file it draws silence a buffer
+  period apart, where scope-tui reads silence as fast as it can.
+- `--tune` takes equal-temperament pitches (`dsp::note_hz`), where
+  scope-tui doubles a table of octave-0 pitches rounded to the hundredth:
+  about one note in ten gives a buffer a sample longer or shorter (E2 is
+  582 samples at 48 kHz here, 583 in scope-tui).
 - The trigger threshold keeps scope-tui's 16-bit units, and compares them
   with the samples scaled back up, so it triggers on every source.
-- `?` lists the keys, options may follow the source, and the header's
-  columns are intuiTUIve's percentages, which can differ from ratatui's
-  table by a cell or two.
+- Where the vectorscope's reference lines cross with nothing drawn over
+  them, the two grid lines merge in one cell; scope-tui draws its second
+  reference over the first.
+- `?` lists the keys, and options may follow the source.
+- For now it shows at most 20 frames a second (23 is scope-tui's at its
+  default buffer): the framework picks up values from other threads every
+  50 ms, a bug listed in [the demo gaps](../../design/intuituive-demo-gaps.md).
 
 ![The spectroscope: each channel's spectrum on a log frequency axis](../../media/tapes/scope/spectroscope.png)
 

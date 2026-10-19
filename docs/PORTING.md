@@ -24,7 +24,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `cells.py`, `_cell_widths.py`         | `cells.rs`               | 🟢 | ✅ 0 / 127,754 codepoints |
 | `segment.py`                          | `segment.rs`             | 🟡 | `split_and_crop_lines`/`adjust_line_length` crop (newline inside a segment, zero-width past the edge: `audit2.tsv` + unit tests) |
 | `markup.py`                           | `markup.rs`              | 🟡 | ✅ (error positions in characters of the original string, per-chunk emoji: `audit2.tsv`) |
-| `text.py` (+ justify, overflow, `tab_size`) | `text.rs`          | 🟡 | ✅ (+ `core_gaps.tsv`: tab stops, justify-padding runs; `upstream_features.tsv`: `with_indent_guides`, `detect_indentation`, `from_ansi(style=…)`, `stylize_before`; `audit2.tsv`: span sweep over many lines, empty spans, explicit `justify="default"`, `splitlines`/`isspace` measurement) |
+| `text.py` (+ justify, overflow, `tab_size`) | `text.rs`          | 🟡 | ✅ (+ `core_gaps.tsv`: tab stops, justify-padding runs; `upstream_features.tsv`: `with_indent_guides`, `detect_indentation`, `from_ansi(style=…)`, `stylize_before`; `audit2.tsv`: span sweep over many lines, empty spans, explicit `justify="default"`, `splitlines`/`isspace` measurement; `functions.tsv`: the `markup` property) |
 | `_wrap.py`                            | `wrap.rs`                | 🟢 | ✅ 0 / 30,680 wrap cases |
 | `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | 🟢 | ✅ (theme stack and theme files since core 0.0.6) |
 | `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
@@ -259,12 +259,20 @@ module to port: Python `rich` has no application framework (upstream's is
 Textual, a separate project this repository does not mirror). It composes
 `rs-rich-interact`'s sessions and drivers, `rich-ext` and core `rich`'s
 public APIs. Core is unchanged and no golden fixture covers it. Its
-off-by-default `art` (image nodes over `rs-rich-art`'s public `ImageArt`),
-`audio` (cpal) and `watch` (notify) features add no core hook either. See
+off-by-default `art` (image nodes over `rs-rich-art`'s public `ImageArt`,
+and FIGlet big text over its public `figlet::render`), `pcm` (raw PCM,
+no dependency; the `audio` module's base), `audio` (cpal, with `pulse`
+for cpal's PulseAudio host), `wav` (hound), `watch` (notify), `files` and
+`archive` (a file manager's components, on the always-compiled generic
+`miller_of`, `jobs`, `finder_of`, `preview_of` and `breadcrumb`) features
+add no core hook either. Its always-compiled code is generic only: a
+domain component is one of these plugins (see
+[the demo gaps](design/intuituive-demo-gaps.md)). See
 [Terminal apps](guide/intuituive/index.md).
 
-rs-rich-ext's `filetype`, `fs`, `dsp` and `syntax` modules, written for its
-Yazi and scope-tui rebuilds, are rs-rich additions too; `syntax::preload`
+rs-rich-ext's `filetype`, `fs`, `listing`, `open`, `file_ops`, `trash`,
+`git`, `archive`, `dsp` and `syntax` modules, written for its Yazi and
+scope-tui rebuilds, are rs-rich additions too; `syntax::preload`
 warms core's `SyntectHighlighter` through its public `CodeHighlighter`
 API, so core is unchanged. See
 [Files, spectra and warm-ups](guide/ext/files-and-signals.md).

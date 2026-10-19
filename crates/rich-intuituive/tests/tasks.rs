@@ -165,3 +165,100 @@ fn waiting_covers_tasks_that_results_start() {
     let rows = screen(&run(app, Script::new().keys("q"), 10, 1));
     assert_eq!(rows[0], "second");
 }
+
+/// A fetch for each key that waits until the test lets that key go, and a
+/// way to let it go.
+type Gate = Arc<Mutex<std::collections::HashMap<u32, std::sync::mpsc::Receiver<()>>>>;
+
+fn gated(keys: &[u32]) -> (Gate, Vec<std::sync::mpsc::Sender<()>>) {
+    let mut gates = std::collections::HashMap::new();
+    let mut open = Vec::new();
+    for &key in keys {
+        let (tx, rx) = std::sync::mpsc::channel();
+        gates.insert(key, rx);
+        open.push(tx);
+    }
+    (Arc::new(Mutex::new(gates)), open)
+}
+
+/// Settle `driver` until its first row is `want`, for at most 10 s.
+fn wait_for(driver: &mut intuituive::Driver, want: &str) {
+    let start = std::time::Instant::now();
+    loop {
+        driver.settle();
+        let shown = driver.screen().plain()[0].trim_end().to_string();
+        if shown == want {
+            return;
+        }
+        assert!(start.elapsed() < Duration::from_secs(10), "still {shown:?}");
+        std::thread::sleep(Duration::from_millis(1));
+    }
+}
+
+/// An app showing `resource_for` the key `id`, which `n` moves on; each
+/// key's fetch waits at `gate`.
+fn keyed(gate: Gate, stale: Option<Duration>) -> App {
+    App::new(move || {
+        let id = signal(1u32);
+        let gate = gate.clone();
+        let mut user = intuituive::resource_for(
+            move || id.get(),
+            move |id| {
+                let rx = gate.lock().unwrap().remove(&id);
+                if let Some(rx) = rx {
+                    let _ = rx.recv();
+                }
+                Ok::<_, String>(format!("user {id}"))
+            },
+        );
+        if let Some(wait) = stale {
+            user = user.stale_after(wait);
+        }
+        text(move || match user.get() {
+            Load::Loading => "loading".into(),
+            Load::Ready(name) => name,
+            Load::Failed(error) => error,
+        })
+        .on_key("n", move |_| id.update(|i| *i += 1))
+    })
+}
+
+#[test]
+fn a_keyed_resource_fetches_again_when_its_key_changes() {
+    let (gate, open) = gated(&[1, 2, 3]);
+    let mut driver = keyed(gate, None).driver(20, 1);
+    driver.settle();
+    open[0].send(()).unwrap();
+    wait_for(&mut driver, "user 1");
+    // A new key: loading at once, then its value.
+    driver.press("n");
+    assert_eq!(driver.screen().plain()[0].trim_end(), "loading");
+    // Key 3 comes before key 2's fetch ends: 2's result is dropped.
+    driver.press("n");
+    open[2].send(()).unwrap();
+    wait_for(&mut driver, "user 3");
+    open[1].send(()).unwrap();
+    std::thread::sleep(Duration::from_millis(50));
+    driver.settle();
+    assert_eq!(driver.screen().plain()[0].trim_end(), "user 3");
+}
+
+#[test]
+fn a_stale_value_stays_a_while_and_then_goes() {
+    let (gate, open) = gated(&[1, 2]);
+    let mut driver = keyed(gate, Some(Duration::from_millis(100))).driver(20, 1);
+    driver.settle();
+    open[0].send(()).unwrap();
+    wait_for(&mut driver, "user 1");
+    driver.press("n");
+    // Still the last key's value, until the wait is over…
+    assert_eq!(driver.screen().plain()[0].trim_end(), "user 1");
+    // The wait is on the app's clock: exactly 100 ms of it.
+    driver.advance(Duration::from_millis(99));
+    assert_eq!(driver.screen().plain()[0].trim_end(), "user 1");
+    driver.advance(Duration::from_millis(1));
+    assert_eq!(driver.screen().plain()[0].trim_end(), "loading");
+    // …and the new one once it comes.
+    open[1].send(()).unwrap();
+    wait_for(&mut driver, "user 2");
+}

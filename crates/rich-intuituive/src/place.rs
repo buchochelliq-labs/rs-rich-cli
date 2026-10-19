@@ -25,7 +25,9 @@ pub enum Origin {
     BottomCenter,
     BottomRight,
     /// Below this rectangle, from its left edge; above it when there is no
-    /// room below.
+    /// room below. A box wider than the room right of the rectangle's edge
+    /// is made narrower to stay there (down to the rectangle's width), and
+    /// only moved left when even that does not fit.
     At(Rect),
 }
 
@@ -89,9 +91,20 @@ pub(crate) fn place(
         },
         None => 0,
     };
-    let w = resolve(offset.w, area.width, &|| {
+    let mut w = resolve(offset.w, area.width, &|| {
         measure(Axis::Horizontal, area.width)
     });
+    // Below a rectangle, a box too wide for the room right of it is made
+    // narrower before it is moved: it stays under the rectangle, as wide
+    // as the room there, while that is at least as wide as the rectangle
+    // (or the box, if narrower).
+    if let Origin::At(rect) = origin {
+        let start = (rect.x as i32 + offset.x as i32).max(area.x as i32);
+        let room = (area.right() as i32 - start).max(0) as u16;
+        if w > room && room >= rect.width.min(w).max(1) {
+            w = room;
+        }
+    }
     let h = resolve(offset.h, area.height, &|| measure(Axis::Vertical, w));
     let middle = |start: u16, room: u16, size: u16| start + (room - size) / 2;
     let (x, y) = match origin {
@@ -128,14 +141,46 @@ pub(crate) fn place(
 }
 
 /// Where a node is on the screen, as the last frame laid it out:
-/// [`Node::rect_handle`]. Reading it with [`get`](Self::get) subscribes,
-/// so what reads it draws again when the node moves.
-#[derive(Clone, Copy)]
+/// [`Node::rect_handle`], or [`RectHandle::new`] given to a node later with
+/// [`Node::rect_into`]. Reading it with [`get`](Self::get) subscribes, so
+/// what reads it draws again when the node moves. Two handles are equal
+/// when they are the same handle, so one can be kept in a signal.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct RectHandle {
     rect: Signal<Option<Rect>>,
 }
 
 impl RectHandle {
+    /// A handle for a node not made yet: app state can hold it before the
+    /// view is built, and [`Node::rect_into`] gives it to the node. `None`
+    /// until then.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::screen::Rect;
+    /// use intuituive::RectHandle;
+    ///
+    /// let mut kept = None;
+    /// let app = App::new(|| {
+    ///     let handle = RectHandle::new();
+    ///     kept = Some(handle);
+    ///     column([label("body"), label("status").fixed(1).rect_into(&handle)])
+    /// });
+    /// let mut driver = app.driver(10, 4);
+    /// driver.settle();
+    /// assert_eq!(kept.unwrap().get_untracked(), Some(Rect::new(0, 3, 10, 1)));
+    /// ```
+    ///
+    /// # Panics
+    /// Outside a running or building app.
+    #[allow(clippy::new_without_default)]
+    pub fn new() -> RectHandle {
+        HANDLES.with(|count| count.set(count.get() + 1));
+        RectHandle {
+            rect: crate::reactive::signal(None).untraced(),
+        }
+    }
+
     /// Its rectangle on the screen (inside a scrolling view, the part in
     /// view); `None` before its first frame, while it is hidden, or
     /// scrolled out of view.
@@ -184,10 +229,16 @@ impl Node {
     /// Outside `App::new`'s closure or a screen's.
     pub fn rect_handle(&self) -> RectHandle {
         let mut slot = self.rect_slot.borrow_mut();
-        let rect = *slot.get_or_insert_with(|| {
-            HANDLES.with(|count| count.set(count.get() + 1));
-            crate::reactive::signal(None).untraced()
-        });
+        let rect = *slot.get_or_insert_with(|| RectHandle::new().rect);
         RectHandle { rect }
+    }
+
+    /// Set `handle` (made with [`RectHandle::new`], before this node) to
+    /// where this node is after each frame, as [`rect_handle`](Self::rect_handle)
+    /// would. A node follows one handle: this replaces the one it had, and
+    /// a handle is for one node.
+    pub fn rect_into(self, handle: &RectHandle) -> Node {
+        *self.rect_slot.borrow_mut() = Some(handle.rect);
+        self
     }
 }

@@ -11,7 +11,9 @@
 //!   (drawn by rich-ext's frame exporter, [`rich_ext::frame::Frame::to_svg`]),
 //!   and a text grid (through [`rich_ext::frame::Frame`]);
 //! - an asciinema v2 cast with input events and the theme in its header;
-//! - a GIF with a key overlay, and an MP4 when FFmpeg is installed;
+//! - a GIF and an animated PNG (APNG) with a key overlay, and an MP4 when
+//!   FFmpeg is installed, at the tape's frame rate (`Set Framerate`), from
+//!   every settled screen update;
 //! - a self-contained HTML page with a small player and the screenshots.
 //!
 //! The window frame, a caption and the key overlay can each be switched on
@@ -41,9 +43,16 @@
 //! # Ok::<(), Box<dyn std::error::Error>>(())
 //! ```
 //!
+//! The emulator follows the images a program draws ([`graphics`]: Kitty,
+//! Sixel, iTerm2) on the cell grid, and the kitty keyboard protocol's flags
+//! ([`keyboard`]), so a tape can hold keys down (`KeyDown`, `KeyUp`,
+//! `Hold`) and a game be recorded as it plays.
+//!
 //! Linux and macOS are supported. Windows builds through ConPTY but needs
 //! `bash` on `PATH` and is experimental.
 
+pub mod graphics;
+pub mod keyboard;
 pub mod record;
 pub mod render;
 pub mod screen;
@@ -52,5 +61,5 @@ pub mod tape;
 pub mod terminal;
 
 pub use record::{Formats, Options, Presentation, Problem, Recording, Skipped, Written};
-pub use screen::{Snapshot, Theme};
+pub use screen::{Packed, Snapshot, Theme};
 pub use tape::{Format, Output, Tape, TapeError};

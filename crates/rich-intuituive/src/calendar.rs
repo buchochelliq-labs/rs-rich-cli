@@ -1,7 +1,8 @@
 //! A month calendar with a selected day, within an optional range (#719),
 //! with styled dates, the days of the months either side, a first weekday
-//! of your choice, and a month that only shows (0.0.19 gap batch C7). The
-//! date types are rs-rich-interact's, shared with its date pickers.
+//! of your choice, and a month that only shows (0.0.19 gap batch C7); a
+//! year of months laid out as they fit, and an agenda of the days ahead.
+//! The date types are rs-rich-interact's, shared with its date pickers.
 
 use std::fmt;
 use std::rc::Rc;
@@ -55,6 +56,31 @@ impl Weekday {
     pub fn short_name(self) -> &'static str {
         ["Mo", "Tu", "We", "Th", "Fr", "Sa", "Su"][self as usize]
     }
+
+    /// The day's name, in English: `Monday`.
+    pub fn name(self) -> &'static str {
+        [
+            "Monday",
+            "Tuesday",
+            "Wednesday",
+            "Thursday",
+            "Friday",
+            "Saturday",
+            "Sunday",
+        ][self as usize]
+    }
+}
+
+/// What a month's title says, for [`CalendarOptions::title`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum MonthTitle {
+    /// `October 2026`.
+    #[default]
+    NameYear,
+    /// `October`: in a year whose number is shown once.
+    Name,
+    /// No title: the weekdays on the first row.
+    None,
 }
 
 /// A function giving a date's style, for [`CalendarOptions::events`].
@@ -78,6 +104,8 @@ pub struct CalendarOptions {
     pub(crate) first_weekday: Weekday,
     pub(crate) weekday_style: Option<String>,
     pub(crate) month_style: Option<String>,
+    pub(crate) month_styler: Option<Styler>,
+    pub(crate) title: MonthTitle,
     pub(crate) day_style: Option<String>,
 }
 
@@ -93,6 +121,11 @@ impl fmt::Debug for CalendarOptions {
             .field("first_weekday", &self.first_weekday)
             .field("weekday_style", &self.weekday_style)
             .field("month_style", &self.month_style)
+            .field(
+                "month_styler",
+                &self.month_styler.as_ref().map(|_| "Fn(Date)"),
+            )
+            .field("title", &self.title)
             .field("day_style", &self.day_style)
             .finish()
     }
@@ -102,12 +135,14 @@ impl PartialEq for CalendarOptions {
     /// Equal when every setting is, and both have the same events function
     /// (the same one, not one that gives the same styles) or neither has.
     fn eq(&self, other: &Self) -> bool {
-        let same_styler = match (&self.styler, &other.styler) {
+        let same = |a: &Option<Styler>, b: &Option<Styler>| match (a, b) {
             (None, None) => true,
             (Some(a), Some(b)) => Rc::ptr_eq(a, b),
             _ => false,
         };
-        same_styler
+        same(&self.styler, &other.styler)
+            && same(&self.month_styler, &other.month_styler)
+            && self.title == other.title
             && self.today == other.today
             && self.min == other.min
             && self.max == other.max
@@ -190,6 +225,48 @@ impl CalendarOptions {
         self
     }
 
+    /// The month's style by the month: `style(first_of_month)`, or `None`
+    /// for [`month_style`](Self::month_style)'s. taskwarrior-tui bolds
+    /// only the current month's title.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{month, CalendarOptions, Date};
+    ///
+    /// let this_month = Date::new(2026, 10, 1);
+    /// let options = CalendarOptions::new()
+    ///     .month_style("default")
+    ///     .month_style_with(move |first| (first == this_month).then_some("bold"));
+    /// let app = App::new(move || month(|| Date::new(2026, 10, 1), options.clone()));
+    /// let mut driver = app.driver(20, 8);
+    /// driver.settle();
+    /// let styled = intuituive::testing::styled(&driver);
+    /// assert!(styled.lines().next().unwrap().contains("[bold]October 2026"));
+    /// ```
+    pub fn month_style_with<S: Into<String>>(
+        mut self,
+        style: impl Fn(Date) -> Option<S> + 'static,
+    ) -> CalendarOptions {
+        self.month_styler = Some(Rc::new(move |date| style(date).map(Into::into)));
+        self
+    }
+
+    /// What the month's title says: [`MonthTitle::NameYear`] (`October
+    /// 2026`, the default), [`MonthTitle::Name`] (`October`) or none.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widgets::{month, CalendarOptions, Date, MonthTitle};
+    ///
+    /// let options = CalendarOptions::new().title(MonthTitle::Name);
+    /// let app = App::new(move || month(|| Date::new(2026, 10, 1), options.clone()));
+    /// assert_eq!(app.render_with(&[], 20, 8).unwrap()[0].trim_end(), "      October");
+    /// ```
+    pub fn title(mut self, title: MonthTitle) -> CalendarOptions {
+        self.title = title;
+        self
+    }
+
     /// The days' style, under everything else (ratatui's `default_style`).
     /// Its background fills the weeks.
     pub fn day_style(mut self, style: impl Into<String>) -> CalendarOptions {
@@ -242,7 +319,7 @@ impl CalendarOptions {
     /// The cell (column, row) of `date` in the grid of its month.
     fn cell(&self, date: Date) -> (u16, u16) {
         let at = self.offset(date) + date.day - 1;
-        ((at % 7) as u16 * 3, 2 + (at / 7) as u16)
+        ((at % 7) as u16 * 3, header_rows(self) + (at / 7) as u16)
     }
 
     /// The date drawn at grid position `at` (from the first week's first
@@ -350,9 +427,14 @@ pub(crate) fn set_moment(
     }
 }
 
+/// Options a function gives, read again when it draws (and subscribing
+/// to the signals it reads).
+type OptionsFn = Rc<dyn Fn() -> CalendarOptions>;
+
 struct Calendar {
     source: DaySource,
     options: CalendarOptions,
+    dynamic: Option<OptionsFn>,
 }
 
 /// The width and height of a calendar.
@@ -461,12 +543,51 @@ pub fn calendar_options(selected: Signal<Date>, options: CalendarOptions) -> Nod
     widget(Calendar {
         source: DaySource::Day(selected),
         options,
+        dynamic: None,
+    })
+}
+
+/// A [`calendar_options`] whose options `options` gives, read again
+/// whenever a signal it reads changes: today that moves at midnight, a
+/// range that follows another field, events from the app's state.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::{calendar_options_with, CalendarOptions, Date};
+///
+/// let app = App::new(|| {
+///     let day = signal(Date::new(2026, 10, 7));
+///     let latest = signal(Date::new(2026, 10, 9));
+///     column([
+///         calendar_options_with(day, move || CalendarOptions::new().max(latest.get())).fixed(8),
+///         text!("{day}"),
+///     ])
+///     .on_key("m", move |_| latest.set(Date::new(2026, 10, 31)))
+/// });
+/// let mut driver = app.driver(20, 9);
+/// driver.press("down");
+/// assert_eq!(driver.screen().plain()[8].trim_end(), "2026-10-09");
+/// driver.press("m down");
+/// assert_eq!(driver.screen().plain()[8].trim_end(), "2026-10-16");
+/// ```
+pub fn calendar_options_with(
+    selected: Signal<Date>,
+    options: impl Fn() -> CalendarOptions + 'static,
+) -> Node {
+    widget(Calendar {
+        source: DaySource::Day(selected),
+        options: options(),
+        dynamic: Some(Rc::new(options)),
     })
 }
 
 /// The calendar half of a date-and-time picker.
 pub(crate) fn moment_calendar(source: DaySource, options: CalendarOptions) -> Node {
-    widget(Calendar { source, options })
+    widget(Calendar {
+        source,
+        options,
+        dynamic: None,
+    })
 }
 
 /// A month that only shows, as ratatui's `calendar::Monthly`: the month of
@@ -488,15 +609,47 @@ pub(crate) fn moment_calendar(source: DaySource, options: CalendarOptions) -> No
 /// assert_eq!(screen[2].trim_end(), "                   1");
 /// ```
 pub fn month(shown: impl Fn() -> Date + 'static, options: CalendarOptions) -> Node {
+    let options = Rc::new(options);
+    month_with(shown, move || (*options).clone())
+}
+
+/// A [`month`] whose options `options` gives, read again whenever a
+/// signal it reads changes: its events from the app's tasks, its title's
+/// style from the year shown.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::{month_with, CalendarOptions, Date};
+/// use intuituive::Driver;
+///
+/// let app = App::new(|| {
+///     let due = signal(Date::new(2026, 10, 7));
+///     month_with(
+///         || Date::new(2026, 10, 1),
+///         move || CalendarOptions::new().event(due.get(), "underline"),
+///     )
+///     .on_key("n", move |_| due.set(Date::new(2026, 10, 8)))
+/// });
+/// let mut driver = app.driver(20, 8);
+/// let week = |driver: &Driver| intuituive::testing::styled(driver).lines().nth(3).unwrap().to_string();
+/// driver.settle();
+/// assert!(week(&driver).contains("[underline] 7"));
+/// driver.press("n");
+/// assert!(week(&driver).contains("[underline] 8"));
+/// ```
+pub fn month_with(
+    shown: impl Fn() -> Date + 'static,
+    options: impl Fn() -> CalendarOptions + 'static,
+) -> Node {
     widget(Month {
         shown: Box::new(shown),
-        options,
+        options: Box::new(options),
     })
 }
 
 struct Month {
     shown: Box<dyn Fn() -> Date>,
-    options: CalendarOptions,
+    options: Box<dyn Fn() -> CalendarOptions>,
 }
 
 /// A style given by name or definition, as the calendar's options hold
@@ -509,6 +662,37 @@ fn named(cx: &DrawCx, spec: &str) -> Style {
 
 /// Draw the month of `shown`, its day `selected` highlighted when there is
 /// one, with `options`.
+/// The month title's style: the month's own, else the options', else the
+/// theme's.
+fn title_style(cx: &DrawCx, options: &CalendarOptions, shown: Date) -> Style {
+    let own = (options.month_styler.as_ref()).and_then(|style| style(shown.first_of_month()));
+    match own.as_ref().or(options.month_style.as_ref()) {
+        Some(spec) => named(cx, spec),
+        None => cx.style("calendar.title", "bold"),
+    }
+}
+
+/// Draw `shown`'s title as `options` say, centred on the first row.
+fn draw_title(cx: &DrawCx, canvas: &mut Canvas, shown: Date, options: &CalendarOptions) {
+    let title = match options.title {
+        MonthTitle::NameYear => format!("{} {}", shown.month_name(), shown.year),
+        MonthTitle::Name => shown.month_name().to_string(),
+        MonthTitle::None => return,
+    };
+    let x = WIDTH.saturating_sub(title.len() as u16) / 2;
+    canvas.print(x, 0, &title, Some(&title_style(cx, options, shown)));
+}
+
+/// The rows above the weeks: the title's (when there is one) and the
+/// weekdays'.
+fn header_rows(options: &CalendarOptions) -> u16 {
+    if options.title == MonthTitle::None {
+        1
+    } else {
+        2
+    }
+}
+
 fn draw_month(
     cx: &mut DrawCx,
     canvas: &mut Canvas,
@@ -516,13 +700,8 @@ fn draw_month(
     selected: Option<Date>,
     options: &CalendarOptions,
 ) {
-    let title = format!("{} {}", shown.month_name(), shown.year);
-    let x = WIDTH.saturating_sub(title.len() as u16) / 2;
-    let title_style = match &options.month_style {
-        Some(spec) => named(cx, spec),
-        None => cx.style("calendar.title", "bold"),
-    };
-    canvas.print(x, 0, &title, Some(&title_style));
+    draw_title(cx, canvas, shown, options);
+    let top = header_rows(options);
     let header = match &options.weekday_style {
         Some(spec) => named(cx, spec),
         None => cx.style("calendar.header", "dim"),
@@ -530,7 +709,7 @@ fn draw_month(
     let names: Vec<&str> = (0..7)
         .map(|i| Weekday::ALL[((options.first_weekday.index() + i) % 7) as usize].short_name())
         .collect();
-    canvas.print(0, 1, &names.join(" "), Some(&header));
+    canvas.print(0, top - 1, &names.join(" "), Some(&header));
     // A month that only shows never asks about the focus, so it does not
     // draw again when the focus moves.
     let highlight = match selected {
@@ -550,13 +729,13 @@ fn draw_month(
         .and_then(|s| s.bgcolor())
         .map(|c| Style::new().with_bgcolor(c.clone()))
     {
-        canvas.fill(0, 2, WIDTH, weeks as u16, Some(&back));
+        canvas.fill(0, top, WIDTH, weeks as u16, Some(&back));
     }
     for at in 0..weeks * 7 {
         let Some(date) = options.date_at(shown, at) else {
             continue;
         };
-        let (x, y) = ((at % 7) as u16 * 3, 2 + (at / 7) as u16);
+        let (x, y) = ((at % 7) as u16 * 3, top + (at / 7) as u16);
         let outside = date.month != shown.month || date.year != shown.year;
         // Under the marks: the days' style, the surrounding days', the
         // events'. Then today, the range and the selection, as before.
@@ -631,16 +810,13 @@ impl Widget for Calendar {
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        if let Some(options) = &self.dynamic {
+            self.options = options();
+        }
         let selected = self.source.get();
         if self.options.empty() {
             // No day can be selected: why, where the weeks go.
-            let title = format!("{} {}", selected.month_name(), selected.year);
-            let x = WIDTH.saturating_sub(title.len() as u16) / 2;
-            let title_style = match &self.options.month_style {
-                Some(spec) => named(cx, spec),
-                None => cx.style("calendar.title", "bold"),
-            };
-            canvas.print(x, 0, &title, Some(&title_style));
+            draw_title(cx, canvas, selected, &self.options);
             let style = cx.theme().error_style("error");
             for (row, line) in (2..).zip(EMPTY) {
                 canvas.print(0, row, line, Some(&style));
@@ -651,6 +827,10 @@ impl Widget for Calendar {
     }
 
     fn event(&mut self, _cx: &mut EventCx, event: &WidgetEvent) -> Used {
+        if let Some(options) = &self.dynamic {
+            self.options = options();
+        }
+        let top = header_rows(&self.options);
         if self.options.empty() {
             // Nothing can be selected, so nothing changes the day.
             return Used::No;
@@ -673,9 +853,9 @@ impl Widget for Calendar {
                 }
             }
             WidgetEvent::Mouse(mouse) => match mouse.kind {
-                MouseKind::Down(button) if mouse.row >= 2 && mouse.column < WIDTH => {
+                MouseKind::Down(button) if mouse.row >= top && mouse.column < WIDTH => {
                     let selected = self.source.get_untracked();
-                    let at = (mouse.row as u32 - 2) * 7 + mouse.column as u32 / 3;
+                    let at = (mouse.row - top) as u32 * 7 + mouse.column as u32 / 3;
                     match self.options.date_at(selected, at) {
                         // A day outside the range is used up: nothing
                         // selects it, and no menu speaks for the old date.
@@ -726,6 +906,276 @@ impl Widget for Month {
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         let shown = (self.shown)();
-        draw_month(cx, canvas, shown, None, &self.options);
+        let options = (self.options)();
+        draw_month(cx, canvas, shown, None, &options);
     }
+}
+
+/// How a [`year_view`] lays out and marks its months: each month's
+/// [`CalendarOptions`] (titled by name only, as the year heads them), how
+/// many across (as many as fit by default), the gaps between them, and
+/// the year's heading.
+#[derive(Clone, Debug, PartialEq)]
+pub struct YearOptions {
+    pub(crate) calendar: CalendarOptions,
+    pub(crate) across: Option<u16>,
+    pub(crate) gap: (u16, u16),
+    pub(crate) heading: bool,
+    pub(crate) heading_style: Option<String>,
+}
+
+impl Default for YearOptions {
+    fn default() -> YearOptions {
+        YearOptions {
+            calendar: CalendarOptions::new().title(MonthTitle::Name),
+            across: None,
+            gap: (2, 1),
+            heading: true,
+            heading_style: None,
+        }
+    }
+}
+
+impl YearOptions {
+    /// As many months across as fit, two columns and a row apart, each
+    /// titled by its name, under the year.
+    pub fn new() -> YearOptions {
+        YearOptions::default()
+    }
+
+    /// Each month's options: today, events, the first weekday, styles
+    /// (their [`title`](CalendarOptions::title) included).
+    pub fn calendar(mut self, options: CalendarOptions) -> YearOptions {
+        self.calendar = options;
+        self
+    }
+
+    /// Mark dates: `style(date)` gives a style for the dates it marks (a
+    /// task's due date, a holiday), as [`CalendarOptions::events`].
+    pub fn marks<S: Into<String>>(
+        mut self,
+        style: impl Fn(Date) -> Option<S> + 'static,
+    ) -> YearOptions {
+        self.calendar = self.calendar.events(style);
+        self
+    }
+
+    /// Mark `today` in the theme's `calendar.today` style.
+    pub fn today(mut self, today: Date) -> YearOptions {
+        self.calendar.today = Some(today);
+        self
+    }
+
+    /// The day the weeks start on.
+    pub fn first_weekday(mut self, day: Weekday) -> YearOptions {
+        self.calendar.first_weekday = day;
+        self
+    }
+
+    /// Always `months` across (1 to 12), rather than as many as fit.
+    pub fn across(mut self, months: u16) -> YearOptions {
+        self.across = Some(months.clamp(1, 12));
+        self
+    }
+
+    /// `columns` between months side by side, `rows` between rows of
+    /// them.
+    pub fn gap(mut self, columns: u16, rows: u16) -> YearOptions {
+        self.gap = (columns, rows);
+        self
+    }
+
+    /// Show the year above the months (on by default), in `style` (the
+    /// theme's `calendar.title`, bold, by default).
+    pub fn heading(mut self, on: bool) -> YearOptions {
+        self.heading = on;
+        self
+    }
+
+    /// The heading's style.
+    pub fn heading_style(mut self, style: impl Into<String>) -> YearOptions {
+        self.heading_style = Some(style.into());
+        self
+    }
+
+    /// How many months go across `width`.
+    fn across_in(&self, width: u16) -> u16 {
+        self.across.unwrap_or_else(|| {
+            (width.saturating_add(self.gap.0) / (WIDTH + self.gap.0)).clamp(1, 12)
+        })
+    }
+
+    /// The rows above the months.
+    fn top(&self) -> u16 {
+        if self.heading {
+            2
+        } else {
+            0
+        }
+    }
+
+    /// The height of the year `across` months across.
+    fn height(&self, across: u16) -> u16 {
+        let rows = 12u16.div_ceil(across);
+        self.top() + rows * HEIGHT + (rows - 1) * self.gap.1
+    }
+}
+
+/// A year of months that only show, as many across as fit, centred, under
+/// the year: taskwarrior-tui's calendar, with its marked dates
+/// ([`YearOptions::marks`]). `year` may read signals; so may the
+/// [`year_view_with`] options. It takes no focus and no keys.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::{year_view, Date, YearOptions};
+///
+/// let options = YearOptions::new().marks(|d: Date| (d == Date::new(2026, 1, 9)).then_some("red"));
+/// let app = App::new(move || year_view(|| 2026, options.clone()));
+/// let screen = app.render_with(&[], 64, 40).unwrap();
+/// assert_eq!(screen[0].trim(), "2026");
+/// assert_eq!(
+///     screen[2].trim_end(),
+///     "      January               February               March"
+/// );
+/// assert_eq!(screen[4].trim_end(), "          1  2  3  4                     1                     1");
+/// ```
+pub fn year_view(year: impl Fn() -> i32 + 'static, options: YearOptions) -> Node {
+    let options = Rc::new(options);
+    year_view_with(year, move || (*options).clone())
+}
+
+/// A [`year_view`] whose options `options` gives, read again whenever a
+/// signal it reads changes.
+pub fn year_view_with(
+    year: impl Fn() -> i32 + 'static,
+    options: impl Fn() -> YearOptions + 'static,
+) -> Node {
+    widget(Year {
+        year: Box::new(year),
+        options: Box::new(options),
+    })
+}
+
+struct Year {
+    year: Box<dyn Fn() -> i32>,
+    options: Box<dyn Fn() -> YearOptions>,
+}
+
+impl Widget for Year {
+    fn name(&self) -> &'static str {
+        "year_view"
+    }
+
+    fn role(&self) -> crate::a11y::Role {
+        crate::a11y::Role::Grid
+    }
+
+    fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
+        let options = (self.options)();
+        match axis {
+            // Three across, unless it says.
+            Axis::Horizontal => {
+                let across = options.across.unwrap_or(3);
+                across * WIDTH + (across - 1) * options.gap.0
+            }
+            Axis::Vertical => options.height(options.across_in(width)),
+        }
+    }
+
+    fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        let year = (self.year)();
+        let options = (self.options)();
+        let width = canvas.width();
+        let across = options.across_in(width);
+        let used = across * WIDTH + (across - 1) * options.gap.0;
+        let left = width.saturating_sub(used) / 2;
+        if options.heading {
+            let style = match &options.heading_style {
+                Some(spec) => named(cx, spec),
+                None => cx.style("calendar.title", "bold"),
+            };
+            let heading = year.to_string();
+            let x = width.saturating_sub(heading.len() as u16) / 2;
+            canvas.print(x, 0, &heading, Some(&style));
+        }
+        let origin = canvas.rect;
+        for month in 0..12u16 {
+            let (column, row) = (month % across, month / across);
+            let x = left + column * (WIDTH + options.gap.0);
+            let y = options.top() + row * (HEIGHT + options.gap.1);
+            let rect = crate::screen::Rect::new(
+                origin.x.saturating_add(x),
+                origin.y.saturating_add(y),
+                WIDTH,
+                HEIGHT,
+            )
+            .intersection(origin);
+            if rect.is_empty() {
+                continue;
+            }
+            let mut part = Canvas {
+                screen: &mut *canvas.screen,
+                rect,
+                written: &mut *canvas.written,
+            };
+            let shown = Date::new(year, month as u32 + 1, 1);
+            draw_month(cx, &mut part, shown, None, &options.calendar);
+        }
+    }
+}
+
+/// The days from `from` (which may read signals) for `days` days, each
+/// with what `items` gives for it (console markup, one line each) under a
+/// heading (`Monday 19 October 2026`, bold);
+/// days with nothing are left out, and with nothing at all it says so,
+/// dimmed. An agenda beside a [`calendar`] or a [`year_view`], as
+/// calcurse's and khal's.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::widgets::{agenda, Date};
+///
+/// let app = App::new(|| {
+///     agenda(|| Date::new(2026, 10, 19), 7, |day: Date| match day.day {
+///         19 => vec!["Pay the rent".into()],
+///         21 => vec!["Dentist, 9:00".into(), "Call Ada".into()],
+///         _ => vec![],
+///     })
+/// });
+/// let screen = app.render_with(&[], 30, 6).unwrap();
+/// assert_eq!(screen[0].trim_end(), "Monday 19 October 2026");
+/// assert_eq!(screen[1].trim_end(), "  Pay the rent");
+/// assert_eq!(screen[2].trim_end(), "Wednesday 21 October 2026");
+/// assert_eq!(screen[4].trim_end(), "  Call Ada");
+/// ```
+pub fn agenda(
+    from: impl Fn() -> Date + 'static,
+    days: u32,
+    items: impl Fn(Date) -> Vec<String> + 'static,
+) -> Node {
+    crate::node::text(move || {
+        let start = from();
+        let mut lines = Vec::new();
+        for n in 0..days {
+            let day = start.add_days(n as i64);
+            let listed = items(day);
+            if listed.is_empty() {
+                continue;
+            }
+            lines.push(format!(
+                "[bold]{} {} {} {}[/]",
+                Weekday::of(day).name(),
+                day.day,
+                day.month_name(),
+                day.year
+            ));
+            lines.extend(listed.into_iter().map(|item| format!("  {item}")));
+        }
+        if lines.is_empty() {
+            lines.push("[dim]Nothing scheduled".into());
+        }
+        lines.join("\n")
+    })
+    .what("agenda")
 }

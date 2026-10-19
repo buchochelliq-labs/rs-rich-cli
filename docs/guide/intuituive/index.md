@@ -27,6 +27,11 @@ Yazi-style file manager rebuilt on intuiTUIve.
 cargo generate --git https://github.com/buchochelliq-labs/rs-rich-cli templates/intuituive-app
 ```
 
+The template needs cargo-generate 0.23.4 or later: its manifest is
+`Cargo.toml.liquid`, so a crate that depends on this repo by git does not
+trip over the `{{project-name}}` placeholder, and older releases leave the
+suffix on.
+
 ## A first app
 
 ```rust
@@ -103,6 +108,26 @@ Alignment does not change a text's natural width: an `.auto()` node is
 as wide as its longest line. A stylesheet sets the same with
 `text-align`, `text-wrap: nowrap` and `text-overflow: ellipsis` (or `clip`,
 or `fold`).
+
+**`.truncate_start()`** cuts a line too long from its start instead, with
+`…` where it was cut, and does not wrap: a path keeps where you are
+(`…/rich/src`), as Yazi's header does. rich's `Overflow` is a mirror of
+upstream's and cuts only at the end, so this is the node's own option.
+For a trail of parts with each styled, see [`breadcrumb`](#bars-for-an-apps-chrome)
+(a path's is `files::path_crumb`). **`.truncate_middle()`** keeps both
+ends instead (`long_na…me.txt`): names in tiles, a delete prompt.
+
+**`fit_text(|| vec![long, medium, short])`** shows the longest of several
+forms that fits its width, read again as signals change, the last cut
+with `…` when none fits; an `.auto()` one is as wide as the form it shows:
+
+```rust
+fit_text(move || vec![
+    format!("SELECTED: {name} ({size}, {files} files)"),
+    format!("SELECTED: {name} ({size})"),
+    format!("{name}"),
+])
+```
 
 ## Layout
 
@@ -222,10 +247,67 @@ layers([
 --8<-- "crates/rich-intuituive/tests/snapshots/layers_badge.txt"
 ```
 
-A layer draws again wherever one under it drew, so the board's ticks never
-show through the panel. A click goes to the top layer under the pointer,
+Layers composite: where a layer draws nothing (the room round a centred
+column, a gap between its children) the ones below it show, so a backdrop
+is one `fill` under the content. A panel covers what is inside its frame,
+and a node with a background (`.bg(..)`, `.style(..)`) its whole
+rectangle; text covers the cells it writes. When any layer is to draw,
+they all draw once, bottom first, none clearing what is under it, so the
+board's ticks never show through the panel. A click goes to the top layer under the pointer,
 and the Tab order and the accessibility tree follow the children's order
 (a lower layer's text, read from the screen, leaves out what is over it).
+
+### Layout that follows state
+
+Sizes and visibility can read signals; the parent lays out again when they
+change:
+
+```rust
+row([
+    // gitui's 40/60 swap while the staged list has the focus.
+    unstaged.size_with(move || if has_focus(staged_id) { Size::Percent(40) } else { Size::Percent(60) }),
+    staged.flex(1),
+    // A details pane toggled by a key keeps its state while hidden.
+    details.shown_when(move || show_details.get()),
+])
+```
+
+- **`.size_with(|| Size)`** sizes a node by state, as `.size(..)` does once.
+- **`.shown_when(|| bool)`** (and `.hidden_when`) shows a node only while
+  the condition holds: hidden, it takes no room, no clicks and no focus
+  (a focused node inside lets it go), and keeps its state.
+- **`keyed(|| key, |key| node)`** is one child built again whenever the
+  key changes, the old one dropped (its `on_unmount`s run, its
+  subscriptions end): a pane whose shape follows state, a table rebuilt
+  when its column set changes. While the key stays, the child stays. When
+  the old child had the focus, the new one's first focusable node takes
+  it.
+- **`switch(..).keep_last(n)`** keeps at most `n` pages, dropping the one
+  shown longest ago; a plain `switch` keeps every page it built, as tabs
+  want.
+- An **`.auto()` `switch`** (or `keyed`) is as big as its page asks to be:
+  the page's own `.fixed(n)`, `.min_size(n)` and `.max_size(n)` count, as
+  a row would lay the page out.
+
+### Treemaps
+
+`layout::squarify(rect, &weights, (min_columns, min_rows), aspect)` lays
+weights out as tiles in proportion, as near square as they let them be (a
+cell `aspect` times taller than wide), covering the rectangle edge to edge;
+the smallest that would make a tile below the minimum share one tile for
+the rest (`Squarified { tiles, rest }`). `treemap(items, |key, rect| node)`
+is the node: a tile per `(key, weight)`, its node kept while its key and
+size stay, and `treemap_with(.., TreemapOptions::new().min_tile(8, 3)
+.aspect(2.0).rest(|n| node))` for the rest's tile:
+
+```rust
+treemap_with(
+    move || folders.get(),                        // Vec<(String, f64)>
+    |name, rect| fit_text(move || vec![name.clone(), "…".into()]).panel(""),
+    TreemapOptions::new().min_tile(8, 3).rest(|n| label(format!("+{n}"))),
+)
+.bind_directional_focus("left h", "right l", "up k", "down j")
+```
 
 ### Laying out by hand
 
@@ -380,12 +462,32 @@ A stylesheet sets the same: `border: thick` (and every kind by name),
 title), `border-subtitle-align` and `border-sides: top bottom`. Code wins
 over the sheet.
 
+### Titles and borders that follow state
+
+`.panel_with(|| markup)` makes a panel whose title is read again as the
+signals it reads change (`Diff: src/lib.rs`, `Processes (3 of 210)`);
+`.title_with(|| ..)` does the same on a panel already made, and
+`.add_title_with(edge, align, || ..)` adds one beside `add_title`'s. The
+kind of box can follow state too: `.focus_border(Border::Double)` while
+the focus is inside (Slumber's selected pane), `.border_with(|| ..)` from
+anything else.
+
+```rust
+list(rows, cursor)
+    .panel_with(move || format!("Commit {}/{}", cursor.get() + 1, count.get()))
+    .border(Border::Plain)
+    .focus_border(Border::Double)
+```
+
 ### Rules, and a border on any node
 
 `rule()` is a line across, one row tall, in the theme's border style.
 Directly inside a panel, from its left side to its right, it joins the
 border, in the panel's kind and focus colour: the `├──┤` between the parts
-of a help box. Padding between them keeps it apart. `.border(Border::Thick)`
+of a help box. Padding between them does not keep it apart: a rule at the
+inside edge of a padded column (`.padding(0, 1)`), or of a panel a
+stylesheet pads, runs across the padding to the border, so the column is
+padded once rather than each part. `.border(Border::Thick)`
 picks the kind of a rule on its own, and it is left out of what assistive
 technology reads.
 
@@ -437,11 +539,21 @@ let is_first = memo(move || selected.get() == 0);
 
 - `get()` reads a value, and `set(v)` or `update(|v| …)` writes it. A node
   that reads a signal while drawing subscribes to it, and a write redraws
-  exactly those nodes. `set` with an equal value does nothing.
+  exactly those nodes. `set` with an equal value does nothing. `set` needs
+  `PartialEq`; `replace(v)` does not (it returns the old value, and every
+  reader updates), for a value that cannot be compared: a closure, a
+  handle. `RectHandle` and `PathWatch` compare as handles: equal when they
+  are the same one.
 - `watch(move || source, move |value, cx| …)` runs a callback when a value
   changes (and once at the start), between frames, with a `Ctx`: load a
   preview when the selection moves, save when a document changes. A watch
   made while a screen is built stops when the screen closes.
+- `on_write(signal, move |value, cx| …)` runs a callback after every write
+  to a signal, in turn, an equal value too: a watch sees two equal buffers
+  as one, this sees two frames. Not called at the start. `rate(signal)` is
+  a `Signal<u32>` of how many times a second it was written, counted over
+  each second of the app's clock: a frame-rate meter. Call `rate` where
+  you call `every`.
 - A `memo` derives a value and notifies its readers only when the result
   changes. In a list where each row reads `memo(move || selected.get() == i)`,
   a move redraws two rows, not all of them.
@@ -480,13 +592,16 @@ column([
   handler can move it too, with `cx.focus_next()` or `cx.focus(id)`.
 - **Which node has the focus first:** the first focusable one, unless a
   node asks with `.autofocus()` (a search box, the list a screen is
-  about).
+  about). On a wrapper that is not focusable of its own (a `switch`, a
+  panel or padding round a list) the focus passes to the first focusable
+  node inside it, now or once it is built: a list in a `switch` gets its
+  own keys, and the menu key reaches its `on_context`.
 - **Clicks:** `.on_click(|cx| …)` gets the clicks inside the node and
   focuses it. The app remembers where each node was drawn, so you never
   store rectangles yourself.
 - **Key names** are the ones `rs-rich-interact` uses: `"q"`, `"ctrl+s"`,
   `"up k"` (either key). Spaces separate names, so the space key is
-  `"space"`; a binding with no keys, or a name that is not a key (`"f99"`,
+  `"space"`, and the comma `"comma"` (`"ctrl+comma"`); a binding with no keys, or a name that is not a key (`"f99"`,
   `"ctrl-s"`), panics when the binding is made. A name means the key:
   `"shift+a"` is `"A"`, and `"ctrl+i"` is Ctrl+I, not Tab. A terminal
   without the kitty keyboard protocol sends some keys alike (Tab and
@@ -515,6 +630,29 @@ column([
   children, while it has the focus, which is how a list shows its selected
   row.
 
+### Focus within, scopes, by direction, and as state
+
+- **`cx.focus_within(id)`** focuses the first focusable node inside a
+  container, once it is laid out: a `switch`'s page shown from the next
+  frame, a `keyed` child about to be rebuilt, a search box shown by a
+  signal. No `cx.after(Duration::ZERO, ..)`, no id kept from a builder.
+  Moving the focus again before then drops the wait.
+- **`.focus_scope()`** marks a pane that remembers the node inside it that
+  had the focus last; focusing the pane as a whole gives it back.
+  `cx.focus_next_scope()` and `cx.focus_previous_scope()` move between
+  panes (Slumber's and lazygit's Tab), Tab still moving between nodes.
+- **`cx.focus_direction(Direction::Left)`** moves to the neighbour on a
+  side by where things were drawn (between scopes when the focus is in
+  one), and `.bind_directional_focus("ctrl+left H", "ctrl+right L",
+  "ctrl+up K", "ctrl+down J")` binds the four; `focus::neighbour(rects,
+  from, direction)` is the geometry, for a widget placing parts of its own.
+- **Where the focus is:** `focus::focused()` (the focused node) and
+  `focus::has_focus(id)` (on it or inside it) read it so a text, a memo,
+  a watch or a size follows it.
+- **`.on_focus(|cx| ..)` and `.on_blur(|cx| ..)`** run when the focus comes
+  into a node (or a node inside it) from outside, and when it leaves; a
+  modal opening over it is leaving.
+
 ### Key sequences, any key, and keys a container sees first
 
 ```rust
@@ -532,10 +670,15 @@ column([list(files, selected), status])
   the first key wins over the sequence). Esc cancels a sequence under way;
   any other key that goes on with none of the node's sequences cancels it
   and is then handled as usual, so `g` then `j` still moves down. The comma
-  key is written in quotes, as in any binding: `"\",\" s"`.
+  key is `comma`, as in any binding: `"comma s"` (or quoted, `"\",\" s"`).
+  Spaces mean "then" here and "or" in `bind("k up", ..)`; a sequence is two
+  keys or more, and one of one key panics: bind it with `bind`.
 - **`App::which_key(true)`** shows what can follow while a sequence waits,
   Yazi's way: in up to three columns, in a box at the bottom of the screen,
-  the keys left in the theme's `which_key.key` style (else `accent`).
+  the keys left in the theme's `which_key.key` style (else `accent`), the
+  two cells after them in `which_key.sep`, the descriptions in
+  `which_key.desc`. A description too long for its column ends in `…`, two
+  cells short of the next column's keys.
   `App::which_key_delay(d)` waits `d` first, so a sequence typed quickly
   shows nothing. The help and the command palette list sequences as `g g`.
 - **`.on_any_key(|cx, key| -> bool)`** gets every key that reaches the node
@@ -548,6 +691,57 @@ column([list(files, selected), status])
 - **With nothing focused** (a pop-up of plain text), keys go to the root
   and down through every node that holds a single child, so a binding on
   the content inside a pop-up's `.panel()` works.
+
+### Held keys, releases and key repeat
+
+```rust
+App::new(|| {
+    let game = signal(Game::new());
+    let held = held_keys();
+    column([view(game, held)])
+        .bind("left a", "Move left", move |cx| game.update(|g| g.left(cx.key())))
+        .repeat(Duration::from_millis(167), Duration::from_millis(33))
+        .bind("down", "Soft drop", move |_| game.update(|g| g.soft(true)))
+        .bind_release("down", "Stop the soft drop", move |_| game.update(|g| g.soft(false)))
+})
+.all_keys(true)
+.synthesize_releases(Some(Duration::from_millis(600)))
+```
+
+- **`held_keys()`** is a memo of the keys held down, as plain keys
+  (`plain_key`: no modifiers, a letter in lower case, so `w` is held with
+  or without Shift), in the order they went down. `cx.is_held("w up")`
+  asks of one, `cx.held_keys()` reads them once. A key is held from its
+  press to its release; one whose release will not come is never held.
+- **Releases** reach `.on_key_up(keys, ..)` and `.bind_release(keys,
+  description, ..)` (listed in the help as "(on release)") on the focused
+  path, after the widgets there (which get `WidgetEvent::KeyUp`). A
+  binding without modifiers takes its key's release with any modifiers
+  held by then.
+- **Which releases come:** `cx.releases_reported()` says, as a
+  `Releases`: `None` (a legacy terminal), `ExceptText` (the kitty keyboard
+  protocol: no release for text keys, Enter, Tab and Backspace) or `All`.
+  **`App::all_keys(true)`** asks a kitty terminal to report every key
+  (flag 8, with alternate keys so Shift+1 is still `!`): text keys then
+  report releases, and a modifier on its own is a key (`"shift"`,
+  `"ctrl"`, `"alt"`, `"super"`), as a game wants it.
+  **`App::synthesize_releases(Some(hold))`** makes up the releases that do
+  not come, `hold` after a key's last press or repeat: pick it longer than
+  the terminal's repeat delay. A test sets what its terminal reports with
+  `driver.set_releases(..)` and sends releases with
+  `driver.send(Event::KeyUp(..))`.
+- **Repeat under the app's control:** `.repeat(delay, rate)` after a
+  binding fires it at once, after `delay`, then every `rate` while the key
+  is held, passing the terminal's own repeats over (a game's DAS and ARR).
+  Without a release to stop it, the binding fires on the terminal's
+  repeats instead.
+- **Which key fired:** `cx.key()` in a binding (pressed, repeating or let
+  go) is the key that fired it, so `.bind("w up", ..)` tells `w` from ↑.
+- **Input waiting is taken together:** the loop handles every event
+  already waiting (64 at most) before it draws, so keys typed while a
+  frame was slow are not spread over the frames after. Keys typed while
+  the terminal is asked about itself at the start are kept: the session
+  waits a second at most for the answer, a quarter of one once keys come.
 
 ## Components
 
@@ -610,6 +804,109 @@ column([
   `input(name).select(0..stem)`.
 - Both are text boxes for assistive technology, with their text as the
   value. Validate them with `.error_when(..)`, as any node.
+
+### Completion, history and a command line
+
+```rust
+use intuituive::command_line::{command_line_with, CommandLine, CommandLineOptions, Mode};
+use intuituive::{complete_words, history_in, Completion};
+
+// An input that completes and remembers.
+input(query)
+    .complete(complete_words(["project:", "status:", "priority:"]))
+    .history(history_in("tasks", "filter-history"));
+
+// A command bar: modes, a title, an inline confirm, errors in red.
+let cmd = CommandLine::new();
+column([report, command_line_with(cmd, CommandLineOptions::new().two_rows())])
+    .on_key("/", move |cx| {
+        cmd.open(cx, Mode::new("").title("Filter Tasks")
+            .on_change(move |text, _| filter.set(text.to_string())))
+    })
+    .on_key("x", move |cx| cmd.confirm_keys(cx, "Delete Task 1? (x)", "x", delete));
+```
+
+- **`input(..).complete(|text, caret| Vec<Completion>)`** gives an
+  input candidates for its text and the caret's byte; each
+  `Completion::new(range, text)` replaces a byte range (usually the word
+  before the caret, `word_before(text, caret)`), with an optional
+  `.detail(..)` shown dimmed beside it. Tab opens a pop-up of them under
+  the input (above it where there is no room), drawn over its neighbours
+  without taking the keys; one candidate is taken at once. Tab and ↓ or
+  Shift+Tab and ↑ move through it, Enter takes one, Esc closes it, and
+  typing narrows it. The top candidate's rest shows after the caret,
+  dimmed (`input.ghost`), and → or End at the end takes it.
+  `complete_with(f, CompleteOptions::new().auto().ghost(false).rows(5))`
+  opens it as you type, drops the ghost, shows five rows.
+  `complete_words(list)` completes the word before the caret from a list.
+  The pop-up's styles are `completion`, `completion.selected` and
+  `completion.detail`.
+- **`input(..).history(h)`**: ↑ and ↓ go through the entries that start
+  with what was typed before the first ↑ (newest first; ↓ past the newest
+  puts the typing back), and Enter adds the text as the newest entry.
+  `h` is an `InputHistory`: a name (`"find"`, the session's, shared by
+  name), `history_session()`, `history_in(app, name)` in the app's
+  [state directory](#editing-text-state-files-and-process-jobs), or
+  `history_file(path)`, written on each entry under a lock and merged
+  with what another session wrote. `h.status()` is `Some((3, 7))` while
+  an input browses it, for a `[3 / 7]` in a title.
+- **`cx.prompt_with(.., PromptOptions::new().complete(f).history(h), ..)`**
+  does the same in a prompt.
+- **`command_line(state)`** is a bar of one row (or two:
+  `command_line_with(state, CommandLineOptions::new().two_rows())`, the
+  title above the line) driven by a `CommandLine`, which is `Copy`.
+  `state.open(cx, Mode::new(":"))` opens it with that prefix and takes the
+  focus; the mode sets `.title(markup)`, `.initial(text)`,
+  `.complete(f)`, `.history(h)`, `.on_submit(|text, cx| Ok(()))` (an
+  `Err(message)` keeps it open with the message in red), `.on_change(..)`
+  (a filter as you type) and `.on_cancel(..)` (Esc). `state.confirm(cx,
+  question, on_yes)` asks in place (`y`; `confirm_keys` takes other keys,
+  and `n`, `q` and Esc say no), `state.error(text)` shows an error in red,
+  `state.message(markup)` a message, and `state.close(cx)` closes it. On
+  closing, the focus goes back where it was. Its styles are
+  `command.title` (reversed) and `command.question` (bold).
+
+### Queries over records
+
+```rust
+use intuituive::query::{self, Grammar, Kind, Record, TextMatch, Value};
+
+let grammar = Grammar::new()
+    .field("project", Kind::Text).matching(TextMatch::Prefix).alias("proj", "project")
+    .field("due", Kind::Date)
+    .field("urgency", Kind::Number)
+    .dates(move |word| intuituive::dates::parse(word, now).ok());
+let query = query::parse("proj:home +next (due.before:eow or urgency > 5)", &grammar)?;
+let shown: Vec<&Task> = tasks.iter().filter(|t| query.matches(*t)).collect();
+```
+
+- **`query::parse(text, &grammar)`** reads a filter into a `Query`, and
+  `query.matches(&record)` tests anything that implements `Record`:
+  `field(name) -> Option<Value>`, `text()` for bare words, and `tags()`
+  (or `has_tag`, for virtual tags). Bare and `"quoted words"` look in the
+  text; `field:value` compares by the field's `Kind` (text by its
+  `TextMatch`, numbers equal, dates on the same day), `field:` matches a
+  record without it; modifiers `field.before:`/`.after:`/`.above:`/
+  `.below:`, `.is:`/`.not:`, `.has:`/`.hasnt:`, `.startswith:`/
+  `.endswith:`, `.none:`/`.any:`; comparisons `field > 5`, `<=`, `!=`;
+  `+tag`/`-tag`; `and`, `or` (looser), `not` or `!`, and parentheses.
+  Errors are `QueryError { message, at }`, `at` the byte range.
+- **The grammar** names the fields, their aliases and kinds, reads
+  values (`.read(|text| ..)` for one field's sizes or levels, `.dates(..)`
+  for dates), gives some bare words a test of their own (`.words(..)`,
+  Taskwarrior's ids), and says whether case counts, whether an unknown
+  `name:value` is a word (`.lenient()`), and whether `+word` is a tag. A
+  Taskwarrior or a process list's syntax is a grammar, not core code.
+- **Dates as typed:** `intuituive::dates` (rs-rich-interact's) reads
+  `now`, `today`, `tomorrow`, `eod`, `monday`, `eow`, `som`, `eoy`,
+  `2026-11-01`, `14:30`, `3d`, `2w` and the rest relative to a given now
+  (`dates::parse(word, now)`, `parse_with(.., DateOptions::new()
+  .week_start(6))` for weeks from Sunday); `dates::NAMES` lists the words
+  for completion. `DateTime::now_local()` and `Date::today_local()` read
+  the clock in the local zone, which follows summer time (`Zone::Local`;
+  `Zone::posix(rule)`, `Zone::named("Europe/London")` and `Zone::tzif`
+  read others), and `DateTime::from_unix(secs, &zone)`/`to_unix(&zone)`
+  convert.
 
 ## Logs
 
@@ -839,12 +1136,44 @@ list(move || names.get(), cursor)
   and yanked markers. The column is kept with nothing marked, so the text
   never moves when a mark comes or goes.
 - **`.selected_style_for(|i| Option<style>)`** is the highlight's style
-  when item `i` is selected, instead of the theme's `selected`: a hovered
-  directory reversed in its own blue.
+  when item `i` is selected, instead of the theme's `selected`: a
+  different look per row (the preview's underline). A bar in each row's
+  own colour needs none: `.row_style` of the colour and a `reverse`
+  `selected` reverse it already.
+- **`.highlight_layer(HighlightLayer::Under)`** puts the highlight under
+  the item's markup rather than over it, so what the markup styles keeps
+  its own style on the selected row: Yazi's rounded ends
+  (`[not reverse blue]\u{e0b6}[/]`) outside the reversed name.
+- **`.wheel_step(n)`** moves the selection `n` items a turn of the wheel
+  (three by default); `0` leaves the wheel to the list's ancestors, whose
+  `on_mouse` otherwise never sees it.
 - **`.row_rects(&rects)`** records where each row in view was drawn on
   the screen, so a handler can open a popup at a row:
   `rects.get(i)` is item `i`'s rectangle, or `None` out of view. Tables
   and `virtual_list` take it too.
+
+`list_lazy`'s closures, and those of `.trailing`, `.marker` and
+`.row_style`, each read the app's data again for the same row.
+**`list_rows(len, |i| ListRow, selected)`** asks one closure per row and
+makes each row once a draw, its parts together:
+
+```rust
+use intuituive::widgets::{list_rows, ListRow};
+
+list_rows(move || files.with(Vec::len), move |i| {
+    files.with(|f| {
+        let entry = &f[i];
+        ListRow::new(entity(entry))
+            .trailing(linemode(entry))
+            .marker(marker_style(entry))
+            .style(row_style(entry))
+    })
+}, cursor)
+.marker_column()
+```
+
+`.marker_column()` keeps the marker column, filled from each row's
+`marker`; every other list option still applies.
 
 #### How a tab strip looks
 
@@ -860,6 +1189,140 @@ none), in the theme's `tabs.divider` style; **`.tab_padding(left, right)`**
 replaces the space either side of each title; and **`.titles_align(..)`**
 puts the strip at the start, the centre or the end of its width. Clicks
 find the right title whatever the divider and padding.
+**`.auto_hide()`** hides the strip while it has fewer than two titles (it
+takes no row then), and **`.on_select(|to, cx| ..)`** is told the title a
+click, ←/→ or a number key picked, instead of the strip setting its
+signal: the app moves there its own way and sets the signal itself, with
+no click routing of its own. **`.fit()`** cuts the titles with `…` to
+share the width when they do not all fit (the short ones whole, the long
+ones to an equal share), rather than losing the last off the end; titles
+not selected are drawn in the theme's `tabs.unselected` style, under their
+own markup.
+
+#### A set of tabs
+
+```rust
+use intuituive::{tab_set, tabs_for};
+
+let pages = tab_set(|| Page::new());          // one tab to start
+column([
+    tabs_for(&pages, |page| page.title()).fit().fixed(1),
+    text(move || pages.with_active(|page| page.body())),
+])
+.on_key("t", move |_| { pages.open(); })      // after the active one
+.on_key("x", move |_| { pages.close_active(); })
+.on_key("shift+right", move |_| pages.swap(1))
+.on_key("tab", move |_| pages.cycle(1))
+```
+
+**`tab_set(|| state)`** keeps one state per tab with one active, the
+model Bubble Tea apps and Textual's `TabbedContent` keep: `open()` (a
+state from the closure) and `open_with(state)` add a tab after the active
+one and make it active, `close(i)` and `close_active()` never close the
+last, `switch(i)`, `cycle(by)` (wrapping) and `swap(by)` (the active tab
+moves); `active()` and `tabs()` are its signals, `with_active`,
+`update_active` and `update(i, ..)` read and change a state. A state is
+anything: plain values, or signals made for the tab (a cwd and its
+history). **`tabs_for(&set, |state| title)`** is a `tabs` strip over it,
+a click or a key switching tabs; it takes every strip option.
+
+#### Tables that follow state
+
+```rust
+use intuituive::widgets::{table_with, Column, HighlightLayer, TableLayout, TableOptions};
+
+let layout = TableLayout::new();
+let options = TableOptions::default()
+    .columns_with(move || report.with(|r| r.columns()))    // titles and sets that change
+    .columns_shown(move || shown.get())                     // a column filter, by index
+    .freeze_columns_with(move || frozen.get())              // csvlens's `f<n>`
+    .cells_when(move || mode.get() == Mode::Cell, column)   // Tab between row and cell modes
+    .multiline_when(move || wrap.get())                     // `-S`
+    .widths(widths)                                         // `<`/`>`, shared with drags
+    .sort(sort)
+    .sort_indicator(|title, order| format!("{title} [{}]", if order == Order::Ascending { "▴" } else { "▾" }))
+    .offset_x(first_column)                                 // `Col n`, Ctrl+←/→
+    .highlight_layer(HighlightLayer::Under)                 // matches keep their colours
+    .marker(move |i| marked(i).then(|| "on yellow".into()))
+    .symbol_for(2, move |i, _| (i == playing.get()).then(|| "► ".into()))
+    .layout(&layout);
+table_with(vec![], rows, cursor, options)
+    .selection_markers(picked, move |i| key_of(i))
+    .cursor_by(move |i| key_of(i))
+```
+
+A table's options can follow state, so a change of layout needs no new
+table (and keeps the scroll across, the cursor and the widths):
+
+- **`.columns_with(|| columns)`** gives the columns from a closure that
+  may read signals, in place of the ones the table was made with: `PID`
+  becoming `Count`, another report's set. **`.columns_shown(|| indices)`**
+  shows only some of them, in the order given. A column's cursor, sort and
+  width stay its own (by its index among all the columns).
+- **`.freeze_columns_with(|| n)`**, **`.multiline_when(|| on)`**,
+  **`.cells_when(|| on, column)`** (the cell cursor on or off; off, ←/→
+  go to the ancestors or scroll across) and **`.sort_indicator(|title,
+  order| ..)`** are the frozen count, wrapping, the selection mode and the
+  sorted title, read at each draw.
+- **`.widths(signal)`** holds each column's width (`None` keeps its
+  `Size`); the mouse's drags write it too, so a key can resize.
+  **`Column::min_percent(p)`** and **`max_percent(p)`** clamp a column to
+  a share of the table (csvlens's 30% cap), scrolled across too.
+  **`Column::priority(n)`** drops a column whole, lowest first, when the
+  columns do not fit, so a flexible column keeps its `min` (or title)
+  instead of shrinking to nothing; a column with no priority is never
+  dropped.
+- **`.offset_x(signal)`** is the first scrolled column in view (its place
+  among the columns shown), to read or set; **`.layout(&TableLayout)`**
+  records what each draw laid out: `width_of(column)`,
+  `columns_in_view()`, `first_row()` and `rows_in_view()`.
+- **`.marker(|i| style)`** is a one-cell marker column outside the
+  highlight, as a list's, and **`.selection_markers(..)`** and
+  **`.marks_by(..)`** draw a `multi_select`'s marks in it. **`.cursor_by(|i|
+  key)`** keeps the cursor on its row when the rows are sorted or
+  filtered again. **`.symbol_for(width, |i, selected| markup)`** gives each
+  row a symbol in a column `width` wide (`None`: the plain `.symbol` on
+  the selected row). **`.highlight_layer(HighlightLayer::Under)`** puts the
+  selection's highlight under the cells' own styles.
+- **`.row_height_for(|i| lines)`** gives each row its height; a
+  `virtual_table` asks only for the rows near the view, with
+  `.multiline()` too.
+
+#### Rows from a source
+
+```rust
+use intuituive::widgets::{source_table, view_of, Order, RowCount, TableSource, ViewQuery};
+
+struct Indexed { /* an index of record offsets, built on a task */ }
+impl TableSource for Indexed {
+    fn len(&self) -> RowCount { /* RowCount::AtLeast(n) until the index is done */ }
+    fn row(&self, i: usize) -> Vec<String> { /* seek and parse record i */ }
+}
+
+let view = view_of(Indexed::open(path), move || {
+    let (pattern, sort) = (filter.get(), sort.get());
+    let mut query = ViewQuery::default().keep(move |cells| matches(&pattern, cells));
+    if let Some((column, order)) = sort {
+        query = query.sort(column, order);
+    }
+    query
+});
+source_table(view, columns, cursor, options).cursor_by(move |i| view.source_row(i))
+```
+
+- **`TableSource`** is rows by index: `len()` (a `RowCount`, `Exact(n)` or
+  `AtLeast(n)` while not all are found; it prints `n+`) and `row(i)`.
+  **`source_table(source, columns, selected, options)`** is a
+  `virtual_table_with` over one; a `len` that reads a signal draws the
+  table again as the source grows.
+- **`view_of(source, || query)`** filters (`keep`), sorts (`sort`, with an
+  optional `compare`) and finds (`find`) over a `Send + Sync` source on a
+  worker thread, reading each row once a pass; a new query, or the count
+  becoming final, starts a new pass and drops the old. The `View` is
+  `Copy` and a `TableSource` itself: `len()`, `source_row(at)`,
+  `found()`, `next_found(at)` and `previous_found(at)` (round the ends),
+  `place(at)` for `[Find: 2/4]`, `is_busy()`. Nothing in it knows a file
+  format: the source does.
 
 #### Scrollbars
 
@@ -981,6 +1444,23 @@ hsplit(
   });
   grid([Size::Fixed(22); 3], months)
   ```
+- **Titles and options that follow state:** `CalendarOptions::title(
+  MonthTitle::Name)` titles a month `October` (`NameYear`, the default,
+  `October 2026`; `None`, no title), and `.month_style_with(|first| ..)`
+  styles each month's title by the month (bold only for this one).
+  `month_with(shown, || options)` and `calendar_options_with(selected, ||
+  options)` read their options again whenever a signal those read
+  changes.
+- **`year_view(year, YearOptions::new())`** is the year as taskwarrior-tui
+  draws it: as many months across as fit (`.across(n)` for a set number),
+  centred, under the year, each titled by its name, with
+  `.marks(|date| Some("red"))` styling dates, `.today(date)`,
+  `.first_weekday(..)`, `.gap(columns, rows)` and `.calendar(options)`
+  for each month's options. `year_view_with(year, || options)` reads its
+  options from signals.
+- **`agenda(from, days, |date| items)`** lists the days from `from` that
+  have items, each under a bold heading (`Monday 19 October 2026`), and
+  says "Nothing scheduled" when none has.
 - **`virtual_list(len, row, selected)`** is the list form of
   `virtual_table`: it asks only for the rows in view. `.scroll_padding(n)`,
   `.row_style(|i| …)`, `.offset(signal)` and `.row_rects(&rects)` work on
@@ -995,6 +1475,18 @@ hsplit(
   (`LazyItem::leaf` or `LazyItem::branch`). The tree shows
   "loading…" until they arrive, and shows an error in red if loading
   fails. `selected` holds the key of the selected item.
+  `tree_lazy_with(roots, children, selected, loads)` keeps what loaded in a
+  `LazyTree`, whose `reload(key)` and `reload_all()` load a level again
+  (a file deleted under an open folder).
+- **`tree_keyed(items, selected, expanded)`** keeps the selection and the
+  open items by each `TreeItem`'s key (`TreeItem::keyed(key, label)`), not
+  its place: a file staged moves every row after it, and the tree stays on
+  its item with its folders open. An item that goes leaves the cursor at
+  its row. **`tree_reveal(&items, key, selected, expanded)`** opens a key's
+  ancestors and selects it. **`TreeItem::prefix(markup)`** is drawn before
+  the indent (gitui's status letters), **`.symbol("🦄 ")`** before the
+  selected row, and **`.tree_keys(TreeKeys::default().no_toggle())`** (or
+  `no_letters`, `no_open_close`) leaves those keys to the tree's ancestors.
 
 #### Times, and a date with a time
 
@@ -1031,6 +1523,85 @@ column([
   after its max) is said there too, and nothing changes the moment.
   Eleven rows, twenty cells wide.
 - The focused day and field are reversed, which reads without colour.
+
+#### List options through a wrapper
+
+A list's options (`.symbol`, `.highlight_layer`, `.wheel_step`,
+`.selected_style_for`, `.marker`, `.on_context`, `.cursor_by`, …) reach
+the list a node wraps: a panel, padding, a reorderable list (a node with
+one child), and a `switch`, whose lists get them as they are built, so a
+list with a "No items" text in its place keeps them. On a node that is
+not a list and wraps none, they do nothing, and a debug build says so on
+stderr, once for each option.
+
+#### The cursor by key, and a context menu
+
+```rust
+list(move || names(), cursor)
+    .cursor_by(move |i| entries.with(|e| e[i].id))
+    .on_context(move |i, cx| open_menu(i, cx))
+```
+
+**`.cursor_by(|i| key)`** keeps the cursor on the same item when the
+items change: re-sorted, filtered, read again. The key of the item under
+the cursor is remembered; when the key now at its index differs, the
+selection goes to wherever it went. Moving the cursor is unchanged.
+**`.on_context(|i, cx| ..)`** runs on a right press on an item (which
+selects it first, and goes no further) or the menu key (`menu`, which
+terminals with the kitty keyboard protocol report, or Shift+F10) on the
+selected item: place the menu at `cx.pointer()`, or at the row's
+`row_rects` from the keyboard.
+
+#### A range of rows
+
+```rust
+let anchor = signal(None);
+list(move || lines(), cursor).range(anchor)
+```
+
+**`.range(anchor)`** gives a list a range from an anchor to the cursor:
+Shift with ↑/↓, PgUp/PgDn or Home/End sets the anchor where the cursor
+was and moves the cursor, a move without Shift clears it, and the rows
+between are lit in the theme's `selected.range` style. Read it as
+`anchor..=cursor`, either way round. A list without a range leaves Shift
+with a move to its ancestors.
+
+#### Picking several items, and finding in a list
+
+```rust
+use intuituive::{list_search, multi_select};
+
+let picked = multi_select::<String>()
+    .over(move || names.get())                // the items' keys, in order
+    .range_from(cursor);                      // what a visual range follows
+let find = list_search(move || query.get(), move || names.get(), cursor);
+list(move || names.get(), cursor)
+    .selection_markers(picked, move |i| names.with(|n| n[i].clone()))
+    .on_key("space", move |_| picked.toggle(hovered()))
+    .on_key("v", move |_| picked.visual(false))
+    .on_key("V", move |_| picked.visual(true))
+    .on_key("esc", move |_| picked.end_visual())
+    .on_key("n", move |_| { find.next(); })
+```
+
+- **`multi_select::<K>()`** is a selection by key that outlives the
+  list's order: `toggle`, `select`, `unselect`, `clear`, and over the
+  items `select_all` and `invert`. `visual(unset)` anchors a range at the
+  cursor that follows it, selecting (or, with `unset`, unselecting) what
+  it covers, as vim's and Yazi's `v` and `V`; `end_visual()` keeps it,
+  `cancel_visual()` drops it. `selected()` is the selection with the
+  range counted, `targets(hovered)` the selection or else the hovered
+  item (what a copy or a delete acts on), `mark(&key)` how one key
+  stands. `Copy`, like a signal.
+- **`.selection_markers(sel, |i| key)`** draws the marks in a list's
+  one-cell marker column: `marker.selected` (yellow), `marker.visual`
+  (cyan) and `marker.unset` (red) in the theme; a `.marker(..)` still
+  shows where an item has no mark.
+- **`list_search(query, items, cursor)`** finds over a list's items (their
+  plain text) in smart case: lower case matches either case, a capital
+  exactly. `next()` and `previous()` move the cursor and wrap, `place()`
+  is `(n, of)` for a `2/5` count (0 off a match), `matches()` and
+  `is_match(i)` for a highlight.
 
 #### Reorderable lists
 
@@ -1305,6 +1876,17 @@ What a widget can do:
     on a part.
   - `cx.report_movement()` turns on movement events without redrawing on
     them.
+- **Where it is:** `cx.rect()` in `draw` is its rectangle on the screen
+  (in a viewport's content, inside one), as `EventCx::rect` is in
+  `event`: for what is drawn outside the cells, a terminal graphic over
+  the widget.
+- **A picture a cell at a time:** `canvas.put_rgb(x, y, '▀', Some(fg),
+  Some(bg))` sets one cell with plain RGB colours, building no segment
+  and no style (the pixel nodes draw with it): a full screen of half
+  blocks whose every colour changes each frame costs about 8 ms at
+  160x50 in a release build, painting included (`tests/pixel_frames.rs`).
+  Styles no cell uses any more are dropped between frames, so such a
+  screen keeps only a frame's worth of them.
 - **`measure`** says how big it wants to be, for `Size::Auto` and for
   modals sized to their content. `MeasureCx::measure`, `extent` and
   `stack` measure and lay out children as the built-in nodes do.
@@ -1325,6 +1907,13 @@ What a widget can do:
   [`layers`](#layers) does: a child draws again wherever an earlier one
   drew in the same frame, and a click goes to the later one.
 - **`caret`** places the text caret while it has the focus.
+- **`access_text`** says what it shows to assistive technology (`Level
+  42%` for a meter of block glyphs): the widget is read as text with that
+  name, after a `.label` code gave it, in the accessibility tree, linear
+  mode and to a screen reader, with no `described` child to wrap.
+- **`cx.now()`** in `draw` is the app's clock, the time its loop (or a
+  test's `update` and `advance`) gave it: a peak that holds for a second,
+  a stall seen after five, tested frame by frame.
 
 Every built-in node is a widget built on this trait: text, labels,
 renderables, columns, rows, grids, panels, padding, `each`, `switch`,
@@ -1342,6 +1931,80 @@ holds them sees keys first (`previews_keys`), and while it is paused it
 keeps them from the meters.
 
 ![Four meters, each a widget of its own](../../media/tapes/intuituive/meters.png)
+
+### Bars for an app's chrome
+
+Ready-made nodes cover the rows round an app's content (in
+`intuituive::widgets`):
+
+```rust
+use intuituive::widgets::{breadcrumb, cells, key_hints, live, seg, status_bar, Caps};
+
+column([
+    breadcrumb(move || trail.get()).crumb_suffix(move || flags()),
+    body.flex(1),
+    status_bar(
+        [
+            seg(move || format!(" {} ", mode.get())).style_with(move || mode_style()),
+            seg(move || format!(" {} ", size())).style("blue on white"),
+            seg(move || format!(" {}", name())),
+        ],
+        [seg(move || format!(" {}/{} ", at(), len())).style("white on blue")],
+    )
+    .caps(Caps::Rounded),
+    key_hints(),
+])
+```
+
+- **`status_bar(left, right)`** is one row of segments, the left group
+  from the left edge and the right against the right one. A segment is
+  markup on a style (`seg(..).style(..)`, or `style_with` for one that
+  changes); with `.caps(Caps::Powerline)` or `Caps::Rounded` (Yazi's;
+  both need a Nerd Font) a glyph between two segments takes the colour of
+  the one it ends on the background of the next, as lualine and
+  vim-airline draw them. A segment with no background gets no cap, an
+  empty one is left out, and the left group is cut with `…` when the two
+  do not fit. **`seg_gauge(|| fraction, || label)`** is a segment that is
+  a gauge, `.width(cells)` wide (10 by default): the share filled in its
+  style (`status_bar.gauge`, black on green), the rest in
+  `status_bar.gauge.rest`, the label centred over both: a task's
+  progress.
+- **`facts([("Name", value), ..])`** is a description list: the keys in a
+  column as wide as the widest (at most half), in the theme's `facts.key`
+  style (bold) or `.key_style(..)`'s, each value beside its key, wrapped
+  under itself. `facts_of(|| rows)` reads signals: the details of
+  whatever is hovered. Read aloud as `key: value` pairs.
+- **`breadcrumb(|| parts)`** is a trail header over any parts (a tree's
+  ancestors, a wizard's steps, a path's directories): the parts joined by
+  ` › ` (`.crumb_separator("/")` changes it), the last in the theme's
+  `breadcrumb.last` style (bold by default), the rest in `breadcrumb` and
+  the separators in `breadcrumb.separator`; an empty part shows nothing,
+  so a leading one puts a separator first. Too long, it loses its start,
+  `…` where it was cut. `.crumb_suffix(|| markup)` adds markup after it
+  that is never cut. A file path, with the home directory as `~`, is the
+  `files` plugin's `path_crumb(|| path)`, built on it.
+- **`key_hints()`** is a footer of the keys that work now: the described
+  bindings of the focused node and its ancestors (a pop-up's while one is
+  open), innermost first, `key description` in `key_hints.key` and
+  `key_hints.desc`, `·` apart; what does not fit is left out whole. Bubbles'
+  `help` and Textual's `Footer`, from the same `.bind` descriptions the
+  help uses. **`key_hints_with(KeyHintsOptions)`** shows them other ways:
+  `.format(|key, desc| format!("{desc} [{key}]"))` (drawn whole in
+  `key_hints.hint`), `.key_symbols(true)` (`⏎ ⇥ ↑ ^u`) or
+  `.key_format(KeyFormat::Vim)`, `.show_disabled(true)` greying the
+  `bind_when` bindings that cannot run now (`key_hints.disabled`) instead
+  of leaving them out, `.separator("  ")`, and `.more(expanded, "more
+  [.]")`: the label in place of what does not fit, and every hint on as
+  many rows as it takes while `expanded` holds (gitui's command bar).
+- **`hex_view(|| bytes, top)`** is rs-rich-ext's `HexView` as a
+  scrolling node: any bytes as `hexdump -C` lays them out.
+- **`cells([(35, a), (25, b), ..])`** is ratatui's one-row `Table`: a row
+  of nodes sized by percentages with `Solver::Ratatui` and a cell between
+  (`.gap(n)` changes it), text cut at each cell's edge with no `…`.
+- **`live(fps_cap, || renderable)`** draws a renderable at most `fps_cap`
+  times a second of the app's clock: a plot fed by a fast source draws at
+  the cap and drops the changes between, the next draw showing the newest,
+  and a change within the cap waits its turn, so the last one is shown.
 
 ### Effects
 
@@ -1380,6 +2043,83 @@ Three frames in (`tests/effects.rs`):
 --8<-- "crates/rich-intuituive/tests/snapshots/effect_drip.txt"
 ```
 
+### Sprites, stages and pixel buffers
+
+A game, a map or an animation draws things that move over a background.
+`intuituive::sprite` has the pieces, all generic:
+
+- A **`Sprite`** is cell art: one or more frames of styled cells, some of
+  them transparent. `Sprite::from_markup(&lines, '.')` reads console markup
+  lines, every `.` a hole; `Sprite::from_cells(rows)` takes `SpriteCell`s;
+  `Sprite::from_pixels(&pixel_sprite)` draws pixel art in half blocks.
+  `Sprite::from_frames([..]).period(ms(120))` animates on the app's clock
+  (`.once()` stops on the last frame); `.anchor(x, y)` or `.centered()`
+  says which cell goes at the sprite's position.
+- A **`stage`** draws `Placed` sprites from a closure that may read
+  signals: `Placed::new(id, sprite).at(x, y).z(1).flip(true)`. Sprites are
+  clipped to the stage and drawn in z order over its backdrop
+  (`StageOptions::backdrop(node)`, any node) or its background
+  (`.bg(..)`); a cell that sets no background takes the colour beneath it,
+  so a red `@` on a blue backdrop is red on blue. The stage draws again
+  when the signals change, and on the app's clock while a sprite animates
+  or moves.
+- **Clicks and hovers** find the topmost sprite with an opaque cell under
+  the pointer: `StageOptions::on_sprite_click(|id, cx| ..)` and
+  `on_sprite_hover(|id, cx| ..)` (`None` off every sprite). A click on no
+  sprite goes on to the stage's own `on_click`.
+- **Movement:** `Placed::tween(tween(from, to, duration, easing))` moves a
+  sprite on the app's clock, a frame every 16 ms until it arrives; a
+  position in a signal moved by `cx.animate` works too.
+  `StageOptions::half_cells(true)` moves pixel-art sprites a pixel (half a
+  cell) at a time up and down.
+- **Collisions:** `overlaps(a, b)` is true when two placed sprites share an
+  opaque cell (`overlaps_at(a, b, now)` at a time), `bounds_overlap(a, b)`
+  when their rectangles meet.
+
+```rust
+use intuituive::sprite::{stage_with, Placed, Sprite, StageOptions};
+
+let ship = Sprite::from_frames([
+    Sprite::from_markup(&[".[cyan]/\\.[/]", "[cyan]<[b red]##[/]>", ".[yellow]''[/]."], '.'),
+    Sprite::from_markup(&[".[cyan]/\\.[/]", "[cyan]<[b red]##[/]>", ".[red]\"\"[/]."], '.'),
+])
+.period(Duration::from_millis(120));
+let (x, selected) = (signal(4.0), signal(None::<usize>));
+stage_with(
+    move || vec![Placed::new(0, ship.clone()).at(x.get(), 3.0)],
+    StageOptions::new()
+        .backdrop(fill("·", "grey30 on #0b1020"))
+        .on_sprite_click(move |id, _| selected.set(Some(id))),
+)
+.on_key("right", move |_| x.update(|x| *x += 1.0))
+```
+
+`intuituive::pixels` is a framebuffer for what is drawn a pixel at a time
+(a raycaster's view, a plot, pixel art): `pixels(width, height, |buf| ..)`
+hands its closure a `PixelBuf` (RGBA, kept between draws) and shows it in
+half blocks, two pixels a cell in true colour; `pixels_fit(|buf| ..)`
+sizes the buffer to the node. `PixelBuf` has `set`, `plot` (blended),
+`fill_rect`, `line` and `blit(&sprite, x, y, scale, flip)`, which draws a
+`PixelSprite` scaled (nearest neighbour) and mirrored, by each pixel's
+alpha; `pixels_mut()` writes the pixels directly. `.pixel_mode(PixelMode::
+Quadrants)` (2x2 a cell) and `PixelMode::Braille` (2x4) trade colour for
+detail. `PixelSprite::from_art(&rows, &palette)` draws pixel art in
+characters, `.with_frame(..)` adds frames and `frame_at(elapsed)` picks
+one by the clock.
+
+Behind features, two plugins: `sprite_sheet(path, tile_width,
+tile_height)` (and `sprite_sheet_bytes`) cuts an image into `PixelSprite`
+tiles, `.animation(&[0, 1, 2])` and `.sprite(i)` (`art`); and
+`micro_sprite(&asset)` makes an rs-rich-micro micro asset a sprite, its
+images fitted in half blocks, its fallback where it has none (`micro`).
+
+A stage of 300 moving sprites with a full-screen backdrop draws a 200x60
+frame in about 6 ms in a release build, painting included; a 200x120
+pixel buffer whose every pixel changes, about 12 to 17 ms
+(`tests/sprites.rs` measures both). `examples/sprites.rs` puts it
+together: animated sprites drifting over a backdrop, a click to select
+one, the arrows to steer it, and a pixel buffer beside them.
+
 ## Screens and modals
 
 ![A modal asking whether to quit, over the screens example](../../media/tapes/intuituive/modal.png)
@@ -1403,6 +2143,9 @@ label("home").on_key("enter", |cx| cx.push(|| detail(7)))
 - A screen's closure can create signals and call `every`; its timers stop
   when it closes.
 - `cx.replace(build)` swaps the top screen, as a wizard's steps do.
+- `App::min_size(64, 28, "Terminal must be at least 64 x 28!")` shows the
+  message centred instead of the app on a smaller terminal, keys held but
+  `q` (and Ctrl+C); the app comes back as it was once there is room.
 
 A modal is a screen in a box over the one below, which keeps drawing:
 
@@ -1457,6 +2200,11 @@ let picked: Option<usize> = App::new(|| {
   `run_on`) returns once the terminal is given back. An `io::Error` keeps
   its kind; anything else (a `String`, your own error) is `Other`.
   `Driver::take_error()` gives it to a loop of your own.
+- **`App::try_new(|| -> Result<Node, E>)`** builds an app that can fail
+  before it starts (a sound card that is not there): the error comes back
+  from `try_new` itself, before the terminal is taken, so `main` reports it
+  with `?` like any other. What the builder made is dropped, and its
+  `latest` threads never start.
 
 ### Pop-ups
 
@@ -1486,8 +2234,13 @@ screen instead (Yazi's): an `Origin` (`TopLeft`, `TopCenter`, `TopRight`,
 below a rectangle or above it when there is no room), moved and sized by
 an `Offset { x, y, w, h }` (cells, negative to go left or up; the sizes as
 a modal's). However far the offset, the pop-up stays on the screen: it is
-moved back inside, and made smaller if it is larger. It closes as any
-pop-up does.
+moved back inside, and made smaller if it is larger. Below a rectangle
+(`Origin::At`), a box wider than the room right of the rectangle is made
+narrower first, to stay under it (down to the rectangle's width), and is
+only moved left when even that does not fit: Yazi's 80-wide rename box
+at 80 columns stays under the row. It closes as any pop-up does. Its
+panel's `.title_style(..)` styles that pop-up's title instead of the
+theme's `popup.title` (Yazi's input titles are plain, `"default"`).
 
 ```rust
 cx.popup_at(Origin::TopCenter, Offset::new(0, 2, 50, 3), move || {
@@ -1499,7 +2252,35 @@ cx.popup_at(Origin::TopCenter, Offset::new(0, 2, 50, 3), move || {
 on the screen after each frame (`None` while hidden or scrolled out of
 view); reading it with `get()` subscribes, so what reads it redraws when
 the node moves. `Origin::At(handle.get_untracked()?)` puts a pop-up under
-it.
+it. App state that wants the handle before the view is built makes one
+with `RectHandle::new()` and gives it to the node later with
+`.rect_into(&handle)`.
+
+Two presets build the usual pop-ups:
+
+```rust
+// Yazi's input: top centre, two rows down, 50 wide; Enter submits, Esc cancels.
+cx.prompt("Rename:", name.get_untracked(), move |text, cx| rename(text, cx));
+cx.prompt_with("Find:", "", PromptOptions::new()
+    .at(Origin::At(row), Offset::new(0, 1, 50, 3))
+    .caret(Caret::At(stem))
+    .title_style("default")
+    .on_change(move |text, _| query.set(text.to_string()))
+    .on_cancel(move |_| query.set(String::new())),
+    |text, cx| find(text, cx));
+// Yazi's "Open with:": a short list below the hovered row.
+cx.pick("Open with:", Origin::At(row), openers, move |i, cx| open_with(i, cx));
+```
+
+- **`cx.prompt(title, initial, |text, cx| ..)`** is a one-line input in a
+  box, the caret at the end. `prompt_with` takes `PromptOptions`: where it
+  opens (`at(origin, offset)`, as `popup_at`), the caret, a title style,
+  and handlers for each edit and for Esc.
+- **`cx.pick(title, origin, items, |index, cx| ..)`** is a list of markup
+  items in a box as wide as the widest item (or the title) and as tall as
+  the items; Enter or a click picks, Esc or `q` closes it with nothing
+  picked. `pick_with` takes `PickOptions`: an offset and size, a title
+  style.
 
 ### Menus
 
@@ -1545,10 +2326,152 @@ App::new(build).palette_key("ctrl+p").help_key("?")
 ```
 
 Bindings made with `.on_key` have no description and stay out of both.
-Name a node (`.name("Editor")`) to group its commands under that name.
+Name a node (`.name("Editor")`) to group its commands under that name, or
+put one binding in a section of its own with `.bind_in(section, keys,
+description, handler)`: an app with modes lists each mode's keys under the
+mode, as scope-tui's help does.
+
+```rust
+label("scope")
+    .bind_in("oscilloscope", "t", "Toggle the trigger", toggle_trigger)
+    .bind_in("spectroscope", "l", "Logarithmic scale", toggle_log)
+    .bind_scaled("up", &[("", 1.0), ("shift", 10.0), ("ctrl", 5.0)], "Scale up",
+        move |_, by| scale.update(|s| *s *= 1.0 + 0.01 * by))
+    .bind_cycle("tab", "Next mode", mode, &[Mode::Scope, Mode::Vector, Mode::Spectrum])
+```
+
+`.bind_scaled(keys, variants, description, |cx, value| …)` binds the keys
+and the same keys with modifiers, each variant with its value (Shift ten
+times, Ctrl five, Alt a fifth), and the help shows them as one row: the
+plain keys, and `Scale up (shift ×10, ctrl ×5)`. `.bind_cycle(keys,
+description, signal, &modes)` moves a signal on to the next of its modes,
+round to the first after the last; `.bind_cycle_back(keys, ..)` moves it
+back, round to the last (Shift+Tab to Tab's cycle).
 
 Sequence bindings are listed too, with their keys as `g g`; a long
-description is cut so its keys still show.
+description is cut so its keys still show. `.bind_sequence_in(section,
+keys, description, handler)` lists one under a section of its own, as
+`bind_in` does a binding. The same descriptions make a footer of the keys
+that work now: [`key_hints()`](#bars-for-an-apps-chrome).
+`HelpOptions::new().all_panes(true)` lists every node's bindings on the
+screen, wherever the focus is, a section per pane and the focused path's
+first: one help for the whole app, as termusic's and bottom's are.
+
+A variant of `bind_scaled` may say itself its own way: with a label as a
+third item, `("alt", 0.2, "⅕")` is listed `alt ⅕` rather than `alt ×0.2`.
+A help row too long for the help wraps under its description.
+
+### Bindings in a state, sections and help options
+
+```rust
+#[derive(Clone, Copy, PartialEq)]
+enum Mode { Osc, Spec }
+
+label("scope")
+    .in_mode(mode, Mode::Osc, "oscilloscope", |node| {
+        node.bind_toggle("t", "Toggle the trigger", cfg, |c| &mut c.triggering)
+            .bind("p", "Peaks", show_peaks)
+    })
+    .in_mode(mode, Mode::Spec, "spectroscope", |node| {
+        node.bind_toggle("l", "Logarithmic scale", cfg, |c| &mut c.log)
+            .bind("p", "Phase", show_phase)
+    })
+    .section("view", |node| {
+        node.bind_scaled("pageup", &[("", 1.0, "1"), ("alt", 0.2, "⅕")], "Up", nudge)
+            .bind_step("equals", "More samples", cfg, |c| &mut c.samples, 256.0, 256..=8192)
+            .bind_step("minus", "Fewer samples", cfg, |c| &mut c.samples, -256.0, 256..=8192)
+            .bind_cycle("tab", "Next mode", mode, &[Mode::Osc, Mode::Spec])
+    })
+```
+
+- **`.bind_when(|| cond, keys, description, handler)`** binds a key that
+  applies only while `cond()` is true: a key passes a binding that does
+  not apply by (to another of the key, on the node or above), and the
+  help, the palette, the which-key pop-up and `key_hints()` leave it out.
+  Two bindings may so share a key under different conditions: `p` for
+  peaks in one mode and phase in another. `.when(|| cond, |node| …)`
+  does the same for every binding the closure adds, of any kind
+  (sequences too); scopes nest.
+- **`.in_mode(mode, value, "section", |node| …)`** is the bindings of one
+  mode: they apply, and are listed under the section, only while `mode`
+  holds `value`. `.modes(mode, &[(value, "section", &|node: Node| …), …])`
+  does several at once. The mode's view is a `switch` on the same signal.
+- **`.section("name", |node| …)`** lists every binding the closure adds
+  under a help section: `bind_scaled`, `bind_cycle`, `bind_toggle` and
+  `bind_step` take no section of their own. A binding given its own
+  (`bind_in`) keeps it.
+- **`.bind_toggle(keys, description, signal, |s| &mut s.flag)`** flips a
+  `bool` field of a signal's value; **`.bind_step(keys, description,
+  signal, |s| &mut s.n, step, range)`** moves a number field (any integer
+  or float type) by `step`, negative to go down, kept within `range`.
+- **Punctuation keys by name**, wherever keys are parsed (bindings,
+  `Driver::press`, scripts, keymap files): `equals`, `minus`, `plus`,
+  `underscore`, `slash`, `backslash`, `period` or `dot`, `comma`,
+  `semicolon`, `colon`, `quote`, `doublequote`, `backtick`, `tilde`,
+  `bracketleft`, `bracketright`, `braceleft`, `braceright`, `lt`, `gt`,
+  `question`, `exclam`, `at`, `hash`, `dollar`, `percent`, `caret`,
+  `ampersand`, `asterisk`, `pipe`: `ctrl+minus`, `"equals plus"`. The
+  help shows the character.
+
+`cx.help_with(options)` shows the help another way:
+
+```rust
+cx.help_with(
+    HelpOptions::new()
+        .title("mgr.help")
+        .key_format(KeyFormat::Vim) // <C-u>, <S-Tab>, gg
+        .filter_first(true),        // Yazi's: search, a rule, one list
+)
+```
+
+`KeyFormat::Vim` says keys in vim's notation (`<C-u>`, `<A-x>`,
+`<PageUp>`, a sequence as `gg`), and the search finds them as said;
+`filter_first(true)` lists every binding in one list under the search
+line and a rule, with no section headings. `KeyFormat::keys(&keys,
+sequence)` says keys the same way anywhere else. `.filter_key("/")` makes
+it Yazi's: `j` and `k` move a row and `g`/`G` go to the ends until `/`
+starts the search, which Esc ends (clearing it) before Esc closes the
+help. A row too long for the help wraps, its keys as well as its
+description: a binding of several keys lists them over several lines,
+broken between keys, the key column taking at most half the width.
+
+### Scaled steps, any modifiers, falling through, unlisted bindings
+
+```rust
+const MAGNITUDES: [(&str, f64, &str); 4] =
+    [("", 1.0, "×1"), ("shift", 10.0, "×10"), ("ctrl", 5.0, "×5"), ("alt", 0.2, "⅕")];
+
+fn samples(s: &mut Scope) -> &mut u32 { &mut s.samples }
+
+label("scope")
+    .bind_step_scaled("right", &MAGNITUDES, "More samples", cfg, samples, 16.0, 16..=8192)
+    .bind_step("pageup", "Average more", cfg, |s| &mut s.average, 1.0, 1..=64)
+    .any_modifiers()
+    .bind("esc", "Reset the view", reset)
+    .fall_through()
+    .bind_hidden("ctrl+l", "Clear the trace", move |_| trace.set(Vec::new()))
+```
+
+- **`.bind_step_scaled(keys, variants, description, signal, field, step,
+  range)`** is `bind_step` with the step scaled by the modifiers held, as
+  `bind_scaled` scales a value: one row in the help (`More samples
+  (shift ×10, ctrl ×5, alt ⅕)`), the field still kept within `range`. An
+  integer moves by the scaled step rounded. A field picker kept in a
+  variable does not compile as a closure (its return does not take its
+  argument's lifetime): write it as a `fn`, as `samples` above.
+- **`.any_modifiers()`** lets the binding added last fire with any
+  modifiers held: `pageup`, Shift+PgUp, Ctrl+PgUp. A binding that names
+  the key with its modifiers, on the node or deeper, still wins.
+- **`.fall_through()`** lets the key go on after the binding added last
+  runs: to the next binding of the key on the node, then up to the nodes
+  above, as Bubble Tea passes a message on. A handler decides as it runs
+  with **`cx.pass_key()`**.
+- **`.unlisted()`** keeps the binding added last out of the help, the
+  which-key pop-up and `key_hints`; it still works, and its description
+  is its name: the palette lists it, and **`driver.run_named(name)`** runs
+  it in a test. **`bind_hidden(keys, name, handler)`** is both at once
+  (Textual's `show=False`). An empty description still hides a binding
+  with no name.
 
 ### Confirming
 
@@ -1561,7 +2484,13 @@ Yazi's way: a modal centred over the screen, the title on its top edge, the
 body under it, the items (ten at most, and a count of the rest) between two
 rules, and `[Y]es` and `(N)o`. `y`, or Enter on Yes, closes it and runs
 `on_yes`; `n`, Esc, or Enter on No closes it; Tab and the arrows move
-between the two, and a click picks one.
+between the two, and a click picks one. With no body, the items sit right
+under the title; with neither, only the answers show.
+
+`cx.confirm_with(title, body, items, ConfirmOptions::new().size(w, h)
+.title_style("blue"), on_yes)` sizes the box (50 wide and as tall as its
+content by default; Yazi's trash confirm is 70 x 20, the items taking
+the room and the answers at the bottom) and styles its title.
 
 ## Toasts and animations
 
@@ -1577,6 +2506,10 @@ between the two, and a click picks one.
   announced with its level (`Error: Copy failed: …`).
 - **`App::toasts_at(corner)`** stacks toasts and notifications in another
   corner, newest nearest it: `Corner::TopRight` is Yazi's.
+- **`App::notify_width(size)`**: a notification is as wide as its body's
+  longest line (and its title), 48 cells at most by default, and wraps
+  beyond. `Size::Fixed(n)` or `Size::Percent(p)` of the screen lets a
+  one-line error stay on one line.
 - **`cx.animate(signal, to, duration, easing)`** moves a `Signal<f64>` to
   `to` over `duration`, setting it every frame, so whatever reads it moves
   with it: a split's ratio, a gauge, a scroll offset. `Easing` is `Linear`,
@@ -1605,11 +2538,45 @@ App::new(|| {
   `App::new`'s closure (or a screen's), next to the signals it writes. A
   timer that fell behind (the clock jumped, the laptop slept) ticks once,
   not once for every tick it missed, and keeps to its step after that.
+  `after(wait, |cx| ..)` runs a handler once, `wait` from now, on the
+  app's clock: anywhere while the app is built or running (a handler, a
+  watch), or `cx.after(..)` from a handler. A test steps through it with
+  `Driver::advance`; `Resource::stale_after` waits this way.
+- **A timer's handle:** `every`, `after` and their `cx` forms return a
+  `Timer` (`Copy`, like a signal) that `pause()`s (keeping the time it
+  had left), `resume()`s, `set_period(d)` (the next tick `d` after the
+  last), `reset()`s and `cancel()`s; a cancelled or fired timer's handle
+  does nothing. `cx.every(d, ..)` starts one from a handler, on the screen
+  the handler runs on, so a game's tick starts with play and stops when its
+  screen closes. In a timer's function `cx.now()` is the app's clock and
+  `cx.missed_ticks()` the ticks it fell behind.
+- **A fixed timestep:** `fixed_step(period, |cx, steps| ..)` (and
+  `cx.fixed_step`) is told how many steps are due, all of them after a
+  stall, so a game keeps to the clock rather than to the frame rate;
+  `.max_catch_up(n)` caps them. Under a `Driver`, `advance` calls it once a
+  period with 1, so a test steps the game exactly.
+- **Frame pacing:** `App::max_fps(n)` draws at most `n` frames a second
+  when the app runs its own loop: what changes in between is drawn by the
+  next frame, and `FrameStats::skipped` counts the frames held back.
+  `App::stats_handle()` keeps the `FrameStats` readable after `run`.
 - **Tasks:** `spawn(work, done)` runs `work` on its own thread and `done`
   with the result back on the app's thread, where it can write signals,
   open a screen or quit. `spawn_future` does the same for a future that does
   not need a particular async runtime. Both return a `Task`, which you can
-  `cancel()` (its result is dropped).
+  `cancel()` (its result is dropped). `done` must be `Send`;
+  **`spawn_then(work, done)`** keeps `done` on the app's thread while the
+  work runs, so it can hold an `Rc` or a node's handle. **`spawn_stream(
+  |stream| ..)`** runs a thread that sends results as it goes through
+  `stream.proxy()`, counted as a task until it returns (an app that waits
+  for its tasks waits for the whole stream) and told of a `cancel()` by
+  `stream.cancelled()`.
+- **Cleaning up:** `node.on_unmount(|| ..)` runs once when the node leaves
+  the tree: its screen or pop-up closes, its `each` row goes, or the app
+  ends (a `switch` keeps the pages it built). Stop what the node started
+  there: set the flag a background walk reads, drop a watcher. The app
+  may be ending, so leave its signals alone. An app dropped without
+  `Driver::finish` (a test that stops early) closes its runtime all the
+  same, so `latest` threads asleep on its clock end.
 
 ```rust
 .on_key("r", move |_| {
@@ -1622,7 +2589,12 @@ App::new(|| {
 - **Resources:** `resource(fetch)` loads a value in the background and
   holds `Load::Loading`, `Load::Ready(value)` or `Load::Failed(error)`. A
   node that reads it redraws when it arrives; `reload()` fetches again and
-  drops any older result still on its way.
+  drops any older result still on its way. `resource_for(move || key(),
+  |key| fetch(key))` fetches again whenever the key changes (the hovered
+  file, the pane's width), dropping results for keys left behind, and
+  `.stale_after(Duration::from_millis(150))` keeps the last value on show
+  while the next loads, for that long at most: a preview pane that neither
+  blinks nor shows the last file for long.
 
 ```rust
 let user = resource(|| api::user(42));
@@ -1634,6 +2606,14 @@ text(move || match user.get() {
 .on_key("r", move |_| user.reload())
 ```
 
+- **Terminal graphics:** `App::graphics(source)` takes rs-rich-ext's
+  `PlacementSource` and draws Kitty, iTerm2 or Sixel images beside the
+  cells, as rs-rich-ext's `Surface` does: after each frame's cells,
+  placements that are new, moved, on another animation frame or written
+  over are drawn again, and an overlay that went away has its cells
+  repainted. The cells under a placement are what a terminal without
+  graphics shows. The `art` feature's `image` node still draws half
+  blocks; giving it a placement is to come.
 - **Other threads:** signals live on the app's thread. Work you start
   yourself (a tokio runtime, a file watcher) sends closures through a
   `Proxy` from `cx.proxy()` or `app.proxy()`: `proxy.run(move ||
@@ -1643,7 +2623,55 @@ text(move || match user.get() {
   `Signal<Option<T>>`: `None` until the first value, then the newest.
   Nothing queues: values the app had no time for are skipped (an audio
   buffer, a sensor, scope-tui's reader). `send` returns `false` once the
-  app has finished.
+  app has finished. A thread that keeps a beat sleeps with
+  `tx.sleep(period)`, which keeps to its step as a timer does, and
+  `latest_every(period, || value)` is a thread that makes a value every
+  `period`. Both keep to the app's clock in a test (see
+  [Testing](#testing)). The thread starts when the app starts running.
+  Each value wakes the loop's wait on the terminal at once, on every
+  backend, so a feed faster than the screen's frames is seen at its own
+  rate (a `rate` of a 10 ms `latest_every` reads 100).
+- **A feed with a state:** `let (value, state) =
+  latest_with_state(stall_after, |tx| …)` is `latest` with a second
+  signal, a `FeedState`: `Running`; `Stalled(since)` once no value came
+  for `stall_after` (`None`: never), until the next comes; `Ended` when
+  the closure returns `()` or `Ok(())`; `Failed(why)` when it returns an
+  `Err` or panics. Any thread: a sensor, a log's tail, a socket.
+- **An iterator at a pace:** `latest_iter(frames, Pace::Every(period))`
+  plays an iterator onto a signal on the app's clock (`Pace::Free`: as
+  fast as it comes), then `.then(fallback)` plays another at the same
+  beat (`std::iter::repeat(silence)`), `.then_with(|tx| …)` runs a
+  closure with the thread's `Latest`, and `.signal()` plays nothing after.
+  `.then_at(pace, tail)` adds a tail at a pace of its own (a pipe read as
+  fast as it comes, then silence a buffer's time apart) and starts
+  nothing; `.with_state()` starts it with a `FeedState` too: `Ended` once
+  the values run out, while a tail plays on (the end of a file, padded
+  with silence), `Stalled` as `.stall_after(d)` says.
+- **Waiting the test clock sees:** a feed thread that waits on something
+  else (a device's buffer, a channel) waits with `tx.wait_for(|| ready,
+  timeout)`, woken to look again by a `Notifier` (`tx.notifier()`,
+  `Clone + Send`, for the device's callback or the channel's sender):
+  under `wait_for_tasks` it counts as asleep, so the driver's turns do
+  not wait for it, and the timeout is on the app's clock. `tx.blocking(||
+  rx.recv())` counts any blocking call as asleep, without the exactness.
+- **Signals over time:** `history(signal)` goes `back()` and `forward()`
+  through the values a signal has had (`can_back()`, `can_forward()`,
+  `.limit(n)`), not recording its own moves: a browser's, a pager's, a
+  file manager's tabs. `recent(signal, n)` is a `Memo<VecDeque<T>>` of its
+  last `n` writes (`n` may be a signal): an average over the last frames,
+  a peak, persistence; it clones each value once, so hold a big one as an
+  `Arc` to share it, or keep a part with `recent_of(signal, n, |v| part)`.
+  `recent_timed(signal, n)` has each value's time on the app's clock
+  (`cx.now()` is the clock), for fading by age. `falling(signal,
+  gravity)` follows a level up at once and falls back with gravity (in
+  units a second, a second), as cava's bars and a meter's peak.
+  `smoothed(signal, attack, release)` is a number
+  that eases after another on the app's clock, rising with the `attack`
+  time constant and falling with `release`: a meter's needle, a progress
+  bar that glides, bars falling back slowly.
+- **Each write, borrowed:** `on_write(signal, |value, cx| …)` gets a clone
+  of each write; `on_write_ref(signal, |&value, cx| …)` a borrow of the
+  value after a turn that wrote it, so a big frame is never copied.
 - **Another program:** `cx.handoff(command)` gives the terminal to a
   program once the handler returns (an editor, a pager, a shell): the app
   leaves the alternate screen and raw mode, runs it and waits, then takes
@@ -1652,13 +2680,217 @@ text(move || match user.get() {
   program is recorded, not run; a loop of your own takes it with
   `Driver::take_handoff` and gives it back with `Driver::handed_back`.
 
+## Browsing, jobs, finding and previewing
+
+Four components that apps of many kinds rebuild by hand are in the core,
+generic over what they show: none knows about files, so a file manager, a
+menu, a package browser or a database client builds on the same pieces.
+The `files` plugin (below) is each of them with a file system plugged in.
+
+- **Miller columns over any tree:** `miller_of(source, start)` takes a
+  `MillerSource` (the items of a level by key, the level an item opens,
+  the level above; `arrive` runs when the columns get to a level) and is
+  the level above, the current level and a preview of the hovered item,
+  in panes whose rails the mouse drags, as signals (`at`, `items`,
+  `cursor`, `hovered`) in a `Copy` struct. Each level remembers the item
+  last hovered in it; a click in the parent column goes there
+  (`click_parent`), one in the preview enters it (`enter_at`).
+  `columns.navigation(node)` binds `j`/`k`, `h`/`l`, `g g`/`G`, Ctrl+D/U
+  and PgDn/PgUp; `cd`, `enter`, `leave`, `arrow`, `page` and `keep` are
+  there for your own. `view()` draws names in lists; `layout(parent,
+  current, preview)` takes columns of your own (`track_current` marks the
+  current one), and `miller_in(source, at)` takes a current-level signal
+  made first, so the source can follow it. Each signal has a method
+  (`at()`, `cursor()`, `hovered()`, `items()`, `first()`, the parent's,
+  `preview_cursor()`, `remembered_all()`), and `visited()` is the levels
+  shown, the most recent last.
+- **Your own keys and wording:** `navigation_with(node, &[(Move::Up, "k
+  up", "Previous file"), ..])` binds a table of moves, keys and the
+  descriptions the help shows, where `navigation`'s are fixed; `go(Move)`
+  makes any move from a binding of your own (a sequence:
+  `.bind_sequence("g g", "Top", move |_| m.go(Move::Top))`).
+- **Options on the columns' lists:** `view_with(MillerOptions::new()
+  .current(|list| list.highlight_layer(HighlightLayer::Under)))` hands
+  each default column's list to a hook (`current`, `parent`, `preview`),
+  so any list option or handler reaches it; a view of your own passes
+  its lists through `wrap_current` and the like.
+- **Other items at a level:** `m.overlay(at, vec![(name, Some(level)),
+  (name, None)])` goes to level `at` and lists those items in place of
+  its own, each opening a level of its own (or a leaf): a search's
+  results, bookmarks, a "recent" list. It lasts until the columns leave
+  the level: entering an item goes to its level, and `leave` (or
+  `end_overlay`) goes back to the level's own items, on the one hovered
+  before, as Yazi leaves a search (the source's `arrive` runs then too).
+  `overlay_at()` says where one is, and `update_overlay(items)` replaces
+  its items in place, the cursor kept: results arriving while a search
+  runs.
+
+```rust
+struct Menu;
+impl MillerSource for Menu {
+    type Key = String;
+    fn items(&self, at: &String) -> Vec<String> { /* the level's names */ }
+    fn child(&self, at: &String, name: &str) -> Option<String> { /* a submenu */ }
+    fn parent(&self, at: &String) -> Option<(String, String)> { /* up, and our name there */ }
+}
+let columns = miller_of(Menu, String::new());
+columns.navigation(columns.view())
+```
+
+- **Jobs with progress:** `jobs::<P>()` runs any work as a cancellable
+  job: `list.run(title, |cancel, progress| { ..; outcome }, |outcome, cx|
+  ..)` on a thread of its own, its progress (`P: JobProgress`: a share
+  done and a detail; plain `f64` is one) reaching a signal at most every
+  50 ms. The outcome (`JobOutcome`: `()`, `Result<T, String>`, or your
+  own) says what failed: a clean or cancelled job leaves the list, a
+  failed one stays until `clear_finished`. `jobs_panel(list)` lists them
+  with progress bars (`x` cancels the hovered job, `X` all, `c` clears the
+  failed); `jobs_panel_with(list, JobsPanelOptions::new()
+  .failed_title(false))` shows a failed job's error without its title.
+- **A streaming fuzzy list:** `fuzzy_list(source, |item| text, |item,
+  cx| ..)` is a fuzzy list over any source of items, read on its own
+  thread: `FuzzySource::iter(items)` for an iterator, or
+  `FuzzySource::feed(|feed| ..)` for a producer pushing items as they
+  arrive (a search's results), stopping once `feed.push` says false.
+  Results show while it goes on (`12/3400 (loading…)`), a new batch is
+  matched alone, Enter picks the hovered item (the item, not its text),
+  Esc closes the screen or modal it is on (on the first screen it leaves
+  Esc to the app: `cx.is_modal()` says which a handler runs on), and the
+  source stops when the screen closes. `fuzzy_list_with(.., FuzzyOptions::new().title("Jump")
+  .border(Border::Rounded).prompt(":").on_cancel(..))` adds a panel, a
+  prompt, or an Esc of your own. **`finder_of(items, ..)`** is one over an
+  iterator, with the same look and keys.
+- **A preview pane:** `preview_of(|width| key, |key| value, |state| node)`
+  loads a value off the app's thread whenever the key changes (it may
+  read signals, and gets the pane's width), drops results for keys left
+  behind, and draws the value from a signal. `preview_of_with(..,
+  PreviewOfOptions::new().state(sig).clear_after(d).on_change(..)
+  .on_loaded(..))` shares the value, clears a slow one, resets a scroll
+  when the key changes and acts on a value as it arrives. It is a
+  `resource_for` keyed by the width and the key (`clear_after` its
+  `stale_after`, on the app's clock), so the first frame lays it out and
+  already shows the first value.
+
+### Lists, tabs, status bars and facts
+
+- **Marks by key:** `list.marks_by(selection, |i| key)` draws a
+  `multi_select`'s marks on a list that is not the one it is over (a
+  parent column, a second view, a search's results), finding each item
+  by key, a visual range too.
+- **Find from here:** `search.next_from(true)` (and `previous_from`)
+  stays on the hovered item when it matches, as find as you type does;
+  `false` is `next`.
+- **Numbered tabs:** `tabs_for_indexed(&set, |i, state| title)` gives the
+  title closure each tab's index, for Yazi's ` 1 src `.
+- **Optional status segments:** `seg(..).when(|| cond)` (any segment, a
+  `seg_gauge` too) leaves the segment and its caps out while `cond` is
+  false: a progress gauge while tasks run.
+- **Facts' values:** `facts(..).value_style("yellow")` styles the values
+  (the theme's `facts.value`, none by default), and
+  `.value_style_for(|i| Some(style))` styles a row's value over it.
+- **A value per tab:** `set.scoped(|| signal(String::new()))` keeps a
+  value for each tab of a `tab_set`, made the first time a tab asks:
+  `scoped.get()` is the active tab's (a draft, a scroll position, a
+  handle), switching with the tab; a closed tab's goes. Tabs have
+  identities that stay through opens, closes and swaps (`active_id()`,
+  `ids()`). To keep one handle and switch what it holds,
+  `multi_select().scoped(&set)` gives each tab its own chosen keys and
+  visual range behind the same `MultiSelect`, so a list's markers and an
+  action's targets follow the active tab, as Yazi's per-tab selection.
+
+### Editing text, state files and process jobs
+
+```rust
+// $VISUAL, else $EDITOR, on a temporary file; read back when it ends.
+cx.edit_text_as(&message, "md", move |edited, cx| match edited {
+    Ok(text) => commit(text, cx),
+    Err(why) => cx.notify(Level::Error, "Editor", why.to_string()),
+});
+
+// State between sessions, by app name.
+let recent = frecency_in("launcher", "recent.tsv").keep(200);
+recent.visit("build");
+let best: Vec<String> = recent.ranked();
+update_state("launcher", "history", |old| append(old, "build"))?;
+
+// A process as a job: progress from its lines, killed on cancel.
+jobs.run_process_with("Fetch", command, |line| parse_percent(line), |outcome, cx| ..);
+```
+
+- **`cx.edit_text(text, |edited, cx| ..)`** puts `text` in a temporary
+  file, hands the terminal to the user's editor on it (`$VISUAL`, else
+  `$EDITOR`, else `vi`; Notepad on Windows) and gives back the file's
+  text once it ends, or why it could not run; `edit_text_as(text, "md",
+  ..)` names the file's extension. Under the headless driver the editor
+  is a recorded `Handoff`, as any `handoff`.
+- **State files:** `state_dir(app)` is where an app keeps state
+  (`$XDG_STATE_HOME/app`, else `~/.local/state/app`; Application Support
+  on macOS; `%LOCALAPPDATA%` on Windows), `state_file(app, name)` a file
+  in it; `write_state(app, name, bytes)` writes it whole (a temporary
+  file synced and renamed over it: `write_atomic(path, bytes)` for any
+  path), `read_state` reads it, and `update_state(app, name, |old|
+  new)` (`update_file` for any path) reads, changes and writes it under
+  a lock another session waits for, so two windows' changes add up.
+- **A frecency store:** `frecency_in(app, name)` (or
+  `frecency_store(file)`, or `frecency_session()` for the session only)
+  ranks string keys by how often and how lately each was used, as zoxide
+  does: `visit`, `remove`, `ranked`, `visits`, `reload`; `keep(n)` caps
+  it, `max_age(total)` sets when the ranks age. Each visit is merged into
+  the file's latest under its lock.
+- **Process jobs:** `jobs.run_process(title, command, |outcome, cx| ..)`
+  runs a command as a job, its output read line by line; cancelling the
+  job kills it. A process that exits otherwise than with 0 fails the job
+  with the last line of its standard error (`ProcessOutcome::Failed(why,
+  output)`); `run_process_with` reads progress from each line.
+  `job.errors()` is a failed job's errors.
+
+### A play head, and a feed as one value
+
+```rust
+// Three minutes long, ending in the next track.
+let head = transport(Duration::from_secs(180)).on_end(move |_| next_track());
+row([
+    text(move || clock(head.position())),
+    progress(move || head.progress()),
+])
+.on_key("space", move |_| head.toggle())
+.on_key("right", move |_| head.seek_by(5.0))
+.on_key("plus", move |_| head.set_rate(head.rate() * 1.25))
+```
+
+- **`transport(length)`** is a play head on the app's clock: `play`,
+  `pause`, `toggle`, `seek(to)`, `seek_by(seconds)`, `set_rate(r)`, and
+  `position()`, `progress()` (0 to 1), `length()`, `is_playing()` to read,
+  subscribing. Readers are drawn again every `tick` (a tenth of a second
+  by default) while it plays, and the end is met on the app's clock
+  exactly, so a test stepping the clock sees it at the same time on
+  every run; `on_end(|cx| ..)` runs there (load the next track, loop,
+  close). `None` for a length is a stream with no end. Any timeline: a
+  track, a slideshow, a replay, an animation.
+- **`Feed<T>`:** a feed's newest value and its `FeedState` as one `Copy`
+  value (`feed.value()`, `feed.state()`, `feed.is_live()`, `parts()`),
+  so an app holds one type whatever its source is.
+  `latest_feed(stall_after, |tx, state| ..)` is `latest_with_state` with a
+  `FeedTeller` to say how it goes before the thread ends
+  (`state.tell(FeedState::Ended)` when a file runs out but silence plays
+  on); `latest_iter(..).feed()` is `with_state()` as one;
+  `Feed::from((value, state))` wraps a pair.
+
 ## Files, sound and images
 
-Three off-by-default features bring the outside world in, each working on
-its own thread and delivering on the app's thread, between frames:
+Off-by-default features bring the outside world in, each working on its
+own thread and delivering on the app's thread, between frames. They are
+plugins: the core stays generic, and what only one domain uses (files,
+sound, images) lives behind a feature, built on generic core pieces.
 
 ```toml
-rs-rich-intuituive = { version = "0.0.5", features = ["watch", "audio", "art"] }
+rs-rich-intuituive = { version = "0.0.5", features = ["watch", "audio", "art", "files"] }
+# PulseAudio and PipeWire sources, and WAV files:
+# features = ["pulse", "wav"]
+# Raw PCM only, with no dependency:
+# features = ["pcm"]
+# Meters, sparklines and spectra as nodes:
+# features = ["viz"]
 ```
 
 - **`watch`: files that change.** `watch_path(path, |event, cx| …)` wakes
@@ -1676,20 +2908,89 @@ watch_path(&dir, move |_event, _cx| entries.set(list_dir(&dir)))?;
 ```
 
 - **`audio`: a sound card.** `audio::input(device, rate, channels,
-  buffer)` returns a `Signal<Matrix>`, one row a channel of `buffer`
-  samples from -1 to 1, which changes with every buffer the device
-  captures (through cpal: ALSA, CoreAudio, WASAPI). The newest buffer
-  wins: one that arrives while the app is busy replaces the one still
-  waiting, so a slow frame drops buffers rather than falling behind.
-  `audio::devices()` lists the inputs (none, not a panic, on a machine
-  without sound). A device with fewer channels than asked for is spread
-  over the rows. On Linux the feature needs ALSA's headers to build
-  (`libasound2-dev`). For a spectrum, rs-rich-ext's `rich_ext::dsp` has
-  `fft` (any length), `hann` and `spectrum(samples, rate)`.
+  buffer)` returns a `Signal<Option<Frame>>`, the shape of `latest`'s:
+  `None` until the first buffer, then the newest `Frame`, numbered, with
+  `samples` one row a channel of `buffer` samples from -1 to 1 (through
+  cpal: ALSA, CoreAudio, WASAPI). Watch the number to see every buffer,
+  silence included. The newest buffer wins: one that arrives while the
+  app is busy replaces the one still waiting, so a slow frame drops
+  buffers rather than falling behind. A device with fewer channels than
+  asked for is spread over the rows. On Linux the feature needs ALSA's
+  headers to build (`libasound2-dev`).
+  - `audio::open(AudioOptions::new().device(id).rate(r).latency(frames)
+    .stall_after(d))` opens one before the app, so a missing device fails
+    before the terminal is taken; inside the app, `capture.samples()` is
+    the signal and `capture.status()` the core's `FeedState` (`Running`,
+    `Stalled(since)` on the app's clock, `Failed(why)`, `Ended` once
+    `capture.stop()`ped) to end the app on, scope-tui's `--timeout`
+    (`.stall_after(None)`: never, as scope-tui's `pulse` source);
+    `capture.feed()` is both as the core's `Feed`.
+  - `audio::devices()` lists the inputs as `Device { id, name, default,
+    host }` (none, not a panic, on a machine without sound): the id is
+    what `input` takes (ALSA's `null`, `pulse`, `hw:CARD=…`), the name
+    what to show. `device.configs()` lists what each can capture
+    (channels, rates, buffer sizes, sample format), and `audio::picker(|
+    device, cx| …)` is a list to choose one in the app.
+  - ALSA's `ALSA lib …` complaints are kept off the screen while devices
+    are listed and opened; `audio::messages()` has them, and
+    `capture.log(log)` sends them to a `Log`.
+  - **`pulse`** (on top of `audio`) adds `Host::Pulse`: PulseAudio's and
+    PipeWire's sources, a sink's monitor among them, through cpal's own
+    client (no system library), with `.latency(frames)` as the server's
+    buffer.
+  - With the light **`pcm`** feature (no dependency; `audio` and `wav`
+    turn it on), `audio::pcm(reader, Format::S16Le, channels, buffer)`
+    reads raw PCM (`parec`'s, `arecord`'s) as buffers, `audio::play(pcm,
+    rate)` plays them onto a signal at the sample rate and then silence
+    (`latest_iter` at a buffer's time apart), and `Frame`, `Matrix` and
+    `deinterleave` are there. A read error ends the buffers and stays in
+    `pcm.error()` (`try_next()` gives it as a `Result`).
+    `audio::Capture::simulated(frames, period)` is a capture with no sound
+    card, its buffers a period apart: a test calls `stall()` (and
+    `resume()`) or `fail(why)` on a clone, and sees the status turn
+    `Stalled` after `.stall_after(d)` or `Failed`, on the app's clock
+    under `wait_for_tasks(true)`. Every source is a `Capture`, the shape
+    of a sound card's: `Capture::generated(frames, period)` (a tone, a
+    demo signal: `Ended` once the frames run out) and
+    `Capture::from_pcm(pcm, rate)` (a file or a pipe played at its rate,
+    `Ended` and then silence, as scope-tui pads a file, or `Failed` with
+    the read error, scope-tui's "data source returned null"). With
+    **`wav`**, `audio::wav(path, buffer)` reads WAV files the same way
+    (`seek(to)` reads on from a time), `audio::wav_writer` writes one,
+    and `audio::record(samples, path, rate, channels)` records a frame
+    signal while the app runs (hound).
+  - **Playing sound:** `audio::output(OutputOptions::new())` opens a
+    sound card output (`audio`; `output_devices(host)` lists them): an
+    `Output` to `write` interleaved samples or `write_matrix` buffers to,
+    a quarter second queued ahead, with `set_paused`, `set_volume` and
+    `clear` (a seek) at once. **`audio::player(PlayerOptions::new()
+    .output(out))`** is a music player's model on the core's `transport`:
+    `queue(tracks)`, `play_track(i)`, `toggle`, `next`, `previous` (the
+    track's start, or the one before in its first three seconds), `seek`,
+    `seek_by`, `set_volume`, `set_speed` (the pitch moves with it), with
+    gapless playback by default; `player.transport()` is the play head
+    for a progress bar, `track()` the one playing, `error()` why one was
+    skipped. Tracks are `Source`s (`rate`, `channels`, `duration`,
+    `seek`, `next_buffer`): `open_source(path)` opens WAV with `wav`,
+    `audio::clip(rate, samples)` is one in memory, and
+    `PlayerOptions::opener(..)` takes a decoder of your own. Without an
+    output (a test, a machine with no sound card) the transport runs
+    alone. Other codecs (MP3, FLAC, Ogg) are later work.
+
+  For a spectrum, rs-rich-ext's `rich_ext::dsp` has `fft` (any length),
+  `hann`, `spectrum(samples, rate)` and `spectrum_full`; `bands(spectrum,
+  n, lo_hz, hi_hz)` (log-spaced, cava's) with `Falloff::gravity(g)` for
+  bars that fall; `peak_hz(spectrum)` and `nearest_note(hz)` (`("A", 4,
+  cents)`), and `Tuner` (`tuner.listen(samples, rate)` or
+  `update(spectrum)`: a `Reading` of the note, octave, cents and Hz,
+  smoothed within a note, taken at once on a new one, held through a
+  few quiet spectra) for a tuner; `note_hz` and `NoteTable::ScopeTui` (scope-tui's
+  rounded table, octave 0 by default); and a test signal without a sound
+  card: `tone`, `partials`, `noise` and `mix`.
 
 ```rust
 let samples = audio::input(None, 48_000, 2, 1024)?;
-renderable(move || oscilloscope(&samples.get()))
+renderable(move || samples.with(|f| oscilloscope(f.as_ref())))
 ```
 
 - **`art`: images.** `image(path)` is a node that draws an image file in
@@ -1699,15 +3000,271 @@ renderable(move || oscilloscope(&samples.get()))
   (`Contain` centres, `Stretch` ignores the aspect), `.mode(ImageMode::
   Quadrants)` (or `Braille`, `Ascii`) draws with other cells, and
   `image_of(move || selected.get(), view)` follows a path that changes, as
-  a preview pane does. Kitty and Sixel pixels are not drawn yet: they need
-  escapes outside the cells, which the screen does not pass through.
+  a preview pane does. `image_bytes(bytes, view)` and
+  `image_bytes_of(|| cover.get(), view)` draw an image in memory (a cover
+  embedded in a song).
+  - **Real pixels:** `ImageView::new().pixels(Pixels::detect())` (or
+    `Pixels::Kitty`, `Sixel`, `Iterm`) with
+    `App::graphics(image_graphics())`: the node keeps its half blocks in
+    the cells, tagged, and after each frame the app draws the picture
+    over them (Sixel, iTerm2) only when it is new, moved or written
+    under; for Kitty the cells are its Unicode placeholders and the
+    picture is uploaded once, and freed when the app ends. Without the
+    app's source a Sixel or iTerm2 view is plain half blocks, so the
+    frame stays exact in any terminal.
 
 A file manager's other parts are in rs-rich-ext: `rich_ext::filetype`
 (Yazi's icons and type colours, MIME types, a Nerd Font check) and
 `rich_ext::fs` (local times, owner and group names); see
-[Files, spectra and warm-ups](../ext/files-and-signals.md). rs-rich-ratatui's
-`style_from_color_name("DarkGray")` reads a ratatui colour name, as a
-ported app's options take them, as a rich style.
+[Files, spectra and warm-ups](../ext/files-and-signals.md). rs-rich-ext's
+`palette::style_from_color_name("DarkGray")` (re-exported by
+rs-rich-ratatui) reads a ratatui colour name, as a ported app's options
+take them, as a rich style.
+
+### A file manager's components
+
+The off-by-default `files` feature (`archive` adds archive previews and
+extraction) has the parts of a file manager such as Yazi as components, in
+`intuituive::files`: the core's generic pieces (see [Browsing, jobs,
+finding and previewing](#browsing-jobs-finding-and-previewing)) with a
+file system plugged in, on rs-rich-ext's `listing`, `open`, `file_ops`,
+`trash` and `git`:
+
+```toml
+rs-rich-intuituive = { version = "0.0.5", features = ["files", "watch", "art"] }
+```
+
+```rust
+use intuituive::files::{miller, selection, tabs, MillerOptions, Yank};
+
+App::new(|| {
+    let columns = miller(start.clone()).icons(true).ratios(1, 4, 3);
+    let picked = selection(columns);
+    let strip = tabs(columns);
+    let yanked = signal(None::<Yank>);
+    let view = columns.view_with(
+        MillerOptions::new()
+            .markers(Yank::markers(yanked))
+            .hovered_caps("\u{e0b6}", "\u{e0b4}"),
+    );
+    columns
+        .navigation(column([strip.strip().fit().fixed(1), view.flex(1), status(columns)]))
+        .on_key("space", move |_| picked.toggle(columns.hovered_path().unwrap()))
+        .on_key("y", move |_| yanked.set(Some(Yank::copy(columns.targets()))))
+})
+```
+
+- **Miller columns:** `miller(start)` is the core's `miller_of` over the
+  directory tree: the parent directory, the current one and a preview of
+  the hovered entry, in panes whose rails the
+  mouse drags, as signals (`cwd`, `cursor`, `hovered`, `hidden`, `sort`,
+  `linemode`, `find`) in a `Copy` struct. Each directory remembers the
+  entry last hovered in it; a click in the parent column goes there, one
+  in a directory's preview enters it. `columns.navigation(node)` binds
+  Yazi's movement keys (`j`/`k`, `h`/`l`, `g g`/`G`, Ctrl+D/U, `J`/`K` for
+  the preview); `cd`, `enter`, `leave`, `arrow` and `refresh` are there
+  for your own. With `watch` both directories follow the disk. The cursor
+  stays on its entry, by path, through a re-sort, a filter, hidden files
+  shown and a refresh. `find_next(previous)` is Yazi's `n` and `N` over
+  the find query (the core's `list_search`), and `visited()` the
+  directories shown so far. `columns.navigation_with(node, &[(Move::Up,
+  "k up", "Previous file"), ..])` and `columns.go(Move::Top)` bind the
+  moves in Yazi's own words (the core's, forwarded; `files::Move`).
+- **Column options:** `view_with(MillerOptions::new() …)` takes markers,
+  git signs (`.git(status)`), the hovered row's rounded ends in its type
+  colour (`.hovered_caps(open, close)`, on the list's
+  `highlight_layer(Under)`), a context handler
+  (`.on_context(|entry, cx| ..)`: a right press, the menu key or
+  Shift+F10 on an entry), how a binary file previews (`.binary(..)`),
+  previewers, and any list option through the core's hooks
+  (`.current(|list| list.wheel_step(1))`, `.parent(..)`, `.preview(..)`).
+- **Tabs:** `tabs(columns)` keeps a directory and a back/forward history
+  per tab (the core's `tab_set` and `history`): `open`, `close_active`,
+  `switch`, `cycle`, `swap`, `back` and `forward` (Yazi's `H` and `L`),
+  `rename`, and `strip()`, a tab strip of their titles. Wherever the
+  columns go, the active tab follows. With a `selection` over the same
+  columns, each tab has its own selection and visual mode behind the one
+  handle (`MultiSelect::scoped`): `v` in one tab leaves the others as
+  they were.
+- **The selection and yanking:** `selection(columns)` is the core's
+  `multi_select` over the current column by path, marked in the columns,
+  with a visual range that follows the cursor (`visual(unset)`,
+  `end_visual`); `columns.targets()` is what an action acts on, the
+  selection or else the hovered file. `Yank::copy(paths)` and
+  `Yank::cut(paths)` hold what `y` and `x` took: `Yank::markers(signal)`
+  marks them, `yank.paste(into, Conflict::Rename)` is the `Op` to run,
+  and `yank.link(into, kind)` the one that links them instead (Yazi's
+  `-`, `LinkKind::Symbolic { relative: false }`; `_`, relative; Ctrl+-,
+  `LinkKind::Hard`), as rs-rich-ext's `Op::Link`. The parent column marks
+  the selection too, by path, in the theme's `marker.selected`
+  (`marks_by`).
+- **A directory model:** `dir_model(|| Some(dir))` holds a directory's
+  entries as memos, sorted (`model.sort`), hidden files shown or not
+  (`model.hidden`), filtered (`model.filter`, smart case), read again on
+  `refresh()`. `.watch()` follows the disk (`watch` feature); `.sniff()`
+  types each file by its first bytes on a worker thread, so a PNG named
+  `.txt` still gets the image colour. `git_status(model)` loads `git
+  status` beside it.
+- **A file list:** `file_list(model, cursor, FileListOptions::new()
+  .icons(true).linemode(mode).find(query).git(status).markers(..))` is a
+  lazy list of rows as Yazi draws them: the type's colour across the row
+  (so the hovered bar takes it), a marker column, find matches picked
+  out with the hovered one's place (`[2/5]`), a git sign and the line mode
+  (`Linemode::Size`, `Permissions`, `Mtime`, `Btime`, `Owner`) at the
+  right. `entry_markup` and `linemode_cell` are the pieces on their own.
+- **A preview pane:** `preview(move || hovered_path(), PreviewOptions::new())`
+  is the core's `preview_of` keyed by the path: it loads off the app's
+  thread whenever the path or the pane's width
+  changes and picks a renderer by type: a directory's entries, text
+  highlighted, an image (`art`; described without it), an archive's
+  entries (`archive`), a hex dump of anything else. A result for a path
+  no longer shown is dropped, and a slow one clears the pane after 150 ms
+  (on the app's clock); the first frame already shows the hovered
+  entry's. `.previewer(|path, mime, settings| ..)` adds your own;
+  `.binary(BinaryPreview::FileType)` shows a binary file as `file -bL`
+  classifies it (`Previewer::file_type()`, a MIME description without
+  `file`) instead of a hex dump. `Previewer::command("application/pdf",
+  &["pdftoppm", "-png", "-singlefile", "-f", "1", "-l", "1", "%s"])` runs
+  an external previewer, as Yazi's `pdftoppm` and `ffmpegthumbnailer`
+  (`video/*` with `-o %o`): output that is an image is shown as one
+  (with `art`), anything else as text; `%s` is the path, `%o` a file to
+  write to, `%w` the pane's width.
+- **Opening:** `open_with(cx, &opener, paths, |cx| ..)` runs one of
+  `rich_ext::open`'s openers (`opener_rules()` is Yazi's defaults): a
+  blocking one (the editor) gets the terminal through `cx.handoff_then`,
+  the others run in the background; `Launch::Extract` extracts beside the
+  archive. `open_with_tasks(cx, &opener, paths, jobs, |cx| ..)` runs
+  extraction as jobs of a task list instead.
+- **Background jobs:** `tasks()` is the core's `jobs` with file
+  operations as the work: it runs copies, moves, deletes, trashing
+  (`jobs.run(Op::Copy { .. }, |report, cx| ..)`) and extraction
+  (`jobs.extract(..)`) each on a thread, with progress a few times a
+  second and a cancel token; `tasks_panel(jobs)` lists them with progress
+  bars (`x` cancels, Yazi's `w`). A job with errors stays listed.
+  `tasks().on_fail(|job, cx| ..)` hears every failure in one place, and
+  `tasks_panel_with(jobs, JobsPanelOptions::new().failed_title(false))`
+  then leaves the title out of a failed row, so nothing is told twice;
+  `jobs.summary()` is `(share done, running, failed)` for a
+  `seg_gauge` in the status line.
+- **A streaming finder:** `finder(walk(root), |path, cx| ..)` is the
+  core's `fuzzy_list` over a directory walk that runs on its own thread:
+  results show while it goes on (`12/3400 (loading…)`), and the walk
+  stops when the finder's screen closes. `finder_with(.., FuzzyOptions
+  ::new().title("Find").border(Border::Rounded))` looks as any fuzzy list
+  does; Esc closes its modal (or runs `.on_cancel(..)`).
+- **Frecency:** `frecency().follow(columns)` counts a visit to each
+  directory shown and ranks them as zoxide does (`ranked()`, best
+  first), in a small file in the user's state directory (`state_dir()`,
+  the core's `state_dir("intuituive")`; `frecency_at(file)` names one):
+  the core's `FrecencyStore` keyed by paths, so two windows' visits add
+  up. Yazi's `Z` across sessions.
+- **Searching:** `search(root, query, SearchKind::Name | Grep)` runs
+  `fd` or `rg` (else a walk of its own), its results streaming in;
+  `columns.show_search(found)` lists them as a level of their own at the
+  root (the core's `overlay`, Yazi's `search://` folder), each named by
+  its path from the root and previewed as any entry: `l` on a directory
+  found goes there, `h` goes back to the directory searched, on the
+  entry hovered before, and `end_search()` does too (Yazi's `s` and
+  `S`).
+- **A file picker:** `pick_file(cx, start, |path| filter, |path, cx|
+  ..)` asks for a file in a modal of Miller's columns: Enter enters a
+  directory or picks a file the filter takes (one it refuses stays, with
+  a warning), Esc cancels. Bubbles' `filepicker`, Textual's
+  `DirectoryTree` in a dialog.
+- **The spotter, bulk rename, a shell:** `spot(path)` is the core's
+  `facts` with a file's name, path, MIME type, size, mode, owner, times
+  and link target. `bulk_rename(cx, paths, |renamed, cx| ..)` edits the
+  names in `$EDITOR` (the core's `cx.edit_text`) and renames what changed when it ends
+  (files may swap names; a name in use is reported). `shell(cx, paths,
+  ShellOptions::new())` prompts for a command and runs it on them as
+  Yazi's `;` (in the background, or as a job with `.tasks(jobs)`) or `:`
+  (`.block(true)`: the terminal handed over), `"$@"` the paths and `$0`
+  the hovered file (`.hovered(..)`).
+- **A path header:** `path_crumb(|| cwd)` is the core's `breadcrumb` over
+  a path's parts (`path_parts`), `/` between them and the home directory
+  as `~` (`path_crumb_at(.., Some(home))` names it).
+- **A hex view:** `hex_view` is the core's (`widgets::hex_view`),
+  re-exported.
+- **The trash everywhere:** `Op::Trash` uses rs-rich-ext's `trash::send`:
+  the FreeDesktop trash on Linux and the BSDs, the Finder's on macOS, the
+  Recycle Bin on Windows.
+
+Image previews draw in pixels with the `art` feature's `Pixels` and
+`image_graphics` (see above).
+
+## Levels, sparklines and big text
+
+Nodes for a dashboard or an audio app, drawn by rs-rich-ext's charts
+from closures that read signals. The meters, sparklines and spectra are
+the **`viz`** plugin, off by default (they show one domain's data, levels
+and spectra, so they are not in the core); `big_text` is `art`'s, and
+`digits` is in every build:
+
+```toml
+rs-rich-intuituive = { version = "0.0.5", features = ["viz"] }
+```
+
+```rust
+use intuituive::{big_text, meter_with, sparkline};
+use rich_ext::chart::MeterScale;
+
+row([
+    meter_with(move || rms.get(), move || peak.get(), |m| {
+        m.label("L").readout(true).scale(MeterScale::Decibels { floor: -60.0 })
+    })
+    .hold(Duration::from_secs(1))
+    .flex(1),
+    sparkline(move || history.get()).fixed(20),
+])
+big_text(move || format!("[accent]{:02}[/]:{:02}", minutes.get(), seconds.get()))
+```
+
+- **`meter(level, peak)`** is a `LevelMeter`: a bar green to red with a
+  mark at the peak; `.hold(duration)` adds a mark that keeps the highest
+  peak for that long, as a DAW's meter does. `meter_with(level, peak,
+  configure)` sets up its label, readout, decibel scale or orientation.
+- **`sparkline(values)`** is a `Sparkline` of what the closure returns,
+  one cell a value (resampled when there are more): keep a history the
+  node's width long. `sparkline_with` configures it.
+- **`spectrogram(spectra)`** is a `Spectrogram`, a waterfall: the closure
+  returns the spectra to show, oldest first (the core's `recent(spectrum,
+  rows)` keeps them), the newest drawn at the top. `spectrogram_with`
+  sets its resolution, log scale, bounds and range.
+- **`bar_spectrum(bands)`** is a `BarSpectrum`, cava's bars: a column per
+  band from the bottom, in eighths of a cell. Feed it `dsp::bands` of a
+  spectrum through a `dsp::Falloff` (or `smoothed` per band);
+  `bar_spectrum_with(bands, |b| b.mirror(true).range(1.0))` mirrors it,
+  the low bands in the middle, and `described(|| BarSpectrum::stereo(l,
+  r))` shows two channels.
+- **`big_text(markup)`** (the `art` feature) draws markup in FIGlet
+  letters with rs-rich-art's bundled font, each run in its style: a
+  clock, a readout, a title.
+- **`digits(markup)`** draws markup three rows tall in box-drawing
+  glyphs, as Textual's `Digits`, in every build (no font): `0`-`9`,
+  `A`-`G`, `+ - = / % ( ) : . , #` and the space, any other character as
+  it is. A clock, a counter or a note name where the `art` feature is
+  off.
+- **`tuner(|| reading)`** (`viz`) is a tuner's readout of an rs-rich-ext
+  `dsp::Tuner` reading: the note in `digits`, a needle from flat to sharp
+  with the note in the middle, and the frequency and cents, green within
+  5 cents, yellow within 15, red beyond; `no signal` without one.
+
+Each says what it shows to a screen reader: the meter its level, peaks and
+band, the sparkline its range and trend, the spectrogram its range and
+where the newest spectrum peaks, the bar spectrum its loudest band, big
+text and digits their text.
+
+For a scope's persistence (older traces fading, as a phosphor's), the
+`viz` plugin's **`persistence(|| frames)`** draws rs-rich-ext's
+`chart::Persistence` of the last frames (`recent(trace, 8)`) on a
+`Chart`, each older one fainter, the newest on top, the axes spanning the
+points; `persistence_with(frames, |p| p.style("#33ff66").fade(0.2),
+|chart| chart.x_axis(..))` sets up the trace and the chart.
+
+```rust
+let traces = recent(trace, 8);
+persistence_with(move || traces.get(), |p| p.style("#33ff66").fade(0.2), |chart| chart)
+```
 
 ## Themes
 
@@ -1727,7 +3284,8 @@ everything is drawn again in the new theme.
 The framework's own parts look for names of their own and fall back to
 these: a modal's or pop-up's panel title (the palette's, the help's, a
 confirm's) is drawn in `popup.title`, else `title`; the which-key keys in
-`which_key.key`, else `accent`; notifications in `notify.info`,
+`which_key.key`, else `accent`, its separators in `which_key.sep` and its
+descriptions in `which_key.desc`; notifications in `notify.info`,
 `notify.warn` and `notify.error`, else `accent`, `warn` and `bad`.
 
 ### Theme files, reloaded live
@@ -2195,8 +3753,8 @@ build has. The `files` and `scope` examples take `--backend NAME`, or
 backends the build has when the name is not one of them:
 
 ```bash
-cargo run -p rs-rich-intuituive --example files --features termwiz -- --backend termwiz
-INTUITUIVE_BACKEND=termion cargo run -p rs-rich-intuituive --example scope --features termion
+cargo run -p rs-rich-intuituive --example files --features files,termwiz -- --backend termwiz
+INTUITUIVE_BACKEND=termion cargo run -p rs-rich-intuituive --example scope --features termion,pcm
 ```
 
 termwiz runs on Windows too. CI builds both crates, and every target,
@@ -2270,7 +3828,15 @@ out.write_all(driver.finish().as_bytes())?;
 - **`render()`** draws what changed and returns the escape sequences that
   show it, or `None` when nothing did.
 - **`timeout(now)`** is how long you may wait for an event: until the next
-  timer, a frame while something animates, at most 50 ms.
+  timer or `after`, a frame while something animates, at most 50 ms.
+  `set_waker(|| …)` is called from any thread that sends the app a value
+  (a `latest` value, a task's result, a `Proxy`), so a loop that waits on
+  something can stop waiting at once: `run` and `run_on` use the
+  backend's `Waker`, which a read on the terminal waits on beside it.
+- **`render()`** also runs the watches its layout set off (one that reads
+  a `RectHandle`: a pane that loads once it has a width) and, in an app
+  that waits for its tasks, their tasks, so the next event finds what
+  they load.
 - **`event(e)`** takes a key, mouse event, paste or resize;
   `resize(w, h)` sets the size directly.
 - **`screen()`** is the frame as cells, and `screen().lines()` as styled
@@ -2311,10 +3877,13 @@ terminal.draw(|frame| {
 ## Testing
 
 `render_with` runs an app headless, pressing keys, and returns the last
-screen:
+screen. The app need not quit: once the keys are pressed it settles
+(watches the first frames set off run, so what loads from a
+`rect_handle`'s width is there) and the screen is read. An error the app
+failed with comes back as the `Err`.
 
 ```rust
-let screen = app.render_with(&["+", "+", "q"], 30, 2)?;
+let screen = app.render_with(&["+", "+"], 30, 2)?;
 assert_eq!(screen[0].trim_end(), "Count: 2");
 ```
 
@@ -2325,7 +3894,10 @@ terminal and no clock of its own. For a test it has:
   which draws until nothing is left to draw;
 - `type_text("Ada")`: a key a character, as a person types;
 - `resize(columns, rows)`, `event(…)` for the mouse and pastes, and
-  `update(now)` to move the clock;
+  `update(now)` to move the clock; `advance(d)` moves it on by `d` a step
+  at a time, to each timer, `after`, animation, toast or `latest` thread
+  asleep on the app's clock due (50 ms at most), drawing after each, so
+  what is timed runs at its own time, and a feed's every value is seen;
 - `assert_focused("save")`: the focus is on the node with that
   `.name("…")`, or that accessible name (its `.label("…")`, the text it
   shows, a panel's title). When it is not, the message says where the
@@ -2373,9 +3945,17 @@ to-do list:
 ```
 
 For the exact bytes sent, or a script of clicks and waits, use
-`App::run_on` with `rs-rich-interact`'s `Headless` backend.
-`App::wait_for_tasks(true)` waits for background tasks before each step,
-so a test sees a task's result however fast the machine is.
+`App::run_on` with `rs-rich-interact`'s `Headless` backend; its `Record`
+keeps the programs handed the terminal (`handoffs`) and each with its
+arguments (`handoff_commands`), so a test sees that `$EDITOR` got the
+right file. `App::wait_for_tasks(true)` waits for background tasks before
+each step, so a test sees a task's result however fast the machine is.
+It also puts `latest` threads that keep a beat (`tx.sleep(period)`,
+`latest_every`) on the app's clock: each step lets the threads that are
+due run until they sleep again, so a thread-fed app shows the same thing
+frame by frame on every run, and a script's `wait(..)` moves the threads
+on as far as the app. (A `latest` thread that waits on something else, a
+pipe, holds each step up to 5 seconds.)
 
 ## Inspector
 

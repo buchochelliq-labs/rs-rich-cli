@@ -14,11 +14,11 @@
 
 use std::time::Duration;
 
-use rich::{Console, Segment, Style};
+use rich::{Console, Segment};
 use rich_interact::Key;
 
 use crate::app::{Ctx, Theme};
-use crate::node::{parse_keys, Node};
+use crate::node::{parse_keys, KeyBinding, KeyHandler, Node};
 use crate::place::{place, Offset, Origin};
 use crate::reactive::NodeId;
 use crate::screen::{Rect, Screen};
@@ -53,22 +53,23 @@ pub(crate) fn continuations(node: &Node, typed: &[Key]) -> Vec<(String, String)>
     node.sequences
         .borrow()
         .iter()
-        .filter(|(keys, _, _)| keys.len() > typed.len() && starts(keys, typed))
-        .map(|(keys, description, _)| {
-            let rest = keys[typed.len()..]
+        .filter(|bound| !bound.hidden && bound.keys.len() > typed.len())
+        .filter(|bound| starts(bound.live_keys(), typed))
+        .map(|bound| {
+            let rest = bound.keys[typed.len()..]
                 .iter()
                 .map(|key| rich_interact::chrome::key_hint(*key))
                 .collect::<Vec<_>>()
                 .join(" ");
-            (rest, description.clone())
+            (rest, bound.description.clone())
         })
         .collect()
 }
 
 impl Node {
     /// Run `handler` when `keys` (key names separated by spaces, pressed one
-    /// after another: `"g g"`, `"c c"`; the comma key is written in quotes,
-    /// as in any binding: `"\",\" s"`) are pressed while this node
+    /// after another: `"g g"`, `"c c"`; the comma key is `comma`, as in any
+    /// binding: `"comma s"`) are pressed while this node
     /// or a node inside it has the focus. The first key starts the
     /// sequence where a binding of that key would run (a deeper node's
     /// binding of it wins, as for any key); each next key that goes on with
@@ -96,22 +97,68 @@ impl Node {
     /// assert_eq!(driver.screen().plain()[0].trim_end(), "top");
     /// ```
     ///
+    /// Spaces mean "then" here, where in [`bind`](Self::bind) they mean
+    /// "or": `bind("k up", ..)` is either key, `bind_sequence("g g", ..)`
+    /// is `g` and then `g`. A sequence is two keys or more; one key is a
+    /// `bind`.
+    ///
     /// # Panics
-    /// On a name that is not a key, or on no names at all.
+    /// On a name that is not a key, on no names at all, or on one key only
+    /// (bind it with [`bind`](Self::bind)).
     pub fn bind_sequence(
         self,
         keys: &str,
         description: &str,
-        handler: impl FnMut(&mut Ctx) + 'static,
+        mut handler: impl FnMut(&mut Ctx) + 'static,
     ) -> Node {
-        let keys = parse_keys(keys);
-        if keys.len() == 1 {
-            return self.bind(&keys[0].to_string(), description, handler);
-        }
+        let parsed = parse_keys(keys);
+        assert!(
+            parsed.len() > 1,
+            "bind_sequence({keys:?}) has one key: a sequence is keys pressed one after \
+             another, so bind one key with bind() (where spaces separate keys that each \
+             run it)"
+        );
+        let handler: KeyHandler = Box::new(move |cx, _| handler(cx));
         self.sequences
             .borrow_mut()
-            .push((keys, description.to_string(), Box::new(handler)));
+            .push(KeyBinding::new(parsed, description, handler));
         self
+    }
+
+    /// [`bind_sequence`](Self::bind_sequence), listed in the help (and the
+    /// palette) under `section`, as [`bind_in`](Self::bind_in) lists a
+    /// binding.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("files")
+    ///         .bind_sequence_in("goto", "g h", "Go home", |_| {})
+    ///         .bind_in("tabs", "t", "New tab", |_| {})
+    ///         .on_key("?", |cx| cx.help())
+    /// });
+    /// let mut driver = app.driver(60, 16);
+    /// driver.press("?");
+    /// let rows = driver.screen().plain().join("\n");
+    /// assert!(rows.find("goto") < rows.find("Go home"));
+    /// assert!(rows.find("tabs") < rows.find("New tab"));
+    /// ```
+    ///
+    /// # Panics
+    /// As [`bind_sequence`](Self::bind_sequence).
+    pub fn bind_sequence_in(
+        self,
+        section: &str,
+        keys: &str,
+        description: &str,
+        handler: impl FnMut(&mut Ctx) + 'static,
+    ) -> Node {
+        let node = self.bind_sequence(keys, description, handler);
+        if let Some(sequence) = node.sequences.borrow_mut().last_mut() {
+            sequence.section = Some(section.to_string());
+        }
+        node
     }
 
     /// [`bind_sequence`](Self::bind_sequence) without a description.
@@ -199,13 +246,18 @@ pub(crate) fn draw_which_key(
     let border = theme.border(false);
     let lines = crate::node::border("", &border, &border, rect);
     screen.write_lines(rect, &lines);
-    let key = theme
-        .styles
-        .iter()
-        .find(|(name, _)| name == "which_key.key")
-        .or_else(|| theme.styles.iter().find(|(name, _)| name == "accent"))
-        .map(|(_, style)| style.clone())
+    let own = |name: &str| {
+        theme
+            .styles
+            .iter()
+            .find(|(n, _)| n == name)
+            .map(|(_, style)| style.clone())
+    };
+    let key = own("which_key.key")
+        .or_else(|| own("accent"))
         .unwrap_or_default();
+    let separator = own("which_key.sep").unwrap_or_default();
+    let described = own("which_key.desc").unwrap_or_default();
     let inner = Rect::new(
         rect.x + 1,
         rect.y + 1,
@@ -218,6 +270,9 @@ pub(crate) fn draw_which_key(
         .map(|(keys, _)| rich::cells::cell_len(keys))
         .max()
         .unwrap_or(0);
+    // What a description has: the column less the key, the separator and
+    // the gap before the next column's key.
+    let room = (cell as usize).saturating_sub(1 + keys + SEPARATOR.len() + WHICH_KEY_GAP);
     for (i, (keys_left, description)) in entries.iter().enumerate() {
         let (column, row) = ((i / rows) as u16, (i % rows) as u16);
         if row >= inner.height {
@@ -226,12 +281,32 @@ pub(crate) fn draw_which_key(
         let pad = " ".repeat(keys - rich::cells::cell_len(keys_left));
         let line = vec![
             Segment::new(format!(" {keys_left}"), Some(key.clone())),
-            Segment::new(format!("{pad}  "), None),
-            Segment::new(description.clone(), Some(Style::default())),
+            Segment::new(pad, None),
+            Segment::new(SEPARATOR.to_string(), Some(separator.clone())),
+            Segment::new(cut(description, room), Some(described.clone())),
         ];
         let line = Segment::adjust_line_length(&line, cell as usize, None);
         let at = Rect::new(inner.x + column * cell, inner.y + row, cell, 1);
         screen.write_lines(at, &[line]);
     }
     Some(rect)
+}
+
+/// What goes between a which-key entry's keys and its description.
+const SEPARATOR: &str = "  ";
+
+/// The blank cells, at least, between a which-key column's descriptions
+/// and the next column's keys.
+const WHICH_KEY_GAP: usize = 2;
+
+/// `text` in at most `width` cells, ending in `…` when cut.
+fn cut(text: &str, width: usize) -> String {
+    if rich::cells::cell_len(text) <= width {
+        return text.to_string();
+    }
+    if width == 0 {
+        return String::new();
+    }
+    let kept = rich::cells::set_cell_size(text, width - 1);
+    format!("{}…", kept.trim_end())
 }

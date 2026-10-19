@@ -320,6 +320,8 @@ impl<W: Write> Surface<W> {
                 }
             }
         }
+        // Styles no cell uses any more go, once they pile up.
+        self.painter.compact(&mut self.screen);
         if self.synchronized && !out.is_empty() {
             out = format!("{BEGIN_SYNCHRONIZED_UPDATE}{out}{END_SYNCHRONIZED_UPDATE}");
         }

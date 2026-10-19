@@ -18,8 +18,6 @@ const HOLD: f64 = 2.5;
 const KEY_SHOWN: f64 = 0.8;
 /// About how many bytes of drawn frames are held at once.
 const BATCH_BYTES: usize = 256 * 1024 * 1024;
-/// Text size of video frames, in pixels.
-const TEXT_SIZE: f32 = 16.0;
 
 /// One distinct video frame: which of the timeline's frames it shows, whether
 /// the cursor, if there is one, is drawn (it blinks), the key shown in the overlay, and how
@@ -36,7 +34,7 @@ pub struct VideoFrame {
 impl VideoFrame {
     /// The screen this frame shows.
     pub fn snapshot(&self, timeline: &Timeline) -> Snapshot {
-        let mut snapshot = timeline.frames[self.frame].1.clone();
+        let mut snapshot = timeline.frames[self.frame].1.snapshot();
         if !self.cursor {
             snapshot.cursor = None;
         }
@@ -73,13 +71,13 @@ pub fn sample_with(timeline: &Timeline, fps: f64, keys: bool) -> Vec<VideoFrame>
             .map(|(_, label)| label.clone());
         // Blink the cursor at 2 Hz, as a terminal does.
         let cursor = ((t * 2.0) as u64).is_multiple_of(2);
-        let drawn = |frame: usize, cursor: bool| frames[frame].1.cursor.filter(|_| cursor);
+        let drawn = |frame: usize, cursor: bool| frames[frame].1.cursor().filter(|_| cursor);
         match out.last_mut() {
             Some(last)
                 if last.key == key
                     && drawn(last.frame, last.cursor) == drawn(index, cursor)
                     && (last.frame == index
-                        || frames[last.frame].1.rows == frames[index].1.rows) =>
+                        || frames[last.frame].1.same_screen(&frames[index].1)) =>
             {
                 last.seconds += step;
             }
@@ -100,7 +98,7 @@ fn options<'a>(look: &Look<'a>, key: Option<&'a str>) -> raster::Frame<'a> {
     raster::Frame {
         title: look.title,
         key,
-        size: TEXT_SIZE,
+        size: look.text_size,
         window: look.window,
         caption: look.caption,
     }
@@ -119,7 +117,7 @@ pub fn size(
             let snapshot = &timeline.frames[frame.frame].1;
             raster::size(
                 snapshot.columns(),
-                snapshot.rows.len(),
+                snapshot.height(),
                 fonts,
                 &options(look, None),
             )
@@ -205,12 +203,14 @@ pub fn ffmpeg_available() -> bool {
         .is_ok_and(|s| s.success())
 }
 
-/// An H.264 MP4 being encoded by FFmpeg at [`FRAME_RATE`], frame by frame.
-/// Dropped unfinished, it stops FFmpeg and waits for it.
+/// An H.264 MP4 being encoded by FFmpeg, frame by frame. Dropped
+/// unfinished, it stops FFmpeg and waits for it.
 pub struct Mp4 {
     child: Child,
     width: usize,
     height: usize,
+    /// Frames a second.
+    fps: f64,
     /// Frames written, and the time they should cover, so rounding each
     /// frame's length does not add up to drift.
     written: u64,
@@ -219,8 +219,18 @@ pub struct Mp4 {
 
 impl Mp4 {
     /// Start FFmpeg writing `path`, `width` x `height` pixels (rounded up to
-    /// even, as H.264 needs).
+    /// even, as H.264 needs), at [`FRAME_RATE`].
     pub fn start(path: &std::path::Path, width: usize, height: usize) -> std::io::Result<Mp4> {
+        Mp4::start_at(path, width, height, FRAME_RATE)
+    }
+
+    /// [`Mp4::start`] at `fps` frames a second.
+    pub fn start_at(
+        path: &std::path::Path,
+        width: usize,
+        height: usize,
+        fps: f64,
+    ) -> std::io::Result<Mp4> {
         let (width, height) = (width.max(2), height.max(2));
         let (width, height) = (width + width % 2, height + height % 2);
         let child = Command::new("ffmpeg")
@@ -234,7 +244,7 @@ impl Mp4 {
                 "rgb24",
             ])
             .args(["-s", &format!("{width}x{height}")])
-            .args(["-r", &FRAME_RATE.to_string(), "-i", "-"])
+            .args(["-r", &fps.to_string(), "-i", "-"])
             .args(["-pix_fmt", "yuv420p", "-movflags", "+faststart"])
             .arg(path)
             .stdin(Stdio::piped())
@@ -243,6 +253,7 @@ impl Mp4 {
             child,
             width,
             height,
+            fps,
             written: 0,
             elapsed: 0.0,
         })
@@ -265,7 +276,7 @@ impl Mp4 {
             self.height.saturating_sub(canvas.height) / 2,
         );
         self.elapsed += seconds;
-        let due = ((self.elapsed * FRAME_RATE).round() as u64).max(self.written + 1);
+        let due = ((self.elapsed * self.fps).round() as u64).max(self.written + 1);
         let stdin = self
             .child
             .stdin
@@ -320,11 +331,12 @@ pub fn mp4(frames: &[(Canvas, f64)], path: &std::path::Path) -> std::io::Result<
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::screen::Packed;
 
-    fn snapshot(text: &[u8]) -> Snapshot {
+    fn snapshot(text: &[u8]) -> Packed {
         let mut parser = vt100::Parser::new(2, 8, 0);
         parser.process(text);
-        Snapshot::from_screen(parser.screen(), &Theme::default())
+        Packed::from(&Snapshot::from_screen(parser.screen(), &Theme::default()))
     }
 
     #[test]
@@ -362,6 +374,25 @@ mod tests {
         // One frame per half second of blink, over 50s plus the hold.
         assert!(sampled.len() <= 2 * 53, "{}", sampled.len());
         assert!(sampled.iter().all(|f| f.frame < 600));
+    }
+
+    #[test]
+    fn samples_drop_to_the_frame_rate() {
+        // 35 distinct screens a second for 2 s, sampled at 35 and at 10.
+        let timeline = Timeline {
+            frames: (0..70)
+                .map(|i| (i as f64 / 35.0, snapshot(format!("{i}").as_bytes())))
+                .collect(),
+            ..Timeline::default()
+        };
+        let all = sample_with(&timeline, 35.0, false);
+        let shown: std::collections::BTreeSet<usize> = all.iter().map(|f| f.frame).collect();
+        assert!(shown.len() >= 69, "{}", shown.len());
+        let total: f64 = all.iter().map(|f| f.seconds).sum();
+        assert!((total - (69.0 / 35.0 + HOLD)).abs() < 0.1, "{total}");
+        let fewer = sample_with(&timeline, 10.0, false);
+        let shown: std::collections::BTreeSet<usize> = fewer.iter().map(|f| f.frame).collect();
+        assert!((19..=21).contains(&shown.len()), "{}", shown.len());
     }
 
     #[test]

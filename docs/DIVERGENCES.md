@@ -62,7 +62,8 @@ Format: what differs · why · how to remove it (if temporary).
   order, which gives the same equality (`{a, b}` ≠ `{b, a}`, `True` ≠ `1`),
   combination (`{**a, **b}`) and truthiness. Non-marshal-able Python values have
   no representation; `Style.from_meta`'s random `link_id` is not modelled (#20);
-  markup `[@handler]` tags do not produce meta.
+  markup `[@handler]` tags do not produce meta (so `Text.markup` of such text
+  has no `[none]…[/none]` tag where upstream writes one).
 - **Why:** Rust has no marshal; the map round-trips what the bindings need.
 
 ### 3. Byte offsets in `Text` spans

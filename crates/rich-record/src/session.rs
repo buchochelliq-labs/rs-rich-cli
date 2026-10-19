@@ -9,11 +9,11 @@ use std::time::{Duration, Instant};
 
 use portable_pty::{native_pty_system, Child, CommandBuilder, MasterPty, PtySize};
 
-use crate::screen::{Snapshot, Theme};
+use crate::screen::{Packed, Snapshot, Theme};
 use crate::terminal::Terminal;
 
-/// Frames are kept at most this often, per second: the video's frame rate.
-/// Output that arrives faster is gathered into one event and one frame.
+/// The video's frame rate unless a tape sets one (`Set Framerate`), and how
+/// often output is gathered into one event of the cast.
 pub const FRAME_RATE: f64 = 12.0;
 /// Frames are kept for this much recorded time. A longer recording still
 /// has its screenshots and cast, but no video.
@@ -43,8 +43,11 @@ pub enum Event {
 #[derive(Clone, Debug, Default)]
 pub struct Timeline {
     pub events: Vec<(f64, Event)>,
-    /// The screen after each change.
-    pub frames: Vec<(f64, Snapshot)>,
+    /// The screen after each settled update (output that read in full, no
+    /// synchronized update open), packed. Of the updates within one frame
+    /// of the video's rate only the last is kept, as only it would be
+    /// shown.
+    pub frames: Vec<(f64, Packed)>,
     /// Keys pressed, for the key overlay.
     pub keys: Vec<(f64, String)>,
     /// Whether frames after [`MAX_VIDEO`] were dropped: the timeline is too
@@ -70,8 +73,10 @@ struct State {
     /// Whether `batch` passed [`MAX_BATCH`] and was dropped for a repaint.
     overflow: bool,
     pending: Option<f64>,
-    /// When the last frame was kept.
+    /// When the last batch of output was recorded.
     last_frame: Option<f64>,
+    /// Frames kept a second, at most: the video's frame rate.
+    frame_rate: f64,
     timeline: Timeline,
     alive: bool,
     /// Why the emulator failed, if it did.
@@ -96,6 +101,7 @@ impl State {
             overflow: false,
             pending: None,
             last_frame: None,
+            frame_rate: FRAME_RATE,
             timeline: Timeline::default(),
             alive: true,
             error: None,
@@ -128,20 +134,36 @@ impl State {
 
     fn frame(&mut self, t: f64) {
         self.last_frame = Some(t);
+        self.capture(t);
+    }
+
+    /// Keep the screen as it is at `t` as a frame, unless it is the frame
+    /// before. A frame within the same frame interval as the one before
+    /// (counted from the first) replaces it, since only the later of the
+    /// two would be shown; one at another size never does.
+    fn capture(&mut self, t: f64) {
         if t > MAX_VIDEO.as_secs_f64() {
             self.timeline.truncated = true;
             return;
         }
         let snapshot = self.terminal.snapshot(&self.theme);
-        if self
-            .timeline
-            .frames
-            .last()
-            .is_some_and(|(_, last)| *last == snapshot)
-        {
+        let frames = &mut self.timeline.frames;
+        let packed = Packed::pack(&snapshot, frames.last().map(|(_, last)| last));
+        let Some((last_t, last)) = frames.last() else {
+            frames.push((t, packed));
+            return;
+        };
+        if *last == packed {
             return;
         }
-        self.timeline.frames.push((t, snapshot));
+        let first = frames[0].0;
+        let interval = |at: f64| ((at - first) * self.frame_rate - 1e-9).ceil();
+        let resized = (last.columns(), last.height()) != (packed.columns(), packed.height());
+        if frames.len() > 1 && !resized && interval(*last_t) == interval(t) {
+            *frames.last_mut().expect("a frame") = (t, packed);
+        } else {
+            frames.push((t, packed));
+        }
     }
 
     /// Remember a screen for [`Session::seen`].
@@ -388,6 +410,11 @@ impl Session {
                 if !state.hidden {
                     let t = state.now();
                     state.output(t, &buffer[..read]);
+                    // Settled: the read did not fill the buffer (no more
+                    // was waiting) and no synchronized update is open.
+                    if read < buffer.len() && !state.terminal.in_synchronized_update() {
+                        state.capture(t);
+                    }
                 }
                 let replies = state.terminal.take_replies();
                 drop(state);
@@ -409,6 +436,24 @@ impl Session {
 
     fn lock(&self) -> MutexGuard<'_, State> {
         lock(&self.state)
+    }
+
+    /// Keep at most `fps` frames a second (the video's frame rate): of the
+    /// screen updates within one frame only the last is kept.
+    pub fn set_frame_rate(&self, fps: f64) {
+        self.lock().frame_rate = fps.clamp(1.0, 240.0);
+    }
+
+    /// Report the kitty keyboard protocol to the program, so that it can
+    /// turn it on ([`Terminal::set_kitty_keyboard`]).
+    pub fn set_kitty_keyboard(&self, on: bool) {
+        self.lock().terminal.set_kitty_keyboard(on);
+    }
+
+    /// The kitty keyboard protocol's flags the program has in force
+    /// ([`Terminal::keyboard_flags`]).
+    pub fn keyboard_flags(&self) -> u8 {
+        self.lock().terminal.keyboard_flags()
     }
 
     /// Why the session failed (the terminal emulator panicked), if it did.
@@ -571,10 +616,30 @@ mod tests {
 
         // The output's frame is the old 20x4 screen; the resize's, 30x6.
         let frames = &state.timeline.frames;
-        let (_, before) = &frames[frames.len() - 2];
+        let before = frames[frames.len() - 2].1.snapshot();
         assert_eq!((before.rows.len(), before.rows[0].len()), (4, 20));
-        assert!(row_text(before, 0).starts_with("hello"));
-        let (_, after) = frames.last().unwrap();
+        assert!(row_text(&before, 0).starts_with("hello"));
+        let after = frames.last().unwrap().1.snapshot();
         assert_eq!((after.rows.len(), after.rows[0].len()), (6, 30));
+    }
+
+    #[test]
+    fn updates_within_a_frame_keep_only_the_last() {
+        let mut state = State::new(2, 10, Theme::default());
+        state.hidden = false;
+        state.frame_rate = 10.0;
+        let draw = |state: &mut State, t: f64, text: &str| {
+            state.terminal.process(text.as_bytes()).unwrap();
+            state.capture(t);
+        };
+        draw(&mut state, 0.0, "a");
+        draw(&mut state, 0.01, "b");
+        draw(&mut state, 0.05, "c");
+        draw(&mut state, 0.15, "d");
+        // An update that changes nothing is no frame.
+        draw(&mut state, 0.16, "");
+        let times: Vec<f64> = state.timeline.frames.iter().map(|(t, _)| *t).collect();
+        assert_eq!(times, [0.0, 0.05, 0.15]);
+        assert!(row_text(&state.timeline.frames[1].1.snapshot(), 0).starts_with("abc"));
     }
 }

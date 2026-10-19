@@ -576,6 +576,25 @@ pub fn mime_for(path: &Path) -> std::io::Result<&'static str> {
     }))
 }
 
+/// The MIME types of `paths`, each as [`mime_for`] sniffs it (at most 512
+/// bytes read a file), `None` where a file cannot be read. A listing's
+/// types from names alone miss a PNG called `.txt` or a script with no
+/// extension; this is the sniffing Yazi's fetchers do, to run off a UI's
+/// thread and merge into the listing when it is done.
+///
+/// ```
+/// let dir = std::env::temp_dir().join(format!("rich-ext-mime-batch-{}", std::process::id()));
+/// std::fs::create_dir_all(&dir).unwrap();
+/// std::fs::write(dir.join("photo.txt"), b"\x89PNG\r\n\x1a\n....").unwrap();
+/// std::fs::write(dir.join("run"), "#!/bin/sh\necho hi\n").unwrap();
+/// let types = rich_ext::filetype::mime_batch(&[dir.join("photo.txt"), dir.join("run"), dir.join("gone")]);
+/// assert_eq!(types, [Some("image/png"), Some("text/plain"), None]);
+/// # std::fs::remove_dir_all(&dir).ok();
+/// ```
+pub fn mime_batch<P: AsRef<Path>>(paths: &[P]) -> Vec<Option<&'static str>> {
+    paths.iter().map(|p| mime_for(p.as_ref()).ok()).collect()
+}
+
 /// Whether a Nerd Font is likely in use, and why we think so.
 ///
 /// No terminal reports its font, and Nerd Font glyphs sit in the Private
