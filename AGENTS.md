@@ -229,6 +229,25 @@ that's a signal the coupling was too tight — prefer widening a core trait.
 
 ---
 
+## Long-running and delegated work: save state as you go
+
+Sessions and agents can end without warning (a time or usage limit, a
+restarted container). Work that exists only in a worktree is lost with it.
+
+- **Commit at every milestone**, not only at the end. Unfinished work is
+  committed too, marked `WIP` in the message with a line saying what is
+  done, partial and left.
+- **When a session may run out**, every running agent commits its state at
+  once, and the lead pushes each in-flight branch to a backup branch named
+  `<working branch>-wip-<name>` (never onto the working branch itself), so
+  nothing lives only on the machine.
+- **Keep a handoff note** for a multi-step effort
+  ([docs/design/intuituive-status.md](docs/design/intuituive-status.md) is
+  the demo loop's): what is merged, what is in flight on which branch, and
+  what is next, updated whenever that changes. A new session starts there.
+- **Delegated agents** are told the same in their brief: commit at
+  milestones, mark WIP, and list what is left.
+
 ## Before you commit
 
 ```bash
