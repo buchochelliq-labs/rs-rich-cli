@@ -157,6 +157,70 @@ files (the `files` plugin builds on them later):
   `parent_cursor()`, `preview_cursor()`, `remembered_all()`), and
   `visited()`, the levels shown.
 
+### intuiTUIve: round 4 files plugin (rs-rich-intuituive, rs-rich-ext)
+
+The `files` plugin's part of round 4, built on the round-4 runtime and
+widgets above ([the demo gaps](docs/design/intuituive-demo-gaps.md),
+"Round 3: files"):
+
+- **Fixed: the first frame's preview.** `preview_of_with` (and so
+  `files::preview`) is now a `resource_for` keyed by the pane's width and
+  the key, with `clear_after` as its `stale_after` (on the app's clock)
+  and no generation counter or sleeping thread of its own: with the
+  runtime's layout fix, the first frame shows the hovered entry's
+  preview, with no wait.
+- **The hovered row's ends:** `FileListOptions::hovered_caps(open,
+  close)` and `MillerOptions::hovered_caps`: Yazi's Nerd Font half
+  circles in the row's type colour, on the list's `highlight_layer(Under)`.
+- **`file` classification:** `Previewer::file_type()` (`file -bL`, else a
+  description of the MIME type), chosen for binary files by
+  `PreviewOptions::binary(BinaryPreview::FileType)` (or
+  `MillerOptions::binary`). **Breaking:** `Previewer` is a struct
+  (`Previewer::new(f)`, `preview(..)`), no longer an `Arc` alias;
+  `PreviewSettings` has a `binary` field; `previewer_of(..)` adds one.
+- **Tabs:** `files::tabs(miller)` (`FileTabs`, `FileTab`): a directory
+  and a back/forward history per tab on the core's `tab_set` and
+  `history`, with `open`, `open_at`, `close_active`, `switch`, `cycle`,
+  `swap`, `back`, `forward`, `rename` and `strip()`.
+- **Selection and yank:** `files::selection(miller)`, the core's
+  `multi_select` over the current column by path, marked in the columns;
+  `Miller::targets()`, the selection or the hovered file; `files::Yank`
+  (`copy`, `cut`, `marker`, `markers(signal)`, `paste(into, conflict) ->
+  Op`).
+- **Miller:** `find_next(previous)` on `list_search`; the cursor kept by
+  path through a re-sort, a filter, hidden files and `refresh` (the
+  list's `cursor_by`); `MillerOptions::on_context(|entry, cx| ..)` and
+  the core's `current`, `parent` and `preview` hooks; `visited()`;
+  `show_search(search)`, `searching()` and `end_search()`.
+- **Tasks:** `Tasks::summary() -> (share, running, failed)` for a
+  `seg_gauge`; `Tasks::on_fail(|job, cx| ..)` for every job's failure;
+  `tasks_panel_with(jobs, JobsPanelOptions::new().failed_title(false))`
+  so a failure is told once; `open_with_tasks(cx, opener, paths, jobs,
+  done)` runs extraction as jobs.
+- **Frecency:** `files::frecency()` (or `frecency_at(file)`): `visit`,
+  `ranked`, `remove`, `follow(miller)`, zoxide's ranking, kept in
+  `state_dir()` (`$XDG_STATE_HOME/intuituive`, Application Support,
+  `%LOCALAPPDATA%`), written whole and renamed into place.
+- **Finder:** `files::finder_with(walk, on_pick, FuzzyOptions)` on the
+  core's `fuzzy_list`: a title, a border, Esc closing its modal or
+  `on_cancel`.
+- **Spotter, bulk rename, shell, search:** `files::spot(path)` (and
+  `spot_facts`) on `facts`; `bulk_rename(cx, paths, done)` through
+  `$EDITOR` (names may swap; conflicts reported); `shell(cx, paths,
+  ShellOptions)`, Yazi's `;` and `:` with `$0`/`"$@"` (`shell_command`);
+  `search(root, query, SearchKind::Name | Grep)` through `fd`/`rg` or a
+  walk of its own, streaming.
+
+Core, for the above: `jobs_panel_with` and `JobsPanelOptions`;
+`Ctx::is_modal()`, and a `fuzzy_list` on the first screen leaves Esc to
+the app; a list's `on_context` answers the menu key. rs-rich-interact:
+`KeyCode::Menu`, parsed as `menu` (crossterm's `Menu`, termwiz's
+`Applications`), which rs-rich-embed sends on. rs-rich-ext:
+`trash::send`, the platform's trash (FreeDesktop; the Finder's through
+`osascript`; the Recycle Bin through `SHFileOperationW`, with
+`windows-sys`, already in the tree), which `file_ops`' `Op::Trash` now
+uses.
+
 ### intuiTUIve: core components are generic (rs-rich-intuituive)
 
 The rule for intuiTUIve is now that its always-compiled core holds only

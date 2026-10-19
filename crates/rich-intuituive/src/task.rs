@@ -303,7 +303,7 @@ impl<T> Load<T> {
 /// A value fetched in the background. `Copy`, like a signal: read it in a
 /// node and the node redraws when it arrives.
 pub struct Resource<T: 'static> {
-    state: Signal<Load<T>>,
+    pub(crate) state: Signal<Load<T>>,
     start: Signal<Rc<dyn Fn()>>,
     /// How long the last value stays while the next loads
     /// ([`stale_after`](Resource::stale_after)).

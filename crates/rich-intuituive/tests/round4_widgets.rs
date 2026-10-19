@@ -345,6 +345,10 @@ fn a_right_press_or_the_menu_key_runs_the_context_handler() {
     driver.press("up");
     driver.press("shift+f10");
     assert_eq!(rows(&driver)[3], "menu 1 at None");
+    // The menu key itself, as a kitty-protocol terminal reports it.
+    driver.press("up");
+    driver.press("menu");
+    assert_eq!(rows(&driver)[3], "menu 0 at None");
 }
 
 // 8. A gauge segment.
@@ -572,4 +576,31 @@ fn m_remembered() -> Option<String> {
     driver.press("z");
     let value = out.borrow().clone();
     value
+}
+
+/// A fuzzy list on the first screen leaves Esc to the app: there is no
+/// screen of its own to close.
+#[test]
+fn a_fuzzy_list_on_the_first_screen_leaves_esc_to_the_app() {
+    let app = App::new(|| {
+        let said = signal(String::new());
+        column([
+            fuzzy_list_with(
+                FuzzySource::iter(vec!["alpha", "beta"]),
+                |s| s.to_string(),
+                |_, _| {},
+                FuzzyOptions::new(),
+            )
+            .flex(1),
+            text!("{said}").fixed(1),
+        ])
+        .on_key("esc", move |cx| {
+            said.set(format!("app esc, modal {}", cx.is_modal()))
+        })
+    })
+    .wait_for_tasks(true);
+    let mut driver = app.driver(20, 5);
+    driver.settle();
+    driver.press("esc");
+    assert_eq!(rows(&driver)[4], "app esc, modal false");
 }

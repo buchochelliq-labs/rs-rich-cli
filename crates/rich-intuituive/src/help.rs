@@ -66,6 +66,7 @@ fn vim_key(key: Key) -> String {
         KeyCode::PageUp => Some("PageUp".to_string()),
         KeyCode::PageDown => Some("PageDown".to_string()),
         KeyCode::F(n) => Some(format!("F{n}")),
+        KeyCode::Menu => Some("Menu".to_string()),
     };
     let mut held = String::new();
     if key.modifiers.ctrl {

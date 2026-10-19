@@ -126,6 +126,9 @@ pub(crate) struct Runtime {
     /// on the app's thread while their work runs.
     pub(crate) locals: RefCell<HashMap<u64, Box<dyn Any>>>,
     pub(crate) next_local: Cell<u64>,
+    /// How many screens are open (the first, and those over it), for
+    /// [`Ctx::is_modal`](crate::Ctx::is_modal) and the bindings that ask.
+    pub(crate) layers: Cell<usize>,
 }
 
 thread_local! {
@@ -162,6 +165,7 @@ impl Runtime {
                 afters: RefCell::new(Vec::new()),
                 now: Cell::new(std::time::Duration::ZERO),
                 hints: Cell::new(None),
+                layers: Cell::new(1),
                 locals: RefCell::new(HashMap::new()),
                 next_local: Cell::new(0),
             });

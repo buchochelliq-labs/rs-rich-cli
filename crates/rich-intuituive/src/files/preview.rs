@@ -56,6 +56,22 @@ pub struct PreviewSettings {
     pub max_lines: usize,
     /// The most bytes of a binary file dumped.
     pub hex_bytes: usize,
+    /// How a binary file is shown: a hex dump, or what `file` says it is.
+    pub binary: BinaryPreview,
+}
+
+/// How a [`preview`] shows a binary file (one that is not text, an image
+/// or an archive this build reads): [`PreviewOptions::binary`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum BinaryPreview {
+    /// Its start as a hex dump (the default).
+    #[default]
+    Hex,
+    /// What it is, as Yazi's `file` previewer says: `file -bL`'s
+    /// classification (`ELF 64-bit LSB pie executable, …`, `data`), or a
+    /// description of its MIME type where there is no `file` command
+    /// ([`Previewer::file_type`]).
+    FileType,
 }
 
 impl Default for PreviewSettings {
@@ -66,14 +82,92 @@ impl Default for PreviewSettings {
             sort: Sort::default(),
             max_lines: 500,
             hex_bytes: 4096,
+            binary: BinaryPreview::Hex,
         }
     }
 }
 
-/// A previewer of your own: given the path, its sniffed MIME type and the
-/// settings, a [`Preview`] for the files it takes, or `None` to leave a
-/// file to the others. It runs on a worker thread.
-pub type Previewer = Arc<dyn Fn(&Path, &str, &PreviewSettings) -> Option<Preview> + Send + Sync>;
+/// A previewer: given the path, its MIME type and the settings, a
+/// [`Preview`] for the files it takes, or `None` to leave a file to the
+/// others. It runs on a worker thread. Make one of your own with
+/// [`new`](Self::new), or take a built-in one
+/// ([`file_type`](Self::file_type)).
+#[derive(Clone)]
+pub struct Previewer(PreviewFn);
+
+type PreviewFn = Arc<dyn Fn(&Path, &str, &PreviewSettings) -> Option<Preview> + Send + Sync>;
+
+impl Previewer {
+    /// A previewer of your own.
+    pub fn new(
+        preview: impl Fn(&Path, &str, &PreviewSettings) -> Option<Preview> + Send + Sync + 'static,
+    ) -> Previewer {
+        Previewer(Arc::new(preview))
+    }
+
+    /// Yazi's `file` previewer: what a file is, as `file -bL` classifies
+    /// it (`ELF 64-bit LSB pie executable, x86-64, …`, `data`), or, where
+    /// there is no `file` command, a description of its MIME type. It
+    /// takes every file but directories; put it in
+    /// [`PreviewOptions::previewer`] to describe every file that way, or
+    /// let [`BinaryPreview::FileType`] use it for binary files only.
+    ///
+    /// ```
+    /// use intuituive::files::{Preview, PreviewSettings, Previewer};
+    ///
+    /// let path = std::env::temp_dir().join(format!("intuituive-file-type-doc-{}", std::process::id()));
+    /// std::fs::write(&path, [0u8, 1, 2, 0xff]).unwrap();
+    /// let shown = Previewer::file_type().preview(&path, "application/octet-stream", &PreviewSettings::default());
+    /// assert!(matches!(shown, Some(Preview::Note(_))), "{shown:?}");
+    /// # std::fs::remove_file(&path).ok();
+    /// ```
+    pub fn file_type() -> Previewer {
+        Previewer::new(|path, mime, _| {
+            if path.is_dir() {
+                return None;
+            }
+            Some(Preview::Note(escape(&file_type(path, mime))))
+        })
+    }
+
+    /// Ask it about `path`, of type `mime`.
+    pub fn preview(&self, path: &Path, mime: &str, settings: &PreviewSettings) -> Option<Preview> {
+        (self.0)(path, mime, settings)
+    }
+}
+
+/// What `path` is: `file -bL`'s classification, else a description of
+/// `mime`.
+fn file_type(path: &Path, mime: &str) -> String {
+    let said = std::process::Command::new("file")
+        .arg("-bL")
+        .arg("--")
+        .arg(path)
+        .stdin(std::process::Stdio::null())
+        .stderr(std::process::Stdio::null())
+        .output()
+        .ok()
+        .filter(|out| out.status.success())
+        .map(|out| String::from_utf8_lossy(&out.stdout).trim().to_string())
+        .filter(|said| !said.is_empty());
+    said.unwrap_or_else(|| describe_mime(mime))
+}
+
+/// A few words for a MIME type, as `file` would put them where it can.
+fn describe_mime(mime: &str) -> String {
+    let known = match mime {
+        "application/octet-stream" | "" => "data",
+        "application/x-executable" | "application/x-pie-executable" => "executable",
+        "application/x-sharedlib" => "shared library",
+        "application/zip" => "Zip archive data",
+        "application/gzip" | "application/x-gzip" => "gzip compressed data",
+        "application/x-tar" => "POSIX tar archive",
+        "application/pdf" => "PDF document",
+        "application/x-sqlite3" | "application/vnd.sqlite3" => "SQLite 3.x database",
+        _ => return mime.to_string(),
+    };
+    known.to_string()
+}
 
 /// Bytes read from a file's start to preview it.
 const HEAD: u64 = 256 * 1024;
@@ -81,8 +175,8 @@ const HEAD: u64 = 256 * 1024;
 /// Load the preview of `path` (on a worker thread: it reads the disk and
 /// highlights): a directory's entries; an image; an archive's listing
 /// (with the `archive` feature); the start of a text file highlighted for
-/// the width; the start of anything else as a hex dump. `previewers` are
-/// asked first, in order.
+/// the width; the start of anything else as a hex dump, or what it is
+/// ([`BinaryPreview`]). `previewers` are asked first, in order.
 pub fn load_preview(path: &Path, settings: &PreviewSettings, previewers: &[Previewer]) -> Preview {
     let meta = match std::fs::metadata(path) {
         Ok(meta) => meta,
@@ -90,7 +184,7 @@ pub fn load_preview(path: &Path, settings: &PreviewSettings, previewers: &[Previ
     };
     let mime = filetype::mime_for(path).unwrap_or("application/octet-stream");
     for previewer in previewers {
-        if let Some(preview) = previewer(path, mime, settings) {
+        if let Some(preview) = previewer.preview(path, mime, settings) {
             return preview;
         }
     }
@@ -123,6 +217,9 @@ pub fn load_preview(path: &Path, settings: &PreviewSettings, previewers: &[Previ
     let mut options = console.options().update_width(width);
     options.no_wrap = Some(true);
     if head.iter().take(8 * 1024).any(|b| *b == 0) || !looks_textual(mime) {
+        if settings.binary == BinaryPreview::FileType {
+            return Preview::Note(escape(&file_type(path, mime)));
+        }
         head.truncate(settings.hex_bytes);
         let view = HexView::new(head).collapse(true);
         return Preview::Hex(console.render_lines(&view, &options, false));
@@ -224,6 +321,7 @@ pub struct PreviewOptions {
     pub(crate) on_dir_click: Option<DirClick>,
     pub(crate) remembered: Option<Remembered>,
     pub(crate) max_lines: Option<usize>,
+    pub(crate) binary: BinaryPreview,
 }
 
 impl PreviewOptions {
@@ -281,7 +379,40 @@ impl PreviewOptions {
         mut self,
         previewer: impl Fn(&Path, &str, &PreviewSettings) -> Option<Preview> + Send + Sync + 'static,
     ) -> PreviewOptions {
-        self.previewers.push(Arc::new(previewer));
+        self.previewers.push(Previewer::new(previewer));
+        self
+    }
+
+    /// Ask a [`Previewer`] (a built-in one: [`Previewer::file_type`])
+    /// before the built-in ones.
+    pub fn previewer_of(mut self, previewer: Previewer) -> PreviewOptions {
+        self.previewers.push(previewer);
+        self
+    }
+
+    /// Show a binary file as a hex dump (the default) or as what it is
+    /// (Yazi's `file` previewer): [`BinaryPreview`].
+    ///
+    /// ```
+    /// use intuituive::files::{preview, BinaryPreview, PreviewOptions};
+    /// use intuituive::prelude::*;
+    ///
+    /// let path = std::env::temp_dir().join(format!("intuituive-binary-doc-{}.bin", std::process::id()));
+    /// std::fs::write(&path, [0u8, 1, 2, 0xff]).unwrap();
+    /// let shown = path.clone();
+    /// let app = App::new(move || {
+    ///     let shown = shown.clone();
+    ///     preview(move || Some(shown.clone()), PreviewOptions::new().binary(BinaryPreview::FileType))
+    /// })
+    /// .wait_for_tasks(true);
+    /// let mut driver = app.driver(40, 2);
+    /// driver.settle();
+    /// // `data`, or `application/octet-stream` with no `file` command.
+    /// assert!(!driver.screen().plain()[0].starts_with("00000000"));
+    /// # std::fs::remove_file(&path).ok();
+    /// ```
+    pub fn binary(mut self, binary: BinaryPreview) -> PreviewOptions {
+        self.binary = binary;
         self
     }
 
@@ -450,6 +581,7 @@ pub fn preview(path: impl Fn() -> Option<PathBuf> + 'static, options: PreviewOpt
     let remembered = options.remembered.clone();
     let clear_after = options.clear_after.unwrap_or(Duration::from_millis(150));
     let max_lines = options.max_lines.unwrap_or(500);
+    let binary = options.binary;
     // The key: the path, and what its preview is loaded for.
     let key = move |width: u16| {
         let path = path()?;
@@ -458,6 +590,7 @@ pub fn preview(path: impl Fn() -> Option<PathBuf> + 'static, options: PreviewOpt
             hidden: hidden.get(),
             sort: sort.get(),
             max_lines,
+            binary,
             ..PreviewSettings::default()
         };
         Some((path, settings, refresh.map(|r| r.get())))

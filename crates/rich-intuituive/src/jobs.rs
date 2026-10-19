@@ -271,6 +271,11 @@ fn bar(fraction: f64, width: usize) -> String {
 /// A job's row: a bar, the share done and its detail, and its title; or
 /// its errors.
 pub fn job_line<P: JobProgress>(job: &Job<P>) -> String {
+    job_line_with(job, &JobsPanelOptions::new())
+}
+
+/// A job's row as `options` says ([`job_line`] with the default ones).
+pub fn job_line_with<P: JobProgress>(job: &Job<P>, options: &JobsPanelOptions) -> String {
     let title = escape(&job.title);
     match &job.state {
         JobState::Running => {
@@ -290,8 +295,40 @@ pub fn job_line<P: JobProgress>(job: &Job<P>) -> String {
                 0 | 1 => String::new(),
                 n => format!(" (and {} more)", n - 1),
             };
-            format!("[red]failed[/]  {title}: {}{more}", escape(first))
+            if options.failed_title {
+                format!("[red]failed[/]  {title}: {}{more}", escape(first))
+            } else {
+                format!("[red]failed[/]  {}{more}", escape(first))
+            }
         }
+    }
+}
+
+/// How a [`jobs_panel_with`] shows its jobs.
+#[derive(Clone, Debug)]
+pub struct JobsPanelOptions {
+    failed_title: bool,
+}
+
+impl Default for JobsPanelOptions {
+    fn default() -> JobsPanelOptions {
+        JobsPanelOptions { failed_title: true }
+    }
+}
+
+impl JobsPanelOptions {
+    /// Each row as [`job_line`] draws it.
+    pub fn new() -> JobsPanelOptions {
+        JobsPanelOptions::default()
+    }
+
+    /// Whether a failed job's row starts its error with the job's title
+    /// (it does by default). Off when the error already names what failed
+    /// (`src: can't go inside itself`), or when the app reported the job
+    /// with its title already.
+    pub fn failed_title(mut self, on: bool) -> JobsPanelOptions {
+        self.failed_title = on;
+        self
     }
 }
 
@@ -299,6 +336,26 @@ pub fn job_line<P: JobProgress>(job: &Job<P>) -> String {
 /// `x` cancels the hovered job, `X` every job, `c` clears the failed ones.
 /// `No tasks` when there are none.
 pub fn jobs_panel<P: JobProgress>(jobs: Jobs<P>) -> Node {
+    jobs_panel_with(jobs, JobsPanelOptions::new())
+}
+
+/// A [`jobs_panel`] whose rows are as `options` says.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::{jobs, jobs_panel_with, JobsPanelOptions};
+///
+/// let app = App::new(|| {
+///     let list = jobs::<f64>();
+///     jobs_panel_with(list, JobsPanelOptions::new().failed_title(false)).on_key("r", move |_| {
+///         list.run("Export", |_, _| Err::<(), _>("disk full".to_string()), |_, _| {});
+///     })
+/// })
+/// .wait_for_tasks(true);
+/// let screen = app.render_with(&["r"], 30, 1).unwrap();
+/// assert_eq!(screen[0].trim_end(), "failed  disk full");
+/// ```
+pub fn jobs_panel_with<P: JobProgress>(jobs: Jobs<P>, options: JobsPanelOptions) -> Node {
     let cursor = signal(0usize);
     let list = jobs.jobs;
     switch(
@@ -307,9 +364,16 @@ pub fn jobs_panel<P: JobProgress>(jobs: Jobs<P>) -> Node {
             if empty {
                 return text(|| "[bright_black]No tasks".into()).text_align(TextAlign::Center);
             }
+            let options = options.clone();
             list_lazy(
                 move || list.with(Vec::len),
-                move |i| list.with(|all| all.get(i).map(job_line).unwrap_or_default()),
+                move |i| {
+                    list.with(|all| {
+                        all.get(i)
+                            .map(|job| job_line_with(job, &options))
+                            .unwrap_or_default()
+                    })
+                },
                 cursor,
             )
         },

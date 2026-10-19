@@ -184,6 +184,7 @@ pub struct FileListOptions {
     pub(crate) lead: bool,
     pub(crate) selected_style: Option<String>,
     pub(crate) focus: bool,
+    pub(crate) caps: Option<(String, String)>,
 }
 
 impl FileListOptions {
@@ -268,6 +269,42 @@ impl FileListOptions {
         self.focus = false;
         self
     }
+
+    /// Round the hovered row's ends with `open` and `close` (Yazi's Nerd
+    /// Font half circles: `"\u{e0b6}"` and `"\u{e0b4}"`), drawn in the
+    /// row's type colour outside its bar: the list's highlight goes
+    /// [`Under`](crate::widgets::HighlightLayer::Under) the markup, and the
+    /// ends turn the highlight off. Every other row keeps a cell at each
+    /// end, so names stay in line.
+    ///
+    /// ```
+    /// use intuituive::files::{dir_model, file_list, FileListOptions};
+    /// use intuituive::prelude::*;
+    ///
+    /// let dir = std::env::temp_dir().join(format!("intuituive-caps-doc-{}", std::process::id()));
+    /// std::fs::create_dir_all(&dir).unwrap();
+    /// std::fs::write(dir.join("a.txt"), "").unwrap();
+    /// std::fs::write(dir.join("b.txt"), "").unwrap();
+    /// let shown = dir.clone();
+    /// let app = App::new(move || {
+    ///     let shown = shown.clone();
+    ///     let options = FileListOptions::new().hovered_caps("(", ")");
+    ///     file_list(dir_model(move || Some(shown.clone())), signal(0), options)
+    /// });
+    /// let mut driver = app.driver(8, 2);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain(), ["(a.txt )", " b.txt  "]);
+    /// # std::fs::remove_dir_all(&dir).ok();
+    /// ```
+    pub fn hovered_caps(mut self, open: &str, close: &str) -> FileListOptions {
+        self.caps = Some((open.to_string(), close.to_string()));
+        self
+    }
+}
+
+/// A hovered row's end: in the row's colour, the highlight turned off.
+fn cap_markup(glyph: &str) -> String {
+    format!("[not reverse]{}[/]", escape(glyph))
 }
 
 /// The git sign for `path`, with the padding cell after it.
@@ -356,6 +393,11 @@ fn build(model: DirModel, cursor: Signal<usize>, options: Rc<FileListOptions>) -
             let at = cursor.get();
             let place = if i == at { found() } else { None };
             let lead = if options.lead { " " } else { "" };
+            let cap = match &options.caps {
+                Some((open, _)) if i == at => cap_markup(open),
+                Some(_) => " ".into(),
+                None => String::new(),
+            };
             entries.with(|f| {
                 f.get(i).map_or(String::new(), |e| {
                     let look = EntryLook {
@@ -364,7 +406,7 @@ fn build(model: DirModel, cursor: Signal<usize>, options: Rc<FileListOptions>) -
                         find: query.as_deref(),
                         found: place,
                     };
-                    format!("{lead}{}", entry_markup(e, &look))
+                    format!("{lead}{cap}{}", entry_markup(e, &look))
                 })
             })
         }
@@ -375,11 +417,17 @@ fn build(model: DirModel, cursor: Signal<usize>, options: Rc<FileListOptions>) -
             filetype::style_for(model.mime(&entry), entry.flags(false)).map(str::to_string)
         })
         .scroll_padding(5);
-    if options.linemode.is_some() || options.git.is_some() {
+    if options.linemode.is_some() || options.git.is_some() || options.caps.is_some() {
         let (linemode, git, icons) = (options.linemode, options.git, options.icons);
+        let close = options.caps.as_ref().map(|(_, close)| close.clone());
         node = node.trailing(move |i| {
             let mode = linemode.map_or(Linemode::None, |m| m.get());
             let dir = model.dir();
+            let cap = match &close {
+                Some(close) if i == cursor.get() => cap_markup(close),
+                Some(_) => " ".into(),
+                None => String::new(),
+            };
             entries.with(|f| {
                 let (Some(e), Some(dir)) = (f.get(i), dir.as_ref()) else {
                     return String::new();
@@ -388,9 +436,12 @@ fn build(model: DirModel, cursor: Signal<usize>, options: Rc<FileListOptions>) -
                 let sign = git
                     .and_then(|g| g.with(|s| s.as_ref().map(|s| git_cell(s, &path, icons))))
                     .unwrap_or_default();
-                format!("{sign}{}", linemode_cell(e, mode, &path))
+                format!("{sign}{}{cap}", linemode_cell(e, mode, &path))
             })
         });
+    }
+    if options.caps.is_some() {
+        node = node.highlight_layer(crate::list::HighlightLayer::Under);
     }
     if let Some(marker) = options.markers.clone() {
         node = node.marker(move |i| {

@@ -225,7 +225,8 @@ impl FuzzyOptions {
 /// how many match, and `(loading…)` while the source goes on. The source
 /// stops when the list's screen closes. Up and Down (Ctrl+P, Ctrl+N)
 /// move, Enter calls `on_pick` with the hovered item, and Esc closes the
-/// screen or modal it is on. For a title, a border, another prompt or
+/// screen or modal it is on (on the first screen Esc is left to the
+/// app). For a title, a border, another prompt or
 /// another Esc, see [`fuzzy_list_with`]. [`finder_of`] is one over an
 /// iterator.
 ///
@@ -382,7 +383,6 @@ pub fn fuzzy_list_with<T: Clone + Send + 'static>(
         input(query).flex(1).autofocus(),
     ])
     .fixed(1);
-    let mut on_cancel = on_cancel;
     let node = column([field, status, results])
         .bind("up ctrl+p", "Previous match", move |_| {
             cursor.update(|c| *c = c.saturating_sub(1))
@@ -396,11 +396,13 @@ pub fn fuzzy_list_with<T: Clone + Send + 'static>(
                 on_pick(item, cx);
             }
         })
-        .bind("esc", "Close", move |cx| match &mut on_cancel {
-            Some(cancel) => cancel(cx),
-            None => cx.pop(),
-        })
         .name("finder");
+    // Esc runs `on_cancel`, else closes the screen the list is on: on the
+    // first screen there is none to close, and Esc goes on to the app.
+    let node = match on_cancel {
+        Some(mut cancel) => node.bind("esc", "Close", move |cx| cancel(cx)),
+        None => node.bind_when(crate::app::over_first, "esc", "Close", |cx| cx.pop()),
+    };
     match (title, border) {
         (None, None) => node,
         (title, border) => {

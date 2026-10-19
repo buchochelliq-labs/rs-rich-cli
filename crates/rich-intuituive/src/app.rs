@@ -76,6 +76,8 @@ pub struct Ctx {
     handoffs: Vec<Handoff>,
     /// One-shot timers made with [`Ctx::after`].
     afters: Vec<After>,
+    /// Screens open when the handler was called.
+    layers: usize,
 }
 
 /// A one-shot timer waiting to be put on the app's clock: how long it
@@ -245,6 +247,12 @@ enum Nav {
     Run(NodeId, usize, bool),
 }
 
+/// Whether a screen is open over the first one, as a binding's condition
+/// reads it ([`Ctx::is_modal`] in a handler).
+pub(crate) fn over_first() -> bool {
+    Runtime::current().layers.get() > 1
+}
+
 impl Ctx {
     pub(crate) fn new(proxy: Proxy) -> Ctx {
         Ctx {
@@ -263,7 +271,36 @@ impl Ctx {
             printed: Vec::new(),
             handoffs: Vec::new(),
             afters: Vec::new(),
+            layers: 1,
         }
+    }
+
+    /// Whether the handler runs on a screen, modal or pop-up opened over
+    /// the first screen (one [`pop`](Self::pop) would close): a component
+    /// that closes itself on Esc, such as a
+    /// [`fuzzy_list`](crate::finder::fuzzy_list), leaves Esc to the app on
+    /// the first screen.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let said = signal(String::new());
+    ///     text!("{said}").on_key("m", move |cx| {
+    ///         said.set(format!("modal: {}", cx.is_modal()));
+    ///         cx.modal(Size::Fixed(10), Size::Fixed(3), move || {
+    ///             label("over").on_key("m", move |cx| said.set(format!("modal: {}", cx.is_modal())))
+    ///         });
+    ///     })
+    /// });
+    /// let mut driver = app.driver(20, 5);
+    /// driver.press("m");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "modal: false");
+    /// driver.press("m");
+    /// assert!(driver.screen().plain()[0].starts_with("modal: true"));
+    /// ```
+    pub fn is_modal(&self) -> bool {
+        self.layers > 1
     }
 
     /// Run `then` once, `wait` from now on the app's clock: [`after`] from
@@ -2915,6 +2952,7 @@ impl App {
     fn ctx(&self) -> Ctx {
         let mut cx = Ctx::new(self.runtime.proxy());
         cx.pointer = self.pointer;
+        cx.layers = self.layers.len();
         cx
     }
 
@@ -3227,6 +3265,7 @@ impl App {
             fallback: false,
         });
         self.restack = true;
+        self.runtime.layers.set(self.layers.len());
         // Once drawn, what opened is announced.
         self.opened = true;
         self.set_focus(None);
@@ -3243,6 +3282,7 @@ impl App {
             self.runtime.drop_watch(watch);
         }
         self.restack = true;
+        self.runtime.layers.set(self.layers.len());
     }
 
     /// The theme in code with the theme file's last good styles over it.

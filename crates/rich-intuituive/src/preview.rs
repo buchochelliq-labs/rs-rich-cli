@@ -2,12 +2,12 @@
 //! current, drops the results for keys left behind, and draws the value.
 
 use std::rc::Rc;
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::node::Node;
-use crate::reactive::{signal, watch, Signal};
-use crate::task::{spawn, spawn_then};
+use crate::reactive::{memo, on_write_ref, signal, watch, Signal};
+use crate::task::{resource_for, Load};
 
 type OnChange<K> = Rc<dyn Fn(Option<&K>)>;
 type OnLoaded<K, T> = Rc<dyn Fn(&K, &T)>;
@@ -43,8 +43,9 @@ impl<K, T> PreviewOfOptions<K, T> {
     }
 
     /// Show the empty value (`T::default()`) when a load takes longer
-    /// than `delay`, so a slow one does not leave the last key's value on
-    /// show. Off by default: the last value stays until the next is ready.
+    /// than `delay` (on the app's clock), so a slow one does not leave the
+    /// last key's value on show. Off by default: the last value stays
+    /// until the next is ready.
     pub fn clear_after(mut self, delay: Duration) -> PreviewOfOptions<K, T> {
         self.clear_after = Some(delay);
         self
@@ -102,11 +103,16 @@ where
 /// pane's width (which may read signals: the hovered row, a setting;
 /// `None` for nothing), `load` makes its value on a worker thread
 /// whenever the key changes, and `render` draws the value from the signal
-/// it is given, made once. Nothing loads before the pane is laid out; a
-/// result for a key already left behind is dropped, so a slow load never
-/// replaces a newer one. With no key the value is `T::default()`. The
-/// `files` plugin's preview is one: a path to a file's preview, picked by
-/// its type.
+/// it is given, made once. Nothing loads before the pane is laid out (the
+/// first frame lays it out and, under
+/// [`wait_for_tasks`](crate::App::wait_for_tasks), shows the first value
+/// already); a result for a key already left behind is dropped, so a slow
+/// load never replaces a newer one. With no key the value is
+/// `T::default()`. It is a [`resource_for`] keyed by
+/// the width and the key, [`stale_after`](crate::Resource::stale_after)
+/// the [`clear_after`](PreviewOfOptions::clear_after) wait. The `files`
+/// plugin's preview is one: a path to a file's preview, picked by its
+/// type.
 pub fn preview_of_with<K, T>(
     key: impl Fn(u16) -> Option<K> + 'static,
     load: impl Fn(&K) -> T + Send + Sync + 'static,
@@ -120,61 +126,66 @@ where
     let state = options.state.unwrap_or_else(|| signal(T::default()));
     let pane = render(state);
     let area = pane.rect_handle();
-    let generation = signal(0u64);
-    let load = Arc::new(load);
     let PreviewOfOptions {
         clear_after,
         on_change,
         on_loaded,
         ..
     } = options;
+    // The width once laid out, and the key for it.
+    let current = memo(move || {
+        let width = area.get().map(|r| r.width).filter(|w| *w > 0);
+        (width, key(width.unwrap_or(0)))
+    });
     watch(
-        move || {
-            let width = area.get().map(|r| r.width);
-            (width, key(width.unwrap_or(0)))
-        },
-        move |(width, key), _| {
-            generation.update(|g| *g += 1);
-            let mine = generation.get_untracked();
+        move || current.with(|(_, key)| key.clone()),
+        move |key, _| {
             if let Some(change) = &on_change {
                 change(key.as_ref());
             }
-            let Some(key) = key else {
+            if key.is_none() {
                 state.set(T::default());
-                return;
-            };
-            // Not laid out yet: the width comes with the first frame.
-            if width.is_none_or(|w| w == 0) {
-                return;
             }
-            if let Some(delay) = clear_after {
-                spawn(
-                    move || std::thread::sleep(delay),
-                    move |_, _| {
-                        if generation.get_untracked() == mine {
-                            state.set(T::default());
-                        }
-                    },
-                );
-            }
-            let load = load.clone();
-            let loading = key.clone();
-            let on_loaded = on_loaded.clone();
-            spawn_then(
-                move || load(&loading),
-                move |loaded, _| {
-                    if generation.get_untracked() != mine {
-                        return;
-                    }
-                    // Done: a pending clear has nothing left to do.
-                    generation.update(|g| *g += 1);
-                    if let Some(on_loaded) = &on_loaded {
-                        on_loaded(&key, &loaded);
-                    }
-                    state.set(loaded);
-                },
-            );
         },
     );
+    // What loads: the key at a width, the key handed back with the value
+    // (taken out once, so the value is never cloned).
+    let load = Arc::new(load);
+    let loaded = resource_for(
+        move || current.with(|(width, key)| Some((*width)?).zip(key.clone())),
+        move |what: Option<(u16, K)>| {
+            let value = what.map(|(_, key)| {
+                let value = load(&key);
+                (key, Taken(Arc::new(Mutex::new(Some(value)))))
+            });
+            Ok::<_, std::convert::Infallible>(value)
+        },
+    );
+    if let Some(delay) = clear_after {
+        loaded.stale_after(delay);
+    }
+    on_write_ref(loaded.state, move |load, _| match load {
+        Load::Ready(Some((key, value))) => {
+            let Some(value) = value.take() else {
+                return;
+            };
+            if let Some(on_loaded) = &on_loaded {
+                on_loaded(key, &value);
+            }
+            state.set(value);
+        }
+        // A load slower than `clear_after`: the old value goes.
+        Load::Loading if clear_after.is_some() => state.set(T::default()),
+        _ => {}
+    });
     pane
+}
+
+/// A loaded value, handed from the worker to the pane once.
+struct Taken<T>(Arc<Mutex<Option<T>>>);
+
+impl<T> Taken<T> {
+    fn take(&self) -> Option<T> {
+        self.0.lock().unwrap_or_else(|e| e.into_inner()).take()
+    }
 }
