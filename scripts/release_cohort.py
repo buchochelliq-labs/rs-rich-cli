@@ -367,7 +367,11 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for,
             local = subprocess.run(["git", "rev-parse", "--verify", "--quiet", f"refs/tags/{package.tag}^{{commit}}"],
                                    cwd=ROOT, text=True, encoding="utf-8", capture_output=True).stdout.strip()
             if local and local != sha:
-                raise RuntimeError(f"A local tag {package.tag} points at {local[:12]}; delete it first")
+                # Not on the remote, so never released: a leftover of an
+                # earlier run (or of a remote tag deleted by hand). Replace it.
+                print(f"drop   local {package.tag} at {local[:12]}: it is not on {remote}", flush=True)
+                git("tag", "-d", package.tag)
+                local = ""
             if not local:
                 git("tag", "-a", package.tag, "-m", f"{package.name} {package.version}", sha)
             git("push", remote, f"refs/tags/{package.tag}", capture=False)

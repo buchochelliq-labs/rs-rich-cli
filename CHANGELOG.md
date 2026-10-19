@@ -16,7 +16,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   last release run ended without success (cancelled or failed), is deleted
   and made again on the commit being released; it used to stop with
   "resolve it by hand". A tag whose run is still going, or with no run to
-  see, still stops, now with the commands to clear it.
+  see, still stops, now with the commands to clear it. A local tag on
+  another commit that the remote does not have (a remote tag deleted by
+  hand leaves one) was never released, so it is replaced too, where it
+  stopped with "delete it first".
 
 ### Releases: tag from the local checkout; versions after a split cohort
 

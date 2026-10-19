@@ -278,6 +278,16 @@ class Tag(unittest.TestCase):
         self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
         self.assertEqual(self.waited, ["rs-rich-art-v0.2.0", "python-v0.3.0"])
 
+    def test_a_leftover_local_tag_on_another_commit_is_replaced(self):
+        # A remote tag deleted by hand leaves the local one behind, on its
+        # old commit; it was never released, so the run replaces it.
+        git(self.work, "commit", "--quiet", "--allow-empty", "-m", "later")
+        git(self.work, "push", "--quiet", "origin", "main")
+        git(self.work, "tag", "-a", "rs-rich-art-v0.2.0", "-m", "x")
+        self.run_tag(commit=self.sha)
+        self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
+        self.assertEqual(cohort.remote_tags("origin")["rs-rich-art-v0.2.0"], self.sha)
+
     def test_a_dry_run_only_says_it_would_move_a_dead_tag(self):
         later = self.tag_a_later_commit()
         self.run_tag(commit=self.sha, dry_run=True,
