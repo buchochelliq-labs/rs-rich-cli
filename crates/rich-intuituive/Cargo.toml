@@ -24,7 +24,7 @@ include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
 # meters and spectra on docs.rs too; `audio` is left out, as its ALSA
 # headers may not be there to build it.
 [package.metadata.docs.rs]
-features = ["art", "watch", "files", "archive", "pcm", "viz"]
+features = ["art", "micro", "watch", "files", "archive", "pcm", "viz"]
 
 [lib]
 name = "intuituive"
@@ -66,8 +66,13 @@ viz = []
 # FSEvents, ReadDirectoryChangesW, kqueue). Off by default.
 watch = ["dep:notify"]
 # `image`: an image file as a node, drawn by rs-rich-art in half blocks
-# (or quadrants, Braille, ASCII). Off by default.
+# (or quadrants, Braille, ASCII); `sprite_sheet`: an image cut into pixel
+# and half-block sprites. Off by default.
 art = ["dep:rich-art", "rich-art/image"]
+# `micro_sprite`: rs-rich-micro's micro assets (emoji-sized images and
+# animations) as sprites for a stage, fitted in half blocks. Off by
+# default.
+micro = ["art", "dep:rich-micro"]
 # `files`: a file manager's components (Miller columns, file lists,
 # previews by type, a watched directory model, background file jobs with
 # progress, a streaming fuzzy finder), on rs-rich-ext's `listing`, `open`,
@@ -91,6 +96,7 @@ cpal = { version = "0.18.2", optional = true }
 hound = { version = "3.5", optional = true }
 notify = { workspace = true, optional = true }
 rich-art = { workspace = true, optional = true }
+rich-micro = { workspace = true, optional = true }
 # Node::solver(Solver::Ratatui): ratatui's constraint solver (its fork of
 # cassowary), so a row ported from ratatui lays out as it did.
 kasuari = "0.4"

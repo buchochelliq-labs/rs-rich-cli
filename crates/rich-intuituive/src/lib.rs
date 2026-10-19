@@ -72,7 +72,9 @@
 //!   (cell art with transparent cells, animated on the app's clock) over a
 //!   backdrop, with clicks, hovers and collisions by their cells;
 //!   [`pixels::pixels`] is an RGBA framebuffer drawn in half blocks,
-//!   quadrants or Braille, with blits, rectangles and lines.
+//!   quadrants or Braille, with blits, rectangles and lines. Plugins cut
+//!   an image into sprites (`sprite_sheet`, behind `art`) and make
+//!   rs-rich-micro's micro assets sprites (`micro_sprite`, behind `micro`).
 //! - **Tests**: [`App::render_with`] and [`App::run_on`] with
 //!   `rich-interact`'s headless driver run an app without a terminal;
 //!   [`App::driver`] steps one, and [`assert_screen!`] compares its screen
@@ -112,6 +114,8 @@ pub mod layout;
 mod list;
 pub mod log;
 pub mod menu;
+#[cfg(feature = "micro")]
+pub mod micro_sprite;
 pub mod miller;
 pub mod node;
 mod notify;
@@ -130,6 +134,8 @@ mod signals;
 mod solver;
 mod split;
 pub mod sprite;
+#[cfg(feature = "art")]
+pub mod sprite_sheet;
 pub mod state;
 pub mod tab_set;
 mod table_scroll;
