@@ -355,7 +355,12 @@ rewrites the versions from the manifests.
 
 `release_cohort.py tag` tags the local checkout (`HEAD`), or `--commit
 <sha>`: any commit on `main` as last fetched, such as an earlier one known to
-be good, whose `RELEASES.toml` and manifests then decide what is released. It fetches nothing and reads
+be good, whose `RELEASES.toml` and manifests then decide what is released.
+Before tagging it refuses a commit that changes the shipped files (by each
+manifest's `include`) of a package already published under the same version
+from another commit, naming each package and the commit it came from: that
+release would put the rest of the cohort beside a package built from other
+code. Release from that commit (`--commit <sha>`) or bump the package. It fetches nothing and reads
 `RELEASES.toml` and the manifests from that commit, so pull `main` first, and
 a run resumed later releases the same commit even if `main` has moved on
 (only the remote's tags and the registries are read live). For each entry in

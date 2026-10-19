@@ -366,6 +366,41 @@ class Tag(unittest.TestCase):
         self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
         self.assertEqual(git(self.work, "rev-parse", "rs-rich-art-v0.2.0^{commit}"), self.sha)
 
+    def publish_rs_rich_here(self):
+        """rs-rich 0.1.0, published, tagged on this commit."""
+        git(self.work, "tag", "-a", "rs-rich-v0.1.0", "-m", "x", self.sha)
+        git(self.work, "push", "--quiet", "origin", "rs-rich-v0.1.0")
+
+    def test_a_published_crate_changed_under_its_version_stops_the_cohort(self):
+        # The split cohort: rs-rich 0.1.0 went out from this commit, and a
+        # later one changes it without a bump. Releasing the later commit
+        # would publish the rest beside an rs-rich of other code.
+        self.publish_rs_rich_here()
+        (self.work / "crates/rich/src").mkdir(parents=True)
+        (self.work / "crates/rich/src/lib.rs").write_text("// changed\n")
+        git(self.work, "add", ".")
+        git(self.work, "commit", "--quiet", "-m", "change rs-rich without a bump")
+        git(self.work, "push", "--quiet", "origin", "main")
+        with self.assertRaisesRegex(RuntimeError, rf"rs-rich@0\.1\.0.*src/lib\.rs(.|\n)*--commit {self.sha[:12]}"):
+            self.run_tag()
+        self.assertEqual(self.remote_tags(), ["rs-rich-v0.1.0"])
+
+    def test_a_published_crate_left_alone_does_not_stop_the_cohort(self):
+        self.publish_rs_rich_here()
+        (self.work / "NOTES.md").write_text("elsewhere\n")
+        git(self.work, "add", ".")
+        git(self.work, "commit", "--quiet", "-m", "outside the crate")
+        git(self.work, "push", "--quiet", "origin", "main")
+        self.run_tag(registry="crates.io")
+        self.assertEqual(self.waited, ["rs-rich-art-v0.2.0"])
+
+    def test_cargo_globs(self):
+        cases = [("src/style.rs", "src/**/*", True), ("src/a/b.rs", "src/**/*", True),
+                 ("tests/t.rs", "src/**/*", False), ("README.md", "README.md", True),
+                 ("docs/README.md", "README.md", True), ("Cargo.toml", "Cargo.toml", True)]
+        for path, pattern, expected in cases:
+            self.assertEqual(cohort.glob_match(path, pattern), expected, (path, pattern))
+
     def test_a_commit_not_on_main_is_refused(self):
         git(self.work, "commit", "--quiet", "--allow-empty", "-m", "unmerged")
         with self.assertRaisesRegex(RuntimeError, "not on origin/main"):

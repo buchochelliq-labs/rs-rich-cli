@@ -28,6 +28,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   them at a version not yet on crates.io, naming each, since that crate's
   publish would fail. Without it, `tag` already begins at the first
   unpublished package.
+- **`release_cohort.py tag` refuses a split cohort.** Before tagging, it
+  compares each published package's shipped files (by its `include`) at the
+  commit its tag is on with the commit being released; a package changed
+  under the same version stops the run, naming the package, the files and
+  the commit it was released from, with `--commit <that sha>` or a bump as
+  the way on. It would have stopped the run that put rs-rich-ext 0.0.17 on
+  #752 beside rs-rich-intuituive 0.0.4 from #751. `--commit` takes any
+  commit on main, such as an earlier one known to be good.
 
 ### Releases: tag from the local checkout; versions after a split cohort
 

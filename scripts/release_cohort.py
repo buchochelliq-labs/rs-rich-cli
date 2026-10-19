@@ -349,6 +349,67 @@ def wait_for(package, timeout, status=registry_status, conclusion=run_conclusion
         sleep(30)
 
 
+def glob_match(path, pattern):
+    """Whether `path` matches a Cargo `include`/`exclude` glob: `**/` is any
+    number of directories, `*` and `?` stay inside one, and a pattern with
+    no `/` matches a file of that name at any depth."""
+    if "/" not in pattern.rstrip("/"):
+        pattern = "**/" + pattern
+    regex, i = "", 0
+    while i < len(pattern):
+        if pattern.startswith("**/", i):
+            regex, i = regex + "(?:.*/)?", i + 3
+        elif pattern.startswith("**", i):
+            regex, i = regex + ".*", i + 2
+        elif pattern[i] == "*":
+            regex, i = regex + "[^/]*", i + 1
+        elif pattern[i] == "?":
+            regex, i = regex + "[^/]", i + 1
+        else:
+            regex, i = regex + re.escape(pattern[i]), i + 1
+    return re.fullmatch(regex, path) is not None
+
+
+def packaged_changes(package, old, new, read):
+    """The files a package ships that differ between commits `old` and `new`,
+    by its manifest's `include` and `exclude` (all of its directory without
+    an `include`)."""
+    folder = str(Path(package.manifest).parent)
+    names = git("diff", "--name-only", old, new, "--", folder).splitlines()
+    manifest = tomllib.loads(read(package.manifest))
+    section = manifest.get("package", manifest.get("project", {}))
+    include, exclude = section.get("include"), section.get("exclude", [])
+    shipped = []
+    for name in names:
+        inner = name[len(folder) + 1:]
+        if include and not any(glob_match(inner, glob) for glob in include):
+            continue
+        if any(glob_match(inner, glob) for glob in exclude):
+            continue
+        shipped.append(inner)
+    return shipped
+
+
+def published_elsewhere(packages, existing, sha, remote, read, status):
+    """Published packages whose tag is on another commit and whose shipped
+    files differ at `sha`: releasing `sha` would put the rest of the cohort
+    beside packages built from other code under the same numbers (the split
+    cohort of rs-rich-intuituive 0.0.4). Returns {tag commit: [package
+    (files)]}."""
+    found = {}
+    for package in packages:
+        tagged = existing.get(package.tag)
+        if not tagged or tagged == sha or not is_published(package, status):
+            continue
+        if subprocess.run(["git", "cat-file", "-e", f"{tagged}^{{commit}}"], cwd=ROOT,
+                          capture_output=True).returncode:
+            git("fetch", "--quiet", "--no-tags", remote, f"refs/tags/{package.tag}")
+        if changed := packaged_changes(package, tagged, sha, read):
+            shown = ", ".join(changed[:3]) + (", ..." if len(changed) > 3 else "")
+            found.setdefault(tagged, []).append(f"{package} ({shown})")
+    return found
+
+
 def start_at(packages, start):
     """The index in `packages` of `start`: a package name or its tag."""
     for index, package in enumerate(packages):
@@ -373,6 +434,13 @@ def tag(commit, remote, timeout, dry_run, status=registry_status, wait=wait_for,
         raise RuntimeError(f"{CONFIG} at {sha[:12]} disagrees with the repository:\n  " + "\n  ".join(errors))
     existing = remote_tags(remote)
     packages = load(read)
+    if split := published_elsewhere(packages, existing, sha, remote, read, status):
+        lines = [f"  released from {commit[:12]}: " + "; ".join(names) for commit, names in split.items()]
+        hint = " or ".join(f"--commit {commit[:12]}" for commit in split)
+        raise RuntimeError(
+            f"{sha[:12]} changes packages already published under the same version from other commits:\n"
+            + "\n".join(lines)
+            + f"\nRelease from the commit they came from ({hint}), or bump them first.")
     first = start_at(packages, start) if start else 0
     if first:
         # Packages before --from are left as they are. One a later crate
