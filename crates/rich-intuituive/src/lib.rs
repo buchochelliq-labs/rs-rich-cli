@@ -85,6 +85,7 @@ mod effect;
 #[cfg(feature = "files")]
 pub mod files;
 pub mod finder;
+mod help;
 mod hex;
 #[cfg(feature = "art")]
 mod image;
@@ -138,6 +139,7 @@ pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use effect::{effect, fill};
 pub use finder::finder_of;
+pub use help::{HelpOptions, KeyFormat};
 #[cfg(feature = "art")]
 pub use image::{image, image_of, image_with, ImageAnchor, ImageFit, ImageMode, ImageView};
 pub use input::{input, number_input};

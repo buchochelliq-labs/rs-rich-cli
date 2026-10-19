@@ -5,6 +5,7 @@
 
 use intuituive::prelude::*;
 use intuituive::widgets::key_hints;
+use intuituive::{HelpOptions, KeyFormat};
 
 fn first(driver: &intuituive::Driver) -> String {
     driver.screen().plain()[0].trim_end().to_string()
@@ -325,4 +326,63 @@ fn punctuation_keys_by_name_bind_and_show_as_their_glyph() {
     let rows = driver.screen().plain().join("\n");
     // The help shows the key, not its name.
     assert!(rows.contains("=  ") && rows.contains("]  "), "{rows}");
+}
+
+#[test]
+fn the_help_wraps_long_rows_instead_of_cutting_them() {
+    let app = App::new(|| {
+        label("scope")
+            .bind_scaled(
+                "pageup",
+                &[("", 1.0), ("shift", 10.0), ("ctrl", 5.0), ("alt", 0.2)],
+                "Threshold or average up, by the step shown",
+                |_, _| {},
+            )
+            .on_key("?", |cx| cx.help())
+    });
+    // The help is 70% of 60 columns: far less than the row.
+    let mut driver = app.driver(60, 20);
+    driver.press("?");
+    let rows = driver.screen().plain().join("\n");
+    assert!(rows.contains("alt ×0.2)"), "{rows}");
+}
+
+#[test]
+fn help_options_title_vim_keys_and_the_filter_first_layout() {
+    let app = App::new(|| {
+        label("files")
+            .bind_in("mgr", "ctrl+u", "Half a page up", |_| {})
+            .bind_sequence_in("goto", "g g", "To the top", |_| {})
+            .bind("shift+tab", "Back", |_| {})
+            .on_key("?", |cx| {
+                cx.help_with(
+                    HelpOptions::new()
+                        .title("mgr.help")
+                        .key_format(KeyFormat::Vim)
+                        .filter_first(true),
+                )
+            })
+    });
+    let mut driver = app.driver(60, 20);
+    driver.press("?");
+    let rows = driver.screen().plain();
+    let all = rows.join("\n");
+    assert!(all.contains("mgr.help"), "{all}");
+    for keys in ["<C-u>", "gg", "<S-Tab>"] {
+        assert!(all.contains(keys), "{keys}: {all}");
+    }
+    // A rule under the search line, and no section headings.
+    let search = rows
+        .iter()
+        .position(|row| row.contains("Search keys"))
+        .unwrap();
+    assert!(rows[search + 1].contains("───"), "{all}");
+    assert!(!all.contains("goto"), "{all}");
+    // Typing searches the keys as said.
+    driver.press("lt");
+    let all = driver.screen().plain().join("\n");
+    assert!(
+        all.contains("<C-u>") && !all.contains("To the top"),
+        "{all}"
+    );
 }

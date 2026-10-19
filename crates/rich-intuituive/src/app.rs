@@ -239,7 +239,7 @@ enum Nav {
     Replace(Build),
     /// The command palette, or the help, from the focused node's bindings.
     Palette,
-    Help,
+    Help(crate::help::HelpOptions),
     /// Run binding `index` of node `id` (a key sequence's, if `true`), as
     /// its key would.
     Run(NodeId, usize, bool),
@@ -455,9 +455,17 @@ impl Ctx {
     }
 
     /// Open the help: the same bindings, with their keys, searchable.
-    /// [`App::help_key`] opens it from a key.
+    /// [`App::help_key`] opens it from a key. Only bindings that apply now
+    /// are listed ([`bind_when`](crate::Node::bind_when)); a row too long
+    /// for the help wraps.
     pub fn help(&mut self) {
-        self.nav.push(Nav::Help);
+        self.help_with(crate::help::HelpOptions::new());
+    }
+
+    /// [`help`](Self::help) shown the way `options` say: its title, its
+    /// key notation, its layout.
+    pub fn help_with(&mut self, options: crate::help::HelpOptions) {
+        self.nav.push(Nav::Help(options));
     }
 
     /// Put `text` on the clipboard, where the terminal lets an app (OSC 52)
@@ -2990,7 +2998,7 @@ impl App {
             Nav::Pop => (self.layers.len() > 1).then_some("screen closed"),
             Nav::Replace(_) => Some("screen replaced"),
             Nav::Palette => Some("command palette opened"),
-            Nav::Help => Some("help opened"),
+            Nav::Help(_) => Some("help opened"),
             Nav::Run(..) => None,
         };
         if let Some(what) = what {
@@ -3036,8 +3044,8 @@ impl App {
                     self.open(build, None);
                 }
             }
-            Nav::Palette => self.open_palette(false),
-            Nav::Help => self.open_palette(true),
+            Nav::Palette => self.open_palette(),
+            Nav::Help(options) => self.open_help(options),
             Nav::PopupAt(origin, offset, look, build) => {
                 self.open(build, Some((offset.w, offset.h)));
                 let top = self.top_mut();
@@ -3109,22 +3117,27 @@ impl App {
         self.runtime.enter(|| hints.set(shown));
     }
 
-    /// The command palette (or the help, if `help`) over the top screen.
-    fn open_palette(&mut self, help: bool) {
+    /// The help over the top screen, as `options` say.
+    fn open_help(&mut self, options: crate::help::HelpOptions) {
+        let all: Vec<_> = self.bindings().into_iter().map(|(_, _, b)| b).collect();
+        self.open(
+            Box::new(move || {
+                let format = options.key_format;
+                let help = rich_interact::overlay::Help::from_bindings(all)
+                    .wrap(true)
+                    .flat(options.filter_first)
+                    .key_format(move |binding| format.keys(&binding.keys, binding.sequence));
+                crate::node::component(help, |_, cx| cx.pop())
+                    .on_cancel(|cx| cx.pop())
+                    .panel(&options.title)
+            }),
+            Some((Size::Percent(70), Size::Percent(70))),
+        );
+    }
+
+    /// The command palette over the top screen.
+    fn open_palette(&mut self) {
         let bindings = self.bindings();
-        if help {
-            let all: Vec<_> = bindings.into_iter().map(|(_, _, b)| b).collect();
-            self.open(
-                Box::new(move || {
-                    let help = rich_interact::overlay::Help::from_bindings(all);
-                    crate::node::component(help, |_, cx| cx.pop())
-                        .on_cancel(|cx| cx.pop())
-                        .panel("Help")
-                }),
-                Some((Size::Percent(70), Size::Percent(70))),
-            );
-            return;
-        }
         let commands: Vec<rich_interact::overlay::Command> = bindings
             .iter()
             .map(|(_, _, binding)| rich_interact::overlay::Command::from_binding(binding))
@@ -3618,7 +3631,7 @@ impl App {
             return self.navigate(Nav::Palette);
         }
         if key.matches_any(&self.help_key) {
-            return self.navigate(Nav::Help);
+            return self.navigate(Nav::Help(crate::help::HelpOptions::new()));
         }
         match key.code {
             KeyCode::Tab => self.move_focus(true),
