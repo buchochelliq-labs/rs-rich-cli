@@ -86,5 +86,60 @@ fn autofocus_on_a_switch_built_later_passes_the_focus_once_it_is_built() {
     assert!(intuituive::testing::styled(&driver).contains("[reverse]b"));
 }
 
+// 2. The help wraps a long key list; `/` starts its search.
+
+#[test]
+fn the_help_wraps_a_long_key_list_instead_of_cutting_it() {
+    let app = App::new(|| {
+        label("scope")
+            .bind(
+                "pageup shift+pageup ctrl+pageup alt+pageup",
+                "Average more",
+                |_| {},
+            )
+            .on_key("?", |cx| cx.help())
+    });
+    let mut driver = app.driver(70, 14);
+    driver.press("?");
+    let help = rows(&driver).join("\n");
+    assert!(help.contains("pgup/shift+pgup/"), "{help}");
+    assert!(help.contains("ctrl+pgup/alt+pgup"), "{help}");
+}
+
+#[test]
+fn a_filter_first_help_moves_with_j_and_k_and_searches_after_slash() {
+    use intuituive::{HelpOptions, KeyFormat};
+    let app = App::new(|| {
+        label("files")
+            .bind("y", "Yank", |_| {})
+            .bind("x", "Cut", |_| {})
+            .bind("p", "Paste", |_| {})
+            .on_key("f2", |cx| {
+                cx.help_with(
+                    HelpOptions::new()
+                        .key_format(KeyFormat::Vim)
+                        .filter_first(true)
+                        .filter_key("/"),
+                )
+            })
+    });
+    let mut driver = app.driver(40, 14);
+    driver.press("f2");
+    driver.press("j k x");
+    let help = rows(&driver).join("\n");
+    // Letters moved; none was searched for.
+    assert!(help.contains("Yank") && help.contains("Paste"), "{help}");
+    assert!(help.contains("/ search"), "{help}");
+    driver.press("/");
+    driver.type_text("cut");
+    let help = rows(&driver).join("\n");
+    assert!(help.contains("Cut") && !help.contains("Yank"), "{help}");
+    // Esc ends the search, then closes the help.
+    driver.press("esc");
+    assert!(rows(&driver).join("\n").contains("Yank"));
+    driver.press("esc");
+    assert!(!rows(&driver).join("\n").contains("Yank"));
+}
+
 #[allow(dead_code)]
 fn unused(_: Event) {}

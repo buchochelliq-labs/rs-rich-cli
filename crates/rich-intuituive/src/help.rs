@@ -114,6 +114,7 @@ pub struct HelpOptions {
     pub(crate) title: String,
     pub(crate) key_format: KeyFormat,
     pub(crate) filter_first: bool,
+    pub(crate) filter_key: Option<Key>,
 }
 
 impl Default for HelpOptions {
@@ -130,6 +131,7 @@ impl HelpOptions {
             title: "Help".to_string(),
             key_format: KeyFormat::Default,
             filter_first: false,
+            filter_key: None,
         }
     }
 
@@ -150,6 +152,39 @@ impl HelpOptions {
     /// for each section.
     pub fn filter_first(mut self, on: bool) -> HelpOptions {
         self.filter_first = on;
+        self
+    }
+
+    /// Move with the letters until `key` is pressed, and search only after
+    /// it, as Yazi's help does with `/`: `j` and `k` move a row, `g` and
+    /// `G` go to the top and the bottom, and Escape ends the search
+    /// (clearing it) before it closes the help. Without it, typing
+    /// searches at once.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::HelpOptions;
+    ///
+    /// let app = App::new(|| {
+    ///     label("files")
+    ///         .bind("y", "Yank", |_| {})
+    ///         .bind("p", "Paste", |_| {})
+    ///         .on_key("?", |cx| cx.help_with(HelpOptions::new().filter_first(true).filter_key("/")))
+    /// });
+    /// let mut driver = app.driver(40, 10);
+    /// // `p` moves (nothing to search for yet); after `/`, it searches.
+    /// driver.press("? p");
+    /// assert!(driver.screen().plain().join("\n").contains("Yank"));
+    /// driver.press("/ p");
+    /// let help = driver.screen().plain().join("\n");
+    /// assert!(help.contains("Paste") && !help.contains("Yank"));
+    /// ```
+    ///
+    /// # Panics
+    /// On a name that is not a key.
+    pub fn filter_key(mut self, key: &str) -> HelpOptions {
+        let parsed = Key::parse(key).unwrap_or_else(|| panic!("filter_key: {key:?} is not a key"));
+        self.filter_key = Some(parsed);
         self
     }
 }

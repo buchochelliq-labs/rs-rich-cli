@@ -3164,6 +3164,7 @@ impl App {
                 let help = rich_interact::overlay::Help::from_bindings(all)
                     .wrap(true)
                     .flat(options.filter_first)
+                    .filter_key(options.filter_key)
                     .key_format(move |binding| format.keys(&binding.keys, binding.sequence));
                 crate::node::component(help, |_, cx| cx.pop())
                     .on_cancel(|cx| cx.pop())

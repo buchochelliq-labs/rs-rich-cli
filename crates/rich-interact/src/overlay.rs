@@ -522,10 +522,13 @@ impl Component for Palette {
 /// descriptions and contexts; the arrows and PageUp/PageDown scroll;
 /// Escape clears the search, then closes; Enter closes.
 ///
-/// Options: [`wrap`](Help::wrap) wraps a description too long for its row
-/// rather than cutting it, [`key_format`](Help::key_format) says the keys
-/// another way (`<C-u>`), and [`flat`](Help::flat) lists every binding in
-/// one list under the search line and a rule, with no context headings.
+/// Options: [`wrap`](Help::wrap) wraps a row too long for the width (its
+/// keys and its description) rather than cutting it,
+/// [`key_format`](Help::key_format) says the keys another way (`<C-u>`),
+/// [`flat`](Help::flat) lists every binding in one list under the search
+/// line and a rule, with no context headings, and
+/// [`filter_key`](Help::filter_key) makes letters move until a key starts
+/// the search (Yazi's `/`).
 pub struct Help {
     bindings: Vec<Binding>,
     filter: FilterState,
@@ -536,6 +539,10 @@ pub struct Help {
     wrap: bool,
     flat: bool,
     format: Option<KeyFormat>,
+    /// The key that starts the search; until it, letters move.
+    filter_key: Option<Key>,
+    /// The search has the keys (always, with no `filter_key`).
+    searching: bool,
     /// The width last drawn at, which wrapped rows are counted for.
     width: Cell<usize>,
 }
@@ -564,10 +571,22 @@ impl Help {
             wrap: false,
             flat: false,
             format: None,
+            filter_key: None,
+            searching: true,
             width: Cell::new(0),
         };
         help.search_keys();
         help
+    }
+
+    /// Move with the letters until `key` is pressed, and only then search:
+    /// `j`/`k` move a row, `g` and `G` go to the top and the bottom, and
+    /// `key` (Yazi's `/`) starts the search, which Escape ends (clearing
+    /// it). `None`, the default, searches as soon as a letter is typed.
+    pub fn filter_key(mut self, key: Option<Key>) -> Self {
+        self.filter_key = key;
+        self.searching = key.is_none();
+        self
     }
 
     pub fn prompt(mut self, prompt: impl Into<String>) -> Self {
@@ -651,16 +670,20 @@ impl Help {
         let theme = &self.theme;
         let matches = self.matches();
         let hints: Vec<String> = matches.iter().map(|b| self.hint_of(b)).collect();
-        let key_width = hints
+        let mut key_width = hints
             .iter()
             .map(|hint| cell_len(hint))
             .max()
             .unwrap_or(0)
             .min(24);
+        if self.wrap && width > 0 {
+            // Keys wrap too: they take at most half the width.
+            key_width = key_width.min((width.saturating_sub(4) / 2).max(4));
+        }
         // Where a description starts, and how wide it may be.
         let indent = key_width + 4;
         let room = width.saturating_sub(indent);
-        let wrapping = self.wrap && width > 0 && room >= 8;
+        let wrapping = self.wrap && width > 0 && room >= 4;
         let mut rows = Vec::new();
         let mut contexts: Vec<&str> = Vec::new();
         for binding in &matches {
@@ -682,33 +705,98 @@ impl Help {
                 .zip(&hints)
                 .filter(|(b, _)| group.is_none_or(|context| b.context == context));
             for (binding, hint) in shown {
-                let lines = if wrapping {
-                    wrap_words(&binding.description, room)
+                let (keys, lines) = if wrapping {
+                    (
+                        wrap_keys(hint, key_width),
+                        wrap_words(&binding.description, room),
+                    )
                 } else {
-                    vec![binding.description.clone()]
+                    (vec![hint.clone()], vec![binding.description.clone()])
                 };
+                let count = keys.len().max(lines.len());
                 if !styled {
-                    rows.extend(lines.iter().map(|_| Vec::new()));
+                    rows.extend((0..count).map(|_| Vec::new()));
                     continue;
                 }
-                for (n, text) in lines.into_iter().enumerate() {
+                for n in 0..count {
                     let mut line = vec![kit::plain("  ")];
-                    if n == 0 {
-                        line.extend(kit::pad(
-                            vec![kit::text(hint.clone(), &theme.prompt)],
+                    let text = lines.get(n);
+                    match keys.get(n) {
+                        // Keys alone on their row need no padding.
+                        Some(keys) if text.is_none() => {
+                            line.push(kit::text(keys.clone(), &theme.prompt));
+                        }
+                        Some(keys) => line.extend(kit::pad(
+                            vec![kit::text(keys.clone(), &theme.prompt)],
                             key_width,
-                        ));
-                    } else {
-                        line.push(kit::plain(" ".repeat(key_width)));
+                        )),
+                        None => line.push(kit::plain(" ".repeat(key_width))),
                     }
-                    line.push(kit::plain("  "));
-                    line.push(kit::plain(text));
+                    if let Some(text) = text {
+                        line.push(kit::plain("  "));
+                        line.push(kit::plain(text.clone()));
+                    }
                     rows.push(line);
                 }
             }
         }
         rows
     }
+}
+
+/// A help row's keys in lines of `width` cells at most, broken after a
+/// key's separator (`/`, `, `, a space), and within a key only where one
+/// is wider than a line.
+fn wrap_keys(keys: &str, width: usize) -> Vec<String> {
+    if cell_len(keys) <= width || width == 0 {
+        return vec![keys.to_string()];
+    }
+    // The keys, each with the separator after it.
+    let mut pieces: Vec<String> = Vec::new();
+    let mut piece = String::new();
+    let mut chars = keys.chars().peekable();
+    while let Some(c) = chars.next() {
+        piece.push(c);
+        let ends = match c {
+            '/' | ' ' => chars.peek().is_some_and(|next| *next != ' '),
+            ',' => {
+                chars.peek() == Some(&' ') && {
+                    piece.push(chars.next().unwrap_or(' '));
+                    true
+                }
+            }
+            _ => false,
+        };
+        if ends {
+            pieces.push(std::mem::take(&mut piece));
+        }
+    }
+    if !piece.is_empty() {
+        pieces.push(piece);
+    }
+    let mut lines: Vec<String> = Vec::new();
+    let mut line = String::new();
+    for piece in pieces {
+        if !line.is_empty() && cell_len(&line) + cell_len(piece.trim_end()) > width {
+            lines.push(line.trim_end().to_string());
+            line.clear();
+        }
+        if line.is_empty() && cell_len(piece.trim_end()) > width {
+            // One key wider than a line: broken where it must be.
+            let mut broken = wrap_words(piece.trim_end(), width);
+            line = broken.pop().unwrap_or_default();
+            lines.extend(broken);
+            if piece.ends_with(' ') {
+                line.push(' ');
+            }
+            continue;
+        }
+        line.push_str(&piece);
+    }
+    if !line.trim_end().is_empty() {
+        lines.push(line.trim_end().to_string());
+    }
+    lines
 }
 
 /// `text` in lines of `width` cells at most, broken between words (a word
@@ -782,7 +870,32 @@ impl Component for Help {
         let Some(key) = event.key() else {
             return Flow::Ignored;
         };
+        if !self.searching {
+            // Letters move until the filter key starts the search.
+            if Some(key) == self.filter_key {
+                self.searching = true;
+                return Flow::Continue;
+            }
+            let plain = !key.modifiers.ctrl && !key.modifiers.alt;
+            let moved = match key.code {
+                KeyCode::Char('j') if plain => self.scroll.scroll(1, page),
+                KeyCode::Char('k') if plain => self.scroll.scroll(-1, page),
+                KeyCode::Char('g') if plain => self.scroll.scroll_to(0, page),
+                KeyCode::Char('G') if plain => self.scroll.scroll_to(usize::MAX, page),
+                // Other letters do nothing until the search starts.
+                _ => typed(key).is_some(),
+            };
+            if moved || typed(key).is_some() {
+                return Flow::Continue;
+            }
+        }
         match key.code {
+            KeyCode::Escape if self.filter_key.is_some() && self.searching => {
+                // Back to moving, the search cleared.
+                self.searching = false;
+                self.filter.clear();
+                self.refilter();
+            }
             KeyCode::Escape if self.filter.is_filtering() => {
                 self.filter.clear();
                 self.refilter();
@@ -854,13 +967,22 @@ impl Component for Help {
         }
         lines.resize_with(page + top, Vec::new);
         let count = self.matches().len();
+        let search = match (self.filter_key, self.searching) {
+            (Some(key), false) => format!("{} search · j/k move", key_hint(key)),
+            _ => "type to search".to_string(),
+        };
         let hint = format!(
-            "  {count} {}{} · type to search · ↑↓ scroll · esc close",
+            "  {count} {}{} · {search} · ↑↓ scroll · esc close",
             if count == 1 { "key" } else { "keys" },
             if more { " · more below" } else { "" }
         );
         lines.push(kit::fit(vec![kit::text(hint, &theme.hint)], width));
-        View::new(lines).with_cursor(0, column.min(width.saturating_sub(1)))
+        let view = View::new(lines);
+        if self.searching {
+            view.with_cursor(0, column.min(width.saturating_sub(1)))
+        } else {
+            view
+        }
     }
 
     fn mouse(&self) -> bool {
@@ -1618,6 +1740,62 @@ mod tests {
         );
         assert_eq!(wrap_words("abcdefghij", 4), ["abcd", "efgh", "ij"]);
         assert_eq!(wrap_words("", 4), [""]);
+    }
+
+    #[test]
+    fn help_wraps_a_long_key_list_between_keys() {
+        let keymap = Keymap::new("scope").bind(
+            "more",
+            keys("pageup shift+pageup ctrl+pageup alt+pageup"),
+            "average more",
+        );
+        let rows = help_rows(&Help::new(&keymap).wrap(true), 40);
+        assert_eq!(
+            rows,
+            [
+                "scope",
+                "  pgup/shift+pgup/    average more",
+                "  ctrl+pgup/alt+pgup",
+            ]
+        );
+        assert_eq!(wrap_keys("<Up>, k, <C-p>", 8), ["<Up>, k,", "<C-p>"]);
+        assert_eq!(wrap_keys("abcdefghij", 4), ["abcd", "efgh", "ij"]);
+        assert_eq!(wrap_keys("a/b", 8), ["a/b"]);
+    }
+
+    #[test]
+    fn a_filter_key_makes_letters_move_until_it_starts_the_search() {
+        let console = rich::Console::new();
+        let context = Context {
+            console: &console,
+            width: 40,
+            height: 4,
+        };
+        let keymap = Keymap::new("demo")
+            .bind("a", keys("a"), "first")
+            .bind("b", keys("b"), "second")
+            .bind("c", keys("c"), "third")
+            .bind("d", keys("d"), "fourth");
+        let mut help = Help::new(&keymap)
+            .flat(true)
+            .filter_key(Key::parse("slash"));
+        help.render(&context);
+        let press = |help: &mut Help, name: &str| {
+            let key = Key::parse(name).unwrap();
+            help.handle(&Event::Key(key), &context)
+        };
+        // `u` searches nothing; `j` moves down a row.
+        assert!(matches!(press(&mut help, "u"), Flow::Continue));
+        assert_eq!(help.matches().len(), 4);
+        press(&mut help, "j");
+        assert_eq!(help.scroll.offset(), 1);
+        press(&mut help, "slash");
+        press(&mut help, "u");
+        assert_eq!(help.matches().len(), 1);
+        // Escape ends the search, then closes.
+        press(&mut help, "escape");
+        assert_eq!(help.matches().len(), 4);
+        assert!(matches!(press(&mut help, "escape"), Flow::Cancel));
     }
 
     #[test]
