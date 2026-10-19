@@ -1,9 +1,11 @@
 //! What a file manager acts on: a [`selection`] over Miller's current
 //! column, and files yanked to paste ([`Yank`]).
 
+use std::cell::Cell;
 use std::path::{Path, PathBuf};
+use std::rc::Rc;
 
-use rich_ext::file_ops::{Conflict, Op};
+use rich_ext::file_ops::{Conflict, LinkKind, Op};
 
 use super::miller::Miller;
 use super::row::Marker;
@@ -13,12 +15,15 @@ use crate::select::{multi_select, MultiSelect};
 /// A selection of files for `miller`'s columns, by path: the core's
 /// [`multi_select`] over the current column's entries, its visual range
 /// following the cursor (Yazi's Space, `v`, `V`, Ctrl+A, Ctrl+R). The
-/// columns mark it ([`Miller::view_with`], made after this) and act on it
-/// ([`Miller::targets`]): selected files stay selected in other
-/// directories. A visual range is over the current directory's rows, so
-/// it is dropped when the directory changes; end it first
-/// ([`end_visual`](MultiSelect::end_visual)) to keep it. Call it while the
-/// app is built.
+/// columns mark it ([`Miller::view_with`], made after this; the parent
+/// column too, by path) and act on it ([`Miller::targets`]): selected
+/// files stay selected in other directories. A visual range is over the
+/// current directory's rows, so it is dropped when the directory changes;
+/// end it first ([`end_visual`](MultiSelect::end_visual)) to keep it.
+/// With [`tabs`](crate::files::tabs) over the same columns (made before
+/// or after this), it is one selection per tab, as Yazi's: the handle
+/// holds the active tab's, and each tab keeps its own visual mode
+/// ([`MultiSelect::scoped`]). Call it while the app is built.
 ///
 /// ```
 /// use intuituive::files::{miller, selection};
@@ -53,7 +58,22 @@ pub fn selection(miller: Miller) -> MultiSelect<PathBuf> {
             entries.with(|e| e.iter().map(|e| dir.join(&e.name)).collect())
         })
         .range_from(miller.cursor);
-    watch(move || cwd.get(), move |_, _| selection.cancel_visual());
+    // A visual range ends when its tab's directory changes: with tabs,
+    // the active tab's own, so switching tabs keeps each tab's mode.
+    let tabs = miller.tabs;
+    let place = move || match tabs.get() {
+        Some(set) => (Some(set.active_id()), set.with_active(|t| t.cwd.get())),
+        None => (None, cwd.get()),
+    };
+    let last = Rc::new(Cell::new(crate::reactive::untracked(|| place().0)));
+    watch(place, move |(tab, _), _| {
+        if last.replace(tab) == tab {
+            selection.cancel_visual();
+        }
+    });
+    if let Some(set) = tabs.get_untracked() {
+        selection.scoped(&set);
+    }
     miller.selection.replace(Some(selection));
     selection
 }
@@ -131,6 +151,31 @@ impl Yank {
                 into,
                 conflict,
             }
+        }
+    }
+
+    /// The operation that links the files into the directory `into`, cut
+    /// or copied alike, as `kind` says: Yazi's `-` (a symbolic link to each
+    /// absolute path, `LinkKind::Symbolic { relative: false }`), `_` (to
+    /// each path from `into`, `relative: true`) and Ctrl+- (hard links,
+    /// [`LinkKind::Hard`]). A name taken gets a free one (`_1`), as a paste
+    /// does. The files stay yanked.
+    ///
+    /// ```
+    /// use intuituive::files::Yank;
+    /// use rich_ext::file_ops::{LinkKind, Op};
+    ///
+    /// let yank = Yank::cut(vec!["/home/a/notes.md".into()]);
+    /// let op = yank.link("/home/a/links", LinkKind::Symbolic { relative: true });
+    /// assert!(matches!(op, Op::Link { kind: LinkKind::Symbolic { relative: true }, .. }));
+    /// assert_eq!(op.title(), "Link notes.md in links");
+    /// ```
+    pub fn link(&self, into: impl Into<PathBuf>, kind: LinkKind) -> Op {
+        Op::Link {
+            from: self.paths.clone(),
+            into: into.into(),
+            kind,
+            conflict: Conflict::Rename,
         }
     }
 }
