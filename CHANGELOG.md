@@ -9,6 +9,67 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: round 5 plugins (rs-rich-intuituive, rs-rich-ext, rs-rich-art)
+
+The plugin pieces of the round-4 gaps of the Yazi and scope-tui clones
+([the demo gaps](docs/design/intuituive-demo-gaps.md), "Round 4: files
+(Yazi)" and "Round 4: scope-tui"), built on round 5's core, with the few
+generic core pieces they needed:
+
+- **Core:** `transport(length)`, a play head on the app's clock (`play`,
+  `pause`, `seek`, `seek_by`, `set_rate`, `position`, `progress`, an
+  `on_end` hook met exactly on the app's clock); `Feed<T>` (a feed's value
+  and `FeedState` as one value), `latest_feed(stall, |tx, state| ..)`
+  with a `FeedTeller`, and `Play::feed()`; `TabSet::scoped(|| value)` (a
+  value per tab, `Scoped`), tab identities (`active_id`, `ids`) and
+  `MultiSelect::scoped(&tabs)` (one handle, a selection and visual mode
+  per tab); `Miller::update_overlay(items)`, and ending an overlay runs
+  the source's `arrive`; `digits` draws `G` and `#`.
+- **Files plugin, rebuilt on the core:** `bulk_rename` on
+  `Ctx::edit_text`; `frecency` on `FrecencyStore` (its API kept; two
+  sessions' visits add up); `files::state_dir` is the core's
+  `state_dir("intuituive")`; `Miller::show_search` is an overlay at the
+  root, so `h` from a search's results goes back to the directory
+  searched, on the entry hovered before, as Yazi; the parent column
+  marks the selection by path with `marks_by` (the theme's
+  `marker.selected`).
+- **Files plugin, new:** `files::Miller::navigation_with` and `go`, and
+  `files::Move` (Yazi's wording without binding each key); a selection
+  and visual mode per tab with `tabs` (`FileTabs::selection`);
+  `Yank::link(into, kind)` on rs-rich-ext's new **`Op::Link { from,
+  into, kind, conflict }`** (`LinkKind::Symbolic { relative }` and
+  `Hard`, directories hard linked file by file) and
+  `file_ops::relative_to`; `files::pick_file(cx, start, filter, |path,
+  cx| ..)`, a file picker modal on Miller's columns;
+  `Previewer::command(mime_glob, argv)`, an external previewer (`%s`,
+  `%o`, `%w`) whose image output is shown as an image.
+- **Sound:** `Capture::generated(frames, period)` and
+  `Capture::from_pcm(pcm, rate)` (Ended and then silence, or `Failed`
+  with the read error), and `Capture::feed()`, so every source is one
+  type; `Pcm::error()` and `Pcm::try_next()` keep the read error that
+  ended a reader; `AudioOptions::stall_after` and `Capture::stall_after`
+  take an `impl Into<Option<Duration>>` (`None`: never stalled).
+  **`audio::output(OutputOptions)`** plays through cpal (behind `audio`;
+  `output_devices`, an `Output` with `write`, `write_matrix`, `clear`,
+  `set_paused`, `set_volume`); **`audio::player(PlayerOptions)`** plays
+  tracks on a `transport` with a volume, a speed and gapless playback,
+  over the `Source` trait (`Wav`, now seekable with `Wav::seek`;
+  `audio::clip` in memory; `open_source` by extension; an opener of your
+  own). Other codecs are later work (symphonia is not a dependency).
+- **rs-rich-ext's dsp:** `Tuner` and `Reading`: the loudest peak's
+  nearest note, its cents and frequency, smoothed within a note.
+- **The `viz` plugin:** `tuner(|| reading)` (the note in `digits`, a
+  needle, the cents in colour) and `persistence(|| frames)` /
+  `persistence_with` over `chart::Persistence`.
+- **The `art` plugin:** `image_bytes` and `image_bytes_of` (an image in
+  memory, an embedded cover); `ImageView::pixels(Pixels::Kitty | Sixel |
+  Iterm)` and `Pixels::detect()` with `image_graphics()` for
+  `App::graphics`: Sixel and iTerm2 pictures drawn over the node's half
+  blocks after each frame, Kitty's through Unicode placeholders, uploaded
+  once and freed at the end; half blocks without the source. The feature
+  now turns on rs-rich-art's `kitty`, `sixel` and `iterm` (no change to
+  rs-rich-art itself: it already decodes from bytes).
+
 ### intuiTUIve: round 5 core (rs-rich-intuituive, rs-rich-interact)
 
 The generic core pieces of the round-4 gaps of the Yazi and scope-tui
