@@ -353,8 +353,14 @@ from its manifest, a publishable crate is missing, or a crate is listed before a
 workspace crate it depends on. After a version bump, `release_cohort.py sync`
 rewrites the versions from the manifests.
 
-`release_cohort.py tag` tags the local checkout (`HEAD`, or `--commit`),
-which must be on `main` as last fetched. It fetches nothing and reads
+`release_cohort.py tag` tags the local checkout (`HEAD`), or `--commit
+<sha>`: any commit on `main` as last fetched, such as an earlier one known to
+be good, whose `RELEASES.toml` and manifests then decide what is released.
+Before tagging it refuses a commit that changes the shipped files (by each
+manifest's `include`) of a package already published under the same version
+from another commit, naming each package and the commit it came from: that
+release would put the rest of the cohort beside a package built from other
+code. Release from that commit (`--commit <sha>`) or bump the package. It fetches nothing and reads
 `RELEASES.toml` and the manifests from that commit, so pull `main` first, and
 a run resumed later releases the same commit even if `main` has moved on
 (only the remote's tags and the registries are read live). For each entry in
@@ -364,9 +370,19 @@ the version to appear before the next, stopping when the release run fails
 (with the GitHub CLI) or after `--timeout` minutes. One tag at a time keeps
 dependencies published first and stays inside the release workflow's
 concurrency group, which keeps only one pending run. It is safe to re-run: a
-tag that exists but is not yet published is waited on, not recreated, and a
-tag on another commit stops it. `--dry-run` shows the plan; `status` shows
-every package's state. `--registry crates.io` tags only the crates, leaving
+tag that exists but is not yet published is waited on, not recreated. A tag
+on another commit is moved to the commit being released only when its
+latest release run ran on that tag's commit, ended without success
+(cancelled, failed) and never started its publish job, so nothing can have
+been uploaded; anything less certain (a run still going, one that started
+publishing, a run of another commit, or no run to see without the GitHub
+CLI) stops it with the commands to clear it by hand. `--dry-run` shows the plan; `status` shows
+every package's state. By default it starts at the top of `RELEASES.toml`
+and skips everything already on its registry, so it begins at the first
+unpublished package; `--from <package or tag>` starts later in the order and
+leaves the packages before it alone, but refuses when a later crate depends
+on one of them at a version not yet on crates.io (that crate's publish would
+fail). `--registry crates.io` tags only the crates, leaving
 the Python package for later (and `--registry pypi` only it).
 
 Both release workflows also refuse a published version from the tag itself:
