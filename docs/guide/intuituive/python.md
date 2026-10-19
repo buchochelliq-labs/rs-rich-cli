@@ -248,20 +248,20 @@ assert ran.screen[0].startswith("Count: 2")
 `App.wait_for_tasks()` waits for background tasks before each scripted
 event, so a test sees a task's result however fast the machine is. For more
 control, `App.driver(width, height)` returns the [loop of your
-own](index.md#owning-the-loop). It has `update(now)`, `render()`,
+own](running.md#owning-the-loop). It has `update(now)`, `render()`,
 `timeout(now)`, `key`, `text`, `paste`, `mouse`, `click`, `resize`,
 `screen()`, `lines()`, `accessibility()` (the accessibility tree, as
 `AccessNode`s), `take_announcements()` and `finish()`. In linear mode,
 `render()` returns the lines a screen reader would read. With
 `App.inspector()` on, `inspector_trace()` returns what the
-[inspector](index.md#inspector)'s trace holds, as `TraceEntry`s (`frame`,
+[inspector](testing.md#inspector)'s trace holds, as `TraceEntry`s (`frame`,
 `at` in seconds, `kind`, `text`), `inspector_timings()` each node's
 `NodeTiming` (`name`, `draws`, and `total` and `last` in seconds), and
 `inspector_selected()` the id of the node it has selected. Signals made
 and written from Python are named in the trace by where the bindings make
 and write them, not by the Python line.
 
-For a test, as in [Rust](index.md#testing), the driver also has
+For a test, as in [Rust](testing.md#testing), the driver also has
 `press("tab enter")` and `type_text("Ada")` (each draws until there is
 nothing left to draw, as `settle()` does), `assert_focused(name)`, which
 raises `AssertionError` saying where the focus is, `focused()` and

@@ -6,7 +6,7 @@ this page. The tests in `crates/rich-intuituive/tests/a11y.rs` and
 `tests/linear.rs` pin what the app writes. This page checks what a person
 hears.
 
-See [Accessibility](index.md#accessibility) for what the two modes do.
+See [Accessibility](accessibility.md#accessibility) for what the two modes do.
 
 ## The example
 

@@ -40,7 +40,7 @@ Or add the crate to a project of your own:
 
 ```toml
 [dependencies]
-rs-rich-intuituive = "0.0.2"
+rs-rich-intuituive = "0.0.5"
 ```
 
 One dependency is enough: `intuituive::rich` is rs-rich (renderables,
@@ -297,7 +297,7 @@ select a node, outlined on the app, and Enter shows where it is, its size,
 its focus and its states; `p` picks one by pointing at it. Pane 4 is the
 trace: tick a to-do and it shows the key, the binding that took it, and the
 signal it wrote, with the nodes that write made dirty. The
-[inspector](index.md#inspector) section has every key.
+[inspector](testing.md#inspector) section has every key.
 
 ## Where next
 

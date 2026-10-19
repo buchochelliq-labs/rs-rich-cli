@@ -13,7 +13,7 @@ behind them can be swapped, including for one your app writes itself.
 
 ```toml
 [dependencies]
-rs-rich-intuituive = "0.0.2"
+rs-rich-intuituive = "0.0.5"
 rs-rich-embed = "0.0.1"
 # The Chrome and Browsh engines are off by default:
 # rs-rich-embed = { version = "0.0.1", features = ["chrome", "browsh"] }

@@ -345,7 +345,7 @@ Rules select by kind (`table`), name (`#title`) and class (`.card`, and
 `.down` while a service is down), with `:focus` and `:hover`. The tape then
 edits the sheet from outside the terminal: the app reads it again, and a
 line it cannot parse is reported in a toast while the last good sheet
-stays. See [Stylesheets](guide/intuituive/index.md#stylesheets).
+stays. See [Stylesheets](guide/intuituive/panels.md#stylesheets).
 
 <div class="tape-player" data-cast="../media/tapes/stylesheet/stylesheet.cast" data-poster="npt:0:3">
   <img src="../media/tapes/stylesheet/stylesheet.gif" alt="A status page styled by a stylesheet, restyled when the sheet changes">
@@ -365,7 +365,7 @@ stays. See [Stylesheets](guide/intuituive/index.md#stylesheets).
 with `table_with`: a click on a header sorts by it and a second click
 reverses the order, ←/→ move the cell cursor and `s` sorts by its column,
 and dragging the gap after a header resizes the column. See
-[Sorting, resizing and a cell cursor](guide/intuituive/index.md#sorting-resizing-and-a-cell-cursor).
+[Sorting, resizing and a cell cursor](guide/intuituive/tables.md#sorting-resizing-and-a-cell-cursor).
 
 <div class="tape-player" data-cast="../media/tapes/tables/tables.cast" data-poster="npt:0:3">
   <img src="../media/tapes/tables/tables.gif" alt="A process table sorted by clicks on its headers, then resized">
@@ -383,7 +383,7 @@ and dragging the gap after a header resizes the column. See
 sprints sit in a `tree_lazy` that loads each one on another thread when it
 is opened, showing "loading…" until it arrives and the error in red when it
 fails. The pointer resting on a card shows its tooltip, and a card dragged
-to another lane moves there. See [The mouse](guide/intuituive/index.md#the-mouse).
+to another lane moves there. See [The mouse](guide/intuituive/input.md#the-mouse).
 
 <div class="tape-player" data-cast="../media/tapes/board/board.cast" data-poster="npt:0:3">
   <img src="../media/tapes/board/board.gif" alt="A sprint board: a lazy tree loading, a tooltip, and a card dragged to Done">
@@ -403,7 +403,7 @@ to another lane moves there. See [The mouse](guide/intuituive/index.md#the-mouse
 different sizes placed by `align_items`, `justify`, `wrap` and
 `align_content`, each cycled with a key; the test card keeps to the end of
 its line with `align_self`. See
-[Alignment and wrapping](guide/intuituive/index.md#alignment-and-wrapping).
+[Alignment and wrapping](guide/intuituive/layout.md#alignment-and-wrapping).
 
 <div class="tape-player" data-cast="../media/tapes/align/align.cast" data-poster="npt:0:2">
   <img src="../media/tapes/align/align.gif" alt="Cards in a row, placed by align-items, justify, wrap and align-content">
@@ -427,7 +427,7 @@ through. In text mode (`--accessible`) boxes are blanks with their titles
 kept, there is no colour, `>` marks the selected item, and the terminal's
 cursor sits on the focus. In linear mode (`--linear`) there is no screen:
 the app is written as lines of text, then only the lines that change. See
-[Accessibility](guide/intuituive/index.md#accessibility).
+[Accessibility](guide/intuituive/accessibility.md#accessibility).
 
 <div class="tape-player" data-cast="../media/tapes/access/access.cast" data-poster="npt:0:3">
   <img src="../media/tapes/access/access.gif" alt="The access example in text mode, then in linear mode">
@@ -445,7 +445,7 @@ the app is written as lines of text, then only the lines that change. See
 with line numbers, over a notes area that wraps and shows a placeholder.
 A line is typed, a line selected with Shift, the typing undone as one step
 with Ctrl+Z, and Escape then Tab moves on to the notes. See
-[Text areas](guide/intuituive/index.md#text-areas).
+[Text areas](guide/intuituive/components.md#text-areas).
 
 <div class="tape-player" data-cast="../media/tapes/editor/editor.cast" data-poster="npt:0:3">
   <img src="../media/tapes/editor/editor.gif" alt="Rust source in a text area: a line typed, a line selected, the typing undone, then notes typed below">

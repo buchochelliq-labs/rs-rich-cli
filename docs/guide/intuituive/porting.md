@@ -102,7 +102,7 @@ tree. The widget can read signals: when they change, it draws again.
 
 ```toml
 [dependencies]
-rs-rich-intuituive = "0.0.2"
+rs-rich-intuituive = "0.0.5"
 rs-rich-ratatui = { version = "0.0.1", features = ["interact"] }
 ratatui = "0.30"
 ```
@@ -208,7 +208,7 @@ worth a closer look:
   `cx.pop()`.
 
 Styles move from `Style::new().fg(..)` to markup (`"[bold red]…[/]"`) or,
-better, theme names (`"[bad]…[/]"`) that a [theme file](index.md#theme-files-reloaded-live)
+better, theme names (`"[bad]…[/]"`) that a [theme file](panels.md#theme-files-reloaded-live)
 can change while the app runs. `rs-rich-ratatui`'s `to_rich_style`
 converts an existing ratatui `Style`.
 
@@ -269,7 +269,7 @@ states are deterministic.
 
 ### 7. Check the result
 
-Run the port with `INTUITUIVE_INSPECT=1`. The [inspector](index.md#inspector)
+Run the port with `INTUITUIVE_INSPECT=1`. The [inspector](testing.md#inspector)
 shows which nodes drew in each frame. A key press should redraw what it
 changed and nothing else. If a whole panel redraws on every tick, a closure
 inside it reads a signal it does not need: the inspector's trace (Shift+F12,
@@ -289,7 +289,7 @@ the app without a loop of its own. Each turn, call:
   `rich_interact::event::from_crossterm`.
 
 `examples/in_ratatui.rs` is the whole program, and the guide's
-[Owning the loop](index.md#owning-the-loop) has the details. This is the
+[Owning the loop](running.md#owning-the-loop) has the details. This is the
 way in for an app too big to port at once: move one pane at a time.
 
 ## Worked example: a Yazi-style file manager
@@ -510,7 +510,7 @@ returning rich segments is the closest thing to a custom `Widget::render`.
 terminal session (crossterm). To keep your own terminal and loop, ratatui's
 included, drive the app with `App::driver` (path 4). `App::run_with` drives
 it with termion or termwiz instead, behind this crate's features of those
-names (see [Backends](index.md#backends)).
+names (see [Backends](running.md#backends)).
 
 **Do I lose performance?** No: [the benchmark](index.md#against-ratatui) has
 intuiTUIve ahead on every scenario it measures, because it redraws and sends
