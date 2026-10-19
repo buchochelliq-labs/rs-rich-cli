@@ -107,3 +107,82 @@ DAS/ARR themselves, and use rodio for sound; Bubble Tea's `tea.Tick` and
 which is the changeable timer above; Textual's `set_interval` returns a
 `Timer` with `pause()`, `resume()` and `reset()`, and its `Key` events carry
 no release, the same limit as a terminal without the kitty protocol.
+
+## Round 2: rebuilt on round 6
+
+`examples/blocks.rs` went from 919 lines to 959, `tests/blocks.rs` from
+390 to 435 (15 tests to 18). The game model is unchanged but for the view
+(the piece no longer composited into the cells); the extra lines are the
+NES repeat rates, the sprite builder and comments, while the hand-built
+glue round the clock, the small-screen switch, the backdrop's ring and the
+state directory went. All 15 earlier tests pass unchanged.
+
+### Replaced by components
+
+| Before (hand-built) | Now | Component |
+|---|---|---|
+| `every(FRAME)` ticking for the app's whole life, once however late | A fixed step of one frame, handed every frame owed (capped at 30, half a second), paused off the playing screen and resumed with play | `fixed_step`, `Timer::max_catch_up`, `Timer::pause`/`resume` |
+| ← → ↓ at the terminal's autorepeat (often 500 ms, then 30/s) | The NES's DAS and ARR: ← → at once, after 16 frames, then every 6; ↓ every 2 frames; the terminal's repeats where no releases come | `Node::repeat(delay, rate)` |
+| A `memo` on `viewport()` and a `switch` to a boxed "Terminal must be at least 64 x 28!" | The framework's guard, which also holds the game's keys while too small | `App::min_size` |
+| A 3x3 ring of four `fill`s round the centred screen (layers were opaque) | One `fill` in a layer under the centred screen | composited `layers` |
+| `$XDG_STATE_HOME`/`~/.local/state` worked out by hand; `fs::write` | `state_file("rs-rich-blocks", "top_score")`; `write_atomic` | `state` module |
+| The falling piece and its ghost written into the board's cells | Two sprites (`██` and `┌┐`, the matrix's blanks transparent) placed on a stage over the board | `sprite::stage_with`, `Sprite::from_markup`, `Placed::z` |
+
+New tests: held → repeats at 16 then 6 frames and stops on the release
+(`Driver::set_releases`, `Event::KeyUp`); a loop stalled ten frames at
+level 29 drops the piece ten rows (`Driver::update`); the backdrop shows
+round the screen.
+
+### Still hand-built, and why
+
+- **The board** is still twenty rows of `[color(n) on color(234)]██[/]`
+  markup, now the stage's backdrop: there is no cell grid, and `pixels`
+  cannot draw the `██`/`░░` glyphs and level palettes cell for cell.
+- **`at(node, x, y, w, h)`**, the original's absolute rectangles as
+  `.inset(..)` from four sides: `layers` still has no `.at(rect)`.
+- **The flash** is counted in the model's frames (no `blink`/keyframes).
+- **The `Rc<RefCell<Game>>` + `view.set(game.view())` glue**, now also
+  pausing the clock by the state after every change.
+- **The block lettering**, the seeded generator and the backdrop's single
+  glyph (no pattern fill), as in round 1.
+
+### New gaps
+
+| Gap | Needed for | API sketch | Where |
+|---|---|---|---|
+| `min_size` with a node | The original's small-screen message is a box in grey on its background with the zoom tip; `App::min_size` takes a message only, centred plain on the terminal's colours, so the box and colours are lost (the tip is now one wrapped paragraph) | `App::min_size_with(w, h, \|\| node)` | core (generic) |
+| A timer that runs while a condition holds | Every handler that may change the state must resume or pause the clock after it (`Shared::act`) | `fixed_step(..).running_when(move \|\| state.get() == Playing)` | core (generic) |
+| Sprites from a mask | Building a piece's sprite means writing markup with `..` holes from its matrix and parsing it again each time it moves | `Sprite::from_grid(&rows, \|ch\| Option<SpriteCell>)`, or `Sprite::from_mask(&["..#", "###"], '#', cell)` | core (generic) |
+| A cell grid (round 1's, still open) | The board, with only changed cells redrawn; the stage's backdrop is markup re-parsed on every change | `cell_grid(cols, rows, \|x, y\| Cell)` | core (generic) |
+
+### Bugs found
+
+- **A styled `layers` node lets the layer below show through where its
+  children leave room.** The guide says a node with a background covers
+  its whole rectangle; inside an inset (or between `at()` boxes) the
+  backdrop's `▓` showed through the screen's `.style("on color(234)")`.
+  The example puts a `fill(" ", "on color(234)")` first in the screen's
+  layers. Minimal failing test:
+
+  ```rust
+  let app = App::new(|| layers([
+      fill("x", "red on blue"),
+      layers([label("a").inset(0, 0, 0, 1)]).style("on green"),
+  ]));
+  let mut driver = app.driver(5, 1);
+  driver.settle();
+  assert_eq!(driver.screen().plain()[0], " a   "); // is "xa   "
+  ```
+
+  (`row([..]).style(..)` and `label("").bg(..)` over a `fill` do cover;
+  the miss is a `layers` whose child is inset.)
+
+### Components that would help
+
+| Component | What it would replace or enable | API sketch | Where | Value |
+|---|---|---|---|---|
+| A cell grid | The board's markup and the stage backdrop under the piece | `cell_grid(cols, rows, \|x, y\| Cell::new("██", style)).cell_width(2)` | core (generic) | high |
+| Placing a layer at a rectangle | The `at()` helper's inset arithmetic, seven times | `.at(x, y, w, h)` in `layers` | core (generic) | medium |
+| `min_size_with` | The original's boxed small-screen message | see above | core (generic) | low |
+| A blink signal | The flash's frame counting | `blink(period) -> Memo<bool>` on the app's clock | core (generic) | low |
+| Sound effects (round 1's) | The original's WAVs | `audio::sfx(bytes).play()` | plugin (`audio`) | medium |

@@ -22,9 +22,11 @@
 //! piece down (hard drop); PageUp and PageDown rotate left and right; `c`
 //! holds; `q` quits.
 //!
-//! The game runs on the app's clock: one `every` tick per NES frame (17 ms,
-//! as the original's timer), so a test seeds the bag, presses keys and
-//! advances the clock, and sees the same game on every run.
+//! The game runs on the app's clock: a `fixed_step` of one NES frame (17 ms,
+//! as the original's timer), paused off the playing screen, so a test seeds
+//! the bag, presses keys and advances the clock, and sees the same game on
+//! every run. ← → and ↓ repeat at the NES's own rates while held (DAS and
+//! ARR) where the terminal reports releases, else at the terminal's.
 
 use std::cell::RefCell;
 use std::path::PathBuf;
@@ -32,7 +34,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use intuituive::prelude::*;
-use intuituive::Ctx;
+use intuituive::sprite::{stage_with, Placed, Sprite, StageOptions};
+use intuituive::{state_file, write_atomic, Ctx};
 
 // The model: no framework in it.
 
@@ -42,6 +45,12 @@ pub const HEIGHT: usize = 20;
 
 /// One NES frame on the original's timer: gravity counts these.
 pub const FRAME: Duration = Duration::from_millis(17);
+
+/// Held ← →: the first repeat after 16 frames, then one every 6 (the
+/// NES's DAS and ARR); held ↓ drops a row every 2 frames.
+const SHIFT_DELAY: Duration = Duration::from_millis(17 * 16);
+const SHIFT_RATE: Duration = Duration::from_millis(17 * 6);
+const DROP_RATE: Duration = Duration::from_millis(17 * 2);
 
 /// Frames a row takes to fall, by level (NES's table, as the original's).
 const GRAVITY: [u32; 15] = [48, 43, 38, 33, 28, 23, 18, 13, 8, 6, 5, 4, 3, 2, 1];
@@ -494,22 +503,13 @@ impl Game {
             for &y in &clearing.rows {
                 cells[y] = [Cell::Clear(lit); WIDTH];
             }
-        } else if self.state == State::Playing {
-            let distance = self.drop_distance();
-            for (x, y) in self.piece.cells() {
-                if y + distance >= 0 {
-                    cells[(y + distance) as usize][x as usize] = Cell::Ghost(self.piece.kind);
-                }
-            }
-            for (x, y) in self.piece.cells() {
-                if y >= 0 {
-                    cells[y as usize][x as usize] = Cell::Block(self.piece.kind);
-                }
-            }
         }
+        let falling = (self.state == State::Playing && self.clearing.is_none())
+            .then(|| (self.piece, self.drop_distance()));
         View {
             state: self.state,
             cells,
+            falling,
             lines: self.lines,
             level: self.level,
             score: self.score,
@@ -540,19 +540,15 @@ fn load_top(file: &PathBuf) -> u32 {
         .unwrap_or(0)
 }
 
-fn save_top(file: &PathBuf, score: u32) -> std::io::Result<()> {
-    if let Some(dir) = file.parent() {
-        std::fs::create_dir_all(dir)?;
-    }
-    std::fs::write(file, score.to_string())
+fn save_top(file: &std::path::Path, score: u32) -> std::io::Result<()> {
+    write_atomic(file, score.to_string().as_bytes())
 }
 
-/// A playfield cell as drawn.
+/// A cell of the board as drawn, under the falling piece.
 #[derive(Clone, Copy, PartialEq, Debug)]
 pub enum Cell {
     Empty,
     Block(Kind),
-    Ghost(Kind),
     Clear(bool),
 }
 
@@ -562,6 +558,8 @@ pub enum Cell {
 pub struct View {
     pub state: State,
     pub cells: [[Cell; WIDTH]; HEIGHT],
+    /// The piece in play and how far its ghost is below it.
+    pub falling: Option<(Piece, i32)>,
     pub lines: u16,
     pub level: u8,
     pub score: u32,
@@ -660,9 +658,47 @@ fn art_markup(kind: Option<Kind>, level: u8) -> String {
     }
 }
 
-/// The playfield: twenty rows of markup, two columns a cell. Bespoke, as
-/// the game itself is: the cells, the ghost and the cleared rows' flash.
+/// A piece as a sprite, two columns a cell, its matrix's blanks holes:
+/// `██` for the piece, `┌┐` for its ghost (the original's bordered block).
+fn piece_sprite(piece: &Piece, level: u8, glyph: &str) -> Sprite {
+    let style = colour(level, piece.kind.index());
+    let lines: Vec<String> = piece.kind.rotations()[piece.rotation]
+        .iter()
+        .map(|line| {
+            line.chars()
+                .map(|c| match c {
+                    '#' => format!("[{style}]{glyph}[/]"),
+                    _ => "..".to_string(),
+                })
+                .collect()
+        })
+        .collect();
+    Sprite::from_markup(&lines.iter().map(String::as_str).collect::<Vec<_>>(), '.')
+}
+
+/// The playfield: the piece and its ghost are sprites on a stage, over the
+/// board, which is twenty rows of markup (two columns a cell, and the
+/// cleared rows' flash).
 fn playfield(view: Signal<View>) -> Node {
+    let sprites = move || {
+        view.with(|v| match &v.falling {
+            Some((piece, distance)) => {
+                let (x, y) = (2.0 * piece.col as f64, piece.row as f64);
+                vec![
+                    Placed::new(0, piece_sprite(piece, v.level, "┌┐")).at(x, y + *distance as f64),
+                    Placed::new(1, piece_sprite(piece, v.level, "██"))
+                        .at(x, y)
+                        .z(1),
+                ]
+            }
+            None => Vec::new(),
+        })
+    };
+    stage_with(sprites, StageOptions::new().backdrop(board(view)))
+}
+
+/// The board under the piece.
+fn board(view: Signal<View>) -> Node {
     plain(move || {
         view.with(|v| {
             let mut out = String::new();
@@ -674,7 +710,6 @@ fn playfield(view: Signal<View>) -> Node {
                     let (glyph, style) = match *cell {
                         Cell::Empty => ("  ", format!("on {BG}")),
                         Cell::Block(kind) => ("██", colour(v.level, kind.index())),
-                        Cell::Ghost(kind) => ("┌┐", colour(v.level, kind.index())),
                         Cell::Clear(lit) => (if lit { "██" } else { "░░" }, colour(v.level, 7)),
                     };
                     out.push_str(&format!("[{style}]{glyph}[/]"));
@@ -786,14 +821,10 @@ impl Default for Options {
     }
 }
 
-/// `$XDG_STATE_HOME/rs-rich-blocks/top_score`, else under
-/// `~/.local/state` (the original keeps `~/top_score`). There is no app
-/// state directory to ask the framework for.
+/// `top_score` in the app's state directory (the original keeps
+/// `~/top_score`).
 fn default_score_file() -> Option<PathBuf> {
-    let state = std::env::var_os("XDG_STATE_HOME")
-        .map(PathBuf::from)
-        .or_else(|| std::env::var_os("HOME").map(|h| PathBuf::from(h).join(".local/state")))?;
-    Some(state.join("rs-rich-blocks").join("top_score"))
+    state_file("rs-rich-blocks", "top_score")
 }
 
 impl Options {
@@ -818,19 +849,25 @@ impl Options {
     }
 }
 
-/// The game, shared by the handlers, and what it shows.
+/// The game, shared by the handlers, what it shows, and its clock.
 #[derive(Clone)]
 struct Shared {
     game: Rc<RefCell<Game>>,
     view: Signal<View>,
+    clock: Timer,
 }
 
 impl Shared {
-    /// Change the game, then show it (an equal view draws nothing).
+    /// Change the game, then show it (an equal view draws nothing); the
+    /// clock runs only while the game is played.
     fn act(&self, f: impl FnOnce(&mut Game)) {
         let mut game = self.game.borrow_mut();
         f(&mut game);
         self.view.set(game.view());
+        match game.state {
+            State::Playing => self.clock.resume(),
+            _ => self.clock.pause(),
+        }
     }
 
     fn key(&self, f: impl Fn(&mut Game) + 'static) -> impl FnMut(&mut Ctx) + 'static {
@@ -847,62 +884,57 @@ pub fn blocks_app(options: Options) -> App {
 pub fn game_app(game: Game) -> App {
     App::new(move || {
         let view = signal(game.view());
-        let shared = Shared {
-            game: Rc::new(RefCell::new(game)),
-            view,
-        };
-        let tick = shared.clone();
-        every(FRAME, move |_| {
-            let mut game = tick.game.borrow_mut();
-            if game.frame() {
-                tick.view.set(game.view());
+        let game = Rc::new(RefCell::new(game));
+        // A NES frame a step, every frame owed after a stall (half a
+        // second's at most), so a slow turn of the loop does not slow the
+        // game down.
+        let ticking = game.clone();
+        let clock = fixed_step(FRAME, move |_, steps| {
+            let mut game = ticking.borrow_mut();
+            let mut changed = false;
+            for _ in 0..steps {
+                changed |= game.frame();
             }
-        });
+            if changed {
+                view.set(game.view());
+            }
+        })
+        .max_catch_up(30);
+        let shared = Shared { game, view, clock };
+        shared.act(|_| ());
 
         let state = memo(move || view.with(|v| v.state));
-        let size = viewport();
-        let too_small = memo(move || {
-            let (w, h) = size.get();
-            w < SCREEN_WIDTH || h < SCREEN_HEIGHT
-        });
-        let screen = move || {
-            // The screen's colour is a style on it: a `fill` layer under the
-            // switch would be painted over, as a layer is opaque.
-            let screen = layers([
-                switch(
-                    move || state.get(),
-                    move |state| match state {
-                        State::Start => start_screen(),
-                        State::Playing => playing(view),
-                        State::Paused => paused_screen(),
-                        State::GameOver => game_over_screen(view),
-                    },
-                ),
-                at(label(CONTROLS).no_wrap(), 2, 27, 60, 1).style(&format!("white on {BG}")),
-            ])
-            .style(&format!("on {BG}"));
-            // The backdrop round it: the original tiles a pattern of grey
-            // blocks; `fill` takes one glyph, and only round the screen.
-            let backdrop = || fill("▓", "color(236) on color(235)");
-            column([
-                backdrop(),
-                row([backdrop(), screen.fixed(SCREEN_WIDTH), backdrop()]).fixed(SCREEN_HEIGHT),
-                backdrop(),
-            ])
-        };
-        let small = || {
-            boxed(label(format!(
-                "[b]Terminal must be at least {SCREEN_WIDTH} x {SCREEN_HEIGHT}![/]\n\n{ZOOM_TIP}"
-            )))
-            .style(&format!("bright_black on {BG}"))
-        };
-        switch(
-            move || too_small.get(),
-            move |small_screen| if small_screen { small() } else { screen() },
-        )
+        // The screen's colour is a `fill` under it (its `.style` alone lets
+        // the backdrop show through the room between its boxes), the
+        // backdrop a `fill` in a layer below, showing round it. The
+        // original tiles a pattern of grey blocks; `fill` takes one glyph.
+        let screen = layers([
+            fill(" ", &format!("on {BG}")),
+            switch(
+                move || state.get(),
+                move |state| match state {
+                    State::Start => start_screen(),
+                    State::Playing => playing(view),
+                    State::Paused => paused_screen(),
+                    State::GameOver => game_over_screen(view),
+                },
+            ),
+            at(label(CONTROLS).no_wrap(), 2, 27, 60, 1).style(&format!("white on {BG}")),
+        ])
+        .style(&format!("on {BG}"));
+        layers([
+            fill("▓", "color(236) on color(235)"),
+            column([row([screen.fixed(SCREEN_WIDTH)])
+                .justify(Justify::Center)
+                .fixed(SCREEN_HEIGHT)])
+            .justify(Justify::Center),
+        ])
         .on_key("left", shared.key(|g| g.shift(-1)))
+        .repeat(SHIFT_DELAY, SHIFT_RATE)
         .on_key("right", shared.key(|g| g.shift(1)))
+        .repeat(SHIFT_DELAY, SHIFT_RATE)
         .on_key("down", shared.key(Game::soft_drop))
+        .repeat(DROP_RATE, DROP_RATE)
         .on_key("up", shared.key(Game::hard_drop))
         .on_key("pageup", shared.key(|g| g.rotate(-1)))
         .on_key("pagedown", shared.key(|g| g.rotate(1)))
@@ -910,6 +942,14 @@ pub fn game_app(game: Game) -> App {
         .on_key("space", shared.key(Game::space))
         .on_key("q", |cx| cx.quit())
     })
+    .min_size(
+        SCREEN_WIDTH,
+        SCREEN_HEIGHT,
+        format!(
+            "[b]Terminal must be at least {SCREEN_WIDTH} x {SCREEN_HEIGHT}![/]\n\n{}",
+            ZOOM_TIP.replace('\n', " ")
+        ),
+    )
 }
 
 fn main() -> std::io::Result<()> {
