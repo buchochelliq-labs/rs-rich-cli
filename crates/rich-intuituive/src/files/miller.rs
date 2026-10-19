@@ -5,18 +5,21 @@
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 
+use rich::markup::escape;
 use rich_ext::git::GitStatus;
 use rich_ext::listing::{read_dir, Entry, Sort};
 
 use super::model::{dir_model_with, DirModel};
-use super::preview::{preview, Preview, PreviewOptions, PreviewSettings};
+use super::preview::{preview, BinaryPreview, Preview, PreviewOptions, PreviewSettings, Previewer};
 use super::row::{file_list, FileListOptions, Linemode, Marker, MarkerFn};
+use super::search::Search;
 use crate::app::Ctx;
 use crate::list::RowRects;
 use crate::miller::{miller_in, MillerSource};
 use crate::node::{label, row, Node};
 use crate::reactive::{memo, signal, Memo, Signal};
 use crate::screen::Rect;
+use crate::select::{list_search, MultiSelect};
 
 /// A directory tree as the core's Miller columns browse it: the current
 /// directory's and the parent's items come from their models (sorted,
@@ -28,6 +31,7 @@ struct DirTree {
     parent: DirModel,
     find: Signal<Option<String>>,
     preview_top: Signal<u16>,
+    search: Signal<Option<Search>>,
 }
 
 impl DirTree {
@@ -89,6 +93,11 @@ impl MillerSource for DirTree {
         self.find.set(None);
         self.current.filter.set(String::new());
         self.preview_top.set(0);
+        // Anywhere else, a search's listing ends.
+        if let Some(search) = self.search.replace(None) {
+            search.cancel();
+            self.current.results.replace(None);
+        }
     }
 }
 
@@ -141,14 +150,25 @@ pub struct Miller {
     preview_cursor: Signal<usize>,
     preview_first: Signal<usize>,
     icons: bool,
+    /// The selection [`selection`](crate::files::selection) made for it.
+    pub(crate) selection: Signal<Option<MultiSelect<PathBuf>>>,
+    /// The search whose results the current column lists.
+    search: Signal<Option<Search>>,
 }
 
-/// What a [`Miller::view_with`] draws besides the entries.
+/// What [`MillerOptions::on_context`] runs.
+type OnEntryContext = Rc<std::cell::RefCell<dyn FnMut(&Entry, &mut Ctx)>>;
+
+/// What a [`Miller::view_with`] draws besides the entries, and what it
+/// gives the columns' lists.
 #[derive(Clone, Default)]
 pub struct MillerOptions {
     markers: Option<MarkerFn>,
     git: Option<Signal<Option<GitStatus>>>,
     previewers: PreviewOptions,
+    caps: Option<(String, String)>,
+    context: Option<OnEntryContext>,
+    hooks: crate::miller::MillerOptions,
 }
 
 impl MillerOptions {
@@ -180,6 +200,59 @@ impl MillerOptions {
         previewer: impl Fn(&Path, &str, &PreviewSettings) -> Option<Preview> + Send + Sync + 'static,
     ) -> MillerOptions {
         self.previewers = self.previewers.previewer(previewer);
+        self
+    }
+
+    /// A [`Previewer`] (a built-in one: [`Previewer::file_type`]), asked
+    /// before the built-in ones.
+    pub fn previewer_of(mut self, previewer: Previewer) -> MillerOptions {
+        self.previewers = self.previewers.previewer_of(previewer);
+        self
+    }
+
+    /// How the preview shows a binary file: a hex dump, or what `file`
+    /// says it is (see [`PreviewOptions::binary`]).
+    pub fn binary(mut self, binary: BinaryPreview) -> MillerOptions {
+        self.previewers = self.previewers.binary(binary);
+        self
+    }
+
+    /// Round the current column's hovered row with `open` and `close`
+    /// (Yazi's `"\u{e0b6}"` and `"\u{e0b4}"` with a Nerd Font), in the
+    /// row's colour: [`FileListOptions::hovered_caps`].
+    pub fn hovered_caps(mut self, open: &str, close: &str) -> MillerOptions {
+        self.caps = Some((open.to_string(), close.to_string()));
+        self
+    }
+
+    /// Run `handler` with an entry of the current column pressed with the
+    /// right button (it is hovered first), or hovered when the menu key
+    /// (or Shift+F10) is pressed: a context menu on a file, opened at
+    /// `cx.pointer()` (`None` from the keyboard; then below the hovered
+    /// row, [`Miller::row_rects`]). The list's
+    /// [`on_context`](Node::on_context).
+    pub fn on_context(mut self, handler: impl FnMut(&Entry, &mut Ctx) + 'static) -> MillerOptions {
+        self.context = Some(Rc::new(std::cell::RefCell::new(handler)));
+        self
+    }
+
+    /// Give the current column's list to `hook`, for any list option
+    /// (`.current(|list| list.wheel_step(1))`): the core's
+    /// [`MillerOptions::current`](crate::miller::MillerOptions::current).
+    pub fn current(mut self, hook: impl Fn(Node) -> Node + 'static) -> MillerOptions {
+        self.hooks = self.hooks.current(hook);
+        self
+    }
+
+    /// Give the parent column's list to `hook`.
+    pub fn parent(mut self, hook: impl Fn(Node) -> Node + 'static) -> MillerOptions {
+        self.hooks = self.hooks.parent(hook);
+        self
+    }
+
+    /// Give the preview pane to `hook`.
+    pub fn preview(mut self, hook: impl Fn(Node) -> Node + 'static) -> MillerOptions {
+        self.hooks = self.hooks.preview(hook);
         self
     }
 }
@@ -220,12 +293,14 @@ pub fn miller(start: impl Into<PathBuf>) -> Miller {
     let (current, parent) = (current.watch(), parent.watch());
     let find = signal(None);
     let preview_top = signal(0);
+    let search = signal(None);
     let tree = DirTree {
         cwd,
         current,
         parent,
         find,
         preview_top,
+        search,
     };
     let columns = miller_in(tree, cwd);
     let cursor = columns.cursor;
@@ -250,6 +325,8 @@ pub fn miller(start: impl Into<PathBuf>) -> Miller {
         preview_cursor: signal(0),
         preview_first: signal(0),
         icons: false,
+        selection: signal(None),
+        search,
     }
 }
 
@@ -292,6 +369,45 @@ impl Miller {
         self.columns.remembered(&dir.to_path_buf())
     }
 
+    /// The directories shown so far, the most recent last (the current one
+    /// among them), a signal: Z's choices in a session, and what a
+    /// [`frecency`](crate::files::frecency) store
+    /// [follows](crate::files::Frecency::follow).
+    pub fn visited(&self) -> Signal<Vec<PathBuf>> {
+        self.columns.visited()
+    }
+
+    /// What an action acts on (Yazi's yank, cut, delete, open): the
+    /// [`selection`](crate::files::selection)'s paths (a visual range
+    /// counted), else the hovered entry's; subscribing, so a status line
+    /// can count them.
+    pub fn targets(&self) -> Vec<PathBuf> {
+        let cwd = self.cwd;
+        let hovered = self.hovered.get().map(|e| cwd.with(|d| d.join(e.name)));
+        match self.selection.get_untracked() {
+            Some(selection) => selection.targets(hovered),
+            None => hovered.into_iter().collect(),
+        }
+    }
+
+    /// Move to the next entry the find query matches (smart case), after
+    /// the cursor, wrapping; with `previous`, the one before (Yazi's `n`
+    /// and `N`). The index it went to, or `None` with no match. The
+    /// core's [`list_search`] over the current column's names.
+    pub fn find_next(&self, previous: bool) -> Option<usize> {
+        let (find, entries) = (self.find, self.current.entries());
+        let search = list_search(
+            move || find.get().unwrap_or_default(),
+            move || entries.with(|e| e.iter().map(|e| escape(&e.name)).collect()),
+            self.cursor,
+        );
+        if previous {
+            search.previous()
+        } else {
+            search.next()
+        }
+    }
+
     /// Move the cursor to `to`, kept in the listing.
     pub fn move_to(&self, to: isize) {
         self.columns.move_to(to);
@@ -323,14 +439,61 @@ impl Miller {
         self.columns.leave();
     }
 
-    /// Read both directories again (after changing files), keeping the
-    /// hovered entry where it is if it is still there.
+    /// Read both directories again (after changing files). The cursor
+    /// stays on the hovered entry while it is there, as it does through a
+    /// re-sort, a filter or hidden files shown (it is kept by name).
     pub fn refresh(&self) {
-        let (current, parent) = (self.current, self.parent);
-        self.columns.keep(|| {
-            current.refresh();
-            parent.refresh();
-        });
+        self.current.refresh();
+        self.parent.refresh();
+    }
+
+    /// List `search`'s results in the current column, in place of its
+    /// root's entries (Yazi's search listing): the columns go to the root,
+    /// each result named by its path from there, and its results arrive
+    /// while it runs. Entering a directory, going up or anywhere else ends
+    /// it, as [`end_search`](Self::end_search) does.
+    ///
+    /// ```
+    /// use intuituive::files::{miller, search, SearchKind};
+    /// use intuituive::prelude::*;
+    ///
+    /// let dir = std::env::temp_dir().join(format!("intuituive-show-search-doc-{}", std::process::id()));
+    /// std::fs::create_dir_all(dir.join("src")).unwrap();
+    /// std::fs::write(dir.join("src/lib.rs"), "").unwrap();
+    /// std::fs::write(dir.join("notes.md"), "").unwrap();
+    /// let start = dir.clone();
+    /// let app = App::new(move || {
+    ///     let m = miller(start.clone());
+    ///     let root = start.clone();
+    ///     m.navigation(m.view()).on_key("s", move |_| m.show_search(search(&root, "lib", SearchKind::Name)))
+    /// })
+    /// .wait_for_tasks(true);
+    /// let mut driver = app.driver(60, 3);
+    /// driver.press("s");
+    /// driver.settle();
+    /// let row = driver.screen().plain()[0].replace('\\', "/");
+    /// assert!(row.contains("src/lib.rs") && !row.contains("notes.md"), "{row}");
+    /// # std::fs::remove_dir_all(&dir).ok();
+    /// ```
+    pub fn show_search(&self, search: Search) {
+        self.cd(search.root(), None);
+        self.search.replace(Some(search));
+        self.current.results.replace(Some(search.found()));
+        self.cursor.set(0);
+    }
+
+    /// The search the current column lists, if any (subscribing): for a
+    /// header that says `search: lib`.
+    pub fn searching(&self) -> Option<Search> {
+        self.search.with(|s| *s)
+    }
+
+    /// Stop listing a search's results: the directory's own entries again.
+    pub fn end_search(&self) {
+        if let Some(search) = self.search.replace(None) {
+            search.cancel();
+            self.current.results.replace(None);
+        }
     }
 
     /// Bind Yazi's movement keys on `node` (which should hold the view):
@@ -354,12 +517,16 @@ impl Miller {
         self.view_with(MillerOptions::new())
     }
 
-    /// The three columns: markers and git signs as `options` says.
+    /// The three columns: markers, git signs, the hovered row's caps, a
+    /// context handler and list options as `options` says. A
+    /// [`selection`](crate::files::selection) made for these columns is
+    /// marked in them.
     pub fn view_with(self, options: MillerOptions) -> Node {
+        let hooks = &options.hooks;
         self.columns.layout(
-            self.parent_column(&options),
-            self.current_column(&options),
-            self.preview_column(&options),
+            hooks.wrap_parent(self.parent_column(&options)),
+            hooks.wrap_current(self.current_column(&options)),
+            hooks.wrap_preview(self.preview_column(&options)),
         )
     }
 
@@ -374,19 +541,50 @@ impl Miller {
         if let Some(git) = options.git {
             list = list.git(git);
         }
-        // The list's own wheel and clicks move the cursor.
-        let node = file_list(self.current, self.cursor, list)
+        if let Some((open, close)) = &options.caps {
+            list = list.hovered_caps(open, close);
+        }
+        let (cwd, entries) = (self.cwd, self.current.entries());
+        // An entry's key: its path, so a cursor or a mark never follows a
+        // name into another directory.
+        let path_at = move |i: usize| {
+            let name = entries.with(|e| e.get(i).map(|e| e.name.clone()));
+            cwd.with(|dir| name.map(|n| dir.join(n)).unwrap_or_default())
+        };
+        // The list's own wheel and clicks move the cursor; a re-sort, a
+        // filter or a new listing keeps it on its entry.
+        let mut node = file_list(self.current, self.cursor, list)
+            .cursor_by(path_at)
             .name("current")
             .autofocus();
+        if let Some(selection) = self.selection.get_untracked() {
+            node = node.selection_markers(selection, path_at);
+        }
+        if let Some(context) = options.context.clone() {
+            node = node.on_context(move |i, cx| {
+                if let Some(entry) = entries.with_untracked(|e| e.get(i).cloned()) {
+                    (context.borrow_mut())(&entry, cx);
+                }
+            });
+        }
         self.columns.track_current(node)
     }
 
     fn parent_column(self, options: &MillerOptions) -> Node {
         let m = self;
-        let markers: Option<MarkerFn> = options
-            .markers
-            .clone()
-            .map(|f| Rc::new(move |_, path: &Path| f(None, path)) as MarkerFn);
+        let selection = self.selection.get_untracked();
+        let markers: Option<MarkerFn> = match (options.markers.clone(), selection) {
+            (None, None) => None,
+            (marker, selection) => Some(Rc::new(move |_, path: &Path| {
+                // The selection's mark first, as the current column draws
+                // it (the parent has no visual range).
+                let key = path.to_path_buf();
+                if selection.is_some_and(|s| s.mark(&key) == crate::select::Mark::Selected) {
+                    return Marker::Selected;
+                }
+                marker.as_ref().map_or(Marker::None, |f| f(None, path))
+            })),
+        };
         let list = FileListOptions::new()
             .icons(self.icons)
             .offset(self.columns.parent_first)

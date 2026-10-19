@@ -7,7 +7,7 @@ use std::sync::Arc;
 
 use rich_ext::filetype;
 use rich_ext::git::GitStatus;
-use rich_ext::listing::{read_dir, smart_contains, Entry, Sort};
+use rich_ext::listing::{read_dir, smart_contains, sort_entries, Entry, Sort};
 
 use crate::reactive::{memo, signal, Memo, Signal};
 use crate::task::spawn;
@@ -38,6 +38,9 @@ pub struct DirModel {
     listing: Memo<Result<Vec<Entry>, String>>,
     entries: Memo<Vec<Entry>>,
     sniffed: Signal<Sniffed>,
+    /// A listing of its own in place of the directory's (a search's
+    /// results), its names paths from the directory.
+    pub(crate) results: Signal<Option<Signal<Vec<Entry>>>>,
 }
 
 /// The entries of the directory `dir` gives (which may read signals, so
@@ -77,15 +80,23 @@ pub fn dir_model_with(
 ) -> DirModel {
     let dir = memo(dir);
     let tick = signal(0u64);
+    let results: Signal<Option<Signal<Vec<Entry>>>> = signal(None);
     let listing = memo(move || {
         tick.get();
         let (hidden, sort) = (hidden.get(), sort.get());
+        if let Some(found) = results.get() {
+            let mut found = found.get();
+            sort_entries(&mut found, sort);
+            return Ok(found);
+        }
         match dir.get() {
             Some(dir) => read_dir(&dir, hidden, sort).map_err(|e| e.to_string()),
             None => Ok(Vec::new()),
         }
     });
-    with_listing(dir, listing, hidden, sort, tick)
+    let mut model = with_listing(dir, listing, hidden, sort, tick);
+    model.results = results;
+    model
 }
 
 /// A model of the entries `listing` gives for the directory `dir`, read
@@ -128,6 +139,7 @@ fn with_listing(
         listing,
         entries,
         sniffed: signal(Sniffed::default()),
+        results: signal(None),
     }
 }
 

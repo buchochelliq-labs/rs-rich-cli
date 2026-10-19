@@ -60,11 +60,17 @@
 
 mod crumb;
 mod finder;
+mod frecency;
 mod miller;
 mod model;
 mod open;
 mod preview;
 mod row;
+mod search;
+mod select;
+mod shell;
+mod spot;
+mod tabs;
 mod tasks;
 
 use std::sync::atomic::Ordering;
@@ -72,16 +78,24 @@ use std::sync::atomic::Ordering;
 /// The core's [`hex_view`](crate::widgets::hex_view), here too.
 pub use crate::widgets::hex_view;
 pub use crumb::{home_dir, path_crumb, path_crumb_at, path_parts};
-pub use finder::{finder, Finder};
+pub use finder::{finder, finder_with, Finder};
+pub use frecency::{frecency, frecency_at, state_dir, Frecency, Visit};
 pub use miller::{miller, Miller, MillerOptions};
 pub use model::{dir_model, dir_model_with, git_status, DirModel};
-pub use open::{open_with, opener_rules};
-pub use preview::{load_preview, preview, Preview, PreviewOptions, PreviewSettings, Previewer};
+pub use open::{open_with, open_with_tasks, opener_rules};
+pub use preview::{
+    load_preview, preview, BinaryPreview, Preview, PreviewOptions, PreviewSettings, Previewer,
+};
 pub use row::{
     coloured_permissions, entry_markup, file_list, linemode_cell, EntryLook, FileListOptions,
     Linemode, Marker,
 };
-pub use tasks::{tasks, tasks_panel, Job, JobState, Tasks};
+pub use search::{search, Search, SearchKind};
+pub use select::{selection, Yank};
+pub use shell::{bulk_rename, shell, shell_command, ShellOptions};
+pub use spot::{spot, spot_facts};
+pub use tabs::{tabs, FileTab, FileTabs};
+pub use tasks::{tasks, tasks_panel, tasks_panel_with, Job, JobState, JobsPanelOptions, Tasks};
 
 /// The listing types the components take, from rs-rich-ext.
 pub use rich_ext::git::{Change, GitStatus};
