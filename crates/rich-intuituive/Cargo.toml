@@ -120,3 +120,8 @@ rich-ratatui = { package = "rs-rich-ratatui", path = "../rich-ratatui", features
 [[example]]
 name = "files"
 required-features = ["files"]
+
+# The gitui clone runs the `git` command line; rs-rich-ext's `local-time`
+# (a dev-dependency feature) shows the commits' times.
+[[example]]
+name = "git"
