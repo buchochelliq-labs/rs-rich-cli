@@ -254,11 +254,11 @@ impl StyleTable {
         let mut map = vec![StyleRemap::GONE; self.styles.len()];
         map[0] = 0;
         let mut next = 1usize;
-        for old in 1..self.styles.len() {
+        for (old, new) in map.iter_mut().enumerate().skip(1) {
             if !keep.get(old).copied().unwrap_or(false) {
                 continue;
             }
-            map[old] = next as u32;
+            *new = next as u32;
             if old != next {
                 self.styles.swap(old, next);
                 self.keys[next] = self.keys[old];
@@ -393,12 +393,11 @@ impl FxHasher {
 impl Hasher for FxHasher {
     #[inline]
     fn write(&mut self, bytes: &[u8]) {
-        let mut chunks = bytes.chunks_exact(8);
-        for chunk in &mut chunks {
-            self.add(u64::from_le_bytes(chunk.try_into().expect("eight bytes")));
+        let (words, tail) = bytes.as_chunks::<8>();
+        for word in words {
+            self.add(u64::from_le_bytes(*word));
         }
         let mut rest = [0u8; 8];
-        let tail = chunks.remainder();
         rest[..tail.len()].copy_from_slice(tail);
         self.add(u64::from_le_bytes(rest) ^ (tail.len() as u64) << 56);
     }

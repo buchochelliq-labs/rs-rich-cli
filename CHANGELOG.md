@@ -9,6 +9,37 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Rendering: styles that don't pile up, fast pixel cells (rs-rich-ext, rs-rich-intuituive)
+
+A full screen of truecolour pixels added thousands of styles a frame that
+were never dropped, the painter copied the whole style table every paint,
+and interning hashed with SipHash: the raycaster's, the sprite stage's and
+real Doom's finding ([the demo gaps](docs/design/intuituive-demo-gaps.md),
+"Round 5" and "Real Doom"; [raycast](docs/design/gaps/raycast.md)). A
+160x50 frame of random half blocks now takes 8 ms in release instead of
+224 ms (80x24: 1.5 ms instead of 48), with the same bytes; a dashboard
+tick is unchanged (about 0.02 ms, 18 bytes).
+
+- **rs-rich-ext `frame::StyleTable`:** interns with a local Fx hash and a
+  chain of ids per key, not SipHash and a `Vec` per bucket;
+  `intern_rgb(fg, bg)` interns a colour pair, building the `Style` only
+  the first time, and `rgb(id)` reads it back; `retain(&keep)` drops what
+  is unused and returns a `StyleRemap` (`get`, `get_or_gone`); `piled_up`
+  says when that is worth it. `StyleId::GONE` is no style's id.
+- **rs-rich-ext `surface::Screen`:** `put_rgb(x, y, ch, fg, bg)` and
+  `put(x, y, ch, style_id)` set one cell without a segment or a style;
+  `compact_styles()` drops the styles no cell uses, `styles_piled_up()`
+  and `style_count()` say how many there are; `underlay`/`restyle`
+  combine each pair of styles once, and `blit` translates each style once.
+- **rs-rich-ext `surface::Painter`:** keeps only the cells it sent, not a
+  copy of the style table each paint; writes true-colour pairs' SGR
+  straight from the colours; `remap_styles(&remap)` follows a compaction
+  and `compact(&mut screen)` does one when the table has piled up.
+  `Surface` compacts after each frame.
+- **intuiTUIve:** `Canvas::put_rgb` and `DrawCx::rect()`; the `pixels`
+  node draws its cells with `put_rgb` (same output); the app compacts its
+  screen after each paint, and a viewport its content.
+
 ### intuiTUIve: sprites, stages and pixel buffers (rs-rich-intuituive)
 
 Cell art that moves over a backdrop, and a framebuffer drawn in cells: the

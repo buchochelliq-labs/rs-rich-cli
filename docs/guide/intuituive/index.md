@@ -1466,6 +1466,17 @@ What a widget can do:
     on a part.
   - `cx.report_movement()` turns on movement events without redrawing on
     them.
+- **Where it is:** `cx.rect()` in `draw` is its rectangle on the screen
+  (in a viewport's content, inside one), as `EventCx::rect` is in
+  `event`: for what is drawn outside the cells, a terminal graphic over
+  the widget.
+- **A picture a cell at a time:** `canvas.put_rgb(x, y, '▀', Some(fg),
+  Some(bg))` sets one cell with plain RGB colours, building no segment
+  and no style (the pixel nodes draw with it): a full screen of half
+  blocks whose every colour changes each frame costs about 8 ms at
+  160x50 in a release build, painting included (`tests/pixel_frames.rs`).
+  Styles no cell uses any more are dropped between frames, so such a
+  screen keeps only a frame's worth of them.
 - **`measure`** says how big it wants to be, for `Size::Auto` and for
   modals sized to their content. `MeasureCx::measure`, `extent` and
   `stack` measure and lay out children as the built-in nodes do.

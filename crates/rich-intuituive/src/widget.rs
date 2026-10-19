@@ -752,7 +752,7 @@ impl DrawCx<'_> {
     ///     }
     /// }
     ///
-    /// let app = App::new(|| column([text("top").fixed(1), widget(Where)]));
+    /// let app = App::new(|| column([label("top").fixed(1), widget(Where)]));
     /// let mut driver = app.driver(12, 3);
     /// driver.settle();
     /// assert_eq!(driver.screen().plain()[1].trim_end(), "0,1 12x2");
