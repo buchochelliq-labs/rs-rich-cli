@@ -9,6 +9,78 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve's audio plugin, rounded out (rs-rich-intuituive)
+
+Round 2 of [the demo gaps](docs/design/intuituive-demo-gaps.md) found what
+the scope-tui rebuild still lacked from the `audio` feature.
+
+- **Breaking: `audio::input` returns `Signal<Option<Frame>>`**, the shape
+  of `latest`'s: `None` before the first buffer, then the newest `Frame {
+  number, samples }`. Numbered, so a watch sees every buffer, digital
+  silence included (frames per second now count silent buffers too). The
+  scope example takes it so.
+- **Devices by id:** `Device { id, name, default, host }`. `input` and
+  `AudioOptions::device` take the id (ALSA's `null`, `pulse`,
+  `hw:CARD=…`), then a name, exactly or in part; the name is the
+  description to show. `Device::configs()` lists channels, rate range,
+  buffer range and sample format, as scope-tui's `audio --list` does.
+- **`audio::open(AudioOptions)` before the app**, so a missing device fails
+  before the terminal is taken, with `capture.samples()` and
+  `capture.status()` inside it. `AudioStatus` is `Running`,
+  `Stalled(since)` (no buffer for `stall_after`) or `Failed(why)` (cpal's
+  stream error; glitches and reroutes are not failures): enough to enforce
+  `--timeout`. `AudioOptions::latency(frames)` sets the driver's or
+  server's buffer.
+- **ALSA keeps quiet:** its `ALSA lib …` lines are taken by a thread-local
+  handler (`snd_lib_error_set_local`) while devices are listed and opened,
+  kept for `audio::messages()`, and passed to a `Log` with
+  `capture.log(log)`.
+- **PulseAudio and PipeWire:** the new `pulse` feature turns on cpal's own
+  PulseAudio client (pure Rust, no libpulse): `Host::Pulse` lists every
+  source, a sink's monitor among them, and `devices_on(host)` lists a
+  host's inputs.
+- **`audio::pcm(reader, Format, channels, buffer)`** reads interleaved raw
+  PCM (`u8`, `s8`, `s16le/be`, `s24le`, `s32le/be`, `f32le/be`, `f64le`;
+  `Format::parse("S16_LE")`) as buffers, in every build. The new `wav`
+  feature (hound) adds `audio::wav(path, buffer)`, `audio::wav_writer` and
+  `audio::record(samples, path, rate, channels)`.
+- **`audio::picker(on_pick)`**: a list of the inputs, the default selected,
+  Enter picks, `r` lists again.
+
+### intuiTUIve: meters, sparklines and big text (rs-rich-intuituive)
+
+- **`meter(level, peak)`**, a `LevelMeter` node; `.hold(duration)` keeps
+  the highest peak marked for that long. `meter_with(.., configure)` sets
+  its label, readout, decibel scale or orientation.
+- **`sparkline(values)`** (and `sparkline_with`): rs-rich-ext's
+  `Sparkline` over a closure that reads signals.
+- **`big_text(markup)`** behind the `art` feature: markup in FIGlet
+  letters through rs-rich-art, each run in its style.
+
+Each reads aloud as its chart does.
+
+### Sound and charts (rs-rich-ext, rs-rich-ratatui)
+
+- **`dsp`:** test signals (`tone`, `partials`, `noise` with
+  `.low_pass(..)`, `mix`), `trigger(samples, level, depth, Edge)`,
+  `note_hz("A4")` and `nearest_note(hz)`, and `spectrum_full` (every bin,
+  as scope-tui plots them).
+- **`chart::Axis::grid([..])`**: grid lines at those values, in the axis's
+  style, under the datasets (the spectroscope's 29 reference datasets
+  become one call).
+- **`chart::Chart::style(..)`**, ratatui's `Chart::style`: under every
+  cell, and the legend's box takes it by default; `legend_style` still
+  wins.
+- **`chart::Spectrogram`**: a waterfall of spectra, the newest at the top,
+  in a heatmap's shades, on a linear or log frequency axis.
+- **`chart::LevelMeter`** and **`chart::PeakHold`**: an audio level meter,
+  green to red, with peak and held-peak marks, linear or in decibels,
+  across or up.
+- **`palette::style_from_color_name`** moves here from rs-rich-ratatui,
+  which re-exports it (its path and behaviour are unchanged, and a test
+  checks it against ratatui's parser); rs-rich-ratatui now depends on
+  rs-rich-ext without its default features.
+
 ### intuiTUIve's Yazi example on the new components (rs-rich-intuituive)
 
 Round 2 of [the demo gaps](docs/design/intuituive-demo-gaps.md):

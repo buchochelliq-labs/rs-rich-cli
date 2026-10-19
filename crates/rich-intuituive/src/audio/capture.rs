@@ -1,105 +1,560 @@
-//! Capturing sound: a signal that holds the newest buffer of samples from
-//! a sound card. Behind the off-by-default `audio` feature, on
-//! [cpal](https://docs.rs/cpal) (ALSA on Linux, CoreAudio on macOS, WASAPI
-//! on Windows). Building it on Linux needs ALSA's headers
-//! (`libasound2-dev` or `alsa-lib-devel`).
-//!
-//! [`input`] opens a device and returns a [`Signal`] of a [`Matrix`]: one
-//! row a channel, `buffer` samples long, each from -1 to 1. Every time
-//! the device has captured another `buffer` frames the signal changes, so a
-//! node drawing an oscilloscope or a spectrum from it draws again. The app
-//! always gets the newest buffer: one that arrives while the last is still
-//! waiting for the app's thread replaces it, so a slow frame drops buffers
-//! instead of falling behind.
-//!
-//! ```no_run
-//! use intuituive::audio;
-//! use intuituive::prelude::*;
-//!
-//! for device in audio::devices() {
-//!     println!("{}{}", device.name, if device.default { " (default)" } else { "" });
-//! }
-//! App::new(|| {
-//!     let samples = audio::input(None, 48_000, 2, 1024).expect("a microphone");
-//!     text(move || {
-//!         let peak = samples.with(|m| m.iter().flatten().fold(0.0f64, |a, s| a.max(s.abs())));
-//!         format!("peak {peak:.2}")
-//!     })
-//!     .on_key("q", |cx| cx.quit())
-//! })
-//! .run()
-//! # .unwrap();
-//! ```
+//! Capturing from a sound card into signals, through cpal: the devices,
+//! their configurations, and a capture with its status.
 
-use std::fmt;
-use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::atomic::{AtomicBool, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Mutex};
-use std::time::Duration;
+use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
 
-use crate::reactive::{signal, Runtime, Signal};
+use super::{error, AudioError, Frame, Matrix};
+use crate::log::Log;
+use crate::reactive::{signal, Proxy, Runtime, Signal};
 
-/// One buffer of samples: one row a channel, each sample from -1 to 1.
-pub type Matrix = Vec<Vec<f64>>;
+/// The sound system a device is reached through.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum Host {
+    /// The platform's default: ALSA on Linux (PulseAudio when the `pulse`
+    /// feature is on and a server is running), CoreAudio on macOS, WASAPI
+    /// on Windows.
+    #[default]
+    Default,
+    /// ALSA's devices and PCMs, Linux only.
+    Alsa,
+    /// A PulseAudio server, or PipeWire's (`pipewire-pulse`), with the
+    /// `pulse` feature on Linux: every source, a sink's monitor among
+    /// them (`….monitor`), what a scope of "what is playing" wants.
+    Pulse,
+}
+
+impl Host {
+    fn open(self) -> Result<cpal::Host, AudioError> {
+        match self {
+            Host::Default => Ok(cpal::default_host()),
+            #[cfg(target_os = "linux")]
+            Host::Alsa => cpal::host_from_id(cpal::HostId::Alsa).map_err(error),
+            #[cfg(not(target_os = "linux"))]
+            Host::Alsa => Err(error("ALSA is only on Linux")),
+            #[cfg(all(feature = "pulse", target_os = "linux"))]
+            Host::Pulse => cpal::host_from_id(cpal::HostId::PulseAudio).map_err(error),
+            #[cfg(not(all(feature = "pulse", target_os = "linux")))]
+            Host::Pulse => Err(error(
+                "PulseAudio needs intuiTUIve's `pulse` feature (on Linux)",
+            )),
+        }
+    }
+}
 
 /// A sound card input, as [`devices`] lists it.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Device {
-    /// The name [`input`] takes.
+    /// What [`input`] and [`AudioOptions::device`] take: ALSA's PCM name
+    /// (`default`, `pulse`, `hw:CARD=PCH,DEV=0`), PulseAudio's source name
+    /// (`alsa_input.pci-0000_00_1f.3.analog-stereo`), or the platform's own
+    /// id. It stays the same from one run to the next.
+    pub id: String,
+    /// What to show: the description's first line ("HDA Intel PCH, ALC892
+    /// Analog", "Monitor of Built-in Audio"), or the id when there is none.
     pub name: String,
-    /// Whether it is the system's default input.
+    /// Whether it is the host's default input.
     pub default: bool,
+    /// The host it was listed on.
+    pub host: Host,
 }
 
-/// Why [`input`] could not open a device.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct AudioError(String);
-
-impl fmt::Display for AudioError {
-    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
-        f.write_str(&self.0)
+impl Device {
+    /// What the device can capture: each configuration its driver offers,
+    /// as `audio --list` prints them in scope-tui. Empty when the device
+    /// cannot be reached (gone, or busy and closed to probing).
+    ///
+    /// ```no_run
+    /// for device in intuituive::audio::devices() {
+    ///     for config in device.configs() {
+    ///         println!("{}: {config}", device.id);
+    ///     }
+    /// }
+    /// ```
+    pub fn configs(&self) -> Vec<DeviceConfig> {
+        let _quiet = quiet();
+        let Ok(host) = self.host.open() else {
+            return Vec::new();
+        };
+        let Ok(device) = find(&host, &self.id) else {
+            return Vec::new();
+        };
+        let Ok(ranges) = device.supported_input_configs() else {
+            return Vec::new();
+        };
+        ranges
+            .map(|range| DeviceConfig {
+                channels: range.channels(),
+                min_rate: range.min_sample_rate(),
+                max_rate: range.max_sample_rate(),
+                buffer: match range.buffer_size() {
+                    cpal::SupportedBufferSize::Range { min, max } => Some((*min, *max)),
+                    cpal::SupportedBufferSize::Unknown => None,
+                },
+                format: range.sample_format().to_string(),
+            })
+            .collect()
     }
 }
 
-impl std::error::Error for AudioError {}
+/// One configuration a [`Device`] can capture in.
+#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+pub struct DeviceConfig {
+    /// Channels.
+    pub channels: u16,
+    /// The lowest sample rate, in Hz.
+    pub min_rate: u32,
+    /// The highest sample rate, in Hz.
+    pub max_rate: u32,
+    /// The smallest and largest buffer, in frames, when the driver says.
+    pub buffer: Option<(u32, u32)>,
+    /// The sample format, as cpal names it (`i16`, `f32`, …).
+    pub format: String,
+}
 
-fn error(what: impl fmt::Display) -> AudioError {
-    AudioError(what.to_string())
+impl std::fmt::Display for DeviceConfig {
+    /// `2 channels, 8000-192000 Hz, buffer 32-65536, i16`.
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        let channels = if self.channels == 1 {
+            "channel"
+        } else {
+            "channels"
+        };
+        write!(f, "{} {channels}, ", self.channels)?;
+        if self.min_rate == self.max_rate {
+            write!(f, "{} Hz", self.min_rate)?;
+        } else {
+            write!(f, "{}-{} Hz", self.min_rate, self.max_rate)?;
+        }
+        if let Some((min, max)) = self.buffer {
+            write!(f, ", buffer {min}-{max}")?;
+        }
+        write!(f, ", {}", self.format)
+    }
 }
 
 /// The input devices of the default host, the default one marked. Empty,
 /// never a panic, on a machine without sound (a container, a CI runner) or
 /// when the sound system cannot be reached.
 pub fn devices() -> Vec<Device> {
-    let host = cpal::default_host();
-    let default = host.default_input_device().map(|d| d.to_string());
-    let Ok(inputs) = host.input_devices() else {
-        return Vec::new();
-    };
-    inputs
-        .map(|device| {
-            let name = device.to_string();
-            Device {
-                default: default.as_deref() == Some(name.as_str()),
-                name,
-            }
-        })
-        .collect()
+    devices_on(Host::Default).unwrap_or_default()
 }
 
-/// Capture from `device` (a name from [`devices`], matched exactly or else
-/// as a case-insensitive part of a name; `None` for the default input) at
-/// `rate` samples a second, into a signal holding the newest `buffer`
-/// frames as `channels` rows (see the [module docs](self)). Call it while
-/// the app is built or running; the capture runs until the app ends. The
-/// signal starts as `channels` empty rows.
+/// The input devices of `host`, the default one marked.
 ///
-/// When the device offers no configuration with `channels` channels at
-/// `rate`, one at `rate` with another count is used: rows past the
-/// device's channels repeat its last one (a mono microphone fills both
-/// rows of a stereo view), and the device's extra channels are dropped.
+/// # Errors
+/// The host is not there (no PulseAudio server; ALSA off Linux; `Pulse`
+/// without the `pulse` feature) or will not list its devices.
+pub fn devices_on(host: Host) -> Result<Vec<Device>, AudioError> {
+    let _quiet = quiet();
+    let opened = host.open()?;
+    let default = opened.default_input_device().and_then(|d| id_of(&d));
+    let inputs = opened.input_devices().map_err(error)?;
+    Ok(inputs
+        .filter_map(|device| {
+            let id = id_of(&device)?;
+            let name = device
+                .description()
+                .map(|d| d.name().to_string())
+                .unwrap_or_else(|_| id.clone());
+            Some(Device {
+                default: default.as_deref() == Some(id.as_str()),
+                name,
+                id,
+                host,
+            })
+        })
+        .collect())
+}
+
+/// A device's id without its host's prefix.
+fn id_of(device: &cpal::Device) -> Option<String> {
+    device.id().ok().map(|id| id.id().to_string())
+}
+
+/// What [`open`] captures, and how.
+#[derive(Clone, Debug, PartialEq)]
+pub struct AudioOptions {
+    host: Host,
+    device: Option<String>,
+    rate: u32,
+    channels: u16,
+    buffer: usize,
+    latency: Option<u32>,
+    stall: Duration,
+}
+
+impl Default for AudioOptions {
+    fn default() -> Self {
+        AudioOptions::new()
+    }
+}
+
+impl AudioOptions {
+    /// The default host's default input, at 48 kHz, two channels, buffers
+    /// of 1024 frames, stalled after a second without one.
+    pub fn new() -> Self {
+        AudioOptions {
+            host: Host::Default,
+            device: None,
+            rate: 48_000,
+            channels: 2,
+            buffer: 1024,
+            latency: None,
+            stall: Duration::from_secs(1),
+        }
+    }
+
+    /// The sound system to open the device on (default [`Host::Default`]).
+    pub fn host(mut self, host: Host) -> Self {
+        self.host = host;
+        self
+    }
+
+    /// The device: an id from [`devices`] (matched exactly first), else a
+    /// name, exactly or as a part of one in any case. Without it, the
+    /// host's default input.
+    pub fn device(mut self, device: impl Into<String>) -> Self {
+        self.device = Some(device.into());
+        self
+    }
+
+    /// Samples a second (default 48 000).
+    pub fn rate(mut self, rate: u32) -> Self {
+        self.rate = rate;
+        self
+    }
+
+    /// Rows a buffer has (default 2, at least 1). When the device offers
+    /// no configuration with that many at the rate, one with another
+    /// count is used: rows past the device's channels repeat its last one
+    /// (a mono microphone fills both rows of a stereo view), and its extra
+    /// channels are dropped.
+    pub fn channels(mut self, channels: u16) -> Self {
+        self.channels = channels.max(1);
+        self
+    }
+
+    /// Frames a buffer (default 1024, at least 1): how many samples a row
+    /// of each [`Frame`] holds.
+    pub fn buffer(mut self, frames: usize) -> Self {
+        self.buffer = frames.max(1);
+        self
+    }
+
+    /// The buffer the driver or server keeps, in frames: lower is less
+    /// delay, higher fewer dropouts (scope-tui's `pulse --server-buffer`).
+    /// Without it, the driver's default; one outside what the device
+    /// allows is left at the default.
+    pub fn latency(mut self, frames: u32) -> Self {
+        self.latency = Some(frames);
+        self
+    }
+
+    /// How long without a buffer before the [`status`](Capture::status)
+    /// says [`AudioStatus::Stalled`] (default a second): the `--timeout`
+    /// of a scope.
+    pub fn stall_after(mut self, quiet: Duration) -> Self {
+        self.stall = quiet.max(Duration::from_millis(1));
+        self
+    }
+}
+
+/// How a capture is going.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum AudioStatus {
+    /// Buffers are arriving (or the stream has just started).
+    Running,
+    /// No buffer has come since this instant (the last buffer, or the
+    /// start), for longer than [`AudioOptions::stall_after`]. Buffers
+    /// coming again make it [`Running`](Self::Running).
+    Stalled(Instant),
+    /// The stream broke (the device was unplugged, the server went away),
+    /// with why. No more buffers come.
+    Failed(String),
+}
+
+/// A running capture, from [`open`]. Clones are the same capture. It
+/// captures until [`stop`](Self::stop) is called or, once its signals are
+/// in an app, until the app ends; a capture never put in an app stops when
+/// its last clone is dropped.
+#[derive(Clone)]
+pub struct Capture {
+    shared: Arc<Shared>,
+    _handle: Arc<Handle>,
+}
+
+impl std::fmt::Debug for Capture {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Capture")
+            .field("device", &self.shared.device)
+            .field("status", &self.shared.status())
+            .finish()
+    }
+}
+
+/// Dropped with the last clone of a [`Capture`].
+struct Handle(Arc<Shared>);
+
+impl Drop for Handle {
+    fn drop(&mut self) {
+        self.0.dropped.store(true, Ordering::SeqCst);
+    }
+}
+
+/// What the capture's threads and the app share.
+struct Shared {
+    /// The device opened, by name.
+    device: String,
+    /// The newest frame not yet taken by the app.
+    latest: Mutex<Option<Frame>>,
+    /// A job to take it is on its way.
+    posted: AtomicBool,
+    /// Buffers delivered.
+    count: AtomicU64,
+    /// The status, and when the last buffer came.
+    state: Mutex<(AudioStatus, Instant)>,
+    /// Where frames and status go, once in an app.
+    sink: Mutex<Option<Sink>>,
+    /// Where ALSA's messages go, once given.
+    log: Mutex<Option<Log>>,
+    stop: AtomicBool,
+    dropped: AtomicBool,
+}
+
+/// The app side of a capture.
+#[derive(Clone)]
+struct Sink {
+    proxy: Proxy,
+    samples: Signal<Option<Frame>>,
+    status: Signal<AudioStatus>,
+}
+
+impl Shared {
+    fn new(device: String) -> Shared {
+        Shared {
+            device,
+            latest: Mutex::new(None),
+            posted: AtomicBool::new(false),
+            count: AtomicU64::new(0),
+            state: Mutex::new((AudioStatus::Running, Instant::now())),
+            sink: Mutex::new(None),
+            log: Mutex::new(None),
+            stop: AtomicBool::new(false),
+            dropped: AtomicBool::new(false),
+        }
+    }
+
+    fn status(&self) -> AudioStatus {
+        self.state
+            .lock()
+            .map(|s| s.0.clone())
+            .unwrap_or(AudioStatus::Running)
+    }
+
+    fn sink(&self) -> Option<Sink> {
+        self.sink.lock().ok().and_then(|s| s.clone())
+    }
+
+    /// A full buffer from the device.
+    fn deliver(self: &Arc<Self>, samples: Matrix) {
+        let number = self.count.fetch_add(1, Ordering::SeqCst) + 1;
+        if let Ok(mut latest) = self.latest.lock() {
+            *latest = Some(Frame { number, samples });
+        }
+        let was = self.state.lock().ok().map(|mut state| {
+            state.1 = Instant::now();
+            match state.0 {
+                AudioStatus::Stalled(_) => std::mem::replace(&mut state.0, AudioStatus::Running),
+                ref other => other.clone(),
+            }
+        });
+        if matches!(was, Some(AudioStatus::Stalled(_))) {
+            self.post_status(AudioStatus::Running);
+        }
+        self.post_frame();
+    }
+
+    /// Send a job to take the newest frame, unless one is on its way.
+    fn post_frame(self: &Arc<Self>) {
+        let Some(sink) = self.sink() else {
+            return;
+        };
+        if self.posted.swap(true, Ordering::SeqCst) {
+            return;
+        }
+        let shared = self.clone();
+        sink.proxy.run(move || {
+            shared.posted.store(false, Ordering::SeqCst);
+            let frame = shared.latest.lock().ok().and_then(|mut l| l.take());
+            if let Some(frame) = frame {
+                sink.samples.update(|s| *s = Some(frame));
+            }
+        });
+    }
+
+    fn post_status(&self, status: AudioStatus) {
+        if let Some(sink) = self.sink() {
+            sink.proxy.run(move || sink.status.set(status));
+        }
+    }
+
+    /// The stream broke.
+    fn fail(&self, why: String) {
+        let status = AudioStatus::Failed(why);
+        if let Ok(mut state) = self.state.lock() {
+            if matches!(state.0, AudioStatus::Failed(_)) {
+                return;
+            }
+            state.0 = status.clone();
+        }
+        self.post_status(status);
+    }
+
+    /// Mark the capture stalled when the last buffer is older than
+    /// `after`.
+    fn check_stall(&self, after: Duration) {
+        let stalled = self.state.lock().ok().and_then(|mut state| {
+            let since = state.1;
+            (state.0 == AudioStatus::Running && since.elapsed() > after).then(|| {
+                state.0 = AudioStatus::Stalled(since);
+                state.0.clone()
+            })
+        });
+        if let Some(status) = stalled {
+            self.post_status(status);
+        }
+    }
+}
+
+impl Capture {
+    /// The newest buffer, as a signal of this app: `None` until the first,
+    /// then each [`Frame`] as it comes (see the [module docs](super)). The
+    /// first call puts the capture in the app (it then runs until the app
+    /// ends); later calls return the same signal.
+    ///
+    /// # Panics
+    /// Outside a running or building app.
+    pub fn samples(&self) -> Signal<Option<Frame>> {
+        self.attach("Capture::samples()").samples
+    }
+
+    /// How the capture is going, as a signal of this app: watch it to end
+    /// the app on a stall (`--timeout`) or a failure.
+    ///
+    /// ```no_run
+    /// use std::time::Duration;
+    /// use intuituive::audio::{self, AudioOptions, AudioStatus};
+    /// use intuituive::prelude::*;
+    ///
+    /// let capture = audio::open(AudioOptions::new().stall_after(Duration::from_secs(5)))?;
+    /// App::new(move || {
+    ///     let samples = capture.samples();
+    ///     let status = capture.status();
+    ///     watch(move || status.get(), |status, cx| match status {
+    ///         AudioStatus::Stalled(_) => cx.fail("no audio for 5 s"),
+    ///         AudioStatus::Failed(why) => cx.fail(why),
+    ///         AudioStatus::Running => {}
+    ///     });
+    ///     text(move || format!("{:?}", samples.with(|f| f.as_ref().map(|f| f.number))))
+    /// })
+    /// .run()?;
+    /// # Ok::<(), Box<dyn std::error::Error>>(())
+    /// ```
+    ///
+    /// # Panics
+    /// Outside a running or building app.
+    pub fn status(&self) -> Signal<AudioStatus> {
+        self.attach("Capture::status()").status
+    }
+
+    /// Send ALSA's messages to `log` from now on, the ones already kept
+    /// first (see [`messages`]).
+    pub fn log(&self, log: Log) {
+        if let Ok(mut slot) = self.shared.log.lock() {
+            *slot = Some(log);
+        }
+    }
+
+    /// Stop capturing. The signals keep their last values.
+    pub fn stop(&self) {
+        self.shared.stop.store(true, Ordering::SeqCst);
+    }
+
+    /// The device opened, by name.
+    pub fn device(&self) -> &str {
+        &self.shared.device
+    }
+
+    fn attach(&self, what: &str) -> Sink {
+        if let Some(sink) = self.shared.sink() {
+            return sink;
+        }
+        let runtime = Runtime::current_for(what);
+        let sink = Sink {
+            proxy: runtime.proxy(),
+            samples: signal(None),
+            status: signal(self.shared.status()),
+        };
+        if let Ok(mut slot) = self.shared.sink.lock() {
+            *slot = Some(sink.clone());
+        }
+        // A buffer that came before: the app takes it on its first turn.
+        let waiting = self.shared.latest.lock().is_ok_and(|l| l.is_some());
+        if waiting {
+            self.shared.post_frame();
+        }
+        sink
+    }
+}
+
+/// Open a capture (see the [module docs](super)): anywhere, before an app
+/// as well as while one is built, so a missing device fails before the
+/// terminal is taken. Its [`samples`](Capture::samples) and
+/// [`status`](Capture::status) signals are taken inside the app.
+///
+/// # Errors
+/// No such host or device, no input at the rate, or the stream would not
+/// start.
+pub fn open(options: AudioOptions) -> Result<Capture, AudioError> {
+    let (opened, result) = mpsc::channel();
+    let stall = options.stall;
+    // The stream lives on its own thread: on some platforms it may not
+    // move between threads, and it must outlive this call.
+    std::thread::Builder::new()
+        .name("intuituive-audio".into())
+        .spawn(move || {
+            // ALSA's complaints while opening are kept, not printed.
+            let _quiet = quiet();
+            let (stream, shared) = match start(&options) {
+                Ok(started) => started,
+                Err(e) => {
+                    let _ = opened.send(Err(e));
+                    return;
+                }
+            };
+            let _ = opened.send(Ok(shared.clone()));
+            keep(stream, &shared, stall);
+        })
+        .map_err(error)?;
+    let shared = result
+        .recv()
+        .unwrap_or_else(|_| Err(error("the audio thread stopped")))?;
+    Ok(Capture {
+        _handle: Arc::new(Handle(shared.clone())),
+        shared,
+    })
+}
+
+/// Capture from `device` (an id or a name from [`devices`]; `None` for the
+/// default input) at `rate` samples a second, into a signal holding the
+/// newest `buffer` frames as `channels` rows: [`open`] and
+/// [`Capture::samples`] in one call, inside an app. The capture runs until
+/// the app ends.
 ///
 /// # Errors
 /// No such device, no input at `rate`, or the stream would not start.
@@ -111,103 +566,140 @@ pub fn input(
     rate: u32,
     channels: u16,
     buffer: usize,
-) -> Result<Signal<Matrix>, AudioError> {
-    let runtime = Runtime::current_for("audio::input()");
-    let proxy = runtime.proxy();
-    let channels = channels.max(1);
-    let buffer = buffer.max(1);
-    let samples = signal(vec![Vec::new(); usize::from(channels)]);
-    let mailbox = Arc::new(Mailbox::default());
-    let wanted = device.map(str::to_string);
-    let (opened, result) = mpsc::channel();
-    // The stream lives on its own thread: on some platforms it may not
-    // move between threads, and it must outlive this call.
-    std::thread::Builder::new()
-        .name("intuituive-audio".into())
-        .spawn(move || {
-            let deliver = {
-                let mailbox = mailbox.clone();
-                let proxy = proxy.clone();
-                move |matrix: Matrix| {
-                    if mailbox.put(matrix) {
-                        let mailbox = mailbox.clone();
-                        proxy.run(move || {
-                            if let Some(matrix) = mailbox.take() {
-                                samples.update(|m| *m = matrix);
-                            }
-                        });
-                    }
-                }
-            };
-            let stream = open(wanted.as_deref(), rate, channels, buffer, deliver);
-            let stream = match stream {
-                Ok(stream) => {
-                    let _ = opened.send(Ok(()));
-                    stream
-                }
-                Err(e) => {
-                    let _ = opened.send(Err(e));
-                    return;
-                }
-            };
-            // Keep the stream until the app has gone (a job nobody runs
-            // fails to send).
-            while proxy.run(|| {}) {
-                std::thread::sleep(Duration::from_millis(250));
-            }
-            drop(stream);
-        })
-        .map_err(error)?;
-    result
-        .recv()
-        .unwrap_or_else(|_| Err(error("the audio thread stopped")))?;
-    Ok(samples)
+) -> Result<Signal<Option<Frame>>, AudioError> {
+    // Checked first, so a call outside an app panics before opening.
+    Runtime::current_for("audio::input()");
+    let mut options = AudioOptions::new()
+        .rate(rate)
+        .channels(channels)
+        .buffer(buffer);
+    if let Some(device) = device {
+        options = options.device(device);
+    }
+    Ok(open(options)?.samples())
 }
 
-/// Open and start the stream, calling `deliver` with each full buffer.
-fn open(
-    wanted: Option<&str>,
-    rate: u32,
-    channels: u16,
-    buffer: usize,
-    deliver: impl FnMut(Matrix) + Send + 'static,
-) -> Result<cpal::Stream, AudioError> {
-    let host = cpal::default_host();
-    let device = match wanted {
+/// ALSA's messages that a listing or a capture kept off the screen, oldest
+/// first (the last 200). Empty off Linux.
+pub fn messages() -> Vec<String> {
+    #[cfg(target_os = "linux")]
+    return super::alsa::messages();
+    #[cfg(not(target_os = "linux"))]
+    Vec::new()
+}
+
+/// While it lives, ALSA's messages on this thread are kept off stderr.
+#[cfg(target_os = "linux")]
+fn quiet() -> super::alsa::Quiet {
+    super::alsa::Quiet::new()
+}
+
+#[cfg(not(target_os = "linux"))]
+fn quiet() {}
+
+/// Keep `stream` until the capture stops, checking for a stall and
+/// passing ALSA's messages on, a few times a second.
+fn keep(stream: cpal::Stream, shared: &Arc<Shared>, stall: Duration) {
+    let tick = (stall / 4).clamp(Duration::from_millis(10), Duration::from_millis(250));
+    #[cfg(target_os = "linux")]
+    let mut seen = 0;
+    loop {
+        if shared.stop.load(Ordering::SeqCst) {
+            break;
+        }
+        match shared.sink() {
+            // In an app: until it has gone (a job nobody runs fails to
+            // send).
+            Some(sink) if !sink.proxy.run(|| {}) => break,
+            Some(_) => {}
+            None if shared.dropped.load(Ordering::SeqCst) => break,
+            None => {}
+        }
+        shared.check_stall(stall);
+        #[cfg(target_os = "linux")]
+        if let (Some(sink), Some(log)) = (shared.sink(), shared.log.lock().ok().and_then(|l| *l)) {
+            let (lines, next) = super::alsa::messages_since(seen);
+            seen = next;
+            if !lines.is_empty() {
+                sink.proxy
+                    .run(move || lines.into_iter().for_each(|line| log.push(line)));
+            }
+        }
+        std::thread::sleep(tick);
+    }
+    drop(stream);
+}
+
+/// Open and start the stream that feeds a new capture.
+fn start(options: &AudioOptions) -> Result<(cpal::Stream, Arc<Shared>), AudioError> {
+    let host = options.host.open()?;
+    let device = match &options.device {
         None => host
             .default_input_device()
             .ok_or_else(|| error("no default audio input"))?,
-        Some(name) => find(&host, name)?,
+        Some(wanted) => find(&host, wanted)?,
     };
-    let (config, format) = choose(&device, rate, channels)?;
-    let framer = Framer::new(usize::from(config.channels), usize::from(channels), buffer);
+    let name = device
+        .description()
+        .map(|d| d.name().to_string())
+        .unwrap_or_else(|_| id_of(&device).unwrap_or_default());
+    let (mut config, format, buffers) = choose(&device, options.rate, options.channels)?;
+    if let (Some(frames), Some((min, max))) = (options.latency, buffers) {
+        if (min..=max).contains(&frames) {
+            config.buffer_size = cpal::BufferSize::Fixed(frames);
+        }
+    }
+    let shared = Arc::new(Shared::new(name));
+    let framer = Framer::new(
+        usize::from(config.channels),
+        usize::from(options.channels),
+        options.buffer,
+    );
     let stream = match format {
-        SampleFormat::F32 => build::<f32>(&device, &config, framer, deliver),
-        SampleFormat::F64 => build::<f64>(&device, &config, framer, deliver),
-        SampleFormat::I16 => build::<i16>(&device, &config, framer, deliver),
-        SampleFormat::I32 => build::<i32>(&device, &config, framer, deliver),
-        SampleFormat::I8 => build::<i8>(&device, &config, framer, deliver),
-        SampleFormat::U8 => build::<u8>(&device, &config, framer, deliver),
-        SampleFormat::U16 => build::<u16>(&device, &config, framer, deliver),
-        SampleFormat::U32 => build::<u32>(&device, &config, framer, deliver),
+        SampleFormat::F32 => build::<f32>(&device, &config, framer, &shared),
+        SampleFormat::F64 => build::<f64>(&device, &config, framer, &shared),
+        SampleFormat::I16 => build::<i16>(&device, &config, framer, &shared),
+        SampleFormat::I32 => build::<i32>(&device, &config, framer, &shared),
+        SampleFormat::I8 => build::<i8>(&device, &config, framer, &shared),
+        SampleFormat::U8 => build::<u8>(&device, &config, framer, &shared),
+        SampleFormat::U16 => build::<u16>(&device, &config, framer, &shared),
+        SampleFormat::U32 => build::<u32>(&device, &config, framer, &shared),
         other => return Err(error(format!("unsupported sample format {other}"))),
     }?;
     stream.play().map_err(error)?;
-    Ok(stream)
+    if let Ok(mut state) = shared.state.lock() {
+        state.1 = Instant::now();
+    }
+    Ok((stream, shared))
 }
 
-/// The input device named `name`: exactly, or else the first whose name
-/// holds it, ignoring case.
-fn find(host: &cpal::Host, name: &str) -> Result<cpal::Device, AudioError> {
+/// The input device `wanted` means (see [`pick`]).
+fn find(host: &cpal::Host, wanted: &str) -> Result<cpal::Device, AudioError> {
     let devices: Vec<cpal::Device> = host.input_devices().map_err(error)?.collect();
-    let names: Vec<String> = devices.iter().map(|d| d.to_string()).collect();
-    let index = pick(&names, name).ok_or_else(|| {
+    let ids: Vec<String> = devices
+        .iter()
+        .map(|d| id_of(d).unwrap_or_default())
+        .collect();
+    let names: Vec<String> = devices
+        .iter()
+        .map(|d| {
+            d.description()
+                .map(|d| d.name().to_string())
+                .unwrap_or_default()
+        })
+        .collect();
+    let index = pick(&ids, &names, wanted).ok_or_else(|| {
+        let listed: Vec<String> = ids
+            .iter()
+            .zip(&names)
+            .map(|(id, name)| format!("{id} ({name})"))
+            .collect();
         error(format!(
-            "no audio input named {name:?} (there are: {})",
-            if names.is_empty() {
+            "no audio input named {wanted:?} (there are: {})",
+            if listed.is_empty() {
                 "none".to_string()
             } else {
-                names.join(", ")
+                listed.join(", ")
             }
         ))
     })?;
@@ -217,14 +709,17 @@ fn find(host: &cpal::Host, name: &str) -> Result<cpal::Device, AudioError> {
         .ok_or_else(|| error("the device went away"))
 }
 
-/// Which of `names` `wanted` means: an exact match, else the first that
-/// holds it ignoring case.
-fn pick(names: &[String], wanted: &str) -> Option<usize> {
+/// Which device `wanted` means, given their `ids` and `names`: an exact
+/// id, an exact name, else the first name, then id, that holds it
+/// ignoring case.
+fn pick(ids: &[String], names: &[String], wanted: &str) -> Option<usize> {
     let lower = wanted.to_lowercase();
-    names
-        .iter()
+    let holds = |list: &[String]| list.iter().position(|n| n.to_lowercase().contains(&lower));
+    ids.iter()
         .position(|n| n == wanted)
-        .or_else(|| names.iter().position(|n| n.to_lowercase().contains(&lower)))
+        .or_else(|| names.iter().position(|n| n == wanted))
+        .or_else(|| holds(names))
+        .or_else(|| holds(ids))
 }
 
 /// The sample formats in the order to prefer them.
@@ -239,13 +734,13 @@ const FORMATS: [SampleFormat; 8] = [
     SampleFormat::U32,
 ];
 
+/// A stream configuration, its sample format and the buffer sizes it
+/// allows.
+type Chosen = (cpal::StreamConfig, SampleFormat, Option<(u32, u32)>);
+
 /// A stream configuration at `rate`: `channels` channels if the device
 /// has them, else the closest count.
-fn choose(
-    device: &cpal::Device,
-    rate: u32,
-    channels: u16,
-) -> Result<(cpal::StreamConfig, SampleFormat), AudioError> {
+fn choose(device: &cpal::Device, rate: u32, channels: u16) -> Result<Chosen, AudioError> {
     let ranges: Vec<_> = device
         .supported_input_configs()
         .map_err(error)?
@@ -264,33 +759,43 @@ fn choose(
         sample_rate: rate,
         buffer_size: cpal::BufferSize::Default,
     };
-    Ok((config, best.sample_format()))
+    let buffers = match best.buffer_size() {
+        cpal::SupportedBufferSize::Range { min, max } => Some((*min, *max)),
+        cpal::SupportedBufferSize::Unknown => None,
+    };
+    Ok((config, best.sample_format(), buffers))
 }
 
 fn build<T>(
     device: &cpal::Device,
     config: &cpal::StreamConfig,
     mut framer: Framer,
-    mut deliver: impl FnMut(Matrix) + Send + 'static,
+    shared: &Arc<Shared>,
 ) -> Result<cpal::Stream, AudioError>
 where
     T: SizedSample + Send + 'static,
     f64: FromSample<T>,
 {
     let mut scratch = Vec::new();
+    let (data, errors) = (shared.clone(), shared.clone());
     device
         .build_input_stream::<T, _, _>(
             *config,
-            move |data: &[T], _| {
+            move |samples: &[T], _| {
                 scratch.clear();
-                scratch.extend(data.iter().map(|s| f64::from_sample_(*s)));
+                scratch.extend(samples.iter().map(|s| f64::from_sample_(*s)));
                 if let Some(matrix) = framer.push(&scratch) {
-                    deliver(matrix);
+                    data.deliver(matrix);
                 }
             },
-            // A stream error (a device unplugged) ends the samples; the
-            // signal keeps the last buffer.
-            |_| {},
+            // A glitch or a reroute goes on; anything else ends the
+            // samples, and the signal keeps the last buffer.
+            move |e| match e.kind() {
+                cpal::ErrorKind::Xrun
+                | cpal::ErrorKind::DeviceChanged
+                | cpal::ErrorKind::RealtimeDenied => {}
+                _ => errors.fail(e.to_string()),
+            },
             None,
         )
         .map_err(error)
@@ -351,31 +856,6 @@ impl Framer {
     }
 }
 
-/// The newest buffer on its way to the app's thread.
-#[derive(Default)]
-struct Mailbox {
-    latest: Mutex<Option<Matrix>>,
-    /// A job to take it is already on its way.
-    posted: AtomicBool,
-}
-
-impl Mailbox {
-    /// Leave `matrix` for the app, replacing any not yet taken; whether a
-    /// job must be sent to take it (none is on its way).
-    fn put(&self, matrix: Matrix) -> bool {
-        if let Ok(mut latest) = self.latest.lock() {
-            *latest = Some(matrix);
-        }
-        !self.posted.swap(true, Ordering::SeqCst)
-    }
-
-    /// The newest buffer, if one is waiting.
-    fn take(&self) -> Option<Matrix> {
-        self.posted.store(false, Ordering::SeqCst);
-        self.latest.lock().ok().and_then(|mut latest| latest.take())
-    }
-}
-
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -424,28 +904,93 @@ mod tests {
     }
 
     #[test]
-    fn the_mailbox_keeps_the_newest_and_posts_once() {
-        let mailbox = Mailbox::default();
-        assert!(mailbox.put(vec![vec![1.0]]));
-        // Already posted: replaced, not posted again.
-        assert!(!mailbox.put(vec![vec![2.0]]));
-        assert_eq!(mailbox.take(), Some(vec![vec![2.0]]));
-        assert_eq!(mailbox.take(), None);
-        // Taken: the next one posts again.
-        assert!(mailbox.put(vec![vec![3.0]]));
+    fn frames_are_numbered_and_the_newest_waits_for_the_app() {
+        let shared = Arc::new(Shared::new("test".into()));
+        shared.deliver(vec![vec![0.0]]);
+        shared.deliver(vec![vec![0.0]]);
+        // Not in an app yet: the newest waits, numbered.
+        let latest = shared.latest.lock().unwrap().clone();
+        assert_eq!(latest.map(|f| f.number), Some(2));
+        let capture = Capture {
+            _handle: Arc::new(Handle(shared.clone())),
+            shared,
+        };
+        let app = crate::App::new(move || {
+            let samples = capture.samples();
+            let status = capture.status();
+            // Two equal buffers are two frames.
+            capture.shared.deliver(vec![vec![0.0]]);
+            crate::text(move || {
+                let number = samples.with(|f| f.as_ref().map_or(0, |f| f.number));
+                format!("{number} {:?}", status.get())
+            })
+        });
+        let mut driver = app.driver(20, 1);
+        driver.settle();
+        assert_eq!(driver.screen().plain()[0].trim_end(), "3 Running");
     }
 
     #[test]
-    fn names_match_exactly_then_in_part() {
-        let names = [
-            "Built-in Microphone".to_string(),
-            "USB Audio".to_string(),
-            "usb".to_string(),
+    fn a_quiet_stream_stalls_then_runs_again() {
+        let shared = Arc::new(Shared::new("test".into()));
+        shared.check_stall(Duration::from_secs(60));
+        assert_eq!(shared.status(), AudioStatus::Running);
+        std::thread::sleep(Duration::from_millis(5));
+        shared.check_stall(Duration::from_millis(1));
+        assert!(matches!(shared.status(), AudioStatus::Stalled(_)));
+        shared.deliver(vec![vec![0.5]]);
+        assert_eq!(shared.status(), AudioStatus::Running);
+        shared.fail("unplugged".into());
+        shared.fail("again".into());
+        assert_eq!(shared.status(), AudioStatus::Failed("unplugged".into()));
+        // A failed stream neither stalls nor runs again.
+        std::thread::sleep(Duration::from_millis(2));
+        shared.check_stall(Duration::from_millis(1));
+        shared.deliver(vec![vec![0.5]]);
+        assert_eq!(shared.status(), AudioStatus::Failed("unplugged".into()));
+    }
+
+    #[test]
+    fn devices_match_by_id_then_name_then_in_part() {
+        let ids = [
+            "default".to_string(),
+            "hw:CARD=USB,DEV=0".into(),
+            "null".into(),
         ];
-        assert_eq!(pick(&names, "usb"), Some(2));
-        assert_eq!(pick(&names, "USB"), Some(1));
-        assert_eq!(pick(&names, "microphone"), Some(0));
-        assert_eq!(pick(&names, "line in"), None);
+        let names = [
+            "Default ALSA Output".to_string(),
+            "USB Audio".into(),
+            "Discard all samples (playback) or generate zero samples (capture)".into(),
+        ];
+        assert_eq!(pick(&ids, &names, "null"), Some(2));
+        assert_eq!(pick(&ids, &names, "USB Audio"), Some(1));
+        assert_eq!(pick(&ids, &names, "usb"), Some(1));
+        assert_eq!(pick(&ids, &names, "CARD=USB"), Some(1));
+        assert_eq!(pick(&ids, &names, "discard"), Some(2));
+        assert_eq!(pick(&ids, &names, "line in"), None);
+    }
+
+    #[test]
+    fn a_config_reads_as_scope_tui_lists_it() {
+        let config = DeviceConfig {
+            channels: 2,
+            min_rate: 8000,
+            max_rate: 192_000,
+            buffer: Some((32, 65536)),
+            format: "i16".into(),
+        };
+        assert_eq!(
+            config.to_string(),
+            "2 channels, 8000-192000 Hz, buffer 32-65536, i16"
+        );
+        let mono = DeviceConfig {
+            channels: 1,
+            min_rate: 48_000,
+            max_rate: 48_000,
+            buffer: None,
+            format: "f32".into(),
+        };
+        assert_eq!(mono.to_string(), "1 channel, 48000 Hz, f32");
     }
 
     #[test]
@@ -453,6 +998,12 @@ mod tests {
         // In a container or on CI there is usually no sound card at all.
         let devices = devices();
         assert!(devices.iter().filter(|d| d.default).count() <= 1);
+        for device in &devices {
+            assert!(!device.id.is_empty());
+            let _ = device.configs();
+        }
+        #[cfg(not(feature = "pulse"))]
+        assert!(devices_on(Host::Pulse).is_err());
     }
 
     #[test]
@@ -467,5 +1018,8 @@ mod tests {
         });
         let screen = app.render_with(&["q"], 20, 1).unwrap();
         assert_eq!(screen[0].trim_end(), "error: true");
+        // Before an app, too.
+        let opened = open(AudioOptions::new().device("no such device for intuituive"));
+        assert!(opened.is_err());
     }
 }
