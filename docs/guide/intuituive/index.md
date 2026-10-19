@@ -2176,6 +2176,8 @@ rs-rich-intuituive = { version = "0.0.5", features = ["watch", "audio", "art", "
 # features = ["pulse", "wav"]
 # Raw PCM only, with no dependency:
 # features = ["pcm"]
+# Meters, sparklines and spectra as nodes:
+# features = ["viz"]
 ```
 
 - **`watch`: files that change.** `watch_path(path, |event, cx| …)` wakes
@@ -2205,9 +2207,10 @@ watch_path(&dir, move |_event, _cx| entries.set(list_dir(&dir)))?;
   - `audio::open(AudioOptions::new().device(id).rate(r).latency(frames)
     .stall_after(d))` opens one before the app, so a missing device fails
     before the terminal is taken; inside the app, `capture.samples()` is
-    the signal and `capture.status()` an `AudioStatus` (`Running`,
-    `Stalled(since)`, `Failed(why)`) to end the app on, scope-tui's
-    `--timeout`.
+    the signal and `capture.status()` the core's `FeedState` (`Running`,
+    `Stalled(since)` on the app's clock, `Failed(why)`, `Ended` once
+    `capture.stop()`ped) to end the app on, scope-tui's `--timeout`: a
+    capture is a `latest_with_state` feed.
   - `audio::devices()` lists the inputs as `Device { id, name, default,
     host }` (none, not a panic, on a machine without sound): the id is
     what `input` takes (ALSA's `null`, `pulse`, `hw:CARD=…`), the name
@@ -2223,15 +2226,25 @@ watch_path(&dir, move |_event, _cx| entries.set(list_dir(&dir)))?;
     buffer.
   - With the light **`pcm`** feature (no dependency; `audio` and `wav`
     turn it on), `audio::pcm(reader, Format::S16Le, channels, buffer)`
-    reads raw PCM (`parec`'s, `arecord`'s) as buffers, and `Frame`,
-    `Matrix` and `deinterleave` are there; with
+    reads raw PCM (`parec`'s, `arecord`'s) as buffers, `audio::play(pcm,
+    rate)` plays them onto a signal at the sample rate and then silence
+    (`latest_iter` at a buffer's time apart), and `Frame`, `Matrix` and
+    `deinterleave` are there. `audio::Capture::simulated(frames, period)`
+    is a capture with no sound card, its buffers a period apart: a test
+    calls `stall()` (and `resume()`) or `fail(why)` on a clone, and sees
+    the status turn `Stalled` after `.stall_after(d)` or `Failed`, on the
+    app's clock under `wait_for_tasks(true)`. With
     **`wav`**, `audio::wav(path, buffer)` reads WAV files the same way,
     `audio::wav_writer` writes one, and `audio::record(samples, path,
     rate, channels)` records a frame signal while the app runs (hound).
 
   For a spectrum, rs-rich-ext's `rich_ext::dsp` has `fft` (any length),
-  `hann`, `spectrum(samples, rate)` and `spectrum_full`, and a test signal
-  without a sound card: `tone`, `partials`, `noise` and `mix`.
+  `hann`, `spectrum(samples, rate)` and `spectrum_full`; `bands(spectrum,
+  n, lo_hz, hi_hz)` (log-spaced, cava's) with `Falloff::gravity(g)` for
+  bars that fall; `peak_hz(spectrum)` and `nearest_note(hz)` (`("A", 4,
+  cents)`) for a tuner; `note_hz` and `NoteTable::ScopeTui` (scope-tui's
+  rounded table, octave 0 by default); and a test signal without a sound
+  card: `tone`, `partials`, `noise` and `mix`.
 
 ```rust
 let samples = audio::input(None, 48_000, 2, 1024)?;
@@ -2343,7 +2356,14 @@ use it.
 ## Levels, sparklines and big text
 
 Nodes for a dashboard or an audio app, drawn by rs-rich-ext's charts
-from closures that read signals:
+from closures that read signals. The meters, sparklines and spectra are
+the **`viz`** plugin, off by default (they show one domain's data, levels
+and spectra, so they are not in the core); `big_text` is `art`'s, and
+`digits` is in every build:
+
+```toml
+rs-rich-intuituive = { version = "0.0.5", features = ["viz"] }
+```
 
 ```rust
 use intuituive::{big_text, meter_with, sparkline};
@@ -2367,6 +2387,16 @@ big_text(move || format!("[accent]{:02}[/]:{:02}", minutes.get(), seconds.get())
 - **`sparkline(values)`** is a `Sparkline` of what the closure returns,
   one cell a value (resampled when there are more): keep a history the
   node's width long. `sparkline_with` configures it.
+- **`spectrogram(spectra)`** is a `Spectrogram`, a waterfall: the closure
+  returns the spectra to show, oldest first (the core's `recent(spectrum,
+  rows)` keeps them), the newest drawn at the top. `spectrogram_with`
+  sets its resolution, log scale, bounds and range.
+- **`bar_spectrum(bands)`** is a `BarSpectrum`, cava's bars: a column per
+  band from the bottom, in eighths of a cell. Feed it `dsp::bands` of a
+  spectrum through a `dsp::Falloff` (or `smoothed` per band);
+  `bar_spectrum_with(bands, |b| b.mirror(true).range(1.0))` mirrors it,
+  the low bands in the middle, and `described(|| BarSpectrum::stereo(l,
+  r))` shows two channels.
 - **`big_text(markup)`** (the `art` feature) draws markup in FIGlet
   letters with rs-rich-art's bundled font, each run in its style: a
   clock, a readout, a title.
@@ -2376,8 +2406,22 @@ big_text(move || format!("[accent]{:02}[/]:{:02}", minutes.get(), seconds.get())
   is. A clock or a counter where the `art` feature is off.
 
 Each says what it shows to a screen reader: the meter its level, peaks and
-band, the sparkline its range and trend, big text and digits their text. A
-`Spectrogram` (a waterfall of spectra) goes in a `renderable`.
+band, the sparkline its range and trend, the spectrogram its range and
+where the newest spectrum peaks, the bar spectrum its loudest band, big
+text and digits their text.
+
+For a scope's persistence (older traces fading, as a phosphor's),
+rs-rich-ext's `chart::Persistence::new(frames)` turns the last frames
+(`recent(trace, 8)`) into a `Chart`'s datasets, each older one fainter;
+draw them with `Layering::PerDataset`.
+
+```rust
+let traces = recent(trace, 8);
+renderable(move || {
+    let fading = Persistence::new(traces.get()).style("#33ff66").fade(0.2);
+    Chart::new(fading.datasets()).layering(Layering::PerDataset)
+})
+```
 
 ## Themes
 

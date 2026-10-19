@@ -182,7 +182,7 @@ impl BarSpectrum {
         let top = self.top(&bars);
         // Fit: the gaps, then the bars' width, then share columns.
         let (mut bar_width, mut gap) = (self.bar_width, self.gap);
-        let span = |n: usize, w: usize, g: usize| (n * w + n.saturating_sub(1) * g);
+        let span = |n: usize, w: usize, g: usize| n * w + n.saturating_sub(1) * g;
         if span(bars.len(), bar_width, gap) > width {
             gap = 0;
         }

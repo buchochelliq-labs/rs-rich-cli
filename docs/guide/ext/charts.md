@@ -351,11 +351,15 @@ let chart = Chart::new(vec![cpu])
     against the y axis line;
   - a scale: `Linear` or `Log`, where log labels fall on powers of ten;
   - a style;
-  - `grid([..])`: lines across the plot at those values, in the axis's
-    style, drawn under the datasets with the first one's marker (the x
-    axis's up the plot, the y axis's along it). With
-    `Layering::PerDataset` the traces break the grid where they cross it,
-    as scope-tui's reference lines, drawn as datasets, break.
+  - `grid([..])`: lines across the plot at those values (the x axis's up
+    the plot, the y axis's along it), drawn under the datasets in
+    `.grid_style(..)` (else the axis's style) with `.grid_marker(..)`
+    (else the chart's `.marker(..)`, else the first dataset's, else
+    Braille, so a grid before the first data looks as it will after).
+    With `Layering::PerDataset` each line is a layer of its own, the y
+    axis's first, so the traces break the grid where they cross it, and
+    the x lines the y lines, as scope-tui's reference lines, drawn as
+    datasets, break.
 
   An axis with an empty `Values` list draws its line and takes no room
   for labels; with `Labels::None` it draws no line either, as a ratatui
@@ -381,7 +385,8 @@ let chart = Chart::new(vec![cpu])
 - **The chart's own style**, `.style("..")`, is ratatui's `Chart::style`:
   it goes under every cell (a background fills the chart) and the legend's
   box takes it. `.style("none")` is a ratatui chart with no style: the
-  terminal's colours.
+  terminal's colours, the legend's box too (`.legend_unstyled()` says that
+  by name).
 - **The legend** is a box in a corner (`LegendPosition`). It hides itself
   when it would cover more than `hidden_legend_fraction` of the plot. Its
   box takes the chart's style, or else the x axis's, unless
@@ -538,8 +543,38 @@ waterfall.push(spectrum.iter().map(|(_, m)| 20.0 * m.log10()));
   width covers. A column over several bins shows the loudest. It fills
   the height it is given.
 
-intuiTUIve draws both as nodes: `meter(level, peak).hold(d)` and
-`renderable(move || waterfall.get())`; see
+### Bar spectra and persistence
+
+cava's bars and an analogue scope's phosphor:
+
+```rust
+use rich_ext::chart::{BarSpectrum, Chart, Layering, Persistence};
+use rich_ext::dsp::{bands, Falloff};
+
+// 24 bands from 50 Hz to 10 kHz, falling under gravity, mirrored.
+let mut falloff = Falloff::gravity(0.02);
+let levels = falloff.update(&bands(&spectrum, 24, 50.0, 10_000.0)).to_vec();
+let bars = BarSpectrum::new(levels).mirror(true).bar_width(2);
+
+// The last eight traces, each older one fainter.
+let fading = Persistence::new(traces).style("#33ff66").fade(0.2);
+let scope = Chart::new(fading.datasets()).layering(Layering::PerDataset);
+```
+
+- **`BarSpectrum::new(bands)`** draws each band as a column from the
+  bottom, its top in eighths of a cell (`#`s to the whole cell in ASCII),
+  scaled to the loudest band or `.range(max)`, `.bar_width(n)` cells wide
+  and `.gap(n)` apart, centred. `.mirror(true)` draws the bands twice,
+  the low ones in the middle; `BarSpectrum::stereo(left, right)` puts a
+  channel on each side. Too narrow, it drops the gaps, then narrows the
+  bars, then lets bands share a column. It fills the height it is given.
+- **`Persistence::new(frames)`** takes the last frames of a trace, oldest
+  first, and makes them datasets in the frame's style, each older one's
+  colour faded towards `.background(..)` (black) down to `.fade(floor)`
+  of it. Draw them with `Layering::PerDataset`, so the newest is on top.
+
+intuiTUIve draws these as nodes with its `viz` feature: `meter(level,
+peak).hold(d)`, `spectrogram(|| rows)` and `bar_spectrum(|| bands)`; see
 [intuiTUIve's levels](../intuituive/index.md#levels-sparklines-and-big-text).
 
 ## In tables and panels

@@ -250,9 +250,19 @@ let start = trigger(&buffer, 0.0, 4, Edge::Rising).unwrap_or(0);
   cross `level` (`Edge::Rising` or `Falling`) and stay past it for
   `depth` samples: an oscilloscope's trigger.
 - **`note_hz("C#3")`** is a note's frequency in equal temperament, A4 at
-  440 Hz (sharps `#`, flats `b`, octaves -1 to 9, 4 when left out), and
-  **`nearest_note(hz)`** the note nearest a frequency with how many cents
-  off it is: a tuner's reading.
+  440 Hz (sharps `#`, flats `b`, octaves -1 to 9, 4 when left out).
+  **`NoteTable::ScopeTui.hz("E2")`** reads it as scope-tui's table does:
+  octave 0's pitches rounded to the hundredth and doubled, octave 0 when
+  left out, so a clone's `--tune` buffer sizes match scope-tui's sample
+  for sample (E2 at 48 kHz is 583 samples there, 582 in equal
+  temperament).
+- **`peak_hz(spectrum)`** is the loudest bin's frequency above 0 Hz,
+  refined between bins, and **`nearest_note(hz)`** the note nearest a
+  frequency, as `("A", 4, cents)`: a tuner's reading.
+- **`bands(spectrum, n, lo_hz, hi_hz)`** gathers a spectrum into `n`
+  log-spaced bands, as cava's bars, and **`Falloff::gravity(g)`** keeps
+  levels that rise at once and fall faster and faster (`update(&levels)`
+  once a frame); `chart::BarSpectrum` draws them.
 
 ## Warming up syntax highlighting
 

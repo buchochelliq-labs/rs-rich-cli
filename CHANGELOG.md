@@ -9,6 +9,59 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: round 4 sound, charts and the viz plugin (rs-rich-intuituive, rs-rich-ext)
+
+The round-3 scope-tui gaps' sound and chart pieces, built on round 4's
+runtime ([the demo gaps](docs/design/intuituive-demo-gaps.md)):
+
+- **Fixed: grid lines shared one layer.** Under `Layering::PerDataset`
+  each of an axis's grid lines is now a layer of its own, the y axis's
+  first, as scope-tui's reference datasets draw: where an x and a y line
+  cross, the x line is drawn over the y line (`⢸`), not merged with it
+  (`⣸`) (rs-rich-ext).
+- **Fixed: a grid with no datasets was drawn in dots.** The grid's
+  marker is now the axis's `Axis::grid_marker(..)`, else the chart's new
+  `Chart::marker(..)`, else the first dataset's, else Braille, so a
+  chart's zero line looks the same before its first data as after
+  (rs-rich-ext).
+- **`Axis::grid_style(..)`** styles the grid lines apart from the axis
+  line and labels (`Axis::style`), and **`Chart::legend_unstyled()`**
+  names what `Chart::style("none")` does to the legend's box (the
+  terminal's own colours); `"none"` still works (rs-rich-ext).
+- **`chart::BarSpectrum`**: a column per band rising from the bottom in
+  eighths of a cell, as cava's bars; `.mirror(true)`, the low bands in the
+  middle, and `BarSpectrum::stereo(left, right)`; `.range`, `.bar_width`,
+  `.gap`, `.style`, `.charset`, `.height` (rs-rich-ext).
+- **`chart::Persistence`**: a trace's last frames, oldest first (a
+  `recent` history), as a `Chart`'s datasets, each older one's colour
+  faded towards `.background(..)` down to `.fade(floor)`, as a scope's
+  phosphor (rs-rich-ext).
+- **`dsp`**: `bands(spectrum, n, lo_hz, hi_hz)` (log-spaced bands),
+  `Falloff::gravity(g)` (levels falling faster and faster, cava's),
+  `peak_hz(spectrum)` (the loudest bin, refined between bins) and
+  `NoteTable` (`Equal`, and `ScopeTui`: scope-tui's octave-0 table
+  rounded to the hundredth and doubled, octave 0 by default, so a clone's
+  buffer sizes match scope-tui's sample for sample). `nearest_note(hz)`
+  now returns the name, octave and cents apart (`("A", 4, 0.0)`), not
+  the name with its octave (rs-rich-ext).
+- **`audio::Capture` on the core's `latest_with_state`:** its `status()`
+  is a `FeedState` (`Running`, `Stalled(since)` on the app's clock,
+  `Failed(why)`, `Ended` once `stop()`ped); `AudioStatus` is gone. The
+  capture's app side is now under `pcm`, so
+  **`Capture::simulated(frames, period)`** stands in for a sound card in
+  tests, with `stall()`, `resume()`, `fail(why)` and `stall_after(d)`.
+- **`audio::play(pcm, rate)`** plays a reader's buffers at the sample
+  rate, then silence, on `latest_iter` (`pcm`); `Pcm::channels` and
+  `Pcm::buffer`.
+- **The `viz` plugin feature**, off by default: `meter`, `meter_with`,
+  `sparkline`, `sparkline_with` and `Node::hold` (the peak hold) have
+  **moved behind `viz`**, out of the always-compiled core, as views of
+  one domain's data; an app that uses them turns `viz` on. With them,
+  **`spectrogram(|| rows)`** and **`bar_spectrum(|| bands)`** (and their
+  `_with` forms), nodes over rs-rich-ext's `Spectrogram` and
+  `BarSpectrum`. CI builds the tapes' examples and docs.rs the docs with
+  it.
+
 ### intuiTUIve: round 4 runtime (rs-rich-intuituive)
 
 Runtime fixes and generic pieces the round-3 clones asked for

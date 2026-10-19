@@ -20,11 +20,11 @@ keywords = ["terminal", "tui", "reactive", "framework", "rich"]
 categories = ["command-line-interface"]
 include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
 
-# The image nodes, the file watcher, the file components and raw PCM on
-# docs.rs too; `audio` is left out,
-# as its ALSA headers may not be there to build it.
+# The image nodes, the file watcher, the file components, raw PCM and the
+# meters and spectra on docs.rs too; `audio` is left out, as its ALSA
+# headers may not be there to build it.
 [package.metadata.docs.rs]
-features = ["art", "watch", "files", "archive", "pcm"]
+features = ["art", "watch", "files", "archive", "pcm", "viz"]
 
 [lib]
 name = "intuituive"
