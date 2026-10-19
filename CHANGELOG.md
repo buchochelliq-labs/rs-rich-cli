@@ -9,6 +9,54 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: round 4 widgets (rs-rich-intuituive)
+
+Generic pieces for the round-3 gaps of the Yazi clone, none of them about
+files (the `files` plugin builds on them later):
+
+- **Fix: list options on a wrapper are no longer dropped.** `.symbol`,
+  `.highlight_layer`, `.wheel_step`, `.selected_style_for`, `.marker` and
+  every other list option reach the list a node wraps: a panel, padding
+  (any node with one child) and a `switch`, whose lists get them as they
+  are built (a list with a "No items" text in its place). On a node that
+  wraps no list a debug build says so on stderr, once an option.
+- **Tab sets:** `tab_set(|| state)` keeps a state per tab with one active
+  (`open`, `open_with`, `close`, `close_active`, `switch`, `cycle`,
+  `swap`, `with_active`, `update_active`, `titles`); `tabs_for(&set,
+  |state| title)` is a `tabs` strip over it.
+- **Fitted tabs:** `tabs(..).fit()` cuts the titles with `…` to share the
+  width; unselected titles take the theme's `tabs.unselected` style.
+- **Multi-select:** `multi_select::<K>()` (`MultiSelect`, `Mark`), a
+  selection by key over a list's items (`over`) with `toggle`,
+  `select_all`, `invert`, `clear`, a visual range from the cursor
+  (`range_from`, `visual(unset)`, `end_visual`, `cancel_visual`),
+  `selected()` and `targets(hovered)`; `list.selection_markers(sel, |i|
+  key)` draws the marks (`marker.selected`, `marker.visual`,
+  `marker.unset`).
+- **Find in a list:** `list_search(query, items, cursor)` (`ListSearch`)
+  with `next`, `previous`, `place() -> (n, of)`, smart case.
+- **Lists:** `.cursor_by(|i| key)` keeps the cursor on its item when the
+  items change; `.on_context(|i, cx| ..)` runs on a right press or
+  Shift+F10.
+- **Status bar:** `seg_gauge(fraction, label)`, a segment filled to a
+  share (`.width(cells)`; `status_bar.gauge`, `status_bar.gauge.rest`).
+- **Description lists:** `facts([("Name", value), ..])` and
+  `facts_of(|| rows)`, with `.key_style(..)` (theme `facts.key`).
+- **A streaming fuzzy list over any source:** `fuzzy_list(source,
+  display, on_pick)` and `fuzzy_list_with(.., FuzzyOptions)` (a title, a
+  border, a prompt, `on_cancel`), over `FuzzySource::iter(items)` or
+  `FuzzySource::feed(|feed| ..)`; Esc closes its screen. `finder_of` is
+  now one over an iterator, its API unchanged (it gains Esc).
+- **Digits:** `digits(markup)`, big text three rows tall in box-drawing
+  glyphs with no FIGlet font, in every build (Textual's `Digits`).
+- **Miller columns:** `Move` and `Miller::go`, `navigation_with(node,
+  &[(Move, keys, description)])` for a clone's own keys and wording
+  (`navigation` is it with the defaults), `view_with(MillerOptions)` with
+  `current`/`parent`/`preview` hooks on the columns' lists, a method for
+  each signal (`at()`, `cursor()`, `hovered()`, `items()`, `first()`,
+  `parent_cursor()`, `preview_cursor()`, `remembered_all()`), and
+  `visited()`, the levels shown.
+
 ### intuiTUIve: core components are generic (rs-rich-intuituive)
 
 The rule for intuiTUIve is now that its always-compiled core holds only

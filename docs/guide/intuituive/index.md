@@ -921,7 +921,38 @@ find the right title whatever the divider and padding.
 takes no row then), and **`.on_select(|to, cx| ..)`** is told the title a
 click, ←/→ or a number key picked, instead of the strip setting its
 signal: the app moves there its own way and sets the signal itself, with
-no click routing of its own.
+no click routing of its own. **`.fit()`** cuts the titles with `…` to
+share the width when they do not all fit (the short ones whole, the long
+ones to an equal share), rather than losing the last off the end; titles
+not selected are drawn in the theme's `tabs.unselected` style, under their
+own markup.
+
+#### A set of tabs
+
+```rust
+use intuituive::{tab_set, tabs_for};
+
+let pages = tab_set(|| Page::new());          // one tab to start
+column([
+    tabs_for(&pages, |page| page.title()).fit().fixed(1),
+    text(move || pages.with_active(|page| page.body())),
+])
+.on_key("t", move |_| { pages.open(); })      // after the active one
+.on_key("x", move |_| { pages.close_active(); })
+.on_key("shift+right", move |_| pages.swap(1))
+.on_key("tab", move |_| pages.cycle(1))
+```
+
+**`tab_set(|| state)`** keeps one state per tab with one active, the
+model Bubble Tea apps and Textual's `TabbedContent` keep: `open()` (a
+state from the closure) and `open_with(state)` add a tab after the active
+one and make it active, `close(i)` and `close_active()` never close the
+last, `switch(i)`, `cycle(by)` (wrapping) and `swap(by)` (the active tab
+moves); `active()` and `tabs()` are its signals, `with_active`,
+`update_active` and `update(i, ..)` read and change a state. A state is
+anything: plain values, or signals made for the tab (a cwd and its
+history). **`tabs_for(&set, |state| title)`** is a `tabs` strip over it,
+a click or a key switching tabs; it takes every strip option.
 
 #### Scrollbars
 
@@ -1093,6 +1124,70 @@ column([
   after its max) is said there too, and nothing changes the moment.
   Eleven rows, twenty cells wide.
 - The focused day and field are reversed, which reads without colour.
+
+#### List options through a wrapper
+
+A list's options (`.symbol`, `.highlight_layer`, `.wheel_step`,
+`.selected_style_for`, `.marker`, `.on_context`, `.cursor_by`, …) reach
+the list a node wraps: a panel, padding, a reorderable list (a node with
+one child), and a `switch`, whose lists get them as they are built, so a
+list with a "No items" text in its place keeps them. On a node that is
+not a list and wraps none, they do nothing, and a debug build says so on
+stderr, once for each option.
+
+#### The cursor by key, and a context menu
+
+```rust
+list(move || names(), cursor)
+    .cursor_by(move |i| entries.with(|e| e[i].id))
+    .on_context(move |i, cx| open_menu(i, cx))
+```
+
+**`.cursor_by(|i| key)`** keeps the cursor on the same item when the
+items change: re-sorted, filtered, read again. The key of the item under
+the cursor is remembered; when the key now at its index differs, the
+selection goes to wherever it went. Moving the cursor is unchanged.
+**`.on_context(|i, cx| ..)`** runs on a right press on an item (which
+selects it first, and goes no further) or the menu key (Shift+F10) on the
+selected item: place the menu at `cx.pointer()`, or at the row's
+`row_rects` from the keyboard.
+
+#### Picking several items, and finding in a list
+
+```rust
+use intuituive::{list_search, multi_select};
+
+let picked = multi_select::<String>()
+    .over(move || names.get())                // the items' keys, in order
+    .range_from(cursor);                      // what a visual range follows
+let find = list_search(move || query.get(), move || names.get(), cursor);
+list(move || names.get(), cursor)
+    .selection_markers(picked, move |i| names.with(|n| n[i].clone()))
+    .on_key("space", move |_| picked.toggle(hovered()))
+    .on_key("v", move |_| picked.visual(false))
+    .on_key("V", move |_| picked.visual(true))
+    .on_key("esc", move |_| picked.end_visual())
+    .on_key("n", move |_| { find.next(); })
+```
+
+- **`multi_select::<K>()`** is a selection by key that outlives the
+  list's order: `toggle`, `select`, `unselect`, `clear`, and over the
+  items `select_all` and `invert`. `visual(unset)` anchors a range at the
+  cursor that follows it, selecting (or, with `unset`, unselecting) what
+  it covers, as vim's and Yazi's `v` and `V`; `end_visual()` keeps it,
+  `cancel_visual()` drops it. `selected()` is the selection with the
+  range counted, `targets(hovered)` the selection or else the hovered
+  item (what a copy or a delete acts on), `mark(&key)` how one key
+  stands. `Copy`, like a signal.
+- **`.selection_markers(sel, |i| key)`** draws the marks in a list's
+  one-cell marker column: `marker.selected` (yellow), `marker.visual`
+  (cyan) and `marker.unset` (red) in the theme; a `.marker(..)` still
+  shows where an item has no mark.
+- **`list_search(query, items, cursor)`** finds over a list's items (their
+  plain text) in smart case: lower case matches either case, a capital
+  exactly. `next()` and `previous()` move the cursor and wrap, `place()`
+  is `(n, of)` for a `2/5` count (0 off a match), `matches()` and
+  `is_match(i)` for a highlight.
 
 #### Reorderable lists
 
@@ -1444,7 +1539,16 @@ column([
   the one it ends on the background of the next, as lualine and
   vim-airline draw them. A segment with no background gets no cap, an
   empty one is left out, and the left group is cut with `…` when the two
-  do not fit.
+  do not fit. **`seg_gauge(|| fraction, || label)`** is a segment that is
+  a gauge, `.width(cells)` wide (10 by default): the share filled in its
+  style (`status_bar.gauge`, black on green), the rest in
+  `status_bar.gauge.rest`, the label centred over both: a task's
+  progress.
+- **`facts([("Name", value), ..])`** is a description list: the keys in a
+  column as wide as the widest (at most half), in the theme's `facts.key`
+  style (bold) or `.key_style(..)`'s, each value beside its key, wrapped
+  under itself. `facts_of(|| rows)` reads signals: the details of
+  whatever is hovered. Read aloud as `key: value` pairs.
 - **`breadcrumb(|| parts)`** is a trail header over any parts (a tree's
   ancestors, a wizard's steps, a path's directories): the parts joined by
   ` › ` (`.crumb_separator("/")` changes it), the last in the theme's
@@ -1904,7 +2008,20 @@ The `files` plugin (below) is each of them with a file system plugged in.
   there for your own. `view()` draws names in lists; `layout(parent,
   current, preview)` takes columns of your own (`track_current` marks the
   current one), and `miller_in(source, at)` takes a current-level signal
-  made first, so the source can follow it.
+  made first, so the source can follow it. Each signal has a method
+  (`at()`, `cursor()`, `hovered()`, `items()`, `first()`, the parent's,
+  `preview_cursor()`, `remembered_all()`), and `visited()` is the levels
+  shown, the most recent last.
+- **Your own keys and wording:** `navigation_with(node, &[(Move::Up, "k
+  up", "Previous file"), ..])` binds a table of moves, keys and the
+  descriptions the help shows, where `navigation`'s are fixed; `go(Move)`
+  makes any move from a binding of your own (a sequence:
+  `.bind_sequence("g g", "Top", move |_| m.go(Move::Top))`).
+- **Options on the columns' lists:** `view_with(MillerOptions::new()
+  .current(|list| list.highlight_layer(HighlightLayer::Under)))` hands
+  each default column's list to a hook (`current`, `parent`, `preview`),
+  so any list option or handler reaches it; a view of your own passes
+  its lists through `wrap_current` and the like.
 
 ```rust
 struct Menu;
@@ -1927,11 +2044,18 @@ columns.navigation(columns.view())
   failed one stays until `clear_finished`. `jobs_panel(list)` lists them
   with progress bars (`x` cancels the hovered job, `X` all, `c` clears the
   failed).
-- **A streaming fuzzy finder:** `finder_of(items, |item| text, |item, cx|
-  ..)` is a fuzzy finder over any iterator, read on its own thread:
-  results show while it goes on (`12/3400 (loading…)`), a new batch is
+- **A streaming fuzzy list:** `fuzzy_list(source, |item| text, |item,
+  cx| ..)` is a fuzzy list over any source of items, read on its own
+  thread: `FuzzySource::iter(items)` for an iterator, or
+  `FuzzySource::feed(|feed| ..)` for a producer pushing items as they
+  arrive (a search's results), stopping once `feed.push` says false.
+  Results show while it goes on (`12/3400 (loading…)`), a new batch is
   matched alone, Enter picks the hovered item (the item, not its text),
-  and the stream stops when the finder's screen closes.
+  Esc closes the screen or modal it is on, and the source stops when the
+  screen closes. `fuzzy_list_with(.., FuzzyOptions::new().title("Jump")
+  .border(Border::Rounded).prompt(":").on_cancel(..))` adds a panel, a
+  prompt, or an Esc of your own. **`finder_of(items, ..)`** is one over an
+  iterator, with the same look and keys.
 - **A preview pane:** `preview_of(|width| key, |key| value, |state| node)`
   loads a value off the app's thread whenever the key changes (it may
   read signals, and gets the pane's width), drops results for keys left
@@ -2119,7 +2243,7 @@ use it.
 
 ## Levels, sparklines and big text
 
-Three nodes for a dashboard or an audio app, drawn by rs-rich-ext's charts
+Nodes for a dashboard or an audio app, drawn by rs-rich-ext's charts
 from closures that read signals:
 
 ```rust
@@ -2147,9 +2271,13 @@ big_text(move || format!("[accent]{:02}[/]:{:02}", minutes.get(), seconds.get())
 - **`big_text(markup)`** (the `art` feature) draws markup in FIGlet
   letters with rs-rich-art's bundled font, each run in its style: a
   clock, a readout, a title.
+- **`digits(markup)`** draws markup three rows tall in box-drawing
+  glyphs, as Textual's `Digits`, in every build (no font): `0`-`9`,
+  `A`-`F`, `+ - = / % ( ) : . ,` and the space, any other character as it
+  is. A clock or a counter where the `art` feature is off.
 
 Each says what it shows to a screen reader: the meter its level, peaks and
-band, the sparkline its range and trend, big text its text. A
+band, the sparkline its range and trend, big text and digits their text. A
 `Spectrogram` (a waterfall of spectra) goes in a `renderable`.
 
 ## Themes
