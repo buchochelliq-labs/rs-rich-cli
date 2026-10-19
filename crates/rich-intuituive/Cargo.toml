@@ -120,3 +120,51 @@ rich-ratatui = { package = "rs-rich-ratatui", path = "../rich-ratatui", features
 [[example]]
 name = "files"
 required-features = ["files"]
+
+# The slumber clone reads its YAML collection and filters JSON with
+# rs-rich-ext's `data` parsers (`yaml`, `jsonpath`).
+[[example]]
+name = "http"
+required-features = ["rich-ext/yaml", "rich-ext/jsonpath"]
+
+[[test]]
+name = "http"
+required-features = ["rich-ext/yaml", "rich-ext/jsonpath"]
+
+# The gitui clone runs the `git` command line; rs-rich-ext's `local-time`
+# (a dev-dependency feature) shows the commits' times.
+[[example]]
+name = "git"
+
+# The bottom (btm) clone reads /proc and /sys through std; no feature.
+[[example]]
+name = "top"
+
+# The csvlens clone reads its CSV through std (rs-rich-data is not a
+# dependency here); no feature.
+[[example]]
+name = "csv"
+
+# The diskonaut clone scans with std and rs-rich-ext's `listing::walk`;
+# no feature.
+[[example]]
+name = "disk"
+
+# The termusic clone reads WAV files (`wav`) and draws the cover (`art`).
+[[example]]
+name = "music"
+required-features = ["wav", "art"]
+
+[[test]]
+name = "music"
+required-features = ["wav", "art"]
+
+# The taskwarrior-tui clone keeps its tasks as JSON lines, read and
+# written with rs-rich-ext's `data` (JSON) parser.
+[[example]]
+name = "tasks"
+required-features = ["rich-ext/data"]
+
+[[test]]
+name = "taskwarrior"
+required-features = ["rich-ext/data"]
