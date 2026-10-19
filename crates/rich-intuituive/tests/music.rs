@@ -217,7 +217,9 @@ fn the_tree_view_layout() {
     let root = library("layout");
     let driver = start(&root);
     let screen = rows(&driver);
-    assert!(screen[0].starts_with("╭ Library ─"), "{}", screen[0]);
+    // The panel's own title, a glyph in from the corner (termusic's sits
+    // at the corner).
+    assert!(screen[0].starts_with("╭─ Library ─"), "{}", screen[0]);
     assert!(
         screen[0].contains("╭─ Playlist ──┤ Total 0 tracks | 00:00 | Mode: 🔁 ├─"),
         "{}",
@@ -505,4 +507,43 @@ fn help_lists_the_keys_by_section_and_q_asks_before_quitting() {
     assert!(!driver.is_done());
     driver.press("q y");
     assert!(driver.is_done());
+}
+
+#[test]
+fn the_help_lists_every_panes_keys_wherever_the_focus_is() {
+    let root = library("help-all");
+    let mut driver = start(&root);
+    // From the playlist, the library's keys are listed too.
+    driver.press("tab ctrl+h");
+    assert_has(&driver, "Randomize playlist");
+    driver.type_text("add one");
+    driver.settle();
+    assert_has(&driver, "Add one track to playlist");
+}
+
+#[test]
+fn the_speed_moves_the_play_head_faster() {
+    let root = library("speed");
+    let mut driver = start(&root);
+    queue_album(&mut driver);
+    // Twice as fast: Intro's four seconds end after two.
+    driver.press("ctrl+f ctrl+f ctrl+f ctrl+f ctrl+f ctrl+f ctrl+f ctrl+f ctrl+f ctrl+f");
+    assert_has(&driver, "Speed: 2.0");
+    driver.press("l");
+    driver.advance(Duration::from_millis(1900));
+    assert_has(&driver, "Lyrics of Artist A - Intro");
+    driver.advance(Duration::from_millis(200));
+    assert_has(&driver, "Lyrics of Artist A - Song");
+}
+
+#[test]
+fn a_deleted_entrys_row_keeps_the_cursor() {
+    let root = library("delete-row");
+    let mut driver = start(&root);
+    // Beta - Tune.wav deleted: the cursor stays on its row, now track.mp3.
+    driver.press("j j d y");
+    assert!(!root.join("Beta - Tune.wav").exists());
+    driver.press("l");
+    assert_has(&driver, "Total 1 tracks");
+    assert_has(&driver, "[--:--]");
 }
