@@ -1,0 +1,26 @@
+~/project (filter: tar)
+  project   │ scripts.tar.gz                             122B │   18B run.sh
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+            │                                                 │
+ NOR  122B  scripts.tar.gz                                                   -rw-r--r--  Top   1/1

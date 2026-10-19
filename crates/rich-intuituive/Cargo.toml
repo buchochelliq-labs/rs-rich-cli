@@ -20,10 +20,11 @@ keywords = ["terminal", "tui", "reactive", "framework", "rich"]
 categories = ["command-line-interface"]
 include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
 
-# The image nodes and the file watcher on docs.rs too; `audio` is left out,
-# as its ALSA headers may not be there to build it.
+# The image nodes, the file watcher, the file components, raw PCM and the
+# meters and spectra on docs.rs too; `audio` is left out, as its ALSA
+# headers may not be there to build it.
 [package.metadata.docs.rs]
-features = ["art", "watch"]
+features = ["art", "micro", "watch", "files", "archive", "pcm", "viz"]
 
 [lib]
 name = "intuituive"
@@ -38,29 +39,78 @@ termion = ["rich-interact/termion"]
 # `App::run_with(BackendKind::Termwiz)`: the termwiz backend of
 # rs-rich-interact.
 termwiz = ["rich-interact/termwiz"]
-# `audio::input` and `audio::devices`: capture from a sound card through
-# cpal (ALSA on Linux, which needs libasound2-dev to build; CoreAudio on
-# macOS; WASAPI on Windows). Off by default.
-audio = ["dep:cpal"]
+# `audio::pcm`, `audio::Format`, `audio::deinterleave`, `audio::Frame`
+# and `audio::Matrix`: raw PCM read a buffer at a time, the light base of
+# the sound plugin, with no dependency. `audio` and `wav` turn it on.
+# Off by default.
+pcm = []
+# `audio::input`, `audio::open`, `audio::devices` and `audio::picker`:
+# capture from a sound card through cpal (ALSA on Linux, which needs
+# libasound2-dev to build; CoreAudio on macOS; WASAPI on Windows), with
+# alsa-sys to keep ALSA's messages off the screen. Off by default.
+audio = ["pcm", "dep:cpal", "dep:alsa-sys"]
+# `audio::Host::Pulse`: PulseAudio and PipeWire sources (a sink's monitor
+# among them) through cpal's own PulseAudio client, pure Rust: no system
+# library beyond `audio`'s. Off by default.
+pulse = ["audio", "cpal/pulseaudio"]
+# `audio::wav`, `audio::wav_writer` and `audio::record`: WAV files in and
+# out, through hound (pure Rust). Off by default.
+wav = ["pcm", "dep:hound"]
+# `meter`, `meter_with`, `sparkline`, `sparkline_with`, `spectrogram`,
+# `spectrogram_with`, `bar_spectrum` and `bar_spectrum_with` (and
+# `Node::hold`): levels and spectra as nodes, on rs-rich-ext's charts,
+# with no dependency of their own. A plugin: views of one domain's data,
+# not core components. Off by default.
+viz = []
 # `watch_path`: wake the app when files change, through notify (inotify,
 # FSEvents, ReadDirectoryChangesW, kqueue). Off by default.
 watch = ["dep:notify"]
-# `image`: an image file as a node, drawn by rs-rich-art in half blocks
-# (or quadrants, Braille, ASCII). Off by default.
-art = ["dep:rich-art", "rich-art/image"]
+# `image`: an image file (or bytes) as a node, drawn by rs-rich-art in half
+# blocks (or quadrants, Braille, ASCII), or in pixels through Kitty's,
+# Sixel's or iTerm2's protocol (`image_graphics`); `sprite_sheet`: an image
+# cut into pixel and half-block sprites. Off by default.
+art = ["dep:rich-art", "rich-art/image", "rich-art/kitty", "rich-art/sixel", "rich-art/iterm"]
+# `micro_sprite`: rs-rich-micro's micro assets (emoji-sized images and
+# animations) as sprites for a stage, fitted in half blocks. Off by
+# default.
+micro = ["art", "dep:rich-micro"]
+# `files`: a file manager's components (Miller columns, file lists,
+# previews by type, a watched directory model, background file jobs with
+# progress, a streaming fuzzy finder), on rs-rich-ext's `listing`, `open`,
+# `file_ops`, `trash` and `git`. Local times through rs-rich-ext's
+# `local-time` (chrono). Off by default.
+files = ["rich-ext/local-time"]
+# `files` with archive previews and extraction (tar, tar.gz, zip) through
+# rs-rich-ext's `archive` (zip, flate2). Off by default.
+archive = ["files", "rich-ext/archive"]
+
+# The scope-tui rebuild reads raw PCM (`audio::pcm`), the `pcm` plugin's.
+[[example]]
+name = "scope"
+required-features = ["pcm"]
 
 [dependencies]
 rich.workspace = true
 rich-ext.workspace = true
 rich-interact.workspace = true
 cpal = { version = "0.18.2", optional = true }
+hound = { version = "3.5", optional = true }
 notify = { workspace = true, optional = true }
 rich-art = { workspace = true, optional = true }
+rich-micro = { workspace = true, optional = true }
 # Node::solver(Solver::Ratatui): ratatui's constraint solver (its fork of
 # cassowary), so a row ported from ratatui lays out as it did.
 kasuari = "0.4"
 
+# The `audio` feature's ALSA error handler (`snd_lib_error_set_local`);
+# cpal links the same library already.
+[target.'cfg(target_os = "linux")'.dependencies]
+alsa-sys = { version = "0.4", optional = true }
+
 [dev-dependencies]
+# The Yazi example (examples/files.rs) shows times in the local time zone
+# with rs-rich-ext's `fs::local_time`, behind its `local-time` feature.
+rich-ext = { workspace = true, features = ["local-time"] }
 # PTY tests: an app run on every backend gives the terminal back
 # (tests/backends.rs).
 portable-pty = "0.9"
@@ -72,3 +122,65 @@ ratatui = { version = "0.30", default-features = false, features = ["crossterm",
 # app (tests/ratatui_widgets.rs). Path only, so `cargo publish` drops it:
 # a published crate need not wait on its dev-dependencies.
 rich-ratatui = { package = "rs-rich-ratatui", path = "../rich-ratatui", features = ["interact"] }
+
+# The Yazi clone is built from the `files` feature's components.
+[[example]]
+name = "files"
+required-features = ["files"]
+
+# The slumber clone reads its YAML collection and filters JSON with
+# rs-rich-ext's `data` parsers (`yaml`, `jsonpath`).
+[[example]]
+name = "http"
+required-features = ["rich-ext/yaml", "rich-ext/jsonpath"]
+
+[[test]]
+name = "http"
+required-features = ["rich-ext/yaml", "rich-ext/jsonpath"]
+
+# The gitui clone runs the `git` command line; rs-rich-ext's `local-time`
+# (a dev-dependency feature) shows the commits' times.
+[[example]]
+name = "git"
+
+# The bottom (btm) clone reads /proc and /sys through std; no feature.
+[[example]]
+name = "top"
+
+# The csvlens clone reads its CSV through std (rs-rich-data is not a
+# dependency here); no feature.
+[[example]]
+name = "csv"
+
+# The diskonaut clone scans with std and rs-rich-ext's `listing::walk`;
+# no feature.
+[[example]]
+name = "disk"
+
+# The termusic clone reads WAV files (`wav`) and draws the cover (`art`).
+[[example]]
+name = "music"
+required-features = ["wav", "art"]
+
+[[test]]
+name = "music"
+required-features = ["wav", "art"]
+
+# The taskwarrior-tui clone keeps its tasks as JSON lines, read and
+# written with rs-rich-ext's `data` (JSON) parser.
+[[example]]
+name = "tasks"
+required-features = ["rich-ext/data"]
+
+[[test]]
+name = "taskwarrior"
+required-features = ["rich-ext/data"]
+
+# The raycaster draws its view in cells and pixels with rs-rich-art (`art`).
+[[example]]
+name = "raycast"
+required-features = ["art"]
+
+[[test]]
+name = "raycast"
+required-features = ["art"]

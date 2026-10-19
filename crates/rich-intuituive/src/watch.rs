@@ -104,11 +104,21 @@ impl WatchOptions {
 
 /// A running watcher (see [`watch_path`]). It runs as long as the app;
 /// [`stop`](Self::stop) ends it sooner. Dropping the handle does not stop
-/// it, so an app may ignore the handle.
+/// it, so an app may ignore the handle. Two handles are equal when they
+/// are handles of the same watcher, so they can be kept in a signal.
 #[derive(Clone, Debug)]
 pub struct PathWatch {
     stop: Arc<AtomicBool>,
 }
+
+impl PartialEq for PathWatch {
+    /// The same watcher.
+    fn eq(&self, other: &Self) -> bool {
+        Arc::ptr_eq(&self.stop, &other.stop)
+    }
+}
+
+impl Eq for PathWatch {}
 
 impl PathWatch {
     /// Stop watching: no handler runs after the change being delivered,
@@ -339,6 +349,18 @@ mod tests {
 
     fn event(kind: EventKind, path: &str) -> notify::Result<notify::Event> {
         Ok(notify::Event::new(kind).add_path(PathBuf::from(path)))
+    }
+
+    #[test]
+    fn handles_are_equal_when_they_are_one_watcher() {
+        let one = PathWatch {
+            stop: Arc::new(AtomicBool::new(false)),
+        };
+        let other = PathWatch {
+            stop: Arc::new(AtomicBool::new(false)),
+        };
+        assert_eq!(one, one.clone());
+        assert_ne!(one, other);
     }
 
     #[test]

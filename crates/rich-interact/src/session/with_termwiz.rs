@@ -29,7 +29,7 @@ use termwiz::input::InputEvent;
 use termwiz::input::InputParser;
 use termwiz::terminal::{SystemTerminal, Terminal};
 
-use super::Output;
+use super::{Output, WakeFd};
 
 /// termwiz's terminal, kept where the panic hook and the signal thread
 /// reach it.
@@ -182,8 +182,9 @@ impl Reader {
         }
     }
 
-    /// The next event within `wait` (or a little sooner).
-    fn next(&mut self, wait: Duration) -> io::Result<Option<InputEvent>> {
+    /// The next event within `wait` (or a little sooner: a wake on `wake`
+    /// ends the wait).
+    fn next(&mut self, wait: Duration, wake: Option<WakeFd>) -> io::Result<Option<InputEvent>> {
         use filedescriptor::{poll, pollfd, POLLIN};
         use std::io::Read;
         use std::os::unix::io::AsRawFd;
@@ -196,7 +197,7 @@ impl Reader {
             }
             None => wait,
         };
-        let mut ready = [
+        let mut ready = vec![
             pollfd {
                 fd: self.tty.as_raw_fd(),
                 events: POLLIN,
@@ -208,6 +209,12 @@ impl Reader {
                 revents: 0,
             },
         ];
+        // The waker's pipe: a wake ends the wait, and nothing is read.
+        ready.extend(wake.map(|fd| pollfd {
+            fd,
+            events: POLLIN,
+            revents: 0,
+        }));
         match poll(&mut ready, Some(wait)) {
             Ok(_) => {}
             // A signal (SIGWINCH, SIGCONT): look again next time.
@@ -347,14 +354,18 @@ pub(super) fn size() -> io::Result<(u16, u16)> {
 }
 
 /// termwiz's next event within `wait` (or a little sooner).
-pub(super) fn poll(probed: &mut Probed, wait: Duration) -> io::Result<Option<InputEvent>> {
+pub(super) fn poll(
+    probed: &mut Probed,
+    wait: Duration,
+    wake: Option<WakeFd>,
+) -> io::Result<Option<InputEvent>> {
     #[cfg(unix)]
     {
-        probed.reader.next(wait)
+        probed.reader.next(wait, wake)
     }
     #[cfg(not(unix))]
     {
-        let _ = probed;
+        let _ = (probed, wake);
         Ok(with(true, |terminal| terminal.poll_input(Some(wait)))?.flatten())
     }
 }

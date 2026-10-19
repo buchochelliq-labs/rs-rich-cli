@@ -93,20 +93,20 @@ impl Note {
     }
 }
 
-/// The widest a notification grows.
-const NOTICE_WIDTH: u16 = 48;
+/// The widest a notification grows unless
+/// [`App::notify_width`](crate::App::notify_width) says.
+pub(crate) const NOTICE_WIDTH: u16 = 48;
 
 /// Draw `toasts` (oldest first) in `corner` of `area`, newest nearest the
 /// corner, each a cell in from the side: a plain one as a box round its
 /// line, a notification as a box with its title on the top edge and its
-/// body wrapped inside. Where they drew.
+/// body wrapped inside, `most` cells wide at most. Where they drew.
 pub(crate) fn draw(
     console: &Console,
     screen: &mut Screen,
     area: Rect,
     toasts: &[&Note],
-    theme: &Theme,
-    corner: Corner,
+    (theme, corner, most): (&Theme, Corner, u16),
 ) -> Vec<Rect> {
     let mut damage = Vec::new();
     let top = matches!(corner, Corner::TopLeft | Corner::TopRight);
@@ -134,7 +134,7 @@ pub(crate) fn draw(
                 let w = widest
                     .saturating_add(4)
                     .max(title)
-                    .min(NOTICE_WIDTH)
+                    .min(most)
                     .min(area.width.saturating_sub(2));
                 let mut options = console
                     .options()

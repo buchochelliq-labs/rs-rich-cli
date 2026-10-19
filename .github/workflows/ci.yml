@@ -221,8 +221,8 @@ jobs:
             args: "--all-features"
           # intuiTUIve, the TUI framework, with both of interact's extra
           # backends (each alone, and on macOS, in `backends`) and its
-          # `art`, `audio` (ALSA headers installed below) and `watch`
-          # features. Its benchmark against ratatui runs in release in
+          # `art`, `audio` (ALSA headers installed below), `watch`, `files`,
+          # `archive` and `viz` features. Its benchmark against ratatui runs in release in
           # `ratatui-gate`.
           - crate: rs-rich-intuituive
             args: "--all-features"
@@ -584,11 +584,16 @@ jobs:
           sudo apt-get install -y less zsh fish w3m
 
       # The CLI with its `serve` feature (the serve tape), the interact
-      # examples (the viewport tape), and the intuiTUIve and embed examples.
+      # examples (the viewport tape), and the intuiTUIve and embed examples;
+      # intuiTUIve's with `files` (the files example needs it), `archive`,
+      # `watch` and `art`, so the files tape lists an archive, follows the
+      # disk and draws its image preview, `pcm`, which the scope example
+      # needs, and `viz` (meters, sparklines and spectra).
       - name: Build the CLI and the examples the tapes run
         run: >-
           cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive
-          -p rs-rich-embed --features rs-rich-cli/serve --bins --examples --locked
+          -p rs-rich-embed --features rs-rich-cli/serve,rs-rich-intuituive/files,rs-rich-intuituive/archive,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm,rs-rich-intuituive/viz
+          --bins --examples --locked
 
       # rs-rich-ext's examples are guide programs; the surface tape runs one.
       - name: Build the example the surface tape runs

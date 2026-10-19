@@ -37,6 +37,11 @@
 //! - Layout and live output: [`layout`], [`live`], [`surface`] (positioned
 //!   drawing that writes only what changed).
 //! - Pipelines: [`transform`], and `data::transform` (`jsonpath` feature).
+//! - Files: [`filetype`] (icons, colours, MIME types), [`fs`] (local times,
+//!   owners), [`listing`] (entries, sorting, a tree walk), [`open`] (opener
+//!   rules), [`file_ops`] (copy, move, delete with progress), [`trash`] (the
+//!   FreeDesktop trash), [`git`] (status per file), and `archive` (tar and zip
+//!   listing and extraction; `archive` feature).
 //!
 //! The user guide (<https://buchochelliq-labs.github.io/rs-rich-cli/guide/ext/>)
 //! covers each module with compiled examples.
@@ -56,6 +61,9 @@
 
 pub mod a11y;
 pub mod ansi_explain;
+// Tar, tar.gz and zip listings and extraction.
+#[cfg(feature = "archive")]
+pub mod archive;
 pub mod badge;
 pub mod cancel;
 pub mod capabilities;
@@ -76,9 +84,17 @@ pub mod format;
 pub mod frame;
 // Local times and owner names for file listings.
 pub mod fs;
+// File operations with progress: copy, move, delete, trash.
+pub mod file_ops;
+// Git's status of each file, through `git status --porcelain`.
+pub mod git;
 pub mod graphics;
 pub mod hex;
 pub mod highlighter;
+// Directory entries, sorting, line-mode cells and a lazy tree walk.
+pub mod listing;
+// Which program opens a file: Yazi's opener rules.
+pub mod open;
 pub mod palette;
 pub mod plugin_loading;
 pub mod redact;
@@ -96,6 +112,8 @@ pub mod table;
 pub mod target;
 pub mod theme;
 pub mod transform;
+// The FreeDesktop trash: put, list, restore, purge.
+pub mod trash;
 pub mod unicode_inspect;
 pub mod workflow;
 

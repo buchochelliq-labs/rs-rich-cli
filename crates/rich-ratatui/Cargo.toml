@@ -4,7 +4,8 @@
 # as ratatui widgets, ratatui buffers convert back into rich lines, and (behind
 # the off-by-default `interact` feature) ratatui widgets run as rs-rich-interact
 # components. The rich → ratatui direction needs only core `rich` and
-# `ratatui-core`, the crate ratatui's own widget libraries build on, so users
+# `ratatui-core`, the crate ratatui's own widget libraries build on (and
+# rs-rich-ext without its defaults, for the colour names), so users
 # of `ratatui` and of `ratatui-core` get the same types. Nothing else in the
 # workspace depends on ratatui. Independent SemVer from 0.0.1. See AGENTS.md →
 # Versioning.
@@ -47,6 +48,11 @@ rich.workspace = true
 # trait, without the umbrella crate's backends and widgets. ratatui 0.30
 # re-exports these types, so a `ratatui` app passes its own `Buffer` here.
 ratatui-core = "0.1.2"
+# `style_from_color_name`, re-exported from `rich_ext::palette`, where it
+# lives so an app can read ratatui's colour names without ratatui. Without
+# its default features (so not through the workspace entry, which keeps
+# them): no syntect.
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext", version = "0.0.17", default-features = false }
 rich-interact = { workspace = true, optional = true }
 
 [dev-dependencies]

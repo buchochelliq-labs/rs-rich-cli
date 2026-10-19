@@ -37,7 +37,8 @@ use std::time::Duration;
 
 use rich::{ColorSystem, Console, Style};
 use rich_interact::{
-    Backend, BackendKind, Button, Event, Key, KeyCode, MouseKind, Session, SessionOptions,
+    Backend, BackendKind, Button, Event, Key, KeyCode, Modifiers, MouseKind, Releases, Session,
+    SessionOptions,
 };
 
 use crate::inspect::{Handled, Inspector, Names, NodeTiming, Probe, TraceEntry, Traced};
@@ -45,7 +46,7 @@ use crate::layout::Size;
 use crate::node::{with_node, Axis, FrameState, Node};
 use crate::notify::{Corner, Level, Note};
 use crate::place::{Offset, Origin};
-use crate::reactive::{signal, NodeId, Proxy, Runtime, Signal};
+use crate::reactive::{signal, Memo, NodeId, Proxy, Runtime, Signal};
 use crate::screen::{Painter, Rect, Screen};
 use crate::widget::{Used, WidgetEvent};
 
@@ -74,6 +75,53 @@ pub struct Ctx {
     printed: Vec<String>,
     /// Programs to give the terminal to, in turn.
     handoffs: Vec<Handoff>,
+    /// One-shot timers made with [`Ctx::after`].
+    afters: Vec<After>,
+    /// Repeating timers made with [`Ctx::every`] and [`Ctx::fixed_step`].
+    tickers: Vec<Ticker>,
+    /// In a timer's function: the ticks it stands for.
+    ticks: u64,
+    /// In a key binding: the key that fired it.
+    key: Option<Key>,
+    /// Which key releases the terminal reports.
+    releases: Releases,
+    /// Screens open when the handler was called.
+    layers: usize,
+    /// The handler passed its key on ([`pass_key`](Ctx::pass_key)).
+    pub(crate) passed: bool,
+}
+
+/// The user's editor: `$VISUAL` (a program and its arguments), else
+/// `$EDITOR`, else `vi` (Notepad on Windows).
+fn editor_command() -> std::process::Command {
+    let visual = std::env::var("VISUAL")
+        .ok()
+        .filter(|v| !v.trim().is_empty());
+    match visual {
+        Some(line) => {
+            let mut words = line.split_whitespace();
+            let mut command = std::process::Command::new(words.next().unwrap_or("vi"));
+            command.args(words);
+            command
+        }
+        None => rich_ext::open::editor(),
+    }
+}
+
+/// A one-shot timer waiting to be put on the app's clock: how long it
+/// waits, what it runs, and where it was made.
+pub(crate) struct After {
+    pub timer: Timer,
+    pub run: Box<dyn FnOnce(&mut Ctx)>,
+    pub at: &'static Location<'static>,
+}
+
+/// A one-shot timer on the app's clock: its handle (when it is due), and
+/// what it runs.
+struct Timeout {
+    timer: Timer,
+    run: Box<dyn FnOnce(&mut Ctx)>,
+    at: &'static Location<'static>,
 }
 
 /// What [`handoff_then`](Ctx::handoff_then) runs once the program is done.
@@ -189,6 +237,12 @@ enum FocusMove {
     Next,
     Previous,
     To(NodeId),
+    /// The first focusable node inside a container, now or once built.
+    Within(NodeId),
+    /// The neighbouring node (or focus scope) on a side.
+    Toward(crate::focus::Direction),
+    /// The next focus scope (`true`) or the previous one.
+    Scope(bool),
 }
 
 type Build = Box<dyn FnOnce() -> Node>;
@@ -222,10 +276,16 @@ enum Nav {
     Replace(Build),
     /// The command palette, or the help, from the focused node's bindings.
     Palette,
-    Help,
+    Help(crate::help::HelpOptions),
     /// Run binding `index` of node `id` (a key sequence's, if `true`), as
     /// its key would.
     Run(NodeId, usize, bool),
+}
+
+/// Whether a screen is open over the first one, as a binding's condition
+/// reads it ([`Ctx::is_modal`] in a handler).
+pub(crate) fn over_first() -> bool {
+    Runtime::current().layers.get() > 1
 }
 
 impl Ctx {
@@ -245,7 +305,193 @@ impl Ctx {
             error: None,
             printed: Vec::new(),
             handoffs: Vec::new(),
+            afters: Vec::new(),
+            tickers: Vec::new(),
+            ticks: 0,
+            key: None,
+            releases: Releases::None,
+            layers: 1,
+            passed: false,
         }
+    }
+
+    /// Pass the key this binding was run for on, as if it had not taken
+    /// it: to the next binding of the key on the same node, then up to the
+    /// nodes above, as Bubble Tea passes a message on to a child. What the
+    /// handler did stands. Nothing outside a key binding.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let (said, editing) = (signal(String::new()), signal(false));
+    ///     column([text!("{said}")
+    ///         .bind("esc", "Stop editing", move |cx| {
+    ///             if !editing.get_untracked() {
+    ///                 cx.pass_key();
+    ///             }
+    ///             editing.set(false);
+    ///         })
+    ///         .focusable()])
+    ///     .bind("esc", "Reset", move |_| said.set("reset".into()))
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("esc");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "reset");
+    /// ```
+    pub fn pass_key(&mut self) {
+        self.passed = true;
+    }
+
+    /// The app's clock: the time since it started, as this turn began
+    /// (stepped by the headless driver in a test).
+    pub fn now(&self) -> Duration {
+        Runtime::current().now.get()
+    }
+
+    /// Whether the handler runs on a screen, modal or pop-up opened over
+    /// the first screen (one [`pop`](Self::pop) would close): a component
+    /// that closes itself on Esc, such as a
+    /// [`fuzzy_list`](crate::finder::fuzzy_list), leaves Esc to the app on
+    /// the first screen.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let said = signal(String::new());
+    ///     text!("{said}").on_key("m", move |cx| {
+    ///         said.set(format!("modal: {}", cx.is_modal()));
+    ///         cx.modal(Size::Fixed(10), Size::Fixed(3), move || {
+    ///             label("over").on_key("m", move |cx| said.set(format!("modal: {}", cx.is_modal())))
+    ///         });
+    ///     })
+    /// });
+    /// let mut driver = app.driver(20, 5);
+    /// driver.press("m");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "modal: false");
+    /// driver.press("m");
+    /// assert!(driver.screen().plain()[0].starts_with("modal: true"));
+    /// ```
+    pub fn is_modal(&self) -> bool {
+        self.layers > 1
+    }
+
+    /// Run `then` once, `wait` from now on the app's clock: [`after`] from
+    /// a handler.
+    #[track_caller]
+    pub fn after(&mut self, wait: Duration, then: impl FnOnce(&mut Ctx) + 'static) -> Timer {
+        let timer = Timer::once(wait);
+        self.afters.push(After {
+            timer,
+            run: Box::new(then),
+            at: Location::caller(),
+        });
+        timer
+    }
+
+    /// Call `tick` every `interval` from now: [`every`] from a handler,
+    /// so a timer starts when it is wanted (a game's tick when play
+    /// starts) rather than with the app. It belongs to the screen the
+    /// handler runs on, and stops when that screen closes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// let app = App::new(|| {
+    ///     let ticks = signal(0);
+    ///     text!("{ticks}").on_key("space", move |cx| {
+    ///         cx.every(Duration::from_millis(100), move |_| ticks.update(|t| *t += 1));
+    ///     })
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// driver.advance(Duration::from_secs(1));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "0");
+    /// driver.press("space");
+    /// driver.advance(Duration::from_millis(300));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "3");
+    /// ```
+    #[track_caller]
+    pub fn every(&mut self, interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) -> Timer {
+        let ticker = Ticker::every(interval, tick, Location::caller());
+        let timer = ticker.timer;
+        self.tickers.push(ticker);
+        timer
+    }
+
+    /// [`fixed_step`] from a handler, as [`every`](Self::every) is
+    /// [`every`](crate::every).
+    #[track_caller]
+    pub fn fixed_step(
+        &mut self,
+        period: Duration,
+        step: impl FnMut(&mut Ctx, u64) + 'static,
+    ) -> Timer {
+        let ticker = Ticker::steps(period, step, Location::caller());
+        let timer = ticker.timer;
+        self.tickers.push(ticker);
+        timer
+    }
+
+    /// In a timer's function: how many of its ticks went by unrun since it
+    /// last ran, because the loop fell behind (an [`every`] runs once
+    /// however many are due). 0 when it is on time, and outside a timer.
+    pub fn missed_ticks(&self) -> u64 {
+        self.ticks.saturating_sub(1)
+    }
+
+    /// In a key binding (pressed, repeating or let go): the key that fired
+    /// it, as it came, so one binding of `"w up"` tells `w` from ↑. The
+    /// command palette runs a binding with its first key. `None` outside
+    /// a key binding.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let last = signal(String::new());
+    ///     text!("{last}").bind("w up", "Walk", move |cx| {
+    ///         last.set(cx.key().map(|k| k.to_string()).unwrap_or_default())
+    ///     })
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// driver.press("up");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "up");
+    /// driver.press("w");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "w");
+    /// ```
+    pub fn key(&self) -> Option<Key> {
+        self.key
+    }
+
+    /// Which key releases the terminal reports: none, every key's but the
+    /// text keys' (the kitty keyboard protocol), or every key's (with
+    /// [`App::all_keys`], or the Windows console). Releases the app makes
+    /// up ([`App::synthesize_releases`]) are not counted.
+    pub fn releases_reported(&self) -> Releases {
+        self.releases
+    }
+
+    /// Whether one of `keys` (key names, as [`on_key`](crate::Node::on_key)
+    /// takes) is held down: see [`held_keys`]. `"w"` is held while W is,
+    /// with or without Shift.
+    ///
+    /// # Panics
+    /// On a name that is not a key.
+    pub fn is_held(&self, keys: &str) -> bool {
+        let held = self.held_keys();
+        crate::node::parse_keys(keys)
+            .into_iter()
+            .any(|key| held.contains(&plain_key(key)))
+    }
+
+    /// The keys held down: [`held_keys`], read once.
+    pub fn held_keys(&self) -> Vec<Key> {
+        Runtime::try_current()
+            .and_then(|runtime| runtime.held_keys.get())
+            .map(|held| held.get_untracked())
+            .unwrap_or_default()
     }
 
     /// Give the terminal to `command` (an editor, a pager, a shell) once
@@ -287,6 +533,74 @@ impl Ctx {
         self.handoffs.push(Handoff {
             command,
             then: Some(Box::new(then)),
+        });
+    }
+
+    /// Edit `text` in the user's editor (`$VISUAL`, else `$EDITOR`, else
+    /// `vi`; Notepad on Windows): it goes in a temporary file, the editor
+    /// gets the terminal on it as with [`handoff_then`](Self::handoff_then),
+    /// and `done` gets the file's text once the editor ends (or why it
+    /// could not run), back on the app's thread. The file is removed. A
+    /// commit message, a note, a list of names to rename, a command to
+    /// change before it runs (Bubble Tea's `tea.ExecProcess`).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let note = signal(String::from("draft"));
+    ///     text!("{note}").on_key("e", move |cx| {
+    ///         cx.edit_text(&note.get_untracked(), move |edited, _| {
+    ///             if let Ok(edited) = edited {
+    ///                 note.set(edited.trim_end().to_string());
+    ///             }
+    ///         })
+    ///     })
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("e");
+    /// let handoff = driver.take_handoff().expect("the editor takes the terminal");
+    /// // The editor's last argument is the file: edit it as a user would.
+    /// let file = handoff.command.get_args().last().unwrap().to_owned();
+    /// assert_eq!(std::fs::read_to_string(&file).unwrap(), "draft");
+    /// std::fs::write(&file, "final\n").unwrap();
+    /// driver.handed_back(handoff, Ok(Some(0)));
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "final");
+    /// ```
+    pub fn edit_text(
+        &mut self,
+        text: &str,
+        done: impl FnOnce(io::Result<String>, &mut Ctx) + 'static,
+    ) {
+        self.edit_text_as(text, "txt", done);
+    }
+
+    /// [`edit_text`](Self::edit_text) in a file ending `.extension`, so the
+    /// editor knows what it is editing (`"md"`, `"toml"`, `"sh"`).
+    pub fn edit_text_as(
+        &mut self,
+        text: &str,
+        extension: &str,
+        done: impl FnOnce(io::Result<String>, &mut Ctx) + 'static,
+    ) {
+        use std::sync::atomic::{AtomicUsize, Ordering};
+        static NEXT: AtomicUsize = AtomicUsize::new(0);
+        let n = NEXT.fetch_add(1, Ordering::SeqCst);
+        let extension = extension.trim_start_matches('.');
+        let file = std::env::temp_dir().join(format!(
+            "intuituive-edit-{}-{n}.{extension}",
+            std::process::id()
+        ));
+        if let Err(error) = std::fs::write(&file, text) {
+            return done(Err(error), self);
+        }
+        let mut editor = editor_command();
+        editor.arg(&file);
+        self.handoff_then(editor, move |ended, cx| {
+            let edited = ended.and_then(|_| std::fs::read_to_string(&file));
+            let _ = std::fs::remove_file(&file);
+            done(edited, cx);
         });
     }
 
@@ -426,9 +740,17 @@ impl Ctx {
     }
 
     /// Open the help: the same bindings, with their keys, searchable.
-    /// [`App::help_key`] opens it from a key.
+    /// [`App::help_key`] opens it from a key. Only bindings that apply now
+    /// are listed ([`bind_when`](crate::Node::bind_when)); a row too long
+    /// for the help wraps.
     pub fn help(&mut self) {
-        self.nav.push(Nav::Help);
+        self.help_with(crate::help::HelpOptions::new());
+    }
+
+    /// [`help`](Self::help) shown the way `options` say: its title, its
+    /// key notation, its layout.
+    pub fn help_with(&mut self, options: crate::help::HelpOptions) {
+        self.nav.push(Nav::Help(options));
     }
 
     /// Put `text` on the clipboard, where the terminal lets an app (OSC 52)
@@ -579,6 +901,86 @@ impl Ctx {
     /// Focus the node with `id`.
     pub fn focus(&mut self, id: NodeId) {
         self.focus = Some(FocusMove::To(id));
+    }
+
+    /// Focus the first node inside the node with `id` that takes the focus
+    /// (the node itself, if it does and holds none): now, or once it is
+    /// built and laid out, when it is a page a [`switch`](crate::switch)
+    /// shows from the next frame, a [`keyed`](crate::keyed) child about to
+    /// be rebuilt, or a search box shown by a signal. A
+    /// [focus scope](crate::Node::focus_scope) gives the focus back to the
+    /// node inside it that had it last. Moving the focus again before then
+    /// (a key, a click, [`focus`](Self::focus)) drops the wait.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let page = signal(0usize);
+    ///     let pages = switch(move || page.get(), |page| match page {
+    ///         0 => label("start").focusable().name("start"),
+    ///         _ => column([label("title"), label("field").focusable().name("field")]),
+    ///     });
+    ///     let id = pages.id();
+    ///     pages.on_key("n", move |cx| {
+    ///         page.set(1);
+    ///         cx.focus_within(id);
+    ///     })
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// driver.press("n");
+    /// driver.assert_focused("field");
+    /// ```
+    pub fn focus_within(&mut self, id: NodeId) {
+        self.focus = Some(FocusMove::Within(id));
+    }
+
+    /// Move the focus to the neighbour on the `direction` side of the
+    /// focused node, by where they were drawn last: the nearest focusable
+    /// node wholly on that side, the one sharing more of its edge first
+    /// (see [`neighbour`](crate::focus::neighbour)). With the focus inside a
+    /// [focus scope](crate::Node::focus_scope), it moves between scopes
+    /// instead, each giving the focus back to the node inside it that had
+    /// it last: panes on a dashboard, tiles of a map, a grid of cards.
+    /// Nothing on that side: the focus stays.
+    /// [`Node::bind_directional_focus`](crate::Node::bind_directional_focus)
+    /// binds keys to it.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::focus::Direction;
+    ///
+    /// let app = App::new(|| {
+    ///     column([
+    ///         row([label("a").focusable().name("a"), label("b").focusable().name("b")]),
+    ///         label("c").focusable().name("c"),
+    ///     ])
+    ///     .on_key("ctrl+right", |cx| cx.focus_direction(Direction::Right))
+    ///     .on_key("ctrl+down", |cx| cx.focus_direction(Direction::Down))
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// driver.press("ctrl+right");
+    /// driver.assert_focused("b");
+    /// driver.press("ctrl+down");
+    /// driver.assert_focused("c");
+    /// ```
+    pub fn focus_direction(&mut self, direction: crate::focus::Direction) {
+        self.focus = Some(FocusMove::Toward(direction));
+    }
+
+    /// Move the focus to the next [focus scope](crate::Node::focus_scope)
+    /// in the tree, after the one that has it (the first, from outside
+    /// any): to the node inside it that had the focus last, else its first
+    /// focusable node. After the last scope, the first. Slumber's and
+    /// lazygit's Tab between panes, where Tab inside a pane moves between
+    /// its fields.
+    pub fn focus_next_scope(&mut self) {
+        self.focus = Some(FocusMove::Scope(true));
+    }
+
+    /// [`focus_next_scope`](Self::focus_next_scope) the other way round.
+    pub fn focus_previous_scope(&mut self) {
+        self.focus = Some(FocusMove::Scope(false));
     }
 
     /// A handle for other threads (see [`Proxy`]).
@@ -761,27 +1163,309 @@ impl Theme {
     }
 }
 
-struct Timer {
-    every: Duration,
+/// A timer on the app's clock, made by [`every`], [`after`],
+/// [`fixed_step`] or their [`Ctx`] forms: a handle to pause it, resume it,
+/// change its period and cancel it, from a handler or anywhere else on
+/// the app's thread. Clones are the same timer. Dropping the handle leaves
+/// the timer running.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use std::time::Duration;
+///
+/// let app = App::new(|| {
+///     let ticks = signal(0);
+///     let timer = every(Duration::from_millis(100), move |_| ticks.update(|t| *t += 1));
+///     text!("{ticks}")
+///         .on_key("p", move |_| match timer.is_paused() {
+///             true => timer.resume(),
+///             false => timer.pause(),
+///         })
+///         .on_key("f", move |_| timer.set_period(Duration::from_millis(50)))
+/// });
+/// let mut driver = app.driver(5, 1);
+/// driver.advance(Duration::from_millis(300));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "3");
+/// driver.press("p");
+/// driver.advance(Duration::from_secs(1));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "3");
+/// driver.press("p f");
+/// driver.advance(Duration::from_millis(200));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "7");
+/// ```
+#[derive(Clone, Copy, PartialEq, Eq)]
+pub struct Timer {
+    runtime: u32,
+    index: u32,
+    /// Which timer of those the entry has held: a handle to one that has
+    /// ended finds a newer one there, or none, and does nothing.
+    generation: u32,
+}
+
+/// The state behind every [`Timer`] of an app, in its runtime: entries
+/// are reused once their timer ends, so an app making a timer a key
+/// press keeps a few.
+#[derive(Default)]
+pub(crate) struct TimerTable {
+    entries: Vec<(u32, Option<TimerData>)>,
+    free: Vec<u32>,
+}
+
+#[derive(Clone, Copy)]
+struct TimerData {
+    period: Duration,
+    /// When it is due next, on the app's clock.
     next: Duration,
-    tick: Box<dyn FnMut(&mut Ctx)>,
-    /// Where it was made, for the inspector's trace.
+    /// Paused: how long it had left.
+    paused: Option<Duration>,
+    /// A [`fixed_step`]'s most ticks for one call; `None`, all that are due.
+    max_catch_up: Option<u64>,
+}
+
+/// The shortest period: a zero one would never move the timer on (and
+/// spin the loop).
+const SHORTEST_PERIOD: Duration = Duration::from_millis(1);
+
+impl Timer {
+    /// A timer in the current app, due `wait` from now on its clock and
+    /// every `period` after.
+    fn make(wait: Duration, period: Duration) -> Timer {
+        let runtime = Runtime::current_for("a timer");
+        let now = runtime.now.get();
+        let data = TimerData {
+            period,
+            next: now + wait,
+            paused: None,
+            max_catch_up: None,
+        };
+        let mut table = runtime.timers.borrow_mut();
+        let index = match table.free.pop() {
+            Some(index) => index,
+            None => {
+                table.entries.push((0, None));
+                (table.entries.len() - 1) as u32
+            }
+        };
+        let entry = &mut table.entries[index as usize];
+        entry.0 = entry.0.wrapping_add(1);
+        entry.1 = Some(data);
+        Timer {
+            runtime: runtime.id,
+            index,
+            generation: entry.0,
+        }
+    }
+
+    /// A repeating timer, due a period from now.
+    fn new(period: Duration) -> Timer {
+        let period = period.max(SHORTEST_PERIOD);
+        Timer::make(period, period)
+    }
+
+    /// A one-shot timer: [`after`]'s wait may be zero.
+    fn once(wait: Duration) -> Timer {
+        Timer::make(wait, wait)
+    }
+
+    /// Run `f` on its state and the app's clock; `None` once it has ended
+    /// (or its app has).
+    fn with<R>(&self, f: impl FnOnce(&mut TimerData, Duration) -> R) -> Option<R> {
+        let runtime = Runtime::try_get(self.runtime)?;
+        let now = runtime.now.get();
+        let mut table = runtime.timers.borrow_mut();
+        match table.entries.get_mut(self.index as usize) {
+            Some((generation, Some(data))) if *generation == self.generation => Some(f(data, now)),
+            _ => None,
+        }
+    }
+
+    /// Let its state go: the handle reads as cancelled from now on.
+    fn release(&self) {
+        let Some(runtime) = Runtime::try_get(self.runtime) else {
+            return;
+        };
+        let mut table = runtime.timers.borrow_mut();
+        let ended = match table.entries.get_mut(self.index as usize) {
+            Some((generation, data)) if *generation == self.generation && data.is_some() => {
+                *data = None;
+                true
+            }
+            _ => false,
+        };
+        if ended {
+            table.free.push(self.index);
+        }
+    }
+
+    /// Stop it: it does not fire until [`resume`](Self::resume)d, and
+    /// keeps the time it had left.
+    pub fn pause(&self) {
+        self.with(|timer, now| {
+            if timer.paused.is_none() {
+                timer.paused = Some(timer.next.saturating_sub(now));
+            }
+        });
+    }
+
+    /// Start it again after [`pause`](Self::pause): it is due when the
+    /// time it had left has passed. Time spent paused is not caught up.
+    pub fn resume(&self) {
+        self.with(|timer, now| {
+            if let Some(left) = timer.paused.take() {
+                timer.next = now + left;
+            }
+        });
+    }
+
+    /// Whether it is paused.
+    pub fn is_paused(&self) -> bool {
+        self.with(|timer, _| timer.paused.is_some())
+            .unwrap_or(false)
+    }
+
+    /// Fire every `period` from now on (one millisecond at least): the
+    /// next tick falls `period` after the last one (or after the timer
+    /// started), at once if that is already past. Paused, it waits
+    /// `period` once resumed. For a one-shot timer ([`after`]), the wait
+    /// from when it started.
+    pub fn set_period(&self, period: Duration) {
+        self.with(|timer, _| {
+            let last = timer.next.saturating_sub(timer.period);
+            // A one-shot timer's wait may be zero.
+            timer.period = match timer.period.is_zero() {
+                true => period,
+                false => period.max(SHORTEST_PERIOD),
+            };
+            timer.next = last + timer.period;
+            if timer.paused.is_some() {
+                timer.paused = Some(timer.period);
+            }
+        });
+    }
+
+    /// Its period (a one-shot timer's wait); zero once it has ended.
+    pub fn period(&self) -> Duration {
+        self.with(|timer, _| timer.period).unwrap_or_default()
+    }
+
+    /// Start its period again from now: the next tick is `period` away.
+    pub fn reset(&self) {
+        self.with(|timer, now| match timer.paused {
+            Some(_) => timer.paused = Some(timer.period),
+            None => timer.next = now + timer.period,
+        });
+    }
+
+    /// Stop it for good: it never fires again, and the app lets it go.
+    pub fn cancel(&self) {
+        self.release();
+    }
+
+    /// Whether it has ended: [`cancel`](Self::cancel)led, made by
+    /// [`after`] and fired, or on a screen that closed.
+    pub fn is_cancelled(&self) -> bool {
+        self.with(|_, _| ()).is_none()
+    }
+
+    /// For a [`fixed_step`]: hand its function at most `ticks` ticks a
+    /// call, dropping the rest, so after a long stall (a suspended
+    /// process, a machine asleep) the app does not run hours of steps at
+    /// once. By default every tick due is handed over.
+    pub fn max_catch_up(self, ticks: u64) -> Timer {
+        self.with(|timer, _| timer.max_catch_up = Some(ticks.max(1)));
+        self
+    }
+
+    /// How long until it is due, if it is waiting to fire.
+    fn left(&self, now: Duration) -> Option<Duration> {
+        self.with(|timer, _| {
+            timer
+                .paused
+                .is_none()
+                .then(|| timer.next.saturating_sub(now))
+        })
+        .flatten()
+    }
+
+    /// When it is due next.
+    fn next(&self) -> Option<Duration> {
+        self.with(|timer, _| timer.next)
+    }
+
+    /// Due `period` from `now`, as a screen's timers are when it opens.
+    fn start_at(&self, now: Duration) {
+        self.with(|timer, _| timer.next = now + timer.period);
+    }
+
+    /// How many ticks are due at `now` (all of them, and the most a fixed
+    /// step takes), the timer moved on past them in step: 0 when it is not
+    /// due (or paused, or has ended).
+    fn take_due(&self, now: Duration) -> (u64, u64) {
+        self.with(|timer, _| {
+            if timer.paused.is_some() || now < timer.next {
+                return (0, 0);
+            }
+            let period = timer.period.as_nanos().max(1);
+            let due = 1 + (now - timer.next).as_nanos() / period;
+            let due = u64::try_from(due).unwrap_or(u64::MAX);
+            let by = timer.period.as_nanos().saturating_mul(u128::from(due));
+            timer.next += Duration::from_nanos(u64::try_from(by).unwrap_or(u64::MAX));
+            (due, timer.max_catch_up.unwrap_or(u64::MAX))
+        })
+        .unwrap_or((0, 0))
+    }
+}
+
+impl std::fmt::Debug for Timer {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Timer")
+            .field("period", &self.period())
+            .field("paused", &self.is_paused())
+            .field("cancelled", &self.is_cancelled())
+            .finish()
+    }
+}
+
+/// A [`fixed_step`]'s function: told how many steps are due.
+type StepFn = Box<dyn FnMut(&mut Ctx, u64)>;
+
+/// What a repeating timer runs.
+enum Tick {
+    /// [`every`]: once however many ticks are due.
+    Every(Box<dyn FnMut(&mut Ctx)>),
+    /// [`fixed_step`]: told how many.
+    Steps(StepFn),
+}
+
+/// A repeating timer of a screen: its handle, what it runs, and where it
+/// was made, for the inspector's trace.
+struct Ticker {
+    timer: Timer,
+    tick: Tick,
     at: &'static Location<'static>,
 }
 
-impl Timer {
-    /// A zero interval would never move the timer on (and spin the loop),
-    /// so the shortest interval is one millisecond.
-    fn new(
+impl Ticker {
+    fn every(
         interval: Duration,
         tick: impl FnMut(&mut Ctx) + 'static,
         at: &'static Location<'static>,
-    ) -> Timer {
-        let every = interval.max(Duration::from_millis(1));
-        Timer {
-            every,
-            next: every,
-            tick: Box::new(tick),
+    ) -> Ticker {
+        Ticker {
+            timer: Timer::new(interval),
+            tick: Tick::Every(Box::new(tick)),
+            at,
+        }
+    }
+
+    fn steps(
+        period: Duration,
+        step: impl FnMut(&mut Ctx, u64) + 'static,
+        at: &'static Location<'static>,
+    ) -> Ticker {
+        Ticker {
+            timer: Timer::new(period),
+            tick: Tick::Steps(Box::new(step)),
             at,
         }
     }
@@ -811,7 +1495,7 @@ struct Layer {
     anchor: Option<(Anchor, Placement)>,
     /// For a pop-up placed from a point of the screen: where.
     origin: Option<(Origin, Offset)>,
-    timers: Vec<Timer>,
+    timers: Vec<Ticker>,
     /// Its [watches](crate::watch), stopped when it closes.
     watches: Vec<usize>,
     /// Its focusable nodes, in Tab order, at the last frame: where the
@@ -824,7 +1508,7 @@ struct Layer {
 
 thread_local! {
     /// Timers [`every`] made while an app is being built.
-    static BUILDING: std::cell::RefCell<Option<Vec<Timer>>> = const { std::cell::RefCell::new(None) };
+    static BUILDING: std::cell::RefCell<Option<Vec<Ticker>>> = const { std::cell::RefCell::new(None) };
     /// Watches [`watch`](crate::watch) made while a screen is being built.
     static WATCHES: std::cell::RefCell<Option<Vec<usize>>> = const { std::cell::RefCell::new(None) };
 }
@@ -853,18 +1537,148 @@ pub(crate) fn building_watch(id: usize) {
 /// });
 /// ```
 ///
+/// It returns the [`Timer`], to pause, resume, speed up or cancel it
+/// later. Fallen behind (a slow frame, a suspended process), it runs once
+/// and goes on in step; [`Ctx::missed_ticks`] tells `tick` how many it
+/// skipped, and [`fixed_step`] runs every one. From a handler, use
+/// [`Ctx::every`].
+///
 /// # Panics
 /// Outside `App::new`'s closure or a screen's.
 #[track_caller]
-pub fn every(interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) {
-    let at = Location::caller();
+pub fn every(interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) -> Timer {
+    building_ticker("every()", Ticker::every(interval, tick, Location::caller()))
+}
+
+/// Run `step` on a fixed timestep of `period` while the app runs, told how
+/// many steps are due: one each period in time, more after the loop fell
+/// behind (a slow frame, a stall), so a game or a simulation keeps to the
+/// clock instead of slowing down with the frame rate. Exact under a
+/// [`Driver`]: [`advance`](Driver::advance) steps to each tick, so `step`
+/// is called once a period with 1; one [`update`](Driver::update) far ahead
+/// calls it once with all the steps owed. [`Timer::max_catch_up`] caps
+/// them. Call it where [`every`] is called; [`Ctx::fixed_step`] from a
+/// handler.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::fixed_step;
+/// use std::time::Duration;
+///
+/// let app = App::new(|| {
+///     let (frames, calls) = (signal(0u64), signal(0u64));
+///     fixed_step(Duration::from_millis(10), move |_, steps| {
+///         frames.update(|f| *f += steps);
+///         calls.update(|c| *c += 1);
+///     });
+///     text!("{frames} in {calls}")
+/// });
+/// let mut driver = app.driver(12, 1);
+/// driver.advance(Duration::from_millis(50));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "5 in 5");
+/// // A stall: one turn of the loop a quarter of a second later.
+/// driver.update(Duration::from_millis(300));
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "30 in 6");
+/// ```
+///
+/// # Panics
+/// Outside `App::new`'s closure or a screen's.
+#[track_caller]
+pub fn fixed_step(period: Duration, step: impl FnMut(&mut Ctx, u64) + 'static) -> Timer {
+    building_ticker(
+        "fixed_step()",
+        Ticker::steps(period, step, Location::caller()),
+    )
+}
+
+/// Put `ticker` on the screen being built; its handle.
+fn building_ticker(what: &str, ticker: Ticker) -> Timer {
+    let timer = ticker.timer;
     BUILDING.with(|building| {
         building
             .borrow_mut()
             .as_mut()
-            .expect("every() is called inside App::new's closure or a screen's")
-            .push(Timer::new(interval, tick, at))
+            .unwrap_or_else(|| panic!("{what} is called inside App::new's closure or a screen's"))
+            .push(ticker)
     });
+    timer
+}
+
+/// Call `then` once, `wait` from now on the app's clock (the time a
+/// [`Driver`] is given, so a test steps it exactly): clear a message after
+/// a while, retry later, give up on something slow. Call it while the app
+/// is built or running: in [`App::new`]'s closure, a handler, a watch.
+/// [`Ctx::after`] does the same from a handler's `cx`.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::after;
+/// use std::time::Duration;
+///
+/// let app = App::new(|| {
+///     let message = signal("Saved");
+///     after(Duration::from_secs(2), move |_| message.set(""));
+///     text!("{message}")
+/// });
+/// let mut driver = app.driver(10, 1);
+/// driver.advance(Duration::from_millis(1900));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "Saved");
+/// driver.advance(Duration::from_millis(100));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "");
+/// ```
+///
+/// It returns the [`Timer`]: [`cancel`](Timer::cancel) it to call
+/// nothing, [`pause`](Timer::pause) it to hold the wait.
+///
+/// # Panics
+/// Outside a running or building app.
+#[track_caller]
+pub fn after(wait: Duration, then: impl FnOnce(&mut Ctx) + 'static) -> Timer {
+    let at = Location::caller();
+    let runtime = Runtime::current_for("after()");
+    let timer = Timer::once(wait);
+    runtime.afters.borrow_mut().push(After {
+        timer,
+        run: Box::new(then),
+        at,
+    });
+    timer
+}
+
+/// How many times a second `source` is written, counted over each second
+/// of the app's clock (and 0 for the first): a frame-rate meter. Each
+/// write counts, an equal value too, as [`on_write`](crate::on_write)
+/// sees them. Call it inside [`App::new`]'s closure (or a screen's), as
+/// [`every`].
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use std::time::Duration;
+///
+/// let app = App::new(|| {
+///     let frame = signal(());
+///     every(Duration::from_millis(100), move |_| frame.update(|_| {}));
+///     let fps = rate(frame);
+///     text!("{fps} fps")
+/// });
+/// let mut driver = app.driver(10, 1);
+/// for tenth in 1..=10 {
+///     driver.update(Duration::from_millis(100 * tenth));
+/// }
+/// driver.render();
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "10 fps");
+/// ```
+///
+/// # Panics
+/// Outside `App::new`'s closure or a screen's, or for a signal of another
+/// app.
+#[track_caller]
+pub fn rate<T: 'static>(source: Signal<T>) -> Signal<u32> {
+    let shown = signal(0u32);
+    let count = crate::reactive::count_writes(source);
+    every(Duration::from_secs(1), move |_| shown.set(count.replace(0)));
+    shown
 }
 
 /// Counters from the last frame, for tests and benchmarks.
@@ -877,6 +1691,44 @@ pub struct FrameStats {
     /// Frames drawn since the app started, this one included: ratatui's
     /// `Frame::count`.
     pub frames: u64,
+    /// Frames not drawn to keep to [`App::max_fps`]: each turn of the
+    /// loop that had something to draw and left it for the next frame,
+    /// which then drew what all of them changed.
+    pub skipped: u64,
+}
+
+/// [`FrameStats`] that stay readable after the app has run (and while a
+/// [`Driver`] runs it): [`App::stats_handle`]. Clones read the same
+/// counters.
+///
+/// ```
+/// use intuituive::interact::headless::{Headless, Script};
+/// use intuituive::prelude::*;
+///
+/// let app = App::new(|| {
+///     let n = signal(0);
+///     text!("{n}")
+///         .on_key("+", move |_| n.update(|n| *n += 1))
+///         .on_key("q", |cx| cx.quit())
+/// });
+/// let stats = app.stats_handle();
+/// app.run_on(&mut Headless::new(Script::new().keys("+ + q"), 5, 1)).unwrap();
+/// assert_eq!(stats.get().frames, 3);
+/// ```
+#[derive(Clone, Debug, Default)]
+pub struct StatsHandle(Rc<std::cell::Cell<FrameStats>>);
+
+impl StatsHandle {
+    /// The counters as the last frame left them.
+    pub fn get(&self) -> FrameStats {
+        self.0.get()
+    }
+
+    fn update(&self, f: impl FnOnce(&mut FrameStats)) {
+        let mut stats = self.0.get();
+        f(&mut stats);
+        self.0.set(stats);
+    }
 }
 
 /// An intuiTUIve app.
@@ -902,6 +1754,8 @@ pub struct App {
     layers: Vec<Layer>,
     /// The stack changed: everything draws again.
     restack: bool,
+    /// Where floats were painted last frame.
+    floats_drawn: Vec<Rect>,
     /// Nodes left dirty by their own drawing, and for how many frames in a
     /// row: one that keeps at it is quietened (see `Driver::render`).
     restless: HashMap<NodeId, u32>,
@@ -917,8 +1771,16 @@ pub struct App {
     /// Toasts showing, with when each goes, and the corner they stack in.
     toasts: Vec<(Note, Duration)>,
     toast_corner: Corner,
+    /// The widest a notification grows.
+    notify_width: Size,
     /// Animations running: the signal, from, to, start, length, easing.
     animations: Vec<Animation>,
+    /// One-shot timers ([`after`]), with when each is due.
+    timeouts: Vec<Timeout>,
+    /// Terminal graphics placed on the cells ([`App::graphics`]), and the
+    /// placements the last frame drew.
+    graphics: Option<std::sync::Arc<dyn rich_ext::frame::PlacementSource>>,
+    placements: Vec<rich_ext::frame::Placement>,
     /// Keys that open the command palette and the help, if any.
     palette_key: Vec<Key>,
     help_key: Vec<Key>,
@@ -953,6 +1815,10 @@ pub struct App {
     focused: Option<NodeId>,
     /// Focus, hover and resize events waiting to be told to their widgets.
     lifecycle: Vec<(NodeId, WidgetEvent)>,
+    /// Nodes with [`on_focus`](crate::Node::on_focus) or
+    /// [`on_blur`](crate::Node::on_blur) handlers the focus came into
+    /// (`true`) or left, waiting to be told with the lifecycle events.
+    focus_events: Vec<(NodeId, bool)>,
     /// Whether text selected with the mouse can be copied, and what was
     /// copied since the loop last asked.
     clipboard: bool,
@@ -961,7 +1827,10 @@ pub struct App {
     console: Option<Console>,
     /// The console the last frame used, for components handling events.
     last_console: Option<Console>,
-    stats: FrameStats,
+    stats: StatsHandle,
+    /// The shortest time between two frames [`run_on`](Self::run_on)
+    /// draws ([`max_fps`](Self::max_fps)).
+    frame_time: Option<Duration>,
     /// Hand each frame's plain text to the backend (the headless driver
     /// records it); off in a real terminal, where nobody reads it.
     text_frames: bool,
@@ -1003,6 +1872,99 @@ pub struct App {
     /// While the inspector traces: the node that took the event being
     /// routed, and how.
     used: crate::inspect::Used,
+    /// Ask the terminal to report every key ([`all_keys`](Self::all_keys)).
+    all_keys: bool,
+    /// Which key releases the backend reports.
+    releases: Releases,
+    /// Releases made up for keys whose release is not reported, after
+    /// this long without a repeat ([`synthesize_releases`](Self::synthesize_releases)).
+    synthesize: Option<Duration>,
+    /// The keys held down, and what [`held_keys`] reads.
+    held: Vec<Held>,
+    held_keys: Signal<Vec<Key>>,
+    /// The key being routed is held already: the terminal's repeat.
+    repeating_key: bool,
+    /// Bindings repeating under the app's control ([`Node::repeat`]).
+    repeats: Vec<Repeat>,
+}
+
+/// A key held down: as a [plain key](plain_key), when it was last pressed
+/// or repeated, and whether its release will be reported.
+struct Held {
+    key: Key,
+    last: Duration,
+    reported: bool,
+}
+
+/// A binding repeating while its key is held ([`Node::repeat`]): the
+/// plain key, the key as pressed (told to the handler), the binding, the
+/// screen it is on, and when it fires next and how often.
+struct Repeat {
+    key: Key,
+    pressed: Key,
+    node: NodeId,
+    index: usize,
+    depth: usize,
+    next: Duration,
+    rate: Duration,
+}
+
+/// `key` as [`held_keys`] and releases name it: without modifiers, a
+/// letter in lower case (Shift with `w` is `W`, and is let go as either),
+/// Shift+Tab as Tab.
+///
+/// ```
+/// use intuituive::interact::Key;
+/// use intuituive::app::plain_key;
+///
+/// let k = |name| Key::parse(name).unwrap();
+/// assert_eq!(plain_key(k("W")), k("w"));
+/// assert_eq!(plain_key(k("ctrl+up")), k("up"));
+/// assert_eq!(plain_key(k("shift+tab")), k("tab"));
+/// ```
+pub fn plain_key(key: Key) -> Key {
+    let code = match key.code {
+        KeyCode::Char(c) if c.is_alphabetic() => {
+            KeyCode::Char(c.to_lowercase().next().unwrap_or(c))
+        }
+        KeyCode::BackTab => KeyCode::Tab,
+        code => code,
+    };
+    Key::with(code, Modifiers::NONE)
+}
+
+/// The keys held down in the current app, as [plain keys](plain_key), in
+/// the order they went down: a game moves while `w` is in it. A key is
+/// held from its press until its release, which the terminal reports
+/// (see [`Ctx::releases_reported`]) or the app makes up
+/// ([`App::synthesize_releases`]). A key whose release will come neither
+/// way is never in it: on a terminal without releases, and with none made
+/// up, it stays empty. Nodes that read it draw again as keys go down and
+/// up.
+///
+/// ```
+/// use intuituive::interact::{Event, Key, Releases};
+/// use intuituive::prelude::*;
+/// use intuituive::held_keys;
+///
+/// let app = App::new(|| {
+///     let held = held_keys();
+///     text(move || held.get().iter().map(|k| k.to_string()).collect::<Vec<_>>().join(" "))
+/// });
+/// let mut driver = app.driver(10, 1);
+/// driver.set_releases(Releases::All);
+/// driver.press("w shift+d");
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "w d");
+/// driver.send(Event::KeyUp(Key::parse("w").unwrap()));
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "d");
+/// ```
+///
+/// # Panics
+/// Outside a running or building app.
+pub fn held_keys() -> Memo<Vec<Key>> {
+    let runtime = Runtime::current_for("held_keys()");
+    let signal = runtime.held_keys.get().expect("an app keeps its held keys");
+    Memo::of(signal)
 }
 
 /// A theme file the app reloads when it changes.
@@ -1065,6 +2027,15 @@ struct ThemeFile {
     error: Option<String>,
 }
 
+/// An app dropped without [`Driver::finish`] (a test that stops early, a
+/// driver let go) closes its runtime all the same: `latest` threads asleep
+/// on its clock wake and end, and its signals go.
+impl Drop for App {
+    fn drop(&mut self) {
+        self.runtime.close();
+    }
+}
+
 impl App {
     /// Build the app: `build` runs once, creates the app's signals and
     /// returns the root node.
@@ -1072,13 +2043,17 @@ impl App {
         let runtime = Runtime::new();
         BUILDING.with(|building| *building.borrow_mut() = Some(Vec::new()));
         WATCHES.with(|watches| *watches.borrow_mut() = Some(Vec::new()));
-        let (root, focus_path, hover_path) = runtime.enter(|| {
+        let (root, focus_path, hover_path, held_keys) = runtime.enter(|| {
             // The trace says when the focus moves and the pointer acts.
             let focus_path = signal(Vec::new()).untraced();
             let hover_path = signal(Vec::new()).untraced();
+            // And what is held, by the keys themselves.
+            let held_keys = signal(Vec::<Key>::new()).untraced();
+            Runtime::current().held_keys.set(Some(held_keys));
+            Runtime::current().focus.set(Some(focus_path));
             // Made now, so a node closure reading it later makes nothing.
             crate::reactive::viewport();
-            (build(), focus_path, hover_path)
+            (build(), focus_path, hover_path, held_keys)
         });
         let timers = BUILDING
             .with(|building| building.borrow_mut().take())
@@ -1103,6 +2078,7 @@ impl App {
                 fallback: false,
             }],
             restack: false,
+            floats_drawn: Vec::new(),
             restless: HashMap::new(),
             now: Duration::ZERO,
             focus_path,
@@ -1114,11 +2090,16 @@ impl App {
             drag: None,
             focused: None,
             lifecycle: Vec::new(),
+            focus_events: Vec::new(),
             clipboard: false,
             copies: Vec::new(),
             toasts: Vec::new(),
             toast_corner: Corner::default(),
+            notify_width: Size::Fixed(crate::notify::NOTICE_WIDTH),
             animations: Vec::new(),
+            timeouts: Vec::new(),
+            graphics: None,
+            placements: Vec::new(),
             palette_key: Vec::new(),
             help_key: Vec::new(),
             legacy_keys: false,
@@ -1134,7 +2115,8 @@ impl App {
             theme: Theme::default(),
             console: None,
             last_console: None,
-            stats: FrameStats::default(),
+            stats: StatsHandle::default(),
+            frame_time: None,
             text_frames: true,
             caret_shown: false,
             restyled: false,
@@ -1161,6 +2143,49 @@ impl App {
             which_key: None,
             which_key_at: None,
             used: None,
+            all_keys: false,
+            releases: Releases::None,
+            synthesize: None,
+            held: Vec::new(),
+            held_keys,
+            repeating_key: false,
+            repeats: Vec::new(),
+        }
+    }
+
+    /// [`new`](Self::new), with a `build` that can fail: a sound card that
+    /// is not there, a file that does not open. The error is returned here,
+    /// before anything runs, so the terminal is never taken: `main` reports
+    /// it as any other, with `?`. Signals, watches and tasks `build` made
+    /// before it failed are dropped with the app; `latest` threads, which
+    /// start when the app runs, never start.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let opened = App::try_new(|| {
+    ///     let text = std::fs::read_to_string("/no/such/file")?;
+    ///     Ok::<_, std::io::Error>(label(text))
+    /// });
+    /// assert!(opened.is_err());
+    /// let app = App::try_new(|| Ok::<_, std::io::Error>(label("fine"))).unwrap();
+    /// assert_eq!(app.render_with(&["ctrl+c"], 4, 1).unwrap()[0], "fine");
+    /// ```
+    pub fn try_new<E>(build: impl FnOnce() -> Result<Node, E>) -> Result<App, E> {
+        let mut failed = None;
+        let app = App::new(|| match build() {
+            Ok(root) => root,
+            Err(error) => {
+                failed = Some(error);
+                crate::node::label("")
+            }
+        });
+        match failed {
+            Some(error) => {
+                app.runtime.close();
+                Err(error)
+            }
+            None => Ok(app),
         }
     }
 
@@ -1408,7 +2433,8 @@ impl App {
     #[track_caller]
     pub fn every(mut self, interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) -> App {
         let at = Location::caller();
-        self.layers[0].timers.push(Timer::new(interval, tick, at));
+        let ticker = self.runtime.enter(|| Ticker::every(interval, tick, at));
+        self.layers[0].timers.push(ticker);
         self
     }
 
@@ -1454,6 +2480,7 @@ impl App {
             bracketed_paste: true,
             output: Default::default(),
             legacy_keys: self.legacy_keys,
+            all_keys: self.all_keys,
             backend,
             // Linear, lines are appended as they come: nothing to hold.
             synchronized_output: if self.linear {
@@ -1466,7 +2493,14 @@ impl App {
 
     /// Before each event, wait for the [tasks](crate::spawn) in flight to
     /// deliver their results. For tests, which then see a task's result on
-    /// the next frame however fast the machine is; off by default.
+    /// the next frame however fast the machine is; off by default. It also
+    /// puts [`latest`](crate::latest) threads that keep a beat with
+    /// [`Latest::sleep`](crate::Latest::sleep) (and
+    /// [`latest_every`](crate::latest_every)) on the app's clock, and
+    /// waits each turn until those due have sent their values and sleep
+    /// again: a thread-fed app is the same frame by frame on every run.
+    /// A `latest` thread that waits on something else (a pipe) holds each
+    /// turn up to 5 seconds.
     pub fn wait_for_tasks(mut self, on: bool) -> App {
         self.wait_for_tasks = on;
         self
@@ -1501,7 +2535,45 @@ impl App {
 
     /// Counters from the last frame.
     pub fn stats(&self) -> FrameStats {
-        self.stats
+        self.stats.get()
+    }
+
+    /// The app's [`FrameStats`], readable after it has run: [`run`](Self::run)
+    /// and [`run_on`](Self::run_on) take the app, so take this first.
+    pub fn stats_handle(&self) -> StatsHandle {
+        self.stats.clone()
+    }
+
+    /// Draw at most `fps` frames a second when the app runs its own loop
+    /// ([`run`](Self::run), [`run_on`](Self::run_on)): what changes in
+    /// between waits, and the next frame draws it all, so an app fed
+    /// faster than it can draw (a game at 60 Hz, a thread sending frames)
+    /// shows the newest state at a steady rate instead of falling behind.
+    /// Input and timers are still handled as they come. Frames held back
+    /// are counted in [`FrameStats::skipped`]. 0 draws as often as there
+    /// is something to draw, the default. A [`Driver`] draws whenever it
+    /// is asked to.
+    ///
+    /// ```
+    /// use intuituive::interact::headless::{Headless, Script};
+    /// use intuituive::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     every(Duration::from_millis(10), move |_| n.update(|n| *n += 1));
+    ///     text!("{n}").on_key("q", |cx| cx.quit())
+    /// })
+    /// .max_fps(20);
+    /// let stats = app.stats_handle();
+    /// let script = Script::new().wait(Duration::from_secs(1)).keys("q");
+    /// app.run_on(&mut Headless::new(script, 5, 1)).unwrap();
+    /// // A hundred ticks, twenty-odd frames.
+    /// assert!(stats.get().frames <= 22, "{:?}", stats.get());
+    /// ```
+    pub fn max_fps(mut self, fps: u32) -> App {
+        self.frame_time = (fps > 0).then(|| Duration::from_secs(1) / fps);
+        self
     }
 
     /// Stack toasts and [notifications](Ctx::notify) in `corner`, newest
@@ -1512,13 +2584,55 @@ impl App {
         self
     }
 
+    /// Draw terminal graphics (Kitty, iTerm2 and Sixel images) beside the
+    /// cells: after each frame's cells are written, `source` finds the
+    /// [placements](rich_ext::frame::Placement) on the screen's cells, and
+    /// those that are new, moved, on another animation frame or wiped by
+    /// cells written over them are drawn again (rs-rich-ext's
+    /// [`plan`](rich_ext::frame::plan), as its `Surface::graphics` does);
+    /// an overlay that went away has its cells repainted. The cells under a
+    /// placement are what a terminal without graphics shows, so the frame
+    /// stays exact either way. When the app ends, `source` releases what
+    /// the terminal holds. Choosing a protocol the terminal supports is the
+    /// source's.
+    pub fn graphics(mut self, source: std::sync::Arc<dyn rich_ext::frame::PlacementSource>) -> App {
+        self.graphics = Some(source);
+        self
+    }
+
+    /// The widest a [notification](Ctx::notify) grows: 48 cells by
+    /// default, or a share of the screen ([`Size::Percent`]); never wider
+    /// than the screen. A notification is as wide as its body's longest
+    /// line and its title within that, and wraps beyond it.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::{Corner, Level};
+    ///
+    /// let error = "Failed to rename notes.txt: permission denied (os error 13)";
+    /// let app = App::new(move || label("").on_key("e", move |cx| cx.notify(Level::Error, "Rename", error)))
+    ///     .toasts_at(Corner::TopRight)
+    ///     .notify_width(Size::Percent(90));
+    /// let mut driver = app.driver(80, 6);
+    /// driver.press("e");
+    /// // One line: the box's body row, then its bottom edge.
+    /// assert!(driver.screen().plain()[1].contains(error));
+    /// assert!(driver.screen().plain()[2].contains("╰───"));
+    /// ```
+    pub fn notify_width(mut self, width: Size) -> App {
+        self.notify_width = width;
+        self
+    }
+
     /// Show the which-key pop-up while a [key
     /// sequence](crate::Node::bind_sequence) is under way: what can follow
     /// the keys pressed so far, with their descriptions, in up to three
     /// columns in a box at the bottom of the screen (Yazi's). It shows at
     /// once; [`which_key_delay`](Self::which_key_delay) waits first. Off by
-    /// default. Its keys are in the theme's `which_key.key` style, else
-    /// `accent`.
+    /// default. Its keys are in the theme's `which_key.key` style (else
+    /// `accent`), the two cells after them in `which_key.sep`, and the
+    /// descriptions in `which_key.desc`; a description too long for its
+    /// column ends in `…`, two cells short of the next column's keys.
     ///
     /// ```
     /// use intuituive::prelude::*;
@@ -1529,7 +2643,7 @@ impl App {
     ///         .bind_sequence("g h", "Go home", |_| {})
     /// })
     /// .which_key(true);
-    /// let mut driver = app.driver(40, 6);
+    /// let mut driver = app.driver(44, 6);
     /// driver.press("g");
     /// let rows = driver.screen().plain();
     /// assert!(rows[3].contains("g  Go to the top") && rows[3].contains("h  Go home"));
@@ -1561,6 +2675,48 @@ impl App {
         self
     }
 
+    /// Have [`run`](Self::run) ask a terminal with the kitty keyboard
+    /// protocol to report every key (its flag 8, see
+    /// [`SessionOptions::all_keys`]): text keys report their release too,
+    /// so [`held_keys`] and [`Node::on_key_up`] work for `w` and Space,
+    /// and a modifier on its own is a key (`shift`, `ctrl`), as a game
+    /// wants. Off by default. [`Ctx::releases_reported`] says what the
+    /// terminal does.
+    pub fn all_keys(mut self, on: bool) -> App {
+        self.all_keys = on;
+        self
+    }
+
+    /// Make up the release of a key whose release the terminal does not
+    /// report, once `hold` passes without the key being pressed or
+    /// repeated again: [`held_keys`], [`Node::on_key_up`] and
+    /// [`Node::repeat`] then work on every terminal, approximately. Pick
+    /// `hold` longer than the terminal's repeat delay (often 500 ms, set
+    /// by the system), or a held key is let go before its repeats come,
+    /// and pressed again when they do. `None` (the default) makes none up.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::held_keys;
+    /// use std::time::Duration;
+    ///
+    /// let app = App::new(|| {
+    ///     let held = held_keys();
+    ///     text(move || format!("{} held", held.get().len()))
+    /// })
+    /// .synthesize_releases(Some(Duration::from_millis(600)));
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("w");
+    /// driver.advance(Duration::from_millis(599));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1 held");
+    /// driver.advance(Duration::from_millis(1));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "0 held");
+    /// ```
+    pub fn synthesize_releases(mut self, hold: Option<Duration>) -> App {
+        self.synthesize = hold;
+        self
+    }
+
     /// Whether [`run`](Self::run) reads keys as a legacy terminal sends
     /// them (off by default). Off, a terminal with the kitty keyboard
     /// protocol has it turned on: Tab and Ctrl+I are told apart, and widgets
@@ -1588,6 +2744,56 @@ impl App {
     /// itself.
     pub fn selectable(mut self, on: bool) -> App {
         self.selectable = on;
+        self
+    }
+
+    /// Below `width` x `height` cells, show `message` (console markup)
+    /// centred instead of the app, as a fixed-layout app or a game does on
+    /// a terminal too small for it. Meanwhile keys go nowhere but `q`,
+    /// which quits (as Ctrl+C does anyway); the app keeps its state, its timers run, and it
+    /// comes back as it was once the terminal is big enough. Pop-ups and
+    /// modals open over it as ever.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("board")).min_size(20, 5, "Terminal must be at least 20 x 5!");
+    /// let mut driver = app.driver(40, 5);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "board");
+    /// driver.resize(12, 5);
+    /// driver.settle();
+    /// let shown = driver.screen().plain().join("\n");
+    /// assert!(shown.contains("Terminal") && !shown.contains("board"));
+    /// driver.resize(20, 5);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "board");
+    /// ```
+    pub fn min_size(mut self, width: u16, height: u16, message: impl Into<String>) -> App {
+        use crate::node::{column, label, row, switch};
+        let message = message.into();
+        let runtime = self.runtime.clone();
+        let root =
+            runtime.enter(|| {
+                let app = std::mem::replace(&mut self.layers[0].root, label(""));
+                let app = std::cell::RefCell::new(Some(app));
+                let viewport = crate::reactive::viewport();
+                let small = move || {
+                    let (w, h) = viewport.get();
+                    (w, h) != (0, 0) && (w < width || h < height)
+                };
+                switch(small, move |small| match small {
+                    true => column([row([
+                        label(message.clone()).text_align(crate::TextAlign::Center)
+                    ])
+                    .justify(crate::Justify::Center)
+                    .auto()])
+                    .justify(crate::Justify::Center)
+                    .on_key("q", |cx| cx.quit()),
+                    false => app.borrow_mut().take().unwrap_or_else(|| label("")),
+                })
+            });
+        self.layers[0].root = root;
         self
     }
 
@@ -1699,8 +2905,15 @@ impl App {
         let inline = self.inline.is_some();
         let text_frames = self.text_frames;
         let linear = self.linear;
+        let frame_time = self.frame_time;
+        let mut last_frame: Option<Duration> = None;
         let mut driver = self.driver(width, height);
         driver.set_clipboard(backend.clipboard().is_ok());
+        driver.set_releases(backend.releases_reported());
+        // A value from another thread ends the wait on the terminal.
+        if let Some(waker) = backend.waker() {
+            driver.set_waker(move || waker.wake());
+        }
         // A frame as one synchronized update, where the backend writes
         // them; linear lines as they are, since they are appended and
         // there is no frame to hold. Nothing for output that is empty.
@@ -1747,6 +2960,60 @@ impl App {
             }
             Ok(())
         }
+        // One event read from the backend, handled (without drawing):
+        // Ctrl+Z suspends unless the app binds it, a resume after SIGTSTP
+        // draws everything, and what handlers asked for (copies, programs
+        // to run) is done.
+        fn deliver(
+            driver: &mut Driver,
+            backend: &mut impl Backend,
+            event: Event,
+            linear: bool,
+            inline: bool,
+        ) -> io::Result<()> {
+            match &event {
+                // Raw mode turns off the terminal's own Ctrl+Z, so it
+                // arrives as a key: suspend as the terminal would have,
+                // unless the app binds it. On `fg` everything draws
+                // again (inline, in a new region below the shell's
+                // lines).
+                Event::Key(key)
+                    if *key == Key::ctrl('z')
+                        && backend.can_suspend()
+                        && !driver.app.binds(*key) =>
+                {
+                    put(backend, linear, &driver.suspend())?;
+                    backend.suspend()?;
+                    if linear {
+                        // The session hides the cursor on the way back;
+                        // linear mode reads from where it is.
+                        backend.write("\x1b[?25h")?;
+                    }
+                    let (columns, rows) = backend.size();
+                    if inline {
+                        driver.set_origin(backend.origin());
+                    }
+                    driver.resize(columns, rows);
+                    return Ok(());
+                }
+                // Back from a suspend started outside (SIGTSTP): what
+                // is on the screen is the shell's, so the resize this
+                // is draws everything, in a new region when inline.
+                Event::Resize { .. } if backend.take_resumed() => {
+                    let _ = driver.suspend();
+                    if linear {
+                        backend.write("\x1b[?25h")?;
+                    }
+                }
+                _ => {}
+            }
+            if inline {
+                driver.set_origin(backend.origin());
+            }
+            driver.event(event);
+            copy_all(driver, backend);
+            hand_off(driver, backend, linear, inline)
+        }
         let result = (|| -> io::Result<()> {
             loop {
                 driver.update(backend.elapsed());
@@ -1755,59 +3022,49 @@ impl App {
                 if driver.is_done() {
                     return Ok(());
                 }
-                if let Some(out) = driver.render() {
+                // Keeping to `max_fps`: a frame too soon after the last
+                // waits, and the wait ends when it may be drawn.
+                let now = backend.elapsed();
+                let hold = match (frame_time, last_frame) {
+                    (Some(frame), Some(last)) if driver.needs_render() => {
+                        Some(last + frame).filter(|&due| due > now)
+                    }
+                    _ => None,
+                };
+                if hold.is_some() {
+                    driver.app.stats.update(|stats| stats.skipped += 1);
+                } else if let Some(out) = driver.render() {
+                    last_frame = Some(now);
                     put(backend, linear, &out)?;
                     if text_frames {
                         backend.painted(&driver.screen().plain().join("\n"));
                     }
                 }
                 copy_all(&mut driver, backend);
-                let wait = driver.timeout(backend.elapsed());
+                let wait = match hold {
+                    // Until the frame may draw, or something is due first.
+                    Some(due) => {
+                        let now = backend.elapsed();
+                        driver.next_due(now).min(due.saturating_sub(now))
+                    }
+                    None => driver.timeout(backend.elapsed()),
+                };
                 let Some(event) = backend.read(Some(wait))? else {
                     continue;
                 };
-                match &event {
-                    // Raw mode turns off the terminal's own Ctrl+Z, so it
-                    // arrives as a key: suspend as the terminal would have,
-                    // unless the app binds it. On `fg` everything draws
-                    // again (inline, in a new region below the shell's
-                    // lines).
-                    Event::Key(key)
-                        if *key == Key::ctrl('z')
-                            && backend.can_suspend()
-                            && !driver.app.binds(*key) =>
-                    {
-                        put(backend, linear, &driver.suspend())?;
-                        backend.suspend()?;
-                        if linear {
-                            // The session hides the cursor on the way back;
-                            // linear mode reads from where it is.
-                            backend.write("\x1b[?25h")?;
-                        }
-                        let (columns, rows) = backend.size();
-                        if inline {
-                            driver.set_origin(backend.origin());
-                        }
-                        driver.resize(columns, rows);
-                        continue;
+                deliver(&mut driver, backend, event, linear, inline)?;
+                // Everything else already waiting goes in before the next
+                // frame: keys typed while a frame was slow are handled
+                // together, as they came, not one a frame.
+                for _ in 1..DRAIN_EVENTS {
+                    if driver.is_done() {
+                        break;
                     }
-                    // Back from a suspend started outside (SIGTSTP): what
-                    // is on the screen is the shell's, so the resize this
-                    // is draws everything, in a new region when inline.
-                    Event::Resize { .. } if backend.take_resumed() => {
-                        let _ = driver.suspend();
-                        if linear {
-                            backend.write("\x1b[?25h")?;
-                        }
-                    }
-                    _ => {}
+                    let Some(event) = backend.read(Some(Duration::ZERO))? else {
+                        break;
+                    };
+                    deliver(&mut driver, backend, event, linear, inline)?;
                 }
-                if inline {
-                    driver.set_origin(backend.origin());
-                }
-                driver.event(event);
-                copy_all(&mut driver, backend);
-                hand_off(&mut driver, backend, linear, inline)?;
                 if driver.is_done() {
                     return Ok(());
                 }
@@ -1891,6 +3148,8 @@ impl App {
         // Focus what can be focused before the first frame (keyed children
         // appear only once drawn; `keep_focus` catches them after it).
         self.focus_first();
+        // `latest` threads start with the app, on its clock in a test.
+        self.runtime.start_threads(self.wait_for_tasks);
         Driver {
             app: self,
             painter,
@@ -1908,17 +3167,42 @@ impl App {
     }
 
     /// Run headless at `width` x `height`, pressing `keys` (key names,
-    /// one per step), and return the last screen's rows as plain text.
+    /// one per step, or several separated by spaces), and return the last
+    /// screen's rows as plain text. The app need not quit: once the keys
+    /// are pressed, it settles (watches set off by the first frames run,
+    /// a [`RectHandle`](crate::RectHandle)'s readers load) and the screen
+    /// is read. Keys after a quit are dropped; a handed-off program is
+    /// taken to have ended with 0. An error the app
+    /// [failed](Ctx::fail) with is returned.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     text!("{n}").on_key("+", move |_| n.update(|n| *n += 1))
+    /// });
+    /// assert_eq!(app.render_with(&["+ +"], 5, 1).unwrap()[0].trim_end(), "2");
+    /// ```
     pub fn render_with(self, keys: &[&str], width: u16, height: u16) -> io::Result<Vec<String>> {
-        let mut script = rich_interact::headless::Script::new();
+        let mut driver = self.driver(width, height);
+        let hand_back = |driver: &mut Driver| {
+            while let Some(handoff) = driver.take_handoff() {
+                driver.handed_back(handoff, Ok(Some(0)));
+                driver.settle();
+            }
+        };
+        driver.settle();
+        hand_back(&mut driver);
         for key in keys {
-            script = script.keys(key);
+            driver.press(key);
+            hand_back(&mut driver);
         }
-        let mut backend = rich_interact::headless::Headless::new(script, width, height);
-        let record = backend.record();
-        self.run_on(&mut backend)?;
-        let last = record.borrow().last_frame().to_string();
-        Ok(last.lines().map(str::to_string).collect())
+        driver.settle();
+        if let Some(error) = driver.take_error() {
+            return Err(error);
+        }
+        Ok(driver.screen().plain())
     }
 
     fn console_for(&mut self, width: u16) -> Console {
@@ -2367,6 +3651,7 @@ impl App {
             runtime: &self.runtime,
             dirty: self.runtime.take_dirty(),
             damage: Vec::new(),
+            composing: 0,
             focus_path: self.focus_path,
             hover_path: self.hover_path,
             wants_hover: std::cell::Cell::new(false),
@@ -2396,6 +3681,7 @@ impl App {
             screen.clear(whole);
             frame.damage.push(whole);
         }
+        let mut floats_now: Vec<(NodeId, Rect)> = Vec::new();
         runtime.enter(|| {
             for (layer, rect) in self.layers[base..].iter_mut().zip(&rects) {
                 // A modal's backdrop and shadow restyle what is below it,
@@ -2451,6 +3737,20 @@ impl App {
                 }
                 layer.root.draw(&mut frame, *rect, screen, force);
                 layer.drawn = Some(*rect);
+                // What the screen's widgets draw over their neighbours.
+                for (id, at) in crate::float::paint(&runtime, &layer.root, screen, area) {
+                    frame.damage.push(at);
+                    floats_now.push((id, at));
+                }
+            }
+            // A float whose node is not shown goes.
+            if !runtime.floats.borrow().is_empty() {
+                let painted: std::collections::HashSet<NodeId> =
+                    floats_now.iter().map(|(id, _)| *id).collect();
+                runtime
+                    .floats
+                    .borrow_mut()
+                    .retain(|id, _| painted.contains(id));
             }
             // Where nodes with a rect handle are on the screen now.
             if crate::place::any_handles() {
@@ -2481,7 +3781,7 @@ impl App {
             }
         });
         let took = started.map(|start| start.elapsed()).unwrap_or_default();
-        self.stats.drawn = frame.drawn;
+        self.stats.update(|stats| stats.drawn = frame.drawn);
         // A drag: its source dimmed, the drop target under the pointer lit.
         if let Some(drag) = self.drag.as_ref().filter(|drag| drag.active) {
             let root = &self.top().root;
@@ -2500,7 +3800,9 @@ impl App {
         if !self.linear {
             let notes: Vec<&Note> = self.toasts.iter().map(|(note, _)| note).collect();
             let corner = self.toast_corner;
-            let drawn = crate::notify::draw(console, screen, area, &notes, &self.theme, corner);
+            let widest = crate::place::resolve(self.notify_width, area.width, &|| area.width);
+            let look = (&self.theme, corner, widest);
+            let drawn = crate::notify::draw(console, screen, area, &notes, look);
             frame.damage.extend(drawn);
         }
         // The which-key pop-up, once its delay is over.
@@ -2610,7 +3912,7 @@ impl App {
                 focus: all.last().and_then(|layer| layer.focus),
                 focus_path: &focus_path,
                 hover: &hover,
-                stats: self.stats,
+                stats: self.stats.get(),
                 frame: inspector.frames,
                 theme,
                 viewport,
@@ -2647,18 +3949,57 @@ impl App {
             };
             self.announce(crate::a11y::Announcement { text, urgent: true }, false);
         }
+        // A float that shrank or went uncovered cells only their owners
+        // can draw: everything draws again.
+        let now: Vec<Rect> = floats_now.into_iter().map(|(_, at)| at).collect();
+        let old = std::mem::replace(&mut self.floats_drawn, now);
+        if !full
+            && old
+                .iter()
+                .any(|r| !crate::float::covered(*r, &self.floats_drawn))
+        {
+            damage.extend(self.frame(console, screen, true));
+        }
         damage
+    }
+
+    /// Put the one-shot timers [`after`] made since the last turn on the
+    /// app's clock, from now.
+    fn take_afters(&mut self) {
+        let made = std::mem::take(&mut *self.runtime.afters.borrow_mut());
+        for after in made {
+            self.timeouts.push(Timeout {
+                timer: after.timer,
+                run: after.run,
+                at: after.at,
+            });
+        }
     }
 
     fn ctx(&self) -> Ctx {
         let mut cx = Ctx::new(self.runtime.proxy());
         cx.pointer = self.pointer;
+        cx.layers = self.layers.len();
+        cx.releases = self.releases;
         cx
     }
 
     /// Apply what a handler asked for; whether to quit.
     fn apply(&mut self, cx: Ctx) -> bool {
         let mut quit = cx.quit;
+        for after in cx.afters {
+            self.timeouts.push(Timeout {
+                timer: after.timer,
+                run: after.run,
+                at: after.at,
+            });
+        }
+        // Timers a handler started: on the screen it ran on.
+        if !cx.tickers.is_empty() {
+            let layer = cx.layers.clamp(1, self.layers.len()) - 1;
+            self.layers[layer].timers.extend(cx.tickers);
+        }
+        self.take_afters();
         if let Some(exit) = cx.exit {
             self.exit = Some(exit);
         }
@@ -2710,10 +4051,23 @@ impl App {
             self.theme_base = theme;
             self.retheme();
         }
+        if cx.focus.is_some() {
+            // A focus move drops a wait for a container to be built.
+            self.runtime.focus_later.set(None);
+        }
         match cx.focus {
             Some(FocusMove::Next) => self.move_focus(true),
             Some(FocusMove::Previous) => self.move_focus(false),
             Some(FocusMove::To(id)) => self.set_focus(Some(id)),
+            Some(FocusMove::Within(id)) => {
+                // After the next frame, once what the handler changed (a
+                // switch's page, a node shown) is laid out.
+                self.runtime.focus_later.set(Some(id));
+                let root = self.top().root.id;
+                self.runtime.mark_dirty(root);
+            }
+            Some(FocusMove::Toward(direction)) => self.focus_toward(direction),
+            Some(FocusMove::Scope(forward)) => self.focus_scope_step(forward),
             None => {}
         }
         quit
@@ -2728,7 +4082,7 @@ impl App {
             Nav::Pop => (self.layers.len() > 1).then_some("screen closed"),
             Nav::Replace(_) => Some("screen replaced"),
             Nav::Palette => Some("command palette opened"),
-            Nav::Help => Some("help opened"),
+            Nav::Help(_) => Some("help opened"),
             Nav::Run(..) => None,
         };
         if let Some(what) = what {
@@ -2774,8 +4128,8 @@ impl App {
                     self.open(build, None);
                 }
             }
-            Nav::Palette => self.open_palette(false),
-            Nav::Help => self.open_palette(true),
+            Nav::Palette => self.open_palette(),
+            Nav::Help(options) => self.open_help(options),
             Nav::PopupAt(origin, offset, look, build) => {
                 self.open(build, Some((offset.w, offset.h)));
                 let top = self.top_mut();
@@ -2788,38 +4142,84 @@ impl App {
     }
 
     /// The described bindings of the focused node and its ancestors,
-    /// innermost first, each with its node and index.
-    fn bindings(&self) -> Vec<(NodeId, usize, rich_interact::keymap::Binding)> {
+    /// innermost first, each with its node and index; the
+    /// [unlisted](crate::Node::unlisted) ones too for the `palette`.
+    fn bindings(&self, palette: bool) -> Vec<(NodeId, usize, rich_interact::keymap::Binding)> {
         let path = self
             .focus()
             .map(|id| self.path_to(id))
             .filter(|p| !p.is_empty())
             .unwrap_or_else(|| vec![self.top().root.id()]);
+        let ids: Vec<NodeId> = path.into_iter().rev().collect();
+        self.bindings_of(&ids, palette)
+    }
+
+    /// [`bindings`](Self::bindings) of every node shown on the top screen:
+    /// the focus path's first, innermost first, then the others in tree
+    /// order.
+    fn all_bindings(&self) -> Vec<(NodeId, usize, rich_interact::keymap::Binding)> {
+        let path = self
+            .focus()
+            .map(|id| self.path_to(id))
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| vec![self.top().root.id()]);
+        let mut ids: Vec<NodeId> = path.iter().rev().copied().collect();
+        self.top().root.walk(&mut |node, _| {
+            if !path.contains(&node.id) {
+                ids.push(node.id);
+            }
+        });
+        self.bindings_of(&ids, false)
+    }
+
+    /// The described bindings of the nodes `ids`, in that order.
+    fn bindings_of(
+        &self,
+        ids: &[NodeId],
+        palette: bool,
+    ) -> Vec<(NodeId, usize, rich_interact::keymap::Binding)> {
         let mut out = Vec::new();
-        for &id in path.iter().rev() {
+        for &id in ids {
             with_node(&self.top().root, id, &mut |node| {
-                let context = node.group_name();
-                for (index, (keys, description, _)) in node.keys.borrow().iter().enumerate() {
-                    if description.is_empty() {
+                let name = node.group_name();
+                // A binding that does not apply now is not listed.
+                for (index, bound) in node.keys.borrow().iter().enumerate() {
+                    if bound.description.is_empty() || !bound.active() || (bound.hidden && !palette)
+                    {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::new(
-                        context.clone(),
+                        bound.section.clone().unwrap_or_else(|| name.clone()),
                         format!("{id}:{index}"),
-                        keys.clone(),
-                        description.clone(),
+                        bound.shown.clone().unwrap_or_else(|| bound.keys.clone()),
+                        bound.description.clone(),
                     );
                     out.push((id, index, binding));
                 }
-                for (index, (keys, description, _)) in node.sequences.borrow().iter().enumerate() {
-                    if description.is_empty() {
+                // Release bindings, for the help to read; the palette
+                // cannot let a key go.
+                for (index, bound) in node.releases.borrow().iter().enumerate() {
+                    if palette || bound.description.is_empty() || !bound.active() {
+                        continue;
+                    }
+                    let binding = rich_interact::keymap::Binding::new(
+                        bound.section.clone().unwrap_or_else(|| name.clone()),
+                        format!("{id}:r{index}"),
+                        bound.keys.clone(),
+                        format!("{} (on release)", bound.description),
+                    );
+                    out.push((id, index, binding));
+                }
+                for (index, bound) in node.sequences.borrow().iter().enumerate() {
+                    if bound.description.is_empty() || !bound.active() || (bound.hidden && !palette)
+                    {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::sequence(
-                        context.clone(),
+                        bound.section.clone().unwrap_or_else(|| name.clone()),
                         format!("{id}:s{index}"),
-                        keys.clone(),
-                        description.clone(),
+                        bound.keys.clone(),
+                        bound.description.clone(),
                     );
                     out.push((id, index, binding));
                 }
@@ -2828,22 +4228,78 @@ impl App {
         out
     }
 
-    /// The command palette (or the help, if `help`) over the top screen.
-    fn open_palette(&mut self, help: bool) {
-        let bindings = self.bindings();
-        if help {
-            let all: Vec<_> = bindings.into_iter().map(|(_, _, b)| b).collect();
-            self.open(
-                Box::new(move || {
-                    let help = rich_interact::overlay::Help::from_bindings(all);
-                    crate::node::component(help, |_, cx| cx.pop())
-                        .on_cancel(|cx| cx.pop())
-                        .panel("Help")
-                }),
-                Some((Size::Percent(70), Size::Percent(70))),
-            );
+    /// What a [`key_hints`](crate::widgets::key_hints) footer shows: the
+    /// described bindings (not sequences) of the focused node and its
+    /// ancestors, innermost first, each keys once. Nothing without one.
+    /// Those whose condition does not hold come too, marked disabled, for
+    /// a footer that greys them.
+    fn refresh_hints(&self) {
+        let Some(hints) = self.runtime.hints.get() else {
             return;
+        };
+        let path = self
+            .focus()
+            .map(|id| self.path_to(id))
+            .filter(|p| !p.is_empty())
+            .unwrap_or_else(|| vec![self.top().root.id()]);
+        let mut shown: Vec<crate::help::Hint> = Vec::new();
+        for &id in path.iter().rev() {
+            with_node(&self.top().root, id, &mut |node| {
+                for bound in node.keys.borrow().iter() {
+                    if bound.description.is_empty() || bound.hidden {
+                        continue;
+                    }
+                    let keys = bound.shown.clone().unwrap_or_else(|| bound.keys.clone());
+                    let disabled = !bound.active();
+                    // Each keys once: the innermost that applies wins.
+                    match shown.iter_mut().find(|hint| hint.keys == keys) {
+                        Some(hint) if hint.disabled && !disabled => {
+                            hint.description = bound.description.clone();
+                            hint.disabled = false;
+                        }
+                        Some(_) => {}
+                        None => shown.push(crate::help::Hint {
+                            keys,
+                            description: bound.description.clone(),
+                            disabled,
+                        }),
+                    }
+                }
+            });
         }
+        self.runtime.enter(|| {
+            if hints.with_untracked(|old| *old != shown) {
+                hints.set(shown);
+            }
+        });
+    }
+
+    /// The help over the top screen, as `options` say.
+    fn open_help(&mut self, options: crate::help::HelpOptions) {
+        let found = match options.all_panes {
+            true => self.all_bindings(),
+            false => self.bindings(false),
+        };
+        let all: Vec<_> = found.into_iter().map(|(_, _, b)| b).collect();
+        self.open(
+            Box::new(move || {
+                let format = options.key_format;
+                let help = rich_interact::overlay::Help::from_bindings(all)
+                    .wrap(true)
+                    .flat(options.filter_first)
+                    .filter_key(options.filter_key)
+                    .key_format(move |binding| format.keys(&binding.keys, binding.sequence));
+                crate::node::component(help, |_, cx| cx.pop())
+                    .on_cancel(|cx| cx.pop())
+                    .panel(&options.title)
+            }),
+            Some((Size::Percent(70), Size::Percent(70))),
+        );
+    }
+
+    /// The command palette over the top screen.
+    fn open_palette(&mut self) {
+        let bindings = self.bindings(true);
         let commands: Vec<rich_interact::overlay::Command> = bindings
             .iter()
             .map(|(_, _, binding)| rich_interact::overlay::Command::from_binding(binding))
@@ -2873,6 +4329,18 @@ impl App {
     /// Run binding `index` of node `id` (its key sequence `index`, if
     /// `sequence`) on the top screen; whether to quit.
     fn run_binding(&mut self, id: NodeId, index: usize, sequence: bool) -> bool {
+        self.run_binding_with(id, index, sequence, None)
+    }
+
+    /// [`run_binding`](Self::run_binding), telling it `key` (else its
+    /// first key).
+    fn run_binding_with(
+        &mut self,
+        id: NodeId,
+        index: usize,
+        sequence: bool,
+        key: Option<Key>,
+    ) -> bool {
         let mut cx = self.ctx();
         let runtime = self.runtime.clone();
         runtime.enter(|| {
@@ -2881,8 +4349,11 @@ impl App {
                     true => node.sequences.borrow_mut(),
                     false => node.keys.borrow_mut(),
                 };
-                if let Some((_, _, handler)) = list.get_mut(index) {
-                    handler(&mut cx);
+                if let Some(bound) = list.get_mut(index) {
+                    // As its first key would, unless told the key.
+                    let key = key.unwrap_or(bound.keys[0]);
+                    cx.key = Some(key);
+                    (bound.handler)(&mut cx, key);
                 }
             });
         });
@@ -2906,15 +4377,15 @@ impl App {
                     .get_or_insert_with(|| POPUP_TITLE.to_string());
             });
         }
-        let mut timers = BUILDING
+        let timers = BUILDING
             .with(|building| building.borrow_mut().take())
             .unwrap_or_default();
         let watches = WATCHES
             .with(|watches| watches.borrow_mut().take())
             .unwrap_or_default();
         // A screen's timers start counting when it opens.
-        for timer in &mut timers {
-            timer.next = self.now + timer.every;
+        for ticker in &timers {
+            ticker.timer.start_at(self.now);
         }
         self.pending = None;
         self.layers.push(Layer {
@@ -2931,6 +4402,7 @@ impl App {
             fallback: false,
         });
         self.restack = true;
+        self.runtime.layers.set(self.layers.len());
         // Once drawn, what opened is announced.
         self.opened = true;
         self.set_focus(None);
@@ -2941,12 +4413,16 @@ impl App {
     fn close(&mut self) {
         self.pending = None;
         let layer = self.layers.pop().expect("an app always has a screen");
+        for ticker in &layer.timers {
+            ticker.timer.release();
+        }
         self.runtime.tracer.farewell(&layer.root);
         layer.root.forget(&self.runtime);
         for watch in layer.watches {
             self.runtime.drop_watch(watch);
         }
         self.restack = true;
+        self.runtime.layers.set(self.layers.len());
     }
 
     /// The theme in code with the theme file's last good styles over it.
@@ -3037,7 +4513,8 @@ impl App {
     fn focusable(&self) -> Vec<NodeId> {
         let mut ids = Vec::new();
         self.top().root.walk_accessible(&mut |node, _| {
-            if node.takes_focus() {
+            // A wrapper whose focus passes inside is not a stop of its own.
+            if node.takes_focus() && node.focus_target().is_none() {
                 ids.push(node.id);
             }
         });
@@ -3050,6 +4527,10 @@ impl App {
     /// the one before it if it was last; with nothing focused, to the
     /// first focusable node.
     fn keep_focus(&mut self) {
+        // A container asked to take the focus, once it is built.
+        if let Some(id) = self.runtime.focus_later.get() {
+            self.focus_inside(id);
+        }
         let ids = self.focusable();
         if let Some(id) = self.focus() {
             // A node that was disabled lets the focus go as one that left.
@@ -3065,6 +4546,19 @@ impl App {
                         .copied()
                 });
                 self.set_focus(next);
+            }
+        }
+        // A wrapper given the focus hands it to what it holds, once that
+        // is built (a `switch`'s list).
+        if let Some(id) = self.focus() {
+            let mut target = None;
+            with_node(&self.top().root, id, &mut |node| {
+                target = node.focus_target()
+            });
+            if target.is_some() {
+                let fallback = self.top().fallback;
+                self.set_focus(target);
+                self.top_mut().fallback = fallback;
             }
         }
         if self.focus().is_none() {
@@ -3129,10 +4623,119 @@ impl App {
         let mut chosen = None;
         self.top().root.walk_accessible(&mut |node, _| {
             if node.autofocus && chosen.is_none() && !node.disabled() {
-                chosen = Some(node.id);
+                chosen = Some(node.focus_target().unwrap_or(node.id));
             }
         });
         chosen
+    }
+
+    /// The focus scopes of the top screen that hold a node taking the
+    /// focus, in tree order.
+    fn focus_scopes(&self) -> Vec<NodeId> {
+        let mut scopes = Vec::new();
+        self.top().root.walk_accessible(&mut |node, _| {
+            if node.is_focus_scope() {
+                scopes.push(node.id);
+            }
+        });
+        scopes.retain(|&scope| self.first_inside(scope).is_some());
+        scopes
+    }
+
+    /// The innermost focus scope on the focus path.
+    fn focused_scope(&self, scopes: &[NodeId]) -> Option<NodeId> {
+        let path = self.focus().map(|id| self.path_to(id)).unwrap_or_default();
+        path.iter().rev().find(|id| scopes.contains(id)).copied()
+    }
+
+    /// Focus the next focus scope (or the previous one).
+    fn focus_scope_step(&mut self, forward: bool) {
+        let scopes = self.focus_scopes();
+        if scopes.is_empty() {
+            return;
+        }
+        let at = self
+            .focused_scope(&scopes)
+            .and_then(|scope| scopes.iter().position(|s| *s == scope));
+        let n = scopes.len();
+        let next = match (at, forward) {
+            (None, true) => 0,
+            (None, false) => n - 1,
+            (Some(i), true) => (i + 1) % n,
+            (Some(i), false) => (i + n - 1) % n,
+        };
+        self.focus_inside(scopes[next]);
+    }
+
+    /// Focus the neighbour on `direction`'s side: among the focus scopes
+    /// when the focus is in one, else among the focusable nodes.
+    fn focus_toward(&mut self, direction: crate::focus::Direction) {
+        let scopes = self.focus_scopes();
+        let (from, candidates, scoped) = match self.focused_scope(&scopes) {
+            Some(scope) => (scope, scopes, true),
+            None => match self.focus() {
+                Some(id) => (id, self.focusable(), false),
+                None => return,
+            },
+        };
+        let mut rects = vec![Rect::default(); candidates.len()];
+        let mut from_rect = None;
+        crate::node::walk_screen(&self.top().root, &mut |node, _, shift, clip| {
+            let rect = crate::node::translate(node.rect(), shift).intersection(clip);
+            if node.id() == from {
+                from_rect = Some(rect);
+            }
+            if let Some(i) = candidates.iter().position(|c| *c == node.id()) {
+                rects[i] = rect;
+            }
+        });
+        let Some(from_rect) = from_rect.filter(|r| !r.is_empty()) else {
+            return;
+        };
+        let Some(i) = crate::focus::neighbour(&rects, from_rect, direction) else {
+            return;
+        };
+        match scoped {
+            true => self.focus_inside(candidates[i]),
+            false => self.set_focus(Some(candidates[i])),
+        }
+    }
+
+    /// Focus the first node inside `container` that takes the focus (a
+    /// focus scope's last one first), or wait for it to be built: the
+    /// wait is tried again after each frame.
+    fn focus_inside(&mut self, container: NodeId) {
+        match self.first_inside(container) {
+            Some(id) => {
+                self.runtime.focus_later.set(None);
+                self.set_focus(Some(id));
+            }
+            None => self.runtime.focus_later.set(Some(container)),
+        }
+    }
+
+    /// The node inside `container` (or `container` itself) that takes the
+    /// focus first, in Tab order; a focus scope's last focused node, while
+    /// it still takes it.
+    fn first_inside(&self, container: NodeId) -> Option<NodeId> {
+        let ids = self.focusable();
+        let mut found = None;
+        with_node(&self.top().root, container, &mut |node| {
+            if let Some(last) = node.scope_last().filter(|last| ids.contains(last)) {
+                let mut inside = false;
+                node.walk_accessible(&mut |n, _| inside |= n.id == last);
+                if inside {
+                    found = Some(last);
+                    return;
+                }
+            }
+            node.walk_accessible(&mut |n, _| {
+                if found.is_none() && ids.contains(&n.id) {
+                    found = Some(n.id);
+                }
+            });
+        });
+        found
     }
 
     fn set_focus(&mut self, id: Option<NodeId>) {
@@ -3153,7 +4756,54 @@ impl App {
         top.fallback = false;
         let path = id.map(|id| self.path_to(id)).unwrap_or_default();
         let runtime = self.runtime.clone();
+        let before = runtime.enter(|| self.focus_path.get_untracked());
+        if before != path {
+            self.focus_moved(&before, &path, id);
+        }
         runtime.enter(|| self.focus_path.set(path));
+    }
+
+    /// The focus went from the nodes on `before` to those on `after`: the
+    /// focus scopes on `after` note `id`, and the nodes it came into or
+    /// left with focus handlers wait to be told.
+    fn focus_moved(&mut self, before: &[NodeId], after: &[NodeId], id: Option<NodeId>) {
+        let mut events = Vec::new();
+        for layer in &self.layers {
+            layer.root.walk_all(&mut |node, _, _| {
+                let (was, is) = (before.contains(&node.id), after.contains(&node.id));
+                if let (true, Some(id)) = (is, id) {
+                    node.note_scope_focus(id);
+                }
+                if was != is && !node.focus_handlers.borrow().is_empty() {
+                    events.push((node.id, is));
+                }
+            });
+        }
+        // The nodes it left first, then those it came into, each outermost
+        // first.
+        events.sort_by_key(|&(_, came)| came);
+        self.focus_events.extend(events);
+    }
+
+    /// Run the focus handlers of node `id`: those for the focus coming if
+    /// `came`, else those for it leaving. Whether to quit.
+    fn tell_focus(&mut self, id: NodeId, came: bool) -> bool {
+        let mut cx = self.ctx();
+        let mut ran = false;
+        let runtime = self.runtime.clone();
+        runtime.enter(|| {
+            for layer in &self.layers {
+                with_node(&layer.root, id, &mut |node| {
+                    for (on, handler) in node.focus_handlers.borrow_mut().iter_mut() {
+                        if *on == came {
+                            handler(&mut cx);
+                            ran = true;
+                        }
+                    }
+                });
+            }
+        });
+        ran && self.apply(cx)
     }
 
     fn move_focus(&mut self, forward: bool) {
@@ -3182,16 +4832,12 @@ impl App {
         let mut bound = false;
         for id in self.key_path() {
             with_node(&self.top().root, id, &mut |node| {
-                bound |= node
-                    .keys
-                    .borrow()
-                    .iter()
-                    .any(|(keys, _, _)| key.matches_any(keys))
+                bound |= crate::node::pick_binding(key, &node.keys.borrow(), &[]).is_some()
                     || node
                         .sequences
                         .borrow()
                         .iter()
-                        .any(|(keys, _, _)| crate::sequence::starts(keys, &[key]))
+                        .any(|bound| crate::sequence::starts(bound.live_keys(), &[key]))
                     || node.body.borrow().widget.claims_key(key);
             });
         }
@@ -3232,6 +4878,7 @@ impl App {
     }
 
     fn key(&mut self, key: Key) -> bool {
+        self.repeating_key = self.press_held(key);
         self.hide_tip();
         if key.code == KeyCode::Escape && self.drag.as_ref().is_some_and(|drag| drag.active) {
             // Esc cancels a drag.
@@ -3335,11 +4982,13 @@ impl App {
             return self.navigate(Nav::Palette);
         }
         if key.matches_any(&self.help_key) {
-            return self.navigate(Nav::Help);
+            return self.navigate(Nav::Help(crate::help::HelpOptions::new()));
         }
         match key.code {
-            KeyCode::Tab => self.move_focus(true),
-            KeyCode::BackTab => self.move_focus(false),
+            KeyCode::Tab | KeyCode::BackTab => {
+                self.runtime.focus_later.set(None);
+                self.move_focus(key.code == KeyCode::Tab);
+            }
             KeyCode::Escape if self.top().is_popup() => return self.navigate(Nav::Pop),
             _ => {}
         }
@@ -3353,7 +5002,15 @@ impl App {
     fn node_keys(&mut self, id: NodeId, key: Key) -> Option<bool> {
         let mut cx = self.ctx();
         let mut used = None;
+        // A binding that repeats by itself, while the key's release will
+        // come: its first press starts the repeat, and the terminal's own
+        // repeats pass it by.
+        let release_known = self.release_known(&key);
+        let repeating = self.repeating_key;
+        let mut repeat = None;
         let mut starts = false;
+        // A binding ran and passed the key on: it goes on up.
+        let mut passed = false;
         let runtime = self.runtime.clone();
         runtime.enter(|| {
             with_node(&self.top().root, id, &mut |node| {
@@ -3363,18 +5020,40 @@ impl App {
                 {
                     let mut keys = node.keys.borrow_mut();
                     // A binding that names the key before one it could be
-                    // (a Tab from a legacy terminal: `tab`, then `ctrl+i`).
-                    let picked = key.pick(keys.iter().map(|(keys, _, _)| keys.as_slice()));
-                    if let Some((_, _, handler)) = picked.and_then(|index| keys.get_mut(index)) {
-                        handler(&mut cx);
+                    // (a Tab from a legacy terminal: `tab`, then `ctrl+i`),
+                    // then a modifier-blind one. One that does not apply
+                    // now has no keys (another of the key may: two under
+                    // different conditions). One that falls through (or
+                    // passes the key on) hands it to the next that takes
+                    // it, here or above.
+                    let mut ran = Vec::new();
+                    while let Some(index) = crate::node::pick_binding(key, &keys, &ran) {
+                        let bound = &mut keys[index];
+                        if let (Some(times), true) = (bound.repeat, release_known) {
+                            if repeating {
+                                used = Some("repeat");
+                                return;
+                            }
+                            repeat = Some((index, times));
+                        }
+                        cx.key = Some(key);
+                        (bound.handler)(&mut cx, key);
                         used = Some("on_key");
+                        if !(bound.fall_through || std::mem::take(&mut cx.passed)) {
+                            passed = false;
+                            return;
+                        }
+                        passed = true;
+                        ran.push(index);
+                    }
+                    if passed {
                         return;
                     }
                 }
                 let sequences = node.sequences.borrow();
                 if sequences
                     .iter()
-                    .any(|(keys, _, _)| crate::sequence::starts(keys, &[key]))
+                    .any(|bound| crate::sequence::starts(bound.live_keys(), &[key]))
                 {
                     starts = true;
                     return;
@@ -3400,8 +5079,26 @@ impl App {
             return Some(false);
         }
         let how = used?;
+        if let Some((index, (delay, rate))) = repeat {
+            let plain = plain_key(key);
+            self.repeats.retain(|r| r.key != plain);
+            self.repeats.push(Repeat {
+                key: plain,
+                pressed: key,
+                node: id,
+                index,
+                depth: self.layers.len(),
+                next: self.now + delay,
+                rate,
+            });
+        }
         self.note_used(id, how);
-        Some(self.apply(cx))
+        let quit = self.apply(cx);
+        if passed && !quit {
+            // Done here; the key goes on to the nodes above.
+            return None;
+        }
+        Some(quit)
     }
 
     /// Go on with the key sequence `pending` with `key`: run the sequence
@@ -3420,9 +5117,9 @@ impl App {
         typed.push(key);
         let (mut exact, mut longer) = (None, false);
         with_node(&self.top().root, pending.node, &mut |node| {
-            for (index, (keys, _, _)) in node.sequences.borrow().iter().enumerate() {
-                if crate::sequence::starts(keys, &typed) {
-                    if keys.len() == typed.len() {
+            for (index, bound) in node.sequences.borrow().iter().enumerate() {
+                if crate::sequence::starts(bound.live_keys(), &typed) {
+                    if bound.keys.len() == typed.len() {
                         exact.get_or_insert(index);
                     } else {
                         longer = true;
@@ -3458,12 +5155,139 @@ impl App {
     /// first, until one uses it. Bindings are for presses only. Whether to
     /// quit.
     fn key_up(&mut self, key: Key) -> bool {
+        self.release_held(key);
         for id in self.key_path().into_iter().rev() {
             if let Some(quit) = self.give_to_widget(id, &WidgetEvent::KeyUp(key)) {
                 return quit;
             }
+            if let Some(quit) = self.node_releases(id, key) {
+                return quit;
+            }
         }
         false
+    }
+
+    /// Offer the release of `key` to node `id`'s release bindings
+    /// ([`Node::on_key_up`]). `Some` (whether to quit) when one took it.
+    fn node_releases(&mut self, id: NodeId, key: Key) -> Option<bool> {
+        let mut cx = self.ctx();
+        let mut ran = false;
+        let runtime = self.runtime.clone();
+        runtime.enter(|| {
+            with_node(&self.top().root, id, &mut |node| {
+                if node.disabled() {
+                    return;
+                }
+                let mut releases = node.releases.borrow_mut();
+                let found = releases.iter_mut().find(|bound| {
+                    bound
+                        .live_keys()
+                        .iter()
+                        .any(|own| match own.modifiers == Modifiers::NONE {
+                            true => plain_key(*own) == plain_key(key),
+                            false => key.matches(own),
+                        })
+                });
+                if let Some(bound) = found {
+                    cx.key = Some(key);
+                    (bound.handler)(&mut cx, key);
+                    ran = true;
+                }
+            });
+        });
+        if !ran {
+            return None;
+        }
+        self.note_used(id, "on_key_up");
+        Some(self.apply(cx))
+    }
+
+    /// Whether the release of `key` will come: reported, or made up.
+    fn release_known(&self, key: &Key) -> bool {
+        self.synthesize.is_some() || self.releases.reported(key)
+    }
+
+    /// Note `key` pressed (or repeated); whether it was held already.
+    fn press_held(&mut self, key: Key) -> bool {
+        // A key whose release will not come would be held for good.
+        if !self.release_known(&key) {
+            return false;
+        }
+        let plain = plain_key(key);
+        let reported = self.releases.reported(&key);
+        if let Some(held) = self.held.iter_mut().find(|held| held.key == plain) {
+            held.last = self.now;
+            return true;
+        }
+        self.held.push(Held {
+            key: plain,
+            last: self.now,
+            reported,
+        });
+        self.publish_held();
+        false
+    }
+
+    /// Note `key` let go: no longer held, and its repeats stop.
+    fn release_held(&mut self, key: Key) {
+        let plain = plain_key(key);
+        self.repeats.retain(|repeat| repeat.key != plain);
+        let before = self.held.len();
+        self.held.retain(|held| held.key != plain);
+        if self.held.len() != before {
+            self.publish_held();
+        }
+    }
+
+    fn publish_held(&self) {
+        let keys: Vec<Key> = self.held.iter().map(|held| held.key).collect();
+        self.runtime.enter(|| self.held_keys.set(keys));
+    }
+
+    /// Releases made up for keys held `hold` without a repeat, and the
+    /// repeats due, at `now`. Whether to quit.
+    fn held_due(&mut self, now: Duration) -> bool {
+        if let Some(hold) = self.synthesize {
+            let gone: Vec<Key> = self
+                .held
+                .iter()
+                .filter(|held| !held.reported && now >= held.last + hold)
+                .map(|held| held.key)
+                .collect();
+            for key in gone {
+                if self.key_up(key) {
+                    return true;
+                }
+            }
+        }
+        let depth = self.layers.len();
+        self.repeats.retain(|repeat| repeat.depth == depth);
+        let mut fire = Vec::new();
+        for repeat in &mut self.repeats {
+            while repeat.next <= now {
+                fire.push((repeat.node, repeat.index, repeat.pressed));
+                repeat.next += repeat.rate;
+            }
+        }
+        for (node, index, key) in fire {
+            if self.run_binding_with(node, index, false, Some(key)) {
+                return true;
+            }
+        }
+        false
+    }
+
+    /// When the next made-up release or repeat is due.
+    fn held_next(&self) -> Option<Duration> {
+        let releases = self.synthesize.and_then(|hold| {
+            self.held
+                .iter()
+                .filter(|held| !held.reported)
+                .map(|held| held.last + hold)
+                .min()
+        });
+        let repeats = self.repeats.iter().map(|repeat| repeat.next).min();
+        releases.into_iter().chain(repeats).min()
     }
 
     /// Offer `event` to the focused node's widget and then its
@@ -3485,11 +5309,17 @@ impl App {
         // the next turn, a few rounds at most.
         for _ in 0..4 {
             let events = std::mem::take(&mut self.lifecycle);
-            if events.is_empty() {
+            let focus = std::mem::take(&mut self.focus_events);
+            if events.is_empty() && focus.is_empty() {
                 break;
             }
             for (id, event) in events {
                 if let Some(true) = self.give_to_widget(id, &event) {
+                    return true;
+                }
+            }
+            for (id, came) in focus {
+                if self.tell_focus(id, came) {
                     return true;
                 }
             }
@@ -3639,6 +5469,7 @@ impl App {
                 yes
             });
             if let Some(id) = focusable {
+                self.runtime.focus_later.set(None);
                 self.set_focus(Some(id));
             }
         }
@@ -3913,6 +5744,64 @@ impl App {
     }
 }
 
+/// After a frame's cells: the graphics `source` places on `screen` that
+/// moved, went away or had cells written under them, as rs-rich-ext's
+/// `Surface` draws them. `placements` is what the last frame drew.
+fn draw_graphics(
+    source: &dyn rich_ext::frame::PlacementSource,
+    placements: &mut Vec<rich_ext::frame::Placement>,
+    screen: &Screen,
+    painter: &mut Painter,
+) -> String {
+    use rich::Segment;
+    use rich_ext::frame::{Change, Frame};
+    let mut segments = Vec::new();
+    for line in screen.lines() {
+        segments.extend(line);
+        segments.push(Segment::line());
+    }
+    let frame = Frame::from_segments(&segments);
+    let height = frame.height();
+    let next: Vec<_> = source
+        .placements(&frame)
+        .into_iter()
+        .filter(|p| p.row + p.rows <= height)
+        .collect();
+    let changes: Vec<Change> = painter
+        .written()
+        .iter()
+        .flat_map(|rect| {
+            (rect.y..rect.bottom()).map(move |row| Change {
+                row: row as usize,
+                columns: rect.x as usize..rect.right() as usize,
+            })
+        })
+        .collect();
+    let plan = rich_ext::frame::plan_graphics(placements, &next, &changes);
+    let mut out = String::new();
+    let repaint: Vec<Rect> = plan
+        .repaint
+        .iter()
+        .map(|(row, columns)| {
+            Rect::new(
+                columns.start as u16,
+                *row as u16,
+                (columns.end - columns.start) as u16,
+                1,
+            )
+        })
+        .collect();
+    if !repaint.is_empty() {
+        out.push_str(&painter.repaint(screen, &repaint));
+    }
+    for placement in &plan.draw {
+        out.push_str(&painter.move_to(placement.column as u16, placement.row as u16));
+        out.push_str(&placement.graphic.draw(placement.frame));
+    }
+    *placements = next;
+    out
+}
+
 /// What [`App::run_on`]'s loop ended with: the app's value or an error,
 /// and the rows printed above a full-screen app, left to write.
 struct Ended {
@@ -3978,6 +5867,15 @@ const RESTLESS_FRAMES: u32 = 4;
 /// The most rows linear mode lays out in.
 const LINEAR_ROWS: u16 = 4096;
 
+/// How many times a frame runs the watches its layout set off, and draws
+/// what they changed, before it is sent.
+const LAYOUT_ROUNDS: usize = 4;
+
+/// The most events [`App::run_on`]'s loop handles between two frames: all
+/// that are waiting, up to this many, so a flood (a paste without
+/// bracketed paste, a stuck key) still draws now and then.
+const DRAIN_EVENTS: usize = 64;
+
 impl Driver {
     /// Bring the app up to `now` (the time since it started): run the
     /// timers that are due, move animations, deliver results from other
@@ -3992,25 +5890,62 @@ impl Driver {
         app.reload_sheet();
         app.now = now;
         app.runtime.tracer.set_now(now);
+        app.runtime.now.set(now);
+        app.take_afters();
+        if app.held_due(now) {
+            self.done = true;
+            return;
+        }
+        let app = &mut self.app;
         let mut cx = app.ctx();
         let runtime = app.runtime.clone();
+        // One-shot timers that are due, in the order they fall due; and
+        // those cancelled let go.
+        app.timeouts.retain(|timeout| !timeout.timer.is_cancelled());
+        let mut due = Vec::new();
+        let mut i = 0;
+        while i < app.timeouts.len() {
+            let at = app.timeouts[i].timer.next().unwrap_or_default();
+            if app.timeouts[i].timer.take_due(now).0 > 0 {
+                due.push((at, app.timeouts.remove(i)));
+            } else {
+                i += 1;
+            }
+        }
+        due.sort_by_key(|(at, _)| *at);
         runtime.enter(|| {
+            for (_, timeout) in due {
+                if runtime.tracer.on() {
+                    runtime.tracer.push(Traced::Timer {
+                        every: Duration::ZERO,
+                        at: timeout.at,
+                    });
+                }
+                timeout.timer.cancel();
+                (timeout.run)(&mut cx);
+            }
             for layer in &mut app.layers {
-                for timer in &mut layer.timers {
-                    if now >= timer.next {
-                        if runtime.tracer.on() {
-                            runtime.tracer.push(Traced::Timer {
-                                every: timer.every,
-                                at: timer.at,
-                            });
-                        }
-                        (timer.tick)(&mut cx);
-                        // Once, however far behind (the clock jumped, the
-                        // laptop slept), and on to the next tick in step.
-                        let every = timer.every.as_nanos().max(1);
-                        let behind = (now - timer.next).as_nanos() % every;
-                        timer.next = now + Duration::from_nanos((every - behind) as u64);
+                layer.timers.retain(|ticker| !ticker.timer.is_cancelled());
+                for ticker in &mut layer.timers {
+                    // Once, however far behind (the clock jumped, the
+                    // laptop slept), and on to the next tick in step; a
+                    // fixed step is told how many are due.
+                    let (ticks, most) = ticker.timer.take_due(now);
+                    if ticks == 0 {
+                        continue;
                     }
+                    if runtime.tracer.on() {
+                        runtime.tracer.push(Traced::Timer {
+                            every: ticker.timer.period(),
+                            at: ticker.at,
+                        });
+                    }
+                    cx.ticks = ticks;
+                    match &mut ticker.tick {
+                        Tick::Every(tick) => tick(&mut cx),
+                        Tick::Steps(step) => step(&mut cx, ticks.min(most)),
+                    }
+                    cx.ticks = 0;
                 }
             }
             // Animations: each one's value for now; finished ones go.
@@ -4023,6 +5958,12 @@ impl Driver {
                 a.value.set(a.from + (a.to - a.from) * a.easing.at(t));
                 t < 1.0
             });
+            // Waiting for tasks, `latest` threads keep to the app's clock:
+            // those due run until they sleep again (or end).
+            if app.wait_for_tasks {
+                runtime.clock.advance(now);
+                runtime.clock.settle();
+            }
             // Results from other threads, then the watches they (or the
             // last event) set off. Waiting for tasks, this repeats until
             // none is in flight: a watch may start one, and its result may
@@ -4091,11 +6032,35 @@ impl Driver {
 
     /// Draw what changed and return the bytes that show it (they may be
     /// empty); `None` when nothing changed. Then tell widgets of focus,
-    /// hover and size changes, now that they are laid out.
+    /// hover and size changes, now that they are laid out. Watches the
+    /// layout set off (one reading a [`RectHandle`](crate::RectHandle):
+    /// what loads once its pane has a width) run before it returns, and,
+    /// in an app that [waits for its tasks](App::wait_for_tasks), the
+    /// tasks they start finish, and what they change is drawn too: the
+    /// frame returned is settled, and the next event finds it so.
     pub fn render(&mut self) -> Option<String> {
+        let mut out = self.render_once();
+        // A few rounds: a watch's result may lay out anew, and set off
+        // another.
+        for _ in 0..LAYOUT_ROUNDS {
+            if self.done || !self.app.runtime.has_pending_watches() {
+                break;
+            }
+            self.update(self.app.now);
+            if let Some(more) = self.render_once() {
+                out.get_or_insert_with(String::new).push_str(&more);
+            }
+        }
+        out
+    }
+
+    /// [`render`](Self::render), once: what changed drawn, and the
+    /// lifecycle events told.
+    fn render_once(&mut self) -> Option<String> {
         if self.done {
             return None;
         }
+        self.app.refresh_hints();
         let out = self.needs_render().then(|| {
             let mut out = String::new();
             if !self.started {
@@ -4105,7 +6070,7 @@ impl Driver {
                     out.push_str("\x1b[?25l");
                 }
             }
-            self.app.stats.frames += 1;
+            self.app.stats.update(|stats| stats.frames += 1);
             // Inline, lines printed above go into the scrollback before the
             // region draws again below them.
             if self.app.inline.is_some() && !self.app.printed.is_empty() {
@@ -4137,21 +6102,39 @@ impl Driver {
     /// [`update`](Self::update) again: not at all while a frame or a
     /// widget's event waits; else until the next timer, a frame's time
     /// while something animates, until the next toast goes or a tooltip
-    /// shows, and at most 50 ms (results from other threads and theme
-    /// files are picked up by `update`).
+    /// shows, until the next [`latest`](crate::latest) thread asleep on
+    /// the app's clock wakes (in an app that
+    /// [waits for its tasks](App::wait_for_tasks)), and at most 50 ms
+    /// (theme files are looked at by `update`). A value another thread
+    /// sends ends the wait early when the loop has a
+    /// [waker](Self::set_waker), as [`App::run`]'s has; without one, it
+    /// waits for the timeout.
     pub fn timeout(&self, now: Duration) -> Duration {
-        let app = &self.app;
-        if self.needs_render() || !app.lifecycle.is_empty() {
+        if self.needs_render() || !self.app.lifecycle.is_empty() {
             // Something is waiting to be drawn or told: no waiting.
             return Duration::ZERO;
         }
+        self.next_due(now)
+    }
+
+    /// How long until the next thing due ([`timeout`](Self::timeout)
+    /// without what waits to be drawn).
+    fn next_due(&self, now: Duration) -> Duration {
+        let app = &self.app;
         app.layers
             .iter()
             .flat_map(|layer| &layer.timers)
-            .map(|t| t.next.saturating_sub(now))
+            .filter_map(|ticker| ticker.timer.left(now))
             .min()
             .unwrap_or(Duration::from_millis(50))
             .min(Duration::from_millis(50))
+            .min(
+                app.timeouts
+                    .iter()
+                    .filter_map(|timeout| timeout.timer.left(now))
+                    .min()
+                    .unwrap_or(Duration::MAX),
+            )
             .min(if app.animations.is_empty() {
                 Duration::MAX
             } else {
@@ -4184,12 +6167,66 @@ impl Driver {
                     .map(|ends| ends.saturating_sub(now))
                     .unwrap_or(Duration::MAX),
             )
+            .min(
+                app.runtime
+                    .clock
+                    .next_due()
+                    .map(|due| due.saturating_sub(now))
+                    .unwrap_or(Duration::MAX),
+            )
+            .min(
+                app.held_next()
+                    .map(|due| due.saturating_sub(now))
+                    .unwrap_or(Duration::MAX),
+            )
+    }
+
+    /// Tell the app which key releases the terminal reports
+    /// ([`Ctx::releases_reported`]): a loop of your own sets what its
+    /// terminal does; [`App::run_on`] sets the backend's
+    /// ([`Backend::releases_reported`]). A test sets it to stand for a
+    /// terminal with the kitty keyboard protocol. None by default.
+    pub fn set_releases(&mut self, releases: Releases) {
+        self.app.releases = releases;
+    }
+
+    /// Have every [`Proxy`] send (a [`latest`](crate::latest) value, a
+    /// task's result, [`Proxy::run`]) call `wake`, on the thread that
+    /// sends: a loop of your own that waits on something (a socket, a
+    /// channel, the terminal) ends that wait, so the value shows at once
+    /// rather than at the next [`timeout`](Self::timeout).
+    /// [`App::run_on`] sets the backend's
+    /// [`Waker`](rich_interact::Waker) here, when it has one.
+    ///
+    /// ```
+    /// use intuituive::interact::Waker;
+    /// use intuituive::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// let app = App::new(|| {
+    ///     let status = signal("waiting");
+    ///     text!("{status}")
+    /// });
+    /// let proxy = app.proxy();
+    /// let mut driver = app.driver(10, 1);
+    /// let waker = Waker::new();
+    /// let wakes = waker.clone();
+    /// driver.set_waker(move || wakes.wake());
+    /// std::thread::spawn(move || proxy.run(|| {}));
+    /// // The send ended the wait at once, not at its timeout.
+    /// assert!(waker.wait(Duration::from_secs(10)));
+    /// ```
+    pub fn set_waker(&mut self, wake: impl Fn() + Send + Sync + 'static) {
+        self.app.runtime.wake.set(Some(std::sync::Arc::new(wake)));
     }
 
     /// Handle an event: a key pressed or let go, the mouse, pasted text, or
     /// the terminal's new size. Ctrl+C quits, unless a node on the focused
     /// path binds it ([`on_key`](crate::Node::on_key)); then the binding
-    /// runs.
+    /// runs. It does not draw: a loop of your own takes every event
+    /// waiting, then [`render`](Self::render)s once ([`App::run_on`]'s
+    /// does). A test that wants the screen to show what an event did uses
+    /// [`send`](Self::send).
     pub fn event(&mut self, event: Event) {
         if self.done {
             return;
@@ -4345,6 +6382,66 @@ impl Driver {
         }
     }
 
+    /// Move the app's clock on by `by`, a step at a time, and draw after
+    /// each step: every timer, [`after`], animation and toast in between
+    /// runs at its own time, as it would with a real clock. A step goes
+    /// to the next thing due, 50 ms at most; in an app that
+    /// [waits for its tasks](App::wait_for_tasks), a
+    /// [`latest`](crate::latest) thread asleep on the app's clock
+    /// ([`Latest::sleep`](crate::Latest::sleep),
+    /// [`latest_every`](crate::latest_every)) is a thing due, so each of
+    /// its values is seen. A test of something timed.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use std::time::Duration;
+    ///
+    /// let app = App::new(|| {
+    ///     let ticks = signal(0);
+    ///     every(Duration::from_millis(100), move |_| ticks.update(|t| *t += 1));
+    ///     text!("{ticks}")
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// driver.advance(Duration::from_secs(1));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "10");
+    /// ```
+    pub fn advance(&mut self, by: Duration) {
+        let end = self.app.now + by;
+        self.settle();
+        while !self.done && self.app.now < end {
+            let step = self.timeout(self.app.now).max(Duration::from_millis(1));
+            let next = (self.app.now + step).min(end);
+            self.update(next);
+            self.settle();
+        }
+    }
+
+    /// [`event`](Self::event), then [`settle`](Self::settle), as
+    /// [`press`](Self::press) does for keys: a test's step for a mouse
+    /// event, a paste, a release or a resize, after which the screen shows
+    /// what it did.
+    ///
+    /// ```
+    /// use intuituive::interact::{Event, Mouse, MouseKind};
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     text!("{n}").on_mouse(move |_, mouse| {
+    ///         n.update(|n| *n += 1);
+    ///         mouse.kind == MouseKind::ScrollDown
+    ///     })
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// driver.send(Event::Mouse(Mouse::new(MouseKind::ScrollDown, 0, 0)));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1");
+    /// ```
+    pub fn send(&mut self, event: Event) {
+        self.settle();
+        self.event(event);
+        self.settle();
+    }
+
     /// Press keys by name, separated by spaces (`"down down enter"`,
     /// `"ctrl+s"`; the space key is `space`), each followed by
     /// [`settle`](Self::settle). Keys after the app quits are dropped.
@@ -4360,6 +6457,40 @@ impl Driver {
             self.event(Event::Key(key));
             self.settle();
         }
+    }
+
+    /// Run the binding called `name` (its description) that the focused
+    /// node or one above it has, as the command palette does, a
+    /// [unlisted](crate::Node::unlisted) one too, then [`settle`](Self::settle).
+    /// Whether there was one.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     text!("{n}").bind_hidden("shift+up", "Add one", move |_| n.update(|n| *n += 1))
+    /// });
+    /// let mut driver = app.driver(5, 1);
+    /// assert!(driver.run_named("Add one"));
+    /// assert!(!driver.run_named("Add two"));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1");
+    /// ```
+    pub fn run_named(&mut self, name: &str) -> bool {
+        self.settle();
+        let found = self
+            .app
+            .bindings(true)
+            .into_iter()
+            .find(|(_, _, binding)| binding.description == name);
+        let Some((id, index, binding)) = found else {
+            return false;
+        };
+        if self.app.run_binding(id, index, binding.sequence) {
+            self.done = true;
+        }
+        self.settle();
+        true
     }
 
     /// Type `text`, one key a character, then [`settle`](Self::settle):
@@ -4397,16 +6528,18 @@ impl Driver {
         self.app.focus()
     }
 
-    /// The focused node's [name](crate::Node::name), else its accessible
-    /// name (its [label](crate::Node::label), the text it shows, a panel's
-    /// title), if any.
+    /// The focused node's [name](crate::Node::name), else the name of the
+    /// wrapper that handed it the focus ([`autofocus`](crate::Node::autofocus)
+    /// on a `switch` round it), else its accessible name (its
+    /// [label](crate::Node::label), the text it shows, a panel's title), if
+    /// any.
     pub fn focused_name(&self) -> Option<String> {
         let id = self.focused()?;
         let mut name = None;
         with_node(&self.app.top().root, id, &mut |node| {
             name = node.given_name().map(str::to_string);
         });
-        name.or_else(|| {
+        name.or_else(|| self.passed_from(id)).or_else(|| {
             self.accessibility()
                 .into_iter()
                 .find(|node| node.id == id)
@@ -4415,8 +6548,27 @@ impl Driver {
         })
     }
 
+    /// The name of the wrapper (innermost first) whose
+    /// [`autofocus`](crate::Node::autofocus) handed node `id` the focus.
+    fn passed_from(&self, id: NodeId) -> Option<String> {
+        let path = self.app.path_to(id);
+        let mut name = None;
+        for &at in path.iter().rev().skip(1) {
+            with_node(&self.app.top().root, at, &mut |node| {
+                if name.is_none() && node.focus_passes && node.focus_target() == Some(id) {
+                    name = node.given_name().map(str::to_string);
+                }
+            });
+            if name.is_some() {
+                break;
+            }
+        }
+        name
+    }
+
     /// Assert that the focus is on the node called `name`: its
-    /// [name](crate::Node::name), or its accessible name (see
+    /// [name](crate::Node::name), the name of the wrapper that handed it
+    /// the focus, or its accessible name (see
     /// [`focused_name`](Self::focused_name)).
     ///
     /// # Panics
@@ -4458,7 +6610,10 @@ impl Driver {
         });
         let tree = self.accessibility();
         let access = tree.iter().find(|node| node.id == id);
-        if given.as_deref() == Some(name) || access.is_some_and(|node| node.name == name) {
+        if given.as_deref() == Some(name)
+            || access.is_some_and(|node| node.name == name)
+            || self.passed_from(id).as_deref() == Some(name)
+        {
             return Ok(());
         }
         let what = match (given, access) {
@@ -4488,7 +6643,7 @@ impl Driver {
 
     /// The last frame's numbers.
     pub fn stats(&self) -> FrameStats {
-        self.app.stats
+        self.app.stats.get()
     }
 
     /// The node selected in the [inspector](crate::inspect), if any.
@@ -4779,6 +6934,14 @@ impl Driver {
         } else if self.app.inline.is_some() && (self.app.restack || self.app.runtime.has_dirty()) {
             out.push_str(&self.paint(false));
         }
+        if let Some(source) = &self.app.graphics {
+            // Inline, the last frame stays, with its graphics.
+            let retained = match self.app.inline {
+                Some(_) => self.app.placements.clone(),
+                None => Vec::new(),
+            };
+            out.push_str(&source.release(&retained));
+        }
         out.push_str(&self.painter.finish());
         out.push_str("\x1b[0m\x1b[?25h");
         self.app.runtime.close();
@@ -4803,7 +6966,7 @@ impl Driver {
         let mut damage = app.frame(&self.console, screen, full);
         if app.linear {
             let out = self.lines();
-            self.app.stats.bytes = out.len();
+            self.app.stats.update(|stats| stats.bytes = out.len());
             return out;
         }
         if let Some((start, end)) = app.selection {
@@ -4823,6 +6986,14 @@ impl Driver {
             app.caret_shown = false;
         }
         out.push_str(&painted);
+        if let Some(source) = app.graphics.clone() {
+            out.push_str(&draw_graphics(
+                &*source,
+                &mut app.placements,
+                screen,
+                &mut self.painter,
+            ));
+        }
         if app.motion.0 && !app.motion.1 && app.captures_mouse() {
             // A widget reads hover: report the pointer's movement too. The
             // session turns it off with the rest of the mouse on the way out.
@@ -4830,7 +7001,10 @@ impl Driver {
             app.motion.1 = true;
         }
         out.push_str(&app.caret(&mut self.painter));
-        app.stats.bytes = out.len();
+        app.stats.update(|stats| stats.bytes = out.len());
+        // Styles no cell uses any more go, once they pile up: a picture
+        // whose colours change every frame keeps a frame's worth.
+        self.painter.compact(&mut self.screen);
         out
     }
 

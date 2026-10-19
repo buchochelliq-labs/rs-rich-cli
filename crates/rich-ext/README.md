@@ -290,8 +290,8 @@ For build, deploy and release tools, all in the default build:
   `Timeline` (ranges, stacked overlaps, milestones, compressed gaps). See
   the `kpi_dashboard` example. `Distribution` (quantiles on a
   box-and-whisker strip) and `SmallMultiples` (a grid of charts on one
-  scale) compare data, and every chart reads aloud through
-  `a11y::AccessibleText`.
+  scale) compare data; `LevelMeter` (with `PeakHold`) and `Spectrogram`
+  show sound; and every chart reads aloud through `a11y::AccessibleText`.
 
 ### Coordinated Live regions
 

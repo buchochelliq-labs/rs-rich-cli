@@ -9,6 +9,952 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Versions: core and the crates published since the 0.0.19 cohort
+
+- rs-rich moves to 0.0.10: the `Text.markup` port changes `src/text.rs`, and
+  0.0.9 is on crates.io. Cargo's 0.0.x requirements are exact, so the
+  published crates that depend on it move with it: plugin API 0.0.4, macros
+  0.0.4, art 0.0.13, diagram 0.0.3, Mermaid 0.0.6, lumis 0.0.4. Data 0.0.4,
+  web 0.0.3 and the CLI 0.0.20 changed since the 0.0.19 cohort was cut
+  (2fc9772) and are published at their old numbers. The other crates already
+  carry unpublished versions. `RELEASES.toml`, the version tables and both
+  `Cargo.lock` files follow.
+
+### Repo: the app template no longer trips git dependencies
+
+- `templates/intuituive-app/Cargo.toml` is now `Cargo.toml.liquid`. A crate
+  that depends on one of this repo's crates by `git` made cargo read every
+  `Cargo.toml` in the checkout, the template's among them, and its
+  `{{project-name}}` placeholder printed an "invalid character in package name"
+  error on every build. cargo-generate drops the `.liquid` suffix, so
+  `cargo generate` still writes a `Cargo.toml`; the template now asks for
+  cargo-generate 0.23.4 or later, the release that fixed that suffix for git
+  templates. Checked with cargo-generate 0.25.0: the generated app builds and
+  passes its test against a `git` dependency, with no error.
+
+### Core: `Text.markup` (rs-rich)
+
+- **`Text::markup()`**, a port of upstream's `Text.markup` property: the console
+  markup that renders a `Text`, with every tag-opening `[` escaped and a tag
+  around the base style and each span, in upstream's order (opening tags before
+  closing ones at a shared offset; a null style or empty name adds none).
+  `Text::from_markup(&text.markup())` gives back the same plain text and spans.
+  Byte-checked against rich 15.0.0 in `golden/functions.tsv` (`text_markup`,
+  `text_markup_from_markup`). An `[@handler]` tag still carries no meta
+  (DIVERGENCES §3a), so its text gets no `[none]` tag.
+
+### intuiTUIve: tables, trees and lists that follow state (rs-rich-intuituive)
+
+The round-5 clones rebuilt tables under a `switch` for every change of
+layout, wrote marks into cells, found their selection again by hand after
+each re-sort, and walked trees for index paths to reopen
+([the demo gaps](docs/design/intuituive-demo-gaps.md), "Round 5", shared
+gaps; [csv](docs/design/gaps/csv.md), [tasks](docs/design/gaps/tasks.md),
+[music](docs/design/gaps/music.md), [top](docs/design/gaps/top.md),
+[git](docs/design/gaps/git.md)). All of it is now generic core:
+
+- **Tables whose options follow state** (`TableOptions`):
+  `columns_with(|| columns)` and `columns_shown(|| indices)` change the
+  columns, their titles, which show and their order in the same table, so
+  the scroll across, the cursor and the widths stay;
+  `freeze_columns_with`, `multiline_when`, `cells_when(|| on, column)`
+  and `sort_indicator(|title, order| ..)` read state at each draw;
+  `widths(Signal<Vec<Option<u16>>>)` is shared with the mouse's drags;
+  `offset_x(signal)` reads and sets the scroll across;
+  `layout(&TableLayout)` records `width_of(column)`, `columns_in_view()`,
+  `first_row()` and `rows_in_view()`.
+- **Columns:** `Column::min_percent` / `max_percent` (of the table's
+  width, scrolled across too) and `Column::priority(n)`: columns dropped
+  whole, lowest first, when they do not fit, so a flexible column keeps
+  its minimum.
+- **Marks and the cursor on tables:** `TableOptions::marker(|i| style)`
+  (a marker column outside the highlight), `Node::selection_markers` and
+  `Node::marks_by` on tables, `Node::cursor_by` on tables,
+  `TableOptions::symbol_for(width, |i, selected| markup)` (a symbol per
+  row) and `highlight_layer(HighlightLayer::Under)` (also through
+  `Node::highlight_layer`).
+- **Row heights:** `TableOptions::row_height_for(|i| lines)`; a
+  `virtual_table` with `multiline` lays out only the rows near the view.
+- **Rows from a source** (the new `source` module, re-exported from
+  `widgets`): the `TableSource` trait (`len() -> RowCount`, `Exact` or
+  `AtLeast`, and `row(i)`), `source_table(source, columns, selected,
+  options)`, and `view_of(source, || ViewQuery)`, which filters, sorts
+  and finds over a `Send + Sync` source on a worker thread, one read a row
+  a pass, a new query dropping the old; the `View` is a `TableSource`
+  with `source_row`, `found`, `next_found`, `previous_found`, `place` and
+  `is_busy`.
+- **Keyed trees:** `tree_keyed(items, selected, expanded)` keeps the
+  selection and the open items by `TreeItem::key` (an item that goes
+  leaves the cursor at its row); `tree_reveal(&items, key, selected,
+  expanded)`; `TreeItem::keyed`, `TreeItem::prefix(markup)` (drawn before
+  the indent); `Node::symbol` on trees; `Node::tree_keys(TreeKeys)` to
+  leave Enter/Space, the letters or ←/→ to the ancestors; `LazyTree` and
+  `tree_lazy_with` to reload a lazy tree's level. `TreeItem` has two new
+  public fields (`key`, `prefix`): one built with a struct literal needs
+  `..Default::default()`.
+- **Ranges on lists:** `list(..).range(anchor)`: Shift with the moves
+  extends a range from the anchor, a plain move ends it, the rows between
+  in the theme's `selected.range`; a list without one leaves Shift to its
+  ancestors.
+
+### intuiTUIve: completion, a command line, queries and dates (rs-rich-intuituive, rs-rich-interact)
+
+What the taskwarrior-tui and slumber clones built by hand for their
+command bars, filters and due dates ([the demo gaps](docs/design/intuituive-demo-gaps.md),
+"Round 5", shared gaps; [tasks](docs/design/gaps/tasks.md),
+[http](docs/design/gaps/http.md)). All generic: the syntaxes and
+candidates are the app's.
+
+- **Input completion:** `input(..).complete(|text, caret| Vec<Completion>)`
+  and `complete_with(.., CompleteOptions)` (as you type, ghost text,
+  rows): a pop-up under the input (Tab, Shift+Tab, the arrows, Enter
+  takes, Esc closes) drawn over its neighbours without taking the keys,
+  and the top candidate's rest as ghost text (→ or End takes it).
+  `Completion::new(range, text).detail(..)`, `complete_words(list)`,
+  `complete::word_before`. Floats: a widget's drawing over its
+  neighbours, painted after its screen, everything drawn again when one
+  shrinks or goes (crate-internal for now).
+- **Input history:** `input(..).history(h)` (↑/↓ through the entries that
+  start with what was typed; Enter adds one) with `InputHistory`: a name
+  for the session's, `history_session()`, `history_in(app, name)` in the
+  app's state, `history_file(path)`; `status()` for `[3 / 7]`.
+  `PromptOptions::complete` and `::history` do the same for `cx.prompt`.
+- **A command line:** `command_line(CommandLine)` and
+  `command_line_with(.., CommandLineOptions::new().two_rows())`;
+  `open(cx, Mode::new(":"))` with `title`, `initial`, `complete`,
+  `history`, `on_submit` (`Err` keeps it open, in red), `on_change`,
+  `on_cancel`; `confirm`/`confirm_keys` asked in place; `error`,
+  `message`, `close`; the focus goes back where it was.
+- **Queries:** `query::parse(text, &Grammar) -> Query` and
+  `query.matches(&record)` over a `Record` trait (`field`, `text`,
+  `tags`/`has_tag`): words, quoted words, `field:value`,
+  `field.before:/after:/above:/below:/is:/not:/has:/hasnt:/startswith:/
+  endswith:/none:/any:`, `field > value` and the other comparisons,
+  `+tag`/`-tag`, `and`/`or`/`not`/`!` and parentheses; a `Grammar` of
+  fields, aliases, `Kind`s, `TextMatch`, value readers, date reading and
+  word matchers; `QueryError` with a byte range.
+- **Calendars:** `CalendarOptions::title(MonthTitle::Name)` and
+  `month_style_with(|first_of_month| ..)`; `month_with` and
+  `calendar_options_with` read their options from signals; `year_view`
+  and `year_view_with` (`YearOptions`: months across as fit, `marks`,
+  `today`, `across`, `gap`, `heading`); `agenda(from, days, items)`;
+  `Weekday::name`.
+- **rs-rich-interact dates and zones:** `dates::parse` and `parse_with`
+  (`now`, `today`, `tomorrow`, `eod`, weekday and month names,
+  `sow`/`eow`/`som`/`eom`/`soq`/`eoq`/`soy`/`eoy` and the current ones,
+  ISO dates and times, `3d`, `2w`, `1mo`, `-2d`), `DateOptions`,
+  `dates::NAMES`; `datetime::Zone` (UTC, `Local` through `localtime_r` on
+  Unix and `SystemTimeToTzSpecificLocalTime` on Windows, `Fixed`,
+  `posix(rule)`, `tzif(bytes)`, `named(name)`), `DateTime::from_unix`,
+  `to_unix`, `now_local`, `now_in`, `add_seconds`, `Date::today_local`,
+  `today_in`, `Time::now_local`. Tested across a change of summer time.
+  intuiTUIve re-exports `dates`.
+
+### Rendering: styles that don't pile up, fast pixel cells (rs-rich-ext, rs-rich-intuituive)
+
+A full screen of truecolour pixels added thousands of styles a frame that
+were never dropped, the painter copied the whole style table every paint,
+and interning hashed with SipHash: the raycaster's, the sprite stage's and
+real Doom's finding ([the demo gaps](docs/design/intuituive-demo-gaps.md),
+"Round 5" and "Real Doom"; [raycast](docs/design/gaps/raycast.md)). A
+160x50 frame of random half blocks now takes 8 ms in release instead of
+224 ms (80x24: 1.5 ms instead of 48), with the same bytes; a dashboard
+tick is unchanged (about 0.02 ms, 18 bytes).
+
+- **rs-rich-ext `frame::StyleTable`:** interns with a local Fx hash and a
+  chain of ids per key, not SipHash and a `Vec` per bucket;
+  `intern_rgb(fg, bg)` interns a colour pair, building the `Style` only
+  the first time, and `rgb(id)` reads it back; `retain(&keep)` drops what
+  is unused and returns a `StyleRemap` (`get`, `get_or_gone`); `piled_up`
+  says when that is worth it. `StyleId::GONE` is no style's id.
+- **rs-rich-ext `surface::Screen`:** `put_rgb(x, y, ch, fg, bg)` and
+  `put(x, y, ch, style_id)` set one cell without a segment or a style;
+  `compact_styles()` drops the styles no cell uses, `styles_piled_up()`
+  and `style_count()` say how many there are; `underlay`/`restyle`
+  combine each pair of styles once, and `blit` translates each style once.
+- **rs-rich-ext `surface::Painter`:** keeps only the cells it sent, not a
+  copy of the style table each paint; writes true-colour pairs' SGR
+  straight from the colours; `remap_styles(&remap)` follows a compaction
+  and `compact(&mut screen)` does one when the table has piled up.
+  `Surface` compacts after each frame.
+- **intuiTUIve:** `Canvas::put_rgb` and `DrawCx::rect()`; the `pixels`
+  node draws its cells with `put_rgb` (same output); the app compacts its
+  screen after each paint, and a viewport its content.
+
+### Input and timing: every key, held keys, timers you can steer (rs-rich-interact, rs-rich-intuituive)
+
+The round-5 input and timing gaps of the falling-block, raycaster and
+system-monitor clones and of real Doom ([the demo
+gaps](docs/design/intuituive-demo-gaps.md), "Round 5"):
+
+- **Fixed:** the app loop handled one input event a frame, so keys queued
+  during a slow frame spread out over the frames after; it now handles
+  every event waiting (64 at most) before drawing (`Headless::queued`
+  scripts it). Keys typed while the terminal did not answer the start-up
+  query were lost for up to 3 s; they are kept and delivered, and the
+  query waits 1 s at most, 250 ms once keys come. Tables took Shift+↑/↓
+  as ↑/↓, so an ancestor's binding never fired; they leave modified keys
+  to their ancestors. `Driver::send(event)` settles after an event as
+  `press` does (`Driver::event` still does not draw, for loops of your
+  own).
+- **Key state:** `held_keys()`, `Ctx::is_held`, `Ctx::held_keys`,
+  `plain_key`; release bindings `Node::on_key_up` and `bind_release`;
+  `Ctx::key()`, the key that fired a binding; `KeyCode::Modifier`
+  (`ModifierKey`) for a modifier on its own; `SessionOptions::all_keys`
+  and `App::all_keys` (kitty flags 1+2+4+8); `Releases`,
+  `Session::releases_reported`, `Backend::releases_reported`,
+  `Ctx::releases_reported`, `Driver::set_releases`; releases made up with
+  `App::synthesize_releases(hold)`.
+- **Key repeat:** `Node::repeat(delay, rate)` fires a held binding at the
+  app's own delay and rate (DAS/ARR), passing the terminal's repeats over.
+- **Timers:** `every`, `after`, `Ctx::after` return a `Timer` (`pause`,
+  `resume`, `set_period`, `reset`, `cancel`); `Ctx::every`,
+  `Ctx::fixed_step` and `fixed_step(period, |cx, steps| ..)` with
+  catch-up and `Timer::max_catch_up`, exact under `Driver::advance`;
+  `Ctx::missed_ticks`.
+- **Frame pacing:** `App::max_fps(n)`, `FrameStats::skipped`,
+  `App::stats_handle()` (`StatsHandle`) for the stats after `run`.
+
+### intuiTUIve: state-driven layout, focus scopes and keyed nodes (rs-rich-intuituive)
+
+Round 6's layout, focus and help pieces, from the shared gaps and bugs of
+the round-5 clones ([the demo gaps](docs/design/intuituive-demo-gaps.md),
+"Round 5"; the git, top, http, music, disk, csv, tasks and blocks
+reports), all generic core:
+
+- **Fixed:** an `.auto()` `switch` takes its page's own `.fixed(n)`,
+  `.min_size(n)` and `.max_size(n)` (bottom's sort menu came out 9 wide
+  for 11); `layers` composite, so a layer shows the ones below where it
+  draws nothing (a backdrop is one `fill`; a panel still covers its inside,
+  a node with a background its rectangle), drawing each layer once when
+  any of them changes; a `switch` can drop the pages
+  it no longer shows (`.keep_last(n)`), where it kept every page it built.
+- **Layout from state:** `Node::size_with(|| Size)`, `Node::shown_when(||
+  bool)` and `hidden_when` (today's private `shown_if`, public);
+  `keyed(|| key, |key| node)`, one child rebuilt when its key changes, the
+  old one dropped and the focus passed on.
+- **Panels:** `panel_with(|| markup)`, `title_with`, `add_title_with`;
+  `border_with(|| Border)`, and `focus_border` now works on a panel.
+- **Focus:** `Ctx::focus_within(id)` (once the container is laid out);
+  `Node::focus_scope` with `Ctx::focus_next_scope`/`focus_previous_scope`;
+  `Ctx::focus_direction(Direction)` and `Node::bind_directional_focus`, on
+  the pure `focus::neighbour`; `focus::focused()` and `focus::has_focus(id)`
+  as reactive reads; `Node::on_focus` and `on_blur`.
+- **Treemaps:** `layout::squarify(rect, weights, min, aspect)`
+  (`Squarified`), and `treemap`/`treemap_with(.., TreemapOptions)`.
+- **Text:** `fit_text(|| forms)`, the longest that fits;
+  `Node::truncate_middle`.
+- **Screens and help:** `App::min_size(w, h, message)`;
+  `widgets::key_hints_with(KeyHintsOptions)` (a format per hint, key
+  symbols or vim notation, disabled bindings greyed, a separator, a "more"
+  expander); `HelpOptions::all_panes`.
+
+### Recording: pixels, every frame and held keys (rs-rich-record, rs-rich-cli)
+
+`rich record` can now record a game as it plays:
+
+- **Terminal graphics:** the emulator follows Kitty graphics (direct
+  placements and Unicode placeholders, PNG and raw pixels, zlib, chunks,
+  deletes), Sixel and iTerm2 inline images on the cell grid
+  (`rich_record::graphics`, `Snapshot::images`, `Tile`); PNG, GIF, APNG and
+  video frames draw them over their cells.
+- **Every frame:** each settled screen update (a read that drained the PTY,
+  no synchronized update open) is a frame; `Set Framerate N` / `--fps N`
+  (1–60, default 12) sets the video's rate, merging identical frames and
+  keeping only the last update within a frame. Frames are kept packed
+  (`screen::Packed`: 12 bytes a cell, rows shared between frames; a breaking
+  change to `Timeline::frames`), and images compressed.
+- **Held keys:** `KeyDown KEY`, `KeyUp KEY`, `Hold KEY DURATION`, with
+  autorepeat (`Set KeyRepeat`); `Set KittyKeyboard on` reports the kitty
+  keyboard protocol, whose flags the emulator follows per screen (`CSI > u`,
+  `CSI < u`, `CSI = u`), and presses, repeats and releases are then sent as
+  its escapes (`rich_record::keyboard`).
+- **APNG:** `Output apng` (and `--format apng`) writes an animated PNG in full
+  colour beside the GIF; `Set FontSize N` sizes video text.
+- The raycaster's tape is now a 35 fps walk-through (`docs/tapes/raycast.tape`,
+  GIF 7.8 MB, APNG 4.7 MB) and `raycast-iterm.tape` records it in real pixels.
+
+### intuiTUIve: sprites, stages and pixel buffers (rs-rich-intuituive)
+
+Cell art that moves over a backdrop, and a framebuffer drawn in cells: the
+round-5 gaps of the falling-block and raycaster clones ([the demo
+gaps](docs/design/intuituive-demo-gaps.md), "Round 5"), generic in core,
+with two plugins:
+
+- **`sprite`:** `Sprite`, frames of cell art with transparent cells, from
+  markup lines with a transparent character, from `SpriteCell`s or from
+  pixel art in half blocks; frame times on the app's clock, looping or
+  `once`; an anchor; flips that mirror brackets, slashes and half blocks.
+  `stage(|| Vec<Placed>)` and `stage_with(.., StageOptions)` draw placed
+  sprites (id, position in cells, z order, flip, fixed frame, start time,
+  `Tween`) clipped and in z order over a backdrop node or the stage's
+  background, a cell with no background taking the one beneath;
+  `on_sprite_click` and `on_sprite_hover` find sprites by their opaque
+  cells; `half_cells` moves pixel art by half cells. `overlaps`,
+  `overlaps_at` and `bounds_overlap` test collisions; `tween(..)`,
+  `Sprite::frame_at` and `sprite::now()` work on the app's clock.
+- **`pixels`:** `pixels(w, h, |buf| ..)` and `pixels_fit(|buf| ..)` show an
+  RGBA `PixelBuf` in half blocks, or quadrants or Braille
+  (`Node::pixel_mode`); `PixelBuf::blit` (alpha, scale, flip),
+  `fill_rect`, `line`, `plot`; `PixelSprite` frames from RGBA or
+  character art.
+- **Plugins:** `sprite_sheet` cuts an image into `PixelSprite` tiles and
+  half-block sprites (`art`); a new off-by-default `micro` feature makes an
+  rs-rich-micro `MicroAsset` a `Sprite` (`micro_sprite`, `micro_pixels`).
+- `examples/sprites.rs`: animated sprites over a backdrop, selected by a
+  click, steered with the arrows, beside a bouncing ball in a pixel
+  buffer.
+
+Measured in a release build (`tests/sprites.rs`): 300 moving sprites over
+a full backdrop at 200x60 take about 6 ms a frame, painting included; a
+200x120 pixel buffer whose every pixel changes, 12 to 17 ms, most of it
+writing 12,000 differently coloured cells into the screen.
+
+### intuiTUIve: round 5 plugins (rs-rich-intuituive, rs-rich-ext, rs-rich-art)
+
+The plugin pieces of the round-4 gaps of the Yazi and scope-tui clones
+([the demo gaps](docs/design/intuituive-demo-gaps.md), "Round 4: files
+(Yazi)" and "Round 4: scope-tui"), built on round 5's core, with the few
+generic core pieces they needed:
+
+- **Core:** `transport(length)`, a play head on the app's clock (`play`,
+  `pause`, `seek`, `seek_by`, `set_rate`, `position`, `progress`, an
+  `on_end` hook met exactly on the app's clock); `Feed<T>` (a feed's value
+  and `FeedState` as one value), `latest_feed(stall, |tx, state| ..)`
+  with a `FeedTeller`, and `Play::feed()`; `TabSet::scoped(|| value)` (a
+  value per tab, `Scoped`), tab identities (`active_id`, `ids`) and
+  `MultiSelect::scoped(&tabs)` (one handle, a selection and visual mode
+  per tab); `Miller::update_overlay(items)`, and ending an overlay runs
+  the source's `arrive`; `digits` draws `G` and `#`.
+- **Files plugin, rebuilt on the core:** `bulk_rename` on
+  `Ctx::edit_text`; `frecency` on `FrecencyStore` (its API kept; two
+  sessions' visits add up); `files::state_dir` is the core's
+  `state_dir("intuituive")`; `Miller::show_search` is an overlay at the
+  root, so `h` from a search's results goes back to the directory
+  searched, on the entry hovered before, as Yazi; the parent column
+  marks the selection by path with `marks_by` (the theme's
+  `marker.selected`).
+- **Files plugin, new:** `files::Miller::navigation_with` and `go`, and
+  `files::Move` (Yazi's wording without binding each key); a selection
+  and visual mode per tab with `tabs` (`FileTabs::selection`);
+  `Yank::link(into, kind)` on rs-rich-ext's new **`Op::Link { from,
+  into, kind, conflict }`** (`LinkKind::Symbolic { relative }` and
+  `Hard`, directories hard linked file by file) and
+  `file_ops::relative_to`; `files::pick_file(cx, start, filter, |path,
+  cx| ..)`, a file picker modal on Miller's columns;
+  `Previewer::command(mime_glob, argv)`, an external previewer (`%s`,
+  `%o`, `%w`) whose image output is shown as an image.
+- **Sound:** `Capture::generated(frames, period)` and
+  `Capture::from_pcm(pcm, rate)` (Ended and then silence, or `Failed`
+  with the read error), and `Capture::feed()`, so every source is one
+  type; `Pcm::error()` and `Pcm::try_next()` keep the read error that
+  ended a reader; `AudioOptions::stall_after` and `Capture::stall_after`
+  take an `impl Into<Option<Duration>>` (`None`: never stalled).
+  **`audio::output(OutputOptions)`** plays through cpal (behind `audio`;
+  `output_devices`, an `Output` with `write`, `write_matrix`, `clear`,
+  `set_paused`, `set_volume`); **`audio::player(PlayerOptions)`** plays
+  tracks on a `transport` with a volume, a speed and gapless playback,
+  over the `Source` trait (`Wav`, now seekable with `Wav::seek`;
+  `audio::clip` in memory; `open_source` by extension; an opener of your
+  own). Other codecs are later work (symphonia is not a dependency).
+- **rs-rich-ext's dsp:** `Tuner` and `Reading`: the loudest peak's
+  nearest note, its cents and frequency, smoothed within a note.
+- **The `viz` plugin:** `tuner(|| reading)` (the note in `digits`, a
+  needle, the cents in colour) and `persistence(|| frames)` /
+  `persistence_with` over `chart::Persistence`.
+- **The `art` plugin:** `image_bytes` and `image_bytes_of` (an image in
+  memory, an embedded cover); `ImageView::pixels(Pixels::Kitty | Sixel |
+  Iterm)` and `Pixels::detect()` with `image_graphics()` for
+  `App::graphics`: Sixel and iTerm2 pictures drawn over the node's half
+  blocks after each frame, Kitty's through Unicode placeholders, uploaded
+  once and freed at the end; half blocks without the source. The feature
+  now turns on rs-rich-art's `kitty`, `sixel` and `iterm` (no change to
+  rs-rich-art itself: it already decodes from bytes).
+
+### intuiTUIve: round 5 core (rs-rich-intuituive, rs-rich-interact)
+
+The generic core pieces of the round-4 gaps of the Yazi and scope-tui
+clones ([the demo gaps](docs/design/intuituive-demo-gaps.md), "Round 4:
+files (Yazi)" and "Round 4: scope-tui"), none of them about files, sound
+or one app:
+
+- **Fixed: `.autofocus()` on a wrapper focused the wrapper.** On a node
+  that is not focusable of its own (a `switch`, a panel, padding), the
+  focus now passes to the first focusable node inside it, now or once it
+  is built, and the wrapper leaves the Tab order: a list in a `switch`
+  gets its own keys, and the menu key reaches its `on_context`.
+- **Fixed: the help cut a long key list.** Wrapping rows wrap their keys
+  too, between keys (within one only where it must), the key column
+  taking at most half the width. `HelpOptions::filter_key("/")`: letters
+  move (`j`, `k`, `g`, `G`) until the key starts the search, as Yazi's
+  help (rs-rich-interact: `overlay::Help::filter_key`).
+- **Bindings:** `bind_step_scaled(keys, variants, desc, signal, field,
+  step, range)`, a clamped step scaled by the modifiers held; after a
+  binding, `.any_modifiers()` (its keys with any modifiers; an exact
+  binding still wins), `.fall_through()` (the key goes on to the next
+  handler) and `.unlisted()` (left out of the help, the which-key pop-up
+  and `key_hints`, still in the palette by its name);
+  `bind_hidden(keys, name, f)`; `Ctx::pass_key()` passes a key on from
+  inside a handler; `Driver::run_named(name)` runs a binding by its name.
+- **Feeds:** `latest_iter(..).then_at(pace, iter)`, a tail at its own
+  pace, and `.with_state()` (`Ended` once the values run out, while a
+  tail plays on; `.stall_after(..)`); `Latest::wait_for(ready, timeout)`
+  woken by a `Notifier` (`Latest::notifier`), and `Latest::blocking(..)`,
+  which count a waiting feed thread as asleep for the headless clock
+  under `wait_for_tasks`; `recent_of(signal, n, |v| part)` (a part of
+  each write, nothing else copied) and `recent_timed(signal, n)` (each
+  with its time on the app's clock, `Ctx::now()`); `falling(signal,
+  gravity)`, a level that rises at once and falls with gravity.
+  `Resource::stale_after` and `PreviewOfOptions::clear_after` take an
+  `impl Into<Option<Duration>>`, as `latest_with_state` does.
+- **Lists and Miller columns:** `Miller::overlay(at, items)` lists other
+  items at a level (each opening a level of its own) until the columns
+  leave it, `leave`/`end_overlay` going back to the level's own items
+  (`overlay_at()`); `Node::marks_by(selection, |i| key)` marks a list's
+  items in a `multi_select` it is not over; `ListSearch::next_from(here)`
+  and `previous_from(here)` stay on a hovered match; `tabs_for_indexed`;
+  `StatusSegment::when(|| cond)` hides a segment and its caps;
+  `facts(..).value_style(..)` (theme `facts.value`) and
+  `.value_style_for(|i| style)`.
+- **App plumbing:** `Ctx::edit_text(text, |edited, cx| ..)` and
+  `edit_text_as(text, ext, ..)` (a temporary file handed to `$VISUAL` or
+  `$EDITOR`); the `state` module: `state_dir(app)`, `state_file`,
+  `read_state`, `write_state` (written whole and renamed), `update_state`
+  and `update_file` (read, change and write under a lock), `write_atomic`;
+  `FrecencyStore` (`frecency_store(file)`, `frecency_in(app, name)`,
+  `frecency_session()`) ranking string keys as zoxide does, merged on
+  write so two sessions add up, with `keep` and `max_age`;
+  `Jobs::run_process(title, command, done)` and `run_process_with(..,
+  |line| progress, ..)` (`ProcessOutcome`, `ProcessOutput`: the last line
+  of stderr as the error, killed on cancel); `Job::errors()`.
+
+### intuiTUIve: round 4 sound, charts and the viz plugin (rs-rich-intuituive, rs-rich-ext)
+
+The round-3 scope-tui gaps' sound and chart pieces, built on round 4's
+runtime ([the demo gaps](docs/design/intuituive-demo-gaps.md)):
+
+- **Fixed: grid lines shared one layer.** Under `Layering::PerDataset`
+  each of an axis's grid lines is now a layer of its own, the y axis's
+  first, as scope-tui's reference datasets draw: where an x and a y line
+  cross, the x line is drawn over the y line (`⢸`), not merged with it
+  (`⣸`) (rs-rich-ext).
+- **Fixed: a grid with no datasets was drawn in dots.** The grid's
+  marker is now the axis's `Axis::grid_marker(..)`, else the chart's new
+  `Chart::marker(..)`, else the first dataset's, else Braille, so a
+  chart's zero line looks the same before its first data as after
+  (rs-rich-ext).
+- **`Axis::grid_style(..)`** styles the grid lines apart from the axis
+  line and labels (`Axis::style`), and **`Chart::legend_unstyled()`**
+  names what `Chart::style("none")` does to the legend's box (the
+  terminal's own colours); `"none"` still works (rs-rich-ext).
+- **`chart::BarSpectrum`**: a column per band rising from the bottom in
+  eighths of a cell, as cava's bars; `.mirror(true)`, the low bands in the
+  middle, and `BarSpectrum::stereo(left, right)`; `.range`, `.bar_width`,
+  `.gap`, `.style`, `.charset`, `.height` (rs-rich-ext).
+- **`chart::Persistence`**: a trace's last frames, oldest first (a
+  `recent` history), as a `Chart`'s datasets, each older one's colour
+  faded towards `.background(..)` down to `.fade(floor)`, as a scope's
+  phosphor (rs-rich-ext).
+- **`dsp`**: `bands(spectrum, n, lo_hz, hi_hz)` (log-spaced bands),
+  `Falloff::gravity(g)` (levels falling faster and faster, cava's),
+  `peak_hz(spectrum)` (the loudest bin, refined between bins) and
+  `NoteTable` (`Equal`, and `ScopeTui`: scope-tui's octave-0 table
+  rounded to the hundredth and doubled, octave 0 by default, so a clone's
+  buffer sizes match scope-tui's sample for sample). `nearest_note(hz)`
+  now returns the name, octave and cents apart (`("A", 4, 0.0)`), not
+  the name with its octave (rs-rich-ext).
+- **`audio::Capture` on the core's `latest_with_state`:** its `status()`
+  is a `FeedState` (`Running`, `Stalled(since)` on the app's clock,
+  `Failed(why)`, `Ended` once `stop()`ped); `AudioStatus` is gone. The
+  capture's app side is now under `pcm`, so
+  **`Capture::simulated(frames, period)`** stands in for a sound card in
+  tests, with `stall()`, `resume()`, `fail(why)` and `stall_after(d)`.
+- **`audio::play(pcm, rate)`** plays a reader's buffers at the sample
+  rate, then silence, on `latest_iter` (`pcm`); `Pcm::channels` and
+  `Pcm::buffer`.
+- **The `viz` plugin feature**, off by default: `meter`, `meter_with`,
+  `sparkline`, `sparkline_with` and `Node::hold` (the peak hold) have
+  **moved behind `viz`**, out of the always-compiled core, as views of
+  one domain's data; an app that uses them turns `viz` on. With them,
+  **`spectrogram(|| rows)`** and **`bar_spectrum(|| bands)`** (and their
+  `_with` forms), nodes over rs-rich-ext's `Spectrogram` and
+  `BarSpectrum`. CI builds the tapes' examples and docs.rs the docs with
+  it.
+
+### intuiTUIve: round 4 runtime (rs-rich-intuituive)
+
+Runtime fixes and generic pieces the round-3 clones asked for
+([the demo gaps](docs/design/intuituive-demo-gaps.md)):
+
+- **Fixed: values from other threads were picked up at most every 50 ms.**
+  A `Proxy` send (a `latest` value, a task's result, `Proxy::run`) now
+  wakes the run loop's wait on the terminal through the backend's new
+  `Waker`, so a feed faster than 20 a second is seen at its rate on every
+  backend. Headless, `Driver::timeout` (and so `Driver::advance` and a
+  script's `wait`) steps to the next `latest` thread asleep on the app's
+  clock: a `rate` of a 10 ms `latest_every` reads 100, not 20.
+  `Driver::set_waker` wires a loop of one's own.
+- **Fixed: work a layout set off was not settled before the next event.**
+  `Driver::render` runs the watches its new rects woke (a `RectHandle`'s
+  readers) and, under `wait_for_tasks`, their tasks, before it returns.
+- **Bindings in a state:** `Node::bind_when(cond, keys, desc, f)` and the
+  `when(cond, |node| …)` scope (any kind of binding, sequences too): a
+  binding applies, and is listed in the help, the palette, the which-key
+  pop-up and `key_hints`, only while its condition holds; two may share a
+  key. `in_mode(mode, value, section, |node| …)` and `modes(mode, &[…])`
+  scope a mode's bindings and help section to the mode a signal holds.
+- **Sections for every kind of binding:** `Node::section(name, |node| …)`.
+- **`bind_toggle`** (a `bool` field of a signal's value) and **`bind_step`**
+  (a number field moved by a step, clamped to a range; `Stepped`).
+- **`bind_scaled` labels:** `("alt", 0.2, "⅕")` is listed `alt ⅕`
+  (`Scaled`); the old two-item form still works.
+- **The help wraps long rows** instead of cutting them, and
+  **`Ctx::help_with(HelpOptions)`** sets its title, its key notation
+  (`KeyFormat::Vim`: `<C-u>`, `gg`) and a filter-first layout (Yazi's).
+- **Feeds and signals over time:** `latest_with_state(stall_after, run)`
+  (`FeedState::{Running, Stalled(since), Ended, Failed(why)}`),
+  `latest_iter(iter, Pace::Every(d) | Pace::Free)` with `.then(iter)` /
+  `.then_with(f)` / `.signal()`, `history(signal)` (`back`, `forward`,
+  `can_back`, `can_forward`, `limit`), `recent(signal, n)` (`n` a number
+  or a signal: `Count`), `smoothed(signal, attack, release)` and
+  `on_write_ref(signal, |&T, cx| …)`.
+
+rs-rich-interact, for the above: `Backend::waker` and `Waker` (a self-pipe
+polled with the terminal on the crossterm, termion and termwiz backends on
+Unix; short waits elsewhere); `Key::parse` names the punctuation keys
+(`equals`, `minus`, `plus`, `underscore`, `slash`, `backslash`,
+`period`/`dot`, `semicolon`, `colon`, `quote`, `backtick`, `tilde`,
+`bracketleft`/`bracketright`, `lt`, `gt`, `question`, …;
+`event::punctuation`), shown as the character; `overlay::Help::wrap`,
+`::flat` and `::key_format`, off by default.
+
+### intuiTUIve: round 4 widgets (rs-rich-intuituive)
+
+Generic pieces for the round-3 gaps of the Yazi clone, none of them about
+files (the `files` plugin builds on them later):
+
+- **Fix: list options on a wrapper are no longer dropped.** `.symbol`,
+  `.highlight_layer`, `.wheel_step`, `.selected_style_for`, `.marker` and
+  every other list option reach the list a node wraps: a panel, padding
+  (any node with one child) and a `switch`, whose lists get them as they
+  are built (a list with a "No items" text in its place). On a node that
+  wraps no list a debug build says so on stderr, once an option.
+- **Tab sets:** `tab_set(|| state)` keeps a state per tab with one active
+  (`open`, `open_with`, `close`, `close_active`, `switch`, `cycle`,
+  `swap`, `with_active`, `update_active`, `titles`); `tabs_for(&set,
+  |state| title)` is a `tabs` strip over it.
+- **Fitted tabs:** `tabs(..).fit()` cuts the titles with `…` to share the
+  width; unselected titles take the theme's `tabs.unselected` style.
+- **Multi-select:** `multi_select::<K>()` (`MultiSelect`, `Mark`), a
+  selection by key over a list's items (`over`) with `toggle`,
+  `select_all`, `invert`, `clear`, a visual range from the cursor
+  (`range_from`, `visual(unset)`, `end_visual`, `cancel_visual`),
+  `selected()` and `targets(hovered)`; `list.selection_markers(sel, |i|
+  key)` draws the marks (`marker.selected`, `marker.visual`,
+  `marker.unset`).
+- **Find in a list:** `list_search(query, items, cursor)` (`ListSearch`)
+  with `next`, `previous`, `place() -> (n, of)`, smart case.
+- **Lists:** `.cursor_by(|i| key)` keeps the cursor on its item when the
+  items change; `.on_context(|i, cx| ..)` runs on a right press or
+  Shift+F10.
+- **Status bar:** `seg_gauge(fraction, label)`, a segment filled to a
+  share (`.width(cells)`; `status_bar.gauge`, `status_bar.gauge.rest`).
+- **Description lists:** `facts([("Name", value), ..])` and
+  `facts_of(|| rows)`, with `.key_style(..)` (theme `facts.key`).
+- **A streaming fuzzy list over any source:** `fuzzy_list(source,
+  display, on_pick)` and `fuzzy_list_with(.., FuzzyOptions)` (a title, a
+  border, a prompt, `on_cancel`), over `FuzzySource::iter(items)` or
+  `FuzzySource::feed(|feed| ..)`; Esc closes its screen. `finder_of` is
+  now one over an iterator, its API unchanged (it gains Esc).
+- **Digits:** `digits(markup)`, big text three rows tall in box-drawing
+  glyphs with no FIGlet font, in every build (Textual's `Digits`).
+- **Miller columns:** `Move` and `Miller::go`, `navigation_with(node,
+  &[(Move, keys, description)])` for a clone's own keys and wording
+  (`navigation` is it with the defaults), `view_with(MillerOptions)` with
+  `current`/`parent`/`preview` hooks on the columns' lists, a method for
+  each signal (`at()`, `cursor()`, `hovered()`, `items()`, `first()`,
+  `parent_cursor()`, `preview_cursor()`, `remembered_all()`), and
+  `visited()`, the levels shown.
+
+### intuiTUIve: round 4 files plugin (rs-rich-intuituive, rs-rich-ext)
+
+The `files` plugin's part of round 4, built on the round-4 runtime and
+widgets above ([the demo gaps](docs/design/intuituive-demo-gaps.md),
+"Round 3: files"):
+
+- **Fixed: the first frame's preview.** `preview_of_with` (and so
+  `files::preview`) is now a `resource_for` keyed by the pane's width and
+  the key, with `clear_after` as its `stale_after` (on the app's clock)
+  and no generation counter or sleeping thread of its own: with the
+  runtime's layout fix, the first frame shows the hovered entry's
+  preview, with no wait.
+- **The hovered row's ends:** `FileListOptions::hovered_caps(open,
+  close)` and `MillerOptions::hovered_caps`: Yazi's Nerd Font half
+  circles in the row's type colour, on the list's `highlight_layer(Under)`.
+- **`file` classification:** `Previewer::file_type()` (`file -bL`, else a
+  description of the MIME type), chosen for binary files by
+  `PreviewOptions::binary(BinaryPreview::FileType)` (or
+  `MillerOptions::binary`). **Breaking:** `Previewer` is a struct
+  (`Previewer::new(f)`, `preview(..)`), no longer an `Arc` alias;
+  `PreviewSettings` has a `binary` field; `previewer_of(..)` adds one.
+- **Tabs:** `files::tabs(miller)` (`FileTabs`, `FileTab`): a directory
+  and a back/forward history per tab on the core's `tab_set` and
+  `history`, with `open`, `open_at`, `close_active`, `switch`, `cycle`,
+  `swap`, `back`, `forward`, `rename` and `strip()`.
+- **Selection and yank:** `files::selection(miller)`, the core's
+  `multi_select` over the current column by path, marked in the columns;
+  `Miller::targets()`, the selection or the hovered file; `files::Yank`
+  (`copy`, `cut`, `marker`, `markers(signal)`, `paste(into, conflict) ->
+  Op`).
+- **Miller:** `find_next(previous)` on `list_search`; the cursor kept by
+  path through a re-sort, a filter, hidden files and `refresh` (the
+  list's `cursor_by`); `MillerOptions::on_context(|entry, cx| ..)` and
+  the core's `current`, `parent` and `preview` hooks; `visited()`;
+  `show_search(search)`, `searching()` and `end_search()`.
+- **Tasks:** `Tasks::summary() -> (share, running, failed)` for a
+  `seg_gauge`; `Tasks::on_fail(|job, cx| ..)` for every job's failure;
+  `tasks_panel_with(jobs, JobsPanelOptions::new().failed_title(false))`
+  so a failure is told once; `open_with_tasks(cx, opener, paths, jobs,
+  done)` runs extraction as jobs.
+- **Frecency:** `files::frecency()` (or `frecency_at(file)`): `visit`,
+  `ranked`, `remove`, `follow(miller)`, zoxide's ranking, kept in
+  `state_dir()` (`$XDG_STATE_HOME/intuituive`, Application Support,
+  `%LOCALAPPDATA%`), written whole and renamed into place.
+- **Finder:** `files::finder_with(walk, on_pick, FuzzyOptions)` on the
+  core's `fuzzy_list`: a title, a border, Esc closing its modal or
+  `on_cancel`.
+- **Spotter, bulk rename, shell, search:** `files::spot(path)` (and
+  `spot_facts`) on `facts`; `bulk_rename(cx, paths, done)` through
+  `$EDITOR` (names may swap; conflicts reported); `shell(cx, paths,
+  ShellOptions)`, Yazi's `;` and `:` with `$0`/`"$@"` (`shell_command`);
+  `search(root, query, SearchKind::Name | Grep)` through `fd`/`rg` or a
+  walk of its own, streaming.
+
+Core, for the above: `jobs_panel_with` and `JobsPanelOptions`;
+`Ctx::is_modal()`, and a `fuzzy_list` on the first screen leaves Esc to
+the app; a list's `on_context` answers the menu key. rs-rich-interact:
+`KeyCode::Menu`, parsed as `menu` (crossterm's `Menu`, termwiz's
+`Applications`), which rs-rich-embed sends on. rs-rich-ext:
+`trash::send`, the platform's trash (FreeDesktop; the Finder's through
+`osascript`; the Recycle Bin through `SHFileOperationW`, with
+`windows-sys`, already in the tree), which `file_ops`' `Op::Trash` now
+uses.
+
+### intuiTUIve: core components are generic (rs-rich-intuituive)
+
+The rule for intuiTUIve is now that its always-compiled core holds only
+generic components, reusable by other components; anything only one
+domain could use (files, sound, one app) is a plugin, built on a generic
+core piece where there is one. [The demo gaps](docs/design/intuituive-demo-gaps.md)
+and `AGENTS.md` make it a gate for new proposals. An audit of the core
+moved or split what did not pass:
+
+- **Miller columns over any tree:** `miller_of(source, start)` (and
+  `miller_in(source, at)`) over a `MillerSource` (a level's items, the
+  level an item opens, the level above, an `arrive` hook): the parent,
+  current and preview columns with remembered cursors per level, clicks,
+  the wheel, draggable rails and the movement keys (`intuituive::miller`).
+  `files::miller` is now a thin layer over it, its API unchanged.
+- **Jobs with progress:** `jobs::<P>()`, `Jobs::run(title, work, done)`
+  and `jobs_panel(list)`, generic over the progress (`JobProgress`; `f64`
+  is one) and the outcome (`JobOutcome`; `()`, `Result<T, String>`).
+  `files::tasks` runs file operations on it, its API unchanged;
+  `files::Job` is now `Job<file_ops::Progress>`.
+- **A streaming fuzzy finder over any items:** `finder_of(items, display,
+  on_pick)`, read on its own thread. `files::finder` is it over a
+  directory walk; `files::Finder` is now `Finder<String>`, its `walking`
+  field renamed `streaming`, and its status says `loading…`.
+- **A keyed preview pane:** `preview_of(key, load, render)` and
+  `preview_of_with(.., PreviewOfOptions)` load a value off the app's
+  thread for the current key and drop results for keys left behind.
+  `files::preview` is built on it, its API unchanged.
+- **Breaking: `breadcrumb` takes parts, not a path.**
+  `widgets::breadcrumb(|| Vec<String>)` joins any trail with ` › ` (or
+  `.crumb_separator(..)`); `.home_tilde()` and `.home_tilde_at(..)` are
+  gone from the core. The path form is the `files` plugin's
+  `path_crumb(|| path)` (home as `~`), `path_crumb_at(.., home)` and
+  `path_parts(path, home)`.
+- **Breaking: the `audio` module needs a feature.** `audio::pcm`,
+  `Format`, `deinterleave`, `Frame` and `Matrix` were compiled in every
+  build; they are now behind the new off-by-default `pcm` feature (no
+  dependency), which `audio` and `wav` turn on. The scope example needs
+  it (`--example scope --features pcm`; `required-features`), and CI's
+  tapes build turns it on.
+- **`hex_view` moves to the core** (`widgets::hex_view`): any bytes are
+  generic. `files::hex_view` re-exports it.
+
+Kept in the core after the audit, as generic: `meter` and `sparkline`
+(any level, any series; decibels are a scale option), `big_text` (`art`),
+`key_hints`, `status_bar`, `cells`, `live`, tabs, the prompt, pick and
+confirm pop-ups, which-key, `latest`/`latest_every`, `rate` and the
+`bind_*` family. The image nodes stay behind `art`, `watch_path` behind
+`watch`.
+
+### The Yazi clone rebuilt on round 3 (rs-rich-intuituive)
+
+- `examples/files.rs` is rebuilt on the `files` feature's Miller columns,
+  previews, openers, tasks and finder and the core's `status_bar`,
+  `breadcrumb`, `tabs(..).auto_hide().on_select(..)`, `cx.prompt_with`,
+  `cx.pick_with` and `cx.confirm_with`: 2,756 lines down to 1,450. Newly as
+  Yazi: the system's trash, file jobs in the background with a task
+  manager (`w`) and a quit confirm while they run, git signs, sniffed type
+  colours, archive previews and extraction, the streaming finder (`z`),
+  50-wide prompts, 70 x 20 confirms, and a click in the parent column that
+  goes into the directory. It now needs the crate's `files` feature
+  (`required-features`); CI's tapes job builds it with `files` and
+  `archive`. Round 3's findings are in
+  [the demo gaps](docs/design/intuituive-demo-gaps.md).
+
+### intuiTUIve: widgets, pop-ups and runtime from round 2 (rs-rich-intuituive)
+
+The rest of what the round-2 rebuilds of scope-tui and Yazi found
+missing (see [the demo gaps](docs/design/intuituive-demo-gaps.md)), and
+what the plugin work on files, audio and charts asked of the core.
+
+- **Lists.** `.highlight_layer(HighlightLayer::Under)` puts a list's
+  highlight under the item's markup, so Yazi's rounded ends keep their
+  colour on the hovered row. **`list_rows(len, |i| ListRow, selected)`**
+  makes each row once a draw, with its trailing text, marker, row style
+  and highlight style (`.marker_column()` keeps the marker column);
+  `list_lazy` is unchanged. `.wheel_step(n)` sets how far the wheel moves
+  the selection, and `0` leaves the wheel to the list's ancestors.
+  `selected_style_for`'s docs no longer suggest it where `row_style` and a
+  reversed highlight do.
+- **`Node::truncate_start()`**: a text too long loses its start, with
+  `…`, rather than its end.
+- **Pop-ups.** `cx.confirm_with(.., ConfirmOptions::new().size(w, h)
+  .title_style(..), ..)` sizes a confirm and styles its title; with no
+  body, the items sit under the title with no empty row or rule (fixed).
+  **`cx.prompt(title, initial, |text, cx| ..)`** and `prompt_with(..,
+  PromptOptions)` (placement, caret, title style, change and cancel
+  handlers) are Yazi's input; **`cx.pick(title, origin, items, |i, cx|
+  ..)`** and `pick_with` its "Open with:" menu. A pop-up's panel's
+  `.title_style` already overrode `popup.title` per pop-up.
+- **Fixed: a rule inside padding did not join its panel.** A rule at the
+  inside edge of a padded column, or of a panel a stylesheet pads, runs
+  across the padding to the border.
+- **Fixed: a pop-up below a row slid away from it.** `Origin::At` makes a
+  box too wide for the room right of the rectangle narrower (down to the
+  rectangle's width) before moving it.
+- **`App::notify_width(size)`**: how wide a notification may grow, 48
+  cells by default.
+- **Bars.** `status_bar(left, right)` of `seg(..)` segments with
+  `.caps(Caps::Powerline | Caps::Rounded)`; `breadcrumb(parts)` with
+  `.crumb_separator(..)` and `.crumb_suffix(..)` (a path's is
+  `files::path_crumb`, below); `key_hints()`, a footer of the
+  keys that work now; `cells([(35, a), ..])`, ratatui's one-row table;
+  `live(fps_cap, || renderable)`, which draws at most so many times a
+  second of the app's clock.
+- **Tabs.** `.auto_hide()` hides a strip of fewer than two titles;
+  `.on_select(|to, cx| ..)` hears the title picked instead of the strip
+  setting its signal.
+- **Clock.** `after(wait, |cx| ..)` (and `cx.after`) runs once on the
+  app's clock; `Resource::stale_after` waits on it. `Driver::advance(d)`
+  steps the clock to each thing due and draws. `DrawCx::now()` gives a
+  widget the app's clock.
+- **Keys.** `.bind_sequence_in(section, ..)`; `.bind_cycle_back(..)`
+  cycles a mode backwards.
+- **Tasks.** `spawn_then(work, done)` keeps a non-`Send` `done` on the
+  app's thread; `spawn_stream(|stream| ..)` is a thread with a proxy
+  counted as a task until it returns, told of a cancel.
+- **`Node::on_unmount(|| ..)`** runs when a node leaves the tree.
+- **`Widget::access_text`**: what a widget says to assistive technology,
+  read as text.
+- **`App::graphics(source)`** draws an rs-rich-ext `PlacementSource`'s
+  terminal graphics beside the cells after each frame, and releases them
+  at the end. The `image` node does not place graphics yet.
+- **`render_with` needs no quit**: it presses its keys, settles and reads
+  the screen; an app's error is its `Err`.
+- **Fixed: an app dropped without `finish()`** (a driver let go) left its
+  `latest` threads asleep on its clock; dropping an `App` now closes its
+  runtime.
+
+### intuiTUIve: runtime, keys and signals from round 2 (rs-rich-intuituive, interact)
+
+What the round-2 rebuilds of scope-tui and Yazi found missing from the
+core (see [the demo gaps](docs/design/intuituive-demo-gaps.md)).
+
+- **`on_write(signal, |value, cx| ..)`** runs after every write to a
+  signal, an equal value too, where a `watch` sees two equal buffers as
+  one. **`rate(signal)`** is a `Signal<u32>` of writes a second, updated
+  each second of the app's clock: a frame-rate meter.
+- **`latest` threads on the app's clock.** `Latest::sleep(period)` keeps
+  a thread to a beat, as `every` does, and **`latest_every(period, ||
+  value)`** is a thread making a value every period. In an app that
+  `wait_for_tasks(true)`, both keep to the app's clock, and each turn
+  waits until the threads due have sent their values and sleep again, so
+  a thread-fed app can be tested frame by frame. `latest` threads now
+  start when the app starts running.
+- **`App::try_new(|| -> Result<Node, E>)`**: a builder that can fail
+  returns its error from `try_new`, before the terminal is taken.
+- **Help sections and modifier variants.** `.bind_in(section, keys,
+  description, handler)` lists a binding under a section of its own in
+  the help and the palette. `.bind_scaled(keys, &[("", 1.0), ("shift",
+  10.0), ..], description, |cx, value| ..)` binds keys with modifiers,
+  each with its value, shown as one help row. `.bind_cycle(keys,
+  description, signal, &modes)` steps a signal through modes.
+- **`resource_for(key, fetch)`** fetches again whenever the key changes
+  and drops results for keys left behind; **`Resource::stale_after(d)`**
+  keeps the last value while the next loads, for `d` at most.
+- **`Signal::replace(value)`** sets a value with no `PartialEq` and
+  returns the old one. `RectHandle` and `PathWatch` are `PartialEq` (the
+  same handle), so they can be kept in a signal with `set`.
+- **`RectHandle::new()`** and **`Node::rect_into(&handle)`**: a handle
+  made before its node.
+- **Keys.** `comma` names the comma key wherever keys are parsed
+  (`"comma s"`, `"ctrl+comma"`; rs-rich-interact's `Key::parse`). A
+  `bind_sequence` of one key panics, saying to use `bind`, where it
+  silently became a `bind`.
+- **The headless record keeps arguments:** rs-rich-interact's
+  `Record::handoff_commands` holds each handed-off program with its
+  arguments.
+- **Fixed: which-key columns ran into each other.** A description too
+  long for its column is cut with `…` two cells short of the next
+  column's keys. The theme's `which_key.desc` and `which_key.sep` style
+  the descriptions and the separator.
+
+### A file manager's components (rs-rich-intuituive `files`, rs-rich-ext)
+
+Round 2 of [the demo gaps](docs/design/intuituive-demo-gaps.md) asked for
+the parts of Yazi that `examples/files.rs` writes by hand. The UI parts
+are in intuiTUIve's new off-by-default `files` feature
+(`intuituive::files`); what needs no terminal is in rs-rich-ext, with no
+new dependency outside its `archive` feature.
+
+- **Miller columns:** `files::miller(start)`: the parent, current and
+  preview columns over one cursor, in draggable panes, with remembered
+  positions, clicks that navigate, Yazi's movement keys
+  (`Miller::navigation`) and markers and git signs through
+  `MillerOptions`. With `watch` both directories follow the disk.
+- **A directory model:** `files::dir_model(..)`: entries as memos,
+  sorted, hidden files shown or not, filtered (smart case), read again on
+  `refresh()`; `.watch()` (`watch` feature) and `.sniff()`, which types
+  files by their first bytes on a worker thread.
+- **File-list rows:** `files::file_list(model, cursor, options)`: icon,
+  type colour across the row, marker, find highlights with the hovered
+  match's place, a git sign and Yazi's line modes (size, permissions,
+  mtime, btime, owner).
+- **A preview pane by type:** `files::preview(path, options)`: a
+  directory's entries, highlighted text, an image (`art`), an archive's
+  listing (`archive`), a hex dump; loaded off the app's thread, stale
+  results dropped, custom previewers first.
+- **Openers, jobs, a finder:** `files::open_with` runs an opener (the
+  editor through a handoff, the system opener in the background, archive
+  extraction); `files::tasks()` and `tasks_panel` run copies, moves,
+  deletes, trashing and extraction as cancellable jobs with progress;
+  `files::finder(walk, on_pick)` fuzzy-finds over a directory walk whose
+  results stream in; `files::git_status`, `files::hex_view`.
+- **rs-rich-ext:** `listing` (entries, Yazi's sort orders, line-mode
+  cells, a lazy tree `walk`), `open` (Yazi's opener rules, MIME and name
+  globs), `file_ops` (copy, move, delete, trash with progress, conflict
+  rules, cancellation), `trash` (the FreeDesktop trash: put, list,
+  restore, purge; an `Unsupported` error on macOS and Windows), `git`
+  (`git status --porcelain=v1 -z` per file), `archive` (tar, tar.gz and
+  zip listing and extraction that never writes outside its directory;
+  the off-by-default `archive` feature brings `zip` and `flate2`, both
+  already in the tree), and `filetype::mime_batch`.
+
+### intuiTUIve's audio plugin, rounded out (rs-rich-intuituive)
+
+Round 2 of [the demo gaps](docs/design/intuituive-demo-gaps.md) found what
+the scope-tui rebuild still lacked from the `audio` feature.
+
+- **Breaking: `audio::input` returns `Signal<Option<Frame>>`**, the shape
+  of `latest`'s: `None` before the first buffer, then the newest `Frame {
+  number, samples }`. Numbered, so a watch sees every buffer, digital
+  silence included (frames per second now count silent buffers too). The
+  scope example takes it so.
+- **Devices by id:** `Device { id, name, default, host }`. `input` and
+  `AudioOptions::device` take the id (ALSA's `null`, `pulse`,
+  `hw:CARD=…`), then a name, exactly or in part; the name is the
+  description to show. `Device::configs()` lists channels, rate range,
+  buffer range and sample format, as scope-tui's `audio --list` does.
+- **`audio::open(AudioOptions)` before the app**, so a missing device fails
+  before the terminal is taken, with `capture.samples()` and
+  `capture.status()` inside it. `AudioStatus` is `Running`,
+  `Stalled(since)` (no buffer for `stall_after`) or `Failed(why)` (cpal's
+  stream error; glitches and reroutes are not failures): enough to enforce
+  `--timeout`. `AudioOptions::latency(frames)` sets the driver's or
+  server's buffer.
+- **ALSA keeps quiet:** its `ALSA lib …` lines are taken by a thread-local
+  handler (`snd_lib_error_set_local`) while devices are listed and opened,
+  kept for `audio::messages()`, and passed to a `Log` with
+  `capture.log(log)`.
+- **PulseAudio and PipeWire:** the new `pulse` feature turns on cpal's own
+  PulseAudio client (pure Rust, no libpulse): `Host::Pulse` lists every
+  source, a sink's monitor among them, and `devices_on(host)` lists a
+  host's inputs.
+- **`audio::pcm(reader, Format, channels, buffer)`** reads interleaved raw
+  PCM (`u8`, `s8`, `s16le/be`, `s24le`, `s32le/be`, `f32le/be`, `f64le`;
+  `Format::parse("S16_LE")`) as buffers, behind the light `pcm` feature
+  (below). The new `wav`
+  feature (hound) adds `audio::wav(path, buffer)`, `audio::wav_writer` and
+  `audio::record(samples, path, rate, channels)`.
+- **`audio::picker(on_pick)`**: a list of the inputs, the default selected,
+  Enter picks, `r` lists again.
+
+### intuiTUIve: meters, sparklines and big text (rs-rich-intuituive)
+
+- **`meter(level, peak)`**, a `LevelMeter` node; `.hold(duration)` keeps
+  the highest peak marked for that long. `meter_with(.., configure)` sets
+  its label, readout, decibel scale or orientation.
+- **`sparkline(values)`** (and `sparkline_with`): rs-rich-ext's
+  `Sparkline` over a closure that reads signals.
+- **`big_text(markup)`** behind the `art` feature: markup in FIGlet
+  letters through rs-rich-art, each run in its style.
+
+Each reads aloud as its chart does.
+
+### Sound and charts (rs-rich-ext, rs-rich-ratatui)
+
+- **`dsp`:** test signals (`tone`, `partials`, `noise` with
+  `.low_pass(..)`, `mix`), `trigger(samples, level, depth, Edge)`,
+  `note_hz("A4")` and `nearest_note(hz)`, and `spectrum_full` (every bin,
+  as scope-tui plots them).
+- **`chart::Axis::grid([..])`**: grid lines at those values, in the axis's
+  style, under the datasets (the spectroscope's 29 reference datasets
+  become one call).
+- **`chart::Chart::style(..)`**, ratatui's `Chart::style`: under every
+  cell, and the legend's box takes it by default; `legend_style` still
+  wins.
+- **`chart::Spectrogram`**: a waterfall of spectra, the newest at the top,
+  in a heatmap's shades, on a linear or log frequency axis.
+- **`chart::LevelMeter`** and **`chart::PeakHold`**: an audio level meter,
+  green to red, with peak and held-peak marks, linear or in decibels,
+  across or up.
+- **`palette::style_from_color_name`** moves here from rs-rich-ratatui,
+  which re-exports it (its path and behaviour are unchanged, and a test
+  checks it against ratatui's parser); rs-rich-ratatui now depends on
+  rs-rich-ext without its default features.
+
+### intuiTUIve's scope-tui example on round 3's components (rs-rich-intuituive)
+
+Round 3 of [the demo gaps](docs/design/intuituive-demo-gaps.md):
+`examples/scope.rs` rebuilt on the audio, DSP, chart and key components
+round 2 asked for, with no hand-rolled stand-in left. Sources are
+`latest_every`, `latest` with `Latest::sleep` and `audio::open`'s capture,
+taken with `on_write` and counted with `rate`; files are read with
+`audio::pcm`; the test signal, trigger and `--tune` are `dsp`'s; reference
+lines are `Axis::grid`, the header `cells`, the keys `bind_cycle`,
+`bind_scaled` and `bind_in`. New and more faithful: `audio --timeout`
+ends the app as scope-tui does, `audio --list` prints each device's
+configurations in scope-tui's format, and `pulse` reaches every
+PulseAudio source with the `pulse` feature, `--server-buffer` included.
+
+### intuiTUIve's Yazi example on the new components (rs-rich-intuituive)
+
+Round 2 of [the demo gaps](docs/design/intuituive-demo-gaps.md):
+`examples/files.rs` rebuilt on round 1's additions, with every workaround
+gone. One lazy list per column with the line mode trailing and a marker
+column; Yazi's key sequences and which-key; prompts placed with
+`popup_at` (rename below the hovered row, the caret before the
+extension); `cx.confirm`, `cx.notify` at the top right; rs-rich-ext's
+`filetype` icons and type colours, local times and owner names; Enter and
+`o` open with `$EDITOR` through `cx.handoff` or the system opener, `O`
+picks one. With the crate's `watch` feature it follows the disk, with
+`art` it draws image previews; CI's tapes job builds the examples with
+both. The example's tests cover the new behaviour.
+
 ### Releases: one release, one commit, found for you
 
 - **`release_cohort.py tag` finds the release and its commit.** A release

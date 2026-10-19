@@ -1,7 +1,11 @@
 //! What the terminal shows at one moment, resolved to colours.
 
+use std::sync::Arc;
+
 use rich::{Color, Segment, Style};
 use rich_ext::frame::Frame;
+
+use crate::graphics::Tile;
 
 /// An RGB colour.
 pub type Rgb = (u8, u8, u8);
@@ -115,11 +119,17 @@ impl Cell {
     }
 }
 
-/// The screen: rows of cells and the cursor, when it is shown.
-#[derive(Clone, Debug, PartialEq, Eq, Hash)]
+/// The screen: rows of cells, the cursor, when it is shown, and the images
+/// drawn over the cells.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Snapshot {
     pub rows: Vec<Vec<Cell>>,
     pub cursor: Option<(u16, u16)>,
+    /// Images the program drew (Kitty, Sixel, iTerm2), in the order they
+    /// are drawn: PNG, GIF, APNG and video frames show them; text grids
+    /// and SVGs show the cells under them. Empty from
+    /// [`Snapshot::from_screen`] and [`Snapshot::from_frame`].
+    pub images: Vec<Tile>,
 }
 
 impl Snapshot {
@@ -184,7 +194,11 @@ impl Snapshot {
             let (row, column) = screen.cursor_position();
             (column, row)
         });
-        Snapshot { rows, cursor }
+        Snapshot {
+            rows,
+            cursor,
+            images: Vec::new(),
+        }
     }
 
     /// Rendered output as a screen `columns` wide, without a terminal: each
@@ -254,7 +268,11 @@ impl Snapshot {
         if rows.is_empty() {
             rows.push(vec![Cell::blank(theme); columns]);
         }
-        Snapshot { rows, cursor: None }
+        Snapshot {
+            rows,
+            cursor: None,
+            images: Vec::new(),
+        }
     }
 
     pub fn columns(&self) -> usize {
@@ -342,6 +360,165 @@ impl Snapshot {
             out.push('\n');
         }
         out
+    }
+}
+
+/// One cell, packed: its text (a character, or an index into its row's
+/// longer texts), width, colours and attributes, in 12 bytes.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+struct PackedCell {
+    /// A character, or [`LONG_TEXT`] plus an index into the row's texts.
+    text: u32,
+    width: u8,
+    fg: Rgb,
+    bg: Rgb,
+    /// Bold 1, italic 2, underline 4.
+    attributes: u8,
+}
+
+/// Marks a [`PackedCell`] text that is an index, not a character.
+const LONG_TEXT: u32 = 1 << 31;
+
+/// A row of packed cells and the texts longer than a character in it.
+#[derive(Debug, PartialEq, Eq, Hash)]
+pub struct PackedRow {
+    cells: Vec<PackedCell>,
+    texts: Vec<String>,
+}
+
+impl PackedRow {
+    fn pack(row: &[Cell]) -> PackedRow {
+        let mut texts = Vec::new();
+        let cells = row
+            .iter()
+            .map(|cell| {
+                let mut chars = cell.text.chars();
+                let text = match (chars.next(), chars.next()) {
+                    (Some(c), None) => c as u32,
+                    (None, _) => LONG_TEXT | u32::MAX >> 1,
+                    _ => {
+                        texts.push(cell.text.clone());
+                        LONG_TEXT | (texts.len() as u32 - 1)
+                    }
+                };
+                PackedCell {
+                    text,
+                    width: cell.width,
+                    fg: cell.fg,
+                    bg: cell.bg,
+                    attributes: u8::from(cell.bold)
+                        | u8::from(cell.italic) << 1
+                        | u8::from(cell.underline) << 2,
+                }
+            })
+            .collect();
+        PackedRow { cells, texts }
+    }
+
+    /// The row's cells.
+    pub fn cells(&self) -> Vec<Cell> {
+        self.cells
+            .iter()
+            .map(|cell| Cell {
+                text: if cell.text & LONG_TEXT == 0 {
+                    char::from_u32(cell.text).map_or_else(String::new, String::from)
+                } else {
+                    self.texts
+                        .get((cell.text & !LONG_TEXT) as usize)
+                        .cloned()
+                        .unwrap_or_default()
+                },
+                width: cell.width,
+                fg: cell.fg,
+                bg: cell.bg,
+                bold: cell.attributes & 1 != 0,
+                italic: cell.attributes & 2 != 0,
+                underline: cell.attributes & 4 != 0,
+            })
+            .collect()
+    }
+}
+
+/// A [`Snapshot`] packed for a [`Timeline`](crate::session::Timeline),
+/// which keeps one for every frame: about 12 bytes a cell, and each row
+/// equal to the frame before's shared with it, so a recording of 35 frames
+/// a second costs megabytes, not gigabytes. [`Packed::snapshot`] unpacks
+/// it.
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Packed {
+    rows: Vec<Arc<PackedRow>>,
+    cursor: Option<(u16, u16)>,
+    images: Vec<Tile>,
+}
+
+impl Packed {
+    /// Pack `snapshot`, sharing the rows it has in common with `before`
+    /// (the frame before it), row for row.
+    pub fn pack(snapshot: &Snapshot, before: Option<&Packed>) -> Packed {
+        let rows = snapshot
+            .rows
+            .iter()
+            .enumerate()
+            .map(|(y, row)| {
+                let row = PackedRow::pack(row);
+                match before.and_then(|b| b.rows.get(y)) {
+                    Some(old) if **old == row => old.clone(),
+                    _ => Arc::new(row),
+                }
+            })
+            .collect();
+        Packed {
+            rows,
+            cursor: snapshot.cursor,
+            images: snapshot.images.clone(),
+        }
+    }
+
+    /// The snapshot again.
+    pub fn snapshot(&self) -> Snapshot {
+        Snapshot {
+            rows: self.rows.iter().map(|row| row.cells()).collect(),
+            cursor: self.cursor,
+            images: self.images.clone(),
+        }
+    }
+
+    /// Its rows, each shared with the frames that have it too.
+    pub fn rows(&self) -> &[Arc<PackedRow>] {
+        &self.rows
+    }
+
+    pub fn columns(&self) -> usize {
+        self.rows.first().map_or(0, |row| row.cells.len())
+    }
+
+    pub fn height(&self) -> usize {
+        self.rows.len()
+    }
+
+    pub fn cursor(&self) -> Option<(u16, u16)> {
+        self.cursor
+    }
+
+    pub fn images(&self) -> &[Tile] {
+        &self.images
+    }
+
+    /// Whether `other` shows the same cells and images, the cursor aside.
+    pub fn same_screen(&self, other: &Packed) -> bool {
+        self.images == other.images
+            && self.rows.len() == other.rows.len()
+            && self
+                .rows
+                .iter()
+                .zip(&other.rows)
+                .all(|(a, b)| Arc::ptr_eq(a, b) || a == b)
+    }
+}
+
+impl From<&Snapshot> for Packed {
+    fn from(snapshot: &Snapshot) -> Packed {
+        Packed::pack(snapshot, None)
     }
 }
 
@@ -477,6 +654,28 @@ mod tests {
                 .len(),
             1
         );
+    }
+
+    #[test]
+    fn packed_snapshots_unpack_and_share_rows() {
+        let one = snapshot("ab漢\x1b[1;4;31mx\r\n👩\u{200d}👧 y".as_bytes(), 3, 8);
+        let packed = Packed::from(&one);
+        assert_eq!(packed.snapshot(), one);
+        assert_eq!((packed.columns(), packed.height()), (8, 3));
+        // A cell takes 12 bytes, whatever its text.
+        assert_eq!(std::mem::size_of::<PackedCell>(), 12);
+        // The next frame shares the rows that did not change.
+        let two = snapshot("ab漢\x1b[1;4;31mx\r\nchanged".as_bytes(), 3, 8);
+        let next = Packed::pack(&two, Some(&packed));
+        assert_eq!(next.snapshot(), two);
+        assert!(Arc::ptr_eq(&next.rows()[0], &packed.rows()[0]));
+        assert!(!Arc::ptr_eq(&next.rows()[1], &packed.rows()[1]));
+        assert!(!next.same_screen(&packed));
+        let moved = Snapshot {
+            cursor: None,
+            ..one.clone()
+        };
+        assert!(Packed::from(&moved).same_screen(&packed));
     }
 
     #[test]

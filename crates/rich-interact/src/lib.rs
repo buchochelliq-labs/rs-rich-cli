@@ -91,6 +91,7 @@ pub mod clipboard;
 pub mod component;
 pub mod components;
 pub mod compose;
+pub mod dates;
 pub mod datetime;
 pub mod edit;
 pub mod event;
@@ -107,6 +108,7 @@ pub mod plugin;
 pub mod policy;
 pub mod session;
 pub mod viewport;
+mod zone;
 
 pub use chrome::{Breadcrumbs, StatusBar, StatusItem};
 pub use component::{Component, Context, Flow, View};
@@ -123,7 +125,9 @@ pub use compose::{
     Axis, Column, ComponentExt, Label, Layer, LayerHandle, Layers, Rect, Row, Size, Split, Stack,
     Tabs,
 };
-pub use event::{Button, Event, HeldButton, Key, KeyCode, Modifiers, Mouse, MouseKind};
+pub use event::{
+    Button, Event, HeldButton, Key, KeyCode, ModifierKey, Modifiers, Mouse, MouseKind, Releases,
+};
 pub use event_loop::{
     degrade, run, run_with_graphics, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions,
 };
@@ -132,7 +136,9 @@ pub use keymap::{Binding, Keymap};
 pub use overlay::{Command, Help, Menu, Overlays, Palette, Shortcuts};
 pub use plugin::PluginView;
 pub use policy::{Fallback, LineIo, NotInteractive, Policy, Reason};
-pub use session::{synchronized_update, Backend, BackendKind, Output, Session, SessionOptions};
+pub use session::{
+    synchronized_update, Backend, BackendKind, Output, Session, SessionOptions, Waker,
+};
 pub use viewport::Viewport;
 
 /// Forward every [`Component`] method to `(**self)`.

@@ -8,7 +8,7 @@
 [package]
 name = "rs-rich-record"
 version = "0.0.8"
-description = "Record scripted terminal sessions (tapes) into screenshots, asciinema casts, GIF and MP4"
+description = "Record scripted terminal sessions (tapes) into screenshots, asciinema casts, GIF, APNG and MP4"
 edition.workspace = true
 license.workspace = true
 repository.workspace = true
@@ -45,3 +45,6 @@ png = "0.18"
 gif = "0.14"
 # One NeuQuant pass per GIF (not per frame); gif already depends on it.
 color_quant = "2"
+# Kitty's zlib-compressed image data, and images kept compressed in a
+# recording; png already depends on it.
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }

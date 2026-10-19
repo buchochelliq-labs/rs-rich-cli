@@ -301,3 +301,143 @@ fn a_pop_ups_title_takes_the_themes_popup_title_style() {
         Some(magenta.color().cloned())
     );
 }
+
+#[test]
+fn which_key_keeps_a_gap_between_its_columns() {
+    // Yazi's which: three columns, descriptions longer than a column.
+    let app = App::new(|| {
+        let mut node = label("x");
+        for (key, what) in [
+            ("m", "Sort by modified time"),
+            ("M", "Sort by modified time (reverse)"),
+            ("a", "Sort alphabetically"),
+            ("A", "Sort alphabetically (reverse)"),
+            ("n", "Sort naturally"),
+            ("N", "Sort naturally (reverse)"),
+        ] {
+            node = node.bind_sequence(&format!("comma {key}"), what, |_| {});
+        }
+        node
+    })
+    .which_key(true);
+    let mut driver = app.driver(62, 8);
+    driver.press("comma");
+    let rows = driver.screen().plain();
+    // Columns of 20 cells: a key, two cells, a description cut with `…`,
+    // and at least two blank cells before the next column's key.
+    let first = &rows[4];
+    assert!(first.contains(" m  Sort by modi… "), "{rows:#?}");
+    let next = first.find(" a  Sort").expect("the second column");
+    assert!(first[..next].ends_with("…  "), "{first:?}");
+    assert!(!first.contains("(rever a"), "{first:?}");
+}
+
+#[test]
+fn which_key_styles_its_keys_separator_and_descriptions_from_the_theme() {
+    let theme = Theme::dark()
+        .with_config(
+            "[styles]\nwhich_key.key = bright_cyan\nwhich_key.sep = on blue\n\
+             which_key.desc = bright_magenta\n",
+        )
+        .unwrap();
+    let mut driver = files().which_key(true).theme(theme).driver(60, 8);
+    driver.press("g");
+    let styled = intuituive::testing::styled(&driver);
+    assert!(
+        styled.contains("[bright_cyan] h[/][on blue]  [/][bright_magenta]Go home[/]"),
+        "{styled}"
+    );
+}
+
+#[test]
+#[should_panic(expected = "bind_sequence(\"g\") has one key")]
+fn a_sequence_of_one_key_is_refused() {
+    let _ = App::new(|| label("x").bind_sequence("g", "Go", |_| {}));
+}
+
+#[test]
+fn the_comma_key_has_a_name() {
+    let app = App::new(|| {
+        let ran = signal(String::from("-"));
+        text!("{ran}")
+            .bind_sequence("comma s", "Sort by size", move |_| ran.set("size".into()))
+            .on_key("ctrl+comma", move |_| ran.set("settings".into()))
+    });
+    let mut driver = app.driver(20, 1);
+    driver.press("comma s");
+    assert_eq!(row(&driver, 0), "size");
+    driver.press("ctrl+comma");
+    assert_eq!(row(&driver, 0), "settings");
+    // The quoted form is the same key.
+    driver.press("\",\" s");
+    assert_eq!(row(&driver, 0), "size");
+}
+
+#[test]
+fn the_help_groups_bindings_by_section() {
+    let app = App::new(|| {
+        label("scope")
+            .name("scope")
+            .bind("q", "Quit", |cx| cx.quit())
+            .bind_in("oscilloscope", "t", "Toggle the trigger", |_| {})
+            .bind_in("spectroscope", "l", "Logarithmic scale", |_| {})
+            .bind_in("oscilloscope", "e", "Falling edge", |_| {})
+    })
+    .help_key("?");
+    let mut driver = app.driver(60, 24);
+    driver.press("?");
+    let rows = driver.screen().plain();
+    let at = |text: &str| {
+        rows.iter()
+            .position(|r| r.contains(text))
+            .unwrap_or_else(|| panic!("{text} in {rows:#?}"))
+    };
+    // Each section's heading, then its keys; the unsectioned under the
+    // node's name.
+    assert!(at("Quit") < at("oscilloscope"));
+    assert!(at("oscilloscope") < at("Toggle the trigger"));
+    assert_eq!(at("Falling edge"), at("Toggle the trigger") + 1);
+    assert!(at("Falling edge") < at("spectroscope"));
+    assert!(at("spectroscope") < at("Logarithmic scale"));
+}
+
+#[test]
+fn scaled_variants_run_with_their_value_and_show_as_one_row() {
+    let app = App::new(|| {
+        let scale = signal(0.0f64);
+        text!("{scale}")
+            .bind_scaled(
+                "up k",
+                &[("", 1.0), ("shift", 10.0), ("ctrl", 5.0), ("alt", 0.5)],
+                "Scale up",
+                move |_, by| scale.update(|s| *s += by),
+            )
+            .on_key("?", |cx| cx.help())
+    });
+    let mut driver = app.driver(90, 20);
+    driver.press("up shift+up ctrl+up alt+up K alt+k");
+    assert_eq!(row(&driver, 0), "27");
+    driver.press("?");
+    let rows = driver.screen().plain();
+    let lines: Vec<&String> = rows.iter().filter(|r| r.contains("Scale up")).collect();
+    assert_eq!(lines.len(), 1, "{rows:#?}");
+    assert!(
+        lines[0].contains("Scale up (shift ×10, ctrl ×5, alt ×0.5)"),
+        "{rows:#?}"
+    );
+    assert!(!lines[0].contains("shift+"), "{rows:#?}");
+}
+
+#[test]
+fn a_cycle_steps_through_the_modes_and_round() {
+    let app = App::new(|| {
+        let mode = signal(String::from("oscilloscope"));
+        let modes = ["oscilloscope", "vectorscope", "spectroscope"].map(String::from);
+        text!("{mode}").bind_cycle("tab", "Next mode", mode, &modes)
+    });
+    let mut driver = app.driver(20, 1);
+    driver.press("tab");
+    assert_eq!(row(&driver, 0), "vectorscope");
+    driver.press("tab tab");
+    assert_eq!(row(&driver, 0), "oscilloscope");
+}

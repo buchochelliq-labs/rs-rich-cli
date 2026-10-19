@@ -241,6 +241,7 @@ fn hands_the_terminal_off_and_takes_it_back() {
     let (outcome, record) = headless::run(Counter::default(), Script::new().keys("e enter"), 40, 5);
     assert_eq!(outcome.unwrap(), Outcome::Done(0));
     assert_eq!(record.handoffs, ["true"]);
+    assert_eq!(record.handoff_commands, [("true".to_string(), Vec::new())]);
     assert_eq!(record.last_frame(), "count 0 ticks 0 returned Some(0)");
 }
 

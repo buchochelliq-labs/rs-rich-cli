@@ -94,6 +94,10 @@ pub fn key_bytes(key: Key, application_cursor: bool) -> Vec<u8> {
         KeyCode::Delete => tilde_key(key, 3),
         KeyCode::PageUp => tilde_key(key, 5),
         KeyCode::PageDown => tilde_key(key, 6),
+        // xterm's menu key: the VT220's Do.
+        KeyCode::Menu => tilde_key(key, 29),
+        // A legacy terminal sends nothing for a modifier on its own.
+        KeyCode::Modifier(_) => Vec::new(),
         KeyCode::F(n) => {
             // F13 to F24 are Shift with F1 to F12, as xterm sends them.
             let (n, mut key) = if (13..=24).contains(&n) {

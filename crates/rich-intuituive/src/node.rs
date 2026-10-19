@@ -60,6 +60,101 @@ pub enum Axis {
 }
 
 pub(crate) type Handler = Box<dyn FnMut(&mut Ctx)>;
+/// What a key binding runs, told the key that fired it (the first of its
+/// keys when the command palette runs it).
+pub(crate) type KeyHandler = Box<dyn FnMut(&mut Ctx, Key)>;
+
+/// A node's key binding, or key sequence: its keys, what the help says of
+/// it and under which section, and its handler.
+pub(crate) struct KeyBinding {
+    pub keys: Vec<Key>,
+    pub description: String,
+    /// The help's section ([`bind_in`](Node::bind_in)); `None` is the
+    /// node's name.
+    pub section: Option<String>,
+    /// The keys the help and the palette show, when not all of `keys`
+    /// ([`bind_scaled`](Node::bind_scaled) shows the plain ones).
+    pub shown: Option<Vec<Key>>,
+    /// When it applies ([`bind_when`](Node::bind_when)); `None`, always.
+    pub when: Option<BindingCondition>,
+    /// Its keys fire with any modifiers held
+    /// ([`any_modifiers`](Node::any_modifiers)).
+    pub any_modifiers: bool,
+    /// The key goes on to the next handler after it
+    /// ([`fall_through`](Node::fall_through)).
+    pub fall_through: bool,
+    /// Bound, but not listed in the help, the which-key pop-up or a
+    /// footer ([`unlisted`](Node::unlisted)); the palette still runs it.
+    pub hidden: bool,
+    /// Held, it fires again after the first of these and then every
+    /// second, rather than on the terminal's repeats
+    /// ([`repeat`](Node::repeat)).
+    pub repeat: Option<(std::time::Duration, std::time::Duration)>,
+    pub handler: KeyHandler,
+}
+
+/// When a binding applies: read untracked, as a key comes and as the help
+/// lists it.
+pub(crate) type BindingCondition = Rc<dyn Fn() -> bool>;
+
+impl KeyBinding {
+    pub(crate) fn new(keys: Vec<Key>, description: &str, handler: KeyHandler) -> KeyBinding {
+        KeyBinding {
+            keys,
+            description: description.to_string(),
+            section: None,
+            shown: None,
+            when: None,
+            any_modifiers: false,
+            fall_through: false,
+            hidden: false,
+            repeat: None,
+            handler,
+        }
+    }
+
+    /// Whether it takes `key` only as a modifier-blind binding: one of
+    /// its keys with other modifiers (Shift+Tab for `tab`).
+    fn takes_bare(&self, key: Key) -> bool {
+        let code = |key: &Key| match key.code {
+            rich_interact::KeyCode::BackTab => rich_interact::KeyCode::Tab,
+            code => code,
+        };
+        self.any_modifiers && self.live_keys().iter().any(|own| code(own) == code(&key))
+    }
+
+    /// Whether it applies now: no condition, or its condition holds.
+    pub(crate) fn active(&self) -> bool {
+        self.when
+            .as_ref()
+            .is_none_or(|when| crate::reactive::untracked(|| when()))
+    }
+
+    /// Its keys while it applies; none while it does not, so a key passes
+    /// it by (to another binding of the key, on this node or above).
+    pub(crate) fn live_keys(&self) -> &[Key] {
+        if self.active() {
+            &self.keys
+        } else {
+            &[]
+        }
+    }
+}
+/// Which of `bindings` takes `key`, those in `skip` left out: one that
+/// names the key (as [`Key::pick`] chooses), else a modifier-blind one
+/// with its key.
+pub(crate) fn pick_binding(key: Key, bindings: &[KeyBinding], skip: &[usize]) -> Option<usize> {
+    let live = bindings.iter().enumerate().map(|(i, bound)| {
+        if skip.contains(&i) {
+            &[][..]
+        } else {
+            bound.live_keys()
+        }
+    });
+    key.pick(live)
+        .or_else(|| (0..bindings.len()).find(|i| !skip.contains(i) && bindings[*i].takes_bare(key)))
+}
+
 /// A mouse handler: the event in the node's coordinates; whether it used
 /// it.
 pub(crate) type MouseHandler = Box<dyn FnMut(&mut Ctx, Mouse) -> bool>;
@@ -79,6 +174,9 @@ pub(crate) struct DropTarget {
 pub struct Node {
     pub(crate) id: NodeId,
     pub(crate) size: Size,
+    /// Its size read from state ([`size_with`](Node::size_with)), over
+    /// `size`.
+    size_with: Option<Rc<dyn Fn() -> Size>>,
     pub(crate) min: u16,
     pub(crate) max: u16,
     /// Columns and rows it spans in a [`grid`].
@@ -96,10 +194,23 @@ pub struct Node {
     /// Takes the focus when its screen opens, before the first focusable
     /// node does.
     pub(crate) autofocus: bool,
-    pub(crate) keys: RefCell<Vec<(Vec<Key>, String, Handler)>>,
-    /// Key sequences ([`bind_sequence`](Node::bind_sequence)): the keys in
-    /// order, a description and the handler.
-    pub(crate) sequences: RefCell<Vec<(Vec<Key>, String, Handler)>>,
+    /// Asked for the focus with [`autofocus`](Node::autofocus) but not
+    /// focusable of its own (a [`switch`], a panel): the focus passes to
+    /// the first node inside it that takes it, now or once built.
+    pub(crate) focus_passes: bool,
+    /// A [focus scope](Node::focus_scope), and the node inside it that had
+    /// the focus last.
+    focus_scope: bool,
+    scope_last: Cell<Option<NodeId>>,
+    /// What runs when the focus comes into it, or a node inside it, from
+    /// outside (`true`), and when it leaves (`false`).
+    pub(crate) focus_handlers: RefCell<Vec<(bool, Handler)>>,
+    pub(crate) keys: RefCell<Vec<KeyBinding>>,
+    /// Bindings run when a key is let go ([`on_key_up`](Node::on_key_up)).
+    pub(crate) releases: RefCell<Vec<KeyBinding>>,
+    /// Key sequences ([`bind_sequence`](Node::bind_sequence)), their keys
+    /// in order.
+    pub(crate) sequences: RefCell<Vec<KeyBinding>>,
     /// What [`on_any_key`](Node::on_any_key) runs.
     pub(crate) any_key: RefCell<Option<crate::sequence::AnyKey>>,
     /// Its bindings see keys before the focused node inside it
@@ -165,6 +276,11 @@ pub struct Node {
     /// A [`list`]'s selection and scroll, for
     /// [`reorderable`](Node::reorderable).
     pub(crate) list_model: Option<Rc<crate::reorder::ListModel>>,
+    /// The list options given a [`switch`] to pass on to the lists it
+    /// builds, now and later.
+    pub(crate) list_forward: Option<crate::list::Forward>,
+    /// How many pages a [`switch`] keeps ([`keep_last`](Node::keep_last)).
+    keep_pages: Option<Rc<Cell<usize>>>,
     /// Its own colours and text style ([`style`](Node::style),
     /// [`bg`](Node::bg), [`fg`](Node::fg)), under what it draws.
     own_style: Option<OwnStyle>,
@@ -176,6 +292,20 @@ pub struct Node {
     /// at its content's size.
     pub(crate) inset: Option<[u16; 4]>,
     pub(crate) place: Option<(Align, Align)>,
+    /// What runs when it leaves the tree ([`on_unmount`](Node::on_unmount)).
+    unmount: Vec<Unmount>,
+}
+
+/// An [`on_unmount`](Node::on_unmount) handler, run when its node is
+/// dropped: when it leaves the tree.
+struct Unmount(Option<Box<dyn FnOnce()>>);
+
+impl Drop for Unmount {
+    fn drop(&mut self) {
+        if let Some(handler) = self.0.take() {
+            handler();
+        }
+    }
 }
 
 /// A node's own style: a style (or theme style name), a foreground and a
@@ -330,6 +460,7 @@ impl Node {
         Node {
             id: next_node(),
             size: Size::Flex(1),
+            size_with: None,
             min: 0,
             max: u16::MAX,
             span: (1, 1),
@@ -345,7 +476,12 @@ impl Node {
             highlit: Cell::new(false),
             focusable: false,
             autofocus: false,
+            focus_passes: false,
+            focus_scope: false,
+            scope_last: Cell::new(None),
+            focus_handlers: RefCell::new(Vec::new()),
             keys: RefCell::new(Vec::new()),
+            releases: RefCell::new(Vec::new()),
             sequences: RefCell::new(Vec::new()),
             any_key: RefCell::new(None),
             previews: false,
@@ -380,11 +516,14 @@ impl Node {
             checked_when: None,
             busy_when: None,
             list_model: None,
+            list_forward: None,
+            keep_pages: None,
             own_style: None,
             theme_styles: Vec::new(),
             scope: RefCell::new(None),
             inset: None,
             place: None,
+            unmount: Vec::new(),
         }
     }
 
@@ -529,6 +668,10 @@ impl Node {
         if role != Role::Group {
             return role;
         }
+        // A widget that says what it shows is read as text.
+        if self.body.borrow().widget.access_text().is_some() {
+            return Role::Text;
+        }
         let clickable = self.click.borrow().is_some();
         match self.what {
             "text" | "label" | "renderable" | "leaf" if clickable => Role::Button,
@@ -539,11 +682,13 @@ impl Node {
     }
 
     /// Its accessible name, if code gave one; a panel's is its title. A
-    /// [`described`] node's is what it says, after the name code gave.
+    /// [`described`] node's is what it says, after the name code gave, as
+    /// is a widget's [`access_text`](Widget::access_text).
     pub(crate) fn access_label(&self) -> Option<String> {
         let says = self
             .widget_ref(|d: &Described| d.text.clone())
             .flatten()
+            .or_else(|| self.body.borrow().widget.access_text())
             .filter(|text| !text.is_empty());
         match (self.access_label.clone(), says) {
             (Some(label), Some(text)) => return Some(format!("{label}: {text}")),
@@ -703,13 +848,13 @@ impl Node {
             .keys
             .borrow()
             .iter()
-            .map(|(keys, _, _)| joined(keys, "/"))
+            .map(|bound| joined(&bound.keys, "/"))
             .collect();
         keys.extend(
             self.sequences
                 .borrow()
                 .iter()
-                .map(|(keys, _, _)| joined(keys, " ")),
+                .map(|bound| joined(&bound.keys, " ")),
         );
         let mut handlers = Vec::new();
         if self.any_key.borrow().is_some() {
@@ -780,6 +925,40 @@ impl Node {
     /// Size this node along its parent's axis.
     pub fn size(mut self, size: Size) -> Node {
         self.size = size;
+        self.size_with = None;
+        self.set[SET_SIZE] = true;
+        self
+    }
+
+    /// Size this node along its parent's axis by `size`, read whenever the
+    /// parent lays out: it may read signals, and the parent lays out again
+    /// when they change. Panes that trade room as the focus moves (40/60
+    /// one way, 60/40 the other), a pane that takes the whole width while
+    /// it is zoomed. Code's size wins over a stylesheet's, as
+    /// [`size`](Self::size)'s does.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let wide = signal(false);
+    ///     row([
+    ///         label("a").size_with(move || match wide.get() {
+    ///             true => Size::Fixed(6),
+    ///             false => Size::Fixed(2),
+    ///         }),
+    ///         label("|b"),
+    ///     ])
+    ///     .on_key("w", move |_| wide.set(true))
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "a |b");
+    /// driver.press("w");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "a     |b");
+    /// ```
+    pub fn size_with(mut self, size: impl Fn() -> Size + 'static) -> Node {
+        self.size_with = Some(Rc::new(size));
         self.set[SET_SIZE] = true;
         self
     }
@@ -1056,6 +1235,73 @@ impl Node {
         self.when_viewport(rule, move |(_, height)| height < rows)
     }
 
+    /// Show this node only while `shown` holds: it may read signals, and
+    /// the parent lays out again when they change. Hidden, it takes no room
+    /// and no gap, is not drawn, takes no clicks and is out of the Tab order
+    /// (a focused node inside it lets the focus go), and keeps its state
+    /// for when it is shown again: a sidebar toggled by a key, a details
+    /// pane, a search box under a table. With several conditions
+    /// ([`hide_below`](Self::hide_below) and the like), all must hold.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let sidebar = signal(true);
+    ///     row([label("nav").fixed(4).shown_when(move || sidebar.get()), label("main")])
+    ///         .on_key("s", move |_| sidebar.update(|on| *on = !*on))
+    /// });
+    /// let mut driver = app.driver(12, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "nav main");
+    /// driver.press("s");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "main");
+    /// ```
+    pub fn shown_when(self, shown: impl Fn() -> bool + 'static) -> Node {
+        self.shown_if("shown_when", shown)
+    }
+
+    /// Hide this node while `hidden` holds: [`shown_when`](Self::shown_when)
+    /// the other way round.
+    pub fn hidden_when(self, hidden: impl Fn() -> bool + 'static) -> Node {
+        self.shown_if("hidden_when", move || !hidden())
+    }
+
+    /// For a [`switch`]: keep at most `pages` of the pages it built, the
+    /// shown one included, dropping the one shown longest ago when another
+    /// is built (its [`on_unmount`](Self::on_unmount) handlers run and its
+    /// subscriptions end; shown again, it is built afresh). A switch keyed
+    /// by live state (a layout, a column set, a size) would otherwise keep
+    /// every page it ever built. `0`, the default, keeps them all, as tabs
+    /// want. [`keyed`] is a switch that keeps one. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let width = signal(10u16);
+    ///     switch(move || width.get(), |w| label(format!("{w} wide")))
+    ///         .keep_last(1)
+    ///         .on_key("+", move |_| width.update(|w| *w += 1))
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("+ +");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "12 wide");
+    /// ```
+    pub fn keep_last(self, pages: usize) -> Node {
+        if let Some(keep) = &self.keep_pages {
+            keep.set(pages);
+        }
+        self
+    }
+
+    /// Shown only while `shown` holds (it may read signals: the parent lays
+    /// out again when they change); `rule` is how the inspector names it.
+    pub(crate) fn shown_if(mut self, rule: &str, shown: impl Fn() -> bool + 'static) -> Node {
+        self.shown_when.push((rule.to_string(), Box::new(shown)));
+        self
+    }
+
     /// Shown only while `shown` holds of the app's viewport; `rule` is how
     /// the inspector names the condition.
     fn when_viewport(mut self, rule: String, shown: impl Fn((u16, u16)) -> bool + 'static) -> Node {
@@ -1096,10 +1342,166 @@ impl Node {
     /// let screen = app.render_with(&["x", "q"], 10, 3).unwrap();
     /// assert_eq!(screen[2].trim_end(), "list");
     /// ```
+    ///
+    /// On a node that is not focusable of its own and holds others (a
+    /// [`switch`], a panel or padding round a list), the focus passes to
+    /// the first node inside it that takes the focus, now or once it is
+    /// built: a list in a `switch` gets its own keys, and its ancestors'
+    /// bindings still see what it leaves.
     pub fn autofocus(mut self) -> Node {
+        self.focus_passes = !self.focusable;
         self.focusable = true;
         self.autofocus = true;
         self
+    }
+
+    /// Where the focus goes when this node is given it: the first node
+    /// inside that takes the focus, for one whose focus
+    /// [passes](Self::autofocus) inside; `None` to keep it.
+    pub(crate) fn focus_target(&self) -> Option<NodeId> {
+        if !self.focus_passes {
+            return None;
+        }
+        let mut found = None;
+        self.each_child(&mut |child| {
+            child.walk_accessible(&mut |node, _| {
+                if found.is_none()
+                    && node.takes_focus()
+                    && (!node.focus_passes || !node.has_children())
+                {
+                    found = Some(node.id);
+                }
+            });
+        });
+        found
+    }
+
+    /// Make this node a focus scope: a pane that remembers which node
+    /// inside it had the focus last, and gives the focus back to it when
+    /// the focus comes to the pane as a whole
+    /// ([`Ctx::focus_within`](crate::Ctx::focus_within),
+    /// [`Ctx::focus_next_scope`](crate::Ctx::focus_next_scope)), rather than
+    /// to its first focusable node. Tab still moves through every node.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     column([
+    ///         column([label("a").focusable().name("a"), label("b").focusable().name("b")])
+    ///             .focus_scope()
+    ///             .name("left"),
+    ///         label("c").focusable().name("c").focus_scope(),
+    ///     ])
+    ///     .on_key("w", |cx| cx.focus_next_scope())
+    /// });
+    /// let mut driver = app.driver(4, 3);
+    /// driver.press("tab");
+    /// driver.assert_focused("b");
+    /// driver.press("w");
+    /// driver.assert_focused("c");
+    /// // Back to the pane: to `b`, where the focus was.
+    /// driver.press("w");
+    /// driver.assert_focused("b");
+    /// ```
+    pub fn focus_scope(mut self) -> Node {
+        self.focus_scope = true;
+        self
+    }
+
+    /// Whether it is a [focus scope](Self::focus_scope).
+    pub(crate) fn is_focus_scope(&self) -> bool {
+        self.focus_scope
+    }
+
+    /// For a focus scope: the node inside it that had the focus last.
+    pub(crate) fn scope_last(&self) -> Option<NodeId> {
+        self.focus_scope.then(|| self.scope_last.get()).flatten()
+    }
+
+    /// For a focus scope: note `id`, inside it, has the focus.
+    pub(crate) fn note_scope_focus(&self, id: NodeId) {
+        if self.focus_scope {
+            self.scope_last.set(Some(id));
+        }
+    }
+
+    /// Run `handler` when the focus comes to this node or a node inside it
+    /// from outside: a pane that lights its title, loads what it shows, or
+    /// tells the rest of the app which pane is in use. Moving between
+    /// nodes inside it runs nothing. Told after the frame that lays out
+    /// the change.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let said = signal(String::new());
+    ///     column([
+    ///         text!("{said}").fixed(1),
+    ///         label("menu").focusable().fixed(1),
+    ///         column([label("a").focusable(), label("b").focusable()])
+    ///             .on_focus(move |_| said.update(|s| s.push_str("in ")))
+    ///             .on_blur(move |_| said.update(|s| s.push_str("out "))),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(16, 4);
+    /// driver.press("tab tab tab");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "in out");
+    /// ```
+    pub fn on_focus(self, handler: impl FnMut(&mut Ctx) + 'static) -> Node {
+        self.focus_handlers
+            .borrow_mut()
+            .push((true, Box::new(handler)));
+        self
+    }
+
+    /// Run `handler` when the focus leaves this node and every node inside
+    /// it (a modal opening over it included), as
+    /// [`on_focus`](Self::on_focus) does when it comes.
+    pub fn on_blur(self, handler: impl FnMut(&mut Ctx) + 'static) -> Node {
+        self.focus_handlers
+            .borrow_mut()
+            .push((false, Box::new(handler)));
+        self
+    }
+
+    /// Bind `left`, `right`, `up` and `down` (each one or more keys, as
+    /// [`bind`](Self::bind) takes them: `"ctrl+left H"`) to moving the
+    /// focus to the neighbour on that side
+    /// ([`Ctx::focus_direction`](crate::Ctx::focus_direction)), listed in
+    /// the help as "Focus left" and so on. An empty string binds nothing.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     row([
+    ///         label("a").focusable().name("a").panel("A").focus_scope(),
+    ///         label("b").focusable().name("b").panel("B").focus_scope(),
+    ///     ])
+    ///     .bind_directional_focus("h", "l", "k", "j")
+    /// });
+    /// let mut driver = app.driver(12, 3);
+    /// driver.press("l");
+    /// driver.assert_focused("b");
+    /// driver.press("h");
+    /// driver.assert_focused("a");
+    /// ```
+    pub fn bind_directional_focus(self, left: &str, right: &str, up: &str, down: &str) -> Node {
+        use crate::focus::Direction;
+        let mut node = self;
+        for (keys, direction, description) in [
+            (left, Direction::Left, "Focus left"),
+            (right, Direction::Right, "Focus right"),
+            (up, Direction::Up, "Focus up"),
+            (down, Direction::Down, "Focus down"),
+        ] {
+            if !keys.trim().is_empty() {
+                node = node.bind(keys, description, move |cx| cx.focus_direction(direction));
+            }
+        }
+        node
     }
 
     /// Take this node out of the Tab order: a [`list`] that only shows, or
@@ -1240,12 +1642,276 @@ impl Node {
         self,
         keys: &str,
         description: &str,
-        handler: impl FnMut(&mut Ctx) + 'static,
+        mut handler: impl FnMut(&mut Ctx) + 'static,
     ) -> Node {
         let parsed = parse_keys(keys);
+        let handler: KeyHandler = Box::new(move |cx, _| handler(cx));
         self.keys
             .borrow_mut()
-            .push((parsed, description.to_string(), Box::new(handler)));
+            .push(KeyBinding::new(parsed, description, handler));
+        self
+    }
+
+    /// [`bind`](Self::bind), listed in the help (and the command palette)
+    /// under `section` rather than under the node's
+    /// [name](Self::name): one node's keys in groups, as an app with modes
+    /// lists them.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("scope")
+    ///         .bind_in("oscilloscope", "t", "Toggle the trigger", |_| {})
+    ///         .bind_in("spectroscope", "l", "Logarithmic scale", |_| {})
+    ///         .on_key("?", |cx| cx.help())
+    /// });
+    /// let mut driver = app.driver(60, 16);
+    /// driver.press("?");
+    /// let rows = driver.screen().plain().join("\n");
+    /// assert!(rows.find("oscilloscope") < rows.find("Toggle the trigger"));
+    /// assert!(rows.find("spectroscope") < rows.find("Logarithmic scale"));
+    /// ```
+    ///
+    /// # Panics
+    /// On a name that is not a key, or on no names at all.
+    pub fn bind_in(
+        self,
+        section: &str,
+        keys: &str,
+        description: &str,
+        handler: impl FnMut(&mut Ctx) + 'static,
+    ) -> Node {
+        let node = self.bind(keys, description, handler);
+        if let Some(binding) = node.keys.borrow_mut().last_mut() {
+            binding.section = Some(section.to_string());
+        }
+        node
+    }
+
+    /// Bind `keys` and the same keys with modifiers, each variant with its
+    /// own value, shown in the help as one row: `variants` pairs the
+    /// modifiers (`""` for none, `"shift"`, `"ctrl"`, `"alt"`,
+    /// `"ctrl+alt"`) with a value, and `handler` gets the value of the
+    /// variant pressed. scope-tui's ↑, ten times with Shift and five with
+    /// Ctrl. The help lists the keys of the first variant, its description
+    /// followed by the others' (`(shift ×10, ctrl ×5)`); the palette runs
+    /// the first. A variant may say itself its own way, with a label in
+    /// place of `×value`: `("alt", 0.2, "⅕")` is listed `alt ⅕` (every
+    /// variant then has one; see [`Scaled`](crate::Scaled)).
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let scale = signal(1.0);
+    ///     text!("{scale}").bind_scaled(
+    ///         "up",
+    ///         &[("", 1.0), ("shift", 10.0), ("ctrl", 5.0)],
+    ///         "Scale up",
+    ///         move |_, by| scale.update(|s| *s += by),
+    ///     )
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("up shift+up ctrl+up");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "17");
+    /// ```
+    ///
+    /// With labels:
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let scale = signal(1.0);
+    ///     text!("{scale}")
+    ///         .bind_scaled(
+    ///             "up",
+    ///             &[("", 1.0, "one"), ("alt", 0.2, "⅕")],
+    ///             "Scale up",
+    ///             move |_, by| scale.update(|s| *s += by),
+    ///         )
+    ///         .on_key("?", |cx| cx.help())
+    /// });
+    /// let mut driver = app.driver(50, 12);
+    /// driver.press("?");
+    /// assert!(driver.screen().plain().join("\n").contains("Scale up (alt ⅕)"));
+    /// ```
+    ///
+    /// # Panics
+    /// On a name that is not a key, on no names or no variants, or on a
+    /// modifier that makes no key with one of them (`"shift"` with `","`).
+    pub fn bind_scaled<V: crate::Scaled>(
+        self,
+        keys: &str,
+        variants: &[V],
+        description: &str,
+        mut handler: impl FnMut(&mut Ctx, f64) + 'static,
+    ) -> Node {
+        assert!(
+            !variants.is_empty(),
+            "bind_scaled({keys:?}) has no variants"
+        );
+        let plain = parse_keys(keys);
+        // What the help says of the others: `shift ×10`, or its label.
+        let others: Vec<String> = variants[1..]
+            .iter()
+            .map(|variant| {
+                let modifiers = variant.modifiers().trim_end_matches('+');
+                match variant.label() {
+                    Some(label) => format!("{modifiers} {label}"),
+                    None => format!("{modifiers} ×{}", variant.value()),
+                }
+            })
+            .collect();
+        let variants: Vec<(Vec<Key>, f64)> = variants
+            .iter()
+            .map(|variant| (variant.modifiers(), variant.value()))
+            .map(|(modifiers, value)| {
+                let modifiers = modifiers.trim_end_matches('+');
+                let keys = match modifiers {
+                    "" => plain.clone(),
+                    modifiers => plain
+                        .iter()
+                        .map(|key| {
+                            let name = format!("{modifiers}+{key}");
+                            Key::parse(&name).unwrap_or_else(|| {
+                                panic!("bind_scaled({keys:?}): {name:?} is not a key")
+                            })
+                        })
+                        .collect(),
+                };
+                (keys, value)
+            })
+            .collect();
+        let description = if others.is_empty() {
+            description.to_string()
+        } else {
+            format!("{description} ({})", others.join(", "))
+        };
+        let all: Vec<Key> = variants.iter().flat_map(|(keys, _)| keys.clone()).collect();
+        let shown = variants[0].0.clone();
+        let handler: KeyHandler = Box::new(move |cx, key| {
+            // The variant that names the key, before one it could be (as
+            // a binding picks among its keys).
+            let index = key
+                .pick(variants.iter().map(|(keys, _)| keys.as_slice()))
+                .unwrap_or(0);
+            handler(cx, variants[index].1)
+        });
+        let mut binding = KeyBinding::new(all, &description, handler);
+        binding.shown = Some(shown);
+        self.keys.borrow_mut().push(binding);
+        self
+    }
+
+    /// Bind `keys` to move `mode` on to the next of `modes`, round to the
+    /// first after the last: a mode switcher (scope-tui's Tab through the
+    /// oscilloscope, the vectorscope and the spectroscope). A value that is
+    /// not among `modes` moves to the first.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let mode = signal("scope");
+    ///     text!("{mode}").bind_cycle("tab", "Next mode", mode, &["scope", "vector", "spectrum"])
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("tab tab tab tab");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "vector");
+    /// ```
+    ///
+    /// # Panics
+    /// On a name that is not a key, or on no names or no modes.
+    pub fn bind_cycle<T: PartialEq + Clone + 'static>(
+        self,
+        keys: &str,
+        description: &str,
+        mode: Signal<T>,
+        modes: &[T],
+    ) -> Node {
+        assert!(!modes.is_empty(), "bind_cycle({keys:?}) has no modes");
+        let modes = modes.to_vec();
+        self.bind(keys, description, move |_| {
+            let at = mode.with_untracked(|now| modes.iter().position(|m| m == now));
+            let next = at.map_or(0, |i| (i + 1) % modes.len());
+            mode.set(modes[next].clone());
+        })
+    }
+
+    /// [`bind_cycle`](Self::bind_cycle) the other way: `keys` move `mode`
+    /// back to the one before, round to the last from the first (Shift+Tab
+    /// to Tab's [`bind_cycle`](Self::bind_cycle)). A value that is not
+    /// among `modes` moves to the last.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let mode = signal("scope");
+    ///     let modes = ["scope", "vector", "spectrum"];
+    ///     text!("{mode}")
+    ///         .bind_cycle("tab", "Next mode", mode, &modes)
+    ///         .bind_cycle_back("shift+tab", "Previous mode", mode, &modes)
+    /// });
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("shift+tab");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "spectrum");
+    /// driver.press("tab shift+tab shift+tab");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "vector");
+    /// ```
+    ///
+    /// # Panics
+    /// On a name that is not a key, or on no names or no modes.
+    pub fn bind_cycle_back<T: PartialEq + Clone + 'static>(
+        self,
+        keys: &str,
+        description: &str,
+        mode: Signal<T>,
+        modes: &[T],
+    ) -> Node {
+        assert!(!modes.is_empty(), "bind_cycle_back({keys:?}) has no modes");
+        let modes = modes.to_vec();
+        self.bind(keys, description, move |_| {
+            let at = mode.with_untracked(|now| modes.iter().position(|m| m == now));
+            let back = at.map_or(modes.len() - 1, |i| (i + modes.len() - 1) % modes.len());
+            mode.set(modes[back].clone());
+        })
+    }
+
+    /// Run `handler` once, when this node leaves the tree: its screen or
+    /// pop-up closes, its [`each`] row goes, or the app ends. (A
+    /// [`switch`] keeps the pages it built, so one shown no more is still
+    /// in the tree.) Stop what it started there: a background
+    /// walk (set the flag it reads), a watcher, a device. The app may be
+    /// ending, so leave its signals alone.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use std::sync::atomic::{AtomicBool, Ordering};
+    /// use std::sync::Arc;
+    ///
+    /// let stop = Arc::new(AtomicBool::new(false));
+    /// let flag = stop.clone();
+    /// let app = App::new(move || {
+    ///     label("files").on_key("s", move |cx| {
+    ///         let flag = flag.clone();
+    ///         cx.push(move || {
+    ///             label("searching…")
+    ///                 .on_unmount(move || flag.store(true, Ordering::SeqCst))
+    ///                 .on_key("esc", |cx| cx.pop())
+    ///         })
+    ///     })
+    /// });
+    /// let mut driver = app.driver(20, 1);
+    /// driver.press("s");
+    /// assert!(!stop.load(Ordering::SeqCst));
+    /// driver.press("esc");
+    /// assert!(stop.load(Ordering::SeqCst));
+    /// ```
+    pub fn on_unmount(mut self, handler: impl FnOnce() + 'static) -> Node {
+        self.unmount.push(Unmount(Some(Box::new(handler))));
         self
     }
 
@@ -1342,8 +2008,98 @@ impl Node {
     /// assert!(rows[2].starts_with("╰───") && rows[2].ends_with("─ 1/20 ─╯"));
     /// ```
     pub fn add_title(self, edge: Edge, align: Align, markup: impl Into<String>) -> Node {
-        let title = Title::new(edge, align, markup);
+        let title = crate::builtin::CodeTitle::Fixed(Title::new(edge, align, markup));
         self.widget_mut(|panel: &mut Panel| panel.code.titles.push(title));
+        self
+    }
+
+    /// For a [panel](Self::panel): a title on `edge`, placed by `align`, as
+    /// [`add_title`](Self::add_title) adds, read from `markup` whenever the
+    /// panel lays out and draws: it may read signals, and the panel draws
+    /// again when they change (a count, a position, a load average).
+    /// Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let at = signal(1);
+    ///     label("…")
+    ///         .panel("Commits")
+    ///         .add_title_with(Edge::Top, Align::End, move || format!("{at}/10"))
+    ///         .on_key("j", move |_| at.update(|n| *n += 1))
+    /// });
+    /// let mut driver = app.driver(20, 3);
+    /// driver.press("j");
+    /// assert_eq!(driver.screen().plain()[0], "╭─ Commits ─ 2/10 ─╮");
+    /// ```
+    pub fn add_title_with(
+        self,
+        edge: Edge,
+        align: Align,
+        markup: impl Fn() -> String + 'static,
+    ) -> Node {
+        let markup = crate::builtin::Dynamic(Rc::new(markup) as Rc<dyn Fn() -> String>);
+        let title = crate::builtin::CodeTitle::With(edge, align, markup);
+        self.widget_mut(|panel: &mut Panel| panel.code.titles.push(title));
+        self
+    }
+
+    /// For a [panel](Self::panel): its own title, read from `markup`
+    /// whenever the panel lays out and draws, in place of the one it was
+    /// made with: it may read signals (`Diff: src/lib.rs`, `Processes (3 of
+    /// 210)`). It is also the panel's accessible name. Ignored on other
+    /// nodes; [`panel_with`](Self::panel_with) makes the panel.
+    pub fn title_with(self, markup: impl Fn() -> String + 'static) -> Node {
+        let markup: Rc<dyn Fn() -> String> = Rc::new(markup);
+        self.widget_mut(|panel: &mut Panel| panel.title_with = Some(markup));
+        self
+    }
+
+    /// Wrap this node in a [panel](Self::panel) whose title is read from
+    /// `markup` whenever the panel lays out and draws: it may read signals,
+    /// and the panel draws again when they change.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let file = signal("lib.rs");
+    ///     label("+ one line")
+    ///         .panel_with(move || format!("Diff: {file}"))
+    ///         .on_key("n", move |_| file.set("main.rs"))
+    /// });
+    /// let mut driver = app.driver(20, 3);
+    /// driver.press("n");
+    /// assert_eq!(driver.screen().plain()[0], "╭─ Diff: main.rs ──╮");
+    /// ```
+    pub fn panel_with(self, markup: impl Fn() -> String + 'static) -> Node {
+        self.panel("").title_with(markup)
+    }
+
+    /// For a [panel](Self::panel): the kind of box it draws, read from
+    /// `border` whenever it lays out and draws (it may read signals), over
+    /// [`border`](Self::border)'s. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let alert = signal(false);
+    ///     label("ok")
+    ///         .panel("")
+    ///         .border_with(move || if alert.get() { Border::Double } else { Border::Plain })
+    ///         .on_key("a", move |_| alert.set(true))
+    /// });
+    /// let mut driver = app.driver(6, 3);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "┌────┐");
+    /// driver.press("a");
+    /// assert_eq!(driver.screen().plain()[0], "╔════╗");
+    /// ```
+    pub fn border_with(self, border: impl Fn() -> Border + 'static) -> Node {
+        let border = crate::builtin::Dynamic(Rc::new(border) as Rc<dyn Fn() -> Border>);
+        self.widget_mut(|panel: &mut Panel| panel.code.border_with = Some(border));
         self
     }
 
@@ -1462,10 +2218,29 @@ impl Node {
     /// For a container with [collapsed borders](Self::collapse_borders):
     /// the kind of the lines round the child with the focus
     /// ([`Border::Thick`] makes it stand out, as ratatui's
-    /// `collapsed-borders` example does). Ignored on other nodes.
+    /// `collapsed-borders` example does). For a [panel](Self::panel): the
+    /// kind of its box while the focus is on it or inside it (Slumber's
+    /// double-bordered pane); it keeps the cells its other kind takes.
+    /// Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     column([
+    ///         label("a").focusable().panel("").border(Border::Plain).focus_border(Border::Double),
+    ///         label("b").focusable().panel("").border(Border::Plain).focus_border(Border::Double),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(5, 6);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "╔═══╗");
+    /// assert_eq!(driver.screen().plain()[3], "┌───┐");
+    /// ```
     pub fn focus_border(self, border: Border) -> Node {
         self.widget_mut(|stack: &mut Stack| stack.collapse.focus_border = Some(border));
         self.widget_mut(|grid: &mut Grid| grid.collapse.focus_border = Some(border));
+        self.widget_mut(|panel: &mut Panel| panel.code.focus_border = Some(border));
         self
     }
 
@@ -1563,6 +2338,53 @@ impl Node {
         self
     }
 
+    /// For a [`text`](fn@text) or [`label`]: a line too long for the width
+    /// loses its start rather than its end, with `…` where it was cut, and
+    /// lines do not wrap. A path in a header keeps where you are, as
+    /// Yazi's does (rich's [`Overflow`] cuts only at the end). Ignored on
+    /// other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("~/projects/rich/src").truncate_start());
+    /// let mut driver = app.driver(10, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "…/rich/src");
+    /// ```
+    pub fn truncate_start(self) -> Node {
+        self.widget_mut(|text: &mut TextNode| {
+            text.cut_start = true;
+            text.cut_middle = false;
+            text.no_wrap = Some(true);
+            text.code[1] = true;
+        });
+        self
+    }
+
+    /// For a [`text`](fn@text) or [`label`]: a line too long for the width
+    /// loses its middle, with `…` where it was cut, keeping its start and
+    /// its end (`long_na…me.txt`), and lines do not wrap: names and paths
+    /// in tiles, a status line, a delete prompt. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("long_file_name.txt").truncate_middle());
+    /// let mut driver = app.driver(11, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "long_…e.txt");
+    /// ```
+    pub fn truncate_middle(self) -> Node {
+        self.widget_mut(|text: &mut TextNode| {
+            text.cut_middle = true;
+            text.cut_start = false;
+            text.no_wrap = Some(true);
+            text.code[1] = true;
+        });
+        self
+    }
+
     /// `a / b` of the parent's axis (see [`Size::Ratio`]): three
     /// `.ratio(1, 3)` children fill it exactly.
     pub fn ratio(self, a: u32, b: u32) -> Node {
@@ -1649,6 +2471,7 @@ impl Node {
         what: &'static str,
     ) -> Node {
         let (size, min, max, span, set) = (self.size, self.min, self.max, self.span, self.set);
+        let size_with = self.size_with.take();
         let align_self = self.align_self;
         // Where it goes in layers is the box's place.
         let (inset, place) = (self.inset.take(), self.place.take());
@@ -1657,6 +2480,7 @@ impl Node {
         let mut outer = Node::from_widget(widget(self), what);
         outer.shown_when = shown_when;
         outer.size = size;
+        outer.size_with = size_with;
         outer.min = min;
         outer.max = max;
         outer.span = span;
@@ -1690,20 +2514,49 @@ impl Node {
         if self.hidden() {
             return (Size::Fixed(0), 0, 0);
         }
-        let sheet = self.sheet.borrow();
-        let layout = &sheet.layout;
-        fn pick<T>(set: bool, own: T, from: Option<T>) -> T {
-            if set {
-                own
-            } else {
-                from.unwrap_or(own)
+        let (size, min, max) = {
+            let sheet = self.sheet.borrow();
+            let layout = &sheet.layout;
+            fn pick<T>(set: bool, own: T, from: Option<T>) -> T {
+                if set {
+                    own
+                } else {
+                    from.unwrap_or(own)
+                }
             }
+            (
+                pick(self.set[SET_SIZE], self.own_size(), layout.size),
+                pick(self.set[SET_MIN], self.min, layout.min),
+                pick(self.set[SET_MAX], self.max, layout.max),
+            )
+        };
+        if size != Size::Auto {
+            return (size, min, max);
         }
-        (
-            pick(self.set[SET_SIZE], self.size, layout.size),
-            pick(self.set[SET_MIN], self.min, layout.min),
-            pick(self.set[SET_MAX], self.max, layout.max),
-        )
+        // Sized by its content, a switch is as big as its page asks to be.
+        let page = match self.body.try_borrow_mut() {
+            Ok(mut body) => body.widget.sized_by().map(|page| page.dims()),
+            Err(_) => None,
+        };
+        match page {
+            Some((page_size, page_min, page_max)) => {
+                let size = match page_size {
+                    Size::Fixed(_) | Size::Percent(_) | Size::Ratio(..) => page_size,
+                    Size::Auto | Size::Flex(_) => size,
+                };
+                (size, min.max(page_min), max.min(page_max))
+            }
+            None => (size, min, max),
+        }
+    }
+
+    /// Its size as code set it: [`size_with`](Self::size_with)'s, read now,
+    /// else [`size`](Self::size)'s.
+    pub(crate) fn own_size(&self) -> Size {
+        match &self.size_with {
+            Some(size) => size(),
+            None => self.size,
+        }
     }
 
     /// Whether a stylesheet hides it (`display: none`), or the app's
@@ -1909,6 +2762,29 @@ impl Node {
         for child in self.body.borrow().widget.children() {
             f(child);
         }
+    }
+
+    /// Whether drawing it into `rect` this frame would draw anything: it
+    /// or something inside it is dirty, or it moved. Read without drawing,
+    /// so a layers stack composites in one pass.
+    fn will_draw(&self, frame: &FrameState, rect: Rect) -> bool {
+        if self.hidden() {
+            return self.drawn.get().is_some();
+        }
+        if self.drawn.get() != Some(rect) {
+            return true;
+        }
+        !frame.dirty.is_empty() && self.dirty_within(&frame.dirty)
+    }
+
+    /// It or a node inside it is in `dirty`.
+    fn dirty_within(&self, dirty: &HashSet<NodeId>) -> bool {
+        if dirty.contains(&self.id) {
+            return true;
+        }
+        let mut found = false;
+        self.each_child(&mut |child| found = found || child.dirty_within(dirty));
+        found
     }
 
     /// Not shown this frame: no rectangle (so no clicks reach it or
@@ -2145,7 +3021,9 @@ impl Node {
                 || restyled
                 || (relaid && !viewport);
             repaint = moved || force || cleared;
-            if cleared {
+            // In a layers stack drawn afresh the area is clear already, and
+            // the layers below show where this draws nothing.
+            if cleared && frame.composing == 0 {
                 screen.clear(rect);
             }
             if let (true, Some((kind, style))) = (repaint, &decor) {
@@ -2256,14 +3134,40 @@ impl Node {
             None => {
                 let overlapping = widget.overlapping();
                 let siblings = frame.damage.len();
+                // Layers composite: where a layer draws nothing (a gap
+                // between its children, no background), the ones below it
+                // show. When any of them is to draw, they all draw once
+                // over a clear area, bottom first, none clearing what is
+                // under it.
+                let shown = areas.iter().filter(|area| !area.is_empty()).count();
+                let layered = overlapping && shown > 1;
+                let compose = layered
+                    && (repaint
+                        || !written.is_empty()
+                        || widget
+                            .children()
+                            .iter()
+                            .zip(areas.iter())
+                            .any(|(child, area)| {
+                                let area = area.intersection(inner);
+                                !area.is_empty() && child.will_draw(frame, area)
+                            }));
+                if compose {
+                    if frame.composing == 0 {
+                        screen.clear(inner);
+                    }
+                    frame.damage.push(inner);
+                    frame.composing += 1;
+                }
                 for (i, child) in widget.children().iter().enumerate() {
                     match areas.get(i).map(|area| area.intersection(inner)) {
                         Some(area) if !area.is_empty() => {
                             // A child draws again where the widget drew over
                             // it, and, over its earlier siblings, where they
                             // drew this frame, on a clear area.
-                            let over = written.iter().any(|w| w.intersects(area));
+                            let over = compose || written.iter().any(|w| w.intersects(area));
                             let under = overlapping
+                                && !compose
                                 && frame.damage[siblings..].iter().any(|d| d.intersects(area));
                             if under {
                                 screen.clear(area);
@@ -2273,6 +3177,26 @@ impl Node {
                         }
                         _ => child.hide(),
                     }
+                }
+                if compose {
+                    frame.composing -= 1;
+                }
+                // Something drew that was not foreseen: the stack draws
+                // again, as above, so the layers still composite.
+                if layered && !compose && frame.damage.len() > siblings {
+                    if frame.composing == 0 {
+                        screen.clear(inner);
+                    }
+                    frame.damage.push(inner);
+                    frame.composing += 1;
+                    for (i, child) in widget.children().iter().enumerate() {
+                        if let Some(area) = areas.get(i).map(|area| area.intersection(inner)) {
+                            if !area.is_empty() {
+                                child.draw(frame, area, screen, true);
+                            }
+                        }
+                    }
+                    frame.composing -= 1;
                 }
                 // An effect sees what is inside it whole: when a child
                 // drew and the effect did not, everything inside draws
@@ -2568,6 +3492,11 @@ impl Node {
         }
         let inner = !std::mem::replace(&mut frame.damage, saved).is_empty();
         frame.shift = outer;
+        // The content is copied onto the screen by style, not by id, so
+        // its own table drops what no cell uses once that piles up.
+        if view.buffer.styles_piled_up() {
+            view.buffer.compact_styles();
+        }
         // Where the focus is inside, for scrolling it into view.
         let focused = frame.focus_path.with_untracked(|path| {
             let last = *path.last()?;
@@ -2718,6 +3647,9 @@ pub(crate) struct FrameState<'a> {
     pub runtime: &'a Runtime,
     pub dirty: HashSet<NodeId>,
     pub damage: Vec<Rect>,
+    /// How many layers stacks being drawn afresh this node is inside: it
+    /// draws over what the layers below drew, clearing nothing.
+    pub composing: usize,
     pub focus_path: Signal<Vec<NodeId>>,
     /// The nodes under the mouse pointer, outermost first.
     pub hover_path: Signal<Vec<NodeId>>,
@@ -2901,6 +3833,36 @@ pub fn leaf(draw: impl Fn(&Console, u16, u16) -> Vec<Vec<Segment>> + 'static) ->
 /// [`Node::overflow`] change how they sit and where they are cut.
 pub fn text(markup: impl Fn() -> String + 'static) -> Node {
     Node::from_widget(Box::new(TextNode::new(Box::new(markup))), "text")
+}
+
+/// Text that shows the longest of its `forms` that fits its width: console
+/// markup, longest first (`SELECTED: docs (29.3K, 1 files)`, `SELECTED:
+/// docs (29.3K)`, `docs`), read from a closure that may read signals. None
+/// fits: the last, cut with `…`. Lines do not wrap. As wide as the longest
+/// form that fits the room it is given, so `.auto()` in a row takes no
+/// more than it shows.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::fit_text;
+///
+/// let app = App::new(|| {
+///     fit_text(|| vec!["Press q to quit".into(), "q: quit".into(), "q".into()])
+/// });
+/// let mut driver = app.driver(10, 1);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "q: quit");
+/// driver.resize(20, 1);
+/// driver.settle();
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "Press q to quit");
+/// ```
+pub fn fit_text(forms: impl Fn() -> Vec<String> + 'static) -> Node {
+    let mut text = TextNode::new(Box::new(String::new));
+    text.forms = Some(Box::new(forms));
+    text.no_wrap = Some(true);
+    text.overflow = Some(Overflow::Ellipsis);
+    text.code = [false, true, true];
+    Node::from_widget(Box::new(text), "text")
 }
 
 /// Console markup that never changes.
@@ -3251,7 +4213,10 @@ where
 /// detail pane per item. `key` may read signals; when it changes, the
 /// switch shows the other child, which keeps its state (and its focus
 /// order) from when it was last shown. Only the shown child is in the Tab
-/// order and takes clicks.
+/// order and takes clicks. A [list](crate::list)'s options given the
+/// switch ([`highlight_layer`](Node::highlight_layer),
+/// [`wheel_step`](Node::wheel_step), …) reach each list it shows: a list
+/// with a "No items" text in its place keeps them.
 ///
 /// ```
 /// use intuituive::prelude::*;
@@ -3277,15 +4242,58 @@ where
     K: Clone + Eq + Hash + 'static,
     F: Fn(K) -> Node + 'static,
 {
-    Node::from_widget(
-        Box::new(Switch {
-            key: Box::new(key),
-            build,
-            built: HashMap::new(),
-            current: None,
-        }),
-        "switch",
-    )
+    // List options given the switch reach each child it builds: the list
+    // shown, or the one shown later.
+    let forward = crate::list::Forward::default();
+    let options = forward.clone();
+    let build = move |key: K| {
+        let node = build(key);
+        options.apply(&node);
+        node
+    };
+    let switch = Switch::new(Box::new(key), build);
+    let keep = switch.keep.clone();
+    let mut node = Node::from_widget(Box::new(switch), "switch");
+    node.list_forward = Some(forward);
+    node.keep_pages = Some(keep);
+    node
+}
+
+/// One child, built by `build` for the current `key` and built again when
+/// the key changes, the old child dropped (its [`on_unmount`](Node::on_unmount)
+/// handlers run, its subscriptions end): a pane rebuilt from state whose
+/// shape changes (a map rebuilt on every scan batch, a table rebuilt when
+/// its column set changes), where a [`switch`] would keep every child it
+/// ever built. While the key stays the same the child stays, with its own
+/// state. When the old child held the focus, the new one's first focusable
+/// node takes it. It is a flexible child; `.auto()` sizes it by the child,
+/// the child's own [`fixed`](Node::fixed) size included.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::keyed;
+///
+/// let app = App::new(|| {
+///     let columns = signal(2usize);
+///     keyed(move || columns.get(), |n| label(format!("{n} columns")))
+///         .on_key("+", move |_| columns.update(|n| *n += 1))
+/// });
+/// let mut driver = app.driver(12, 1);
+/// driver.press("+");
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "3 columns");
+/// ```
+pub fn keyed<K, F>(key: impl Fn() -> K + 'static, build: F) -> Node
+where
+    K: Clone + Eq + Hash + 'static,
+    F: Fn(K) -> Node + 'static,
+{
+    let own = Rc::new(Cell::new(None));
+    let mut switch = Switch::new(Box::new(key), build);
+    switch.keep.set(1);
+    switch.refocus = Some(own.clone());
+    let node = Node::from_widget(Box::new(switch), "keyed");
+    own.set(Some(node.id));
+    node
 }
 
 /// The nodes under `column`, `row`, outermost first (the path to the

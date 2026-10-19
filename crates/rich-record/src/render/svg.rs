@@ -65,6 +65,7 @@ mod tests {
             title: "t",
             window: false,
             caption: Some("A caption"),
+            ..Look::window("t")
         };
         let svg = svg(&shot(b"hi"), &theme, &look);
         assert!(!svg.contains("#ff5f57"));

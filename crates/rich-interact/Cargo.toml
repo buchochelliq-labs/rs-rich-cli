@@ -88,6 +88,12 @@ signal-hook = "0.3"
 # already depends on it).
 libc = "0.2"
 
+# The local time zone (`datetime::Zone::Local`) through
+# `SystemTimeToTzSpecificLocalTime` (already in the tree, through
+# rs-rich-ext).
+[target.'cfg(windows)'.dependencies]
+windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Time"] }
+
 [dev-dependencies]
 # Every format the data explorer reads, in its tests.
 rich-ext = { workspace = true, features = ["data", "yaml", "toml", "xml"] }

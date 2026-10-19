@@ -1,26 +1,26 @@
 ~/project
-  project   │ src                                            4│#!/bin/sh
-            │ tests                                          1│echo hi
-            │ run.sh                                       18B│
-            │ Cargo.toml                                  181B│
-            │ readme╭─ Commands ───────────────────────────────────────────────╮
-            │ README│? Command ›                                               │
-            │       │❯  Exit visual mode, clear selection, or cancel sear… esc │
-            │       │   Quit the process                                     q │
-            │       │   Close the current tab, or quit if it's last     ctrl+c │
-            │       │   Previous file                                      k/↑ │
-            │       │   Next file                                          j/↓ │
-            │       │   Go to bottom                                     G/end │
-            │       │   Go to top                                         home │
-            │       │   Move cursor up half page             ctrl+u/shift+pgup │
-            │       │   Move cursor down half page           ctrl+d/shift+pgdn │
-            │       │   Move cursor up one page                    ctrl+b/pgup │
-            │       │   Move cursor down one page                  ctrl+f/pgdn │
-            │       │  46/46 · ↑↓ move · enter run · esc close                 │
+  project   │ src                                           4 │#!/bin/sh
+            │ tests                                         1 │echo hi
+            │ run.sh                                      18B │
+            │ scripts.tar.gz                             122B │
+            │ Cargo.╭─ Commands ───────────────────────────────────────────────╮
+            │ logo.p│? Command ›                                               │
+            │ readme│❯ mgr Exit visual mode, clear selection, or cancel s… esc │
+            │ README│  mgr Quit the process                                  q │
+            │       │  mgr Close the current tab, or quit if it's last  ctrl+c │
+            │       │  mgr Previous file                                   k/↑ │
+            │       │  mgr Next file                                       j/↓ │
+            │       │  mgr Go to bottom                                  G/end │
+            │       │  mgr Go to top                                      home │
+            │       │  mgr Move cursor up half page          ctrl+u/shift+pgup │
+            │       │  mgr Move cursor down half page        ctrl+d/shift+pgdn │
+            │       │  mgr Move cursor up one page                 ctrl+b/pgup │
+            │       │  mgr Move cursor down one page               ctrl+f/pgdn │
+            │       │  93/93 · ↑↓ move · enter run · esc close                 │
             │       ╰──────────────────────────────────────────────────────────╯
             │                                                 │
             │                                                 │
             │                                                 │
             │                                                 │
             │                                                 │
- NOR  18B  run.sh                                                            -rwxr-xr-x  50%   3/6
+ NOR  18B  run.sh                                                            -rwxr-xr-x  37%   3/8

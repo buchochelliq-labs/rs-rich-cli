@@ -7,11 +7,12 @@ mod template;
 
 #[test]
 fn the_template_names_this_crate_as_its_dependency() {
-    let manifest = include_str!("../../../templates/intuituive-app/Cargo.toml");
+    // `.liquid`, so cargo's package discovery in a git checkout skips it.
+    let manifest = include_str!("../../../templates/intuituive-app/Cargo.toml.liquid");
     let version = env!("CARGO_PKG_VERSION");
     assert!(
         manifest.contains(&format!("rs-rich-intuituive = \"{version}\"")),
-        "templates/intuituive-app/Cargo.toml should depend on rs-rich-intuituive {version}"
+        "templates/intuituive-app/Cargo.toml.liquid should depend on rs-rich-intuituive {version}"
     );
 }
 

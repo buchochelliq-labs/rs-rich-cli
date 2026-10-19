@@ -2,11 +2,11 @@
   src       │ event_loop.rs                                   │//! orbit: watch a queue, run its jo
   tests     │ lib.rs                                          │
   Cargo.toml│ main.rs                                         │mod event_loop;
-  readme-li…│ render.rs                                       │mod render;
-  README.md │                                                 │
-  run.sh    │                                                 │fn main() {
-            │                                                 │    let workers = std::env::args()
-            │                                                 │        .skip_while(|arg| arg != "--
+  logo.png  │ render.rs                                       │mod render;
+  readme-li…│                                                 │
+  README.md │                                                 │fn main() {
+  run.sh    │                                                 │    let workers = std::env::args()
+  scripts.t…│                                                 │        .skip_while(|arg| arg != "--
             │                                                 │        .nth(1)
             │                                                 │        .and_then(|n| n.parse().ok()
             │                                                 │        .unwrap_or(4);

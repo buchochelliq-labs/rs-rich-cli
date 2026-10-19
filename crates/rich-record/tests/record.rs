@@ -306,3 +306,117 @@ fn a_flood_of_output_is_recorded_in_bounded_frames() {
     assert!(!timeline.truncated);
     assert!(recording.shots[0].1.text_grid().contains("done"));
 }
+
+#[test]
+fn held_keys_repeat_and_their_releases_follow_the_programs_flags() {
+    // `cat -v` shows what the keys send. Without the protocol a held key
+    // repeats its bytes and its release sends nothing; with it on and the
+    // program's flags pushed (3: releases too), arrows report repeats and
+    // releases, and letters still type.
+    let tape = tape::parse(
+        "Set Size 60x8\nSet KeyRepeat 100ms 50ms\nType \"stty -icanon -echo; cat -v\"\nEnter\n\
+         Sleep 300ms\nHold w 330ms\nType \".\"\nWait /wwww+\\./\nScreenshot legacy\n",
+    )
+    .unwrap();
+    let recording = record::record(&tape, "held", &Options::default()).unwrap();
+    let grid = recording.shots[0].1.text_grid();
+    let ws = grid.matches('w').count();
+    // The press, then a repeat every 50 ms after the first 100 ms.
+    assert!((4..=7).contains(&ws), "{ws} in {grid}");
+
+    let tape = tape::parse(
+        "Set Size 60x8\nSet KittyKeyboard on\nSet KeyRepeat 100ms 100ms\n\
+         Type \"printf '\\\\033[>3u'; stty -icanon -echo; cat -v\"\nEnter\nSleep 300ms\n\
+         KeyDown Up\nSleep 150ms\nKeyUp Up\nType \"w\"\nEscape\n\
+         Wait /3A.*w/\nScreenshot kitty\n",
+    )
+    .unwrap();
+    let recording = record::record(&tape, "kitty-keys", &Options::default()).unwrap();
+    let grid = recording.shots[0].1.text_grid();
+    // The press, a repeat or more (a sleep can overshoot into a second on
+    // a busy machine), the release; then `w` pressed and let go.
+    let mut once = grid.clone();
+    while once.contains("^[[1;1:2A^[[1;1:2A") {
+        once = once.replace("^[[1;1:2A^[[1;1:2A", "^[[1;1:2A");
+    }
+    assert!(
+        once.contains("^[[A^[[1;1:2A^[[1;1:3Aw^[[27u^[[27;1:3u"),
+        "{grid}"
+    );
+
+    let error = record::record(
+        &tape::parse("KeyUp w\nScreenshot x\n").unwrap(),
+        "not-held",
+        &Options::default(),
+    )
+    .unwrap_err();
+    assert!(
+        error.message.contains("not held") && error.line == 1,
+        "{error}"
+    );
+}
+
+#[test]
+fn every_settled_update_is_a_frame_at_the_tapes_rate() {
+    // 50 updates a second for a second and a half, recorded at 35 frames a
+    // second: about 35 frames a second are kept, each a different screen.
+    let tape = tape::parse(
+        "Set Size 30x4\nSet Framerate 35\nOutput apng gif\n\
+         Type \"for i in $(seq 1 75); do printf '\\\\r%03d' $i; sleep 0.02; done; echo; echo done\"\n\
+         Enter\nWait /done/ 10s\nScreenshot end\n",
+    )
+    .unwrap();
+    let recording = record::record(&tape, "rate", &Options::default()).unwrap();
+    assert_eq!(recording.frame_rate, 35.0);
+    let frames = &recording.timeline.frames;
+    let counting: Vec<f64> = frames
+        .iter()
+        .filter(|(_, f)| {
+            let text = f.snapshot().text_grid();
+            text.lines()
+                .any(|l| l.trim().len() == 3 && l.trim().parse::<u32>().is_ok())
+        })
+        .map(|(t, _)| *t)
+        .collect();
+    let span = counting.last().unwrap() - counting.first().unwrap();
+    let rate = (counting.len() - 1) as f64 / span;
+    // At most the tape's rate; and most of the frames there were to keep:
+    // the 75 updates, or 35 a second over the time they took, whichever is
+    // fewer (the loop runs slower on a busy machine, so the bound follows
+    // the span measured rather than a fixed rate). On a machine that keeps
+    // up (about 1.5s), a recorder at the old 12 a second keeps under 40%.
+    // The rate between the first frame and the last jitters by a frame
+    // or so either way: at most the tape's rate, within 10%.
+    assert!(
+        rate <= 35.0 * 1.1 && counting.len() >= 3,
+        "{} frames over {span:.2}s",
+        counting.len()
+    );
+    // macOS's runners kept 7 frames over 0.8s, where Linux keeps about
+    // 30 a second: the bound holds where the PTY's reads are known.
+    #[cfg(target_os = "linux")]
+    assert!(
+        counting.len() as f64 >= 0.4 * (35.0 * span).min(75.0),
+        "{} frames over {span:.2}s",
+        counting.len()
+    );
+    let dir = scratch("rate");
+    let written = record::write_selected(
+        &recording,
+        &dir,
+        "rate",
+        Formats::ALL,
+        &Fonts::embedded(),
+        &Default::default(),
+        None,
+    )
+    .unwrap();
+    let apng = std::fs::read(dir.join("rate.apng")).unwrap();
+    let reader = png::Decoder::new(std::io::Cursor::new(&apng))
+        .read_info()
+        .unwrap();
+    let frames = reader.info().animation_control.unwrap().num_frames;
+    assert!(frames as usize >= counting.len() - 2, "{frames}");
+    assert!(written.paths.iter().any(|p| p.ends_with("rate.gif")));
+    let _ = std::fs::remove_dir_all(&dir);
+}

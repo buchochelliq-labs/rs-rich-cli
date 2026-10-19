@@ -1345,6 +1345,31 @@ fn pure_function_parity() {
                     .collect();
                 Value::from(ratio_resolve(usize_arg(0), &edges))
             }
+            "text_markup" => {
+                let plain = str_arg(0);
+                // Upstream's offsets count characters; ours count bytes.
+                let byte = |chars: u64| {
+                    plain
+                        .char_indices()
+                        .nth(chars as usize)
+                        .map_or(plain.len(), |(at, _)| at)
+                };
+                let mut text = Text::new(plain.as_str());
+                text.set_base_style(str_arg(1));
+                for span in args[2].as_array().expect("span array") {
+                    text.spans_mut().push(rich::text::Span {
+                        start: byte(span[0].as_u64().expect("start")),
+                        end: byte(span[1].as_u64().expect("end")),
+                        style: span[2].as_str().expect("style").to_string().into(),
+                    });
+                }
+                Value::from(text.markup())
+            }
+            "text_markup_from_markup" => Value::from(
+                Text::from_markup(&str_arg(0))
+                    .expect("valid markup")
+                    .markup(),
+            ),
             other => panic!("line {}: no binding for function {other:?}", index + 1),
         };
 
@@ -1362,8 +1387,8 @@ fn pure_function_parity() {
     // A fixture that silently loses a whole function should fail loudly.
     assert_eq!(
         seen.len(),
-        4,
-        "expected all four functions covered, got {seen:?}"
+        6,
+        "expected all six functions covered, got {seen:?}"
     );
 }
 

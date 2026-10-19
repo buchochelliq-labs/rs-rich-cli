@@ -38,11 +38,23 @@ fn child() {
         .unwrap_or_default();
     let app = if mode == "inline" {
         app().inline(3)
+    } else if mode == "feed" {
+        feed_app()
     } else {
         app()
     };
     let result = app.run_with(backend);
     println!("OUTCOME {result:?}");
+}
+
+/// A thread's values 200 times a second, counted.
+fn feed_app() -> App {
+    let head = format!("child ready pid {}.", std::process::id());
+    App::new(move || {
+        let feed = latest_every(Duration::from_millis(5), || 0u8);
+        let fps = rate(feed);
+        column([label(head), text!("rate {fps}!")]).on_key("q", |cx| cx.quit())
+    })
 }
 
 fn backends() -> impl Iterator<Item = &'static str> {
@@ -129,6 +141,34 @@ fn an_app_resumed_from_outside_draws_once() {
         assert_eq!(pty.text().len(), drawn, "{backend}: still drawing");
         pty.send("+");
         wait_for_screen(&pty, "count 1!");
+        quit(pty, backend);
+    }
+}
+
+#[test]
+fn a_threads_values_wake_the_loop_on_every_backend() {
+    for backend in backends() {
+        let pty = Pty::start_on(backend, "feed");
+        pty.wait_for("child ready");
+        // Far above the 20 a second a 50 ms wait on the terminal allowed:
+        // each value woke the loop (200 a second, less on a busy machine).
+        let end = Instant::now() + Duration::from_secs(30);
+        loop {
+            let mut parser = vt100::Parser::new(24, 80, 0);
+            parser.process(pty.text().as_bytes());
+            let screen = parser.screen().contents();
+            let rate: u32 = screen
+                .split("rate ")
+                .nth(1)
+                .and_then(|rest| rest.split('!').next())
+                .and_then(|n| n.parse().ok())
+                .unwrap_or(0);
+            if rate >= 60 {
+                break;
+            }
+            assert!(Instant::now() < end, "{backend}: {screen}");
+            std::thread::sleep(Duration::from_millis(50));
+        }
         quit(pty, backend);
     }
 }

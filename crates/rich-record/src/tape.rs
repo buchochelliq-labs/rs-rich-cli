@@ -11,12 +11,18 @@
 //! Set KeyOverlay off         # show keys as they are pressed, in video (on)
 //! Set Env NAME value         # extra environment for the shell and `Exec`
 //! Set Shell zsh              # bash (default), zsh, fish or sh
+//! Set Framerate 35           # video frames a second, 1 to 60 (12)
+//! Set FontSize 12            # text size of video frames, in pixels (16)
+//! Set KittyKeyboard on       # report the kitty keyboard protocol (off)
+//! Set KeyRepeat 200ms 33ms   # a held key's autorepeat: delay and interval
 //! Write data.json '{"a": 1}' # create a file in the workspace (\n, \t escapes)
 //! Exec "sed -i s/1/2/ data.json"   # run a command outside the terminal
 //! Type "rich data.json"      # type into the shell, one character at a time
 //! Enter  Tab  Space  Backspace  Escape  Up  Down  Left  Right
 //! Home  End  PageUp  PageDown  Ctrl+C   # keys; an optional count repeats
 //! Alt+Left  Ctrl+Shift+PageDown  Shift+F5 # with modifiers
+//! KeyDown w  KeyUp w         # hold a key (or a character) down, let it go
+//! Hold Up 2s                 # hold a key for a while, then let it go
 //! Sleep 500ms
 //! Wait "text"                # until the screen shows it, or has since the last
 //!                            # step began (or /regex/ [timeout])
@@ -24,9 +30,17 @@
 //! Hide / Show                # steps between them are not recorded
 //! Resize 80x24
 //! Mask /\/tmp\/\S+/ "<tmp>"  # in text grids only: hide output that varies
-//! Output gif png             # write only these (png svg cast gif mp4 html)
-//! Output demo.html           # ... or name a file: cast, gif, mp4 or html
+//! Output gif png             # write only these (png svg cast gif apng mp4 html)
+//! Output demo.html           # ... or name a file: cast, gif, apng, mp4 or html
 //! ```
+//!
+//! A held key autorepeats while the steps after `KeyDown` run (the most
+//! recently pressed one, as a keyboard repeats), and every key still held
+//! is let go when the tape ends. What a press, repeat and release send
+//! depends on the kitty keyboard flags the program pushed: see
+//! [`crate::keyboard`]. A program hears of the protocol only with `Set
+//! KittyKeyboard on`; otherwise it reads presses and repeats, as on a
+//! terminal without it.
 //!
 //! This is the format of the first, Python tape runner (#598), extended with
 //! presentation settings and `Output`; its tapes run under `rich record` as
@@ -36,6 +50,8 @@ use std::fmt;
 use std::time::Duration;
 
 use fancy_regex::Regex;
+
+use crate::keyboard::Press;
 
 /// A parse or run error, with the tape line it came from (0 when none).
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -138,7 +154,7 @@ impl Modifiable {
     }
 
     /// The key without its modifiers.
-    fn plain(self) -> Key {
+    pub(crate) fn plain(self) -> Key {
         match self {
             Modifiable::Up => Key::Up,
             Modifiable::Down => Key::Down,
@@ -175,7 +191,8 @@ impl Modifiable {
 }
 
 impl Key {
-    fn parse(name: &str) -> Option<Key> {
+    /// A key's name in a tape: `Enter`, `F5`, `Ctrl+C`, `Alt+Left`.
+    pub(crate) fn parse(name: &str) -> Option<Key> {
         if let Some(key) = Key::parse_plain(name) {
             return Some(key);
         }
@@ -433,6 +450,8 @@ pub enum Format {
     /// The asciinema cast.
     Cast,
     Gif,
+    /// An animated PNG, in full colour.
+    Apng,
     /// Needs FFmpeg.
     Mp4,
     /// A self-contained page: a player and the screenshots.
@@ -440,16 +459,17 @@ pub enum Format {
 }
 
 impl Format {
-    pub const ALL: [Format; 6] = [
+    pub const ALL: [Format; 7] = [
         Format::Png,
         Format::Svg,
         Format::Cast,
         Format::Gif,
+        Format::Apng,
         Format::Mp4,
         Format::Html,
     ];
 
-    /// `png`, `svg`, `cast`, `gif`, `mp4` or `html`.
+    /// `png`, `svg`, `cast`, `gif`, `apng`, `mp4` or `html`.
     pub fn parse(name: &str) -> Option<Format> {
         Format::ALL
             .into_iter()
@@ -463,6 +483,7 @@ impl Format {
             Format::Svg => "svg",
             Format::Cast => "cast",
             Format::Gif => "gif",
+            Format::Apng => "apng",
             Format::Mp4 => "mp4",
             Format::Html => "html",
         }
@@ -537,6 +558,15 @@ pub enum Step {
     },
     Exec(String),
     Mouse(Mouse),
+    /// `KeyDown`: press a key and hold it.
+    KeyDown(Press),
+    /// `KeyUp`: let a held key go.
+    KeyUp(Press),
+    /// `Hold`: press a key, hold it for a while, let it go.
+    Hold {
+        key: Press,
+        duration: Duration,
+    },
 }
 
 /// The shell a tape runs in (`Set Shell`). Each starts without the user's
@@ -592,6 +622,16 @@ pub struct Tape {
     pub key_overlay: Option<bool>,
     /// `Output`, in order. Empty: every format.
     pub outputs: Vec<Output>,
+    /// `Set Framerate`: video frames a second.
+    pub frame_rate: Option<f64>,
+    /// `Set FontSize`: the text size of video frames, in pixels.
+    pub font_size: Option<u16>,
+    /// `Set KittyKeyboard`: report the kitty keyboard protocol to the
+    /// program.
+    pub kitty_keyboard: bool,
+    /// `Set KeyRepeat`: how long a held key waits before it repeats, and
+    /// how often it then does.
+    pub key_repeat: Option<(Duration, Duration)>,
     pub steps: Vec<(usize, Step)>,
 }
 
@@ -628,6 +668,10 @@ pub const MIN_ROWS: u16 = 2;
 /// screenshot is already about 8500x7400 pixels.
 pub const MAX_COLUMNS: u16 = 500;
 pub const MAX_ROWS: u16 = 200;
+/// The frame rates a tape may ask for (`Set Framerate`).
+pub const FRAME_RATES: std::ops::RangeInclusive<f64> = 1.0..=60.0;
+/// The text sizes video frames may be drawn at (`Set FontSize`), in pixels.
+pub const FONT_SIZES: std::ops::RangeInclusive<u16> = 4..=64;
 
 /// `500ms` or `2s` (fractions allowed), at most [`MAX_DURATION`].
 pub fn parse_duration(text: &str) -> Option<Duration> {
@@ -769,7 +813,7 @@ fn parse_output(word: &str) -> Result<Output, String> {
     if let Some(format) = Format::parse(word) {
         return Ok(Output { format, path: None });
     }
-    let names = "png, svg, cast, gif, mp4 or html";
+    let names = "png, svg, cast, gif, apng, mp4 or html";
     let Some(format) = std::path::Path::new(word)
         .extension()
         .and_then(|ext| ext.to_str())
@@ -810,6 +854,10 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
         caption: None,
         key_overlay: None,
         outputs: Vec::new(),
+        frame_rate: None,
+        font_size: None,
+        kitty_keyboard: false,
+        key_repeat: None,
         steps: Vec::new(),
     };
     let wait_regex = Regex::new(r"^Wait\s+/(.*)/(?:\s+(\S+))?$").expect("valid regex");
@@ -919,6 +967,44 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
                         tape.env.push((args[1].clone(), value));
                         continue;
                     }
+                    "Framerate" => {
+                        tape.frame_rate = Some(
+                            value
+                                .parse::<f64>()
+                                .ok()
+                                .filter(|fps| FRAME_RATES.contains(fps))
+                                .ok_or_else(|| {
+                                    error(format!(
+                                        "bad frame rate {value:?} (frames a second, 1 to 60)"
+                                    ))
+                                })?,
+                        );
+                        continue;
+                    }
+                    "FontSize" => {
+                        tape.font_size = Some(
+                            value
+                                .parse::<u16>()
+                                .ok()
+                                .filter(|size| FONT_SIZES.contains(size))
+                                .ok_or_else(|| {
+                                    error(format!("bad font size {value:?} (pixels, 4 to 64)"))
+                                })?,
+                        );
+                        continue;
+                    }
+                    "KittyKeyboard" => {
+                        tape.kitty_keyboard = switch(value)?;
+                        continue;
+                    }
+                    "KeyRepeat" => {
+                        let interval = duration(arg(2)?)?;
+                        if interval.is_zero() {
+                            return Err(error("KeyRepeat's interval must be more than 0".into()));
+                        }
+                        tape.key_repeat = Some((duration(value)?, interval));
+                        continue;
+                    }
                     "TypingDelay" => Step::TypingDelay(duration(value)?),
                     "Timeout" => Step::Timeout(duration(value)?),
                     other => return Err(error(format!("unknown setting {other}"))),
@@ -966,6 +1052,23 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
                     tape.outputs.push(parse_output(word).map_err(error)?);
                 }
                 continue;
+            }
+            "KeyDown" | "KeyUp" | "Hold" => {
+                let name = arg(0)?;
+                let key = Press::parse(name).ok_or_else(|| {
+                    error(format!(
+                        "{command} {name:?}: not a key (a name such as Up or Ctrl+C, or one \
+                         character)"
+                    ))
+                })?;
+                match command.as_str() {
+                    "KeyDown" => Step::KeyDown(key),
+                    "KeyUp" => Step::KeyUp(key),
+                    _ => Step::Hold {
+                        key,
+                        duration: duration(arg(1)?)?,
+                    },
+                }
             }
             "Click" | "RightClick" | "MiddleClick" | "DoubleClick" | "Drag" | "ScrollUp"
             | "ScrollDown" | "MouseMove" => {
@@ -1273,6 +1376,54 @@ mod tests {
             ("Output shot.png", "named by Screenshot"),
             ("Output ../x.gif", "stay in the output directory"),
             ("Output", "needs a format"),
+        ] {
+            let error = parse(bad).unwrap_err();
+            assert!(error.message.contains(message), "{bad}: {error}");
+        }
+    }
+
+    #[test]
+    fn held_keys_and_video_settings() {
+        let tape = parse(
+            "Set Framerate 35\nSet FontSize 12\nSet KittyKeyboard on\n\
+             Set KeyRepeat 250ms 30ms\nKeyDown w\nKeyUp w\nHold Up 2s\nHold Ctrl+F 100ms\n\
+             Output apng raycast.apng\n",
+        )
+        .unwrap();
+        assert_eq!(tape.frame_rate, Some(35.0));
+        assert_eq!(tape.font_size, Some(12));
+        assert!(tape.kitty_keyboard);
+        assert_eq!(
+            tape.key_repeat,
+            Some((Duration::from_millis(250), Duration::from_millis(30)))
+        );
+        assert!(matches!(tape.steps[0].1, Step::KeyDown(Press::Char('w'))));
+        assert!(matches!(tape.steps[1].1, Step::KeyUp(Press::Char('w'))));
+        assert!(matches!(
+            tape.steps[2].1,
+            Step::Hold { key: Press::Key(Key::Up), duration } if duration == Duration::from_secs(2)
+        ));
+        assert!(matches!(
+            tape.steps[3].1,
+            Step::Hold {
+                key: Press::Key(Key::Ctrl('F')),
+                ..
+            }
+        ));
+        assert_eq!(tape.outputs[0].format, Format::Apng);
+        assert_eq!(tape.outputs[1].path.as_deref(), Some("raycast.apng"));
+        let defaults = parse("Type x\n").unwrap();
+        assert!(defaults.frame_rate.is_none() && !defaults.kitty_keyboard);
+        for (bad, message) in [
+            ("Set Framerate 0", "bad frame rate"),
+            ("Set Framerate 61", "bad frame rate"),
+            ("Set FontSize 2", "bad font size"),
+            ("Set KeyRepeat 200ms", "needs an argument"),
+            ("Set KeyRepeat 200ms 0ms", "more than 0"),
+            ("KeyDown", "needs an argument"),
+            ("KeyDown ww", "not a key"),
+            ("Hold w", "needs an argument"),
+            ("Hold w soon", "bad duration"),
         ] {
             let error = parse(bad).unwrap_err();
             assert!(error.message.contains(message), "{bad}: {error}");

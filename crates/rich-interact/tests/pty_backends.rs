@@ -100,6 +100,9 @@ fn child() {
     if std::env::var_os("INTERACT_CHILD").is_some_and(|mode| mode == "legacy") {
         options.session.legacy_keys = true;
     }
+    if std::env::var_os("INTERACT_CHILD").is_some_and(|mode| mode == "all-keys") {
+        options.session.all_keys = true;
+    }
     if std::env::var_os("INTERACT_CHILD").is_some_and(|mode| mode == "inline") {
         options.session.alternate_screen = false;
     }
@@ -149,7 +152,9 @@ fn event_for_parts(pty: &mut Pty, parts: &[&str]) -> String {
 /// How many times the kitty keyboard flags were pushed: crossterm's both
 /// flags, or termwiz's first.
 fn kitty_pushes(text: &str) -> usize {
-    text.matches("\x1b[>3u").count() + text.matches("\x1b[>1u").count()
+    text.matches("\x1b[>3u").count()
+        + text.matches("\x1b[>1u").count()
+        + text.matches("\x1b[>15u").count()
 }
 
 fn key(name: &str) -> Event {
@@ -632,4 +637,67 @@ fn a_late_answer_is_no_key() {
         assert_eq!(key, format!("{:?}", self::key("a")), "{backend}");
         finish(pty, backend);
     }
+}
+
+/// blocks: with a terminal that never answers the start-up query, keys
+/// typed while the session waited for the answer were lost (a `q` at 0.1,
+/// 0.5 or 1.5 s did not quit). They arrive, in order, soon after.
+#[test]
+fn every_backend_keeps_keys_typed_while_the_terminal_does_not_answer() {
+    for backend in backends() {
+        let mut pty = Pty::start_mute_on(backend, "events");
+        // The query is out (termion asks nothing, and is ready at once).
+        let end = Instant::now() + Duration::from_secs(30);
+        while !pty.text().contains("\x1b[c") && !pty.text().contains("child ready") {
+            assert!(Instant::now() < end, "{backend}: no query:\n{}", pty.text());
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        std::thread::sleep(Duration::from_millis(100));
+        let sent = Instant::now();
+        pty.send("x\x1b[Ay");
+        let want = [key("x"), key("up"), key("y")].map(|event| format!("EV<{event:?}>EV"));
+        let end = Instant::now() + Duration::from_secs(10);
+        loop {
+            let text = pty.text();
+            let at: Vec<Option<usize>> = want.iter().map(|w| text.find(w.as_str())).collect();
+            if let [Some(x), Some(up), Some(y)] = at[..] {
+                assert!(x < up && up < y, "{backend}: out of order:\n{text}");
+                break;
+            }
+            assert!(Instant::now() < end, "{backend}: keys lost:\n{text}");
+            std::thread::sleep(Duration::from_millis(5));
+        }
+        // Soon: the session stops waiting for an answer once keys come.
+        let took = sent.elapsed();
+        assert!(took < Duration::from_millis(900), "{backend}: {took:?}");
+        finish(pty, backend);
+    }
+}
+
+/// Doom, raycast: with every key reported (kitty flag 8), text keys report
+/// their release, and a modifier on its own is a key. crossterm only:
+/// termwiz pushes its one flag whatever is asked.
+#[test]
+fn all_keys_reports_text_releases_and_modifiers_alone() {
+    use rich_interact::{KeyCode, ModifierKey};
+    let mut pty = Pty::start_kitty_on("crossterm", "all-keys");
+    pty.wait_for("child ready");
+    assert!(pty.text().contains("\x1b[>15u"), "{:?}", pty.text());
+    let shift = Key::new(KeyCode::Modifier(ModifierKey::Shift)).exact();
+    for (bytes, expected) in [
+        ("\x1b[119u", Event::Key(Key::char('w').exact())),
+        ("\x1b[119;1:3u", Event::KeyUp(Key::char('w').exact())),
+        ("\x1b[57441;2u", Event::Key(shift)),
+        ("\x1b[57441;1:3u", Event::KeyUp(shift)),
+        // The alternate key: Shift with `1` is `!`.
+        ("\x1b[49:33;2u", Event::Key(Key::char('!').exact())),
+        ("\x1b[13u", Event::Key(Key::new(KeyCode::Enter).exact())),
+    ] {
+        assert_eq!(
+            event_for(&mut pty, bytes),
+            format!("{expected:?}"),
+            "{bytes:?}"
+        );
+    }
+    finish(pty, "crossterm");
 }

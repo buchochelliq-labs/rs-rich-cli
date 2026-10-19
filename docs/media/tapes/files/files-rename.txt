@@ -1,0 +1,26 @@
+~/project
+  project   │ src                                           4 │# orbit
+            │ tests                                         1 │
+            │ run.sh                                      18B │A tiny service, here so the document
+            │ scripts.tar.gz                             122B │page through, pick from and search.
+            │ Cargo.toml                                 181B │
+            │ logo.png                                   476B │## What it does
+            │ readme-link -> README.md                   1.4K │
+            │ README.md                                  1.4K │orbit watches a queue, hands each jo
+            │ ╭─ Rename: ──────────────────────────────────────╮erminal. Workers are plain function
+            │ │README.md                                       │nce, retries a job that fails, and
+            │ ╰────────────────────────────────────────────────╯
+            │                                                 │## Configuration
+            │                                                 │
+            │                                                 │| Setting | Default | Meaning |
+            │                                                 │|---|---|---|
+            │                                                 │| `workers` | 4 | Jobs that run at o
+            │                                                 │| `retries` | 3 | Tries before a job
+            │                                                 │| `port` | 8080 | Where the status p
+            │                                                 │
+            │                                                 │## Running it
+            │                                                 │
+            │                                                 │```bash
+            │                                                 │orbit --workers 8 queue.toml
+            │                                                 │```
+ NOR  1.4K  README.md                                                        -rw-r--r--  Bot   8/8

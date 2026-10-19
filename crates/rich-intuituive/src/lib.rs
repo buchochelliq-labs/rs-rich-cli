@@ -45,10 +45,36 @@
 //!   instead of the alternate screen.
 //! - **Responsive**: [`Node::hide_below`] and a stylesheet's `@media`
 //!   rules follow the terminal's size; [`viewport`] reads it.
-//! - **The outside world** (off-by-default features): `audio::input`
-//!   captures a sound card into a signal (`audio`), `watch_path` wakes the
-//!   app when files change (`watch`), and `image` draws an image file in
-//!   half blocks (`art`).
+//! - **The outside world**, behind off-by-default features (plugins: the
+//!   core stays generic): `audio::pcm` reads raw PCM a buffer at a time,
+//!   `audio::play` plays it at its rate and `audio::Capture::simulated`
+//!   stands in for a sound card in tests (`pcm`), `audio::input` captures
+//!   a sound card into a signal
+//!   (`audio`, with PulseAudio sources under `pulse`),
+//!   `audio::wav` reads and records WAV files (`wav`), `watch_path` wakes
+//!   the app when files change (`watch`), `image` draws an image file
+//!   in half blocks (`art`), `meter`, `sparkline`, `spectrogram` and
+//!   `bar_spectrum` show levels and spectra (`viz`), and [`files`] has a
+//!   file manager's components: Miller columns, file lists, previews,
+//!   background file jobs and a streaming finder (`files`).
+//! - **Generic building blocks**: [`miller_of`] (Miller columns over any
+//!   [`MillerSource`] tree), [`jobs`](fn@jobs) and [`jobs_panel`]
+//!   (cancellable work with progress), [`fuzzy_list`] and [`finder_of`]
+//!   (a fuzzy list over any stream of items), [`preview_of`] (a value
+//!   loaded off the app's thread for the current key), [`multi_select`]
+//!   (a selection by key with a visual range), [`list_search`] (find next
+//!   and previous over a list), [`tab_set`](fn@tab_set) (tabs' states with one
+//!   active), [`facts`] (a description list), [`digits`] (big digits
+//!   in any build), and [`state`]'s files and [`FrecencyStore`] (an
+//!   app's state between sessions). The core is generic only; the domain
+//!   plugins above build on these.
+//! - **Sprites and pixels**: [`sprite::stage`] draws [`sprite::Sprite`]s
+//!   (cell art with transparent cells, animated on the app's clock) over a
+//!   backdrop, with clicks, hovers and collisions by their cells;
+//!   [`pixels::pixels`] is an RGBA framebuffer drawn in half blocks,
+//!   quadrants or Braille, with blits, rectangles and lines. Plugins cut
+//!   an image into sprites (`sprite_sheet`, behind `art`) and make
+//!   rs-rich-micro's micro assets sprites (`micro_sprite`, behind `micro`).
 //! - **Tests**: [`App::render_with`] and [`App::run_on`] with
 //!   `rich-interact`'s headless driver run an app without a terminal;
 //!   [`App::driver`] steps one, and [`assert_screen!`] compares its screen
@@ -59,39 +85,74 @@
 
 pub mod a11y;
 pub mod app;
-#[cfg(feature = "audio")]
+#[cfg(feature = "pcm")]
 pub mod audio;
+mod bars;
+#[cfg(feature = "art")]
+mod big_text;
+mod bindings;
 pub mod border;
 mod builtin;
 mod calendar;
+pub mod command_line;
+pub mod complete;
 mod datetime;
 mod dialog;
+mod digits;
 mod effect;
+mod facts;
+mod feed;
+#[cfg(feature = "files")]
+pub mod files;
+pub mod finder;
+mod float;
+pub mod focus;
+mod help;
+mod hex;
 #[cfg(feature = "art")]
 mod image;
 mod input;
 pub mod inspect;
+pub mod jobs;
 pub mod layout;
 mod list;
 pub mod log;
 pub mod menu;
+#[cfg(feature = "micro")]
+pub mod micro_sprite;
+pub mod miller;
 pub mod node;
 mod notify;
+pub mod pixels;
 mod place;
+pub mod preview;
+pub mod query;
 pub mod reactive;
 mod reorder;
 mod rule;
 pub mod screen;
 mod scrollbar;
+pub mod select;
 mod sequence;
 mod sheet;
+mod signals;
 mod solver;
+pub mod source;
 mod split;
+pub mod sprite;
+#[cfg(feature = "art")]
+pub mod sprite_sheet;
+pub mod state;
+pub mod tab_set;
 mod table_scroll;
 pub mod task;
 pub mod testing;
 mod text_area;
+pub mod transport;
 mod tree;
+mod treemap;
+#[cfg(feature = "viz")]
+mod viz;
 #[cfg(feature = "watch")]
 mod watch;
 pub mod widget;
@@ -103,33 +164,80 @@ pub use rich;
 /// rs-rich-interact, for its components (`interact::Input`,
 /// `interact::Select`, …) and the headless test driver.
 pub use rich_interact as interact;
+/// Dates as people type them (`tomorrow`, `eow`, `3d`): rs-rich-interact's.
+pub use rich_interact::dates;
 
 pub use app::{
-    every, Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, ModalOptions, Placement, Theme,
+    after, every, fixed_step, held_keys, plain_key, rate, Anchor, App, Ctx, Driver, Easing,
+    FrameStats, Handoff, ModalOptions, Placement, StatsHandle, Theme, Timer,
 };
-pub use border::{Border, BorderSet, Edge, Shadow, Sides};
-pub use effect::{effect, fill};
 #[cfg(feature = "art")]
-pub use image::{image, image_of, image_with, ImageAnchor, ImageFit, ImageMode, ImageView};
+pub use big_text::big_text;
+pub use bindings::{ModePage, Scaled, Stepped};
+pub use border::{Border, BorderSet, Edge, Shadow, Sides};
+pub use command_line::{command_line, command_line_with, CommandLine, CommandLineOptions};
+pub use complete::{
+    complete_words, history_file, history_in, history_session, CompleteOptions, Completion,
+    InputHistory,
+};
+pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
+pub use digits::digits;
+pub use effect::{effect, fill};
+pub use facts::{facts, facts_of};
+pub use feed::{
+    latest_feed, latest_iter, latest_with_state, Feed, FeedEnd, FeedState, FeedTeller, Pace, Play,
+};
+pub use finder::{finder_of, fuzzy_list, fuzzy_list_with, FuzzyOptions, FuzzySource};
+pub use focus::Direction;
+pub use help::{HelpOptions, KeyFormat, KeyHintsOptions};
+#[cfg(feature = "art")]
+pub use image::{
+    image, image_bytes, image_bytes_of, image_graphics, image_of, image_with, ImageAnchor,
+    ImageFit, ImageMode, ImageView, Pixels,
+};
 pub use input::{input, number_input};
+pub use jobs::{
+    jobs, jobs_panel, jobs_panel_with, Job, JobOutcome, JobProgress, JobState, Jobs,
+    JobsPanelOptions, ProcessOutcome, ProcessOutput,
+};
 pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use list::list_optional;
 pub use log::Log;
+pub use miller::{miller_in, miller_of, MillerSource};
 pub use node::described;
 pub use node::{
-    column, component, each, grid, label, layers, leaf, list, renderable, repeating, row, scroll,
-    scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text, Node,
+    column, component, each, fit_text, grid, keyed, label, layers, leaf, list, renderable,
+    repeating, row, scroll, scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text,
+    Node,
 };
 pub use notify::{Corner, Level};
 pub use place::{Offset, Origin, RectHandle};
-pub use reactive::{memo, signal, viewport, watch, Memo, Proxy, Signal};
+pub use preview::{preview_of, preview_of_with, PreviewOfOptions};
+pub use reactive::{memo, on_write, on_write_ref, signal, viewport, watch, Memo, Proxy, Signal};
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;
 pub use rule::rule;
+pub use select::{list_search, multi_select, ListSearch, Mark, MultiSelect};
 pub use sheet::{SheetError, Stylesheet};
+pub use signals::{falling, history, recent, recent_of, recent_timed, smoothed, Count, History};
 pub use solver::Solver;
-pub use task::{latest, resource, spawn, spawn_future, Latest, Load, Resource, Task};
+pub use state::{
+    frecency_in, frecency_session, frecency_store, read_state, state_dir, state_file, update_file,
+    update_state, write_atomic, write_state, FrecencyStore,
+};
+pub use tab_set::{tab_set, tabs_for, tabs_for_indexed, Scoped, TabSet};
+pub use task::{
+    latest, latest_every, resource, resource_for, spawn, spawn_future, spawn_stream, spawn_then,
+    Latest, Load, Notifier, Resource, Stream, Task,
+};
 pub use text_area::Caret;
+pub use transport::{transport, Transport};
+pub use treemap::{treemap, treemap_with, TreemapOptions};
+#[cfg(feature = "viz")]
+pub use viz::{
+    bar_spectrum, bar_spectrum_with, meter, meter_with, persistence, persistence_with, sparkline,
+    sparkline_with, spectrogram, spectrogram_with, tuner,
+};
 #[cfg(feature = "watch")]
 pub use watch::{
     watch_path, watch_path_with, ChangeKind, PathChange, PathEvent, PathWatch, WatchOptions,
@@ -142,11 +250,12 @@ pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::described;
     pub use crate::{
-        column, component, each, effect, every, fill, grid, input, label, latest, layers, leaf,
-        list, list_optional, memo, number_input, renderable, repeating, resource, row, scroll,
+        after, column, component, each, effect, every, fill, fixed_step, grid, input, keyed, label,
+        latest, latest_every, layers, leaf, list, list_optional, memo, number_input, on_write,
+        on_write_ref, rate, renderable, repeating, resource, resource_for, row, scroll,
         scroll_both, scroll_with, scroll_x, signal, spawn, switch, text, text_area, viewport,
         watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow,
-        Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Widget,
+        Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Timer, Widget,
     };
 }
 

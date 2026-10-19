@@ -1,12 +1,12 @@
 ~/project
-  project   │ src                                            4│# orbit
-            │ tests                                          1│
+  project   │ src                                           4 │# orbit
+            │ tests                                         1 │
             │ r╭────────────────────── Trash 1 selected file? ──────────────────────╮o the document
-            │ C│ ~/project/README.md                                                │m and search.
+            │ s│ ~/project/README.md                                                │m and search.
+            │ C│                                                                    │
+            │ l│                                                                    │
             │ r│                                                                    │
-            │ R│                                                                    │
-            │  │                                                                    │
-            │  │                                                                    │ hands each jo
+            │ R│                                                                    │ hands each jo
             │  │                                                                    │plain function
             │  │                                                                    │at fails, and
             │  │                                                                    │
@@ -18,9 +18,9 @@
             │  │                                                                    │s before a job
             │  │                                                                    │e the status p
             │  │                                                                    │
-            │  │────────────────────────────────────────────────────────────────────│
-            │  │               [Y]es                              (N)o              │
+            │  ├────────────────────────────────────────────────────────────────────┤
+            │  │                   [Y]es                    (N)o                    │
             │  ╰────────────────────────────────────────────────────────────────────╯
             │                                                 │orbit --workers 8 queue.toml
             │                                                 │```
- NOR  1.4K  README.md                                                        -rw-r--r--  Bot   6/6
+ NOR  1.4K  README.md                                                        -rw-r--r--  Bot   8/8
