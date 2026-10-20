@@ -441,6 +441,12 @@ These are not gaps, but they explain why a port is usually shorter:
 - accessibility, with a linear mode for screen readers;
 - serving an app to a browser, the inspector, and Python bindings.
 
+### 1.12 Portability
+
+| ratatui | intuiTUIve | Status | Fix |
+|---|---|---|---|
+| `no_std` plus `alloc` (`default-features = false`; widgets, layout, text and the buffer, with a backend the app brings, such as `mousefood`) | none: no crate is `no_std`. A browser works instead: core and intuiTUIve run on `wasm32-unknown-unknown` (the docs playground spike) | ✗ by design | Not now: [the `no_std` decision](no-std.md) |
+
 ## 2. Prioritized gaps
 
 Ordered by value to an app author, weighed by how many ports need them. The
