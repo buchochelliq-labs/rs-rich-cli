@@ -22,6 +22,10 @@
 //! - **Grouping:** [`GroupBy`] finds a record's trace, span or correlation
 //!   id; [`Groups`] gathers records by it, [`GroupHeader`] draws a group's
 //!   header and [`Summary`] counts levels and names the groups with errors.
+//! - **From `tracing` and `log`:** [`Record::from_event`] reads the
+//!   adapters' events as records, and [`ChannelSink`] sends them down a
+//!   bounded channel to a log view on another thread, dropping (and
+//!   counting) what a full channel cannot take.
 //! - **Time:** [`parse_timestamp`] reads RFC 3339, the access log's format
 //!   and epoch numbers, and [`Clock`] shows a time as written, relative to
 //!   the first record, or not at all.
@@ -55,12 +59,14 @@ use std::borrow::Cow;
 use crate::event::{EventContext, Message, Severity, StructuredEvent, Value};
 use crate::redact::Redactor;
 
+mod channel;
 mod collapse;
 mod filter;
 mod group;
 mod parse;
 mod time;
 
+pub use channel::ChannelSink;
 pub use collapse::{Collapser, Push, Repeat};
 pub use filter::{severity_of, Filter, FilterError, LevelFilter, Op, Predicate};
 pub use group::{Group, GroupBy, GroupHeader, Groups, LevelCounts, Summary};
@@ -231,6 +237,81 @@ impl Record {
             event.fields.push((key.clone(), value.clone()));
         }
         event
+    }
+
+    /// An event as a record, the reverse of [`to_event`](Self::to_event):
+    /// a `tracing` event from `EventLayer` or a `log` record from
+    /// `LogAdapter` (see [`adapters`](crate::adapters)), ready for a log
+    /// view. The fields, in order: `timestamp`, `level` (the severity's
+    /// name), `target` and `message`, then the event's own fields, then
+    /// `thread`, `task`, `correlation_id` and `spans` (the span names,
+    /// outermost first, joined by `:`), each only when the event has it.
+    /// An event marking a span opening or closing gets `span` (`open` or
+    /// `close`) and, on a close, `elapsed_us`. Its format is `event`.
+    ///
+    /// ```
+    /// use rich_ext::event::{EventContext, Message, Severity, StructuredEvent, Value};
+    /// use rich_ext::log_stream::Record;
+    ///
+    /// let event = StructuredEvent::new(Message::Literal("connected".into()))
+    ///     .field("port", Value::Unsigned(5432))
+    ///     .context(EventContext {
+    ///         severity: Some(Severity::Warn),
+    ///         target: Some("db::pool".into()),
+    ///         ..Default::default()
+    ///     });
+    /// let record = Record::from_event(&event);
+    /// assert_eq!(record.message().as_deref(), Some("connected"));
+    /// assert_eq!(record.severity(), Some(Severity::Warn));
+    /// assert_eq!(record.get("target"), Some(&Value::String("db::pool".into())));
+    /// assert_eq!(record.get("port"), Some(&Value::Unsigned(5432)));
+    /// ```
+    pub fn from_event(event: &StructuredEvent) -> Record {
+        let context = &event.context;
+        let text = |value: &str| Value::String(value.to_string());
+        let mut record = Record::new("event");
+        if let Some(time) = &context.timestamp {
+            record.fields.push(("timestamp".into(), text(time)));
+        }
+        if let Some(severity) = context.severity {
+            record
+                .fields
+                .push(("level".into(), text(severity.as_str())));
+        }
+        if let Some(target) = &context.target {
+            record.fields.push(("target".into(), text(target)));
+        }
+        let message = match &event.message {
+            Message::Literal(message) | Message::Markup(message) => message,
+        };
+        record.fields.push(("message".into(), text(message)));
+        for (key, value) in &event.fields {
+            record.set(key.clone(), value.clone());
+        }
+        for (key, value) in [
+            ("thread", &context.thread),
+            ("task", &context.task),
+            ("correlation_id", &context.correlation_id),
+        ] {
+            if let Some(value) = value {
+                record.set(key, text(value));
+            }
+        }
+        let spans = event.span_context();
+        if !spans.is_empty() {
+            let names: Vec<&str> = spans.iter().map(|span| span.name.as_str()).collect();
+            record.set("spans", text(&names.join(":")));
+        }
+        match event.span_marker() {
+            Some(crate::event::SpanEvent::Open) => record.set("span", text("open")),
+            Some(crate::event::SpanEvent::Close { elapsed }) => {
+                record.set("span", text("close"));
+                let micros = elapsed.as_micros().min(u64::MAX as u128) as u64;
+                record.set("elapsed_us", Value::Unsigned(micros));
+            }
+            None => {}
+        }
+        record
     }
 
     /// Whether `other` is the same record but for its time: the same

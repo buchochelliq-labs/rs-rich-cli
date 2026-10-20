@@ -482,3 +482,25 @@ screen, the cursor, the keyboard) before the message prints, with nothing
 for the app to set up; an error comes back from `run` once the terminal is
 back, and `main` prints it. `tests/panic.rs` checks the first in a real
 terminal (a PTY), and the second headless.
+
+### `tracing`: the app's own logs
+
+```bash
+cargo run -p rs-rich-intuituive --example tracing --features tracing
+```
+
+ratatui's `tracing` writes its events to a file and points to the
+third-party tui-logger for a pane; this one shows them in the app. A
+worker thread logs at random levels under three targets into a `Log` fed
+by the [`tracing` plugin](plugins.md#logs-from-tracing-tracing), next to
+a panel of the targets with their levels, a filter box and a status line.
+The log follows the newest line until ↑, PgUp, Home or the wheel scroll it
+back, and the status line counts what arrived since; End follows again.
+In the targets panel ↑ and ↓ choose a target, ← and → set its level and
+Space turns it off; `-` and `+` set the log's own level, and the box takes
+a query (`level:warn`, `target:worker::db`, words). Tab moves between the
+panes, q quits. `tests/tracing.rs` drives it, a worker's thread included.
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/tracing_scrolled_back.txt"
+```

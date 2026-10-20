@@ -1,0 +1,14 @@
+╭─ Targets ──────────────╮╭─ Log ────────────────────────────────────────────╮
+│DEBUG tracing_app      1││INFO  worker::net done job=16 ms=77              ││
+│DEBUG worker::jobs    10││WARN  worker::db slow, retrying job=17           ││
+│DEBUG worker::net      8││INFO  worker::jobs done job=18 ms=802            ││
+│DEBUG worker::db      17││WARN  worker::db slow, retrying job=19           ││
+│                        ││DEBUG worker::db picked up job=21                ││
+│                        ││DEBUG worker::db picked up job=22                ┃│
+│                        ││ERROR worker::db failed job=23                   ┃│
+│                        ││INFO  worker::db done job=24 ms=502              ┃│
+│                        ││DEBUG worker::db picked up job=25                ││
+│                        ││WARN  worker::jobs slow, retrying job=26         ││
+╰────────────────────────╯╰──────────────────────────────────────────────────╯
+Filter words, level:warn, target:worker::db
+scrolled back · 7 new · End follows · 31 of 36 lines · level debug+ · q quits,

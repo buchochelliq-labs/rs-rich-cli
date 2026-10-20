@@ -2,8 +2,8 @@
 
 The plugins: off-by-default features for what only one kind of app uses.
 Files that change, a sound card and sound files, images (in half blocks
-or real pixels), a file manager's components, and meters, sparklines,
-spectra and big text. Each is built on generic core pieces from the other
+or real pixels), an app's own `tracing` events, a file manager's
+components, and meters, sparklines, spectra and big text. Each is built on generic core pieces from the other
 pages.
 
 ## Files, sound and images
@@ -21,6 +21,8 @@ rs-rich-intuituive = { version = "0.0.5", features = ["watch", "audio", "art", "
 # features = ["pcm"]
 # Meters, sparklines and spectra as nodes:
 # features = ["viz"]
+# The app's own tracing events in a Log:
+# features = ["tracing"]
 ```
 
 ### Files that change (`watch`)
@@ -196,6 +198,65 @@ A file manager's other parts are in rs-rich-ext: `rich_ext::filetype`
 `palette::style_from_color_name("DarkGray")` (re-exported by
 rs-rich-ratatui) reads a ratatui colour name, as a ported app's options
 take them, as a rich style.
+
+## Logs from `tracing` (`tracing`)
+
+The **`tracing`** plugin, off by default, shows an app's own `tracing`
+events in a [`Log`](lists.md#logs), as they happen, from any thread:
+ratatui's `tracing` example writes them to a file and leaves an in-app
+pane to the third-party tui-logger.
+
+```toml
+rs-rich-intuituive = { version = "0.0.6", features = ["tracing"] }
+```
+
+```rust
+use intuituive::log::{tracing_layer, Severity};
+use tracing_subscriber::prelude::*;
+
+let mut made = None;
+let app = App::new(|| {
+    let log = Log::new(5_000);
+    log.set_level(Some(Severity::Debug));
+    made = Some(log);
+    row([
+        log.targets_view().panel("Targets").fixed(26),
+        log.view().focusable().panel("Log").flex(1),
+    ])
+});
+let subscriber = tracing_subscriber::registry().with(tracing_layer(made.unwrap(), app.proxy()));
+tracing::subscriber::set_global_default(subscriber)?;
+tracing::info!(port = 8080, "listening");
+app.run()
+```
+
+- **`tracing_layer(log, proxy)`** is a `tracing_subscriber` layer: add it
+  to your subscriber next to any other (a file, an `EnvFilter`).
+  `install_tracing(log, proxy)` makes a subscriber of it alone the global
+  default.
+- **`TracingFeed::new(log, proxy)`** sets it up first: `.capacity(n)` (the
+  events that may wait for the app, 1,024 by default), `.fields(false)`
+  (leave out `key=value` after the message) and `.spans(false)` (leave out
+  the `outer:inner:` spans before it); then `.layer()` or `.install()`.
+- Each event becomes a line with its level and target, so the log's
+  [level, target and text filters](lists.md#levels-targets-and-filters)
+  and its targets panel work on it. The message shows as written: square
+  brackets are not markup.
+- It is built on rs-rich-ext's `EventLayer` and a bounded
+  [`ChannelSink`](../ext/logging.md#into-a-log-view-channelsink): the
+  thread that logs never waits for the app. When the app falls behind,
+  what the channel cannot take is dropped and counted, and the log gets
+  one `… 12 events dropped` line. The app's thread takes what waits a
+  batch at a time, between frames.
+
+The `tracing` example rebuilds ratatui's: a worker thread logging at
+random levels, the log pane with its targets panel, a filter box and a
+status line (`cargo run -p rs-rich-intuituive --example tracing --features
+tracing`). Scrolled back, three lines up:
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/tracing_scrolled_back.txt"
+```
 
 ## A file manager's components
 
