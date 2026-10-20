@@ -135,10 +135,21 @@ pub(crate) struct Line {
     pub markup: String,
     pub level: Option<Severity>,
     pub target: Option<String>,
-    /// The plain text, for the query's bare words and for screen readers.
-    pub plain: String,
+    /// The plain text, for the query's bare words and for screen readers,
+    /// read from the markup the first time either asks.
+    pub plain: std::cell::OnceCell<String>,
     /// Whether it passes the filters.
     pub pass: bool,
+}
+
+impl Line {
+    fn plain(&self) -> &str {
+        self.plain
+            .get_or_init(|| match rich::Text::from_markup(&self.markup) {
+                Ok(text) => text.plain().to_string(),
+                Err(_) => self.markup.clone(),
+            })
+    }
 }
 
 impl query::Record for Line {
@@ -151,7 +162,7 @@ impl query::Record for Line {
     }
 
     fn text(&self) -> String {
-        self.plain.clone()
+        self.plain().to_string()
     }
 }
 
@@ -384,15 +395,11 @@ impl Log {
             level,
             target,
         } = line.into();
-        let plain = match rich::Text::from_markup(&markup) {
-            Ok(text) => text.plain().to_string(),
-            Err(_) => markup.clone(),
-        };
         let mut line = Line {
             markup,
             level,
             target,
-            plain,
+            plain: std::cell::OnceCell::new(),
             pass: true,
         };
         self.data.update(|data| {
@@ -561,7 +568,7 @@ impl Log {
                 bar: crate::scrollbar::Bar::default(),
                 barred: false,
                 bar_at: None,
-                said: String::new(),
+                said: None,
             }),
             "log",
         )
@@ -609,8 +616,9 @@ pub(crate) struct LogView {
     pub barred: bool,
     /// Where the bar was drawn, and the place and length it showed.
     pub bar_at: Option<(Rect, usize, usize)>,
-    /// What a screen reader reads, as of the last draw.
-    pub said: String,
+    /// The number of the newest line in view at the last draw: what a
+    /// screen reader reads.
+    pub said: Option<u64>,
 }
 
 /// A level as the view shows it, the theme name of its style, and the
@@ -675,7 +683,12 @@ impl Widget for LogView {
 
     /// The newest line in view, as plain text.
     fn access_text(&self) -> Option<String> {
-        (!self.said.is_empty()).then(|| self.said.clone())
+        let number = self.said?;
+        self.log.data.with_untracked(|data| {
+            let first = data.total - data.lines.len() as u64;
+            let line = data.lines.get(number.checked_sub(first)? as usize)?;
+            Some(line.plain().to_string())
+        })
     }
 
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
@@ -722,7 +735,7 @@ impl Widget for LogView {
         let console = cx.console();
         let shown = self.shown;
         let mut first = 0;
-        let mut said = String::new();
+        let mut said = None;
         self.log.data.with_untracked(|data| {
             let render = |indices: &mut dyn Iterator<Item = usize>| -> Vec<Vec<Segment>> {
                 indices
@@ -737,15 +750,15 @@ impl Widget for LogView {
                     first = data.passing_in(0..top).count();
                 }
                 if let Some(&last) = window.last() {
-                    said = data.lines[last].plain.clone();
+                    said = Some(data.number(last));
                 }
                 let lines = render(&mut window.into_iter());
                 canvas.lines_at(x, 0, width, height as u16, &lines);
                 return;
             }
             first = len.saturating_sub(height);
-            if let Some(line) = data.lines.back() {
-                said = line.plain.clone();
+            if !data.lines.is_empty() {
+                said = Some(data.number(len - 1));
             }
             match arrived {
                 Some(0) if !full => {}
