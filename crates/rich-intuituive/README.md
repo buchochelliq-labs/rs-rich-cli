@@ -1,5 +1,7 @@
 # rs-rich-intuituive
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mark.svg" alt="intuiTUIve" width="96" height="96">
+
 **intuiTUIve**: a reactive, retained terminal UI framework built on
 [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli). It is part of
 rs-rich, an addition rather than a port.

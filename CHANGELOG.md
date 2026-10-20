@@ -9,6 +9,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: a logo and topic icons (docs)
+
+- intuiTUIve has a mark (a node tree drawn with box-drawing guides, one
+  cell lit: the one a signal redraws), a favicon-sized mark, a wordmark
+  with TUI reversed out like a selection, and a line icon for each guide
+  page, under `docs/assets/intuituive/`. The overview page shows the
+  wordmark and an icon beside each page; the crate README shows the mark.
+
 ### Versions: the 0.0.21 versions are open
 
 - Every package moves one patch past the 0.0.20 cohort, as the
