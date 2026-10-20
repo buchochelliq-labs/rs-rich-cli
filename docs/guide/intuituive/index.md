@@ -77,7 +77,7 @@ thing it introduces:
 | [Inputs, text and dates](components.md) | Hosted components, inputs with completion and history, a command line, text areas, calendars, date and time pickers, queries over records |
 | [Lists, trees and tabs](lists.md) | How lists look, ranges, selections, finding and reordering; trees by path, by key and lazy; split panes; tab strips and tab sets; logs |
 | [Tables and scrolling](tables.md) | Tables, sorting, a cell cursor, options that follow state, rows from a source, scrolling and scrollbars |
-| [Chrome, your own widgets and effects](widgets.md) | Status bars, breadcrumbs, key hints, facts; the `Widget` trait; effects |
+| [Chrome, your own widgets and effects](widgets.md) | Status bars, breadcrumbs, key hints, facts; the `Widget` trait; effects and effect presets (`fx`) |
 | [Screens, pop-ups and toasts](screens.md) | Screens, modals, ending with a value, pop-ups, prompts, menus, confirming, toasts, animations |
 | [Tasks, feeds and other threads](background.md) | Tasks, resources, values from threads, signals over time, handing off the terminal, a play head |
 | [Browsing, jobs and app state](browsing.md) | Miller columns over any tree, jobs, a fuzzy list, a preview pane, `$EDITOR`, state files, frecency |

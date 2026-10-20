@@ -640,7 +640,7 @@ pub fn transition(child: Node, fx: Fx, shown: impl Fn() -> bool + 'static) -> No
     .shown_when(move || shown() || leaving.get())
 }
 
-/// A splash screen: `cover` (a logo, an [`image`](crate::image), big
+/// A splash screen: `cover` (a logo, an `image` with the `art` feature, big
 /// text) fades in, stays `hold`, and fades out, then `app` fades in in its
 /// place. Enter or Esc skips to the app, unless the app takes the key.
 /// Call it while the app is built.
