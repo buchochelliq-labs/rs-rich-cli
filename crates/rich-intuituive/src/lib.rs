@@ -148,6 +148,7 @@ mod table_scroll;
 pub mod task;
 pub mod testing;
 mod text_area;
+pub mod text_edit;
 pub mod transport;
 mod tree;
 mod treemap;
@@ -231,6 +232,7 @@ pub use task::{
     Latest, Load, Notifier, Resource, Stream, Task,
 };
 pub use text_area::Caret;
+pub use text_edit::{search_bar, TextSearch};
 pub use transport::{transport, Transport};
 pub use treemap::{treemap, treemap_with, TreemapOptions};
 #[cfg(feature = "viz")]

@@ -1835,6 +1835,9 @@ pub struct App {
     /// records it); off in a real terminal, where nobody reads it.
     text_frames: bool,
     caret_shown: bool,
+    /// The caret shape last set on the terminal's cursor (DECSCUSR), to
+    /// put back when the app ends.
+    caret_shape: Option<rich_interact::caret::CaretShape>,
     /// The theme changed: a new console, and everything draws again.
     restyled: bool,
     /// Rows of an inline region; `None` for the alternate screen.
@@ -2119,6 +2122,7 @@ impl App {
             frame_time: None,
             text_frames: true,
             caret_shown: false,
+            caret_shape: None,
             restyled: false,
             inline: None,
             wait_for_tasks: false,
@@ -3501,6 +3505,7 @@ impl App {
                 disabled: node.disabled(),
                 state: node.access_state(),
                 rect,
+                error: node.error(),
             });
         });
         out
@@ -3522,12 +3527,14 @@ impl App {
     /// Accessible, the cursor goes on whatever has the focus.
     fn caret(&mut self, painter: &mut Painter) -> String {
         let accessible = self.accessible;
+        let mut shape = None;
         let caret = self.focus().and_then(|id| {
             let mut caret = None;
             // Inside a scroll, a node's coordinates are its own: move the
             // caret onto the screen, and hide it when scrolled out of view.
             crate::node::walk_screen(&self.top().root, &mut |node, _, shift, clip| {
                 if node.id() == id {
+                    shape = node.wanted_caret_shape();
                     let point = node.caret.get().or_else(|| {
                         accessible.then(|| {
                             let inner = node.inner.get();
@@ -3546,12 +3553,18 @@ impl App {
         // Accessible, a cursor already shown where it goes stays put: a
         // screen reader following it reads nothing new.
         let parked = accessible && self.caret_shown && caret == self.caret_at;
-        let out = match caret {
+        let mut out = match caret {
             Some(_) if parked => String::new(),
             Some((x, y)) => format!("{}\x1b[?25h", painter.move_to(x, y)),
             None if self.caret_shown => "\x1b[?25l".to_string(),
             None => String::new(),
         };
+        // The focused widget's caret shape, set once it changes; a widget
+        // with none puts back the user's.
+        if caret.is_some() && shape != self.caret_shape {
+            out.push_str(shape.map_or(rich_interact::caret::RESET, |s| s.sequence()));
+            self.caret_shape = shape;
+        }
         self.caret_shown = caret.is_some();
         self.caret_at = caret;
         out
@@ -6791,6 +6804,9 @@ impl Driver {
     pub fn suspend(&mut self) -> String {
         let mut out = self.painter.finish();
         out.push_str("\x1b[0m\x1b[?25h");
+        if self.app.caret_shape.take().is_some() {
+            out.push_str(rich_interact::caret::RESET);
+        }
         self.painter.invalidate();
         self.first = true;
         self.started = false;
@@ -6944,6 +6960,9 @@ impl Driver {
         }
         out.push_str(&self.painter.finish());
         out.push_str("\x1b[0m\x1b[?25h");
+        if self.app.caret_shape.take().is_some() {
+            out.push_str(rich_interact::caret::RESET);
+        }
         self.app.runtime.close();
         out
     }

@@ -344,6 +344,7 @@ mod tests {
             disabled: false,
             state: AccessState::item(1, 3),
             rect: Rect::new(0, 1, 10, 3),
+            error: None,
         };
         let json = node(&list);
         assert_eq!(

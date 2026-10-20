@@ -319,6 +319,14 @@ pub trait Widget: Any {
         None
     }
 
+    /// The caret's shape while it has the focus: the app sets the
+    /// terminal's cursor to it (DECSCUSR) and puts it back as the user had
+    /// it when the focus moves to a widget with none, or the app ends.
+    /// Default: none, the terminal's own.
+    fn caret_shape(&self) -> Option<rich_interact::caret::CaretShape> {
+        None
+    }
+
     /// What it is, for assistive technology. Layout widgets keep the
     /// default, [`Role::Group`](crate::a11y::Role::Group).
     fn role(&self) -> crate::a11y::Role {
