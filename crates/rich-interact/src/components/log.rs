@@ -63,6 +63,26 @@ pub enum LogEvent {
     Continuation(String),
 }
 
+/// A record as an event, so rs-rich-ext's
+/// [`ChannelSink`](rich_ext::log_stream::ChannelSink) can feed a
+/// [`LogView::source`] straight from `tracing` or `log`:
+///
+/// ```
+/// use rich_interact::components::{LogEvent, LogView};
+/// use rich_ext::log_stream::{ChannelSink, Record};
+///
+/// let (sink, records) = ChannelSink::<LogEvent>::bounded(1_000);
+/// sink.send(Record::text("started"));
+/// let view = LogView::new().source(records);
+/// // `EventLayer::new(Arc::new(sink))` would send `tracing`'s events.
+/// # drop(view);
+/// ```
+impl From<Record> for LogEvent {
+    fn from(record: Record) -> LogEvent {
+        LogEvent::Record(record)
+    }
+}
+
 /// The keys of a [`LogView`], in context `log-view`.
 pub fn log_view_keymap() -> Keymap {
     Keymap::new("log-view")
@@ -1145,6 +1165,32 @@ mod tests {
         assert_eq!(record.instant(), Some(i64::MIN));
         view.time = TimeMode::Relative;
         assert!(view.time_of(&record).is_some());
+    }
+
+    #[test]
+    fn a_channel_sink_feeds_the_view_with_events() {
+        use rich_ext::adapters::EventSink;
+        use rich_ext::event::{EventContext, Message, Severity, StructuredEvent};
+        use rich_ext::log_stream::ChannelSink;
+
+        let (sink, receiver) = ChannelSink::<LogEvent>::bounded(8);
+        let event =
+            StructuredEvent::new(Message::Literal("disk full".into())).context(EventContext {
+                severity: Some(Severity::Error),
+                target: Some("store".into()),
+                ..Default::default()
+            });
+        sink.emit(event).unwrap();
+        let view = LogView::new().source(receiver);
+        let frames = run(
+            view,
+            Script::new().wait(Duration::from_millis(150)).keys("q"),
+            4,
+        );
+        drop(sink);
+        let frame = frames.last_frame();
+        assert!(frame.contains("ERROR disk full"), "{frame}");
+        assert!(frame.contains("target=store"), "{frame}");
     }
 
     #[test]
