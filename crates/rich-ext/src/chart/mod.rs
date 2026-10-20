@@ -26,6 +26,7 @@
 //! | [`LevelMeter`] | an audio level as a bar, green to red, with its peak and the peak a [`PeakHold`] keeps |
 //! | [`BarSpectrum`] | levels per band as columns from the bottom, mirrored or stereo (cava's bars) |
 //! | [`Persistence`] | a trace's last frames as a [`Chart`]'s datasets, older ones fainter (a scope's phosphor) |
+//! | [`PieChart`] | shares of a whole as slices of a disc or a donut ([`Slice`]s), with a legend of percentages |
 //!
 //! And laid out as ratatui's widgets, so a ported app looks the same:
 //!
@@ -99,6 +100,7 @@ mod line;
 mod meter;
 mod multiples;
 mod persistence;
+mod pie;
 mod plot_canvas;
 mod progress;
 mod scale;
@@ -120,6 +122,7 @@ pub use line::{LineChart, Series, SeriesKind};
 pub use meter::{LevelMeter, MeterScale, PeakHold};
 pub use multiples::{Facet, SmallMultiples};
 pub use persistence::Persistence;
+pub use pie::{PieChart, Slice};
 pub use plot_canvas::{Canvas, CanvasPainter, Marker, Shape};
 pub use progress::{FillGauge, LineGauge, LineSet};
 pub use scale::{Scale, ValueFormat};

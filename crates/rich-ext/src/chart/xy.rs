@@ -9,6 +9,8 @@ use super::plot_canvas::{is_ascii, raster, spec_style, CellGrid, Marker, Op, Vie
 use super::{cell_units, cells, lines_to_segments, series_key, Scale, ValueFormat};
 use crate::fidelity::ascii_text;
 
+mod stacked;
+
 /// Rows a [`Chart`] takes when it is given no height and [`Chart::height`]
 /// is not set.
 const DEFAULT_HEIGHT: usize = 15;
@@ -683,6 +685,7 @@ pub struct Chart {
     marker: Option<Marker>,
     width: Option<usize>,
     height: Option<usize>,
+    stacked: bool,
 }
 
 impl Default for Chart {
@@ -708,6 +711,7 @@ impl Chart {
             marker: None,
             width: None,
             height: None,
+            stacked: false,
         }
     }
 
@@ -1206,8 +1210,9 @@ impl Chart {
                 ops.push(Op::Layer);
             }
         }
-        for (index, dataset) in self.datasets.iter().enumerate() {
-            if index > 0 && self.layering == Layering::PerDataset {
+        for (nth, index) in self.draw_order().into_iter().enumerate() {
+            let dataset = &self.datasets[index];
+            if nth > 0 && self.layering == Layering::PerDataset {
                 ops.push(Op::Layer);
             }
             let style = self.dataset_spec(index);
@@ -1480,11 +1485,14 @@ impl crate::a11y::AccessibleText for Chart {
             return "Chart, no datasets".to_string();
         }
         let points = || self.datasets.iter().flat_map(|d| d.points.iter());
+        let view = self.stacked_view();
+        let stacked_points = || view.datasets.iter().flat_map(|d| d.points.iter());
         let mut out = vec![format!(
-            "Chart, {}, {}, {}",
+            "Chart, {}, {}, {}{}",
             counted(self.datasets.len(), "dataset", "datasets"),
             self.x_axis.describe("x", points().map(|p| p.0)),
-            self.y_axis.describe("y", points().map(|p| p.1)),
+            self.y_axis.describe("y", stacked_points().map(|p| p.1)),
+            if self.stacks() { ", areas stacked" } else { "" },
         )];
         for (index, d) in self.datasets.iter().enumerate() {
             let name = if d.name.is_empty() {
@@ -1512,7 +1520,8 @@ impl Chart {
         if let Some([a, b]) = self.y_axis.bounds {
             return Some((a.min(b), a.max(b)));
         }
-        let ys = self
+        let view = self.stacked_view();
+        let ys = view
             .datasets
             .iter()
             .flat_map(|d| d.points.iter().map(|p| p.1));
@@ -1528,7 +1537,8 @@ impl Chart {
 
 impl Renderable for Chart {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        lines_to_segments(self.grid(console, options).into_lines(), options.max_width)
+        let view = self.stacked_view();
+        lines_to_segments(view.grid(console, options).into_lines(), options.max_width)
     }
 
     fn measure(&self, _console: &Console, options: &ConsoleOptions) -> Measurement {
