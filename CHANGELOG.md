@@ -19,6 +19,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - A widget index (`guide/intuituive/widget-index.md`): every widget and
   component, 88 in seven groups, each with an icon, its constructor, a line
   on what it is and a link to the section that documents it.
+- A mascot: a purple elephant with block-cursor eyes that holds up the
+  mark's lit cell, in five poses, at 32 and 16 px, and as a 32x32 pixel
+  sprite for half blocks (`docs/assets/intuituive/mascot/`). The overview
+  page shows it waving.
 
 ### Versions: the 0.0.21 versions are open
 

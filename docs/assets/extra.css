@@ -151,3 +151,9 @@
 [data-md-color-scheme="slate"] .md-typeset img.tui-icon {
   filter: invert(0.92);
 }
+.md-typeset img.tui-mascot[src$=".svg"]:not([src^="http"]) {
+  float: right;
+  margin: 0 0 0.5rem 1rem;
+  border-radius: 0;
+  box-shadow: none;
+}

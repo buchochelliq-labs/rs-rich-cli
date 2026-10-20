@@ -3,6 +3,7 @@
 ![intuiTUIve](../../assets/intuituive/wordmark-dark.svg#only-dark){ .tui-wordmark width="300" }
 ![intuiTUIve](../../assets/intuituive/wordmark-light.svg#only-light){ .tui-wordmark width="300" }
 
+![intuiTUIve's elephant, waving its trunk and holding up a lit cell](../../assets/intuituive/mascot/elephant-hero.svg){ .tui-mascot width="128" }
 `rs-rich-intuituive` (`intuituive`, new and early) is a framework for
 terminal apps, full-screen or inline. You describe the screen once as a
 tree of nodes and keep your state in **signals**. When a signal changes, the nodes that

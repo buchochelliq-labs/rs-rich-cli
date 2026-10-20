@@ -12,6 +12,7 @@ site_dir: site
 exclude_docs: |
   python/
   assets/vendor/**/README.md
+  assets/intuituive/mascot/MASCOT.md
 
 theme:
   name: material

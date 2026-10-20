@@ -1,0 +1,11 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="intuiTUIve's elephant">
+<rect x="13" y="17" width="17" height="11" rx="5" fill="#7c4dff"/>
+<rect x="14" y="24" width="5" height="7" rx="2" fill="#7c4dff"/>
+<rect x="24" y="24" width="5" height="7" rx="2" fill="#7c4dff"/>
+<rect x="15" y="2" width="15" height="17" rx="6" fill="#5a32d6"/>
+<rect x="18" y="5" width="9" height="11" rx="4" fill="#b9a1ff"/>
+<rect x="3" y="3" width="17" height="17" rx="8" fill="#7c4dff"/>
+<path d="M8 17C7 23 5.5 27 3.5 24.5" fill="none" stroke="#5a32d6" stroke-width="6" stroke-linecap="round"/>
+<path d="M8 17C7 23 5.5 27 3.5 24.5" fill="none" stroke="#7c4dff" stroke-width="4" stroke-linecap="round"/>
+<rect x="10" y="8" width="3" height="4" rx="1" fill="#1c1a24"/>
+</svg>
