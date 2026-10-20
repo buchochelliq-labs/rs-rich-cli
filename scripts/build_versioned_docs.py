@@ -3,9 +3,9 @@
 
 Each release's docs (a release is named by rs-rich-cli's version; see
 release_cohort.py) are built into `<out>/X.Y.Z/` from the last commit on main
-that still ships that release: its `rs-rich-cli-vX.Y.Z` tag, or a later commit
-up to the merge that first moves a crate past it in `RELEASES.toml` (within that
-merge, the newest commit before the move). Docs fixed after a release so show
+that still ships that release: the commit `docs-versions.toml` pins for it,
+else its `rs-rich-cli-vX.Y.Z` tag or a later commit up to the one before
+`RELEASES.toml` first moves a crate past it. Docs fixed after a release so show
 under it, and the docs of the next release's work do not. Main's docs are built into `<out>/dev/`. The theme's version selector reads `versions.json`
 at the site's root, the format `mike` writes, so no `gh-pages` branch is needed:
 the whole site is rebuilt and deployed as one Pages artifact.
@@ -40,6 +40,7 @@ ROOT = Path(__file__).resolve().parents[1]
 OVERRIDES = ROOT / "scripts" / "docs_overrides"
 TAG = re.compile(r"rs-rich-cli-v(\d+)\.(\d+)\.(\d+)")
 WRAPPER = ".mkdocs-versioned.yml"
+PINS = "docs-versions.toml"
 
 
 def git(*args):
@@ -72,27 +73,37 @@ def versions_at(commit):
     return {(p["name"], p.get("registry")): p["version"] for p in packages}
 
 
-def docs_commit(tag):
-    """The commit whose docs stand for the release `tag` tags. On HEAD's
-    first-parent line, find the first commit where RELEASES.toml moves a
-    version past the tag's; the docs are the newest commit it brings in
-    (itself excluded) whose versions are still the tag's, so a merge that
-    carries the release's notes and then the next versions keeps the notes.
-    HEAD when nothing has moved yet; the tag itself when it is not behind HEAD
-    or has no RELEASES.toml to compare."""
+def pinned(version):
+    """The commit `docs-versions.toml` names for `version`'s docs, or None."""
+    path = ROOT / PINS
+    if not path.exists():
+        return None
+    return tomllib.loads(path.read_text(encoding="utf-8")).get("docs", {}).get(version)
+
+
+def docs_commit(version, tag):
+    """The commit whose docs stand for release `version`, tagged `tag`.
+
+    The commit `docs-versions.toml` pins for it, when that is behind HEAD: the
+    commit that opens the next release's versions records there the last
+    commit of this release's docs (its notes come before the version change).
+    Otherwise the last commit on HEAD's first-parent line before RELEASES.toml
+    moves a version past the tag's, else HEAD. The tag itself when it is not
+    behind HEAD or has no RELEASES.toml to compare."""
+    pin = pinned(version)
+    if pin and not subprocess.run(["git", "merge-base", "--is-ancestor", pin, "HEAD"], cwd=ROOT,
+                                  capture_output=True).returncode:
+        return git("rev-parse", pin).strip()
     shipped = versions_at(tag)
     ancestor = subprocess.run(["git", "merge-base", "--is-ancestor", tag, "HEAD"], cwd=ROOT)
     if shipped is None or ancestor.returncode:
         return tag
     changes = git("log", "--first-parent", "--reverse", "--format=%H", f"{tag}..HEAD",
                   "--", "RELEASES.toml").split()
-    moved = next((commit for commit in changes if versions_at(commit) != shipped), None)
-    if moved is None:
-        return git("rev-parse", "HEAD").strip()
-    for commit in git("rev-list", "--topo-order", f"{moved}^@", f"^{tag}").split():
-        if versions_at(commit) == shipped:
-            return commit
-    return tag
+    for commit in changes:
+        if versions_at(commit) != shipped:
+            return git("rev-parse", f"{commit}^1").strip()
+    return git("rev-parse", "HEAD").strip()
 
 
 def site_root():
@@ -204,7 +215,7 @@ def main():
     kept = []
     with tempfile.TemporaryDirectory() as scratch:
         for version, tag in releases()[: args.releases]:
-            commit = docs_commit(tag)
+            commit = docs_commit(version, tag)
             print(f"building {version} from {commit[:12]} ({tag})", flush=True)
             source = Path(scratch) / version
             extract(commit, source)

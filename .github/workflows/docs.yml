@@ -24,6 +24,7 @@ on:
       - mkdocs-python.yml
       - scripts/gen_python_api.py
       - scripts/build_versioned_docs.py
+      - docs-versions.toml
       - scripts/docs_overrides/**
       # The Python site's API reference is read from the stubs and modules.
       - crates/rich-py/python/**
@@ -35,6 +36,7 @@ on:
       - mkdocs-python.yml
       - scripts/gen_python_api.py
       - scripts/build_versioned_docs.py
+      - docs-versions.toml
       - scripts/docs_overrides/**
       # The Python site's API reference is read from the stubs and modules.
       - crates/rich-py/python/**

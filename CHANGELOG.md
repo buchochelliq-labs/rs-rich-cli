@@ -35,10 +35,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `scripts/build_versioned_docs.py` builds it in the `docs` workflow, keeping
   the newest releases that fit under GitHub Pages' 1 GB; a release tag's push
   re-runs the workflow on main, so a release's docs go up when it is tagged.
-  Once a merge moves a version past the release, its docs come from the
-  newest commit in that merge still at the release's versions, so a
-  release's notes are committed before the next versions open
-  (`docs/BRANCHING.md`).
+  `docs-versions.toml` pins a release's docs to a commit: the commit that
+  opens the next versions records the last commit of the release's notes
+  there (`docs/BRANCHING.md`).
 
 ## 0.0.20 cohort — published 2026-10-19
 
