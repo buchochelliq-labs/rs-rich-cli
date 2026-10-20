@@ -29,6 +29,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `<details>` block, and say how much was kept.
 - Guide: [Markdown for GitHub](docs/guide/ext/markdown-export.md).
 
+### rs-rich-ext: plain-text table cells
+
+- **`table::PlainRows`**, an extension trait for the core `Table`:
+  `add_plain_row`, `add_plain_rows`, `add_plain_column`,
+  `add_plain_column_justify` and `plain_column_footer` take cells as plain
+  text, so `[bold]x[/]`, a `[` in a file name or `:smile:` stay as written.
+  The core `add_row` still reads a `&str` as markup, as upstream does.
+- **`table::PlainTree::add_plain`** does the same for tree labels.
+- Guide: [Plain-text cells](docs/guide/ext/tables.md#plain-text-cells).
+
 ### rs-rich-embed: Chrome's DevTools over a pipe on Linux and macOS
 
 - **No DevTools port on Unix.** `ChromeEngine` starts Chrome with
