@@ -7,6 +7,7 @@ use std::cell::RefCell;
 use std::cmp::Ordering;
 use std::collections::HashSet;
 use std::fmt;
+use std::ops::Range;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicU64, Ordering as Atomic};
 use std::sync::Arc;
@@ -62,6 +63,49 @@ pub trait TableSource {
     /// Row `i`'s cells, as markup.
     fn row(&self, i: usize) -> Vec<String>;
 
+    /// The rows in `range`, in order: each one's index and cells given to
+    /// `each`, until it returns `false`. What a [`view_of`] pass reads the
+    /// source with. By default [`row`](Self::row) a row; a source that can
+    /// do better in bulk (a file read in one sequential sweep rather than
+    /// a seek a row, a database cursor) overrides it.
+    ///
+    /// ```
+    /// use std::ops::Range;
+    /// use intuituive::widgets::{RowCount, TableSource};
+    ///
+    /// /// Lines of one string, handed out a sweep at a time.
+    /// struct Lines(String);
+    /// impl TableSource for Lines {
+    ///     fn len(&self) -> RowCount {
+    ///         RowCount::Exact(self.0.lines().count())
+    ///     }
+    ///     fn row(&self, i: usize) -> Vec<String> {
+    ///         self.0.lines().nth(i).map(|l| vec![l.to_string()]).unwrap_or_default()
+    ///     }
+    ///     fn rows(&self, range: Range<usize>, each: &mut dyn FnMut(usize, Vec<String>) -> bool) {
+    ///         let lines = self.0.lines().enumerate().skip(range.start).take(range.len());
+    ///         for (i, line) in lines {
+    ///             if !each(i, vec![line.to_string()]) {
+    ///                 return;
+    ///             }
+    ///         }
+    ///     }
+    /// }
+    /// let mut seen = Vec::new();
+    /// Lines("a\nb\nc".into()).rows(1..3, &mut |i, cells| {
+    ///     seen.push((i, cells[0].clone()));
+    ///     true
+    /// });
+    /// assert_eq!(seen, [(1, "b".to_string()), (2, "c".to_string())]);
+    /// ```
+    fn rows(&self, range: Range<usize>, each: &mut dyn FnMut(usize, Vec<String>) -> bool) {
+        for i in range {
+            if !each(i, self.row(i)) {
+                return;
+            }
+        }
+    }
+
     /// Whether there are no rows yet.
     fn is_empty(&self) -> bool {
         self.len().count() == 0
@@ -76,6 +120,10 @@ impl<T: TableSource + ?Sized> TableSource for Rc<T> {
     fn row(&self, i: usize) -> Vec<String> {
         (**self).row(i)
     }
+
+    fn rows(&self, range: Range<usize>, each: &mut dyn FnMut(usize, Vec<String>) -> bool) {
+        (**self).rows(range, each)
+    }
 }
 
 impl<T: TableSource + ?Sized> TableSource for Arc<T> {
@@ -85,6 +133,10 @@ impl<T: TableSource + ?Sized> TableSource for Arc<T> {
 
     fn row(&self, i: usize) -> Vec<String> {
         (**self).row(i)
+    }
+
+    fn rows(&self, range: Range<usize>, each: &mut dyn FnMut(usize, Vec<String>) -> bool) {
+        (**self).rows(range, each)
     }
 }
 
@@ -238,7 +290,8 @@ impl<S: 'static> Clone for View<S> {
 impl<S: 'static> Copy for View<S> {}
 
 /// `source` filtered, sorted and searched as `query` (which may read
-/// signals) says, on a worker thread: each row is read once a pass, and a
+/// signals) says, on a worker thread: each row is read once a pass (with
+/// [`TableSource::rows`], a thousand at a time), and a
 /// new query (or the source's count becoming final) starts a new pass,
 /// dropping the one running. Until the first pass ends the view is the
 /// source as it is. csvlens's whole-file filter, find and sort over a file
@@ -362,25 +415,33 @@ fn run<S: TableSource + ?Sized>(
     let mut kept: Vec<usize> = Vec::new();
     let mut cells: Vec<String> = Vec::new();
     let mut hits: HashSet<usize> = HashSet::new();
-    for i in 0..n {
-        if i % 1024 == 0 && stale() {
+    // In bulk, a thousand rows at a time, looking between them for a
+    // newer query.
+    for start in (0..n).step_by(1024) {
+        if stale() {
             return None;
         }
-        let row = source.row(i);
-        if let Some(keep) = &query.keep {
-            if !keep(&row) {
-                continue;
+        source.rows(start..(start + 1024).min(n), &mut |i, mut row| {
+            if let Some(keep) = &query.keep {
+                if !keep(&row) {
+                    return true;
+                }
             }
-        }
-        if let Some(find) = &query.find {
-            if find(&row) {
-                hits.insert(i);
+            if let Some(find) = &query.find {
+                if find(&row) {
+                    hits.insert(i);
+                }
             }
-        }
-        if let Some((column, _)) = query.sort {
-            cells.push(row.get(column).cloned().unwrap_or_default());
-        }
-        kept.push(i);
+            if let Some((column, _)) = query.sort {
+                let cell = match column < row.len() {
+                    true => row.swap_remove(column),
+                    false => String::new(),
+                };
+                cells.push(cell);
+            }
+            kept.push(i);
+            true
+        });
     }
     if let Some((_, order)) = query.sort {
         let mut places: Vec<usize> = (0..kept.len()).collect();
@@ -518,6 +579,42 @@ mod tests {
         let source = rows(&["a"]);
         let query = ViewQuery::default().keep(|_| true);
         assert!(run(&source, TableSource::len(&source), &query, || true).is_none());
+    }
+
+    /// Reads only in bulk: `row` is not called by a pass.
+    struct Bulk {
+        sweeps: std::sync::Mutex<Vec<Range<usize>>>,
+    }
+
+    impl TableSource for Bulk {
+        fn len(&self) -> RowCount {
+            RowCount::Exact(2500)
+        }
+        fn row(&self, _: usize) -> Vec<String> {
+            panic!("a pass reads in bulk")
+        }
+        fn rows(&self, range: Range<usize>, each: &mut dyn FnMut(usize, Vec<String>) -> bool) {
+            self.sweeps.lock().unwrap().push(range.clone());
+            for i in range {
+                if !each(i, vec![i.to_string()]) {
+                    return;
+                }
+            }
+        }
+    }
+
+    #[test]
+    fn a_pass_reads_the_source_in_bulk() {
+        let source = Bulk {
+            sweeps: Default::default(),
+        };
+        let query = ViewQuery::default().keep(|row| row[0].ends_with("99"));
+        let pass = run(&source, source.len(), &query, || false).unwrap();
+        assert_eq!(pass.rows.unwrap().len(), 25);
+        assert_eq!(
+            *source.sweeps.lock().unwrap(),
+            [0..1024, 1024..2048, 2048..2500]
+        );
     }
 
     #[test]

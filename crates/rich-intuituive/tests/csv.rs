@@ -506,6 +506,42 @@ fn measure_a_million_rows() {
     eprintln!("30 x j on 50 rows: {:?} a key", started.elapsed() / 30);
 }
 
+/// csv's million-row filter (round 7 measured 3.3 s become 15.4 s in the
+/// unoptimised build once it ran on `view_of`): a pass reads the file in
+/// bulk (`TableSource::rows`) and tests each cell's text with a compiled
+/// `Pattern`, no `Text` a row. The bound is for a release build: it took
+/// 2.3 s before and 0.27 s after where it was written, so a second leaves a
+/// slow runner room and still catches the regression.
+#[test]
+#[ignore = "a benchmark: run it in release with --ignored"]
+fn a_million_row_filter_is_fast() {
+    let mut body = String::from("id,name,value,comment\n");
+    for i in 0..1_000_000 {
+        body.push_str(&format!("{i},name{i},{},\"note, {i}\"\n", i * 7 % 1000));
+    }
+    let path = file("million-filter.csv", &body);
+    drop(body);
+    let mut d = app(&path).driver(120, 40);
+    d.settle();
+    let mut best = Duration::MAX;
+    for _ in 0..3 {
+        d.press("ampersand");
+        d.type_text("name99");
+        let started = Instant::now();
+        d.press("enter");
+        best = best.min(started.elapsed());
+        assert!(
+            status(&d).ends_with("[Filter \"name99\": 1/11111]"),
+            "{}",
+            status(&d)
+        );
+        d.press("r");
+    }
+    let _ = std::fs::remove_file(&path);
+    println!("a million-row filter: {best:?}");
+    assert!(best.as_secs_f64() < 1.0, "{best:?}");
+}
+
 #[test]
 fn it_takes_csvlens_options_for_the_first_view() {
     let path = file("opts.csv", CITIES);
