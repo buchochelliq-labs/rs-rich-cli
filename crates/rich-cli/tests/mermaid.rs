@@ -59,17 +59,51 @@ fn the_command_its_alias_and_mmd_files_draw_the_diagram() {
         assert!(out.contains(DRAWN), "{args:?}: {out}");
     }
     // A diagram the text renderer cannot draw shows its source under a note.
-    std::fs::write(work.join("seq.mmd"), "sequenceDiagram\n  A->>B: hi\n").unwrap();
+    std::fs::write(work.join("class.mmd"), "classDiagram\n  Animal <|-- Duck\n").unwrap();
     let out = stdout(&run_in(
         &work,
         &home,
-        &["seq.mmd", "--mermaid-backend", "text"],
+        &["class.mmd", "--mermaid-backend", "text"],
     ));
     assert!(
-        out.starts_with("Mermaid: sequence diagrams are not drawn as text"),
+        out.starts_with("Mermaid: class diagrams are not drawn as text"),
         "{out}"
     );
-    assert!(out.contains("A->>B: hi"), "{out}");
+    assert!(out.contains("Animal <|-- Duck"), "{out}");
+}
+
+#[test]
+fn sequence_and_er_diagrams_are_drawn_as_text() {
+    let (_root, work, home) = setup();
+    std::fs::write(work.join("seq.mmd"), "sequenceDiagram\n  A->>B: hi\n").unwrap();
+    std::fs::write(work.join("er.mermaid"), "erDiagram\n  A ||--o{ B : has\n").unwrap();
+    std::fs::write(
+        work.join("both.md"),
+        "```mermaid\nsequenceDiagram\n  A->>B: hi\n```\n\n```mermaid\nerDiagram\n  A ||--o{ B : has\n```\n",
+    )
+    .unwrap();
+    for args in [
+        &["mermaid", "seq.mmd", "--mermaid-backend", "text"][..],
+        &["seq.mmd", "--mermaid-backend", "text"],
+        &["both.md"],
+    ] {
+        let out = stdout(&run_in(&work, &home, args));
+        assert!(
+            out.contains("│  hi   │") && out.contains("├──────►│"),
+            "{args:?}: {out}"
+        );
+        assert!(!out.contains("Mermaid:"), "{args:?}: {out}");
+    }
+    for args in [
+        &["mmd", "er.mermaid", "--mermaid-backend", "text"][..],
+        &["both.md"],
+    ] {
+        let out = stdout(&run_in(&work, &home, args));
+        assert!(
+            out.contains("│ 1") && out.contains("has") && out.contains("│ 0..N"),
+            "{args:?}: {out}"
+        );
+    }
 }
 
 #[test]
