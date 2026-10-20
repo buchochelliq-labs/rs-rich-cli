@@ -157,8 +157,6 @@ jobs:
       - name: Build
         run: mkdocs build --strict
 
-      # The Python package has its own site, published under /python/. Its
-      # API reference is generated from the type stubs, so no wheel is built.
       # The playground page and a guide block in headless Chromium.
       - name: Check the playground in a browser
         run: |
@@ -166,6 +164,8 @@ jobs:
           npx playwright install --with-deps chromium
           node scripts/check_playground_page.mjs site
 
+      # The Python package has its own site, published under /python/. Its
+      # API reference is generated from the type stubs, so no wheel is built.
       - name: Check the Python API pages are current
         run: python scripts/gen_python_api.py --check
 
