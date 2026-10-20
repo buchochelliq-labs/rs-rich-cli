@@ -24,7 +24,7 @@ include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
 # meters and spectra on docs.rs too; `audio` is left out, as its ALSA
 # headers may not be there to build it.
 [package.metadata.docs.rs]
-features = ["art", "micro", "watch", "files", "archive", "pcm", "viz"]
+features = ["art", "micro", "watch", "files", "archive", "pcm", "viz", "vim"]
 
 [lib]
 name = "intuituive"
@@ -74,6 +74,11 @@ art = ["dep:rich-art", "rich-art/image", "rich-art/kitty", "rich-art/sixel", "ri
 # animations) as sprites for a stage, fitted in half blocks. Off by
 # default.
 micro = ["art", "dep:rich-micro"]
+# `Node::vim`: Vim's keys for `text_area` and `input` (normal, insert and
+# visual modes, motions, operators, counts and `.`), rs-rich-interact's
+# `vim::Vim` preset. A plugin over the core's `key_mode` hook. Off by
+# default.
+vim = ["rich-interact/vim"]
 # `files`: a file manager's components (Miller columns, file lists,
 # previews by type, a watched directory model, background file jobs with
 # progress, a streaming fuzzy finder), on rs-rich-ext's `listing`, `open`,

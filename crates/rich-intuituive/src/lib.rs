@@ -152,6 +152,8 @@ pub mod text_edit;
 pub mod transport;
 mod tree;
 mod treemap;
+#[cfg(feature = "vim")]
+pub mod vim;
 #[cfg(feature = "viz")]
 mod viz;
 #[cfg(feature = "watch")]
