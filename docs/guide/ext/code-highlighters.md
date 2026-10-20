@@ -122,11 +122,11 @@ or go to another highlighter with `SqlHighlighter::with_fallback(…)`.
 `sql::SqlPlugin` registers it as the highlighter `"sql"`.
 
 !!! note "Dropping syntect"
-    Core's `syntax` feature brings syntect; its `code` feature has `Syntax`
-    without it, and its `markdown` feature needs only `code`. Depend on
-    `rs-rich` with `default-features = false, features = ["code", "markdown"]`
-    and on `rs-rich-ext` with `default-features = false, features = ["sql"]`,
-    then install `SqlPlugin` as the default code highlighter (or set it on
+    The `syntax` feature brings syntect; the `code` feature has `Syntax`
+    without it, and `markdown` needs only `code`. `rs-rich-ext` forwards all
+    three, and `sql` turns on `code`, so one dependency is enough:
+    `rs-rich-ext` with `default-features = false, features = ["sql",
+    "markdown"]` (leave out `markdown` if you need no Markdown). Then install `SqlPlugin` as the default code highlighter (or set it on
     the console as above): every `Syntax` and ```` ```sql ```` fence is
     highlighted by this lexer, and `cargo tree` shows no syntect or bincode.
     Code in other languages is plain in such a build, unless another

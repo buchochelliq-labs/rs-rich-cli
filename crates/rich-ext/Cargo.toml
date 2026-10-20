@@ -96,13 +96,16 @@ thiserror = "2"
 trybuild = "1"
 
 [features]
-# `Syntax` and `Markdown` from core (syntect and pulldown-cmark). Without them
-# `rst`, `cli_doc::markdown_view`, the `syntect` registry entry and the
-# highlighter conformance kit are left out; `source_view`, `diff::SourceDiff`
-# and `diff::PatchView` stay, unhighlighted.
+# `Syntax` and `Markdown` from core. `code` forwards core's syntect-free code
+# blocks (coloured by a registered highlighter, or plain); `syntax` adds
+# syntect; `markdown` adds pulldown-cmark and needs only `code`. Without
+# `syntax`, the `syntect` registry entry and the highlighter conformance kit
+# are left out; without `markdown`, `rst` and `cli_doc::markdown_view`;
+# `source_view`, `diff::SourceDiff` and `diff::PatchView` stay, unhighlighted.
 default = ["syntax", "markdown"]
-syntax = ["rich/syntax"]
-markdown = ["rich/markdown", "syntax"]
+code = ["rich/code"]
+syntax = ["code", "rich/syntax"]
+markdown = ["rich/markdown", "code"]
 anyhow = ["dep:anyhow"]
 # richf!, style!, theme_key!, markup!, #[derive(Rich)] and the print macros.
 macros = ["dep:rich-macros"]
@@ -142,14 +145,15 @@ archive = ["dep:zip", "dep:flate2"]
 # `qr::QrCode`: QR codes drawn with half blocks, through qrcodegen.
 qr = ["dep:qrcodegen"]
 # `sql::SqlHighlighter`: a hand-written SQL lexer as a code highlighter, with
-# Jinja blocks (dbt). No dependencies, and neither syntect nor `syntax`.
-sql = []
+# Jinja blocks (dbt). No dependencies, and neither syntect nor `syntax`; it
+# turns on `code`, the code blocks it colours.
+sql = ["code"]
 
 # `Syntax` and Markdown highlighted by `sql` without syntect; CI runs it with
-# `--no-default-features --features sql,rich/code,rich/markdown`.
+# `--no-default-features --features sql,markdown`.
 [[test]]
 name = "sql_without_syntect"
-required-features = ["sql", "rich/code", "rich/markdown"]
+required-features = ["sql", "markdown"]
 
 [[example]]
 name = "guide_live_layout"

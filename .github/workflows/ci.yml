@@ -152,7 +152,7 @@ jobs:
           # `code` and `markdown` keep `Syntax` and `Markdown` without syntect,
           # for a highlighter such as rs-rich-ext's `sql`.
           found="$(cargo tree -p rs-rich-ext --no-default-features \
-            --features sql,rich/code,rich/markdown -e normal --prefix none \
+            --features sql,markdown -e normal --prefix none \
             | grep -E '^(syntect|bincode|onig) ' || true)"
           if [ -n "$found" ]; then
             echo "::error::rs-rich-ext with sql and core's code,markdown still depends on:"
@@ -215,7 +215,7 @@ jobs:
           # The SQL highlighter behind core's `Syntax` and Markdown fences,
           # still without syntect (the `sql_without_syntect` test).
           - crate: rs-rich-ext
-            args: "--no-default-features --features sql,rich/code,rich/markdown"
+            args: "--no-default-features --features sql,markdown"
           - crate: rs-rich-art
             args: ""
           - crate: rs-rich-art
