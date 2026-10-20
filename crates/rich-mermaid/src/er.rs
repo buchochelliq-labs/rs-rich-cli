@@ -148,6 +148,14 @@ impl EntityDiagram {
     /// ([`Edge::start_label`], [`Edge::end_label`]). With the notes on what
     /// the graph cannot show: a relationship from an entity to itself is
     /// drawn as a `↻` beside its box, so its texts are a note.
+    ///
+    /// ```
+    /// let diagram = rich_mermaid::er::parse("erDiagram\n  A }|--|| B : in").unwrap();
+    /// let (graph, notes) = diagram.to_graph();
+    /// let edge = &graph.edges()[0];
+    /// assert_eq!((edge.start_label.as_deref(), edge.end_label.as_deref()), (Some("1..N"), Some("1")));
+    /// assert!(notes.is_empty());
+    /// ```
     pub fn to_graph(&self) -> (Graph, Vec<String>) {
         let nodes = self
             .entities
@@ -235,6 +243,14 @@ fn table(entity: &Entity) -> String {
 
 /// Lay out and draw `diagram`, its notes (and the layout's) in
 /// [`Drawing::notes`]. `ascii` restricts the output to ASCII.
+///
+/// ```
+/// use rich_mermaid::er::{draw, parse};
+///
+/// let diagram = parse("erDiagram\n  direction LR\n  A ||..o{ B : has").unwrap();
+/// let drawing = draw(&diagram, true).unwrap();
+/// assert_eq!(drawing.lines[1], "| A +.1..has..0..N.+ B |");
+/// ```
 pub fn draw(diagram: &EntityDiagram, ascii: bool) -> Result<Drawing, String> {
     let (graph, notes) = diagram.to_graph();
     let mut drawing = rich_diagram::draw(&graph, ascii).map_err(|error| error.to_string())?;
@@ -258,6 +274,11 @@ pub fn draw(diagram: &EntityDiagram, ascii: bool) -> Result<Drawing, String> {
 
 /// Whether `source` is an ER diagram: its first statement, after front
 /// matter and comments, is `erDiagram`.
+///
+/// ```
+/// assert!(rich_mermaid::er::is_er("erDiagram\n  A ||--o{ B : has"));
+/// assert!(!rich_mermaid::er::is_er("sequenceDiagram"));
+/// ```
 pub fn is_er(source: &str) -> bool {
     crate::sequence::header_keyword(source) == Some("erDiagram")
 }

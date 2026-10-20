@@ -204,6 +204,11 @@ pub struct Sequence {
 
 /// Whether `source` is a sequence diagram: its first statement, after front
 /// matter and comments, is `sequenceDiagram`.
+///
+/// ```
+/// assert!(rich_mermaid::sequence::is_sequence("%% a comment\nsequenceDiagram\n  A->>B: hi"));
+/// assert!(!rich_mermaid::sequence::is_sequence("graph TD\n  A --> B"));
+/// ```
 pub fn is_sequence(source: &str) -> bool {
     header_keyword(source) == Some("sequenceDiagram")
 }

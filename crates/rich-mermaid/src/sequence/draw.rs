@@ -29,6 +29,17 @@ const HEAD_GAP: i64 = 3;
 /// Fails when the drawing would cover more than
 /// [`MAX_CELLS`](rich_diagram::layout::MAX_CELLS) cells. A diagram with no
 /// participants draws nothing.
+///
+/// ```
+/// use rich_mermaid::sequence::{draw, parse};
+///
+/// let diagram = parse("sequenceDiagram\n  A->>A: think").unwrap();
+/// let drawing = draw(&diagram, true).unwrap();
+/// assert_eq!(
+///     drawing.lines,
+///     ["+---+", "| A |", "+-+-+", "  |", "  | think", "  +--+", "  |<-+", "  |"]
+/// );
+/// ```
 pub fn draw(diagram: &Sequence, ascii: bool) -> Result<Drawing, String> {
     let n = diagram.participants.len();
     if n == 0 {
