@@ -1,0 +1,25 @@
+@ 0 ms
+dissolve and
+coalesce cel
+
+
+@ 96 ms
+dissol e a d
+ oalesce  el
+      v   n
+c        c
+@ 192 ms
+d sso    a
+    esce
+ i   lve  nd
+coal     cel
+@ 288 ms
+  s o    a
+    e
+di s lve  nd
+coal sce cel
+@ 384 ms
+
+
+dissolve and
+coalesce cel

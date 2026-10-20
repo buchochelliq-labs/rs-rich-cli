@@ -256,3 +256,103 @@ Three frames in (`tests/effects.rs`):
 ```text
 --8<-- "crates/rich-intuituive/tests/snapshots/effect_drip.txt"
 ```
+
+### Effect presets
+
+`intuituive::fx` has the effects most apps want, ready made, each timed
+and eased on the app's clock (so a test steps it exactly), and each an
+`effect` underneath. Play one over any node:
+
+```rust
+use intuituive::fx;
+
+// Once, when the node first draws.
+fx::play(welcome, fx::fade_in(Duration::from_millis(400)))
+```
+
+| Preset | What it does |
+|---|---|
+| `fade_in(d)` / `fade_out(d)` | Each cell's colours from (to) the background colour; faded out, the cells are blank |
+| `dissolve(d)` / `coalesce(d)` | The cells go (come) one by one, in a scattered order |
+| `sweep(direction, d)` | The cells show as a soft edge moving toward `direction` passes them |
+| `slide_in(direction, d)` | The node slides in toward `direction`, coming to rest where it belongs |
+| `hsl_shift(hue, saturation, lightness, d)` | The colours turn round the wheel, and lighten or darken |
+| `glitch(d)` | Noise glyphs and rows jumping sideways, worst half way, gone at the end |
+| `rain()` | Digital rain falling over the node, for ever |
+| `shimmer(period)` | A band of light crossing text on the slant, for ever |
+| `skeleton(period)` | What the node shows as bars pulsing dim to bright, for ever: a view whose data is loading |
+| `placeholder(widths)` | A node: skeleton bars of the widths given, read as "Loading" |
+
+An `Fx` composes. `fx::sequence([..])` runs effects one after another
+(the last holds its end), `fx::parallel([..])` at once, `fx::wait(d)` is a
+pause; on an effect, `.delay(d)` holds its start first (a fade in delayed
+stays hidden), `.hold(d)` its end after, `.repeat(n)`, `.forever()`,
+`.ping_pong()`, `.reversed()`, `.limit(d)` and `.easing(Easing::…)`
+(a preset's own easing, or a whole sequence's timeline):
+
+```rust
+let ms = Duration::from_millis;
+// In, held, out, held, again and again.
+let cycle = fx::sequence([
+    fx::coalesce(ms(900)).hold(ms(900)),
+    fx::dissolve(ms(900)).hold(ms(400)),
+])
+.forever();
+```
+
+How it is played decides when:
+
+- `fx::play(node, fx)` runs once, from when the node first draws (a page
+  of a `switch` built later plays when it shows).
+- `fx::play_when(node, fx, || cond)` runs from its start each time the
+  condition turns true: a flash when a value changes, a glitch on an
+  error.
+- `fx::play_while(node, fx, || cond)` runs while it holds, the node as it
+  is otherwise: `play_while(table, fx::skeleton(period), move ||
+  loading.get())`.
+- `fx::transition(node, fx, || shown)` plays forwards as the node shows
+  and backwards as it goes, and hides it (`shown_when`) once back at the
+  start; a change half way turns round from where it is.
+
+A running effect asks for a frame every `fx::FRAME` (16 ms); once it is
+over it asks for none, and its last state stays, so a finished fade costs
+nothing. In accessible and linear mode there is no motion: an effect is
+drawn at its end at once (an endless one at its start, where a skeleton
+is still bars and rain has not begun), as `cx.animate` does.
+
+The colours come from the theme: the `fx` style's background is the
+colour cells fade to (black unless set) and its colour the one assumed for
+text that has none; `fx.shimmer`, `fx.rain` and `fx.skeleton` (its colour
+the dim end of the pulse, its background the bright end) colour those
+presets:
+
+```rust
+let theme = Theme::light().style("fx", Style::parse("grey30 on white")?);
+```
+
+`Fx::new(length, |frame, canvas, cx| …)` makes your own: it gets the
+canvas as `effect` does, and a `Frame` with its eased `progress` (0 to 1)
+and `elapsed` time; `Fx::endless` one that never ends. It composes and
+plays like the presets.
+
+Coalesce and dissolve, frame by frame (`tests/fx.rs`):
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/fx_dissolve.txt"
+```
+
+#### A splash screen
+
+`fx::splash(cover, hold, app)` fades the cover in, keeps it for `hold`,
+fades it out, and fades the app in in its place; Enter or Esc skips it.
+The cover is any node, so with the `art` feature it is an image:
+
+```rust
+App::new(|| {
+    let logo = image("logo.png").fixed(12);
+    fx::splash(logo, Duration::from_secs(1), main_view())
+})
+```
+
+`examples/fx.rs` is a gallery of every preset, after a splash:
+`cargo run -p rs-rich-intuituive --example fx`.

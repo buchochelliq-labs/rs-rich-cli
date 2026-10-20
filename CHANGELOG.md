@@ -141,6 +141,35 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - The guide's [Charts](docs/guide/ext/charts.md) page covers them, from the
   new `guide_charts_extra` example.
 
+### intuiTUIve: effect presets (rs-rich-intuituive)
+
+Ready-made effects over any node, in a new generic core module `fx`,
+built only on `effect`, the app's clock and `Easing` (tachyonfx is the
+reference design; it is not a dependency, as it would bring ratatui into
+the workspace):
+
+- **Presets:** `fade_in` / `fade_out` (each cell to and from the
+  background colour), `dissolve` / `coalesce`, `sweep` (a soft edge
+  moving in a `Direction`), `slide_in`, `hsl_shift`, `glitch`, `rain`
+  (digital rain), `shimmer` (a band of light across text) and `skeleton`
+  (what a node shows as pulsing bars, for loading); `placeholder(widths)`
+  is bars of their own, read as "Loading". `Fx::new` and `Fx::endless`
+  make your own.
+- **Composition:** `fx::sequence`, `fx::parallel`, `fx::wait`, and
+  `delay`, `hold`, `repeat`, `forever`, `ping_pong`, `reversed`, `limit`
+  and `easing` on an `Fx`.
+- **Playing:** `fx::play` (once, when the node first draws), `play_when`
+  (each time a condition turns true), `play_while` (while one holds: a
+  skeleton while loading) and `transition` (forwards as a node shows,
+  backwards as it goes, hidden at the end); `fx::splash(cover, hold, app)`
+  fades a cover (an `image`, big text) into the app.
+- A running effect asks for a frame every `fx::FRAME`; once over it asks
+  for none, and its end stays. In accessible and linear mode an effect
+  goes straight to its end, as `Ctx::animate` does.
+- Colours from the theme: the `fx` style (the colour faded to), and
+  `fx.shimmer`, `fx.rain` and `fx.skeleton`. The `fx` example is a
+  gallery of them all.
+
 ### Recording: a held key repeats only while it is held (rs-rich-record)
 
 - `Hold` (and a `KeyDown` held through a `Sleep`) sends the repeats due

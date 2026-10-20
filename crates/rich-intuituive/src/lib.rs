@@ -109,6 +109,7 @@ pub mod files;
 pub mod finder;
 mod float;
 pub mod focus;
+pub mod fx;
 mod help;
 mod hex;
 #[cfg(feature = "art")]
@@ -195,6 +196,7 @@ pub use feed::{
 };
 pub use finder::{finder_of, fuzzy_list, fuzzy_list_with, FuzzyOptions, FuzzySource};
 pub use focus::Direction;
+pub use fx::Fx;
 pub use help::{HelpOptions, KeyFormat, KeyHintsOptions};
 #[cfg(feature = "art")]
 pub use image::{
