@@ -33,13 +33,22 @@ name = "rich"
 workspace = true
 
 [features]
-# `Syntax` and the syntect highlighter (with syntect's bundled grammars and
-# themes). On by default; turn it off (`default-features = false`) when an
-# application never highlights code, to drop syntect and what it pulls in.
-syntax = ["dep:syntect"]
-# `Markdown`, parsed with pulldown-cmark. Code blocks are highlighted by
-# `Syntax`, so this turns `syntax` on too. On by default.
-markdown = ["dep:pulldown-cmark", "syntax"]
+# `Syntax` and the `CodeHighlighter` plumbing behind it, without any engine
+# and without dependencies. A `Syntax` (and so a Markdown code block)
+# highlights with its own highlighter or the console's default
+# (`ConsoleCodeHighlighting`, which `rich_ext`'s registry installs); with
+# neither it renders as plain code in the same layout. `syntax` adds syntect
+# as the engine used when none is given.
+code = []
+# `Syntax` with the syntect highlighter (with syntect's bundled grammars and
+# themes) as its default engine: `code` plus syntect. On by default; turn it
+# off (`default-features = false`, then `code` if you still want `Syntax`)
+# to drop syntect and what it pulls in.
+syntax = ["code", "dep:syntect"]
+# `Markdown`, parsed with pulldown-cmark. Code blocks are drawn by `Syntax`,
+# so this turns `code` on; they are highlighted by syntect only with `syntax`
+# (on by default).
+markdown = ["dep:pulldown-cmark", "code"]
 # Optional parser reuse; disabled in the default mirror (DIVERGENCES #23).
 syntax-cache = ["syntax"]
 # Oniguruma (C) as syntect's regex engine instead of pure-Rust fancy-regex:

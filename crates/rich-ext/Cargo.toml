@@ -145,6 +145,12 @@ qr = ["dep:qrcodegen"]
 # Jinja blocks (dbt). No dependencies, and neither syntect nor `syntax`.
 sql = []
 
+# `Syntax` and Markdown highlighted by `sql` without syntect; CI runs it with
+# `--no-default-features --features sql,rich/code,rich/markdown`.
+[[test]]
+name = "sql_without_syntect"
+required-features = ["sql", "rich/code", "rich/markdown"]
+
 [[example]]
 name = "guide_live_layout"
 required-features = ["syntax"]

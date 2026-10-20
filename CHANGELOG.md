@@ -9,6 +9,22 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### rs-rich: `Syntax` and `Markdown` without syntect (feature `code`)
+
+- **`code`**, a new feature with no dependencies: `Syntax`, the
+  `CodeHighlighter` plumbing and everything `Markdown` needs. `syntax` is
+  now `code` plus syntect, `markdown` implies `code` instead of `syntax`,
+  and `syntax-cache` and `onig` stay on `syntax`. The default features, and
+  the default output, are unchanged; the golden tests pass as they were.
+- With `code` but not `syntax`, a `Syntax` or Markdown code block
+  highlights with its own highlighter or the console's default (which
+  `rs-rich-ext`'s registry installs), and with neither renders as plain
+  code in the same layout. `SyntectHighlighter` stays behind `syntax`.
+  Recorded as [Divergences #39](docs/DIVERGENCES.md).
+- CI builds, lints and tests `--no-default-features --features
+  code,markdown`, and checks that `rs-rich-ext` with `sql` and core's
+  `code,markdown` carries no syntect or bincode.
+
 ### rs-rich-ext: Markdown for GitHub
 
 - **`markdown_export`** writes renderables as GitHub-flavoured Markdown, for
@@ -52,7 +68,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and `ansi_light`. `with_fallback` hands other languages to another
   highlighter; `SqlPlugin` registers it as `"sql"`.
 - `sql::highlight` returns highlighted SQL as a `Text`, for builds without
-  core's `syntax` feature; `sql::tokenize` returns the tokens.
+  `Syntax`; `sql::tokenize` returns the tokens.
+- With core's new `code` and `markdown` features (and not `syntax`), a
+  `Syntax` and a Markdown ```` ```sql ```` fence are highlighted by
+  `SqlHighlighter` from the registry with no syntect in the build (the
+  `sql_without_syntect` test, which CI runs that way).
 - Tests: token classes on tricky input, unterminated strings and comments,
   and 3000 random inputs that must tokenize and highlight without a panic;
   a `Syntax` block and a Markdown ```` ```sql ```` fence highlighted through

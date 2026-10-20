@@ -27,8 +27,8 @@ syntect is the default everywhere and is what upstream parity is measured
 with. Choose lumis for tree-sitter's more precise parsing, its languages or its
 themes, and accept the larger build.
 
-A `Syntax` with no highlighter of its own uses syntect, with its default
-theme, `base16-ocean.dark`:
+A `Syntax` with no highlighter of its own uses syntect (core's default
+`syntax` feature), with its default theme, `base16-ocean.dark`:
 
 ```rust
 --8<-- "crates/rich-ext/examples/guide_highlighters.rs:default"
@@ -122,12 +122,17 @@ or go to another highlighter with `SqlHighlighter::with_fallback(…)`.
 `sql::SqlPlugin` registers it as the highlighter `"sql"`.
 
 !!! note "Dropping syntect"
-    Core's `Syntax` and `Markdown` are behind its `syntax` and `markdown`
-    features, which bring syntect. In a build without them,
-    `rich_ext::sql::highlight(code, theme)` returns the highlighted SQL as a
-    `Text`, which prints like any other; `sql::tokenize` gives the tokens.
-    A `Syntax` or a Markdown fence highlighted by this lexer still needs
-    core's `syntax` feature for now.
+    Core's `syntax` feature brings syntect; its `code` feature has `Syntax`
+    without it, and its `markdown` feature needs only `code`. Depend on
+    `rs-rich` with `default-features = false, features = ["code", "markdown"]`
+    and on `rs-rich-ext` with `default-features = false, features = ["sql"]`,
+    then install `SqlPlugin` as the default code highlighter (or set it on
+    the console as above): every `Syntax` and ```` ```sql ```` fence is
+    highlighted by this lexer, and `cargo tree` shows no syntect or bincode.
+    Code in other languages is plain in such a build, unless another
+    highlighter is registered or given as the fallback. Without `Syntax` at
+    all, `rich_ext::sql::highlight(code, theme)` returns the highlighted SQL
+    as a `Text`; `sql::tokenize` gives the tokens.
 
 ## Write your own
 
