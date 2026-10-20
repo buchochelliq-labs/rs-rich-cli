@@ -517,6 +517,7 @@ pub fn job_line_with<P: JobProgress>(job: &Job<P>, options: &JobsPanelOptions) -
 
 /// How a [`jobs_panel_with`] shows its jobs.
 #[derive(Clone, Debug)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct JobsPanelOptions {
     failed_title: bool,
 }

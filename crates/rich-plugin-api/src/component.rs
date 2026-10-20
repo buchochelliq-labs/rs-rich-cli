@@ -129,6 +129,7 @@ impl ComponentView {
     }
 
     /// Put the cursor at `row`, `column` of the view.
+    #[must_use]
     pub fn with_cursor(mut self, row: usize, column: usize) -> ComponentView {
         self.cursor = Some((row, column));
         self

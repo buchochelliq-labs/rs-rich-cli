@@ -138,6 +138,7 @@ enum Term {
 }
 
 /// A live view of log records. See the [module docs](self).
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct LogView {
     /// The records kept; `first` is the number of the first, as older ones
     /// are dropped past the limit.

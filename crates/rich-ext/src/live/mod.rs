@@ -134,6 +134,7 @@ impl<W: Write> LiveCoordinator<W> {
     }
     /// Draw the graphics `source` places on the content's cells (on an
     /// interactive terminal only).
+    #[must_use]
     pub fn with_graphics(mut self, source: Arc<dyn PlacementSource>) -> Self {
         self.graphics = Some(source);
         self

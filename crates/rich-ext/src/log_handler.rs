@@ -92,6 +92,7 @@ impl RichHandler {
     }
 
     /// How an event's spans are shown (default [`SpanView::Inline`]).
+    #[must_use]
     pub fn span_view(mut self, view: SpanView) -> Self {
         self.span_view = view;
         self
@@ -100,6 +101,7 @@ impl RichHandler {
     /// Link the path column through `hyperlinker` instead of a bare `file://`
     /// URL: its editor template, base directory for relative paths (as
     /// `tracing` reports them) and on/off switch apply.
+    #[must_use]
     pub fn hyperlinker(mut self, hyperlinker: Hyperlinker) -> Self {
         self.hyperlinker = Some(hyperlinker);
         self
@@ -110,6 +112,7 @@ impl RichHandler {
     /// `RenderTarget::console`); longer lines fold. The coordinator refuses
     /// control codes, so any in a line (a message, field, span or path) are
     /// shown as symbols instead: every line prints.
+    #[must_use]
     pub fn live<W: Write + Send + 'static>(mut self, live: Arc<Mutex<LiveCoordinator<W>>>) -> Self {
         self.output = Some(Box::new(move |segments| {
             let segments = neutralise(segments);
@@ -133,45 +136,53 @@ impl RichHandler {
     }
 
     /// Show the time column (upstream `show_time`).
+    #[must_use]
     pub fn show_time(self, show: bool) -> Self {
         self.map_render(|render| render.show_time(show))
     }
 
     /// Show the level column (upstream `show_level`).
+    #[must_use]
     pub fn show_level(self, show: bool) -> Self {
         self.map_render(|render| render.show_level(show))
     }
 
     /// Show the path column (upstream `show_path`).
+    #[must_use]
     pub fn show_path(self, show: bool) -> Self {
         self.map_render(|render| render.show_path(show))
     }
 
     /// Blank a time equal to the previous record's (upstream
     /// `omit_repeated_times`).
+    #[must_use]
     pub fn omit_repeated_times(self, omit: bool) -> Self {
         self.map_render(|render| render.omit_repeated_times(omit))
     }
 
     /// The level column's width, or `None` to fit (upstream `log_time_format`'s
     /// sibling `level_width`, fixed at 8 upstream).
+    #[must_use]
     pub fn level_width(self, width: Option<usize>) -> Self {
         self.map_render(|render| render.level_width(width))
     }
 
     /// Parse messages as console markup (upstream `markup`).
+    #[must_use]
     pub fn markup(mut self, markup: bool) -> Self {
         self.markup = markup;
         self
     }
 
     /// The message highlighter, or `None` for none (upstream `highlighter`).
+    #[must_use]
     pub fn highlighter(mut self, highlighter: Option<Box<dyn Highlighter + Send + Sync>>) -> Self {
         self.highlighter = highlighter;
         self
     }
 
     /// Words styled `logging.keyword` (upstream `keywords`).
+    #[must_use]
     pub fn keywords<I, S>(mut self, keywords: I) -> Self
     where
         I: IntoIterator<Item = S>,
@@ -182,6 +193,7 @@ impl RichHandler {
     }
 
     /// Link the path column to the source file (upstream `enable_link_path`).
+    #[must_use]
     pub fn enable_link_path(mut self, enable: bool) -> Self {
         self.enable_link_path = enable;
         self
@@ -189,6 +201,7 @@ impl RichHandler {
 
     /// Format the current time for events without a `timestamp` (upstream
     /// `log_time_format`).
+    #[must_use]
     pub fn time_format(mut self, format: impl Fn() -> String + Send + Sync + 'static) -> Self {
         self.time_format = Box::new(format);
         self

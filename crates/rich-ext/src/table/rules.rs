@@ -370,6 +370,7 @@ impl StyleRule {
     }
 
     /// Style the row or the column instead of the cell.
+    #[must_use]
     pub fn target(mut self, target: Target) -> Self {
         self.target = target;
         self
@@ -725,6 +726,7 @@ impl StyleRules {
     }
 
     /// Add a rule (builder form).
+    #[must_use]
     pub fn rule(mut self, rule: StyleRule) -> Self {
         self.rules.push(rule);
         self

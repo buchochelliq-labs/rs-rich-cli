@@ -8,6 +8,7 @@ use rich::segment::Segment;
 const DOTS: [[u8; 2]; 4] = [[0, 3], [1, 4], [2, 5], [6, 7]];
 
 /// A monochrome image rendered with two pixels by four pixels per cell.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct BrailleArt {
     image: std::sync::Arc<DynamicImage>,
     width: Option<usize>,

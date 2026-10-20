@@ -104,6 +104,7 @@ impl MicroAssetRef {
         Ok(MicroAssetRef::new(Arc::clone(registry.require(name)?)))
     }
 
+    #[must_use]
     pub fn preference(mut self, preference: FallbackPreference) -> Self {
         self.preference = preference;
         self

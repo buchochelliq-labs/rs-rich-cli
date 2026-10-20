@@ -179,6 +179,7 @@ pub fn quantile(sorted: &[f64], q: f64) -> Option<f64> {
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Distribution {
     label: String,
     sorted: Vec<f64>,
@@ -623,6 +624,7 @@ impl crate::a11y::AccessibleText for Distribution {
 /// );
 /// ```
 #[derive(Clone, Debug, Default, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct DistributionSet {
     items: Vec<Distribution>,
     range: Option<(f64, f64)>,

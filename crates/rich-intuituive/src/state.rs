@@ -298,6 +298,9 @@ fn now() -> u64 {
 impl FrecencyStore {
     /// Keep at most `keys` keys (500 by default): past it, the least used
     /// go.
+    // A handle: the change is made through shared state, so the
+    // returned copy is only for chaining and may be dropped.
+    #[allow(clippy::return_self_not_must_use)]
     pub fn keep(self, keys: usize) -> FrecencyStore {
         self.limits.update(|l| l.keep = keys.max(1));
         self
@@ -306,6 +309,9 @@ impl FrecencyStore {
     /// Age every rank once they add up to more than `total` (10 000 by
     /// default, zoxide's `_ZO_MAXAGE`): they are scaled down to 90% of
     /// it, and a key under one visit goes.
+    // A handle: the change is made through shared state, so the
+    // returned copy is only for chaining and may be dropped.
+    #[allow(clippy::return_self_not_must_use)]
     pub fn max_age(self, total: f64) -> FrecencyStore {
         self.limits.update(|l| l.max_age = total.max(1.0));
         self

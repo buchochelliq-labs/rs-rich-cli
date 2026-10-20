@@ -373,11 +373,13 @@ impl MicroAsset {
         Ok(self)
     }
 
+    #[must_use]
     pub fn with_kind(mut self, kind: AssetKind) -> Self {
         self.kind = kind;
         self
     }
 
+    #[must_use]
     pub fn with_variants(mut self, variants: Variants) -> Self {
         self.variants = variants;
         self
@@ -392,21 +394,25 @@ impl MicroAsset {
         Ok(self)
     }
 
+    #[must_use]
     pub fn with_origin(mut self, origin: Origin) -> Self {
         self.origin = origin;
         self
     }
 
+    #[must_use]
     pub fn with_version(mut self, version: &str) -> Self {
         self.version = Some(version.to_string());
         self
     }
 
+    #[must_use]
     pub fn with_license(mut self, license: &str) -> Self {
         self.license = Some(license.to_string());
         self
     }
 
+    #[must_use]
     pub fn with_author(mut self, author: &str) -> Self {
         self.author = Some(author.to_string());
         self

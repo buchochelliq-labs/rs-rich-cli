@@ -25,6 +25,7 @@ use super::{escape_controls, style, Node, Path, Redactor, Value};
 /// assert!(out.contains("│ HOST      │ example.com │ the host │"), "{out}");
 /// assert!(out.contains("│ API_TOKEN │ ********    │"), "{out}");
 /// ```
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct ConfigFileView<'a> {
     node: Cow<'a, Node>,
     redactor: Option<Box<dyn Redactor + 'a>>,

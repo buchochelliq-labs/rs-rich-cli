@@ -204,6 +204,7 @@ type WordsFn = Rc<dyn Fn(&str) -> Option<Matcher>>;
 /// read, whether case counts, and how bare words match. A syntax
 /// (Taskwarrior's, a process list's) is a grammar a plugin builds.
 #[derive(Clone, Default)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct Grammar {
     fields: Vec<Field>,
     aliases: Vec<(String, String)>,

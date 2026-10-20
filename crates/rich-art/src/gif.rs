@@ -54,6 +54,7 @@ struct Frame {
 
 /// An animated GIF, renderable as terminal art.
 #[derive(Clone)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct AnimatedArt {
     frames: Vec<Frame>,
     width: Option<usize>,

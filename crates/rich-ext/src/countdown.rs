@@ -132,6 +132,7 @@ impl Backoff {
     }
 
     /// Multiply the delay by `factor` after each failure (at least 1).
+    #[must_use]
     pub fn factor(mut self, factor: f64) -> Self {
         self.factor = if factor.is_finite() {
             factor.max(1.0)
@@ -142,12 +143,14 @@ impl Backoff {
     }
 
     /// Never wait longer than `max`.
+    #[must_use]
     pub fn max(mut self, max: Duration) -> Self {
         self.max = max;
         self
     }
 
     /// Give up after `attempts` attempts in all (at least 1).
+    #[must_use]
     pub fn attempts(mut self, attempts: u32) -> Self {
         self.max_attempts = Some(attempts.max(1));
         self
@@ -157,6 +160,7 @@ impl Backoff {
     /// (0..=1) of it, drawn from `seed`: the same seed always gives the same
     /// delays, so tests stay deterministic. Seed from the clock or process id
     /// in production so clients spread out.
+    #[must_use]
     pub fn jitter(mut self, fraction: f64, seed: u64) -> Self {
         self.jitter = if fraction.is_finite() {
             fraction.clamp(0.0, 1.0)
@@ -279,6 +283,7 @@ impl CountdownBar {
     }
 
     /// The bar's width in cells (at least 3).
+    #[must_use]
     pub fn width(mut self, width: usize) -> Self {
         self.width = width.max(3);
         self
@@ -345,18 +350,21 @@ impl RetryStatus {
     }
 
     /// Show the attempt as `n/max`.
+    #[must_use]
     pub fn max_attempts(mut self, max: u32) -> Self {
         self.max_attempts = Some(max);
         self
     }
 
     /// Why the attempt failed.
+    #[must_use]
     pub fn reason(mut self, reason: impl Into<String>) -> Self {
         self.reason = Some(reason.into());
         self
     }
 
     /// The next attempt comes after `left`.
+    #[must_use]
     pub fn retrying_in(mut self, left: Duration) -> Self {
         self.remaining = Some(left);
         self
@@ -364,12 +372,14 @@ impl RetryStatus {
 
     /// Also draw a [`CountdownBar`] of the whole `delay` (use with
     /// [`retrying_in`](Self::retrying_in) for the time left).
+    #[must_use]
     pub fn bar(mut self, delay: Duration) -> Self {
         self.total = Some(delay);
         self
     }
 
     /// The bar's width in cells (default 20).
+    #[must_use]
     pub fn bar_width(mut self, width: usize) -> Self {
         self.bar_width = width;
         self
@@ -377,6 +387,7 @@ impl RetryStatus {
 
     /// How the status is marked (default Unicode; ASCII on an ASCII-only
     /// console).
+    #[must_use]
     pub fn symbols(mut self, set: SymbolSet) -> Self {
         self.symbols = set;
         self
@@ -388,6 +399,7 @@ impl RetryStatus {
     }
 
     /// The same status with `left` remaining: the frame for one tick.
+    #[must_use]
     pub fn at(&self, left: Duration) -> Self {
         let mut next = self.clone();
         next.remaining = Some(left);
@@ -484,30 +496,35 @@ impl RateLimit {
     }
 
     /// The quota per window.
+    #[must_use]
     pub fn limit(mut self, limit: u64) -> Self {
         self.limit = Some(limit);
         self
     }
 
     /// How much of the quota is left.
+    #[must_use]
     pub fn remaining(mut self, remaining: u64) -> Self {
         self.remaining = Some(remaining);
         self
     }
 
     /// What is limited, e.g. an API name.
+    #[must_use]
     pub fn scope(mut self, scope: impl Into<String>) -> Self {
         self.scope = Some(scope.into());
         self
     }
 
     /// Also draw a [`CountdownBar`] over a reset window of `window`.
+    #[must_use]
     pub fn bar(mut self, window: Duration) -> Self {
         self.window = Some(window);
         self
     }
 
     /// The bar's width in cells (default 20).
+    #[must_use]
     pub fn bar_width(mut self, width: usize) -> Self {
         self.bar_width = width;
         self
@@ -515,12 +532,14 @@ impl RateLimit {
 
     /// How the status is marked (default Unicode; ASCII on an ASCII-only
     /// console).
+    #[must_use]
     pub fn symbols(mut self, set: SymbolSet) -> Self {
         self.symbols = set;
         self
     }
 
     /// The same limit with `left` until the reset: the frame for one tick.
+    #[must_use]
     pub fn at(&self, left: Duration) -> Self {
         let mut next = self.clone();
         next.resets_in = left;
@@ -641,18 +660,21 @@ impl<'a> CountdownWait<'a> {
     }
 
     /// Report (and check for cancellation) every `tick` (at least 1 ms).
+    #[must_use]
     pub fn tick(mut self, tick: Duration) -> Self {
         self.tick = tick.max(Duration::from_millis(1));
         self
     }
 
     /// Stop early once `token` is cancelled.
+    #[must_use]
     pub fn cancel(mut self, token: CancelToken) -> Self {
         self.cancel = Some(token);
         self
     }
 
     /// Sleep with `sleep` instead of `std::thread::sleep`.
+    #[must_use]
     pub fn sleeper(mut self, sleep: impl FnMut(Duration) + 'a) -> Self {
         self.sleep = Box::new(sleep);
         self

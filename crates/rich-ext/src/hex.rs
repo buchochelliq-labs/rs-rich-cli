@@ -163,6 +163,7 @@ impl ByteClass {
 
 /// A renderable hex dump of some bytes.
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct HexView {
     bytes: Vec<u8>,
     offset: u64,

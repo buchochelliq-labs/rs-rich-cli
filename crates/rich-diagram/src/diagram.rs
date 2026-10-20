@@ -41,6 +41,7 @@ use crate::layout::{draw, DrawError, Drawing};
 /// );
 /// ```
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is laid out or rendered"]
 pub struct Diagram {
     graph: Graph,
     ascii: Option<bool>,

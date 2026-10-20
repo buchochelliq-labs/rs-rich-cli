@@ -184,6 +184,9 @@ impl Tasks {
     /// let screen = app.render_with(&["d"], 40, 1).unwrap();
     /// assert!(screen[0].trim_end().ends_with("failed"), "{screen:?}");
     /// ```
+    // A handle: the change is made through shared state, so the
+    // returned copy is only for chaining and may be dropped.
+    #[allow(clippy::return_self_not_must_use)]
     pub fn on_fail(self, handler: impl FnMut(&Job, &mut Ctx) + 'static) -> Tasks {
         let handler: OnFail = Rc::new(RefCell::new(handler));
         self.on_fail.replace(Some(handler));

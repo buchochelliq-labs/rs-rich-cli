@@ -74,6 +74,7 @@ pub enum GradientDirection {
 /// assert_eq!(plain.render_export(&banner), "one\ntwo\nsix\n");
 /// ```
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct GradientText {
     text: Text,
     stops: Vec<Color>,

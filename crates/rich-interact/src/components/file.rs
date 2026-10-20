@@ -102,6 +102,7 @@ fn hidden_name(name: &OsStr) -> bool {
 
 /// Browse from a root and pick a path. Returns the path, joined to the
 /// root as given (a root of `.` gives paths relative to it).
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct FilePicker {
     root: PathBuf,
     /// The canonical root, when jailed.

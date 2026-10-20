@@ -89,6 +89,7 @@ pub enum ToastStyle {
 
 /// One message to show for a while. See the [module docs](self).
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Notification {
     status: Status,
     title: Option<String>,
@@ -281,12 +282,14 @@ impl Notifications {
 
     /// How long notifications without their own TTL stay; `None` keeps them
     /// until dismissed.
+    #[must_use]
     pub fn default_ttl(mut self, ttl: Option<Duration>) -> Self {
         self.default_ttl = ttl;
         self
     }
 
     /// Show at most `count` (the newest), with a `+N more` line for the rest.
+    #[must_use]
     pub fn max_visible(mut self, count: usize) -> Self {
         self.max_visible = count.max(1);
         self
@@ -294,18 +297,21 @@ impl Notifications {
 
     /// Stack and expire (`true`, the default), or queue every notification
     /// to be printed once and never stack (`false`), for logs and pipes.
+    #[must_use]
     pub fn transient(mut self, transient: bool) -> Self {
         self.transient = transient;
         self
     }
 
     /// Mark every notification with `set`, overriding their own.
+    #[must_use]
     pub fn symbols(mut self, set: SymbolSet) -> Self {
         self.symbols = Some(set);
         self
     }
 
     /// Draw every notification in `toast` style, overriding their own.
+    #[must_use]
     pub fn toast_style(mut self, toast: ToastStyle) -> Self {
         self.toast = Some(toast);
         self

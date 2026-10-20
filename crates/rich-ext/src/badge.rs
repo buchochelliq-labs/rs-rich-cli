@@ -96,6 +96,7 @@ enum Kind {
 
 /// One badge. See the [module docs](self).
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Badge {
     kind: Kind,
     text: String,
@@ -287,6 +288,7 @@ impl AccessibleText for Badge {
 
 /// A row of badges, wrapped between badges to the available width.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Badges {
     badges: Vec<Badge>,
     separator: String,

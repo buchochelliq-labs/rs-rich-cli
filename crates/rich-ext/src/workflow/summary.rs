@@ -51,6 +51,7 @@ use crate::a11y::{AccessibilityPolicy, SymbolSet};
 
 /// One line of a [`CompletionSummary`].
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct SummaryItem {
     /// How it ended.
     pub state: State,
@@ -101,6 +102,7 @@ impl From<&CommandRecord> for SummaryItem {
 
 /// An end-of-command summary. See the [module docs](self).
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct CompletionSummary {
     title: String,
     status: Option<State>,

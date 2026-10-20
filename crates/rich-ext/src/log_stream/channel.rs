@@ -72,6 +72,7 @@ impl<T: From<Record> + Send> ChannelSink<T> {
     /// Call `notify` after each record is sent, or dropped because the
     /// channel was full, on the thread that logged: to wake the reader
     /// (an app's event loop). Keep it quick; it must not log.
+    #[must_use]
     pub fn notify(mut self, notify: impl Fn() + Send + Sync + 'static) -> ChannelSink<T> {
         self.notify = Some(Arc::new(notify));
         self

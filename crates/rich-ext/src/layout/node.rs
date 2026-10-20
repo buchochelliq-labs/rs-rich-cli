@@ -17,6 +17,7 @@ enum Content {
     Leaf(Box<dyn Renderable>),
     Split(Axis, Vec<LayoutNode>),
 }
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct LayoutNode {
     content: Content,
     width: Constraint,

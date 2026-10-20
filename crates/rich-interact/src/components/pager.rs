@@ -55,6 +55,7 @@ pub fn pager_search_keymap() -> Keymap {
 }
 
 /// Pages content; returns when closed.
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct Pager {
     keymap: Keymap,
     search_keymap: Keymap,

@@ -51,6 +51,10 @@
 //! Linux and macOS are supported. Windows builds through ConPTY but needs
 //! `bash` on `PATH` and is experimental.
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 pub mod graphics;
 pub mod keyboard;
 pub mod record;

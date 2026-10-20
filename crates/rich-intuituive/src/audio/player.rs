@@ -21,6 +21,7 @@ type Opener = Arc<dyn Fn(&Path) -> Result<Box<dyn Source>, AudioError> + Send + 
 
 /// How a [`player`] plays.
 #[derive(Clone)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct PlayerOptions {
     opener: Opener,
     gapless: bool,

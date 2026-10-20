@@ -142,30 +142,35 @@ impl CheckResult {
     }
 
     /// The column checked.
+    #[must_use]
     pub fn column(mut self, column: impl Into<String>) -> Self {
         self.column = Some(column.into());
         self
     }
 
     /// What the check found.
+    #[must_use]
     pub fn observed(mut self, observed: impl Into<String>) -> Self {
         self.observed = Some(observed.into());
         self
     }
 
     /// What the check wanted.
+    #[must_use]
     pub fn expected(mut self, expected: impl Into<String>) -> Self {
         self.expected = Some(expected.into());
         self
     }
 
     /// A message.
+    #[must_use]
     pub fn message(mut self, message: impl Into<String>) -> Self {
         self.message = Some(message.into());
         self
     }
 
     /// A sample of the failing rows.
+    #[must_use]
     pub fn failing_rows(mut self, rows: FailingRows) -> Self {
         self.failing_rows = Some(rows);
         self
@@ -217,6 +222,7 @@ impl QualityReport {
     }
 
     /// The most failing rows shown per check (default [`FAILING_ROWS`]).
+    #[must_use]
     pub fn show_rows(mut self, rows: usize) -> Self {
         self.show_rows = rows;
         self

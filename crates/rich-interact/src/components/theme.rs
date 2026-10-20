@@ -82,6 +82,7 @@ impl Renderable for Themed {
 /// assert_eq!(outcome.unwrap().value().as_deref(), Some("night"));
 /// assert!(record.frames[0].contains("Theme preview"));
 /// ```
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct ThemePicker {
     select: Select<String>,
 }

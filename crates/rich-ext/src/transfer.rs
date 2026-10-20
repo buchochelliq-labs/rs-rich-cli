@@ -331,24 +331,28 @@ impl Transfer {
     }
 
     /// Set the total size in bytes.
+    #[must_use]
     pub fn total(mut self, bytes: u64) -> Self {
         self.total = Some(bytes);
         self
     }
 
     /// Show the attempt as `n/max` and stop counting at `max`.
+    #[must_use]
     pub fn max_attempts(mut self, max: u32) -> Self {
         self.max_attempts = Some(max.max(1));
         self
     }
 
     /// Average the rate over `window` (default 5 seconds).
+    #[must_use]
     pub fn rate_window(mut self, window: Duration) -> Self {
         self.meter = RateMeter::new(window);
         self
     }
 
     /// The widest the bar may grow (default 24 cells); it shrinks to fit.
+    #[must_use]
     pub fn bar_width(mut self, width: usize) -> Self {
         self.bar_width = width;
         self
@@ -356,6 +360,7 @@ impl Transfer {
 
     /// How the direction and state are marked (default Unicode; an ASCII-only
     /// console uses ASCII tags regardless).
+    #[must_use]
     pub fn symbols(mut self, set: SymbolSet) -> Self {
         self.symbols = set;
         self
@@ -749,12 +754,14 @@ impl Transfers {
     }
 
     /// Add a totals line under the transfers.
+    #[must_use]
     pub fn summary(mut self, summary: bool) -> Self {
         self.summary = summary;
         self
     }
 
     /// How directions and states are marked, for every transfer in the group.
+    #[must_use]
     pub fn symbols(mut self, set: SymbolSet) -> Self {
         self.symbols = set;
         self
@@ -1010,12 +1017,14 @@ impl<R> TransferReader<R> {
     }
 
     /// Stop with [`cancelled`] once `token` is cancelled.
+    #[must_use]
     pub fn cancel(mut self, token: CancelToken) -> Self {
         self.meter.cancel = Some(token);
         self
     }
 
     /// Read times from `clock` instead of a real clock.
+    #[must_use]
     pub fn clock(mut self, clock: Clock) -> Self {
         self.meter.clock = clock;
         self
@@ -1059,12 +1068,14 @@ impl<W> TransferWriter<W> {
     }
 
     /// Stop with [`cancelled`] once `token` is cancelled.
+    #[must_use]
     pub fn cancel(mut self, token: CancelToken) -> Self {
         self.meter.cancel = Some(token);
         self
     }
 
     /// Read times from `clock` instead of a real clock.
+    #[must_use]
     pub fn clock(mut self, clock: Clock) -> Self {
         self.meter.clock = clock;
         self

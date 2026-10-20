@@ -383,6 +383,9 @@ impl<S: MillerSource> Miller<S> {
 
     /// The columns' shares of the width, `[1, 4, 3]` by default. A share
     /// of 0 hides that column's pane down to its rail.
+    // A handle: the change is made through shared state, so the
+    // returned copy is only for chaining and may be dropped.
+    #[allow(clippy::return_self_not_must_use)]
     pub fn ratios(self, parent: u16, current: u16, preview: u16) -> Self {
         let total = f64::from(parent + current + preview).max(1.0);
         self.outer.set(f64::from(parent) / total);
@@ -919,12 +922,14 @@ impl MillerOptions {
 
     /// Give the current column's list to `hook`:
     /// `.current(|list| list.highlight_layer(HighlightLayer::Under))`.
+    #[must_use]
     pub fn current(mut self, hook: impl Fn(Node) -> Node + 'static) -> MillerOptions {
         self.current = Some(Rc::new(hook));
         self
     }
 
     /// Give the parent column's list to `hook`.
+    #[must_use]
     pub fn parent(mut self, hook: impl Fn(Node) -> Node + 'static) -> MillerOptions {
         self.parent = Some(Rc::new(hook));
         self
@@ -932,6 +937,7 @@ impl MillerOptions {
 
     /// Give the preview column's node (the default view's: a list) to
     /// `hook`.
+    #[must_use]
     pub fn preview(mut self, hook: impl Fn(Node) -> Node + 'static) -> MillerOptions {
         self.preview = Some(Rc::new(hook));
         self

@@ -439,6 +439,7 @@ pub enum LoopMode {
 
 impl LoopMode {
     /// The next mode, in termusic's order (`m`).
+    #[must_use]
     pub fn cycle(self) -> LoopMode {
         match self {
             LoopMode::Random => LoopMode::Playlist,

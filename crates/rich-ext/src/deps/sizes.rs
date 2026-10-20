@@ -199,6 +199,7 @@ pub enum SizeSource {
 
 /// How [`Sizes::from_target_dir`] reads a target directory.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct SizeOptions {
     /// The profile: `dev` (the default, `debug/`), `release`, `test`,
     /// `bench`, or a custom profile's name. Without one, `debug/` is read
@@ -1005,6 +1006,7 @@ impl Sizes {
 
     /// Keep only the entries `keep` accepts (say, the packages a
     /// [`DepGraph`](super::DepGraph) reaches).
+    #[must_use]
     pub fn retain(mut self, keep: impl FnMut(&SizeEntry) -> bool) -> Self {
         self.entries.retain(keep);
         self
@@ -1055,6 +1057,7 @@ impl SizeReport {
 
     /// Show the `limit` largest entries ([`DEFAULT_LIMIT`] by default); the
     /// rest are counted underneath.
+    #[must_use]
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = limit.max(1);
         self

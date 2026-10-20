@@ -218,6 +218,7 @@ impl Renderable for Subtree {
 /// assert_eq!(json_path(&path), "$.server.port");
 /// assert_eq!(record.copies, ["$.server.port"]);
 /// ```
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct DataExplorer {
     tree: TreeSelect<usize>,
     shape: Arc<Shape>,

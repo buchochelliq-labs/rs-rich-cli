@@ -794,12 +794,14 @@ impl SourceRendererFormat {
     }
 
     /// The name people call the format.
+    #[must_use]
     pub fn name(mut self, name: impl Into<String>) -> Self {
         self.name = name.into();
         self
     }
 
     /// The extensions it claims, without the dot.
+    #[must_use]
     pub fn extensions(mut self, extensions: &[&str]) -> Self {
         self.extensions = extensions
             .iter()
@@ -809,6 +811,7 @@ impl SourceRendererFormat {
     }
 
     /// A content sniffer (0 to 1).
+    #[must_use]
     pub fn sniffer(mut self, sniffer: impl Fn(&str) -> f32 + Send + Sync + 'static) -> Self {
         self.sniffer = Some(Box::new(sniffer));
         self

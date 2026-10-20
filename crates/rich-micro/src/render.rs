@@ -98,6 +98,7 @@ impl MicroMeta {
     }
 
     /// The same occurrence's row `row`.
+    #[must_use]
     pub fn with_row(&self, row: usize) -> Self {
         MicroMeta {
             row,
@@ -322,6 +323,7 @@ impl MicroRenderer for FallbackRenderer {
 /// Wraps a renderable and offers every complete placement in its output to
 /// `renderers`, in order. Layout is the inner renderable's: this only
 /// replaces cells with cells of the same width.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct MicroView<R> {
     inner: R,
     registry: Arc<MicroRegistry>,

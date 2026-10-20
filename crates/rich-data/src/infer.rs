@@ -267,12 +267,14 @@ impl Inferrer {
     }
 
     /// Replace the null tokens (compared after trimming whitespace).
+    #[must_use]
     pub fn null_tokens(mut self, tokens: impl IntoIterator<Item = impl Into<String>>) -> Self {
         self.nulls = tokens.into_iter().map(Into::into).collect();
         self
     }
 
     /// Give the column called `column` this type, whatever its cells say.
+    #[must_use]
     pub fn override_type(mut self, column: impl Into<String>, data_type: InferredType) -> Self {
         self.overrides.insert(column.into(), data_type);
         self

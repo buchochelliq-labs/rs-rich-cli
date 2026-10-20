@@ -170,6 +170,7 @@ struct Cache {
 /// [`Value`]s shown through each [`Column`]'s formatter; the frame (title,
 /// caption, box, edges, expand, border style) is set with the same builders
 /// as [`TableData`].
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct StreamingTable<K> {
     columns: Vec<Column>,
     frame: Frame,

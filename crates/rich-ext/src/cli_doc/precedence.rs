@@ -26,10 +26,12 @@ impl Layer {
             ..Default::default()
         }
     }
+    #[must_use]
     pub fn origin(mut self, origin: impl Into<String>) -> Self {
         self.origin = Some(origin.into());
         self
     }
+    #[must_use]
     pub fn value(mut self, key: impl Into<String>, value: impl Into<String>) -> Self {
         self.values.push((key.into(), value.into()));
         self
@@ -72,6 +74,7 @@ impl Precedence {
     }
 
     /// Add a layer above the ones added so far.
+    #[must_use]
     pub fn layer(mut self, layer: Layer) -> Self {
         self.layers.push(layer);
         self

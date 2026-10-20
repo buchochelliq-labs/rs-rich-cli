@@ -184,6 +184,7 @@ impl Parsers {
     }
 
     /// Try `parser` before the built-in ones.
+    #[must_use]
     pub fn with_parser(mut self, parser: impl TraceParser + 'static) -> Self {
         self.parsers.insert(0, Box::new(parser));
         self
@@ -634,6 +635,7 @@ fn clean(text: &str) -> String {
 }
 
 /// Rendering options for a [`StackTrace`].
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct StackTraceView<'a> {
     trace: &'a StackTrace,
     linker: Hyperlinker,

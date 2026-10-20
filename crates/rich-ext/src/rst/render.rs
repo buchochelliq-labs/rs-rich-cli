@@ -32,6 +32,7 @@ use super::parse::{blocks_text, parse, Block, DefinitionItem, Field, Inline};
 /// assert!(out.contains("Some text."));
 /// ```
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct RestructuredText {
     blocks: Vec<Block>,
     code_theme: Option<String>,

@@ -54,6 +54,10 @@
 //! assert!(out.contains("│ api     │ 35.5 │ false │"));
 //! ```
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 pub mod csv;
 #[cfg(feature = "er")]
 pub mod er;
@@ -182,6 +186,7 @@ impl Rows {
     }
 
     /// Attach a schema (one field per column).
+    #[must_use]
     pub fn with_schema(mut self, schema: Schema) -> Self {
         self.schema = Some(schema);
         self

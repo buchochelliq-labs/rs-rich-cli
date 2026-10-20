@@ -14,6 +14,7 @@ use crate::widget::{Canvas, DrawCx, MeasureCx, Widget};
 /// How a [`treemap_with`] lays its tiles out: the smallest tile, a cell's
 /// shape, and the node for the items too small for a tile of their own.
 #[derive(Clone)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct TreemapOptions {
     pub(crate) min: (u16, u16),
     pub(crate) aspect: f64,

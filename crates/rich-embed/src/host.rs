@@ -136,11 +136,13 @@ impl Command {
         }
     }
 
+    #[must_use]
     pub fn arg(mut self, arg: impl Into<OsString>) -> Command {
         self.args.push(arg.into());
         self
     }
 
+    #[must_use]
     pub fn args<I: IntoIterator<Item = S>, S: Into<OsString>>(mut self, args: I) -> Command {
         self.args.extend(args.into_iter().map(Into::into));
         self
@@ -148,12 +150,14 @@ impl Command {
 
     /// Set `key` in the program's environment (it inherits the app's,
     /// with `TERM=xterm-256color`).
+    #[must_use]
     pub fn env(mut self, key: impl Into<OsString>, value: impl Into<OsString>) -> Command {
         self.env.push((key.into(), value.into()));
         self
     }
 
     /// Run in `dir` (default: the app's current directory).
+    #[must_use]
     pub fn cwd(mut self, dir: impl Into<PathBuf>) -> Command {
         self.cwd = Some(dir.into());
         self
@@ -293,6 +297,7 @@ impl LocalPty {
     /// unread, the oldest is dropped. For
     /// a reader that may fall behind and must not lose anything, such as a
     /// browser at the end of a network (rs-rich-web).
+    #[must_use]
     pub fn backpressure(mut self, bytes: usize) -> LocalPty {
         self.backpressure = Some(bytes.max(1));
         self
@@ -587,12 +592,14 @@ impl ReplayHost {
     }
 
     /// Play `bytes` as the program's output once it starts.
+    #[must_use]
     pub fn output(self, bytes: impl AsRef<[u8]>) -> ReplayHost {
         lock(&self.state).script.extend_from_slice(bytes.as_ref());
         self
     }
 
     /// Exit with `status` once the output has played.
+    #[must_use]
     pub fn exit(self, status: ExitStatus) -> ReplayHost {
         lock(&self.state).script_exit = Some(status);
         self

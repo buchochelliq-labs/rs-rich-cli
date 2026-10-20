@@ -74,22 +74,27 @@ impl Matrix {
             ..Matrix::default()
         }
     }
+    #[must_use]
     pub fn widths(mut self, widths: impl Into<Vec<usize>>) -> Self {
         self.widths = widths.into();
         self
     }
+    #[must_use]
     pub fn color(mut self, color: impl Into<Vec<ColorDepth>>) -> Self {
         self.color = color.into();
         self
     }
+    #[must_use]
     pub fn unicode(mut self, unicode: impl Into<Vec<bool>>) -> Self {
         self.unicode = unicode.into();
         self
     }
+    #[must_use]
     pub fn hyperlinks(mut self, on: bool) -> Self {
         self.hyperlinks = on;
         self
     }
+    #[must_use]
     pub fn height(mut self, height: Option<usize>) -> Self {
         self.height = height;
         self
@@ -376,6 +381,7 @@ impl Approvals {
     }
 
     /// Accept every shot as approved while checking (instead of `RICH_APPROVE`).
+    #[must_use]
     pub fn approving(mut self, approve: bool) -> Self {
         self.approve = approve;
         self

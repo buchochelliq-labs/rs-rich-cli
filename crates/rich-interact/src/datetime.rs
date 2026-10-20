@@ -139,12 +139,14 @@ impl Date {
     }
 
     /// The date `days` later (earlier if negative).
+    #[must_use]
     pub fn add_days(self, days: i64) -> Date {
         Date::from_days(self.days() + days)
     }
 
     /// The same day `months` later (earlier if negative), or the last day
     /// of that month if it is shorter.
+    #[must_use]
     pub fn add_months(self, months: i32) -> Date {
         let index = self.year as i64 * 12 + self.month as i64 - 1 + months as i64;
         let year = index.div_euclid(12) as i32;
@@ -154,11 +156,13 @@ impl Date {
     }
 
     /// The first day of its month.
+    #[must_use]
     pub fn first_of_month(self) -> Date {
         Date { day: 1, ..self }
     }
 
     /// The last day of its month.
+    #[must_use]
     pub fn last_of_month(self) -> Date {
         Date {
             day: Date::days_in_month(self.year, self.month),
@@ -429,6 +433,7 @@ impl DateTime {
     /// The moment `seconds` later (earlier if negative), on a clock that
     /// does not change (as UTC's): add to [`to_unix`](Self::to_unix) for
     /// a zone's.
+    #[must_use]
     pub fn add_seconds(self, seconds: i64) -> DateTime {
         DateTime::from_unix(self.to_unix(&Zone::Utc) + seconds, &Zone::Utc)
     }

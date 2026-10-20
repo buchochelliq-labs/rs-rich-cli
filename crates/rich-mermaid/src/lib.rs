@@ -20,6 +20,10 @@
 //! assert!(out.contains("│ A ├─►│ B │"), "{out}");
 //! ```
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 use std::sync::Arc;
 
 use rich::console::{Console, ConsoleOptions};
@@ -63,6 +67,7 @@ pub struct MermaidOptions {
 
 /// A Mermaid diagram.
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Mermaid {
     source: String,
     options: MermaidOptions,

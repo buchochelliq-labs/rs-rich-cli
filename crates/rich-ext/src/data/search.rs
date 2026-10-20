@@ -63,23 +63,28 @@ impl SearchQuery {
     pub fn text(pattern: impl Into<String>) -> Self {
         Self::default().and_text(pattern)
     }
+    #[must_use]
     pub fn and_text(mut self, pattern: impl Into<String>) -> Self {
         self.text = Some(pattern.into());
         self
     }
+    #[must_use]
     pub fn and_key(mut self, pattern: impl Into<String>) -> Self {
         self.key = Some(pattern.into());
         self
     }
+    #[must_use]
     pub fn and_path(mut self, pattern: impl Into<String>) -> Self {
         self.path = Some(pattern.into());
         self
     }
+    #[must_use]
     pub fn and_value(mut self, pattern: impl Into<String>) -> Self {
         self.value = Some(pattern.into());
         self
     }
     /// Ignore case in keys, values and path globs.
+    #[must_use]
     pub fn case_insensitive(mut self, yes: bool) -> Self {
         self.case_insensitive = yes;
         self
@@ -345,11 +350,13 @@ impl<'a> SearchResults<'a> {
         }
     }
     /// Show up to `siblings` other entries of each hit's container.
+    #[must_use]
     pub fn context(mut self, siblings: usize) -> Self {
         self.context = siblings;
         self
     }
     /// Cut values to this many characters (default 80).
+    #[must_use]
     pub fn max_string(mut self, length: usize) -> Self {
         self.max_string = Some(length);
         self

@@ -92,6 +92,7 @@ pub struct Frame {
 /// assert_eq!(fx::rain().length(), None);
 /// ```
 #[derive(Clone)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct Fx(Rc<Kind>);
 
 enum Kind {

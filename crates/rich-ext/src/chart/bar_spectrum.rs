@@ -49,6 +49,7 @@ const MAX_HEIGHT: usize = u16::MAX as usize;
 /// assert_eq!(console.render_export(&mirrored), "    █ █    \n▄ █ █ █ █ ▄\n");
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct BarSpectrum {
     left: Vec<f64>,
     right: Option<Vec<f64>>,

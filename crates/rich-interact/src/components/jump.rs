@@ -81,22 +81,26 @@ impl<T> JumpSource<T> {
     }
 
     /// Typed first, `prefix` searches only this source.
+    #[must_use]
     pub fn prefix(mut self, prefix: char) -> Self {
         self.prefix = Some(prefix);
         self
     }
 
     /// Show at most `results` while every source is searched.
+    #[must_use]
     pub fn limit(mut self, results: usize) -> Self {
         self.limit = results.max(1);
         self
     }
 
+    #[must_use]
     pub fn item(mut self, item: impl Into<Item<T>>) -> Self {
         self.items.push(item.into());
         self
     }
 
+    #[must_use]
     pub fn items<I, V>(mut self, items: I) -> Self
     where
         I: IntoIterator<Item = V>,
@@ -146,6 +150,7 @@ impl<T> JumpIndex<T> {
         JumpIndex::default()
     }
 
+    #[must_use]
     pub fn source(mut self, source: JumpSource<T>) -> Self {
         self.sources.push(source);
         self
@@ -260,6 +265,7 @@ enum Row {
 
 /// One fuzzy box over several sources, the results grouped by source.
 /// Returns a [`Jumped`].
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct Jump<T> {
     prompt: String,
     index: JumpIndex<T>,

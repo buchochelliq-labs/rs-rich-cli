@@ -79,6 +79,7 @@ enum Content<'a> {
 /// text. Lines are written by [`lines_to_buffer`]: styles patch the cells
 /// beneath (a `Block`'s background shows through unstyled text), and each
 /// segment sits at the column rich measured for it.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct RichWidget<'a> {
     content: Content<'a>,
     console: Option<&'a Console>,

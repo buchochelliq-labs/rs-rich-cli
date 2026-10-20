@@ -33,6 +33,7 @@ pub enum SeriesKind {
 
 /// One named set of `(x, y)` points in a [`LineChart`].
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Series {
     name: String,
     points: Vec<(f64, f64)>,
@@ -159,6 +160,7 @@ impl Series {
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct LineChart {
     series: Vec<Series>,
     height: Option<usize>,

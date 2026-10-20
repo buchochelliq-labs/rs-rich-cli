@@ -33,6 +33,7 @@ const UPPER_HALF: &str = "\u{2580}";
 const LOWER_HALF: &str = "\u{2584}";
 
 /// An image drawn with half-block characters.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct BlockArt {
     image: std::sync::Arc<DynamicImage>,
     width: Option<usize>,

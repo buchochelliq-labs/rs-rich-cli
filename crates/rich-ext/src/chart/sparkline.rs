@@ -103,6 +103,7 @@ impl Levels {
 /// assert_eq!(console.render_export(&tall), "   █\n ▁██\n▁███\n");
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Sparkline {
     values: Vec<f64>,
     min: Option<f64>,

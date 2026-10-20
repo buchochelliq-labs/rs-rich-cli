@@ -46,6 +46,7 @@ impl View {
         }
     }
 
+    #[must_use]
     pub fn with_cursor(mut self, row: usize, column: usize) -> View {
         self.cursor = Some((row, column));
         self

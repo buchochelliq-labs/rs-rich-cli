@@ -168,10 +168,12 @@ impl Default for Policy {
 }
 
 impl Policy {
+    #[must_use]
     pub fn ceiling(mut self, level: Fidelity) -> Self {
         self.ceiling = Some(level);
         self
     }
+    #[must_use]
     pub fn floor(mut self, level: Fidelity) -> Self {
         self.floor = Some(level);
         self
@@ -214,11 +216,13 @@ impl<T: Degradable> Adaptive<T> {
         }
     }
     /// Force the selected level instead of deriving it from the console.
+    #[must_use]
     pub fn level(mut self, level: Fidelity) -> Self {
         self.level = Some(level);
         self
     }
     /// Limits applied when the level is derived from the console.
+    #[must_use]
     pub fn policy(mut self, policy: Policy) -> Self {
         self.policy = policy;
         self
@@ -278,10 +282,12 @@ impl<R: Renderable> Degrade<R> {
         }
     }
     /// Force a level instead of deriving it from the console.
+    #[must_use]
     pub fn level(mut self, level: Fidelity) -> Self {
         self.level = Some(level);
         self
     }
+    #[must_use]
     pub fn policy(mut self, policy: Policy) -> Self {
         self.policy = policy;
         self

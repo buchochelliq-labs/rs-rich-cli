@@ -50,6 +50,7 @@ type Handler<S, T> = Box<dyn FnMut(&mut S, &Event) -> Flow<T>>;
 /// view through [`buffer_to_lines`], with its losses (the underline colour;
 /// `Reset` read as unset). Without a handler every event is
 /// [`Flow::Ignored`], so a container can route it elsewhere.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct RatatuiComponent<S, T> {
     state: S,
     draw: Draw<S>,

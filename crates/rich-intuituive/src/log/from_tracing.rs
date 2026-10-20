@@ -71,12 +71,14 @@ impl TracingFeed {
 
     /// How many events may wait for the app before more are dropped
     /// (default [`CAPACITY`](Self::CAPACITY)).
+    #[must_use]
     pub fn capacity(mut self, events: usize) -> TracingFeed {
         self.capacity = events.max(1);
         self
     }
 
     /// Show an event's fields after its message, `key=value` (default on).
+    #[must_use]
     pub fn fields(mut self, on: bool) -> TracingFeed {
         self.fields = on;
         self
@@ -84,6 +86,7 @@ impl TracingFeed {
 
     /// Show the spans an event happened in before its message,
     /// `outer:inner:` (default on).
+    #[must_use]
     pub fn spans(mut self, on: bool) -> TracingFeed {
         self.spans = on;
         self

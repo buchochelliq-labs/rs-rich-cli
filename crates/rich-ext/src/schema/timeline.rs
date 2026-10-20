@@ -70,6 +70,7 @@ impl Version {
 /// );
 /// ```
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct SchemaTimeline {
     versions: Vec<Version>,
     details: bool,

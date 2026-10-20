@@ -217,6 +217,7 @@ impl Keymap {
     }
 
     /// Declare that `keys` do `action`, described as `description`.
+    #[must_use]
     pub fn bind(
         mut self,
         action: impl Into<String>,
@@ -267,6 +268,7 @@ impl Keymap {
     }
 
     /// Builder form of [`rebind`](Self::rebind).
+    #[must_use]
     pub fn rebound(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Keymap {
         self.rebind(action, keys);
         self

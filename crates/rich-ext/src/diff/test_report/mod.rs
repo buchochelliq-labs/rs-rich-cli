@@ -273,16 +273,19 @@ impl TestReport {
         }
     }
     /// List passing and skipped cases after the failures (default off).
+    #[must_use]
     pub fn show_passed(mut self, show: bool) -> Self {
         self.show_passed = show;
         self
     }
     /// Show captured output under failures (default on).
+    #[must_use]
     pub fn show_output(mut self, show: bool) -> Self {
         self.show_output = show;
         self
     }
     /// Context lines in expected/actual diffs (default 3).
+    #[must_use]
     pub fn diff_context(mut self, lines: usize) -> Self {
         self.diff_context = lines;
         self

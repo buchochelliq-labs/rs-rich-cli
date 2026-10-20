@@ -68,6 +68,7 @@ use crate::layout::{draw, DrawError, Drawing};
 
 /// A column of an [`Entity`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is laid out or rendered"]
 pub struct Column {
     pub name: String,
     /// Its type as the source spells it (`int`, `varchar(80)`), if known.
@@ -139,6 +140,7 @@ impl Column {
 
 /// A table (or any entity) and its columns.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is laid out or rendered"]
 pub struct Entity {
     /// What relationships and groups refer to it by, and its header.
     pub name: String,
@@ -197,6 +199,7 @@ impl Cardinality {
 /// A relationship from the `from` entity's columns to the `to` entity's (a
 /// foreign key reads `from` the referencing table `to` the referenced one).
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is laid out or rendered"]
 pub struct Relationship {
     pub from: String,
     /// The `from` entity's columns, in order; empty when not known.
@@ -295,6 +298,7 @@ impl Group {
 
 /// Entities, the relationships between them, and groups of them.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is laid out or rendered"]
 pub struct ErModel {
     pub entities: Vec<Entity>,
     pub relationships: Vec<Relationship>,
@@ -466,6 +470,7 @@ type Drawn = (Vec<String>, Result<Drawing, DrawError>);
 /// Entities flow left to right by default ([`ErDiagram::direction`]):
 /// referencing tables before the tables they reference.
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is laid out or rendered"]
 pub struct ErDiagram {
     model: ErModel,
     direction: Direction,

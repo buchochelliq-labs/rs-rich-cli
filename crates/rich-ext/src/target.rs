@@ -49,6 +49,7 @@ impl RenderTarget {
     }
     /// Give this target's consoles a default code highlighter (see
     /// [`ConsoleCodeHighlighting`]).
+    #[must_use]
     pub fn with_code_highlighting(mut self, highlighting: Option<CodeHighlighting>) -> Self {
         self.code_highlighting = highlighting;
         self

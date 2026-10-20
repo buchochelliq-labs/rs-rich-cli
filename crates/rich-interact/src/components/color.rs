@@ -122,6 +122,7 @@ impl Picked {
 }
 
 /// Pick a colour. Returns it as a string in the [`ColorFormat`] chosen.
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct ColorPicker {
     prompt: String,
     query: String,

@@ -11,6 +11,7 @@ use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, Wi
 
 /// How a [`time_picker_with`] shows and limits the time.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct TimeOptions {
     /// Pick the seconds too.
     pub seconds: bool,
@@ -50,6 +51,7 @@ impl TimeOptions {
 
 /// How a [`datetime_picker`] shows and limits the moment.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct DateTimeOptions {
     /// The day the calendar marks as today.
     pub today: Option<Date>,

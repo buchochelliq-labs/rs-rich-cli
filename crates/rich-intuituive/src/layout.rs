@@ -185,6 +185,7 @@ pub struct StackLayout {
 /// # let _ = (sidebar, status);
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct Track {
     pub(crate) size: Size,
     pub(crate) min: u16,

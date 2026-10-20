@@ -278,6 +278,7 @@ impl Key {
     /// kitty keyboard protocol): it [`matches`](Key::matches) a binding for
     /// itself only. A [`Session`](crate::Session) with the protocol on
     /// reads keys so, and a test marks them to stand for such a terminal.
+    #[must_use]
     pub const fn exact(self) -> Key {
         Key {
             exact: true,
@@ -295,6 +296,7 @@ impl Key {
     /// as Ctrl+Space, and Ctrl+Shift with a letter as Ctrl and the letter.
     /// Any other key arrives as itself. The result is not
     /// [`exact`](Key::exact).
+    #[must_use]
     pub fn legacy(self) -> Key {
         let mut key = Key {
             exact: false,

@@ -163,6 +163,7 @@ impl<T> Feed<T> {
 
 /// A [`fuzzy_list`]'s options: a title, a border, what Esc does, the
 /// prompt.
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct FuzzyOptions {
     title: Option<String>,
     border: Option<Border>,

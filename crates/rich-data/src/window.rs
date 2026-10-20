@@ -74,12 +74,14 @@ impl Default for WindowReader {
 
 impl WindowReader {
     /// Start the window at row `offset` (0-based, default 0).
+    #[must_use]
     pub fn offset(mut self, offset: usize) -> Self {
         self.offset = offset;
         self
     }
 
     /// Keep `rows` rows (default 20, at most `MAX_HEIGHT`).
+    #[must_use]
     pub fn len(mut self, rows: usize) -> Self {
         self.len = rows.min(MAX_HEIGHT);
         self
@@ -87,6 +89,7 @@ impl WindowReader {
 
     /// Also keep the first `rows` rows, for column widths and alignment
     /// (default `DEFAULT_SAMPLE`, at most `MAX_SAMPLE`).
+    #[must_use]
     pub fn sample(mut self, rows: usize) -> Self {
         self.sample = rows.min(MAX_SAMPLE);
         self
@@ -94,6 +97,7 @@ impl WindowReader {
 
     /// Read to the end to count the rows (default on). Off, reading stops one
     /// row past the window, so the position says `of 1,041+`.
+    #[must_use]
     pub fn count(mut self, count: bool) -> Self {
         self.count = count;
         self

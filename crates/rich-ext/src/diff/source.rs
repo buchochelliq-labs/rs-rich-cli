@@ -102,6 +102,7 @@ pub(crate) fn highlight_lines(
 /// assert!(console.render_to_string(&diff).contains("+ fn b() {}"));
 /// ```
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct SourceDiff {
     old: String,
     new: String,

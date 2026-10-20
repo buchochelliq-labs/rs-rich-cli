@@ -48,6 +48,10 @@
 //! [`terminal`] and [`web_view`] are called inside `App::new`'s closure or
 //! a node's.
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 #[cfg(feature = "browsh")]
 pub mod browsh;
 #[cfg(feature = "chrome")]

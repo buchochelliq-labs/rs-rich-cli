@@ -558,6 +558,7 @@ pub enum ConflictLayout {
 /// );
 /// ```
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct ConflictView {
     file: ConflictFile,
     language: Option<String>,

@@ -1127,6 +1127,7 @@ impl TextBuffer {
 /// `thickness` cells of border, then the second pane. Both panes keep at
 /// least their minimum while the total has room for that.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Divider {
     position: Option<usize>,
     dragging: bool,

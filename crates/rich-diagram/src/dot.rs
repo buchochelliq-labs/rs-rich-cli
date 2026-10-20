@@ -1256,6 +1256,7 @@ pub fn parse(source: &str) -> Result<DotGraph, DotError> {
 /// assert!(out.contains("│ a ├─►│ b │"), "{out}");
 /// ```
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is laid out or rendered"]
 pub struct Dot {
     source: String,
     ascii: Option<bool>,

@@ -132,6 +132,7 @@ impl ScrollbarSymbols {
 /// [`scroll`]: crate::scroll
 /// [`list`]: crate::list
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct Scrollbar {
     pub(crate) side: Side,
     pub(crate) show: Show,

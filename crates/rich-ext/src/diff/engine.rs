@@ -528,6 +528,7 @@ impl TextDiff {
         }
     }
     /// Unchanged lines shown around each change (default 3).
+    #[must_use]
     pub fn context(mut self, lines: usize) -> Self {
         self.context = lines;
         self

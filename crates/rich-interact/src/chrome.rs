@@ -253,6 +253,7 @@ impl StatusHandle {
 /// [`Overlays::status_bar`](crate::overlay::Overlays::status_bar), which
 /// also feeds its hints the component's keymap. Change it while it shows
 /// through its [`handle`](Self::handle).
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct StatusBar<M = ()> {
     handle: StatusHandle,
     style: Style,
@@ -564,6 +565,7 @@ type IconFor<'a> = Box<dyn Fn(usize, &str) -> Option<rich::Text> + 'a>;
 /// left, behind `…`. With the mouse on, a click on a crumb goes back to it
 /// (the path is cut after it), or does what [`on_pick`](Self::on_pick)
 /// says. It takes no focus and no keys.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Breadcrumbs<'a, M = ()> {
     crumbs: Crumbs,
     icons: Option<IconFor<'a>>,

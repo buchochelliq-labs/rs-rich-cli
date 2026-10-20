@@ -602,6 +602,7 @@ impl Scaled for (&str, f64, &str) {
 pub trait Stepped: Copy + PartialOrd + 'static {
     /// This moved by `by`: rounded, and kept within the type, for an
     /// integer.
+    #[must_use]
     fn stepped(self, by: f64) -> Self;
 }
 

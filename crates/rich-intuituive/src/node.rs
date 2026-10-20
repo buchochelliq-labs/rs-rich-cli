@@ -171,6 +171,7 @@ pub(crate) struct DropTarget {
 
 /// One node of the tree: a [`Widget`] with a place in the layout, key
 /// bindings and handlers.
+#[must_use = "a `Node` does nothing until it is placed in a tree"]
 pub struct Node {
     pub(crate) id: NodeId,
     pub(crate) size: Size,

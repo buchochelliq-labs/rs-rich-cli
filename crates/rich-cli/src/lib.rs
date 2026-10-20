@@ -30,6 +30,10 @@
 //! public `rich` / `rich-ext` / `rich-art` / `rich-diagram` / `rich-mermaid`
 //! / `rich-interact` / `rich-micro` / `rich-record` / `rich-web` APIs.
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;

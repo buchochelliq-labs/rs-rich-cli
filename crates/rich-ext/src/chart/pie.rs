@@ -27,6 +27,7 @@ const MARKER: char = '■';
 
 /// One slice of a [`PieChart`].
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Slice {
     /// Its name in the legend.
     pub label: String,
@@ -96,6 +97,7 @@ impl Slice {
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct PieChart {
     slices: Vec<Slice>,
     hole: f64,

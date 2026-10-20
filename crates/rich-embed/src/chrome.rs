@@ -188,6 +188,7 @@ impl ChromeEngine {
     }
 
     /// Run the browser at `path`.
+    #[must_use]
     pub fn binary(mut self, path: impl Into<PathBuf>) -> ChromeEngine {
         self.binary = Some(path.into());
         self
@@ -197,6 +198,7 @@ impl ChromeEngine {
     /// whatever they say: `--no-sandbox`, and every other switch that turns
     /// part of it off, is dropped, however it is spelled. So is every
     /// `--remote-debugging-…` switch: the engine says where DevTools goes.
+    #[must_use]
     pub fn args<I: IntoIterator<Item = S>, S: Into<String>>(mut self, args: I) -> ChromeEngine {
         self.args.extend(
             args.into_iter()
@@ -208,6 +210,7 @@ impl ChromeEngine {
 
     /// The CSS pixels one cell of the pane stands for (default 10 x 20):
     /// the page is laid out at the pane's size times this.
+    #[must_use]
     pub fn cell_pixels(mut self, width: u32, height: u32) -> ChromeEngine {
         self.cell = (width.max(1), height.max(1));
         self

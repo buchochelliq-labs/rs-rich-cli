@@ -19,6 +19,7 @@ type Then = Box<dyn FnOnce(&mut Ctx)>;
 
 /// How a [`shell`] prompt runs its command.
 #[derive(Default)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct ShellOptions {
     block: bool,
     hovered: Option<PathBuf>,

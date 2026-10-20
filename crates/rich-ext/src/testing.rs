@@ -160,6 +160,7 @@ impl RenderSnapshot {
     }
     /// This snapshot as schema 2: rows of merged runs from its segments. A
     /// schema 2 snapshot is returned unchanged. `ansi` is kept as captured.
+    #[must_use]
     pub fn upgrade(&self) -> Self {
         if self.rows.is_some() {
             return self.clone();

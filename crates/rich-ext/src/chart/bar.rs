@@ -76,6 +76,7 @@ const DEFAULT_BAR: usize = 40;
 
 /// One bar of a [`BarChart`].
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Bar {
     /// Written before the bar (under it, when vertical).
     pub label: String,
@@ -152,6 +153,7 @@ impl Bar {
 /// A [`stacked`](Self::stacked) group is one bar made of its bars end to
 /// end, labelled with the group's label (see [`BarChart`]'s stacked bars).
 #[derive(Clone, Debug, Default, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct BarGroup {
     label: String,
     bars: Vec<Bar>,
@@ -351,6 +353,7 @@ struct Group {
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct BarChart {
     bars: Vec<Bar>,
     groups: Vec<Group>,
@@ -1387,6 +1390,7 @@ impl BarChart {
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Histogram {
     values: Vec<f64>,
     bins: usize,

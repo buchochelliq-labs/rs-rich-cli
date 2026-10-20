@@ -233,12 +233,14 @@ pub struct Tone {
 
 impl Tone {
     /// Its peak (default 1).
+    #[must_use]
     pub fn amplitude(mut self, amplitude: f64) -> Self {
         self.amplitude = amplitude;
         self
     }
 
     /// Where in its cycle it starts, in radians (default 0).
+    #[must_use]
     pub fn phase(mut self, radians: f64) -> Self {
         self.phase = (radians / (2.0 * PI)).rem_euclid(1.0);
         self
@@ -314,6 +316,7 @@ impl Noise {
     /// Through a one-pole low-pass at `hz` (taken at `rate` samples a
     /// second): fast changes are smoothed away, so the noise wanders.
     /// Filtering takes energy out: the result is quieter than -1 to 1.
+    #[must_use]
     pub fn low_pass(mut self, hz: f64, rate: f64) -> Self {
         let coefficient = if rate > 0.0 {
             1.0 - (-2.0 * PI * hz / rate).exp()
@@ -387,6 +390,7 @@ impl Mix {
     }
 
     /// Add `source`, scaled by `gain`.
+    #[must_use]
     pub fn add(mut self, gain: f64, source: impl Iterator<Item = f64> + Send + 'static) -> Self {
         self.parts.push((gain, Box::new(source)));
         self
@@ -871,6 +875,7 @@ impl Tuner {
     /// How much of the last reading each new one keeps, from 0 (none: each
     /// spectrum read alone) to just under 1 (barely moving); default a
     /// half.
+    #[must_use]
     pub fn smoothing(mut self, keep: f64) -> Self {
         if keep.is_finite() {
             self.smoothing = keep.clamp(0.0, 0.99);
@@ -880,6 +885,7 @@ impl Tuner {
 
     /// The quietest peak heard (a magnitude, as [`spectrum`] gives them);
     /// default 0.001.
+    #[must_use]
     pub fn floor(mut self, level: f64) -> Self {
         if level.is_finite() {
             self.floor = level.max(0.0);
@@ -889,6 +895,7 @@ impl Tuner {
 
     /// How many spectra with nothing heard keep the last reading (default
     /// 4), so a note that dips does not blink out.
+    #[must_use]
     pub fn hold(mut self, spectra: usize) -> Self {
         self.hold = spectra;
         self
