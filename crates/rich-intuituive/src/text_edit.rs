@@ -89,11 +89,11 @@ impl fmt::Debug for Editing {
 /// use intuituive::TextSearch;
 ///
 /// let app = App::new(|| {
-///     let text = signal("one fish\ntwo fish".to_string());
+///     let body = signal("one fish\ntwo fish".to_string());
 ///     let search = TextSearch::new();
 ///     search.set("fish");
 ///     column([
-///         text_area(text).search(search).autofocus(),
+///         text_area(body).search(search).autofocus(),
 ///         text(move || format!("{:?}", search.found())).fixed(1),
 ///     ])
 ///     .on_key("ctrl+n", move |_| search.next())
@@ -229,10 +229,10 @@ impl TextSearch {
 /// let mut driver = app.driver(30, 2);
 /// driver.type_text("at");
 /// driver.settle();
-/// assert_eq!(driver.screen().plain()[1].trim_end(), "Find at              1/3");
+/// assert_eq!(driver.screen().plain()[1].trim_end(), "Find at         1/3");
 /// driver.press("enter");
 /// driver.settle();
-/// assert_eq!(driver.screen().plain()[1].trim_end(), "Find at              2/3");
+/// assert_eq!(driver.screen().plain()[1].trim_end(), "Find at         2/3");
 /// ```
 pub fn search_bar(search: TextSearch) -> Node {
     use crate::node::{label, row, text};
@@ -257,7 +257,7 @@ pub fn search_bar(search: TextSearch) -> Node {
     row([
         label("[search_bar.label]Find[/] ").fixed(5),
         crate::input::input(search.pattern()).on_submit(move |_, _| search.next()),
-        status.fixed(12),
+        status.fixed(14),
     ])
     .on_key("down", move |_| search.next())
     .on_key("up", move |_| search.previous())
@@ -283,6 +283,10 @@ pub(crate) fn apply_search(area: &mut TextArea) -> bool {
     let key = (pattern.clone(), regex, any_case, moves);
     let before = area.options.editing.applied.clone();
     if before.as_ref() == Some(&key) {
+        // Nothing new from the app; the area's own keys may have moved.
+        let buffer = &area.buffer_ref();
+        let error = search.error.get_untracked();
+        search.report(found_in(buffer, &pattern, error.is_some()), error);
         return false;
     }
     let buffer = area.buffer_mut();
@@ -311,17 +315,25 @@ pub(crate) fn apply_search(area: &mut TextArea) -> bool {
         moved = buffer.select_match(forward);
     }
     area.options.editing.applied = Some(key);
-    let buffer = area.buffer_mut();
-    let found = (!pattern.is_empty() && error.is_none()).then(|| {
+    let found = found_in(area.buffer_ref(), &pattern, error.is_some());
+    search.report(found, error);
+    moved
+}
+
+/// Which match is selected (from 1, 0 for none) and how many there are.
+fn found_in(
+    buffer: &rich_interact::edit::Buffer,
+    pattern: &str,
+    failed: bool,
+) -> Option<(usize, usize)> {
+    (!pattern.is_empty() && !failed).then(|| {
         let count = buffer.match_count();
         let at = buffer
             .selection()
             .and_then(|_| buffer.match_index())
             .map_or(0, |i| i + 1);
         (at, count)
-    });
-    search.report(found, error);
-    moved
+    })
 }
 
 /// The editing options of a [`text_area`](crate::text_area) or an
@@ -471,8 +483,8 @@ impl Node {
     /// Validate an [`input`](crate::input): `check` is given the text and
     /// returns why it is wrong, or `None`. While it returns a message the
     /// node is [in error](Self::error_when) (styled `:error`, read out as
-    /// invalid), the message shows under the text (beside it, right
-    /// aligned, when the input is one row high) in the theme's
+    /// invalid), the message shows under the text when the input has two
+    /// rows (`.fixed(2)`), else beside it, right aligned, in the theme's
     /// `input.error` style, and assistive technology is given it.
     ///
     /// ```

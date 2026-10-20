@@ -231,6 +231,10 @@ impl TextArea {
         }
     }
 
+    pub(crate) fn buffer_ref(&self) -> &Buffer {
+        &self.buffer
+    }
+
     pub(crate) fn buffer_mut(&mut self) -> &mut Buffer {
         self.follow.set(true);
         &mut self.buffer
@@ -690,6 +694,11 @@ impl TextArea {
                 Some(text) => {
                     b.push_kill(&text);
                     cx.app().copy(text);
+                    // Copying ends the mark (Emacs's Alt+W); a plain
+                    // selection stays.
+                    if b.marking() {
+                        b.clear_mark();
+                    }
                 }
                 // Nothing selected: Ctrl+C is the app's (it quits).
                 None => return false,

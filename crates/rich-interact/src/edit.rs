@@ -1443,6 +1443,7 @@ impl Buffer {
     /// Left one grapheme; without `select`, a selection collapses to its
     /// start instead.
     pub fn left(&mut self, select: bool) {
+        let select = select || self.marking;
         let to = match self.selection() {
             Some((start, _)) if !select => start,
             _ => self.before(self.caret),
@@ -1453,6 +1454,7 @@ impl Buffer {
     /// Right one grapheme; without `select`, a selection collapses to its
     /// end instead.
     pub fn right(&mut self, select: bool) {
+        let select = select || self.marking;
         let to = match self.selection() {
             Some((_, end)) if !select => end,
             _ => self.after(self.caret),

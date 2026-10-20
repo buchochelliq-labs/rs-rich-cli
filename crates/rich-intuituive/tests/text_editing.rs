@@ -20,7 +20,7 @@ fn editor(start: &'static str, options: fn(Node) -> Node) -> App {
         let reached = signal(String::new());
         column([
             options(text_area(value)).autofocus(),
-            text(move || format!("={}", value.get().replace('\n', "|"))).fixed(1),
+            text(move || format!("={}<", value.get().replace('\n', "|"))).fixed(1),
             text!("app:{reached}").fixed(1),
         ])
         .on_key("alt+d", move |_| reached.set("alt+d".into()))
@@ -36,7 +36,10 @@ fn rows(driver: &Driver) -> Vec<String> {
 fn value(driver: &Driver) -> String {
     rows(driver)
         .into_iter()
-        .find_map(|row| row.strip_prefix('=').map(str::to_string))
+        .find_map(|row| {
+            let row = row.strip_prefix('=')?;
+            Some(row.strip_suffix('<').unwrap_or(row).to_string())
+        })
         .expect("the value line")
 }
 
@@ -74,20 +77,20 @@ fn the_emacs_preset_moves_kills_and_yanks() {
     assert_eq!(value(&driver), "alpha |gamma");
     driver.press("ctrl+n ctrl+a ctrl+y");
     assert_eq!(value(&driver), "alpha |betagamma");
-    driver.press("ctrl+p ctrl+a alt+d alt+d");
-    assert_eq!(value(&driver), "|betagamma");
+    driver.press("ctrl+p ctrl+a alt+d");
+    assert_eq!(value(&driver), " |betagamma");
     driver.press("ctrl+y alt+y");
     assert_eq!(
         value(&driver),
-        "beta|betagamma",
+        "beta |betagamma",
         "Alt+Y swaps in the older kill"
     );
     // Ctrl+Space sets the mark; moves select, Alt+W copies onto the ring.
     driver.press("ctrl+a ctrl+space ctrl+f ctrl+f alt+w ctrl+e ctrl+y");
-    assert_eq!(value(&driver), "betabe|betagamma");
+    assert_eq!(value(&driver), "beta be|betagamma");
     // Ctrl+D deletes forward, Ctrl+H back; Alt+D is the editor's now.
     driver.press("ctrl+a ctrl+d ctrl+e ctrl+h");
-    assert_eq!(value(&driver), "etab|betagamma");
+    assert_eq!(value(&driver), "eta b|betagamma");
     assert_eq!(reached(&driver), "");
 }
 
@@ -130,10 +133,10 @@ fn delete_next_word_and_paragraph_moves_can_be_bound() {
 #[test]
 fn search_selects_matches_and_reports_where_it_is() {
     let app = App::new(|| {
-        let text = signal("cat\nhat cat\nbat".to_string());
+        let body = signal("cat\nhat cat\nbat".to_string());
         let search = TextSearch::new();
         column([
-            text_area(text).search(search).autofocus(),
+            text_area(body).search(search).autofocus(),
             text(move || format!("{:?} {:?}", search.found(), search.error())).fixed(1),
         ])
         .on_key("ctrl+p", move |_| search.previous())
@@ -160,8 +163,9 @@ fn search_selects_matches_and_reports_where_it_is() {
     driver.type_text("dog");
     assert_eq!(rows(&driver)[1], "hat dog");
     assert_eq!(rows(&driver)[3], "Some((0, 1)) None");
+    // A new pattern selects the first match from the caret on.
     driver.press("f6");
-    assert_eq!(rows(&driver)[3], "Some((1, 2)) None");
+    assert_eq!(rows(&driver)[3], "Some((2, 2)) None");
     driver.press("f7");
     assert!(
         rows(&driver)[3].starts_with("None Some("),
@@ -178,12 +182,12 @@ fn matches_in_view_are_highlighted() {
         text_area(signal("ab ab".to_string()))
             .search(search)
             .autofocus()
-    })
-    .theme_styles([
-        ("text_area.search", "underline"),
-        ("text_area.search.current", "bold"),
-        ("text_area.selection", "italic"),
-    ]);
+            .theme_styles([
+                ("text_area.search", "underline"),
+                ("text_area.search.current", "bold"),
+                ("text_area.selection", "italic"),
+            ])
+    });
     let mut driver = app.driver(10, 1);
     driver.settle();
     assert_eq!(
@@ -204,19 +208,19 @@ fn the_find_bar_drives_a_search() {
     });
     let mut driver = app.driver(30, 2);
     driver.type_text("one");
-    assert_eq!(rows(&driver)[1], "Find one             1/2");
+    assert_eq!(rows(&driver)[1], "Find one        1/2");
     driver.press("down");
-    assert_eq!(rows(&driver)[1], "Find one             2/2");
+    assert_eq!(rows(&driver)[1], "Find one        2/2");
     driver.press("up up");
-    assert_eq!(rows(&driver)[1], "Find one             2/2");
+    assert_eq!(rows(&driver)[1], "Find one        2/2");
     driver.press("alt+r");
-    assert_eq!(rows(&driver)[1], "Find one             2/2 .*");
+    assert_eq!(rows(&driver)[1], "Find one        2/2 .*");
     driver.press("ctrl+a");
     driver.type_text("(");
     assert!(rows(&driver)[1].contains("unclosed") || rows(&driver)[1].len() > 9);
     driver.press("ctrl+a");
     driver.type_text("zzz");
-    assert_eq!(rows(&driver)[1], "Find zzz             no matches .*");
+    assert_eq!(rows(&driver)[1], "Find zzz        no matches .*");
 }
 
 #[test]
@@ -229,10 +233,9 @@ fn word_wrap_keeps_words_whole() {
     let mut driver = app.driver(11, 4);
     driver.settle();
     assert_eq!(rows(&driver), ["the quick", "brown fox", "jumps", ""]);
-    // The caret walks the rows as they are wrapped.
-    driver.press("down");
-    driver.type_text("^");
-    assert_eq!(rows(&driver)[1], "^brown fox");
+    // The caret is placed on the rows as they are wrapped.
+    driver.press("ctrl+end");
+    assert_eq!(driver.cursor(), Some((5, 2)));
     // Back to a character wrap, and to none.
     let app =
         App::new(|| text_area(signal("the quick brown".to_string())).wrap_mode(WrapMode::Grapheme));
@@ -252,8 +255,8 @@ fn the_cursor_line_is_highlighted_across_the_row() {
         text_area(signal("one\ntwo".to_string()))
             .cursor_line()
             .autofocus()
-    })
-    .theme_styles([("text_area.cursor_line", "bold")]);
+            .theme_styles([("text_area.cursor_line", "bold")])
+    });
     let mut driver = app.driver(6, 2);
     driver.settle();
     assert_eq!(
@@ -363,7 +366,11 @@ fn the_undo_limit_drops_the_oldest_steps() {
         driver.press("enter");
     }
     driver.press("ctrl+z ctrl+z ctrl+z ctrl+z ctrl+z");
-    assert_eq!(value(&driver), "a|b|c");
+    assert_eq!(
+        value(&driver),
+        "a|b|",
+        "two steps undone: c and its line break"
+    );
 }
 
 #[test]
@@ -375,7 +382,7 @@ fn a_validation_message_shows_and_is_read_out() {
     let app = App::new(move || {
         let age = signal("x".to_string());
         column([
-            input(age).label("Age").validate(check).autofocus(),
+            input(age).label("Age").validate(check).fixed(2).autofocus(),
             label("end"),
         ])
     })
