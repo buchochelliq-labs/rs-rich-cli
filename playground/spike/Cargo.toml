@@ -1,0 +1,34 @@
+# The docs playground spike (docs/design/docs-playground.md): rs-rich
+# rendering in a browser from wasm. Not a workspace member, not published.
+[package]
+name = "rich-playground-spike"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+# Its own workspace, so it never joins the repo's.
+[workspace]
+
+[lib]
+crate-type = ["cdylib"]
+path = "src/lib.rs"
+
+[features]
+default = ["syntax"]
+# syntect and pulldown-cmark in core: `Syntax` and `Markdown`.
+syntax = ["rich/syntax", "rich/markdown"]
+# Tier 3: an intuiTUIve app driven by keys from xterm.js. Pulls rs-rich-ext
+# with its defaults (syntect too), so it is measured on its own.
+app = ["dep:intuituive"]
+
+[dependencies]
+rich = { package = "rs-rich", path = "../../crates/rich", default-features = false }
+intuituive = { package = "rs-rich-intuituive", path = "../../crates/rich-intuituive", optional = true }
+wasm-bindgen = "=0.2.129"
+
+[profile.release]
+opt-level = "z"
+lto = true
+codegen-units = 1
+panic = "abort"
+strip = true

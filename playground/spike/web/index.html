@@ -1,0 +1,61 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>rs-rich playground spike</title>
+<link rel="stylesheet" href="xterm/xterm.css">
+<style>
+  :root { color-scheme: dark; --bg: #15171c; --fg: #e6e6e6; --muted: #9aa0a6; --edge: #2c3038; }
+  body { margin: 0; padding: 16px; background: var(--bg); color: var(--fg);
+         font: 15px/1.5 system-ui, sans-serif; }
+  main { max-width: 980px; margin: 0 auto; }
+  h1 { font-size: 20px; margin: 0 0 4px; }
+  h2 { font-size: 16px; margin: 24px 0 8px; }
+  p.note { color: var(--muted); margin: 0 0 8px; }
+  .row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  @media (max-width: 760px) { .row { grid-template-columns: 1fr; } }
+  textarea { width: 100%; box-sizing: border-box; min-height: 150px; background: #0f1115;
+             color: var(--fg); border: 1px solid var(--edge); border-radius: 6px; padding: 8px;
+             font: 13px/1.4 ui-monospace, monospace; }
+  .term { border: 1px solid var(--edge); border-radius: 6px; padding: 6px; background: #101010; }
+  iframe { width: 100%; height: 190px; border: 1px solid var(--edge); border-radius: 6px; background: #fff; }
+  button { font: inherit; padding: 4px 12px; border-radius: 6px; border: 1px solid var(--edge);
+           background: #232831; color: var(--fg); cursor: pointer; }
+  #status { color: var(--muted); font-size: 13px; }
+</style>
+</head>
+<body>
+<main>
+  <h1>rs-rich in the browser</h1>
+  <p class="note">Everything below runs in this tab, from one wasm module. <span id="status">Loading…</span></p>
+
+  <h2>1. Console markup</h2>
+  <div class="row">
+    <textarea id="markup">[bold magenta]Hello[/], [u]world[/]! :rocket:
+Numbers, URLs and paths are highlighted: 42, 3.14, https://example.org, /usr/bin/env
+[on blue] white on blue [/] [reverse] reversed [/] [strike]struck[/] [italic green]italic[/]</textarea>
+    <div class="term" id="t-markup"></div>
+  </div>
+
+  <h2>2. A Table, as ANSI and as exported HTML</h2>
+  <div class="row">
+    <textarea id="csv">Released,Title,Box Office
+Dec 20 2019,The Rise of Skywalker,$952110690
+May 25 2018,Solo,$393151347
+Dec 15 2017,The Last Jedi,$1332539889</textarea>
+    <div class="term" id="t-table"></div>
+  </div>
+  <p class="note">The same table through <code>Console::export_html</code>, with no terminal:</p>
+  <iframe id="html" title="Exported HTML"></iframe>
+
+  <h2>3. An intuiTUIve app</h2>
+  <p class="note">The tutorial's to-do app, unchanged, on a <code>Driver</code>: keys from xterm.js in, frames out.
+    Type and press Enter to add; Tab to the list; Space ticks; d deletes; Ctrl+Q quits.
+    <button id="start">Start</button></p>
+  <div class="term" id="t-app"></div>
+</main>
+<script src="xterm/xterm.js"></script>
+<script type="module" src="main.js"></script>
+</body>
+</html>
