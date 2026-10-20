@@ -132,6 +132,15 @@ ratatui = { version = "0.30", default-features = false, features = ["crossterm",
 # a published crate need not wait on its dev-dependencies.
 rich-ratatui = { package = "rs-rich-ratatui", path = "../rich-ratatui", features = ["interact"] }
 
+# ratatui's tracing app, with its log in a pane: the `tracing` plugin.
+[[example]]
+name = "tracing"
+required-features = ["tracing"]
+
+[[test]]
+name = "tracing"
+required-features = ["tracing"]
+
 # The Yazi clone is built from the `files` feature's components.
 [[example]]
 name = "files"
