@@ -733,7 +733,7 @@ fn mode_options() -> Vec<ArgSpec> {
             "BACKEND",
             MODE_OPTIONS,
             "How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text \
-             draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc \
+             draws flowcharts, sequence and ER diagrams as text, mmdc uses Mermaid's own CLI (a build with the mmdc \
              feature; `rich mermaid` tries it first there), off leaves fences as code",
         )
         .choices(["text", "mmdc", "off"])
@@ -1841,7 +1841,8 @@ pub(crate) fn spec() -> CommandSpec {
         (
             "mermaid",
             &["mmd"][..],
-            "Draw a Mermaid diagram: flowcharts as text, every type through mmdc where built in \
+            "Draw a Mermaid diagram: flowcharts, sequence and ER diagrams as text, every type \
+             through mmdc where built in \
              (.mmd and .mermaid files are detected)",
         ),
         (

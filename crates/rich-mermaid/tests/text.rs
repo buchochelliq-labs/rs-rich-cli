@@ -112,12 +112,12 @@ fn a_large_graph_is_cropped_with_a_note() {
 
 #[test]
 fn unsupported_diagrams_show_their_source_under_a_note() {
-    let out = render("sequenceDiagram\n  Alice->>Bob: Hi", 60, false);
+    let out = render("classDiagram\n  Animal <|-- Duck", 60, false);
     assert!(
-        out.starts_with("Mermaid: sequence diagrams are not drawn as text"),
+        out.starts_with("Mermaid: class diagrams are not drawn as text"),
         "{out}"
     );
-    assert!(out.contains("Alice->>Bob: Hi"), "{out}");
+    assert!(out.contains("Animal <|-- Duck"), "{out}");
     let out = render("graph TD\n  A -->", 60, false);
     assert!(
         out.starts_with("Mermaid: line 2: an arrow needs a node after it"),
@@ -150,9 +150,18 @@ fn labels_cannot_carry_escape_sequences() {
     assert!(out.contains("red") && out.contains("bold"), "{out}");
     assert!(!out.contains('\u{1b}') && !out.contains('\u{7}'), "{out:?}");
     // Nor can source shown in a fallback code block.
-    let out = render("sequenceDiagram\n  A->>B: \u{1b}]0;title\u{7}", 60, false);
-    assert!(out.contains("A->>B"), "{out}");
+    let out = render("classDiagram\n  A <|-- B: \u{1b}]0;title\u{7}", 60, false);
+    assert!(out.contains("A <|-- B"), "{out}");
     assert!(!out.contains('\u{1b}') && !out.contains('\u{7}'), "{out:?}");
+    // Nor sequence or ER diagrams' text.
+    for source in [
+        "sequenceDiagram\n  participant A as \u{1b}[31mAlice\n  A->>B: \u{1b}[1mbold\u{7}\n  Note over A: \u{1b}[2Jnote",
+        "erDiagram\n  A[\"\u{1b}[31mred\"] ||--o{ B : \"\u{1b}[1mbold\u{7}\"\n  B {\n    string x \"\u{1b}[2J\"\n  }",
+    ] {
+        let out = render(source, 60, false);
+        assert!(out.contains("bold") && !out.contains("Mermaid:"), "{out}");
+        assert!(!out.contains('\u{1b}') && !out.contains('\u{7}'), "{out:?}");
+    }
 }
 
 /// Render `source` on another thread; fail if it takes longer than `limit`

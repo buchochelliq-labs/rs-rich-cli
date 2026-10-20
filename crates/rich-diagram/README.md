@@ -9,7 +9,9 @@ on core `rs-rich` only.
 The layout is the one
 [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) has always drawn
 flowcharts with, lifted out so every diagram source draws the same way.
-Mermaid flowcharts now render through this crate, unchanged.
+Mermaid flowcharts and ER diagrams render through this crate; an edge's
+texts at its ends (`start_label`, `end_label`, DOT's `taillabel` and
+`headlabel`) carry an ER diagram's cardinalities.
 
 ```rust
 use rich::Console;

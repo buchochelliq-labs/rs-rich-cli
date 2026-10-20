@@ -14,6 +14,8 @@ use rich_mermaid::{Backend, Mermaid, MermaidOptions};
 
 const FLOWCHART: &str = "graph LR\n  A --> B";
 const SEQUENCE: &str = "sequenceDiagram\n  Alice->>Bob: Hi";
+/// A kind the text renderer does not draw.
+const CLASS: &str = "classDiagram\n  Animal <|-- Duck";
 
 /// A destination that shows Sixel graphics, so the backend runs even for a
 /// flowchart.
@@ -128,14 +130,20 @@ fn a_missing_mmdc_falls_back_to_text_or_source() {
         out.contains("Mermaid: `/nonexistent/mmdc` is not installed; drawn as text"),
         "{out}"
     );
-    let out = plain(&render(SEQUENCE, missing, true));
+    let out = plain(&render(SEQUENCE, missing.clone(), true));
+    assert!(out.contains("│ Alice │   │ Bob │"), "{out}");
+    assert!(
+        out.contains("Mermaid: `/nonexistent/mmdc` is not installed; drawn as text"),
+        "{out}"
+    );
+    let out = plain(&render(CLASS, missing, true));
     assert!(
         out.starts_with(
-            "Mermaid: `/nonexistent/mmdc` is not installed; sequence diagrams are not drawn as text"
+            "Mermaid: `/nonexistent/mmdc` is not installed; class diagrams are not drawn as text"
         ),
         "{out}"
     );
-    assert!(out.contains("Alice->>Bob: Hi"), "{out}");
+    assert!(out.contains("Animal <|-- Duck"), "{out}");
 }
 
 #[test]
@@ -147,6 +155,20 @@ fn without_graphics_a_flowchart_prefers_text_and_never_runs_mmdc() {
     };
     let out = plain(&render(FLOWCHART, never, false));
     assert!(out.contains("│ A ├─►│ B │"), "{out}");
+    assert!(!out.contains("Mermaid:"), "{out}");
+}
+
+#[test]
+fn without_graphics_sequence_and_er_diagrams_prefer_text_too() {
+    let never = MmdcOptions {
+        program: PathBuf::from("/nonexistent/mmdc"),
+        ..MmdcOptions::default()
+    };
+    let out = plain(&render(SEQUENCE, never.clone(), false));
+    assert!(out.contains("│ Alice │   │ Bob │"), "{out}");
+    assert!(!out.contains("Mermaid:"), "{out}");
+    let out = plain(&render("erDiagram\n  A ||--o{ B : has", never, false));
+    assert!(out.contains("0..N"), "{out}");
     assert!(!out.contains("Mermaid:"), "{out}");
 }
 
@@ -166,7 +188,7 @@ fn a_slow_mmdc_is_stopped_at_the_timeout() {
     assert!(started.elapsed() < Duration::from_secs(10));
     let out = plain(&render(SEQUENCE, slow, true));
     assert!(
-        out.starts_with("Mermaid: mmdc did not finish within 0.3 s;"),
+        out.contains("Mermaid: mmdc did not finish within 0.3 s; drawn as text"),
         "{out}"
     );
 }
@@ -269,8 +291,9 @@ fn real_mmdc_renders_every_diagram_type() {
         assert!(out.contains("\x1bP"), "{name}: no Sixel output");
         assert!(!plain(&out).contains("Mermaid:"), "{name}: {}", plain(&out));
     }
-    // Without Sixel, a sequence diagram is drawn in blocks, with a note.
-    let out = render(SEQUENCE, options, false);
+    // Without Sixel, a class diagram is drawn in blocks, with a note (a
+    // sequence diagram is drawn as text).
+    let out = render(CLASS, options, false);
     let text = plain(&out);
     if let Some(dump) = std::env::var_os("RICH_MERMAID_DUMP") {
         std::fs::write(dump, &out).unwrap();

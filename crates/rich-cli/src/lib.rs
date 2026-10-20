@@ -728,7 +728,8 @@ struct Cli {
 /// `--mermaid-backend`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MermaidBackend {
-    /// Flowcharts as text; other diagrams as source. The default for fences.
+    /// Flowcharts, sequence and ER diagrams as text; other diagrams as
+    /// source. The default for fences.
     Text,
     /// Mermaid's own CLI first (the `mmdc` feature). The default for
     /// `rich mermaid` in a build that has it.
