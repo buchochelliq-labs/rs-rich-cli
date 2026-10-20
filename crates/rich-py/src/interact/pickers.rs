@@ -192,7 +192,7 @@ pub(crate) struct FilePicker {
     parsed: FileMode,
 }
 
-struct FileBuild {
+pub(super) struct FileBuild {
     root: PathBuf,
     prompt: String,
     mode: FileMode,
@@ -283,7 +283,7 @@ impl FilePicker {
 }
 
 impl FilePicker {
-    fn prepare(&self) -> FileBuild {
+    pub(super) fn prepare(&self) -> FileBuild {
         FileBuild {
             root: self.root.clone(),
             prompt: self.prompt.clone(),

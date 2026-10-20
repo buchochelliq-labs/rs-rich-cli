@@ -52,6 +52,33 @@ TOO_WIDE = "graph TD\n" + "\n".join(f"n{i} --> n{i + 1}" for i in range(199)) + 
 )
 TOO_MANY = "graph TD\n" + "\n".join(f"a{i} --> b{i}" for i in range(501))
 
+SEQUENCE = """sequenceDiagram
+  title Checkout
+  actor U as User
+  participant S as Shop
+  autonumber
+  U->>+S: order
+  loop every item
+    S-->>S: reserve
+  end
+  Note over U,S: paid
+  alt in stock
+    S-->>-U: shipped
+  else missing
+    S--xU: refund
+  end
+"""
+
+ER = """erDiagram
+  direction LR
+  CUSTOMER ||--o{ ORDER : places
+  ORDER ||..|{ LINE : contains
+  CUSTOMER {
+    string id PK "customer number"
+    string name
+  }
+"""
+
 
 def case(name, kind, opts, console=PLAIN):
     return {"name": name, "kind": kind, "opts": opts, "console": console, "image": None}
@@ -67,7 +94,10 @@ CASES = [
     case("render_ascii", "mermaid", {"source": "graph LR\n  A --> B --> C", "ascii": True}),
     case("render_subgraph_note", "mermaid", {"source": SUBGRAPH}, COLOR),
     case("render_cropped", "mermaid", {"source": "graph LR\n  Alpha --> Beta --> Gamma --> Delta"}, {"width": 20}),
-    case("render_sequence_source", "mermaid", {"source": "sequenceDiagram\n  Alice->>Bob: Hi"}, COLOR),
+    case("render_class_source", "mermaid", {"source": "classDiagram\n  Animal <|-- Duck"}, COLOR),
+    case("render_sequence", "mermaid", {"source": SEQUENCE}, {"width": 60}),
+    case("render_er", "mermaid", {"source": ER}, {"width": 80}),
+    case("render_sequence_ascii", "mermaid", {"source": "sequenceDiagram\n  A->>A: think", "ascii": True}),
     case("render_syntax_error", "mermaid", {"source": "graph TD\n  A --> "}),
     case("render_empty", "mermaid", {"source": "%% nothing\n"}),
     case("render_no_nodes", "mermaid", {"source": "graph TD\n"}),
@@ -84,6 +114,11 @@ CASES = [
     case("draw_ascii", "mermaid_draw", {"source": "graph LR\n  A((x)) -.-> B", "ascii": True}),
     case("draw_too_wide", "mermaid_draw", {"source": TOO_WIDE}),
     case("clean_label", "clean_label", {"text": "a<br>b &amp; c &lt;d&gt; <br/>e"}),
+    case("sequence_draw", "sequence_draw", {"source": SEQUENCE}),
+    case("sequence_draw_ascii", "sequence_draw", {"source": "sequenceDiagram\n  Alice->>+Bob: Hi\n  Bob-->>-Alice: Hello", "ascii": True}),
+    case("sequence_draw_syntax", "sequence_draw", {"source": "sequenceDiagram\n  A->>B: hi\n  end"}),
+    case("er_draw", "er_draw", {"source": ER}),
+    case("er_draw_ascii", "er_draw", {"source": "erDiagram\n  direction LR\n  A ||..o{ B : has", "ascii": True}),
 ]
 
 
@@ -138,6 +173,15 @@ def run(case: dict) -> dict:
         except mermaid.MermaidLayoutError as error:
             return {"error": str(error), "kind": error.kind}
         return {"lines": diagram.lines, "width": diagram.width}
+    if kind in ("sequence_draw", "er_draw"):
+        draw = mermaid.draw_sequence if kind == "sequence_draw" else mermaid.draw_er
+        try:
+            diagram = draw(opts["source"], ascii=opts.get("ascii", False))
+        except mermaid.MermaidParseError as error:
+            return parse_error(error)
+        except mermaid.MermaidLayoutError as error:
+            return {"error": str(error), "kind": error.kind}
+        return {"lines": diagram.lines, "width": diagram.width, "notes": diagram.notes}
     if kind == "clean_label":
         return {"out": mermaid.mermaid_clean_label(opts["text"])}
     raise AssertionError(kind)
@@ -178,9 +222,18 @@ def test_parse_errors_carry_kind_and_line():
         mermaid.parse("graph TD\n  A --> B\n  B -->")
     assert (raised.value.kind, raised.value.line) == ("syntax", 3)
     with pytest.raises(mermaid.MermaidParseError) as raised:
-        mermaid.parse("sequenceDiagram\n  A->>B: hi")
+        mermaid.parse("classDiagram\n  Animal <|-- Duck")
     assert (raised.value.kind, raised.value.line) == ("unsupported", None)
-    assert str(raised.value) == "sequence diagrams are not drawn as text"
+    assert str(raised.value) == "class diagrams are not drawn as text"
+    # The flowchart parser points sequence and ER diagrams at their own.
+    for source, parser in [("sequenceDiagram\n  A->>B: hi", "parse_sequence"), ("erDiagram\n  A ||--o{ B : x", "parse_er")]:
+        with pytest.raises(mermaid.MermaidParseError) as raised:
+            mermaid.parse_flowchart(source)
+        assert (raised.value.kind, raised.value.line) == ("unsupported", None)
+        assert parser in str(raised.value)
+    with pytest.raises(mermaid.MermaidParseError) as raised:
+        mermaid.parse_sequence("sequenceDiagram\n  A->>B: hi\n  end")
+    assert (raised.value.kind, raised.value.line) == ("syntax", 3)
     assert issubclass(mermaid.MermaidParseError, mermaid.MermaidError)
     assert issubclass(mermaid.MermaidLayoutError, mermaid.MermaidError)
 
@@ -197,6 +250,53 @@ def test_flowchart_objects():
     assert mermaid.draw(chart).lines == mermaid.draw_flowchart("graph LR\n  A[Start] -->|go| B((End))").lines
     with pytest.raises(TypeError):
         mermaid.draw_flowchart(42)
+
+
+def test_sequence_objects():
+    diagram = mermaid.parse(SEQUENCE)
+    assert isinstance(diagram, mermaid.SequenceDiagram) and mermaid.Sequence is mermaid.SequenceDiagram
+    assert repr(diagram) == "<SequenceDiagram participants=2 events=12>"
+    assert diagram.title == "Checkout"
+    assert [repr(p) for p in diagram.participants] == [
+        "SequenceParticipant(id='U', label='User', kind='actor')",
+        "SequenceParticipant(id='S', label='Shop', kind='participant')",
+    ]
+    assert repr(diagram.messages[0]) == (
+        "SequenceMessage(source=0, target=1, text='order', line='solid', start=None, end='arrow', number=1)"
+    )
+    kinds = [event.kind for event in diagram.events]
+    assert kinds == ["message", "activate", "start", "message", "end", "note", "start", "message", "deactivate", "divider", "message", "end"]
+    loop, note = diagram.events[2], diagram.events[5]
+    assert (loop.block, loop.label) == ("loop", "every item")
+    assert (note.placement, note.participants, note.text) == ("over", [0, 1], "paid")
+    assert diagram.events[0].message.text == "order" and diagram.events[1].participants == [1]
+    assert diagram.messages[-1].end == "cross" and diagram.messages[1].line == "dotted"
+    assert mermaid.is_sequence(SEQUENCE) and not mermaid.is_sequence(ER)
+    assert mermaid.draw(diagram).lines == mermaid.draw_sequence(SEQUENCE).lines == EXPECTED["sequence_draw"]["lines"]
+    with pytest.raises(TypeError):
+        mermaid.draw_sequence(mermaid.parse(ER))
+
+
+def test_er_objects():
+    diagram = mermaid.parse(ER)
+    assert isinstance(diagram, mermaid.EntityDiagram)
+    assert repr(diagram) == "<EntityDiagram LR entities=3 relationships=2>"
+    customer = diagram.entities[0]
+    assert repr(customer) == "ErEntity(id='CUSTOMER', label='CUSTOMER', attributes=2)"
+    assert repr(customer.attributes[0]) == (
+        "ErAttribute(data_type='string', name='id', keys=['PK'], comment='customer number')"
+    )
+    places, contains = diagram.relationships
+    assert (places.source_cardinality, places.target_cardinality) == ("exactly_one", "zero_or_more")
+    assert (places.source_notation, places.target_notation, places.identifying) == ("1", "0..N", True)
+    assert (contains.label, contains.identifying, contains.target_cardinality) == ("contains", False, "one_or_more")
+    assert mermaid.is_er(ER) and not mermaid.is_er(SEQUENCE)
+    assert mermaid.draw(ER).lines == mermaid.draw_er(diagram).lines == EXPECTED["er_draw"]["lines"]
+    # A flowchart still parses and draws through the same functions.
+    assert isinstance(mermaid.parse("graph LR\n  A --> B"), mermaid.Flowchart)
+    assert mermaid.draw("graph LR\n  A --> B").lines == EXPECTED["render_lr"]["out"].splitlines()
+    with pytest.raises(TypeError):
+        mermaid.draw(42)
 
 
 def test_limits():
@@ -266,6 +366,22 @@ EXPECTED: dict = {'clean_label': {'out': 'a\nb &amp; c &lt;d&gt;\ne'},
              'width': 12},
  'draw_too_wide': {'error': 'too large to draw: its edges cross 19901 rank positions, more than 5000',
                    'kind': 'too_large'},
+ 'er_draw': {'lines': ['┌───────────────────────────────────┐',
+                       '│             CUSTOMER              │',
+                       '├───────────────────────────────────┤                 ┌───────┐                   '
+                       '┌──────┐',
+                       '│ string  id    PK  customer number ├─1──places──0..N─┤ ORDER ├┄1┄┄contains┄┄1..N┄┤ '
+                       'LINE │',
+                       '│ string  name                      │                 └───────┘                   '
+                       '└──────┘',
+                       '└───────────────────────────────────┘'],
+             'notes': [],
+             'width': 90},
+ 'er_draw_ascii': {'lines': ['+---+              +---+',
+                             '| A +.1..has..0..N.+ B |',
+                             '+---+              +---+'],
+                   'notes': [],
+                   'width': 24},
  'parse_edges': {'out': {'direction': 'LR',
                          'edges': [{'end': 'arrow',
                                     'label': 'label',
@@ -483,6 +599,17 @@ EXPECTED: dict = {'clean_label': {'out': 'a\nb &amp; c &lt;d&gt;\ne'},
                        'line': None},
  'render_ascii': {'out': '+---+  +---+  +---+\n| A +->| B +->| C |\n+---+  +---+  +---+\n'},
  'render_bt': {'out': '┌───┐\n│ C │\n└───┘\n  ▲\n  │\n┌─┴─┐\n│ B │\n└───┘\n  ▲\n  │\n┌─┴─┐\n│ A │\n└───┘\n'},
+ 'render_class_source': {'out': '\x1b[2;3mMermaid: class diagrams are not drawn as text\x1b[0m\n'
+                                '\x1b[48;2;43;48;59m                                                            '
+                                '\x1b[0m\n'
+                                '\x1b[48;2;43;48;59m '
+                                '\x1b[0m\x1b[38;2;192;197;206;48;2;43;48;59mclassDiagram\x1b[0m\x1b[48;2;43;48;59m                                              '
+                                '\x1b[0m\x1b[48;2;43;48;59m \x1b[0m\n'
+                                '\x1b[48;2;43;48;59m \x1b[0m\x1b[38;2;192;197;206;48;2;43;48;59m  Animal '
+                                '<|-- Duck\x1b[0m\x1b[48;2;43;48;59m                                        '
+                                '\x1b[0m\x1b[48;2;43;48;59m \x1b[0m\n'
+                                '\x1b[48;2;43;48;59m                                                            '
+                                '\x1b[0m\n'},
  'render_cropped': {'out': '┌───────┐  ┌──────┐\n'
                            '│ Alpha ├─►│ Beta ├─\n'
                            '└───────┘  └──────┘\n'
@@ -499,6 +626,13 @@ EXPECTED: dict = {'clean_label': {'out': 'a\nb &amp; c &lt;d&gt;\ne'},
                          '                                                            \n'
                          ' %% nothing                                                 \n'
                          '                                                            \n'},
+ 'render_er': {'out': '┌───────────────────────────────────┐\n'
+                      '│             CUSTOMER              │\n'
+                      '├───────────────────────────────────┤                 ┌───────┐\n'
+                      '│ string  id    PK  customer number ├─1──places──0..N─┤ ORDER ├┄1┄┄contains┄┄1..\n'
+                      '│ string  name                      │                 └───────┘\n'
+                      '└───────────────────────────────────┘\n'
+                      'Mermaid: cropped to 80 of 90 columns\n'},
  'render_lr': {'out': '┌───┐  ┌───┐\n│ A ├─►│ B │\n└───┘  └───┘\n'},
  'render_mmdc_fallback': {'out': '┌───┐  ┌───┐\n'
                                  '│ A ├─►│ B │\n'
@@ -509,18 +643,32 @@ EXPECTED: dict = {'clean_label': {'out': 'a\nb &amp; c &lt;d&gt;\ne'},
                             ' graph TD                                                   \n'
                             '                                                            \n'},
  'render_rl': {'out': '┌───┐  ┌───┐  ┌───┐\n│ C │◄─┤ B │◄─┤ A │\n└───┘  └───┘  └───┘\n'},
- 'render_sequence_source': {'out': '\x1b[2;3mMermaid: sequence diagrams are not drawn as text\x1b[0m\n'
-                                   '\x1b[48;2;43;48;59m                                                            '
-                                   '\x1b[0m\n'
-                                   '\x1b[48;2;43;48;59m '
-                                   '\x1b[0m\x1b[38;2;192;197;206;48;2;43;48;59msequenceDiagram\x1b[0m\x1b[48;2;43;48;59m                                           '
-                                   '\x1b[0m\x1b[48;2;43;48;59m \x1b[0m\n'
-                                   '\x1b[48;2;43;48;59m \x1b[0m\x1b[38;2;192;197;206;48;2;43;48;59m  '
-                                   'Alice->>Bob: '
-                                   'Hi\x1b[0m\x1b[48;2;43;48;59m                                         '
-                                   '\x1b[0m\x1b[48;2;43;48;59m \x1b[0m\n'
-                                   '\x1b[48;2;43;48;59m                                                            '
-                                   '\x1b[0m\n'},
+ 'render_sequence': {'out': '              Checkout\n'
+                            '\n'
+                            '  ○         ┌──────┐\n'
+                            ' ─┼─        │ Shop │\n'
+                            ' ╱ ╲        └───┬──┘\n'
+                            'User            │\n'
+                            '  │             │\n'
+                            '  │  1. order   │\n'
+                            '  ├────────────►┃\n'
+                            '  │           ┌─ loop [every item] ─┐\n'
+                            '  │           │ ┃ 2. reserve        │\n'
+                            '  │           │ ┠┄┄┐                │\n'
+                            '  │           │ ┃◄┄┘                │\n'
+                            '  │           └─╂───────────────────┘\n'
+                            '┌─┴─────────────┴─┐\n'
+                            '│      paid       │\n'
+                            '└─┬─────────────┬─┘\n'
+                            '┌─ alt [in stock] ─┐\n'
+                            '│ │ 3. shipped  ┃  │\n'
+                            '│ │◄┄┄┄┄┄┄┄┄┄┄┄┄┨  │\n'
+                            '├┄ [missing] ┄┄┄┼┄┄┤\n'
+                            '│ │  4. refund  │  │\n'
+                            '│ │×┄┄┄┄┄┄┄┄┄┄┄┄┤  │\n'
+                            '└─┼─────────────┼──┘\n'
+                            '  │             │\n'},
+ 'render_sequence_ascii': {'out': '+---+\n| A |\n+-+-+\n  |\n  | think\n  +--+\n  |<-+\n  |\n'},
  'render_shapes': {'out': '    ┌───────┐\n'
                           '    │ rect  │\n'
                           '    └───┬───┘\n'
@@ -624,5 +772,44 @@ EXPECTED: dict = {'clean_label': {'out': 'a\nb &amp; c &lt;d&gt;\ne'},
                              '│ OK  │  │ End │\n'
                              '└─────┘  └─────┘\n'},
  'render_too_wide': {'out': {'len': 16483,
-                             'sha256': '65d71ef9713a15272b6f8bc6a8b6f3af0a82cab1399d42c9c6dcc7f0341acf21'}}}
+                             'sha256': '65d71ef9713a15272b6f8bc6a8b6f3af0a82cab1399d42c9c6dcc7f0341acf21'}},
+ 'sequence_draw': {'lines': ['              Checkout',
+                             '',
+                             '  ○         ┌──────┐',
+                             ' ─┼─        │ Shop │',
+                             ' ╱ ╲        └───┬──┘',
+                             'User            │',
+                             '  │             │',
+                             '  │  1. order   │',
+                             '  ├────────────►┃',
+                             '  │           ┌─ loop [every item] ─┐',
+                             '  │           │ ┃ 2. reserve        │',
+                             '  │           │ ┠┄┄┐                │',
+                             '  │           │ ┃◄┄┘                │',
+                             '  │           └─╂───────────────────┘',
+                             '┌─┴─────────────┴─┐',
+                             '│      paid       │',
+                             '└─┬─────────────┬─┘',
+                             '┌─ alt [in stock] ─┐',
+                             '│ │ 3. shipped  ┃  │',
+                             '│ │◄┄┄┄┄┄┄┄┄┄┄┄┄┨  │',
+                             '├┄ [missing] ┄┄┄┼┄┄┤',
+                             '│ │  4. refund  │  │',
+                             '│ │×┄┄┄┄┄┄┄┄┄┄┄┄┤  │',
+                             '└─┼─────────────┼──┘',
+                             '  │             │'],
+                   'notes': [],
+                   'width': 37},
+ 'sequence_draw_ascii': {'lines': ['+-------+   +-----+',
+                                   '| Alice |   | Bob |',
+                                   '+---+---+   +--+--+',
+                                   '    |          |',
+                                   '    |    Hi    |',
+                                   '    +--------->#',
+                                   '    |  Hello   #',
+                                   '    |<.........#',
+                                   '    |          |'],
+                         'notes': [],
+                         'width': 19},
+ 'sequence_draw_syntax': {'error': 'line 3: `end` without a block to close', 'kind': 'syntax', 'line': 3}}
 # fmt: on

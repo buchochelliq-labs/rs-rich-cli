@@ -134,13 +134,20 @@ pub(crate) struct DiagramEdge {
     end: Option<&'static str>,
     #[pyo3(get)]
     length: usize,
+    /// The text at the edge's start, beside its source (an ER diagram's
+    /// cardinality, DOT's `taillabel`).
+    #[pyo3(get)]
+    start_label: Option<String>,
+    /// The text at its end, beside its target (DOT's `headlabel`).
+    #[pyo3(get)]
+    end_label: Option<String>,
 }
 
 #[pymethods]
 impl DiagramEdge {
     fn __repr__(&self) -> String {
-        format!(
-            "DiagramEdge(source={}, target={}, label={}, stroke={}, start={}, end={}, length={})",
+        let mut repr = format!(
+            "DiagramEdge(source={}, target={}, label={}, stroke={}, start={}, end={}, length={}",
             self.source,
             self.target,
             repr_opt(self.label.as_deref()),
@@ -148,7 +155,18 @@ impl DiagramEdge {
             repr_opt(self.start),
             repr_opt(self.end),
             self.length
-        )
+        );
+        // The end texts only when there are any, so other edges read as
+        // before.
+        if self.start_label.is_some() || self.end_label.is_some() {
+            repr.push_str(&format!(
+                ", start_label={}, end_label={}",
+                repr_opt(self.start_label.as_deref()),
+                repr_opt(self.end_label.as_deref())
+            ));
+        }
+        repr.push(')');
+        repr
     }
 }
 
@@ -162,6 +180,8 @@ impl From<&CoreEdge> for DiagramEdge {
             start: opt_head_name(edge.start),
             end: opt_head_name(edge.end),
             length: edge.length,
+            start_label: edge.start_label.clone(),
+            end_label: edge.end_label.clone(),
         }
     }
 }
@@ -203,8 +223,12 @@ impl Graph {
 
     /// Add an edge from `source` to `target`. `start` and `end` are the
     /// heads at each end (`None`, `"arrow"`, `"circle"` or `"cross"`);
-    /// `min_length` the ranks it spans at least.
-    #[pyo3(signature = (source, target, *, label=None, stroke="solid", start=None, end=Some("arrow"), min_length=1))]
+    /// `min_length` the ranks it spans at least; `start_label` and
+    /// `end_label` texts drawn at its ends, beside `source` and `target`.
+    #[pyo3(signature = (
+        source, target, *, label=None, stroke="solid", start=None, end=Some("arrow"),
+        min_length=1, start_label=None, end_label=None
+    ))]
     #[allow(clippy::too_many_arguments)]
     fn edge<'py>(
         mut slf: PyRefMut<'py, Self>,
@@ -215,6 +239,8 @@ impl Graph {
         start: Option<&str>,
         end: Option<&str>,
         min_length: usize,
+        start_label: Option<String>,
+        end_label: Option<String>,
     ) -> PyResult<PyRefMut<'py, Self>> {
         let stroke = self::stroke(stroke)?;
         let (start, end) = (opt_head(start)?, opt_head(end)?);
@@ -225,7 +251,8 @@ impl Graph {
             .edge(source, target)
             .stroke(stroke)
             .heads(start, end)
-            .min_length(min_length);
+            .min_length(min_length)
+            .end_labels(start_label.as_deref(), end_label.as_deref());
         slf.inner = match label {
             Some(label) => graph.label(label),
             None => graph,
@@ -233,15 +260,29 @@ impl Graph {
         Ok(slf)
     }
 
-    /// An undirected edge: a solid line with no heads.
-    #[pyo3(signature = (source, target, *, label=None))]
+    /// An undirected edge: a solid line with no heads, with `edge`'s
+    /// `label`, `start_label` and `end_label`.
+    #[pyo3(signature = (source, target, *, label=None, start_label=None, end_label=None))]
     fn link<'py>(
         slf: PyRefMut<'py, Self>,
         source: String,
         target: String,
         label: Option<String>,
+        start_label: Option<String>,
+        end_label: Option<String>,
     ) -> PyResult<PyRefMut<'py, Self>> {
-        Graph::edge(slf, source, target, label, "solid", None, None, 1)
+        Graph::edge(
+            slf,
+            source,
+            target,
+            label,
+            "solid",
+            None,
+            None,
+            1,
+            start_label,
+            end_label,
+        )
     }
 
     #[getter]

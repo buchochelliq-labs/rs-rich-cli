@@ -42,10 +42,12 @@ const NUMBERS_COLUMN_DEFAULT_PADDING: usize = 2;
 // The code-highlighter choice
 
 /// The registry of code highlighters: `rich-ext`'s built-ins (`syntect`),
-/// plus `lumis` in a lumis build.
+/// the SQL highlighter (`sql`), plus `lumis` in a lumis build.
 fn registry() -> rich_ext::registry::ExtensionRegistry {
-    #[allow(unused_mut)]
     let mut registry = rich_ext::registry::ExtensionRegistry::with_defaults();
+    registry
+        .add_plugin(&rich_ext::sql::SqlPlugin)
+        .expect("the sql plugin registers cleanly");
     #[cfg(feature = "lumis")]
     registry
         .add_plugin(&rich_lumis::LumisPlugin)
@@ -88,7 +90,7 @@ pub(crate) fn code_highlighter_value(
     }
 }
 
-/// The names of the code highlighters this build has (`syntect`, and
+/// The names of the code highlighters this build has (`syntect`, `sql`, and
 /// `lumis` in a lumis build). Not in Rich.
 #[pyfunction]
 fn code_highlighters() -> Vec<String> {
@@ -447,6 +449,13 @@ impl Syntax {
             highlighter_arg: highlighter,
             background_name: background_color,
         })
+    }
+}
+
+impl Syntax {
+    /// Core's `Syntax` with every option (for the Markdown export).
+    pub(crate) fn core_syntax(&self) -> rich::Syntax {
+        self.spec.full_core()
     }
 }
 

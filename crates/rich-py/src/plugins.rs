@@ -37,7 +37,7 @@ mod types;
 #[allow(unused_imports)] // for other areas (`Syntax`, `Markdown`)
 pub(crate) use adapters::fence_renderer_arg;
 #[allow(unused_imports)] // for other areas (`Syntax`, `Markdown`)
-pub(crate) use code::code_highlighter_arg;
+pub(crate) use code::{code_highlighter_arg, CodeHighlighter};
 #[allow(unused_imports)] // for `console.rs`
 pub(crate) use registry::{installed, Installed};
 

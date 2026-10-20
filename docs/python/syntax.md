@@ -90,10 +90,11 @@ rust
 ## Code highlighters
 
 Rich highlights with Pygments. rs_rich highlights with a Rust *code
-highlighter*: `syntect` in every build, and `lumis` (tree-sitter) in the
-separate lumis build. Choose one per `Syntax` (or `Markdown`) with
-`highlighter=`; `code_highlighters()` lists what the build has, and
-`code_themes(name)` a highlighter's themes.
+highlighter*: `syntect` and `sql` (the SQL highlighter, see
+[below](#sql)) in every build, and `lumis` (tree-sitter) in the separate
+lumis build. Choose one per `Syntax` (or `Markdown`) with `highlighter=`;
+`code_highlighters()` lists what the build has, and `code_themes(name)` a
+highlighter's themes.
 
 ```python
 from rs_rich.syntax import code_highlighters, code_themes
@@ -103,11 +104,62 @@ print([theme for theme in code_themes("syntect") if theme.startswith("ansi")])
 ```
 
 ```text
-['syntect']
+['sql', 'syntect']
 ['ansi_dark', 'ansi_light']
 ```
 
 An unknown name raises `ValueError` listing the known ones.
+
+## SQL
+
+`rs_rich.ext.sql` is a SQL highlighter written in Rust, without syntect: a
+lexer that knows the keywords and types of PostgreSQL, MySQL, SQLite,
+BigQuery, Snowflake, DuckDB, T-SQL and PL/SQL, dollar-quoted and raw
+strings, nested comments, bind parameters, and dbt's Jinja blocks
+(`{{ ref('orders') }}`, `{% if %}`). It answers to `sql`, `postgresql`,
+`duckdb` and the other names in `sql.LANGUAGES`, with three themes:
+`monokai` (the default), `ansi_dark` and `ansi_light`.
+
+Pick it by name, or pass a `SqlHighlighter`; with a fallback, every other
+language goes to that highlighter (`ansi_dark` is a theme both have):
+
+```python
+from rs_rich.console import Console
+from rs_rich.ext import sql
+from rs_rich.markdown import Markdown
+from rs_rich.syntax import Syntax
+
+console = Console()
+console.print(Syntax("SELECT id FROM {{ ref('orders') }} -- dbt", "sql", highlighter="sql"))
+fences = "```sql\nselect 1 as n\n```\n\n```python\nn = 1\n```"
+console.print(Markdown(fences, code_theme="ansi_dark", highlighter=sql.SqlHighlighter("syntect")))
+```
+
+![SQL with a dbt block highlighted by the SQL highlighter, then SQL and Python fences in Markdown](media/syntax-sql.svg)
+
+Without a `Syntax`, `sql.highlight(code, theme)` styles the code into a
+`Text`, and `sql.tokenize(code)` lists its tokens, whitespace included, with
+their kinds (`sql.TOKEN_KINDS`) and positions as `str` indices:
+
+```python
+from rs_rich.ext import sql
+
+for token in sql.tokenize("select n from t -- x"):
+    if token.kind != "whitespace":
+        print(token.kind, repr(token.text), token.start)
+```
+
+```text
+keyword 'select' 0
+name 'n' 7
+keyword 'from' 9
+name 't' 14
+comment '-- x' 16
+```
+
+`sql.token_style(kind, theme)` is the style of a kind, and
+`rs_rich.plugins.SqlPlugin` registers the highlighter as `sql` with a plugin
+host.
 
 ## Themes
 

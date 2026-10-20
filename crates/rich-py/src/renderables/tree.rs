@@ -50,10 +50,19 @@ pub(crate) struct Tree {
 
 impl AsRenderable for Tree {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
+        Ok(Box::new(self.build(py, false)?))
+    }
+}
+
+impl Tree {
+    /// Core's tree. With `gfm` (the Markdown export), a `str` label is a
+    /// markup cell, read as styled text, rather than a string rendered
+    /// later under the print's options.
+    pub(crate) fn build(&self, py: Python<'_>, gfm: bool) -> PyResult<CoreTree> {
         // Flatten depth first from an explicit stack; a tree that contains
         // itself would never finish upstream, so it is refused.
         let highlight = Some(self.highlight);
-        let root = node(py, self, highlight)?;
+        let root = node(py, self, highlight, gfm)?;
         let mut nodes = vec![root.0];
         let mut pending: Vec<(usize, Py<PyList>, usize)> = vec![(0, root.1, 0)];
         let mut path: Vec<usize> = Vec::new();
@@ -77,7 +86,7 @@ impl AsRenderable for Tree {
                 return Err(PyRecursionError::new_err("a Tree cannot contain itself"));
             }
             path.push(key);
-            let (built, grandchildren) = node(py, &child, highlight)?;
+            let (built, grandchildren) = node(py, &child, highlight, gfm)?;
             let index = nodes.len();
             nodes.push(built);
             nodes[parent].children.push(index);
@@ -101,16 +110,24 @@ impl AsRenderable for Tree {
             built[index] = Some(tree);
         }
         let root = built[0].take().expect("the root is built last");
-        Ok(Box::new(root.hide_root(self.hide_root)))
+        Ok(root.hide_root(self.hide_root))
     }
 }
 
 /// One node's own fields, and its children list to walk. Every label
 /// renders with the root's `highlight`, as upstream's do.
-fn node(py: Python<'_>, tree: &Tree, highlight: Option<bool>) -> PyResult<(Node, Py<PyList>)> {
+fn node(
+    py: Python<'_>,
+    tree: &Tree,
+    highlight: Option<bool>,
+    gfm: bool,
+) -> PyResult<(Node, Py<PyList>)> {
     let label = tree.label.bind(py);
     let label = match label.extract::<PyRef<'_, Text>>() {
         Ok(text) => Cell::Text(text.inner.clone()),
+        Err(_) if gfm && label.is_instance_of::<PyString>() => {
+            Cell::Markup(renderable::render_str_markup(label.extract()?)?)
+        }
         Err(_) => {
             // Check now what printing needs: bad markup, a non-renderable.
             renderable::to_renderable(label, highlight)?;
@@ -199,6 +216,31 @@ impl Tree {
         let node = Py::new(py, node)?;
         self.children.bind(py).append(node.clone_ref(py))?;
         Ok(node)
+    }
+
+    /// Add a child whose label is taken literally, never as markup
+    /// (`rich_ext::table::PlainTree::add_plain`): a `str` becomes a `Text`;
+    /// `None` is empty, any other value its `str()`. The keywords are
+    /// `add`'s. Not in Rich.
+    #[pyo3(signature = (label, *, style=None, guide_style=None, expanded=true, highlight=Some(false)))]
+    fn add_plain(
+        &self,
+        py: Python<'_>,
+        label: Option<&Bound<'_, PyAny>>,
+        style: Option<Py<PyAny>>,
+        guide_style: Option<Py<PyAny>>,
+        expanded: bool,
+        highlight: Option<bool>,
+    ) -> PyResult<Py<Tree>> {
+        let text = match label.filter(|label| !label.is_none()) {
+            None => String::new(),
+            Some(label) => match label.cast::<PyString>() {
+                Ok(string) => string.to_cow()?.into_owned(),
+                Err(_) => label.str()?.to_cow()?.into_owned(),
+            },
+        };
+        let label = Py::new(py, Text::from_core(rich::Text::new(text)))?.into_any();
+        self.add(py, label, style, guide_style, expanded, highlight)
     }
 
     #[getter]

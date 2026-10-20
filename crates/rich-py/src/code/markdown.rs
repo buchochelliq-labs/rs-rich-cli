@@ -98,6 +98,13 @@ fn fence_renderer(value: &Bound<'_, PyAny>) -> PyResult<Arc<dyn FenceRenderer>> 
     crate::plugins::fence_renderer_arg(value)
 }
 
+impl Markdown {
+    /// The Markdown source (for the Markdown export).
+    pub(crate) fn source(&self) -> &str {
+        &self.spec.markup
+    }
+}
+
 impl AsRenderable for Markdown {
     fn to_renderable(&self, _py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
         Ok(Box::new(Render(self.spec.clone())))

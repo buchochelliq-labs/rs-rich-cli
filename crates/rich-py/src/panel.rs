@@ -121,6 +121,26 @@ pub(crate) struct Panel {
 
 impl AsRenderable for Panel {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
+        Ok(Box::new(self.build(py, None)?))
+    }
+}
+
+impl Panel {
+    /// The child as Python holds it (`""` once the collector has cleared it).
+    pub(crate) fn child<'py>(&self, py: Python<'py>) -> Bound<'py, PyAny> {
+        match &self.renderable {
+            Some(child) => child.bind(py).clone(),
+            None => PyString::new(py, "").into_any(),
+        }
+    }
+
+    /// Core's panel, around `body` when given (the Markdown export's reading
+    /// of the child) and otherwise the child converted for a print.
+    pub(crate) fn build(
+        &self,
+        py: Python<'_>,
+        body: Option<Box<dyn Renderable>>,
+    ) -> PyResult<CorePanel> {
         // Rich parses a `str` title with `Text.from_markup`, whatever the
         // console's `markup`, and raises on bad markup.
         for title in [&self.title, &self.subtitle] {
@@ -131,12 +151,12 @@ impl AsRenderable for Panel {
             }
         }
         // `__clear__` (garbage collection) is the only thing that empties it.
-        let child = match &self.renderable {
-            Some(child) => child.bind(py).clone(),
-            None => PyString::new(py, "").into_any(),
+        let body = match body {
+            Some(body) => body,
+            // Upstream renders a panel's child with the panel's `highlight`.
+            None => renderable::to_renderable(&self.child(py), Some(self.highlight))?,
         };
-        // Upstream renders a panel's child with the panel's `highlight`.
-        let mut panel = CorePanel::new(renderable::to_renderable(&child, Some(self.highlight))?)
+        let mut panel = CorePanel::new(body)
             .box_set(self.box_set)
             .expand(self.expand)
             .title_align(self.title_align)
@@ -168,7 +188,7 @@ impl AsRenderable for Panel {
         if let Some(width) = check_size_arg("width", self.width)? {
             panel = panel.width(width);
         }
-        Ok(Box::new(panel))
+        Ok(panel)
     }
 }
 

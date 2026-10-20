@@ -20,8 +20,10 @@ mod frame;
 mod inspect;
 mod layout;
 pub(crate) mod log_stream;
+mod markdown_export;
 mod qa;
 mod registry;
+mod sql;
 mod status;
 mod surface;
 pub(crate) mod tables;
@@ -50,5 +52,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     cli_doc::register(m)?;
     qa::register(m)?;
     document::register(m)?;
+    markdown_export::register(m)?;
+    sql::register(m)?;
     Ok(())
 }

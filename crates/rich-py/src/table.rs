@@ -36,6 +36,13 @@ struct ColumnSpec {
     no_wrap: bool,
     vertical: rich::align::VerticalAlign,
     highlight: Option<bool>,
+    /// `header_style`, `footer_style` and `style` as given (a `str` or a
+    /// `Style`), for `Column`'s attributes.
+    given: [Option<StyleType>; 3],
+    /// How many rows the table had when the column was added, and whether
+    /// a row too long for the table added it. Rich gives such a column an
+    /// empty `Text` for each earlier row, and one from `add_column` none.
+    origin: (usize, bool),
 }
 
 enum CellSpec {
@@ -137,6 +144,26 @@ fn check_leading(value: usize, rows: usize) -> PyResult<usize> {
         return Ok(value);
     }
     check_alloc("leading", value, MAX_CONSOLE_HEIGHT)
+}
+
+/// A column's `width`, `min_width`, `max_width` and `ratio`. Larger values
+/// than these make core overflow or take minutes, and no terminal is that
+/// wide anyway.
+fn check_sizes(sizes: [Option<usize>; 4]) -> PyResult<()> {
+    let [width, min_width, max_width, ratio] = sizes;
+    for (name, value, limit) in [
+        ("width", width, MAX_COLUMN_WIDTH),
+        ("min_width", min_width, MAX_COLUMN_WIDTH),
+        ("max_width", max_width, MAX_COLUMN_WIDTH),
+        ("ratio", ratio, MAX_COLUMN_RATIO),
+    ] {
+        if let Some(value) = value.filter(|value| *value > limit) {
+            return Err(PyValueError::new_err(format!(
+                "{name} must be at most {limit}, got {value}"
+            )));
+        }
+    }
+    Ok(())
 }
 
 /// A cell, header or footer: `str` (console markup), `Text`, `None` (empty)
@@ -257,8 +284,134 @@ impl CellSpec {
     }
 }
 
+impl CellSpec {
+    /// The cell as Rich holds it: the `str`, a copy of the `Text`, or the
+    /// object.
+    fn value(&self, py: Python<'_>) -> PyResult<Py<PyAny>> {
+        Ok(match self {
+            CellSpec::Markup(markup) => PyString::new(py, markup).into_any().unbind(),
+            CellSpec::Text(text) => Py::new(py, Text::from_core(text.clone()))?.into_any(),
+            CellSpec::Object(object) => object.clone_ref(py),
+        })
+    }
+
+    /// A plain-text cell: a `Text`, never parsed as markup. `None` is
+    /// empty; anything else is its `str()`.
+    fn plain(value: Option<&Bound<'_, PyAny>>) -> PyResult<CellSpec> {
+        let text = match value.filter(|value| !value.is_none()) {
+            None => String::new(),
+            Some(value) => match value.cast::<PyString>() {
+                Ok(string) => string.to_cow()?.into_owned(),
+                Err(_) => value.str()?.to_cow()?.into_owned(),
+            },
+        };
+        Ok(CellSpec::Text(CoreText::new(text)))
+    }
+}
+
+fn vertical_name(value: rich::align::VerticalAlign) -> &'static str {
+    match value {
+        rich::align::VerticalAlign::Top => "top",
+        rich::align::VerticalAlign::Middle => "middle",
+        rich::align::VerticalAlign::Bottom => "bottom",
+    }
+}
+
+/// `rich.table.Column`: a column of a `Table`, as `Table.columns` lists it.
+/// A read-only copy: the table's columns change through `add_column`.
+#[pyclass(name = "Column", module = "rs_rich.table", frozen)]
+pub(crate) struct Column {
+    #[pyo3(get)]
+    header: Py<PyAny>,
+    #[pyo3(get)]
+    footer: Py<PyAny>,
+    #[pyo3(get)]
+    header_style: Py<PyAny>,
+    #[pyo3(get)]
+    footer_style: Py<PyAny>,
+    #[pyo3(get)]
+    style: Py<PyAny>,
+    #[pyo3(get)]
+    justify: &'static str,
+    #[pyo3(get)]
+    vertical: &'static str,
+    #[pyo3(get)]
+    overflow: &'static str,
+    #[pyo3(get)]
+    width: Option<usize>,
+    #[pyo3(get)]
+    min_width: Option<usize>,
+    #[pyo3(get)]
+    max_width: Option<usize>,
+    #[pyo3(get)]
+    ratio: Option<usize>,
+    #[pyo3(get)]
+    no_wrap: bool,
+    #[pyo3(get)]
+    highlight: bool,
+    index: usize,
+    cells: Vec<Py<PyAny>>,
+}
+
+#[pymethods]
+impl Column {
+    /// The column's cells, one per row (Rich's `Column.cells`).
+    #[getter]
+    fn cells(&self, py: Python<'_>) -> Vec<Py<PyAny>> {
+        self.cells.iter().map(|cell| cell.clone_ref(py)).collect()
+    }
+
+    /// Whether the column has a `ratio` (Rich's `Column.flexible`).
+    #[getter]
+    fn flexible(&self) -> bool {
+        self.ratio.is_some()
+    }
+
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        Ok(format!(
+            "Column(header={}, justify='{}', index={})",
+            self.header.bind(py).repr()?,
+            self.justify,
+            self.index
+        ))
+    }
+
+    fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
+        visit.call(&self.header)?;
+        visit.call(&self.footer)?;
+        for cell in &self.cells {
+            visit.call(cell)?;
+        }
+        Ok(())
+    }
+}
+
+/// `rich.table.Row`: a row's `style` and `end_section`, as `Table.rows`
+/// lists them. A read-only copy.
+#[pyclass(name = "Row", module = "rs_rich.table", frozen)]
+pub(crate) struct Row {
+    #[pyo3(get)]
+    style: Option<Py<PyAny>>,
+    #[pyo3(get)]
+    end_section: bool,
+}
+
+#[pymethods]
+impl Row {
+    fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
+        let style = match &self.style {
+            Some(style) => style.bind(py).repr()?.to_string(),
+            None => "None".to_string(),
+        };
+        Ok(format!(
+            "Row(style={style}, end_section={})",
+            if self.end_section { "True" } else { "False" }
+        ))
+    }
+}
+
 impl Table {
-    fn build(&self, py: Python<'_>) -> PyResult<CoreTable> {
+    pub(crate) fn build(&self, py: Python<'_>) -> PyResult<CoreTable> {
         let mut table = CoreTable::new();
         table = match self.box_set {
             Some(box_set) => table.box_set(box_set),
@@ -523,41 +676,64 @@ impl Table {
         ratio: Option<usize>,
         no_wrap: bool,
     ) -> PyResult<()> {
-        // Larger values than these make core overflow or take minutes, and
-        // no terminal is that wide anyway.
-        for (name, value, limit) in [
-            ("width", width, MAX_COLUMN_WIDTH),
-            ("min_width", min_width, MAX_COLUMN_WIDTH),
-            ("max_width", max_width, MAX_COLUMN_WIDTH),
-            ("ratio", ratio, MAX_COLUMN_RATIO),
-        ] {
-            if let Some(value) = value.filter(|value| *value > limit) {
-                return Err(PyValueError::new_err(format!(
-                    "{name} must be at most {limit}, got {value}"
-                )));
-            }
-        }
+        check_sizes([width, min_width, max_width, ratio])?;
         let spec = |value: Option<&Bound<'_, PyAny>>| match value {
             Some(value) => cell_spec(value),
             None => Ok(CellSpec::Markup(String::new())),
         };
-        self.columns.push(ColumnSpec {
-            header: spec(header)?,
-            footer: spec(footer)?,
-            footer_style: resolved_style(footer_style)?,
-            justify: convert::justify(Some(justify))?,
-            style: resolved_style(style)?,
-            header_style: resolved_style(header_style)?,
-            overflow: convert::overflow(overflow)?,
-            width,
-            min_width,
-            max_width,
-            ratio,
-            no_wrap,
-            vertical: self::vertical(vertical)?,
+        let (header, footer) = (spec(header)?, spec(footer)?);
+        self.push_column(
+            header,
+            footer,
+            [header_style, footer_style, style],
             highlight,
-        });
-        Ok(())
+            justify,
+            vertical,
+            overflow,
+            [width, min_width, max_width, ratio],
+            no_wrap,
+        )
+    }
+
+    /// Add a column whose header and footer are taken literally, never as
+    /// markup (`rich_ext::table::PlainRows::add_plain_column`). The keywords
+    /// are `add_column`'s. Not in Rich.
+    #[pyo3(signature = (
+        header=None, footer=None, *, header_style=None, highlight=None, footer_style=None,
+        style=None, justify="left", vertical="top", overflow="ellipsis", width=None,
+        min_width=None, max_width=None, ratio=None, no_wrap=false
+    ))]
+    #[allow(clippy::too_many_arguments)]
+    fn add_plain_column(
+        &mut self,
+        header: Option<&Bound<'_, PyAny>>,
+        footer: Option<&Bound<'_, PyAny>>,
+        header_style: Option<&Bound<'_, PyAny>>,
+        highlight: Option<bool>,
+        footer_style: Option<&Bound<'_, PyAny>>,
+        style: Option<&Bound<'_, PyAny>>,
+        justify: &str,
+        vertical: &str,
+        overflow: &str,
+        width: Option<usize>,
+        min_width: Option<usize>,
+        max_width: Option<usize>,
+        ratio: Option<usize>,
+        no_wrap: bool,
+    ) -> PyResult<()> {
+        check_sizes([width, min_width, max_width, ratio])?;
+        let (header, footer) = (CellSpec::plain(header)?, CellSpec::plain(footer)?);
+        self.push_column(
+            header,
+            footer,
+            [header_style, footer_style, style],
+            highlight,
+            justify,
+            vertical,
+            overflow,
+            [width, min_width, max_width, ratio],
+            no_wrap,
+        )
     }
 
     /// Add a row of renderables: `str` (console markup), `Text`, `None`
@@ -573,19 +749,50 @@ impl Table {
         for cell in renderables.iter() {
             cells.push(cell_spec(&cell)?);
         }
-        // A row longer than the table adds columns, as Rich's does.
-        while self.columns.len() < cells.len() {
-            self.columns
-                .push(ColumnSpec::new(CellSpec::Markup(String::new())));
-            if let Some(column) = self.columns.last_mut() {
-                column.highlight = Some(self.highlight);
+        self.push_row(cells, style_type(style)?, end_section);
+        Ok(())
+    }
+
+    /// Add a row whose cells are taken literally, never as markup
+    /// (`rich_ext::table::PlainRows::add_plain_row`): each is a `str`,
+    /// `None` (empty) or any value, written as its `str()`. Not in Rich.
+    #[pyo3(signature = (*cells, style=None, end_section=false))]
+    fn add_plain_row(
+        &mut self,
+        cells: &Bound<'_, PyTuple>,
+        style: Option<&Bound<'_, PyAny>>,
+        end_section: bool,
+    ) -> PyResult<()> {
+        let cells = cells
+            .iter()
+            .map(|cell| CellSpec::plain(Some(&cell)))
+            .collect::<PyResult<Vec<_>>>()?;
+        self.push_row(cells, style_type(style)?, end_section);
+        Ok(())
+    }
+
+    /// Add each row of `rows` (an iterable of iterables of cells) with
+    /// `add_plain_row`. Not in Rich.
+    fn add_plain_rows(&mut self, rows: &Bound<'_, PyAny>) -> PyResult<()> {
+        // Every row is read before any is added, so a bad row adds none.
+        let mut read = Vec::new();
+        for row in rows.try_iter()? {
+            let row = row?;
+            if row.is_instance_of::<PyString>() {
+                return Err(PyTypeError::new_err(
+                    "add_plain_rows takes an iterable of rows; a row is an iterable of cells, \
+                     not a str",
+                ));
             }
+            read.push(
+                row.try_iter()?
+                    .map(|cell| CellSpec::plain(Some(&cell?)))
+                    .collect::<PyResult<Vec<_>>>()?,
+            );
         }
-        self.rows.push(RowSpec {
-            cells,
-            style: style_type(style)?,
-            end_section,
-        });
+        for cells in read {
+            self.push_row(cells, None, false);
+        }
         Ok(())
     }
 
@@ -599,6 +806,71 @@ impl Table {
     #[getter]
     fn row_count(&self) -> usize {
         self.rows.len()
+    }
+
+    /// Rich's `Table.columns`: a `Column` per column, with its cells.
+    /// Read-only copies.
+    #[getter]
+    fn columns(&self, py: Python<'_>) -> PyResult<Vec<Column>> {
+        let given = |value: &Option<StyleType>| -> PyResult<Py<PyAny>> {
+            match value {
+                Some(style) => py_style_type(py, style),
+                None => Ok(PyString::new(py, "").into_any().unbind()),
+            }
+        };
+        self.columns
+            .iter()
+            .enumerate()
+            .map(|(index, column)| {
+                let (since, grown) = column.origin;
+                let cells = self
+                    .rows
+                    .iter()
+                    .enumerate()
+                    .filter(|(at, _)| grown || *at >= since)
+                    .map(|(at, row)| match row.cells.get(index) {
+                        Some(cell) => cell.value(py),
+                        None if at < since => {
+                            Ok(Py::new(py, Text::from_core(CoreText::new("")))?.into_any())
+                        }
+                        None => Ok(PyString::new(py, "").into_any().unbind()),
+                    })
+                    .collect::<PyResult<Vec<_>>>()?;
+                Ok(Column {
+                    header: column.header.value(py)?,
+                    footer: column.footer.value(py)?,
+                    header_style: given(&column.given[0])?,
+                    footer_style: given(&column.given[1])?,
+                    style: given(&column.given[2])?,
+                    justify: convert::justify_name(column.justify).unwrap_or("default"),
+                    vertical: vertical_name(column.vertical),
+                    overflow: convert::overflow_name(column.overflow),
+                    width: column.width,
+                    min_width: column.min_width,
+                    max_width: column.max_width,
+                    ratio: column.ratio,
+                    no_wrap: column.no_wrap,
+                    highlight: column.highlight.unwrap_or(self.highlight),
+                    index,
+                    cells,
+                })
+            })
+            .collect()
+    }
+
+    /// Rich's `Table.rows`: a `Row` (its `style` and `end_section`) per
+    /// row. Read-only copies.
+    #[getter]
+    fn rows(&self, py: Python<'_>) -> PyResult<Vec<Row>> {
+        self.rows
+            .iter()
+            .map(|row| {
+                Ok(Row {
+                    style: style_value(py, row.style.as_ref())?,
+                    end_section: row.end_section,
+                })
+            })
+            .collect()
     }
 
     // Rich's attributes. The table is a specification converted when it
@@ -831,11 +1103,70 @@ impl ColumnSpec {
             no_wrap: false,
             vertical: rich::align::VerticalAlign::Top,
             highlight: None,
+            given: [None, None, None],
+            origin: (0, false),
         }
     }
 }
 
 impl Table {
+    /// Add a column: `add_column` and `add_plain_column`.
+    #[allow(clippy::too_many_arguments)]
+    fn push_column(
+        &mut self,
+        header: CellSpec,
+        footer: CellSpec,
+        styles: [Option<&Bound<'_, PyAny>>; 3],
+        highlight: Option<bool>,
+        justify: &str,
+        vertical: &str,
+        overflow: &str,
+        sizes: [Option<usize>; 4],
+        no_wrap: bool,
+    ) -> PyResult<()> {
+        let [header_style, footer_style, style] = styles;
+        let [width, min_width, max_width, ratio] = sizes;
+        self.columns.push(ColumnSpec {
+            header,
+            footer,
+            footer_style: resolved_style(footer_style)?,
+            justify: convert::justify(Some(justify))?,
+            style: resolved_style(style)?,
+            header_style: resolved_style(header_style)?,
+            overflow: convert::overflow(overflow)?,
+            width,
+            min_width,
+            max_width,
+            ratio,
+            no_wrap,
+            vertical: self::vertical(vertical)?,
+            highlight,
+            given: [
+                style_type(header_style)?,
+                style_type(footer_style)?,
+                style_type(style)?,
+            ],
+            origin: (self.rows.len(), false),
+        });
+        Ok(())
+    }
+
+    /// Add a row: `add_row`, `add_plain_row` and `add_plain_rows`. A row
+    /// longer than the table adds columns, as Rich's does.
+    fn push_row(&mut self, cells: Vec<CellSpec>, style: Option<StyleType>, end_section: bool) {
+        while self.columns.len() < cells.len() {
+            let mut column = ColumnSpec::new(CellSpec::Markup(String::new()));
+            column.highlight = Some(self.highlight);
+            column.origin = (self.rows.len(), true);
+            self.columns.push(column);
+        }
+        self.rows.push(RowSpec {
+            cells,
+            style,
+            end_section,
+        });
+    }
+
     /// `add_column(header)` with every default.
     fn add_header(&mut self, header: &Bound<'_, PyAny>) -> PyResult<()> {
         self.columns.push(ColumnSpec::new(cell_spec(header)?));
@@ -844,5 +1175,7 @@ impl Table {
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
-    renderable::add_renderable_class::<Table>(m)
+    renderable::add_renderable_class::<Table>(m)?;
+    m.add_class::<Column>()?;
+    m.add_class::<Row>()
 }

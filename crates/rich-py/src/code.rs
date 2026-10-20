@@ -30,11 +30,12 @@ mod json;
 mod layout;
 mod markdown;
 mod pretty;
+pub(crate) use markdown::Markdown;
 pub(crate) use pretty::Pretty;
 mod syntax;
 mod traceback;
 
-pub(crate) use syntax::code_highlighter_value;
+pub(crate) use syntax::{code_highlighter_value, Syntax};
 
 /// What `Console.print` renders for a container, dataclass or other
 /// object Rich pretty-prints (`rich.pretty.Pretty(obj, highlighter=...)`).

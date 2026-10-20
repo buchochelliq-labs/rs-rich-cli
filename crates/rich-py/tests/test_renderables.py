@@ -465,6 +465,22 @@ def test_refresh_screen_matches_rich():
     assert _refresh_screen("rs_rich") == _refresh_screen("rich")
 
 
+def test_plain_tree_labels_stay_literal():
+    # rich_ext::table::PlainTree's test, with the Python Tree (not in Rich).
+    from rs_rich.console import Console
+    from rs_rich.text import Text
+    from rs_rich.tree import Tree
+
+    tree = Tree(Text("r"))
+    child = tree.add_plain("[red]a")
+    child.add_plain(":smile:", guide_style="bold")
+    tree.add_plain(42)
+    console = Console(file=io.StringIO(), width=30, color_system=None)
+    console.print(tree)
+    assert console.file.getvalue() == "r\n├── [red]a\n│   └── :smile:\n└── 42\n"
+    assert isinstance(child.label, Text) and child.label.plain == "[red]a"
+
+
 def test_a_tree_that_contains_itself_is_refused():
     from rs_rich.console import Console
     from rs_rich.tree import Tree

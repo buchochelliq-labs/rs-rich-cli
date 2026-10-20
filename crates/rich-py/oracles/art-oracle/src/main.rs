@@ -479,6 +479,20 @@ fn run(case: &Value) -> Value {
                 Err(e) => json!({"error": format!("too large to draw: {e}"), "kind": "too_large"}),
             },
         },
+        "sequence_draw" => match rich_mermaid::sequence::parse(ostr(o, "source").unwrap()) {
+            Err(e) => parse_error_json(&e),
+            Ok(diagram) => match rich_mermaid::sequence::draw(&diagram, obool(o, "ascii")) {
+                Ok(d) => json!({"lines": d.lines, "width": d.width, "notes": d.notes}),
+                Err(e) => json!({"error": format!("too large to draw: {e}"), "kind": "too_large"}),
+            },
+        },
+        "er_draw" => match rich_mermaid::er::parse(ostr(o, "source").unwrap()) {
+            Err(e) => parse_error_json(&e),
+            Ok(diagram) => match rich_mermaid::er::draw(&diagram, obool(o, "ascii")) {
+                Ok(d) => json!({"lines": d.lines, "width": d.width, "notes": d.notes}),
+                Err(e) => json!({"error": format!("too large to draw: {e}"), "kind": "too_large"}),
+            },
+        },
         "clean_label" => text_result(rich_mermaid::flowchart::clean_label(
             ostr(o, "text").unwrap(),
         )),

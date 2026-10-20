@@ -1,9 +1,10 @@
 //! `rs_rich.mermaid`: `rich-mermaid` diagrams. `Mermaid` renders a diagram
-//! (flowcharts as text; with an `mmdc` build and `backend="mmdc"`, every
-//! type through Mermaid's CLI); `parse_flowchart` and `draw_flowchart`
-//! expose the parser and the text layout, raising on what they refuse;
-//! `MermaidFences` is the Markdown fence renderer. (`MermaidPlugin` is the
-//! plugins area's, in `plugins/plugin.rs`.)
+//! (flowcharts, sequence and ER diagrams as text; with an `mmdc` build and
+//! `backend="mmdc"`, every type through Mermaid's CLI); `parse_flowchart`,
+//! `parse_sequence` and `parse_er` (and `parse_diagram`, which picks by the
+//! header) expose the parsers, and the `draw_*` functions the text drawings,
+//! raising on what they refuse; `MermaidFences` is the Markdown fence
+//! renderer. (`MermaidPlugin` is the plugins area's, in `plugins/plugin.rs`.)
 
 use std::sync::Arc;
 
@@ -13,7 +14,13 @@ use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyString};
 
 use rich::protocol::{FenceRenderer, Renderable};
+use rich_diagram::Drawing;
+use rich_mermaid::er::{self, Cardinality, EntityDiagram as CoreEntityDiagram};
 use rich_mermaid::flowchart::{Direction, Head, Shape, Stroke};
+use rich_mermaid::sequence::{
+    self, Event as CoreEvent, LineStyle, Message as CoreMessage, NotePlacement, ParticipantKind,
+    Sequence as CoreSequence, Tip,
+};
 use rich_mermaid::{Backend, Flowchart as CoreFlowchart, MermaidOptions, ParseError};
 
 use super::{bad_choice, kinded, normalized, repr_float, repr_opt, repr_str};
@@ -478,7 +485,8 @@ impl Flowchart {
     }
 }
 
-/// A flowchart drawn as text (`rich_mermaid::Diagram`).
+/// A diagram drawn as text (`rich_mermaid::Diagram`): a flowchart, a
+/// sequence diagram or an ER diagram.
 #[pyclass(name = "MermaidDiagram", module = "rs_rich.mermaid", frozen)]
 pub(crate) struct MermaidDiagram {
     #[pyo3(get)]
@@ -486,6 +494,20 @@ pub(crate) struct MermaidDiagram {
     /// The widest line, in cells.
     #[pyo3(get)]
     width: usize,
+    /// What the drawing does not show, one sentence each (`Mermaid` prints
+    /// them under the diagram).
+    #[pyo3(get)]
+    notes: Vec<String>,
+}
+
+impl From<Drawing> for MermaidDiagram {
+    fn from(drawing: Drawing) -> Self {
+        MermaidDiagram {
+            lines: drawing.lines,
+            width: drawing.width,
+            notes: drawing.notes,
+        }
+    }
 }
 
 #[pymethods]
@@ -516,7 +538,42 @@ fn parse_error(py: Python<'_>, error: &ParseError) -> PyErr {
 }
 
 fn parse(py: Python<'_>, source: &str) -> PyResult<CoreFlowchart> {
+    // The flowchart parser names other kinds as not drawn; these two are,
+    // by their own parsers.
+    for (is, what, with) in [
+        (
+            sequence::is_sequence as fn(&str) -> bool,
+            "a sequence diagram",
+            "parse_sequence",
+        ),
+        (er::is_er, "an ER diagram", "parse_er"),
+    ] {
+        if is(source) {
+            return Err(kinded::<MermaidParseError>(
+                py,
+                format!("{what} is not a flowchart; parse it with {with} or parse_diagram"),
+                "unsupported",
+            )
+            .tap_line(py));
+        }
+    }
     rich_mermaid::parse(source).map_err(|error| parse_error(py, &error))
+}
+
+/// `line` is `None` on an error that is not a syntax error.
+trait TapLine {
+    fn tap_line(self, py: Python<'_>) -> Self;
+}
+
+impl TapLine for PyErr {
+    fn tap_line(self, py: Python<'_>) -> Self {
+        let _ = self.value(py).setattr("line", py.None());
+        self
+    }
+}
+
+fn layout_error(py: Python<'_>, reason: String) -> PyErr {
+    kinded::<MermaidLayoutError>(py, format!("too large to draw: {reason}"), "too_large")
 }
 
 /// Parse a Mermaid flowchart (`rich_mermaid::parse`). Raises
@@ -550,13 +607,583 @@ fn draw_flowchart(
     };
     let diagram = py
         .detach(move || rich_mermaid::draw(&chart, ascii))
-        .map_err(|reason| {
-            kinded::<MermaidLayoutError>(py, format!("too large to draw: {reason}"), "too_large")
-        })?;
-    Ok(MermaidDiagram {
-        lines: diagram.lines,
-        width: diagram.width,
+        .map_err(|reason| layout_error(py, reason))?;
+    Ok(diagram.into())
+}
+
+// ---------------------------------------------------------------------------
+// Sequence diagrams
+
+fn tip_name(tip: Tip) -> Option<&'static str> {
+    match tip {
+        Tip::None => None,
+        Tip::Arrow => Some("arrow"),
+        Tip::Cross => Some("cross"),
+        Tip::Open => Some("open"),
+    }
+}
+
+/// A participant or actor of a sequence diagram.
+#[pyclass(name = "SequenceParticipant", module = "rs_rich.mermaid", frozen)]
+pub(crate) struct SequenceParticipant {
+    #[pyo3(get)]
+    id: String,
+    /// The text in its head; `\n` breaks a line.
+    #[pyo3(get)]
+    label: String,
+    /// `"participant"` (a box) or `"actor"` (a stick figure).
+    #[pyo3(get)]
+    kind: &'static str,
+}
+
+#[pymethods]
+impl SequenceParticipant {
+    fn __repr__(&self) -> String {
+        format!(
+            "SequenceParticipant(id={}, label={}, kind={})",
+            repr_str(&self.id),
+            repr_str(&self.label),
+            repr_str(self.kind)
+        )
+    }
+}
+
+/// A message: `source` and `target` index `participants`.
+#[pyclass(name = "SequenceMessage", module = "rs_rich.mermaid", frozen)]
+pub(crate) struct SequenceMessage {
+    #[pyo3(get)]
+    source: usize,
+    #[pyo3(get)]
+    target: usize,
+    #[pyo3(get)]
+    text: String,
+    /// `"solid"` (`->>`) or `"dotted"` (`-->>`).
+    #[pyo3(get)]
+    line: &'static str,
+    /// The tip at the sender (only `<<->>` has one): `None`, `"arrow"`,
+    /// `"cross"` or `"open"`.
+    #[pyo3(get)]
+    start: Option<&'static str>,
+    /// The tip at the receiver.
+    #[pyo3(get)]
+    end: Option<&'static str>,
+    /// Its `autonumber` number, when numbering is on.
+    #[pyo3(get)]
+    number: Option<u64>,
+}
+
+impl From<&CoreMessage> for SequenceMessage {
+    fn from(message: &CoreMessage) -> Self {
+        SequenceMessage {
+            source: message.from,
+            target: message.to,
+            text: message.text.clone(),
+            line: match message.line {
+                LineStyle::Solid => "solid",
+                LineStyle::Dotted => "dotted",
+            },
+            start: tip_name(message.start),
+            end: tip_name(message.end),
+            number: message.number,
+        }
+    }
+}
+
+#[pymethods]
+impl SequenceMessage {
+    fn __repr__(&self) -> String {
+        format!(
+            "SequenceMessage(source={}, target={}, text={}, line={}, start={}, end={}, number={})",
+            self.source,
+            self.target,
+            repr_str(&self.text),
+            repr_str(self.line),
+            repr_opt(self.start),
+            repr_opt(self.end),
+            self.number.map_or("None".to_string(), |n| n.to_string())
+        )
+    }
+}
+
+/// One statement of a sequence diagram, in order. `kind` is `"message"`
+/// (`message`), `"note"` (`placement` `"left_of"`, `"right_of"` or
+/// `"over"`, `participants` the one or two it is beside or spans, `text`),
+/// `"activate"` or `"deactivate"` (`participants`, one), `"start"` (a block
+/// opens: `block` is its keyword, `label` its label), `"divider"` (`else`,
+/// `and` or `option`: `label`) or `"end"`.
+#[pyclass(name = "SequenceEvent", module = "rs_rich.mermaid", frozen)]
+pub(crate) struct SequenceEvent {
+    #[pyo3(get)]
+    kind: &'static str,
+    message: Option<Py<SequenceMessage>>,
+    #[pyo3(get)]
+    placement: Option<&'static str>,
+    #[pyo3(get)]
+    participants: Vec<usize>,
+    #[pyo3(get)]
+    text: Option<String>,
+    #[pyo3(get)]
+    block: Option<&'static str>,
+    #[pyo3(get)]
+    label: Option<String>,
+}
+
+impl SequenceEvent {
+    fn new(py: Python<'_>, event: &CoreEvent) -> PyResult<Self> {
+        let mut out = SequenceEvent {
+            kind: "end",
+            message: None,
+            placement: None,
+            participants: Vec::new(),
+            text: None,
+            block: None,
+            label: None,
+        };
+        match event {
+            CoreEvent::Message(message) => {
+                out.kind = "message";
+                out.message = Some(Py::new(py, SequenceMessage::from(message))?);
+            }
+            CoreEvent::Note { placement, text } => {
+                out.kind = "note";
+                let (name, participants) = match *placement {
+                    NotePlacement::LeftOf(at) => ("left_of", vec![at]),
+                    NotePlacement::RightOf(at) => ("right_of", vec![at]),
+                    NotePlacement::Over(first, last) if first == last => ("over", vec![first]),
+                    NotePlacement::Over(first, last) => ("over", vec![first, last]),
+                };
+                out.placement = Some(name);
+                out.participants = participants;
+                out.text = Some(text.clone());
+            }
+            CoreEvent::Activate(at) => {
+                out.kind = "activate";
+                out.participants = vec![*at];
+            }
+            CoreEvent::Deactivate(at) => {
+                out.kind = "deactivate";
+                out.participants = vec![*at];
+            }
+            CoreEvent::Start { kind, label } => {
+                out.kind = "start";
+                out.block = Some(kind.keyword());
+                out.label = Some(label.clone());
+            }
+            CoreEvent::Divider { label } => {
+                out.kind = "divider";
+                out.label = Some(label.clone());
+            }
+            CoreEvent::End => {}
+        }
+        Ok(out)
+    }
+}
+
+#[pymethods]
+impl SequenceEvent {
+    /// The message, for a `"message"` event.
+    #[getter]
+    fn message(&self, py: Python<'_>) -> Option<Py<SequenceMessage>> {
+        self.message.as_ref().map(|m| m.clone_ref(py))
+    }
+
+    fn __repr__(&self) -> String {
+        format!("<SequenceEvent {}>", self.kind)
+    }
+}
+
+/// A parsed sequence diagram (`rich_mermaid::sequence::Sequence`).
+#[pyclass(name = "SequenceDiagram", module = "rs_rich.mermaid", frozen)]
+pub(crate) struct SequenceDiagram {
+    inner: CoreSequence,
+}
+
+#[pymethods]
+impl SequenceDiagram {
+    #[getter]
+    fn title(&self) -> Option<String> {
+        self.inner.title.clone()
+    }
+
+    /// Left to right, in order of first appearance.
+    #[getter]
+    fn participants(&self) -> Vec<SequenceParticipant> {
+        self.inner
+            .participants
+            .iter()
+            .map(|participant| SequenceParticipant {
+                id: participant.id.clone(),
+                label: participant.label.clone(),
+                kind: match participant.kind {
+                    ParticipantKind::Participant => "participant",
+                    ParticipantKind::Actor => "actor",
+                },
+            })
+            .collect()
+    }
+
+    /// Every statement that draws something, in order.
+    #[getter]
+    fn events(&self, py: Python<'_>) -> PyResult<Vec<SequenceEvent>> {
+        self.inner
+            .events
+            .iter()
+            .map(|event| SequenceEvent::new(py, event))
+            .collect()
+    }
+
+    /// The messages alone, in order.
+    #[getter]
+    fn messages(&self) -> Vec<SequenceMessage> {
+        self.inner
+            .events
+            .iter()
+            .filter_map(|event| match event {
+                CoreEvent::Message(message) => Some(SequenceMessage::from(message)),
+                _ => None,
+            })
+            .collect()
+    }
+
+    /// What the text renderer simplified (shown under the diagram).
+    #[getter]
+    fn notes(&self) -> Vec<String> {
+        self.inner.notes.clone()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<SequenceDiagram participants={} events={}>",
+            self.inner.participants.len(),
+            self.inner.events.len()
+        )
+    }
+}
+
+fn sequence_of(py: Python<'_>, source: &str) -> PyResult<CoreSequence> {
+    sequence::parse(source).map_err(|error| parse_error(py, &error))
+}
+
+/// Parse a Mermaid sequence diagram (`rich_mermaid::sequence::parse`).
+/// Raises `MermaidParseError` as `parse_flowchart` does.
+#[pyfunction]
+fn parse_sequence(py: Python<'_>, source: &str) -> PyResult<SequenceDiagram> {
+    Ok(SequenceDiagram {
+        inner: sequence_of(py, source)?,
     })
+}
+
+/// Draw a sequence diagram as text (`rich_mermaid::sequence::draw`): a
+/// `SequenceDiagram`, or source to parse first. Raises `MermaidLayoutError`
+/// when it is too large to draw.
+#[pyfunction]
+#[pyo3(signature = (diagram, ascii=false))]
+fn draw_sequence(
+    py: Python<'_>,
+    diagram: &Bound<'_, PyAny>,
+    ascii: bool,
+) -> PyResult<MermaidDiagram> {
+    let diagram = if let Ok(source) = diagram.cast::<PyString>() {
+        sequence_of(py, source.to_cow()?.as_ref())?
+    } else if let Ok(diagram) = diagram.cast::<SequenceDiagram>() {
+        diagram.get().inner.clone()
+    } else {
+        return Err(PyTypeError::new_err(
+            "expected a SequenceDiagram or Mermaid source",
+        ));
+    };
+    py.detach(move || sequence::draw(&diagram, ascii))
+        .map(MermaidDiagram::from)
+        .map_err(|reason| layout_error(py, reason))
+}
+
+/// Whether `source` is a sequence diagram (its first statement is
+/// `sequenceDiagram`).
+#[pyfunction]
+fn mermaid_is_sequence(source: &str) -> bool {
+    sequence::is_sequence(source)
+}
+
+// ---------------------------------------------------------------------------
+// ER diagrams
+
+fn cardinality_name(cardinality: Cardinality) -> &'static str {
+    match cardinality {
+        Cardinality::ExactlyOne => "exactly_one",
+        Cardinality::ZeroOrOne => "zero_or_one",
+        Cardinality::ZeroOrMore => "zero_or_more",
+        Cardinality::OneOrMore => "one_or_more",
+    }
+}
+
+/// An entity's attribute: `type name [keys] ["comment"]`.
+#[pyclass(name = "ErAttribute", module = "rs_rich.mermaid", frozen)]
+pub(crate) struct ErAttribute {
+    #[pyo3(get)]
+    data_type: String,
+    #[pyo3(get)]
+    name: String,
+    /// `"PK"`, `"FK"` and `"UK"`, as written.
+    #[pyo3(get)]
+    keys: Vec<&'static str>,
+    #[pyo3(get)]
+    comment: Option<String>,
+}
+
+#[pymethods]
+impl ErAttribute {
+    fn __repr__(&self) -> String {
+        format!(
+            "ErAttribute(data_type={}, name={}, keys=[{}], comment={})",
+            repr_str(&self.data_type),
+            repr_str(&self.name),
+            self.keys
+                .iter()
+                .map(|key| repr_str(key))
+                .collect::<Vec<_>>()
+                .join(", "),
+            repr_opt(self.comment.as_deref())
+        )
+    }
+}
+
+/// An entity and its attributes.
+#[pyclass(name = "ErEntity", module = "rs_rich.mermaid", frozen)]
+pub(crate) struct ErEntity {
+    #[pyo3(get)]
+    id: String,
+    /// Its header: the alias, or the id.
+    #[pyo3(get)]
+    label: String,
+    attributes: Vec<Py<ErAttribute>>,
+}
+
+#[pymethods]
+impl ErEntity {
+    #[getter]
+    fn attributes(&self, py: Python<'_>) -> Vec<Py<ErAttribute>> {
+        self.attributes.iter().map(|a| a.clone_ref(py)).collect()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "ErEntity(id={}, label={}, attributes={})",
+            repr_str(&self.id),
+            repr_str(&self.label),
+            self.attributes.len()
+        )
+    }
+}
+
+/// A relationship: `source` and `target` index `entities`. The
+/// cardinalities are `"exactly_one"`, `"zero_or_one"`, `"zero_or_more"` or
+/// `"one_or_more"`, and `*_notation` what the drawing shows (`1`, `0..1`,
+/// `0..N`, `1..N`).
+#[pyclass(name = "ErRelationship", module = "rs_rich.mermaid", frozen)]
+pub(crate) struct ErRelationship {
+    #[pyo3(get)]
+    source: usize,
+    #[pyo3(get)]
+    target: usize,
+    #[pyo3(get)]
+    source_cardinality: &'static str,
+    #[pyo3(get)]
+    target_cardinality: &'static str,
+    #[pyo3(get)]
+    source_notation: &'static str,
+    #[pyo3(get)]
+    target_notation: &'static str,
+    /// `--` (a solid line) rather than `..` (dotted).
+    #[pyo3(get)]
+    identifying: bool,
+    #[pyo3(get)]
+    label: String,
+}
+
+#[pymethods]
+impl ErRelationship {
+    fn __repr__(&self) -> String {
+        format!(
+            "ErRelationship(source={}, target={}, source_cardinality={}, \
+             target_cardinality={}, identifying={}, label={})",
+            self.source,
+            self.target,
+            repr_str(self.source_cardinality),
+            repr_str(self.target_cardinality),
+            if self.identifying { "True" } else { "False" },
+            repr_str(&self.label)
+        )
+    }
+}
+
+/// A parsed entity-relationship diagram
+/// (`rich_mermaid::er::EntityDiagram`).
+#[pyclass(name = "EntityDiagram", module = "rs_rich.mermaid", frozen)]
+pub(crate) struct EntityDiagram {
+    inner: CoreEntityDiagram,
+}
+
+#[pymethods]
+impl EntityDiagram {
+    #[getter]
+    fn title(&self) -> Option<String> {
+        self.inner.title.clone()
+    }
+
+    /// `"TD"`, `"BT"`, `"LR"` or `"RL"`.
+    #[getter]
+    fn direction(&self) -> &'static str {
+        direction_name(self.inner.direction)
+    }
+
+    /// In order of first appearance.
+    #[getter]
+    fn entities(&self, py: Python<'_>) -> PyResult<Vec<ErEntity>> {
+        self.inner
+            .entities
+            .iter()
+            .map(|entity| {
+                Ok(ErEntity {
+                    id: entity.id.clone(),
+                    label: entity.label.clone(),
+                    attributes: entity
+                        .attributes
+                        .iter()
+                        .map(|attribute| {
+                            Py::new(
+                                py,
+                                ErAttribute {
+                                    data_type: attribute.data_type.clone(),
+                                    name: attribute.name.clone(),
+                                    keys: attribute.keys.iter().map(|key| key.code()).collect(),
+                                    comment: attribute.comment.clone(),
+                                },
+                            )
+                        })
+                        .collect::<PyResult<_>>()?,
+                })
+            })
+            .collect()
+    }
+
+    #[getter]
+    fn relationships(&self) -> Vec<ErRelationship> {
+        self.inner
+            .relationships
+            .iter()
+            .map(|relationship| ErRelationship {
+                source: relationship.from,
+                target: relationship.to,
+                source_cardinality: cardinality_name(relationship.from_cardinality),
+                target_cardinality: cardinality_name(relationship.to_cardinality),
+                source_notation: relationship.from_cardinality.notation(),
+                target_notation: relationship.to_cardinality.notation(),
+                identifying: relationship.identifying,
+                label: relationship.label.clone(),
+            })
+            .collect()
+    }
+
+    /// What the text renderer simplified (shown under the diagram).
+    #[getter]
+    fn notes(&self) -> Vec<String> {
+        self.inner.notes.clone()
+    }
+
+    fn __repr__(&self) -> String {
+        format!(
+            "<EntityDiagram {} entities={} relationships={}>",
+            direction_name(self.inner.direction),
+            self.inner.entities.len(),
+            self.inner.relationships.len()
+        )
+    }
+}
+
+fn er_of(py: Python<'_>, source: &str) -> PyResult<CoreEntityDiagram> {
+    er::parse(source).map_err(|error| parse_error(py, &error))
+}
+
+/// Parse a Mermaid ER diagram (`rich_mermaid::er::parse`). Raises
+/// `MermaidParseError` as `parse_flowchart` does.
+#[pyfunction]
+fn parse_er(py: Python<'_>, source: &str) -> PyResult<EntityDiagram> {
+    Ok(EntityDiagram {
+        inner: er_of(py, source)?,
+    })
+}
+
+/// Draw an ER diagram as text (`rich_mermaid::er::draw`): an
+/// `EntityDiagram`, or source to parse first. Raises `MermaidLayoutError`
+/// when it is too large to draw.
+#[pyfunction]
+#[pyo3(signature = (diagram, ascii=false))]
+fn draw_er(py: Python<'_>, diagram: &Bound<'_, PyAny>, ascii: bool) -> PyResult<MermaidDiagram> {
+    let diagram = if let Ok(source) = diagram.cast::<PyString>() {
+        er_of(py, source.to_cow()?.as_ref())?
+    } else if let Ok(diagram) = diagram.cast::<EntityDiagram>() {
+        diagram.get().inner.clone()
+    } else {
+        return Err(PyTypeError::new_err(
+            "expected an EntityDiagram or Mermaid source",
+        ));
+    };
+    py.detach(move || er::draw(&diagram, ascii))
+        .map(MermaidDiagram::from)
+        .map_err(|reason| layout_error(py, reason))
+}
+
+/// Whether `source` is an ER diagram (its first statement is `erDiagram`).
+#[pyfunction]
+fn mermaid_is_er(source: &str) -> bool {
+    er::is_er(source)
+}
+
+// ---------------------------------------------------------------------------
+// Any diagram drawn as text
+
+/// Parse `source` by its header, as `Mermaid` does: a `SequenceDiagram`
+/// (`sequenceDiagram`), an `EntityDiagram` (`erDiagram`) or a `Flowchart`.
+/// Raises `MermaidParseError`; another diagram type is `"unsupported"`.
+#[pyfunction]
+fn parse_diagram(py: Python<'_>, source: &str) -> PyResult<Py<PyAny>> {
+    Ok(if sequence::is_sequence(source) {
+        Py::new(py, parse_sequence(py, source)?)?.into_any()
+    } else if er::is_er(source) {
+        Py::new(py, parse_er(py, source)?)?.into_any()
+    } else {
+        Py::new(py, parse_flowchart(py, source)?)?.into_any()
+    })
+}
+
+/// Draw any diagram drawn as text: a `Flowchart`, `SequenceDiagram` or
+/// `EntityDiagram`, or source, parsed by its header.
+#[pyfunction]
+#[pyo3(signature = (diagram, ascii=false))]
+fn draw_diagram(
+    py: Python<'_>,
+    diagram: &Bound<'_, PyAny>,
+    ascii: bool,
+) -> PyResult<MermaidDiagram> {
+    let parsed;
+    let diagram = match diagram.cast::<PyString>() {
+        Ok(source) => {
+            parsed = parse_diagram(py, source.to_cow()?.as_ref())?.into_bound(py);
+            &parsed
+        }
+        Err(_) => diagram,
+    };
+    if diagram.is_instance_of::<SequenceDiagram>() {
+        draw_sequence(py, diagram, ascii)
+    } else if diagram.is_instance_of::<EntityDiagram>() {
+        draw_er(py, diagram, ascii)
+    } else if diagram.is_instance_of::<Flowchart>() {
+        draw_flowchart(py, diagram, ascii)
+    } else {
+        Err(PyTypeError::new_err(
+            "expected a Flowchart, SequenceDiagram, EntityDiagram or Mermaid source",
+        ))
+    }
 }
 
 /// A label as the parser cleans it (`<br>` to newlines, entities decoded,
@@ -618,8 +1245,24 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<FlowchartNode>()?;
     m.add_class::<FlowchartEdge>()?;
     m.add_class::<MermaidDiagram>()?;
+    m.add_class::<SequenceDiagram>()?;
+    m.add_class::<SequenceParticipant>()?;
+    m.add_class::<SequenceMessage>()?;
+    m.add_class::<SequenceEvent>()?;
+    m.add_class::<EntityDiagram>()?;
+    m.add_class::<ErEntity>()?;
+    m.add_class::<ErAttribute>()?;
+    m.add_class::<ErRelationship>()?;
     m.add_function(pyo3::wrap_pyfunction!(parse_flowchart, m)?)?;
     m.add_function(pyo3::wrap_pyfunction!(draw_flowchart, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(parse_sequence, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(draw_sequence, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(mermaid_is_sequence, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(parse_er, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(draw_er, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(mermaid_is_er, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(parse_diagram, m)?)?;
+    m.add_function(pyo3::wrap_pyfunction!(draw_diagram, m)?)?;
     m.add_function(pyo3::wrap_pyfunction!(mermaid_clean_label, m)?)?;
     m.add_function(pyo3::wrap_pyfunction!(mmdc_render_png, m)?)?;
     m.add("MERMAID_HAS_MMDC", cfg!(feature = "mmdc"))?;
