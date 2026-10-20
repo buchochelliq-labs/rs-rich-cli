@@ -164,30 +164,35 @@ impl CommandRecord {
     }
 
     /// Set the working directory shown under the header.
+    #[must_use]
     pub fn cwd(mut self, cwd: impl Into<PathBuf>) -> Self {
         self.cwd = Some(cwd.into());
         self
     }
 
     /// Append stdout lines (`text` is split on line endings).
+    #[must_use]
     pub fn stdout(mut self, text: &str) -> Self {
         self.push(Stream::Stdout, text);
         self
     }
 
     /// Append stderr lines (`text` is split on line endings).
+    #[must_use]
     pub fn stderr(mut self, text: &str) -> Self {
         self.push(Stream::Stderr, text);
         self
     }
 
     /// Set how the command ended.
+    #[must_use]
     pub fn status(mut self, status: CommandStatus) -> Self {
         self.status = status;
         self
     }
 
     /// Set how long it ran.
+    #[must_use]
     pub fn duration(mut self, duration: Duration) -> Self {
         self.duration = duration;
         self
@@ -283,6 +288,7 @@ fn quote(word: &str) -> String {
 
 /// How a [`CommandRecord`] is rendered. See the [module docs](self).
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct CommandView<'a> {
     record: &'a CommandRecord,
     tail: Option<usize>,
@@ -531,6 +537,7 @@ impl<'a> CommandRunner<'a> {
 
     /// Kill the child when `token` is cancelled; the record ends
     /// [`Cancelled`](CommandStatus::Cancelled).
+    #[must_use]
     pub fn cancel(mut self, token: CancelToken) -> Self {
         self.cancel = Some(token);
         self
@@ -538,12 +545,14 @@ impl<'a> CommandRunner<'a> {
 
     /// How often `on_update` runs while no output arrives, and how often
     /// cancellation is checked.
+    #[must_use]
     pub fn tick(mut self, every: Duration) -> Self {
         self.tick = every.max(Duration::from_millis(1));
         self
     }
 
     /// Call `update` with the record so far after each line and each tick.
+    #[must_use]
     pub fn on_update(mut self, update: impl FnMut(&CommandRecord) + 'a) -> Self {
         self.on_update = Some(Box::new(update));
         self

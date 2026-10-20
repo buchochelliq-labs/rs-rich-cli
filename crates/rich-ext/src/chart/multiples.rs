@@ -27,6 +27,7 @@ const MAX_GAP: usize = u16::MAX as usize;
 /// | [`Chart`] | the y axis | [`Axis::bounds`](super::Axis::bounds) |
 #[derive(Clone, Debug, PartialEq)]
 #[non_exhaustive]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub enum Facet {
     Sparkline(Sparkline),
     Bars(BarChart),
@@ -169,6 +170,7 @@ impl crate::a11y::AccessibleText for Facet {
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct SmallMultiples {
     items: Vec<(String, Facet)>,
     columns: Option<usize>,

@@ -47,6 +47,7 @@ pub const MAX_PIXELS: u64 = 16 * 1024 * 1024;
 const SIXEL_REPEAT_MAX: usize = 65_535;
 
 /// An image rendered as Sixel graphics.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct SixelArt {
     image: DynamicImage,
     /// Target width in terminal columns; pixels are derived from it.

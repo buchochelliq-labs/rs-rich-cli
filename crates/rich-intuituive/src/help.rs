@@ -119,6 +119,7 @@ fn vim_key(key: Key) -> String {
 /// assert!(help.contains("mgr.help") && help.contains("<C-u>"));
 /// ```
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct HelpOptions {
     pub(crate) title: String,
     pub(crate) key_format: KeyFormat,
@@ -271,6 +272,7 @@ type HintFormat = std::rc::Rc<dyn Fn(&str, &str) -> String>;
 /// assert_eq!(driver.screen().plain()[1].trim_end(), "Stage [⏎] Reset [D]");
 /// ```
 #[derive(Clone)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct KeyHintsOptions {
     pub(crate) format: Option<HintFormat>,
     pub(crate) key_format: KeyFormat,

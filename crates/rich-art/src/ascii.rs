@@ -29,6 +29,7 @@ fn fg_style(color: Color) -> Style {
 }
 
 /// An image rendered as ASCII (or ANSI) art.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct AsciiArt {
     image: std::sync::Arc<DynamicImage>,
     width: Option<usize>,

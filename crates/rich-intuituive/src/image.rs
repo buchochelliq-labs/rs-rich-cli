@@ -44,6 +44,7 @@ const KEEP: u32 = 1536;
 
 /// How an [`image`] node draws its picture.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct ImageView {
     /// The cell mode: [`ImageMode::Blocks`] (half blocks) by default.
     pub mode: ImageMode,

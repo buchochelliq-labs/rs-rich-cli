@@ -62,6 +62,7 @@ pub trait OpenBranch {
 /// assert!(out.contains("primary: \"ana\""), "{out}");
 /// ```
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct RecordView<'a> {
     node: Cow<'a, Node>,
     depth: usize,

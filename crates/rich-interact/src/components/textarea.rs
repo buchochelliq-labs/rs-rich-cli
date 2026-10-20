@@ -32,6 +32,7 @@ struct Row {
 }
 
 /// Multi-line text. Returns the text, lines joined with `\n`.
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct TextArea {
     prompt: String,
     /// The text, the caret and the limit: the editing shared with

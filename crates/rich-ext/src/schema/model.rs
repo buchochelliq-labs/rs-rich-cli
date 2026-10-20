@@ -588,6 +588,7 @@ impl fmt::Display for Unexpanded {
 /// present, its constraints, and optionally the source's own name for the
 /// type, a description and metadata.
 #[derive(Clone, Debug, PartialEq, Eq, Hash)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Field {
     name: String,
     data_type: DataType,
@@ -825,6 +826,7 @@ impl Field {
 /// `FOREIGN KEY`) are the schema's own [constraints](Schema::constraints);
 /// a key on one column is that field's.
 #[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Schema {
     name: Option<String>,
     description: Option<String>,

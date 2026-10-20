@@ -162,6 +162,7 @@ pub fn unflatten(leaves: Vec<(Path, Node)>) -> Result<Node, UnflattenError> {
 
 /// Leaves as a `path | value` table, optionally with a type column.
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct FlatView<'a> {
     node: Cow<'a, Node>,
     show_types: bool,

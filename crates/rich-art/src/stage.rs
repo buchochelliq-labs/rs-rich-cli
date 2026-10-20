@@ -125,18 +125,21 @@ impl Stage {
     }
 
     /// Add an animation. They are laid out left to right in the order added.
+    #[must_use]
     pub fn with(mut self, art: AnimatedArt) -> Self {
         self.items.push(art);
         self
     }
 
     /// Columns of blank space between animations (default 2).
+    #[must_use]
     pub fn gap(mut self, gap: usize) -> Self {
         self.gap = gap;
         self
     }
 
     /// When to stop (default: when every animation has finished).
+    #[must_use]
     pub fn until(mut self, until: Until) -> Self {
         self.until = until;
         self

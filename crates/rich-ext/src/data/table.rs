@@ -13,6 +13,7 @@ const INLINE_LIMIT: usize = 40;
 
 /// Overrides for a [`TableView`].
 #[derive(Clone, Debug, Default)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct TableOptions {
     /// Show only these columns, in this order.
     pub columns: Option<Vec<String>>,
@@ -79,6 +80,7 @@ impl TableOptions {
 /// assert!(out.contains("│ a    │   80 │"), "{out}");
 /// ```
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct TableView<'a> {
     node: Cow<'a, Node>,
     options: TableOptions,

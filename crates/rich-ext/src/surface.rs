@@ -171,6 +171,7 @@ impl<W: Write> Surface<W> {
 
     /// Draw inline or full screen. An inline viewport's row count replaces
     /// the surface's height, up to that height (the terminal's).
+    #[must_use]
     pub fn viewport(mut self, viewport: Viewport) -> Surface<W> {
         self.viewport = viewport;
         if let Viewport::Inline(rows) = viewport {
@@ -190,6 +191,7 @@ impl<W: Write> Surface<W> {
 
     /// Render with `console`: its colour system is the one written (`None`
     /// writes no colour at all), and its theme and highlighting apply.
+    #[must_use]
     pub fn console(mut self, console: Console) -> Surface<W> {
         self.painter.set_color_system(console.color_system());
         self.console = console;
@@ -199,6 +201,7 @@ impl<W: Write> Surface<W> {
     /// Write each frame as one synchronized update (DEC private mode 2026),
     /// which a terminal that has it shows whole and one that does not
     /// ignores (off by default).
+    #[must_use]
     pub fn synchronized(mut self, on: bool) -> Surface<W> {
         self.synchronized = on;
         self
@@ -206,6 +209,7 @@ impl<W: Write> Surface<W> {
 
     /// Draw the graphics `source` places on the screen's cells, after the
     /// cells, and redraw them when the cells under them are repainted.
+    #[must_use]
     pub fn graphics(mut self, source: Option<Arc<dyn PlacementSource>>) -> Surface<W> {
         self.graphics = source;
         self

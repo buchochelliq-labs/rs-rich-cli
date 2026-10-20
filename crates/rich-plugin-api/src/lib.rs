@@ -41,6 +41,10 @@
 //! bumps [`PLUGIN_API_VERSION`], and hosts refuse a plugin built for another
 //! version rather than misbehaving.
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 use std::fmt;
 use std::sync::Arc;
 
@@ -125,6 +129,7 @@ impl PluginMetadata {
     }
 
     /// Add a one-line description.
+    #[must_use]
     pub fn description(mut self, description: impl Into<String>) -> Self {
         self.description = Some(description.into());
         self

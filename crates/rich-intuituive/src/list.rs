@@ -516,6 +516,7 @@ pub fn list_lazy(
 /// [`row_style`](Node::row_style) and
 /// [`selected_style_for`](Node::selected_style_for) would give it.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct ListRow {
     /// The item's console markup.
     pub text: String,

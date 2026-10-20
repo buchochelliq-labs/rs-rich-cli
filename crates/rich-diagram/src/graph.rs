@@ -88,6 +88,7 @@ pub enum Shape {
 
 /// A node.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is laid out or rendered"]
 pub struct Node {
     /// What edges refer to it by.
     pub id: String,
@@ -206,6 +207,7 @@ impl Edge {
 /// assert_eq!(graph.clusters()[1].parent, Some(0));
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is laid out or rendered"]
 pub struct Cluster {
     /// What it is known by (a DOT subgraph's name, `cluster` prefix
     /// included).
@@ -278,6 +280,7 @@ enum Last {
 /// assert_eq!(graph.nodes()[2].label, "cache");
 /// ```
 #[derive(Clone, Debug, Default)]
+#[must_use = "builder methods return a new value; it does nothing until it is laid out or rendered"]
 pub struct Graph {
     direction: Direction,
     nodes: Vec<Node>,

@@ -482,6 +482,7 @@ type Remembered = Rc<dyn Fn(&Path) -> Option<String>>;
 
 /// How a [`preview`] pane behaves, and the signals it shares.
 #[derive(Clone, Default)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct PreviewOptions {
     pub(crate) hidden: Option<Signal<bool>>,
     pub(crate) sort: Option<Signal<Sort>>,

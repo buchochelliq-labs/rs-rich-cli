@@ -72,6 +72,7 @@ impl Opener {
     }
 
     /// Taking the terminal (or not).
+    #[must_use]
     pub fn block(mut self, on: bool) -> Opener {
         self.block = on;
         self
@@ -220,6 +221,7 @@ impl Rules {
     }
 
     /// Add an opener (replacing one of the same name).
+    #[must_use]
     pub fn opener(mut self, opener: Opener) -> Rules {
         self.openers.retain(|o| o.name != opener.name);
         self.openers.push(opener);
@@ -227,12 +229,14 @@ impl Rules {
     }
 
     /// Add a rule after the others.
+    #[must_use]
     pub fn rule(mut self, rule: Rule) -> Rules {
         self.rules.push(rule);
         self
     }
 
     /// Add a rule before the others.
+    #[must_use]
     pub fn prepend(mut self, rule: Rule) -> Rules {
         self.rules.insert(0, rule);
         self

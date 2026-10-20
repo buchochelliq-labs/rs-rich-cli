@@ -216,6 +216,7 @@ impl Field {
 /// assert_eq!(answers.list("features").unwrap(), ["tls", "metrics"]);
 /// assert_eq!(answers.text("region"), Some("us-central1"));
 /// ```
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct Form {
     title: String,
     fields: Vec<Field>,

@@ -51,6 +51,7 @@ type Action = Rc<RefCell<dyn FnMut(&mut Ctx)>>;
 /// One line of a menu: an action with a label and a key hint, or a
 /// separator.
 #[derive(Clone)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct MenuItem {
     label: String,
     hint: String,

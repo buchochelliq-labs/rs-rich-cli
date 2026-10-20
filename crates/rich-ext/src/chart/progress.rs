@@ -98,6 +98,7 @@ fn front(style: &Style) -> Style {
 /// assert_eq!(console.render_export(&fine), "███████42.00%       \n");
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct FillGauge {
     ratio: f64,
     label: Option<String>,
@@ -359,6 +360,7 @@ impl LineSet {
 /// assert_eq!(console.render_export(&plain), " 50% ───────\n");
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct LineGauge {
     ratio: f64,
     label: Option<String>,

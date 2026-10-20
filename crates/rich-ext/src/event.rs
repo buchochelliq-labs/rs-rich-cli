@@ -117,6 +117,7 @@ impl SpanContext {
             fields: Vec::new(),
         }
     }
+    #[must_use]
     pub fn field(mut self, key: impl Into<String>, value: Value) -> Self {
         self.fields.push((key.into(), value));
         self
@@ -160,10 +161,12 @@ impl StructuredEvent {
             overflow: OverflowPolicy::Fold,
         }
     }
+    #[must_use]
     pub fn diagnostic(mut self, diagnostic: crate::diagnostic::Diagnostic) -> Self {
         self.diagnostics.push(diagnostic);
         self
     }
+    #[must_use]
     pub fn field(mut self, key: impl Into<String>, value: Value) -> Self {
         let key = key.into();
         if let Some((_, old)) = self.fields.iter_mut().find(|(name, _)| name == &key) {
@@ -173,33 +176,40 @@ impl StructuredEvent {
         }
         self
     }
+    #[must_use]
     pub fn field_order(mut self, keys: Vec<String>) -> Self {
         self.order = keys;
         self
     }
+    #[must_use]
     pub fn hide_fields(mut self, keys: Vec<String>) -> Self {
         self.hidden = keys;
         self
     }
+    #[must_use]
     pub fn view(mut self, view: EventView) -> Self {
         self.view = view;
         self
     }
+    #[must_use]
     pub fn context(mut self, context: EventContext) -> Self {
         self.context = context;
         self
     }
+    #[must_use]
     pub fn overflow(mut self, overflow: OverflowPolicy) -> Self {
         self.overflow = overflow;
         self
     }
     /// The spans the event happened in, outermost first.
+    #[must_use]
     pub fn spans(mut self, spans: Vec<SpanContext>) -> Self {
         self.spans = spans;
         self
     }
     /// Mark the event as a span opening or closing. Its message is the span's
     /// name, its fields the span's, and `spans` its parents.
+    #[must_use]
     pub fn span_event(mut self, event: SpanEvent) -> Self {
         self.span_event = Some(event);
         self

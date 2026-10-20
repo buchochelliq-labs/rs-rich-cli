@@ -125,6 +125,7 @@ impl Record {
     }
 
     /// Set a field, replacing one of the same name. Returns the record.
+    #[must_use]
     pub fn field(mut self, key: impl Into<String>, value: Value) -> Record {
         self.set(key, value);
         self

@@ -633,12 +633,14 @@ impl Exports {
     }
 
     /// One line on what it does.
+    #[must_use]
     pub fn description(mut self, description: &str) -> Self {
         self.abi.description = description.to_string();
         self
     }
 
     /// Add a capability of any kind.
+    #[must_use]
     pub fn capability(mut self, kind: CapabilityKind, name: &str, function: ExportFn) -> Self {
         self.abi.capabilities.push(AbiCapability {
             kind,
@@ -649,21 +651,25 @@ impl Exports {
     }
 
     /// A named text transform: plain text in and out.
+    #[must_use]
     pub fn transform(self, name: &str, function: ExportFn) -> Self {
         self.capability(CapabilityKind::Transform, name, function)
     }
 
     /// A highlighter: plain text in, `START END STYLE` lines out.
+    #[must_use]
     pub fn highlighter(self, name: &str, function: ExportFn) -> Self {
         self.capability(CapabilityKind::Highlighter, name, function)
     }
 
     /// A fence renderer for `language` returning `rich` markup.
+    #[must_use]
     pub fn fence_markup(self, language: &str, function: ExportFn) -> Self {
         self.capability(CapabilityKind::FenceMarkup, language, function)
     }
 
     /// A fence renderer for `language` returning ANSI-styled text.
+    #[must_use]
     pub fn fence_ansi(self, language: &str, function: ExportFn) -> Self {
         self.capability(CapabilityKind::FenceAnsi, language, function)
     }

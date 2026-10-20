@@ -114,6 +114,7 @@ pub fn terminal_with(host: impl PtyHost + 'static) -> TerminalPane {
 impl TerminalPane {
     /// Run `handler` on the app's thread when the program exits, with how
     /// it ended.
+    #[must_use]
     pub fn on_exit(self, handler: impl FnMut(ExitStatus, &mut Ctx) + 'static) -> TerminalPane {
         self.state.borrow_mut().on_exit = Some(Box::new(handler));
         self
@@ -127,6 +128,7 @@ impl TerminalPane {
 
     /// Keep up to `rows` rows that scrolled off the top (default
     /// [`DEFAULT_SCROLLBACK`]). Before the pane is first laid out.
+    #[must_use]
     pub fn scrollback(self, rows: usize) -> TerminalPane {
         self.state.borrow_mut().core.set_scrollback(rows);
         self
@@ -135,6 +137,7 @@ impl TerminalPane {
     /// Keys (space-separated names, as [`Node::on_key`] takes them) that
     /// are not sent to the program but go on to the app's bindings: a way
     /// out of the pane, such as `"ctrl+q f10"`.
+    #[must_use]
     pub fn release_keys(mut self, keys: &str) -> TerminalPane {
         self.release
             .extend(keys.split_whitespace().filter_map(Key::parse));

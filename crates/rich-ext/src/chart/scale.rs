@@ -25,6 +25,7 @@ use crate::format;
 /// assert_eq!(Scale::new(10.0, -10.0).normalize(0.0), Some(0.5));
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Scale {
     min: f64,
     max: f64,

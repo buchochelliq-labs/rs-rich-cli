@@ -64,6 +64,7 @@ impl Viewport {
     /// counts the lines under them. A page always keeps one row to scroll:
     /// on one too short for every sticky line, the last that fit stay, and
     /// the ones before them scroll away first, so every line is shown.
+    #[must_use]
     pub fn sticky(mut self, rows: usize) -> Viewport {
         self.set_sticky(rows);
         self
@@ -114,12 +115,14 @@ impl Viewport {
     /// Make `keys` do `action` (see [`viewport_keymap`]) when the viewport
     /// runs as a component. Installed overrides (`viewport.page-down = n`)
     /// apply too.
+    #[must_use]
     pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Viewport {
         self.keymap.rebind(action, keys);
         self
     }
 
     /// Show `height` rows instead of filling the space.
+    #[must_use]
     pub fn with_height(mut self, height: usize) -> Viewport {
         self.height = Some(height);
         self

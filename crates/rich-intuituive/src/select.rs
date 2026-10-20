@@ -138,6 +138,7 @@ impl<K: Clone + Eq + Hash + 'static> MultiSelect<K> {
     /// The list's items, by key, in the list's order (may read signals):
     /// what [`select_all`](Self::select_all), [`invert`](Self::invert) and
     /// a visual range go over.
+    #[must_use]
     pub fn over(self, keys: impl Fn() -> Vec<K> + 'static) -> Self {
         let keys: Keys<K> = Rc::new(keys);
         self.keys.replace(Some(keys));
@@ -145,6 +146,7 @@ impl<K: Clone + Eq + Hash + 'static> MultiSelect<K> {
     }
 
     /// The cursor a visual range runs to: the list's selected index.
+    #[must_use]
     pub fn range_from(self, cursor: Signal<usize>) -> Self {
         self.cursor.set(Some(cursor));
         self
@@ -292,6 +294,7 @@ impl<K: Clone + Eq + Hash + 'static> MultiSelect<K> {
     /// driver.press("2");
     /// assert_eq!(driver.screen().plain()[0].trim_end(), "b");
     /// ```
+    #[must_use]
     pub fn scoped<T: 'static>(self, tabs: &crate::tab_set::TabSet<T>) -> Self {
         type Saved<K> = (Vec<K>, Option<Visual>);
         let set = *tabs;

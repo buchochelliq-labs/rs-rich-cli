@@ -18,6 +18,7 @@ const MIN_PLOT: usize = 8;
 /// A range on a [`Timeline`]: the row it goes on, where it starts and where
 /// it ends.
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Span {
     /// The row's label. Spans with the same label share a row.
     pub row: String,
@@ -221,6 +222,7 @@ impl Mapping {
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Timeline {
     spans: Vec<Span>,
     milestones: Vec<Milestone>,

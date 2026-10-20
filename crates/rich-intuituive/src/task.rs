@@ -364,6 +364,7 @@ impl<T: 'static> Resource<T> {
     /// app's clock ([`after`](crate::after)), so a test steps through it
     /// with [`Driver::advance`](crate::Driver::advance). `None` goes
     /// back to loading at once, as without it.
+    #[must_use]
     pub fn stale_after(self, wait: impl Into<Option<Duration>>) -> Resource<T> {
         self.stale.set(wait.into());
         self

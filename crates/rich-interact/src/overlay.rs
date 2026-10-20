@@ -80,6 +80,7 @@ fn typed(key: Key) -> Option<char> {
 /// Something the [`Palette`] offers: a binding of the keymap
 /// ([`from_binding`](Self::from_binding)) or a command of yours.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Command {
     /// What identifies it: `context.action` for a binding.
     pub id: String,
@@ -172,6 +173,7 @@ pub fn palette_keymap() -> Keymap {
 ///
 /// [`Overlays`] builds one from the host's keymap each time it opens, so
 /// what it lists is what the host can do then.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Palette {
     commands: Vec<Command>,
     /// An icon before a category's name, by category.
@@ -529,6 +531,7 @@ impl Component for Palette {
 /// line and a rule, with no context headings, and
 /// [`filter_key`](Help::filter_key) makes letters move until a key starts
 /// the search (Yazi's `/`).
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Help {
     bindings: Vec<Binding>,
     filter: FilterState,
@@ -1035,6 +1038,7 @@ impl Shortcuts {
         }
     }
 
+    #[must_use]
     pub fn theme(mut self, theme: Theme) -> Self {
         self.theme = theme;
         self
@@ -1135,6 +1139,7 @@ impl Component for Shortcuts {
 /// action's own key runs one (the menu answers it), Escape or the key that
 /// opened it cancels. [`Select`](crate::Select) opens one over the focused
 /// item; [`Overlays`] opens one for a region.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Menu {
     menu: ActionMenu,
     target: ActionTarget,
@@ -1243,6 +1248,7 @@ type ActionHandler<'a, M> = Box<dyn FnMut(&Action, &ActionTarget) -> Flow<M> + '
 /// if it had been pressed. The overlays are modal [`Layer`]s of a
 /// [`Layers`] host round the component ([`layers`](Self::layers)), so
 /// layers of your own open there too.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Overlays<'a, M> {
     layers: Layers<'a, M>,
     keymap: Keymap,

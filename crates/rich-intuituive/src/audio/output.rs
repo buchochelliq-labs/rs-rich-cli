@@ -14,6 +14,7 @@ use super::{error, AudioError, Device, Host, Matrix};
 
 /// What [`output`] opens, and how.
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct OutputOptions {
     host: Host,
     device: Option<String>,

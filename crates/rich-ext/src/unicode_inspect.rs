@@ -332,6 +332,7 @@ fn cluster(text: &str, start: usize, end: usize, base: usize) -> Cluster {
 
 /// A renderable table of the grapheme clusters of some text.
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct UnicodeView {
     clusters: Vec<Cluster>,
     summary: Summary,

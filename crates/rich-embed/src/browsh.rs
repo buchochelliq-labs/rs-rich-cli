@@ -122,6 +122,7 @@ impl BrowshEngine {
     }
 
     /// Start the server with `program` instead of `browsh` from `PATH`.
+    #[must_use]
     pub fn program(mut self, program: impl Into<String>) -> BrowshEngine {
         self.program = Some(program.into());
         self

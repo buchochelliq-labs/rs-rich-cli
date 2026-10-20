@@ -55,6 +55,24 @@ python scripts/capture_golden.py
 Then assert byte-equality in `crates/rich/tests/`. Only genuinely-upstream output
 goes in golden fixtures — our conveniences get ordinary unit tests.
 
+## API conventions
+
+**Builders are `#[must_use]`.** A builder method takes `self` and returns
+`Self` (`Node::text("x").bold()`), so a call whose result is dropped does
+nothing: the value was moved in and is gone. Every crate except `crates/rich`
+(the mirror keeps upstream's shape) turns on
+`clippy::return_self_not_must_use` in its `lib.rs`, so such a method must say
+so:
+
+- A type that is only useful once used (a renderable, a widget, a component,
+  an `*Options` struct, `Node`, `Graph`) carries `#[must_use = "…"]` on the
+  type itself, and every function that returns one warns when it is dropped.
+- A setter on any other type carries `#[must_use]` on the method.
+- A setter on a `Copy` handle that makes its change through shared state
+  (`Transport::tick`, `Timer::max_catch_up`) is `#[must_use]` too, though
+  the change is made either way: one rule for every builder. A caller
+  that only wants the change writes `let _ = transport.tick(d);`.
+
 ## Before every PR
 
 ```bash

@@ -275,6 +275,7 @@ impl CopyFormat {
     }
 
     /// The next format, for a key that cycles through them.
+    #[must_use]
     pub fn next(self) -> CopyFormat {
         match self {
             CopyFormat::Text => CopyFormat::Csv,

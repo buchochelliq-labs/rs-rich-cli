@@ -178,6 +178,7 @@ pub(super) fn id_of(device: &cpal::Device) -> Option<String> {
 
 /// What [`open`] captures, and how.
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct AudioOptions {
     host: Host,
     device: Option<String>,

@@ -326,6 +326,7 @@ impl CanvasPainter {
 /// assert_eq!(console.render_export(&braille), "⡠⠊\n");
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Canvas {
     x_bounds: [f64; 2],
     y_bounds: [f64; 2],

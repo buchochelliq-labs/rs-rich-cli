@@ -21,6 +21,10 @@
 //! A banner is a normal renderable, so it composes with the rest of `rich` —
 //! wrap it in a `Panel`, style it, export it to SVG, and so on.
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 pub mod figlet;
 
 #[cfg(feature = "image")]
@@ -111,6 +115,7 @@ use rich::style::Style;
 ///
 /// Sizing follows the console: the banner lays out to `options.max_width`, so a
 /// long line wraps onto further banner rows exactly as `figlet` would.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Figlet {
     text: String,
     font: FigletFont,

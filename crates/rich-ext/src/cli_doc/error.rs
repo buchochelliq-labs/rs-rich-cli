@@ -135,27 +135,33 @@ impl CliError {
         CliError::new(CliErrorKind::MissingRequired, "").argument(joined.join(", "))
     }
 
+    #[must_use]
     pub fn argument(mut self, argument: impl Into<String>) -> Self {
         self.argument = Some(argument.into());
         self
     }
+    #[must_use]
     pub fn value(mut self, value: impl Into<String>) -> Self {
         self.value = Some(value.into());
         self
     }
+    #[must_use]
     pub fn suggestion(mut self, suggestion: impl Into<String>) -> Self {
         self.suggestions.push(suggestion.into());
         self
     }
+    #[must_use]
     pub fn suggestions(mut self, suggestions: impl IntoIterator<Item = String>) -> Self {
         self.suggestions.extend(suggestions);
         self
     }
+    #[must_use]
     pub fn usage(mut self, usage: impl Into<String>) -> Self {
         self.usage = Some(usage.into());
         self
     }
     /// Close with "for more information, try '`flag`'".
+    #[must_use]
     pub fn help_flag(mut self, flag: impl Into<String>) -> Self {
         self.help_flag = Some(flag.into());
         self

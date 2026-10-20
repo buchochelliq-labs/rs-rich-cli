@@ -70,18 +70,21 @@ impl Redaction {
     }
 
     /// Add a key pattern.
+    #[must_use]
     pub fn pattern(mut self, pattern: impl Into<String>) -> Self {
         self.patterns.push(pattern.into());
         self
     }
 
     /// Add key patterns.
+    #[must_use]
     pub fn patterns<S: Into<String>>(mut self, patterns: impl IntoIterator<Item = S>) -> Self {
         self.patterns.extend(patterns.into_iter().map(Into::into));
         self
     }
 
     /// The replacement text.
+    #[must_use]
     pub fn mask(mut self, mask: impl Into<String>) -> Self {
         self.mask = mask.into();
         self

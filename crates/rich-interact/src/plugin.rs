@@ -150,6 +150,7 @@ impl PluginView {
     }
 
     /// Make `keys` do the plugin's `action` instead of the keys it declared.
+    #[must_use]
     pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
         self.keymap.rebind(action, keys);
         self

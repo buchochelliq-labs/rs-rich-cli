@@ -74,6 +74,7 @@ impl Delta {
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct KpiCard {
     label: String,
     value: f64,

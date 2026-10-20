@@ -379,6 +379,7 @@ impl std::error::Error for ImageArtError {}
 ///     .width(60);
 /// console.print(&art);
 /// ```
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct ImageArt {
     image: Arc<DynamicImage>,
     options: ImageOptions,

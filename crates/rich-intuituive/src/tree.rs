@@ -17,6 +17,7 @@ use crate::widgets::{cell_line, over};
 /// An item of a [`tree`]: a line of markup and the items under it, with
 /// a key for a [`tree_keyed`] and markup drawn before its indent.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct TreeItem {
     pub label: String,
     pub children: Vec<TreeItem>,
@@ -112,6 +113,7 @@ impl TreeItem {
 /// assert_eq!(driver.screen().plain()[2].trim_end(), "1");
 /// ```
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct TreeKeys {
     /// Enter and Space toggle an item with children.
     pub toggle: bool,

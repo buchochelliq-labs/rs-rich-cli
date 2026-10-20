@@ -418,6 +418,7 @@ impl Comparison {
     }
 
     /// Name the two reports in the heading (their files, say).
+    #[must_use]
     pub fn names(mut self, baseline: impl Into<String>, current: impl Into<String>) -> Self {
         self.names = Some((baseline.into(), current.into()));
         self
@@ -425,6 +426,7 @@ impl Comparison {
 
     /// Show at most `limit` units (regressions first); the rest are
     /// counted underneath.
+    #[must_use]
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = Some(limit.max(1));
         self

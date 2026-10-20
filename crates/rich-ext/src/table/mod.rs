@@ -254,12 +254,14 @@ impl Column {
     }
 
     /// Justify the column's cells.
+    #[must_use]
     pub fn justify(mut self, justify: Justify) -> Self {
         self.options.justify = justify;
         self
     }
 
     /// Replace every core column option (width, ratio, no_wrap, style, …).
+    #[must_use]
     pub fn options(mut self, options: ColumnOptions) -> Self {
         self.options = options;
         self
@@ -267,6 +269,7 @@ impl Column {
 
     /// Display values through `formatter` instead of [`Value::to_text`].
     /// Aggregates other than counts are formatted the same way.
+    #[must_use]
     pub fn format(mut self, formatter: impl Fn(&Value) -> Text + Send + Sync + 'static) -> Self {
         self.formatter = Some(Arc::new(formatter));
         self

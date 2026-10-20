@@ -63,6 +63,7 @@ pub fn paginator_keymap() -> Keymap {
 /// assert_eq!(outcome.unwrap().value(), Some(1));
 /// assert_eq!(record.last_frame(), "? Letters › page 2 of 3");
 /// ```
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct Paginator {
     pages: usize,
     page: usize,

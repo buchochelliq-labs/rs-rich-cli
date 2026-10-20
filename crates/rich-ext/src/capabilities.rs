@@ -137,26 +137,31 @@ impl MapEnvironment {
         }
     }
     /// Set a variable.
+    #[must_use]
     pub fn var(mut self, name: &str, value: &str) -> Self {
         self.vars.insert(name.into(), value.into());
         self
     }
     /// Set the terminal flag.
+    #[must_use]
     pub fn terminal(mut self, terminal: bool) -> Self {
         self.terminal = terminal;
         self
     }
     /// Set the reported size.
+    #[must_use]
     pub fn size(mut self, width: usize, height: usize) -> Self {
         self.size = Some((width, height));
         self
     }
     /// Mark the environment as Windows.
+    #[must_use]
     pub fn windows(mut self, windows: bool) -> Self {
         self.windows = windows;
         self
     }
     /// Set the cell size in pixels the terminal reports.
+    #[must_use]
     pub fn cell_pixels(mut self, width: u16, height: u16) -> Self {
         self.cell_pixels = Some((width, height));
         self

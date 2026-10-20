@@ -238,6 +238,7 @@ impl Server {
     /// ([`Isolation::Processes`], the default), or each on a thread of the
     /// server ([`Isolation::Threads`]). A program's sessions (a command, a
     /// host) are processes already, and this does not change them.
+    #[must_use]
     pub fn isolation(mut self, isolation: Isolation) -> Server {
         self.shared.isolation = isolation;
         self
@@ -247,6 +248,7 @@ impl Server {
     /// as this program with the arguments it was given. It must reach the
     /// same `serve` or `Server::bind` call: an interpreter running the same
     /// script, say (Python's `rs_rich.tui.serve` passes its own).
+    #[must_use]
     pub fn session_command<P, I, S>(mut self, program: P, args: I) -> Server
     where
         P: Into<std::path::PathBuf>,
@@ -263,6 +265,7 @@ impl Server {
     /// On Linux it holds from the moment the process starts; on other Unix
     /// systems from when it reaches `serve`; macOS has no such limit, and
     /// elsewhere (Windows) it is not applied.
+    #[must_use]
     pub fn session_memory(mut self, bytes: u64) -> Server {
         self.shared.spawn.memory = Some(bytes);
         self
@@ -273,6 +276,7 @@ impl Server {
     /// input uses none. On Linux it holds from the moment the process
     /// starts; on other Unix systems from when it reaches `serve`;
     /// elsewhere (Windows) it is not applied.
+    #[must_use]
     pub fn session_cpu(mut self, time: Duration) -> Server {
         self.shared.spawn.cpu = Some(time);
         self
@@ -280,6 +284,7 @@ impl Server {
 
     /// Run at most `n` sessions at once (8 by default); a browser that
     /// opens one more is refused until one ends.
+    #[must_use]
     pub fn max_sessions(mut self, n: usize) -> Server {
         self.shared.max_sessions = n;
         self
@@ -294,6 +299,7 @@ impl Server {
     /// [`LocalPty`] with backpressure never drops output, even past its
     /// own 16 MiB limit without it). Apps send whole frames and are not
     /// affected.
+    #[must_use]
     pub fn max_buffered(mut self, bytes: usize) -> Server {
         self.shared.max_buffered = bytes.max(2);
         self
@@ -303,6 +309,7 @@ impl Server {
     /// [`Renderer::Dom`]. A page's address can ask for either with
     /// `&renderer=xterm` or `&renderer=dom`. A program is always drawn by
     /// xterm.js.
+    #[must_use]
     pub fn renderer(mut self, renderer: Renderer) -> Server {
         self.shared.renderer = renderer;
         self
@@ -315,6 +322,7 @@ impl Server {
     /// # Panics
     /// When `token` is empty or has characters other than ASCII letters,
     /// digits, `-`, `_`, `.` and `~` (it goes in a URL as it is).
+    #[must_use]
     pub fn token(mut self, token: impl Into<String>) -> Server {
         let token = token.into();
         assert!(
@@ -331,6 +339,7 @@ impl Server {
     /// Also accept WebSocket upgrades from pages served at `origin` (say
     /// `"https://term.example.com"`): the address a reverse proxy serves
     /// this server's page from. The token is still required.
+    #[must_use]
     pub fn allow_origin(mut self, origin: impl Into<String>) -> Server {
         self.shared.origins.push(origin.into());
         self
@@ -338,6 +347,7 @@ impl Server {
 
     /// The page's title (`intuiTUIve` for an app, the program's name for a
     /// command, by default).
+    #[must_use]
     pub fn title(mut self, title: impl Into<String>) -> Server {
         self.shared.title = title.into();
         self

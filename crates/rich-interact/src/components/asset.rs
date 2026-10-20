@@ -139,6 +139,7 @@ impl Renderable for BoxPreview {
 
 /// Pick an emoji, a box style or a spinner. Returns the emoji, or the
 /// style's or spinner's name.
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct AssetPicker {
     kind: AssetKind,
     select: Select<String>,

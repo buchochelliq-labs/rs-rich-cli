@@ -28,6 +28,7 @@ use rich::{Console, ConsoleOptions, Justify, Overflow, Renderable, Segment, Styl
 
 /// Source text with line numbers and optional search highlighting.
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct SourceView {
     code: String,
     #[cfg_attr(not(feature = "syntax"), allow(dead_code))]

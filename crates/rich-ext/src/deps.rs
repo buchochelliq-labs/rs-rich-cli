@@ -727,6 +727,7 @@ fn section(name: &str, console: &Console) -> Tree {
 /// A dependency tree: each root and what it depends on. See the
 /// [module docs](self).
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct DepTree {
     graph: DepGraph,
     max_depth: Option<usize>,
@@ -1010,6 +1011,7 @@ impl Renderable for Prerendered {
 /// One crate and everything that depends on it, up to the roots (`cargo
 /// tree -i`). See the [module docs](self).
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct WhyTree {
     graph: DepGraph,
     targets: Vec<usize>,

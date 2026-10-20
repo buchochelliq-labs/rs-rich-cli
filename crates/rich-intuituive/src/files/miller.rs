@@ -167,6 +167,7 @@ type OnEntryContext = Rc<std::cell::RefCell<dyn FnMut(&Entry, &mut Ctx)>>;
 /// What a [`Miller::view_with`] draws besides the entries, and what it
 /// gives the columns' lists.
 #[derive(Clone, Default)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct MillerOptions {
     markers: Option<MarkerFn>,
     git: Option<Signal<Option<GitStatus>>>,
@@ -360,6 +361,7 @@ pub fn miller(start: impl Into<PathBuf>) -> Miller {
 
 impl Miller {
     /// With Nerd Font icons (or not).
+    #[must_use]
     pub fn icons(mut self, on: bool) -> Miller {
         self.icons = on;
         self
@@ -367,8 +369,9 @@ impl Miller {
 
     /// The columns' shares of the width: Yazi's `ratio`, `[1, 4, 3]` by
     /// default. A share of 0 hides that column's pane down to its rail.
+    #[must_use]
     pub fn ratios(self, parent: u16, current: u16, preview: u16) -> Miller {
-        self.columns.ratios(parent, current, preview);
+        let _ = self.columns.ratios(parent, current, preview);
         self
     }
 

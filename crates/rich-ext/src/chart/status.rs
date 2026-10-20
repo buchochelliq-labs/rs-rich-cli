@@ -228,6 +228,7 @@ struct Grid {
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct StatusMatrix {
     columns: Vec<String>,
     rows: Vec<(String, Vec<String>)>,

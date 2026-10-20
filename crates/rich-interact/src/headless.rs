@@ -40,6 +40,7 @@ impl Script {
     ///
     /// # Panics
     /// On a name that does not parse: a script is test code.
+    #[must_use]
     pub fn keys(mut self, names: &str) -> Script {
         for name in names.split_whitespace() {
             let key = Key::parse(name).unwrap_or_else(|| panic!("unknown key {name:?}"));
@@ -52,12 +53,14 @@ impl Script {
     ///
     /// # Panics
     /// On a name that does not parse.
+    #[must_use]
     pub fn key_up(self, name: &str) -> Script {
         let key = Key::parse(name).unwrap_or_else(|| panic!("unknown key {name:?}"));
         self.event(Event::KeyUp(key))
     }
 
     /// Each character of `text` as a key press.
+    #[must_use]
     pub fn text(mut self, text: &str) -> Script {
         for c in text.chars() {
             self.0.push_back(Step::Event(Event::Key(Key::char(c))));
@@ -65,27 +68,32 @@ impl Script {
         self
     }
 
+    #[must_use]
     pub fn event(mut self, event: Event) -> Script {
         self.0.push_back(Step::Event(event));
         self
     }
 
+    #[must_use]
     pub fn wait(mut self, duration: Duration) -> Script {
         self.0.push_back(Step::Wait(duration));
         self
     }
 
+    #[must_use]
     pub fn resize(self, columns: u16, rows: u16) -> Script {
         self.event(Event::Resize { columns, rows })
     }
 
     /// A mouse event at `column`, `row` of the terminal (#476). Headless,
     /// the region starts at the top, so these are the view's rows too.
+    #[must_use]
     pub fn mouse(self, kind: MouseKind, column: u16, row: u16) -> Script {
         self.event(Event::Mouse(Mouse::new(kind, column, row)))
     }
 
     /// A left click: the button down, then up, at one cell.
+    #[must_use]
     pub fn click(self, column: u16, row: u16) -> Script {
         self.mouse(MouseKind::Down(Button::Left), column, row)
             .mouse(MouseKind::Up(Button::Left), column, row)
@@ -93,6 +101,7 @@ impl Script {
 
     /// A drag with the left button from one cell to another, through the
     /// columns between them on the starting row, as a terminal reports it.
+    #[must_use]
     pub fn drag(self, from: (u16, u16), to: (u16, u16)) -> Script {
         let mut script = self.mouse(MouseKind::Down(Button::Left), from.0, from.1);
         let step: i32 = if to.0 >= from.0 { 1 } else { -1 };
@@ -110,6 +119,7 @@ impl Script {
     }
 
     /// The wheel, one notch down (`down`) or up, over a cell.
+    #[must_use]
     pub fn scroll(self, down: bool, column: u16, row: u16) -> Script {
         let kind = if down {
             MouseKind::ScrollDown

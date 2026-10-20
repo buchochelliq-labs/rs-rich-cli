@@ -129,6 +129,7 @@ fn choose_with_clear(pixels: [[f64; 3]; 4], clear: u8) -> QuadCell {
 }
 
 /// An image drawn with quadrant-block characters.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct QuadrantArt {
     image: std::sync::Arc<DynamicImage>,
     width: Option<usize>,

@@ -98,6 +98,7 @@ pub fn history<T: PartialEq + Clone + 'static>(source: Signal<T>) -> History<T> 
 impl<T: PartialEq + Clone + 'static> History<T> {
     /// Keep the last `limit` values at most (at least one); every value,
     /// by default.
+    #[must_use]
     pub fn limit(self, limit: usize) -> History<T> {
         self.state.update(|past| {
             past.limit = limit.max(1);

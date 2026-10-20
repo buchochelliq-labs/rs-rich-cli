@@ -55,31 +55,37 @@ impl PackageSpec {
         }
     }
 
+    #[must_use]
     pub fn emoji(mut self, emoji: impl Into<String>) -> Self {
         self.emoji = Some(emoji.into());
         self
     }
 
+    #[must_use]
     pub fn text(mut self, text: impl Into<String>) -> Self {
         self.text = Some(text.into());
         self
     }
 
+    #[must_use]
     pub fn alias(mut self, alias: impl Into<String>) -> Self {
         self.aliases.push(alias.into());
         self
     }
 
+    #[must_use]
     pub fn version(mut self, version: impl Into<String>) -> Self {
         self.version = Some(version.into());
         self
     }
 
+    #[must_use]
     pub fn license(mut self, license: impl Into<String>) -> Self {
         self.license = Some(license.into());
         self
     }
 
+    #[must_use]
     pub fn author(mut self, author: impl Into<String>) -> Self {
         self.author = Some(author.into());
         self

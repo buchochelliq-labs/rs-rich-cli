@@ -169,6 +169,7 @@ impl std::fmt::Debug for Handoff {
 /// assert!(driver.screen().plain()[2].contains("hi"));
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct ModalOptions {
     shadow: Option<String>,
     backdrop: Option<String>,
@@ -1103,6 +1104,7 @@ impl Theme {
     }
 
     /// Add (or replace) the named style `name`, for markup: `[name]…[/]`.
+    #[must_use]
     pub fn style(mut self, name: &str, style: Style) -> Theme {
         self.styles.retain(|(n, _)| n != name);
         self.styles.push((name.to_string(), style));
@@ -1395,6 +1397,7 @@ impl Timer {
     /// call, dropping the rest, so after a long stall (a suspended
     /// process, a machine asleep) the app does not run hours of steps at
     /// once. By default every tick due is handed over.
+    #[must_use]
     pub fn max_catch_up(self, ticks: u64) -> Timer {
         self.with(|timer, _| timer.max_catch_up = Some(ticks.max(1)));
         self
@@ -2223,6 +2226,7 @@ impl App {
     /// of what happened. F12 shows and hides it; Shift+F12 gives it the
     /// keys. Setting `INTUITUIVE_INSPECT=1` turns it on for any app
     /// without a code change.
+    #[must_use]
     pub fn inspector(mut self, on: bool) -> App {
         self.inspector = on.then(|| Inspector::new(true));
         self
@@ -2242,6 +2246,7 @@ impl App {
     /// accent = bold magenta
     /// border.focused = bright_green
     /// ```
+    #[must_use]
     pub fn theme_file(mut self, path: impl Into<std::path::PathBuf>) -> App {
         self.theme_file = Some(ThemeFile {
             path: path.into(),
@@ -2268,6 +2273,7 @@ impl App {
     /// let screen = app.render_with(&["q"], 10, 3).unwrap();
     /// assert_eq!(screen[2].trim_end(), "Status");
     /// ```
+    #[must_use]
     pub fn stylesheet(mut self, css: &str) -> App {
         match crate::Stylesheet::parse(css) {
             Ok(sheet) => {
@@ -2281,6 +2287,7 @@ impl App {
     /// [`stylesheet`](Self::stylesheet) from a file, read again whenever it
     /// changes while the app runs. A change that does not parse is
     /// reported in a toast, and the last good sheet stays.
+    #[must_use]
     pub fn stylesheet_file(mut self, path: impl Into<std::path::PathBuf>) -> App {
         self.sheet = Some(SheetSource::new(
             crate::Stylesheet::default(),
@@ -2353,6 +2360,7 @@ impl App {
     /// let screen = app.render_with(&["q"], 10, 2).unwrap();
     /// assert_eq!(screen[1].trim_end(), "> two");
     /// ```
+    #[must_use]
     pub fn accessible(mut self, on: bool) -> App {
         self.accessible = on;
         self
@@ -2384,6 +2392,7 @@ impl App {
     /// let out = driver.render().unwrap();
     /// assert_eq!(out, "→ Numbers, list, 1 of 2: one, selected\r\n");
     /// ```
+    #[must_use]
     pub fn linear(mut self, on: bool) -> App {
         self.linear = on;
         self
@@ -2398,6 +2407,7 @@ impl App {
     /// Where announcements go as they happen: toasts, a screen or dialog
     /// opening, [live](crate::Node::live) nodes changing, and
     /// [`Ctx::announce`]. [`Driver::take_announcements`] has them too.
+    #[must_use]
     pub fn announcer(mut self, announcer: impl crate::a11y::Announcer + 'static) -> App {
         self.announcer = Some(Box::new(announcer));
         self
@@ -2459,6 +2469,7 @@ impl App {
 
     /// Call `tick` every `interval` (a clock, a poll, an animation).
     #[track_caller]
+    #[must_use]
     pub fn every(mut self, interval: Duration, tick: impl FnMut(&mut Ctx) + 'static) -> App {
         let at = Location::caller();
         let ticker = self.runtime.enter(|| Ticker::every(interval, tick, at));
@@ -2472,6 +2483,7 @@ impl App {
     /// command's output. The mouse is left to the terminal, so its
     /// scrollback and selection keep working (see [`mouse`](Self::mouse)).
     /// [`Ctx::print_above`] prints lines into the scrollback above it.
+    #[must_use]
     pub fn inline(mut self, height: u16) -> App {
         self.inline = Some(height.max(1));
         self
@@ -2483,6 +2495,7 @@ impl App {
     /// full-screen (the terminal keeps its selection and scrollback).
     /// `None`, the default, captures it full-screen and leaves it to the
     /// terminal inline.
+    #[must_use]
     pub fn mouse(mut self, capture: Option<bool>) -> App {
         self.mouse = capture;
         self
@@ -2529,12 +2542,14 @@ impl App {
     /// again: a thread-fed app is the same frame by frame on every run.
     /// A `latest` thread that waits on something else (a pipe) holds each
     /// turn up to 5 seconds.
+    #[must_use]
     pub fn wait_for_tasks(mut self, on: bool) -> App {
         self.wait_for_tasks = on;
         self
     }
 
     /// Use `theme` (see [`Theme`]).
+    #[must_use]
     pub fn theme(mut self, theme: Theme) -> App {
         self.theme_base = theme.clone();
         self.theme = theme;
@@ -2543,6 +2558,7 @@ impl App {
 
     /// Render with `console` (its colour system and options) instead of
     /// one detected from the terminal.
+    #[must_use]
     pub fn console(mut self, console: Console) -> App {
         self.console = Some(console);
         self
@@ -2551,6 +2567,7 @@ impl App {
     /// Whether to hand each frame's plain text to the backend, as the
     /// headless driver records it (on by default; [`run`](Self::run) turns
     /// it off).
+    #[must_use]
     pub fn text_frames(mut self, on: bool) -> App {
         self.text_frames = on;
         self
@@ -2599,6 +2616,7 @@ impl App {
     /// // A hundred ticks, twenty-odd frames.
     /// assert!(stats.get().frames <= 22, "{:?}", stats.get());
     /// ```
+    #[must_use]
     pub fn max_fps(mut self, fps: u32) -> App {
         self.frame_time = (fps > 0).then(|| Duration::from_secs(1) / fps);
         self
@@ -2607,6 +2625,7 @@ impl App {
     /// Stack toasts and [notifications](Ctx::notify) in `corner`, newest
     /// nearest it: [`Corner::BottomRight`] by default, Yazi's
     /// [`Corner::TopRight`].
+    #[must_use]
     pub fn toasts_at(mut self, corner: Corner) -> App {
         self.toast_corner = corner;
         self
@@ -2623,6 +2642,7 @@ impl App {
     /// stays exact either way. When the app ends, `source` releases what
     /// the terminal holds. Choosing a protocol the terminal supports is the
     /// source's.
+    #[must_use]
     pub fn graphics(mut self, source: std::sync::Arc<dyn rich_ext::frame::PlacementSource>) -> App {
         self.graphics = Some(source);
         self
@@ -2647,6 +2667,7 @@ impl App {
     /// assert!(driver.screen().plain()[1].contains(error));
     /// assert!(driver.screen().plain()[2].contains("╰───"));
     /// ```
+    #[must_use]
     pub fn notify_width(mut self, width: Size) -> App {
         self.notify_width = width;
         self
@@ -2676,6 +2697,7 @@ impl App {
     /// let rows = driver.screen().plain();
     /// assert!(rows[3].contains("g  Go to the top") && rows[3].contains("h  Go home"));
     /// ```
+    #[must_use]
     pub fn which_key(mut self, on: bool) -> App {
         self.which_key = on.then_some(Duration::ZERO);
         self
@@ -2684,6 +2706,7 @@ impl App {
     /// Turn the [which-key](Self::which_key) pop-up on, shown once a
     /// sequence has waited `delay` for its next key (which-key.nvim's
     /// habit: a sequence typed quickly shows nothing).
+    #[must_use]
     pub fn which_key_delay(mut self, delay: Duration) -> App {
         self.which_key = Some(delay);
         self
@@ -2691,6 +2714,7 @@ impl App {
 
     /// Open the [command palette](Ctx::command_palette) with `keys` (say
     /// `"ctrl+p"`), when no binding of the app used them.
+    #[must_use]
     pub fn palette_key(mut self, keys: &str) -> App {
         self.palette_key = crate::node::parse_keys(keys);
         self
@@ -2698,6 +2722,7 @@ impl App {
 
     /// Open the [help](Ctx::help) with `keys` (say `"f1"`), when no binding
     /// of the app used them.
+    #[must_use]
     pub fn help_key(mut self, keys: &str) -> App {
         self.help_key = crate::node::parse_keys(keys);
         self
@@ -2710,6 +2735,7 @@ impl App {
     /// and a modifier on its own is a key (`shift`, `ctrl`), as a game
     /// wants. Off by default. [`Ctx::releases_reported`] says what the
     /// terminal does.
+    #[must_use]
     pub fn all_keys(mut self, on: bool) -> App {
         self.all_keys = on;
         self
@@ -2740,6 +2766,7 @@ impl App {
     /// driver.advance(Duration::from_millis(1));
     /// assert_eq!(driver.screen().plain()[0].trim_end(), "0 held");
     /// ```
+    #[must_use]
     pub fn synthesize_releases(mut self, hold: Option<Duration>) -> App {
         self.synthesize = hold;
         self
@@ -2749,6 +2776,7 @@ impl App {
     /// them (off by default). Off, a terminal with the kitty keyboard
     /// protocol has it turned on: Tab and Ctrl+I are told apart, and widgets
     /// get [`WidgetEvent::KeyUp`].
+    #[must_use]
     pub fn legacy_keys(mut self, on: bool) -> App {
         self.legacy_keys = on;
         self
@@ -2761,6 +2789,7 @@ impl App {
     /// asked at start-up with the kitty keyboard query (not asked with
     /// [`legacy_keys`](Self::legacy_keys)). See
     /// [`SessionOptions::synchronized_output`].
+    #[must_use]
     pub fn synchronized_output(mut self, on: Option<bool>) -> App {
         self.synchronized_output = on;
         self
@@ -2770,6 +2799,7 @@ impl App {
     /// is copied to the clipboard when the button is released (on by
     /// default). With the mouse captured, the terminal cannot select by
     /// itself.
+    #[must_use]
     pub fn selectable(mut self, on: bool) -> App {
         self.selectable = on;
         self
@@ -2797,6 +2827,7 @@ impl App {
     /// driver.settle();
     /// assert_eq!(driver.screen().plain()[0].trim_end(), "board");
     /// ```
+    #[must_use]
     pub fn min_size(mut self, width: u16, height: u16, message: impl Into<String>) -> App {
         use crate::node::{column, label, row, switch};
         let message = message.into();

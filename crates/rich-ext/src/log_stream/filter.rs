@@ -203,6 +203,7 @@ impl LevelFilter {
     }
 
     /// Also keep what `other` keeps.
+    #[must_use]
     pub fn or(mut self, other: LevelFilter) -> LevelFilter {
         self.levels.extend(other.levels);
         self
@@ -602,12 +603,14 @@ impl Filter {
     }
 
     /// Keep only the levels `levels` allows.
+    #[must_use]
     pub fn levels(mut self, levels: LevelFilter) -> Filter {
         self.levels = levels;
         self
     }
 
     /// Also require `predicate`.
+    #[must_use]
     pub fn predicate(mut self, predicate: Predicate) -> Filter {
         self.predicates.push(predicate);
         self

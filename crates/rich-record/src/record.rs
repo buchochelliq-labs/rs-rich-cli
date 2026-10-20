@@ -707,6 +707,7 @@ impl Formats {
     }
 
     /// The formats in both.
+    #[must_use]
     pub fn intersect(self, other: Formats) -> Formats {
         let mut out = Formats::NONE;
         for format in Format::ALL {

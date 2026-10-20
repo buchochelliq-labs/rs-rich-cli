@@ -202,6 +202,7 @@ fn mask(value: &str, ascii: bool) -> String {
 
 /// A renderable table of environment variables.
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct EnvView {
     vars: Vec<(String, String)>,
     filter: Option<String>,
@@ -410,6 +411,7 @@ pub struct PathEntry {
 }
 
 /// A renderable, checked table of one PATH-like variable.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct PathView {
     name: String,
     value: String,

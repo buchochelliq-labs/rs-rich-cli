@@ -83,6 +83,7 @@ impl Parsers {
     }
 
     /// Try `parser` before the others.
+    #[must_use]
     pub fn with_parser(mut self, parser: impl LineParser + 'static) -> Parsers {
         self.parsers.insert(0, Box::new(parser));
         self
@@ -95,6 +96,7 @@ impl Parsers {
 
     /// Keep only the parsers that answer to one of `names` (by name or
     /// alias), in their order here.
+    #[must_use]
     pub fn only(mut self, names: &[&str]) -> Parsers {
         self.parsers
             .retain(|parser| names.iter().any(|name| answers(&**parser, name)));
@@ -715,6 +717,7 @@ impl Assembler {
     /// Keep at most `limit` continuation lines in a record; once it has
     /// them, it is given out and the lines after it arrive as
     /// [`Assembled::Continuation`].
+    #[must_use]
     pub fn continuation_limit(mut self, limit: usize) -> Assembler {
         self.limit = limit.max(1);
         self

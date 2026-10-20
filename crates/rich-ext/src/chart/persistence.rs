@@ -35,6 +35,7 @@ use super::{Dataset, GraphType, Marker};
 /// assert_eq!(chart.datasets().len(), 3);
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Persistence {
     frames: Vec<Vec<(f64, f64)>>,
     style: String,

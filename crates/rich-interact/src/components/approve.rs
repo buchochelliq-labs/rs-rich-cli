@@ -234,6 +234,7 @@ struct ReasonEditor {
 
 /// A queue of pending items to approve, reject or skip. Returns an
 /// [`ApprovalReport`].
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct ApprovalQueue<T> {
     prompt: String,
     items: Vec<Item<T>>,

@@ -47,6 +47,7 @@ pub enum View {
 /// assert_eq!(out, "doc\n├── a: {…} 2 keys\n└── d: […] 3 items\n");
 /// ```
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Explorer<'a> {
     node: Cow<'a, Node>,
     max_depth: Option<usize>,

@@ -199,6 +199,7 @@ impl Selection {
     }
 
     /// With animation on or off.
+    #[must_use]
     pub fn animate(mut self, animate: bool) -> Selection {
         self.animate = animate;
         self
@@ -379,6 +380,7 @@ impl MicroGraphics {
 
     /// Cache optimised images in `dir` (or not, with `None`). Only before
     /// the state is shared.
+    #[must_use]
     pub fn with_disk_cache(self, dir: Option<std::path::PathBuf>) -> MicroGraphics {
         self.rebuild(|inner| {
             let budget = ImageCache::DEFAULT_BUDGET;
@@ -387,18 +389,21 @@ impl MicroGraphics {
     }
 
     /// Read packages under `limits`. Only before the state is shared.
+    #[must_use]
     pub fn with_limits(self, limits: Limits) -> MicroGraphics {
         self.rebuild(|inner| inner.limits = limits)
     }
 
     /// Bound the in-memory image cache to `bytes`. Only before the state is
     /// shared.
+    #[must_use]
     pub fn with_cache_budget(self, bytes: usize) -> MicroGraphics {
         self.rebuild(|inner| inner.cache = Mutex::new(ImageCache::new(bytes, None)))
     }
 
     /// Drive animation from `clock` (time since start) instead of the wall
     /// clock. Only before the state is shared.
+    #[must_use]
     pub fn with_clock(self, clock: impl Fn() -> Duration + Send + Sync + 'static) -> MicroGraphics {
         self.rebuild(|inner| inner.clock = Arc::new(clock))
     }

@@ -57,6 +57,7 @@ const HEAT_STYLES: usize = 5;
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Heatmap {
     columns: Vec<String>,
     rows: Vec<(String, Vec<f64>)>,

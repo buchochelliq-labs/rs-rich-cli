@@ -115,6 +115,10 @@
 //!   input with it, in the browser.
 //! - `syntax` (default): intuiTUIve's syntax highlighting (syntect).
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 // The framework, under the name its own crate gives it (the workspace's
 // dependency key makes it `rich_intuituive`), and re-exported, so an app needs
 // only this crate.

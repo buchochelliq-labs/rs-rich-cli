@@ -136,6 +136,7 @@ impl<T> Pipeline<T> {
     }
 
     /// Add a stage at the end.
+    #[must_use]
     pub fn then(mut self, name: impl Into<String>, transform: impl Transform<T> + 'static) -> Self {
         self.push(name, Box::new(transform));
         self
@@ -248,6 +249,7 @@ impl KeepLines {
     }
 
     /// Keep the lines that do *not* match instead.
+    #[must_use]
     pub fn invert(mut self, invert: bool) -> Self {
         self.invert = invert;
         self
