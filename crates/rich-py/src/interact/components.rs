@@ -1294,6 +1294,8 @@ fn answers(py: Python<'_>, answers: Answers) -> PyResult<Py<PyAny>> {
         match value {
             Value::Text(text) => dict.set_item(name, text)?,
             Value::Flag(flag) => dict.set_item(name, flag)?,
+            Value::List(list) => dict.set_item(name, list)?,
+            Value::Path(path) => dict.set_item(name, path.to_string_lossy().into_owned())?,
         }
     }
     Ok(dict.into_any().unbind())
