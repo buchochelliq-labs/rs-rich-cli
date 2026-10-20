@@ -198,6 +198,9 @@ jobs:
           # Interactive components: session, event loop, PTY restoration.
           - crate: rs-rich-interact
             args: ""
+          # The Vim preset for the text editors, off by default.
+          - crate: rs-rich-interact
+            args: "--features vim"
           # Micro assets: model, packages, registry, markup (hostile-package
           # conformance tests included).
           - crate: rs-rich-micro

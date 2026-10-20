@@ -362,6 +362,9 @@ pub struct Buffer {
     search: Option<Search>,
     /// Bumped when the search changes.
     searches: u64,
+    /// The mark is set: moves select until an edit or
+    /// [`clear_mark`](Self::clear_mark).
+    marking: bool,
     /// Every match, for the revision and search they were found for.
     found: RefCell<Option<Found>>,
 }
@@ -409,6 +412,7 @@ impl Buffer {
             yanked: None,
             search: None,
             searches: 0,
+            marking: false,
             found: RefCell::new(None),
         }
     }
@@ -426,6 +430,7 @@ impl Buffer {
         self.redo.clear();
         self.killed = None;
         self.yanked = None;
+        self.marking = false;
         self.revision += 1;
         if let Some(limit) = self.limit {
             self.cut_to(limit);
@@ -602,11 +607,47 @@ impl Buffer {
     /// Put the caret at `pos` (clamped), extending the selection from where
     /// the caret was when `select`, else dropping it.
     pub fn set_caret(&mut self, pos: Pos, select: bool) {
+        if !select {
+            self.marking = false;
+        }
         let pos = self.clamp(pos);
         self.move_to(pos, select);
     }
 
+    /// Set the mark at the caret (Ctrl+Space in Emacs): from now on moves
+    /// select from it, until an edit, [`clear_mark`](Self::clear_mark) or
+    /// a move that drops the selection on purpose
+    /// ([`set_caret`](Self::set_caret) without `select`).
+    ///
+    /// ```
+    /// use rich_interact::edit::Buffer;
+    ///
+    /// let mut buffer = Buffer::new("hello world");
+    /// buffer.set_mark();
+    /// buffer.word_right(false);
+    /// assert_eq!(buffer.selected_text().as_deref(), Some("hello"));
+    /// buffer.insert("bye");
+    /// assert!(!buffer.marking());
+    /// ```
+    pub fn set_mark(&mut self) {
+        self.anchor = None;
+        self.marking = true;
+        self.end_run();
+    }
+
+    /// Stop the mark, and drop the selection.
+    pub fn clear_mark(&mut self) {
+        self.marking = false;
+        self.anchor = None;
+    }
+
+    /// Whether the mark is set.
+    pub fn marking(&self) -> bool {
+        self.marking
+    }
+
     fn move_to(&mut self, pos: Pos, select: bool) {
+        let select = select || self.marking;
         if select {
             if self.anchor.is_none() {
                 self.anchor = Some(self.caret);
@@ -746,6 +787,7 @@ impl Buffer {
         let after = self.snap(after, text);
         self.caret = after;
         self.anchor = None;
+        self.marking = false;
         self.redo.clear();
         let change = Change {
             start,
@@ -1221,6 +1263,23 @@ impl Buffer {
         }
     }
 
+    /// Indent lines `first` to `last` (all of each) as one step, whatever
+    /// is selected (Vim's `>>`).
+    pub fn indent_lines(&mut self, first: usize, last: usize) {
+        let last = last.min(self.lines.len() - 1);
+        let indent = self.indent_text();
+        // Any end that is not a line's start keeps the last line.
+        self.each_line(first.min(last), Pos::new(last, 1), |_| {
+            Some((0, 0, indent.clone()))
+        });
+    }
+
+    /// Outdent lines `first` to `last` as one step (Vim's `<<`).
+    pub fn outdent_lines(&mut self, first: usize, last: usize) {
+        let last = last.min(self.lines.len() - 1);
+        self.outdent_from(first.min(last), Pos::new(last, 1));
+    }
+
     /// Outdent: up to a tab's width of leading spaces (or a tab) off the
     /// selected lines, or the caret's.
     pub fn outdent(&mut self) {
@@ -1228,6 +1287,10 @@ impl Buffer {
             Some((start, end)) => (start.line, end),
             None => (self.caret.line, self.caret),
         };
+        self.outdent_from(first, end);
+    }
+
+    fn outdent_from(&mut self, first: usize, end: Pos) {
         let tab = self.tab;
         self.each_line(first, end, |line| {
             let n = if line.starts_with('\t') {

@@ -35,6 +35,9 @@ data = ["rich-ext/data"]
 # Micro assets (rs-rich-micro): `AssetKind::Micro` in `AssetPicker`, and
 # `StatusItem::micro`. Pulls in image decoding.
 micro = ["dep:rich-micro"]
+# `vim::Vim`: a Vim preset for the text editors (modes, motions, operators,
+# counts and `.`), a `KeyMode` over `edit::Buffer`. Off by default.
+vim = []
 # The termion backend (#677): `BackendKind::Termion`, Unix only (on other
 # platforms the feature compiles to nothing).
 termion = ["dep:termion"]
