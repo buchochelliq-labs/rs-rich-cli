@@ -402,7 +402,10 @@ impl Game {
         }
         let kind = self.piece.kind;
         match self.hold.replace(kind) {
-            Some(held) => self.piece = Piece::new(held),
+            Some(held) => {
+                self.piece = Piece::new(held);
+                self.gravity = 0;
+            }
             None => self.spawn(),
         }
         self.held = true;
@@ -436,6 +439,9 @@ impl Game {
     /// over (the original's rule).
     fn spawn(&mut self) {
         self.piece = Piece::new(self.next);
+        // A new piece starts its fall from a full count, as the original's
+        // does, rather than inheriting the last one's.
+        self.gravity = 0;
         self.held = false;
         self.stats[self.next.index()] += 1;
         if self.bag.is_empty() {
