@@ -1,6 +1,9 @@
-// The docs playground, tier 1 (docs/design/docs-playground.md): every
+// The docs playground (docs/design/docs-playground.md). Tier 1: every
 // `.rich-playground` block gets a "Try it" button that turns its input into
 // an editor and renders it with rs-rich, compiled to wasm, in this tab.
+// Tier 2: a `data-kind="cli"` block (a `rich` command line) gets a "Try it"
+// that opens a terminal under it, running the `rich` CLI on WASI in a Web
+// Worker (rich-shell/), with the block's commands filled in at the prompt.
 //
 // Nothing loads with the page but this file and, when a block is on it, the
 // `playground/playground.json` stamp beside it. No stamp (a docs version
@@ -19,6 +22,8 @@
   const script = document.currentScript && document.currentScript.src;
   if (!script || typeof WebAssembly !== "object") return;
   const BASE = new URL("playground/", script);
+  // Tier 2's terminal: the line runner, the worker and the sample files.
+  const SHELL = new URL("rich-shell/", script);
   // The longest input a block takes, and the longest fragment a link carries.
   const MAX_INPUT = 20000;
   const MAX_FRAGMENT = 8000;
@@ -102,7 +107,15 @@
         document.head.append(css);
         const js = document.createElement("script");
         js.src = new URL(s.xterm.js, BASE).href;
-        js.onload = () => resolve(window.Terminal);
+        js.onload = () => {
+          if (!s.xterm.fit) return resolve(window.Terminal);
+          // The fit addon sizes a CLI terminal to its box.
+          const fit = document.createElement("script");
+          fit.src = new URL(s.xterm.fit, BASE).href;
+          fit.onload = () => resolve(window.Terminal);
+          fit.onerror = () => resolve(window.Terminal);
+          document.head.append(fit);
+        };
         js.onerror = () => {
           xtermRequest = null;
           reject(new Error("xterm.js did not load"));
@@ -404,6 +417,39 @@
     return editor;
   }
 
+  // ---- a CLI block's terminal (tier 2) ------------------------------------
+
+  // A `data-kind="cli"` block: its commands are filled in, in turn, at the
+  // prompt of a terminal that opens under it, where `rich` runs on WASI in a
+  // worker (rich-shell/terminal.js).
+  async function openCli(block) {
+    const s = await stamp();
+    if (!s || !s.cli) return null;
+    const host = el("div", { class: "rp-cli" });
+    block.after(host);
+    try {
+      const [Terminal, terminal, shell] = await Promise.all([
+        loadXterm(s),
+        import(new URL("terminal.js", SHELL).href),
+        import(new URL("shell.js", SHELL).href),
+      ]);
+      const rows = Math.max(8, Math.min(40, Number(block.dataset.rows) || 18));
+      return await terminal.openTerminal({
+        host,
+        wasm: new URL(s.cli.wasm, BASE).href,
+        worker: new URL("worker.js", SHELL).href,
+        bytes: s.cli.bytes,
+        Terminal,
+        FitAddon: window.FitAddon,
+        commands: shell.commandLines(blockInput(block)),
+        rows,
+      });
+    } catch (e) {
+      host.replaceChildren(el("p", { class: "rp-error", role: "alert", textContent: "The terminal could not load here." }));
+      return null;
+    }
+  }
+
   // ---- mounting --------------------------------------------------------
 
   async function mount() {
@@ -414,6 +460,16 @@
     const all = [...document.querySelectorAll(".rich-playground")];
     for (const block of blocks) {
       block.dataset.mounted = "1";
+      if (block.dataset.kind === "cli") {
+        if (!s.cli || typeof Worker !== "function") continue;
+        const button = el("button", { type: "button", class: "md-button rp-try", textContent: "Try it" });
+        button.addEventListener("click", async () => {
+          button.remove();
+          await openCli(block);
+        });
+        block.after(button);
+        continue;
+      }
       if (!moduleName(s, block.dataset.kind)) continue;
       const index = all.indexOf(block);
       const button = el("button", { type: "button", class: "md-button rp-try", textContent: "Try it" });
@@ -431,7 +487,7 @@
     const match = /^#rp=(\d+)\.([A-Za-z0-9_-]+)$/.exec(location.hash);
     if (!match || !canShare) return;
     const block = all[Number(match[1])];
-    if (!block || block.dataset.open) return;
+    if (!block || block.dataset.open || block.dataset.kind === "cli") return;
     let state = null;
     try {
       state = validState(await unpack(match[2], MAX_INPUT * 4 + 2000), s);

@@ -28,6 +28,11 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
         Ok(options) => options,
         Err(message) => return emit_error(false, ExitClass::Usage, &message),
     };
+    // The tour runs commands as processes and exports to a temporary
+    // directory; WASI has neither.
+    if !options.list && cfg!(target_os = "wasi") {
+        return emit_error(false, ExitClass::Usage, &crate::host::unavailable("--demo"));
+    }
     if options.list {
         println!("core       Core renderables and extensions");
         println!("workflows  Configuration, batch, exports, watch, inspectors and capture");

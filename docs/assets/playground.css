@@ -108,3 +108,14 @@
 .md-typeset .rp-page .rp-input {
   min-height: 14rem;
 }
+/* Tier 2: a CLI block's terminal (rich-shell/terminal.js). The fit addon
+   sizes it to the column; the screen keeps xterm.js from overflowing. */
+.md-typeset .rp-cli {
+  margin: -0.4rem 0 1.2rem;
+}
+.md-typeset .rp-shell-screen {
+  overflow: hidden;
+}
+.md-typeset .rp-shell-screen .xterm {
+  line-height: normal;
+}

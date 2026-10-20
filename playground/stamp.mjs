@@ -6,9 +6,10 @@
 //     node playground/stamp.mjs OUT
 
 import { execSync } from "node:child_process";
-import { statSync, writeFileSync } from "node:fs";
+import { existsSync, statSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { load } from "./node.mjs";
+import { runBlock } from "./cli.mjs";
 
 const out = process.argv[2];
 if (!out) throw new Error("usage: node playground/stamp.mjs OUT");
@@ -22,7 +23,12 @@ function commit() {
   }
 }
 
-const stamp = { format: 1, commit: commit(), modules: {}, xterm: { js: "xterm/xterm.js", css: "xterm/xterm.css" } };
+const stamp = {
+  format: 1,
+  commit: commit(),
+  modules: {},
+  xterm: { js: "xterm/xterm.js", css: "xterm/xterm.css", fit: "xterm/addon-fit.js" },
+};
 for (const name of ["lean", "full"]) {
   const module = await load(out, name);
   const info = JSON.parse(module.info());
@@ -34,6 +40,18 @@ for (const name of ["lean", "full"]) {
     wasm,
     bytes: statSync(path.join(out, wasm)).size,
     kinds: JSON.parse(module.kinds()).map((kind) => kind.name),
+  };
+}
+// Tier 2: the CLI module, if this build has one. `rich --version` must run
+// through the terminal's own runner, or the stamp is not written.
+const cliWasm = path.join(out, "cli", "rich.wasm");
+if (existsSync(cliWasm)) {
+  const result = await runBlock(cliWasm, "rich --version", { timeout: 60000 });
+  if (!result.ok) throw new Error(`cli/rich.wasm did not run: ${result.error || result.output}`);
+  stamp.cli = {
+    wasm: "cli/rich.wasm",
+    bytes: statSync(cliWasm).size,
+    version: result.output.trim().split("\n")[0],
   };
 }
 writeFileSync(path.join(out, "playground.json"), JSON.stringify(stamp, null, 2) + "\n");
