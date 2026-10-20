@@ -694,9 +694,9 @@ pub struct Squarified {
 /// terminals), so a tile looks square rather than counts square. A tile
 /// is never smaller than `min` (columns, rows): the smallest weights that
 /// would make one are grouped into one tile for the rest, as large as
-/// they are together (and twice the smallest tile at least), when there
-/// is a rest at all. Tiles cover `rect`
-/// exactly, edge to edge.
+/// they are together (and twice the smallest tile at least, or larger
+/// still where its share would be a strip too thin for a tile), when
+/// there is a rest at all. Tiles cover `rect` exactly, edge to edge.
 ///
 /// ```
 /// use intuituive::layout::squarify;
@@ -756,8 +756,22 @@ pub fn squarify(rect: Rect, weights: &[f64], min: (u16, u16), aspect: f64) -> Sq
     loop {
         // The rest takes room for a tile at least: twice the smallest.
         let rest: f64 = order[k..].iter().map(|&i| weights[i]).sum();
-        let rest = rest.max(total * 2.0 * least / cells);
-        let tiles = squarify_tiles(rect, &order[..k], weights, Some(rest), aspect);
+        let mut rest = rest.max(total * 2.0 * least / cells);
+        let mut tiles = squarify_tiles(rect, &order[..k], weights, Some(rest), aspect);
+        // A rest too thin for a tile (a strip beside one large item) is
+        // grown until it fits, while the items' tiles still do.
+        for _ in 0..8 {
+            let Some(&(_, r)) = tiles.iter().find(|(i, _)| *i == usize::MAX) else {
+                break;
+            };
+            if k == 0 || fits(r) || !tiles.iter().all(|(i, r)| *i == usize::MAX || fits(*r)) {
+                break;
+            }
+            let grow = |have: u16, want: u16| want.max(1) as f64 / have.max(1) as f64;
+            let by = grow(r.width, min.0).max(grow(r.height, min.1)).max(1.1);
+            rest *= by;
+            tiles = squarify_tiles(rect, &order[..k], weights, Some(rest), aspect);
+        }
         if k == 0 || tiles.iter().all(|(_, r)| fits(*r)) {
             for (i, r) in tiles {
                 match i {

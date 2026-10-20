@@ -228,6 +228,9 @@ struct Indexed { /* an index of record offsets, built on a task */ }
 impl TableSource for Indexed {
     fn len(&self) -> RowCount { /* RowCount::AtLeast(n) until the index is done */ }
     fn row(&self, i: usize) -> Vec<String> { /* seek and parse record i */ }
+    fn rows(&self, range: Range<usize>, each: &mut dyn FnMut(usize, Vec<String>) -> bool) {
+        /* one read of the records' bytes, each parsed in turn */
+    }
 }
 
 let view = view_of(Indexed::open(path), move || {
@@ -242,14 +245,19 @@ source_table(view, columns, cursor, options).cursor_by(move |i| view.source_row(
 ```
 
 - **`TableSource`** is rows by index: `len()` (a `RowCount`, `Exact(n)` or
-  `AtLeast(n)` while not all are found; it prints `n+`) and `row(i)`.
+  `AtLeast(n)` while not all are found; it prints `n+`) and `row(i)`;
+  `rows(range, each)` hands a run of rows over in order (by default a
+  `row` each), for a source that reads faster in bulk.
   **`source_table(source, columns, selected, options)`** is a
   `virtual_table_with` over one; a `len` that reads a signal draws the
   table again as the source grows.
 - **`view_of(source, || query)`** filters (`keep`), sorts (`sort`, with an
   optional `compare`) and finds (`find`) over a `Send + Sync` source on a
-  worker thread, reading each row once a pass; a new query, or the count
-  becoming final, starts a new pass and drops the old. The `View` is
+  worker thread, reading each row once a pass through `rows`, a thousand
+  at a time; a regex test is cheapest as rs-rich-ext's
+  `transform::Pattern` run on each cell (`pattern.is_match(cell)`), no
+  `Text` built. A new query, or the count becoming final, starts a new
+  pass and drops the old. The `View` is
   `Copy` and a `TableSource` itself: `len()`, `source_row(at)`,
   `found()`, `next_found(at)` and `previous_found(at)` (round the ends),
   `place(at)` for `[Find: 2/4]`, `is_busy()`. Nothing in it knows a file

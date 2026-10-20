@@ -298,22 +298,7 @@ pub fn treemap(items: &[(String, &Item)], w: u16, h: u16, zoomed: usize) -> Map 
     };
     let total: f64 = weights.iter().sum();
     let min = (MIN_WIDTH, MIN_HEIGHT);
-    let mut laid = squarify(Rect::new(0, 0, w, h), &weights, min, RATIO);
-    // squarify gives up (everything in the rest) when the rest's own tile
-    // is narrower than the minimum; then the small items get a strip at
-    // the bottom and the others the room above it.
-    let room = f64::from(w) * f64::from(h - h.min(MIN_HEIGHT));
-    let big = weights
-        .iter()
-        .take_while(|wt| *wt / total * room >= f64::from(MIN_WIDTH * MIN_HEIGHT))
-        .count();
-    if laid.tiles.iter().all(Rect::is_empty) && big > 0 && big < weights.len() {
-        let above = Rect::new(0, 0, w, h - MIN_HEIGHT);
-        laid = squarify(above, &weights[..big], min, RATIO);
-        laid.tiles.resize(weights.len(), Rect::default());
-        let strip = Rect::new(0, h - MIN_HEIGHT, w, MIN_HEIGHT);
-        laid.rest = Some((strip, weights.len() - big));
-    }
+    let laid = squarify(Rect::new(0, 0, w, h), &weights, min, RATIO);
     let tiles = items
         .iter()
         .zip(&weights)

@@ -193,6 +193,10 @@ a confirm in the app's own look.
 
 ### Bugs found
 
+**Fixed in 0.0.21** ([2a36216](https://github.com/buchochelliq-labs/rs-rich-cli/commit/2a36216)): a rest too thin for a
+tile grows until it fits; the test is in `tests/round7_bugs.rs`, and the
+example's 12-line workaround is gone.
+
 **`squarify` drops every tile when the rest's tile is narrower than the
 minimum.** The rest's own tile is held to `min` too; when it cannot be
 (a thin strip beside one large item), the loop lowers `k` to 0 and puts

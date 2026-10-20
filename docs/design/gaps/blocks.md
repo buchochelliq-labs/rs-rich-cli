@@ -157,6 +157,10 @@ round the screen.
 
 ### Bugs found
 
+**Fixed in 0.0.21** ([2a36216](https://github.com/buchochelliq-labs/rs-rich-cli/commit/2a36216)): a node with a background
+clears its rectangle in a layers stack; the test is in
+`tests/round7_bugs.rs`, and the example's `fill` layer is gone.
+
 - **A styled `layers` node lets the layer below show through where its
   children leave room.** The guide says a node with a background covers
   its whole rectangle; inside an inset (or between `at()` boxes) the

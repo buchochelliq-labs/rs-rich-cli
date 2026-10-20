@@ -165,7 +165,11 @@ column([list(files, selected), status])
 - **`.previews_keys()`** lets a container's own bindings, sequences and
   `on_any_key` see keys before the focused node inside it does, outermost
   container first: an app-wide keymap that wins over a focused list's `j`,
-  `k` and `g`, without making the container focusable.
+  `k` and `g`, without making the container focusable. A focused text box
+  inside (an input, a text area, an open `command_line`) keeps the keys
+  typed into it that have no Ctrl or Alt (letters, Enter, the arrows): the
+  container sees one of those only when the box does not use it, so a
+  command line can sit inside the app's keymap.
 - **With nothing focused** (a pop-up of plain text), keys go to the root
   and down through every node that holds a single child, so a binding on
   the content inside a pop-up's `.panel()` works.

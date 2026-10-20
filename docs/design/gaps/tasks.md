@@ -248,6 +248,13 @@ command line's error style over the whole row (`[bold red]Filter Tasks
 
 ### Bugs found
 
+**Fixed in 0.0.21** ([2a36216](https://github.com/buchochelliq-labs/rs-rich-cli/commit/2a36216)): the focus move is made
+before the modal opens; the test is in `tests/round7_bugs.rs`, and the
+clone no longer focuses the report itself. The clone's own case needed a
+second fix in the same commit: the report, focused by a watch before it
+was laid out, had no focus path, so the command line kept no node to
+give the focus back to.
+
 - **A modal opened after `cx.focus(x)` in the same handler gives the
   focus back to the node focused before, not `x`.** The command line
   closes on a failed add (`cmd.close(cx)` focuses the report) and the

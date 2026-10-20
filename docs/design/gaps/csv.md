@@ -233,6 +233,14 @@ indexed CSV source on rs-rich-data).
 
 ### Bugs found
 
+**Fixed in 0.0.21:** the previews-keys trap ([2a36216](https://github.com/buchochelliq-labs/rs-rich-cli/commit/2a36216)): a
+focused text box takes the keys it uses that have no Ctrl or Alt before a
+`previews_keys` container, so the command line now sits in the keys'
+container and `<n>G` ends in the goto line's `on_change`; and the filter's
+speed ([ee8c474](https://github.com/buchochelliq-labs/rs-rich-cli/commit/ee8c474)): `TableSource::rows` and rs-rich-ext's
+`transform::Pattern`, the million-row filter 3.8 s (from 15.4 s) in the
+unoptimised build, bounded by an ignored release benchmark.
+
 None that block. The previews-keys interaction above reads as a trap
 rather than a bug. `view_of`'s query closure is run again whenever the
 source's count changes (the watch reads both), so a `ViewQuery` built in

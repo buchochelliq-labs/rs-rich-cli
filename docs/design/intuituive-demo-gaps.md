@@ -991,7 +991,9 @@ repeat rates and the sprite builder.
 | `layout::squarify` gives the largest item no tile when the rest's tile is under the minimum width | disk | 12 lines |
 | A `previews_keys` container takes the letters typed into a `command_line` inside it | csv | the line sits outside the container |
 
-Each has a minimal failing test in its report.
+Each has a minimal failing test in its report. All four are fixed in
+0.0.21 ([2a36216](https://github.com/buchochelliq-labs/rs-rich-cli/commit/2a36216)), their tests in
+`crates/rich-intuituive/tests/round7_bugs.rs`, the workarounds gone.
 
 ### Performance
 
@@ -1002,6 +1004,9 @@ regex. Needed:
 
 - a bulk read for passes;
 - a compiled matcher on `&str` in rs-rich-ext.
+
+Both are in 0.0.21 ([ee8c474](https://github.com/buchochelliq-labs/rs-rich-cli/commit/ee8c474)): `TableSource::rows` and
+`rich_ext::transform::Pattern`; the filter takes 3.8 s.
 
 ### Gaps shared across apps
 

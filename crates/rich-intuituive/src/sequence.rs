@@ -7,9 +7,12 @@
 //! 1. a key sequence under way takes the key if it goes on with it (or
 //!    ends it); Esc cancels it; any other key cancels it and is then
 //!    routed as below, as if no sequence had started;
-//! 2. containers that [preview keys](Node::previews_keys), outermost
+//! 2. a focused text box (an input, a text area, an open command line)
+//!    takes a key with no Ctrl or Alt that it uses (a character, Enter,
+//!    an arrow);
+//! 3. containers that [preview keys](Node::previews_keys), outermost
 //!    first, try their bindings, sequences and [`on_any_key`](Node::on_any_key);
-//! 3. from the focused node up: its widget, then its bindings, then the
+//! 4. from the focused node up: its widget, then its bindings, then the
 //!    first key of its sequences, then its `on_any_key`.
 
 use std::time::Duration;
@@ -198,7 +201,11 @@ impl Node {
     /// inside it does: an app's own keymap that wins over a focused list's
     /// `j`, `k` and `g`, without making the container focusable. Outer
     /// previewing containers go first. A key one of them uses goes no
-    /// further.
+    /// further. A focused text box inside (an input, a text area, an open
+    /// [`command_line`](crate::command_line::command_line)) keeps the
+    /// keys typed into it that have no Ctrl or Alt (characters, Enter, the
+    /// arrows): the container sees those only when the box does not use
+    /// them. Its Ctrl and Alt keys go to the container first, as others do.
     ///
     /// ```
     /// use intuituive::prelude::*;
