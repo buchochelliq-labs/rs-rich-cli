@@ -182,6 +182,8 @@ jobs:
                   src = m.group(1)
                   if src.startswith("http"):
                       continue
+                  # Material's `#only-dark` / `#only-light` pick a scheme; not part of the path.
+                  src = src.split("#", 1)[0]
                   if not (md.parent / src).resolve().exists():
                       missing.append(f"{md}: {src}")
           if missing:
