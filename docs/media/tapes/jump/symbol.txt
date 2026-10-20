@@ -1,7 +1,7 @@
 ❯ place=$(rich jump --commands commands --recent .jump-recent docs src)
 ? Jump › [Files] @ApprovalQueue
-Symbols @                                         │   233
-❯ ApprovalQueue  struct · src/components/approve. │   234 /// A queue of pending items to approve, reject or s
+Symbols @                                         │   234 /// A queue of pending items to approve, reject or s
+❯ ApprovalQueue  struct · src/components/approve. │   235 /// [`ApprovalReport`].
   1 results · shift+tab widen · ↑↓ move · alt+↑↓ group · enter jump · esc cancel
 
 

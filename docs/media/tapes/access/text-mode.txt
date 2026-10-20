@@ -20,5 +20,5 @@ Notes
 
 
   10 files, loaded once
-[ Save ] [ Delete ] [ Reload ]
+[Save] [Delete] [Reload]
 tab moves · space ticks · s saves · d deletes · r reloads · q quits
