@@ -15,12 +15,9 @@ use rich_embed::{web_view_with, ChromeEngine, WebHandle};
 use rich_intuituive::prelude::*;
 use rich_intuituive::Driver;
 
-#[test]
-fn a_page_arrives_as_a_screencast_and_draws_as_half_blocks() {
-    let Some(binary) = std::env::var_os("RICH_EMBED_CHROME") else {
-        eprintln!("skipped: set RICH_EMBED_CHROME to a Chrome or Chromium binary to run");
-        return;
-    };
+/// A web view of an all-red page in a 20 x 6 app, driven until the page
+/// draws (or a minute passes), and its handle.
+fn open_a_red_page(binary: std::ffi::OsString) -> (Driver, WebHandle, bool) {
     let url = "data:text/html,<title>red</title><body style='margin:0;background:%23ff0000'>";
     let handle: Rc<RefCell<Option<WebHandle>>> = Rc::default();
     let keep = handle.clone();
@@ -46,8 +43,19 @@ fn a_page_arrives_as_a_screencast_and_draws_as_half_blocks() {
         std::thread::sleep(Duration::from_millis(20));
     }
     let h = handle.borrow().unwrap();
+    let drawn = red(&driver);
+    (driver, h, drawn)
+}
+
+#[test]
+fn a_page_arrives_as_a_screencast_and_draws_as_half_blocks() {
+    let Some(binary) = std::env::var_os("RICH_EMBED_CHROME") else {
+        eprintln!("skipped: set RICH_EMBED_CHROME to a Chrome or Chromium binary to run");
+        return;
+    };
+    let (driver, h, drawn) = open_a_red_page(binary);
     assert!(
-        red(&driver),
+        drawn,
         "no red frame: {:?}, error {:?}",
         driver.screen().plain(),
         h.error().get_untracked()
@@ -55,8 +63,104 @@ fn a_page_arrives_as_a_screencast_and_draws_as_half_blocks() {
     assert!(h.address().get_untracked().starts_with("data:text/html"));
 }
 
-/// A stand-in browser: a script that writes down its arguments and the
-/// mode of its profile directory, then idles as a browser would.
+/// On Linux and macOS DevTools runs over a pipe: while a view is open, the
+/// browser (and every process it started) listens on no TCP socket.
+#[cfg(target_os = "linux")]
+#[test]
+fn the_browser_listens_on_no_port_while_a_view_is_open() {
+    let Some(binary) = std::env::var_os("RICH_EMBED_CHROME") else {
+        eprintln!("skipped: set RICH_EMBED_CHROME to a Chrome or Chromium binary to run");
+        return;
+    };
+    let (driver, h, drawn) = open_a_red_page(binary);
+    assert!(
+        drawn,
+        "no red frame: {:?}, error {:?}",
+        driver.screen().plain(),
+        h.error().get_untracked()
+    );
+    let browser = linux::descendants(std::process::id());
+    assert!(!browser.is_empty(), "no browser process found");
+    let listening: Vec<_> = browser
+        .iter()
+        .flat_map(|&pid| linux::listening(pid).into_iter().map(move |at| (pid, at)))
+        .collect();
+    assert!(
+        listening.is_empty(),
+        "the browser listens on TCP: {listening:?}"
+    );
+}
+
+/// The processes under this one and the TCP sockets they listen on, from
+/// `/proc`, scoped to each process's own descriptors.
+#[cfg(target_os = "linux")]
+mod linux {
+    use std::fs;
+
+    /// The parent of `pid`, from `/proc/<pid>/stat` (the field after the
+    /// command, which may itself hold spaces and parentheses).
+    fn parent(pid: u32) -> Option<u32> {
+        let stat = fs::read_to_string(format!("/proc/{pid}/stat")).ok()?;
+        let after = &stat[stat.rfind(')')? + 1..];
+        after.split_whitespace().nth(1)?.parse().ok()
+    }
+
+    /// Every process descended from `root`, not `root` itself.
+    pub fn descendants(root: u32) -> Vec<u32> {
+        let all: Vec<(u32, u32)> = fs::read_dir("/proc")
+            .map(|dir| {
+                dir.flatten()
+                    .filter_map(|e| e.file_name().to_str()?.parse().ok())
+                    .filter_map(|pid| Some((pid, parent(pid)?)))
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut found = vec![root];
+        let mut at = 0;
+        while at < found.len() {
+            let pid = found[at];
+            found.extend(all.iter().filter(|(_, p)| *p == pid).map(|(c, _)| *c));
+            at += 1;
+        }
+        found.remove(0);
+        found
+    }
+
+    /// The local addresses of the TCP sockets `pid` holds that listen.
+    pub fn listening(pid: u32) -> Vec<String> {
+        let held: Vec<String> = fs::read_dir(format!("/proc/{pid}/fd"))
+            .map(|dir| {
+                dir.flatten()
+                    .filter_map(|e| fs::read_link(e.path()).ok())
+                    .filter_map(|link| {
+                        let link = link.to_string_lossy().into_owned();
+                        Some(
+                            link.strip_prefix("socket:[")?
+                                .strip_suffix(']')?
+                                .to_string(),
+                        )
+                    })
+                    .collect()
+            })
+            .unwrap_or_default();
+        let mut out = Vec::new();
+        for table in ["tcp", "tcp6"] {
+            let text = fs::read_to_string(format!("/proc/{pid}/net/{table}")).unwrap_or_default();
+            for line in text.lines().skip(1) {
+                let fields: Vec<&str> = line.split_whitespace().collect();
+                // `st` 0A is LISTEN; the inode is the tenth field.
+                if fields.len() > 9 && fields[3] == "0A" && held.iter().any(|i| i == fields[9]) {
+                    out.push(fields[1].to_string());
+                }
+            }
+        }
+        out
+    }
+}
+
+/// A stand-in browser: a script that writes down its arguments, the mode of
+/// its profile directory and the first byte the engine sends it on
+/// descriptor 3, then idles as a browser would.
 #[cfg(unix)]
 #[test]
 fn the_browser_gets_no_sandbox_switch_and_a_private_profile() {
@@ -75,6 +179,7 @@ fn the_browser_gets_no_sandbox_switch_and_a_private_profile() {
              for a in \"$@\"; do case \"$a\" in --user-data-dir=*) \
              stat -c %a \"${{a#--user-data-dir=}}\" > '{dir}/mode' 2>/dev/null || \
              stat -f %Lp \"${{a#--user-data-dir=}}\" > '{dir}/mode';; esac; done\n\
+             (head -c 1 <&3 > '{dir}/cdp.tmp' && mv '{dir}/cdp.tmp' '{dir}/cdp') 2>/dev/null &\n\
              printf '%s\\n' \"$@\" > '{argv}.tmp' && mv '{argv}.tmp' '{argv}'\n\
              exec sleep 30\n",
             dir = dir.display(),
@@ -95,11 +200,14 @@ fn the_browser_gets_no_sandbox_switch_and_a_private_profile() {
     ]);
     engine.resize(80, 24).unwrap();
     let start = Instant::now();
-    while !argv.exists() && start.elapsed() < Duration::from_secs(10) {
+    let cdp = dir.join("cdp");
+    while !(argv.exists() && cdp.exists()) && start.elapsed() < Duration::from_secs(10) {
         std::thread::sleep(Duration::from_millis(20));
     }
     let args = std::fs::read_to_string(&argv).unwrap_or_default();
     let mode = std::fs::read_to_string(dir.join("mode")).unwrap_or_default();
+    // The first byte the engine wrote on descriptor 3: a DevTools message.
+    let first = std::fs::read_to_string(&cdp).unwrap_or_default();
     drop(engine);
     let _ = std::fs::remove_dir_all(&dir);
     assert!(args.lines().any(|arg| arg == "--lang=en"), "{args}");
@@ -108,4 +216,11 @@ fn the_browser_gets_no_sandbox_switch_and_a_private_profile() {
         "a sandbox switch reached the browser: {args}"
     );
     assert_eq!(mode.trim(), "700", "the profile's mode");
+    // DevTools over descriptors 3 and 4, and no port.
+    assert!(
+        args.lines().any(|arg| arg == "--remote-debugging-pipe"),
+        "{args}"
+    );
+    assert!(!args.contains("--remote-debugging-port"), "{args}");
+    assert_eq!(first, "{", "nothing came over descriptor 3");
 }

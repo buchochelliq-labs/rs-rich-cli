@@ -1,9 +1,16 @@
 //! [`ChromeEngine`]: headless Chrome or Chromium, which the user installs,
 //! driven over the DevTools protocol.
 //!
-//! The protocol subset is spoken directly over `tungstenite`, on one thread
-//! of the engine's own, so no async runtime comes with it:
+//! The protocol subset is spoken directly, on one thread of the engine's
+//! own, so no async runtime comes with it:
 //!
+//! - on Linux and macOS, over a pipe: the browser is started with
+//!   `--remote-debugging-pipe` and reads DevTools messages from descriptor 3
+//!   and writes them to descriptor 4, each a JSON text ended by a NUL byte.
+//!   No port is opened. The descriptors are passed with `command-fds`;
+//! - on Windows, over a WebSocket (`tungstenite`) on a random port of
+//!   `127.0.0.1` (`--remote-debugging-port=0`), whose address the browser
+//!   prints on its standard error. See [`ChromeEngine`]'s security note;
 //! - the browser is started headless with a temporary profile directory
 //!   (only this user's, removed when the engine goes), its sandbox on (no
 //!   switch that turns any of it off, ever), and downloads denied
@@ -22,7 +29,7 @@
 use std::io::{BufRead, BufReader, ErrorKind};
 use std::net::TcpStream;
 use std::path::{Path, PathBuf};
-use std::process::{Child, Command, Stdio};
+use std::process::{Child, ChildStderr, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
 use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
@@ -56,6 +63,37 @@ const KNOWN_PATHS: &[&str] = &[
     r"C:\Program Files\Google\Chrome\Application\chrome.exe",
     r"C:\Program Files (x86)\Google\Chrome\Application\chrome.exe",
 ];
+
+/// How the engine reaches the browser's DevTools.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub(crate) enum Wire {
+    /// `--remote-debugging-pipe`: descriptors 3 and 4, no port.
+    #[cfg(unix)]
+    Pipe,
+    /// `--remote-debugging-port=0`: a WebSocket on a port of `127.0.0.1`.
+    /// Windows's; on Unix only the tests choose it, to keep it exercised.
+    #[cfg_attr(all(unix, not(test)), allow(dead_code))]
+    Port,
+}
+
+impl Wire {
+    /// The pipe on Linux and macOS; the port on Windows, where the browser
+    /// takes the pipe only as two inheritable handles, which nothing here
+    /// can pass without `unsafe`.
+    #[cfg(unix)]
+    const DEFAULT: Wire = Wire::Pipe;
+    #[cfg(not(unix))]
+    const DEFAULT: Wire = Wire::Port;
+
+    /// The browser's switch for it.
+    fn switch(self) -> &'static str {
+        match self {
+            #[cfg(unix)]
+            Wire::Pipe => "--remote-debugging-pipe",
+            Wire::Port => "--remote-debugging-port=0",
+        }
+    }
+}
 
 /// How long the browser has to say where its DevTools endpoint is.
 const START_TIMEOUT: Duration = Duration::from_secs(30);
@@ -99,13 +137,17 @@ fn notify(shared: &Mutex<Shared>) {
 ///
 /// # Security
 ///
-/// The engine drives the browser over DevTools on a random TCP port of
-/// `127.0.0.1`. While the view is open, that port can be reached by other
-/// programs and other users on this machine, and DevTools has no
-/// authentication of its own: whoever finds it can drive the browser as
-/// this user (open local files, run script in pages). Use this engine on a
-/// machine you do not share. The profile directory is readable by this
-/// user only.
+/// On Linux and macOS the engine drives the browser over DevTools on a
+/// pipe only the two processes hold: no port is opened, and nothing else on
+/// the machine can reach it.
+///
+/// On Windows it uses a random TCP port of `127.0.0.1`. While the view is
+/// open, that port can be reached by other programs and other users on this
+/// machine, and DevTools has no authentication of its own: whoever finds it
+/// can drive the browser as this user (open local files, run script in
+/// pages). On Windows, use this engine on a machine you do not share.
+///
+/// Everywhere, the profile directory is readable by this user only.
 pub struct ChromeEngine {
     binary: Option<PathBuf>,
     args: Vec<String>,
@@ -113,6 +155,7 @@ pub struct ChromeEngine {
     shared: Arc<Mutex<Shared>>,
     commands: Option<Sender<Request>>,
     profile: Option<PathBuf>,
+    wire: Wire,
 }
 
 impl fmt::Debug for ChromeEngine {
@@ -140,6 +183,7 @@ impl ChromeEngine {
             shared: Arc::default(),
             commands: None,
             profile: None,
+            wire: Wire::DEFAULT,
         }
     }
 
@@ -151,12 +195,13 @@ impl ChromeEngine {
 
     /// More command-line switches for the browser. The sandbox stays on
     /// whatever they say: `--no-sandbox`, and every other switch that turns
-    /// part of it off, is dropped, however it is spelled.
+    /// part of it off, is dropped, however it is spelled. So is every
+    /// `--remote-debugging-…` switch: the engine says where DevTools goes.
     pub fn args<I: IntoIterator<Item = S>, S: Into<String>>(mut self, args: I) -> ChromeEngine {
         self.args.extend(
             args.into_iter()
                 .map(Into::into)
-                .filter(|arg| !turns_sandbox_off(arg)),
+                .filter(|arg| !turns_sandbox_off(arg) && !moves_devtools(arg)),
         );
         self
     }
@@ -209,16 +254,25 @@ impl ChromeEngine {
         let profile = temporary_profile()?;
         // The window's first size; the page is sized to the pane once
         // attached.
-        let spawned = Command::new(&binary)
-            .args(launch_args(&profile, &self.args, 80, 24, self.cell))
+        let mut command = Command::new(&binary);
+        command
+            .args(launch_args(
+                &profile, &self.args, 80, 24, self.cell, self.wire,
+            ))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
-            .stderr(Stdio::piped())
-            .spawn();
+            .stderr(Stdio::piped());
+        let spawned = connect(&mut command, self.wire).and_then(|connect| {
+            let child = command.spawn()?;
+            Ok((child, connect))
+        });
+        // Our copies of the browser's ends of the pipe close with the
+        // command, so its exit reads as the end of the pipe.
+        drop(command);
         // The profile is the engine's to remove only once Chrome runs in
         // it; a failed start removes it here, so retries leave none behind.
-        let mut child = match spawned {
-            Ok(child) => child,
+        let (mut child, connect) = match spawned {
+            Ok(spawned) => spawned,
             Err(error) => {
                 let _ = std::fs::remove_dir_all(&profile);
                 return Err(error);
@@ -232,7 +286,7 @@ impl ChromeEngine {
         let shared = Arc::clone(&self.shared);
         let cell = self.cell;
         thread::spawn(move || {
-            if let Err(error) = run(stderr, receiver, &shared, cell) {
+            if let Err(error) = run(connect, stderr, receiver, &shared, cell) {
                 let mut state = lock(&shared);
                 state.state.error = Some(format!("Chrome: {error}"));
                 state.state.loading = false;
@@ -314,6 +368,44 @@ impl WebEngine for ChromeEngine {
     }
 }
 
+/// The engine's ends of the browser's DevTools connection, before it runs.
+enum Connect {
+    /// Read the address from the browser's standard error, then connect.
+    Port,
+    /// Write to the browser's descriptor 3, read from its descriptor 4.
+    #[cfg(unix)]
+    Pipe(io::PipeWriter, io::PipeReader),
+}
+
+/// Set `command` up for `wire`: for the pipe, two pipes whose far ends the
+/// browser gets as descriptors 3 (it reads) and 4 (it writes).
+#[cfg_attr(not(unix), allow(unused_variables))]
+fn connect(command: &mut Command, wire: Wire) -> io::Result<Connect> {
+    match wire {
+        #[cfg(unix)]
+        Wire::Pipe => {
+            use command_fds::{CommandFdExt, FdMapping};
+
+            let (browser_reads, we_write) = io::pipe()?;
+            let (we_read, browser_writes) = io::pipe()?;
+            command
+                .fd_mappings(vec![
+                    FdMapping {
+                        parent_fd: browser_reads.into(),
+                        child_fd: 3,
+                    },
+                    FdMapping {
+                        parent_fd: browser_writes.into(),
+                        child_fd: 4,
+                    },
+                ])
+                .map_err(|_| io::Error::other("descriptors 3 and 4 collide"))?;
+            Ok(Connect::Pipe(we_write, we_read))
+        }
+        Wire::Port => Ok(Connect::Port),
+    }
+}
+
 /// A new, empty directory for the browser's profile.
 fn temporary_profile() -> io::Result<PathBuf> {
     static NEXT: AtomicU64 = AtomicU64::new(0);
@@ -359,20 +451,30 @@ pub(crate) fn turns_sandbox_off(arg: &str) -> bool {
         || matches!(name.as_str(), "single-process" | "no-zygote")
 }
 
-/// The browser's command line: headless, on a random DevTools port, in its
+/// Whether `arg` opens DevTools somewhere of its own
+/// (`--remote-debugging-port`, `--remote-debugging-pipe`, …): the engine
+/// chooses where DevTools goes, and a port would undo the pipe.
+pub(crate) fn moves_devtools(arg: &str) -> bool {
+    let name = arg.trim_start_matches(|c| c == '-' || (cfg!(windows) && c == '/'));
+    name.len() != arg.len() && name.to_ascii_lowercase().starts_with("remote-debugging-")
+}
+
+/// The browser's command line: headless, with DevTools on `wire`, in its
 /// own profile, without first-run screens, extensions or background
-/// traffic. Never a switch that turns the sandbox off.
+/// traffic. Never a switch that turns the sandbox off, nor one that moves
+/// DevTools elsewhere.
 pub(crate) fn launch_args(
     profile: &Path,
     extra: &[String],
     columns: u16,
     rows: u16,
     cell: (u32, u32),
+    wire: Wire,
 ) -> Vec<String> {
     let (width, height) = viewport(columns, rows, cell);
     let mut args = vec![
         "--headless=new".to_string(),
-        "--remote-debugging-port=0".to_string(),
+        wire.switch().to_string(),
         format!("--user-data-dir={}", profile.display()),
         format!("--window-size={width},{height}"),
         "--no-first-run".to_string(),
@@ -383,7 +485,12 @@ pub(crate) fn launch_args(
         "--mute-audio".to_string(),
         "--hide-scrollbars".to_string(),
     ];
-    args.extend(extra.iter().filter(|arg| !turns_sandbox_off(arg)).cloned());
+    args.extend(
+        extra
+            .iter()
+            .filter(|arg| !turns_sandbox_off(arg) && !moves_devtools(arg))
+            .cloned(),
+    );
     args.push("about:blank".to_string());
     args
 }
@@ -557,7 +664,7 @@ fn decode_frame(data: &str) -> Option<Pixels> {
 
 /// Wait for the browser to print where DevTools listens, then keep reading
 /// its standard error so it never blocks on a full pipe.
-fn devtools_address(stderr: std::process::ChildStderr) -> io::Result<String> {
+fn devtools_address(stderr: ChildStderr) -> io::Result<String> {
     let (found, wait) = mpsc::channel();
     thread::spawn(move || {
         let mut found = Some(found);
@@ -590,6 +697,135 @@ fn devtools_address(stderr: std::process::ChildStderr) -> io::Result<String> {
     }
 }
 
+/// Keep reading the browser's standard error so it never blocks on a full
+/// pipe; its last line, once it ends, says why the browser went.
+#[cfg(unix)]
+fn drain(stderr: ChildStderr) -> Receiver<String> {
+    let (last_line, wait) = mpsc::channel();
+    thread::spawn(move || {
+        let mut last = String::new();
+        for line in BufReader::new(stderr).lines() {
+            let Ok(line) = line else { break };
+            if !line.trim().is_empty() {
+                last = line;
+            }
+        }
+        let _ = last_line.send(last);
+    });
+    wait
+}
+
+/// The DevTools connection's messages, whichever way they travel.
+enum Transport {
+    /// A WebSocket on a port of `127.0.0.1`, read with a timeout.
+    WebSocket(Box<WebSocket<TcpStream>>),
+    /// NUL-ended JSON on a pipe each way, read on a thread of its own so
+    /// the engine's thread can wait with a timeout.
+    #[cfg(unix)]
+    Pipe {
+        write: io::PipeWriter,
+        read: Receiver<Vec<u8>>,
+        /// The browser's last line on standard error, once it ends.
+        stderr: Receiver<String>,
+    },
+}
+
+impl Transport {
+    /// Over the WebSocket the browser announced on its standard error.
+    fn websocket(stderr: ChildStderr) -> io::Result<Transport> {
+        let url = devtools_address(stderr)?;
+        let address = url
+            .trim_start_matches("ws://")
+            .split('/')
+            .next()
+            .unwrap_or_default()
+            .to_string();
+        let stream = TcpStream::connect(&address)?;
+        let (socket, _) = tungstenite::client::client(url.as_str(), stream)
+            .map_err(|error| io::Error::other(error.to_string()))?;
+        socket.get_ref().set_read_timeout(Some(POLL))?;
+        Ok(Transport::WebSocket(Box::new(socket)))
+    }
+
+    /// Over the pipe to the browser's descriptors 3 and 4.
+    #[cfg(unix)]
+    fn pipe(write: io::PipeWriter, read: io::PipeReader, stderr: ChildStderr) -> Transport {
+        let (messages, receive) = mpsc::channel();
+        thread::spawn(move || {
+            let mut read = BufReader::new(read);
+            loop {
+                let mut message = Vec::new();
+                match read.read_until(0, &mut message) {
+                    // The pipe's end: the browser went.
+                    Ok(0) | Err(_) => break,
+                    Ok(_) => {
+                        if message.last() == Some(&0) {
+                            message.pop();
+                        }
+                        if messages.send(message).is_err() {
+                            break;
+                        }
+                    }
+                }
+            }
+        });
+        Transport::Pipe {
+            write,
+            read: receive,
+            stderr: drain(stderr),
+        }
+    }
+
+    fn send(&mut self, text: &str) -> io::Result<()> {
+        match self {
+            Transport::WebSocket(socket) => socket
+                .send(Message::text(text))
+                .map_err(|error| io::Error::other(error.to_string())),
+            #[cfg(unix)]
+            Transport::Pipe { write, .. } => {
+                // JSON escapes NUL inside strings, so it only ever ends one.
+                let mut bytes = Vec::with_capacity(text.len() + 1);
+                bytes.extend_from_slice(text.as_bytes());
+                bytes.push(0);
+                io::Write::write_all(write, &bytes)?;
+                io::Write::flush(write)
+            }
+        }
+    }
+
+    /// The next message, or none if none came within [`POLL`].
+    fn read(&mut self) -> io::Result<Option<String>> {
+        match self {
+            Transport::WebSocket(socket) => match socket.read() {
+                Ok(Message::Text(text)) => Ok(Some(text.as_str().to_string())),
+                Ok(Message::Close(_)) => Err(io::Error::other("the browser closed")),
+                Ok(_) => Ok(None),
+                Err(tungstenite::Error::Io(error))
+                    if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) =>
+                {
+                    Ok(None)
+                }
+                Err(error) => Err(io::Error::other(error.to_string())),
+            },
+            #[cfg(unix)]
+            Transport::Pipe { read, stderr, .. } => match read.recv_timeout(POLL) {
+                Ok(message) => Ok(Some(String::from_utf8_lossy(&message).into_owned())),
+                Err(mpsc::RecvTimeoutError::Timeout) => Ok(None),
+                Err(mpsc::RecvTimeoutError::Disconnected) => {
+                    let last = stderr
+                        .recv_timeout(Duration::from_secs(1))
+                        .unwrap_or_default();
+                    Err(io::Error::other(if last.is_empty() {
+                        "the browser closed".to_string()
+                    } else {
+                        format!("the browser closed: {last}")
+                    }))
+                }
+            },
+        }
+    }
+}
+
 /// What a pending command's answer is for.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Pending {
@@ -601,7 +837,7 @@ enum Pending {
 
 /// The DevTools connection, on the engine's thread.
 struct Session {
-    socket: WebSocket<TcpStream>,
+    transport: Transport,
     next: u64,
     pending: Vec<(u64, Pending)>,
     session: Option<String>,
@@ -622,9 +858,7 @@ impl Session {
         let session = if page { self.session.clone() } else { None };
         let text = command(self.next, method, params, session.as_deref());
         self.pending.push((self.next, kind));
-        self.socket
-            .send(Message::text(text))
-            .map_err(io::Error::other)
+        self.transport.send(&text)
     }
 
     fn page(&mut self, method: &str, params: Value) -> io::Result<()> {
@@ -803,24 +1037,19 @@ impl Session {
 /// The engine's thread: connect, then pass messages both ways until the
 /// engine goes.
 fn run(
-    stderr: std::process::ChildStderr,
+    connect: Connect,
+    stderr: ChildStderr,
     commands: Receiver<Request>,
     shared: &Mutex<Shared>,
     cell: (u32, u32),
 ) -> io::Result<()> {
-    let url = devtools_address(stderr)?;
-    let address = url
-        .trim_start_matches("ws://")
-        .split('/')
-        .next()
-        .unwrap_or_default()
-        .to_string();
-    let stream = TcpStream::connect(&address)?;
-    let (socket, _) = tungstenite::client::client(url.as_str(), stream)
-        .map_err(|error| io::Error::other(error.to_string()))?;
-    socket.get_ref().set_read_timeout(Some(POLL))?;
+    let transport = match connect {
+        Connect::Port => Transport::websocket(stderr)?,
+        #[cfg(unix)]
+        Connect::Pipe(write, read) => Transport::pipe(write, read, stderr),
+    };
     let mut session = Session {
-        socket,
+        transport,
         next: 0,
         pending: Vec::new(),
         session: None,
@@ -856,13 +1085,8 @@ fn run(
                 }
             }
         }
-        match session.socket.read() {
-            Ok(Message::Text(text)) => session.message(text.as_str(), shared)?,
-            Ok(Message::Close(_)) => return Err(io::Error::other("the browser closed")),
-            Ok(_) => {}
-            Err(tungstenite::Error::Io(error))
-                if matches!(error.kind(), ErrorKind::WouldBlock | ErrorKind::TimedOut) => {}
-            Err(error) => return Err(io::Error::other(error.to_string())),
+        if let Some(text) = session.transport.read()? {
+            session.message(&text, shared)?;
         }
         if session.session.is_none() && started.elapsed() > START_TIMEOUT {
             return Err(io::Error::new(
@@ -964,7 +1188,14 @@ mod tests {
     #[test]
     fn the_browser_is_launched_sandboxed_in_its_own_profile() {
         let extra = vec!["--no-sandbox".to_string(), "--lang=en".to_string()];
-        let args = launch_args(Path::new("/tmp/profile"), &extra, 80, 24, (10, 20));
+        let args = launch_args(
+            Path::new("/tmp/profile"),
+            &extra,
+            80,
+            24,
+            (10, 20),
+            Wire::DEFAULT,
+        );
         assert!(args.contains(&"--headless=new".to_string()));
         assert!(args.contains(&"--user-data-dir=/tmp/profile".to_string()));
         assert!(args.contains(&"--window-size=800,480".to_string()));
@@ -973,6 +1204,88 @@ mod tests {
         assert_eq!(args.last().unwrap(), "about:blank");
         let engine = ChromeEngine::new().args(["--no-sandbox"]);
         assert!(engine.args.is_empty());
+    }
+
+    #[test]
+    fn devtools_runs_over_a_pipe_on_unix_and_a_port_elsewhere() {
+        let args = launch_args(Path::new("/p"), &[], 80, 24, (10, 20), Wire::DEFAULT);
+        let pipe = args.iter().any(|arg| arg == "--remote-debugging-pipe");
+        let port = args.iter().any(|arg| arg == "--remote-debugging-port=0");
+        assert_eq!((pipe, port), (cfg!(unix), !cfg!(unix)), "{args:?}");
+        assert_eq!(ChromeEngine::new().wire, Wire::DEFAULT);
+    }
+
+    #[test]
+    fn a_devtools_switch_of_the_callers_is_dropped() {
+        let extra: Vec<String> = [
+            "--remote-debugging-port=9222",
+            "-Remote-Debugging-Address=0.0.0.0",
+            "--remote-debugging-pipe",
+            "--lang=en",
+            "https://remote-debugging-port.example",
+        ]
+        .map(String::from)
+        .to_vec();
+        let args = launch_args(Path::new("/p"), &extra, 80, 24, (10, 20), Wire::DEFAULT);
+        let devtools: Vec<_> = args
+            .iter()
+            .filter(|arg| arg.to_ascii_lowercase().starts_with("--remote-debugging"))
+            .collect();
+        assert_eq!(devtools, [Wire::DEFAULT.switch()]);
+        let engine = ChromeEngine::new().args(extra);
+        assert_eq!(
+            engine.args,
+            ["--lang=en", "https://remote-debugging-port.example"]
+        );
+    }
+
+    /// A page's first frame over `wire`, from the browser `RICH_EMBED_CHROME`
+    /// names (skipped without one). Both ways are tried on Linux and macOS,
+    /// so the port Windows uses is still exercised where a browser is.
+    fn a_frame_arrives_over(wire: Wire) {
+        let Some(binary) = std::env::var_os("RICH_EMBED_CHROME") else {
+            eprintln!("skipped: set RICH_EMBED_CHROME to a Chrome or Chromium binary to run");
+            return;
+        };
+        let mut engine = ChromeEngine::new().binary(binary);
+        engine.wire = wire;
+        engine.resize(8, 4).unwrap();
+        engine
+            .open("data:text/html,<body style='background:%2300ff00'>")
+            .unwrap();
+        // A green frame at the pane's size: 8 x 4 cells of 10 x 20 pixels.
+        let green = |frame: &Option<WebFrame>| match frame {
+            Some(WebFrame::Pixels(p)) => {
+                let at = (p.width as usize * p.height as usize / 2 + p.width as usize / 2) * 3;
+                (p.width, p.height) == (80, 80)
+                    && p.rgb
+                        .get(at..at + 3)
+                        .is_some_and(|c| c[0] < 60 && c[1] > 200 && c[2] < 60)
+            }
+            _ => false,
+        };
+        let start = Instant::now();
+        let mut frame = None;
+        while !green(&frame) && start.elapsed() < Duration::from_secs(60) {
+            frame = engine.poll().or(frame);
+            thread::sleep(Duration::from_millis(20));
+        }
+        assert!(
+            green(&frame),
+            "no green frame over {wire:?}: {:?}",
+            engine.state().error
+        );
+    }
+
+    #[cfg(unix)]
+    #[test]
+    fn a_frame_arrives_over_the_pipe() {
+        a_frame_arrives_over(Wire::Pipe);
+    }
+
+    #[test]
+    fn a_frame_arrives_over_the_port() {
+        a_frame_arrives_over(Wire::Port);
     }
 
     #[test]
@@ -1006,7 +1319,14 @@ mod tests {
         let extra: Vec<String> = ["-no-sandbox", "--Disable-Setuid-Sandbox", "--lang=en"]
             .map(String::from)
             .to_vec();
-        let args = launch_args(Path::new("/tmp/profile"), &extra, 80, 24, (10, 20));
+        let args = launch_args(
+            Path::new("/tmp/profile"),
+            &extra,
+            80,
+            24,
+            (10, 20),
+            Wire::DEFAULT,
+        );
         assert!(!args
             .iter()
             .any(|arg| arg.to_ascii_lowercase().contains("sandbox")));
