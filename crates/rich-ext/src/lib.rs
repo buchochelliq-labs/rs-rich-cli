@@ -83,6 +83,8 @@ pub mod fidelity;
 pub mod filetype;
 pub mod format;
 pub mod frame;
+// Text coloured along a gradient of two or more colours.
+pub mod gradient;
 // Local times and owner names for file listings.
 pub mod fs;
 // File operations with progress: copy, move, delete, trash.
@@ -98,6 +100,9 @@ pub mod listing;
 pub mod open;
 pub mod palette;
 pub mod plugin_loading;
+// QR codes drawn with half blocks.
+#[cfg(feature = "qr")]
+pub mod qr;
 pub mod redact;
 pub mod registry;
 #[cfg(feature = "syntax")]

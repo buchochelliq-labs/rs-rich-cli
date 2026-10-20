@@ -115,6 +115,32 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   channel dropped. The new `tracing` example rebuilds ratatui's, with the
   log in a pane, a targets panel, a filter box and a status line.
 
+### Charts: pies, stacked bars and areas, QR codes and gradient text (rs-rich-ext, rs-rich-cli)
+
+- `chart::PieChart`: shares of a whole as slices of a disc, clockwise from
+  the top, with a legend of labels, percentages and (optionally) values;
+  `.donut(hole)` makes a ring with text in the hole. Half blocks with
+  colour, a fill per slice without it, Braille with the edges between
+  slices left out, and an ASCII form; accessible text names each share.
+- `BarGroup::stacked()`: a group drawn as one bar of parts, across or up,
+  parts below zero stacking down, with the total written and a legend
+  (`BarChart::legend`). Without colour each part has its own fill.
+- `Chart::stacked(true)`: area datasets drawn on top of the ones before,
+  the axes fitting the totals.
+- `qr::QrCode`, behind the new off-by-default `qr` feature: QR codes drawn
+  with half blocks inside a quiet zone, at an `ErrorCorrection` level, in
+  exact black and white with colour and in the terminal's own colours
+  without (`.invert` for light terminals); two cells a module in ASCII. The
+  quiet zone narrows to fit, and a code that cannot fit says how many
+  columns it needs. New dependency: `qrcodegen` 1.8 (MIT, no dependencies).
+- `gradient::GradientText`: a `Text` coloured along two or more colours
+  through `palette::gradient`, across, down or corner to corner, its
+  colours the nearest each colour system has.
+- `rich chart --kind pie` (one series as slices) and `--kind stacked` (a
+  bar per row, each series a part).
+- The guide's [Charts](docs/guide/ext/charts.md) page covers them, from the
+  new `guide_charts_extra` example.
+
 ### Recording: a held key repeats only while it is held (rs-rich-record)
 
 - `Hold` (and a `KeyDown` held through a `Sleep`) sends the repeats due

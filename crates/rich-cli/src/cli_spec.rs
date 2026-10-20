@@ -886,15 +886,16 @@ fn mode_options() -> Vec<ArgSpec> {
             CHART,
             "With `rich chart`, what to draw: spark (a sparkline per series), bar (a bar per \
              row, labelled by --x), line (the default) and scatter (each series against --x, or \
-             the row number), or heatmap (rows by series, each value a shade)",
+             the row number), heatmap (rows by series, each value a shade), pie (one series as \
+             slices, labelled by --x) or stacked (a bar per row, each series a part)",
         )
-        .choices(["spark", "bar", "line", "scatter", "heatmap"]),
+        .choices(["spark", "bar", "line", "scatter", "heatmap", "pie", "stacked"]),
         option(
             "x",
             "COLUMN",
             CHART,
             "With `rich chart`, the column of x positions (line, scatter) or labels (bar, \
-             heatmap), by header or 1-based number (default: the row number; for labels, the \
+             heatmap, pie, stacked), by header or 1-based number (default: the row number; for labels, the \
              first column that is not all numbers)",
         ),
         option(
@@ -1889,9 +1890,9 @@ pub(crate) fn spec() -> CommandSpec {
     spec = spec.subcommand(
         CommandSpec::new("chart")
             .about(
-                "A chart from CSV, JSON or stdin: a sparkline, bars, lines, points or a heatmap; \
-                 --x and --y pick the columns, a missing column or a value that is not a number \
-                 is refused with its row and column",
+                "A chart from CSV, JSON or stdin: a sparkline, bars, lines, points, a heatmap, a \
+                 pie or stacked bars; --x and --y pick the columns, a missing column or a value \
+                 that is not a number is refused with its row and column",
             )
             .usage("chart [OPTIONS] [FILE]")
             .arg(ArgSpec::positional("file").value(ValueHint::Path).help(

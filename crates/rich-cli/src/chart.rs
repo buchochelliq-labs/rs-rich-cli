@@ -9,7 +9,7 @@
 use super::*;
 
 use rich::table::Cell as TableCell;
-use rich_ext::chart::{Bar, BarChart, Heatmap, LineChart, Series, Sparkline};
+use rich_ext::chart::{Bar, BarChart, BarGroup, Heatmap, LineChart, PieChart, Series, Sparkline};
 
 /// `--kind`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Default)]
@@ -25,6 +25,10 @@ pub(crate) enum ChartKind {
     Scatter,
     /// Rows by series, each value a shade.
     Heatmap,
+    /// One series as slices of a disc, labelled by `--x`.
+    Pie,
+    /// A bar per row, labelled by `--x`, each series a part of it.
+    Stacked,
 }
 
 impl ChartKind {
@@ -35,8 +39,10 @@ impl ChartKind {
             "line" => Ok(Self::Line),
             "scatter" => Ok(Self::Scatter),
             "heatmap" => Ok(Self::Heatmap),
+            "pie" => Ok(Self::Pie),
+            "stacked" => Ok(Self::Stacked),
             other => Err(format!(
-                "unknown chart kind {other:?} (spark, bar, line, scatter, heatmap)"
+                "unknown chart kind {other:?} (spark, bar, line, scatter, heatmap, pie, stacked)"
             )),
         }
     }
@@ -69,7 +75,7 @@ impl ChartOptions {
             "--kind" => {
                 let value = rest
                     .next()
-                    .ok_or("--kind requires spark, bar, line, scatter or heatmap")?;
+                    .ok_or("--kind requires spark, bar, line, scatter, heatmap, pie or stacked")?;
                 self.kind = Some(ChartKind::parse(value)?);
             }
             "--x" => {
@@ -588,6 +594,34 @@ fn build(data: &Data, options: &ChartOptions) -> Result<Box<dyn Renderable>, Fai
                 heatmap = heatmap.row(label.clone(), series.iter().map(|(_, values)| values[row]));
             }
             Box::new(heatmap)
+        }
+        ChartKind::Pie => {
+            let [(_, values)] = series.as_slice() else {
+                return Err((
+                    ExitClass::Usage,
+                    format!(
+                        "a pie chart draws one series; name it with --y (the numeric columns are {})",
+                        series
+                            .iter()
+                            .map(|(name, _)| format!("{name:?}"))
+                            .collect::<Vec<_>>()
+                            .join(", ")
+                    ),
+                ));
+            };
+            Box::new(PieChart::from_pairs(
+                labels.iter().cloned().zip(values.iter().copied()),
+            ))
+        }
+        ChartKind::Stacked => {
+            let mut chart = BarChart::new();
+            for (row, label) in labels.iter().enumerate() {
+                let parts = series
+                    .iter()
+                    .map(|(name, values)| Bar::new(*name, values[row]));
+                chart = chart.group(BarGroup::new(label.clone()).stacked().bars(parts));
+            }
+            Box::new(chart)
         }
     })
 }

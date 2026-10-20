@@ -1,0 +1,99 @@
+<svg class="rich-terminal" viewBox="0 0 750 172.0" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_charts_extra-gradient-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_charts_extra-gradient-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_charts_extra-gradient-r1 { fill: #fbbf24;font-weight: bold }
+.guide_charts_extra-gradient-r2 { fill: #fab32a;font-weight: bold }
+.guide_charts_extra-gradient-r3 { fill: #faa72f;font-weight: bold }
+.guide_charts_extra-gradient-r4 { fill: #f99a35;font-weight: bold }
+.guide_charts_extra-gradient-r5 { fill: #f88e3a;font-weight: bold }
+.guide_charts_extra-gradient-r6 { fill: #f88240;font-weight: bold }
+.guide_charts_extra-gradient-r7 { fill: #f77645;font-weight: bold }
+.guide_charts_extra-gradient-r8 { fill: #f66a4b;font-weight: bold }
+.guide_charts_extra-gradient-r9 { fill: #f65d50;font-weight: bold }
+.guide_charts_extra-gradient-r10 { fill: #f55156;font-weight: bold }
+.guide_charts_extra-gradient-r11 { fill: #f4455b;font-weight: bold }
+.guide_charts_extra-gradient-r12 { fill: #ee3f65;font-weight: bold }
+.guide_charts_extra-gradient-r13 { fill: #e33e72;font-weight: bold }
+.guide_charts_extra-gradient-r14 { fill: #d73e80;font-weight: bold }
+.guide_charts_extra-gradient-r15 { fill: #cc3d8e;font-weight: bold }
+.guide_charts_extra-gradient-r16 { fill: #c13d9b;font-weight: bold }
+.guide_charts_extra-gradient-r17 { fill: #b53ca9;font-weight: bold }
+.guide_charts_extra-gradient-r18 { fill: #aa3cb7;font-weight: bold }
+.guide_charts_extra-gradient-r19 { fill: #9e3bc4;font-weight: bold }
+.guide_charts_extra-gradient-r20 { fill: #933bd2;font-weight: bold }
+.guide_charts_extra-gradient-r21 { fill: #873adf;font-weight: bold }
+.guide_charts_extra-gradient-r22 { fill: #7c3aed;font-weight: bold }
+.guide_charts_extra-gradient-r23 { fill: #c5c8c6 }
+.guide_charts_extra-gradient-r24 { fill: #fbbf24 }
+.guide_charts_extra-gradient-r25 { fill: #f43f5e }
+.guide_charts_extra-gradient-r26 { fill: #7c3aed }
+    </style>
+
+    <defs>
+    <clipPath id="guide_charts_extra-gradient-clip-terminal">
+      <rect x="0" y="0" width="731.0" height="121.0" />
+    </clipPath>
+    <clipPath id="guide_charts_extra-gradient-line-0">
+    <rect x="0" y="1.5" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_charts_extra-gradient-line-1">
+    <rect x="0" y="25.9" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_charts_extra-gradient-line-2">
+    <rect x="0" y="50.3" width="732" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_charts_extra-gradient-line-3">
+    <rect x="0" y="74.7" width="732" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="748" height="170" rx="8"/><text class="guide_charts_extra-gradient-title" fill="#c5c8c6" text-anchor="middle" x="374" y="27">GradientText</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_charts_extra-gradient-clip-terminal)">
+    <rect fill="#fbbf24" x="0" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#fab12a" x="12.2" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#f9a331" x="24.4" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#f99437" x="36.6" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#f8863e" x="48.8" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#f77844" x="61" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#f66a4b" x="73.2" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#f65b51" x="85.4" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#f54d58" x="97.6" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#f43f5e" x="109.8" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#e73e6e" x="122" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#d93e7e" x="134.2" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#cc3d8e" x="146.4" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#bf3d9e" x="158.6" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#b13cad" x="170.8" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#a43cbd" x="183" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#973bcd" x="195.2" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#893bdd" x="207.4" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/><rect fill="#7c3aed" x="219.6" y="99.1" width="12.2" height="24.65" shape-rendering="crispEdges"/>
+    <g class="guide_charts_extra-gradient-matrix">
+    <text class="guide_charts_extra-gradient-r1" x="0" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">r</text><text class="guide_charts_extra-gradient-r2" x="12.2" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">s</text><text class="guide_charts_extra-gradient-r3" x="24.4" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">-</text><text class="guide_charts_extra-gradient-r4" x="36.6" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">r</text><text class="guide_charts_extra-gradient-r5" x="48.8" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">i</text><text class="guide_charts_extra-gradient-r6" x="61" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">c</text><text class="guide_charts_extra-gradient-r7" x="73.2" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">h</text><text class="guide_charts_extra-gradient-r8" x="85.4" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">:</text><text class="guide_charts_extra-gradient-r10" x="109.8" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">r</text><text class="guide_charts_extra-gradient-r11" x="122" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">i</text><text class="guide_charts_extra-gradient-r12" x="134.2" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">c</text><text class="guide_charts_extra-gradient-r13" x="146.4" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">h</text><text class="guide_charts_extra-gradient-r14" x="158.6" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">,</text><text class="guide_charts_extra-gradient-r16" x="183" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">i</text><text class="guide_charts_extra-gradient-r17" x="195.2" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">n</text><text class="guide_charts_extra-gradient-r19" x="219.6" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">R</text><text class="guide_charts_extra-gradient-r20" x="231.8" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">u</text><text class="guide_charts_extra-gradient-r21" x="244" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">s</text><text class="guide_charts_extra-gradient-r22" x="256.2" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">t</text><text class="guide_charts_extra-gradient-r23" x="732" y="20" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-0)">
+</text><text class="guide_charts_extra-gradient-r24" x="0" y="44.4" textLength="146.4" clip-path="url(#guide_charts_extra-gradient-line-1)">one&#160;gradient</text><text class="guide_charts_extra-gradient-r23" x="732" y="44.4" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-1)">
+</text><text class="guide_charts_extra-gradient-r25" x="0" y="68.8" textLength="146.4" clip-path="url(#guide_charts_extra-gradient-line-2)">from&#160;the&#160;top</text><text class="guide_charts_extra-gradient-r23" x="732" y="68.8" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-2)">
+</text><text class="guide_charts_extra-gradient-r26" x="0" y="93.2" textLength="158.6" clip-path="url(#guide_charts_extra-gradient-line-3)">to&#160;the&#160;bottom</text><text class="guide_charts_extra-gradient-r23" x="732" y="93.2" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-3)">
+</text><text class="guide_charts_extra-gradient-r23" x="24.4" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">b</text><text class="guide_charts_extra-gradient-r23" x="36.6" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">e</text><text class="guide_charts_extra-gradient-r23" x="48.8" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">h</text><text class="guide_charts_extra-gradient-r23" x="61" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">i</text><text class="guide_charts_extra-gradient-r23" x="73.2" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">n</text><text class="guide_charts_extra-gradient-r23" x="85.4" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">d</text><text class="guide_charts_extra-gradient-r23" x="109.8" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">t</text><text class="guide_charts_extra-gradient-r23" x="122" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">h</text><text class="guide_charts_extra-gradient-r23" x="134.2" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">e</text><text class="guide_charts_extra-gradient-r23" x="158.6" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">t</text><text class="guide_charts_extra-gradient-r23" x="170.8" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">e</text><text class="guide_charts_extra-gradient-r23" x="183" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">x</text><text class="guide_charts_extra-gradient-r23" x="195.2" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">t</text><text class="guide_charts_extra-gradient-r23" x="732" y="117.6" textLength="12.2" clip-path="url(#guide_charts_extra-gradient-line-4)">
+</text>
+    </g>
+    </g>
+</svg>

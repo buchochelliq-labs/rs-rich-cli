@@ -338,9 +338,9 @@ fn data_with_nothing_to_chart_is_refused() {
 
 #[test]
 fn chart_options_are_checked() {
-    let (code, stderr) = failure(&run(&["chart", "sales.csv", "--kind", "pie"]));
+    let (code, stderr) = failure(&run(&["chart", "sales.csv", "--kind", "radar"]));
     assert_eq!(code, Some(2));
-    assert!(stderr.contains("unknown chart kind \"pie\""), "{stderr}");
+    assert!(stderr.contains("unknown chart kind \"radar\""), "{stderr}");
     let (code, stderr) = failure(&run(&["sales.csv", "--kind", "bar"]));
     assert_eq!(code, Some(2));
     assert!(
@@ -372,4 +372,37 @@ fn chart_is_in_help_and_completions() {
     let out = stdout(&run(&["chart", "--help"]));
     assert!(out.contains("--kind"), "{out}");
     assert!(out.contains("--y"), "{out}");
+}
+
+#[test]
+fn a_pie_of_one_series_labelled_by_the_first_text_column() {
+    let out = stdout(&run(&["chart", "sales.csv", "--kind", "pie", "--y", "api"]));
+    assert!(out.contains("Jan  14.6%"), "{out}");
+    assert!(out.contains("May  23.3%"), "{out}");
+    // Several series are refused: a pie has one.
+    let (code, stderr) = failure(&run(&["chart", "sales.csv", "--kind", "pie"]));
+    assert_eq!(code, Some(2));
+    assert!(
+        stderr.contains("a pie chart draws one series; name it with --y"),
+        "{stderr}"
+    );
+}
+
+#[test]
+fn stacked_bars_a_row_each_with_the_series_as_parts() {
+    let out = stdout(&run(&["chart", "sales.csv", "--kind", "stacked"]));
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines.len(), 6, "{out}");
+    assert!(
+        lines[0].starts_with("Jan ") && lines[0].ends_with(" 42"),
+        "{out}"
+    );
+    assert!(
+        lines[3].starts_with("Apr ") && lines[3].ends_with(" 73"),
+        "{out}"
+    );
+    assert!(
+        lines[5].contains("█ api") && lines[5].contains("▓ web"),
+        "{out}"
+    );
 }

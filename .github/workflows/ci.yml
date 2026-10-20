@@ -191,6 +191,10 @@ jobs:
             args: "--all-features"
           - crate: rs-rich-ext
             args: "--no-default-features"
+          # QR codes on their own (qrcodegen), without syntect or Markdown;
+          # `--all-features` above covers them with everything else.
+          - crate: rs-rich-ext
+            args: "--no-default-features --features qr"
           - crate: rs-rich-art
             args: ""
           - crate: rs-rich-art
