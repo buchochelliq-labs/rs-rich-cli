@@ -456,18 +456,17 @@ exist. Every dependency it names must already be on crates.io.
 #### After a release: notes first, then the next versions
 
 The docs site keeps a copy of each release's docs
-(`scripts/build_versioned_docs.py`): release X.Y.Z's are built from the last
-commit on `main`'s first-parent line before `RELEASES.toml` moves a package
-past what X.Y.Z shipped, or from `main` while nothing has moved. So the
-order after a release matters:
+(`scripts/build_versioned_docs.py`). Release X.Y.Z's are built from `main`
+while `RELEASES.toml` still lists what X.Y.Z shipped; once a merge moves a
+package past it, from the newest commit inside that merge whose versions are
+still X.Y.Z's. So the order of commits after a release matters:
 
-1. Merge the post-release docs (the release notes, the CHANGELOG's cohort
-   heading, any docs fixes for that release) on their own, with no version
-   change.
-2. Only then open the next release's versions, in a later merge.
+1. Commit the post-release docs (the release notes, the CHANGELOG's cohort
+   heading, docs fixes for that release) with no version change.
+2. Open the next release's versions in a later commit: the same pull request
+   is fine, as long as it is merged with a merge commit, not squashed.
 
-Docs fixed for a release after its versions moved on show under **dev**
-only.
+Docs committed after the versions move show under **dev** only.
 
 #### Release 0.0.19
 

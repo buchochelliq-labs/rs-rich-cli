@@ -11,8 +11,8 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   `<crate>-v<version>` for all 17 crates; see the
   [0.0.20 release notes](../releases/0.0.20.md)), with `rs-rich` 0.0.8 on
   PyPI (`python-v0.0.8`).
-- **0.0.21 is in progress** ([plan](../plans/0.0.21.md)); its versions open
-  after 0.0.20's release notes merge. Its first wave is running now, each workstream on a
+- **0.0.21 is in progress** ([plan](../plans/0.0.21.md)); its versions are
+  open. Its first wave is running now, each workstream on a
   branch of its own: round 7's bugs and regressions (workstream 1), the
   DevTools pipe on Linux and macOS (workstream 8), and the marketplace's
   listing format and schema (workstream 7).
