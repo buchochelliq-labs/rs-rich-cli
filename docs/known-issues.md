@@ -4,7 +4,7 @@ What does not work yet, what was never meant to, and what works differently on
 purpose. Three different things, kept apart — a deliberate trade-off listed as a
 bug makes a considered decision look like neglect.
 
-**Applies to** the 0.0.20 release (`rs-rich-cli` 0.0.20, `rs-rich` 0.0.10),
+**Applies to** the 0.0.21 release (`rs-rich-cli` 0.0.21, `rs-rich` 0.0.11),
 reviewed against Python `rich` 15.0.0. Older entries name the release they
 were found in. Each entry links to its issue or report so you can check the
 status without waiting for this page to be updated.
@@ -33,29 +33,8 @@ about 30 frames a second; on CI's macOS runners the same recording kept 7
 frames over 0.8 s, so its video plays in jumps. Whether macOS's PTY reads
 or the recorder's settling rule merge the updates is not known yet; the
 frame-rate test keeps its lower bound on Linux only until it is. Record
-games on Linux for now. Planned for [0.0.21](plans/0.0.21.md#1-round-7s-bugs-and-regressions-intuituive-record).
-
-### Four intuiTUIve bugs the demo clones found
-
-Round 7 of the [demo loop](design/intuituive-demo-gaps.md#round-7-the-nine-apps-rebuilt-on-round-6)
-found these; each has a minimal failing test in its clone's report and a
-workaround in the clone, and all four are planned for 0.0.21:
-
-- a `cx.focus(x)` made just before `cx.modal(..)` opens is not where the
-  focus returns when the modal closes: it goes back to the node focused
-  before ([tasks](design/gaps/tasks.md)); focus `x` again after the modal
-  closes;
-- a styled `layers` node does not cover the gaps its inset children leave
-  ([blocks](design/gaps/blocks.md)); put a `fill` as the first layer;
-- `layout::squarify` gives the largest item no tile when the rest's tile is
-  under the minimum width ([disk](design/gaps/disk.md));
-- a `previews_keys` container takes the letters typed into a
-  `command_line` inside it ([csv](design/gaps/csv.md)); put the command
-  line outside the container.
-
-Filtering a million rows through `view_of` is also slower than the clone's
-own loop was (15.4 s against 3.3 s in an unoptimised build): each row is
-read through `TableSource::row` and turned into a `Text` for the regex.
+games on Linux for now. Found in 0.0.20 and still open in 0.0.21
+([plan](plans/0.0.21.md#1-round-7s-bugs-and-regressions-intuituive-record)).
 
 ---
 
@@ -82,8 +61,8 @@ the formats now include an animated PNG beside the GIF. An APNG is in full
 colour, so it can be several megabytes for a long recording, and encoding
 it adds time. Name what you want with an `Output` line (`Output gif png`)
 or `--format gif,png,svg`, or skip all video with `--no-video`. Whether the
-APNG stays a default is an open question for
-[0.0.21](plans/0.0.21.md#1-round-7s-bugs-and-regressions-intuituive-record).
+APNG stays a default is still an open question after 0.0.21
+([plan](plans/0.0.21.md#decisions)).
 
 ### The local time zone on Windows follows `TZ` when it is set
 
@@ -259,6 +238,9 @@ fixes to `view`, stack traces and hyperlinks) are in the changelog instead. Full
 
 | Symptom | Fixed in |
 |---------|----------|
+| <a id="four-intuituive-bugs-the-demo-clones-found"></a>A `cx.focus(x)` just before `cx.modal(..)` was lost when the modal closed; a styled `layers` node let the layers below show through its children's gaps; `layout::squarify` gave the largest item no tile; a `previews_keys` container took a command line's letters (round 7's four bugs) | intuituive `0.0.6` |
+| Filtering a million rows through `view_of` was slower than a hand-written loop (15.4 s against 3.3 s unoptimised) | intuituive `0.0.6`, ext `0.0.18` |
+| A held key in a tape sent extra repeats after its release on a slow machine | record `0.0.9`, CLI `0.0.21` |
 | `rich mermaid` and `rich_mermaid::Mermaid` printed a blank line after the diagram | mermaid `0.0.4`, CLI `0.0.15` |
 | `rich micro preview` labelled a still image with a frame time ("100 ms") | CLI `0.0.15` |
 | `NO_COLOR` also dropped bold and underline in a terminal | core `0.0.7` |

@@ -50,41 +50,28 @@ topic and a widget index.
 
 </div>
 
-## New in 0.0.20
+## New in 0.0.21
 
-| A raycaster on intuiTUIve | Recorded with held keys |
-|---|---|
-| ![The raycaster example: a first-person maze in half blocks](media/tapes/raycast/start.png) | ![The raycaster's map, recorded from a tape](media/tapes/raycast/map.png) |
+![Memo celebrating, trunk up, with confetti cells](assets/intuituive/mascot/elephant-celebrate.svg){ .tui-mascot width="128" }
+0.0.21 ([release notes](releases/0.0.21.md)) fixes what the demo loop's
+seventh round found and adds what the clones and a consumer asked for.
 
-![Memo, intuiTUIve's elephant, waving, with her calf Tui holding her tail](assets/intuituive/mascot/memo-and-tui.svg){ .tui-mascot width="224" }
-0.0.20, published on 2026-10-19 ([release notes](releases/0.0.20.md)),
-is the intuiTUIve demo loop's release: eleven well-known terminal
-apps rebuilt on [intuiTUIve](guide/intuituive/index.md) (Yazi, scope-tui,
-gitui, bottom, Slumber, csvlens, diskonaut, termusic, taskwarrior-tui, a
-falling-block game and a Doom-style raycaster), what each lacked added to
-the framework, and each rebuilt again on it.
-[What the demos are missing](design/intuituive-demo-gaps.md) tells the
-story round by round.
+- **Widgets:** [form controls](guide/intuituive/controls.md) (buttons,
+  check boxes, switches, radios, sliders, select fields), a log pane fed by
+  `tracing`, [text editing](guide/intuituive/text-editing.md) with Emacs
+  and Vim keys, effect presets, pie and stacked [charts](guide/ext/charts.md),
+  QR codes, Huh-style forms and `rich spin`.
+- **Diagrams:** Mermaid sequence and ER diagrams drawn as text.
+- **Leaner builds:** `Syntax` and `Markdown` without syntect (core's `code`
+  feature), a SQL highlighter with no syntect, and
+  [Markdown for GitHub](guide/ext/markdown-export.md) from any renderable.
+- **A [playground](playground.md):** **Try it** on guide blocks, `rich` on
+  WASI for CLI examples, and whole apps in the page.
+- **Fixes:** round 7's four intuiTUIve bugs, csv's million-row filter fast
+  again, and no DevTools port on Linux and macOS.
 
-- **Games and pixels:** sprites on a stage, RGBA pixel buffers, held keys
-  and key releases, key repeat at the app's own rate, timers you can pause
-  and fixed steps with catch-up. See [a game, played with held
-  keys](recordings.md#a-game-played-with-held-keys).
-- **Apps:** tables, trees and lists that follow state, input completion and
-  history, a command line, a query language over records, focus scopes,
-  treemaps.
-- **Dates and zones:** `tomorrow`, `eow` and `3d` read by
-  [`dates::parse`](guide/interact/index.md#natural-dates), and
-  [time zones](guide/interact/index.md#time-zones) with summer time.
-- **Recording games:** `rich record` follows Kitty, Sixel and iTerm2
-  images, keeps every frame at a set rate, holds keys and writes an
-  animated PNG. See [Record your own](recordings.md#record-your-own).
-- **Core:** [`Text::markup()`](guide/core/text-and-style.md#back-to-markup),
-  a port of upstream's `Text.markup`.
-
-Earlier releases are under [Releases](releases/0.0.20.md) in the
-navigation; 0.0.21 is in progress, and the [roadmap](ROADMAP.md) and the
-[0.0.21 plan](plans/0.0.21.md) say what it brings.
+Earlier releases are under [Releases](releases/0.0.21.md) in the
+navigation; the [roadmap](ROADMAP.md) says what comes next.
 
 ### Which version are these docs for?
 

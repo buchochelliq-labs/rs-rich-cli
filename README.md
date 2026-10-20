@@ -53,26 +53,23 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 [Getting started](docs/getting-started.md) has a complete program; the
 [tutorial](docs/tutorial/index.md) builds up from there.
 
-## New in 0.0.20
+## New in 0.0.21
 
-Published on 2026-10-19 ([release notes](docs/releases/0.0.20.md)). The
-intuiTUIve demo loop: eleven well-known terminal apps rebuilt on
-intuiTUIve (Yazi, scope-tui, gitui, bottom, Slumber, csvlens, diskonaut,
-termusic, taskwarrior-tui, a falling-block game and a Doom-style raycaster),
-each gap they found added to the framework, and each clone rebuilt on it
-([the loop](docs/design/intuituive-demo-gaps.md)). What it added:
+[Release notes](docs/releases/0.0.21.md). Round 7's fixes, and what the
+demo clones and a consumer asked for:
 
-- **Games and pixels:** sprites on a stage, RGBA pixel buffers drawn in half
-  blocks, quadrants or Braille, held keys and key releases, DAS/ARR key
-  repeat, timers with a handle and fixed steps with catch-up, frame pacing.
-- **Apps:** tables, trees and lists that follow state, rows from a source
-  filtered on a worker thread, input completion and history, a command
-  line, a query language over records, focus scopes and directional focus,
-  treemaps, and natural dates (`tomorrow`, `eow`, `3d`) with time zones.
-- **`rich record`** follows Kitty, Sixel and iTerm2 images, records every
-  frame at a set rate (`Set Framerate 35`), holds keys (`KeyDown`, `KeyUp`,
-  `Hold`) with the kitty keyboard protocol, and writes an animated PNG.
-- **Core:** `Text::markup()`, a port of upstream's `Text.markup`.
+- **Widgets:** form controls (buttons, check boxes, switches, radios,
+  sliders, select fields), a log pane fed by `tracing`, text editing with
+  Emacs and Vim keys, effect presets, pie and stacked charts, QR codes,
+  Huh-style forms and `rich spin`.
+- **Diagrams:** Mermaid sequence and ER diagrams drawn as text.
+- **Leaner builds:** `Syntax` and `Markdown` without syntect (core's `code`
+  feature), a SQL highlighter with no syntect, and GitHub Markdown from any
+  renderable.
+- **Docs:** a playground (guide blocks, `rich` on WASI and whole apps in
+  the page), rs-rich's own mark, and intuiTUIve as a section of its own.
+- **Fixes:** round 7's four intuiTUIve bugs, csv's million-row filter fast
+  again, and no DevTools port on Linux and macOS.
 
 The [changelog](CHANGELOG.md) lists every change.
 
