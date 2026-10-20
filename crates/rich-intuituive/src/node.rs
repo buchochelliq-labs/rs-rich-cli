@@ -347,6 +347,22 @@ impl OwnStyle {
     }
 }
 
+impl Node {
+    /// Whether its style (code's or the stylesheet's) sets a background.
+    fn has_background(&self, console: &Console) -> bool {
+        let own = self
+            .own_style
+            .as_ref()
+            .is_some_and(|own| own.resolve(console).bgcolor().is_some());
+        own || self
+            .sheet
+            .borrow()
+            .style
+            .as_ref()
+            .is_some_and(|style| style.bgcolor().is_some())
+    }
+}
+
 /// The console and theme a subtree draws with when a node gives it theme
 /// styles of its own ([`Node::theme_styles`]): copies made once, and again
 /// when what they were made over changes.
@@ -3024,6 +3040,12 @@ impl Node {
             // In a layers stack drawn afresh the area is clear already, and
             // the layers below show where this draws nothing.
             if cleared && frame.composing == 0 {
+                screen.clear(rect);
+            }
+            // A node with a background covers its whole rectangle, in a
+            // layers stack too: the layers below do not show through the
+            // gaps its children leave (an inset, room between them).
+            if repaint && frame.composing > 0 && self.has_background(console) {
                 screen.clear(rect);
             }
             if let (true, Some((kind, style))) = (repaint, &decor) {

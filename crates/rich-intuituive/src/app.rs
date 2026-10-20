@@ -59,6 +59,11 @@ pub(crate) const POPUP_TITLE: &str = "popup.title";
 pub struct Ctx {
     quit: bool,
     focus: Option<FocusMove>,
+    /// How many of `nav`'s moves were asked for before `focus`: those run
+    /// first, then the focus moves, then the rest (a `focus(x)` before a
+    /// `modal(..)` is on the screen below it, where the modal gives the
+    /// focus back).
+    focus_after: usize,
     proxy: Proxy,
     nav: Vec<Nav>,
     theme: Option<Theme>,
@@ -298,6 +303,7 @@ impl Ctx {
             announcements: Vec::new(),
             pointer: None,
             focus: None,
+            focus_after: 0,
             proxy,
             nav: Vec::new(),
             theme: None,
@@ -890,17 +896,23 @@ impl Ctx {
 
     /// Move the focus to the next focusable node.
     pub fn focus_next(&mut self) {
-        self.focus = Some(FocusMove::Next);
+        self.move_focus_to(FocusMove::Next);
     }
 
     /// Move the focus to the previous focusable node.
     pub fn focus_previous(&mut self) {
-        self.focus = Some(FocusMove::Previous);
+        self.move_focus_to(FocusMove::Previous);
+    }
+
+    /// Ask for a focus move, after the screens opened or closed so far.
+    fn move_focus_to(&mut self, to: FocusMove) {
+        self.focus = Some(to);
+        self.focus_after = self.nav.len();
     }
 
     /// Focus the node with `id`.
     pub fn focus(&mut self, id: NodeId) {
-        self.focus = Some(FocusMove::To(id));
+        self.move_focus_to(FocusMove::To(id));
     }
 
     /// Focus the first node inside the node with `id` that takes the focus
@@ -932,7 +944,7 @@ impl Ctx {
     /// driver.assert_focused("field");
     /// ```
     pub fn focus_within(&mut self, id: NodeId) {
-        self.focus = Some(FocusMove::Within(id));
+        self.move_focus_to(FocusMove::Within(id));
     }
 
     /// Move the focus to the neighbour on the `direction` side of the
@@ -965,7 +977,7 @@ impl Ctx {
     /// driver.assert_focused("c");
     /// ```
     pub fn focus_direction(&mut self, direction: crate::focus::Direction) {
-        self.focus = Some(FocusMove::Toward(direction));
+        self.move_focus_to(FocusMove::Toward(direction));
     }
 
     /// Move the focus to the next [focus scope](crate::Node::focus_scope)
@@ -975,12 +987,12 @@ impl Ctx {
     /// lazygit's Tab between panes, where Tab inside a pane moves between
     /// its fields.
     pub fn focus_next_scope(&mut self) {
-        self.focus = Some(FocusMove::Scope(true));
+        self.move_focus_to(FocusMove::Scope(true));
     }
 
     /// [`focus_next_scope`](Self::focus_next_scope) the other way round.
     pub fn focus_previous_scope(&mut self) {
-        self.focus = Some(FocusMove::Scope(false));
+        self.move_focus_to(FocusMove::Scope(false));
     }
 
     /// A handle for other threads (see [`Proxy`]).
@@ -4044,7 +4056,12 @@ impl App {
                 easing,
             });
         }
-        for nav in cx.nav {
+        // The screens opened or closed before the focus move, then the
+        // move, then the rest: a `focus(x)` before `modal(..)` moves the
+        // focus on the screen below, where closing the modal returns it.
+        let mut navs = cx.nav;
+        let later = navs.split_off(cx.focus_after.min(navs.len()));
+        for nav in navs {
             quit |= self.navigate(nav);
         }
         if let Some(theme) = cx.theme {
@@ -4069,6 +4086,9 @@ impl App {
             Some(FocusMove::Toward(direction)) => self.focus_toward(direction),
             Some(FocusMove::Scope(forward)) => self.focus_scope_step(forward),
             None => {}
+        }
+        for nav in later {
+            quit |= self.navigate(nav);
         }
         quit
     }
@@ -4571,6 +4591,18 @@ impl App {
                 self.set_focus(Some(id));
             }
         }
+        // A node focused before it was laid out (by a watch as the app
+        // starts, inside a page a `switch` builds) had no path then: the
+        // focus path follows it once it has one.
+        if let Some(id) = self.focus() {
+            let path = self.path_to(id);
+            let shown = self.runtime.enter(|| self.focus_path.get_untracked());
+            if path != shown {
+                let fallback = self.top().fallback;
+                self.set_focus(Some(id));
+                self.top_mut().fallback = fallback;
+            }
+        }
         self.top_mut().order = ids;
     }
 
@@ -4935,6 +4967,27 @@ impl App {
                 return false;
             }
         }
+        let focused = path.last().copied();
+        // A focused text box takes the keys it uses that have no Ctrl or
+        // Alt (characters, Enter, Esc, arrows, Home, End) before the
+        // containers that preview keys do: a letter bound on the app goes
+        // into a focused command line or input rather than to the binding.
+        // Their Ctrl and Alt keys still win.
+        let typed = !key.modifiers.ctrl && !key.modifiers.alt;
+        let mut text_box = false;
+        if let (true, Some(id)) = (typed, focused) {
+            with_node(&self.top().root, id, &mut |node| {
+                text_box = !node.disabled()
+                    && node.body.borrow().widget.role() == crate::a11y::Role::TextBox;
+            });
+        }
+        if text_box {
+            if let Some(quit) =
+                self.give_to_widget(focused.expect("a focused text box"), &WidgetEvent::Key(key))
+            {
+                return quit;
+            }
+        }
         // Containers that asked see the key first, outermost first: their
         // widgets, and nodes' own bindings ([`Node::previews_keys`]). A
         // disabled node sees none: neither its widget nor its handlers.
@@ -4956,7 +5009,6 @@ impl App {
                 }
             }
         }
-        let focused = path.last().copied();
         for &id in path.iter().rev() {
             // Disabled; or a container that saw the key first already.
             let mut skip = (false, false);
@@ -4966,8 +5018,12 @@ impl App {
             if skip.0 {
                 continue;
             }
-            if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Key(key)) {
-                return quit;
+            // A text box offered its typed key already.
+            let offered = text_box && Some(id) == focused;
+            if !offered {
+                if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Key(key)) {
+                    return quit;
+                }
             }
             if !skip.1 {
                 if let Some(quit) = self.node_keys(id, key) {

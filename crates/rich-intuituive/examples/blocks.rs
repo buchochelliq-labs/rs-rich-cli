@@ -904,12 +904,10 @@ pub fn game_app(game: Game) -> App {
         shared.act(|_| ());
 
         let state = memo(move || view.with(|v| v.state));
-        // The screen's colour is a `fill` under it (its `.style` alone lets
-        // the backdrop show through the room between its boxes), the
-        // backdrop a `fill` in a layer below, showing round it. The
+        // The screen's colour covers the room between its boxes; the
+        // backdrop is a `fill` in a layer below, showing round it. The
         // original tiles a pattern of grey blocks; `fill` takes one glyph.
         let screen = layers([
-            fill(" ", &format!("on {BG}")),
             switch(
                 move || state.get(),
                 move |state| match state {

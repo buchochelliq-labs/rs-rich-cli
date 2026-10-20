@@ -529,8 +529,6 @@ struct Lens {
     layout: TableLayout,
     /// The prompts, in place of the status line.
     cmd: CommandLine,
-    /// Whether the prompt is `<n>G`'s, which G ends.
-    goto: Signal<bool>,
     highlighter: Rc<RefCell<Option<Highlighter>>>,
 }
 
@@ -569,7 +567,6 @@ impl Lens {
             cursor: signal(1.min(names)),
             layout: TableLayout::new(),
             cmd: CommandLine::new(),
-            goto: signal(false),
             highlighter: Rc::new(RefCell::new(None)),
         };
         if let Some(re) = &options.columns {
@@ -863,19 +860,27 @@ fn prompt(l: &Lens, cx: &mut Ctx, kind: Prompt, initial: &str) {
         Prompt::Columns => "Columns regex: ",
         Prompt::Goto => "Go to line: ",
     };
-    let (submit, goto) = (l.clone(), l.goto);
+    let submit = l.clone();
     let mut line = Line::new(prefix)
         .initial(initial)
         .on_submit(move |value, _| {
-            submit.goto.set(false);
             submitted(&submit, kind, value.trim());
             Ok(())
-        })
-        .on_cancel(move |_| goto.set(false));
+        });
     if matches!(kind, Prompt::Find | Prompt::Filter) {
         line = line.history("finder");
     }
-    l.goto.set(kind == Prompt::Goto);
+    if kind == Prompt::Goto {
+        // `<n>G`: G (or g) ends the number as Enter does.
+        let ends = l.clone();
+        line = line.on_change(move |value, cx| {
+            if let Some(number) = value.strip_suffix(['G', 'g']) {
+                let number = number.trim().to_string();
+                ends.cmd.close(cx);
+                submitted(&ends, Prompt::Goto, &number);
+            }
+        });
+    }
     l.cmd.open(cx, line);
 }
 
@@ -1234,27 +1239,12 @@ fn view(l: &Lens) -> Node {
             .fixed(1)
             .hidden_when(move || cmd.is_open())
     };
-    // `<n>G`: G (or g) ends the number as Enter does.
-    let goto = l.goto;
-    let ends = {
-        let l = l.clone();
-        move |cx: &mut Ctx| {
-            let value = l.cmd.text();
-            l.goto.set(false);
-            l.cmd.close(cx);
-            submitted(&l, Prompt::Goto, value.trim());
-        }
-    };
-    let line = column([command_line(cmd)])
-        .previews_keys()
-        .bind_when(move || goto.get_untracked(), "G g", "Go to the line", ends)
+    let line = command_line(cmd)
         .style(GUTTER)
         .fixed(1)
         .shown_when(move || cmd.is_open());
-    // The prompt sits outside the keys' container, so what is typed in
-    // it reaches none of csvlens's keys.
-    let body = column([rule(), tables.flex(1), rule(), status]).previews_keys();
-    column([keymap(l, body).flex(1), line])
+    let body = column([rule(), tables.flex(1), rule(), status, line]).previews_keys();
+    keymap(l, body)
 }
 
 fn theme() -> Theme {
