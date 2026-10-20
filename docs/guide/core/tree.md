@@ -13,9 +13,27 @@ use rich::{Console, Tree};
 `Tree::new(label)` makes the root. `add(label)` appends a child and returns
 `&mut Tree` for it, so you descend by binding the result:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_tree.rs:basic"
 ```
+
+```text { .rich-playground data-kind="tree" data-width="50" }
+rs-rich-cli
+  crates
+    rich
+    rich-ext
+      src
+      examples
+    rich-cli
+  docs
+    guide
+      core
+  Cargo.toml
+```
+
+</div>
 
 ![A tree of the repository layout](../../media/guide/guide_tree-basic.svg)
 
@@ -30,9 +48,24 @@ use rich::{Console, Tree};
 A recursive function that takes `&mut Tree` maps any nested structure onto a
 tree:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_tree.rs:build"
 ```
+
+```text { .rich-playground data-kind="tree" data-width="50" }
+project/
+  src/
+    lib.rs
+    render/
+      mod.rs
+      table.rs
+    main.rs
+  README.md
+```
+
+</div>
 
 ![A tree built recursively from nested data](../../media/guide/guide_tree-build.svg)
 
@@ -41,9 +74,21 @@ tree:
 Labels wrap to the available width, and continuation lines keep the guides
 of their branch:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_tree.rs:wrap"
 ```
+
+```text { .rich-playground data-kind="tree" data-width="40" }
+Release checklist
+  Before tagging
+    Run the full test suite on every supported platform, including the MSRV
+    Regenerate golden fixtures
+  After tagging: publish crates in dependency order, core first
+```
+
+</div>
 
 ![Wrapped labels in a 40-column tree](../../media/guide/guide_tree-wrap.svg)
 
@@ -52,9 +97,21 @@ of their branch:
 A `Tree` is a renderable like any other: put it in a panel, a table cell or a
 layout region.
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_tree.rs:panel"
 ```
+
+```text { .rich-playground data-kind="tree" data-title="Deployment" data-width="30" }
+services
+  api
+    v1
+    v2
+  worker
+```
+
+</div>
 
 ![A tree inside a titled panel](../../media/guide/guide_tree-panel.svg)
 

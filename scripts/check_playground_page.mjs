@@ -87,8 +87,12 @@ async function main() {
   const errors = [];
   try {
     const context = await browser.newContext({ permissions: ["clipboard-read", "clipboard-write"] });
+    // Hermetic: the theme's web fonts and the like are not fetched. An error
+    // about a resource elsewhere is not the playground's.
+    await context.route((url) => !url.href.startsWith(base), (route) => route.abort());
+    const local = (message) => (message.location().url || base).startsWith(base);
     const page = await context.newPage();
-    page.on("console", (message) => message.type() === "error" && errors.push(message.text()));
+    page.on("console", (message) => message.type() === "error" && local(message) && errors.push(message.text()));
     page.on("pageerror", (error) => errors.push(String(error)));
     const wasm = [];
     page.on("request", (request) => request.url().endsWith(".wasm") && wasm.push(request.url()));

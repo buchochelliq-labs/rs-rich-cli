@@ -12,7 +12,7 @@
 pub mod options;
 pub mod render;
 
-use rich::{ColorSystem, Console, DEFAULT_TERMINAL_THEME};
+use rich::{ColorSystem, Console, SVG_EXPORT_THEME};
 use wasm_bindgen::prelude::*;
 
 use crate::options::{Options, MAX_INPUT};
@@ -104,7 +104,7 @@ pub fn render_html(kind: &str, input: &str, options: &str) -> Result<String, Str
     let (console, options) = prepare(kind, input, options)?;
     let mut result = Ok(());
     let html = console
-        .export_html_with(&DEFAULT_TERMINAL_THEME, Some(HTML_FORMAT), true, |c| {
+        .export_html_with(&SVG_EXPORT_THEME, Some(HTML_FORMAT), true, |c| {
             result = render::draw(c, kind, input, &options)
         })
         .map_err(|e| e.to_string())?;

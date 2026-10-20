@@ -110,6 +110,8 @@ for example `rich_ext::richf!`. The CLI package `rs-rich-cli` installs a binary 
 
 ## Hello, world
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 use rich::Console;
 
@@ -120,6 +122,12 @@ fn main() {
 
 --8<-- "crates/rich-ext/examples/guide_getting_started.rs:hello"
 ```
+
+```text { .rich-playground data-kind="markup" data-width="40" }
+[bold magenta]Hello[/] [green]World[/]
+```
+
+</div>
 
 ![The same two words from the library: Hello in bold magenta, World in green](media/guide/guide_getting_started-hello.svg)
 

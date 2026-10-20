@@ -280,8 +280,8 @@ pub fn draw(console: &Console, name: &str, input: &str, options: &Options) -> Re
             if let Some(on) = options.word_wrap {
                 syntax = syntax.word_wrap(on);
             }
-            if let Some(padding) = options.padding {
-                syntax = syntax.padding(padding.min(8));
+            if let Some(padding) = &options.padding {
+                syntax = syntax.padding_sides(padding.unpack()?);
             }
             if let Some(tab_size) = options.tab_size {
                 syntax = syntax.tab_size(tab_size.clamp(1, 16));
@@ -346,9 +346,8 @@ fn panel(input: &str, options: &Options) -> Result<Panel, String> {
     if let Some(spec) = &options.border_style {
         panel = panel.border_style(style(spec)?);
     }
-    if let Some(padding) = options.padding {
-        let padding = padding.min(8);
-        panel = panel.padding((padding, padding * 2, padding, padding * 2));
+    if let Some(padding) = &options.padding {
+        panel = panel.padding(padding.unpack()?);
     }
     Ok(panel)
 }

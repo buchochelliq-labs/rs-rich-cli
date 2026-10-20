@@ -24,7 +24,7 @@
   const MAX_FRAGMENT = 8000;
   // Options are the block's data-* attributes; these are the page's own.
   const RESERVED = new Set(["kind", "kinds", "mounted"]);
-  const NUMBERS = new Set(["width", "padding", "indent", "bar-width", "bins", "threshold", "context", "tab-size"]);
+  const NUMBERS = new Set(["width", "indent", "bar-width", "bins", "threshold", "context", "tab-size"]);
   // The options a shared link may set, and the controls offer.
   const CONTROLS = {
     box: { kinds: ["table", "panel"], values: ["", "ROUNDED", "SQUARE", "HEAVY", "HEAVY_HEAD", "DOUBLE", "MINIMAL", "SIMPLE", "ASCII", "MARKDOWN"] },
@@ -32,6 +32,7 @@
     layout: { kinds: ["diff"], values: ["", "unified", "side-by-side"] },
     view: { kinds: ["data"], values: ["", "tree", "table", "flat"] },
     justify: { kinds: ["panel", "markdown"], values: ["", "left", "center", "right", "full"] },
+    overflow: { kinds: ["panel"], values: ["", "fold", "crop", "ellipsis"] },
   };
   const SHARED_OPTIONS = new Set(["width", ...Object.keys(CONTROLS)]);
   // Inputs for the playground page's kind picker.

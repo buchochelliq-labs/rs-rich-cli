@@ -177,3 +177,71 @@ jobs:
       # in fresh temporary directories, without the upload step's credential.
       - name: Wait for selected versions, then build as a stranger would
         run: python3 scripts/release.py verify
+
+  # The docs playground's module for this release (docs/design/docs-playground.md,
+  # decision 3): built from the tagged commit and attached to the release's
+  # GitHub release as playground-X.Y.Z.tar.gz, which build_versioned_docs.py
+  # downloads into the X.Y.Z docs. Additive: it runs only after a release tag's
+  # crates are published, uploads nothing to a registry, and cannot fail the
+  # run (`continue-on-error`), whose conclusion release_cohort.py waits on. A
+  # crate tag, a verify-only run or a failed publish attaches nothing. The
+  # job's name must not start with "publish": release_cohort.py reads such a
+  # job's start as an upload.
+  playground:
+    name: docs playground module
+    needs: [gate, publish]
+    if: ${{ startsWith(inputs.tag || github.ref_name, 'release-') && inputs.verify_only != true }}
+    continue-on-error: true
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write   # create the GitHub release and attach the archive
+      actions: write    # re-run docs.yml, so the site picks the archive up
+    env:
+      RELEASE_TAG: ${{ inputs.tag || github.ref_name }}
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ needs.gate.outputs.sha }}
+
+      - uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+
+      - name: Install wasm-bindgen and wasm-opt
+        run: |
+          cargo install wasm-bindgen-cli --version 0.2.129 --locked
+          curl -sSfL https://github.com/WebAssembly/binaryen/releases/download/version_124/binaryen-version_124-x86_64-linux.tar.gz \
+            | tar -xz -C "$RUNNER_TEMP"
+          echo "$RUNNER_TEMP/binaryen-version_124/bin" >> "$GITHUB_PATH"
+
+      - name: Build the modules and render every playground block
+        env:
+          PLAYGROUND_REQUIRE_WASM_OPT: "1"
+        run: |
+          playground/build.sh --tar "${RELEASE_TAG#release-}" "$RUNNER_TEMP/playground"
+          node scripts/check_playground_blocks.mjs "$RUNNER_TEMP/playground"
+
+      # The release's GitHub release is created here when there is none yet;
+      # its notes point at the docs, where the release notes live.
+      - name: Attach the archive to the release
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          version="${RELEASE_TAG#release-}"
+          if ! gh release view "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" > /dev/null 2>&1; then
+            gh release create "$RELEASE_TAG" --repo "$GITHUB_REPOSITORY" --verify-tag \
+              --title "Release $version" \
+              --notes "The crates of release $version, published to crates.io. Release notes: docs/releases/$version.md. playground-$version.tar.gz is the docs playground's module for the $version docs."
+          fi
+          gh release upload "$RELEASE_TAG" "$RUNNER_TEMP/playground-$version.tar.gz" \
+            --repo "$GITHUB_REPOSITORY" --clobber
+
+      # docs.yml already ran for the tag, before the archive existed.
+      - name: Rebuild the docs site with it
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh workflow run docs.yml --repo "$GITHUB_REPOSITORY" --ref main

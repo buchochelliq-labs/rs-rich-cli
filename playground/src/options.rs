@@ -34,7 +34,7 @@ pub struct Options {
     pub show_lines: Option<bool>,
     pub show_header: Option<bool>,
     pub show_edge: Option<bool>,
-    pub padding: Option<usize>,
+    pub padding: Option<Padding>,
     pub guide_style: Option<String>,
     pub indent: Option<usize>,
     pub sort_keys: Option<bool>,
@@ -60,6 +60,35 @@ pub struct Options {
     pub view: Option<String>,
     pub root_label: Option<String>,
     pub show_types: Option<bool>,
+}
+
+/// Padding as upstream's `Padding.unpack` takes it: one number for every
+/// side, or "top/bottom,left/right", or "top,right,bottom,left".
+#[derive(Debug, Deserialize)]
+#[serde(untagged)]
+pub enum Padding {
+    Uniform(usize),
+    Sides(String),
+}
+
+impl Padding {
+    pub fn unpack(&self) -> Result<(usize, usize, usize, usize), String> {
+        let parts: Vec<usize> = match self {
+            Padding::Uniform(n) => vec![*n],
+            Padding::Sides(text) => text
+                .split(',')
+                .map(|part| part.trim().parse::<usize>())
+                .collect::<Result<_, _>>()
+                .map_err(|_| format!("padding {text:?}: numbers, comma-separated"))?,
+        };
+        let clamp = |n: usize| n.min(16);
+        match parts[..] {
+            [n] => Ok((clamp(n), clamp(n), clamp(n), clamp(n))),
+            [v, h] => Ok((clamp(v), clamp(h), clamp(v), clamp(h))),
+            [t, r, b, l] => Ok((clamp(t), clamp(r), clamp(b), clamp(l))),
+            _ => Err("padding takes one, two or four numbers".into()),
+        }
+    }
 }
 
 impl Options {

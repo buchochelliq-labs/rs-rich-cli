@@ -266,7 +266,8 @@ class Workflow(unittest.TestCase):
     def test_ci_runs_once_on_the_validated_commit(self):
         self.assertEqual(self.text.count("uses: ./.github/workflows/ci.yml"), 1)
         self.assertIn("checkout_ref: ${{ needs.gate.outputs.sha }}", self.text)
-        self.assertEqual(self.text.count("runs-on:"), 2)         # the gate and the publish job
+        # The gate, the publish job and the docs playground's module.
+        self.assertEqual(self.text.count("runs-on:"), 3)
 
     def test_the_gate_checks_the_release_before_ci(self):
         ci = self.text.index("uses: ./.github/workflows/ci.yml")
@@ -293,6 +294,20 @@ class Workflow(unittest.TestCase):
         self.assertEqual([c.args[0] for c in run.call_args_list], [
             ["cargo", "publish", "-p", "rs-rich", "-p", "rs-rich-ext", "--locked", "--dry-run"],
             ["cargo", "publish", "-p", "rs-rich", "-p", "rs-rich-ext", "--locked"]])
+
+    def test_the_playground_job_only_adds_a_release_asset(self):
+        # docs/design/docs-playground.md, decision 3: after the crates are out,
+        # never instead of them, and never failing the run release_cohort.py
+        # waits on. Its name must not read as a publish job's start.
+        job = self.text[self.text.index("  playground:"):]
+        self.assertIn("name: docs playground module", job)
+        self.assertIn("needs: [gate, publish]", job)
+        self.assertIn("continue-on-error: true", job)
+        self.assertIn("startsWith(inputs.tag || github.ref_name, 'release-')", job)
+        self.assertIn("inputs.verify_only != true", job)
+        for forbidden in ("cargo publish", "release.py", "CARGO_REGISTRY_TOKEN", "id-token", "maturin", "twine"):
+            self.assertNotIn(forbidden, job)
+        self.assertIn("gh release upload", job)
 
     def test_releases_never_cancel_each_other(self):
         self.assertIn("group: crates-io-release\n  cancel-in-progress: false", self.text)
