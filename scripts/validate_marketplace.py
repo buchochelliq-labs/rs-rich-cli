@@ -32,6 +32,7 @@ file was refused), 1 when something did not, 2 for a usage or setup error.
 from __future__ import annotations
 
 import argparse
+import datetime
 import hashlib
 import json
 import re
@@ -221,8 +222,12 @@ class Evaluator:
 # What a schema cannot say.
 # ---------------------------------------------------------------------------
 
+# A pre-release identifier: a number without leading zeroes, or
+# alphanumerics with at least one letter or hyphen.
+_PRE = r"(?:0|[1-9]\d*|\d*[A-Za-z-][0-9A-Za-z-]*)"
 SEMVER = re.compile(
-    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)(?:-([0-9A-Za-z.-]+))?(?:\+[0-9A-Za-z.-]+)?$"
+    r"^(0|[1-9]\d*)\.(0|[1-9]\d*)\.(0|[1-9]\d*)"
+    rf"(?:-({_PRE}(?:\.{_PRE})*))?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?$"
 )
 
 
@@ -252,6 +257,10 @@ def semantic_errors(listing):
     seen = {}
     for i, entry in enumerate(versions):
         at = f"versions[{i}]"
+        try:
+            datetime.date.fromisoformat(entry["published"])
+        except ValueError:
+            out.append(f"{at}.published: not a real day: {entry['published']!r}")
         number = entry["version"]
         precedence = semver_key(number)
         if precedence in seen:
@@ -368,6 +377,13 @@ class Validator:
         except (OSError, ValueError) as error:
             return [f"{index_path}: cannot read: {error}"]
         errors = [f"{index_path}: {e}" for e in self.schema_errors(index, "index")]
+        if errors:
+            return errors
+        for field in ("generated", "expires"):
+            try:
+                datetime.datetime.strptime(index[field], "%Y-%m-%dT%H:%M:%SZ")
+            except ValueError:
+                errors.append(f"{index_path}: {field} is not a real time: {index[field]!r}")
         if errors:
             return errors
         if index["expires"] <= index["generated"]:

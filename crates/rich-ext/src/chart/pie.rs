@@ -231,10 +231,24 @@ impl PieChart {
     /// Each slice's share of the whole (0 to 1), `None` for one that takes
     /// no part.
     pub fn shares(&self) -> Vec<Option<f64>> {
-        let total = self.total();
+        // Summed over the largest value, so finite values too large to add
+        // up (two of `f64::MAX`) still share the disc.
+        let largest = self
+            .slices
+            .iter()
+            .map(|s| s.value)
+            .filter(|v| Self::counts(*v))
+            .fold(0.0, f64::max);
+        let scaled: f64 = self
+            .slices
+            .iter()
+            .map(|s| s.value)
+            .filter(|v| Self::counts(*v))
+            .map(|v| v / largest)
+            .sum();
         self.slices
             .iter()
-            .map(|s| (Self::counts(s.value) && total > 0.0).then(|| s.value / total))
+            .map(|s| (Self::counts(s.value) && largest > 0.0).then(|| s.value / largest / scaled))
             .collect()
     }
 
@@ -657,6 +671,15 @@ mod tests {
             .slice("c", f64::NAN)
             .slice("d", 1.0);
         assert_eq!(pie.shares(), vec![Some(0.75), None, None, Some(0.25)]);
+    }
+
+    #[test]
+    fn values_too_large_to_add_up_still_share_the_disc() {
+        let pie = PieChart::new().slice("a", 1e308).slice("b", 1e308);
+        assert_eq!(pie.shares(), vec![Some(0.5), Some(0.5)]);
+        let ends = pie.ends();
+        assert_eq!(pie.pixel(&ends, 0.1, -0.9).0, Pixel::Slice(0));
+        assert_eq!(pie.pixel(&ends, -0.5, 0.0).0, Pixel::Slice(1));
     }
 
     #[test]

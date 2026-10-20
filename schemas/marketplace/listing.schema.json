@@ -22,7 +22,7 @@
     "name": {"description": "A human-readable name.", "$ref": "#/$defs/line"},
     "description": {"description": "One line on what the package adds.", "$ref": "#/$defs/line"},
     "tier": {
-      "description": "official: this repository's packages. reviewed: read and built by a maintainer. community: checked by CI only. Set by the marketplace's maintainers, not the submitter.",
+      "description": "official: packages whose repository is under https://github.com/buchochelliq-labs/, the project's own organisation. reviewed: read and built by a maintainer. community: checked by CI only. Set by the marketplace's maintainers, not the submitter.",
       "enum": ["official", "reviewed", "community"]
     },
     "license": {"description": "An SPDX license expression.", "type": "string", "minLength": 1, "maxLength": 256},
@@ -99,7 +99,7 @@
     "semver": {
       "type": "string",
       "maxLength": 256,
-      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*)(\\.(0|[1-9][0-9]*|[0-9]*[A-Za-z-][0-9A-Za-z-]*))*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
     },
     "version": {
       "type": "object",

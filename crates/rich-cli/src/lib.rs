@@ -1031,11 +1031,23 @@ pub fn run_embedded(program: Vec<std::ffi::OsString>, args: Vec<std::ffi::OsStri
     if let Ok(mut slot) = SELF_PROGRAM.lock() {
         *slot = program;
     }
-    run(args)
+    IN_HOST.store(true, std::sync::atomic::Ordering::SeqCst);
+    let code = run(args);
+    IN_HOST.store(false, std::sync::atomic::Ordering::SeqCst);
+    code
 }
 
 /// Held for the whole of one [`run_embedded`] call.
 static EMBEDDED_RUN: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+/// Set while [`run_embedded`] runs a command line in a host process.
+static IN_HOST: std::sync::atomic::AtomicBool = std::sync::atomic::AtomicBool::new(false);
+
+/// Whether this run is inside a host process ([`run_embedded`]), whose
+/// process-wide state (its Ctrl+C handling) a command must leave alone.
+pub(crate) fn in_host() -> bool {
+    IN_HOST.load(std::sync::atomic::Ordering::SeqCst)
+}
 
 /// The command [`run_embedded`] was given; empty for the binary.
 static SELF_PROGRAM: std::sync::Mutex<Vec<std::ffi::OsString>> = std::sync::Mutex::new(Vec::new());

@@ -100,6 +100,22 @@ class RulesTest(unittest.TestCase):
         crate["versions"][0]["requires"] = {"abi": "1.0"}
         self.assertNotEqual(self.errors(crate), [])
 
+    def test_a_numeric_pre_release_identifier_has_no_leading_zero(self):
+        for version, ok in [("1.0.0-0", True), ("1.0.0-10", True), ("1.0.0-01", False),
+                            ("1.0.0-alpha.01", False), ("1.0.0-0a", True), ("1.0.0-01a", True),
+                            ("1.0.0+01", True)]:
+            listing = example("shout")
+            listing["versions"] = listing["versions"][:1]
+            listing["versions"][0]["version"] = version
+            with self.subTest(version):
+                self.assertEqual(self.errors(listing) == [], ok, self.errors(listing))
+                self.assertEqual(vm.SEMVER.match(version) is not None, ok)
+
+    def test_a_published_day_must_exist(self):
+        listing = example("shout")
+        listing["versions"][0]["published"] = "2026-02-30"
+        self.assertTrue(any("published" in e for e in self.errors(listing)))
+
     def test_the_abi_is_major_dot_minor(self):
         for abi, ok in [("1.0", True), ("1.12", True), ("1", False), ("1.0.0", False),
                         ("01.0", False), ("v1.0", False)]:
@@ -268,6 +284,13 @@ class IndexTest(unittest.TestCase):
             path.write_text(json.dumps(index))
             errors = self.validator.check_index_file(path)
             self.assertTrue(any("expires" in e for e in errors), errors)
+            # Times that cannot exist are refused, by the schema's ranges
+            # and by the calendar.
+            for bad in ("2026-99-99T99:99:99Z", "2026-02-30T00:00:00Z"):
+                index["generated"] = bad
+                path.write_text(json.dumps(index))
+                errors = self.validator.check_index_file(path)
+                self.assertTrue(any("generated" in e for e in errors), (bad, errors))
 
 
 class MainTest(unittest.TestCase):

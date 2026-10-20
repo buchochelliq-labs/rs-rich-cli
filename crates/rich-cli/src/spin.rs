@@ -278,8 +278,12 @@ fn run(
     let stdout = drain(child.stdout.take());
     let stderr = drain(child.stderr.take());
     // Ctrl+C reaches the command too (it shares the terminal's process
-    // group): rich stays to clean up the line and report how it ended.
-    let _ = ctrlc::set_handler(|| {});
+    // group): rich stays to clean up the line and report how it ended. In a
+    // host process (the Python wheel) the handler would outlive the command
+    // and replace the host's own, so the host's handling stands instead.
+    if !crate::in_host() {
+        let _ = ctrlc::set_handler(|| {});
+    }
     let console = rich::Console::builder()
         .force_terminal(true)
         .no_color(no_color)
