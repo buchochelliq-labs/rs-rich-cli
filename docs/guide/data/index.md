@@ -1,4 +1,4 @@
-# Tabular data (rs-rich-data)
+# ![](../../assets/rs-rich/data.svg){ .rs-icon } Tabular data (rs-rich-data)
 
 `rs-rich-data` (`rich_data`, new in 0.0.16) turns a file, a stream of records
 or a query result into a table without hand-written glue. It is an rs-rich

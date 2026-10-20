@@ -12,6 +12,33 @@ This guide walks through all of it. Every code sample on these pages is taken
 from an example program that CI compiles, and every screenshot is that program's
 real output, exported to SVG by the library itself.
 
+| Section | Crate | What it covers |
+|---|---|---|
+| ![](../assets/rs-rich/core.svg){ .rs-icon width="20" } [Core](core/index.md) | `rs-rich` | The faithful port of rich: console, markup, tables, layout, progress, Markdown, export |
+| ![](../assets/rs-rich/ext.svg){ .rs-icon width="20" } [Extensions](ext/index.md) | `rs-rich-ext` | Everything added on top: diagnostics, structured data, charts, workflows, QA tooling |
+| ![](../assets/rs-rich/art.svg){ .rs-icon width="20" } [Art](art/index.md) | `rs-rich-art` | Banners, images, GIFs and image diffs |
+| ![](../assets/rs-rich/interact.svg){ .rs-icon width="20" } [Interactive](interact/index.md) | `rs-rich-interact` | Pickers, inputs, forms, pagers and explorers |
+| ![](../assets/rs-rich/ratatui.svg){ .rs-icon width="20" } [Using rich with ratatui](ratatui.md) | `rs-rich-ratatui` | Rich renderables as ratatui widgets, and back |
+| ![](../assets/rs-rich/diagram.svg){ .rs-icon width="20" } [Diagrams](diagram/index.md) | `rs-rich-diagram` | Graphs, Mermaid flowcharts and DOT sources |
+| ![](../assets/rs-rich/data.svg){ .rs-icon width="20" } [Data and schemas](data/index.md) | `rs-rich-data` | CSV, JSON Lines and Arrow sources, profiles and schemas |
+| ![](../assets/rs-rich/micro.svg){ .rs-icon width="20" } [Micro assets](micro/index.md) | `rs-rich-micro` | Emoji-sized inline images |
+| ![](../assets/rs-rich/cli.svg){ .rs-icon width="20" } [The rich CLI](cli/index.md) | `rs-rich-cli` | The `rich` command |
+
+<div class="rs-subsite" markdown>
+
+![intuiTUIve's mark](../assets/intuituive/mark.svg){ .rs-mark width="48" }
+
+<div markdown>
+
+**Built on rs-rich: [intuiTUIve](intuituive/index.md)** (`rs-rich-intuituive`),
+the framework for full terminal apps. It has its own section, after this
+guide: signals, a retained tree of nodes, widgets, and only the changed
+cells redrawn.
+
+</div>
+
+</div>
+
 A Markdown document from the core, a dashboard of `rs-rich-ext` charts in a
 core `Layout`, and an `rs-rich-interact` explorer searching a YAML file:
 
@@ -53,7 +80,7 @@ core `Layout`, and an `rs-rich-interact` explorer searching a YAML file:
 | [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | through `rich_ext` | Compile-time checked markup (`richf!`), `#[derive(Rich)]` and print macros. Enabled by ext's `macros` feature. | [Macros](ext/macros.md) |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `rich_art` | FIGlet banners, images as ASCII, Braille, blocks, quadrants, Sixel, Kitty or iTerm2 graphics, animated GIFs, perceptual image diffs. | [Art](art/index.md) |
 | `rs-rich-interact` (new in 0.0.13) | `rich_interact` | Interactive components: fuzzy pickers, input, confirm, forms, pagers, a text area, file, colour, asset and date pickers and data explorers, composable with containers, overlays and a keymap; the terminal session and its keys, natural dates and time zones. | [Interactive](interact/index.md) |
-| `rs-rich-intuituive` (new in 0.0.17) | `intuituive` | intuiTUIve, a framework for full-screen terminal apps: signals and memos, a retained tree of nodes (text, rich renderables, rich-interact components, logs), widgets, focus, keys and clicks, sprites and pixel buffers, and only the changed cells sent to the terminal. | [Terminal apps](intuituive/index.md) |
+| `rs-rich-intuituive` (new in 0.0.17) | `intuituive` | intuiTUIve, a framework for full-screen terminal apps: signals and memos, a retained tree of nodes (text, rich renderables, rich-interact components, logs), widgets, focus, keys and clicks, sprites and pixel buffers, and only the changed cells sent to the terminal. | [intuiTUIve](intuituive/index.md) |
 | `rs-rich-web` (new in 0.0.18) | `rich_web` | Serving intuiTUIve apps, or any terminal program on a PTY, to a web browser: one per tab over a WebSocket, drawn by a vendored xterm.js page or, for apps, a DOM renderer with ARIA, behind a URL token, an origin check and a session cap. | [Serving an app to a browser](intuituive/web.md) |
 | `rs-rich-embed` (new in 0.0.18) | `rich_embed` | Other programs and web pages inside an intuiTUIve app: a terminal pane that runs any program (a shell, `htop`, a terminal browser) with scrollback, and a web view with an address bar, each over a swappable backend (`PtyHost`, `WebEngine`); a headless Chrome over DevTools and Browsh's HTTP mode behind features. | [Embedding programs and pages](intuituive/embed.md) |
 | `rs-rich-ratatui` (new in 0.0.17) | `rich_ratatui` | ratatui interop: any rich renderable as a ratatui widget, ratatui widgets as rich-interact components (`interact` feature), and the style, colour, line and buffer-cell conversions underneath. | [Using rich with ratatui](ratatui.md) |

@@ -1,5 +1,10 @@
 # rs-rich-cli
 
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/rs-rich/hero-dark.svg">
+  <img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/rs-rich/hero-light.svg" alt="rs-rich: Python's rich, in Rust. Styled text, tables, Markdown and progress bars in the terminal; cargo add rs-rich; and intuiTUIve for full apps" width="100%">
+</picture>
+
 [![CI](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml)
 [![crates.io](https://img.shields.io/crates/v/rs-rich.svg)](https://crates.io/crates/rs-rich)
 [![docs.rs](https://img.shields.io/docsrs/rs-rich)](https://docs.rs/rs-rich)

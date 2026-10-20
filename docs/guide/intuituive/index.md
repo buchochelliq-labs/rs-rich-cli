@@ -1,4 +1,4 @@
-# Terminal apps (intuiTUIve)
+# intuiTUIve: terminal apps
 
 ![intuiTUIve: terminal apps from signals. Describe the screen once; when a signal changes, only the cells that changed are redrawn. With Memo the elephant and her calf Tui beside a small to-do app.](../../assets/intuituive/hero-dark.svg#only-dark){ .tui-hero }
 ![intuiTUIve: terminal apps from signals. Describe the screen once; when a signal changes, only the cells that changed are redrawn. With Memo the elephant and her calf Tui beside a small to-do app.](../../assets/intuituive/hero-light.svg#only-light){ .tui-hero }
