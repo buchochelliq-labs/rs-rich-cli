@@ -12,7 +12,7 @@ The pictures on this page are the commands' own output, exported with
 
 With no mode flag, the type is detected from the extension:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich README.md          # markdown
 rich data.json          # pretty JSON
 rich main.rs            # syntax highlighted
@@ -30,7 +30,7 @@ and `rich team.csv --title Team`:
 
 Force a mode when the extension lies, or when reading stdin:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --markdown notes.txt
 cat main.rs | rich --syntax -
 ```
@@ -39,7 +39,7 @@ cat main.rs | rich --syntax -
 
 ## Printing markup
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich -p "[bold red]Alert[/] disk at [bold]91%[/]"
 ```
 
@@ -68,7 +68,7 @@ The render mode comes from the flag, else the URL's extension, else the response
 
 ## Decorating output
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --panel rounded --title "Notes" --style "bold blue" notes.md
 rich --padding 1,4 --center report.md
 rich --width 60 --rule "Section"
@@ -87,7 +87,7 @@ and the last:
 Both exports write to a **path** and leave the terminal output intact, so you get
 both at once:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich -m README.md --export-html readme.html
 rich -m README.md --export-svg readme.svg
 rich -m README.md -o readme.html --export-svg readme.svg   # both
@@ -100,7 +100,7 @@ SVG export like this one.
 
 ## Paging
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --pager long-document.md
 ```
 
@@ -117,13 +117,13 @@ secrets masked; `capture` runs a command and shows or exports its output; and
 `doctor` reports what `rich` detected. The [CLI walkthrough](../guide/cli/walkthrough.md)
 shows each one. Two of them:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich inspect deploy.yaml
 ```
 
 ![deploy.yaml as a tree of keys and values](../media/guide/cli_inspect.svg)
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich diff greet.py greet_v2.py
 ```
 

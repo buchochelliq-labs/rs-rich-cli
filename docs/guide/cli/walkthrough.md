@@ -163,7 +163,7 @@ With no mode, `rich` picks a renderer from the file extension.
 
 ### Markdown
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich notes.md
 ```
 
@@ -176,7 +176,7 @@ rich notes.md
 
 ### Source code
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich greet.py
 ```
 
@@ -187,7 +187,7 @@ language taken from the extension. `rich syntax FILE` (`code`, `-x`) forces it.
 
 ### JSON
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich data.json
 ```
 
@@ -199,7 +199,7 @@ best-effort print.
 
 ### CSV and TSV
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich team.csv --title Team
 ```
 
@@ -214,7 +214,7 @@ From standard input, name the mode: `cat team.csv | rich csv -`.
 
 ### Notebooks
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich analysis.ipynb
 ```
 
@@ -228,7 +228,7 @@ Markdown cells are rendered, code cells are highlighted in a box with their
 `print` treats its RESOURCE as [console markup](../../tutorial/02-markup.md)
 rather than a file name:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich print '[bold magenta]Hello[/] from [green]rich[/]!'
 ```
 
@@ -244,7 +244,7 @@ markup, such as an unmatched `[/tag]`, is an error with exit code `4`.
 
 `rule` draws a horizontal rule with the RESOURCE as its title:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich rule 'Chapter 1'
 ```
 
@@ -255,7 +255,7 @@ rich rule 'Chapter 1'
 `jsonl` renders newline-delimited JSON one record at a time, so it can follow
 a stream that never ends (`tail -f app.jsonl | rich jsonl -`):
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich jsonl events.jsonl
 ```
 
@@ -275,7 +275,7 @@ rich jsonl events.jsonl
 `level`/`severity`, `message`/`msg`) and prints one line per record, with the
 remaining fields at the end:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich log events.jsonl
 rich log events.jsonl --log-presentation rich
 ```
@@ -300,7 +300,7 @@ HTML or SVG (that is why this section shows text).
 
 `inspect` reads JSON, YAML, TOML, XML, INI or dotenv and draws it as a tree:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich inspect deploy.yaml
 ```
 
@@ -308,31 +308,31 @@ rich inspect deploy.yaml
 
 The options change the view:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich inspect deploy.yaml --select '$.servers[*].name'   # a JSONPath query
 ```
 
 ![Only the two server names](../../media/guide/cli_inspect_select.svg)
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich inspect deploy.yaml --find alpha        # search keys and values
 ```
 
 ![One match, with its context](../../media/guide/cli_inspect_find.svg)
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich inspect deploy.yaml --flatten           # one path = value row per value
 ```
 
 ![A path and value table](../../media/guide/cli_inspect_flatten.svg)
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich inspect deploy.yaml --redact            # mask password, token, api_key …
 ```
 
 ![The password shown as asterisks](../../media/guide/cli_inspect_redact.svg)
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich inspect deploy.yaml --compare deploy-prod.yaml
 ```
 
@@ -366,13 +366,13 @@ config.
 Two text files give a line diff, syntax-highlighted by file name, with the
 changed words emphasised:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich diff greet.py greet_v2.py
 ```
 
 ![A unified diff with line numbers and highlighted changes](../../media/guide/cli_diff_text.svg)
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich diff greet.py greet_v2.py --side-by-side
 ```
 
@@ -415,7 +415,7 @@ from `python3 scripts/smoke_cli.py --fixtures DIR`: `before.png` and
 
 ### Still images
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image before.png --image-mode blocks --width 48
 ```
 
@@ -432,7 +432,7 @@ rich image before.png --image-mode blocks --width 48
 | `ascii` | a character ramp; works without colour |
 | `sixel` | real pixels, in terminals that support Sixel |
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image before.png --image-mode ascii --width 48
 rich image before.png --image-mode quadrants --width 48
 ```
@@ -443,7 +443,7 @@ rich image before.png --image-mode quadrants --width 48
 
 Fit it into an exact box, cropping around an anchor:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image before.png --image-mode blocks --width 30 --height 12 \
   --image-fit cover --image-anchor right
 ```
@@ -452,7 +452,7 @@ rich image before.png --image-mode blocks --width 30 --height 12 \
 
 Flatten transparency onto a colour:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image logo.png --image-mode blocks --width 40 --image-background '#542080'
 ```
 
@@ -464,7 +464,7 @@ shows them on a gray checkerboard instead.
 
 Reduce the colours, with dithering:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image before.png --image-mode blocks --width 48 \
   --image-color ansi16 --image-dither bayer4x4
 ```
@@ -477,14 +477,14 @@ frames. The dithers are `floyd-steinberg`, `bayer4x4` and `atkinson`, and
 `--image-color-distance oklab` picks the nearest palette colour perceptually,
 which keeps hues truer in the small ANSI16 palette:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image before.png --image-mode quadrants --width 48 \
   --image-color ansi16 --image-dither atkinson --image-color-distance oklab
 ```
 
 Rotate, convert to grayscale and adjust the tone:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image before.png --image-mode blocks --width 24 \
   --image-rotate 90 --image-grayscale --image-contrast 1.4
 ```
@@ -503,7 +503,7 @@ What to notice:
 
 ### GIFs
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich gif ball.gif --gif-mode blocks --width 48 --loop 2
 ```
 
@@ -524,7 +524,7 @@ leaves the cursor hidden, `printf '\033[?25h'` brings it back.
 When both inputs are images, `diff` compares them perceptually: would a person
 notice the change, and where?
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich diff before.png after.png --image-mode blocks --width 64
 ```
 
@@ -545,7 +545,7 @@ depth; [Image diff](../art/image-diff.md) covers the library.
 `ansi explain` lists every escape sequence in a capture of terminal output and
 what it does, then the text a terminal would show:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich ansi explain capture.ans
 ls --color=always | rich ansi explain -
 ```
@@ -566,7 +566,7 @@ inert symbols (`ESC[2J` becomes `␛[2J`). Use it for files you do not trust.
 `rich chart` draws numbers from CSV, JSON or stdin (0.0.15). Columns go by
 header or by 1-based number:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich chart sales.csv --kind bar --x month --y api
 rich chart sales.csv                       # every numeric column as a line
 seq 1 20 | rich chart --kind spark
@@ -598,7 +598,7 @@ exit code 4 and a message naming it. See [Charts](../ext/charts.md),
 `view` shows a file the way it should be read, and pages it when it is taller
 than the terminal:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich view src/main.rs
 rich view src/main.rs --search todo     # highlight matches; a summary goes to stderr
 cat config.yaml | rich view -           # the format is detected from the content
@@ -654,7 +654,7 @@ Arguments filter the names, as substrings or `*` globs, and a
 single PATH-like variable is checked entry by entry, flagging missing,
 duplicate and empty ones:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich env AWS
 rich env PATH
 ```
@@ -720,7 +720,7 @@ printf '[b]Build passed[/]\n3 targets, 0 warnings\n' |
 - `--padding` takes 1, 2 or 4 comma-separated numbers, like CSS.
 - `--style` styles the content; `-S`/`--panel-style` styles the border.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich print Centered --center --width 24 --panel heavy --style 'bold white on #303060'
 ```
 
@@ -733,7 +733,7 @@ rich print Centered --center --width 24 --panel heavy --style 'bold white on #30
 
 Any rendering can also be written to a file, while still printing to stdout:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich notes.md --export-html notes.html
 rich notes.md --export-svg notes.svg
 ```
@@ -748,7 +748,7 @@ rich notes.md --export-svg notes.svg
 
 ## Paging
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich notes.md --pager          # always page
 rich notes.md --auto-pager     # page only if taller than the terminal
 ```
@@ -818,7 +818,7 @@ rich --batch --markdown --export-html site/page.html --jobs 2 --report json docs
 The sample `rich.toml` has a `[defaults]` table, a `ci` profile and a `night`
 theme. Check that it is valid and see what a profile resolves to:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich config validate --config rich.toml --profile ci
 rich config show --config rich.toml --profile ci
 ```
@@ -845,7 +845,7 @@ rich config show --config rich.toml --profile ci
 
 Explain where one value comes from, and what it overrides:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich config explain width --config rich.toml --profile ci --width 72
 ```
 
@@ -881,7 +881,7 @@ profiles are errors (exit `2`), even in profiles you did not select.
 
 ## Completions and generated docs
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich completions bash > ~/.local/share/bash-completion/completions/rich
 rich completions zsh  > "${fpath[1]}/_rich"
 rich completions fish > ~/.config/fish/completions/rich.fish
@@ -902,7 +902,7 @@ man ./man/rich.1
 
 ## Diagnosing your terminal
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich doctor
 ```
 
@@ -997,7 +997,7 @@ fi
 
 ## The guided demo
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --demo-list
 ```
 

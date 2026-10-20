@@ -51,7 +51,7 @@ do not, [rustup.rs](https://rustup.rs) is the one-line installer.
 
 ## Check the install worked
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --version
 ```
 
@@ -66,7 +66,7 @@ already running.
 
 Then render something:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --print "[bold magenta]Hello[/] [green]World[/]"
 ```
 

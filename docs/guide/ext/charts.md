@@ -907,7 +907,7 @@ sniffed as `rich --csv` sniffs it), JSON (an array of records, of numbers or
 of rows, or an object of columns), JSON Lines, or whitespace-separated
 numbers.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich chart sales.csv                                  # every numeric column as a line
 rich chart sales.csv --kind bar --x month --y api     # a bar per row, labelled
 rich chart sales.csv --kind heatmap                   # rows by series, as shades

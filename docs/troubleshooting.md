@@ -33,7 +33,7 @@ way the exit code is 3.
 Check the path, and remember that a leading `-` makes `rich` read the argument
 as an option. Put it after `--`:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich -- -leading-dash.md
 ```
 
@@ -90,7 +90,7 @@ nothing.
 
 Add the flag it depends on, or drop it:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --panel rounded --panel-style dim notes.md
 ```
 

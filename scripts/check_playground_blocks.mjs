@@ -14,11 +14,20 @@
 // A block whose input stops rendering (a renamed style, a changed option, a
 // new panic on wasm) fails the docs job, as a tape that no longer records
 // does.
+//
+// Tier 2: a `data-kind="cli"` block's commands run, in order, in a fresh
+// session of the docs terminal (the `rich` WASI module, the sample files
+// and the line runner; playground/cli.mjs), and each must exit 0. A CLI
+// example (a bash, sh, shell or console fence with a `rich` command) that
+// is not marked but runs fails too: every example that runs in the
+// terminal offers it. Examples that cannot run there (a URL, --watch, a
+// process, a file the samples lack) stay plain.
 
 import { readdirSync, readFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { load } from "../playground/node.mjs";
+import { runBlock } from "../playground/cli.mjs";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DOCS = path.join(ROOT, "docs");
@@ -29,6 +38,11 @@ const RESERVED = new Set(["kind", "kinds"]);
 const NUMBERS = new Set(["width", "indent", "bar-width", "bins", "threshold", "context", "tab-size"]);
 // Pages whose blocks stand alone, without Rust beside them.
 const STANDALONE = new Set(["playground.md"]);
+// Pages about the docs rather than of them: their examples are not checked.
+const NOT_EXAMPLES = /^(design|plans|releases)\//;
+const SHELL_FENCE = /^(bash|sh|shell|console)\b/;
+// A command line that starts with `rich` (after `$ ` in a transcript).
+const RICH_LINE = /(^|\n)(\$ )?rich( |$)/m;
 
 function markdownFiles(dir) {
   const out = [];
@@ -74,7 +88,11 @@ export function blocks(text) {
     }
     const block = { line: n + 1, info: info.trim(), body: body.join("\n"), pair };
     if (pair) pair.fences.push(block);
-    if (/\.rich-playground\b/.test(info)) {
+    if (!/\.rich-playground\b/.test(info) && SHELL_FENCE.test(block.info) && RICH_LINE.test(block.body)) {
+      block.kind = null;
+      block.candidate = true;
+      found.push(block);
+    } else if (/\.rich-playground\b/.test(info)) {
       const attrs = attributes(info);
       block.kind = attrs["data-kind"];
       block.options = {};
@@ -104,9 +122,14 @@ async function main() {
   let count = 0;
   const pages = new Set();
   const kinds = new Map();
+  const cli = [];
   for (const file of markdownFiles(DOCS)) {
     const rel = path.relative(DOCS, file).split(path.sep).join("/");
     for (const block of blocks(readFileSync(file, "utf8"))) {
+      if (block.candidate || block.kind === "cli") {
+        if (!NOT_EXAMPLES.test(rel) || block.kind === "cli") cli.push({ rel, block });
+        continue;
+      }
       count += 1;
       pages.add(rel);
       const where = `${rel}:${block.line} (${block.kind})`;
@@ -144,6 +167,8 @@ async function main() {
       }
     }
   }
+  failures += await checkCli(stamp, cli, pages, kinds);
+  count += kinds.get("cli") || 0;
   const summary = [...kinds].map(([kind, n]) => `${kind} ${n}`).join(", ");
   console.log(`${count} playground blocks on ${pages.size} pages (${summary})`);
   if (!count) {
@@ -154,6 +179,40 @@ async function main() {
     console.error(`${failures} block(s) failed`);
     process.exit(1);
   }
+}
+
+// Tier 2's blocks, a few at a time (each in its own worker thread).
+async function checkCli(stamp, cli, pages, kinds) {
+  if (!stamp.cli) {
+    if (!cli.some(({ block }) => block.kind === "cli")) return 0;
+    console.log("FAIL the stamp has no cli module: run playground/build.sh with the wasm32-wasip1 target");
+    return 1;
+  }
+  const wasm = path.join(MODULES, stamp.cli.wasm);
+  let failures = 0;
+  let next = 0;
+  const one = async () => {
+    while (next < cli.length) {
+      const { rel, block } = cli[next++];
+      const result = await runBlock(wasm, block.body, { timeout: 60000 });
+      const where = `${rel}:${block.line}`;
+      if (block.kind === "cli") {
+        pages.add(rel);
+        kinds.set("cli", (kinds.get("cli") || 0) + 1);
+        if (!result.ok) {
+          failures += 1;
+          const failed = result.lines.filter((l) => l.code !== 0).map((l) => `\`${l.line}\` exited ${l.code}`);
+          console.log(`FAIL ${where} (cli): ${result.error || failed.join("; ") || "no commands"}`);
+          if (!result.error) console.log(result.output.split("\n").slice(-8).join("\n"));
+        }
+      } else if (result.ok) {
+        failures += 1;
+        console.log(`FAIL ${where}: this CLI example runs in the docs terminal; mark it { .rich-playground data-kind="cli" }`);
+      }
+    }
+  };
+  await Promise.all(Array.from({ length: 4 }, one));
+  return failures;
 }
 
 if (process.argv[1] && path.resolve(process.argv[1]) === fileURLToPath(import.meta.url)) {

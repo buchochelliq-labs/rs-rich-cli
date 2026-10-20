@@ -235,7 +235,7 @@ is useful in tests.
 with its source. `rich doctor --report json` includes the same data under
 `capabilities`. It never probes the terminal, so it is safe in scripts.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich doctor
 RICH_COLOR=256 RICH_UNICODE=0 rich doctor   # see overrides take effect
 rich doctor --report json > doctor.json
