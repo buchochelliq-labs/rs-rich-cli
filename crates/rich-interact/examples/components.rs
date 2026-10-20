@@ -149,6 +149,12 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                         ("token", _) => println!("token: (set)"),
                         (_, rich_interact::Value::Text(text)) => println!("{name}: {text}"),
                         (_, rich_interact::Value::Flag(on)) => println!("{name}: {on}"),
+                        (_, rich_interact::Value::List(list)) => {
+                            println!("{name}: {}", list.join(", "))
+                        }
+                        (_, rich_interact::Value::Path(path)) => {
+                            println!("{name}: {}", path.display())
+                        }
                     }
                 }
             }

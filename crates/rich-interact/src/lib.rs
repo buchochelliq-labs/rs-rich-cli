@@ -27,7 +27,7 @@
 //! - [`headless`]: scripted events in, frames out, for tests;
 //! - [`components`]: [`Select`], [`MultiSelect`], [`TableSelect`],
 //!   [`TreeSelect`], [`Input`], [`TextArea`], [`Confirm`], [`Form`],
-//!   [`Pager`], [`FilePicker`], [`ColorPicker`], [`AssetPicker`],
+//!   [`Pager`], [`Paginator`], [`FilePicker`], [`ColorPicker`], [`AssetPicker`],
 //!   [`ThemePicker`], [`Reorder`] (#720), and [`DatePicker`],
 //!   [`TimePicker`] and [`DateTimePicker`] (#719, on the [`datetime`]
 //!   types), [`LogView`] (#724, a live view of log records), built on
@@ -121,6 +121,7 @@ pub use components::{
     Reorder, Select, Suggestion, TableSelect, TextArea, Theme, ThemePicker, TimePicker, TreeSelect,
     Value, Verdict,
 };
+pub use components::{Paginator, PaginatorStyle};
 pub use compose::{
     Axis, Column, ComponentExt, Label, Layer, LayerHandle, Layers, Rect, Row, Size, Split, Stack,
     Tabs,

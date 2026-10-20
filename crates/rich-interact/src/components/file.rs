@@ -499,6 +499,13 @@ impl FilePicker {
         self.select.items()[index].value.clone()
     }
 
+    /// Show the list again after the picker finished or was cancelled, in
+    /// the directory it was in: for a container that opens one picker more
+    /// than once (a [`Form`](crate::Form)'s file field).
+    pub fn reopen(&mut self) {
+        self.select.reopen();
+    }
+
     fn finish(&mut self, path: PathBuf) -> Flow<PathBuf> {
         self.select.set_answer(Some(display_path(&path)));
         Flow::Done(path)

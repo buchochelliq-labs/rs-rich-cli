@@ -1933,6 +1933,7 @@ pub(crate) fn spec() -> CommandSpec {
         spec = spec.subcommand(super::banner::command());
     }
     spec = spec.subcommand(super::shell::command());
+    spec = spec.subcommand(super::spin::command());
     #[cfg(feature = "serve")]
     {
         spec = spec.subcommand(super::serve::command());
@@ -2181,6 +2182,7 @@ mod tests {
     #[cfg(feature = "art")]
     const BANNER: &str = include_str!("banner.rs");
     const SHELL: &str = include_str!("shell.rs");
+    const SPIN: &str = include_str!("spin.rs");
 
     /// The source of the item that starts with `start`, up to the next
     /// top-level item.
@@ -2250,6 +2252,7 @@ mod tests {
         #[cfg(feature = "art")]
         out.extend(option_literals(item(BANNER, "fn parse_args(")));
         out.extend(option_literals(item(SHELL, "fn parse_args(")));
+        out.extend(option_literals(item(SPIN, "fn parse_args(")));
         #[cfg(feature = "art")]
         for start in ["const CREATE_VALUES", "const CREATE_FLAGS", "fn request("] {
             out.extend(option_literals(item(MICRO, start)));
@@ -2412,6 +2415,7 @@ mod tests {
             "doctor",
             "inspect",
             "shell",
+            "spin",
         ] {
             assert!(spec.find_subcommand(name).is_some(), "{name}");
         }

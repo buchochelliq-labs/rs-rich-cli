@@ -383,6 +383,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `micro` | Micro assets: emoji-sized images and animations written :micro:name: (with --emoji). List, show, preview, add, remove and create them; install packs |
 | `banner` | Draw TEXT as a FIGlet banner: a font, a style or colour gradient, alignment and width fitting. Built with the `art` feature |
 | `shell` | Shell integration: `init` prints a script with completions, OSC 133 prompt marks, OSC 7 and a status line after each command; `status` and `link` are its helpers |
+| `spin` | Run a command with a spinner and a title until it exits, and exit with its status (like gum spin); without a terminal it just runs the command |
 | `record` | Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG, an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with committed ones instead |
 | `plugins` | List the plugins this build has — built in, linked, and any --plugin PATH loads — with their source, version, ABI and capabilities |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
@@ -2350,6 +2351,45 @@ A bash prompt with a clickable working directory
 
 ```sh
 PS1='$(rich shell link --tilde --links always --prompt bash) \$ '
+```
+
+### rich spin
+
+Run a command with a spinner and a title until it exits, and exit with its status (like gum spin); without a terminal it just runs the command
+
+#### Usage
+
+```text
+rich spin [--title TEXT] [--spinner NAME] [--show-output | --show-error] -- COMMAND [ARG]...
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--title <TEXT>` | The text beside the spinner (default "Loading...") |
+| `--spinner <NAME>` | One of rich's spinners (default dots; `rich asset --kind spinner` picks one) |
+| `--show-output` | Print the command's output (stdout and stderr) once it exits; on a terminal it is otherwise held back. |
+| `--show-error` | Print the command's output only when it fails. |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `<COMMAND>...` | The command and its arguments, after `--`. |
+
+#### Examples
+
+A spinner until the build ends; its exit status is rich's
+
+```sh
+rich spin --title "Building" -- cargo build --release
+```
+
+The moon spinner, then the page
+
+```sh
+rich spin --spinner moon --show-output -- curl -sS https://example.com
 ```
 
 ### rich record
