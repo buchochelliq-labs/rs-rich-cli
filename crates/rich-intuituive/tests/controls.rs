@@ -187,7 +187,7 @@ fn a_checkbox_and_a_switch_follow_their_signals() {
     );
     // Focused, its text is reversed.
     assert!(style_at(&driver, 5, 0).contains("reverse"));
-    assert!(!style_at(&driver, 5, 0 + 1).contains("reverse"));
+    assert!(!style_at(&driver, 5, 1).contains("reverse"));
     driver.press("space");
     assert_eq!(rows(&driver)[0], "[x] Wrap lines");
     driver.press("enter tab left");
