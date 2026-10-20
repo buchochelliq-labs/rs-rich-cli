@@ -40,7 +40,7 @@ impl Chart {
     /// assert_eq!(
     ///     console.render_export(&chart),
     ///     concat!(
-    ///         "     +++\n",
+    ///         "    ++++\n",
     ///         "++++++++\n",
     ///         "########\n",
     ///         "########\n",

@@ -1491,7 +1491,7 @@ impl crate::a11y::AccessibleText for Chart {
             "Chart, {}, {}, {}{}",
             counted(self.datasets.len(), "dataset", "datasets"),
             self.x_axis.describe("x", points().map(|p| p.0)),
-            self.y_axis.describe("y", stacked_points().map(|p| p.1)),
+            view.y_axis.describe("y", stacked_points().map(|p| p.1)),
             if self.stacks() { ", areas stacked" } else { "" },
         )];
         for (index, d) in self.datasets.iter().enumerate() {

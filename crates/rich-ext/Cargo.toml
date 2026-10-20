@@ -71,6 +71,10 @@ chrono = { version = "0.4.45", default-features = false, features = ["clock", "s
 # through rs-rich-micro; off by default.
 zip = { version = "8", default-features = false, features = ["deflate-flate2"], optional = true }
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"], optional = true }
+# `qr`: the QR code encoder (Project Nayuki's reference implementation;
+# MIT, no dependencies, one file). Lighter than `qrcode`, whose renderers
+# this crate does not need.
+qrcodegen = { version = "1.8", optional = true }
 
 # The terminal's cell size in pixels (`TIOCGWINSZ`) and the `CSI 16 t` query.
 # rustix is already in the tree through `terminal_size`; libc (already in the
@@ -135,6 +139,8 @@ local-time = ["dep:chrono"]
 # `archive`: the entries of tar, tar.gz and zip files, and extraction
 # that never writes outside its directory (zip, flate2).
 archive = ["dep:zip", "dep:flate2"]
+# `qr::QrCode`: QR codes drawn with half blocks, through qrcodegen.
+qr = ["dep:qrcodegen"]
 
 [[example]]
 name = "guide_live_layout"
@@ -224,3 +230,7 @@ required-features = ["data", "toml"]
 [[example]]
 name = "guide_documents"
 required-features = ["syntax"]
+
+[[example]]
+name = "guide_charts_extra"
+required-features = ["qr"]
