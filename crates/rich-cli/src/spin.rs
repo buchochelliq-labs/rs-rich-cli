@@ -257,6 +257,10 @@ fn run(
     animate: bool,
     no_color: bool,
 ) -> Result<ExitCode, (u8, String)> {
+    // A WASI build (the docs playground's `rich`) cannot start a process.
+    if cfg!(target_os = "wasi") {
+        return Err((2, crate::host::unavailable("`rich spin`")));
+    }
     let mut process = Process::new(&spin.command[0]);
     process.args(&spin.command[1..]);
     if terminal {
@@ -282,7 +286,7 @@ fn run(
     // host process (the Python wheel) the handler would outlive the command
     // and replace the host's own, so the host's handling stands instead.
     if !crate::in_host() {
-        let _ = ctrlc::set_handler(|| {});
+        let _ = crate::host::on_interrupt(|| {});
     }
     let console = rich::Console::builder()
         .force_terminal(true)

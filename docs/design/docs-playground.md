@@ -415,8 +415,8 @@ iframe, as the spike does.
   `notify`, `cap-std` and `cap-fs-ext` are non-WASI dependencies; Ctrl+C
   handlers go through `host::on_interrupt` (a no-op there: the page stops
   a command by terminating its worker); `--batch`, `--watch`,
-  `log --follow` and `--demo` say they are not available in the browser
-  (exit 2); `rich log` reads stdin on its own thread natively and inline
+  `log --follow`, `--demo` and `rich spin` (it starts a process) say they
+  are not available in the browser (exit 2); `rich log` reads stdin on its own thread natively and inline
   under WASI, which has no threads. Native builds are unchanged.
 - **Measured.** 6.24 MB from cargo (`opt-level=z`, LTO, one codegen unit,
   `panic=abort`, stripped), **5.55 MB after `wasm-opt -Oz`, 2.46 MB
