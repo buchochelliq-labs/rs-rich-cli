@@ -1,0 +1,227 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/schemas/marketplace/listing.schema.json",
+  "title": "rs-rich marketplace listing",
+  "description": "One package in the rs-rich marketplace: what it is, where each version's artifact is and what it hashes to, and what each version needs from the host. See docs/design/marketplace.md.",
+  "type": "object",
+  "required": ["schema_version", "id", "kind", "name", "description", "tier", "license", "repository", "versions"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {
+      "description": "The listing format's version. This schema is version 1.",
+      "const": 1
+    },
+    "id": {
+      "description": "The package's marketplace id, unique across every kind. The plugin name rule: lowercase letters, digits, '-', '_' and '.', starting with a letter or digit, at most 64 bytes.",
+      "$ref": "#/$defs/plugin_name"
+    },
+    "kind": {
+      "description": "crate: a Cargo crate, listed only. wasm-plugin: a sandboxed WASM module. micro-pack: a .richmicro pack. theme: an upstream [styles] theme file.",
+      "enum": ["crate", "wasm-plugin", "micro-pack", "theme"]
+    },
+    "name": {"description": "A human-readable name.", "$ref": "#/$defs/line"},
+    "description": {"description": "One line on what the package adds.", "$ref": "#/$defs/line"},
+    "tier": {
+      "description": "official: this repository's packages. reviewed: read and built by a maintainer. community: checked by CI only. Set by the marketplace's maintainers, not the submitter.",
+      "enum": ["official", "reviewed", "community"]
+    },
+    "license": {"description": "An SPDX license expression.", "type": "string", "minLength": 1, "maxLength": 256},
+    "authors": {
+      "type": "array",
+      "items": {"$ref": "#/$defs/line"},
+      "maxItems": 32
+    },
+    "repository": {"description": "The source repository.", "$ref": "#/$defs/https_url"},
+    "homepage": {"$ref": "#/$defs/https_url"},
+    "keywords": {
+      "type": "array",
+      "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$"},
+      "maxItems": 8,
+      "uniqueItems": true
+    },
+    "crate": {
+      "description": "For kind crate only: the crate on crates.io.",
+      "type": "object",
+      "required": ["name"],
+      "additionalProperties": false,
+      "properties": {
+        "name": {"type": "string", "pattern": "^[A-Za-z][A-Za-z0-9_-]{0,63}$"},
+        "features": {
+          "description": "Cargo features a user enables to get the plugin, if any.",
+          "type": "array",
+          "items": {"type": "string", "pattern": "^[A-Za-z0-9_][A-Za-z0-9_+.-]{0,63}$"},
+          "uniqueItems": true
+        }
+      }
+    },
+    "versions": {
+      "description": "Every published version, newest first.",
+      "type": "array",
+      "minItems": 1,
+      "maxItems": 1000,
+      "items": {"$ref": "#/$defs/version"}
+    }
+  },
+  "allOf": [
+    {
+      "if": {"properties": {"kind": {"const": "crate"}}, "required": ["kind"]},
+      "then": {
+        "required": ["crate"],
+        "properties": {"versions": {"items": {"$ref": "#/$defs/crate_version"}}}
+      },
+      "else": {"not": {"required": ["crate"]}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "wasm-plugin"}}, "required": ["kind"]},
+      "then": {"properties": {"versions": {"items": {"$ref": "#/$defs/wasm_version"}}}}
+    },
+    {
+      "if": {"properties": {"kind": {"const": "micro-pack"}}, "required": ["kind"]},
+      "then": {
+        "properties": {
+          "id": {"$ref": "#/$defs/micro_segment"},
+          "versions": {"items": {"$ref": "#/$defs/micro_version"}}
+        }
+      }
+    },
+    {
+      "if": {"properties": {"kind": {"const": "theme"}}, "required": ["kind"]},
+      "then": {"properties": {"versions": {"items": {"$ref": "#/$defs/theme_version"}}}}
+    }
+  ],
+  "$defs": {
+    "line": {"type": "string", "minLength": 1, "maxLength": 1024, "pattern": "^[^\\u0000-\\u001f\\u007f]*$"},
+    "https_url": {"type": "string", "maxLength": 2048, "pattern": "^https://[^\\s]+$"},
+    "sha256": {"description": "Lowercase hex SHA-256.", "type": "string", "pattern": "^[0-9a-f]{64}$"},
+    "plugin_name": {"type": "string", "maxLength": 64, "pattern": "^[a-z0-9][a-z0-9._-]*$"},
+    "micro_segment": {"type": "string", "maxLength": 64, "pattern": "^[a-z0-9_-]+$"},
+    "micro_name": {"type": "string", "maxLength": 128, "pattern": "^[a-z0-9_-]+(/[a-z0-9_-]+)*$"},
+    "semver": {
+      "type": "string",
+      "maxLength": 256,
+      "pattern": "^(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)\\.(0|[1-9][0-9]*)(-[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?(\\+[0-9A-Za-z-]+(\\.[0-9A-Za-z-]+)*)?$"
+    },
+    "version": {
+      "type": "object",
+      "required": ["version", "published", "requires", "artifact", "capabilities", "permissions"],
+      "additionalProperties": false,
+      "properties": {
+        "version": {"$ref": "#/$defs/semver"},
+        "published": {"description": "The day it was listed, YYYY-MM-DD.", "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"},
+        "requires": {
+          "description": "What the version needs from the host. Which keys apply depends on the kind.",
+          "type": "object",
+          "additionalProperties": false,
+          "properties": {
+            "abi": {"description": "The runtime plugin ABI, MAJOR.MINOR (rich_plugin_api::abi::ABI_MAJOR and ABI_MINOR).", "type": "string", "pattern": "^(0|[1-9][0-9]{0,8})\\.(0|[1-9][0-9]{0,8})$"},
+            "plugin_api": {"description": "rich_plugin_api::PLUGIN_API_VERSION.", "type": "integer", "minimum": 1},
+            "micro_schema": {"description": "The pack.json schema_version (rich_micro::package::SCHEMA_VERSION).", "type": "integer", "minimum": 1},
+            "theme_format": {"description": "The theme file format; 1 is upstream rich's [styles] INI file.", "type": "integer", "minimum": 1}
+          }
+        },
+        "artifact": {
+          "type": "object",
+          "required": ["url", "sha256", "size"],
+          "additionalProperties": false,
+          "properties": {
+            "url": {"$ref": "#/$defs/https_url"},
+            "sha256": {"$ref": "#/$defs/sha256"},
+            "size": {"description": "Bytes.", "type": "integer", "minimum": 1}
+          }
+        },
+        "source_revision": {"description": "The full Git commit the artifact was built from, in the repository.", "type": "string", "pattern": "^([0-9a-f]{40}|[0-9a-f]{64})$"},
+        "capabilities": {
+          "type": "array",
+          "maxItems": 64,
+          "items": {
+            "type": "object",
+            "required": ["kind", "name"],
+            "additionalProperties": false,
+            "properties": {
+              "kind": {"type": "string"},
+              "name": {"type": "string"}
+            }
+          }
+        },
+        "permissions": {
+          "type": "array",
+          "uniqueItems": true,
+          "items": {"enum": ["native-code", "filesystem-read", "filesystem-write", "network", "process", "environment", "clipboard", "ansi-output"]}
+        },
+        "yanked": {"type": "boolean"},
+        "yank_reason": {"$ref": "#/$defs/line"}
+      },
+      "if": {"properties": {"yanked": {"const": true}}, "required": ["yanked"]},
+      "then": {"required": ["yank_reason"]},
+      "else": {"not": {"required": ["yank_reason"]}}
+    },
+    "crate_version": {
+      "properties": {
+        "requires": {"required": ["plugin_api"], "propertyNames": {"enum": ["plugin_api"]}},
+        "artifact": {"properties": {"url": {"pattern": "^https://static\\.crates\\.io/crates/"}}},
+        "capabilities": {
+          "items": {
+            "properties": {
+              "kind": {"enum": ["highlighter", "code-highlighter", "theme", "box-style", "renderer", "fence-renderer", "transform", "action", "component"]},
+              "name": {"$ref": "#/$defs/plugin_name"}
+            }
+          }
+        },
+        "permissions": {"contains": {"const": "native-code"}, "items": {"not": {"const": "ansi-output"}}}
+      }
+    },
+    "wasm_version": {
+      "required": ["source_revision"],
+      "properties": {
+        "requires": {"required": ["abi"], "propertyNames": {"enum": ["abi"]}},
+        "artifact": {
+          "properties": {
+            "url": {"pattern": "\\.wasm$"},
+            "size": {"maximum": 16777216}
+          }
+        },
+        "capabilities": {
+          "minItems": 1,
+          "items": {
+            "properties": {
+              "kind": {"enum": ["transform", "highlighter", "fence-markup", "fence-ansi"]},
+              "name": {"$ref": "#/$defs/plugin_name"}
+            }
+          }
+        },
+        "permissions": {"items": {"const": "ansi-output"}}
+      }
+    },
+    "micro_version": {
+      "properties": {
+        "requires": {"required": ["micro_schema"], "propertyNames": {"enum": ["micro_schema"]}},
+        "artifact": {"properties": {"url": {"pattern": "\\.(zip|richmicro)$"}, "size": {"maximum": 8388608}}},
+        "capabilities": {
+          "items": {
+            "properties": {
+              "kind": {"const": "asset"},
+              "name": {"$ref": "#/$defs/micro_name"}
+            }
+          }
+        },
+        "permissions": {"maxItems": 0}
+      }
+    },
+    "theme_version": {
+      "properties": {
+        "requires": {"required": ["theme_format"], "propertyNames": {"enum": ["theme_format"]}},
+        "artifact": {"properties": {"url": {"pattern": "\\.(ini|theme)$"}, "size": {"maximum": 1048576}}},
+        "capabilities": {
+          "minItems": 1,
+          "items": {
+            "properties": {
+              "kind": {"const": "theme"},
+              "name": {"$ref": "#/$defs/plugin_name"}
+            }
+          }
+        },
+        "permissions": {"maxItems": 0}
+      }
+    }
+  }
+}

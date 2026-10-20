@@ -56,9 +56,41 @@ pub use linked::{linked_plugins, LinkedPlugin};
 use rich::r#box::Box as BoxStyle;
 use rich::{CodeHighlighter, FenceRenderer, Highlighter, Renderable, Text, Theme};
 
-/// The version of this contract. A host accepts a plugin only if the plugin's
-/// [`PluginMetadata::api_version`] equals the host's.
+/// The version of this contract (the Rust traits) that this host implements.
+/// A host accepts a plugin only if the plugin's
+/// [`PluginMetadata::api_version`] equals it ([`is_supported_api_version`]).
+///
+/// Every breaking change to the contract bumps it. It versions compile-time
+/// plugins (added with `add_plugin` or linked with [`export_plugin!`]); a
+/// runtime plugin is versioned by the ABI instead ([`abi::ABI_MAJOR`],
+/// [`abi::ABI_MINOR`]). A marketplace listing of a Cargo crate names it as
+/// `requires.plugin_api` (see docs/design/marketplace.md).
+///
+/// ```
+/// use rich_plugin_api::{is_supported_api_version, PluginMetadata, PLUGIN_API_VERSION};
+///
+/// assert_eq!(PLUGIN_API_VERSION, 1);
+/// let metadata = PluginMetadata::new("solarized", "Solarized themes", "1.0.0");
+/// assert_eq!(metadata.api_version, PLUGIN_API_VERSION);
+/// assert!(is_supported_api_version(metadata.api_version));
+/// ```
 pub const PLUGIN_API_VERSION: u32 = 1;
+
+/// Whether this host accepts a plugin built against plugin API
+/// `api_version`: only [`PLUGIN_API_VERSION`] itself.
+///
+/// This is the check `rs-rich-ext`'s `ExtensionRegistry::add_plugin` makes,
+/// so a tool that chooses a plugin before adding it decides as the host will.
+///
+/// ```
+/// use rich_plugin_api::{is_supported_api_version, PLUGIN_API_VERSION};
+///
+/// assert!(is_supported_api_version(PLUGIN_API_VERSION));
+/// assert!(!is_supported_api_version(PLUGIN_API_VERSION + 1));
+/// ```
+pub const fn is_supported_api_version(api_version: u32) -> bool {
+    api_version == PLUGIN_API_VERSION
+}
 
 /// Makes a fresh regex [`Highlighter`] each time a host installs it, so one
 /// registration can be installed onto many consoles.
@@ -343,6 +375,16 @@ mod tests {
         ] {
             assert!(!is_valid_name(bad), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn only_this_api_version_is_supported() {
+        assert!(is_supported_api_version(PLUGIN_API_VERSION));
+        assert!(is_supported_api_version(
+            PluginMetadata::new("a", "A", "1").api_version
+        ));
+        assert!(!is_supported_api_version(PLUGIN_API_VERSION + 1));
+        assert!(!is_supported_api_version(PLUGIN_API_VERSION - 1));
     }
 
     #[test]

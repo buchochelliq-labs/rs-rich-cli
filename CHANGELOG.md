@@ -84,6 +84,28 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   release benchmark bounding it at a second
   (`a_million_row_filter_is_fast`, ignored by default).
 
+### Marketplace: the listing format, and the host's versions (plugin-api, ext, scripts)
+
+- **The listing format** ([design note](docs/design/marketplace.md)): one
+  JSON file per package with a `schema_version`, its kind (`crate`,
+  `wasm-plugin`, `micro-pack`, `theme`), tier, repository and every version's
+  artifact URL, SHA-256 and size, `requires`, capabilities, permissions and
+  yanking. One minisign-signed index pins every listing by hash, with a
+  serial and an expiry; a backup key only rotates keys. Only WASM plugins and
+  asset packs install; crates are listed only.
+- **Schemas and a validator.** `schemas/marketplace/listing.schema.json` and
+  `index.schema.json`, valid examples of every kind and invalid ones (a bad
+  hash, an unknown kind, a missing ABI and ten more).
+  `scripts/validate_marketplace.py` checks listings and indexes with the
+  standard library, and with `jsonschema` too when it is installed (the two
+  must agree); CI runs it and its tests.
+- **`rs-rich-plugin-api`:** `is_supported_api_version` and
+  `abi::is_supported` are the checks the registry and both loaders make
+  against `PLUGIN_API_VERSION`, `ABI_MAJOR` and `ABI_MINOR`, so a tool that
+  resolves `requires` decides as the host loads. The constants are
+  unchanged (API 1, ABI 1.0) and documented for the marketplace; tests pin
+  the WASM loader, the native descriptor reader and `add_plugin` to them.
+
 ## 0.0.20 cohort — published 2026-10-19
 
 Published on 2026-10-19 from `56c6c97` by one `release.yml` run (tag

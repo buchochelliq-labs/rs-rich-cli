@@ -37,10 +37,63 @@ use std::panic::{catch_unwind, AssertUnwindSafe};
 
 use crate::is_valid_name;
 
-/// The ABI's major version. A host refuses a plugin with another.
+/// The major version of the runtime plugin ABI this host implements, for
+/// native and WASM plugins alike. A host refuses a plugin built for another.
+///
+/// It is the first number of a WASM plugin's manifest line
+/// (`rich-plugin-abi 1.0`) and of a native plugin's descriptor, and the
+/// number a marketplace listing's `requires.abi` names (see
+/// docs/design/marketplace.md). It is separate from
+/// [`PLUGIN_API_VERSION`](crate::PLUGIN_API_VERSION), which versions the Rust
+/// traits. [`is_supported`] is the check every loader makes.
+///
+/// ```
+/// use rich_plugin_api::abi::{is_supported, PluginAbi, ABI_MAJOR, ABI_MINOR};
+///
+/// assert_eq!(format!("{ABI_MAJOR}.{ABI_MINOR}"), "1.0");
+/// let manifest = format!("rich-plugin-abi {ABI_MAJOR}.{ABI_MINOR}\nname shout\nversion 1\n");
+/// assert!(PluginAbi::parse_manifest(&manifest).is_ok());
+/// assert!(is_supported(ABI_MAJOR, ABI_MINOR) && !is_supported(ABI_MAJOR + 1, 0));
+/// ```
 pub const ABI_MAJOR: u32 = 1;
-/// The ABI's minor version: additions a host of the same major may lack.
+/// The minor version of the runtime plugin ABI this host implements:
+/// additions a host of the same [`ABI_MAJOR`] may lack.
+///
+/// A plugin built for a newer minor still loads when it uses nothing this
+/// host lacks; one that declares a capability kind the host does not know is
+/// refused when its manifest or descriptor is read, never by its version.
+///
+/// ```
+/// use rich_plugin_api::abi::{is_supported, PluginAbi, ABI_MAJOR, ABI_MINOR};
+///
+/// let newer = format!("rich-plugin-abi {ABI_MAJOR}.{}\nname shout\nversion 1\n", ABI_MINOR + 1);
+/// assert!(PluginAbi::parse_manifest(&newer).is_ok());
+/// assert!(is_supported(ABI_MAJOR, ABI_MINOR + 1));
+/// ```
 pub const ABI_MINOR: u32 = 0;
+
+/// Whether this host loads a plugin built for ABI `major.minor`: the same
+/// [`ABI_MAJOR`], whatever the minor (see [`ABI_MINOR`]).
+///
+/// This is the version check of [`PluginAbi::validate`],
+/// [`PluginAbi::parse_manifest`] (the WASM loader's) and [`read_descriptor`]
+/// (the native loader's), so a tool that chooses a plugin before loading it,
+/// such as a marketplace resolving `requires.abi`, decides exactly as the
+/// loader will.
+///
+/// ```
+/// use rich_plugin_api::abi::{is_supported, ABI_MAJOR};
+///
+/// assert!(is_supported(ABI_MAJOR, 0));
+/// assert!(is_supported(ABI_MAJOR, 7));
+/// assert!(!is_supported(ABI_MAJOR + 1, 0));
+/// ```
+pub const fn is_supported(major: u32, minor: u32) -> bool {
+    // Any minor of this major: what a newer minor adds is checked where it
+    // appears (an unknown capability kind is refused).
+    let _ = minor;
+    major == ABI_MAJOR
+}
 
 /// The function a native plugin exports: `extern "C" fn() -> *const PluginDescriptor`.
 pub const DYLIB_ENTRY_SYMBOL: &str = "rich_plugin_entry";
@@ -191,7 +244,7 @@ impl PluginAbi {
 
     /// Check the version and every field a host relies on.
     pub fn validate(&self) -> Result<(), AbiError> {
-        if self.abi_major != ABI_MAJOR {
+        if !is_supported(self.abi_major, self.abi_minor) {
             return Err(AbiError::Incompatible {
                 major: self.abi_major,
                 minor: self.abi_minor,
@@ -285,7 +338,7 @@ impl PluginAbi {
             .split_once('.')
             .and_then(|(major, minor)| Some((major.parse().ok()?, minor.parse().ok()?)))
             .ok_or_else(|| AbiError::Invalid(format!("invalid ABI version {version:?}")))?;
-        if major != ABI_MAJOR {
+        if !is_supported(major, minor) {
             return Err(AbiError::Incompatible { major, minor });
         }
         let mut abi = PluginAbi {
@@ -498,7 +551,7 @@ pub unsafe fn read_descriptor(
         let version = descriptor.cast::<u32>();
         (version.read(), version.add(1).read())
     };
-    if major != ABI_MAJOR {
+    if !is_supported(major, minor) {
         return Err(AbiError::Incompatible { major, minor });
     }
     // SAFETY: same major, so the layout is this one.
@@ -828,6 +881,58 @@ mod tests {
         let text = String::from_utf8(text.to_vec()).unwrap();
         unsafe { (descriptor.free)(output) };
         (status, text)
+    }
+
+    /// Versions around the host's: the same, a newer and an older minor, and
+    /// the majors on either side.
+    fn versions_around_the_host() -> Vec<(u32, u32)> {
+        let mut versions = vec![
+            (ABI_MAJOR, ABI_MINOR),
+            (ABI_MAJOR, ABI_MINOR + 1),
+            (ABI_MAJOR + 1, 0),
+            (ABI_MAJOR + 1, ABI_MINOR),
+        ];
+        if let Some(older) = ABI_MINOR.checked_sub(1) {
+            versions.push((ABI_MAJOR, older));
+        }
+        if let Some(older) = ABI_MAJOR.checked_sub(1) {
+            versions.push((older, ABI_MINOR));
+        }
+        versions
+    }
+
+    #[test]
+    fn the_published_constants_are_the_ones_every_loader_checks() {
+        // What a marketplace resolves against (`is_supported`) must be what
+        // the WASM loader (`parse_manifest`), the native loader
+        // (`read_descriptor`) and `validate` accept, version for version.
+        assert!(is_supported(ABI_MAJOR, ABI_MINOR));
+        let current = PluginAbi::new("shout", "1");
+        assert_eq!(
+            (current.abi_major, current.abi_minor),
+            (ABI_MAJOR, ABI_MINOR)
+        );
+        assert!(current
+            .to_manifest()
+            .starts_with(&format!("rich-plugin-abi {ABI_MAJOR}.{ABI_MINOR}\n")));
+        for (major, minor) in versions_around_the_host() {
+            let expected = is_supported(major, minor);
+            let manifest = format!("rich-plugin-abi {major}.{minor}\nname shout\nversion 1\n");
+            let parsed = PluginAbi::parse_manifest(&manifest);
+            assert_eq!(parsed.is_ok(), expected, "manifest {major}.{minor}");
+            if !expected {
+                assert_eq!(parsed.unwrap_err(), AbiError::Incompatible { major, minor });
+            }
+
+            let mut abi = PluginAbi::new("shout", "1");
+            (abi.abi_major, abi.abi_minor) = (major, minor);
+            assert_eq!(abi.validate().is_ok(), expected, "validate {major}.{minor}");
+
+            let mut exported = Exported::new(exports(), __rich_plugin_call);
+            (exported.descriptor.abi_major, exported.descriptor.abi_minor) = (major, minor);
+            let read = unsafe { read_descriptor(&exported.descriptor) };
+            assert_eq!(read.is_ok(), expected, "descriptor {major}.{minor}");
+        }
     }
 
     #[test]

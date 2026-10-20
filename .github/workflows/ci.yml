@@ -54,6 +54,15 @@ jobs:
       - name: Test the failing-test report
         run: python3 -m unittest discover -s scripts -p 'test_test_failures.py' -v
 
+      # The listing format (docs/design/marketplace.md): the examples against
+      # the schema, with jsonschema as well as the script's own evaluator.
+      - name: Marketplace listings validate, and the bad examples do not
+        run: |
+          python3 -m pip install jsonschema
+          python3 scripts/validate_marketplace.py --jsonschema require schemas/marketplace/examples/valid/*.json
+          python3 scripts/validate_marketplace.py --jsonschema require --expect-invalid schemas/marketplace/examples/invalid/*.json
+          python3 -m unittest discover -s scripts -p 'test_validate_marketplace.py' -v
+
   packages:
     name: registry source identity and staged packages
     runs-on: ubuntu-latest
