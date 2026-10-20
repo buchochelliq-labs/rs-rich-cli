@@ -461,3 +461,41 @@ fn vim_keys_edit_modally_with_their_caret_shapes() {
     driver.type_text(":");
     assert_eq!(rows(&driver)[3], "command", "`:` goes on to the app");
 }
+
+#[cfg(feature = "vim")]
+#[path = "../examples/textarea.rs"]
+#[allow(dead_code)]
+mod gallery;
+
+#[cfg(feature = "vim")]
+#[test]
+fn the_gallery_shows_each_tab() {
+    let mut driver = gallery::textarea_app().driver(70, 12);
+    driver.settle();
+    for (key, shown) in [
+        ("f2", "main.rs"),
+        ("f3", "not a number"),
+        ("f4", "word wrap"),
+        ("f5", "emacs keys"),
+        ("f6", "NORMAL"),
+        ("f7", "password"),
+        ("f1", "minimal"),
+    ] {
+        driver.press(key);
+        let screen = rows(&driver).join("\n");
+        if key == "f3" {
+            driver.press("ctrl+a");
+            driver.type_text("x");
+        }
+        let screen = if key == "f3" {
+            rows(&driver).join("\n")
+        } else {
+            screen
+        };
+        assert!(screen.contains(shown), "{key}: {screen}");
+    }
+    // The editor's find bar.
+    driver.press("f2 ctrl+f");
+    driver.type_text("fish");
+    assert!(rows(&driver).join("\n").contains("1/2"));
+}

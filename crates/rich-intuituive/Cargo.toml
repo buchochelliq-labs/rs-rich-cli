@@ -89,6 +89,11 @@ files = ["rich-ext/local-time"]
 # rs-rich-ext's `archive` (zip, flate2). Off by default.
 archive = ["files", "rich-ext/archive"]
 
+# ratatui-textarea's examples as one gallery; its Vim tab needs `vim`.
+[[example]]
+name = "textarea"
+required-features = ["vim"]
+
 # The scope-tui rebuild reads raw PCM (`audio::pcm`), the `pcm` plugin's.
 [[example]]
 name = "scope"
