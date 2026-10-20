@@ -291,6 +291,8 @@ impl Parser {
                         from,
                         to,
                         label: link.label.clone(),
+                        start_label: None,
+                        end_label: None,
                         stroke: link.stroke,
                         start: link.start,
                         end: link.end,

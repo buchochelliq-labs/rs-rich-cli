@@ -8,8 +8,8 @@
 //!   chains included (`a -> b -> c`), with `{ … }` groups as endpoints
 //!   (`a -> { b c }`);
 //! - attribute lists for `label`, `shape` and `style` (plus `dir`,
-//!   `arrowhead`, `arrowtail` and `minlen` on edges, and `rankdir` and
-//!   `label` on the graph), and `node [ … ]`, `edge [ … ]` and `graph [ … ]`
+//!   `arrowhead`, `arrowtail`, `taillabel`, `headlabel` and `minlen` on
+//!   edges, and `rankdir` and `label` on the graph), and `node [ … ]`, `edge [ … ]` and `graph [ … ]`
 //!   defaults, scoped to the subgraph they are set in;
 //! - subgraphs; a subgraph named `cluster…` is a [`Cluster`], drawn as a
 //!   labelled frame around its nodes (nested clusters nest their frames);
@@ -1141,6 +1141,12 @@ pub fn parse(source: &str) -> Result<DotGraph, DotError> {
                 edge: Some((&parser.nodes[*from].0, &parser.nodes[*to].0, directed)),
             };
             edge.label = get(attrs, "label")
+                .map(|raw| label_text(raw, &names))
+                .filter(|label| !label.is_empty());
+            edge.start_label = get(attrs, "taillabel")
+                .map(|raw| label_text(raw, &names))
+                .filter(|label| !label.is_empty());
+            edge.end_label = get(attrs, "headlabel")
                 .map(|raw| label_text(raw, &names))
                 .filter(|label| !label.is_empty());
             let style = get(attrs, "style").unwrap_or("");
