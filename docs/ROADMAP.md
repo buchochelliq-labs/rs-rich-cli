@@ -216,7 +216,7 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
-## 0.0.21 — parity, the marketplace's foundation, round 7's leftovers (in progress)
+## 0.0.21 — parity, the marketplace's foundation, round 7's leftovers (in release)
 
 The [0.0.21 plan](plans/0.0.21.md), stage 2 of the [plan to 1.0.0](plans/1.0.0.md):
 every partial row in [Module status](PORTING.md) ported or recorded as a
@@ -225,8 +225,11 @@ crate that resolves, downloads and locks plugins; Chrome's DevTools over a
 pipe on Linux and macOS (Windows keeps the port); and what the demo loop's
 seventh round found: four intuiTUIve bugs, csv's filter regression, the
 recorder's frame rate on macOS and whether APNG stays a default output.
-Its first wave is running: round 7's bugs, the DevTools pipe on Unix and
-the marketplace's listing format.
+What ships: round 7's four bugs and csv's filter, the DevTools pipe on
+Unix, the marketplace's listing format, and the widgets, text editing,
+playground and leaner builds added during the release (see the
+[release notes](releases/0.0.21.md)). Parity, the marketplace crate, the
+shared gaps, the macOS recorder and the APNG decision move to 0.0.22.
 
 ## 0.0.20 — the intuiTUIve demo loop (published 2026-10-19)
 
