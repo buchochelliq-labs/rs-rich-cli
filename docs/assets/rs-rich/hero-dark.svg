@@ -1,0 +1,61 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 380" role="img" aria-label="rs-rich: Python's rich, in Rust. Rich text, tables, Markdown and progress bars in the terminal, and intuiTUIve for full apps">
+<defs><clipPath id="c"><rect width="1200" height="380" rx="18"/></clipPath><pattern id="g" width="16" height="32" patternUnits="userSpaceOnUse"><path d="M16 0H0V32" fill="none" stroke="#24212b" stroke-width="1"/></pattern></defs>
+<g clip-path="url(#c)"><rect width="1200" height="380" fill="#16141a"/><rect width="1200" height="380" fill="url(#g)"/>
+<rect x="1041" y="225" width="15" height="31" fill="#c08600" opacity="0.45"/>
+<rect x="17" y="257" width="15" height="31" fill="#c08600" opacity="0.18"/>
+<rect x="113" y="1" width="15" height="31" fill="#c08600" opacity="0.18"/>
+<rect x="1" y="321" width="15" height="31" fill="#c08600" opacity="0.18"/>
+<rect x="1121" y="33" width="15" height="31" fill="#c08600" opacity="0.45"/>
+</g>
+<g transform="translate(48 58) scale(1.6)"><path d="M22 23V50M22 35a10 10 0 0 1 10-10h4M61 29.5c-1.6-2.2-4.6-3.5-8-3.5-4.6 0-8 2.3-8 5.8 0 7.4 16.6 3.6 16.6 10.6 0 3-3.6 4.6-8.6 4.6-3.6 0-6.8-1.2-8.6-3.4" fill="none" stroke="#ecebf2" stroke-width="6" stroke-linejoin="round"/>
+<rect x="69" y="33" width="11" height="6" fill="#c08600"/>
+<rect x="88" y="4" width="110" height="54" rx="6" fill="#c08600"/>
+<path d="M100 23V50M100 35a10 10 0 0 1 10-10h4M124 23V50M154 29.1A10.5 10.5 0 1 0 154 43.9M168 12V50M168 35a9 9 0 0 1 18 0V50" fill="none" stroke="#1c1a24" stroke-width="6"/>
+<rect x="121" y="11" width="6" height="6" fill="#1c1a24"/>
+</g>
+<text x="80" y="208" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="32" font-weight="600" fill="#ecebf2">Python's rich, in Rust.</text>
+<text x="80" y="244" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="21" fill="#a9a4bd">Styled text, tables, Markdown and progress bars</text>
+<text x="80" y="272" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="21" fill="#a9a4bd">in the terminal, held to rich byte for byte.</text>
+<rect x="80" y="296" width="234" height="40" rx="8" fill="#1f1c26" stroke="#3b3646"/><text x="98" y="322" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="17" fill="#a9a4bd"><tspan fill="#c08600">$</tspan> cargo add rs-rich</text>
+<g><rect x="640" y="40" width="380" height="256" rx="10" fill="#1f1c26" stroke="#3b3646" stroke-width="2"/><circle cx="658" cy="56" r="4.5" fill="#6f6a85"/><circle cx="674" cy="56" r="4.5" fill="#6f6a85"/><circle cx="690" cy="56" r="4.5" fill="#c08600"/><text x="1004" y="61" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" fill="#6f6a85">~/release</text><path d="M640 72H1020" stroke="#3b3646" stroke-width="2"/>
+<rect x="656" y="90" width="348" height="140" rx="4" fill="none" stroke="#c08600" stroke-width="2"/><rect x="778.0" y="80" width="104" height="20" fill="#1f1c26"/><text x="830.0" y="95" text-anchor="middle" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" font-weight="700" fill="#c08600">Crates</text>
+<text x="672" y="120" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" font-weight="700" fill="#ecebf2">Crate</text><text x="806" y="120" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" font-weight="700" fill="#ecebf2">Status</text><text x="988" y="120" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" font-weight="700" fill="#ecebf2">Tests</text><path d="M666 130H994" stroke="#3b3646" stroke-width="1.5"/>
+<text x="672" y="154" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#ecebf2">rs-rich</text><text x="806" y="154" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#4caf50">✓ parity</text><text x="988" y="154" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#a9a4bd">1,204</text>
+<text x="672" y="178" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#ecebf2">rs-rich-ext</text><text x="806" y="178" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#4caf50">✓ built</text><text x="988" y="178" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#a9a4bd">863</text>
+<text x="672" y="202" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#ecebf2">rs-rich-cli</text><text x="806" y="202" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#c08600">● running</text><text x="988" y="202" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#a9a4bd">412</text>
+<text x="656" y="265" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#ecebf2">Testing</text><rect x="734" y="257" width="200" height="8" rx="4" fill="#3b3646"/><rect x="734" y="257" width="148" height="8" rx="4" fill="#c08600"/><text x="1004" y="265" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="14" fill="#a9a4bd">74%</text></g>
+<g transform="translate(892 314) scale(0.5)"><rect width="64" height="64" rx="14" fill="#1c1a24"/>
+<g fill="#ecebf2"><rect x="12" y="10" width="14" height="14" rx="2"/><rect x="32" y="27" width="18" height="10" rx="2"/></g>
+<path d="M19 24v24h13M19 32h13" fill="none" stroke="#ecebf2" stroke-width="4"/>
+<rect x="32" y="43" width="18" height="10" rx="2" fill="#7c4dff"/>
+</g>
+<text x="932" y="330" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="15" fill="#a9a4bd">and <tspan fill="#7c4dff" font-weight="600">intuiTUIve</tspan></text><text x="932" y="348" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="15" fill="#a9a4bd">for full apps</text>
+<g transform="translate(1080 266) scale(0.78)"><rect x="58" y="92" width="13" height="22" rx="5" fill="#5a32d6"/>
+<rect x="74" y="94" width="12" height="20" rx="5" fill="#5a32d6"/>
+<path d="M102 82c6 2 8 7 7 12" fill="none" stroke="#5a32d6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="38" y="62" width="66" height="44" rx="22" fill="#7c4dff"/>
+<rect x="42" y="90" width="16" height="26" rx="6" fill="#7c4dff"/>
+<rect x="86" y="90" width="16" height="26" rx="6" fill="#7c4dff"/>
+<rect x="44.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="48.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="52.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="88.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="92.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="96.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="58" y="14" width="46" height="56" rx="18" fill="#5a32d6"/>
+<rect x="66" y="22" width="30" height="38" rx="12" fill="#b9a1ff"/>
+<rect x="18" y="16" width="56" height="54" rx="24" fill="#7c4dff"/>
+<path d="M34 60C20 62 10 52 11 36" fill="none" stroke="#5a32d6" stroke-width="18" stroke-linecap="round"/>
+<path d="M34 60C20 62 10 52 11 36" fill="none" stroke="#7c4dff" stroke-width="14" stroke-linecap="round"/>
+<path d="M14.0 57.5L19.7 52.0M9.2 50.2L16.6 47.1" stroke="#5a32d6" stroke-width="2" stroke-linecap="round"/>
+<rect x="40" y="38" width="7" height="10" rx="2" fill="#1c1a24"/>
+<rect x="55" y="38" width="6" height="10" rx="2" fill="#1c1a24"/>
+<rect x="41.5" y="39.5" width="2.5" height="2.5" rx="0.5" fill="#f4f1ff"/>
+<rect x="56.3" y="39.5" width="2.2" height="2.5" rx="0.5" fill="#f4f1ff"/>
+<rect x="60" y="52" width="7" height="4" rx="2" fill="#b9a1ff"/>
+<path d="M44 60q4 4 9 0" fill="none" stroke="#1c1a24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="4" y="18" width="12" height="12" rx="2.5" fill="#f4f1ff"/>
+<rect x="4" y="18" width="12" height="12" rx="2.5" fill="none" stroke="#5a32d6" stroke-width="2"/>
+<path d="M2 12a12 12 0 0 1 6-6M20 12a12 12 0 0 0-6-6" fill="none" stroke="#b9a1ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+</svg>
