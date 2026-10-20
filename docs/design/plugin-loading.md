@@ -83,7 +83,9 @@ loaders differ only in how they call the plugin.
 
 ### Versioning
 
-`ABI_MAJOR.ABI_MINOR` is 1.0. The ABI version is separate from
+`ABI_MAJOR.ABI_MINOR` is 1.0, and `abi::is_supported` is the check every
+loader makes (a marketplace listing's `requires.abi` is resolved with it; see
+[the listing format](marketplace.md)). The ABI version is separate from
 `PLUGIN_API_VERSION` (which versions the Rust traits) because the two change
 for different reasons. A host refuses another major. A newer minor loads if it
 uses nothing the host lacks; an unknown capability kind is refused, never

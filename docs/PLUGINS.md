@@ -104,8 +104,10 @@ whose `register` fails, or that breaks a rule below, leaves the registry as it
 was.
 
 - **API version.** `PluginMetadata::new` records `PLUGIN_API_VERSION`. A host
-  refuses a plugin built for another version (`PluginError::IncompatibleApi`).
-  At 0.0.x the contract still changes, and every breaking change bumps it.
+  refuses a plugin built for another version (`PluginError::IncompatibleApi`);
+  `is_supported_api_version` is that check, for a tool that chooses a plugin
+  before adding it. At 0.0.x the contract still changes, and every breaking
+  change bumps it.
 - **Names.** The plugin id and every capability name use lowercase letters,
   digits, `-`, `_` and `.` (at most 64 bytes), and start with a letter or
   digit, so they are safe to print and to use as CLI values.
@@ -240,9 +242,10 @@ or linked with `export_plugin!`, and `rich plugins list` shows it as
   nothing. See the hand-written
   [`examples/wasm/shout.wat`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-plugin-api/examples/wasm/shout.wat).
 
-The ABI is versioned separately from `PLUGIN_API_VERSION` (it is 1.0). A host
-refuses a plugin built for another major, and one that declares a capability
-kind the host does not know.
+The ABI is versioned separately from `PLUGIN_API_VERSION`: it is
+`abi::ABI_MAJOR.abi::ABI_MINOR`, 1.0. A host refuses a plugin built for
+another major (`abi::is_supported` is the check both loaders make), and one
+that declares a capability kind the host does not know.
 
 ### In the `rich` CLI
 
@@ -307,8 +310,9 @@ its way:
    API version above.
 3. **Done — third-party loading (0.0.13).** Linked plugins, native and WASM
    runtime plugins, and `rich plugins list/info`, as above.
-4. **Later.** Plugin manifests that can be read without running code, a
-   Git-backed index, `rich plugin install` (#232).
+4. **In progress — the marketplace (#232).** A Git-backed, signed index of
+   packages ([the listing format](design/marketplace.md), 0.0.21), the
+   `rs-rich-marketplace` crate (0.0.21) and `rich plugin install` (0.0.22).
 
 Whatever we add, the invariant holds: **the core never learns about a specific
 extension.**

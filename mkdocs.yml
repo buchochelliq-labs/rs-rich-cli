@@ -237,6 +237,7 @@ nav:
       - Extending: PLUGINS.md
       - "Design: render tree (#226)": design/render-tree.md
       - "Design: plugin loading (#14, #232)": design/plugin-loading.md
+      - "Design: the marketplace listing format (#232)": design/marketplace.md
       - "Design: intuiTUIve spike (milestone 11)": design/intuituive.md
       - "Design: intuiTUIve widgets": design/intuituive-widgets.md
       - "Design: intuiTUIve against ratatui": design/intuituive-vs-ratatui.md
