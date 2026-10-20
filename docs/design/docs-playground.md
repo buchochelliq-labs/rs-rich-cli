@@ -507,6 +507,18 @@ Answered by the maintainer on 2026-10-20:
    `rich record`); and "Try it" on every guide block it fits (tier 1, done)
    and every CLI example (tier 2), not a chosen few.
 
+Phase 1's own open questions, answered by the maintainer on 2026-10-20
+(all three as built):
+
+7. **The release job creates the `release-X.Y.Z` GitHub release** when it
+   is missing, with short generic notes, so the playground archive can be
+   attached. Yes.
+8. **docs.yml's extra path filters** (`crates/rich/**`,
+   `crates/rich-ext/**`, `playground/**`) stay, so a crate change that
+   breaks a block fails its PR. Yes.
+9. **The lean module keeps rs-rich-ext's renderers** (charts, diffs, data),
+   at about 647 KB gzipped. Yes.
+
 The questions as they were put:
 
 1. **Tier 2's engine:** the CLI on WASI with our own line runner

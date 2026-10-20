@@ -41,6 +41,7 @@ mod authoring;
 #[cfg(feature = "art")]
 mod banner;
 mod batch;
+#[cfg_attr(target_os = "wasi", path = "batch_output_wasi.rs")]
 mod batch_output;
 mod batch_paths;
 #[cfg(test)]
@@ -52,6 +53,7 @@ mod controls;
 mod demo;
 mod doctor;
 mod documents;
+mod host;
 mod inspect;
 #[cfg(feature = "interact")]
 mod interactive;
@@ -1098,6 +1100,9 @@ fn dispatch(args: Vec<String>) -> ExitCode {
             {
                 return fail(&cli, ExitClass::Usage, message);
             }
+            if cli.batch && cfg!(target_os = "wasi") {
+                return fail(&cli, ExitClass::Usage, host::unavailable("--batch"));
+            }
             if cli.batch {
                 if let Err(error) = batch::install_interrupt_handler() {
                     return fail(
@@ -1420,6 +1425,8 @@ fn glob_match(pattern: &str, text: &str) -> bool {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum GlobUnit {
     Char(char),
+    // Only Unix names are bytes; elsewhere (Windows, WASI) they are text.
+    #[cfg_attr(not(unix), allow(dead_code))]
     Byte(u8),
 }
 
@@ -4080,6 +4087,9 @@ fn run_watch(mut cli: Cli) -> ExitCode {
         return first_failure.unwrap_or_else(|| ExitClass::Success.exit_code());
     }
     // From here on the output repaints: micro assets keep their fallback.
+    if cfg!(target_os = "wasi") {
+        return fail(&cli, ExitClass::Usage, host::unavailable("--watch"));
+    }
     watch::start_watching();
     let resource = resource.as_str();
     if !is_url(resource) {

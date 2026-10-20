@@ -278,6 +278,9 @@ pub(super) fn run(cli: &Cli, console: &Console) -> ExitCode {
     }
     let mut stream = Stream::new(cli, console, redactor);
     let read = match path {
+        Some(_) if options.follow && cfg!(target_os = "wasi") => {
+            return fail(cli, ExitClass::Usage, crate::host::unavailable("--follow"))
+        }
         Some(path) if options.follow => return follow(cli, path, stream),
         Some(path) => read_file(&fs_path(path), &mut stream),
         None => read_stdin(|event| match event {
@@ -433,7 +436,7 @@ fn read_stdin(mut each: impl FnMut(Tailed<'_>) -> io::Result<()>) -> io::Result<
 /// starting over when it is truncated or replaced (log rotation).
 fn follow(cli: &Cli, path: &str, mut stream: Stream<'_>) -> ExitCode {
     STOP.store(false, Ordering::SeqCst);
-    let _ = ctrlc::set_handler(|| STOP.store(true, Ordering::SeqCst));
+    let _ = crate::host::on_interrupt(|| STOP.store(true, Ordering::SeqCst));
     let result = tail(
         path,
         |event| match event {

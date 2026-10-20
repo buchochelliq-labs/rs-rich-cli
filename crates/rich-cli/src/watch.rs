@@ -9,6 +9,9 @@
 //! terminal as one `rich_ext::live::LiveCoordinator` region each.
 //!
 //! URLs keep their polling-only loop in `lib.rs` and never reach this module.
+// Under WASI there are no file events, and `--watch` is refused before it
+// starts, so the event plumbing is unused there.
+#![cfg_attr(target_os = "wasi", allow(dead_code))]
 use super::{render_target, run_once, watch_fingerprint, Cli, ExitClass};
 use rich::protocol::{RenderEnvironment, TargetCapabilities};
 use rich::rule::Rule;
@@ -259,6 +262,7 @@ fn split(path: &Path) -> Option<(PathBuf, OsString)> {
 
 /// Whether an event can reflect a content change. Our own reads open and
 /// close the file, so pure access notifications must not trigger a render.
+#[cfg(not(target_os = "wasi"))]
 pub(super) fn is_relevant(kind: &notify::EventKind) -> bool {
     use notify::event::{AccessKind, AccessMode};
     match kind {
@@ -271,6 +275,7 @@ pub(super) fn is_relevant(kind: &notify::EventKind) -> bool {
 /// The active change-detection backend.
 pub(super) enum Backend {
     /// Kept alive for as long as events should flow.
+    #[cfg(not(target_os = "wasi"))]
     Events(#[allow(dead_code)] notify::RecommendedWatcher),
     Poll,
 }
@@ -285,6 +290,18 @@ pub(super) fn start_backend(
     if force_poll {
         return (Backend::Poll, None);
     }
+    #[cfg(target_os = "wasi")]
+    {
+        drop((targets, sender));
+        (Backend::Poll, Some("no file events under WASI".into()))
+    }
+    #[cfg(not(target_os = "wasi"))]
+    start_events(targets, sender)
+}
+
+/// The platform's file events, or the polling backend and why.
+#[cfg(not(target_os = "wasi"))]
+fn start_events(targets: &Targets, sender: Sender<Signal>) -> (Backend, Option<String>) {
     let lookup = targets.clone();
     let handler = move |result: notify::Result<notify::Event>| {
         let signals: Vec<Signal> = match result {
@@ -586,7 +603,7 @@ pub(super) fn watch_files(cli: Cli) -> ExitCode {
         return run_loop(&cli, &backend, &receiver, &mut Viewport);
     }
     let interrupt = sender.clone();
-    let _ = ctrlc::set_handler(move || {
+    let _ = crate::host::on_interrupt(move || {
         let _ = interrupt.send(Signal::Interrupt);
     });
     let mut regions = Regions::new(&cli);
