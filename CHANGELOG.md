@@ -9,6 +9,23 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### rs-rich-embed: Chrome's DevTools over a pipe on Linux and macOS
+
+- **No DevTools port on Unix.** `ChromeEngine` starts Chrome with
+  `--remote-debugging-pipe` on Linux and macOS and speaks the protocol over
+  its file descriptors 3 and 4 (NUL-ended JSON), so no other program or
+  user on the machine can reach it. The descriptors are passed with
+  `command-fds` (pinned to 0.3.3, Apache-2.0), and the crate keeps
+  `unsafe_code = "deny"`. Windows keeps the `127.0.0.1` port, still a
+  [known limit](docs/known-issues.md#chromes-devtools-port-on-windows-in-rs-rich-embed).
+- One protocol path over either transport; a browser that exits early now
+  reports its last line of standard error.
+- `--remote-debugging-…` switches passed in `.args` are dropped, as sandbox
+  switches are: the engine chooses where DevTools goes.
+- Tests: on Linux, the browser and every process it started listen on no
+  TCP socket while a view is open; frames arrive over the pipe and over the
+  port.
+
 ### Versions: the 0.0.21 versions are open
 
 - Every package moves one patch past the 0.0.20 cohort, as the
