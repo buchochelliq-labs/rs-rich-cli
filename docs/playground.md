@@ -48,9 +48,34 @@ xterm.js instead, as a terminal would.
 
 ## The `rich` command
 
-*Coming later:* a small terminal where `rich` commands run against sample
-files (`rich data.csv --csv`, `echo '# Hi' | rich - --markdown`), from the
-CLI compiled for WASI.
+A terminal where the `rich` command runs: the real CLI, compiled for WASI
+and run in a worker in this tab, with a few sample files (`ls` lists them,
+`help` says what else there is). **Try it** opens it with the commands
+below filled in at the prompt, one at a time: press Enter to run each.
+
+```bash { .rich-playground data-kind="cli" data-rows="26" }
+rich README.md
+rich sales.csv --title "Sales"
+rich chart sales.csv --kind bar --x month --y api
+echo '# Hello from a pipe' | rich - --markdown
+rich main.rs --line-numbers
+```
+
+The prompt understands pipes (`|`), `;`, `&&`, `||`, `<`, `>` and `>>`,
+and a few commands of its own: `echo`, `printf`, `seq`, `cat`, `ls`,
+`clear`, `pwd`, `help` and `history`. Up and Down recall what you typed.
+
+- **Stop** ends a command that runs too long (an endless `--loop 0` GIF,
+  say): it starts a fresh session, and the files go back to the samples.
+- **Save as tape** downloads what you typed as `session.tape`, with the
+  sample files it used as `Write` lines. A native `rich record session.tape`
+  replays it and records it ([Recordings](recordings.md)).
+
+Some things need a real computer and say so here: URLs (no network),
+`--watch`, `--batch`, `--pager`, `rich capture` and `rich record` (no
+processes), `--demo`, and the interactive commands (`choose`, `filter`,
+`explore`, …), which need a terminal's raw keys. Every CLI example in these
+docs that runs here has the same **Try it** button.
 
 ## Terminal apps
 
