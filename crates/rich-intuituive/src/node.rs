@@ -702,6 +702,12 @@ impl Node {
             .filter(|title| !title.is_empty())
     }
 
+    /// Its widget's [value](Widget::access_value) for assistive
+    /// technology, if it gives one.
+    pub(crate) fn access_value(&self) -> Option<String> {
+        self.body.borrow().widget.access_value()
+    }
+
     /// Where its selected item is, on its widget's surface.
     pub(crate) fn cursor(&self) -> Option<Rect> {
         self.body.borrow().widget.cursor()
@@ -3080,6 +3086,7 @@ impl Node {
                     shift: frame.shift,
                     wants_hover: &frame.wants_hover,
                     watchers: frame.watchers,
+                    disabled: self.disabled(),
                 };
                 let mut canvas = Canvas {
                     screen: &mut *screen,
@@ -3236,6 +3243,7 @@ impl Node {
                     shift: frame.shift,
                     wants_hover: &frame.wants_hover,
                     watchers: frame.watchers,
+                    disabled: self.disabled(),
                 };
                 let mut canvas = Canvas {
                     screen: &mut *screen,

@@ -244,6 +244,7 @@ fn item_role(role: Role) -> Option<&'static str> {
         Role::TabList => "tab",
         Role::Menu | Role::MenuBar => "menuitem",
         Role::Grid => "gridcell",
+        Role::RadioGroup => "radio",
         _ => return None,
     })
 }

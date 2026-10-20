@@ -343,6 +343,13 @@ pub trait Widget: Any {
     fn access_state(&self) -> crate::a11y::AccessState {
         crate::a11y::AccessState::default()
     }
+
+    /// Its value for assistive technology, as it is now, where its cells
+    /// do not say it: a [`slider`](crate::slider)'s number. It wins over
+    /// the value read from a [`cursor`](Self::cursor). Default: none.
+    fn access_value(&self) -> Option<String> {
+        None
+    }
 }
 
 /// A node with `widget`'s behaviour.
@@ -696,6 +703,8 @@ pub struct DrawCx<'a> {
     pub(crate) shift: (i32, i32),
     pub(crate) wants_hover: &'a Cell<bool>,
     pub(crate) watchers: &'a Watchers,
+    /// Whether its node is [disabled](Node::disabled_when).
+    pub(crate) disabled: bool,
 }
 
 impl DrawCx<'_> {
@@ -781,6 +790,12 @@ impl DrawCx<'_> {
     /// that changes.
     pub fn focused(&self) -> bool {
         self.focus_path.with(|path| path.last() == Some(&self.id))
+    }
+
+    /// Whether its node is [disabled](Node::disabled_when) now: to draw
+    /// it greyed out. A change draws it again.
+    pub fn disabled(&self) -> bool {
+        self.disabled
     }
 
     /// Whether the focus is on this widget or a node inside it.
