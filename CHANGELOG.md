@@ -1283,13 +1283,13 @@ What round 1 of rebuilding Yazi (`examples/files.rs`) and scope-tui
   your own; the headless driver records it.
 - **Docs:** the intuiTUIve guide covers each of these.
 
-## 0.0.19 cohort — published 2026-10-18 and 2026-10-19
+## 0.0.19 cohort — published 2026-10-19
 
 ext 0.0.16 / micro 0.0.5 / record 0.0.7 / interact 0.0.7 / ratatui 0.0.4 /
 intuituive 0.0.4 / embed 0.0.2 / web 0.0.2 / data 0.0.3 / CLI 0.0.19, and
 `rs-rich` 0.0.7 on PyPI. Published crate by crate, tag by tag: ext, micro,
-record and interact on 2026-10-18 (from `22da468`), the rest and `rs-rich`
-0.0.7 on 2026-10-19 (from `2fc9772`, the cut the CLI's tag is on).
+record and interact from `22da468`, the rest and `rs-rich` 0.0.7 from
+`2fc9772`, the cut the CLI's tag is on.
 Unchanged and already published: core 0.0.9, macros 0.0.3, plugin API 0.0.3,
 art 0.0.12, diagram 0.0.2, mermaid 0.0.5, lumis 0.0.3. See
 [the release notes](docs/releases/0.0.19.md).

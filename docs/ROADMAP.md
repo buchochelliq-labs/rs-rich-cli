@@ -240,7 +240,7 @@ following terminal graphics, recording every frame and holding keys, with
 APNG output; and core's `Text::markup()` (core 0.0.10). The first release
 published by one release run. See the [release notes](releases/0.0.20.md).
 
-## 0.0.19 — layout, editing, isolation and docs (published 2026-10-18 and 2026-10-19)
+## 0.0.19 — layout, editing, isolation and docs (published 2026-10-19)
 
 The [0.0.19 plan](plans/0.0.19.md) is stage 1 of the
 [plan to 1.0.0](plans/1.0.0.md): flex alignment and wrapping, a text-area
