@@ -23,15 +23,17 @@
 // terminal offers it. Examples that cannot run there (a URL, --watch, a
 // process, a file the samples lack) stay plain.
 
-import { readdirSync, readFileSync } from "node:fs";
+import { readdirSync, readFileSync, writeFileSync } from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
 import { load } from "../playground/node.mjs";
 import { runBlock } from "../playground/cli.mjs";
+import { sessionTape } from "../docs/assets/rich-shell/shell.js";
+import { sampleFiles } from "../docs/assets/rich-shell/samples.js";
 
 const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const DOCS = path.join(ROOT, "docs");
-const MODULES = path.resolve(process.argv[2] || path.join(DOCS, "assets", "playground"));
+const MODULES = path.resolve(process.argv.slice(2).find((a) => !a.startsWith("--")) || path.join(DOCS, "assets", "playground"));
 // The same rules as docs/assets/playground.js.
 const MAX_INPUT = 20000;
 const RESERVED = new Set(["kind", "kinds"]);
@@ -111,6 +113,39 @@ export function blocks(text) {
   return found;
 }
 
+// A saved session must replay in `rich record`: this tape, from the
+// terminal's own sessionTape, is parsed by rs-rich-record's tests
+// (tests/playground_tape.rs). It must match what sessionTape writes now;
+// `--update-tape` rewrites it.
+const TAPE = path.join(ROOT, "crates", "rich-record", "tests", "fixtures", "playground-session.tape");
+export function fixtureTape() {
+  const encoder = new TextEncoder();
+  const files = { ...sampleFiles(), "tricky.txt": encoder.encode('say "hi"\\n\tnot a newline: \\ end\n') };
+  const lines = [
+    "rich data.json",
+    'echo "# A \\"quoted\\" title" | rich - --markdown',
+    "help",
+    "rich photo.png --width 20",
+    "cat tricky.txt",
+  ];
+  const entries = lines.map((line, i) => ({ line, at: i * 1500 }));
+  return sessionTape({ entries, files, columns: 100, rows: 28, date: new Date("2026-10-20T00:00:00Z") });
+}
+
+function checkTape() {
+  const tape = fixtureTape();
+  if (process.argv.includes("--update-tape")) writeFileSync(TAPE, tape);
+  let current = "";
+  try {
+    current = readFileSync(TAPE, "utf8");
+  } catch {
+    current = "";
+  }
+  if (current === tape) return 0;
+  console.log(`FAIL ${path.relative(ROOT, TAPE)} is not what the terminal saves now: run with --update-tape`);
+  return 1;
+}
+
 async function main() {
   const stamp = JSON.parse(readFileSync(path.join(MODULES, "playground.json"), "utf8"));
   const modules = {};
@@ -168,6 +203,7 @@ async function main() {
     }
   }
   failures += await checkCli(stamp, cli, pages, kinds);
+  failures += checkTape();
   count += kinds.get("cli") || 0;
   const summary = [...kinds].map(([kind, n]) => `${kind} ${n}`).join(", ");
   console.log(`${count} playground blocks on ${pages.size} pages (${summary})`);
