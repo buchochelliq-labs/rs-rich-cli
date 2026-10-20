@@ -25,6 +25,27 @@ cargo run -p rs-rich-intuituive --example todo
 
 ![The finished to-do app, with one to-do ticked off](../../media/tapes/intuituive/todo.png)
 
+Or run it here, in the browser: the same app, compiled to WebAssembly, on
+the to-dos in the box (one per line). Type one and Enter adds it, Tab moves
+to the list, Space ticks, `d` deletes.
+
+<div class="rich-playground-pair" markdown>
+
+```rust
+todo_app(vec![
+    Todo::new(1, "Read the intuiTUIve tutorial"),
+    Todo::new(2, "Build an app"),
+])
+.run()
+```
+
+```text { .rich-playground data-kind="app" data-app="todo" data-width="72" data-rows="14" }
+Read the intuiTUIve tutorial
+Build an app
+```
+
+</div>
+
 ## 1. A project
 
 Start from the template:

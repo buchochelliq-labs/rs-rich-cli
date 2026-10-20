@@ -14,6 +14,10 @@
 //   - "Copy link" writes the state into the fragment, and opening that link
 //     restores it as the textarea's text, with nothing injected into the page;
 //   - a guide page's block, its Rust beside it, renders its input;
+//   - tier 3: an `app` block loads the app module only on "Run it", and runs
+//     in a Web Worker: `choose` answers keys and the mouse and shows what it
+//     returned, the to-do app takes typing, `explore` returns a path, and
+//     Stop ends an animating app (its terminal stops changing);
 //   - without the stamp (a version built without the module) there is no
 //     button, and with JavaScript off the block is a plain code block;
 //   - nothing logs an error to the console.
@@ -150,6 +154,68 @@ async function main() {
     await page.waitForFunction(() => (document.querySelector(".rp-frame")?.srcdoc || "").includes("bold"));
     check(true, "a guide block renders its input");
 
+    // Tier 3: apps in a terminal, in a worker.
+    await page.goto(`${base}playground/`);
+    await page.locator(".rp-try").first().waitFor();
+    check(!wasm.some((url) => url.includes("/app/")), "no app module loads before Run it");
+    const app = (name) => `.rich-playground[data-app="${name}"] + .rp-editor + .rp-output`;
+    const rows = (name) => page.locator(`${app(name)} .xterm-rows`);
+    const rowsText = (name) => rows(name).textContent();
+    const result = (name) => page.locator(`${app(name)} .rp-result:not([hidden])`);
+    async function run(name, shows) {
+      await page.locator(`.rich-playground[data-app="${name}"] + .rp-try`).click();
+      await rows(name).waitFor();
+      await page.waitForFunction(
+        ([selector, text]) => document.querySelector(selector)?.textContent.includes(text),
+        [`${app(name)} .xterm-rows`, shows],
+      );
+    }
+
+    await run("choose", "TypeScript");
+    check(wasm.some((url) => url.includes("/app/")), "Run it loads the app module, and choose draws its list");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await result("choose").waitFor();
+    check((await result("choose").textContent()).includes("Python"), "keys reach choose, and its answer is shown");
+
+    await page.locator(`${app("choose")}`).locator("xpath=preceding-sibling::div[contains(@class,'rp-editor')][1]")
+      .getByRole("button", { name: "Restart" }).click();
+    await page.waitForFunction((selector) => !document.querySelector(selector), `${app("choose")} .rp-result:not([hidden])`);
+    await page.waitForFunction((selector) => document.querySelector(selector)?.textContent.includes("Haskell"), `${app("choose")} .xterm-rows`);
+    const goRow = rows("choose").locator(":scope > div", { hasText: /^\s*Go\s*$/ }).first();
+    // Where a reader clicks: on xterm.js's screen, over that row.
+    await goRow.scrollIntoViewIfNeeded();
+    const box = await goRow.boundingBox();
+    await page.mouse.click(box.x + 40, box.y + box.height / 2);
+    await page.waitForTimeout(300);
+    if (!(await result("choose").count())) await page.keyboard.press("Enter");
+    await result("choose").waitFor();
+    check((await result("choose").textContent()).includes("Go"), "a click in the terminal picks a line");
+
+    await run("todo", "Water the plants");
+    await page.keyboard.type("Feed the cat");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction((selector) => document.querySelector(selector)?.textContent.includes("Feed the cat"), `${app("todo")} .xterm-rows`);
+    check(true, "the to-do app takes typing and adds the to-do");
+
+    await run("explore", "server");
+    await page.keyboard.press("ArrowDown");
+    await page.keyboard.press("Enter");
+    await result("explore").waitFor();
+    check((await result("explore").textContent()).includes("server"), "explore returns the path it was on");
+
+    await run("meters", "");
+    await page.waitForTimeout(300);
+    const before = await rowsText("meters");
+    await page.waitForTimeout(400);
+    const moving = (await rowsText("meters")) !== before;
+    check(moving, "an animated app keeps drawing on its ticks");
+    await page.locator(`${app("meters")}`).locator("xpath=preceding-sibling::div[contains(@class,'rp-editor')][1]")
+      .getByRole("button", { name: "Stop" }).click();
+    const stopped = await rowsText("meters");
+    await page.waitForTimeout(500);
+    check((await rowsText("meters")) === stopped, "Stop ends the app's worker: its terminal stops changing");
+
     // A version built without the module: no stamp, no button.
     const bare = await context.newPage();
     await bare.route("**/playground/playground.json", (route) => route.fulfill({ status: 404, body: "" }));
@@ -162,7 +228,7 @@ async function main() {
     const off = await browser.newContext({ javaScriptEnabled: false });
     const plain = await off.newPage();
     await plain.goto(`${base}playground/`);
-    check((await plain.locator(".rich-playground code").textContent()).includes("[bold magenta]Hello[/]"),
+    check((await plain.locator(".rich-playground code").first().textContent()).includes("[bold magenta]Hello[/]"),
       "with JavaScript off the block shows its input");
     check((await plain.locator(".rp-try").count()) === 0, "with JavaScript off there is no button");
     await off.close();
