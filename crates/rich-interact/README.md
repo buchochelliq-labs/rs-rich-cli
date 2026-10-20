@@ -55,9 +55,11 @@ Ready-made components:
 - `Input`: one line with validation, history, and suggestions, from a list or
   a background provider;
 - `Confirm`: a confirmation sheet with a body, warnings and several choices;
-- `Form`: text, masked (password), choice and toggle fields, with each error under its
-  field;
+- `Form`: text, masked (password), choice, multi-select, file, toggle and note fields,
+  a choice whose options follow earlier answers, descriptions, and groups shown as
+  pages, each checked before the next; each error under its field;
 - `Pager`: page any renderable, with search;
+- `Paginator`: which page of several shows, as dots or `n/m`, standalone or embedded;
 - `TextArea`: multi-line text, wrapped and scrolled, with a character limit;
 - `FilePicker`: browse from a root, with a fuzzy filter, previews, hidden
   files, a file/directory mode, extensions and an optional root jail;
