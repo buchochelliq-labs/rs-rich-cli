@@ -1,5 +1,6 @@
 # Testing and the inspector
 
+![Memo with her trunk to her chin, thinking](../../assets/intuituive/mascot/elephant-think.svg){ .tui-mascot width="112" }
 Apps run headless in tests: keys by name, a clock you move, snapshots of
 the screen, and the inspector, which shows an app's tree, its timings and
 what happened, live or from a test.

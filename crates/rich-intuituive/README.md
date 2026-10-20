@@ -1,6 +1,9 @@
 # rs-rich-intuituive
 
-<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mark.svg" alt="intuiTUIve" width="96" height="96">
+<picture>
+  <source media="(prefers-color-scheme: dark)" srcset="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/hero-dark.svg">
+  <img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/hero-light.svg" alt="intuiTUIve: terminal apps from signals, with Memo the elephant and her calf Tui" width="100%">
+</picture>
 
 **intuiTUIve**: a reactive, retained terminal UI framework built on
 [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli). It is part of

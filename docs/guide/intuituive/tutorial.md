@@ -1,5 +1,6 @@
 # Tutorial: a to-do app
 
+![Memo, intuiTUIve's elephant, waving, with her calf Tui holding her tail](../../assets/intuituive/mascot/memo-and-tui.svg){ .tui-mascot width="224" }
 This tutorial builds a small to-do app with intuiTUIve in eight steps. Each
 step adds one idea:
 

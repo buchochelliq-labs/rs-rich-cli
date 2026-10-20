@@ -9,6 +9,23 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Docs: rs-rich's own identity, and intuiTUIve as a sub-site
+
+- rs-rich has a mark (a styled "r" in a terminal tile, with a gold span and
+  a gold cell), a favicon, wordmarks with "rich" reversed out of a gold span,
+  27 line icons for the site's sections, a preview sheet and a hero banner
+  (`scripts/gen_rs_rich_hero.py`), under `docs/assets/rs-rich/`. They share
+  intuiTUIve's ink and shapes, with gold (`#c08600`) where intuiTUIve has
+  purple, so the two read as parent and child.
+- The site uses the mark as its logo and favicon, and gold as its accent;
+  intuiTUIve's pages keep its purple.
+- The home page and the README open with the hero; the home page links to
+  intuiTUIve in a card of its own and ends with every section and its icon.
+  The guide's front page lists each crate's section with its icon, and each
+  crate's page shows its icon by its title.
+- intuiTUIve is a top-level section of the site, after the Guide, with its
+  overview as the section's page. Its pages keep their URLs.
+
 ### rs-rich-embed: Chrome's DevTools over a pipe on Linux and macOS
 
 - **No DevTools port on Unix.** `ChromeEngine` starts Chrome with
@@ -34,7 +51,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   page, under `docs/assets/intuituive/`. The overview page shows the
   wordmark and an icon beside each page; the crate README shows the mark.
 - A widget index (`guide/intuituive/widget-index.md`): every widget and
-  component, 88 in seven groups, each with an icon, its constructor, a line
+  component, 100 in eight groups, each with an icon, its constructor, a line
   on what it is and a link to the section that documents it.
 - A mascot: Memo, a purple elephant with block-cursor eyes who holds up the
   mark's lit cell, in five poses, at 32 and 16 px, and as a 32x32 pixel

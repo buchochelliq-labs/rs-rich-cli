@@ -1,4 +1,4 @@
-# The `rich` command
+# ![](../../assets/rs-rich/cli.svg){ .rs-icon } The `rich` command
 
 `rich` renders files that are hard to read raw — Markdown, JSON, CSV, source
 code, Jupyter notebooks, logs, YAML — as formatted, coloured terminal output.

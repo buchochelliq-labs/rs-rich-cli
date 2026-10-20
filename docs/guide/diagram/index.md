@@ -1,4 +1,4 @@
-# Diagrams (rs-rich-diagram)
+# ![](../../assets/rs-rich/diagram.svg){ .rs-icon } Diagrams (rs-rich-diagram)
 
 `rs-rich-diagram` (`rich_diagram`, new in 0.0.15) draws graphs in the
 terminal: a graph model, a layered layout, and a `Diagram` renderable that

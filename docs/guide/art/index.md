@@ -1,4 +1,4 @@
-# rich-art
+# ![](../../assets/rs-rich/art.svg){ .rs-icon } rich-art
 
 `rs-rich-art` (imported as `rich_art`) puts pictures in the terminal: FIGlet
 text banners, still images drawn with characters or real pixels, animated

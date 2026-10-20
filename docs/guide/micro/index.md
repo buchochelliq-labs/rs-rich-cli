@@ -1,4 +1,4 @@
-# Micro assets (rs-rich-micro)
+# ![](../../assets/rs-rich/micro.svg){ .rs-icon } Micro assets (rs-rich-micro)
 
 `rs-rich-micro` (`rich_micro`, new in 0.0.14) holds micro assets:
 emoji-sized inline images and animations, written `Deploying :micro:rocket:`.

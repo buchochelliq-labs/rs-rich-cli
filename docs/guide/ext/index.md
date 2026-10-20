@@ -1,4 +1,4 @@
-# The ext crate
+# ![](../../assets/rs-rich/ext.svg){ .rs-icon } The ext crate
 
 `rs-rich-ext` holds everything this port adds on top of Python `rich`. The core
 crate, `rs-rich`, stays a faithful mirror of upstream; this crate builds on its

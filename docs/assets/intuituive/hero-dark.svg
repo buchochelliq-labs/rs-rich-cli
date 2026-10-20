@@ -1,0 +1,97 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1200 380" role="img" aria-label="intuiTUIve: terminal apps from signals, with Memo the elephant and her calf Tui">
+<defs><clipPath id="c"><rect width="1200" height="380" rx="18"/></clipPath><pattern id="g" width="16" height="32" patternUnits="userSpaceOnUse"><path d="M16 0H0V32" fill="none" stroke="#221f2d" stroke-width="1"/></pattern></defs>
+<g clip-path="url(#c)"><rect width="1200" height="380" fill="#15131d"/><rect width="1200" height="380" fill="url(#g)"/>
+<rect x="801" y="321" width="15" height="31" fill="#7c4dff" opacity="0.18"/>
+<rect x="1185" y="1" width="15" height="31" fill="#7c4dff" opacity="0.45"/>
+<rect x="433" y="1" width="15" height="31" fill="#7c4dff" opacity="0.18"/>
+<rect x="865" y="1" width="15" height="31" fill="#7c4dff" opacity="0.45"/>
+<rect x="1185" y="1" width="15" height="31" fill="#7c4dff" opacity="0.45"/>
+<rect x="1185" y="193" width="15" height="31" fill="#7c4dff" opacity="0.18"/>
+<rect x="449" y="1" width="15" height="31" fill="#7c4dff" opacity="0.45"/>
+<rect x="1105" y="33" width="15" height="31" fill="#7c4dff" opacity="0.45"/>
+<rect x="369" y="33" width="15" height="31" fill="#7c4dff" opacity="0.45"/>
+<rect x="1089" y="193" width="15" height="31" fill="#7c4dff" opacity="0.28"/>
+</g>
+<g transform="translate(48 70) scale(1.55)"><path d="M22 23V50M41 23V50M41 35a9 9 0 0 1 18 0V50M75 13V41a9 9 0 0 0 9 9h3M69 26h18M97 23V41a9 9 0 0 0 18 0M115 23V50M134 23V50M257 23l9 24.5l9-24.5M285 36.5h18a9 10.5 0 1 0-2.1 6.75" fill="none" stroke="#ecebf2" stroke-width="6" stroke-linejoin="round"/>
+<rect x="19" y="11" width="6" height="6" fill="#7c4dff"/><rect x="131" y="11" width="6" height="6" fill="#7c4dff"/>
+<rect x="152" y="4" width="96" height="54" rx="6" fill="#7c4dff"/>
+<path d="M161 15h22M172 15V50M191 12V38a9 9 0 0 0 18 0V12M220 15h16M220 47h16M228 15V47" fill="none" stroke="#fff" stroke-width="6"/>
+</g>
+<text x="80" y="208" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="30" font-weight="600" fill="#ecebf2">Terminal apps from signals.</text>
+<text x="80" y="244" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="21" fill="#a9a4bd">Describe the screen once. When a signal changes,</text>
+<text x="80" y="272" font-family="ui-sans-serif,system-ui,-apple-system,Segoe UI,Roboto,Helvetica,Arial,sans-serif" font-size="21" fill="#a9a4bd">only the cells that changed are redrawn.</text>
+<rect x="80" y="296" width="330" height="40" rx="8" fill="#1e1b29" stroke="#3a3550"/><text x="98" y="322" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="17" fill="#a9a4bd"><tspan fill="#7c4dff">$</tspan> cargo add rs-rich-intuituive</text>
+<g><rect x="640" y="58" width="320" height="250" rx="10" fill="#1e1b29" stroke="#3a3550" stroke-width="2"/><circle cx="658" cy="74" r="4.5" fill="#6f6a85"/><circle cx="674" cy="74" r="4.5" fill="#6f6a85"/><circle cx="690" cy="74" r="4.5" fill="#7c4dff"/><text x="944" y="79" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" fill="#6f6a85">to-do</text><path d="M640 90H960" stroke="#3a3550" stroke-width="2"/>
+<text x="662" y="123" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="16" fill="#ecebf2">[x] Draw the screen once</text>
+<rect x="650" y="136" width="300" height="30" rx="5" fill="#7c4dff"/>
+<text x="662" y="157" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="16" fill="#ffffff">[ ] Keep state in signals</text>
+<text x="662" y="191" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="16" fill="#ecebf2">[ ] Redraw what changed</text>
+<text x="662" y="225" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="16" fill="#ecebf2">[ ] Ship it</text>
+<rect x="662" y="266" width="10" height="6" rx="2" fill="#7c4dff" opacity="0.45"/>
+<rect x="676" y="262" width="10" height="10" rx="2" fill="#7c4dff" opacity="0.49"/>
+<rect x="690" y="264" width="10" height="8" rx="2" fill="#7c4dff" opacity="0.53"/>
+<rect x="704" y="258" width="10" height="14" rx="2" fill="#7c4dff" opacity="0.57"/>
+<rect x="718" y="260" width="10" height="12" rx="2" fill="#7c4dff" opacity="0.62"/>
+<rect x="732" y="254" width="10" height="18" rx="2" fill="#7c4dff" opacity="0.66"/>
+<rect x="746" y="257" width="10" height="15" rx="2" fill="#7c4dff" opacity="0.70"/>
+<rect x="760" y="250" width="10" height="22" rx="2" fill="#7c4dff" opacity="0.74"/>
+<rect x="774" y="253" width="10" height="19" rx="2" fill="#7c4dff" opacity="0.78"/>
+<rect x="788" y="246" width="10" height="26" rx="2" fill="#7c4dff" opacity="0.82"/>
+<rect x="802" y="249" width="10" height="23" rx="2" fill="#7c4dff" opacity="0.87"/>
+<rect x="816" y="244" width="10" height="28" rx="2" fill="#7c4dff" opacity="0.91"/>
+<text x="942" y="270" text-anchor="end" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="13" fill="#6f6a85">1/4 done</text><path d="M640 282H960" stroke="#3a3550" stroke-width="2"/><text x="656" y="299" font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace" font-size="12" fill="#6f6a85">space tick · a add · q quit</text></g>
+<g transform="translate(978 222) scale(0.94)"><g>
+<rect x="58" y="92" width="13" height="22" rx="5" fill="#5a32d6"/>
+<rect x="74" y="94" width="12" height="20" rx="5" fill="#5a32d6"/>
+<path d="M102 82c6 2 8 7 7 12" fill="none" stroke="#5a32d6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="38" y="62" width="66" height="44" rx="22" fill="#7c4dff"/>
+<rect x="42" y="90" width="16" height="26" rx="6" fill="#7c4dff"/>
+<rect x="86" y="90" width="16" height="26" rx="6" fill="#7c4dff"/>
+<rect x="44.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="48.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="52.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="88.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="92.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="96.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="58" y="14" width="46" height="56" rx="18" fill="#5a32d6"/>
+<rect x="66" y="22" width="30" height="38" rx="12" fill="#b9a1ff"/>
+<rect x="18" y="16" width="56" height="54" rx="24" fill="#7c4dff"/>
+<path d="M34 60C20 62 10 52 11 36" fill="none" stroke="#5a32d6" stroke-width="18" stroke-linecap="round"/>
+<path d="M34 60C20 62 10 52 11 36" fill="none" stroke="#7c4dff" stroke-width="14" stroke-linecap="round"/>
+<path d="M14.0 57.5L19.7 52.0M9.2 50.2L16.6 47.1" stroke="#5a32d6" stroke-width="2" stroke-linecap="round"/>
+<rect x="40" y="38" width="7" height="10" rx="2" fill="#1c1a24"/>
+<rect x="55" y="38" width="6" height="10" rx="2" fill="#1c1a24"/>
+<rect x="41.5" y="39.5" width="2.5" height="2.5" rx="0.5" fill="#f4f1ff"/>
+<rect x="56.3" y="39.5" width="2.2" height="2.5" rx="0.5" fill="#f4f1ff"/>
+<rect x="60" y="52" width="7" height="4" rx="2" fill="#b9a1ff"/>
+<path d="M44 60q4 4 9 0" fill="none" stroke="#1c1a24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="4" y="18" width="12" height="12" rx="2.5" fill="#f4f1ff"/>
+<rect x="4" y="18" width="12" height="12" rx="2.5" fill="none" stroke="#5a32d6" stroke-width="2"/>
+<path d="M2 12a12 12 0 0 1 6-6M20 12a12 12 0 0 0-6-6" fill="none" stroke="#b9a1ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g transform="translate(100 36) scale(0.72)">
+<rect x="62" y="96" width="12" height="18" rx="5" fill="#5a32d6"/>
+<rect x="78" y="97" width="11" height="17" rx="5" fill="#5a32d6"/>
+<path d="M99 84c5 1 7 5 6 9" fill="none" stroke="#5a32d6" stroke-width="3.5" stroke-linecap="round"/>
+<rect x="44" y="70" width="58" height="38" rx="19" fill="#7c4dff"/>
+<rect x="48" y="94" width="15" height="22" rx="6" fill="#7c4dff"/>
+<rect x="82" y="94" width="15" height="22" rx="6" fill="#7c4dff"/>
+<rect x="51" y="111" width="3.5" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="56.5" y="111" width="3.5" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="85" y="111" width="3.5" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="90.5" y="111" width="3.5" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="62" y="30" width="38" height="44" rx="17" fill="#5a32d6"/>
+<rect x="69" y="37" width="24" height="30" rx="10" fill="#b9a1ff"/>
+<rect x="18" y="28" width="60" height="58" rx="29" fill="#7c4dff"/>
+<path d="M30 78C22 84 13 80 14 70" fill="none" stroke="#5a32d6" stroke-width="15" stroke-linecap="round"/>
+<path d="M30 78C22 84 13 80 14 70" fill="none" stroke="#7c4dff" stroke-width="11" stroke-linecap="round"/>
+<rect x="36" y="48" width="9" height="13" rx="3" fill="#1c1a24"/>
+<rect x="54" y="48" width="8" height="13" rx="3" fill="#1c1a24"/>
+<rect x="37.8" y="49.8" width="3.2" height="3.2" rx="0.6" fill="#f4f1ff"/>
+<rect x="55.6" y="49.8" width="3" height="3.2" rx="0.6" fill="#f4f1ff"/>
+<rect x="60" y="64" width="8" height="4" rx="2" fill="#b9a1ff"/>
+<path d="M42 70q4 3.5 8 0" fill="none" stroke="#1c1a24" stroke-width="2.5" stroke-linecap="round"/>
+
+</g>
+</g>
+</svg>

@@ -1,4 +1,4 @@
-# The core library
+# ![](../../assets/rs-rich/core.svg){ .rs-icon } The core library
 
 `rs-rich` (imported as `rich`) is the core of the project: a module-for-module
 port of Python [`rich`](https://github.com/Textualize/rich). Everything that

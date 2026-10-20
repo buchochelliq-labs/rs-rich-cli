@@ -1,4 +1,4 @@
-# Interactive components (rs-rich-interact)
+# ![](../../assets/rs-rich/interact.svg){ .rs-icon } Interactive components (rs-rich-interact)
 
 `rs-rich-interact` (`rich_interact`) is the layer between printing and a full
 TUI framework: small interactive components that take the terminal, get an

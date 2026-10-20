@@ -1,5 +1,8 @@
 # rs-rich
 
+![rs-rich: Python's rich, in Rust. Styled text, tables, Markdown and progress bars in the terminal, held to rich byte for byte; cargo add rs-rich. Beside it, a terminal window with a panel of crates and a progress bar, and intuiTUIve's mark and Memo the elephant, for full apps.](assets/rs-rich/hero-dark.svg#only-dark){ .rs-hero }
+![rs-rich: Python's rich, in Rust. Styled text, tables, Markdown and progress bars in the terminal, held to rich byte for byte; cargo add rs-rich. Beside it, a terminal window with a panel of crates and a progress bar, and intuiTUIve's mark and Memo the elephant, for full apps.](assets/rs-rich/hero-light.svg#only-light){ .rs-hero }
+
 <div class="project-badges" markdown="1">
 
 [![CI](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml/badge.svg)](https://github.com/buchochelliq-labs/rs-rich-cli/actions/workflows/ci.yml)
@@ -31,12 +34,29 @@ rich --print '[bold magenta]Hello[/] [green]World[/]'
 For Rust applications: `cargo add rs-rich`. Read [Getting started](getting-started.md)
 for a complete library example.
 
+<div class="rs-subsite" markdown>
+
+![intuiTUIve's mark](assets/intuituive/mark.svg){ .rs-mark width="64" }
+
+<div markdown>
+
+**[intuiTUIve](guide/intuituive/index.md): full terminal apps, built on rs-rich.**
+Describe the screen once as a tree of nodes and keep your state in
+signals; when a signal changes, only the cells that changed are redrawn.
+It has a section of its own on this site, with a tutorial, a page per
+topic and a widget index.
+
+</div>
+
+</div>
+
 ## New in 0.0.20
 
 | A raycaster on intuiTUIve | Recorded with held keys |
 |---|---|
 | ![The raycaster example: a first-person maze in half blocks](media/tapes/raycast/start.png) | ![The raycaster's map, recorded from a tape](media/tapes/raycast/map.png) |
 
+![Memo, intuiTUIve's elephant, waving, with her calf Tui holding her tail](assets/intuituive/mascot/memo-and-tui.svg){ .tui-mascot width="224" }
 0.0.20, published on 2026-10-19 ([release notes](releases/0.0.20.md)),
 is the intuiTUIve demo loop's release: eleven well-known terminal
 apps rebuilt on [intuiTUIve](guide/intuituive/index.md) (Yazi, scope-tui,
@@ -253,9 +273,23 @@ published or not. Each crate versions independently; see
 
 ## Where next
 
-- [Getting started](getting-started.md): install, check it worked, and a
-  first program.
-- The [tutorial](tutorial/index.md) builds up from a line of text to a
-  live progress display.
-- The [gallery](gallery.md) and the [recordings](recordings.md) show what
-  exists; the [guide](guide/index.md) covers every crate.
+| Section | What it is |
+|---|---|
+| ![](assets/rs-rich/getting-started.svg){ .rs-icon width="20" } [Getting started](getting-started.md) | Install, check it worked, and a first program |
+| ![](assets/rs-rich/tutorial.svg){ .rs-icon width="20" } [Tutorial](tutorial/index.md) | From a line of text to a live progress display |
+| ![](assets/rs-rich/guide.svg){ .rs-icon width="20" } [Guide](guide/index.md) | Every crate, with examples CI compiles |
+| ![](assets/intuituive/mark.svg){ .rs-mark width="20" } [intuiTUIve](guide/intuituive/index.md) | The framework for full terminal apps, built on rs-rich |
+| ![](assets/rs-rich/gallery.svg){ .rs-icon width="20" } [Gallery](gallery.md) | What each renderable looks like |
+| ![](assets/rs-rich/recordings.svg){ .rs-icon width="20" } [Terminal recordings](recordings.md) | Tapes of the CLI and the apps, played in the page |
+| ![](assets/rs-rich/demos.svg){ .rs-icon width="20" } [CLI and art videos](demos.md) | The CLI and the art crate, on video |
+| ![](assets/rs-rich/using-cli.svg){ .rs-icon width="20" } [Using the CLI](cli.md) | The `rich` command, task by task |
+| ![](assets/rs-rich/cli-reference.svg){ .rs-icon width="20" } [CLI reference](cli-reference.md) | Every command and flag |
+| ![](assets/rs-rich/python.svg){ .rs-icon width="20" } [Python](https://buchochelliq-labs.github.io/rs-rich-cli/python/) | `rs_rich`, Rich's API over the Rust core |
+| ![](assets/rs-rich/recipes.svg){ .rs-icon width="20" } [Workflow recipes](recipes.md) | The CLI in scripts and CI |
+| ![](assets/rs-rich/image-diff.svg){ .rs-icon width="20" } [Comparing images](image-diff.md) | Perceptual image diffs |
+| ![](assets/rs-rich/troubleshooting.svg){ .rs-icon width="20" } [Troubleshooting](troubleshooting.md) | When the output is not what you expected |
+| ![](assets/rs-rich/known-issues.svg){ .rs-icon width="20" } [Known issues](known-issues.md) | What is known not to work yet |
+| ![](assets/rs-rich/plans.svg){ .rs-icon width="20" } [Development plans](plans/1.0.0.md) | What each release sets out to do |
+| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.20.md) | What each release shipped |
+| ![](assets/rs-rich/parity.svg){ .rs-icon width="20" } [Parity with Python rich](parity.md) | What matches upstream, and how it is proven |
+| ![](assets/rs-rich/contributing.svg){ .rs-icon width="20" } [Contributing](BRANCHING.md) | Branches, architecture and design notes |

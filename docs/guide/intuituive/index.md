@@ -1,9 +1,8 @@
-# Terminal apps (intuiTUIve)
+# intuiTUIve: terminal apps
 
-![intuiTUIve](../../assets/intuituive/wordmark-dark.svg#only-dark){ .tui-wordmark width="300" }
-![intuiTUIve](../../assets/intuituive/wordmark-light.svg#only-light){ .tui-wordmark width="300" }
+![intuiTUIve: terminal apps from signals. Describe the screen once; when a signal changes, only the cells that changed are redrawn. With Memo the elephant and her calf Tui beside a small to-do app.](../../assets/intuituive/hero-dark.svg#only-dark){ .tui-hero }
+![intuiTUIve: terminal apps from signals. Describe the screen once; when a signal changes, only the cells that changed are redrawn. With Memo the elephant and her calf Tui beside a small to-do app.](../../assets/intuituive/hero-light.svg#only-light){ .tui-hero }
 
-![Memo, intuiTUIve's elephant, waving her trunk and holding up a lit cell](../../assets/intuituive/mascot/elephant-hero.svg){ .tui-mascot width="128" }
 `rs-rich-intuituive` (`intuituive`, new and early) is a framework for
 terminal apps, full-screen or inline. You describe the screen once as a
 tree of nodes and keep your state in **signals**. When a signal changes, the nodes that
