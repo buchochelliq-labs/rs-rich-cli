@@ -14,6 +14,11 @@
 //   - "Copy link" writes the state into the fragment, and opening that link
 //     restores it as the textarea's text, with nothing injected into the page;
 //   - a guide page's block, its Rust beside it, renders its input;
+//   - tier 2: a CLI block's "Try it" loads only the `rich` WASI module and
+//     opens a terminal with the block's first command at the prompt; Enter
+//     runs it, the next is filled in, a pipe and a builtin work; Stop ends
+//     a command that never does and a fresh session answers; "Save as tape"
+//     downloads the lines typed; a guide page's CLI example has the button;
 //   - without the stamp (a version built without the module) there is no
 //     button, and with JavaScript off the block is a plain code block;
 //   - nothing logs an error to the console.
@@ -46,7 +51,7 @@ function loadPlaywright() {
 const TYPES = {
   ".html": "text/html; charset=utf-8", ".js": "text/javascript", ".mjs": "text/javascript",
   ".css": "text/css", ".json": "application/json", ".wasm": "application/wasm", ".svg": "image/svg+xml",
-  ".png": "image/png", ".woff2": "font/woff2", ".gif": "image/gif",
+  ".png": "image/png", ".woff2": "font/woff2", ".gif": "image/gif", ".map": "application/json",
 };
 
 function serve(root) {
@@ -150,6 +155,50 @@ async function main() {
     await page.waitForFunction(() => (document.querySelector(".rp-frame")?.srcdoc || "").includes("bold"));
     check(true, "a guide block renders its input");
 
+    // Tier 2: a CLI block's terminal.
+    await page.goto(`${base}playground/`);
+    wasm.length = 0;
+    const cliTry = page.locator('.rich-playground[data-kind="cli"] + .rp-try');
+    await cliTry.waitFor();
+    await cliTry.click();
+    const rows = page.locator(".rp-shell .xterm-rows");
+    const screen = () => rows.textContent();
+    const waitFor = (text) =>
+      page.waitForFunction((t) => document.querySelector(".rp-shell .xterm-rows")?.textContent.includes(t), text, { timeout: 30000 });
+    await waitFor("$ rich README.md");
+    check(wasm.length === 1 && wasm[0].includes("/cli/rich.wasm"), "the CLI block loads the rich WASI module only");
+    await page.locator(".rp-shell .xterm-helper-textarea").focus();
+    await page.keyboard.press("Enter");
+    await waitFor("$ rich sales.csv");
+    check((await screen()).includes("Install"), "Enter runs the block's first command; the next is filled in");
+    await page.keyboard.press("Control+U");
+    await page.keyboard.type("seq 1 5 | rich chart --kind spark && ls");
+    await page.keyboard.press("Enter");
+    await waitFor("photo.png");
+    check(true, "a pipe, && and the builtins run");
+    // The block's next command is at the prompt: clear it first.
+    await page.keyboard.press("Control+U");
+    await page.keyboard.type("rich --gif ball.gif --loop 0");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => document.querySelector(".rp-shell")?.dataset.state === "running");
+    await page.waitForTimeout(500);
+    await page.locator(".rp-shell .rp-stop").click();
+    await waitFor("(stopped");
+    await page.waitForFunction(() => document.querySelector(".rp-shell")?.dataset.state === "ready", null, { timeout: 30000 });
+    await page.locator(".rp-shell .xterm-helper-textarea").focus();
+    await page.keyboard.press("Control+U");
+    await page.keyboard.type("echo fresh > note.txt; cat note.txt");
+    await page.keyboard.press("Enter");
+    await page.waitForFunction(() => /fresh\s/.test(document.querySelector(".rp-shell .xterm-rows")?.textContent || ""));
+    check(true, "Stop ends a command that runs on, and a fresh session answers");
+    const [download] = await Promise.all([page.waitForEvent("download"), page.locator(".rp-shell .rp-save").click()]);
+    const tape = readFileSync(await download.path(), "utf8");
+    check(download.suggestedFilename() === "session.tape" && tape.includes('Type "rich README.md"') && tape.includes("Write README.md") && tape.includes("Write note.txt") === false,
+      "Save as tape downloads the lines typed and the samples they use");
+
+    await page.goto(`${base}tutorial/06-cli/`);
+    check((await page.locator('.rich-playground[data-kind="cli"] + .rp-try').count()) > 0, "a guide page's CLI example has Try it");
+
     // A version built without the module: no stamp, no button.
     const bare = await context.newPage();
     await bare.route("**/playground/playground.json", (route) => route.fulfill({ status: 404, body: "" }));
@@ -162,7 +211,7 @@ async function main() {
     const off = await browser.newContext({ javaScriptEnabled: false });
     const plain = await off.newPage();
     await plain.goto(`${base}playground/`);
-    check((await plain.locator(".rich-playground code").textContent()).includes("[bold magenta]Hello[/]"),
+    check((await plain.locator(".rich-playground code").first().textContent()).includes("[bold magenta]Hello[/]"),
       "with JavaScript off the block shows its input");
     check((await plain.locator(".rp-try").count()) === 0, "with JavaScript off there is no button");
     await off.close();

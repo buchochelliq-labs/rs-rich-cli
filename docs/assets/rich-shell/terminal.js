@@ -74,10 +74,13 @@ export async function openTerminal({ host, wasm, worker: workerUrl, bytes, Termi
   const fit = FitAddon ? new FitAddon.FitAddon() : null;
   if (fit) term.loadAddon(fit);
   term.open(screen);
+  // Fit the columns to the box; the rows stay as the block asked. (The box
+  // has no height of its own, so fitting rows would grow it without end.)
   const refit = () => {
     if (!fit) return;
     try {
-      fit.fit();
+      const size = fit.proposeDimensions();
+      if (size && size.cols > 10 && size.cols !== term.cols) term.resize(size.cols, rows);
     } catch (error) {
       // Not laid out yet.
     }
