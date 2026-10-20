@@ -9,6 +9,25 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Builders are `#[must_use]` (rs-rich-ext, rs-rich-interact, rs-rich-intuituive, rs-rich-art, rs-rich-diagram, rs-rich-mermaid, rs-rich-micro, rs-rich-data, rs-rich-record, rs-rich-web, rs-rich-embed, rs-rich-ratatui, rs-rich-plugin-api)
+
+- **A dropped builder now warns.** A builder method takes `self` and
+  returns `Self`, so `node.on_key(..);` on its own line moved the node
+  away and did nothing. 184 types that are only useful once used
+  (intuiTUIve's `Node`, its `*Options` structs and widgets, rs-rich-ext's
+  charts and views, rs-rich-interact's components, `Graph`, the art
+  renderables, `RichWidget`) are `#[must_use]`, and so are 405 setters on
+  other types.
+- No breaking change: code that uses its builders compiles as before;
+  code that drops one gets an `unused_must_use` warning.
+- Setters on `Copy` handles that work through shared state
+  (`Transport::tick`, `Timer::max_catch_up`, `MultiSelect::scoped`,
+  `Resource::stale_after`, …) still work when their result is dropped, and
+  do not warn.
+- Every crate but `rs-rich` (the mirror is unchanged) turns on
+  `clippy::return_self_not_must_use`, so new builders stay covered; the
+  rule is in `CONTRIBUTING.md`, "API conventions".
+
 ### rs-rich-embed: Chrome's DevTools over a pipe on Linux and macOS
 
 - **No DevTools port on Unix.** `ChromeEngine` starts Chrome with
