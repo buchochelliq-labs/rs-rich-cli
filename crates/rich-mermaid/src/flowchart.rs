@@ -63,6 +63,13 @@ impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ParseError::Empty => f.write_str("the diagram is empty"),
+            // Sequence and ER diagrams are drawn, by their own parsers.
+            ParseError::Unsupported(kind) if kind == "sequence" => {
+                f.write_str("not a flowchart: sequence diagrams are parsed by `sequence::parse`")
+            }
+            ParseError::Unsupported(kind) if kind == "entity relationship" => {
+                f.write_str("not a flowchart: ER diagrams are parsed by `er::parse`")
+            }
             ParseError::Unsupported(kind) => {
                 write!(f, "{kind} diagrams are not drawn as text")
             }
@@ -765,7 +772,13 @@ mod tests {
             parse("sequenceDiagram\n  A->>B: hi")
                 .unwrap_err()
                 .to_string(),
-            "sequence diagrams are not drawn as text"
+            "not a flowchart: sequence diagrams are parsed by `sequence::parse`"
+        );
+        assert_eq!(
+            parse("erDiagram\n  A ||--o{ B : has")
+                .unwrap_err()
+                .to_string(),
+            "not a flowchart: ER diagrams are parsed by `er::parse`"
         );
         assert_eq!(
             parse("---\ntitle: x\n---\nstateDiagram-v2\n[*] --> A"),
