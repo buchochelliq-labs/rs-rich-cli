@@ -493,6 +493,27 @@ impl Vim {
             return;
         };
         let caret = b.caret();
+        // One line takes no line breaks: a line-wise paste goes in as text,
+        // and any break in what was cut becomes a space.
+        if cx.single_line {
+            let body = text.strip_suffix('\n').unwrap_or(&text).replace('\n', " ");
+            let body = body.repeat(count);
+            let at = if self.linewise {
+                if after {
+                    Pos::new(caret.line, b.line(caret.line).len())
+                } else {
+                    Pos::new(caret.line, 0)
+                }
+            } else if after && caret.at < b.line(caret.line).len() {
+                b.after(caret)
+            } else {
+                caret
+            };
+            b.replace(at, at, &body);
+            let end = b.caret();
+            b.set_caret(b.before(end), false);
+            return;
+        }
         if self.linewise {
             let body = text.strip_suffix('\n').unwrap_or(&text);
             let body = vec![body; count].join("\n");
@@ -666,6 +687,16 @@ impl Vim {
             }
             'A' => {
                 b.end(false);
+                self.insert(cx);
+            }
+            // One line (an input) has no line to open: insert at its end
+            // or its start instead.
+            'o' | 'O' if cx.single_line => {
+                if c == 'o' {
+                    b.end(false);
+                } else {
+                    b.set_caret(Pos::new(0, 0), false);
+                }
                 self.insert(cx);
             }
             'o' | 'O' => {
@@ -1084,7 +1115,29 @@ mod tests {
         (buffer, vim)
     }
 
+    /// [`run`] in one line, as an input.
+    fn run_line(text: &str, keys: &str) -> Buffer {
+        let mut buffer = Buffer::new(text);
+        let mut vim = Vim::new();
+        type_keys_in(&mut buffer, &mut vim, keys, true);
+        buffer
+    }
+
+    #[test]
+    fn one_line_never_gets_a_line_break() {
+        assert_eq!(run_line("ab", "oX<esc>").text(), "abX");
+        assert_eq!(run_line("ab", "OX<esc>").text(), "Xab");
+        // A line-wise yank and paste stays on the line.
+        assert_eq!(run_line("ab", "yyp").text(), "abab");
+        assert_eq!(run_line("ab", "yyP").text(), "abab");
+        assert!(!run_line("ab", "yy3p").text().contains('\n'));
+    }
+
     fn type_keys(buffer: &mut Buffer, vim: &mut Vim, keys: &str) {
+        type_keys_in(buffer, vim, keys, false);
+    }
+
+    fn type_keys_in(buffer: &mut Buffer, vim: &mut Vim, keys: &str, single_line: bool) {
         let mut rest = keys;
         while let Some(c) = rest.chars().next() {
             let key = if c == '<' {
@@ -1107,7 +1160,7 @@ mod tests {
             let mut cx = ModeCx {
                 buffer: &mut *buffer,
                 editable: true,
-                single_line: false,
+                single_line,
                 page: 10,
             };
             if vim.key(key, &mut cx) == ModeKey::Pass {
