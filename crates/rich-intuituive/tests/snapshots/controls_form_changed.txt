@@ -1,0 +1,20 @@
+╭─ Settings ───────────────────────────────────────────────╮
+│ Appearance                                               │
+│ Theme       Solarized      ▾                             │
+│ Font size   ━━━━━━━━●──────────────── 16pt               │
+│ [ ] Show line numbers                                    │
+│ ──● Dark title bar                                       │
+│                                                          │
+│ Editor                                                   │
+│ Indent with ( ) Spaces                                   │
+│             (•) Tabs                                     │
+│                                                          │
+│ ▾ Advanced                                               │
+│   [ ] Send anonymous usage data                          │
+│   Autosave    ━━━━━━●────────────────── every 30s        │
+│                                                          │
+│                                                          │
+╰──────────────────────────────────────────────────────────╯
+   Not saved yet
+  Save    Reset    Delete profile
+tab moves · enter opens · space ticks · ←/→ slide · q quits

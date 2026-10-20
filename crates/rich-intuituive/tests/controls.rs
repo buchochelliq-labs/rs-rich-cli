@@ -487,3 +487,57 @@ fn a_collapsible_shows_its_child_while_open() {
     assert_eq!(rows(&driver)[..2], ["▸ Advanced", "    Done"]);
     assert_eq!(read(&driver)[0], "Advanced, button, collapsed");
 }
+
+#[path = "../examples/controls.rs"]
+#[allow(dead_code)]
+mod controls_example;
+
+#[test]
+fn the_controls_example_is_a_settings_form() {
+    let mut driver = controls_example::controls_app().driver(60, 20);
+    driver.settle();
+    intuituive::assert_screen!(driver, "controls_form");
+}
+
+#[test]
+fn the_settings_form_changes_saves_and_reads_out() {
+    let mut driver = controls_example::controls_app().driver(60, 20);
+    driver.settle();
+    // The theme by its first letter, two points bigger, the boxes flipped,
+    // tabs for spaces, and Advanced open.
+    driver.press("s tab right right tab space tab space tab down tab enter");
+    intuituive::assert_screen!(driver, "controls_form_changed");
+    assert_eq!(
+        read(&driver),
+        [
+            "Settings, region",
+            "Appearance",
+            "Theme, combo box, 3 of 4: Solarized, collapsed",
+            "Font size, slider: 16",
+            "16pt",
+            "Show line numbers, check box, not checked",
+            "Dark title bar, switch, checked",
+            "Editor",
+            "Indent with, radio group, 2 of 2: Tabs, checked",
+            "Advanced, button, expanded",
+            "Send anonymous usage data, check box, not checked",
+            "Autosave every, slider: 30",
+            "every 30s",
+            "Not saved yet",
+            "Save, button",
+            "Reset, button",
+            "Delete profile, button",
+            "tab moves · enter opens · space ticks · ←/→ slide · q quits",
+        ]
+    );
+    // Save: busy for a second, then saved.
+    driver.press("tab tab tab enter");
+    assert!(rows(&driver).iter().any(|r| r.contains("Saving…")));
+    assert!(driver.accessibility()[0].state.busy);
+    driver.advance(Duration::from_secs(1));
+    assert!(rows(&driver).iter().any(|r| r.contains("Saved")));
+    assert!(!driver.accessibility()[0].state.busy);
+    // Reset puts it all back.
+    driver.press("tab enter");
+    assert!(rows(&driver)[2].contains("Dark "), "{:?}", rows(&driver));
+}
