@@ -32,7 +32,7 @@
 //! | Style | What it styles |
 //! |---|---|
 //! | `button`, `button.primary`, `button.danger` | a button's face, by [variant](ButtonVariant) |
-//! | `<face>.focus` (else `button.focus`) | over the face, with the focus or the pointer on it, or held |
+//! | `<face>.focus` (else `button.focus`) | over the face, with the focus or the pointer on it, or held (`bold reverse`) |
 //! | `<face>.disabled` (else `button.disabled`) | over the face, while it is disabled (`dim`) |
 //! | `<face>.light`, `<face>.shade` (and `<face>.focus.light`, …) | a button three rows tall: its top and bottom edges' colours |
 //! | `checkbox.on`, `radio.on` | the tick and the dot (the theme's `accent`) |

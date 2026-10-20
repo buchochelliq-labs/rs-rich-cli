@@ -176,9 +176,10 @@ ratatui's widget examples, one tab for each family, with its `table`,
   with a shadow; under it stand four shadow looks.
 - **Borders.** Four panes sharing their borders; the one with the focus
   is drawn thick.
-- **Custom.** Three buttons drawn by hand: a widget each, with a face, a
-  lit top edge and a shadowed bottom one, picked under the pointer or the
-  focus, pressed while the mouse holds them.
+- **Custom.** ratatui's three hand-drawn buttons, as stock
+  [buttons](controls.md#buttons), each with a face, a lit top edge and a
+  shadowed bottom one, picked under the pointer or the focus, pressed
+  while the mouse holds them.
 
 ```text
 --8<-- "crates/rich-intuituive/tests/snapshots/widgets_table_app.txt"
@@ -210,9 +211,11 @@ What intuiTUIve adds:
   padding, a table's footer, gaps and highlights, a panel's titles,
   sides and shadow are builders on the node, and the highlights are
   theme styles given to each widget with `.theme_styles(..)`.
-- **The custom buttons are ordinary widgets.** Each implements `Widget`:
-  it draws on its canvas, asks `cx.hovered()` and `cx.focused()`, and
-  captures the mouse while it is held.
+- **The custom buttons are stock buttons.** ratatui draws each by hand;
+  here each is a `button(..)` given its colours as theme styles
+  (`button`, `button.light`, `button.shade` and their `.focus` looks)
+  with `.theme_styles(..)`. To draw a widget of your own instead, see
+  [your own widgets](widgets.md#your-own-widgets).
 - **Only what changes draws again.** A key in the List tab draws the list
   and nothing else; `tests/widgets_gallery.rs` checks it.
 

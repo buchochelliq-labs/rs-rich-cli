@@ -1042,13 +1042,11 @@ impl Theme {
                 ("warn", "yellow"),
                 ("bad", "bold red"),
                 ("selected", "reverse"),
-                // The stock buttons' faces, and their look with the focus.
+                // The stock buttons' faces; with the focus, `bold reverse`
+                // over them unless `button.focus` says otherwise.
                 ("button", "white on grey30"),
-                ("button.focus", "bold on grey50"),
                 ("button.primary", "black on cyan"),
-                ("button.primary.focus", "bold on bright_cyan"),
                 ("button.danger", "white on red3"),
-                ("button.danger.focus", "bold on red1"),
             ],
         )
     }
@@ -1066,11 +1064,8 @@ impl Theme {
                 ("bad", "bold red3"),
                 ("selected", "reverse"),
                 ("button", "black on grey82"),
-                ("button.focus", "bold on grey66"),
                 ("button.primary", "white on blue"),
-                ("button.primary.focus", "bold on dodger_blue2"),
                 ("button.danger", "white on red3"),
-                ("button.danger.focus", "bold on red1"),
             ],
         )
     }
@@ -1090,9 +1085,7 @@ impl Theme {
                 ("button", "reverse"),
                 ("button.focus", "bold underline"),
                 ("button.primary", "bold reverse"),
-                ("button.primary.focus", "underline"),
                 ("button.danger", "bold reverse"),
-                ("button.danger.focus", "underline"),
             ],
         )
     }
