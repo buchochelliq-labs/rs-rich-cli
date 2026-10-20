@@ -66,7 +66,8 @@ always available. The `use` path is `rich_ext::<module>`.
 | `countdown` | `Backoff`, `RetryStatus`, `RateLimit`, `CountdownBar`, `CountdownWait`: retry and rate-limit countdowns | none | [Transfers and status](transfers-and-status.md#retries-and-rate-limits) |
 | `notify` | `Notification`, `Notifications`: transient toasts with expiry | none | [Transfers and status](transfers-and-status.md#notifications) |
 | `cancel` | `CancelToken`: one cancellation flag, with child tokens, shared by the modules above | none | [Workflows](workflows.md#cancellation) |
-| `table` | `TableData`: stable multi-column sort, grouping and aggregates; `StreamingTable`: keyed rows that re-render only what changed; `VirtualTable`: one window of a large row source in constant memory | none | [Tables](tables.md) |
+| `table` | `TableData`: stable multi-column sort, grouping and aggregates; `StreamingTable`: keyed rows that re-render only what changed; `VirtualTable`: one window of a large row source in constant memory; `PlainRows`, `PlainTree`: data into a core `Table` or `Tree` as plain text | none | [Tables](tables.md) |
+| `markdown_export` | `GfmDocument`, `ToGfm`: tables, trees, panels, rules, text and code as GitHub-flavoured Markdown for PR comments; `fit_github_comment` for GitHub's size limit | none | [Markdown for GitHub](markdown-export.md) |
 | `badge`, `size_bar` | `Badge`/`Badges`: status, label, link and metadata chips; `SizeBar`: a size against a total or limit | none | [Badges and redaction](badges-and-redaction.md) |
 | `chart` | `Sparkline`, `BarChart` (stacked groups too), `Histogram`, `LineChart` (Braille line and scatter), `PieChart` (pies and donuts), `Gauge`, `BulletChart`, `Heatmap`, `StatusMatrix`, `KpiCard`, `Timeline`, `LevelMeter` (with `PeakHold`), `Spectrogram`, `BarSpectrum` and `Persistence`, with `Scale`, `ValueFormat` and `Charset`; every chart has an ASCII form and reads without colour. In the shell: `rich chart` | none | [Charts](charts.md) |
 | `gradient` | `GradientText`: a `Text` coloured along two or more colours, across, down or corner to corner, degrading by colour system | none | [Charts](charts.md#gradient-text) |
@@ -81,6 +82,7 @@ always available. The `use` path is `rich_ext::<module>`.
 | `git` | `status(dir)`: `git status --porcelain=v1 -z` per file, directories taking the greatest change inside; `parse_porcelain` | none (runs `git`) | [Files, spectra and warm-ups](files-and-signals.md#git-status) |
 | `archive` | `entries(path)`, `extract(path, dest)`, `extract_with`: tar, tar.gz and zip, never writing outside `dest` | `archive` | [Files, spectra and warm-ups](files-and-signals.md#archives) |
 | `dsp` | `fft` (any length), `hann`, `spectrum` and `spectrum_full`; test signals (`tone`, `partials`, `noise`, `mix`); `trigger(samples, level, depth, Edge)`; `bands`, `Falloff`, `peak_hz`; `note_hz("A4")`, `NoteTable`, `nearest_note(hz)` | none | [Files, spectra and warm-ups](files-and-signals.md#fft-and-spectrum) |
+| `sql` | `SqlHighlighter`: SQL highlighting with no syntect (dialect words, Jinja blocks for dbt); `highlight` for a `Text`, `tokenize` for the tokens | `sql` | [Code highlighters](code-highlighters.md#sql-without-syntect) |
 | `syntax` | `preload(languages)`: warm the default highlighter on a worker thread | `syntax` (default) | [Files, spectra and warm-ups](files-and-signals.md#warming-up-syntax-highlighting) |
 | `redact` | `Redactor` (**experimental**, best effort: check its output): mask secrets in strings, ANSI text and rendered segments before they are exported or recorded | none | [Badges and redaction](badges-and-redaction.md#redaction) |
 
@@ -135,6 +137,7 @@ needs them); every other feature is off.
 | `test-report` | `diff::test_report` | `serde`, `serde_json`, `quick-xml` |
 | `local-time` | `fs::local_time`, `fs::short_local_time` | `chrono` (`clock`: iana-time-zone) |
 | `serde` | `Serialize` for capability reports, contrast findings and ANSI explanations | `serde` |
+| `sql` | `sql::SqlHighlighter`, a SQL code highlighter with Jinja blocks, and `sql::highlight` | none |
 | `dylib-plugins`, `wasm-plugins` | Loading runtime plugins: native libraries, or sandboxed WASM modules ([Extending](../../PLUGINS.md)) | `libloading`, `wasmi` |
 
 ## Examples

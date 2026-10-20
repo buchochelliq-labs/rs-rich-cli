@@ -111,6 +111,9 @@ pub mod rst;
 pub mod sanitize;
 pub mod size_bar;
 pub mod source_view;
+// A pure-Rust SQL highlighter (no syntect), with Jinja blocks for dbt.
+#[cfg(feature = "sql")]
+pub mod sql;
 pub mod surface;
 // Warming up syntax highlighting on a worker thread.
 #[cfg(feature = "syntax")]

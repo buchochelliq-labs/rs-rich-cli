@@ -74,6 +74,61 @@ in a debug build. An interactive app can do that on a worker thread at
 start-up with `rich_ext::syntax::preload(&["rust", "markdown"])` (see
 [Warming up syntax highlighting](files-and-signals.md#warming-up-syntax-highlighting)).
 
+## SQL without syntect
+
+The `sql` feature of `rs-rich-ext` adds `sql::SqlHighlighter`, a
+`CodeHighlighter` built on a hand-written SQL lexer: pure Rust, no
+dependencies, no grammar files. It answers to `sql` and to `postgresql`,
+`postgres`, `mysql`, `mariadb`, `sqlite`, `bigquery`, `snowflake`, `duckdb`,
+`tsql` and `plsql`, and knows their common words (`QUALIFY`, `PRAGMA`,
+`ILIKE`, `INT64`, `VARIANT`, …).
+
+```rust
+use rich::protocol::{CodeHighlighting, ConsoleCodeHighlighting};
+use rich::Console;
+use rich_ext::sql::SqlHighlighter;
+
+let mut console = Console::new();
+console.set_code_highlighting(Some(CodeHighlighting {
+    highlighter: SqlHighlighter::shared(),
+    theme: Some("ansi_dark".into()),
+}));
+// Every `Syntax` and Markdown ```sql fence this console renders.
+```
+
+What it tells apart:
+
+| class | examples |
+|---|---|
+| keywords, types, constants | `SELECT`, `VARCHAR`, `NULL` |
+| functions | a name before `(`: `count(`, `coalesce(` |
+| names and quoted names | `orders`, `"Order Id"`, `` `col` ``, `[dbo].[t]` |
+| strings | `'it''s'`, `E'\n'`, `$$ … $$`, `$fn$ … $fn$`, `'''raw'''`, `X'FF'` |
+| numbers | `42`, `.5`, `1.5e-3`, `0xFF` |
+| comments | `-- …`, `/* … */` (nested) |
+| parameters | `:name`, `@name`, `@@var`, `$1`, `?` |
+| operators, punctuation | `<>`, `\|\|`, `::`, `->>`; `( ) , ;` |
+| Jinja blocks | `{{ ref('orders') }}`, `{% if … %}`, `{# … #}`, as dbt models use them |
+
+A name after a `.` is a name even when it is a keyword (`t.date`), and `[`
+after a name or `ARRAY` is a subscript, not a quoted name. An unterminated
+string, comment or block runs to the end of the input; the lexer never
+fails. `#` is an operator (PostgreSQL), not a MySQL comment.
+
+Its themes are `monokai` (the default), `ansi_dark` and `ansi_light`; a theme
+it does not know colours SQL with `monokai`, so a console set up with
+another engine's theme still colours SQL. Other languages are plain text,
+or go to another highlighter with `SqlHighlighter::with_fallback(…)`.
+`sql::SqlPlugin` registers it as the highlighter `"sql"`.
+
+!!! note "Dropping syntect"
+    Core's `Syntax` and `Markdown` are behind its `syntax` and `markdown`
+    features, which bring syntect. In a build without them,
+    `rich_ext::sql::highlight(code, theme)` returns the highlighted SQL as a
+    `Text`, which prints like any other; `sql::tokenize` gives the tokens.
+    A `Syntax` or a Markdown fence highlighted by this lexer still needs
+    core's `syntax` feature for now.
+
 ## Write your own
 
 An adapter implements four methods. `highlight` returns one line per element

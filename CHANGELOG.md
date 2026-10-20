@@ -39,6 +39,26 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **`table::PlainTree::add_plain`** does the same for tree labels.
 - Guide: [Plain-text cells](docs/guide/ext/tables.md#plain-text-cells).
 
+### rs-rich-ext: a SQL highlighter without syntect
+
+- **`sql::SqlHighlighter`** (feature `sql`, off by default, no new
+  dependencies): a `CodeHighlighter` on a hand-written lexer for SQL,
+  answering to `sql` and the aliases `postgresql`, `mysql`, `sqlite`,
+  `bigquery`, `snowflake`, `duckdb` and others. Keywords (with common
+  dialect words), types, constants, functions, names, quoted names
+  (`""`, backticks, `[]`), strings (`''` escapes, `E''`, dollar quotes,
+  triple quotes), numbers, nested comments, parameters, operators and Jinja
+  blocks (`{{ }}`, `{% %}`, `{# #}`) for dbt, in `monokai`, `ansi_dark`
+  and `ansi_light`. `with_fallback` hands other languages to another
+  highlighter; `SqlPlugin` registers it as `"sql"`.
+- `sql::highlight` returns highlighted SQL as a `Text`, for builds without
+  core's `syntax` feature; `sql::tokenize` returns the tokens.
+- Tests: token classes on tricky input, unterminated strings and comments,
+  and 3000 random inputs that must tokenize and highlight without a panic;
+  a `Syntax` block and a Markdown ```` ```sql ```` fence highlighted through
+  the console. CI builds the feature on its own.
+- Guide: [SQL without syntect](docs/guide/ext/code-highlighters.md#sql-without-syntect).
+
 ### rs-rich-embed: Chrome's DevTools over a pipe on Linux and macOS
 
 - **No DevTools port on Unix.** `ChromeEngine` starts Chrome with

@@ -141,6 +141,9 @@ local-time = ["dep:chrono"]
 archive = ["dep:zip", "dep:flate2"]
 # `qr::QrCode`: QR codes drawn with half blocks, through qrcodegen.
 qr = ["dep:qrcodegen"]
+# `sql::SqlHighlighter`: a hand-written SQL lexer as a code highlighter, with
+# Jinja blocks (dbt). No dependencies, and neither syntect nor `syntax`.
+sql = []
 
 [[example]]
 name = "guide_live_layout"
