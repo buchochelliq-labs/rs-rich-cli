@@ -30,10 +30,13 @@ on:
       - crates/rich-py/python/**
       # The docs playground: its crate, the libraries it renders with (a
       # change there can break a block; dev's module must follow main), the
-      # xterm.js it copies, and its checks.
+      # CLI its terminal runs, the xterm.js it copies, its checks and the
+      # tape fixture they keep current.
       - playground/**
       - crates/rich/**
       - crates/rich-ext/**
+      - crates/rich-cli/**
+      - crates/rich-record/tests/fixtures/playground-session.tape
       - crates/rich-web/assets/xterm/**
       - scripts/check_playground_*.mjs
       - scripts/test_build_versioned_docs.py
@@ -51,10 +54,13 @@ on:
       - crates/rich-py/python/**
       # The docs playground: its crate, the libraries it renders with (a
       # change there can break a block; dev's module must follow main), the
-      # xterm.js it copies, and its checks.
+      # CLI its terminal runs, the xterm.js it copies, its checks and the
+      # tape fixture they keep current.
       - playground/**
       - crates/rich/**
       - crates/rich-ext/**
+      - crates/rich-cli/**
+      - crates/rich-record/tests/fixtures/playground-session.tape
       - crates/rich-web/assets/xterm/**
       - scripts/check_playground_*.mjs
       - scripts/test_build_versioned_docs.py
@@ -105,11 +111,15 @@ jobs:
       # build_versioned_docs.py.
       - uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
+          # The playground's modules, and the `rich` CLI for its terminal.
+          targets: wasm32-unknown-unknown, wasm32-wasip1
 
       - uses: Swatinem/rust-cache@v2
         with:
-          workspaces: playground
+          # The modules build in playground/; the CLI in the workspace.
+          workspaces: |
+            playground
+            .
 
       - uses: actions/setup-node@v6
         with:
@@ -130,6 +140,7 @@ jobs:
           playground/build.sh
 
       # Docs as tests: every `.rich-playground` block renders with the module,
+      # and every CLI example that runs in the terminal does (and is marked),
       # under Node, or the build fails.
       - name: Render every playground block
         run: node scripts/check_playground_blocks.mjs

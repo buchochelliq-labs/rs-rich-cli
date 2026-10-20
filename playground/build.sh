@@ -66,7 +66,7 @@ cli_features="art,mermaid"
 CARGO_PROFILE_RELEASE_OPT_LEVEL=z CARGO_PROFILE_RELEASE_LTO=true \
 CARGO_PROFILE_RELEASE_CODEGEN_UNITS=1 CARGO_PROFILE_RELEASE_PANIC=abort \
 CARGO_PROFILE_RELEASE_STRIP=true \
-    cargo build --manifest-path "$root/Cargo.toml" --release --target wasm32-wasip1 \
+    cargo build --manifest-path "$root/Cargo.toml" --locked --release --target wasm32-wasip1 \
         -p rs-rich-cli --no-default-features --features "$cli_features" --bin rich
 rm -rf "${out:?}/cli"
 mkdir -p "$out/cli"
