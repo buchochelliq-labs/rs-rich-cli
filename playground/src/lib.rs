@@ -9,6 +9,8 @@
 //! The same functions run natively (`cargo test`) and under Node
 //! (`scripts/check_playground.mjs`, which renders every block in the docs).
 
+#[cfg(feature = "app")]
+pub mod app;
 pub mod options;
 pub mod render;
 
@@ -121,6 +123,11 @@ pub fn kinds() -> String {
         .iter()
         .filter(|kind| cfg!(feature = "full") || !kind.full)
         .map(|kind| serde_json::json!({"name": kind.name, "full": kind.full, "input": kind.input}))
+        // An `app` block runs a session (`app::Session`), named by its
+        // `data-app`, in a terminal.
+        .chain(cfg!(feature = "app").then(|| {
+            serde_json::json!({"name": "app", "full": false, "input": "what the app named by data-app takes"})
+        }))
         .collect();
     serde_json::Value::Array(kinds).to_string()
 }
@@ -129,12 +136,20 @@ pub fn kinds() -> String {
 #[wasm_bindgen]
 pub fn info() -> String {
     serde_json::json!({
-        "module": if cfg!(feature = "full") { "full" } else { "lean" },
+        "module": if cfg!(feature = "app") {
+            "app"
+        } else if cfg!(feature = "full") {
+            "full"
+        } else {
+            "lean"
+        },
         "rs-rich": env!("RS_RICH_VERSION"),
         "rs-rich-ext": env!("RS_RICH_EXT_VERSION"),
     })
     .to_string()
 }
 
+#[cfg(all(test, feature = "app"))]
+mod app_tests;
 #[cfg(test)]
 mod tests;

@@ -23,7 +23,7 @@ function commit() {
 }
 
 const stamp = { format: 1, commit: commit(), modules: {}, xterm: { js: "xterm/xterm.js", css: "xterm/xterm.css" } };
-for (const name of ["lean", "full"]) {
+for (const name of ["lean", "full", "app"]) {
   const module = await load(out, name);
   const info = JSON.parse(module.info());
   const wasm = `${name}/rich_playground_bg.wasm`;
@@ -35,6 +35,8 @@ for (const name of ["lean", "full"]) {
     bytes: statSync(path.join(out, wasm)).size,
     kinds: JSON.parse(module.kinds()).map((kind) => kind.name),
   };
+  // The app module's sessions, for `app` blocks (`data-app`).
+  if (module.Session) stamp.modules[name].apps = JSON.parse(module.Session.apps()).map((app) => app.name);
 }
 writeFileSync(path.join(out, "playground.json"), JSON.stringify(stamp, null, 2) + "\n");
 console.log(`wrote ${path.join(out, "playground.json")}`);

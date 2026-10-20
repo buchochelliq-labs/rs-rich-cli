@@ -8,6 +8,7 @@
 # OUT gets:
 #   lean/   rs-rich without syntect (most blocks)        rich_playground{.js,_bg.wasm}
 #   full/   with syntect and pulldown-cmark (`syntax`, `markdown` blocks)
+#   app/    tier 3: components and intuiTUIve apps (`app` blocks), no syntect
 #   xterm/  rs-rich-web's vendored xterm.js (MIT, its licence beside it)
 #   playground.json   the stamp the page checks first: modules, kinds, versions
 #
@@ -57,6 +58,7 @@ build() {
 
 build lean
 build full --features full
+build app --features app
 
 # The page's terminal, for the blocks a reader switches to it.
 mkdir -p "$out/xterm"
@@ -68,6 +70,6 @@ node "$here/stamp.mjs" "$out"
 
 if [ -n "$tar_version" ]; then
     archive="$(dirname "$out")/playground-$tar_version.tar.gz"
-    tar -czf "$archive" -C "$out" playground.json lean full xterm
+    tar -czf "$archive" -C "$out" playground.json lean full app xterm
     echo "wrote $archive ($(wc -c < "$archive") bytes)"
 fi
