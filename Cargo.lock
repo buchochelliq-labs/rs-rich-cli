@@ -3035,6 +3035,8 @@ dependencies = [
  "rs-rich-interact",
  "rs-rich-micro",
  "rs-rich-ratatui",
+ "tracing",
+ "tracing-subscriber",
  "vt100",
 ]
 

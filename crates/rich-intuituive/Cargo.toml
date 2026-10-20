@@ -24,7 +24,7 @@ include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
 # meters and spectra on docs.rs too; `audio` is left out, as its ALSA
 # headers may not be there to build it.
 [package.metadata.docs.rs]
-features = ["art", "micro", "watch", "files", "archive", "pcm", "viz"]
+features = ["art", "micro", "watch", "files", "archive", "pcm", "viz", "tracing"]
 
 [lib]
 name = "intuituive"
@@ -84,6 +84,12 @@ files = ["rich-ext/local-time"]
 # rs-rich-ext's `archive` (zip, flate2). Off by default.
 archive = ["files", "rich-ext/archive"]
 
+# `log::tracing_layer`, `log::install_tracing` and `log::TracingFeed`: a
+# `tracing_subscriber` layer feeding a `Log`, so an app shows its own
+# `tracing` events, through rs-rich-ext's `EventLayer` and `ChannelSink`.
+# A plugin. Off by default.
+tracing = ["rich-ext/tracing", "dep:tracing", "dep:tracing-subscriber"]
+
 # The scope-tui rebuild reads raw PCM (`audio::pcm`), the `pcm` plugin's.
 [[example]]
 name = "scope"
@@ -101,6 +107,9 @@ rich-micro = { workspace = true, optional = true }
 # Node::solver(Solver::Ratatui): ratatui's constraint solver (its fork of
 # cassowary), so a row ported from ratatui lays out as it did.
 kasuari = "0.4"
+# The `tracing` plugin; the same versions and features rs-rich-ext uses.
+tracing = { version = "0.1", default-features = false, features = ["std"], optional = true }
+tracing-subscriber = { version = "0.3", default-features = false, features = ["registry", "std"], optional = true }
 
 # The `audio` feature's ALSA error handler (`snd_lib_error_set_local`);
 # cpal links the same library already.
