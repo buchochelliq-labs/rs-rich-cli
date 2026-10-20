@@ -21,6 +21,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `RELEASES.toml`, both lockfiles, the version tables and the CLI reference
   follow.
 
+### Recording: a held key repeats only while it is held (rs-rich-record)
+
+- `Hold` (and a `KeyDown` held through a `Sleep`) sends the repeats due
+  before the key's release and none after: a late wake-up of the recorder
+  sent the ones due in its sleep, so a slow machine (macOS CI) recorded
+  more repeats than the tape asked for. The count is now exact on every
+  machine, and the test asserts it.
+
 ### Docs: one site per release, with a version selector
 
 - The documentation site keeps a copy of the docs for each release, picked

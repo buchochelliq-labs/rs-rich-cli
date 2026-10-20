@@ -316,12 +316,13 @@ impl Held {
         Ok(())
     }
 
-    /// Send the repeats that are due.
-    fn pump(&mut self, session: &mut Session) -> std::io::Result<()> {
+    /// Send the repeats that are due, none after `until`: a late wake-up
+    /// must not send repeats from after the key was let go.
+    fn pump(&mut self, session: &mut Session, until: Instant) -> std::io::Result<()> {
         let (Some(&key), Some(mut next)) = (self.keys.last(), self.next) else {
             return Ok(());
         };
-        let now = Instant::now();
+        let now = Instant::now().min(until);
         while next <= now {
             Held::send(session, key, KeyEvent::Repeat, false)?;
             next += self.repeat.1;
@@ -334,7 +335,7 @@ impl Held {
     fn pause(&mut self, session: &mut Session, delay: Duration) -> std::io::Result<()> {
         let end = Instant::now() + delay;
         loop {
-            self.pump(session)?;
+            self.pump(session, end)?;
             let now = Instant::now();
             if now >= end {
                 return Ok(());
