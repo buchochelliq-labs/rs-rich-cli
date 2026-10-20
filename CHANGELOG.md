@@ -9,6 +9,55 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Versions: the 0.0.21 versions are open
+
+- Every package moves one patch past the 0.0.20 cohort, as the
+  [0.0.21 plan](docs/plans/0.0.21.md) lists: core 0.0.11, macros 0.0.5,
+  plugin API 0.0.5, art 0.0.14, diagram 0.0.4, Mermaid 0.0.7, lumis 0.0.5,
+  ext 0.0.18, micro 0.0.7, record 0.0.9, interact 0.0.9, ratatui 0.0.6,
+  intuituive 0.0.6, embed 0.0.4, web 0.0.4, data 0.0.5, the CLI 0.0.21 and
+  `rs-rich` 0.0.9 on PyPI. Parity work changes core, and Cargo's 0.0.x
+  requirements are exact, so every crate that depends on it moves too.
+  `RELEASES.toml`, both lockfiles, the version tables and the CLI reference
+  follow.
+
+### Recording: a held key repeats only while it is held (rs-rich-record)
+
+- `Hold` (and a `KeyDown` held through a `Sleep`) sends the repeats due
+  before the key's release and none after: a late wake-up of the recorder
+  sent the ones due in its sleep, so a slow machine (macOS CI) recorded
+  more repeats than the tape asked for. The count is now exact on every
+  machine, and the test asserts it.
+
+### Docs: one site per release, with a version selector
+
+- The documentation site keeps a copy of the docs for each release, picked
+  from a drop-down in the header: `/X.Y.Z/` is built from the last commit on
+  main that still ships that release (its `rs-rich-cli-vX.Y.Z` tag, or a later
+  one up to the commit before `RELEASES.toml` first moves a crate past it, so
+  docs fixed after a release show under it), `/dev/` from main, and the
+  site's root and
+  `/latest/` go to the newest release. Every other version shows a banner
+  linking to the newest release's docs, and an old unversioned link is sent
+  to the same page under the newest release.
+  `scripts/build_versioned_docs.py` builds it in the `docs` workflow, keeping
+  the newest releases that fit under GitHub Pages' 1 GB; a release tag's push
+  re-runs the workflow on main, so a release's docs go up when it is tagged.
+  `docs-versions.toml` pins a release's docs to a commit: the commit that
+  opens the next versions records the last commit of the release's notes
+  there (`docs/BRANCHING.md`).
+
+## 0.0.20 cohort — published 2026-10-19
+
+Published on 2026-10-19 from `56c6c97` by one `release.yml` run (tag
+`release-0.0.20`), the first release made with the one-run pipeline:
+core 0.0.10 / macros 0.0.4 / plugin API 0.0.4 / art 0.0.13 / diagram 0.0.3 /
+mermaid 0.0.6 / lumis 0.0.4 / ext 0.0.17 / micro 0.0.6 / record 0.0.8 /
+interact 0.0.8 / ratatui 0.0.5 / intuituive 0.0.5 / embed 0.0.3 / web 0.0.3 /
+data 0.0.4 / CLI 0.0.20. `rs-rich` 0.0.8 on PyPI (`python-v0.0.8`, same
+commit) followed once the maintainer approved it, early on 2026-10-20 (UTC). See
+[the release notes](docs/releases/0.0.20.md).
+
 ### Releases: one run for every crate (scripts, release.yml)
 
 - **A release tag publishes the whole release.** `release-<name>` (the
@@ -74,18 +123,6 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   cargo-generate 0.23.4 or later, the release that fixed that suffix for git
   templates. Checked with cargo-generate 0.25.0: the generated app builds and
   passes its test against a `git` dependency, with no error.
-
-### Docs: one site per release, with a version selector
-
-- The documentation site keeps a copy of the docs for each release, picked
-  from a drop-down in the header: `/X.Y.Z/` is built from that release's
-  `rs-rich-cli-vX.Y.Z` tag, `/dev/` from main, and the site's root and
-  `/latest/` go to the newest release. Every other version shows a banner
-  linking to the newest release's docs, and an old unversioned link is sent
-  to the same page under the newest release.
-  `scripts/build_versioned_docs.py` builds it in the `docs` workflow, keeping
-  the newest releases that fit under GitHub Pages' 1 GB; a release tag's push
-  re-runs the workflow on main, so a release's docs go up when it is tagged.
 
 ### Core: `Text.markup` (rs-rich)
 
@@ -1257,11 +1294,13 @@ What round 1 of rebuilding Yazi (`examples/files.rs`) and scope-tui
   your own; the headless driver records it.
 - **Docs:** the intuiTUIve guide covers each of these.
 
-## 0.0.19 cohort
+## 0.0.19 cohort — published 2026-10-19
 
 ext 0.0.16 / micro 0.0.5 / record 0.0.7 / interact 0.0.7 / ratatui 0.0.4 /
 intuituive 0.0.4 / embed 0.0.2 / web 0.0.2 / data 0.0.3 / CLI 0.0.19, and
-`rs-rich` 0.0.7 on PyPI. Not published yet: the maintainer tags it.
+`rs-rich` 0.0.7 on PyPI. Published crate by crate, tag by tag: ext, micro,
+record and interact from `22da468`, the rest and `rs-rich` 0.0.7 from
+`2fc9772`, the cut the CLI's tag is on.
 Unchanged and already published: core 0.0.9, macros 0.0.3, plugin API 0.0.3,
 art 0.0.12, diagram 0.0.2, mermaid 0.0.5, lumis 0.0.3. See
 [the release notes](docs/releases/0.0.19.md).

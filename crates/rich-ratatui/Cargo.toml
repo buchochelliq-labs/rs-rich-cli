@@ -11,7 +11,7 @@
 # Versioning.
 [package]
 name = "rs-rich-ratatui"
-version = "0.0.5"
+version = "0.0.6"
 description = "ratatui interop for rs-rich: rich renderables as ratatui widgets, buffers as rich lines, and ratatui widgets as rs-rich-interact components"
 edition.workspace = true
 license.workspace = true
@@ -52,7 +52,7 @@ ratatui-core = "0.1.2"
 # lives so an app can read ratatui's colour names without ratatui. Without
 # its default features (so not through the workspace entry, which keeps
 # them): no syntect.
-rich-ext = { package = "rs-rich-ext", path = "../rich-ext", version = "0.0.17", default-features = false }
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext", version = "0.0.18", default-features = false }
 rich-interact = { workspace = true, optional = true }
 
 [dev-dependencies]

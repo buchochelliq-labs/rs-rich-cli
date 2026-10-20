@@ -321,8 +321,10 @@ fn held_keys_repeat_and_their_releases_follow_the_programs_flags() {
     let recording = record::record(&tape, "held", &Options::default()).unwrap();
     let grid = recording.shots[0].1.text_grid();
     let ws = grid.matches('w').count();
-    // The press, then a repeat every 50 ms after the first 100 ms.
-    assert!((4..=7).contains(&ws), "{ws} in {grid}");
+    // The press, then a repeat every 50 ms after the first 100 ms and
+    // before the release at 330 ms: 100, 150, ..., 300. Exact, however late
+    // the recorder wakes (macOS CI once sent repeats from after the release).
+    assert_eq!(ws, 6, "{ws} in {grid}");
 
     let tape = tape::parse(
         "Set Size 60x8\nSet KittyKeyboard on\nSet KeyRepeat 100ms 100ms\n\

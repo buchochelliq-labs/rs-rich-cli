@@ -453,6 +453,23 @@ same gate and CI. Create the tag first (annotated, on `main`, with the
 release's `Release:`/`Commit:` lines as `tag` writes them) if it does not
 exist. Every dependency it names must already be on crates.io.
 
+#### After a release: notes first, then the next versions
+
+The docs site keeps a copy of each release's docs
+(`scripts/build_versioned_docs.py`). Release X.Y.Z's are built from the commit
+`docs-versions.toml` names for it; without a line there, from `main` while
+`RELEASES.toml` still lists what X.Y.Z shipped, and from the last commit on
+`main`'s first-parent line before that changes. So, after a release:
+
+1. Commit the post-release docs (the release notes, the CHANGELOG's cohort
+   heading, docs fixes for that release) with no version change.
+2. In a later commit (the same pull request is fine), open the next
+   release's versions, and add X.Y.Z's line to `docs-versions.toml` naming
+   the last commit of step 1.
+
+Docs fixed for X.Y.Z later show under **dev**; to show them under X.Y.Z too,
+move its line to a newer commit that still has X.Y.Z's versions.
+
 #### Release 0.0.19
 
 Release 0.0.19 was cut (2fc9772) before release tags: that commit's

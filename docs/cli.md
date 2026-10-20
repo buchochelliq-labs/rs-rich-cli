@@ -17,8 +17,8 @@ options, see the
 
 **Assumes** you can run commands in a terminal. Examples use real CLI output;
 sections marked with a version need at least that version. The latest
-published release is 0.0.19 (see the
-[0.0.19 release notes](releases/0.0.19.md)); this page describes 0.0.20.
+published release is 0.0.20 (see the
+[0.0.20 release notes](releases/0.0.20.md)), which this page describes.
 
 ---
 

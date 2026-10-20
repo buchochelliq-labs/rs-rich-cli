@@ -1,0 +1,11 @@
+# Which commit each release's docs are built from on the versioned docs site
+# (scripts/build_versioned_docs.py). A release without a line here is built
+# from the last commit on main before RELEASES.toml moves past its versions.
+#
+# The commit that opens the next release's versions adds the line for the
+# release just published, naming the last commit of its docs (its release
+# notes come first; see docs/BRANCHING.md, "After a release").
+
+[docs]
+# 0.0.20's notes (#762), the last commit before the 0.0.21 versions open.
+"0.0.20" = "9ed4ccbad330a52b1233395686fee52a62d221e8"

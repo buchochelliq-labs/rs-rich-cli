@@ -37,7 +37,8 @@ for a complete library example.
 |---|---|
 | ![The raycaster example: a first-person maze in half blocks](media/tapes/raycast/start.png) | ![The raycaster's map, recorded from a tape](media/tapes/raycast/map.png) |
 
-0.0.20 is the intuiTUIve demo loop's release: eleven well-known terminal
+0.0.20, published on 2026-10-19 ([release notes](releases/0.0.20.md)),
+is the intuiTUIve demo loop's release: eleven well-known terminal
 apps rebuilt on [intuiTUIve](guide/intuituive/index.md) (Yazi, scope-tui,
 gitui, bottom, Slumber, csvlens, diskonaut, termusic, taskwarrior-tui, a
 falling-block game and a Doom-style raycaster), what each lacked added to
@@ -61,16 +62,18 @@ story round by round.
 - **Core:** [`Text::markup()`](guide/core/text-and-style.md#back-to-markup),
   a port of upstream's `Text.markup`.
 
-Earlier releases are under [Releases](releases/0.0.19.md) in the
-navigation; the [roadmap](ROADMAP.md) and the
-[0.0.21 plan](plans/0.0.21.md) say what comes next.
+Earlier releases are under [Releases](releases/0.0.20.md) in the
+navigation; 0.0.21 is in progress, and the [roadmap](ROADMAP.md) and the
+[0.0.21 plan](plans/0.0.21.md) say what it brings.
 
 ### Which version are these docs for?
 
 The version menu in the header picks the docs of a release. A release is
 named by `rs-rich-cli`'s version, and its docs match the crates of that
 release: the other crates' versions are in that release's
-[version table](#versions-in-this-checkout). **dev (main)** documents what
+[version table](#versions-in-this-checkout). A release's docs keep the fixes
+made to them after it shipped, until main moves on to the next release's
+crates. **dev (main)** documents what
 is on `main` and not released yet. The site's root and `/latest/` show the
 newest release, and every other version says so in a banner with a link to
 it. The site keeps the newest releases that fit GitHub Pages' 1 GB, up to
@@ -229,23 +232,23 @@ published or not. Each crate versions independently; see
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
 |---|---|
-| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.10` |
-| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.4` |
-| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.4` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.17` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.20` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.13` |
-| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.6` |
-| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.4` |
-| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.8` |
-| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.8` |
-| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.6` |
-| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.3` |
-| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.4` |
-| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.5` |
-| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.5` |
-| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.3` |
-| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.3` |
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.11` |
+| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.5` |
+| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.5` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.18` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.21` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.14` |
+| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.7` |
+| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.5` |
+| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.9` |
+| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.9` |
+| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.7` |
+| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.4` |
+| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.5` |
+| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.6` |
+| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.6` |
+| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.4` |
+| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.4` |
 <!-- END MANIFEST VERSIONS -->
 
 ## Where next

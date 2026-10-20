@@ -14,7 +14,7 @@
 # 0.0.1. See AGENTS.md → Versioning.
 [package]
 name = "rs-rich-web"
-version = "0.0.3"
+version = "0.0.4"
 description = "Serve rs-rich intuiTUIve apps, or any terminal program on a PTY, to a web browser over a WebSocket, drawn by a vendored xterm.js or as accessible DOM"
 edition.workspace = true
 license.workspace = true
