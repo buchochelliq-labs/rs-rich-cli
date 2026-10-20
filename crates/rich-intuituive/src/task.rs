@@ -69,6 +69,10 @@ impl Task {
 /// assert_eq!(screen[0].trim_end(), "42");
 /// ```
 ///
+/// # In a browser
+/// On `wasm32-unknown-unknown` there are no threads: `work` runs at once,
+/// on the app's thread, and its result arrives on the next turn.
+///
 /// # Panics
 /// Outside a running or building app.
 #[track_caller]
@@ -189,6 +193,10 @@ pub fn spawn_then<T: Send + 'static>(
 /// driver.settle();
 /// assert_eq!(driver.screen().plain()[0].trim_end(), "line 1,line 2,line 3");
 /// ```
+///
+/// # In a browser
+/// On `wasm32-unknown-unknown` there are no threads: `work` runs at once,
+/// on the app's thread, and what it sends arrives on the next turn.
 ///
 /// # Panics
 /// Outside a running or building app.
@@ -1015,6 +1023,10 @@ const THREAD_SETTLE: Duration = Duration::from_secs(5);
 /// }
 /// ```
 ///
+/// # In a browser
+/// On `wasm32-unknown-unknown` there are no threads: `run` never starts
+/// and the signal stays `None`. [`latest_every`] works there.
+///
 /// # Panics
 /// Outside a running or building app.
 #[track_caller]
@@ -1086,6 +1098,11 @@ pub fn latest<T: Send + 'static>(
 /// and a headless script's `wait` step to each beat, and in a terminal a
 /// value wakes the loop at once, so a [`rate`](crate::rate) counts every
 /// one (100 a second at 10 ms), however fast the beat.
+///
+/// # In a browser
+/// On `wasm32-unknown-unknown` there are no threads: `next` runs on the
+/// app's thread, once at the start and then on an [`every`](crate::every)
+/// timer.
 ///
 /// # Panics
 /// Outside a running or building app.

@@ -40,6 +40,34 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `playground-X.Y.Z.tar.gz` to the release, and the versioned docs download
   it; a release without one keeps plain code blocks.
 
+### Docs: apps in the playground (tier 3; rs-rich-interact, rs-rich-intuituive, rs-rich-web)
+
+- The [Playground](docs/playground.md) page runs `rich choose` (and
+  `--multi`), `rich filter`, `rich pager` and `rich explore`, and
+  intuiTUIve's to-do, form, meters and sprites examples, in xterm.js with
+  the keyboard and the mouse; the intuiTUIve tutorial runs its to-do app
+  beside the Rust. A third module (`app`, no syntect, about 1 MB gzipped)
+  loads only on **Run it**, in a Web Worker that **Stop** ends. The docs
+  checks start every app block under Node, and drive them with keys and
+  clicks in Chromium.
+- rs-rich-interact: `EventLoop::step`, `pump`, `timeout`, `is_running`
+  and `finish`, a push API beside `run` for a host that cannot block (a
+  browser tab, another program's loop), with the same outcomes and bytes
+  as `run` on the same input; `PushBackend` and `PushPort` are a backend
+  for it whose clock and screen the host owns.
+- rs-rich-interact and rs-rich-intuituive: a `syntax` feature, on by
+  default, so nothing changes for an existing build; off, syntect is left
+  out. Both build for `wasm32-unknown-unknown`, checked in CI. On wasm32,
+  intuiTUIve keeps short spans (double clicks, throttles, the inspector's
+  timings) on the app's clock, runs `spawn`, `spawn_stream` and the
+  `files` plugin's work on the app's thread, and keeps `latest_every` to
+  an `every` timer; `latest` and a meter's peak hold are not available
+  there.
+- rs-rich-web: a `server` feature, on by default with `syntax`, around
+  everything that serves (`serve`, `serve_command`, `Server`, the page,
+  the session processes). Without it the crate is `input` (the page's key
+  and mouse decoder) and `dom`, with no networking or PTYs, for wasm32.
+
 ### Docs: one site per release, with a version selector
 
 - The documentation site keeps a copy of the docs for each release, picked

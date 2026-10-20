@@ -1,6 +1,6 @@
 //! Serve intuiTUIve apps, and any terminal program, to a web browser.
 //!
-//! [`serve`] listens on an address and runs one [`App`] per browser tab,
+//! [`serve`] listens on an address and runs one [`App`](intuituive::App) per browser tab,
 //! each in a process of its own (see [Isolation](#isolation)). The page is
 //! [xterm.js](https://xtermjs.org),
 //! vendored in this crate and served by it; the app's frames go to it as
@@ -105,6 +105,15 @@
 //! There is no other authentication and no TLS. To reach the server from
 //! another machine, put it behind a reverse proxy that has both, and allow
 //! the proxy's origin.
+//!
+//! # Features
+//!
+//! - `server` (default): everything above. Without it the crate is
+//!   [`input`] (the page's key and mouse decoder) and [`dom`] (the DOM
+//!   renderer's messages) only, with no networking or PTYs, so it builds
+//!   for `wasm32-unknown-unknown`: the docs playground decodes xterm.js's
+//!   input with it, in the browser.
+//! - `syntax` (default): intuiTUIve's syntax highlighting (syntect).
 
 // The framework, under the name its own crate gives it (the workspace's
 // dependency key makes it `rich_intuituive`), and re-exported, so an app needs

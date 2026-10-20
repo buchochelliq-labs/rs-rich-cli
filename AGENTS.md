@@ -61,7 +61,10 @@ rich-cli ─ ─ ▶ rich-web ──▶ rich-intuituive, rich-embed   (serving t
                                                  tab, an app or a program on a PTY (rs-rich-embed's
                                                  `PtyHost`), a vendored xterm.js page or a DOM renderer
                                                  with ARIA; tungstenite, no async runtime. The CLI's
-                                                 `rich serve`, behind its off-by-default `serve` feature)
+                                                 `rich serve`, behind its off-by-default `serve` feature.
+                                                 rs-rich-embed and the network sit behind rs-rich-web's
+                                                 default `server` feature: without it, only its input
+                                                 decoder and DOM messages, for the docs playground's wasm)
 rich-py  ──▶ rich, rich-ext, rich-art, rich-mermaid, rich-diagram, rich-micro, rich-interact, rich-cli,
              rich-intuituive, rich-web, rich-embed
                            (Python bindings; outside the workspace, released to PyPI only)
