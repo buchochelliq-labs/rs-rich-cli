@@ -230,8 +230,8 @@ let page = web_view_with(ChromeEngine::new(), "https://example.com");
 
 The engine finds the browser at the path you give, else under its usual
 names on `PATH` (`google-chrome`, `chromium`, `chromium-browser`, …) or its
-usual install location. It speaks the protocol directly over
-`tungstenite`, on a thread of its own, so no async runtime comes with it.
+usual install location. It speaks the protocol directly, on a thread of
+its own, so no async runtime comes with it.
 
 - **The sandbox stays on.** `--no-sandbox` is never passed, and it is
   dropped if you pass it in `.args`, as is every other switch that turns
@@ -242,13 +242,26 @@ usual install location. It speaks the protocol directly over
   ordinary user.
 - **The profile is a temporary directory** that only this user can read
   (mode 0700 on Unix), removed when the engine goes.
-- **DevTools listens on a random port of `127.0.0.1`** while the view is
-  open. Other programs and other users on this machine can reach that
-  port, and DevTools has no authentication of its own: whoever finds it
-  can drive the browser as you (open local files, run script in pages).
-  Use the Chrome engine on a machine you do not share. A pipe in place of
-  the port is planned for 0.0.21 on Linux and macOS; Windows keeps the
-  port until a maintained crate can pass the pipe's two handles.
+- **On Linux and macOS, DevTools runs over a pipe, and no port is
+  opened.** Chrome starts with `--remote-debugging-pipe` and reads the
+  protocol from its file descriptor 3 and writes it to descriptor 4, as
+  JSON messages each ended by a NUL byte. Only the engine and the browser
+  hold the pipe, so no other program or user on the machine can reach
+  DevTools. The descriptors are passed with the
+  [`command-fds`](https://crates.io/crates/command-fds) crate, so
+  rs-rich-embed itself keeps no `unsafe` code. (Since 0.0.21.)
+- **On Windows, DevTools listens on a random port of `127.0.0.1`** while
+  the view is open, as it did everywhere before 0.0.21. Other programs and
+  other users on this machine can reach that port, and DevTools has no
+  authentication of its own: whoever finds it can drive the browser as
+  you (open local files, run script in pages). On Windows, use the Chrome
+  engine on a machine you do not share. This is a
+  [known limit](../../known-issues.md#chromes-devtools-port-on-windows-in-rs-rich-embed):
+  Chrome takes the pipe there only as two inheritable handles named in
+  one switch, and no maintained crate can pass them yet.
+- **Where DevTools goes is the engine's choice.** A `--remote-debugging-…`
+  switch you pass in `.args` (`--remote-debugging-port=9222`,
+  `--remote-debugging-address=…`) is dropped, however it is spelled.
 - **Downloads are denied** (`Browser.setDownloadBehavior`).
 - Frames are `Page.startScreencast` JPEGs, with the page laid out at the
   pane's size times `cell_pixels` (10 x 20 CSS pixels a cell by default).
@@ -296,6 +309,10 @@ driver.event(Event::Key(Key::parse("up").unwrap()));
 assert_eq!(handle.written(), b"\x1b[A");
 ```
 
-The test against a real Chrome (`crates/rich-embed/tests/chrome.rs`) runs
-only when `RICH_EMBED_CHROME` names a Chrome or Chromium binary, so CI needs
-none.
+The tests against a real Chrome (`crates/rich-embed/tests/chrome.rs`, and
+the engine's own tests) run only when `RICH_EMBED_CHROME` names a Chrome or
+Chromium binary, so CI needs none. With one, on Linux, they also check that
+neither the browser nor any process it started listens on a TCP socket
+while a view is open, and that a page's frames arrive over both the pipe
+and the port Windows uses. Chrome will not start its sandbox as root, so
+run them as an ordinary user.

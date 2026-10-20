@@ -95,16 +95,17 @@ has no zoneinfo database, so `TZ` must be a POSIX rule
 a zone name alone, such as `Europe/Berlin`, is read as UTC. See
 [Troubleshooting](troubleshooting.md#the-local-time-is-wrong-on-windows).
 
-### Chrome's DevTools port in rs-rich-embed
+### Chrome's DevTools port on Windows in rs-rich-embed
 
-The Chrome engine of `rs-rich-embed`'s web view talks to Chrome over
-DevTools on a random port of `127.0.0.1`, which other programs and users
-on the machine can reach while the view is open, and DevTools has no
-authentication. Use the Chrome engine on a machine you do not share. A
-pipe in place of the port is
-[planned for 0.0.21](plans/0.0.21.md#8-devtools-over-a-pipe-on-unix-embed)
-on Linux and macOS; Windows keeps the port until a maintained crate can
-pass Chrome the pipe's two handles.
+On Windows, the Chrome engine of `rs-rich-embed`'s web view talks to
+Chrome over DevTools on a random port of `127.0.0.1`, which other programs
+and users on the machine can reach while the view is open, and DevTools
+has no authentication. On Windows, use the Chrome engine on a machine you
+do not share. On Linux and macOS it uses a pipe instead and opens no port
+(since rs-rich-embed 0.0.4, [0.0.21](plans/0.0.21.md#8-devtools-over-a-pipe-on-unix-embed)).
+Windows keeps the port until a maintained crate can pass Chrome the pipe's
+two inheritable handles in one switch
+([why](plans/0.0.19.md#5-devtools-over-a-pipe-embed)).
 
 ### No Jupyter integration, and no Python-object inspection
 
