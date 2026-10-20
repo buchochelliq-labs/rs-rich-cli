@@ -10,7 +10,7 @@
 //! | Type | Draws |
 //! |---|---|
 //! | [`Sparkline`] | one line, one cell per value (two in Braille) |
-//! | [`BarChart`] | a label, a bar and a value per row, or columns side by side ([`Orientation::Vertical`]) |
+//! | [`BarChart`] | a label, a bar and a value per row, or columns side by side ([`Orientation::Vertical`]); [stacked](BarGroup::stacked) groups |
 //! | [`Histogram`] | raw values counted into bins, drawn as a [`BarChart`] |
 //! | [`LineChart`] | one or more [`Series`] as lines or scattered points, with axes and a legend |
 //! | [`Gauge`] | a value against a range, with a target and threshold [`Band`]s, on one line or full width |
@@ -32,7 +32,7 @@
 //!
 //! | Type | ratatui's | Draws |
 //! |---|---|---|
-//! | [`Chart`] | `Chart` | [`Dataset`]s on two [`Axis`] lines, with a legend |
+//! | [`Chart`] | `Chart` | [`Dataset`]s on two [`Axis`] lines, with a legend; areas [stacked](Chart::stacked) |
 //! | [`Canvas`] | `Canvas` | points, lines, shapes, areas, text and a world map in world coordinates |
 //! | [`FillGauge`] | `Gauge` | a bar that fills its area, its label on the middle row |
 //! | [`LineGauge`] | `LineGauge` | a label and a line in two styles |

@@ -105,8 +105,9 @@ impl std::error::Error for QrError {}
 ///   as Braille dots are too sparse to scan) draws two modules a cell with
 ///   half blocks (`▀▄█`), so the code is square and `size + 2 × quiet
 ///   zone` cells wide.
-/// - With colour, every cell is painted: the dark modules in `black` and
-///   the light ones in `bright_white` ([`colours`](Self::colours) changes
+/// - With colour, every cell is painted: the dark modules in `#000000` and
+///   the light ones in `#ffffff`, whatever the terminal's theme makes of its
+///   named colours ([`colours`](Self::colours) changes
 ///   them), so the code reads on a dark or a light terminal.
 /// - Without colour, the glyphs draw the light modules in the terminal's
 ///   text colour, so on a dark background (the common case) the code reads
@@ -192,8 +193,8 @@ impl QrCode {
             quiet: SPEC_QUIET_ZONE,
             charset: Charset::Auto,
             invert: false,
-            dark: "black".to_string(),
-            light: "bright_white".to_string(),
+            dark: "#000000".to_string(),
+            light: "#ffffff".to_string(),
         }
     }
 
@@ -240,7 +241,8 @@ impl QrCode {
     }
 
     /// The dark and light modules' colours with colour on: theme keys or
-    /// colour definitions (default `black` and `bright_white`).
+    /// colour definitions (default `#000000` and `#ffffff`, the
+    /// nearest a console has: black and bright white on 16 colours).
     pub fn colours(mut self, dark: impl Into<String>, light: impl Into<String>) -> Self {
         self.dark = dark.into();
         self.light = light.into();

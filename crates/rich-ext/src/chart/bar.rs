@@ -172,6 +172,30 @@ impl BarGroup {
     /// own style (`chart.series.N` by position, or [`Bar::style`]), with the
     /// group's label and the total written. Parts above zero stack up from
     /// zero and parts below it down from zero.
+    ///
+    /// A chart with a stacked group draws every group that way (other bars
+    /// are stacks of one) and adds a legend naming the parts
+    /// ([`BarChart::legend`]). With colour each part is its style; without
+    /// it each part has its own fill (`█▓░▒`, `⣿⣤⠿⠶` in Braille, `#=+:` in
+    /// ASCII). Part boundaries fall on whole cells; with colour the last
+    /// part ends in a partial cell. Values on the bars
+    /// ([`BarChart::values_inside`]) are not drawn on stacks; the total is
+    /// written after (or above) each.
+    ///
+    /// ```
+    /// use rich::Console;
+    /// use rich_ext::chart::{Bar, BarChart, BarGroup};
+    ///
+    /// let console = Console::builder().width(40).color_system(None).build();
+    /// let chart = BarChart::new()
+    ///     .group(BarGroup::new("Q1").stacked().bar(Bar::new("a", 4.0)).bar(Bar::new("b", 2.0)))
+    ///     .group(BarGroup::new("Q2").stacked().bar(Bar::new("a", 3.0)).bar(Bar::new("b", 3.0)))
+    ///     .bar_width(12);
+    /// assert_eq!(
+    ///     console.render_export(&chart),
+    ///     "Q1 ████████▓▓▓▓ 6\nQ2 ██████▓▓▓▓▓▓ 6\n█ a  ▓ b         \n"
+    /// );
+    /// ```
     pub fn stacked(mut self) -> Self {
         self.stacked = true;
         self
