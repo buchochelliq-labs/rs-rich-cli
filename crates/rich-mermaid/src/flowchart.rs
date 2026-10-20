@@ -145,7 +145,7 @@ pub fn parse(source: &str) -> Result<Flowchart, ParseError> {
 }
 
 /// Drop a `%%` comment (including `%%{init: …}%%` directives).
-fn strip_comment(line: &str) -> &str {
+pub(crate) fn strip_comment(line: &str) -> &str {
     match line.find("%%") {
         Some(at) => &line[..at],
         None => line,
@@ -715,7 +715,7 @@ pub fn clean_label(text: &str) -> String {
 }
 
 /// Source text quoted in an error: control characters removed, shortened.
-fn printable(text: &str, limit: usize) -> String {
+pub(crate) fn printable(text: &str, limit: usize) -> String {
     let clean: String = text.chars().filter(|c| !c.is_control()).collect();
     if clean.chars().count() > limit {
         let short: String = clean.chars().take(limit).collect();
