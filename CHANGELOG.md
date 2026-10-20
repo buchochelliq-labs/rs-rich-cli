@@ -67,6 +67,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   component of its own over a list of items. New `FilePicker::reopen`, and
   a `huh_form` example.
 
+### CLI: `rich spin` (rs-rich-cli)
+
+- New `rich spin [--title TEXT] [--spinner NAME] -- COMMAND [ARG]...`, after
+  `gum spin`: runs the command with core's `Status` spinner and the title on
+  stderr until it exits, and exits with its status. `--spinner` takes any of
+  core's spinner names. On a terminal the command's output is held back;
+  `--show-output` prints it after, and `--show-error` only on a failure.
+  Without a terminal there is no spinner: the command just runs. Reduced
+  motion draws the title once.
+
 ## 0.0.20 cohort — published 2026-10-19
 
 Published on 2026-10-19 from `56c6c97` by one `release.yml` run (tag

@@ -1645,6 +1645,37 @@ terminal back before the command ends. Ctrl+Z suspends a command as it would
 any other program: the terminal is given back to the shell, and `fg` takes it
 again and repaints.
 
+## Run a command with a spinner (0.0.21)
+
+`rich spin` runs a command with a spinner and a title until it exits, like
+`gum spin`, and exits with the command's status, so it fits in `&&` chains
+and `set -e` scripts:
+
+```bash
+rich spin --title "Building" -- cargo build --release && ./deploy
+rich spin --spinner moon --show-output -- curl -sS https://example.com
+rich spin --title "Testing" --show-error -- cargo test
+```
+
+- **Where it draws:** on stderr, one line redrawn in place, cleared when the
+  command exits. The title is plain text, not markup.
+- **The command's output:** held back while the spinner draws, and dropped
+  unless `--show-output` prints it after (stdout to stdout, stderr to
+  stderr), or `--show-error` prints it only when the command fails.
+- **Without a terminal** (stderr is a pipe or a CI log), there is no
+  spinner: the command just runs, its output going straight through.
+- **The spinner:** any of rich's spinners by name (`--spinner dots`, the
+  default; `line`, `moon`, `arc`, …). `rich asset --kind spinner` previews
+  them. An unknown name is a usage error (exit 2).
+- **Exit status:** the command's, or 128 plus the signal that ended it; 127
+  when it cannot be started (126 when it is not executable). Ctrl+C reaches
+  the command, and `rich spin` cleans up its line and reports how it ended.
+- **Reduced motion:** with `RICH_A11Y=reduced-motion` (or `no-animation`,
+  `screen-reader`, or `RICH_ANIMATION=0`) the title is drawn once, without
+  animation.
+- The command starts at the first word that is not an option, or after
+  `--`; everything from there is its own, options included.
+
 ## Review and jump
 
 `rich approve` and `rich jump` are two more interactive commands, with the

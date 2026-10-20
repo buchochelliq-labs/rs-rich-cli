@@ -1932,6 +1932,7 @@ pub(crate) fn spec() -> CommandSpec {
         spec = spec.subcommand(super::banner::command());
     }
     spec = spec.subcommand(super::shell::command());
+    spec = spec.subcommand(super::spin::command());
     #[cfg(feature = "serve")]
     {
         spec = spec.subcommand(super::serve::command());
@@ -2411,6 +2412,7 @@ mod tests {
             "doctor",
             "inspect",
             "shell",
+            "spin",
         ] {
             assert!(spec.find_subcommand(name).is_some(), "{name}");
         }
