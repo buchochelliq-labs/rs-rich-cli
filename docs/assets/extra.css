@@ -157,3 +157,12 @@
   border-radius: 0;
   box-shadow: none;
 }
+/* No `display` here: Material hides the other scheme's copy (#only-dark,
+   #only-light) with display: none, and this must not undo it. */
+.md-typeset img.tui-hero {
+  width: 100%;
+  height: auto;
+  margin: 0 0 1.2rem;
+  border-radius: 12px;
+  box-shadow: none;
+}
