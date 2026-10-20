@@ -81,6 +81,9 @@ body {{
     color: {foreground};
     background-color: {background};
 }}
+a {{
+    color: inherit;
+}}
 pre {{
     margin: 0;
     padding: 8px 12px;

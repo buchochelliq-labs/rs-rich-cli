@@ -1,7 +1,11 @@
 # A playground in the docs
 
-Status: proposal, with a spike that works (`playground/spike/`). Nothing is
-on the site yet. The decisions for the maintainer are at the end.
+Status: phase 1 (tier 1 on the site) and phase 4 (docs as tests) are in:
+`playground/`, `docs/assets/playground.js`, 37 blocks on 14 pages and
+`docs/playground.md` (see [Phase 1 and 4, as built](#phase-1-and-4-as-built)).
+Tiers 2 and 3 are next. The maintainer answered the decisions on
+2026-10-20 (at the end). The spike (`playground/spike/`) stays as the
+reference for tier 3.
 
 The idea: readers try rs-rich on the docs site, in their browser, with
 nothing to install. There are three tiers:
@@ -143,6 +147,22 @@ These are release builds (`opt-level = "z"`, LTO, one codegen unit,
 | The above plus intuiTUIve and the to-do app (`--features app`) | 2.67 MB | 1.18 MB |
 | xterm.js 6.0.0 (`xterm.js`, once per site version) | 489 KB | 120 KB |
 | wasm-bindgen glue JS | 15 KB | ~4 KB |
+
+**After `wasm-opt` (phase 1, binaryen 124, `-Oz`).** The modules the site
+ships, built by `playground/build.sh`:
+
+| Module | After wasm-bindgen | After wasm-opt | Gzipped |
+|---|---:|---:|---:|
+| Lean: core without syntect, plus rs-rich-ext's charts, diffs and data views (JSON, YAML) | 1.88 MB | 1.73 MB | 647 KB |
+| Full: the lean one plus syntect and pulldown-cmark (`Syntax`, `Markdown`) | 2.81 MB | 2.58 MB | 1.20 MB |
+| The release archive (`playground-X.Y.Z.tar.gz`: both modules, glue, xterm.js) | | | 1.98 MB |
+
+`wasm-opt` takes 8% off, less than the 10–20% hoped for: `opt-level = "z"`
+with LTO has already done most of it. The lean module is about 200 KB
+gzipped over the spike's core-only figure: that is rs-rich-ext (the chart,
+diff and data renderers, and the YAML parser). A reader downloads the lean
+module on their first **Try it**, the full one only on a `syntax` or
+`markdown` block, and xterm.js only when they switch to the terminal view.
 
 Where the bytes go, from `twiggy top` on an unstripped build:
 
@@ -317,6 +337,71 @@ else's input in the reader's page. It's rendered as text, never as HTML,
 except through `export_html`, whose output goes in a sandboxed `srcdoc`
 iframe, as the spike does.
 
+## Phase 1 and 4, as built
+
+- **The crate.** `playground/` is a `cdylib` + `rlib` with its own empty
+  `[workspace]` and `publish = false`, so the release tooling, which reads
+  the root workspace's members (`release_cohort.py`, `check_packages.py`,
+  `release.py`), never sees it, and `cargo metadata` at the root does not
+  list it. Its API: `render(kind, input, options)` to ANSI,
+  `render_html(..)` to an HTML document (`Console::export_html_with`, the
+  SVG export's dark theme, fixed 17 px lines so the page can size the
+  frame), `kinds()` and `info()`. Options are the block's `data-*`
+  attributes as JSON; unknown ones are refused, so a typo fails the docs
+  check. Kinds: `markup`, `panel`, `rule`, `columns`, `table` (CSV),
+  `tree` (an indented outline), `json`, `sparkline`, `bars`, `histogram`,
+  `diff`, `data`, `data-diff`, and in the full module `syntax` and
+  `markdown`. No crate changes: everything goes through public APIs, with
+  the clock pinned through `ConsoleBuilder::get_time`.
+- **The page script** (`docs/assets/playground.js`) runs on Material's
+  `document$`, reads `assets/playground/playground.json` (the stamp) only
+  when a page has a block, and offers **Try it** only when the stamp names
+  a module for the block's kind. A click loads the module, turns the block
+  into a textarea with a few controls (width, and box, orientation,
+  layout, view, justify or overflow where the kind takes one), and renders
+  on every keystroke (debounced) into a sandboxed `srcdoc` iframe. A panic
+  (`WebAssembly.RuntimeError`) drops the instance and the next render
+  imports a fresh one. Input is capped at 20,000 characters.
+- **Shareable links.** **Copy link** deflates `{kind, input, options}`
+  (`CompressionStream("deflate-raw")`, base64url) into `#rp=<block>.<data>`.
+  Opening one inflates at most 82 KB from a fragment of at most 8,000
+  characters, keeps only known options with allowed values, keeps a guide
+  block's own kind, and puts the input into the textarea's value: it is
+  text, rendered only by the module.
+- **Blocks.** Each guide block is a `rich-playground-pair` div holding the
+  Rust snippet (from the compiled examples, unchanged) and the
+  `.rich-playground` input block that matches it; the output appears under
+  the pair, above the committed screenshot. 37 blocks on 14 pages: the
+  tutorial's first three pages, getting started, and the core (text and
+  style, tables, trees, layout, code and data, the guide index) and ext
+  (charts, diffs, structured data) pages. Left out: examples whose input is
+  Rust values or computed data (`Pretty`, the histogram's 400 generated
+  values, nested renderables, progress and live displays).
+- **Checks.** `scripts/check_playground_blocks.mjs` (phase 4) renders every
+  block in `docs/` with both modules under Node, as ANSI and as HTML, and
+  fails on an unknown kind or option, a render error, a panic, an input
+  over the cap, or a guide block without its Rust pair.
+  `scripts/check_playground_page.mjs` drives headless Chromium over a built
+  site: no module before a click; lean on the first click; the sandbox;
+  re-rendering; errors shown; the full module for `syntax`; xterm.js; a
+  shared link restoring hostile input as text; a guide block; no button
+  without a stamp or with JavaScript off; no console errors.
+  `scripts/test_build_versioned_docs.py` covers the download.
+- **Pipeline (decision 3).** `docs.yml` builds main's modules (tests,
+  `build.sh` with `wasm-opt` required) into `docs/assets/playground/`
+  before both MkDocs builds, runs both checks and the download tests, and
+  now also runs on changes to `playground/`, `crates/rich/` and
+  `crates/rich-ext/`, so a crate change that breaks a block fails its PR
+  and dev's module follows main. `release.yml`'s `playground` job, after
+  `publish` and only for a `release-*` tag, builds the archive, renders the
+  blocks with it, creates the GitHub release if there is none, attaches
+  `playground-X.Y.Z.tar.gz`, and re-runs `docs.yml`. It is
+  `continue-on-error`, so it can never fail the run `release_cohort.py`
+  waits on. `build_versioned_docs.py` downloads each release's archive
+  (only for docs that have the script; a 404 or a network error leaves
+  plain blocks) and unpacks it with tarfile's `data` filter after checking
+  the stamp.
+
 ## Phased plan
 
 1. **Tier 1 on the site.** Add a `playground/` crate (outside the
@@ -397,7 +482,32 @@ in-process function, which the WASI route doesn't.
   (`pager.rs`'s `drop(stdin)`, because `ChildStdin` has no `Drop` there).
   CI doesn't lint that target, so leave it alone.
 
-## Decisions for the maintainer
+## Decisions
+
+Answered by the maintainer on 2026-10-20:
+
+1. **Tier 2's engine:** the CLI on WASI (`wasm32-wasip1`) under a JS WASI
+   shim with our own small line runner (pipes, `echo`, `cat`), not Bashkit.
+2. **The experimental gates** (`04aed23`) stay, and phase 3 makes them
+   proper, with a wasm `cargo check` of rs-rich-interact and
+   rs-rich-intuituive in CI.
+3. **Each version's module:** attached to the GitHub release by the release
+   workflow, downloaded by `build_versioned_docs.py`; dev's built in
+   `docs.yml`. Never committed. (Done in phase 1.)
+4. **Syntect:** two modules, lean and full; the full one loads only when a
+   block needs it (done in phase 1). And rs-rich-interact stops forcing
+   `rich/syntax` on: a feature (on by default, so nothing changes for
+   today's users) that an app build can turn off.
+5. **Tier 1 edits inputs** (markup, Markdown, CSV, JSON, options), never
+   Rust source; the Rust that produced a block is shown beside it.
+6. **All the extras** (questions 6–8 below): shareable links (the state in
+   the URL fragment, compressed, size-capped, rendered as text only; done
+   for tier 1); a terminal session can be saved as a `.tape` the reader
+   downloads (tiers 2 and 3: the keys and lines typed, replayable by
+   `rich record`); and "Try it" on every guide block it fits (tier 1, done)
+   and every CLI example (tier 2), not a chosen few.
+
+The questions as they were put:
 
 1. **Tier 2's engine:** the CLI on WASI with our own line runner
    (recommended), or Bashkit with an in-process CLI. Or WASI first and
