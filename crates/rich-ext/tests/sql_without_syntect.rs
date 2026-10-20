@@ -47,11 +47,7 @@ fn a_sql_markdown_fence_is_highlighted_through_the_registry() {
 /// the same block; with syntect the default engine colours it.
 #[test]
 fn without_a_registered_highlighter_the_code_is_still_shown() {
-    let console = Console::builder()
-        .force_terminal(true)
-        .color_system(Some(ColorSystem::Standard))
-        .width(40)
-        .build();
+    let console = Console::builder().width(40).color_system(None).build();
     let out = console.render_to_string(&Markdown::new("```sql\nSELECT 1\n```\n"));
     assert!(out.contains("SELECT 1"), "{out:?}");
 }
