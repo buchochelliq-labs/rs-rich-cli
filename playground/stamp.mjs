@@ -29,7 +29,7 @@ const stamp = {
   modules: {},
   xterm: { js: "xterm/xterm.js", css: "xterm/xterm.css", fit: "xterm/addon-fit.js" },
 };
-for (const name of ["lean", "full"]) {
+for (const name of ["lean", "full", "app"]) {
   const module = await load(out, name);
   const info = JSON.parse(module.info());
   const wasm = `${name}/rich_playground_bg.wasm`;
@@ -41,6 +41,8 @@ for (const name of ["lean", "full"]) {
     bytes: statSync(path.join(out, wasm)).size,
     kinds: JSON.parse(module.kinds()).map((kind) => kind.name),
   };
+  // The app module's sessions, for `app` blocks (`data-app`).
+  if (module.Session) stamp.modules[name].apps = JSON.parse(module.Session.apps()).map((app) => app.name);
 }
 // Tier 2: the CLI module, if this build has one. `rich --version` must run
 // through the terminal's own runner, or the stamp is not written.

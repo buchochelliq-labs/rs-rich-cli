@@ -1,13 +1,16 @@
 # A playground in the docs
 
-Status: phases 1 and 4 (tier 1 on the site, docs as tests) and phase 2
-(tier 2: the `rich` CLI in a terminal) are in: `playground/`,
-`docs/assets/playground.js`, `docs/assets/rich-shell/`, 37 tier-1 blocks
-on 14 pages, 127 CLI examples on 16 pages, and `docs/playground.md` (see
-[Phase 1 and 4, as built](#phase-1-and-4-as-built) and
-[Phase 2, as built](#phase-2-as-built)). Tier 3 is next. The maintainer
-answered the decisions on 2026-10-20 (at the end). The spike
-(`playground/spike/`) stays as the reference for tier 3.
+Status: all four phases are in: tier 1 on the site (phase 1), tier 2
+(phase 2: the `rich` CLI in a terminal), tier 3 (phase 3: apps) and docs
+as tests (phase 4): `playground/`, `docs/assets/playground.js`,
+`docs/assets/rich-shell/`, 37 tier-1 blocks on 14 pages, 9 app blocks
+(on the playground page and the intuiTUIve tutorial), 127 CLI examples on
+16 pages, and `docs/playground.md` (see
+[Phase 1 and 4, as built](#phase-1-and-4-as-built),
+[Phase 2, as built](#phase-2-as-built) and
+[Phase 3, as built](#phase-3-as-built)). The maintainer answered the
+decisions on 2026-10-20 (at the end). The spike (`playground/spike/`) is
+superseded by the `app` module and kept only for its measurements.
 
 The idea: readers try rs-rich on the docs site, in their browser, with
 nothing to install. There are three tiers:
@@ -248,7 +251,7 @@ browser version moves that loop into the page:
 What it needs in the crates:
 
 1. **rs-rich-interact:** crossterm behind `cfg(not(target_arch = "wasm32"))`.
-   That's done on this branch (`04aed23`), marked experimental. The public
+   Done (`04aed23`, then made proper, with a CI check). The public
    `from_crossterm*` functions are left out on wasm.
 2. **rs-rich-intuituive:** no wall clock on wasm (done, same commit). Then
    an audit of the other `Instant::now()` and `thread::spawn` call sites
@@ -479,6 +482,55 @@ iframe, as the spike does.
   docs job, so a change in a crate the CLI uses (rs-rich-data, rs-rich-art,
   …) that breaks the WASI build fails main's docs job, not its own PR.
   Images draw as coloured cells: xterm.js has no graphics protocol here.
+
+## Phase 3, as built
+
+- **The crates.** rs-rich-interact and intuiTUIve build for
+  `wasm32-unknown-unknown`, with a `syntax` feature (on by default) to
+  leave syntect out; CI's `wasm` job checks them with and without it, the
+  explorer and intuiTUIve's `viz` and `files` plugins, and rs-rich-web
+  without its server. intuiTUIve's run-time audit: `clock::Instant` (std's
+  natively, the app's clock on wasm32) for the inspector's timings, double
+  clicks, the finder's and file search's throttles, the jobs panel's rate
+  and the state lock; `spawn`, `spawn_stream` and the `files` plugin's
+  `background` run their work at once on the app's thread; `latest_every`
+  keeps to an `every` timer; `latest` never starts its thread (its signal
+  stays `None`), and a meter's peak hold, which keeps to the wall clock,
+  shows no held peak. `block_on` polls in a loop, so a future that waits on
+  I/O never finishes there. `watch` and `pcm` stay native-only (notify,
+  cpal).
+- **The push API.** `EventLoop::step(event)` and `pump()` do one turn of
+  `run`'s loop (its body is now that turn) and return whether a component
+  still runs; `timeout()` says when to pump next and `finish()` ends
+  painting. `PushBackend` is a backend whose clock (`PushPort::set_elapsed`)
+  and output (`take_output`) the host owns. `tests/push.rs` shows that
+  choose, filter, choose --multi, the pager, explore, a cancel, an
+  interrupt and ticks give the same outcome and the same bytes stepped as
+  run by the headless backend.
+- **rs-rich-web split.** A `server` feature (default) holds everything that
+  serves; without it the crate is `input` and `dom` only (no tungstenite,
+  rs-rich-embed or getrandom), which the module depends on.
+- **The module.** `playground/`'s `app` feature adds `app::Session`:
+  `choose`, `filter`, `choose-multi`, `pager` and `explore` on the push API
+  (inline, as in a shell), and intuiTUIve's `todo` (on the block's lines),
+  `form`, `meters` and `sprites` examples, included unchanged, on a
+  `Driver` (on the alternate screen). Mouse reporting is turned on for
+  both. `build.sh` builds it as `app/`: **2.56 MB after wasm-opt, 1.01 MB
+  gzipped** (lean is 647 KB, full 1.20 MB); the stamp lists its apps.
+- **The page.** An `app` block (`data-kind="app" data-app="…"`, with
+  `data-width` and `data-rows`) gets **Run it**. The session runs in a module
+  Web Worker (`docs/assets/playground-worker.js`); xterm.js stays on the
+  page, posts its `onData` and writes what comes back. The worker ticks on
+  the session's `timeout`. **Stop** terminates the worker, whatever the app
+  is doing, and **Restart** starts a new one on the box's text. Copies go
+  to `navigator.clipboard`. App blocks are not shared by link.
+- **Checks.** `check_playground_blocks.mjs` starts every app block, ticks it
+  for a second of its own time and ends it with Ctrl+C.
+  `check_playground_page.mjs` checks that no app module loads before Run
+  it, that keys and a click reach `choose` and its answer is shown, that
+  typing reaches the to-do app, that `explore` returns a path, and that an
+  animated app draws and stops when Stop is pressed. `docs.yml` runs the
+  module's tests and follows rs-rich-interact, intuiTUIve and rs-rich-web.
 
 ## Phased plan
 

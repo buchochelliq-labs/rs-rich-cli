@@ -22,6 +22,9 @@ description = "rs-rich in the docs site's browser tab (not published)"
 # cdylib for the browser; rlib so `cargo test` runs the renderers natively.
 crate-type = ["cdylib", "rlib"]
 path = "src/lib.rs"
+# The intuiTUIve examples it includes carry their own docs, shell commands
+# rather than doctests.
+doctest = false
 
 [features]
 # The lean module has no syntect: markup, tables, trees, panels, rules,
@@ -30,10 +33,17 @@ default = []
 # The full module adds `Syntax` and `Markdown` (syntect, pulldown-cmark).
 # It loads only when a block needs it.
 full = ["rich/syntax", "rich/markdown", "rich-ext/syntax", "rich-ext/markdown"]
+# The app module (tier 3): rs-rich-interact's components on its push API and
+# intuiTUIve apps on a `Driver`, without syntect, keys decoded by rs-rich-web
+# (its `server` feature off). It loads only for an `app` block.
+app = ["dep:intuituive", "dep:rich-interact", "dep:rich-web"]
 
 [dependencies]
 rich = { package = "rs-rich", path = "../crates/rich", default-features = false }
 rich-ext = { package = "rs-rich-ext", path = "../crates/rich-ext", default-features = false, features = ["data", "yaml"] }
+intuituive = { package = "rs-rich-intuituive", path = "../crates/rich-intuituive", default-features = false, optional = true }
+rich-interact = { package = "rs-rich-interact", path = "../crates/rich-interact", default-features = false, features = ["data"], optional = true }
+rich-web = { package = "rs-rich-web", path = "../crates/rich-web", default-features = false, optional = true }
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 wasm-bindgen = "=0.2.129"

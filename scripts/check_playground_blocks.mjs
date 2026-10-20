@@ -9,6 +9,10 @@
 //     the module knows (the module refuses unknown options);
 //   - its input renders, as ANSI and as HTML, without an error or a panic;
 //   - its input is under the page's cap;
+//   - an `app` block (tier 3) names an app the app module has, takes only
+//     `data-app`, `data-width` and `data-rows`, starts and draws on its
+//     input, keeps drawing through a second of its ticks, and ends on
+//     Ctrl+C, without an error or a panic;
 //   - on a guide page, it sits in a `rich-playground-pair` div whose first
 //     block is the Rust that renders it.
 // A block whose input stops rendering (a renamed style, a changed option, a
@@ -37,7 +41,9 @@ const MODULES = path.resolve(process.argv.slice(2).find((a) => !a.startsWith("--
 // The same rules as docs/assets/playground.js.
 const MAX_INPUT = 20000;
 const RESERVED = new Set(["kind", "kinds"]);
-const NUMBERS = new Set(["width", "indent", "bar-width", "bins", "threshold", "context", "tab-size"]);
+const NUMBERS = new Set(["width", "indent", "bar-width", "bins", "threshold", "context", "tab-size", "rows"]);
+// The options an `app` block takes.
+const APP_OPTIONS = new Set(["app", "width", "rows"]);
 // Pages whose blocks stand alone, without Rust beside them.
 const STANDALONE = new Set(["playground.md"]);
 // Pages about the docs rather than of them: their examples are not checked.
@@ -146,6 +152,33 @@ function checkTape() {
   return 1;
 }
 
+// Start an app block's session as the page's worker does, tick it for a
+// second of its own time, then Ctrl+C: the problems found.
+function runApp(module, entry, block) {
+  const problems = [];
+  const { app, width = 80, rows = 14 } = block.options;
+  for (const key of Object.keys(block.options)) {
+    if (!APP_OPTIONS.has(key)) problems.push(`unknown option ${JSON.stringify(key)} for an app block`);
+  }
+  if (!(entry.apps || []).includes(app)) return [...problems, `unknown app ${JSON.stringify(app)}`];
+  const session = new module.Session(app, block.body, width, rows);
+  try {
+    if (!session.output(0)) problems.push("it drew nothing");
+    let now = 0;
+    for (let turns = 0; turns < 200 && now < 1000 && !session.done(); turns++) {
+      const wait = session.timeout(now);
+      if (wait < 0) break;
+      now += Math.max(1, wait);
+      session.tick(now);
+    }
+    session.input("\x03", now + 1);
+    if (!session.done()) problems.push("Ctrl+C did not end it");
+  } finally {
+    session.free();
+  }
+  return problems;
+}
+
 async function main() {
   const stamp = JSON.parse(readFileSync(path.join(MODULES, "playground.json"), "utf8"));
   const modules = {};
@@ -178,7 +211,19 @@ async function main() {
           problems.push("not in a rich-playground-pair div after its Rust");
         }
       }
-      if (name) {
+      if (name && block.kind === "app") {
+        try {
+          problems.push(...runApp(modules[name], stamp.modules[name], block));
+        } catch (error) {
+          if (error instanceof WebAssembly.RuntimeError) {
+            problems.push("the app panicked (see the message above)");
+            panics += 1;
+            modules[name] = await load(MODULES, name, panics);
+          } else {
+            problems.push(`the app: ${error}`);
+          }
+        }
+      } else if (name) {
         const options = JSON.stringify(block.options);
         for (const fn of ["render", "render_html"]) {
           try {

@@ -14,7 +14,9 @@
 
 use std::cell::{Cell, RefCell};
 use std::ops::Range;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use crate::clock::Instant;
 
 use rich::protocol::ConsoleCodeHighlighting;
 use rich::{Console, Segment, Style};
@@ -417,7 +419,11 @@ impl TextArea {
         let code = self.buffer.lines()[lines.clone()].join("\n");
         let (engine, theme) = match console.code_highlighting() {
             Some(chosen) => (chosen.highlighter.clone(), chosen.theme.clone()),
+            #[cfg(feature = "syntax")]
             None => (rich::SyntectHighlighter::shared(), None),
+            // Without syntect, only a highlighter the console was given.
+            #[cfg(not(feature = "syntax"))]
+            None => return None,
         };
         let theme = theme.unwrap_or_else(|| engine.default_theme().to_string());
         let out = engine.highlight(&code, Some(language), &theme).ok()?;

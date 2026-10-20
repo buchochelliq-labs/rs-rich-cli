@@ -37,7 +37,10 @@ on:
       - crates/rich-ext/**
       - crates/rich-cli/**
       - crates/rich-record/tests/fixtures/playground-session.tape
-      - crates/rich-web/assets/xterm/**
+      # The app module (tier 3) runs these.
+      - crates/rich-interact/**
+      - crates/rich-intuituive/**
+      - crates/rich-web/**
       - scripts/check_playground_*.mjs
       - scripts/test_build_versioned_docs.py
   pull_request:
@@ -61,7 +64,10 @@ on:
       - crates/rich-ext/**
       - crates/rich-cli/**
       - crates/rich-record/tests/fixtures/playground-session.tape
-      - crates/rich-web/assets/xterm/**
+      # The app module (tier 3) runs these.
+      - crates/rich-interact/**
+      - crates/rich-intuituive/**
+      - crates/rich-web/**
       - scripts/check_playground_*.mjs
       - scripts/test_build_versioned_docs.py
   workflow_dispatch:
@@ -137,6 +143,7 @@ jobs:
           PLAYGROUND_REQUIRE_WASM_OPT: "1"
         run: |
           cargo test --manifest-path playground/Cargo.toml --locked --features full
+          cargo test --manifest-path playground/Cargo.toml --locked --features app
           playground/build.sh
 
       # Docs as tests: every `.rich-playground` block renders with the module,

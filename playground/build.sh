@@ -8,6 +8,7 @@
 # OUT gets:
 #   lean/   rs-rich without syntect (most blocks)        rich_playground{.js,_bg.wasm}
 #   full/   with syntect and pulldown-cmark (`syntax`, `markdown` blocks)
+#   app/    tier 3: components and intuiTUIve apps (`app` blocks), no syntect
 #   cli/    the `rich` CLI for wasm32-wasip1 (tier 2's terminal)  rich.wasm
 #   xterm/  rs-rich-web's vendored xterm.js and its fit addon (MIT, licences beside them)
 #   playground.json   the stamp the page checks first: modules, kinds, versions
@@ -58,6 +59,7 @@ build() {
 
 build lean
 build full --features full
+build app --features app
 
 # Tier 2: the `rich` CLI on WASI. Its features: no network (`fetch`), no
 # PTY (`record`, `png`) and no raw-terminal input (`interact`); `art` and
@@ -94,6 +96,6 @@ node "$here/stamp.mjs" "$out"
 
 if [ -n "$tar_version" ]; then
     archive="$(dirname "$out")/playground-$tar_version.tar.gz"
-    tar -czf "$archive" -C "$out" playground.json lean full cli xterm
+    tar -czf "$archive" -C "$out" playground.json lean full app cli xterm
     echo "wrote $archive ($(wc -c < "$archive") bytes)"
 fi

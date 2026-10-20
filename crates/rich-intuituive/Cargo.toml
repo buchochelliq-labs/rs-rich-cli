@@ -33,6 +33,12 @@ name = "intuituive"
 workspace = true
 
 [features]
+default = ["syntax"]
+# Syntax highlighting through syntect, in rs-rich-interact and rs-rich-ext
+# (their `syntax` features, and rs-rich-ext's `markdown`). On by default;
+# an app built for a browser (the docs playground) turns it off to leave
+# syntect out. The `files` previews need it.
+syntax = ["rich-interact/syntax", "rich-ext/syntax", "rich-ext/markdown"]
 # `App::run_with(BackendKind::Termion)`: the termion backend of
 # rs-rich-interact (Unix only).
 termion = ["rich-interact/termion"]
@@ -84,7 +90,7 @@ vim = ["rich-interact/vim"]
 # progress, a streaming fuzzy finder), on rs-rich-ext's `listing`, `open`,
 # `file_ops`, `trash` and `git`. Local times through rs-rich-ext's
 # `local-time` (chrono). Off by default.
-files = ["rich-ext/local-time"]
+files = ["syntax", "rich-ext/local-time"]
 # `files` with archive previews and extraction (tar, tar.gz, zip) through
 # rs-rich-ext's `archive` (zip, flate2). Off by default.
 archive = ["files", "rich-ext/archive"]
@@ -107,8 +113,10 @@ required-features = ["pcm"]
 
 [dependencies]
 rich.workspace = true
-rich-ext.workspace = true
-rich-interact.workspace = true
+# Both without their defaults, so `syntax` decides whether syntect comes
+# in. Path dependencies, as workspace ones cannot turn defaults off.
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext", version = "0.0.18", default-features = false }
+rich-interact = { package = "rs-rich-interact", path = "../rich-interact", version = "0.0.9", default-features = false }
 cpal = { version = "0.18.2", optional = true }
 hound = { version = "3.5", optional = true }
 notify = { workspace = true, optional = true }

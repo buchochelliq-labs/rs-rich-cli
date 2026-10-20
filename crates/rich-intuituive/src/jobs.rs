@@ -1,7 +1,9 @@
 //! Cancellable background jobs with progress, and a panel listing them: a
 //! task manager for any work (copies, downloads, builds, exports).
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use crate::clock::Instant;
 
 use rich::markup::escape;
 pub use rich_ext::cancel::CancelToken;

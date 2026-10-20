@@ -3,7 +3,9 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use crate::clock::Instant;
 
 use rich::markup::escape;
 use rich_interact::fuzzy::fuzzy;

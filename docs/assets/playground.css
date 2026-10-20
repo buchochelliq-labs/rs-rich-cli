@@ -104,6 +104,21 @@
   font-size: 0.75rem;
   color: var(--md-typeset-del-color, #e57373);
 }
+/* An app block (tier 3): a hint beside its buttons, and what it returned. */
+.md-typeset .rp-hint {
+  font-size: 0.7rem;
+  opacity: 0.7;
+}
+.md-typeset .rp-result {
+  margin: 0.4em 0 0;
+  font-family: var(--md-code-font-family);
+  font-size: 0.75rem;
+  white-space: pre-wrap;
+}
+.md-typeset .rp-terminal:focus-within {
+  outline: 2px solid var(--md-accent-fg-color);
+  outline-offset: 2px;
+}
 /* The playground page shows tier 1 at full size. */
 .md-typeset .rp-page .rp-input {
   min-height: 14rem;

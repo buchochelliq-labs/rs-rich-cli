@@ -34,36 +34,88 @@ name = "rich_web"
 [lints]
 workspace = true
 
+[features]
+default = ["server", "syntax"]
+# The server: `serve`, `serve_command`, `Server`, the vendored page and the
+# per-tab processes. Off, the crate is `input` (the page's key and mouse
+# decoder) and `dom` (the DOM renderer's messages) only, with neither
+# networking nor PTYs, so it builds for wasm32-unknown-unknown: the docs
+# playground decodes xterm.js's input with it in the page.
+server = ["dep:rich-embed", "dep:tungstenite", "dep:httparse", "dep:data-encoding", "dep:getrandom", "dep:rustix", "dep:win32job"]
+# intuiTUIve's syntax highlighting (syntect). Off in the playground's lean
+# build.
+syntax = ["rich-intuituive/syntax"]
+
+# Everything here but the crate itself needs the server.
+[[test]]
+name = "dom"
+required-features = ["server"]
+
+[[test]]
+name = "isolation"
+required-features = ["server"]
+
+[[test]]
+name = "isolation_hardening"
+required-features = ["server"]
+
+[[test]]
+name = "isolation_windows"
+required-features = ["server"]
+
+[[test]]
+name = "pty"
+required-features = ["server"]
+
+[[test]]
+name = "serve"
+required-features = ["server"]
+
+[[example]]
+name = "isolated"
+required-features = ["server"]
+
+[[example]]
+name = "serve"
+required-features = ["server"]
+
+[[example]]
+name = "session_probe"
+required-features = ["server"]
+
 [dependencies]
-rich-intuituive.workspace = true
+# Without its defaults, so `syntax` above can leave syntect out (a path
+# dependency, as rs-rich-ratatui's rs-rich-ext is: a workspace dependency
+# keeps its defaults).
+rich-intuituive = { package = "rs-rich-intuituive", path = "../rich-intuituive", version = "0.0.6", default-features = false }
 # A program per connection: `PtyHost`, and `LocalPty` (portable-pty, a PTY on
 # Unix and ConPTY on Windows), shared with the terminal pane.
-rich-embed.workspace = true
+rich-embed = { workspace = true, optional = true }
 # The DOM renderer's messages.
 serde_json.workspace = true
 # The WebSocket protocol. `handshake` brings the accept-key derivation and the
 # client used by the tests; the server reads the HTTP request itself (below).
-tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"], optional = true }
 # Request heads, for the page, its assets and the WebSocket upgrade. Already
 # in the tree through tungstenite's `handshake`. Not tiny_http (the plan's
 # default): its upgraded connection is one boxed blocking stream with no read
 # timeout, so a session could not both wait for keys and draw on a timer.
-httparse = "1"
+httparse = { version = "1", optional = true }
 # Base64 for OSC 52 clipboard copies. Already in the tree through tungstenite.
-data-encoding = "2"
+data-encoding = { version = "2", optional = true }
 # The URL's token, from the operating system's random source.
-getrandom = "0.4"
+getrandom = { version = "0.4", optional = true }
 
 # A session's process: its memory and CPU limits (`setrlimit`) and ending its
 # process group, through safe calls (the crate keeps `unsafe_code = "deny"`).
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "1", features = ["process"] }
+rustix = { version = "1", features = ["process"], optional = true }
 
 # A session's process on Windows: a job object that ends it, and everything
 # it started, when the session ends or the server dies (kill on close),
 # through a safe API (MIT OR Apache-2.0; it wraps the `windows` crate).
 [target.'cfg(windows)'.dependencies]
-win32job = "2"
+win32job = { version = "2", optional = true }
 
 [build-dependencies]
 # build.rs checks the vendored xterm.js files against their pinned hashes.

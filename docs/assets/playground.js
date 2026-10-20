@@ -14,6 +14,11 @@
 // sandboxed `srcdoc` iframe; xterm.js loads only when the reader switches a
 // block to the terminal view.
 //
+// An `app` block (`data-kind="app" data-app="choose"`, tier 3) runs a
+// component or an intuiTUIve app in xterm.js instead: the app module in a
+// Web Worker (playground-worker.js), keys and the mouse from the terminal,
+// with Stop to end it whatever it is doing.
+//
 // A block's state can be shared as a link: the kind, input and options,
 // deflated into the URL fragment (`#rp=<block>.<data>`), capped in size,
 // and restored as text only (the input goes into a textarea's value, and
@@ -28,7 +33,10 @@
   const MAX_INPUT = 20000;
   const MAX_FRAGMENT = 8000;
   // Options are the block's data-* attributes; these are the page's own.
-  const RESERVED = new Set(["kind", "kinds", "mounted"]);
+  const RESERVED = new Set(["kind", "kinds", "mounted", "open"]);
+  // An app block's terminal: the width and height it may ask for.
+  const APP_COLUMNS = [20, 160];
+  const APP_ROWS = [4, 40];
   const NUMBERS = new Set(["width", "indent", "bar-width", "bins", "threshold", "context", "tab-size"]);
   // The options a shared link may set, and the controls offer.
   const CONTROLS = {
@@ -75,7 +83,7 @@
   }
 
   function moduleName(s, kind) {
-    for (const name of ["lean", "full"]) {
+    for (const name of ["lean", "full", "app"]) {
       if (s.modules[name] && s.modules[name].kinds.includes(kind)) return name;
     }
     return null;
@@ -209,7 +217,7 @@
   // booleans, only known option names, within the input cap.
   function validState(state, s) {
     if (!state || typeof state !== "object" || state.v !== 1) return null;
-    if (typeof state.k !== "string" || !moduleName(s, state.k)) return null;
+    if (typeof state.k !== "string" || state.k === "app" || !moduleName(s, state.k)) return null;
     if (typeof state.i !== "string" || state.i.length > MAX_INPUT) return null;
     const options = {};
     for (const [key, value] of Object.entries(state.o && typeof state.o === "object" ? state.o : {})) {
@@ -450,6 +458,113 @@
     }
   }
 
+  // ---- an app block (tier 3) -------------------------------------------
+
+  function clamp(value, [low, high], otherwise) {
+    const n = Math.round(Number(value));
+    return Number.isFinite(n) && n > 0 ? Math.max(low, Math.min(high, n)) : otherwise;
+  }
+
+  async function openApp(block) {
+    const s = await stamp();
+    if (!s || !s.modules.app) return null;
+    const entry = s.modules.app;
+    const app = block.dataset.app;
+    const columns = clamp(block.dataset.width, APP_COLUMNS, 80);
+    const rows = clamp(block.dataset.rows, APP_ROWS, 14);
+    const pair = block.closest(".rich-playground-pair");
+    const original = blockInput(block);
+    let worker = null;
+    let terminal = null;
+
+    const status = el("span", { class: "rp-status", role: "status" });
+    const error = el("p", { class: "rp-error", role: "alert", hidden: true });
+    const input = el("textarea", {
+      class: "rp-input", spellcheck: false, maxLength: MAX_INPUT, value: original, "aria-label": "Input",
+    });
+    input.rows = Math.min(12, Math.max(3, original.split("\n").length + 1));
+    // An app that takes no input shows no box for it.
+    input.hidden = !original;
+    const screen = el("div", { class: "rp-terminal" });
+    const result = el("p", { class: "rp-result", hidden: true });
+    const output = el("div", { class: "rp-output" }, screen, result, error);
+    const run = el("button", { type: "button", class: "md-button rp-small", textContent: "Restart" });
+    const stop = el("button", { type: "button", class: "md-button rp-small", textContent: "Stop" });
+    const hint = el("span", { class: "rp-hint", textContent: "Click the terminal to type; Stop or Restart to leave it." });
+    const toolbar = el("div", { class: "rp-toolbar" }, run, stop, hint, status);
+    const editor = el("div", { class: "rp-editor" }, toolbar, input);
+
+    function end(message) {
+      if (worker) worker.terminate();
+      worker = null;
+      stop.disabled = true;
+      if (message) status.textContent = message;
+    }
+
+    function start() {
+      end();
+      error.hidden = true;
+      result.hidden = true;
+      status.textContent = `Loading the app module (${Math.round(entry.bytes / 1024)} KB)…`;
+      terminal.reset();
+      worker = new Worker(new URL("playground-worker.js", script), { type: "module" });
+      stop.disabled = false;
+      worker.onmessage = ({ data: message }) => {
+        if (message.type === "ready") {
+          status.textContent = "";
+          terminal.focus();
+        } else if (message.type === "out") {
+          terminal.write(message.data);
+        } else if (message.type === "copy") {
+          if (navigator.clipboard) navigator.clipboard.writeText(message.text).catch(() => {});
+          status.textContent = "Copied.";
+        } else if (message.type === "done") {
+          end("Finished.");
+          result.textContent = message.result ? `It returned: ${message.result}` : "";
+          result.hidden = !message.result;
+        } else if (message.type === "error") {
+          end();
+          status.textContent = "";
+          error.textContent = message.panic
+            ? "The app stopped (a panic); Restart to run it again."
+            : String(message.message);
+          error.hidden = false;
+        }
+      };
+      worker.onerror = () => end("The app module could not load here.");
+      worker.postMessage({
+        type: "start",
+        js: new URL(entry.js, BASE).href,
+        wasm: new URL(entry.wasm, BASE).href,
+        app,
+        input: input.value.slice(0, MAX_INPUT),
+        columns,
+        rows,
+      });
+    }
+
+    try {
+      const Terminal = await loadXterm(s);
+      terminal = new Terminal({
+        cols: columns, rows, convertEol: false, cursorBlink: false,
+        fontFamily: '"Fira Code", "DejaVu Sans Mono", Menlo, monospace', fontSize: 13,
+      });
+    } catch (e) {
+      status.textContent = "The terminal could not load.";
+      return null;
+    }
+    terminal.onData((data) => worker && worker.postMessage({ type: "input", data }));
+    run.addEventListener("click", start);
+    stop.addEventListener("click", () => end("Stopped."));
+    block.hidden = true;
+    block.after(editor);
+    (pair || editor).after(output);
+    block.dataset.open = "1";
+    terminal.open(screen);
+    start();
+    return editor;
+  }
+
   // ---- mounting --------------------------------------------------------
 
   async function mount() {
@@ -470,6 +585,17 @@
         block.after(button);
         continue;
       }
+      if (block.dataset.kind === "app") {
+        // Only an app the stamp's module has.
+        if (!s.modules.app || !(s.modules.app.apps || []).includes(block.dataset.app)) continue;
+        const button = el("button", { type: "button", class: "md-button rp-try", textContent: "Run it" });
+        button.addEventListener("click", async () => {
+          button.remove();
+          await openApp(block);
+        });
+        (block.closest(".rich-playground-pair") || block).after(button);
+        continue;
+      }
       if (!moduleName(s, block.dataset.kind)) continue;
       const index = all.indexOf(block);
       const button = el("button", { type: "button", class: "md-button rp-try", textContent: "Try it" });
@@ -487,7 +613,7 @@
     const match = /^#rp=(\d+)\.([A-Za-z0-9_-]+)$/.exec(location.hash);
     if (!match || !canShare) return;
     const block = all[Number(match[1])];
-    if (!block || block.dataset.open || block.dataset.kind === "cli") return;
+    if (!block || block.dataset.open || block.dataset.kind === "cli" || block.dataset.kind === "app") return;
     let state = null;
     try {
       state = validState(await unpack(match[2], MAX_INPUT * 4 + 2000), s);

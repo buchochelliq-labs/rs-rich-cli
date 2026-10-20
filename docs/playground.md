@@ -74,10 +74,111 @@ and a few commands of its own: `echo`, `printf`, `seq`, `cat`, `ls`,
 Some things need a real computer and say so here: URLs (no network),
 `--watch`, `--batch`, `--pager`, `rich capture` and `rich record` (no
 processes), `--demo`, and the interactive commands (`choose`, `filter`,
-`explore`, …), which need a terminal's raw keys. Every CLI example in these
-docs that runs here has the same **Try it** button.
+`explore`, …), which need a terminal's raw keys at this prompt; they run
+on their own under [Terminal apps](#terminal-apps) below. Every CLI
+example in these docs that runs here has the same **Try it** button.
 
 ## Terminal apps
 
-*Coming later:* intuiTUIve apps and the interactive commands (`choose`,
-`pager`, `explore`), driven with the keyboard and the mouse.
+The interactive commands and intuiTUIve apps run here too, in a terminal
+(xterm.js) you drive with the keyboard and the mouse. **Run it** starts
+one; click the terminal to type into it. Each runs in a Web Worker, so
+**Stop** ends it whatever it is doing, and **Restart** runs it again on
+what is in the box above it.
+
+### Pick from a list: `rich choose` and `rich filter`
+
+Arrow keys or the mouse move, Enter picks; type to narrow the list. Esc
+cancels and Ctrl+C interrupts, as in a shell.
+
+```text { .rich-playground data-kind="app" data-app="choose" data-width="60" data-rows="10" }
+Rust
+Python
+TypeScript
+Go
+Zig
+Haskell
+```
+
+`rich choose --multi`: Tab marks a line and moves down, Enter returns the
+lines marked.
+
+```text { .rich-playground data-kind="app" data-app="choose-multi" data-width="60" data-rows="10" }
+syntax highlighting
+tables
+progress bars
+Markdown
+trees
+panels
+```
+
+### Read a long text: `rich pager`
+
+Arrow keys, Page Up and Down, `g` and `G` for the ends, `/` to search, `q`
+to quit.
+
+```text { .rich-playground data-kind="app" data-app="pager" data-width="72" data-rows="12" }
+rs-rich is a Rust port of Python's rich: styled text, tables, trees,
+panels, progress bars, Markdown and syntax highlighting in the terminal.
+
+rs-rich-interact adds interactive components on top of it: pickers,
+inputs, confirmations, forms, a pager and a data explorer. The rich
+command line uses them for `rich choose`, `rich filter`, `rich input`,
+`rich confirm`, `rich pager` and `rich explore`.
+
+intuiTUIve is a framework for whole terminal apps, built on both:
+signals and a retained tree, a cell screen with damage tracking, focus,
+mouse and accessibility.
+
+Everything on this page runs in your browser tab, compiled to
+WebAssembly. Nothing you type is sent anywhere.
+
+The pager wraps long lines to the terminal's width, keeps the position
+when the terminal is resized, and searches with `/`, `n` and `N`.
+```
+
+### Browse a document: `rich explore`
+
+A JSON or YAML document as a tree: arrow keys open and close branches,
+Enter returns the path of the line you are on.
+
+```text { .rich-playground data-kind="app" data-app="explore" data-width="72" data-rows="14" }
+{
+  "server": {"host": "localhost", "port": 8080, "tls": false},
+  "users": [
+    {"name": "ada", "roles": ["admin"]},
+    {"name": "grace", "roles": ["dev", "ops"]}
+  ],
+  "debug": true
+}
+```
+
+### intuiTUIve apps
+
+The [tutorial](guide/intuituive/tutorial.md)'s to-do list, unchanged, on
+the lines below: type a to-do and Enter adds it, Tab moves to the list,
+Space ticks, `d` deletes, Ctrl+Q quits, and the mouse works.
+
+```text { .rich-playground data-kind="app" data-app="todo" data-width="72" data-rows="14" }
+Read the intuiTUIve tutorial
+Run it in a browser
+Water the plants
+```
+
+Three more of intuiTUIve's examples: a form that checks what you type, level
+meters, and sprites on a stage, all on the app's clock. They take no input.
+
+```text { .rich-playground data-kind="app" data-app="form" data-width="72" data-rows="16" }
+```
+
+```text { .rich-playground data-kind="app" data-app="meters" data-width="72" data-rows="14" }
+```
+
+```text { .rich-playground data-kind="app" data-app="sprites" data-width="72" data-rows="16" }
+```
+
+In the browser there is no file system, no other threads and no wall
+clock, so an app that reads files, runs work on a thread
+([`latest`](https://docs.rs/rs-rich-intuituive/latest/rich_intuituive/fn.latest.html)),
+or holds a meter's peak on the wall clock does less here than in a
+terminal; see [the design](design/docs-playground.md#tier-3-intuituive-apps-with-keyboard-and-mouse).
