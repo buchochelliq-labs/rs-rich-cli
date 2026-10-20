@@ -2,7 +2,7 @@
 //! SQL highlighted by `SqlHighlighter`, in a build that can leave syntect out.
 //!
 //! CI runs this with `--no-default-features --features
-//! sql,rich/code,rich/markdown`, where `cargo tree` shows no syntect or
+//! sql,markdown`, where `cargo tree` shows no syntect or
 //! bincode (the "Lean builds" step checks that). It also runs with the
 //! defaults, where syntect is present but a registered highlighter wins.
 

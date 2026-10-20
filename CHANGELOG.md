@@ -92,8 +92,8 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   code in the same layout. `SyntectHighlighter` stays behind `syntax`.
   Recorded as [Divergences #39](docs/DIVERGENCES.md).
 - CI builds, lints and tests `--no-default-features --features
-  code,markdown`, and checks that `rs-rich-ext` with `sql` and core's
-  `code,markdown` carries no syntect or bincode.
+  code,markdown`, and checks that `rs-rich-ext` with `sql,markdown` and no
+  default features carries no syntect or bincode.
 
 ### rs-rich: read-only accessors for tables, panels, rules and Markdown
 
@@ -154,10 +154,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   highlighter; `SqlPlugin` registers it as `"sql"`.
 - `sql::highlight` returns highlighted SQL as a `Text`, for builds without
   `Syntax`; `sql::tokenize` returns the tokens.
-- With core's new `code` and `markdown` features (and not `syntax`), a
-  `Syntax` and a Markdown ```` ```sql ```` fence are highlighted by
-  `SqlHighlighter` from the registry with no syntect in the build (the
-  `sql_without_syntect` test, which CI runs that way).
+- `rs-rich-ext` forwards core's new `code` feature: `code` is new,
+  `syntax` is `code` plus syntect, and `markdown` now needs only `code`
+  (it used to turn on `syntax`, so syntect). `sql` turns on `code`. The
+  default features are unchanged.
+- With `default-features = false, features = ["sql", "markdown"]` on
+  `rs-rich-ext` alone, a `Syntax` and a Markdown ```` ```sql ```` fence are
+  highlighted by `SqlHighlighter` from the registry with no syntect in the
+  build (the `sql_without_syntect` test, which CI runs that way).
 - Tests: token classes on tricky input, unterminated strings and comments,
   and 3000 random inputs that must tokenize and highlight without a panic;
   a `Syntax` block and a Markdown ```` ```sql ```` fence highlighted through
