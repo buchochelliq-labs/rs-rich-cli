@@ -1,11 +1,13 @@
 # A playground in the docs
 
-Status: phase 1 (tier 1 on the site) and phase 4 (docs as tests) are in:
-`playground/`, `docs/assets/playground.js`, 37 blocks on 14 pages and
-`docs/playground.md` (see [Phase 1 and 4, as built](#phase-1-and-4-as-built)).
-Tiers 2 and 3 are next. The maintainer answered the decisions on
-2026-10-20 (at the end). The spike (`playground/spike/`) stays as the
-reference for tier 3.
+Status: phases 1 and 4 (tier 1 on the site, docs as tests) and phase 2
+(tier 2: the `rich` CLI in a terminal) are in: `playground/`,
+`docs/assets/playground.js`, `docs/assets/rich-shell/`, 37 tier-1 blocks
+on 14 pages, 127 CLI examples on 16 pages, and `docs/playground.md` (see
+[Phase 1 and 4, as built](#phase-1-and-4-as-built) and
+[Phase 2, as built](#phase-2-as-built)). Tier 3 is next. The maintainer
+answered the decisions on 2026-10-20 (at the end). The spike
+(`playground/spike/`) stays as the reference for tier 3.
 
 The idea: readers try rs-rich on the docs site, in their browser, with
 nothing to install. There are three tiers:
@@ -401,6 +403,82 @@ iframe, as the spike does.
   (only for docs that have the script; a 404 or a network error leaves
   plain blocks) and unpacks it with tarfile's `data` filter after checking
   the stamp.
+
+## Phase 2, as built
+
+- **The CLI on WASI.** `rs-rich-cli` builds for `wasm32-wasip1` with
+  `--no-default-features --features art,mermaid` (no `fetch`: no network;
+  no `record`/`png`: no PTY; no `interact`: no raw keys). `ctrlc`,
+  `notify`, `cap-std` and `cap-fs-ext` are non-WASI dependencies; Ctrl+C
+  handlers go through `host::on_interrupt` (a no-op there: the page stops
+  a command by terminating its worker); `--batch`, `--watch`,
+  `log --follow` and `--demo` say they are not available in the browser
+  (exit 2); `rich log` reads stdin on its own thread natively and inline
+  under WASI, which has no threads. Native builds are unchanged.
+- **Measured.** 6.24 MB from cargo (`opt-level=z`, LTO, one codegen unit,
+  `panic=abort`, stripped), **5.55 MB after `wasm-opt -Oz`, 2.46 MB
+  gzipped**: over the 1.5–2 MB estimate, and the largest download on the
+  site. It loads only on a CLI block's **Try it**, compiles once per page
+  (`compileStreaming`) and is shared by every terminal on it. A command
+  starts a fresh instance: 3–40 ms for most, about 160 ms for the first
+  markup parse.
+- **The engine (decision 1).** `@bjorn3/browser_wasi_shim` 0.4.2,
+  vendored unchanged under `docs/assets/rich-shell/vendor/` with its
+  licences, plus one fix in `wasi.js`: 0.4.2 sizes arguments in UTF-16
+  units, so a non-ASCII argument overflowed its buffer. `wasi.js` runs
+  `rich` once over an in-memory file system that outlives the instance:
+  stdin is the terminal (a character device at end of input) or a pipe's
+  bytes, stdout streams to the terminal or is collected for the next
+  command, and a panic is reported as exit 134.
+- **The line runner** (`shell.js`, ours, no DOM): words with quotes,
+  escapes and `$NAME`; `NAME=value`; `|`, `;`, `&&`, `||`, `#`; `<`, `>`,
+  `>>`, `2>&1`, `2>file`; `*` and `?` globs. Builtins: `echo`, `printf`,
+  `seq`, `cat`, `ls`, `clear`, `pwd`, `true`, `false`, `help`, `history`;
+  anything else is exit 127. `$(…)`, backticks and `&` are refused with a
+  message.
+- **The terminal** (`terminal.js`, `worker.js`, `session.js`): xterm.js
+  and its fit addon (columns only; the block's `data-rows` sets the
+  height), a line editor (history, Ctrl+C/L/U/A/E), and one module worker
+  per terminal. A block's commands are filled in at the prompt one at a
+  time. **Stop** terminates the worker and starts a fresh session: the
+  samples come back as they were.
+- **Sample files** (`samples.js`): 69 names, text and small images,
+  chosen so the docs' examples find what they name (`README.md`,
+  `sales.csv`, `app.jsonl`, `deploy.yaml`, `main.rs`, `photo.png`,
+  `ball.gif`, …). Edit freely; the check below says when an example loses
+  its file.
+- **Tapes (decision 6).** **Save as tape** downloads `session.tape`: a
+  `Write` line for each sample a command names (text files; an image is a
+  comment), then `Type`, `Enter` and the pause before the next line
+  (0.5–5 s). `help` and `history` are left out. A fixture from the same
+  function, `crates/rich-record/tests/fixtures/playground-session.tape`,
+  is parsed by rs-rich-record's `playground_tape` test (typed lines and
+  file text come back exactly), and the block check fails when the
+  fixture is not what the terminal writes now (`--update-tape`).
+- **Reach (decision 6).** Every CLI example that runs here is a
+  `{ .rich-playground data-kind="cli" }` fence: 127 on 16 pages. The
+  other 107 stay plain: URLs, `--watch`, `--batch`, `capture`, `record`,
+  `serve`, the interactive commands, `rich deps` (cargo), a shell's own
+  tools (`git`, `jq`, `tail -f`), or files no sample stands in for.
+- **Checks.** `check_playground_blocks.mjs` runs each CLI block in a fresh
+  session under Node (`playground/cli.mjs`: the same `session.js`, in a
+  worker thread with a 60 s limit, four at a time; about 75 s), every
+  command must exit 0, and a CLI example that runs but is not marked
+  fails, so new examples get the button. `check_playground_page.mjs` adds
+  the terminal in Chromium: only `cli/rich.wasm` loads; Enter runs the
+  block's commands in turn; a pipe, `&&` and the builtins; Stop ending an
+  endless GIF and a fresh session answering; the tape download; a guide
+  page's button.
+- **Pipeline.** `build.sh` builds `cli/rich.wasm` (with the modules, into
+  the same archive), `stamp.mjs` runs `rich --version` through the runner
+  before naming it in the stamp, and `docs.yml` and the release workflow
+  install `wasm32-wasip1`. `docs.yml` now also runs on `crates/rich-cli/`.
+  A release archive without `cli/` (every one before this) has no `cli` in
+  its stamp, and its CLI blocks stay plain.
+- **Not done.** No CI `cargo check --target wasm32-wasip1` outside the
+  docs job, so a change in a crate the CLI uses (rs-rich-data, rs-rich-art,
+  …) that breaks the WASI build fails main's docs job, not its own PR.
+  Images draw as coloured cells: xterm.js has no graphics protocol here.
 
 ## Phased plan
 
