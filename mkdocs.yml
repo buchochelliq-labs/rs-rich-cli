@@ -258,3 +258,4 @@ nav:
           - "tasks (taskwarrior-tui)": design/gaps/tasks.md
           - "raycast": design/gaps/raycast.md
       - "Design: a playground in the docs": design/docs-playground.md
+      - "Design: no_std, not now": design/no-std.md
