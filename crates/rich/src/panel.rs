@@ -253,6 +253,57 @@ fn label_from_text(parsed: &Text) -> Text {
     text
 }
 
+/// Read access to what a panel holds: upstream's public `Panel` fields. Not
+/// upstream as methods, and they change nothing; they let an extension read
+/// a panel instead of its rendering.
+///
+/// ```
+/// use rich::{Panel, Text};
+/// use rich::table::Cell;
+///
+/// let panel = Panel::new(Box::new(Text::new("body"))).title("[b]Status[/]");
+/// assert!(matches!(panel.get_title(), Some(Cell::Markup(t)) if t == "[b]Status[/]"));
+/// assert!(panel.get_subtitle().is_none());
+/// assert_eq!(panel.renderable().printed_text().unwrap().plain(), "body");
+/// ```
+impl Panel {
+    /// The renderable inside the panel (upstream `Panel.renderable`).
+    pub fn renderable(&self) -> &dyn Renderable {
+        self.child.as_ref()
+    }
+
+    /// The title (upstream `Panel.title`): a [`Cell::Text`](crate::table::Cell::Text)
+    /// when set with [`title_as_text`](Self::title_as_text), which wins, else a
+    /// [`Cell::Markup`](crate::table::Cell::Markup) set with [`title`](Self::title).
+    pub fn get_title(&self) -> Option<crate::table::Cell> {
+        label_cell(self.title_value.as_ref(), self.title.as_deref())
+    }
+
+    /// The subtitle (upstream `Panel.subtitle`), as [`get_title`](Self::get_title).
+    pub fn get_subtitle(&self) -> Option<crate::table::Cell> {
+        label_cell(self.subtitle_value.as_ref(), self.subtitle.as_deref())
+    }
+
+    /// The title's alignment (upstream `Panel.title_align`).
+    pub fn get_title_align(&self) -> HorizontalAlign {
+        self.title_align
+    }
+
+    /// The subtitle's alignment (upstream `Panel.subtitle_align`).
+    pub fn get_subtitle_align(&self) -> HorizontalAlign {
+        self.subtitle_align
+    }
+}
+
+/// A title as a cell: the literal `Text` when set, else the markup.
+fn label_cell(text: Option<&Text>, markup: Option<&str>) -> Option<crate::table::Cell> {
+    match (text, markup) {
+        (Some(text), _) => Some(crate::table::Cell::Text(text.clone())),
+        (None, Some(markup)) => Some(crate::table::Cell::Markup(markup.to_string())),
+        (None, None) => None,
+    }
+}
+
 impl Panel {
     /// The title as `Panel._title` builds it, when there is one.
     fn title_text(&self) -> Option<Text> {

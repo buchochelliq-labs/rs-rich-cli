@@ -13,39 +13,32 @@
 //! | [`Rule`] | `---`, its title after it in bold |
 //! | [`Text`] and markup | inline Markdown: bold `**`, italic `*`, strike `~~`, code `` ` ``, links `[text](url)` |
 //! | `Syntax` (feature `syntax`) | a fenced code block with its language |
-//! | Markdown source | itself ([`GfmDocument::push_markdown`]) |
+//! | `Markdown` (feature `markdown`) and Markdown source | the source as it is ([`GfmDocument::push_markdown`] for a string) |
 //! | anything else | its plain rendering at [`GfmOptions::width`] in a ```` ```text ```` fence |
 //!
 //! Text styles map where Markdown has an equivalent: bold, italic, strike and
 //! links. Colour, dim, underline and reverse have none and are dropped. Code
 //! comes from style *names* ([`GfmOptions::code_styles`], `code` and
-//! `markdown.code` by default), so it is kept for [`Text`], markup and tree
-//! labels, but not inside tables and panels, whose styles are already
-//! resolved when they are read.
+//! `markdown.code` by default), in [`Text`], markup, table cells, panel text
+//! and tree labels.
 //!
 //! # How content is read
 //!
-//! The core renderables are a faithful port of upstream and expose little of
-//! what they hold. What each export reads:
+//! Through the core's read-only accessors, which mirror upstream's public
+//! attributes:
 //!
-//! - **Text**, **Tree**: their public accessors (`plain`, `spans`, `label`,
-//!   `children`).
+//! - **Text**, **Tree**: `plain`, `spans`, `label`, `children`.
+//! - **Table**: `columns` (header, footer, justify, style), `rows` (cells,
+//!   style), `get_title`, `get_caption`, `get_show_header`,
+//!   `get_show_footer`, `get_footer_style` and `get_row_style`, so every
+//!   table is written exactly, a grid or a cell of several lines included.
+//! - **Panel**: `get_title`, `get_subtitle` and `renderable`; a body that is
+//!   not text is rendered wide and read back (a drawing is fenced).
+//! - **Rule**: `get_title`. **Markdown**: `markup`, its source.
 //! - **Syntax**: a copy of it is highlighted with a highlighter that records
 //!   the code and language it is given (`Syntax::highlighter` and
 //!   `Syntax::highlight`), so line ranges and themes do not matter.
-//! - **Table**, **Panel**, **Rule**: there are no accessors for their cells,
-//!   body or title, so they are rendered wide and read back from the cells
-//!   and styles of the result. A table without box borders (`Table::grid`,
-//!   `show_edge(false)`, a box with blank edges) or whose rows cannot be told
-//!   apart (a cell that wraps without `show_lines`) falls back to its plain
-//!   rendering in a ```` ```text ```` fence. A table's column alignment is
-//!   read from where its cells' text sits in the column: left (the default),
-//!   right or centred.
-//! - **Markdown**, **Columns**: nothing is exposed, so a [`Markdown`] value
-//!   cannot give its source back; push the source with
-//!   [`GfmDocument::push_markdown`]. `Columns` are rendered plain.
-//!
-//! [`Markdown`]: rich::markdown::Markdown
+//! - **Columns** expose nothing of their items and are rendered plain.
 //!
 //! # Example
 //!
@@ -80,13 +73,12 @@
 //! );
 //! ```
 
-use rich::cells::char_cell_width;
 use rich::containers::Renderables;
 use rich::protocol::Renderable;
 use rich::segment::Segment;
 use rich::style::{Style, StyleType};
 use rich::table::Cell;
-use rich::{Columns, Console, Panel, Rule, Table, Text, Tree};
+use rich::{Columns, Console, Justify, Panel, Rule, Table, Text, Tree};
 
 /// The most characters a GitHub issue or pull request comment may hold.
 pub const GITHUB_COMMENT_LIMIT: usize = 65_536;
@@ -194,7 +186,7 @@ impl Default for GfmExporter {
     }
 }
 
-/// Renderings that are read back (tables, panels, rules) are made this wide,
+/// A panel body that is read back from its rendering is rendered this wide,
 /// so that nothing wraps that would not wrap anyway.
 const WIDE: usize = 2000;
 
@@ -361,12 +353,11 @@ struct StyledChar {
     flags: Flags,
 }
 
-/// A character of a rendered line, with its style and cell width.
+/// A character of a rendered line, with its style.
 #[derive(Clone, Debug)]
 struct CellChar {
     ch: char,
     style: Style,
-    width: usize,
 }
 
 fn cell_chars(line: &[Segment]) -> Vec<CellChar> {
@@ -377,14 +368,9 @@ fn cell_chars(line: &[Segment]) -> Vec<CellChar> {
             segment.text.chars().map(move |ch| CellChar {
                 ch,
                 style: style.clone(),
-                width: char_cell_width(ch),
             })
         })
         .collect()
-}
-
-fn line_text(line: &[CellChar]) -> String {
-    line.iter().map(|c| c.ch).collect()
 }
 
 fn styled(chars: &[CellChar]) -> Vec<StyledChar> {
@@ -393,19 +379,6 @@ fn styled(chars: &[CellChar]) -> Vec<StyledChar> {
         .map(|c| StyledChar {
             ch: c.ch,
             flags: Flags::from_style(&c.style, false),
-        })
-        .collect()
-}
-
-fn unstyled(chars: &[CellChar]) -> Vec<StyledChar> {
-    chars
-        .iter()
-        .map(|c| StyledChar {
-            ch: c.ch,
-            flags: Flags {
-                link: c.style.link().map(str::to_string),
-                ..Flags::default()
-            },
         })
         .collect()
 }
@@ -672,20 +645,6 @@ fn fenced(body: &str, language: &str, prefix: &str) -> String {
 }
 
 // ---------------------------------------------------------------------------
-// Box borders
-// ---------------------------------------------------------------------------
-
-/// Characters that draw boxes: the Box Drawing block and ASCII boxes' pieces.
-fn is_box_char(ch: char) -> bool {
-    ('\u{2500}'..='\u{257f}').contains(&ch) || matches!(ch, '+' | '-' | '=' | '|')
-}
-
-/// A line drawn only with box characters (an edge or separator of a table).
-fn is_border_line(line: &[CellChar]) -> bool {
-    line.iter().any(|c| c.ch != ' ') && line.iter().all(|c| c.ch == ' ' || is_box_char(c.ch))
-}
-
-// ---------------------------------------------------------------------------
 // Table
 // ---------------------------------------------------------------------------
 
@@ -695,268 +654,142 @@ impl ToGfm for Table {
     }
 }
 
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-enum Align {
-    Left,
-    Center,
-    Right,
+/// `chars` with only their links kept: a header or caption is styled as a
+/// whole by Markdown (bold, italic), so its own emphasis is dropped.
+fn links_only(chars: Vec<StyledChar>) -> Vec<StyledChar> {
+    chars
+        .into_iter()
+        .map(|c| StyledChar {
+            ch: c.ch,
+            flags: Flags {
+                link: c.flags.link,
+                ..Flags::default()
+            },
+        })
+        .collect()
 }
 
-/// A table row's lines.
-type Row<'a> = Vec<&'a [CellChar]>;
-
-fn table_gfm(table: &Table, exporter: &GfmExporter) -> Option<String> {
-    if table.column_count() == 0 {
-        return None;
-    }
-    let lines = exporter.wide_lines(table);
-    let borders: Vec<usize> = (0..lines.len())
-        .filter(|&i| is_border_line(&lines[i]))
+/// A cell's lines as one table cell, joined with `<br>`.
+fn table_cell(chars: &[StyledChar]) -> String {
+    let parts: Vec<String> = chars
+        .split(|c| c.ch == '\n')
+        .map(|line| inline(trim(line), Context::TableCell))
         .collect();
-    let (&top, &bottom) = (borders.first()?, borders.last()?);
-    if top == bottom {
-        return None;
+    let mut parts: Vec<&str> = parts.iter().map(String::as_str).collect();
+    while parts.last().is_some_and(|part| part.is_empty()) {
+        parts.pop();
     }
-    // Column boundaries: where the top edge is not its horizontal fill.
-    let edge = &lines[top];
-    let fill = most_common(edge)?;
-    let mut bounds = Vec::new();
-    let mut position = 0;
-    for c in edge {
-        if c.ch != fill && c.ch != ' ' {
-            bounds.push(position);
-        }
-        position += c.width;
+    while parts.first().is_some_and(|part| part.is_empty()) {
+        parts.remove(0);
     }
-    if bounds.len() != table.column_count() + 1 {
-        return None;
-    }
-    // Groups of content lines between separators.
-    let mut groups: Vec<Vec<&[CellChar]>> = Vec::new();
-    let mut current = Vec::new();
-    for line in &lines[top + 1..bottom] {
-        if is_border_line(line) {
-            groups.push(std::mem::take(&mut current));
-        } else {
-            current.push(line.as_slice());
-        }
-    }
-    groups.push(current);
-    groups.retain(|group| !group.is_empty());
-    let rows = table.row_count();
-    let (header, body): (Option<Row>, Vec<Row>) = if groups.len() == 1 {
-        let lines = groups.remove(0);
-        if lines.len() != rows {
-            return None;
-        }
-        (None, lines.into_iter().map(|line| vec![line]).collect())
-    } else {
-        let header = groups.remove(0);
-        let line_count: usize = groups.iter().map(Vec::len).sum();
-        // A footer is drawn in bold (`table.footer`) after a separator, as
-        // `show_lines` draws the next row: two groups of `rows` lines and one
-        // line are the rows and a footer only when that line is bold.
-        let footer_after_rows = groups.len() == 2
-            && groups[0].len() == rows
-            && groups[1].iter().all(|line| all_bold(line));
-        let body = if groups.len() == rows + 1 || (groups.len() == rows && !footer_after_rows) {
-            // `show_lines`: a group per row, maybe a footer.
-            groups
-        } else if line_count == rows {
-            groups
-                .into_iter()
-                .flatten()
-                .map(|line| vec![line])
-                .collect()
-        } else if footer_after_rows {
-            let footer = groups.pop()?;
-            let mut body: Vec<Row> = groups
-                .into_iter()
-                .flatten()
-                .map(|line| vec![line])
-                .collect();
-            body.push(footer);
-            body
-        } else {
-            return None;
-        };
-        (Some(header), body)
-    };
+    parts.join("<br>")
+}
 
-    let columns = table.column_count();
-    let split = |row: &[&[CellChar]]| -> Vec<Vec<Vec<CellChar>>> {
-        // Per column, the cell's lines.
-        let mut cells = vec![Vec::new(); columns];
-        for line in row {
-            for (column, cell) in cells.iter_mut().enumerate() {
-                cell.push(slice_cells(line, bounds[column] + 1, bounds[column + 1]));
-            }
-        }
-        cells
-    };
-    let header_cells = header.as_deref().map(split);
-    let body_cells: Vec<_> = body.iter().map(|row| split(row)).collect();
-
-    let aligns: Vec<Align> = (0..columns)
-        .map(|column| {
-            column_align(
-                header_cells
-                    .iter()
-                    .chain(body_cells.iter())
-                    .flat_map(|row| row[column].iter()),
-            )
+impl GfmExporter {
+    /// A cell's characters over `base`; a renderable with no text of its own
+    /// is its plain rendering at [`GfmOptions::width`].
+    fn any_cell_chars(&self, cell: &Cell, base: Option<&StyleType>) -> Vec<StyledChar> {
+        self.cell_chars(cell, base).unwrap_or_else(|| match cell {
+            Cell::Renderable(renderable) => self
+                .console
+                .render_export(renderable.as_ref())
+                .chars()
+                .map(|ch| StyledChar {
+                    ch,
+                    flags: Flags::default(),
+                })
+                .collect(),
+            _ => Vec::new(),
         })
-        .collect();
-
-    let cell = |lines: &[Vec<CellChar>], plain: bool| -> String {
-        let parts: Vec<String> = lines
-            .iter()
-            .map(|line| {
-                let chars = if plain { unstyled(line) } else { styled(line) };
-                inline(trim(&chars), Context::TableCell)
-            })
-            .collect();
-        let mut parts: Vec<&str> = parts.iter().map(String::as_str).collect();
-        while parts.last().is_some_and(|part| part.is_empty()) {
-            parts.pop();
-        }
-        while parts.first().is_some_and(|part| part.is_empty()) {
-            parts.remove(0);
-        }
-        parts.join("<br>")
-    };
-    let row_line = |cells: Vec<String>| format!("| {} |", cells.join(" | "));
-
-    let mut out = String::new();
-    let title: Vec<String> = lines[..top]
-        .iter()
-        .map(|line| inline(trim(&styled(line)), Context::Paragraph))
-        .filter(|line| !line.is_empty())
-        .collect();
-    if !title.is_empty() {
-        out.push_str(&format!("**{}**\n\n", strip_emphasis(&title.join(" "))));
     }
-    out.push_str(&row_line(match &header_cells {
-        Some(cells) => cells.iter().map(|lines| cell(lines, true)).collect(),
-        None => vec![String::new(); columns],
+
+    /// A title, caption or label as one line of inline Markdown.
+    fn label(&self, cell: &Cell) -> String {
+        let chars = links_only(self.any_cell_chars(cell, None));
+        chars
+            .split(|c| c.ch == '\n')
+            .map(|line| inline(trim(line), Context::Paragraph))
+            .filter(|line| !line.is_empty())
+            .collect::<Vec<_>>()
+            .join(" ")
+    }
+}
+
+/// The table read through its accessors (`Table::columns`, `Table::rows`,
+/// the title, caption and header and footer settings).
+fn table_gfm(table: &Table, exporter: &GfmExporter) -> Option<String> {
+    let columns = table.columns();
+    if columns.is_empty() {
+        return None;
+    }
+    let console = &exporter.console;
+    let row_line = |cells: Vec<String>| format!("| {} |", cells.join(" | "));
+    let mut out = String::new();
+    if let Some(title) = table.get_title().map(|title| exporter.label(title)) {
+        if !title.is_empty() {
+            out.push_str(&format!("**{title}**\n\n"));
+        }
+    }
+    out.push_str(&row_line(if table.get_show_header() {
+        columns
+            .iter()
+            .map(|column| table_cell(&links_only(exporter.any_cell_chars(column.header(), None))))
+            .collect()
+    } else {
+        vec![String::new(); columns.len()]
     }));
     out.push('\n');
     out.push_str(&row_line(
-        aligns
+        columns
             .iter()
-            .map(|align| match align {
-                Align::Left => "---".to_string(),
-                Align::Center => ":---:".to_string(),
-                Align::Right => "---:".to_string(),
+            .map(|column| match column.justify() {
+                Justify::Center => ":---:".to_string(),
+                Justify::Right => "---:".to_string(),
+                _ => "---".to_string(),
             })
             .collect(),
     ));
-    for row in &body_cells {
+    let empty = Cell::Text(Text::new(""));
+    for (index, row) in table.rows().iter().enumerate() {
+        let row_style = table.get_row_style(console, index);
         out.push('\n');
         out.push_str(&row_line(
-            row.iter().map(|lines| cell(lines, false)).collect(),
+            columns
+                .iter()
+                .enumerate()
+                .map(|(at, column)| {
+                    let base = StyleType::Style(column.style().combine(&row_style));
+                    let cell = row.cells().get(at).unwrap_or(&empty);
+                    table_cell(&exporter.any_cell_chars(cell, Some(&base)))
+                })
+                .collect(),
         ));
     }
-    let caption: Vec<String> = lines[bottom + 1..]
-        .iter()
-        .map(|line| inline(trim(&unstyled(line)), Context::Paragraph))
-        .filter(|line| !line.is_empty())
-        .collect();
-    if !caption.is_empty() {
-        out.push_str(&format!("\n\n*{}*", caption.join(" ")));
+    if table.get_show_footer() {
+        let footer = console
+            .get_style(table.get_footer_style())
+            .unwrap_or_default();
+        out.push('\n');
+        out.push_str(&row_line(
+            columns
+                .iter()
+                .map(|column| {
+                    let style = match column.footer_style() {
+                        Some(fill) => footer.combine(fill),
+                        None => footer.clone(),
+                    };
+                    let base = StyleType::Style(style);
+                    table_cell(&exporter.any_cell_chars(column.footer(), Some(&base)))
+                })
+                .collect(),
+        ));
+    }
+    if let Some(caption) = table.get_caption().map(|caption| exporter.label(caption)) {
+        if !caption.is_empty() {
+            out.push_str(&format!("\n\n*{caption}*"));
+        }
     }
     Some(out)
-}
-
-fn all_bold(line: &[CellChar]) -> bool {
-    line.iter()
-        .filter(|c| !c.ch.is_whitespace() && !is_box_char(c.ch))
-        .all(|c| c.style.attr(0) == Some(true))
-}
-
-/// A title is written in bold as a whole, so drop its own `**`.
-fn strip_emphasis(text: &str) -> String {
-    let mut out = String::new();
-    let mut chars = text.chars().peekable();
-    while let Some(ch) = chars.next() {
-        if ch == '\\' {
-            out.push(ch);
-            if let Some(next) = chars.next() {
-                out.push(next);
-            }
-        } else if ch == '*' {
-            while chars.peek() == Some(&'*') {
-                chars.next();
-            }
-        } else {
-            out.push(ch);
-        }
-    }
-    out
-}
-
-fn most_common(line: &[CellChar]) -> Option<char> {
-    let mut counts: Vec<(char, usize)> = Vec::new();
-    for c in line {
-        match counts.iter_mut().find(|(ch, _)| *ch == c.ch) {
-            Some((_, count)) => *count += 1,
-            None => counts.push((c.ch, 1)),
-        }
-    }
-    counts
-        .into_iter()
-        .max_by_key(|(_, count)| *count)
-        .map(|(ch, _)| ch)
-}
-
-/// The characters of `line` in cell columns `from..to`.
-fn slice_cells(line: &[CellChar], from: usize, to: usize) -> Vec<CellChar> {
-    let mut position = 0;
-    let mut out = Vec::new();
-    for c in line {
-        if position >= from && position < to {
-            out.push(c.clone());
-        }
-        position += c.width;
-    }
-    out
-}
-
-/// A column's alignment, from the space around its cells' text: text that
-/// always sits at the left (or right) of its slack is left (right) aligned,
-/// text with slack on both sides is centred.
-fn column_align<'a>(cells: impl Iterator<Item = &'a Vec<CellChar>>) -> Align {
-    let pads: Vec<(usize, usize)> = cells
-        .filter(|line| line.iter().any(|c| !c.ch.is_whitespace()))
-        .map(|line| {
-            let lead = line.iter().take_while(|c| c.ch == ' ').count();
-            let trail = line.iter().rev().take_while(|c| c.ch == ' ').count();
-            (lead, trail)
-        })
-        .collect();
-    let Some(base) = pads.iter().map(|&(lead, trail)| lead.min(trail)).min() else {
-        return Align::Left;
-    };
-    let (mut left, mut right, mut center) = (0, 0, 0);
-    for &(lead, trail) in &pads {
-        let (lead, trail) = (lead - base, trail - base);
-        // Centred text puts an odd cell of slack on its right, so one cell
-        // on the right alone says nothing.
-        match (lead, trail) {
-            (0, 0) | (0, 1) => {}
-            (0, _) => left += 1,
-            (_, 0) => right += 1,
-            (lead, trail) if trail == lead || trail == lead + 1 => center += 1,
-            _ => left += 1,
-        }
-    }
-    if right > left && right >= center {
-        Align::Right
-    } else if center > left && center > right {
-        Align::Center
-    } else {
-        Align::Left
-    }
 }
 
 // ---------------------------------------------------------------------------
@@ -1031,55 +864,27 @@ fn tree_item(tree: &Tree, depth: usize, exporter: &GfmExporter, out: &mut String
 // Panel and Rule
 // ---------------------------------------------------------------------------
 
-/// The text inside a border line: the line without the box characters (and
-/// spaces) at either end.
-fn border_title(line: &[CellChar]) -> Vec<CellChar> {
-    let start = line
-        .iter()
-        .position(|c| c.ch != ' ' && !is_box_char(c.ch))
-        .unwrap_or(line.len());
-    let end = line
-        .iter()
-        .rposition(|c| c.ch != ' ' && !is_box_char(c.ch))
-        .map_or(start, |at| at + 1);
-    line[start..end.max(start)].to_vec()
-}
-
 impl ToGfm for Panel {
     fn to_gfm(&self, exporter: &GfmExporter) -> String {
-        panel_gfm(self, exporter).unwrap_or_else(|| exporter.plain(self))
+        panel_gfm(self, exporter)
     }
 }
 
-fn panel_gfm(panel: &Panel, exporter: &GfmExporter) -> Option<String> {
-    let lines = exporter.wide_lines(panel);
-    if lines.len() < 2 {
-        return None;
+/// The body of a panel: a [`Text`] (or anything that prints as one) as
+/// paragraphs. Anything else exposes nothing, so it is rendered wide and read
+/// back: a drawing (box characters) is fenced, the rest is paragraphs.
+fn panel_body(body: &dyn Renderable, exporter: &GfmExporter) -> String {
+    if let Some(text) = body.printed_text() {
+        return exporter.text(&text);
     }
-    let (first, last) = (&lines[0], &lines[lines.len() - 1]);
-    if !first.first().is_some_and(|c| is_box_char(c.ch))
-        || !last.first().is_some_and(|c| is_box_char(c.ch))
-    {
-        return None;
-    }
-    let title = line_text(&border_title(first));
-    let subtitle = line_text(&border_title(last));
-    let mut body: Vec<&[CellChar]> = Vec::new();
-    for line in &lines[1..lines.len() - 1] {
-        let (left, right) = (line.first()?, line.last()?);
-        if !is_box_char(left.ch) || !is_box_char(right.ch) || line.len() < 2 {
-            return None;
-        }
-        body.push(&line[1..line.len() - 1]);
-    }
-    // The common indent is the panel's padding.
-    let indent = body
+    let lines = exporter.wide_lines(body);
+    let indent = lines
         .iter()
         .filter(|line| line.iter().any(|c| c.ch != ' '))
         .map(|line| line.iter().take_while(|c| c.ch == ' ').count())
         .min()
         .unwrap_or(0);
-    let mut body: Vec<Vec<StyledChar>> = body
+    let mut body: Vec<Vec<StyledChar>> = lines
         .iter()
         .map(|line| {
             let line = styled(&line[indent.min(line.len())..]);
@@ -1096,66 +901,67 @@ fn panel_gfm(panel: &Panel, exporter: &GfmExporter) -> Option<String> {
         line.iter()
             .any(|c| ('\u{2500}'..='\u{259f}').contains(&c.ch))
     });
-    let content = if preformatted {
+    if preformatted {
         let plain: Vec<String> = body
             .iter()
             .map(|line| line.iter().map(|c| c.ch).collect())
             .collect();
-        fenced(&plain.join("\n"), "text", "")
-    } else {
-        let mut joined = Vec::new();
-        for (i, line) in body.iter().enumerate() {
-            if i > 0 {
-                joined.push(StyledChar {
-                    ch: '\n',
-                    flags: Flags::default(),
-                });
-            }
-            joined.extend(line.iter().cloned());
-        }
-        paragraphs(&joined)
-    };
-    let escape = |text: &str| -> String {
-        let chars: Vec<StyledChar> = text
-            .chars()
-            .map(|ch| StyledChar {
-                ch,
+        return fenced(&plain.join("\n"), "text", "");
+    }
+    let mut joined = Vec::new();
+    for (i, line) in body.iter().enumerate() {
+        if i > 0 {
+            joined.push(StyledChar {
+                ch: '\n',
                 flags: Flags::default(),
-            })
-            .collect();
-        inline(&chars, Context::Paragraph)
-    };
+            });
+        }
+        joined.extend(line.iter().cloned());
+    }
+    paragraphs(&joined)
+}
+
+/// The panel read through its accessors (`Panel::get_title`,
+/// `Panel::get_subtitle`, `Panel::renderable`).
+fn panel_gfm(panel: &Panel, exporter: &GfmExporter) -> String {
+    let label = |cell: Option<Cell>| cell.map(|cell| exporter.label(&cell)).unwrap_or_default();
+    let title = label(panel.get_title());
+    let subtitle = label(panel.get_subtitle());
+    let content = panel_body(panel.renderable(), exporter);
     let mut block = Vec::new();
     match exporter.options.panel {
         PanelStyle::Blockquote => {
             if !title.is_empty() {
-                block.push(format!("**{}**", escape(&title)));
+                block.push(format!("**{title}**"));
                 block.push(String::new());
             }
             block.extend(content.lines().map(str::to_string));
             if !subtitle.is_empty() {
                 block.push(String::new());
-                block.push(format!("*{}*", escape(&subtitle)));
+                block.push(format!("*{subtitle}*"));
             }
-            Some(
-                block
-                    .iter()
-                    .map(|line| {
-                        if line.is_empty() {
-                            ">".to_string()
-                        } else {
-                            format!("> {line}")
-                        }
-                    })
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            )
+            block
+                .iter()
+                .map(|line| {
+                    if line.is_empty() {
+                        ">".to_string()
+                    } else {
+                        format!("> {line}")
+                    }
+                })
+                .collect::<Vec<_>>()
+                .join("\n")
         }
         PanelStyle::Details { open } => {
-            let summary = if title.is_empty() {
-                exporter.options.summary.clone()
-            } else {
-                title
+            let summary = match panel.get_title() {
+                Some(cell) if !title.is_empty() => exporter
+                    .any_cell_chars(&cell, None)
+                    .iter()
+                    .map(|c| if c.ch == '\n' { ' ' } else { c.ch })
+                    .collect::<String>()
+                    .trim()
+                    .to_string(),
+                _ => exporter.options.summary.clone(),
             };
             let mut out = format!(
                 "<details{}><summary>{}</summary>\n\n{content}",
@@ -1163,44 +969,34 @@ fn panel_gfm(panel: &Panel, exporter: &GfmExporter) -> Option<String> {
                 escape_html(&summary)
             );
             if !subtitle.is_empty() {
-                out.push_str(&format!("\n\n*{}*", escape(&subtitle)));
+                out.push_str(&format!("\n\n*{subtitle}*"));
             }
             out.push_str("\n\n</details>");
-            Some(out)
+            out
         }
     }
 }
 
+/// `---`, and the rule's title (`Rule::get_title`) in bold after it.
 impl ToGfm for Rule {
     fn to_gfm(&self, exporter: &GfmExporter) -> String {
-        let lines = exporter.wide_lines(self);
-        let title = lines
-            .first()
-            .map(|line| {
-                // A rule's line is drawn with its own characters: drop the
-                // runs of the first and last character at either end.
-                let text = line_text(line);
-                let text = text.trim();
-                let first = text.chars().next().unwrap_or(' ');
-                let last = text.chars().last().unwrap_or(' ');
-                text.trim_start_matches(first)
-                    .trim_end_matches(last)
-                    .trim()
-                    .to_string()
-            })
+        let title = self
+            .get_title()
+            .map(|cell| exporter.label(&cell))
             .unwrap_or_default();
         if title.is_empty() {
             "---".to_string()
         } else {
-            let chars: Vec<StyledChar> = title
-                .chars()
-                .map(|ch| StyledChar {
-                    ch,
-                    flags: Flags::default(),
-                })
-                .collect();
-            format!("---\n\n**{}**", inline(&chars, Context::Paragraph))
+            format!("---\n\n**{title}**")
         }
+    }
+}
+
+/// A core `Markdown` is written as its source (`Markdown::markup`).
+#[cfg(feature = "markdown")]
+impl ToGfm for rich::markdown::Markdown {
+    fn to_gfm(&self, _exporter: &GfmExporter) -> String {
+        self.markup().trim_end().to_string()
     }
 }
 

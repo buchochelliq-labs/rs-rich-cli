@@ -76,20 +76,45 @@ fn table_rows_with_lines_keep_multi_line_cells() {
 }
 
 #[test]
-fn table_with_unreadable_rows_falls_back_to_plain_text() {
-    // Without `show_lines` a two-line cell cannot be told from two rows.
+fn tables_are_read_from_their_cells_not_their_rendering() {
+    // A wrapped cell without `show_lines`, which a rendering cannot tell
+    // from two rows, and a grid, which has no borders to read.
     let mut table = Table::new();
     table.add_column("v");
     table.add_row(&["one\ntwo"]);
     table.add_row(&["three"]);
-    let out = gfm(&table);
-    assert!(out.starts_with("```text\n┏"), "{out}");
-    assert!(out.ends_with("┘\n```"), "{out}");
-    // A grid has no borders to read.
+    assert_eq!(gfm(&table), "| v |\n| --- |\n| one<br>two |\n| three |");
     let mut grid = Table::grid();
     grid.add_column("a");
+    grid.add_column_justify("b", Justify::Right);
     grid.add_row(&["x"]);
-    assert_eq!(gfm(&grid), "```text\nx\n```");
+    assert_eq!(gfm(&grid), "|  |  |\n| --- | ---: |\n| x |  |");
+    // Wider than the export width, styled rows, literal text, a renderable.
+    let mut wide = Table::new()
+        .row_styles(vec!["bold".into(), "none".into()])
+        .title_text(Text::new("[not markup]"));
+    wide.add_column("long");
+    wide.add_column("cell");
+    wide.add_row(&["word ".repeat(40).trim_end(), "a"]);
+    wide.add_row_cells(vec![
+        Cell::Text(Text::new("[b]")),
+        Cell::Renderable(Arc::new(Rule::line())),
+    ]);
+    let out = GfmExporter::with_options(GfmOptions::new().width(20)).export(&wide);
+    let lines: Vec<&str> = out.lines().collect();
+    assert_eq!(lines[0], "**\\[not markup\\]**", "{out}");
+    assert_eq!(
+        lines[4],
+        format!("| **{}** | **a** |", "word ".repeat(40).trim_end())
+    );
+    assert_eq!(lines[5], format!("| \\[b\\] | {} |", "─".repeat(20)));
+}
+
+#[test]
+fn columns_fall_back_to_their_rendering() {
+    let columns = Columns::new(vec!["a".into(), "b".into()]);
+    let out = gfm(&Panel::new(Box::new(columns)).title_as_text(Text::new("[x]")));
+    assert_eq!(out, "> **\\[x\\]**\n>\n> a b");
 }
 
 #[test]
@@ -167,6 +192,21 @@ fn rules() {
     assert_eq!(gfm(&Rule::line()), "---");
     assert_eq!(gfm(&Rule::new("Next [b]part[/]")), "---\n\n**Next part**");
     assert_eq!(gfm(&Rule::new("x").characters("=")), "---\n\n**x**");
+    // A title wider than the export width, and a literal one.
+    let long = "word ".repeat(30);
+    let out = GfmExporter::with_options(GfmOptions::new().width(20)).export(&Rule::new(&long));
+    assert_eq!(out, format!("---\n\n**{}**", long.trim_end()));
+    assert_eq!(
+        gfm(&Rule::with_title_text(Text::new("[b]"))),
+        "---\n\n**\\[b\\]**"
+    );
+}
+
+#[cfg(feature = "markdown")]
+#[test]
+fn markdown_is_written_as_its_source() {
+    let markdown = rich::markdown::Markdown::new("# Title\n\n- *item*\n");
+    assert_eq!(gfm(&markdown), "# Title\n\n- *item*");
 }
 
 #[test]
@@ -201,7 +241,7 @@ fn markup_strings_and_groups() {
 }
 
 #[test]
-fn columns_fall_back_to_plain_text() {
+fn columns_are_plain_text() {
     let columns = Columns::new(vec!["a".into(), "b".into()]);
     assert_eq!(gfm(&columns), "```text\na b\n```");
 }

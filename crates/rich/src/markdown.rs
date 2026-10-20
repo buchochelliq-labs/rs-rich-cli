@@ -192,6 +192,18 @@ struct MarkdownOptions {
 }
 
 impl Markdown {
+    /// The Markdown source this was parsed from (upstream `Markdown.markup`).
+    /// Not upstream as a method; it changes nothing.
+    ///
+    /// ```
+    /// use rich::markdown::Markdown;
+    ///
+    /// assert_eq!(Markdown::new("# Title\n").markup(), "# Title\n");
+    /// ```
+    pub fn markup(&self) -> &str {
+        &self.source
+    }
+
     /// Parse CommonMark `source` into renderable blocks.
     ///
     /// Hyperlinks are on, matching `rich.markdown.Markdown(hyperlinks=True)`.

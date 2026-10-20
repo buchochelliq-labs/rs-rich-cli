@@ -33,7 +33,10 @@ use crate::style::{Style, StyleType};
 use crate::text::Text;
 
 /// A single column definition. Mirrors the used subset of `rich.table.Column`.
-struct Column {
+/// A column of a [`Table`], as upstream's `rich.table.Column`. Read it with
+/// [`Table::columns`]; columns are added with the table's `add_column*`
+/// methods.
+pub struct Column {
     header: Cell,
     /// The footer cell (port of `Column.footer`), shown with `show_footer`.
     footer: Cell,
@@ -73,6 +76,63 @@ struct Column {
     overflow: Overflow,
 }
 
+/// Read access to what a column holds: upstream's public `Column` fields.
+/// Not upstream as methods; they change nothing.
+impl Column {
+    /// The header cell (upstream `Column.header`).
+    pub fn header(&self) -> &Cell {
+        &self.header
+    }
+
+    /// The footer cell (upstream `Column.footer`), shown with
+    /// [`Table::show_footer`].
+    pub fn footer(&self) -> &Cell {
+        &self.footer
+    }
+
+    /// The justification of the column's cells (upstream `Column.justify`).
+    pub fn justify(&self) -> Justify {
+        self.justify
+    }
+
+    /// The style of the column's body cells (upstream `Column.style`).
+    pub fn style(&self) -> &Style {
+        &self.style
+    }
+
+    /// The column's header cell style, over the table's `header_style`
+    /// (upstream `Column.header_style`).
+    pub fn header_style(&self) -> Option<&Style> {
+        self.header_fill.as_ref()
+    }
+
+    /// The column's footer cell style, over the table's `footer_style`
+    /// (upstream `Column.footer_style`).
+    pub fn footer_style(&self) -> Option<&Style> {
+        self.footer_fill.as_ref()
+    }
+}
+
+/// Read access to a row: its cells and upstream's public `Row` fields. Not
+/// upstream as methods; they change nothing.
+impl Row {
+    /// The row's cells, as added. A row may hold fewer cells than the table
+    /// has columns; the missing ones render empty.
+    pub fn cells(&self) -> &[Cell] {
+        &self.cells
+    }
+
+    /// The row's own style (upstream `Row.style`).
+    pub fn style(&self) -> Option<&StyleType> {
+        self.style.as_ref()
+    }
+
+    /// Whether a line is drawn beneath the row (upstream `Row.end_section`).
+    pub fn end_section(&self) -> bool {
+        self.end_section
+    }
+}
+
 impl Column {
     /// A column with every upstream default and the given header / justify.
     fn new(header: Cell, justify: Justify) -> Self {
@@ -98,7 +158,9 @@ impl Column {
 
 /// A row's cells and the row's own options. Port of `rich.table.Row` (which
 /// upstream keeps apart from the cells, stored per column).
-struct Row {
+/// A body row of a [`Table`], as upstream's `rich.table.Row` plus the row's
+/// cells (upstream keeps them per column). Read it with [`Table::rows`].
+pub struct Row {
     cells: Vec<Cell>,
     /// A style for the whole row (`add_row(..., style=…)`).
     style: Option<StyleType>,
@@ -569,6 +631,75 @@ impl Table {
     /// The number of columns.
     pub fn column_count(&self) -> usize {
         self.columns.len()
+    }
+
+    /// The columns (upstream `Table.columns`), read-only. Not upstream as a
+    /// method, and it changes nothing; it lets an extension read what the
+    /// table holds instead of its rendering.
+    ///
+    /// ```
+    /// use rich::{Justify, Table};
+    /// use rich::table::Cell;
+    ///
+    /// let mut table = Table::new().title("Jobs");
+    /// table.add_column_justify("ms", Justify::Right);
+    /// table.add_row(&["12"]);
+    /// let column = &table.columns()[0];
+    /// assert!(matches!(column.header(), Cell::Markup(h) if h == "ms"));
+    /// assert_eq!(column.justify(), Justify::Right);
+    /// assert!(matches!(&table.rows()[0].cells()[0], Cell::Markup(c) if c == "12"));
+    /// assert!(matches!(table.get_title(), Some(Cell::Markup(t)) if t == "Jobs"));
+    /// ```
+    pub fn columns(&self) -> &[Column] {
+        &self.columns
+    }
+
+    /// The body rows (upstream `Table.rows`, with their cells), read-only.
+    pub fn rows(&self) -> &[Row] {
+        &self.rows
+    }
+
+    /// The title set with [`title`](Self::title) or
+    /// [`title_text`](Self::title_text) (upstream `Table.title`).
+    pub fn get_title(&self) -> Option<&Cell> {
+        self.title.as_ref()
+    }
+
+    /// The caption set with [`caption`](Self::caption) or
+    /// [`caption_text`](Self::caption_text) (upstream `Table.caption`).
+    pub fn get_caption(&self) -> Option<&Cell> {
+        self.caption.as_ref()
+    }
+
+    /// Whether the header row is shown (upstream `Table.show_header`).
+    pub fn get_show_header(&self) -> bool {
+        self.show_header
+    }
+
+    /// Whether the footer row is shown (upstream `Table.show_footer`).
+    pub fn get_show_footer(&self) -> bool {
+        self.show_footer
+    }
+
+    /// Whether lines are drawn between rows (upstream `Table.show_lines`).
+    pub fn get_show_lines(&self) -> bool {
+        self.show_lines
+    }
+
+    /// The box the table is drawn with, or `None` for `box=None` (upstream
+    /// `Table.box`).
+    pub fn get_box(&self) -> Option<BoxSet> {
+        (!self.no_box).then_some(self.box_set)
+    }
+
+    /// The header row's style (upstream `Table.header_style`).
+    pub fn get_header_style(&self) -> &StyleType {
+        &self.header_style
+    }
+
+    /// The footer row's style (upstream `Table.footer_style`).
+    pub fn get_footer_style(&self) -> &StyleType {
+        &self.footer_style
     }
 
     /// The style of body row `index`: its place in `row_styles`, then its

@@ -46,10 +46,11 @@ single value. Each renderable becomes:
 | `Text`, a markup string | paragraphs: line breaks become hard breaks, blank lines paragraph breaks |
 | `Syntax` (feature `syntax`) | a fenced block with its language |
 | `Renderables` (a group) | each item as its own block |
+| `Markdown` (feature `markdown`) | its source, as it is |
 | `Columns`, and anything else through `Plain` or `push_plain` | the plain rendering in a ```` ```text ```` fence |
 
-`push_markdown` takes Markdown as it is: a core `Markdown` does not give its
-source back, so push the string you built it from. `push_code` writes a
+`push_markdown` takes Markdown source as it is, and `push(&markdown)` writes
+a core `Markdown` as the source it was parsed from. `push_code` writes a
 fence, and `push_heading` a heading from console markup.
 
 ## Styles
@@ -91,27 +92,32 @@ collapsible block, which suits long logs in a comment:
 </details>
 ```
 
-A panel around a table or another drawing keeps the drawing in a
-```` ```text ```` fence inside the block.
+A panel's title and subtitle are read from the panel. Its body is
+written as paragraphs when it is a `Text` (or prints as one); any other
+body is rendered and read back, and a table or another drawing stays a
+drawing in a ```` ```text ```` fence inside the block.
 
-## How tables are read
+## How content is read
 
-The core `Table` is a faithful port of upstream's and has no accessors for
-its cells. The exporter renders it wide and reads the cells back from the
-rendering, between the column borders of its top edge: the text, its
-styles, and where the text sits in the column, which gives the alignment
-(left is GitHub's default `---`, right `---:`, centred `:---:`).
+Tables, panels, rules and Markdown are read through core's read-only
+accessors, which mirror upstream's public attributes: `Table::columns`
+(each column's header, footer, justify and style), `Table::rows` (each
+row's cells and style), `get_title`, `get_caption`, `get_show_header`
+and `get_show_footer`; `Panel::get_title`, `get_subtitle` and
+`renderable`; `Rule::get_title`; `Markdown::markup`. So every table is
+written exactly, whatever its box, width or wrapping: a grid, a table
+without edges and a cell of several lines (joined with `<br>`) included.
+The alignment row comes from each column's justify (left is GitHub's
+default `---`, right `---:`, centred `:---:`).
 
-Two kinds of table cannot be read that way and are written as their plain
-rendering in a ```` ```text ```` fence instead:
+Header cells are written without their style (GitHub bolds headers
+itself); body cells keep their own styles over the column's and row's; a
+footer is written as the last row, in the table's `footer_style`. A cell
+that is a renderable with no text is its plain rendering.
 
-- one with no borders to read: `Table::grid()`, `show_edge(false)`, or a box
-  whose edges are blank;
-- one whose rows cannot be told apart: a cell of two or more lines in a
-  table without `show_lines`, where the lines look like rows.
-
-Header cells are written without their style (GitHub bolds headers itself).
-A footer is told from a row by the `table.footer` bold it is drawn in.
+Only renderables that expose nothing are still rendered and read back, or
+written plain: `Columns`, a panel's body that is not text, and anything
+passed to `Plain`.
 
 ## GitHub's limit
 

@@ -25,6 +25,19 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   code,markdown`, and checks that `rs-rich-ext` with `sql` and core's
   `code,markdown` carries no syntect or bincode.
 
+### rs-rich: read-only accessors for tables, panels, rules and Markdown
+
+- Getters that mirror upstream's public attributes and change nothing:
+  `Table::columns` and `Table::rows` (the now-public `table::Column`, with
+  `header`, `footer`, `justify`, `style`, `header_style` and
+  `footer_style`, and `table::Row`, with `cells`, `style` and
+  `end_section`), `Table::get_title`, `get_caption`, `get_show_header`,
+  `get_show_footer`, `get_show_lines`, `get_box`, `get_header_style` and
+  `get_footer_style`; `Panel::renderable`, `get_title`, `get_subtitle`,
+  `get_title_align` and `get_subtitle_align`; `Rule::get_title` and
+  `get_align`; `Markdown::markup`. A `get_` prefix where the builder
+  already has the name, as `Tree::get_style`. Output is unchanged.
+
 ### rs-rich-ext: Markdown for GitHub
 
 - **`markdown_export`** writes renderables as GitHub-flavoured Markdown, for
@@ -36,10 +49,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and markup (inline Markdown, code from `code`-named styles), `Syntax` (a
   fence with its language) and groups. Anything else, `Columns` included,
   is its plain rendering in a ```` ```text ```` fence at a set width.
-- The core `Table`, `Panel` and `Rule` expose no cells, body or title, so
-  they are rendered wide and read back; a table with no borders to read, or
-  whose rows cannot be told apart, falls back to its plain rendering. A
-  core `Markdown` does not give its source back: `push_markdown` takes it.
+- Exact: tables, panels, rules and Markdown are read through core's new
+  read-only accessors, not their rendering, so every table is written as
+  it is (a grid, a table without edges, a cell of several lines as
+  `<br>`), styles named `code` survive in table cells, and a core
+  `Markdown` is written as its source. Only what exposes nothing (a
+  panel's non-text body, `Columns`) is rendered and read back, or plain.
 - `fit_github_comment` and `truncate_markdown` cut Markdown to GitHub's
   65 536-character comment limit at a line break, close an open fence or
   `<details>` block, and say how much was kept.
