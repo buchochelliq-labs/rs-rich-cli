@@ -149,6 +149,16 @@ jobs:
               exit 1
             fi
           done
+          # `code` and `markdown` keep `Syntax` and `Markdown` without syntect,
+          # for a highlighter such as rs-rich-ext's `sql`.
+          found="$(cargo tree -p rs-rich-ext --no-default-features \
+            --features sql,rich/code,rich/markdown -e normal --prefix none \
+            | grep -E '^(syntect|bincode|onig) ' || true)"
+          if [ -n "$found" ]; then
+            echo "::error::rs-rich-ext with sql and core's code,markdown still depends on:"
+            echo "$found"
+            exit 1
+          fi
 
       - name: Verify interactive stdin and NO_COLOR in a terminal
         run: python3 scripts/test_cli_terminal.py --binary target/debug/rich
@@ -180,6 +190,10 @@ jobs:
           # Without syntect and pulldown-cmark: no `Syntax`, no `Markdown`.
           - crate: rs-rich
             args: "--no-default-features"
+          # `Syntax` and `Markdown` without syntect: code renders through a
+          # registered highlighter, or plain.
+          - crate: rs-rich
+            args: "--no-default-features --features code,markdown"
           # rich-art is zero-dependency by default; its image/GIF support is
           # opt-in, and each config compiles different code. `--all-features`
           # rather than naming them, so new features are covered automatically.
@@ -195,6 +209,13 @@ jobs:
           # `--all-features` above covers them with everything else.
           - crate: rs-rich-ext
             args: "--no-default-features --features qr"
+          # The SQL highlighter on its own: no syntect, no `Syntax`.
+          - crate: rs-rich-ext
+            args: "--no-default-features --features sql"
+          # The SQL highlighter behind core's `Syntax` and Markdown fences,
+          # still without syntect (the `sql_without_syntect` test).
+          - crate: rs-rich-ext
+            args: "--no-default-features --features sql,rich/code,rich/markdown"
           - crate: rs-rich-art
             args: ""
           - crate: rs-rich-art

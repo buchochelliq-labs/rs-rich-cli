@@ -681,3 +681,22 @@ dependency on extensions. See [encoding policy](troubleshooting.md#text-encoding
   could still differ.
 - **Enable:** `cargo build -p rs-rich-cli --release --features onig`, or
   `rs-rich = { version = "…", features = ["onig"] }`.
+
+### 39. `Syntax` and `Markdown` without syntect (`code`)
+
+- **Default:** unchanged. `syntax` (on by default) is now `code` plus syntect,
+  and `markdown` implies `code`; the default feature set, and so the default
+  build and its output, are as before.
+- **Opt-in:** the `code` Cargo feature, off by default, keeps `Syntax`, the
+  `CodeHighlighter` plumbing and everything `Markdown` needs without syntect
+  (`default-features = false, features = ["code", "markdown"]`). Such a build
+  has no built-in engine: a `Syntax` or Markdown code block highlights with
+  its own highlighter or the console's default (`ConsoleCodeHighlighting`,
+  which `rich_ext`'s registry installs), and with neither renders as plain
+  code in the same layout, like a theme without a background. Upstream
+  always highlights with Pygments.
+- **Why:** an application that only highlights SQL (through
+  `rich_ext::sql::SqlHighlighter`) can drop syntect and its bincode 1.x,
+  which carries a security advisory, and keep `Syntax` and Markdown fences.
+- **Enable:** `rs-rich = { version = "…", default-features = false,
+  features = ["code", "markdown"] }`.

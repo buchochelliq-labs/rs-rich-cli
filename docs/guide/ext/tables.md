@@ -12,6 +12,8 @@ operations upstream leaves to you, and a table for rows that keep changing:
   widths that stay put while it scrolls.
 - **`sort`** and **`group`**: the same operations as functions over plain
   rows, for building a core `Table` yourself.
+- **`PlainRows`** and **`PlainTree`**: data into a core `Table` or `Tree` as
+  plain text, never parsed as markup ([below](#plain-text-cells)).
 
 `rs-rich-data` adds a SQL-shaped result set on top (see
 [SQL result sets](#sql-result-sets)).
@@ -444,6 +446,34 @@ console.print(&ResultSet::new(rows).elapsed(Duration::from_millis(12)));
 For a file, `ResultSet::read(source, offset, limit)` reads one pass of any
 `RowSource`. Run `infer::Inferrer` over CSV rows first so their columns get
 types.
+
+## Plain-text cells
+
+The core `Table::add_row` reads each `&str` as console markup, as upstream
+reads a `str`: `"[bold]x[/]"` is a bold `x`, and a `[` in a file name or a
+column name can restyle or hide what follows. Data you do not control goes
+in as a `Text`, which is never parsed. The `PlainRows` extension trait does
+that wrapping for you, and `PlainTree` does it for tree labels:
+
+```rust
+use rich::{Table, Tree};
+use rich_ext::table::{PlainRows, PlainTree};
+
+let mut table = Table::new();
+table.add_plain_column("file");
+table.add_plain_column_justify("size", rich::Justify::Right);
+table.add_plain_row(["[draft] notes.md", "12 kB"]);
+table.add_plain_rows([["a:smile:b.txt", "1 kB"], ["c.txt", "3 kB"]]);
+table.plain_column_footer("[total]");
+
+let mut tree = Tree::new("files");
+tree.add_plain("[draft] notes.md");
+```
+
+Every cell, header and footer is shown exactly as written. A plain cell is a
+`Text` cell, so upstream's rules for those apply: a column's `highlight`
+does not highlight it, and emoji codes stay as written. For `Columns`, use
+`Columns::from_cells` with `Cell::from(Text::new(item))`.
 
 ## Styles
 

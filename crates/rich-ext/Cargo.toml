@@ -141,6 +141,15 @@ local-time = ["dep:chrono"]
 archive = ["dep:zip", "dep:flate2"]
 # `qr::QrCode`: QR codes drawn with half blocks, through qrcodegen.
 qr = ["dep:qrcodegen"]
+# `sql::SqlHighlighter`: a hand-written SQL lexer as a code highlighter, with
+# Jinja blocks (dbt). No dependencies, and neither syntect nor `syntax`.
+sql = []
+
+# `Syntax` and Markdown highlighted by `sql` without syntect; CI runs it with
+# `--no-default-features --features sql,rich/code,rich/markdown`.
+[[test]]
+name = "sql_without_syntect"
+required-features = ["sql", "rich/code", "rich/markdown"]
 
 [[example]]
 name = "guide_live_layout"
@@ -230,6 +239,11 @@ required-features = ["data", "toml"]
 [[example]]
 name = "guide_documents"
 required-features = ["syntax"]
+
+[[example]]
+name = "guide_markdown_export"
+# Checks the Markdown it prints.
+test = true
 
 [[example]]
 name = "guide_charts_extra"

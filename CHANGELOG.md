@@ -79,6 +79,91 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `clippy::return_self_not_must_use`, so new builders stay covered; the
   rule is in `CONTRIBUTING.md`, "API conventions".
 
+### rs-rich: `Syntax` and `Markdown` without syntect (feature `code`)
+
+- **`code`**, a new feature with no dependencies: `Syntax`, the
+  `CodeHighlighter` plumbing and everything `Markdown` needs. `syntax` is
+  now `code` plus syntect, `markdown` implies `code` instead of `syntax`,
+  and `syntax-cache` and `onig` stay on `syntax`. The default features, and
+  the default output, are unchanged; the golden tests pass as they were.
+- With `code` but not `syntax`, a `Syntax` or Markdown code block
+  highlights with its own highlighter or the console's default (which
+  `rs-rich-ext`'s registry installs), and with neither renders as plain
+  code in the same layout. `SyntectHighlighter` stays behind `syntax`.
+  Recorded as [Divergences #39](docs/DIVERGENCES.md).
+- CI builds, lints and tests `--no-default-features --features
+  code,markdown`, and checks that `rs-rich-ext` with `sql` and core's
+  `code,markdown` carries no syntect or bincode.
+
+### rs-rich: read-only accessors for tables, panels, rules and Markdown
+
+- Getters that mirror upstream's public attributes and change nothing:
+  `Table::columns` and `Table::rows` (the now-public `table::Column`, with
+  `header`, `footer`, `justify`, `style`, `header_style` and
+  `footer_style`, and `table::Row`, with `cells`, `style` and
+  `end_section`), `Table::get_title`, `get_caption`, `get_show_header`,
+  `get_show_footer`, `get_show_lines`, `get_box`, `get_header_style` and
+  `get_footer_style`; `Panel::renderable`, `get_title`, `get_subtitle`,
+  `get_title_align` and `get_subtitle_align`; `Rule::get_title` and
+  `get_align`; `Markdown::markup`. A `get_` prefix where the builder
+  already has the name, as `Tree::get_style`. Output is unchanged.
+
+### rs-rich-ext: Markdown for GitHub
+
+- **`markdown_export`** writes renderables as GitHub-flavoured Markdown, for
+  pull request comments and job summaries. `GfmDocument` collects blocks;
+  `ToGfm` is implemented for `Table` (a GFM table: header, an alignment row
+  from each column's justify, `|` escaped, cell styles as `**`, `*`, `~~`
+  and links), `Tree` (nested lists), `Panel` (a blockquote, or
+  `<details><summary>` with `PanelStyle::Details`), `Rule` (`---`), `Text`
+  and markup (inline Markdown, code from `code`-named styles), `Syntax` (a
+  fence with its language) and groups. Anything else, `Columns` included,
+  is its plain rendering in a ```` ```text ```` fence at a set width.
+- Exact: tables, panels, rules and Markdown are read through core's new
+  read-only accessors, not their rendering, so every table is written as
+  it is (a grid, a table without edges, a cell of several lines as
+  `<br>`), styles named `code` survive in table cells, and a core
+  `Markdown` is written as its source. Only what exposes nothing (a
+  panel's non-text body, `Columns`) is rendered and read back, or plain.
+- `fit_github_comment` and `truncate_markdown` cut Markdown to GitHub's
+  65 536-character comment limit at a line break, close an open fence or
+  `<details>` block, and say how much was kept.
+- Guide: [Markdown for GitHub](docs/guide/ext/markdown-export.md).
+
+### rs-rich-ext: plain-text table cells
+
+- **`table::PlainRows`**, an extension trait for the core `Table`:
+  `add_plain_row`, `add_plain_rows`, `add_plain_column`,
+  `add_plain_column_justify` and `plain_column_footer` take cells as plain
+  text, so `[bold]x[/]`, a `[` in a file name or `:smile:` stay as written.
+  The core `add_row` still reads a `&str` as markup, as upstream does.
+- **`table::PlainTree::add_plain`** does the same for tree labels.
+- Guide: [Plain-text cells](docs/guide/ext/tables.md#plain-text-cells).
+
+### rs-rich-ext: a SQL highlighter without syntect
+
+- **`sql::SqlHighlighter`** (feature `sql`, off by default, no new
+  dependencies): a `CodeHighlighter` on a hand-written lexer for SQL,
+  answering to `sql` and the aliases `postgresql`, `mysql`, `sqlite`,
+  `bigquery`, `snowflake`, `duckdb` and others. Keywords (with common
+  dialect words), types, constants, functions, names, quoted names
+  (`""`, backticks, `[]`), strings (`''` escapes, `E''`, dollar quotes,
+  triple quotes), numbers, nested comments, parameters, operators and Jinja
+  blocks (`{{ }}`, `{% %}`, `{# #}`) for dbt, in `monokai`, `ansi_dark`
+  and `ansi_light`. `with_fallback` hands other languages to another
+  highlighter; `SqlPlugin` registers it as `"sql"`.
+- `sql::highlight` returns highlighted SQL as a `Text`, for builds without
+  `Syntax`; `sql::tokenize` returns the tokens.
+- With core's new `code` and `markdown` features (and not `syntax`), a
+  `Syntax` and a Markdown ```` ```sql ```` fence are highlighted by
+  `SqlHighlighter` from the registry with no syntect in the build (the
+  `sql_without_syntect` test, which CI runs that way).
+- Tests: token classes on tricky input, unterminated strings and comments,
+  and 3000 random inputs that must tokenize and highlight without a panic;
+  a `Syntax` block and a Markdown ```` ```sql ```` fence highlighted through
+  the console. CI builds the feature on its own.
+- Guide: [SQL without syntect](docs/guide/ext/code-highlighters.md#sql-without-syntect).
+
 ### rs-rich-embed: Chrome's DevTools over a pipe on Linux and macOS
 
 - **No DevTools port on Unix.** `ChromeEngine` starts Chrome with

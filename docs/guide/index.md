@@ -135,7 +135,8 @@ images all rely on that.
 
 | Crate | Feature | Turns on |
 |---|---|---|
-| `rs-rich` | *(default)* `syntax`, `markdown` | `Syntax` (syntect) and `Markdown` (pulldown-cmark; implies `syntax`). With `default-features = false` everything else in the faithful core remains, without syntect, its bincode 1.x or pulldown-cmark. |
+| `rs-rich` | *(default)* `syntax`, `markdown` | `Syntax` with syntect as its highlighter, and `Markdown` (pulldown-cmark; implies `code`). With `default-features = false` everything else in the faithful core remains, without syntect, its bincode 1.x or pulldown-cmark. |
+| | `code` | `Syntax` and the `CodeHighlighter` plumbing without syntect (`syntax` implies it). Code highlights through a highlighter you give it or register (such as `rich_ext::sql`), and is plain otherwise. `features = ["code", "markdown"]` keeps `Syntax` and `Markdown` without syntect. |
 | | `syntax-cache`, `json-escape-safe` | Opt-in divergences from upstream, documented in [Divergences](../DIVERGENCES.md). |
 | | `onig` | Oniguruma instead of pure-Rust `fancy-regex` for syntax highlighting: 2–4× faster, same output, needs a C compiler ([Divergences #26](../DIVERGENCES.md)). |
 | `rs-rich-ext` | *(default)* `syntax`, `markdown` | Core's two features, plus what needs them: `rst`, `cli_doc::markdown_view`, the `syntect` registry entry and `testing::conformance`. Without `syntax`, `source_view`, `SourceDiff` and `PatchView` render unhighlighted. |

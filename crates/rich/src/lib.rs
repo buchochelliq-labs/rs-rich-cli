@@ -21,6 +21,21 @@
 //! - Input and paging: [`prompt`], [`pager`].
 //! - Extension points: [`protocol`], [`measure`].
 //!
+//! ## Cargo features
+//!
+//! - `syntax` *(default)*: [`syntax`] with syntect as the code highlighter
+//!   used when none is given. Implies `code`.
+//! - `markdown` *(default)*: [`markdown`], parsed with pulldown-cmark.
+//!   Implies `code`, not `syntax`.
+//! - `code`: [`syntax`] and the [`CodeHighlighter`] plumbing without syntect.
+//!   A `Syntax` or Markdown code block highlights with its own highlighter or
+//!   the console's default ([`ConsoleCodeHighlighting`]); with neither it
+//!   renders as plain code in the same layout. Use
+//!   `default-features = false, features = ["code", "markdown"]` to keep
+//!   `Syntax` and `Markdown` without syntect and its dependencies.
+//! - `syntax-cache`, `onig`, `json-escape-safe`: opt-in divergences, see
+//!   `docs/DIVERGENCES.md`.
+//!
 //! Most modules are partial ports of their upstream counterpart; the per-module
 //! status and parity evidence are in `docs/PORTING.md`.
 
@@ -75,7 +90,7 @@ pub mod status;
 pub mod style;
 pub mod styled;
 pub mod svg;
-#[cfg(feature = "syntax")]
+#[cfg(feature = "code")]
 pub mod syntax;
 pub mod table;
 pub mod terminal_theme;
@@ -127,8 +142,10 @@ pub use crate::spinner::Spinner;
 pub use crate::status::Status;
 pub use crate::style::{Meta, MetaValue, Style, StyleType};
 pub use crate::styled::Styled;
+#[cfg(feature = "code")]
+pub use crate::syntax::Syntax;
 #[cfg(feature = "syntax")]
-pub use crate::syntax::{Syntax, SyntectHighlighter};
+pub use crate::syntax::SyntectHighlighter;
 pub use crate::table::{Cell, ColumnOptions, Table};
 pub use crate::terminal_theme::{
     TerminalTheme, DEFAULT_TERMINAL_THEME, DIMMED_MONOKAI, MONOKAI, NIGHT_OWLISH, SVG_EXPORT_THEME,

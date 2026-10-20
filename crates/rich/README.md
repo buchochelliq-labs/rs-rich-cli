@@ -58,8 +58,8 @@ Export
 
 ## Cargo features
 
-`syntax` (syntect) and `markdown` (pulldown-cmark, implies `syntax`) are on
-by default, so a default build is the whole port. An application that never
+`syntax` (syntect, implies `code`) and `markdown` (pulldown-cmark, implies
+`code`) are on by default, so a default build is the whole port. An application that never
 renders `Syntax` or `Markdown` can build without them:
 
 ```toml
@@ -70,6 +70,17 @@ That removes `rich::syntax`, `rich::markdown` and the `Syntax` /
 `SyntectHighlighter` re-exports, along with syntect, bincode 1.x, a second
 copy of `fancy-regex` and pulldown-cmark. Everything else renders exactly
 as before.
+
+To keep `Syntax` and `Markdown` but not syntect, turn on `code` (no
+dependencies) and `markdown`:
+
+```toml
+rs-rich = { version = "0.0.10", default-features = false, features = ["code", "markdown"] }
+```
+
+Code then highlights through a `CodeHighlighter` you give a `Syntax` or set
+on the console (such as `rs-rich-ext`'s `sql` highlighter), and renders as
+plain code, in the same layout, when there is none.
 
 ## Extending it
 

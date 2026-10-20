@@ -129,6 +129,7 @@ nav:
           - Documents (Org, AsciiDoc, man pages): guide/ext/documents.md
           - Transforms: guide/ext/transforms.md
           - CLI authoring: guide/ext/cli-authoring.md
+          - Markdown for GitHub: guide/ext/markdown-export.md
           - Diffs and test reports: guide/ext/diffs-and-test-reports.md
           - QA tooling: guide/ext/qa.md
           - Capabilities and fidelity: guide/ext/capabilities.md
