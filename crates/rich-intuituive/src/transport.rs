@@ -98,9 +98,7 @@ fn now() -> Duration {
 impl Transport {
     /// Draw readers of the position again every `every` while playing
     /// (default a tenth of a second; at least a millisecond).
-    // A handle: the change is made through shared state, so the
-    // returned copy is only for chaining and may be dropped.
-    #[allow(clippy::return_self_not_must_use)]
+    #[must_use]
     pub fn tick(self, every: Duration) -> Transport {
         self.every.set(every.max(Duration::from_millis(1)));
         self
@@ -109,9 +107,7 @@ impl Transport {
     /// Run `hook` when the play head reaches the end while playing (it
     /// stops there first): load the next track, loop back
     /// (`seek(Duration::ZERO)` and `play()`), close the view.
-    // A handle: the change is made through shared state, so the
-    // returned copy is only for chaining and may be dropped.
-    #[allow(clippy::return_self_not_must_use)]
+    #[must_use]
     pub fn on_end(self, hook: impl FnMut(&mut Ctx) + 'static) -> Transport {
         self.on_end.replace(Some(Rc::new(RefCell::new(hook))));
         self

@@ -69,9 +69,9 @@ so:
   type itself, and every function that returns one warns when it is dropped.
 - A setter on any other type carries `#[must_use]` on the method.
 - A setter on a `Copy` handle that makes its change through shared state
-  (`Transport::tick`, `Timer::max_catch_up`) works even when its result is
-  dropped; it carries `#[allow(clippy::return_self_not_must_use)]` and a
-  comment saying why.
+  (`Transport::tick`, `Timer::max_catch_up`) is `#[must_use]` too, though
+  the change is made either way: one rule for every builder. A caller
+  that only wants the change writes `let _ = transport.tick(d);`.
 
 ## Before every PR
 

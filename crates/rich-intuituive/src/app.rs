@@ -1397,9 +1397,7 @@ impl Timer {
     /// call, dropping the rest, so after a long stall (a suspended
     /// process, a machine asleep) the app does not run hours of steps at
     /// once. By default every tick due is handed over.
-    // A handle: the change is made through shared state, so the
-    // returned copy is only for chaining and may be dropped.
-    #[allow(clippy::return_self_not_must_use)]
+    #[must_use]
     pub fn max_catch_up(self, ticks: u64) -> Timer {
         self.with(|timer, _| timer.max_catch_up = Some(ticks.max(1)));
         self

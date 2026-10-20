@@ -93,7 +93,7 @@ pub fn tabs(miller: Miller) -> FileTabs {
     // A selection made for the columns is kept per tab.
     miller.tabs.replace(Some(set));
     if let Some(selection) = miller.selection.get_untracked() {
-        selection.scoped(&set);
+        let _ = selection.scoped(&set);
     }
     // The active tab follows the columns.
     watch(

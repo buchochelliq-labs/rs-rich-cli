@@ -198,7 +198,7 @@ fn a_timer_is_told_the_apps_clock_and_the_ticks_it_missed() {
 fn a_fixed_step_catches_up_and_is_exact_under_advance() {
     let app = App::new(|| {
         let (steps, calls) = (signal(0u64), signal(0u64));
-        fixed_step(ms(28), move |_, n| {
+        let _ = fixed_step(ms(28), move |_, n| {
             steps.update(|s| *s += n);
             calls.update(|c| *c += 1);
         })

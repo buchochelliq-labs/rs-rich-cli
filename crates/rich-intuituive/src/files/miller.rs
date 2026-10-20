@@ -369,11 +369,9 @@ impl Miller {
 
     /// The columns' shares of the width: Yazi's `ratio`, `[1, 4, 3]` by
     /// default. A share of 0 hides that column's pane down to its rail.
-    // A handle: the change is made through shared state, so the
-    // returned copy is only for chaining and may be dropped.
-    #[allow(clippy::return_self_not_must_use)]
+    #[must_use]
     pub fn ratios(self, parent: u16, current: u16, preview: u16) -> Miller {
-        self.columns.ratios(parent, current, preview);
+        let _ = self.columns.ratios(parent, current, preview);
         self
     }
 

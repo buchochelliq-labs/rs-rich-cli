@@ -383,9 +383,7 @@ impl<S: MillerSource> Miller<S> {
 
     /// The columns' shares of the width, `[1, 4, 3]` by default. A share
     /// of 0 hides that column's pane down to its rail.
-    // A handle: the change is made through shared state, so the
-    // returned copy is only for chaining and may be dropped.
-    #[allow(clippy::return_self_not_must_use)]
+    #[must_use]
     pub fn ratios(self, parent: u16, current: u16, preview: u16) -> Self {
         let total = f64::from(parent + current + preview).max(1.0);
         self.outer.set(f64::from(parent) / total);

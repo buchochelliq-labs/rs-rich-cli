@@ -417,9 +417,7 @@ impl Capture {
     /// for a capture whose signals are not yet taken (a device's is set by
     /// [`AudioOptions::stall_after`](super::AudioOptions::stall_after) when
     /// the `audio` feature is on). At least a millisecond.
-    // A handle: the change is made through shared state, so the
-    // returned copy is only for chaining and may be dropped.
-    #[allow(clippy::return_self_not_must_use)]
+    #[must_use]
     pub fn stall_after(self, quiet: impl Into<Option<Duration>>) -> Capture {
         *lock(&self.shared.stall) = quiet.into().map(|q| q.max(Duration::from_millis(1)));
         self

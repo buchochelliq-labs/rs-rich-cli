@@ -267,9 +267,7 @@ impl From<&str> for InputHistory {
 
 impl InputHistory {
     /// Keep at most `entries` (500 by default); the oldest go.
-    // A handle: the change is made through shared state, so the
-    // returned copy is only for chaining and may be dropped.
-    #[allow(clippy::return_self_not_must_use)]
+    #[must_use]
     pub fn limit(self, entries: usize) -> InputHistory {
         self.limit.set(entries.max(1));
         self

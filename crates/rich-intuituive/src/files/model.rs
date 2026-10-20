@@ -226,9 +226,7 @@ impl DirModel {
     /// way; by name alone a PNG called `.txt` or a script with no
     /// extension gets the wrong colour. A directory left before its sniff
     /// is done stops it.
-    // A handle: the change is made through shared state, so the
-    // returned copy is only for chaining and may be dropped.
-    #[allow(clippy::return_self_not_must_use)]
+    #[must_use]
     pub fn sniff(self) -> DirModel {
         let model = self;
         let mut running: Option<Arc<AtomicBool>> = None;
@@ -295,9 +293,7 @@ impl DirModel {
     /// change (through [`watch_path`](crate::watch_path); the watch moves
     /// with the directory). With the `watch` feature.
     #[cfg(feature = "watch")]
-    // A handle: the change is made through shared state, so the
-    // returned copy is only for chaining and may be dropped.
-    #[allow(clippy::return_self_not_must_use)]
+    #[must_use]
     pub fn watch(self) -> DirModel {
         let model = self;
         let mut watching: Option<crate::PathWatch> = None;

@@ -339,9 +339,7 @@ impl<T: 'static> Resource<T> {
     /// app's clock ([`after`](crate::after)), so a test steps through it
     /// with [`Driver::advance`](crate::Driver::advance). `None` goes
     /// back to loading at once, as without it.
-    // A handle: the change is made through shared state, so the
-    // returned copy is only for chaining and may be dropped.
-    #[allow(clippy::return_self_not_must_use)]
+    #[must_use]
     pub fn stale_after(self, wait: impl Into<Option<Duration>>) -> Resource<T> {
         self.stale.set(wait.into());
         self

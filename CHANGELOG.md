@@ -16,14 +16,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   away and did nothing. 184 types that are only useful once used
   (intuiTUIve's `Node`, its `*Options` structs and widgets, rs-rich-ext's
   charts and views, rs-rich-interact's components, `Graph`, the art
-  renderables, `RichWidget`) are `#[must_use]`, and so are 405 setters on
+  renderables, `RichWidget`) are `#[must_use]`, and so are 423 setters on
   other types.
 - No breaking change: code that uses its builders compiles as before;
   code that drops one gets an `unused_must_use` warning.
 - Setters on `Copy` handles that work through shared state
   (`Transport::tick`, `Timer::max_catch_up`, `MultiSelect::scoped`,
-  `Resource::stale_after`, …) still work when their result is dropped, and
-  do not warn.
+  `Resource::stale_after`, …) warn too, for one rule everywhere; they still
+  make their change when the result is dropped, so `let _ =` keeps the old
+  behaviour without the warning.
 - Every crate but `rs-rich` (the mirror is unchanged) turns on
   `clippy::return_self_not_must_use`, so new builders stay covered; the
   rule is in `CONTRIBUTING.md`, "API conventions".

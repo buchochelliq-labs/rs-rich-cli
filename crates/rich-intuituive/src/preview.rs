@@ -163,7 +163,7 @@ where
         },
     );
     if let Some(delay) = clear_after {
-        loaded.stale_after(delay);
+        let _ = loaded.stale_after(delay);
     }
     on_write_ref(loaded.state, move |load, _| match load {
         Load::Ready(Some((key, value))) => {

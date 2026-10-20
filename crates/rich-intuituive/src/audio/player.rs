@@ -210,7 +210,7 @@ pub fn player(options: PlayerOptions) -> Player {
         #[cfg(feature = "audio")]
         output: signal(options.output),
     };
-    music.transport.on_end(move |_| music.advance());
+    let _ = music.transport.on_end(move |_| music.advance());
     music
 }
 
