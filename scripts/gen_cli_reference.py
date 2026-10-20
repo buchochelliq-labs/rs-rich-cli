@@ -59,6 +59,33 @@ consumers can read `error.message`. Informational exits such as `--help` and
 """
 
 
+# The examples the docs terminal runs (the playground's tier 2): their fences
+# get its "Try it" mark. scripts/check_playground_blocks.mjs runs every
+# marked block and fails on an example that runs but is not marked, so a
+# command missing here, or one that stops running, fails the docs job.
+PLAYGROUND_COMMANDS = {
+    "rich completions bash > ~/.local/share/bash-completion/completions/rich",
+    'rich completions zsh > "${fpath[1]}/_rich"',
+    "rich completions fish > ~/.config/fish/completions/rich.fish",
+    "rich micro list",
+    "rich micro preview status/loading",
+    'rich -p --emoji "Deploying :micro:status/loading: done :micro:status/success:"',
+    "rich banner Hello",
+    "rich banner --gradient rainbow --align center 'Ship it'",
+    "rich shell status --exit 101 --duration 4.2 --command 'cargo test'",
+}
+PLAYGROUND_MARK = '```sh { .rich-playground data-kind="cli" }'
+
+
+def mark_playground(markdown):
+    """Give the one-command `sh` examples the docs terminal runs its mark."""
+    lines = markdown.split("\n")
+    for i, line in enumerate(lines[:-2]):
+        if line == "```sh" and lines[i + 1] in PLAYGROUND_COMMANDS and lines[i + 2] == "```":
+            lines[i] = PLAYGROUND_MARK
+    return "\n".join(lines)
+
+
 def demote(markdown):
     """Shift every heading down one level, leaving fenced code alone, so the
     generated `# rich` sits under this page's `# CLI reference`."""
@@ -91,7 +118,7 @@ def main():
     parts = [HEADER, demote(generated("docs", "markdown")), demote(generated("docs", "config"))]
     parts.append(FOOTER)
     rendered = "\n".join(parts)
-    rendered = rendered.replace("\n\n\n", "\n\n")
+    rendered = mark_playground(rendered.replace("\n\n\n", "\n\n"))
     if args.check:
         if OUT.read_text(encoding="utf-8") != rendered:
             print("docs/cli-reference.md is stale; regenerate with this binary", file=sys.stderr)
