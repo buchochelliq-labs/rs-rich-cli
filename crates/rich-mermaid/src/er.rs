@@ -638,7 +638,10 @@ fn split_name(text: &str) -> (&str, &str) {
     let mut end = 0;
     let mut chars = text.char_indices().peekable();
     if text.starts_with('"') {
-        end = text[1..].find('"').map_or(text.len(), |close| close + 2);
+        end = text
+            .strip_prefix('"')
+            .and_then(|rest| rest.find('"'))
+            .map_or(text.len(), |close| close + 2);
     } else {
         while let Some(&(at, c)) = chars.peek() {
             if c.is_alphanumeric() || c == '_' || (c == '-' && !text[at..].starts_with("--")) {

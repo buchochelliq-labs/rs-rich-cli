@@ -1,0 +1,10 @@
+                                               ┌────────────────────────────────────────────┐                    ┌──────────────────────────┐
+                                               │                   ORDER                    │                    │        LINE-ITEM         │
+                                               ├────────────────────────────────────────────┤                    ├──────────────────────────┤
+┌────────────────────────┐      ┌─places──0..N─┤ int     orderNumber      PK                ├─1─┐                │ string  productCode   FK │
+│        CUSTOMER        │      │              │ string  deliveryAddress  FK  where it goes │   └─contains──1..N─┤ int     quantity         │
+├────────────────────────┤      │              └────────────────────────────────────────────┘                    │ float   pricePerUnit     │
+│ string  name           ├─1────┘                                                                                └──────────────────────────┘
+│ string  custNumber  PK ├┄1..N┄┐              ┌──────────────────┐
+│ string  sector         │      └┄┄uses┄┄┄1..N┄┤ DELIVERY-ADDRESS │
+└────────────────────────┘                     └──────────────────┘

@@ -357,9 +357,10 @@ impl Plan {
         let n = self.heads.len();
         let mut constraints = self.constraints.clone();
         let mut x = solve(n, &constraints);
-        // Each round adds a constraint for a frame that did not fit; a frame
-        // fits once added, so this ends within a round per frame.
-        for _ in 0..=self.frames.len() {
+        // Each round adds a constraint for each frame that did not fit, which
+        // then fits; pushing lifelines right can unsettle another, so a few
+        // rounds, bounded.
+        for _ in 0..8 {
             let mut added = false;
             for frame in &self.frames {
                 let ((lo, _), left, right) = self.frame_extent(frame, &x);
@@ -410,13 +411,13 @@ impl Plan {
         let top = self.head_row as i64;
         let last = self.height as i64 - 1;
         // Lifelines, heavy where active.
-        for p in 0..n {
-            for y in top + self.heads[p].1..=last {
-                canvas.bits(x[p], y, N | S, false);
+        for ((&column, &(_, h)), active) in x.iter().zip(&self.heads).zip(&self.active) {
+            for y in top + h..=last {
+                canvas.bits(column, y, N | S, false);
             }
-            for &(start, end) in &self.active[p] {
+            for &(start, end) in active {
                 for y in start..=end {
-                    canvas.heavy(x[p], y as i64);
+                    canvas.heavy(column, y as i64);
                 }
             }
         }

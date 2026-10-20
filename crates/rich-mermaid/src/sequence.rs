@@ -48,6 +48,8 @@ pub use draw::draw;
 pub const MAX_SOURCE: usize = rich_diagram::MAX_SOURCE;
 /// The most participants a diagram may have ([`rich_diagram::MAX_NODES`]).
 pub const MAX_PARTICIPANTS: usize = rich_diagram::MAX_NODES;
+/// The deepest blocks (`loop`, `alt`, …, `box`) may nest.
+pub const MAX_NESTING: usize = 32;
 /// The most statements that draw something (messages, notes and block
 /// lines) a diagram may have ([`rich_diagram::MAX_EDGES`]).
 pub const MAX_EVENTS: usize = rich_diagram::MAX_EDGES;
@@ -225,13 +227,15 @@ pub(crate) fn header_keyword(source: &str) -> Option<&str> {
     None
 }
 
+/// A source's front-matter title, its header keyword, and its statements
+/// with their line numbers.
+pub(crate) type Statements = (Option<String>, String, Vec<(usize, String)>);
+
 /// The statements after the header line, with their line numbers, and the
 /// front matter's `title:`. Statements split at line breaks and at `;`
 /// outside quotes and `#…;` entity codes. Fails when the source is too large
 /// or has no header.
-pub(crate) fn statements(
-    source: &str,
-) -> Result<(Option<String>, String, Vec<(usize, String)>), ParseError> {
+pub(crate) fn statements(source: &str) -> Result<Statements, ParseError> {
     if source.len() > MAX_SOURCE {
         return Err(ParseError::TooLarge(format!(
             "{} bytes, more than {MAX_SOURCE}",
@@ -545,6 +549,11 @@ impl Parser {
                 } else {
                     clean_label(rest)
                 };
+                if self.blocks.len() >= MAX_NESTING {
+                    return Err(ParseError::TooLarge(format!(
+                        "blocks nested more than {MAX_NESTING} deep"
+                    )));
+                }
                 self.blocks.push(Open {
                     kind: Some(kind),
                     keyword: kind.keyword(),

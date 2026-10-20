@@ -136,3 +136,159 @@ fn random_valid_graphs_draw() {
         );
     }
 }
+
+const SEQUENCE_TOKENS: &[&str] = &[
+    "A",
+    "B",
+    "Carol",
+    " ",
+    " ",
+    "\n",
+    "\n",
+    ";",
+    ":",
+    ",",
+    "->>",
+    "-->>",
+    "->",
+    "-->",
+    "-x",
+    "--x",
+    "-)",
+    "--)",
+    "<<->>",
+    "+",
+    "-",
+    "participant ",
+    "actor ",
+    " as ",
+    "Note left of ",
+    "Note right of ",
+    "Note over ",
+    "activate ",
+    "deactivate ",
+    "loop x\n",
+    "alt y\n",
+    "else\n",
+    "par\n",
+    "and\n",
+    "critical\n",
+    "option\n",
+    "break\n",
+    "rect rgb(1,2,3)\n",
+    "opt\n",
+    "end\n",
+    "autonumber\n",
+    "title T\n",
+    "box\n",
+    "create ",
+    "destroy ",
+    "<br>",
+    "#59;",
+    "日本",
+    "\u{1b}",
+    "\t",
+    "a long message text",
+];
+
+const ER_TOKENS: &[&str] = &[
+    "A",
+    "B",
+    "C-D",
+    "\"Two words\"",
+    " ",
+    " ",
+    "\n",
+    "\n",
+    ":",
+    "||--o{",
+    "}|..|{",
+    "|o--||",
+    "}o..o|",
+    "only one",
+    " to ",
+    " optionally to ",
+    "zero or more",
+    "{",
+    "}",
+    "string",
+    "int",
+    "PK",
+    "FK",
+    "UK",
+    ",",
+    "\"comment\"",
+    "[\"alias\"]",
+    "direction LR\n",
+    "direction BT\n",
+    "style A x\n",
+    "日本",
+    "\u{1b}",
+    "\t",
+];
+
+/// Sequence and ER diagrams: never a panic, never wider than asked.
+#[test]
+fn random_sequence_and_er_sources_never_panic() {
+    let mut rng = Rng(0x2545_f491_4f6c_dd1d);
+    let console = Console::builder().width(50).color_system(None).build();
+    for case in 0..3000 {
+        let (header, tokens) = if case % 2 == 0 {
+            ("sequenceDiagram\n", SEQUENCE_TOKENS)
+        } else {
+            ("erDiagram\n", ER_TOKENS)
+        };
+        let length = rng.next() % 50;
+        let mut source = header.to_string();
+        for _ in 0..length {
+            source.push_str(rng.pick(tokens));
+        }
+        let _ = rich_mermaid::sequence::parse(&source);
+        let _ = rich_mermaid::er::parse(&source);
+        let ascii = case % 4 < 2;
+        let out = console.render_to_string(&Mermaid::new(source.clone()).ascii(ascii));
+        for line in out.lines() {
+            assert!(
+                rich::cells::cell_len(line) <= 50,
+                "case {case}: too wide for {source:?}: {line:?}"
+            );
+        }
+    }
+}
+
+/// Well-formed random sequence diagrams always draw.
+#[test]
+fn random_valid_sequences_draw() {
+    let mut rng = Rng(7);
+    for case in 0..300 {
+        let people = 1 + rng.next() % 6;
+        let mut source = String::from("sequenceDiagram\n");
+        let mut depth = 0;
+        for _ in 0..1 + rng.next() % 25 {
+            let a = rng.next() % people;
+            let b = rng.next() % people;
+            match rng.next() % 6 {
+                0 if depth < 3 => {
+                    source.push_str(rng.pick(&["loop l\n", "alt a\n", "par p\n", "opt\n"]));
+                    depth += 1;
+                }
+                1 if depth > 0 => {
+                    source.push_str("end\n");
+                    depth -= 1;
+                }
+                2 => source.push_str(&format!(
+                    "Note {} p{a}: note {case}\n",
+                    rng.pick(&["left of", "right of", "over"])
+                )),
+                _ => source.push_str(&format!(
+                    "p{a}{}p{b}: message {a} to {b}\n",
+                    rng.pick(&["->>", "-->>", "-x", "--)", "<<->>"])
+                )),
+            }
+        }
+        source.push_str(&"end\n".repeat(depth));
+        let diagram = rich_mermaid::sequence::parse(&source)
+            .unwrap_or_else(|e| panic!("case {case}: {e}\n{source}"));
+        rich_mermaid::sequence::draw(&diagram, false).unwrap();
+    }
+}
