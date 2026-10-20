@@ -90,6 +90,7 @@ thing it introduces:
 | ![](../../assets/intuituive/running.svg){ .tui-icon width="20" } [Inline apps, backends and your own loop](running.md) | Inline apps, termion and termwiz, synchronized output, a loop of your own, inside ratatui |
 | ![](../../assets/intuituive/testing.svg){ .tui-icon width="20" } [Testing and the inspector](testing.md) | Headless tests, snapshots, a clock you move, the inspector |
 | ![](../../assets/intuituive/clones.svg){ .tui-icon width="20" } [Eleven apps, rebuilt](clones.md) | Real terminal apps cloned from components only: what each one is built from, with recordings |
+| ![](../../assets/intuituive/widget-index.svg){ .tui-icon width="20" } [Widget index](widget-index.md) | Every widget and component, with its constructor and the section that documents it |
 
 Then: [porting a ratatui app](porting.md), [ratatui's examples,
 rebuilt](ratatui-examples.md), [serving an app to a browser](web.md),

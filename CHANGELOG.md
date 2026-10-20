@@ -16,6 +16,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   with TUI reversed out like a selection, and a line icon for each guide
   page, under `docs/assets/intuituive/`. The overview page shows the
   wordmark and an icon beside each page; the crate README shows the mark.
+- A widget index (`guide/intuituive/widget-index.md`): every widget and
+  component, 88 in seven groups, each with an icon, its constructor, a line
+  on what it is and a link to the section that documents it.
 
 ### Versions: the 0.0.21 versions are open
 
