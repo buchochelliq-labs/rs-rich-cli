@@ -1,5 +1,7 @@
 # 3. Tables
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 use rich::{Console, Justify, Table};
 use rich::r#box::HEAVY_HEAD;
@@ -16,6 +18,14 @@ table.add_row(&["rs-rich-cli", "0.0.1", "731"]);
 
 console.print(&table);
 ```
+
+```text { .rich-playground data-kind="table" data-box="HEAVY_HEAD" data-title="Releases" data-justify=",,right" }
+Crate,Version,Downloads
+rs-rich,0.0.1,"1,204"
+rs-rich-cli,0.0.1,731
+```
+
+</div>
 
 ![Table](../assets/table.svg)
 

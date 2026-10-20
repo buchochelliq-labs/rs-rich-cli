@@ -59,9 +59,28 @@ within a line, and `group_hunks` groups the resulting `Op`s into `Hunk`s.
 `DiffView::new(old, new)` renders a diff with line numbers, hunk headers and
 word-level emphasis on the parts of a line that changed:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich-ext/examples/guide_diff.rs:unified"
 ```
+
+```text { .rich-playground data-kind="diff" data-old-title="server.toml (old)" data-new-title="server.toml (new)" data-width="60" }
+[server]
+host = "0.0.0.0"
+port = 8080
+workers = 4
+log = "info"
+=======
+[server]
+host = "0.0.0.0"
+port = 8443
+workers = 4
+log = "debug"
+tls = true
+```
+
+</div>
 
 ![A unified diff](../../media/guide/guide_diff-unified.svg)
 
@@ -74,9 +93,28 @@ word-level emphasis on the parts of a line that changed:
 | `wrap(false)` | Truncate long lines with `…` instead of wrapping |
 | `emphasis(false)` | Turn off word-level emphasis |
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich-ext/examples/guide_diff.rs:side-by-side"
 ```
+
+```text { .rich-playground data-kind="diff" data-layout="side-by-side" data-old-title="before" data-new-title="after" data-context="1" data-width="80" }
+[server]
+host = "0.0.0.0"
+port = 8080
+workers = 4
+log = "info"
+=======
+[server]
+host = "0.0.0.0"
+port = 8443
+workers = 4
+log = "debug"
+tls = true
+```
+
+</div>
 
 ![A side-by-side diff](../../media/guide/guide_diff-side-by-side.svg)
 

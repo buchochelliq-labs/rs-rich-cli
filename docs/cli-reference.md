@@ -1772,19 +1772,19 @@ rich completions <SHELL>
 
 Bash
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich completions bash > ~/.local/share/bash-completion/completions/rich
 ```
 
 Zsh
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich completions zsh > "${fpath[1]}/_rich"
 ```
 
 Fish
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich completions fish > ~/.config/fish/completions/rich.fish
 ```
 
@@ -1923,19 +1923,19 @@ rich micro [list | show | preview | add | remove | create | install | uninstall 
 
 Every asset, drawn as this terminal can
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich micro list
 ```
 
 One asset, inline and magnified
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich micro preview status/loading
 ```
 
 Micro assets in text
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich -p --emoji "Deploying :micro:status/loading: done :micro:status/success:"
 ```
 
@@ -2207,13 +2207,13 @@ rich banner [OPTIONS] [TEXT]...
 
 A banner in the standard font
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich banner Hello
 ```
 
 Centred, in rainbow colours
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich banner --gradient rainbow --align center 'Ship it'
 ```
 
@@ -2316,7 +2316,7 @@ rich shell status --exit CODE [--duration D] [--command TEXT] [--min-duration SE
 
 ✖ error $ cargo test  exit 101  4.2s
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich shell status --exit 101 --duration 4.2 --command 'cargo test'
 ```
 

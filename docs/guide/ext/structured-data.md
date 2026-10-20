@@ -37,9 +37,24 @@ cargo run -p rs-rich-ext --example guide_data --features data,yaml,toml,xml,json
 
 Parse a document and print it as a tree:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich-ext/examples/guide_data.rs:explorer"
 ```
+
+```text { .rich-playground data-kind="data" data-format="yaml" data-root-label="deploy.yaml" data-width="60" }
+defaults: &defaults
+  replicas: 2
+  image: registry.example/app:1.4
+services:
+  web:
+    port: 8080
+    settings: *defaults
+  worker: *defaults
+```
+
+</div>
 
 ![A YAML document with anchors shown as a tree](../../media/guide/guide_data-explorer.svg)
 
@@ -146,9 +161,19 @@ applies here too. Every line is cut to the width: long strings shrink first
 `View::Table` shows a sequence of maps as rows, and anything else as
 `path | value` rows:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich-ext/examples/guide_data.rs:explorer-table"
 ```
+
+```text { .rich-playground data-kind="data" data-format="json" data-view="table" data-width="60" }
+[{"host": "a.example", "port": 80, "up": true},
+ {"host": "b.example", "port": 443, "up": false},
+ {"host": "c.example", "up": null}]
+```
+
+</div>
 
 ![Records as a table](../../media/guide/guide_data-explorer-table.svg)
 
@@ -220,9 +245,17 @@ path, a path that is both a leaf and a container, a container with both keys
 and indexes, or a sequence with a missing index. `FlatView` renders the
 leaves as a table.
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich-ext/examples/guide_data.rs:flatten"
 ```
+
+```text { .rich-playground data-kind="data" data-format="json" data-view="flat" data-show-types="true" data-width="60" }
+{"name": "api", "ports": [80, 443], "tls": true}
+```
+
+</div>
 
 ![Leaves as path, value and type](../../media/guide/guide_data-flatten.svg)
 
@@ -287,9 +320,19 @@ returns `Change`s (`Added`, `Removed`, `Changed`) with the path and the old
 and new leaves, in document order. `DiffView` renders them with `+`, `-` and
 `~` markers, so they read correctly without colour:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich-ext/examples/guide_data.rs:diff"
 ```
+
+```text { .rich-playground data-kind="data-diff" data-format="json" data-width="60" }
+{"name": "api", "ports": [80, 443], "tls": true}
+=======
+{"name": "api", "ports": [80, 8443], "tls": true, "hsts": true}
+```
+
+</div>
 
 ![A document diff](../../media/guide/guide_data-diff.svg)
 

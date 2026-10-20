@@ -208,3 +208,47 @@ impl<C: Component + ?Sized> Component for &mut C {
 impl<C: Component + ?Sized> Component for Box<C> {
     forward_component!();
 }
+
+/// Experimental (playground spike): crossterm's surface, unsupported, on wasm.
+#[cfg(target_arch = "wasm32")]
+pub(crate) mod crossterm_stub {
+    fn no<T>() -> std::io::Result<T> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "no terminal on wasm",
+        ))
+    }
+    pub mod terminal {
+        pub fn enable_raw_mode() -> std::io::Result<()> {
+            super::no()
+        }
+        pub fn disable_raw_mode() -> std::io::Result<()> {
+            super::no()
+        }
+        pub fn size() -> std::io::Result<(u16, u16)> {
+            super::no()
+        }
+        pub fn supports_keyboard_enhancement() -> std::io::Result<bool> {
+            super::no()
+        }
+    }
+    pub mod cursor {
+        pub fn position() -> std::io::Result<(u16, u16)> {
+            super::no()
+        }
+    }
+    /// The stub event is uninhabited: nothing to translate.
+    pub fn from_crossterm(event: event::Event) -> Option<crate::event::Event> {
+        match event {}
+    }
+    pub use from_crossterm as from_crossterm_kitty;
+    pub mod event {
+        pub enum Event {}
+        pub fn poll(_: std::time::Duration) -> std::io::Result<bool> {
+            super::no()
+        }
+        pub fn read() -> std::io::Result<Event> {
+            super::no()
+        }
+    }
+}

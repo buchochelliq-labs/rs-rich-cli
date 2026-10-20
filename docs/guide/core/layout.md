@@ -24,9 +24,18 @@ The examples use these imports:
 
 ## Panel
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_layout.rs:panel"
 ```
+
+```text { .rich-playground data-kind="panel" data-title="[bold]Title[/]" data-align="left" data-subtitle="subtitle" data-box="DOUBLE" data-padding="1,4,1,4" data-border-style="cyan" data-width="60" }
+Panels take [b]any[/b] renderable,
+including other panels.
+```
+
+</div>
 
 ![A plain panel and a double-bordered panel with aligned title and subtitle](../../media/guide/guide_layout-panel.svg)
 
@@ -68,9 +77,26 @@ tree. A child that fills the width (a `Panel`) has nothing to align;
 
 ## Columns
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_layout.rs:columns"
 ```
+
+```text { .rich-playground data-kind="columns" data-width="60" }
+rs-rich
+rs-rich-ext
+rs-rich-cli
+rs-rich-art
+rs-rich-macros
+syntect
+serde_json
+pulldown-cmark
+fancy-regex
+terminal_size
+```
+
+</div>
 
 ![Ten names packed into columns](../../media/guide/guide_layout-columns.svg)
 
@@ -81,9 +107,17 @@ columns of other renderables, use [`Layout::split_row`](#layout) or a
 
 ## Rule
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_layout.rs:rule"
 ```
+
+```text { .rich-playground data-kind="rule" data-width="60" }
+[b]Centred title[/b]
+```
+
+</div>
 
 ![A plain rule, a titled rule, a left-aligned rule and a custom-character rule](../../media/guide/guide_layout-rule.svg)
 

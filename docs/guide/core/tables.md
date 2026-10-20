@@ -16,9 +16,20 @@ The examples use these imports:
 
 Add columns, then rows. A row is a slice of strings, one per column.
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_tables.rs:basic"
 ```
+
+```text { .rich-playground data-kind="table" data-title="Star Wars Movies" data-caption="Box office, USD" data-justify=",,right" data-width="60" }
+Released,Title,Box Office
+"Dec 20, 2019",The Rise of Skywalker,"$952,110,690"
+"May 25, 2018",Solo,"$393,151,347"
+"Dec 15, 2017",The Last Jedi,"$1,332,539,889"
+```
+
+</div>
 
 ![A table with a title, caption and a right-justified column](../../media/guide/guide_tables-basic.svg)
 
@@ -95,9 +106,20 @@ proportion:
 
 ## Styling
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_tables.rs:styling"
 ```
+
+```text { .rich-playground data-kind="table" data-box="ROUNDED" data-border-style="bright_blue" data-show-lines="true" data-title="[b]Deploys[/b] :rocket:" data-justify=",,right" data-width="60" }
+Service,State,Latency
+api,[green]up[/],12 ms
+worker,[yellow]degraded[/],840 ms
+billing,[bold red]down[/],—
+```
+
+</div>
 
 ![A rounded table with a blue border, row separators and styled cells](../../media/guide/guide_tables-styling.svg)
 
@@ -120,9 +142,18 @@ proportion:
 
 The edge and padding options side by side:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_tables.rs:edges"
 ```
+
+```text { .rich-playground data-kind="table" data-box="SQUARE" data-show-edge="false" data-width="60" }
+a,b
+1,2
+```
+
+</div>
 
 ![show_edge(false), no header with pad_edge(false), and collapsed wide padding](../../media/guide/guide_tables-edges.svg)
 

@@ -493,7 +493,7 @@ entries)` note.
 --8<-- "crates/rich-ext/examples/guide_sources.rs:schema"
 ```
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich schema order-v1.schema.json
 ```
 
@@ -516,7 +516,7 @@ comparisons of differing schemas (`MAX_COMPARISONS`), and then says so in its
 summary (`(stopped after …: more may differ)`; `SchemaDiff::is_truncated`).
 `rich schema OLD NEW` prints it:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich schema order-v1.schema.json order-v2.schema.json
 ```
 

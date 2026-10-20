@@ -80,9 +80,17 @@ and in the shell as [`rich chart`](#from-the-shell-rich-chart).
 `Sparkline::new(values)` draws each value as a cell whose height shows where
 it falls between the smallest and largest value:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich-ext/examples/guide_charts.rs:sparkline"
 ```
+
+```text { .rich-playground data-kind="sparkline" data-width="60" }
+12 15 14 18 25 31 28 22 35 41 38 30 26 33 47 52 44 39 36 29 24 21 17 14
+```
+
+</div>
 
 ![Sparklines in blocks, with a summary, in Braille and resampled](../../media/guide/guide_charts-sparkline.svg)
 
@@ -124,9 +132,20 @@ What ratatui's `Sparkline` has, and more rows than one:
 
 `BarChart` draws a row per bar: the label, the bar and the value.
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich-ext/examples/guide_charts.rs:bars"
 ```
+
+```text { .rich-playground data-kind="bars" data-bar-width="30" data-width="60" }
+api,412
+web,268.5
+worker,97
+cron,12
+```
+
+</div>
 
 ![Bar charts with positive and negative values](../../media/guide/guide_charts-bars.svg)
 
@@ -151,9 +170,23 @@ What ratatui's `Sparkline` has, and more rows than one:
 `.orientation(Orientation::Vertical)` stands the bars up side by side, with
 the labels underneath:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich-ext/examples/guide_charts.rs:vertical"
 ```
+
+```text { .rich-playground data-kind="bars" data-orientation="vertical" data-bar-width="8" data-width="60" }
+mon,31
+tue,42.5
+wed,38
+thu,51
+fri,47
+sat,12
+sun,9.5
+```
+
+</div>
 
 ![Vertical bar charts with positive and negative values](../../media/guide/guide_charts-vertical.svg)
 
@@ -975,7 +1008,7 @@ sniffed as `rich --csv` sniffs it), JSON (an array of records, of numbers or
 of rows, or an object of columns), JSON Lines, or whitespace-separated
 numbers.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich chart sales.csv                                  # every numeric column as a line
 rich chart sales.csv --kind bar --x month --y api     # a bar per row, labelled
 rich chart sales.csv --kind heatmap                   # rows by series, as shades

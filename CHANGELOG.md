@@ -256,6 +256,25 @@ the workspace):
   more repeats than the tape asked for. The count is now exact on every
   machine, and the test asserts it.
 
+### Docs: a playground in the docs (tier 1)
+
+- Guide and tutorial blocks whose input is text (console markup, CSV,
+  JSON, Markdown, code, chart values, diffs, data documents) have a
+  **Try it** button: rs-rich, compiled to wasm, renders the edited input in
+  the reader's tab, with the Rust that renders it beside the block. A new
+  [Playground](docs/playground.md) page has every kind at full size. Nothing
+  loads until the first click; the lean module (no syntect) serves most
+  blocks, and the full one loads only for `syntax` and `markdown`. Output is
+  rs-rich's own HTML export in a sandboxed frame, or xterm.js on request.
+- **Copy link** puts a block's input and options in the link's fragment,
+  compressed and size-capped; opening it restores them as text.
+- The modules come from `playground/` (not published, outside the
+  workspace). The `docs` workflow builds main's and renders every playground
+  block with them under Node, so a block that stops rendering fails the docs
+  build; a browser check covers the page. The release workflow attaches
+  `playground-X.Y.Z.tar.gz` to the release, and the versioned docs download
+  it; a release without one keeps plain code blocks.
+
 ### Docs: one site per release, with a version selector
 
 - The documentation site keeps a copy of the docs for each release, picked

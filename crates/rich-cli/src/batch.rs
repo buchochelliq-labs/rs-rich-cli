@@ -10,8 +10,8 @@ use std::time::Duration;
 
 static INTERRUPTED: AtomicBool = AtomicBool::new(false);
 
-pub(super) fn install_interrupt_handler() -> Result<(), ctrlc::Error> {
-    ctrlc::set_handler(|| INTERRUPTED.store(true, Ordering::Relaxed))
+pub(super) fn install_interrupt_handler() -> Result<(), impl std::fmt::Display> {
+    crate::host::on_interrupt(|| INTERRUPTED.store(true, Ordering::Relaxed))
 }
 
 fn interrupted() -> bool {

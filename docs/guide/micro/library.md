@@ -16,7 +16,7 @@ two-row asset also takes the row below its line, which `MicroRows` (or
 terminal: see [Drawing modes, side by side](#drawing-modes-side-by-side)
 below.
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich micro list --layer built-in        # the same list, in your terminal
 rich micro preview fun/heart            # one asset, inline and magnified
 rich -p --emoji "Deploy :micro:status/success: done"

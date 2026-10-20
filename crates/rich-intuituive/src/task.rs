@@ -729,7 +729,34 @@ pub(crate) struct ThreadClock {
     state: Mutex<ClockState>,
     changed: Condvar,
     /// Where the wall clock's time starts.
-    start: Instant,
+    start: WallStart,
+}
+
+/// `Instant::now()` at the clock's start. On `wasm32-unknown-unknown` std
+/// has no clock (`Instant::now` panics) and no threads to keep to it, so
+/// the wall's time there stays at zero (experimental: the playground spike).
+#[cfg(not(target_arch = "wasm32"))]
+struct WallStart(Instant);
+#[cfg(target_arch = "wasm32")]
+struct WallStart;
+
+impl WallStart {
+    #[cfg(not(target_arch = "wasm32"))]
+    fn now() -> WallStart {
+        WallStart(Instant::now())
+    }
+    #[cfg(target_arch = "wasm32")]
+    fn now() -> WallStart {
+        WallStart
+    }
+    #[cfg(not(target_arch = "wasm32"))]
+    fn elapsed(&self) -> Duration {
+        self.0.elapsed()
+    }
+    #[cfg(target_arch = "wasm32")]
+    fn elapsed(&self) -> Duration {
+        Duration::ZERO
+    }
 }
 
 #[derive(Default)]
@@ -757,7 +784,7 @@ impl ThreadClock {
         Arc::new(ThreadClock {
             state: Mutex::new(ClockState::default()),
             changed: Condvar::new(),
-            start: Instant::now(),
+            start: WallStart::now(),
         })
     }
 

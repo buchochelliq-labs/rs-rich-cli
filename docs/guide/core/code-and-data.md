@@ -17,9 +17,26 @@ The examples use these imports:
 
 ## Syntax
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_code.rs:syntax"
 ```
+
+```text { .rich-playground data-kind="syntax" data-lang="rust" data-width="64" }
+use std::collections::HashMap;
+
+/// Count words, ignoring case.
+fn count(text: &str) -> HashMap<String, usize> {
+	let mut counts = HashMap::new();
+	for word in text.split_whitespace() {
+		*counts.entry(word.to_lowercase()).or_insert(0) += 1;
+	}
+	counts
+}
+```
+
+</div>
 
 ![Rust source highlighted with the default theme](../../media/guide/guide_code-syntax.svg)
 
@@ -27,9 +44,18 @@ The examples use these imports:
 (`"rust"`, `"rs"`, `"py"`, `"json"`, `"toml"`, `"sh"` …). An empty or unknown
 language renders the code as plain text on the theme background.
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_code.rs:syntax_options"
 ```
+
+```text { .rich-playground data-kind="syntax" data-lang="rs" data-theme="InspiredGitHub" data-padding="1" data-tab-size="2" data-word-wrap="true" data-width="48" }
+let answer = compute_the_answer(life, universe, everything); // 42
+	indented_with_a_tab();
+```
+
+</div>
 
 ![Word-wrapped code with padding on a light theme, and cropped code on Solarized](../../media/guide/guide_code-syntax-options.svg)
 
@@ -77,9 +103,34 @@ the file yourself.
 
 ## Markdown
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_code.rs:markdown"
 ```
+
+````text { .rich-playground data-kind="markdown" data-width="64" }
+# Release notes
+
+Markdown renders **bold**, *italic*, `code` and [links](https://docs.rs/rs-rich).
+
+- bullet lists
+  - nested
+1. and numbered ones
+
+> Block quotes, too.
+
+| Crate | Lib name |
+|-------|---------:|
+| rs-rich | `rich` |
+| rs-rich-ext | `rich_ext` |
+
+```rust
+fn main() { println!("fenced code is highlighted"); }
+```
+````
+
+</div>
 
 ![A Markdown document with a heading, inline styles, lists, a quote, a table and a code block](../../media/guide/guide_code-markdown.svg)
 
@@ -88,9 +139,17 @@ Headings, paragraphs, emphasis, inline code, links, bullet and numbered lists
 fenced code blocks (highlighted by `Syntax`) are all rendered, as upstream
 does.
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_code.rs:markdown_options"
 ```
+
+```text { .rich-playground data-kind="markdown" data-hyperlinks="false" data-justify="full" data-style="grey85" data-code-theme="base16-ocean.dark" data-inline-code-lexer="rust" data-width="64" }
+Some *text* with a [link](https://example.com).
+```
+
+</div>
 
 | Method | Default | Effect |
 |---|---|---|
@@ -114,9 +173,18 @@ Markdown styles come from the theme: `markdown.h1`, `markdown.code`,
 
 ## JSON
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_code.rs:json"
 ```
+
+```text { .rich-playground data-kind="json" data-width="48" }
+{"name": "rs-rich", "version": "0.0.7", "tags": ["terminal", "ansi"],
+ "stable": false, "downloads": 1204, "license": null}
+```
+
+</div>
 
 ![A JSON document, indented with keys, strings, numbers, booleans and null coloured](../../media/guide/guide_code-json.svg)
 

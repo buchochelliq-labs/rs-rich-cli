@@ -7,6 +7,8 @@
 //! It follows the [`Fallback`] instead: ask line by line, return the
 //! component's default, or fail with the reason.
 
+#[cfg(target_arch = "wasm32")]
+use crate::crossterm_stub as crossterm;
 use std::fmt;
 use std::io::{BufRead, IsTerminal, Write};
 
@@ -284,7 +286,11 @@ impl LineIo for StdLineIo {
 /// One line read in raw mode, so nothing typed is echoed; `shown` runs
 /// once raw mode is on (it writes the prompt).
 fn read_hidden(shown: impl FnOnce()) -> Result<Option<String>, NotInteractive> {
-    use crate::event::{from_crossterm, Event, KeyCode};
+    #[cfg(target_arch = "wasm32")]
+    use crate::crossterm_stub::from_crossterm;
+    #[cfg(not(target_arch = "wasm32"))]
+    use crate::event::from_crossterm;
+    use crate::event::{Event, KeyCode};
 
     /// Raw mode off again on every way out, a panic and a terminating
     /// signal included.

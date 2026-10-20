@@ -1,0 +1,121 @@
+/* The docs playground (playground.js). A block's Rust sits beside its
+   input: two columns where the page is wide enough, stacked where not. */
+.md-typeset .rich-playground-pair {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(min(100%, 22rem), 1fr));
+  gap: 0 1rem;
+  align-items: start;
+}
+.md-typeset .rich-playground-pair > * {
+  min-width: 0;
+}
+.md-typeset .rich-playground-pair > .highlight:first-child::before,
+.md-typeset .rich-playground-pair > .rich-playground::before,
+.md-typeset .rich-playground-pair > .rp-editor::before {
+  display: block;
+  font-size: 0.64rem;
+  opacity: 0.7;
+  margin-bottom: -0.6em;
+}
+.md-typeset .rich-playground-pair > .highlight:first-child::before {
+  content: "Rust";
+}
+.md-typeset .rich-playground-pair > .rich-playground::before,
+.md-typeset .rich-playground-pair > .rp-editor::before {
+  content: "Input";
+}
+.md-typeset .rich-playground-pair > .rp-editor::before {
+  margin-bottom: 0.2em;
+}
+.md-typeset .rp-try {
+  margin: -0.4rem 0 1rem;
+  padding: 0.2em 1em;
+  font-size: 0.7rem;
+}
+.md-typeset .rp-editor {
+  margin: 1em 0;
+}
+.md-typeset .rp-toolbar {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 0.4rem;
+  align-items: center;
+  margin-bottom: 0.4rem;
+  font-size: 0.7rem;
+}
+.md-typeset .rp-controls {
+  display: contents;
+}
+.md-typeset .rp-control select,
+.md-typeset .rp-control input {
+  font: inherit;
+  color: inherit;
+  background: var(--md-code-bg-color);
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 4px;
+  padding: 0.1em 0.3em;
+}
+.md-typeset .rp-width {
+  width: 4.5em;
+}
+.md-typeset .rp-small {
+  padding: 0.15em 0.8em;
+  font-size: 0.7rem;
+}
+.md-typeset .rp-status {
+  opacity: 0.8;
+}
+.md-typeset .rp-input {
+  display: block;
+  box-sizing: border-box;
+  width: 100%;
+  resize: vertical;
+  padding: 0.6em 0.8em;
+  font-family: var(--md-code-font-family);
+  font-size: 0.8rem;
+  font-variant-ligatures: none;
+  line-height: 1.4;
+  color: var(--md-code-fg-color);
+  background: var(--md-code-bg-color);
+  border: 1px solid var(--md-default-fg-color--lightest);
+  border-radius: 4px;
+  tab-size: 4;
+}
+.md-typeset .rp-output {
+  margin: 0 0 1.2rem;
+}
+.md-typeset .rp-frame {
+  display: block;
+  width: 100%;
+  border: 0;
+  border-radius: 8px;
+  background: #000;
+  box-shadow: 0 2px 14px rgba(0, 0, 0, 0.35);
+}
+.md-typeset .rp-terminal {
+  padding: 8px;
+  border-radius: 8px;
+  background: #000;
+  overflow-x: auto;
+}
+.md-typeset .rp-error {
+  margin: 0.4em 0 0;
+  font-family: var(--md-code-font-family);
+  font-size: 0.75rem;
+  color: var(--md-typeset-del-color, #e57373);
+}
+/* The playground page shows tier 1 at full size. */
+.md-typeset .rp-page .rp-input {
+  min-height: 14rem;
+}
+/* Tier 2: a CLI block's terminal (rich-shell/terminal.js). The fit addon
+   sizes it to the column; the screen keeps xterm.js from overflowing. */
+.md-typeset .rp-cli {
+  margin: -0.4rem 0 1.2rem;
+}
+.md-typeset .rp-shell-screen {
+  overflow: hidden;
+}
+.md-typeset .rp-shell-screen .xterm {
+  line-height: normal;
+}

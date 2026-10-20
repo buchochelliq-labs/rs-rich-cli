@@ -425,7 +425,7 @@ With the `plugin` feature, `rich_diagram::plugin::DotPlugin` registers `dot`
 and `graphviz` fence renderers and a `dot` source renderer, as
 `rs-rich-mermaid` registers Mermaid. The `rich` CLI includes it:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich dot services.dot           # alias: rich graphviz; .dot and .gv files are detected
 rich README.md                  # ```dot fences draw as diagrams
 rich README.md --dot-backend off   # ... or stay code blocks, as upstream renders them
@@ -447,7 +447,7 @@ In the CLI, `--dot-backend graphviz` makes `--export-svg OUT.svg` write
 Graphviz's SVG instead of the text drawing's, while the terminal still shows
 the native drawing:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich dot services.dot --dot-backend graphviz --export-svg services.svg
 ```
 

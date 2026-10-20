@@ -4,11 +4,21 @@
 
 A tag names a style. Styles combine, and tags nest:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 console.print_str("[bold]bold[/] [italic]italic[/] [underline]underline[/]");
 console.print_str("[red]red[/] [white on blue]white on blue[/]");
 console.print_str("[bold magenta]outer [italic]and inner[/] again outer[/]");
 ```
+
+```text { .rich-playground data-kind="markup" }
+[bold]bold[/] [italic]italic[/] [underline]underline[/]
+[red]red[/] [white on blue]white on blue[/]
+[bold magenta]outer [italic]and inner[/] again outer[/]
+```
+
+</div>
 
 ![Markup](../assets/markup.svg)
 

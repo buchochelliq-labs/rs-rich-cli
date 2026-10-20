@@ -1,0 +1,2 @@
+# Build outputs: cargo's, and nothing else (build.sh writes to docs/assets/playground/).
+/target/
