@@ -48,6 +48,19 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/datetime_picker.svg){ .tui-icon width="20" } | [datetime_picker](components.md#times-and-a-date-with-a-time) | `datetime_picker` | A date and a time together |
 | ![](../../assets/intuituive/widgets/hex_view.svg){ .tui-icon width="20" } | [hex_view](widgets.md#bars-for-an-apps-chrome) | `hex_view` | Bytes as hex and text, scrolled |
 
+## Form controls
+
+| | Widget | Constructor | What it is |
+|---|---|---|---|
+| ![](../../assets/intuituive/widgets/button.svg){ .tui-icon width="20" } | [button](controls.md#buttons) | `button` | A button pressed with Enter, Space or a click, in three looks |
+| ![](../../assets/intuituive/widgets/checkbox.svg){ .tui-icon width="20" } | [checkbox](controls.md#check-boxes-and-switches) | `checkbox` | A box ticked on and off, bound to a `Signal<bool>` |
+| ![](../../assets/intuituive/widgets/switch_toggle.svg){ .tui-icon width="20" } | [switch toggle](controls.md#check-boxes-and-switches) | `switch_toggle` | An on/off switch, bound to a `Signal<bool>` |
+| ![](../../assets/intuituive/widgets/radio.svg){ .tui-icon width="20" } | [radio group](controls.md#radio-groups) | `radio` | One choice of several, shown at once |
+| ![](../../assets/intuituive/widgets/slider.svg){ .tui-icon width="20" } | [slider](controls.md#sliders) | `slider` | A number in a range, by keys, click, drag or wheel |
+| ![](../../assets/intuituive/widgets/select_field.svg){ .tui-icon width="20" } | [select field](controls.md#select-fields) | `select_field` | One choice of several, from a menu that opens under it |
+| ![](../../assets/intuituive/widgets/collapsible.svg){ .tui-icon width="20" } | [collapsible](controls.md#collapsible-sections) | `collapsible` | A titled section that opens and closes |
+| ![](../../assets/intuituive/widgets/spinner.svg){ .tui-icon width="20" } | [spinner](controls.md#spinners-and-loading) | `spinner`, `.loading_when` | An animated busy sign; a node dimmed while it loads |
+
 ## Lists and data
 
 | | Widget | Constructor | What it is |
@@ -64,6 +77,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/cells.svg){ .tui-icon width="20" } | [cells](widgets.md#bars-for-an-apps-chrome) | `cells` | One row of fixed-width cells |
 | ![](../../assets/intuituive/widgets/scrollbar.svg){ .tui-icon width="20" } | [scrollbar](tables.md#scrollbars) | `scrollbar`, `.scrollbar()` | A scrollbar beside any scrolled node |
 | ![](../../assets/intuituive/widgets/log.svg){ .tui-icon width="20" } | [log](lists.md#logs) | `Log::new(..).view()` | Lines appended at the bottom, kept to a capacity |
+| ![](../../assets/intuituive/widgets/log_targets.svg){ .tui-icon width="20" } | [log sources](lists.md#levels-targets-and-filters) | `log.targets_view()` | A log's sources, each with its own level |
 
 ## Navigation and chrome
 
@@ -105,6 +119,9 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/pixels.svg){ .tui-icon width="20" } | [pixels](timers.md#sprites-stages-and-pixel-buffers) | `pixels`, `pixels_fit` | A pixel buffer drawn with half blocks |
 | ![](../../assets/intuituive/widgets/stage.svg){ .tui-icon width="20" } | [stage](timers.md#sprites-stages-and-pixel-buffers) | `stage`, `stage_with` | Sprites placed over a backdrop, in z order |
 | ![](../../assets/intuituive/widgets/effect.svg){ .tui-icon width="20" } | [effect](widgets.md#effects) | `effect` | A pass over a node's cells after it draws |
+| ![](../../assets/intuituive/widgets/fx.svg){ .tui-icon width="20" } | [effect presets](widgets.md#effect-presets) | `fx::fade_in`, `fx::sweep`, …, `fx::play` | Ready effects (fades, dissolve, sweep, slide, glitch, rain, shimmer) that compose and run on cue |
+| ![](../../assets/intuituive/widgets/placeholder.svg){ .tui-icon width="20" } | [placeholder](widgets.md#effect-presets) | `fx::placeholder` | Pulsing bars shown while content loads |
+| ![](../../assets/intuituive/widgets/splash.svg){ .tui-icon width="20" } | [splash](widgets.md#a-splash-screen) | `fx::splash` | A cover node that fades into the app |
 | ![](../../assets/intuituive/widgets/image.svg){ .tui-icon width="20" } | [image](plugins.md#images-art) | `image`, `image_with`, `image_of` | An image, as half blocks or terminal graphics (`art` feature) |
 | ![](../../assets/intuituive/widgets/sprite_sheet.svg){ .tui-icon width="20" } | [sprite_sheet](timers.md#sprites-stages-and-pixel-buffers) | `sprite_sheet` | Frames cut from one image, for animation (`art` feature) |
 | ![](../../assets/intuituive/widgets/micro_sprite.svg){ .tui-icon width="20" } | [micro_sprite](timers.md#sprites-stages-and-pixel-buffers) | `micro_sprite` | A micro asset as a sprite (`micro` feature) |

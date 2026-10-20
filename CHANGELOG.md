@@ -34,7 +34,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   page, under `docs/assets/intuituive/`. The overview page shows the
   wordmark and an icon beside each page; the crate README shows the mark.
 - A widget index (`guide/intuituive/widget-index.md`): every widget and
-  component, 88 in seven groups, each with an icon, its constructor, a line
+  component, 100 in eight groups, each with an icon, its constructor, a line
   on what it is and a link to the section that documents it.
 - A mascot: Memo, a purple elephant with block-cursor eyes who holds up the
   mark's lit cell, in five poses, at 32 and 16 px, and as a 32x32 pixel
