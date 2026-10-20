@@ -94,7 +94,18 @@ In Python the same graph is built with [`rs_rich.diagram`](https://buchochelliq-
   `Thick`, `Dotted`, or `Invisible`: laid out but not drawn), a `Head` at each
   end (`None`, `Arrow`, `Circle`, `Cross`), and a minimum number of ranks to
   span (at most 10). `edge` adds an arrow; `link` adds an undirected edge,
-  with no heads; `heads(Head::Arrow, Head::Arrow)` makes it two-way.
+  with no heads; `heads(Head::Arrow, Head::Arrow)` makes it two-way. An edge
+  may also carry a text at each end (`start_label`, `end_label`; the
+  `end_labels` builder call, new in 0.0.4): drawn next to the line where it
+  leaves its source and reaches its target, on the line left-right and beside
+  it top-down, clear of the other lines. Mermaid ER diagrams put their
+  cardinalities there, and DOT's `taillabel` and `headlabel` map to them:
+
+  ```text
+  ┌──────────┐         ┌───────┐
+  │ customer ├─1──0..N─┤ order │
+  └──────────┘         └───────┘
+  ```
 
 - **Clusters** (0.0.2): a `Cluster` has an id, an optional label, its nodes
   and an optional parent cluster; it is drawn as a frame around its nodes.
@@ -324,7 +335,8 @@ was accepted but is not drawn.
   edge's, `a->b`; an escape the object has no name for stands for its
   letter, as in Graphviz), `style` (`dashed`/`dotted` draw dotted, `bold`
   thick, `invis` laid out but not drawn),
-  `dir`, `arrowhead`, `arrowtail` and `minlen`; the graph takes `rankdir`
+  `dir`, `arrowhead`, `arrowtail`, `taillabel` and `headlabel` (text at
+  the tail and head ends, new in 0.0.4) and `minlen`; the graph takes `rankdir`
   (`TB`, `LR`, `BT`, `RL`) and `label`, drawn under the graph;
 - subgraphs; one named `cluster…` is a cluster, framed with its `label`
   (a cluster opened inside another nests in it), and `rank=same` in a
@@ -555,6 +567,8 @@ another way.
 
 ## From Mermaid
 
+### Flowcharts
+
 The Mermaid source for the first graph draws the same lines:
 
 ```text
@@ -571,10 +585,167 @@ draws through. It does not pass Mermaid's subgraphs on as clusters yet, so
 they are still drawn without frames (with a note). Mermaid's tests check both directions: its snapshots built
 with the builder, and random graphs written both ways.
 
-From the shell, `rich mermaid flow.mmd` (alias `mmd`; `.mmd` and `.mermaid`
-files are detected) draws a flowchart, and ```` ```mermaid ```` fences draw in
-Markdown; `--mermaid-backend mmdc` renders every diagram type through
-Mermaid's own CLI in a build with the `mmdc` feature. In Python, the same
+### Sequence diagrams
+
+`sequenceDiagram` sources are drawn as text too (`rs-rich-mermaid` 0.0.7,
+`rich_mermaid::sequence`), on lifelines rather than through the layered
+layout:
+
+```text
+sequenceDiagram
+    autonumber
+    actor C as Customer
+    participant S as Shop
+    participant P as Payments
+    C->>+S: Place order
+    S->>+P: Charge card
+    alt accepted
+        P-->>S: Paid
+    else declined
+        P--xS: Declined
+    end
+    deactivate P
+    S-->>-C: Confirmation
+    Note right of C: Reads email
+```
+
+```text
+    ○              ┌──────┐        ┌──────────┐
+   ─┼─             │ Shop │        │ Payments │
+   ╱ ╲             └───┬──┘        └─────┬────┘
+Customer               │                 │
+    │                  │                 │
+    │  1. Place order  │                 │
+    ├─────────────────►┃                 │
+    │                  ┃ 2. Charge card  │
+    │                  ┠────────────────►┃
+    │                ┌─ alt [accepted] ──╂─┐
+    │                │ ┃     3. Paid     ┃ │
+    │                │ ┃◄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┨ │
+    │                ├┄ [declined] ┄┄┄┄┄┄╂┄┤
+    │                │ ┃   4. Declined   ┃ │
+    │                │ ┃×┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┨ │
+    │                └─╂─────────────────╂─┘
+    │ 5. Confirmation  ┃                 │
+    │◄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┄┨                 │
+    │ ┌─────────────┐  │                 │
+    │ │ Reads email │  │                 │
+    │ └─────────────┘  │                 │
+    │                  │                 │
+```
+
+- **Participants and actors** head their lifelines, left to right in the
+  order they appear: `participant A as Alice` (an alias), `actor B` (a stick
+  figure), or implied by a message.
+- **Messages** take every Mermaid arrow: `->>` and `-->>` (arrowhead), `->`
+  and `-->` (none), `-x` and `--x` (cross), `-)` and `--)` (open, `▷`, for
+  async), `<<->>` and `<<-->>` (both ends); one dash draws a solid line, two a
+  dotted one. A message to its sender loops back to its own lifeline. Its
+  text sits above the arrow; `<br>` breaks it.
+- **Notes**: `Note left of A`, `Note right of A`, `Note over A` and
+  `Note over A,B`, boxed, covering the lifelines behind them.
+- **Activations**: `activate A` / `deactivate A`, and `+` / `-` on a message
+  (`A->>+B` activates B, `B-->>-A` deactivates B), draw the lifeline heavy
+  (`┃`, `#` in ASCII) while active. Nested activations share one bar.
+- **Blocks**: `loop`, `alt` / `else`, `opt`, `par` / `and`, `critical` /
+  `option`, `break` and `rect` frame their messages, the kind and label in the
+  top border (`loop [Every minute]`), each `else`, `and` or `option` a dotted
+  divider with its label. A `rect` is a frame with no label: its colour cannot
+  be drawn.
+- `autonumber` (with a start and a step, and `autonumber off`) numbers the
+  messages' text; `title` (or a front-matter `title:`) is centred above.
+
+Columns are sized to what sits between them: each lifeline goes as far left
+as the heads, the message texts between two lifelines, the notes and
+self-messages beside one and the frames around them allow, so nothing
+overlaps. A diagram wider than the width given is cropped at the right, and a
+note under it says so (`Mermaid: cropped to 40 of 64 columns`).
+
+A `box` is drawn without its frame, `create` draws the participant from the
+top, `destroy` leaves the lifeline running to the end, and a participant's
+`@{ … }` type draws a plain box: each with a note under the drawing. `links`,
+`link`, `properties`, `details`, `accTitle` and `accDescr` are accepted and
+ignored. Any other statement falls back to the source, under a note naming it
+(``Mermaid: line 3: `wobble` is not drawn as text``), as does a block left
+open or an `end` with none to close.
+
+### ER diagrams
+
+`erDiagram` sources are drawn through this crate's layered layout
+(`rich_mermaid::er`): each entity a `Table` box, each relationship an edge,
+with its cardinality at each end as an end text. Top to bottom by default, as
+in Mermaid; `direction LR` (or `BT`, `RL`) turns it.
+
+```text
+erDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains
+    CUSTOMER {
+        string id PK
+        string name
+    }
+    ORDER {
+        int number PK
+        string customer FK "who placed it"
+    }
+```
+
+```text
+         ┌───────────────────┐
+         │     CUSTOMER      │
+         ├───────────────────┤
+         │ string  id    PK  │
+         │ string  name      │
+         └─────────┬─────────┘
+                   │
+                   │ 1
+                places
+                   │ 0..N
+                   │
+┌──────────────────┴──────────────────┐
+│                ORDER                │
+├─────────────────────────────────────┤
+│ int     number    PK                │
+│ string  customer  FK  who placed it │
+└──────────────────┬──────────────────┘
+                   │
+                   │ 1
+               contains
+                   │ 1..N
+                   │
+             ┌─────┴─────┐
+             │ LINE-ITEM │
+             └───────────┘
+```
+
+- **Entities**: the name (or a `["alias"]`) as the header, then one row per
+  attribute in Mermaid's order: type, name, keys (`PK`, `FK`, `UK`, several
+  separated by commas) and comment, in aligned columns. An entity named only
+  in a relationship is a box with its name.
+- **Relationships**: a solid line for an identifying one (`--`, or `to`), a
+  dotted one for a non-identifying one (`..`, `optionally to`), its label
+  beside the line.
+- **Cardinality** is shown as text where the line meets each entity: `1`
+  (`||`), `0..1` (`|o`, `o|`), `0..N` (`}o`, `o{`) and `1..N` (`}|`, `|{`).
+  Text rather than crow's-foot glyphs: it reads the same in ASCII, a
+  terminal font has no glyph for each foot, and it needs no legend. The word
+  forms (`only one`, `zero or one`, `one or more`, `zero or many`, `many(0)`,
+  `1+`, …) read the same as the symbols.
+
+A relationship from an entity to itself is marked `↻` beside its box, as the
+layout marks any self-edge, and its label and cardinalities are a note
+(``Mermaid: EMPLOYEE relates to itself: `manages`, 0..1 to 0..N``). `style`,
+`classDef` and `class` are accepted and ignored; anything else falls back to
+the source with a note naming it.
+
+### From the shell
+
+`rich mermaid flow.mmd` (alias `mmd`; `.mmd` and `.mermaid` files are
+detected) draws a flowchart, a sequence diagram or an ER diagram, and
+```` ```mermaid ```` fences draw them in Markdown; `--mermaid-backend mmdc`
+renders every diagram type through Mermaid's own CLI in a build with the
+`mmdc` feature (without Sixel graphics, the three kinds drawn as text still
+are). In Python, the same
 graphs, DOT sources and Mermaid diagrams are
 [`rs_rich.diagram`](https://buchochelliq-labs.github.io/rs-rich-cli/python/diagram/)
 and [`rs_rich.mermaid`](https://buchochelliq-labs.github.io/rs-rich-cli/python/mermaid/).

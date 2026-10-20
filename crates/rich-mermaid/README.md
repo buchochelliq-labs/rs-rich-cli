@@ -10,12 +10,22 @@ of Python's `rich`.
   [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram), which also
   draws graphs built in code and DOT sources the same way;
   `Flowchart::to_graph` gives a parsed flowchart as its `Graph`.
+- **Sequence diagrams as text** (0.0.7). Participants and actors on
+  lifelines, every arrow (`->>`, `-->>`, `->`, `-->`, `-x`, `--x`, `-)`,
+  `--)`, `<<->>`), self-messages, notes, activation bars, `loop` / `alt` /
+  `opt` / `par` / `critical` / `break` / `rect` frames, `autonumber` and
+  `title`, with columns sized to their text (`rich_mermaid::sequence`).
+- **ER diagrams as text** (0.0.7). Entities as table boxes (type, name,
+  `PK`/`FK`/`UK`, comment), identifying and non-identifying relationships
+  through the same layered layout, and the cardinality at each end as text
+  (`1`, `0..1`, `0..N`, `1..N`) next to the line (`rich_mermaid::er`).
 - **Every diagram type through `mmdc`.** With the off-by-default `mmdc`
   feature and `Backend::Mmdc`, Mermaid's own CLI
   ([`@mermaid-js/mermaid-cli`](https://github.com/mermaid-js/mermaid-cli), Node
   and headless Chromium, installed separately) renders the diagram, shown
   through `rs-rich-art`: Sixel where the terminal supports it, otherwise
-  quadrant blocks. A flowchart still prefers text when there are no real pixels.
+  quadrant blocks. The kinds drawn as text still prefer text when there are no
+  real pixels.
 - **Never an error on screen.** Anything that cannot be drawn is shown as its
   source in a code block, under a one-line note saying why.
 
@@ -44,8 +54,10 @@ renderer through [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-
 
 ## Limits
 
-The text renderer refuses (showing the source under a note) flowcharts over
-64 KiB, 500 nodes or 2000 edges, layouts needing more than 5000 points (nodes
+The text renderer refuses (showing the source under a note) diagrams over
+64 KiB, flowcharts and ER diagrams with over 500 nodes (entities) or 2000
+edges (relationships), sequence diagrams with over 500 participants, 2000
+messages, notes and block lines, or blocks nested over 32 deep, layouts needing more than 5000 points (nodes
 plus one per rank a long edge crosses), and drawings over 2 million cells. A
 link lengthened with extra dashes (`---->`) spans at most 10 ranks; longer
 runs are drawn at that length.

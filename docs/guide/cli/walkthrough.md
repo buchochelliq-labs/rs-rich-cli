@@ -578,6 +578,8 @@ Graphs are drawn as text through one layout, whatever their source:
 
 ```bash
 rich mermaid flow.mmd                      # a Mermaid flowchart
+rich mermaid checkout.mmd                  # a sequence diagram, on lifelines
+rich mermaid shop.mmd                      # an ER diagram, cardinality at each end
 rich dot services.dot                      # a DOT (Graphviz) graph
 rich deps --why syn                        # what pulls a crate into this workspace
 rich deps --graph --depth 1                # the same dependencies as a diagram

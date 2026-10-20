@@ -9,6 +9,39 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### rs-rich-mermaid, rs-rich-diagram, rs-rich-cli: sequence and ER diagrams drawn as text
+
+- **Sequence diagrams** (`sequenceDiagram`) are drawn as text, no longer
+  shown as source: participants and actors (`as` aliases) heading their
+  lifelines; every arrow (`->>`, `-->>`, `->`, `-->`, `-x`, `--x`, `-)`,
+  `--)`, `<<->>`, `<<-->>`) with its line and tip; self-messages; notes left
+  of, right of and over one or two participants; activation bars
+  (`activate`/`deactivate` and `+`/`-`); `loop`, `alt`/`else`, `opt`,
+  `par`/`and`, `critical`/`option`, `break` and `rect` frames with their
+  labels; `autonumber` and `title`. Columns are sized to their text, so
+  nothing overlaps; a diagram wider than the width is cropped with a note.
+  `rich_mermaid::sequence` parses and draws them.
+- **ER diagrams** (`erDiagram`) are drawn through the layered layout:
+  entities as table boxes (type, name, `PK`/`FK`/`UK`, comment), solid
+  identifying and dotted non-identifying relationships with their labels,
+  and the cardinality at each end as text (`1`, `0..1`, `0..N`, `1..N`),
+  symbols and word forms alike; `direction` and a front-matter title.
+  `rich_mermaid::er` parses and draws them.
+- `box`, `create`, `destroy` and participant types are drawn simplified, with
+  a note; other syntax in either kind falls back to the source under a note
+  naming it. Without Sixel graphics, the `mmdc` backend draws both as text,
+  as it does flowcharts.
+- **Texts at an edge's ends** in rs-rich-diagram: `Edge::start_label` and
+  `end_label` (the `Graph::end_labels` builder call) are drawn where the line
+  leaves and reaches a node, on the line left-right and beside it top-down,
+  clear of the other lines. DOT's `taillabel` and `headlabel` map to them.
+  Graphs without them draw as before.
+- `rich mermaid` and ```` ```mermaid ```` fences pick both kinds up; the help
+  and the CLI reference say so.
+- Tests: parser tests for each construct, Unicode and ASCII snapshots,
+  cropping, fallbacks, random sources (never wider than asked, never a
+  panic) and bounded work on the largest sources.
+
 ### rs-rich-embed: Chrome's DevTools over a pipe on Linux and macOS
 
 - **No DevTools port on Unix.** `ChromeEngine` starts Chrome with
