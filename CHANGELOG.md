@@ -84,7 +84,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   page, under `docs/assets/intuituive/`. The overview page shows the
   wordmark and an icon beside each page; the crate README shows the mark.
 - A widget index (`guide/intuituive/widget-index.md`): every widget and
-  component, 100 in eight groups, each with an icon, its constructor, a line
+  component, 101 in eight groups, each with an icon, its constructor, a line
   on what it is and a link to the section that documents it.
 - A mascot: Memo, a purple elephant with block-cursor eyes who holds up the
   mark's lit cell, in five poses, at 32 and 16 px, and as a 32x32 pixel
@@ -219,6 +219,34 @@ the workspace):
 - Colours from the theme: the `fx` style (the colour faded to), and
   `fx.shimmer`, `fx.rain` and `fx.skeleton`. The `fx` example is a
   gallery of them all.
+
+### Text editing: rebindable keys, Emacs and Vim presets, search, word wrap (rs-rich-interact, rs-rich-intuituive)
+
+- `edit::Buffer` gains a kill ring (`kill_to_end`, `kill_word`, `yank`,
+  `yank_pop`, joined consecutive kills), a mark (`set_mark`), paragraph
+  moves, `delete_next_word`, search (`Search::plain`, `Search::regex` with
+  fancy-regex, `ignore_case`; `match_count`, `select_match`), an undo limit
+  (`set_history_limit`, 1000 by default), tab width and hard tabs, and
+  `wrap_line` with `WrapMode::Word`, `Grapheme` and `None`.
+- New `edit_keys`: the editors' keys as a keymap of named actions
+  (`editor_keymap`, `emacs_keymap`, `resolve`, `perform`) and the `KeyMode`
+  hook for modal presets. New `caret::CaretShape` for DECSCUSR.
+- New off-by-default `vim` feature (rs-rich-interact and rs-rich-intuituive):
+  `vim::Vim`, with normal, insert, visual and visual line modes, motions,
+  operators, counts and `.`.
+- rs-rich-interact's `TextArea` runs the buffer's new actions and gains
+  `emacs_keys()`.
+- intuiTUIve's `text_area` and `input` gain `rebind_key`, `edit_keymap`,
+  `emacs_keys`, `key_mode`, `vim` and `vim_inserting`, `mode_status`,
+  `search(TextSearch)` with match highlighting and the `search_bar` find
+  bar, `wrap_mode`, `cursor_line`, `caret_shape` (the app sends DECSCUSR
+  and puts the user's shape back) and `draw_caret`, `tab_width` and
+  `hard_tabs`, `undo_limit`, and `validate` (a message shown and given to
+  assistive technology). `Node::error_message` and `AccessNode::error` carry
+  a message for any node. Editors without these options behave as before.
+- A `textarea` example (ratatui-textarea's examples as a gallery) and the
+  guide pages [Editing text](docs/guide/intuituive/text-editing.md) and
+  [The text buffer and editor keys](docs/guide/interact/editing.md).
 
 ### Recording: a held key repeats only while it is held (rs-rich-record)
 

@@ -39,6 +39,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/input.svg){ .tui-icon width="20" } | [input](components.md#inputs-bound-to-signals) | `input` | A one-line input bound to a String signal |
 | ![](../../assets/intuituive/widgets/number_input.svg){ .tui-icon width="20" } | [number_input](components.md#inputs-bound-to-signals) | `number_input` | A number in a range, stepped with keys |
 | ![](../../assets/intuituive/widgets/text_area.svg){ .tui-icon width="20" } | [text_area](components.md#text-areas) | `text_area` | Multi-line text editing |
+| ![](../../assets/intuituive/widgets/search_bar.svg){ .tui-icon width="20" } | [search_bar](text-editing.md#search-and-the-find-bar) | `search_bar` | A find bar over a text area's search: the pattern, where it is, regex and case flags |
 | ![](../../assets/intuituive/widgets/command_line.svg){ .tui-icon width="20" } | [command_line](components.md#completion-history-and-a-command-line) | `command_line` | A vim-style command line, with completion and history |
 | ![](../../assets/intuituive/widgets/calendar.svg){ .tui-icon width="20" } | [calendar](components.md#calendars-and-dates) | `calendar` | A month to pick a date from |
 | ![](../../assets/intuituive/widgets/month.svg){ .tui-icon width="20" } | [month](components.md#calendars-and-dates) | `month` | One month, drawn from a date |

@@ -35,6 +35,9 @@ data = ["rich-ext/data"]
 # Micro assets (rs-rich-micro): `AssetKind::Micro` in `AssetPicker`, and
 # `StatusItem::micro`. Pulls in image decoding.
 micro = ["dep:rich-micro"]
+# `vim::Vim`: a Vim preset for the text editors (modes, motions, operators,
+# counts and `.`), a `KeyMode` over `edit::Buffer`. Off by default.
+vim = []
 # The termion backend (#677): `BackendKind::Termion`, Unix only (on other
 # platforms the feature compiles to nothing).
 termion = ["dep:termion"]
@@ -64,6 +67,9 @@ required-features = ["data"]
 [dependencies]
 rich = { workspace = true, features = ["syntax"] }
 rich-ext.workspace = true
+# The text buffer's search (`edit::Search`): plain strings and regular
+# expressions (already in the tree, through rs-rich).
+fancy-regex.workspace = true
 rich-micro = { workspace = true, optional = true }
 # Raw mode, the alternate screen, and key and mouse events on every platform.
 # `use-dev-tty` reads events through poll/select instead of mio: macOS's

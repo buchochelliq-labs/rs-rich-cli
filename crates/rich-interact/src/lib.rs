@@ -86,6 +86,7 @@
 //! assert_eq!(record.last_frame(), "count: 2");
 //! ```
 
+pub mod caret;
 pub mod chrome;
 pub mod clipboard;
 pub mod component;
@@ -94,6 +95,7 @@ pub mod compose;
 pub mod dates;
 pub mod datetime;
 pub mod edit;
+pub mod edit_keys;
 pub mod event;
 pub mod event_loop;
 pub mod fuzzy;
@@ -108,6 +110,8 @@ pub mod plugin;
 pub mod policy;
 pub mod session;
 pub mod viewport;
+#[cfg(feature = "vim")]
+pub mod vim;
 mod zone;
 
 pub use chrome::{Breadcrumbs, StatusBar, StatusItem};

@@ -211,6 +211,9 @@ jobs:
           # Interactive components: session, event loop, PTY restoration.
           - crate: rs-rich-interact
             args: ""
+          # The Vim preset for the text editors, off by default.
+          - crate: rs-rich-interact
+            args: "--features vim"
           # Micro assets: model, packages, registry, markup (hostile-package
           # conformance tests included).
           - crate: rs-rich-micro
@@ -608,7 +611,7 @@ jobs:
       - name: Build the CLI and the examples the tapes run
         run: >-
           cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive
-          -p rs-rich-embed --features rs-rich-cli/serve,rs-rich-intuituive/files,rs-rich-intuituive/archive,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm,rs-rich-intuituive/viz,rs-rich-intuituive/wav,rich-ext/yaml,rich-ext/jsonpath,rich-ext/data
+          -p rs-rich-embed --features rs-rich-cli/serve,rs-rich-intuituive/files,rs-rich-intuituive/archive,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm,rs-rich-intuituive/viz,rs-rich-intuituive/wav,rs-rich-intuituive/vim,rich-ext/yaml,rich-ext/jsonpath,rich-ext/data
           --bins --examples --locked
 
       # rs-rich-ext's examples are guide programs; the surface tape runs one.

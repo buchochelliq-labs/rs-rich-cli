@@ -103,6 +103,48 @@ impl TextArea {
         self
     }
 
+    /// Emacs's keys on top of the defaults: Ctrl+F/B/N/P and Alt+F/B
+    /// move, Ctrl+K, Ctrl+U, Ctrl+W, Alt+D and Alt+Backspace kill onto the
+    /// buffer's kill ring, Ctrl+Y yanks the last kill back and Alt+Y
+    /// swaps it for an older one, Alt+{ and Alt+} move by paragraph.
+    /// (Ctrl+D still submits unless [`submit_key`](Self::submit_key)
+    /// moves it.)
+    ///
+    /// ```
+    /// use rich_interact::headless::{run, Script};
+    /// use rich_interact::TextArea;
+    ///
+    /// let area = TextArea::new("Note").value("one two").emacs_keys();
+    /// let script = Script::new().keys("ctrl+a alt+d ctrl+e ctrl+y ctrl+d");
+    /// let (outcome, _) = run(area, script, 30, 6);
+    /// assert_eq!(outcome.unwrap().value().as_deref(), Some(" twoone"));
+    /// ```
+    pub fn emacs_keys(mut self) -> Self {
+        for (action, names) in [
+            ("left", "left ctrl+b"),
+            ("right", "right ctrl+f"),
+            ("up", "up ctrl+p"),
+            ("down", "down ctrl+n"),
+            ("word-left", "ctrl+left alt+b"),
+            ("word-right", "ctrl+right alt+f"),
+            ("kill-to-end", "ctrl+k"),
+            ("kill-to-start", "ctrl+u"),
+            ("kill-word", "ctrl+w"),
+            ("kill-next-word", "alt+d"),
+            ("kill-previous-word", "alt+backspace"),
+            ("yank", "ctrl+y"),
+            ("yank-pop", "alt+y"),
+            ("paragraph-up", "alt+{"),
+            ("paragraph-down", "alt+}"),
+            ("delete-to-start", ""),
+            ("delete-to-end", ""),
+            ("delete-word", ""),
+        ] {
+            self.rebound.rebind(action, keys(names));
+        }
+        self
+    }
+
     /// The key that submits (default Ctrl+D).
     pub fn submit_key(mut self, key: Key) -> Self {
         self.submit = key;
@@ -269,6 +311,17 @@ impl Component for TextArea {
             Some("delete-to-start") => self.buffer.delete_to_start(),
             Some("delete-to-end") => self.buffer.delete_to_end(),
             Some("delete-word") => self.buffer.delete_word(),
+            // The buffer's other actions (kills, yanks, undo, word and
+            // paragraph moves), for keys rebound onto them.
+            Some(action)
+                if crate::edit_keys::perform(
+                    &mut self.buffer,
+                    action,
+                    crate::edit_keys::Act {
+                        page: height,
+                        ..crate::edit_keys::Act::default()
+                    },
+                ) == crate::edit_keys::Outcome::Used => {}
             _ => match key.code {
                 KeyCode::Char(c) if !key.modifiers.ctrl && !key.modifiers.alt => {
                     let mut buffer = [0; 4];
@@ -306,6 +359,25 @@ impl Component for TextArea {
             .bind("delete-word", keys("ctrl+w"), "delete a word")
             .bind("backspace", keys("backspace"), "delete back")
             .bind("delete", keys("delete"), "delete forward");
+        // Bound to no key here; rebind them, or take `emacs_keys`.
+        for (action, description) in [
+            ("word-left", "word left"),
+            ("word-right", "word right"),
+            ("paragraph-up", "paragraph up"),
+            ("paragraph-down", "paragraph down"),
+            ("undo", "undo"),
+            ("redo", "redo"),
+            ("delete-next-word", "delete a word forward"),
+            ("kill-to-end", "kill to the line's end"),
+            ("kill-to-start", "kill to the line's start"),
+            ("kill-word", "kill a word back"),
+            ("kill-next-word", "kill a word forward"),
+            ("kill-previous-word", "kill to the word's start"),
+            ("yank", "yank the last kill"),
+            ("yank-pop", "swap the yank for an older kill"),
+        ] {
+            keymap = keymap.bind(action, [], description);
+        }
         keymap.extend(self.rebound.clone());
         keymap
     }

@@ -18,7 +18,9 @@ use std::time::{Duration, Instant};
 
 use rich::protocol::ConsoleCodeHighlighting;
 use rich::{Console, Segment, Style};
-use rich_interact::edit::{cells, graphemes, Buffer, Pos};
+use rich_interact::caret::CaretShape;
+use rich_interact::edit::{graphemes, wrap_line, Buffer, Pos, WrapMode};
+use rich_interact::edit_keys::{self, Act, ModeCx, ModeKey, Outcome};
 use rich_interact::{Button, Key, KeyCode, MouseKind};
 
 use crate::node::{Axis, Node};
@@ -78,6 +80,11 @@ pub(crate) struct Options {
     pub caret: Option<Caret>,
     /// What is selected when the text is set: [`Node::select`].
     pub select: Option<Range<usize>>,
+    /// Wrapping, rows break at a space: [`Node::wrap_mode`].
+    pub word_wrap: bool,
+    /// The keys, the search, the caret and the rest:
+    /// [`text_edit`](crate::text_edit).
+    pub editing: crate::text_edit::Editing,
 }
 
 /// Where the caret of an [`input`](crate::input) or a
@@ -112,6 +119,16 @@ struct Row {
 /// The highlighted lines last drawn: which lines, at which revision.
 /// A line's highlighted spans: byte ranges and their styles.
 type Spans = Vec<(Range<usize>, Style)>;
+
+/// The styles a row is drawn with beyond the code's, and the search's
+/// matches in view.
+struct Looks {
+    selection: Style,
+    search: Style,
+    current: Style,
+    /// The matches on the lines in view, in order.
+    matches: Vec<(Pos, Pos)>,
+}
 
 struct Highlight {
     key: (usize, usize, u64),
@@ -209,9 +226,57 @@ impl TextArea {
     /// The cells `text` takes as shown: one a character when masked.
     fn shown_cells(&self, text: &str) -> usize {
         match self.options.mask {
-            Some(_) => graphemes(text).len(),
-            None => cells(text),
+            Some(_) => self.buffer.graphemes(text).len(),
+            None => self.buffer.cells(text),
         }
+    }
+
+    pub(crate) fn buffer_ref(&self) -> &Buffer {
+        &self.buffer
+    }
+
+    pub(crate) fn buffer_mut(&mut self) -> &mut Buffer {
+        self.follow.set(true);
+        &mut self.buffer
+    }
+
+    /// The signal it edits.
+    pub(crate) fn text_signal(&self) -> Signal<String> {
+        self.text
+    }
+
+    /// An option changed: show the caret again when next drawn.
+    pub(crate) fn touch(&mut self) {
+        self.follow.set(true);
+    }
+
+    pub(crate) fn set_wrap(&mut self, mode: WrapMode) {
+        self.options.soft_wrap = mode != WrapMode::None;
+        self.options.word_wrap = mode == WrapMode::Word;
+        self.follow.set(true);
+    }
+
+    fn wrap(&self) -> WrapMode {
+        match (self.options.soft_wrap, self.options.word_wrap) {
+            (false, _) => WrapMode::None,
+            (true, false) => WrapMode::Grapheme,
+            (true, true) => WrapMode::Word,
+        }
+    }
+
+    /// Write the key mode's name and pending keys to its status signal.
+    pub(crate) fn tell_mode(&self) {
+        let editing = &self.options.editing;
+        let (Some(status), Some(mode)) = (editing.mode_status, editing.mode.as_ref()) else {
+            return;
+        };
+        let mode = mode.borrow();
+        let text = [mode.label(), mode.pending()]
+            .into_iter()
+            .flatten()
+            .collect::<Vec<_>>()
+            .join(" ");
+        status.set(text);
     }
 
     /// Columns the line numbers take.
@@ -234,35 +299,16 @@ impl TextArea {
     /// The rows line `index` takes, `room` cells wide when wrapping.
     fn line_rows(&self, index: usize, room: usize) -> Vec<Row> {
         let line = self.buffer.line(index);
-        if !self.options.soft_wrap {
-            return vec![Row {
+        wrap_line(line, room, self.buffer.tab_width(), self.wrap())
+            .into_iter()
+            .enumerate()
+            .map(|(i, range)| Row {
                 line: index,
-                start: 0,
-                end: line.len(),
-                first: true,
-            }];
-        }
-        let mut rows = Vec::new();
-        let (mut start, mut used, mut first) = (0, 0, true);
-        for (at, _, width) in graphemes(line) {
-            if used + width > room && at > start {
-                rows.push(Row {
-                    line: index,
-                    start,
-                    end: at,
-                    first,
-                });
-                (start, used, first) = (at, 0, false);
-            }
-            used += width;
-        }
-        rows.push(Row {
-            line: index,
-            start,
-            end: line.len(),
-            first,
-        });
-        rows
+                start: range.start,
+                end: range.end,
+                first: i == 0,
+            })
+            .collect()
     }
 
     /// Which of `rows` (a line's) holds `at`.
@@ -414,8 +460,9 @@ impl TextArea {
         first_line: usize,
         left: usize,
         width: usize,
-        selection: &Style,
+        looks: &Looks,
     ) -> Vec<Segment> {
+        let selection = &looks.selection;
         let line = self.buffer.line(row.line);
         let highlight = self.highlight.borrow();
         let spans: Option<(&Spans, &Style)> = highlight
@@ -438,11 +485,23 @@ impl TextArea {
             Some((_, default)) => default.combine(selection),
             None => selection.clone(),
         };
+        // The search's matches on this row's line, and which is selected.
+        let current = self.buffer.selection();
+        let matches: Vec<(Range<usize>, bool)> = looks
+            .matches
+            .iter()
+            .filter(|(start, _)| start.line == row.line)
+            .map(|&(start, end)| (start.at..end.at, Some((start, end)) == current))
+            .collect();
+        let over = |base: Option<Style>, look: &Style| match base {
+            Some(base) => base.combine(look),
+            None => look.clone(),
+        };
         let mut out: Vec<Segment> = Vec::new();
         let mut column = 0;
         let mut shown = 0;
         let mask = self.options.mask.map(String::from);
-        for (start, end, cell_width) in graphemes(&line[row.start..row.end]) {
+        for (start, end, cell_width) in self.buffer.graphemes(&line[row.start..row.end]) {
             let cell_width = if mask.is_some() { 1 } else { cell_width };
             let (start, end) = (row.start + start, row.start + end);
             if column + cell_width <= left {
@@ -468,13 +527,20 @@ impl TextArea {
                     .map(|(_, style)| style.clone())
                     .or_else(|| Some(default.clone()))
             });
+            if let Some((_, now)) = matches.iter().find(|(range, _)| range.contains(&start)) {
+                let look = if *now { &looks.current } else { &looks.search };
+                style = Some(over(style, look));
+            }
             if selected
                 .as_ref()
                 .is_some_and(|range| range.contains(&start))
+                && !matches
+                    .iter()
+                    .any(|(range, now)| *now && range.contains(&start))
             {
                 style = Some(selected_style.clone());
             }
-            let width = cells(text).max(if text.trim().is_empty() {
+            let width = self.buffer.cells(text).max(if text.trim().is_empty() {
                 text.len()
             } else {
                 0
@@ -519,7 +585,7 @@ impl TextArea {
             + left;
         let mut at = shown.start;
         let mut used = 0;
-        for (start, end, width) in graphemes(&line[shown.start..shown.end]) {
+        for (start, end, width) in self.buffer.graphemes(&line[shown.start..shown.end]) {
             let width = if self.options.mask.is_some() {
                 1
             } else {
@@ -552,7 +618,7 @@ impl TextArea {
 
     /// A key: whether it was used.
     fn key(&mut self, cx: &mut EventCx, key: Key) -> bool {
-        let (ctrl, alt, shift) = (key.modifiers.ctrl, key.modifiers.alt, key.modifiers.shift);
+        let (ctrl, alt) = (key.modifiers.ctrl, key.modifiers.alt);
         // Escape, then Tab or Shift+Tab, moves the focus on, so the area is
         // never a trap; read-only, Tab always does.
         let escaped = std::mem::replace(&mut self.escaped, key.code == KeyCode::Escape);
@@ -584,77 +650,79 @@ impl TextArea {
                 _ => {}
             }
         }
+        // A modal preset sees the key first.
+        if let Some(mode) = self.options.editing.mode.clone() {
+            let page = self.page().max(1) as usize;
+            let out = mode.borrow_mut().key(
+                key,
+                &mut ModeCx {
+                    buffer: &mut self.buffer,
+                    editable: edit,
+                    single_line: self.options.single_line,
+                    page,
+                },
+            );
+            match out {
+                ModeKey::Used => return true,
+                ModeKey::Unused => return false,
+                ModeKey::Copy(text) => {
+                    if self.options.mask.is_none() {
+                        cx.app().copy(text);
+                    }
+                    return true;
+                }
+                ModeKey::Pass => {}
+            }
+        }
         // Masked, nothing is copied out.
         let masked = self.options.mask.is_some();
+        let Some((action, select)) = edit_keys::resolve(&self.options.editing.keymap, key) else {
+            return match key.code {
+                KeyCode::Char(c) if !ctrl && !alt && edit => {
+                    let mut bytes = [0; 4];
+                    self.buffer.insert(c.encode_utf8(&mut bytes));
+                    true
+                }
+                _ => false,
+            };
+        };
         let b = &mut self.buffer;
-        match key.code {
-            KeyCode::Char(c) if !ctrl && !alt => {
-                if !edit {
-                    return false;
+        match action.as_str() {
+            // Masked, a selection takes Ctrl+C and Ctrl+X and gives nothing.
+            "copy" | "cut" if masked => return b.selection().is_some(),
+            "copy" => match b.selected_text() {
+                Some(text) => {
+                    b.push_kill(&text);
+                    cx.app().copy(text);
+                    // Copying ends the mark (Emacs's Alt+W); a plain
+                    // selection stays.
+                    if b.marking() {
+                        b.clear_mark();
+                    }
                 }
-                let mut bytes = [0; 4];
-                b.insert(c.encode_utf8(&mut bytes));
-            }
-            KeyCode::Char('a') if ctrl => b.select_all(),
-            KeyCode::Char('c') | KeyCode::Char('x') if ctrl && masked => {
-                if b.selection().is_none() {
-                    return false;
-                }
-            }
-            KeyCode::Char('c') if ctrl => match b.selected_text() {
-                Some(text) => cx.app().copy(text),
                 // Nothing selected: Ctrl+C is the app's (it quits).
                 None => return false,
             },
-            KeyCode::Char('x') if ctrl && edit => match b.selected_text() {
+            "cut" if edit => match b.selected_text() {
                 Some(text) => {
                     cx.app().copy(text);
-                    b.backspace();
+                    b.kill_selection();
                 }
                 None => return false,
             },
-            KeyCode::Char('z') if ctrl && edit => {
-                if shift {
-                    b.redo();
-                } else {
-                    b.undo();
+            // After Escape, Tab and Shift+Tab move the focus on.
+            "indent" | "outdent" if escaped => return false,
+            action => {
+                let act = Act {
+                    select,
+                    editable: edit,
+                    single_line: self.options.single_line,
+                    page: self.page().max(1) as usize,
+                };
+                if edit_keys::perform(&mut self.buffer, action, act) != Outcome::Used {
+                    return false;
                 }
             }
-            KeyCode::Char('y') if ctrl && edit => {
-                b.redo();
-            }
-            KeyCode::Char('w') if ctrl && edit => b.delete_word(),
-            KeyCode::Char('u') if ctrl && edit => b.delete_to_start(),
-            KeyCode::Char('k') if ctrl && edit => b.delete_to_end(),
-            KeyCode::Enter if edit => b.insert("\n"),
-            KeyCode::Tab if edit && !ctrl && !escaped => b.indent(),
-            KeyCode::BackTab if edit && !escaped => b.outdent(),
-            KeyCode::Backspace if edit => b.backspace(),
-            KeyCode::Delete if edit => b.delete(),
-            KeyCode::Left if ctrl => b.word_left(shift),
-            KeyCode::Right if ctrl => b.word_right(shift),
-            KeyCode::Left => b.left(shift),
-            KeyCode::Right => b.right(shift),
-            KeyCode::Up => b.vertical(-1, shift),
-            KeyCode::Down => b.vertical(1, shift),
-            KeyCode::PageUp => {
-                let page = self.page();
-                self.buffer.vertical(-page, shift);
-            }
-            KeyCode::PageDown => {
-                let page = self.page();
-                self.buffer.vertical(page, shift);
-            }
-            KeyCode::Home if ctrl => b.top(shift),
-            KeyCode::End if ctrl => b.bottom(shift),
-            KeyCode::Home => b.home(shift),
-            KeyCode::End => b.end(shift),
-            // With nothing selected it goes on to the app (a modal closes).
-            KeyCode::Escape if b.selection().is_some() => {
-                let caret = b.caret();
-                b.set_caret(caret, false);
-            }
-            _ => return false,
         }
         true
     }
@@ -837,6 +905,29 @@ impl TextArea {
         }
     }
 
+    /// An input's validation message: under the text, or with one row,
+    /// at the right of it where it fits.
+    fn draw_message(&self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        let Some(validate) = &self.options.editing.validate else {
+            return;
+        };
+        let Some(message) = self.text.with(|text| validate(text)) else {
+            return;
+        };
+        let style = cx.style("input.error", "red");
+        let width = canvas.width() as usize;
+        if canvas.height() >= 2 {
+            let shown = rich::cells::set_cell_size(&message, width);
+            canvas.print(0, 1, shown.trim_end(), Some(&style));
+            return;
+        }
+        let used = self.shown_cells(&self.buffer.text()) + 1;
+        let size = rich::cells::cell_len(&message);
+        if used + 1 + size <= width {
+            canvas.print((width - size) as u16, 0, &message, Some(&style));
+        }
+    }
+
     /// Draw the ghost after the caret, and set the pop-up's float.
     fn draw_assist(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         if !self.options.single_line || self.assist.completer.is_none() {
@@ -950,7 +1041,10 @@ impl Widget for TextArea {
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, width: u16, _height: u16) -> u16 {
         match axis {
             Axis::Horizontal => self.natural_width(),
-            Axis::Vertical if self.options.single_line => 1,
+            // An input that validates keeps a row for its message.
+            Axis::Vertical if self.options.single_line => {
+                1 + u16::from(self.options.editing.validate.is_some())
+            }
             Axis::Vertical => {
                 let room = self.room(width.max(1));
                 (0..self.buffer.line_count())
@@ -976,6 +1070,10 @@ impl Widget for TextArea {
             self.place_caret();
             self.assist.popup = None;
             self.assist.browse = None;
+        }
+        // The search the app drives: a new pattern or a move selects.
+        if crate::text_edit::apply_search(self) {
+            self.follow.set(true);
         }
         let (mut width, height) = (canvas.width(), canvas.height());
         // The bar keeps a column while the lines do not all fit.
@@ -1012,7 +1110,19 @@ impl Widget for TextArea {
         };
         let number = cx.style("text_area.line_number", "dim");
         let hint = cx.style("text_area.placeholder", "dim");
-        let selection = cx.style("text_area.selection", "reverse");
+        let looks = Looks {
+            selection: cx.style("text_area.selection", "reverse"),
+            search: cx.style("text_area.search", "black on yellow"),
+            current: cx.style("text_area.search.current", "bold black on bright_yellow"),
+            matches: match (rows.first(), rows.last()) {
+                (Some(first), Some(last)) if self.buffer.search().is_some() => {
+                    self.buffer.matches(first.line..last.line + 1)
+                }
+                _ => Vec::new(),
+            },
+        };
+        let cursor_line = (self.options.editing.cursor_line)
+            .then(|| cx.style("text_area.cursor_line", "underline"));
         // Highlighted, every row is filled with the code's own background.
         let fill = self.highlight.borrow().as_ref().map(|h| h.default.clone());
         let blank_gutter = (gutter > 0).then(|| {
@@ -1040,12 +1150,24 @@ impl Widget for TextArea {
                     line.push(Segment::new(placeholder.clone(), Some(hint.clone())));
                 }
             } else {
-                line.extend(self.row_segments(*row, first_line, left, text_width, &selection));
+                line.extend(self.row_segments(*row, first_line, left, text_width, &looks));
             }
+            let used = |line: &[Segment]| -> usize {
+                line.iter().map(|s| rich::cells::cell_len(&s.text)).sum()
+            };
             if let Some(fill) = &fill {
-                let used: usize = line.iter().map(|s| cells(&s.text)).sum();
-                let room = width as usize - used.min(width as usize);
+                let room = width as usize - used(&line).min(width as usize);
                 line.push(Segment::new(" ".repeat(room), Some(fill.clone())));
+            }
+            if let (Some(look), true) = (&cursor_line, row.line == caret.line) {
+                for segment in line.iter_mut().skip(usize::from(gutter > 0)) {
+                    segment.style = Some(match &segment.style {
+                        Some(style) => style.combine(look),
+                        None => look.clone(),
+                    });
+                }
+                let room = width as usize - used(&line).min(width as usize);
+                line.push(Segment::new(" ".repeat(room), Some(look.clone())));
             }
             if row.line == caret.line {
                 let last_of_line = row.end == self.buffer.line(row.line).len();
@@ -1081,8 +1203,29 @@ impl Widget for TextArea {
                 self.bar_at.set(None);
             }
         }
-        self.caret.set(caret_cell);
+        // The caret drawn in the cells, rather than the terminal's.
+        let drawn = self.options.editing.draw_caret;
+        if let (true, true, Some((x, y))) = (drawn, cx.focused(), caret_cell) {
+            let fallback = match self.caret_shape() {
+                Some(CaretShape::Underline) => "underline",
+                _ => "reverse",
+            };
+            let look = cx.style("text_area.caret", fallback);
+            let (symbol, style) = match canvas.cell(x, y) {
+                Some(cell) if !cell.symbol().is_empty() && !cell.is_continuation() => {
+                    (cell.symbol().to_string(), cell.style().cloned())
+                }
+                _ => (" ".to_string(), None),
+            };
+            let style = match style {
+                Some(style) => style.combine(&look),
+                None => look,
+            };
+            canvas.set_cell(x, y, &symbol, Some(&style));
+        }
+        self.caret.set(caret_cell.filter(|_| !drawn));
         *self.rows.borrow_mut() = rows;
+        self.draw_message(cx, canvas);
         self.draw_assist(cx, canvas);
     }
 
@@ -1103,7 +1246,9 @@ impl Widget for TextArea {
         }
         match event {
             WidgetEvent::Key(key) => {
-                if !self.key(cx, *key) {
+                let used = self.key(cx, *key);
+                self.tell_mode();
+                if !used {
                     return Used::No;
                 }
                 if self.buffer.revision() != revision && self.assist.browse.is_none() {
@@ -1203,6 +1348,15 @@ impl Widget for TextArea {
 
     fn caret(&self) -> Option<(u16, u16)> {
         self.caret.get()
+    }
+
+    fn caret_shape(&self) -> Option<CaretShape> {
+        self.options
+            .editing
+            .mode
+            .as_ref()
+            .and_then(|mode| mode.borrow().caret_shape())
+            .or(self.options.editing.caret_shape)
     }
 
     fn role(&self) -> crate::a11y::Role {

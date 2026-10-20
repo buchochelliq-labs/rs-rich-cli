@@ -250,6 +250,8 @@ pub struct Node {
     selected_when: Option<Condition>,
     disabled_when: Option<Condition>,
     error_when: Option<Condition>,
+    /// Why it is in error, while it is ([`error_message`](Node::error_message)).
+    error_message: Option<Box<dyn Fn() -> Option<String>>>,
     /// Conditions on the app's [`viewport`](crate::viewport()) that must
     /// all hold for it to be shown ([`hide_below`](Node::hide_below) and
     /// the like), each with the rule the inspector names it by.
@@ -519,6 +521,7 @@ impl Node {
             selected_when: None,
             disabled_when: None,
             error_when: None,
+            error_message: None,
             shown_when: Vec::new(),
             error_lit: Cell::new(false),
             sheet: RefCell::new(SheetNode::default()),
@@ -674,7 +677,7 @@ impl Node {
         }
         state.selected |= holds(&self.selected_when).unwrap_or(false);
         state.busy |= holds(&self.busy_when).unwrap_or(false);
-        state.invalid |= holds(&self.error_when).unwrap_or(false);
+        state.invalid |= holds(&self.error_when).unwrap_or(false) || self.error().is_some();
         state
     }
 
@@ -1221,6 +1224,42 @@ impl Node {
         self.error_when
             .as_ref()
             .is_some_and(|condition| condition())
+            || self.error().is_some()
+    }
+
+    /// In error while `message` returns one, which says why: as
+    /// [`error_when`](Self::error_when) (either makes the node invalid),
+    /// and assistive technology is given the message
+    /// ([`AccessNode::error`](crate::a11y::AccessNode::error)). An
+    /// [`input`](crate::input)'s [`validate`](Self::validate) uses it and
+    /// shows the message too. `message` may read signals.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let name = signal(String::new());
+    ///     text!("Name: {name}")
+    ///         .label("Name")
+    ///         .error_message(move || name.with(|n| n.is_empty().then(|| "required".to_string())))
+    /// });
+    /// let mut driver = app.driver(12, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.accessibility()[0].describe(), "Name, invalid: required");
+    /// ```
+    pub fn error_message(mut self, message: impl Fn() -> Option<String> + 'static) -> Node {
+        self.error_message = Some(Box::new(message));
+        self
+    }
+
+    /// Why it is in error now, from [`error_message`](Self::error_message).
+    pub(crate) fn error(&self) -> Option<String> {
+        self.error_message.as_ref().and_then(|message| message())
+    }
+
+    /// The caret's shape its widget wants while it has the focus.
+    pub(crate) fn wanted_caret_shape(&self) -> Option<rich_interact::caret::CaretShape> {
+        self.body.borrow().widget.caret_shape()
     }
 
     /// Hide this node while the app is narrower than `columns` cells (its
