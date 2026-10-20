@@ -1,28 +1,32 @@
-# intuiTUIve's elephant
+# intuiTUIve's elephants: Memo and Tui
 
-A purple elephant, drawn in the mark's language: the mark's deep purple
+Memo is a purple elephant, drawn in the mark's language: the mark's deep purple
 (`#7c4dff`) with a darker rim (`#5a32d6`), a light inside (`#b9a1ff`), ink
-(`#1c1a24`) and a near-white lit cell (`#f4f1ff`). Its eyes are block
-cursors, its toes are three light cells, and in its trunk it holds up the lit
+(`#1c1a24`) and a near-white lit cell (`#f4f1ff`). Her eyes are block
+cursors, her toes are three light cells, and in her trunk she holds up the lit
 cell from the mark: the one cell a signal redraws.
 
 ## Names
 
-- **Memo**: an elephant never forgets, and `memo` is the signal that
-  remembers a derived value until what it read changes. First choice.
-- **Trunk**: the root of the retained tree is a trunk, and so is what it
-  waves with.
-- **Tui** (said "too-ee"): the middle of intuiTUIve, short enough for a
-  tape caption.
+- **Memo** (she): an elephant never forgets, and `memo` is the signal that
+  remembers a derived value until what it read changes.
+- **Tui** (said "too-ee"), Memo's calf: the middle of intuiTUIve, and
+  short enough for a tape caption.
 
 ## Personality
 
-Memo is patient and precise: it remembers everything, redraws nothing it
+Memo is patient and precise: she remembers everything, redraws nothing she
 does not have to, and carries one lit cell around as if it were a lantern.
-It is friendly rather than goofy: it waves people in at the tutorial, holds
-up a sign with a prompt on it for tips, scratches its chin at
-troubleshooting, and throws confetti cells for a release. It never talks in
-the docs; it shows up beside the text that does.
+She is friendly rather than goofy: she waves people in at the tutorial, holds
+up a sign with a prompt on it for tips, scratches her chin at
+troubleshooting, and throws confetti cells for a release. She never talks
+in the docs; she shows up beside the text that does.
+
+Tui is Memo's calf: a bigger head, shorter legs, two toes a foot, and
+eyes a size too large. Where Memo holds up a lit cell, Tui carries a cursor
+(an underscore): the cell that is not filled in yet. Tui suits beginners'
+pages, first steps and small wins, and in the pair's picture follows Memo
+holding her tail in a curled trunk, as calves do.
 
 ## The files
 
@@ -35,6 +39,8 @@ the docs; it shows up beside the text that does.
 | `elephant-celebrate.svg` | Eyes closed, trunk up, confetti cells | Release notes |
 | `elephant-32.svg` | Silhouette drawn for 32 px | Avatars, small badges |
 | `elephant-16.svg` | Silhouette drawn for 16 px | Favicons, inline |
+| `tui.svg` | Tui, holding a cursor | Beginners' pages, first steps |
+| `memo-and-tui.svg` | Memo waving, Tui holding her tail (224x128) | The tutorial's start, the guide's front page |
 | `elephant-pixel.png` | 32x32 pixels, one pixel a cell | Source for a micro asset or a sprite |
 | `elephant-pixel.txt` | The same grid as characters, with the palette | Source for a `pixels` buffer or a test |
 | `elephant-pixel.svg` | The same grid as SVG runs | The pixel version in docs |
