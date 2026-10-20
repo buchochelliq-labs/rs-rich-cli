@@ -142,8 +142,34 @@ panel still appear.
 Every constructor argument is also an attribute you can read and set, as in
 Rich (`table.show_header = False`, `table.title = "..."`, `table.box = None`,
 `table.padding = 0`, ...): they take effect when the table next prints.
-`padding` reads back as `(top, right, bottom, left)`. Rich's `columns` and
-`rows` lists are not attributes; use `add_column` and `add_row`.
+`padding` reads back as `(top, right, bottom, left)`.
+
+`table.columns` and `table.rows` are Rich's lists, read only: a `Column`
+(from `rs_rich.table`) per column, with Rich's attributes (`header`,
+`footer`, `header_style`, `footer_style`, `style`, `justify`, `vertical`,
+`overflow`, `width`, `min_width`, `max_width`, `ratio`, `no_wrap`,
+`highlight`, `cells` and `flexible`), and a `Row` (`style`, `end_section`)
+per row. They are copies of the table's state when read, so changing the
+table means `add_column` and `add_row`; setting an attribute on one raises
+`AttributeError`.
+
+```python
+from rs_rich.table import Table
+
+table = Table("Name", title="Users")
+table.add_column("Role", justify="right", style="cyan")
+table.add_row("ada", "admin", style="bold")
+table.add_row("bob")
+for column in table.columns:
+    print(column.header, column.justify, repr(column.style), list(column.cells))
+print([(row.style, row.end_section) for row in table.rows])
+```
+
+```text
+Name left '' ['ada', 'bob']
+Role right 'cyan' ['admin', '']
+[('bold', False), (None, False)]
+```
 
 Footers, sections, row styles and a fixed width:
 
@@ -163,6 +189,41 @@ console.print(table)
 ```
 
 ![A table with a footer row, a section line, zebra rows and a right-justified caption](media/table-footers.svg)
+
+## Plain-text cells
+
+A `str` cell is console markup, as in Rich: `"[bold]x[/]"` prints a bold
+`x`, and a stray `[` in a file name, a column name or user input can
+restyle, link or hide what follows. Data you do not control belongs in a
+`Text`, which is never parsed; these methods (rs-rich's, not Rich's) wrap
+each cell for you:
+
+```text
+add_plain_row(*cells, style=None, end_section=False)
+add_plain_rows(rows)
+add_plain_column(header=None, footer=None, *, <add_column's keywords>)
+```
+
+Each cell is a `str`, `None` (empty) or any value, written as its `str()`,
+so a row of numbers needs no conversion. `add_plain_rows` takes an iterable
+of rows, each an iterable of cells (a `csv.reader`, a list of tuples); a
+plain cell is a `Text`, so it is not highlighted and emoji codes stay as
+written. `Tree.add_plain` does the same for [tree labels](tree.md).
+
+```python
+from rs_rich.console import Console
+from rs_rich.table import Table
+
+console = Console(width=40)
+table = Table(show_footer=True)
+table.add_plain_column("[file]", "[total]")
+table.add_plain_column("bytes", justify="right")
+table.add_plain_rows([("notes[1].txt", 120), ("a:smile:b", 3)])
+table.add_plain_row("[bold]x[/]", None)
+console.print(table)
+```
+
+![A table whose markup-like cells print literally](media/table-plain.svg)
 
 `leading`, `min_width`, and a row with more cells than columns:
 

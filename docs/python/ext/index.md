@@ -37,6 +37,8 @@ Each Rust module `rich_ext::<name>` is `rs_rich.ext.<name>`, and
 | [Layout and live output](layout.md) | `layout`, `live`, `surface` |
 | [CLI authoring](cli-authoring.md) | `cli_doc` |
 | [Testing and QA](testing.md) | `testing`, `qa` |
+| [GitHub Markdown export](markdown-export.md) | `markdown_export` |
+| [Syntax: SQL](../syntax.md#sql) | `sql` (the SQL code highlighter) |
 
 The extension registry (`ExtensionRegistry`, `install_defaults`) is the plugin
 host, documented with the plugin API; `rs_rich.ext.registry` re-exports it.

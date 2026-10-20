@@ -9,6 +9,41 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Python: this cohort's Rust APIs, and rs-rich's identity on the Python site (rs-rich on PyPI)
+
+- `rs_rich.ext.markdown_export`: GitHub-flavoured Markdown from the Python
+  renderables (`to_gfm`, `GfmExporter`, `GfmDocument`, `GfmOptions`,
+  `PanelStyle`, `fit_github_comment`, `truncate_markdown`,
+  `GITHUB_COMMENT_LIMIT`). `Table`, `Tree`, `Panel`, `Rule`, `Text`, markup,
+  `Syntax` and `Markdown` are read as the Rust crate reads them; a `Group`
+  writes each item as its own block.
+- `rs_rich.ext.sql`: the SQL highlighter without syntect (`SqlHighlighter`,
+  with an optional fallback, `highlight`, `tokenize`, `token_style`,
+  `is_sql`). `highlighter="sql"` picks it for `Syntax` and `Markdown`, and
+  `rs_rich.plugins.SqlPlugin` registers it with a plugin host. The wheel
+  builds rs-rich-ext with `sql`.
+- Plain-text cells: `Table.add_plain_row`, `add_plain_rows`,
+  `add_plain_column` and `Tree.add_plain` take data literally, never as
+  markup.
+- `Table.columns` and `Table.rows`, as in Rich: read-only `Column` and
+  `Row` copies (`rs_rich.table.Column`, `rs_rich.table.Row`), compared with
+  Rich 15.0.0.
+- `rs_rich.mermaid` parses and draws sequence and ER diagrams
+  (`parse_sequence`, `draw_sequence`, `parse_er`, `draw_er`, with
+  `SequenceDiagram`, `EntityDiagram` and their parts); `parse` and `draw`
+  pick the kind by the header, as `Mermaid` does. `parse_flowchart` given a
+  sequence or ER diagram names the parser to use, and `MermaidDiagram` has
+  the drawing's `notes`.
+- `rs_rich.diagram`: edges' `start_label` and `end_label`, in
+  `Graph.edge`, `Graph.link` and `DiagramEdge`.
+- `Form.multi` and `Form.file` in `rs_rich.interact`: their answers are a
+  `list` of `str` and a `pathlib.Path` (a path was a `str`).
+- The Python site has rs-rich's mark, favicon and gold accent, and the hero
+  banner on its home page, with pip's install line
+  (`scripts/gen_rs_rich_hero.py` writes it and copies the mark into
+  `docs/python/assets/`). New pages and sections for all of the above; the
+  Mermaid page's "not drawn as text" example is a class diagram now.
+
 ### Docs: rs-rich's own identity, and intuiTUIve as a sub-site
 
 - rs-rich has a mark (a styled "r" in a terminal tile, with a gold span and

@@ -1,0 +1,26 @@
+/* rs-rich's identity on the Python site, as on the main site
+   (docs/assets/extra.css): its gold accent, #c08600, through Material's
+   `custom` accent, a darker gold on the light scheme so hovered links keep
+   4.5:1 on white. The mark, favicon and hero banner beside this file are
+   written by scripts/gen_rs_rich_hero.py. */
+[data-md-color-accent="custom"] {
+  --md-accent-fg-color: #946800;
+  --md-accent-fg-color--transparent: rgba(192, 134, 0, 0.12);
+  --md-accent-bg-color: #ffffff;
+  --md-accent-bg-color--light: rgba(255, 255, 255, 0.7);
+}
+[data-md-color-scheme="slate"][data-md-color-accent="custom"] {
+  --md-accent-fg-color: #c08600;
+  --md-accent-fg-color--transparent: rgba(192, 134, 0, 0.16);
+  --md-accent-bg-color: #1c1a24;
+  --md-accent-bg-color--light: rgba(28, 26, 36, 0.7);
+}
+
+/* The hero banner on the home page: full width, one per scheme (Material
+   hides the other with `#only-dark` / `#only-light`, so no `display` here). */
+.md-typeset img.rs-hero {
+  width: 100%;
+  height: auto;
+  margin: 0 0 1.2rem;
+  border-radius: 12px;
+}

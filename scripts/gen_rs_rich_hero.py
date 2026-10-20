@@ -1,7 +1,10 @@
 """Generate rs-rich's hero banner (docs/assets/rs-rich/hero-dark.svg and
-hero-light.svg) from its wordmark and intuiTUIve's mark and mascot. Run it
-after any of them changes."""
+hero-light.svg) from its wordmark and intuiTUIve's mark and mascot, and the
+Python site's (docs/python/assets/hero-*.svg), whose install line is pip's.
+The Python site is built from docs/python alone, so its mark and favicon are
+copied there too. Run it after any of them changes."""
 import random
+import shutil
 from pathlib import Path
 ASSETS = Path(__file__).resolve().parent.parent / 'docs/assets'
 A = str(ASSETS / 'rs-rich') + '/'
@@ -9,7 +12,7 @@ T = str(ASSETS / 'intuituive') + '/'
 GOLD = '#c08600'
 PURPLE = '#7c4dff'
 body = lambda s: s.split('\n', 1)[1].rsplit('</svg>', 1)[0]
-def make(theme):
+def make(theme, install='cargo add rs-rich'):
     dark = theme == 'dark'
     bg, grid, ink, sub, panel, pline, dim, ok = (
         ('#16141a', '#24212b', '#ecebf2', '#a9a4bd', '#1f1c26', '#3b3646', '#6f6a85', '#4caf50') if dark else
@@ -36,8 +39,10 @@ def make(theme):
     o.append(f'<text x="80" y="244" {font} font-size="21" fill="{sub}">Styled text, tables, Markdown and progress bars</text>')
     o.append(f'<text x="80" y="272" {font} font-size="21" fill="{sub}">in the terminal, held to rich byte for byte.</text>')
     mono = 'font-family="ui-monospace,SFMono-Regular,Menlo,Consolas,monospace"'
-    o.append(f'<rect x="80" y="296" width="234" height="40" rx="8" fill="{panel}" stroke="{pline}"/>'
-             f'<text x="98" y="322" {mono} font-size="17" fill="{sub}"><tspan fill="{GOLD}">$</tspan> cargo add rs-rich</text>')
+    # 17px monospace is about 10.2px a character; 234 fits `cargo add rs-rich`.
+    box = 234 + round((len(install) - len('cargo add rs-rich')) * 10.2)
+    o.append(f'<rect x="80" y="296" width="{box}" height="40" rx="8" fill="{panel}" stroke="{pline}"/>'
+             f'<text x="98" y="322" {mono} font-size="17" fill="{sub}"><tspan fill="{GOLD}">$</tspan> {install}</text>')
     # A terminal window: a panel holding a table, and a progress bar.
     X, Y, w, h = 640, 40, 380, 256
     o.append(f'<g><rect x="{X}" y="{Y}" width="{w}" height="{h}" rx="10" fill="{panel}" stroke="{pline}" stroke-width="2"/>'
@@ -74,5 +79,10 @@ def make(theme):
     o.append(f'<g transform="translate(1080 266) scale(0.78)">{body(open(T + "mascot/elephant-wave.svg").read())}</g>')
     o.append('</svg>')
     return '\n'.join(o) + '\n'
+PY = ASSETS.parent / 'python' / 'assets'
+PY.mkdir(exist_ok=True)
+for name in ('mark.svg', 'favicon.svg'):
+    shutil.copyfile(A + name, PY / name)
 for t in ('dark', 'light'):
     open(A + f'hero-{t}.svg', 'w').write(make(t))
+    open(PY / f'hero-{t}.svg', 'w').write(make(t, 'pip install rs-rich'))

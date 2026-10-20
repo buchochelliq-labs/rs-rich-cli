@@ -1,5 +1,8 @@
 # Python bindings
 
+![rs-rich for Python: Python's rich, in Rust. Styled text, tables, Markdown and progress bars in the terminal, held to rich byte for byte; pip install rs-rich. Beside it, a terminal window with a panel of crates and a progress bar, and intuiTUIve's mark and Memo the elephant, for full apps.](assets/hero-dark.svg#only-dark){ .rs-hero }
+![rs-rich for Python: Python's rich, in Rust. Styled text, tables, Markdown and progress bars in the terminal, held to rich byte for byte; pip install rs-rich. Beside it, a terminal window with a panel of crates and a progress bar, and intuiTUIve's mark and Memo the elephant, for full apps.](assets/hero-light.svg#only-light){ .rs-hero }
+
 `rs-rich` on PyPI puts the Rust port behind Rich's Python API. A Rich program
 moves over by changing its imports. The rendering, down to the last byte, is
 the Rust port's.
@@ -66,7 +69,7 @@ Your own classes render as they do with Rich, through `__rich__`,
 
 | Crate | rs_rich | Reference |
 |---|---|---|
-| `rs-rich-ext` (39 modules: diagnostics, data, diffs, workflows, tables, terminals, frames, testing and QA, ...) | `rs_rich.ext`, `rs_rich.ext.<module>` | [Extensions](ext/index.md) |
+| `rs-rich-ext` (45 modules: diagnostics, data, diffs, workflows, tables, terminals, frames, testing and QA, Markdown export, SQL, ...) | `rs_rich.ext`, `rs_rich.ext.<module>` | [Extensions](ext/index.md) |
 | `rs-rich-interact` (pickers, input, confirmations, forms, a pager; headless runs; fuzzy matching) | `rs_rich.interact` | [Interactive components](interact.md) |
 | `rs-rich-intuituive` (the TUI framework: nodes, signals, widgets, themes, stylesheets, accessibility; headless runs), with `rs-rich-web` (serving to a browser) and `rs-rich-embed` (terminal panes and web views) | `rs_rich.tui` | [Terminal apps](tui.md) |
 | `rs-rich-art` (images, FIGlet, GIFs, image diffs) | `rs_rich.art` | [Art](art.md) |
