@@ -4,6 +4,8 @@ The nodes that take what a user types: rs-rich-interact's components
 hosted in an app, inputs bound to signals (with completion and a
 history), a command line, text areas, calendars and date and time
 pickers, and a query language for filtering records by what was typed.
+Buttons, check boxes, radio groups, sliders and select fields are on
+[Buttons and form controls](controls.md).
 
 ## Components
 
