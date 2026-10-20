@@ -52,7 +52,7 @@ use std::time::Duration;
 
 use rich::{Color, ColorTriplet, Style};
 
-use crate::app::{after, Easing};
+use crate::app::{after, Easing, Timer};
 use crate::effect::effect;
 use crate::focus::Direction;
 use crate::node::{column, label, switch, Node};
@@ -359,12 +359,20 @@ impl Run {
 
     /// The position at `now`, within `0..=length`.
     fn at(self, now: f64, length: Option<f64>) -> f64 {
+        // Within a microsecond of an end is at it: the clock's seconds
+        // do not add up exactly as floats.
+        const NEAR: f64 = 1e-6;
         let moved = (now - self.anchor).max(0.0);
         if self.forward {
             let at = self.from + moved;
-            length.map_or(at, |l| at.min(l))
+            length.map_or(at, |l| if at >= l - NEAR { l } else { at })
         } else {
-            (self.from - moved).max(0.0)
+            let at = self.from - moved;
+            if at <= NEAR {
+                0.0
+            } else {
+                at
+            }
         }
     }
 
@@ -398,45 +406,66 @@ fn moving() -> bool {
 /// the effect is off), and may read signals.
 fn drive(child: Node, fx: Fx, mut control: impl FnMut(f64, &mut Option<Run>) + 'static) -> Node {
     let tick = signal(0u64);
-    let due: Rc<Cell<Option<Duration>>> = Rc::default();
+    let pending = Pending::default();
     let length = fx.seconds();
     let mut run = None;
     effect(child, move |canvas, cx| {
         tick.get();
         let now = cx.now();
         control(secs(now), &mut run);
-        let Some(run) = run else { return };
+        let Some(run) = run else {
+            pending.cancel();
+            return;
+        };
         if !moving() {
+            pending.cancel();
             fx.apply(run.still(length), canvas, cx);
             return;
         }
         let at = run.at(secs(now), length);
         fx.apply(at, canvas, cx);
-        let left = run.left(at, length);
-        if left != Some(0.0) {
-            // The next frame, or the last one exactly at the end.
-            let step = left.map_or(FRAME, |left| FRAME.min(Duration::from_secs_f64(left)));
-            wake_at(&due, tick, now + step.max(Duration::from_millis(1)), now);
+        match run.left(at, length) {
+            Some(left) if left <= 0.0 => pending.cancel(),
+            left => {
+                // The next frame, or the last one exactly at the end.
+                let step = left.map_or(FRAME, |left| FRAME.min(Duration::from_secs_f64(left)));
+                pending.wake_at(tick, now + step.max(Duration::from_millis(1)), now);
+            }
         }
     })
 }
 
-/// Ask for a draw at `due`, unless an earlier one is asked for already.
-fn wake_at(due: &Rc<Cell<Option<Duration>>>, tick: Signal<u64>, at: Duration, now: Duration) {
-    if due
-        .get()
-        .is_some_and(|pending| pending <= at && pending > now)
-    {
-        return;
-    }
-    due.set(Some(at));
-    let pending = due.clone();
-    after(at - now, move |_| {
-        if pending.get() == Some(at) {
-            pending.set(None);
+/// The draw a running effect has asked for: when, and its timer.
+#[derive(Clone, Default)]
+struct Pending(Rc<Cell<Option<(Duration, Timer)>>>);
+
+impl Pending {
+    /// Ask for a draw at `at`, unless one is asked for already by then.
+    fn wake_at(&self, tick: Signal<u64>, at: Duration, now: Duration) {
+        if self
+            .0
+            .get()
+            .is_some_and(|(pending, _)| pending <= at && pending > now)
+        {
+            return;
         }
-        tick.update(|t| *t = t.wrapping_add(1));
-    });
+        self.cancel();
+        let mine = self.clone();
+        let timer = after(at - now, move |_| {
+            if mine.0.get().is_some_and(|(pending, _)| pending == at) {
+                mine.0.set(None);
+            }
+            tick.update(|t| *t = t.wrapping_add(1));
+        });
+        self.0.set(Some((at, timer)));
+    }
+
+    /// Ask for nothing more: the effect is over, or off.
+    fn cancel(&self) {
+        if let Some((_, timer)) = self.0.take() {
+            timer.cancel();
+        }
+    }
 }
 
 /// `child` with `fx` played over it once, from when it first draws (a
