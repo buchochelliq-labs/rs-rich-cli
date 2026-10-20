@@ -12,6 +12,7 @@ site_dir: site
 exclude_docs: |
   python/
   assets/vendor/**/README.md
+  assets/intuituive/mascot/MASCOT.md
 
 theme:
   name: material
@@ -144,6 +145,7 @@ nav:
           - Panels, themes and stylesheets: guide/intuituive/panels.md
           - State, keys and the mouse: guide/intuituive/input.md
           - Inputs, text and dates: guide/intuituive/components.md
+          - Buttons and form controls: guide/intuituive/controls.md
           - Lists, trees and tabs: guide/intuituive/lists.md
           - Tables and scrolling: guide/intuituive/tables.md
           - Chrome, your own widgets and effects: guide/intuituive/widgets.md
@@ -158,6 +160,7 @@ nav:
           - Porting a ratatui app: guide/intuituive/porting.md
           - "ratatui's examples, rebuilt": guide/intuituive/ratatui-examples.md
           - "Eleven apps, rebuilt": guide/intuituive/clones.md
+          - Widget index: guide/intuituive/widget-index.md
           - Serving an app to a browser: guide/intuituive/web.md
           - "Embedding programs and pages (rs-rich-embed)": guide/intuituive/embed.md
           - Testing with screen readers: guide/intuituive/screen-readers.md
@@ -238,6 +241,7 @@ nav:
       - Extending: PLUGINS.md
       - "Design: render tree (#226)": design/render-tree.md
       - "Design: plugin loading (#14, #232)": design/plugin-loading.md
+      - "Design: the marketplace listing format (#232)": design/marketplace.md
       - "Design: intuiTUIve spike (milestone 11)": design/intuituive.md
       - "Design: intuiTUIve widgets": design/intuituive-widgets.md
       - "Design: intuiTUIve against ratatui": design/intuituive-vs-ratatui.md
@@ -254,3 +258,4 @@ nav:
           - "tasks (taskwarrior-tui)": design/gaps/tasks.md
           - "raycast": design/gaps/raycast.md
       - "Design: a playground in the docs": design/docs-playground.md
+      - "Design: no_std, not now": design/no-std.md

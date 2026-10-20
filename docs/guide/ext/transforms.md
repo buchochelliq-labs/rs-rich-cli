@@ -33,6 +33,9 @@ Anything that implements `Transform<T>` can be a stage, and
 
 `KeepLines` keeps the lines a regular expression matches (or, inverted, those
 it does not), with their styles. `HighlightMatches` styles every match.
+`Pattern` is the same regular expression compiled once and run on a plain
+`&str` (`Pattern::new(re)?.is_match(cell)`): a filter over many rows or
+cells, where building a `Text` for each would cost more than the match.
 
 ```rust
 --8<-- "crates/rich-ext/examples/guide_transforms.rs:text"

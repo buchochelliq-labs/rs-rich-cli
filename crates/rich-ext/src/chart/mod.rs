@@ -10,7 +10,7 @@
 //! | Type | Draws |
 //! |---|---|
 //! | [`Sparkline`] | one line, one cell per value (two in Braille) |
-//! | [`BarChart`] | a label, a bar and a value per row, or columns side by side ([`Orientation::Vertical`]) |
+//! | [`BarChart`] | a label, a bar and a value per row, or columns side by side ([`Orientation::Vertical`]); [stacked](BarGroup::stacked) groups |
 //! | [`Histogram`] | raw values counted into bins, drawn as a [`BarChart`] |
 //! | [`LineChart`] | one or more [`Series`] as lines or scattered points, with axes and a legend |
 //! | [`Gauge`] | a value against a range, with a target and threshold [`Band`]s, on one line or full width |
@@ -26,12 +26,13 @@
 //! | [`LevelMeter`] | an audio level as a bar, green to red, with its peak and the peak a [`PeakHold`] keeps |
 //! | [`BarSpectrum`] | levels per band as columns from the bottom, mirrored or stereo (cava's bars) |
 //! | [`Persistence`] | a trace's last frames as a [`Chart`]'s datasets, older ones fainter (a scope's phosphor) |
+//! | [`PieChart`] | shares of a whole as slices of a disc or a donut ([`Slice`]s), with a legend of percentages |
 //!
 //! And laid out as ratatui's widgets, so a ported app looks the same:
 //!
 //! | Type | ratatui's | Draws |
 //! |---|---|---|
-//! | [`Chart`] | `Chart` | [`Dataset`]s on two [`Axis`] lines, with a legend |
+//! | [`Chart`] | `Chart` | [`Dataset`]s on two [`Axis`] lines, with a legend; areas [stacked](Chart::stacked) |
 //! | [`Canvas`] | `Canvas` | points, lines, shapes, areas, text and a world map in world coordinates |
 //! | [`FillGauge`] | `Gauge` | a bar that fills its area, its label on the middle row |
 //! | [`LineGauge`] | `LineGauge` | a label and a line in two styles |
@@ -99,6 +100,7 @@ mod line;
 mod meter;
 mod multiples;
 mod persistence;
+mod pie;
 mod plot_canvas;
 mod progress;
 mod scale;
@@ -120,6 +122,7 @@ pub use line::{LineChart, Series, SeriesKind};
 pub use meter::{LevelMeter, MeterScale, PeakHold};
 pub use multiples::{Facet, SmallMultiples};
 pub use persistence::Persistence;
+pub use pie::{PieChart, Slice};
 pub use plot_canvas::{Canvas, CanvasPainter, Marker, Shape};
 pub use progress::{FillGauge, LineGauge, LineSet};
 pub use scale::{Scale, ValueFormat};

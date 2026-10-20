@@ -54,6 +54,15 @@ jobs:
       - name: Test the failing-test report
         run: python3 -m unittest discover -s scripts -p 'test_test_failures.py' -v
 
+      # The listing format (docs/design/marketplace.md): the examples against
+      # the schema, with jsonschema as well as the script's own evaluator.
+      - name: Marketplace listings validate, and the bad examples do not
+        run: |
+          python3 -m pip install jsonschema
+          python3 scripts/validate_marketplace.py --jsonschema require schemas/marketplace/examples/valid/*.json
+          python3 scripts/validate_marketplace.py --jsonschema require --expect-invalid schemas/marketplace/examples/invalid/*.json
+          python3 -m unittest discover -s scripts -p 'test_validate_marketplace.py' -v
+
   packages:
     name: registry source identity and staged packages
     runs-on: ubuntu-latest
@@ -182,6 +191,10 @@ jobs:
             args: "--all-features"
           - crate: rs-rich-ext
             args: "--no-default-features"
+          # QR codes on their own (qrcodegen), without syntect or Markdown;
+          # `--all-features` above covers them with everything else.
+          - crate: rs-rich-ext
+            args: "--no-default-features --features qr"
           - crate: rs-rich-art
             args: ""
           - crate: rs-rich-art
@@ -222,7 +235,7 @@ jobs:
           # intuiTUIve, the TUI framework, with both of interact's extra
           # backends (each alone, and on macOS, in `backends`) and its
           # `art`, `audio` (ALSA headers installed below), `watch`, `files`,
-          # `archive` and `viz` features. Its benchmark against ratatui runs in release in
+          # `archive`, `viz` and `tracing` features. Its benchmark against ratatui runs in release in
           # `ratatui-gate`.
           - crate: rs-rich-intuituive
             args: "--all-features"

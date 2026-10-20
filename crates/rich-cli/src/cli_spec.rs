@@ -886,15 +886,16 @@ fn mode_options() -> Vec<ArgSpec> {
             CHART,
             "With `rich chart`, what to draw: spark (a sparkline per series), bar (a bar per \
              row, labelled by --x), line (the default) and scatter (each series against --x, or \
-             the row number), or heatmap (rows by series, each value a shade)",
+             the row number), heatmap (rows by series, each value a shade), pie (one series as \
+             slices, labelled by --x) or stacked (a bar per row, each series a part)",
         )
-        .choices(["spark", "bar", "line", "scatter", "heatmap"]),
+        .choices(["spark", "bar", "line", "scatter", "heatmap", "pie", "stacked"]),
         option(
             "x",
             "COLUMN",
             CHART,
             "With `rich chart`, the column of x positions (line, scatter) or labels (bar, \
-             heatmap), by header or 1-based number (default: the row number; for labels, the \
+             heatmap, pie, stacked), by header or 1-based number (default: the row number; for labels, the \
              first column that is not all numbers)",
         ),
         option(
@@ -1889,9 +1890,9 @@ pub(crate) fn spec() -> CommandSpec {
     spec = spec.subcommand(
         CommandSpec::new("chart")
             .about(
-                "A chart from CSV, JSON or stdin: a sparkline, bars, lines, points or a heatmap; \
-                 --x and --y pick the columns, a missing column or a value that is not a number \
-                 is refused with its row and column",
+                "A chart from CSV, JSON or stdin: a sparkline, bars, lines, points, a heatmap, a \
+                 pie or stacked bars; --x and --y pick the columns, a missing column or a value \
+                 that is not a number is refused with its row and column",
             )
             .usage("chart [OPTIONS] [FILE]")
             .arg(ArgSpec::positional("file").value(ValueHint::Path).help(
@@ -1932,6 +1933,7 @@ pub(crate) fn spec() -> CommandSpec {
         spec = spec.subcommand(super::banner::command());
     }
     spec = spec.subcommand(super::shell::command());
+    spec = spec.subcommand(super::spin::command());
     #[cfg(feature = "serve")]
     {
         spec = spec.subcommand(super::serve::command());
@@ -2180,6 +2182,7 @@ mod tests {
     #[cfg(feature = "art")]
     const BANNER: &str = include_str!("banner.rs");
     const SHELL: &str = include_str!("shell.rs");
+    const SPIN: &str = include_str!("spin.rs");
 
     /// The source of the item that starts with `start`, up to the next
     /// top-level item.
@@ -2249,6 +2252,7 @@ mod tests {
         #[cfg(feature = "art")]
         out.extend(option_literals(item(BANNER, "fn parse_args(")));
         out.extend(option_literals(item(SHELL, "fn parse_args(")));
+        out.extend(option_literals(item(SPIN, "fn parse_args(")));
         #[cfg(feature = "art")]
         for start in ["const CREATE_VALUES", "const CREATE_FLAGS", "fn request("] {
             out.extend(option_literals(item(MICRO, start)));
@@ -2411,6 +2415,7 @@ mod tests {
             "doctor",
             "inspect",
             "shell",
+            "spin",
         ] {
             assert!(spec.find_subcommand(name).is_some(), "{name}");
         }

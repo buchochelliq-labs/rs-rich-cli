@@ -10,9 +10,10 @@
 //! ## Modules
 //!
 //! - Errors and logs: [`diagnostic`], [`dashboard`], [`stacktrace`],
-//!   [`hyperlink`], [`log_handler`] (`RichHandler`, `SpanView`), `adapters`
-//!   (`log` / `tracing` features), [`event`], [`log_stream`] (log records
-//!   parsed, filtered, collapsed and grouped).
+//!   [`hyperlink`], [`log_handler`] (`RichHandler`, `SpanView`), [`adapters`]
+//!   (`EventSink`; `LogAdapter` and `EventLayer` with the `log` / `tracing`
+//!   features), [`event`], [`log_stream`] (log records parsed, filtered,
+//!   collapsed and grouped, and [`ChannelSink`](log_stream::ChannelSink)).
 //! - Data and authoring: `data`, `deps` (Cargo dependency trees) and `schema`
 //!   (JSON Schema trees and diffs, and the format-neutral schema model), all
 //!   behind the `data` feature;
@@ -82,6 +83,8 @@ pub mod fidelity;
 pub mod filetype;
 pub mod format;
 pub mod frame;
+// Text coloured along a gradient of two or more colours.
+pub mod gradient;
 // Local times and owner names for file listings.
 pub mod fs;
 // File operations with progress: copy, move, delete, trash.
@@ -97,6 +100,9 @@ pub mod listing;
 pub mod open;
 pub mod palette;
 pub mod plugin_loading;
+// QR codes drawn with half blocks.
+#[cfg(feature = "qr")]
+pub mod qr;
 pub mod redact;
 pub mod registry;
 #[cfg(feature = "syntax")]
@@ -181,7 +187,7 @@ pub use log_handler::{RichHandler, SpanView};
 // Log streams: parsing, filtering, collapsing and grouping records (#724).
 pub mod log_stream;
 
-#[cfg(any(feature = "log", feature = "tracing"))]
+// `EventSink` always; `LogAdapter` and `EventLayer` behind `log` and `tracing`.
 pub mod adapters;
 
 pub mod live;

@@ -407,7 +407,7 @@ API the matrix names lives:
 | async: the app's own `tokio::select!` over events and channels (`async-github`) | `spawn_future`, `resource`, `Proxy`, with any runtime | ✓ beyond | — |
 | loading states, by hand | `Load::Loading`, `Ready`, `Failed`, `reload()` | ✓ beyond | — |
 | `tracing` to a file (the `tracing` example) | what any program does; `rich_ext::adapters::EventLayer` (the `tracing` feature) | ✓ | — |
-| a log pane (the third-party `tui-logger`) | `Log` (`log.rs`), drawn line by line | ◐ no scrolling back, no follow mode, no tracing sink | M · Later (L2) |
+| a log pane (the third-party `tui-logger`) | `Log` (`log.rs`), drawn line by line: scrollback, follow mode, levels, level, target and text filters, `targets_view`; `log::tracing_layer` (the `tracing` plugin) | ✓ | — (L2, done in 0.0.21) |
 
 ### 1.9 Performance
 
@@ -440,6 +440,12 @@ These are not gaps, but they explain why a port is usually shorter:
 - stylesheets with states and `@media`, themes reloaded live;
 - accessibility, with a linear mode for screen readers;
 - serving an app to a browser, the inspector, and Python bindings.
+
+### 1.12 Portability
+
+| ratatui | intuiTUIve | Status | Fix |
+|---|---|---|---|
+| `no_std` plus `alloc` (`default-features = false`; widgets, layout, text and the buffer, with a backend the app brings, such as `mousefood`) | none: no crate is `no_std`. A browser works instead: core and intuiTUIve run on `wasm32-unknown-unknown` (the docs playground spike) | ✗ by design | Not now: [the `no_std` decision](no-std.md) |
 
 ## 2. Prioritized gaps
 
@@ -1171,7 +1177,8 @@ These are worth building, but after the batches:
       resumes at the end.
     - A `tracing` sink into a `Log`: `intuituive::log::tracing_layer(log,
       proxy)`, behind a `tracing` feature that turns on rs-rich-ext's.
-    - Size M.
+    - Size M. Done in 0.0.21, with levels, filters and a targets panel
+      besides (the `tracing` example).
 - **L3. The cursor's shape and the window title.** `App::title(..)`,
   `cx.set_title(..)` and a text input's `.caret_shape(..)`. Size S.
 - **L4. The horizontal wheel.** `MouseKind::ScrollLeft` and `ScrollRight`.
@@ -1218,7 +1225,7 @@ The 32 apps, and the `concepts` examples:
 | `scrollbar` | four scrollbar looks | `editor`, `board` | `widgets`, the Scrollbar tab (D2) |
 | `table` | multi-line rows, stripes, row, column and cell highlights, a column span, palettes, a scrollbar | `tables` (sorting, resizing, a cell cursor) | `widgets`, the Table tab (D2) |
 | `todo-list` | stripes, a symbol, deselecting, a detail pane | `todo`, the tutorial's | covered; refine `todo` once B1 lands |
-| `tracing` | `tracing` to a file | none | later, with L2 |
+| `tracing` | `tracing` to a file | `tracing`, with its log in a pane | ported, with L2 |
 | `user-input` | an input with editing and normal modes, a message list | `todo`'s `repeating` input | `form`, the Chat tab (D3) |
 | `volatility-surface` | a 3D wireframe on a Braille canvas | none | `canvas`, an optional Surface tab (D3) |
 | `weather` | 24 hourly bars with text values | none | `charts`, the Bars tab (D2) |

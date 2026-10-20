@@ -39,7 +39,8 @@ Each sits on a trait an app can implement itself:
   - `ProgramEngine` (default): a terminal browser you install (Carbonyl,
     Browsh, Chawan, w3m) run in a pane;
   - `ChromeEngine` (feature `chrome`): a headless Chrome or Chromium you
-    install, over the DevTools protocol, sandbox on, temporary private
+    install, over the DevTools protocol (a pipe on Linux and macOS, no
+    port; a `127.0.0.1` port on Windows), sandbox on, temporary private
     profile, downloads off;
   - `BrowshEngine` (feature `browsh`): Browsh's HTTP mode, a page as text,
     its server bound to `127.0.0.1`.

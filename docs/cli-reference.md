@@ -147,8 +147,8 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 
 | Option | Description |
 | --- | --- |
-| `--kind <KIND>` | With `rich chart`, what to draw: spark (a sparkline per series), bar (a bar per row, labelled by --x), line (the default) and scatter (each series against --x, or the row number), or heatmap (rows by series, each value a shade) Possible values: `spark`, `bar`, `line`, `scatter`, `heatmap`. |
-| `--x <COLUMN>` | With `rich chart`, the column of x positions (line, scatter) or labels (bar, heatmap), by header or 1-based number (default: the row number; for labels, the first column that is not all numbers) |
+| `--kind <KIND>` | With `rich chart`, what to draw: spark (a sparkline per series), bar (a bar per row, labelled by --x), line (the default) and scatter (each series against --x, or the row number), heatmap (rows by series, each value a shade), pie (one series as slices, labelled by --x) or stacked (a bar per row, each series a part) Possible values: `spark`, `bar`, `line`, `scatter`, `heatmap`, `pie`, `stacked`. |
+| `--x <COLUMN>` | With `rich chart`, the column of x positions (line, scatter) or labels (bar, heatmap, pie, stacked), by header or 1-based number (default: the row number; for labels, the first column that is not all numbers) |
 | `--y <COLUMN>...` | With `rich chart`, a column to draw, by header or 1-based number; repeatable, one series each (default: every numeric column but --x) |
 
 ### Profile
@@ -361,7 +361,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `dot`, `graphviz` | Draw a DOT (Graphviz) graph as text (.dot and .gv files are detected); what the native parser does not support is refused with its line |
 | `deps` | A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --policy FILE, --timings FILE, --sizes and --audit FILE for supply-chain reports, --baseline FILE to compare timings or sizes |
 | `schema` | A JSON Schema, SQL DDL or Arrow schema as a tree: types, required markers, constraints, keys, $refs resolved; with two schemas (of any of these formats), what changed between them and which changes break; --er draws an ER diagram |
-| `chart` | A chart from CSV, JSON or stdin: a sparkline, bars, lines, points or a heatmap; --x and --y pick the columns, a missing column or a value that is not a number is refused with its row and column |
+| `chart` | A chart from CSV, JSON or stdin: a sparkline, bars, lines, points, a heatmap, a pie or stacked bars; --x and --y pick the columns, a missing column or a value that is not a number is refused with its row and column |
 | `profile` | A profile of CSV, TSV or JSON Lines: each column's type, nulls, distinct values, statistics and distribution, and a map of where the nulls are; a long input is sampled. --report json writes the profile as JSON to stdout |
 | `config` | Show, validate, explain or document configuration |
 | `choose` | Pick from ITEMs with a fuzzy-filtered list and print the choice; exits 1 when cancelled |
@@ -383,6 +383,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `micro` | Micro assets: emoji-sized images and animations written :micro:name: (with --emoji). List, show, preview, add, remove and create them; install packs |
 | `banner` | Draw TEXT as a FIGlet banner: a font, a style or colour gradient, alignment and width fitting. Built with the `art` feature |
 | `shell` | Shell integration: `init` prints a script with completions, OSC 133 prompt marks, OSC 7 and a status line after each command; `status` and `link` are its helpers |
+| `spin` | Run a command with a spinner and a title until it exits, and exit with its status (like gum spin); without a terminal it just runs the command |
 | `record` | Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG, an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with committed ones instead |
 | `plugins` | List the plugins this build has — built in, linked, and any --plugin PATH loads — with their source, version, ABI and capabilities |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
@@ -1114,7 +1115,7 @@ rich schema [OPTIONS] SCHEMA [NEW_SCHEMA]
 
 ### rich chart
 
-A chart from CSV, JSON or stdin: a sparkline, bars, lines, points or a heatmap; --x and --y pick the columns, a missing column or a value that is not a number is refused with its row and column
+A chart from CSV, JSON or stdin: a sparkline, bars, lines, points, a heatmap, a pie or stacked bars; --x and --y pick the columns, a missing column or a value that is not a number is refused with its row and column
 
 #### Usage
 
@@ -1126,8 +1127,8 @@ rich chart [OPTIONS] [FILE]
 
 | Option | Description |
 | --- | --- |
-| `--kind <KIND>` | With `rich chart`, what to draw: spark (a sparkline per series), bar (a bar per row, labelled by --x), line (the default) and scatter (each series against --x, or the row number), or heatmap (rows by series, each value a shade) Possible values: `spark`, `bar`, `line`, `scatter`, `heatmap`. |
-| `--x <COLUMN>` | With `rich chart`, the column of x positions (line, scatter) or labels (bar, heatmap), by header or 1-based number (default: the row number; for labels, the first column that is not all numbers) |
+| `--kind <KIND>` | With `rich chart`, what to draw: spark (a sparkline per series), bar (a bar per row, labelled by --x), line (the default) and scatter (each series against --x, or the row number), heatmap (rows by series, each value a shade), pie (one series as slices, labelled by --x) or stacked (a bar per row, each series a part) Possible values: `spark`, `bar`, `line`, `scatter`, `heatmap`, `pie`, `stacked`. |
+| `--x <COLUMN>` | With `rich chart`, the column of x positions (line, scatter) or labels (bar, heatmap, pie, stacked), by header or 1-based number (default: the row number; for labels, the first column that is not all numbers) |
 | `--y <COLUMN>...` | With `rich chart`, a column to draw, by header or 1-based number; repeatable, one series each (default: every numeric column but --x) |
 
 #### Layout
@@ -2350,6 +2351,45 @@ A bash prompt with a clickable working directory
 
 ```sh
 PS1='$(rich shell link --tilde --links always --prompt bash) \$ '
+```
+
+### rich spin
+
+Run a command with a spinner and a title until it exits, and exit with its status (like gum spin); without a terminal it just runs the command
+
+#### Usage
+
+```text
+rich spin [--title TEXT] [--spinner NAME] [--show-output | --show-error] -- COMMAND [ARG]...
+```
+
+#### Options
+
+| Option | Description |
+| --- | --- |
+| `--title <TEXT>` | The text beside the spinner (default "Loading...") |
+| `--spinner <NAME>` | One of rich's spinners (default dots; `rich asset --kind spinner` picks one) |
+| `--show-output` | Print the command's output (stdout and stderr) once it exits; on a terminal it is otherwise held back. |
+| `--show-error` | Print the command's output only when it fails. |
+
+#### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `<COMMAND>...` | The command and its arguments, after `--`. |
+
+#### Examples
+
+A spinner until the build ends; its exit status is rich's
+
+```sh
+rich spin --title "Building" -- cargo build --release
+```
+
+The moon spinner, then the page
+
+```sh
+rich spin --spinner moon --show-output -- curl -sS https://example.com
 ```
 
 ### rich record

@@ -18,34 +18,9 @@
 
 use std::time::Duration;
 
-use intuituive::a11y::Role;
 use intuituive::prelude::*;
 use intuituive::widgets::{tabs, tree, TreeItem};
-
-const SPINNER: [&str; 4] = ["-", "\\", "|", "/"];
-
-/// A setting that Space ticks: a check box, or a switch.
-fn setting(name: &'static str, on: Signal<bool>, role: Role) -> Node {
-    text(move || format!("{} {name}", if on.get() { "[x]" } else { "[ ]" }))
-        .label(name)
-        .role(role)
-        .checked_when(move || on.get())
-        .focusable()
-        .focus_style("reverse")
-        .on_key("space", move |_| on.update(|on| *on = !*on))
-        .fixed(1)
-}
-
-/// A clickable label that Enter presses too.
-fn button(name: &'static str, press: impl Fn(&mut Ctx) + Copy + 'static) -> Node {
-    label(format!("[ {name} ]"))
-        .label(name)
-        .focusable()
-        .focus_style("reverse")
-        .on_click(press)
-        .on_key("enter", press)
-        .fixed(name.len() as u16 + 4)
-}
+use intuituive::{button, checkbox, spinner, switch_toggle, ButtonVariant};
 
 fn delete(cx: &mut Ctx) {
     cx.modal(Size::Auto, Size::Auto, || {
@@ -70,12 +45,6 @@ pub fn access_app() -> App {
         let dark = signal(false);
         let loading = signal(false);
         let loads = signal(1u32);
-        let turn = signal(0usize);
-        every(Duration::from_millis(150), move |_| {
-            if loading.get_untracked() {
-                turn.update(|t| *t += 1);
-            }
-        });
         let reload = move || {
             loading.set(true);
             spawn(
@@ -103,19 +72,17 @@ pub fn access_app() -> App {
                     list(files, file).label("Files").panel("Files"),
                 ]),
                 _ => column([
-                    setting("Wrap lines", wrap, Role::CheckBox),
-                    setting("Dark theme", dark, Role::Switch),
+                    checkbox("Wrap lines", wrap).fixed(1),
+                    switch_toggle("Dark theme", dark).fixed(1),
                 ])
                 .panel("Settings"),
             },
         );
-        // The spinner's glyph is decoration: the status says the same.
-        let spinner = text(move || match loading.get() {
-            true => SPINNER[turn.get() % SPINNER.len()].to_string(),
-            false => " ".into(),
-        })
-        .access_hidden(true)
-        .fixed(2);
+        // The spinner's glyph is decoration (hidden from screen readers):
+        // the status says the same.
+        let spinner = spinner("line")
+            .spinning_when(move || loading.get())
+            .fixed(2);
         let status = row([
             spinner,
             text(move || match (loading.get(), loads.get()) {
@@ -139,7 +106,7 @@ pub fn access_app() -> App {
             status.fixed(1),
             row([
                 button("Save", |cx| cx.toast("Saved")),
-                button("Delete", delete),
+                button("Delete", delete).variant(ButtonVariant::Danger),
                 button("Reload", move |_| reload()),
             ])
             .gap(1)

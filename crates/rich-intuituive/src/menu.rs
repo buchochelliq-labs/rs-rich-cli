@@ -129,6 +129,9 @@ fn line(cx: &DrawCx, markup: &str, width: u16) -> Vec<Segment> {
 struct MenuList {
     items: Vec<MenuItem>,
     selected: Cell<usize>,
+    /// Letters jump to the item they start (a select field's menu), rather
+    /// than j and k moving.
+    typeahead: Option<crate::select_field::Typeahead>,
 }
 
 impl MenuList {
@@ -137,6 +140,7 @@ impl MenuList {
         MenuList {
             items,
             selected: Cell::new(first),
+            typeahead: None,
         }
     }
 
@@ -154,6 +158,20 @@ impl MenuList {
                 return;
             }
         }
+    }
+
+    /// A key that moves the selection or runs the selected item.
+    fn arrows(&self, cx: &mut EventCx, code: KeyCode) -> Used {
+        match code {
+            KeyCode::Up => self.step(-1),
+            KeyCode::Down => self.step(1),
+            KeyCode::Char('k') if self.typeahead.is_none() => self.step(-1),
+            KeyCode::Char('j') if self.typeahead.is_none() => self.step(1),
+            KeyCode::Enter | KeyCode::Char(' ') => return self.run(cx, self.selected.get()),
+            _ => return Used::No,
+        }
+        cx.redraw();
+        Used::Yes
     }
 
     /// Close the menu and run item `index`.
@@ -260,12 +278,25 @@ impl Widget for MenuList {
 
     fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
         match event {
-            WidgetEvent::Key(key) => match key.code {
-                KeyCode::Up | KeyCode::Char('k') => self.step(-1),
-                KeyCode::Down | KeyCode::Char('j') => self.step(1),
-                KeyCode::Enter | KeyCode::Char(' ') => return self.run(cx, self.selected.get()),
-                _ => return Used::No,
-            },
+            WidgetEvent::Key(key) if self.typeahead.is_some() && key.code != KeyCode::Char(' ') => {
+                let KeyCode::Char(c) = key.code else {
+                    return self.arrows(cx, key.code);
+                };
+                if key.modifiers.ctrl || key.modifiers.alt {
+                    return Used::No;
+                }
+                let labels: Vec<String> = self
+                    .items
+                    .iter()
+                    .map(|i| crate::controls::plain(&i.label))
+                    .collect();
+                let at = self.selected.get();
+                let typeahead = self.typeahead.as_mut().expect("typeahead");
+                if let Some(to) = typeahead.key(c, &labels, at) {
+                    self.selected.set(to);
+                }
+            }
+            WidgetEvent::Key(key) => return self.arrows(cx, key.code),
             WidgetEvent::Mouse(mouse) => {
                 let row = mouse.row as usize;
                 let on_item = self.items.get(row).is_some_and(|i| !i.is_separator());
@@ -295,6 +326,30 @@ impl Widget for MenuList {
 pub fn open_menu(cx: &mut Ctx, at: impl Into<Anchor>, placement: Placement, items: Vec<MenuItem>) {
     cx.popup(at, placement, Size::Auto, Size::Auto, move || {
         widget(MenuList::new(items)).panel("")
+    });
+}
+
+/// [`open_menu`] with item `selected` selected, letters jumping to the
+/// item they start: a [`select_field`](crate::select_field)'s menu.
+pub(crate) fn open_choices(
+    cx: &mut Ctx,
+    at: impl Into<Anchor>,
+    items: Vec<MenuItem>,
+    selected: usize,
+    label: Option<String>,
+) {
+    cx.popup(at, Placement::Below, Size::Auto, Size::Auto, move || {
+        let mut list = MenuList::new(items);
+        if selected < list.items.len() && !list.items[selected].is_separator() {
+            list.selected.set(selected);
+        }
+        list.typeahead = Some(crate::select_field::Typeahead::default());
+        let menu = widget(list);
+        match label {
+            Some(label) => menu.label(label),
+            None => menu,
+        }
+        .panel("")
     });
 }
 

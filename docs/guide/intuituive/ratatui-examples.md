@@ -176,9 +176,10 @@ ratatui's widget examples, one tab for each family, with its `table`,
   with a shadow; under it stand four shadow looks.
 - **Borders.** Four panes sharing their borders; the one with the focus
   is drawn thick.
-- **Custom.** Three buttons drawn by hand: a widget each, with a face, a
-  lit top edge and a shadowed bottom one, picked under the pointer or the
-  focus, pressed while the mouse holds them.
+- **Custom.** ratatui's three hand-drawn buttons, as stock
+  [buttons](controls.md#buttons), each with a face, a lit top edge and a
+  shadowed bottom one, picked under the pointer or the focus, pressed
+  while the mouse holds them.
 
 ```text
 --8<-- "crates/rich-intuituive/tests/snapshots/widgets_table_app.txt"
@@ -210,9 +211,11 @@ What intuiTUIve adds:
   padding, a table's footer, gaps and highlights, a panel's titles,
   sides and shadow are builders on the node, and the highlights are
   theme styles given to each widget with `.theme_styles(..)`.
-- **The custom buttons are ordinary widgets.** Each implements `Widget`:
-  it draws on its canvas, asks `cx.hovered()` and `cx.focused()`, and
-  captures the mouse while it is held.
+- **The custom buttons are stock buttons.** ratatui draws each by hand;
+  here each is a `button(..)` given its colours as theme styles
+  (`button`, `button.light`, `button.shade` and their `.focus` looks)
+  with `.theme_styles(..)`. To draw a widget of your own instead, see
+  [your own widgets](widgets.md#your-own-widgets).
 - **Only what changes draws again.** A key in the List tab draws the list
   and nothing else; `tests/widgets_gallery.rs` checks it.
 
@@ -479,3 +482,25 @@ screen, the cursor, the keyboard) before the message prints, with nothing
 for the app to set up; an error comes back from `run` once the terminal is
 back, and `main` prints it. `tests/panic.rs` checks the first in a real
 terminal (a PTY), and the second headless.
+
+### `tracing`: the app's own logs
+
+```bash
+cargo run -p rs-rich-intuituive --example tracing --features tracing
+```
+
+ratatui's `tracing` writes its events to a file and points to the
+third-party tui-logger for a pane; this one shows them in the app. A
+worker thread logs at random levels under three targets into a `Log` fed
+by the [`tracing` plugin](plugins.md#logs-from-tracing-tracing), next to
+a panel of the targets with their levels, a filter box and a status line.
+The log follows the newest line until ↑, PgUp, Home or the wheel scroll it
+back, and the status line counts what arrived since; End follows again.
+In the targets panel ↑ and ↓ choose a target, ← and → set its level and
+Space turns it off; `-` and `+` set the log's own level, and the box takes
+a query (`level:warn`, `target:worker::db`, words). Tab moves between the
+panes, q quits. `tests/tracing.rs` drives it, a worker's thread included.
+
+```text
+--8<-- "crates/rich-intuituive/tests/snapshots/tracing_scrolled_back.txt"
+```

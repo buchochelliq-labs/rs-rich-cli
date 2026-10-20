@@ -179,6 +179,54 @@ impl<T> Transform<T> for Pipeline<T> {
     }
 }
 
+/// A regular expression compiled once and run on plain `&str`: what a
+/// filter tests each row or cell with, where building a [`Text`] for
+/// [`KeepLines`] would cost more than the match. The same engine and
+/// syntax as [`KeepLines`] and [`HighlightMatches`] (fancy-regex:
+/// look-around and back-references).
+///
+/// ```
+/// use rich_ext::transform::Pattern;
+///
+/// let pattern = Pattern::new("(?i)name9+$").unwrap();
+/// assert!(pattern.is_match("Name99"));
+/// assert!(!pattern.is_match("name98"));
+/// assert_eq!(pattern.as_str(), "(?i)name9+$");
+/// assert!(Pattern::new("(").is_err());
+/// ```
+#[derive(Clone, Debug)]
+pub struct Pattern {
+    regex: fancy_regex::Regex,
+}
+
+impl Pattern {
+    /// Compile `pattern`, or say why it is not one.
+    pub fn new(pattern: &str) -> Result<Self, TransformError> {
+        let regex = fancy_regex::Regex::new(pattern)
+            .map_err(|e| TransformError::new(format!("invalid pattern {pattern:?}: {e}")))?;
+        Ok(Pattern { regex })
+    }
+
+    /// Whether it matches anywhere in `text`; `false` too where the engine
+    /// gives up (its backtrack limit), which [`try_is_match`](Self::try_is_match)
+    /// reports instead.
+    pub fn is_match(&self, text: &str) -> bool {
+        self.regex.is_match(text).unwrap_or(false)
+    }
+
+    /// Whether it matches anywhere in `text`, or the engine's error.
+    pub fn try_is_match(&self, text: &str) -> Result<bool, TransformError> {
+        self.regex
+            .is_match(text)
+            .map_err(|e| TransformError::new(format!("match failed: {e}")))
+    }
+
+    /// The pattern as it was written.
+    pub fn as_str(&self) -> &str {
+        self.regex.as_str()
+    }
+}
+
 /// Keeps the lines of a text that match a regular expression (or, inverted,
 /// those that do not). Styles are kept, and the result ends with a newline
 /// only if the input did.
@@ -297,6 +345,17 @@ mod tests {
             ""
         );
         assert!(KeepLines::new("(").is_err());
+    }
+
+    #[test]
+    fn a_pattern_matches_plain_text_as_keep_lines_does() {
+        let pattern = Pattern::new(r"(?<=a)b|^c").unwrap();
+        assert!(pattern.is_match("ab"));
+        assert!(pattern.is_match("cat"));
+        assert!(!pattern.is_match("b c"));
+        assert_eq!(pattern.try_is_match("xab"), Ok(true));
+        let err = Pattern::new("[").unwrap_err();
+        assert!(err.message().starts_with("invalid pattern"), "{err}");
     }
 
     #[test]

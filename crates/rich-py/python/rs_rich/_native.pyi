@@ -6384,6 +6384,9 @@ class TuiRole:
     Separator: "TuiRole"
     CheckBox: "TuiRole"
     Switch: "TuiRole"
+    Slider: "TuiRole"
+    RadioGroup: "TuiRole"
+    ComboBox: "TuiRole"
     @property
     def value(self) -> str: ...
     def spoken(self) -> str: ...

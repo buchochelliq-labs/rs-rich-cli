@@ -9,7 +9,8 @@ Three pieces turn log records into rich output:
   time, level, message, and the source file on the right.
 - **Adapters** (features `log` and `tracing`): `LogAdapter` and `EventLayer`
   turn `log` records and `tracing` events into `StructuredEvent`s and hand them
-  to an `EventSink`, such as a `RichHandler`.
+  to an `EventSink`, such as a `RichHandler`, or a `ChannelSink` for a log
+  view on another thread ([below](#into-a-log-view-channelsink)).
 
 ```toml
 rs-rich-ext = { version = "…", features = ["log"] }        # the log facade
@@ -195,6 +196,53 @@ to a `Recorder`, and `RichHandler::render` lays them out on an SVG console.
 
 Errors returned by `emit` are dropped, never logged: logging a logging failure
 could recurse forever.
+
+## Into a log view: `ChannelSink`
+
+`ChannelSink` (`rich_ext::log_stream`) is an `EventSink` over a bounded
+channel, for a log view on another thread: an intuiTUIve
+[`Log`](../intuituive/lists.md#logs) or rs-rich-interact's `LogView`. It
+needs no feature itself; the adapters that feed it do.
+
+```rust
+use std::sync::Arc;
+use rich_ext::adapters::EventLayer;
+use rich_ext::log_stream::{ChannelSink, Record};
+use tracing_subscriber::prelude::*;
+
+let (sink, records) = ChannelSink::<Record>::bounded(1_024);
+let counter = sink.clone(); // clones share the channel and the count
+let subscriber = tracing_subscriber::registry().with(EventLayer::new(Arc::new(sink)));
+tracing::subscriber::set_global_default(subscriber)?;
+
+// The reading side, on its own thread:
+for record in records.try_iter() {
+    println!("{} {}", record.severity().unwrap().as_str(), record.message().unwrap());
+}
+println!("{} dropped", counter.take_dropped());
+```
+
+- **Never blocks.** A send that finds the channel full drops the record and
+  counts it: `dropped()` is the total, `take_dropped()` the count since it
+  was last taken (what a view shows once as "12 dropped"). The thread that
+  logs never waits for a slow reader.
+- **Wakes the reader.** `.notify(|| …)` runs after each send, on the thread
+  that logged: wake an event loop there. Keep it quick, and do not log in it.
+- **Records, or your own type.** Each event becomes a
+  [`Record`](#log-records-from-events) and then `T: From<Record>`.
+  `ChannelSink::<LogEvent>::bounded(n)` feeds rs-rich-interact's
+  `LogView::source(receiver)` directly, its follow mode, pause and filter
+  line included.
+
+### Log records from events
+
+`Record::from_event(&event)` reads an event as a log record, the reverse
+of `Record::to_event`: the fields `timestamp`, `level` (the severity's
+name), `target` and `message`, then the event's own fields, then `thread`,
+`task`, `correlation_id` and `spans` (`request:query`), each only when the
+event has them. A span's open or close event gets `span` (`open` or
+`close`) and, on a close, `elapsed_us`. Its format is `event`, and
+`to_event` reads it back with the same message, severity and time.
 
 ## Structured events
 

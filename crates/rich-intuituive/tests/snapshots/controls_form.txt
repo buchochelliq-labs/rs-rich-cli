@@ -1,0 +1,20 @@
+╭─ Settings ───────────────────────────────────────────────╮
+│ Appearance                                               │
+│ Theme       Dark           ▾                             │
+│ Font size   ━━━━━━●────────────────── 14pt               │
+│ [x] Show line numbers                                    │
+│ ●── Dark title bar                                       │
+│                                                          │
+│ Editor                                                   │
+│ Indent with (•) Spaces                                   │
+│             ( ) Tabs                                     │
+│                                                          │
+│ ▸ Advanced                                               │
+│                                                          │
+│                                                          │
+│                                                          │
+│                                                          │
+╰──────────────────────────────────────────────────────────╯
+   Not saved yet
+  Save    Reset    Delete profile
+tab moves · enter opens · space ticks · ←/→ slide · q quits

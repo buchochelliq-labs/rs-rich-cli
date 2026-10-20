@@ -19,7 +19,9 @@
 //! (the row count shows `N+` until it is done), and only the rows in view
 //! are read and parsed, a seek and a read each. Finding, filtering and
 //! sorting read the whole file, on a background task: the file is a
-//! `TableSource` and what the query asks of it a `view_of` it. The table
+//! `TableSource` (read in bulk for a pass, `TableSource::rows`) and what
+//! the query asks of it a `view_of` it, a regex tested on each cell's text
+//! (rs-rich-ext's `Pattern`). The table
 //! follows state as it draws (`columns_with`, `freeze_columns_with`,
 //! `multiline_when`, `TableLayout`); the prompts are a `command_line`,
 //! find and filter sharing a history.
@@ -38,6 +40,7 @@ use std::cell::RefCell;
 use std::collections::{BTreeSet, HashMap};
 use std::fs::File;
 use std::io::{self, Read, Seek, SeekFrom};
+use std::ops::Range;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as Atomic};
@@ -52,7 +55,7 @@ use intuituive::widgets::{
     TableOptions, TableSource, View, ViewQuery,
 };
 use intuituive::{rule, spawn_stream, HelpOptions};
-use rich_ext::transform::{HighlightMatches, KeepLines, TextTransform};
+use rich_ext::transform::{HighlightMatches, KeepLines, Pattern, TextTransform};
 
 // ---------------------------------------------------------------------
 // The file: an index of record boundaries, and rows read on demand.
@@ -276,6 +279,41 @@ impl Source {
         fields
     }
 
+    /// Data rows `range`, in order, to `each` until it returns `false`:
+    /// read in one sweep of large reads rather than a seek a row, and kept
+    /// out of the cache (a pass over the file would only churn it).
+    pub fn read_rows(&self, range: Range<usize>, each: &mut dyn FnMut(usize, Vec<String>) -> bool) {
+        let first = range.start + self.headers as usize;
+        let bounds: Vec<u64> = {
+            let bounds = self.bounds.read().unwrap();
+            let end = (range.end + self.headers as usize + 1).min(bounds.len());
+            bounds
+                .get(first..end)
+                .map(<[u64]>::to_vec)
+                .unwrap_or_default()
+        };
+        let (Some(&from), Some(&to)) = (bounds.first(), bounds.last()) else {
+            return;
+        };
+        let mut bytes = vec![0; (to - from) as usize];
+        let read = {
+            let mut file = self.file.lock().unwrap();
+            file.seek(SeekFrom::Start(from))
+                .and_then(|_| file.read_exact(&mut bytes))
+        };
+        if read.is_err() {
+            return;
+        }
+        let records = bounds.len() - 1;
+        self.parsed.fetch_add(records, Atomic::Relaxed);
+        for (k, span) in bounds.windows(2).enumerate() {
+            let (a, b) = ((span[0] - from) as usize, (span[1] - from) as usize);
+            if !each(range.start + k, parse_record(&bytes[a..b], self.delimiter)) {
+                return;
+            }
+        }
+    }
+
     /// Index the rest of the file on a background task, telling
     /// `indexed` (data rows, done) as it goes.
     fn index_in_background(&self, indexed: Signal<(usize, bool)>) {
@@ -348,6 +386,10 @@ impl TableSource for Indexed {
     fn row(&self, i: usize) -> Vec<String> {
         self.src.row(i).to_vec()
     }
+
+    fn rows(&self, range: Range<usize>, each: &mut dyn FnMut(usize, Vec<String>) -> bool) {
+        self.src.read_rows(range, each);
+    }
 }
 
 // ---------------------------------------------------------------------
@@ -385,12 +427,14 @@ fn pattern(re: &str, ignore_case: bool) -> String {
 
 /// A row test for the view: a match of `re` in a cell.
 fn row_test(re: &str, ignore_case: bool) -> Option<impl Fn(&[String]) -> bool + Send + Sync> {
-    let keep = KeepLines::new(&pattern(re, ignore_case)).ok()?;
+    let pattern = Pattern::new(&pattern(re, ignore_case)).ok()?;
     Some(move |cells: &[String]| {
-        // A cell a line, so a match never runs from one into the next.
-        let lines: Vec<String> = cells.iter().map(|c| c.replace(['\n', '\r'], " ")).collect();
-        keep.transform(Text::new(lines.join("\n")))
-            .is_ok_and(|t| !t.plain().is_empty())
+        // A cell at a time, each one line, so a match never runs from one
+        // into the next.
+        cells.iter().any(|cell| match cell.contains(['\n', '\r']) {
+            true => pattern.is_match(&cell.replace(['\n', '\r'], " ")),
+            false => pattern.is_match(cell),
+        })
     })
 }
 
@@ -529,8 +573,6 @@ struct Lens {
     layout: TableLayout,
     /// The prompts, in place of the status line.
     cmd: CommandLine,
-    /// Whether the prompt is `<n>G`'s, which G ends.
-    goto: Signal<bool>,
     highlighter: Rc<RefCell<Option<Highlighter>>>,
 }
 
@@ -569,7 +611,6 @@ impl Lens {
             cursor: signal(1.min(names)),
             layout: TableLayout::new(),
             cmd: CommandLine::new(),
-            goto: signal(false),
             highlighter: Rc::new(RefCell::new(None)),
         };
         if let Some(re) = &options.columns {
@@ -863,19 +904,27 @@ fn prompt(l: &Lens, cx: &mut Ctx, kind: Prompt, initial: &str) {
         Prompt::Columns => "Columns regex: ",
         Prompt::Goto => "Go to line: ",
     };
-    let (submit, goto) = (l.clone(), l.goto);
+    let submit = l.clone();
     let mut line = Line::new(prefix)
         .initial(initial)
         .on_submit(move |value, _| {
-            submit.goto.set(false);
             submitted(&submit, kind, value.trim());
             Ok(())
-        })
-        .on_cancel(move |_| goto.set(false));
+        });
     if matches!(kind, Prompt::Find | Prompt::Filter) {
         line = line.history("finder");
     }
-    l.goto.set(kind == Prompt::Goto);
+    if kind == Prompt::Goto {
+        // `<n>G`: G (or g) ends the number as Enter does.
+        let ends = l.clone();
+        line = line.on_change(move |value, cx| {
+            if let Some(number) = value.strip_suffix(['G', 'g']) {
+                let number = number.trim().to_string();
+                ends.cmd.close(cx);
+                submitted(&ends, Prompt::Goto, &number);
+            }
+        });
+    }
     l.cmd.open(cx, line);
 }
 
@@ -1234,27 +1283,12 @@ fn view(l: &Lens) -> Node {
             .fixed(1)
             .hidden_when(move || cmd.is_open())
     };
-    // `<n>G`: G (or g) ends the number as Enter does.
-    let goto = l.goto;
-    let ends = {
-        let l = l.clone();
-        move |cx: &mut Ctx| {
-            let value = l.cmd.text();
-            l.goto.set(false);
-            l.cmd.close(cx);
-            submitted(&l, Prompt::Goto, value.trim());
-        }
-    };
-    let line = column([command_line(cmd)])
-        .previews_keys()
-        .bind_when(move || goto.get_untracked(), "G g", "Go to the line", ends)
+    let line = command_line(cmd)
         .style(GUTTER)
         .fixed(1)
         .shown_when(move || cmd.is_open());
-    // The prompt sits outside the keys' container, so what is typed in
-    // it reaches none of csvlens's keys.
-    let body = column([rule(), tables.flex(1), rule(), status]).previews_keys();
-    column([keymap(l, body).flex(1), line])
+    let body = column([rule(), tables.flex(1), rule(), status, line]).previews_keys();
+    keymap(l, body)
 }
 
 fn theme() -> Theme {

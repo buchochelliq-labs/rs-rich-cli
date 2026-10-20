@@ -46,9 +46,7 @@
 use rich_ext::palette::tailwind::{Palette, BLUE, EMERALD, INDIGO, RED, SLATE};
 
 use intuituive::border::Shadow as ShadowKind;
-use intuituive::interact::{KeyCode, MouseKind};
 use intuituive::prelude::*;
-use intuituive::widget::{Canvas, DrawCx, EventCx, MouseExt, Used, WidgetEvent};
 use intuituive::widgets::{
     month, table_with, tabs, CalendarOptions, Column, Date, ListDirection, Scrollbar,
     ScrollbarSymbols, Show, Side, TableOptions, Weekday,
@@ -841,114 +839,37 @@ pub const BUTTONS: [(&str, Look, Look); 3] = [
     ),
 ];
 
-/// A button drawn by hand: a face, a lit top edge and a shadowed bottom
-/// edge, which swap while it is pressed. It is picked while it has the
-/// focus or the pointer is over it.
-struct Button {
-    index: usize,
-    /// The button held down with the mouse, if any.
-    held: Signal<Option<usize>>,
-    /// How many times each button was pressed, and the last pressed.
-    presses: Signal<([u32; 3], Option<usize>)>,
+/// The theme styles that give a stock button a look of its own: its face
+/// and edges idle, and picked (with the focus or the pointer on it, or
+/// held). Held, the button swaps its edges, pressed in.
+fn look_styles(idle: Look, picked: Look) -> Vec<(String, String)> {
+    vec![
+        ("button".into(), format!("{} on {}", idle.text, idle.face)),
+        ("button.light".into(), idle.light.into()),
+        ("button.shade".into(), idle.shade.into()),
+        (
+            "button.focus".into(),
+            format!("{} on {}", picked.text, picked.face),
+        ),
+        ("button.focus.light".into(), picked.light.into()),
+        ("button.focus.shade".into(), picked.shade.into()),
+    ]
 }
 
-impl Button {
-    fn press(&self) {
-        let i = self.index;
-        self.presses.update(|(counts, last)| {
-            counts[i] += 1;
-            *last = Some(i);
-        });
-    }
-}
-
-impl Widget for Button {
-    fn name(&self) -> &'static str {
-        "button"
-    }
-
-    fn role(&self) -> intuituive::a11y::Role {
-        intuituive::a11y::Role::Button
-    }
-
-    fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
-        let (label, idle, picked) = BUTTONS[self.index];
-        let pressed = self.held.get() == Some(self.index);
-        let look = if pressed || cx.focused() || cx.hovered() {
-            picked
-        } else {
-            idle
-        };
-        let (top, bottom) = if pressed {
-            (look.shade, look.light)
-        } else {
-            (look.light, look.shade)
-        };
-        let style = |fg: &str| rich::Style::parse(&format!("{fg} on {}", look.face)).ok();
-        let (width, height) = (canvas.width(), canvas.height());
-        canvas.fill(0, 0, width, height, style(look.text).as_ref());
-        if height >= 3 {
-            canvas.print(0, 0, &"▔".repeat(width as usize), style(top).as_ref());
-            canvas.print(
-                0,
-                height - 1,
-                &"▁".repeat(width as usize),
-                style(bottom).as_ref(),
-            );
-        }
-        let text = if pressed {
-            format!("[{label}]")
-        } else {
-            label.to_string()
-        };
-        let x = width.saturating_sub(text.chars().count() as u16) / 2;
-        canvas.print(x, height / 2, &text, style(look.text).as_ref());
-    }
-
-    fn event(&mut self, cx: &mut EventCx, event: &WidgetEvent) -> Used {
-        match event {
-            WidgetEvent::Mouse(mouse) if mouse.is_press() => {
-                self.held.set(Some(self.index));
-                cx.capture_mouse();
-                Used::Yes
-            }
-            WidgetEvent::Mouse(mouse) if matches!(mouse.kind, MouseKind::Up(_)) => {
-                cx.release_mouse();
-                if self.held.get_untracked() == Some(self.index) {
-                    self.held.set(None);
-                    let (width, height) = cx.size();
-                    // Let go over the button: a click.
-                    if mouse.column < width && mouse.row < height {
-                        self.press();
-                    }
-                }
-                Used::Yes
-            }
-            WidgetEvent::Key(key) if matches!(key.code, KeyCode::Enter | KeyCode::Char(' ')) => {
-                self.press();
-                Used::Yes
-            }
-            _ => Used::No,
-        }
-    }
-
-    fn focusable(&self) -> bool {
-        true
-    }
-}
-
-/// Custom: three buttons drawn by hand.
+/// Custom: ratatui's hand-drawn buttons, as three stock buttons with
+/// looks of their own.
 fn buttons() -> Node {
-    let held = signal(None::<usize>);
     let presses = signal(([0u32; 3], None::<usize>));
     let button = |index: usize| {
-        widget(Button {
-            index,
-            held,
-            presses,
+        let (label, idle, picked) = BUTTONS[index];
+        intuituive::button(label, move |_| {
+            presses.update(|(counts, last)| {
+                counts[index] += 1;
+                *last = Some(index);
+            })
         })
-        .name(&BUTTONS[index].0.to_lowercase())
-        .label(BUTTONS[index].0)
+        .theme_styles(look_styles(idle, picked))
+        .name(&label.to_lowercase())
         .fixed(15)
     };
     let status = text(move || {
@@ -966,9 +887,9 @@ fn buttons() -> Node {
     .live();
     column([
         label(
-            "Three buttons, each a widget of its own: it draws its face and edges, \
-               takes the pointer and the keys, and looks picked while it has the focus \
-               or the pointer, and pressed while a button is held on it.",
+            "Three stock buttons, each with a look of its own from theme styles: \
+               a face, a lit top edge and a shaded bottom one, picked while it has \
+               the focus or the pointer, and pressed while a button is held on it.",
         )
         .auto(),
         label("").fixed(1),

@@ -1,0 +1,6 @@
+@ 200 ms
+glitching text
+over two row\
+@ 400 ms
+glitching text
+over two rows

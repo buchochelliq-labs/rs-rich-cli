@@ -3,23 +3,34 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-10-20)
+## Where things stand (2026-10-20, later)
 
-- **Rounds 2 to 7 are merged and published.** The loop's branch merged to
-  `main` as #757; the 0.0.20 cohort was published on 2026-10-19 from
-  `56c6c97` by one release run (`release-0.0.20`; record tags
-  `<crate>-v<version>` for all 17 crates; see the
-  [0.0.20 release notes](../releases/0.0.20.md)), with `rs-rich` 0.0.8 on
-  PyPI (`python-v0.0.8`).
-- **0.0.21 is in progress** ([plan](../plans/0.0.21.md)); its versions are
-  open. Its first wave is running now, each workstream on a
-  branch of its own: round 7's bugs and regressions (workstream 1), the
-  DevTools pipe on Linux and macOS (workstream 8), and the marketplace's
-  listing format and schema (workstream 7).
-- **Next:** the four parity workstreams (3 to 6) and the marketplace
-  crate; then round 7's shared gaps (workstream 2) and a re-run of the
-  eleven clones' suites and tapes; then the release test. Moving
-  rs-rich-doom onto the 0.0.20 crates is part of workstream 1.
+- **0.0.20 is published** (17 crates from `56c6c97` by `release-0.0.20`;
+  `rs-rich` 0.0.8 on PyPI). Its notes, the versioned docs site and the
+  0.0.21 version opening merged as #762.
+- **0.0.21's first wave and the new widgets are in #763** (open): round
+  7's bugs (workstream 1), the marketplace's listing format (workstream 7),
+  the DevTools pipe on Unix (workstream 8), form controls, the log pane and
+  `tracing`, pies/stacked charts/QR/gradient text, Huh-style forms with a
+  Paginator and `rich spin`, effect presets (`fx`), the icons and the
+  mascots (Memo and her calf Tui), and the `no_std` note (not now).
+- **In flight**, each on a local branch backed up as
+  `claude/next-priority-items-3c5p8e-wip-<name>`:
+
+  | Work | Branch (backup) | State |
+  |---|---|---|
+  | Text editing: kill ring, search, word wrap, caret shape, undo limit, validation message, rebindable keys, Emacs and Vim presets | `021-txt` (wip-txt) | running |
+  | Docs playground stage 2: the CLI on WASI, a terminal with a line runner, tapes, "Try it" on CLI examples | `021-play` (wip-play) | running; stage 1 (tier 1 blocks, links, docs-as-tests, release asset) done on the same branch |
+  | Docs playground stage 3, crate side: wasm gates, run-time audit, `EventLoop` push API, interact's `syntax` feature, rs-rich-web input split, an app module | `021-apps` (wip-apps) | running; the page wiring waits for stage 2 |
+
+- **Next:** drive #763 to merged; then the `#[must_use]` pass over every
+  crate (held so it doesn't conflict with open branches); then a PR with
+  text editing and the playground. After that, the plan's parity
+  workstreams (3 to 6) and the marketplace crate.
+- **Open decisions:** the minisign keys, APNG as a default tape output,
+  the text-box key rule, the filter benchmark in CI, the DevTools caller
+  `--remote-debugging-*` switch, `fx`'s reduced-motion switch
+  (`RICH_A11Y=motion`) and whether `splash` sits behind `art`.
 
 The sections below are the loop's history, kept as they were written.
 

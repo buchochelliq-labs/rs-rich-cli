@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use std::time::{Duration, Instant};
 
 use rich::{Console, Text};
-use rich_ext::plugin::abi::{AbiError, CapabilityKind};
+use rich_ext::plugin::abi::{is_supported, AbiError, CapabilityKind, ABI_MAJOR, ABI_MINOR};
 use rich_ext::plugin_loading::{load, load_wasm, LoadError, LoadOptions, RuntimeKind, WasmLimits};
 use rich_ext::ExtensionRegistry;
 
@@ -232,20 +232,28 @@ fn a_module_that_imports_anything_is_refused() {
 
 #[test]
 fn another_abi_major_and_bad_files_are_refused() {
-    let future = plugin(&LOOPS.replace("1.0", "2.0"), "(i64.const 0)", "");
+    let next = ABI_MAJOR + 1;
+    let future = plugin(
+        &LOOPS.replace("1.0", &format!("{next}.0")),
+        "(i64.const 0)",
+        "",
+    );
     let path = module("future.wasm", &future);
     let error = load_wasm(&path, &WasmLimits::default()).unwrap_err();
     assert!(
         matches!(
             error,
             LoadError::Abi {
-                error: AbiError::Incompatible { major: 2, .. },
+                error: AbiError::Incompatible { major, .. },
                 ..
-            }
+            } if major == next
         ),
         "{error}"
     );
-    assert!(error.to_string().contains("ABI 2.0"), "{error}");
+    assert!(
+        error.to_string().contains(&format!("ABI {next}.0")),
+        "{error}"
+    );
 
     let dir = PathBuf::from(env!("CARGO_TARGET_TMPDIR")).join("wasm-plugins");
     std::fs::create_dir_all(&dir).unwrap();
@@ -267,4 +275,37 @@ fn another_abi_major_and_bad_files_are_refused() {
         load_wasm(&garbage, &limits),
         Err(LoadError::Limit { .. })
     ));
+}
+
+#[test]
+fn the_loader_accepts_exactly_the_versions_the_published_constants_allow() {
+    // A marketplace resolves `requires.abi` with `is_supported`, against
+    // `ABI_MAJOR` and `ABI_MINOR`; the WASM loader must decide the same way.
+    assert!(LOOPS.starts_with(&format!("rich-plugin-abi {ABI_MAJOR}.{ABI_MINOR}\n")));
+    let mut versions = vec![
+        (ABI_MAJOR, ABI_MINOR),
+        (ABI_MAJOR, ABI_MINOR + 1),
+        (ABI_MAJOR + 1, 0),
+    ];
+    if let Some(older) = ABI_MAJOR.checked_sub(1) {
+        versions.push((older, ABI_MINOR));
+    }
+    for (major, minor) in versions {
+        let manifest = LOOPS.replacen(
+            &format!("{ABI_MAJOR}.{ABI_MINOR}"),
+            &format!("{major}.{minor}"),
+            1,
+        );
+        let path = module(
+            &format!("version-{major}-{minor}.wasm"),
+            &plugin(&manifest, "(i64.const 0)", ""),
+        );
+        let loaded = load_wasm(&path, &WasmLimits::default());
+        assert_eq!(
+            loaded.is_ok(),
+            is_supported(major, minor),
+            "ABI {major}.{minor}: {:?}",
+            loaded.err()
+        );
+    }
 }

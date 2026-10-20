@@ -347,6 +347,22 @@ impl OwnStyle {
     }
 }
 
+impl Node {
+    /// Whether its style (code's or the stylesheet's) sets a background.
+    fn has_background(&self, console: &Console) -> bool {
+        let own = self
+            .own_style
+            .as_ref()
+            .is_some_and(|own| own.resolve(console).bgcolor().is_some());
+        own || self
+            .sheet
+            .borrow()
+            .style
+            .as_ref()
+            .is_some_and(|style| style.bgcolor().is_some())
+    }
+}
+
 /// The console and theme a subtree draws with when a node gives it theme
 /// styles of its own ([`Node::theme_styles`]): copies made once, and again
 /// when what they were made over changes.
@@ -601,19 +617,30 @@ impl Node {
     /// Checked while `condition` holds, not checked while it does not
     /// (ARIA's `aria-checked`). Its role becomes
     /// [`CheckBox`](crate::a11y::Role::CheckBox) unless set; set
-    /// [`Switch`](crate::a11y::Role::Switch) for a toggle.
+    /// [`Switch`](crate::a11y::Role::Switch) for a toggle. The stock
+    /// [`checkbox`](crate::checkbox) and
+    /// [`switch_toggle`](crate::switch_toggle) are checked by their
+    /// signals already; this is for a node of your own that is on or off.
     ///
     /// ```
+    /// use intuituive::a11y::Role;
+    /// use intuituive::checkbox;
     /// use intuituive::prelude::*;
     ///
     /// let app = App::new(|| {
-    ///     let on = signal(true);
-    ///     text(move || format!("{} Wrap lines", if on.get() { "☑" } else { "☐" }))
-    ///         .label("Wrap lines")
-    ///         .checked_when(move || on.get())
-    ///         .focusable()
-    ///         .on_key("space", move |_| on.update(|on| *on = !*on))
+    ///     let (wrap, recording) = (signal(true), signal(false));
+    ///     column([
+    ///         checkbox("Wrap lines", wrap),
+    ///         text(move || if recording.get() { "● REC" } else { "○ REC" }.into())
+    ///             .label("Recording")
+    ///             .role(Role::Switch)
+    ///             .checked_when(move || recording.get()),
+    ///     ])
     /// });
+    /// let mut driver = app.driver(16, 2);
+    /// driver.settle();
+    /// let read: Vec<String> = driver.accessibility().iter().map(|n| n.describe()).collect();
+    /// assert_eq!(read, ["Wrap lines, check box, checked", "Recording, switch, not checked"]);
     /// ```
     pub fn checked_when(mut self, condition: impl Fn() -> bool + 'static) -> Node {
         self.checked_when = Some(Box::new(condition));
@@ -700,6 +727,12 @@ impl Node {
         }
         self.widget_mut(|panel: &mut Panel| panel.shown_title())
             .filter(|title| !title.is_empty())
+    }
+
+    /// Its widget's [value](Widget::access_value) for assistive
+    /// technology, if it gives one.
+    pub(crate) fn access_value(&self) -> Option<String> {
+        self.body.borrow().widget.access_value()
     }
 
     /// Where its selected item is, on its widget's surface.
@@ -3026,6 +3059,12 @@ impl Node {
             if cleared && frame.composing == 0 {
                 screen.clear(rect);
             }
+            // A node with a background covers its whole rectangle, in a
+            // layers stack too: the layers below do not show through the
+            // gaps its children leave (an inset, room between them).
+            if repaint && frame.composing > 0 && self.has_background(console) {
+                screen.clear(rect);
+            }
             if let (true, Some((kind, style))) = (repaint, &decor) {
                 let title_style = style.combine(&theme.title);
                 let (sides, titles) = {
@@ -3080,6 +3119,7 @@ impl Node {
                     shift: frame.shift,
                     wants_hover: &frame.wants_hover,
                     watchers: frame.watchers,
+                    disabled: self.disabled(),
                 };
                 let mut canvas = Canvas {
                     screen: &mut *screen,
@@ -3236,6 +3276,7 @@ impl Node {
                     shift: frame.shift,
                     wants_hover: &frame.wants_hover,
                     watchers: frame.watchers,
+                    disabled: self.disabled(),
                 };
                 let mut canvas = Canvas {
                     screen: &mut *screen,

@@ -12,6 +12,8 @@ use super::{
     Line, Scale, ValueFormat,
 };
 
+mod stacked;
+
 /// Partial cells for [`Charset::Blocks`]: 1/8 to 7/8 of a cell.
 const EIGHTHS: [char; 7] = ['▏', '▎', '▍', '▌', '▋', '▊', '▉'];
 const FULL_BLOCK: char = '█';
@@ -146,10 +148,14 @@ impl Bar {
 ///     .group(BarGroup::new("Q2").bars([Bar::new("a", 4.0), Bar::new("b", 2.0)]));
 /// assert_eq!(chart.bars().len(), 4);
 /// ```
+///
+/// A [`stacked`](Self::stacked) group is one bar made of its bars end to
+/// end, labelled with the group's label (see [`BarChart`]'s stacked bars).
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct BarGroup {
     label: String,
     bars: Vec<Bar>,
+    stacked: bool,
 }
 
 impl BarGroup {
@@ -158,7 +164,41 @@ impl BarGroup {
         BarGroup {
             label: label.into(),
             bars: Vec::new(),
+            stacked: false,
         }
+    }
+
+    /// Draw the group as one bar: its bars end to end, each a part in its
+    /// own style (`chart.series.N` by position, or [`Bar::style`]), with the
+    /// group's label and the total written. Parts above zero stack up from
+    /// zero and parts below it down from zero.
+    ///
+    /// A chart with a stacked group draws every group that way (other bars
+    /// are stacks of one) and adds a legend naming the parts
+    /// ([`BarChart::legend`]). With colour each part is its style; without
+    /// it each part has its own fill (`█▓░▒`, `⣿⣤⠿⠶` in Braille, `#=+:` in
+    /// ASCII). Part boundaries fall on whole cells; with colour the last
+    /// part ends in a partial cell. Values on the bars
+    /// ([`BarChart::values_inside`]) are not drawn on stacks; the total is
+    /// written after (or above) each.
+    ///
+    /// ```
+    /// use rich::Console;
+    /// use rich_ext::chart::{Bar, BarChart, BarGroup};
+    ///
+    /// let console = Console::builder().width(40).color_system(None).build();
+    /// let chart = BarChart::new()
+    ///     .group(BarGroup::new("Q1").stacked().bar(Bar::new("a", 4.0)).bar(Bar::new("b", 2.0)))
+    ///     .group(BarGroup::new("Q2").stacked().bar(Bar::new("a", 3.0)).bar(Bar::new("b", 3.0)))
+    ///     .bar_width(12);
+    /// assert_eq!(
+    ///     console.render_export(&chart),
+    ///     "Q1 ████████▓▓▓▓ 6\nQ2 ██████▓▓▓▓▓▓ 6\n█ a  ▓ b         \n"
+    /// );
+    /// ```
+    pub fn stacked(mut self) -> Self {
+        self.stacked = true;
+        self
     }
 
     /// Add a bar.
@@ -181,6 +221,8 @@ struct Group {
     len: usize,
     /// Made of bars added one by one, so the next one joins it.
     loose: bool,
+    /// Drawn as one bar of parts ([`BarGroup::stacked`]).
+    stacked: bool,
 }
 
 /// Bars: by default horizontal, a label, a bar and the value on each line;
@@ -326,6 +368,7 @@ pub struct BarChart {
     label_style: Option<String>,
     value_style: Option<String>,
     values_inside: bool,
+    legend: bool,
 }
 
 impl Default for BarChart {
@@ -354,6 +397,7 @@ impl BarChart {
             label_style: None,
             value_style: None,
             values_inside: false,
+            legend: true,
         }
     }
 
@@ -378,6 +422,7 @@ impl BarChart {
                 label: String::new(),
                 len: 1,
                 loose: true,
+                stacked: false,
             }),
             None => {}
         }
@@ -395,12 +440,14 @@ impl BarChart {
                 label: String::new(),
                 len: self.bars.len(),
                 loose: false,
+                stacked: false,
             });
         }
         self.groups.push(Group {
             label: group.label,
             len: group.bars.len(),
             loose: false,
+            stacked: group.stacked,
         });
         self.bars.extend(group.bars);
         self
@@ -491,6 +538,13 @@ impl BarChart {
     /// How values are written (default [`ValueFormat::Compact`]).
     pub fn format(mut self, format: ValueFormat) -> Self {
         self.format = format;
+        self
+    }
+
+    /// Show the legend of a chart with [stacked](BarGroup::stacked) groups:
+    /// each part's marker and name (default on). Other charts have none.
+    pub fn legend(mut self, legend: bool) -> Self {
+        self.legend = legend;
         self
     }
 
@@ -1172,6 +1226,9 @@ impl BarChart {
             line.push(&truncate("no data", width, ascii), None);
             return vec![line];
         }
+        if self.is_stacked() {
+            return self.stacked_lines(console, width, charset, options.height);
+        }
         match self.orientation {
             Orientation::Vertical => self.vertical_fit(console, width, charset, options.height),
             Orientation::Horizontal => self.horizontal_lines(console, width, charset),
@@ -1179,6 +1236,9 @@ impl BarChart {
     }
 
     fn natural_width(&self) -> usize {
+        if self.is_stacked() {
+            return self.totals().natural_width();
+        }
         if self.orientation == Orientation::Vertical {
             let n = self.bars.len();
             let groups = self.spans().len().max(1);
@@ -1210,6 +1270,7 @@ impl Renderable for BarChart {
         let max = self.natural_width();
         let min = match self.orientation {
             Orientation::Horizontal => MIN_BAR,
+            Orientation::Vertical if self.is_stacked() => self.stacks().len(),
             Orientation::Vertical => self.bars.len(),
         };
         Measurement::new(min.min(max), max)
@@ -1223,6 +1284,9 @@ impl Renderable for BarChart {
 /// group's label first.
 impl crate::a11y::AccessibleText for BarChart {
     fn accessible_text(&self, _width: usize) -> String {
+        if self.is_stacked() {
+            return self.stacked_facts();
+        }
         self.facts("Bar chart", ("bar", "bars"))
     }
 }
@@ -1235,7 +1299,11 @@ impl BarChart {
         if !any && self.min.is_none() && self.max.is_none() {
             return None;
         }
-        let scale = self.scale();
+        let scale = if self.is_stacked() {
+            self.stacked_scale()
+        } else {
+            self.scale()
+        };
         Some((scale.min(), scale.max()))
     }
 

@@ -149,7 +149,11 @@ these: a modal's or pop-up's panel title (the palette's, the help's, a
 confirm's) is drawn in `popup.title`, else `title`; the which-key keys in
 `which_key.key`, else `accent`, its separators in `which_key.sep` and its
 descriptions in `which_key.desc`; notifications in `notify.info`,
-`notify.warn` and `notify.error`, else `accent`, `warn` and `bad`.
+`notify.warn` and `notify.error`, else `accent`, `warn` and `bad`. The
+presets also name the [stock buttons](controls.md#buttons)' faces,
+`button`, `button.primary` and `button.danger`; the other
+[form controls](controls.md#the-theme-styles) fall back to `accent`,
+`good` and `muted`.
 
 ### Theme files, reloaded live
 

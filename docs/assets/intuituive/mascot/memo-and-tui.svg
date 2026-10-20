@@ -1,0 +1,55 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 224 128" role="img" aria-label="Memo waving, with her calf Tui holding her tail">
+<g>
+<rect x="58" y="92" width="13" height="22" rx="5" fill="#5a32d6"/>
+<rect x="74" y="94" width="12" height="20" rx="5" fill="#5a32d6"/>
+<path d="M102 82c6 2 8 7 7 12" fill="none" stroke="#5a32d6" stroke-width="4" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="38" y="62" width="66" height="44" rx="22" fill="#7c4dff"/>
+<rect x="42" y="90" width="16" height="26" rx="6" fill="#7c4dff"/>
+<rect x="86" y="90" width="16" height="26" rx="6" fill="#7c4dff"/>
+<rect x="44.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="48.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="52.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="88.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="92.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="96.5" y="111" width="3" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="58" y="14" width="46" height="56" rx="18" fill="#5a32d6"/>
+<rect x="66" y="22" width="30" height="38" rx="12" fill="#b9a1ff"/>
+<rect x="18" y="16" width="56" height="54" rx="24" fill="#7c4dff"/>
+<path d="M34 60C20 62 10 52 11 36" fill="none" stroke="#5a32d6" stroke-width="18" stroke-linecap="round"/>
+<path d="M34 60C20 62 10 52 11 36" fill="none" stroke="#7c4dff" stroke-width="14" stroke-linecap="round"/>
+<path d="M14.0 57.5L19.7 52.0M9.2 50.2L16.6 47.1" stroke="#5a32d6" stroke-width="2" stroke-linecap="round"/>
+<rect x="40" y="38" width="7" height="10" rx="2" fill="#1c1a24"/>
+<rect x="55" y="38" width="6" height="10" rx="2" fill="#1c1a24"/>
+<rect x="41.5" y="39.5" width="2.5" height="2.5" rx="0.5" fill="#f4f1ff"/>
+<rect x="56.3" y="39.5" width="2.2" height="2.5" rx="0.5" fill="#f4f1ff"/>
+<rect x="60" y="52" width="7" height="4" rx="2" fill="#b9a1ff"/>
+<path d="M44 60q4 4 9 0" fill="none" stroke="#1c1a24" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="4" y="18" width="12" height="12" rx="2.5" fill="#f4f1ff"/>
+<rect x="4" y="18" width="12" height="12" rx="2.5" fill="none" stroke="#5a32d6" stroke-width="2"/>
+<path d="M2 12a12 12 0 0 1 6-6M20 12a12 12 0 0 0-6-6" fill="none" stroke="#b9a1ff" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+</g>
+<g transform="translate(100 36) scale(0.72)">
+<rect x="62" y="96" width="12" height="18" rx="5" fill="#5a32d6"/>
+<rect x="78" y="97" width="11" height="17" rx="5" fill="#5a32d6"/>
+<path d="M99 84c5 1 7 5 6 9" fill="none" stroke="#5a32d6" stroke-width="3.5" stroke-linecap="round"/>
+<rect x="44" y="70" width="58" height="38" rx="19" fill="#7c4dff"/>
+<rect x="48" y="94" width="15" height="22" rx="6" fill="#7c4dff"/>
+<rect x="82" y="94" width="15" height="22" rx="6" fill="#7c4dff"/>
+<rect x="51" y="111" width="3.5" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="56.5" y="111" width="3.5" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="85" y="111" width="3.5" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="90.5" y="111" width="3.5" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="62" y="30" width="38" height="44" rx="17" fill="#5a32d6"/>
+<rect x="69" y="37" width="24" height="30" rx="10" fill="#b9a1ff"/>
+<rect x="18" y="28" width="60" height="58" rx="29" fill="#7c4dff"/>
+<path d="M30 78C22 84 13 80 14 70" fill="none" stroke="#5a32d6" stroke-width="15" stroke-linecap="round"/>
+<path d="M30 78C22 84 13 80 14 70" fill="none" stroke="#7c4dff" stroke-width="11" stroke-linecap="round"/>
+<rect x="36" y="48" width="9" height="13" rx="3" fill="#1c1a24"/>
+<rect x="54" y="48" width="8" height="13" rx="3" fill="#1c1a24"/>
+<rect x="37.8" y="49.8" width="3.2" height="3.2" rx="0.6" fill="#f4f1ff"/>
+<rect x="55.6" y="49.8" width="3" height="3.2" rx="0.6" fill="#f4f1ff"/>
+<rect x="60" y="64" width="8" height="4" rx="2" fill="#b9a1ff"/>
+<path d="M42 70q4 3.5 8 0" fill="none" stroke="#1c1a24" stroke-width="2.5" stroke-linecap="round"/>
+
+</g>
+</svg>

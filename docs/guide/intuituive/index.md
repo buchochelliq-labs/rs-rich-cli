@@ -1,5 +1,9 @@
 # Terminal apps (intuiTUIve)
 
+![intuiTUIve](../../assets/intuituive/wordmark-dark.svg#only-dark){ .tui-wordmark width="300" }
+![intuiTUIve](../../assets/intuituive/wordmark-light.svg#only-light){ .tui-wordmark width="300" }
+
+![Memo, intuiTUIve's elephant, waving her trunk and holding up a lit cell](../../assets/intuituive/mascot/elephant-hero.svg){ .tui-mascot width="128" }
 `rs-rich-intuituive` (`intuituive`, new and early) is a framework for
 terminal apps, full-screen or inline. You describe the screen once as a
 tree of nodes and keep your state in **signals**. When a signal changes, the nodes that
@@ -70,23 +74,25 @@ thing it introduces:
 
 | Page | What it covers |
 |---|---|
-| [Tutorial: a to-do app](tutorial.md) | An app built step by step |
-| [Nodes and layout](layout.md) | The nodes; sizes, flexbox alignment, grids, layers, layout that follows state, treemaps, responsive layout, `App::min_size` |
-| [Panels, themes and stylesheets](panels.md) | Borders, titles, rules and shared borders; themes and theme files; styles on a node; CSS stylesheets and `:error` |
-| [State, keys and the mouse](input.md) | Signals, memos and watches; focus, scopes and directions; key sequences, held keys, releases and repeat; the mouse, tooltips, drag-and-drop; bindings, the help and the command palette |
-| [Inputs, text and dates](components.md) | Hosted components, inputs with completion and history, a command line, text areas, calendars, date and time pickers, queries over records |
-| [Lists, trees and tabs](lists.md) | How lists look, ranges, selections, finding and reordering; trees by path, by key and lazy; split panes; tab strips and tab sets; logs |
-| [Tables and scrolling](tables.md) | Tables, sorting, a cell cursor, options that follow state, rows from a source, scrolling and scrollbars |
-| [Chrome, your own widgets and effects](widgets.md) | Status bars, breadcrumbs, key hints, facts; the `Widget` trait; effects |
-| [Screens, pop-ups and toasts](screens.md) | Screens, modals, ending with a value, pop-ups, prompts, menus, confirming, toasts, animations |
-| [Tasks, feeds and other threads](background.md) | Tasks, resources, values from threads, signals over time, handing off the terminal, a play head |
-| [Browsing, jobs and app state](browsing.md) | Miller columns over any tree, jobs, a fuzzy list, a preview pane, `$EDITOR`, state files, frecency |
-| [Timers, frames and games](timers.md) | Timers and their handles, a fixed timestep, frame pacing, sprites, stages and pixel buffers |
-| [Files, sound, images and charts](plugins.md) | The plugins: `watch`, `audio`, `art`, `files` and `viz` |
-| [Accessibility](accessibility.md) | The cursor on the focus, text mode, roles and states, announcements, linear mode |
-| [Inline apps, backends and your own loop](running.md) | Inline apps, termion and termwiz, synchronized output, a loop of your own, inside ratatui |
-| [Testing and the inspector](testing.md) | Headless tests, snapshots, a clock you move, the inspector |
-| [Eleven apps, rebuilt](clones.md) | Real terminal apps cloned from components only: what each one is built from, with recordings |
+| ![](../../assets/intuituive/tutorial.svg){ .tui-icon width="20" } [Tutorial: a to-do app](tutorial.md) | An app built step by step |
+| ![](../../assets/intuituive/layout.svg){ .tui-icon width="20" } [Nodes and layout](layout.md) | The nodes; sizes, flexbox alignment, grids, layers, layout that follows state, treemaps, responsive layout, `App::min_size` |
+| ![](../../assets/intuituive/panels.svg){ .tui-icon width="20" } [Panels, themes and stylesheets](panels.md) | Borders, titles, rules and shared borders; themes and theme files; styles on a node; CSS stylesheets and `:error` |
+| ![](../../assets/intuituive/input.svg){ .tui-icon width="20" } [State, keys and the mouse](input.md) | Signals, memos and watches; focus, scopes and directions; key sequences, held keys, releases and repeat; the mouse, tooltips, drag-and-drop; bindings, the help and the command palette |
+| ![](../../assets/intuituive/components.svg){ .tui-icon width="20" } [Inputs, text and dates](components.md) | Hosted components, inputs with completion and history, a command line, text areas, calendars, date and time pickers, queries over records |
+| ![](../../assets/intuituive/controls.svg){ .tui-icon width="20" } [Buttons and form controls](controls.md) | Buttons in three looks, check boxes, radio groups, switches, sliders, select fields, collapsible sections, spinners and a node shown as loading |
+| ![](../../assets/intuituive/lists.svg){ .tui-icon width="20" } [Lists, trees and tabs](lists.md) | How lists look, ranges, selections, finding and reordering; trees by path, by key and lazy; split panes; tab strips and tab sets; logs |
+| ![](../../assets/intuituive/tables.svg){ .tui-icon width="20" } [Tables and scrolling](tables.md) | Tables, sorting, a cell cursor, options that follow state, rows from a source, scrolling and scrollbars |
+| ![](../../assets/intuituive/widgets.svg){ .tui-icon width="20" } [Chrome, your own widgets and effects](widgets.md) | Status bars, breadcrumbs, key hints, facts; the `Widget` trait; effects and effect presets (`fx`) |
+| ![](../../assets/intuituive/screens.svg){ .tui-icon width="20" } [Screens, pop-ups and toasts](screens.md) | Screens, modals, ending with a value, pop-ups, prompts, menus, confirming, toasts, animations |
+| ![](../../assets/intuituive/background.svg){ .tui-icon width="20" } [Tasks, feeds and other threads](background.md) | Tasks, resources, values from threads, signals over time, handing off the terminal, a play head |
+| ![](../../assets/intuituive/browsing.svg){ .tui-icon width="20" } [Browsing, jobs and app state](browsing.md) | Miller columns over any tree, jobs, a fuzzy list, a preview pane, `$EDITOR`, state files, frecency |
+| ![](../../assets/intuituive/timers.svg){ .tui-icon width="20" } [Timers, frames and games](timers.md) | Timers and their handles, a fixed timestep, frame pacing, sprites, stages and pixel buffers |
+| ![](../../assets/intuituive/plugins.svg){ .tui-icon width="20" } [Files, sound, images and charts](plugins.md) | The plugins: `watch`, `audio`, `art`, `files` and `viz` |
+| ![](../../assets/intuituive/accessibility.svg){ .tui-icon width="20" } [Accessibility](accessibility.md) | The cursor on the focus, text mode, roles and states, announcements, linear mode |
+| ![](../../assets/intuituive/running.svg){ .tui-icon width="20" } [Inline apps, backends and your own loop](running.md) | Inline apps, termion and termwiz, synchronized output, a loop of your own, inside ratatui |
+| ![](../../assets/intuituive/testing.svg){ .tui-icon width="20" } [Testing and the inspector](testing.md) | Headless tests, snapshots, a clock you move, the inspector |
+| ![](../../assets/intuituive/clones.svg){ .tui-icon width="20" } [Eleven apps, rebuilt](clones.md) | Real terminal apps cloned from components only: what each one is built from, with recordings |
+| ![](../../assets/intuituive/widget-index.svg){ .tui-icon width="20" } [Widget index](widget-index.md) | Every widget and component, with its constructor and the section that documents it |
 
 Then: [porting a ratatui app](porting.md), [ratatui's examples,
 rebuilt](ratatui-examples.md), [serving an app to a browser](web.md),

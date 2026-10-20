@@ -23,9 +23,9 @@ use rich::{
     Highlighter, Text, Theme,
 };
 use rich_plugin_api::{
-    is_valid_name, Capability, ComponentFactory, CustomAction, HighlighterFactory, Plugin,
-    PluginComponent, PluginError, PluginMetadata, PluginRegistrar, SourceRenderer, TextTransform,
-    PLUGIN_API_VERSION,
+    is_supported_api_version, is_valid_name, Capability, ComponentFactory, CustomAction,
+    HighlighterFactory, Plugin, PluginComponent, PluginError, PluginMetadata, PluginRegistrar,
+    SourceRenderer, TextTransform, PLUGIN_API_VERSION,
 };
 
 use crate::transform::Pipeline;
@@ -227,7 +227,7 @@ impl ExtensionRegistry {
                 name: id,
             });
         }
-        if metadata.api_version != PLUGIN_API_VERSION {
+        if !is_supported_api_version(metadata.api_version) {
             return Err(PluginError::IncompatibleApi {
                 plugin: id,
                 built_for: metadata.api_version,
@@ -991,6 +991,26 @@ mod tests {
             }
         );
         assert!(registry.plugins().is_empty() && registry.theme("x").is_none());
+    }
+
+    #[test]
+    fn add_plugin_accepts_exactly_the_api_versions_the_constant_names() {
+        // The marketplace resolves `requires.plugin_api` with
+        // `is_supported_api_version`; the host must agree with it.
+        for api in [
+            PLUGIN_API_VERSION - 1,
+            PLUGIN_API_VERSION,
+            PLUGIN_API_VERSION + 1,
+        ] {
+            let mut registry = ExtensionRegistry::new();
+            let mut candidate = plugin("candidate", &["x"]);
+            candidate.api = api;
+            assert_eq!(
+                registry.add_plugin(&candidate).is_ok(),
+                is_supported_api_version(api),
+                "plugin API {api}"
+            );
+        }
     }
 
     #[test]

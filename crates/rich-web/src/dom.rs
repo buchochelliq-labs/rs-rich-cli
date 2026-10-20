@@ -244,6 +244,8 @@ fn item_role(role: Role) -> Option<&'static str> {
         Role::TabList => "tab",
         Role::Menu | Role::MenuBar => "menuitem",
         Role::Grid => "gridcell",
+        Role::RadioGroup => "radio",
+        Role::ComboBox => "option",
         _ => return None,
     })
 }
@@ -278,9 +280,15 @@ pub fn node(node: &AccessNode) -> Value {
     });
     match item {
         Some((role, value)) => {
-            let (on_item, own): (Vec<_>, Vec<_>) = attrs
-                .into_iter()
-                .partition(|(name, _)| ITEM_STATES.contains(name));
+            // A combo box's open state is its own; its current option is
+            // the selected one.
+            let combo = node.role == Role::ComboBox;
+            let (mut on_item, own): (Vec<_>, Vec<_>) = attrs.into_iter().partition(|(name, _)| {
+                ITEM_STATES.contains(name) && !(combo && *name == "aria-expanded")
+            });
+            if combo {
+                on_item.insert(0, ("aria-selected", "true".to_string()));
+            }
             out["attrs"] = pairs(&own);
             out["item"] = json!({"role": role, "attrs": pairs(&on_item), "text": value});
         }
@@ -359,6 +367,56 @@ mod tests {
             })
         );
         assert_eq!(json["rect"], json!([0, 1, 10, 3]));
+        // A radio group's chosen option is a checked radio.
+        let group = AccessNode {
+            role: Role::RadioGroup,
+            name: "Size".into(),
+            value: Some("Medium".into()),
+            state: AccessState {
+                checked: Some(true),
+                position: Some((2, 3)),
+                ..AccessState::default()
+            },
+            ..list.clone()
+        };
+        let json = node(&group);
+        assert_eq!(json["item"]["role"], "radio");
+        assert_eq!(
+            json["item"]["attrs"],
+            json!([
+                ["aria-checked", "true"],
+                ["aria-posinset", "2"],
+                ["aria-setsize", "3"]
+            ])
+        );
+        // A combo box's current option is a selected option; whether it
+        // is open stays on the combo box.
+        let combo = AccessNode {
+            role: Role::ComboBox,
+            name: "Theme".into(),
+            value: Some("Dark".into()),
+            state: AccessState {
+                expanded: Some(false),
+                position: Some((2, 3)),
+                ..AccessState::default()
+            },
+            ..list.clone()
+        };
+        let json = node(&combo);
+        assert_eq!(json["item"]["role"], "option");
+        assert_eq!(json["item"]["text"], "Dark");
+        assert_eq!(
+            json["item"]["attrs"],
+            json!([
+                ["aria-selected", "true"],
+                ["aria-posinset", "2"],
+                ["aria-setsize", "3"]
+            ])
+        );
+        assert!(json["attrs"]
+            .as_array()
+            .unwrap()
+            .contains(&json!(["aria-expanded", "false"])));
         // A button keeps its own attributes and reads by its label.
         let button = AccessNode {
             role: Role::Button,

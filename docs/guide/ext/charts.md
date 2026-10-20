@@ -3,10 +3,13 @@
 `rich_ext::chart` draws data with text:
 
 - **`Sparkline`**: one line, one cell per value.
-- **`BarChart`**: a label, a bar and a value per row.
+- **`BarChart`**: a label, a bar and a value per row; groups of bars
+  side by side or [stacked](#stacked-bars).
 - **`Histogram`**: raw values counted into bins, drawn as bars.
 - **`LineChart`**: one or more series as lines or scattered points, with
   axes and a legend.
+- **`PieChart`**: shares of a whole as slices of a disc or a donut, with a
+  legend of percentages ([below](#pie-and-donut-charts)).
 
 And the pieces of a dashboard:
 
@@ -33,7 +36,8 @@ Every chart also says what it shows in words, for a screen reader
 And laid out as ratatui's widgets, so a ported app looks the same
 ([below](#ratatui-style-charts-and-canvases)):
 
-- **`Chart`**: datasets on two axes, as lines, points, bars or areas.
+- **`Chart`**: datasets on two axes, as lines, points, bars or areas,
+  the areas [stacked](#stacked-areas) if asked.
 - **`Canvas`**: shapes, text and a world map in world coordinates.
 - **`FillGauge`** and **`LineGauge`**: ratatui's `Gauge` and `LineGauge`.
 
@@ -51,14 +55,17 @@ fill their area: a `Layout` region, a `Panel` with a height, or an
 given, they keep their defaults.
 
 The examples come from
-[`guide_charts.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-ext/examples/guide_charts.rs).
-The module needs no feature:
+[`guide_charts.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-ext/examples/guide_charts.rs),
+and the pies, stacked charts, QR codes and gradients from
+[`guide_charts_extra.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-ext/examples/guide_charts_extra.rs).
+The module needs no feature (QR codes need `qr`):
 
 ```bash
 cargo run -p rs-rich-ext --example guide_charts
 cargo run -p rs-rich-ext --example charts            # every chart on one screen
 cargo run -p rs-rich-ext --example charts -- --ascii
 cargo run -p rs-rich-ext --example kpi_dashboard     # cards, a matrix and a timeline, live
+cargo run -p rs-rich-ext --example guide_charts_extra --features qr
 ```
 
 The styles are theme keys (`chart.*`). Pass `rich_ext::extended_theme()` to
@@ -199,6 +206,39 @@ What ratatui's `BarChart` has, by this crate's names:
   thickness. Without a value style, a value on its bar is the bar's colour
   reversed.
 
+### Stacked bars
+
+`BarGroup::new("Q1").stacked()` draws a group as one bar, its bars end to
+end, labelled with the group's label and its total written after it (above
+it, vertical):
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts_extra.rs:stacked"
+```
+
+![Four quarters as stacked bars, across and up, with a legend](../../media/guide/guide_charts_extra-stacked.svg)
+
+- Each part takes `chart.series.N` by its place in the stack (or its own
+  `Bar::style`), and the legend under the chart names the parts after the
+  first stack's bars. `.legend(false)` hides it.
+- **Without colour** each part has its own fill: `█▓░▒` in blocks,
+  `⣿⣤⠿⠶` in Braille, `#=+:` in ASCII, and the legend shows the fills:
+
+  ```text
+  Q1 ████████▓▓▓▓ 6
+  Q2 ██████▓▓▓▓▓▓ 6
+  █ a  ▓ b
+  ```
+
+- Parts above zero stack up from zero, parts below it down from zero; the
+  scale fits both sums. Part edges fall on whole cells; with colour the
+  last part ends in a partial cell, as a plain bar does.
+- Other bars in the same chart are stacks of one. `.values_inside(true)`
+  has no effect on stacks: their totals are written outside.
+- The accessible text names each stack's total and parts:
+  `Stacked bar chart, 2 stacks of 2 parts, totals at 6`, then
+  `Q1 total 6 (a 4, b 2), Q2 total 6 (a 3, b 3)`.
+
 ## Histograms
 
 `Histogram::new(values).bins(n)` counts raw values into `n` bins of equal
@@ -223,6 +263,45 @@ width and draws them as a `BarChart`:
 - With `.range(min, max)` the bins split that range exactly, and values
   outside it are not counted. NaN and infinite values are never counted.
 - `.counts()` and `.edges()` return the numbers; `.to_bar_chart()` the chart.
+
+## Pie and donut charts
+
+A `PieChart` draws shares of a whole as slices of a disc, clockwise from
+the top, with a legend of labels and percentages beside it (under it when
+there is no room):
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts_extra.rs:pie"
+```
+
+![A pie and a donut of traffic by service, with their legends](../../media/guide/guide_charts_extra-pie.svg)
+
+- **Half blocks by default:** two pixels a cell (`▀▄█`), each slice in its
+  `chart.series.N` colour (or `Slice::new(..).style(..)`), so two slices
+  can share a cell and the disc is round at twice the resolution.
+- **Without colour** each slice is drawn a cell at a time in its own fill
+  (`█░▓▒▚▞`), and the legend shows the fills. `Charset::Braille` draws 2×4
+  dots a cell and leaves out the dots on the edges between slices, so the
+  wedges read without colour too. `Charset::Ascii` fills with `#+@:%=o*`:
+
+  ```text
+   @@@###   # api   50.0%
+  +@@@####  + web   30.0%
+  ++++####  @ cron  20.0%
+   +++###
+  ```
+
+- `.donut(0.5)` cuts a hole half the radius; `.centre_text("790")` writes
+  in it when it fits.
+- `.height(n)` sets the disc's rows (it is twice as wide); otherwise it
+  fills the height it is given, or takes 8 rows. Given less width, the disc
+  shrinks.
+- `.show_percentages(false)` and `.show_values(true)` choose the legend's
+  columns; `.legend(false)` hides it.
+- A value that is not a finite number above zero takes no part of the disc
+  and its percentage is written `-`; a slice too small for a cell is still
+  in the legend and the accessible text (`Pie chart, 4 slices, total
+  789.5`, then each slice's value and share).
 
 ## Line and scatter charts
 
@@ -409,6 +488,28 @@ An area chart, its end labels in bold and its y labels centred:
 ```
 
 ![An area chart with bold end labels](../../media/guide/guide_charts-ratatui-area.svg)
+
+### Stacked areas
+
+`.stacked(true)` puts each area dataset on top of the ones before it, so
+the top edge is the running total and each band is one dataset:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts_extra.rs:areas"
+```
+
+![Three services' traffic as stacked areas](../../media/guide/guide_charts_extra-areas.svg)
+
+- The axes fit the totals; a linear y axis without bounds runs from the
+  fill level (the first area's `.fill_to(..)`, 0 by default).
+- Every stacked area fills down to that level, the top one drawn first, so
+  each band shows in its own style. Without colour, give each its own
+  marker (`Marker::Ascii('#')`, `Marker::Ascii('+')`) to tell them apart.
+- Datasets that share x values stack exactly; between another area's
+  points the one below is followed along its line. Lines, points and bars
+  in the same chart are drawn as they are, over the areas.
+- The legend and the accessible text keep each dataset's own values; the
+  description's first line ends `areas stacked`.
 
 `Canvas` draws shapes in world coordinates, as ratatui's `Canvas` does:
 
@@ -878,14 +979,16 @@ numbers.
 rich chart sales.csv                                  # every numeric column as a line
 rich chart sales.csv --kind bar --x month --y api     # a bar per row, labelled
 rich chart sales.csv --kind heatmap                   # rows by series, as shades
+rich chart sales.csv --kind pie --y api               # one series as slices
+rich chart sales.csv --kind stacked                   # a bar per row, series as parts
 seq 1 20 | rich chart --kind spark                    # numbers piped in
 rich chart metrics.json --kind scatter --x t --y p50 --y p99
 ```
 
 | Option | Meaning |
 |---|---|
-| `--kind spark\|bar\|line\|scatter\|heatmap` | What to draw; `line` by default |
-| `--x COLUMN` | The positions (line, scatter: numbers) or labels (bar, heatmap). Default: the row number; for labels, the first column that is not all numbers |
+| `--kind spark\|bar\|line\|scatter\|heatmap\|pie\|stacked` | What to draw; `line` by default. A pie draws one series: name it with `--y` when there are several |
+| `--x COLUMN` | The positions (line, scatter: numbers) or labels (bar, heatmap, pie, stacked). Default: the row number; for labels, the first column that is not all numbers |
 | `--y COLUMN` | A series; repeat for several. Default: every numeric column but `--x` |
 | `--width N` | The width to draw in |
 
@@ -950,6 +1053,83 @@ Design's colours come from Material Design Lite, Apache License 2.0
 (Google); Oklab and Okhsv are Björn Ottosson's, and the conversions are our
 own code for his published formulas.
 
+### Gradient text
+
+`rich_ext::gradient::GradientText` colours a `Text` along two or more
+colours (`gradient(&stops, t)` for each character), across, down or
+corner to corner:
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts_extra.rs:gradient"
+```
+
+![A title, a block and a banner in an amber, rose and violet gradient](../../media/guide/guide_charts_extra-gradient.svg)
+
+- The text is laid out as it would be on its own (wrapped, justified, its
+  bold and italic kept); then each character takes the colour at its
+  column across the widest line (`GradientDirection::Horizontal`, the
+  default), its line (`Vertical`) or both (`Diagonal`).
+- The gradient replaces the text's own colour; `.background(true)` paints
+  the background instead.
+- **It degrades by colour system:** each colour is the nearest the console
+  has, so 256 colours show steps and 16 colours a few bands, and
+  neighbours that come out the same are written as one run. Without colour
+  (`NO_COLOR`, a pipe) the text is drawn as it is. Its accessible text is
+  the text's own words.
+
+## QR codes
+
+`rich_ext::qr::QrCode` (the `qr` feature) encodes text or bytes and draws
+the code with half blocks, two modules a cell, so it is square and a phone
+can read it off the terminal:
+
+```bash
+cargo add rs-rich-ext --features qr
+```
+
+```rust
+--8<-- "crates/rich-ext/examples/guide_charts_extra.rs:qr"
+```
+
+![A QR code for the repository's address](../../media/guide/guide_charts_extra-qr.svg)
+
+- `QrCode::new(text)` uses `ErrorCorrection::Medium`;
+  `QrCode::with_error_correction(text, level)` takes `Low` (about 7% of the
+  code can be lost), `Medium` (15%), `Quartile` (25%) or `High` (30%), and
+  uses a higher level when it fits the same size of code.
+  `QrCode::from_bytes(bytes, level)` encodes bytes. Data too long for the
+  largest code (version 40) is a `QrError::TooLong`.
+- **With colour** every cell is painted, the dark modules `#000000` and
+  the light ones `#ffffff` (`.colours(dark, light)` changes them), so the
+  code reads on a dark or a light terminal.
+- **Without colour** the glyphs draw the light modules, so on a dark
+  terminal the code reads dark on light; `.invert(true)` draws the dark
+  ones, for a light terminal.
+- **ASCII** (`Charset::Ascii`, or an ASCII-only console) draws a module as
+  `##` or two spaces (painted spaces with colour), twice as tall.
+- The quiet zone is 4 modules, as the specification asks; `.quiet_zone(2)`
+  is smaller and scanners manage. Given less width, the quiet zone narrows
+  to a module; a code that still does not fit is replaced by
+  `QR code needs N columns`, as a cut code cannot be read.
+- `.size()`, `.version()`, `.error_correction()` and `.module(x, y)` read
+  the code back. The accessible text names the version, the size, the
+  error correction and what it encodes.
+
+The encoder is Project Nayuki's
+[`qrcodegen`](https://crates.io/crates/qrcodegen) (MIT, no dependencies):
+one file, lighter to build than `qrcode`, whose image and SVG renderers
+this crate has no use for.
+
+All of them together, from the same example:
+
+![A gradient title, a pie and a QR code in a table, and stacked bars](../../media/guide/guide_charts_extra-together.svg)
+
+??? example "The code"
+
+    ```rust
+    --8<-- "crates/rich-ext/examples/guide_charts_extra.rs:together"
+    ```
+
 ## The shared pieces
 
 | Type | What it does |
@@ -962,7 +1142,8 @@ own code for his published formulas.
 | `Charset` | `Auto`, `Blocks`, `Braille`, `Ascii` |
 | `DotCanvas` | The Braille canvas the line chart draws on: set dots, draw lines, read cells |
 | `Direction`, `Levels` | A sparkline's way (`LeftToRight`, `RightToLeft`) and block set (`Nine`, `Three`) |
-| `BarGroup` | Bars with a label, set apart from the others |
+| `BarGroup` | Bars with a label, set apart from the others, or `.stacked()` into one bar |
+| `Slice` | A pie's slice: a label, a value and an optional style |
 | `Marker`, `Shape`, `MapResolution` | How a canvas marks what it draws; a shape of your own; the map's detail |
 | `LineSet` | A line gauge's glyphs: `Thin`, `Thick`, `Double` |
 | `Summary`, `quantile` | A distribution's numbers (`Summary::of(values)`), and one quantile of sorted values, interpolated linearly |
@@ -979,7 +1160,7 @@ Theme keys:
 | `chart.spark` | `cyan` | Sparklines |
 | `chart.over` | `bold red` | Sparkline values above the threshold |
 | `chart.min`, `chart.max` | `blue`, `bold green` | Sparkline extremes |
-| `chart.series.1` … `.5` | `cyan`, `magenta`, `yellow`, `green`, `blue` | Series, by position (they cycle); timeline rows |
+| `chart.series.1` … `.5` | `cyan`, `magenta`, `yellow`, `green`, `blue` | Series, by position (they cycle); timeline rows; pie slices; stacked parts |
 | `chart.track` | `bright_black` | A gauge's track and band shades |
 | `chart.target` | `bold` | A gauge's target marker |
 | `chart.gauge.filled`, `chart.gauge.unfilled` | `cyan`, `bright_black` | A `FillGauge`'s bar and the rest; a `LineGauge`'s two parts |

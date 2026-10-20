@@ -9,6 +9,38 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### rs-rich-embed: Chrome's DevTools over a pipe on Linux and macOS
+
+- **No DevTools port on Unix.** `ChromeEngine` starts Chrome with
+  `--remote-debugging-pipe` on Linux and macOS and speaks the protocol over
+  its file descriptors 3 and 4 (NUL-ended JSON), so no other program or
+  user on the machine can reach it. The descriptors are passed with
+  `command-fds` (pinned to 0.3.3, Apache-2.0), and the crate keeps
+  `unsafe_code = "deny"`. Windows keeps the `127.0.0.1` port, still a
+  [known limit](docs/known-issues.md#chromes-devtools-port-on-windows-in-rs-rich-embed).
+- One protocol path over either transport; a browser that exits early now
+  reports its last line of standard error.
+- `--remote-debugging-…` switches passed in `.args` are dropped, as sandbox
+  switches are: the engine chooses where DevTools goes.
+- Tests: on Linux, the browser and every process it started listen on no
+  TCP socket while a view is open; frames arrive over the pipe and over the
+  port.
+
+### intuiTUIve: a logo and topic icons (docs)
+
+- intuiTUIve has a mark (a node tree drawn with box-drawing guides, one
+  cell lit: the one a signal redraws), a favicon-sized mark, a wordmark
+  with TUI reversed out like a selection, and a line icon for each guide
+  page, under `docs/assets/intuituive/`. The overview page shows the
+  wordmark and an icon beside each page; the crate README shows the mark.
+- A widget index (`guide/intuituive/widget-index.md`): every widget and
+  component, 88 in seven groups, each with an icon, its constructor, a line
+  on what it is and a link to the section that documents it.
+- A mascot: Memo, a purple elephant with block-cursor eyes who holds up the
+  mark's lit cell, in five poses, at 32 and 16 px, and as a 32x32 pixel
+  sprite for half blocks; and her calf Tui, alone and holding Memo's tail
+  (`docs/assets/intuituive/mascot/`). The overview page shows Memo waving.
+
 ### Versions: the 0.0.21 versions are open
 
 - Every package moves one patch past the 0.0.20 cohort, as the
@@ -20,6 +52,123 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   requirements are exact, so every crate that depends on it moves too.
   `RELEASES.toml`, both lockfiles, the version tables and the CLI reference
   follow.
+
+### intuiTUIve: stock form controls (rs-rich-intuituive, rs-rich-web, rs-rich on PyPI)
+
+- `button(label, on_press)`: Enter, Space or a click (a press let go over
+  it) presses it; `.variant(ButtonVariant::Primary | Danger)` picks its
+  face from the theme's `button`, `button.primary` or `button.danger`
+  (the dark, light and mono themes name all three); it looks picked under
+  the focus or the pointer, pressed while the mouse holds it, greyed out
+  with `disabled_when`, and three rows tall draws lit and shaded edges in
+  colours a theme names.
+- `checkbox(label, Signal<bool>)`, `switch_toggle(label, Signal<bool>)`,
+  `radio(options, Signal<usize>)` (the arrows move the choice within the
+  group), `slider(Signal<f64>, range, step)` (the arrows, PageUp/PageDown,
+  Home/End, a click, a drag and the wheel), `select_field(options,
+  Signal<usize>)` (a menu under it on `open_menu`'s list, opened at the
+  choice; letters jump to the option they start, closed or open) and
+  `collapsible(title, Signal<bool>, child)`.
+- `spinner(name)`: rich's named spinners as a node, turned by an `after`
+  timer only while it spins (`.spinning_when(..)`), hidden from screen
+  readers. `.loading_when(..)` dims any node under a spinner and marks it
+  busy.
+- Each has a role and states for assistive technology: new
+  `Role::Slider`, `Role::RadioGroup` and `Role::ComboBox`;
+  `Widget::access_value` for a value the cells do not say (a slider's
+  number, sent to a browser as `aria-valuenow`); `DrawCx::disabled`. The
+  DOM renderer gives a radio group's chosen item the `radio` role, and
+  `rs_rich.tui.Role` names the three new roles.
+- Each draws in theme styles with fallbacks (`checkbox.on`, `switch.on`,
+  `slider.filled`, `control.focus`, …), so a theme file or
+  `.theme_styles(..)` restyles it. A select field's menu, and only its,
+  takes letters rather than j and k.
+- `examples/controls.rs` is a settings form of all of them, and the guide
+  has a page for them (Buttons and form controls). The `access` example's
+  check box, switch, buttons and spinner, the widget gallery's three
+  hand-drawn buttons and `checked_when`'s doc example use them now.
+
+### Logs: the app's own `tracing` events in an intuiTUIve pane (rs-rich-ext, rs-rich-interact, rs-rich-intuituive)
+
+- rs-rich-ext: `Record::from_event` reads a `StructuredEvent` (from
+  `EventLayer` or `LogAdapter`) as a `log_stream::Record`, the reverse of
+  `to_event`. `ChannelSink` is an `EventSink` over a bounded channel: a
+  full channel drops and counts the record, so the thread that logs never
+  waits, and `notify` wakes the reader. `adapters` (`EventSink`) is now in
+  every build; `LogAdapter` and `EventLayer` still need their features.
+- rs-rich-interact: `LogEvent: From<Record>`, so a
+  `ChannelSink::<LogEvent>` feeds `LogView::source`.
+- intuiTUIve: `Log` keeps a scrollback (`set_capacity`) and follows the
+  newest line until it is scrolled back (keys while focused, the wheel,
+  the scrollbar); End follows again, and `unseen()` counts what arrived
+  below. `LogLine` gives a line a level and a target, drawn in rich's
+  `logging.level.*` styles and `log.target`. `set_level`,
+  `set_target_level` (a target covers the ones under it) and `set_filter`
+  (a query: words, `level:`, `target:`) filter what shows;
+  `targets_view()` is a tui-logger-style panel of targets and their
+  levels. A log reads as its newest line in view to assistive technology.
+  Its existing API is unchanged, and a following, unfiltered log still
+  draws only what arrived.
+- intuiTUIve: the off-by-default `tracing` plugin, `log::tracing_layer`,
+  `install_tracing` and `TracingFeed`, feeds a `Log` from `tracing`
+  through `EventLayer` and a `ChannelSink`, with one line for what a full
+  channel dropped. The new `tracing` example rebuilds ratatui's, with the
+  log in a pane, a targets panel, a filter box and a status line.
+
+### Charts: pies, stacked bars and areas, QR codes and gradient text (rs-rich-ext, rs-rich-cli)
+
+- `chart::PieChart`: shares of a whole as slices of a disc, clockwise from
+  the top, with a legend of labels, percentages and (optionally) values;
+  `.donut(hole)` makes a ring with text in the hole. Half blocks with
+  colour, a fill per slice without it, Braille with the edges between
+  slices left out, and an ASCII form; accessible text names each share.
+- `BarGroup::stacked()`: a group drawn as one bar of parts, across or up,
+  parts below zero stacking down, with the total written and a legend
+  (`BarChart::legend`). Without colour each part has its own fill.
+- `Chart::stacked(true)`: area datasets drawn on top of the ones before,
+  the axes fitting the totals.
+- `qr::QrCode`, behind the new off-by-default `qr` feature: QR codes drawn
+  with half blocks inside a quiet zone, at an `ErrorCorrection` level, in
+  exact black and white with colour and in the terminal's own colours
+  without (`.invert` for light terminals); two cells a module in ASCII. The
+  quiet zone narrows to fit, and a code that cannot fit says how many
+  columns it needs. New dependency: `qrcodegen` 1.8 (MIT, no dependencies).
+- `gradient::GradientText`: a `Text` coloured along two or more colours
+  through `palette::gradient`, across, down or corner to corner, its
+  colours the nearest each colour system has.
+- `rich chart --kind pie` (one series as slices) and `--kind stacked` (a
+  bar per row, each series a part).
+- The guide's [Charts](docs/guide/ext/charts.md) page covers them, from the
+  new `guide_charts_extra` example.
+
+### intuiTUIve: effect presets (rs-rich-intuituive)
+
+Ready-made effects over any node, in a new generic core module `fx`,
+built only on `effect`, the app's clock and `Easing` (tachyonfx is the
+reference design; it is not a dependency, as it would bring ratatui into
+the workspace):
+
+- **Presets:** `fade_in` / `fade_out` (each cell to and from the
+  background colour), `dissolve` / `coalesce`, `sweep` (a soft edge
+  moving in a `Direction`), `slide_in`, `hsl_shift`, `glitch`, `rain`
+  (digital rain), `shimmer` (a band of light across text) and `skeleton`
+  (what a node shows as pulsing bars, for loading); `placeholder(widths)`
+  is bars of their own, read as "Loading". `Fx::new` and `Fx::endless`
+  make your own.
+- **Composition:** `fx::sequence`, `fx::parallel`, `fx::wait`, and
+  `delay`, `hold`, `repeat`, `forever`, `ping_pong`, `reversed`, `limit`
+  and `easing` on an `Fx`.
+- **Playing:** `fx::play` (once, when the node first draws), `play_when`
+  (each time a condition turns true), `play_while` (while one holds: a
+  skeleton while loading) and `transition` (forwards as a node shows,
+  backwards as it goes, hidden at the end); `fx::splash(cover, hold, app)`
+  fades a cover (an `image`, big text) into the app.
+- A running effect asks for a frame every `fx::FRAME`; once over it asks
+  for none, and its end stays. In accessible and linear mode an effect
+  goes straight to its end, as `Ctx::animate` does.
+- Colours from the theme: the `fx` style (the colour faded to), and
+  `fx.shimmer`, `fx.rain` and `fx.skeleton`. The `fx` example is a
+  gallery of them all.
 
 ### Recording: a held key repeats only while it is held (rs-rich-record)
 
@@ -46,6 +195,95 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `docs-versions.toml` pins a release's docs to a commit: the commit that
   opens the next versions records the last commit of the release's notes
   there (`docs/BRANCHING.md`).
+
+### intuiTUIve: round 7's four bugs (rs-rich-intuituive)
+
+- **The focus after a modal.** A `cx.focus(x)` made just before
+  `cx.modal(..)` (or a push or pop-up) moves the focus on the screen
+  below, so closing the modal gives it back to `x`, not to the node
+  focused before. A handler's focus moves and screens now take effect in
+  the order it asked for them. A node focused before it was laid out (by a
+  watch as the app starts, inside a `switch`'s page) has its focus path
+  once it is laid out, so a command line closing gives the focus back to
+  it (the tasks clone).
+- **A styled `layers` node covers its whole rectangle**, the gaps its
+  inset children leave included: the layers below no longer show through
+  (the blocks clone).
+- **`layout::squarify` keeps the largest item's tile** when the rest's
+  tile would be a strip too thin for the minimum: the rest grows until it
+  fits, where every item used to go into it (the disk clone).
+- **A focused text box keeps its keys from `previews_keys` containers.**
+  An input, text area or open `command_line` takes the keys it uses that
+  have no Ctrl or Alt (letters, Enter, the arrows) before a previewing
+  container round it, so a command line can sit inside the app's keymap;
+  Ctrl and Alt keys still go to the container first (the csv clone).
+- The tasks, blocks, disk and csv clones lose their workarounds; csv's
+  `<n>G` ends the number in the goto line's `on_change`.
+
+### intuiTUIve, rs-rich-ext: csv's million-row filter is fast again (rs-rich-intuituive, rs-rich-ext)
+
+- **`TableSource::rows(range, each)`**: a run of rows in order, by
+  default a `row` each; `view_of`'s passes read through it, a thousand
+  rows at a time, so a source can read in bulk.
+- **`rich_ext::transform::Pattern`**: a regular expression (fancy-regex,
+  as `KeepLines`) compiled once and run on a `&str` (`is_match`,
+  `try_is_match`), no `Text` built.
+- The csv clone's filter over a million rows takes 3.8 s in the
+  unoptimised build, from 15.4 s (0.27 s in release, from 2.3 s), with a
+  release benchmark bounding it at a second
+  (`a_million_row_filter_is_fast`, ignored by default).
+
+### Marketplace: the listing format, and the host's versions (plugin-api, ext, scripts)
+
+- **The listing format** ([design note](docs/design/marketplace.md)): one
+  JSON file per package with a `schema_version`, its kind (`crate`,
+  `wasm-plugin`, `micro-pack`, `theme`), tier, repository and every version's
+  artifact URL, SHA-256 and size, `requires`, capabilities, permissions and
+  yanking. One minisign-signed index pins every listing by hash, with a
+  serial and an expiry; a backup key only rotates keys. Only WASM plugins and
+  asset packs install; crates are listed only.
+- **Schemas and a validator.** `schemas/marketplace/listing.schema.json` and
+  `index.schema.json`, valid examples of every kind and invalid ones (a bad
+  hash, an unknown kind, a missing ABI and ten more).
+  `scripts/validate_marketplace.py` checks listings and indexes with the
+  standard library, and with `jsonschema` too when it is installed (the two
+  must agree); CI runs it and its tests.
+- **`rs-rich-plugin-api`:** `is_supported_api_version` and
+  `abi::is_supported` are the checks the registry and both loaders make
+  against `PLUGIN_API_VERSION`, `ABI_MAJOR` and `ABI_MINOR`, so a tool that
+  resolves `requires` decides as the host loads. The constants are
+  unchanged (API 1, ABI 1.0) and documented for the marketplace; tests pin
+  the WASM loader, the native descriptor reader and `add_plugin` to them.
+
+### Interact: Huh-style forms and a paginator (rs-rich-interact)
+
+- `Form` gains the rest of Huh's fields: `multi` (several options, with
+  `chosen` and `limit`), `note` (read-only text that focus passes over),
+  `file` (a path picked with a `FilePicker` opened under the field), and
+  `dynamic_choice`, whose options come from the answers above it and follow
+  them as they change. `describe` puts a line of help under any field.
+- `Form::group` splits a form into pages shown one at a time over a
+  paginator: Enter on a page's last field or Page Down checks the page
+  first, Page Up goes back, and a submit that fails shows the page of the
+  field that failed. Each new field has a line-by-line form without a
+  terminal.
+- `Value` gains `List` and `Path` (a breaking change for an exhaustive
+  `match`), and `Answers` gains `list` and `path`.
+- New `Paginator`: dots (`● ○ ○`) or a fraction (`2/3`), moved with the
+  arrows, Page Up and Down, Home and End, the wheel or a click on a dot.
+  It is state to embed (`bounds`, `handle_key`, `indicator`) and a
+  component of its own over a list of items. New `FilePicker::reopen`, and
+  a `huh_form` example.
+
+### CLI: `rich spin` (rs-rich-cli)
+
+- New `rich spin [--title TEXT] [--spinner NAME] -- COMMAND [ARG]...`, after
+  `gum spin`: runs the command with core's `Status` spinner and the title on
+  stderr until it exits, and exits with its status. `--spinner` takes any of
+  core's spinner names. On a terminal the command's output is held back;
+  `--show-output` prints it after, and `--show-error` only on a failure.
+  Without a terminal there is no spinner: the command just runs. Reduced
+  motion draws the title once.
 
 ## 0.0.20 cohort — published 2026-10-19
 

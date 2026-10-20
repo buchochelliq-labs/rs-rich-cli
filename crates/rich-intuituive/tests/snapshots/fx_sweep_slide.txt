@@ -1,0 +1,30 @@
+@ 0 ms
+
+
+
+
+
+@ 80 ms
+s
+
+from below
+
+
+@ 160 ms
+sweep ri
+sweep up
+from below
+        slid
+
+@ 240 ms
+sweep right
+sweep up
+from below
+   slide lef
+slide down
+@ 320 ms
+sweep right
+sweep up
+from below
+  slide left
+slide down

@@ -1530,11 +1530,6 @@ impl Tw {
                 .on_any_key(move |cx, _| {
                     cx.pop();
                     tw.error.set(None);
-                    // The modal gives the focus back to the command line
-                    // it opened over (closed by then), not the report.
-                    if let (0, Some(table)) = (tw.tab.get_untracked(), tw.table.get_untracked()) {
-                        cx.focus(table);
-                    }
                     true
                 })
         });

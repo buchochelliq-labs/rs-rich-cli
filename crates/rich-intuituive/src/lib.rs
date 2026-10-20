@@ -94,8 +94,10 @@ mod bindings;
 pub mod border;
 mod builtin;
 mod calendar;
+mod collapsible;
 pub mod command_line;
 pub mod complete;
+mod controls;
 mod datetime;
 mod dialog;
 mod digits;
@@ -107,6 +109,7 @@ pub mod files;
 pub mod finder;
 mod float;
 pub mod focus;
+pub mod fx;
 mod help;
 mod hex;
 #[cfg(feature = "art")]
@@ -133,11 +136,13 @@ mod rule;
 pub mod screen;
 mod scrollbar;
 pub mod select;
+mod select_field;
 mod sequence;
 mod sheet;
 mod signals;
 mod solver;
 pub mod source;
+mod spinner;
 mod split;
 pub mod sprite;
 #[cfg(feature = "art")]
@@ -175,11 +180,13 @@ pub use app::{
 pub use big_text::big_text;
 pub use bindings::{ModePage, Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
+pub use collapsible::collapsible;
 pub use command_line::{command_line, command_line_with, CommandLine, CommandLineOptions};
 pub use complete::{
     complete_words, history_file, history_in, history_session, CompleteOptions, Completion,
     InputHistory,
 };
+pub use controls::{button, checkbox, radio, slider, switch_toggle, ButtonVariant};
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use digits::digits;
 pub use effect::{effect, fill};
@@ -189,6 +196,7 @@ pub use feed::{
 };
 pub use finder::{finder_of, fuzzy_list, fuzzy_list_with, FuzzyOptions, FuzzySource};
 pub use focus::Direction;
+pub use fx::Fx;
 pub use help::{HelpOptions, KeyFormat, KeyHintsOptions};
 #[cfg(feature = "art")]
 pub use image::{
@@ -218,9 +226,11 @@ pub use reactive::{memo, on_write, on_write_ref, signal, viewport, watch, Memo, 
 pub use rich::Overflow;
 pub use rule::rule;
 pub use select::{list_search, multi_select, ListSearch, Mark, MultiSelect};
+pub use select_field::select_field;
 pub use sheet::{SheetError, Stylesheet};
 pub use signals::{falling, history, recent, recent_of, recent_timed, smoothed, Count, History};
 pub use solver::Solver;
+pub use spinner::spinner;
 pub use state::{
     frecency_in, frecency_session, frecency_store, read_state, state_dir, state_file, update_file,
     update_state, write_atomic, write_state, FrecencyStore,

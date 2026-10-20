@@ -34,8 +34,9 @@ There are two modes for assistive technology:
   - Animations jump to their end.
 - **Roles and names.** Every node has a role (`Widget::role`, set by every
   built-in: `list`, `table`, `tree`, `tablist`, `menu`, `region` for a
-  panel, `button` for a clickable label, `textbox` for an `Input` or a
-  `TextArea`, …) and a name: `.label("Save")`, else the text it shows,
+  panel, `button` for a clickable label or a `button`, `textbox` for an
+  `Input` or a `TextArea`, `checkbox`, `switch`, `radiogroup`, `slider`
+  and `combobox` for the [form controls](controls.md), …) and a name: `.label("Save")`, else the text it shows,
   else a panel's title. `.role(Role::MenuBar)` sets a role in code. A node
   named by the text it shows (a live row, a button) speaks for what is
   inside it, so its children are not listed again. A chart (or any
@@ -60,6 +61,12 @@ There are two modes for assistive technology:
     | `tree_lazy` | the same, and `busy` while a level loads |
     | `calendar` | `selected` |
     | `text_area` | none: its value is the caret's line |
+    | `checkbox`, `switch_toggle` | `checked` |
+    | `radio` | `checked` and `position` for the chosen option, its value |
+    | `select_field` | `expanded` while its menu is open, `position`, its value |
+    | `collapsible`'s header | `expanded` |
+    | `slider` | none: its value is its number |
+    | `.loading_when(..)` | `busy` |
 
     Code sets them with `.selected_when(…)`, `.expanded_when(…)`,
     `.checked_when(…)` (which makes the role `checkbox` unless one is set;
@@ -68,8 +75,9 @@ There are two modes for assistive technology:
     condition that may read signals. `Widget::access_state` is the hook
     for a widget of your own. `AccessNode::aria_attributes()` maps them to
     ARIA (`aria-expanded`, `aria-checked`, `aria-selected`, `aria-busy`,
-    `aria-disabled`, `aria-invalid`, `aria-posinset`, `aria-setsize`) for
-    a browser.
+    `aria-disabled`, `aria-invalid`, a slider's `aria-valuenow`,
+    `aria-posinset`, `aria-setsize`) for a browser. `Widget::access_value`
+    gives a widget of your own a value its cells do not say.
 - **Hidden from assistive technology.** `.access_hidden(true)` (ARIA's
   `aria-hidden`) leaves a node, and everything inside it, out of the tree,
   linear mode's lines, announcements and the names of what holds it, and
