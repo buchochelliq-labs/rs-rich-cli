@@ -167,3 +167,30 @@ fn tracing_layer_feeds_a_log_next_to_lines_pushed_by_hand() {
         ["INFO  [by hand]", "ERROR api request: boom"]
     );
 }
+
+#[test]
+fn scrolled_back_the_status_line_counts_what_is_new() {
+    let (app, log) = tracing_app();
+    let dispatch = dispatch(&app, log);
+    tracing::dispatcher::with_default(
+        &dispatch,
+        || tracing::info!(target: "tracing_app", "started"),
+    );
+    worker(dispatch.clone(), Duration::ZERO, 2026, Some(30))
+        .join()
+        .unwrap();
+    let mut driver = app.driver(78, 14);
+    driver.settle();
+    // From the targets panel to the log, then back three lines.
+    driver.press("tab up up up");
+    worker(dispatch, Duration::ZERO, 99, Some(5))
+        .join()
+        .unwrap();
+    driver.settle();
+    assert!(!log.is_following());
+    assert_eq!(log.unseen(), 7);
+    intuituive::assert_screen!(driver, "tracing_scrolled_back");
+    driver.press("end");
+    assert!(log.is_following());
+    assert!(rows(&driver)[13].starts_with("following"));
+}

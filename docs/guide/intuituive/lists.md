@@ -388,6 +388,73 @@ A log renders each line once. On an append it moves the rows already on
 screen up and renders only the new lines. That is why a log tail costs less
 than redrawing every row, which is ratatui's approach.
 
+The lines it keeps are its scrollback: `Log::new(capacity)` drops the
+oldest past it, and `set_capacity(n)` changes it later. The view follows
+the newest line until it is scrolled back, then stays where it is while
+lines arrive below it; End, or scrolling down to the last line, follows
+again. `is_following()`, `follow()` and `unseen()` (the lines that arrived
+below the view) are what a status line shows.
+
+| Key | Does |
+|---|---|
+| ↑ ↓ (`k` `j`) | a line back or on |
+| PgUp PgDn | a page |
+| Home (`g`) | the oldest line kept |
+| End (`G`) | follow the newest line again |
+| the wheel | three lines; works over the log without the focus |
+| the scrollbar | `.scrollbar(Scrollbar::new())`: dragging the thumb scrolls |
+
+Keys reach the log while it has the focus, so make it
+`log.view().focusable()`. A key it cannot use (↑ in a log that fits) goes
+on to its ancestors' bindings.
+
+### Levels, targets and filters
+
+A line may carry a level and a target, the module that wrote it:
+
+```rust
+use intuituive::log::{LogLine, Severity, TargetLevel};
+
+log.push_line(LogLine::new("disk [b]full[/]").level(Severity::Error).target("app::store"));
+log.push_line(LogLine::text("[raw] brackets as written").level(Severity::Debug));
+
+log.set_level(Some(Severity::Warn));                     // warn and above
+log.set_target_level("hyper", TargetLevel::Off);         // hyper and hyper::*
+log.set_target_level("app::db", TargetLevel::From(Severity::Debug));
+log.set_filter("timeout or level:error")?;               // a query
+```
+
+The view puts the level, in rich's `logging.level.<name>` theme styles,
+and the target, in `log.target` (dim), before the message;
+`show_level(false)` and `show_target(false)` leave them out. A line with
+no level passes every level filter.
+
+- **Level:** `set_level(Some(level))` keeps lines at that level and above.
+- **Targets:** `set_target_level(target, level)` covers the target and the
+  ones under it (`app` covers `app::db`, not `apple`), and the most
+  specific setting wins. `TargetLevel::Inherit` goes back to the log's
+  level. `targets()` lists the targets seen, with their line counts.
+- **Text:** `set_filter(text)` reads a [query](components.md#queries-over-records) in
+  `log::filter_grammar()`: words in the message (ignoring case),
+  `level:warn`, `target:app::db` (from the start of the target), `and`,
+  `or`, `not`, parentheses. Wire a box to it with
+  `watch(move || filter.get(), move |text, _| { let _ = log.set_filter(&text); })`.
+
+Filters apply to lines already kept and to every line that arrives, and
+the view scrolls by the lines that show. `shown()` counts them.
+
+`log.targets_view()` is a panel of the targets seen, like tui-logger's:
+↑ and ↓ choose a target, ← shows less of it and → more (off, error, warn,
+info, debug, trace), Space turns it off or back on, and Backspace gives it
+back to the log's level. It is focusable and takes clicks and the wheel.
+
+For assistive technology a log's role is `log`, and its accessible text is
+the newest line in view; the targets panel is a `list` whose selected item
+reads as `app::db: debug and above`.
+
+With the off-by-default `tracing` feature a log shows the app's own
+`tracing` events: see [Logs from `tracing`](plugins.md#logs-from-tracing-tracing).
+
 The `planner` example puts them together under a menu bar: projects and
 their tasks in a tree, the selected task's due date on a calendar, and a
 log of a hundred thousand rows, in panes whose dividers drag

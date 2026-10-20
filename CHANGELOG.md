@@ -21,6 +21,33 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `RELEASES.toml`, both lockfiles, the version tables and the CLI reference
   follow.
 
+### Logs: the app's own `tracing` events in an intuiTUIve pane (rs-rich-ext, rs-rich-interact, rs-rich-intuituive)
+
+- rs-rich-ext: `Record::from_event` reads a `StructuredEvent` (from
+  `EventLayer` or `LogAdapter`) as a `log_stream::Record`, the reverse of
+  `to_event`. `ChannelSink` is an `EventSink` over a bounded channel: a
+  full channel drops and counts the record, so the thread that logs never
+  waits, and `notify` wakes the reader. `adapters` (`EventSink`) is now in
+  every build; `LogAdapter` and `EventLayer` still need their features.
+- rs-rich-interact: `LogEvent: From<Record>`, so a
+  `ChannelSink::<LogEvent>` feeds `LogView::source`.
+- intuiTUIve: `Log` keeps a scrollback (`set_capacity`) and follows the
+  newest line until it is scrolled back (keys while focused, the wheel,
+  the scrollbar); End follows again, and `unseen()` counts what arrived
+  below. `LogLine` gives a line a level and a target, drawn in rich's
+  `logging.level.*` styles and `log.target`. `set_level`,
+  `set_target_level` (a target covers the ones under it) and `set_filter`
+  (a query: words, `level:`, `target:`) filter what shows;
+  `targets_view()` is a tui-logger-style panel of targets and their
+  levels. A log reads as its newest line in view to assistive technology.
+  Its existing API is unchanged, and a following, unfiltered log still
+  draws only what arrived.
+- intuiTUIve: the off-by-default `tracing` plugin, `log::tracing_layer`,
+  `install_tracing` and `TracingFeed`, feeds a `Log` from `tracing`
+  through `EventLayer` and a `ChannelSink`, with one line for what a full
+  channel dropped. The new `tracing` example rebuilds ratatui's, with the
+  log in a pane, a targets panel, a filter box and a status line.
+
 ### Recording: a held key repeats only while it is held (rs-rich-record)
 
 - `Hold` (and a `KeyDown` held through a `Sleep`) sends the repeats due
