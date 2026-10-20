@@ -655,9 +655,48 @@ jobs:
       - name: Benchmark against ratatui (release)
         run: cargo test --release --locked -p rs-rich-intuituive --test versus_ratatui -- --ignored --nocapture
 
+  # The browser build (docs/design/docs-playground.md, tier 3): the core, the
+  # extensions, rs-rich-interact and intuiTUIve for wasm32-unknown-unknown,
+  # with and without syntect, so a new crossterm, `Instant` or thread call
+  # outside the crates' wasm gates fails here rather than in the playground.
+  # rs-rich-web without its server (`default-features = false`), whose
+  # input decoder the playground uses.
+  wasm:
+    name: wasm32 build (playground crates)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check (default features)
+        run: >-
+          cargo check --locked --target wasm32-unknown-unknown
+          -p rs-rich -p rs-rich-ext -p rs-rich-interact -p rs-rich-intuituive
+
+      - name: Check (no syntect, as an app build)
+        run: >-
+          cargo check --locked --target wasm32-unknown-unknown --no-default-features
+          -p rs-rich -p rs-rich-ext -p rs-rich-interact -p rs-rich-intuituive -p rs-rich-web
+
+      - name: Check (the explorer and intuiTUIve's plugins that build there)
+        run: >-
+          cargo check --locked --target wasm32-unknown-unknown
+          -p rs-rich-interact -p rs-rich-intuituive
+          --features rs-rich-interact/data,rs-rich-intuituive/viz,rs-rich-intuituive/files
+
   ci-ok:
     name: ci-ok
-    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate]
+    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, wasm]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()

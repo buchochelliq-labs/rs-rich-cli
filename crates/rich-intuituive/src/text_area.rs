@@ -14,7 +14,9 @@
 
 use std::cell::{Cell, RefCell};
 use std::ops::Range;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use crate::clock::Instant;
 
 use rich::protocol::ConsoleCodeHighlighting;
 use rich::{Console, Segment, Style};

@@ -8,7 +8,7 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
 
 use rich::{Segment, Style};
 use rich_ext::chart::{
@@ -59,10 +59,16 @@ pub fn meter_with(
     let held = hold.clone();
     let child = described(move || {
         let (level, peak) = (level(), peak());
-        let mut meter = LevelMeter::new(level).peak(peak);
-        if let Some(hold) = held.borrow_mut().as_mut() {
-            meter = meter.held(hold.update(peak, Instant::now()));
-        }
+        let meter = LevelMeter::new(level).peak(peak);
+        // The peak hold keeps to the wall clock, which a browser's wasm
+        // build has not got: there the meter shows no held peak.
+        #[cfg(not(target_arch = "wasm32"))]
+        let meter = match held.borrow_mut().as_mut() {
+            Some(hold) => meter.held(hold.update(peak, std::time::Instant::now())),
+            None => meter,
+        };
+        #[cfg(target_arch = "wasm32")]
+        let _ = &held;
         configure(meter)
     });
     widget(Meter { child, hold }).what("meter")

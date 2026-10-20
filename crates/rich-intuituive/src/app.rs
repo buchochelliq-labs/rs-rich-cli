@@ -3393,9 +3393,9 @@ impl App {
     /// Wait (a while at most) until every task in flight has sent its
     /// result.
     fn settle_tasks(&self) {
-        let deadline = std::time::Instant::now() + Duration::from_secs(10);
+        let deadline = crate::clock::Instant::now() + Duration::from_secs(10);
         while self.runtime.tasks.load(std::sync::atomic::Ordering::SeqCst) > 0
-            && std::time::Instant::now() < deadline
+            && crate::clock::Instant::now() < deadline
         {
             std::thread::sleep(Duration::from_millis(1));
         }
@@ -3572,7 +3572,7 @@ impl App {
             .panel_width(whole.width)
             .map(|w| Rect::new(whole.right() - w, whole.y, w, whole.height));
         // Only while it is shown is the frame timed.
-        let started = panel.map(|_| std::time::Instant::now());
+        let started = panel.map(|_| crate::clock::Instant::now());
         let area = match panel {
             Some(panel) => Rect::new(whole.x, whole.y, whole.width - panel.width, whole.height),
             None => whole,

@@ -24,8 +24,10 @@ use std::panic::Location;
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
-use std::task::{Context, Poll, Wake, Waker};
-use std::time::{Duration, Instant};
+#[cfg(not(target_arch = "wasm32"))]
+use std::task::Wake;
+use std::task::{Context, Poll, Waker};
+use std::time::Duration;
 
 use crate::app::Ctx;
 use crate::reactive::{signal, watch, Runtime, Signal};
@@ -93,7 +95,7 @@ fn spawn_at<T: Send + 'static>(
     };
     let handle = task.clone();
     tasks.fetch_add(1, Ordering::SeqCst);
-    std::thread::spawn(move || {
+    crate::clock::off_thread(move || {
         // Count the task delivered however the work ends, a panic included.
         struct Delivered(Arc<std::sync::atomic::AtomicUsize>);
         impl Drop for Delivered {
@@ -204,7 +206,7 @@ pub fn spawn_stream(work: impl FnOnce(Stream) + Send + 'static) -> Task {
     let tasks = runtime.tasks.clone();
     let finished = task.finished.clone();
     tasks.fetch_add(1, Ordering::SeqCst);
-    std::thread::spawn(move || {
+    crate::clock::off_thread(move || {
         // Done however the work ends, a panic included. The count goes
         // down after the last result is queued, so a waiting app takes
         // them all.
@@ -258,6 +260,7 @@ where
 }
 
 /// Poll `future` on this thread until it is ready.
+#[cfg(not(target_arch = "wasm32"))]
 fn block_on<F: Future>(future: F) -> F::Output {
     struct Unpark(std::thread::Thread);
     impl Wake for Unpark {
@@ -272,6 +275,20 @@ fn block_on<F: Future>(future: F) -> F::Output {
         match future.as_mut().poll(&mut context) {
             Poll::Ready(output) => return output,
             Poll::Pending => std::thread::park(),
+        }
+    }
+}
+
+/// Poll `future` until it is ready. On wasm32 there is no other thread to
+/// wake it, so it is polled again at once: a future that waits on I/O or a
+/// timer never finishes there.
+#[cfg(target_arch = "wasm32")]
+fn block_on<F: Future>(future: F) -> F::Output {
+    let mut context = Context::from_waker(Waker::noop());
+    let mut future = std::pin::pin!(future);
+    loop {
+        if let Poll::Ready(output) = future.as_mut().poll(&mut context) {
+            return output;
         }
     }
 }
@@ -736,14 +753,14 @@ pub(crate) struct ThreadClock {
 /// has no clock (`Instant::now` panics) and no threads to keep to it, so
 /// the wall's time there stays at zero.
 #[cfg(not(target_arch = "wasm32"))]
-struct WallStart(Instant);
+struct WallStart(std::time::Instant);
 #[cfg(target_arch = "wasm32")]
 struct WallStart;
 
 impl WallStart {
     #[cfg(not(target_arch = "wasm32"))]
     fn now() -> WallStart {
-        WallStart(Instant::now())
+        WallStart(std::time::Instant::now())
     }
     #[cfg(target_arch = "wasm32")]
     fn now() -> WallStart {
@@ -926,10 +943,10 @@ impl ThreadClock {
     /// Wait (a while at most) until every thread is asleep on the app's
     /// clock or finished. Only on the app's clock.
     pub(crate) fn settle(&self) {
-        let deadline = Instant::now() + THREAD_SETTLE;
+        let deadline = crate::clock::Instant::now() + THREAD_SETTLE;
         let mut state = self.lock();
         while state.manual && state.running > 0 && !state.closed {
-            let left = deadline.saturating_duration_since(Instant::now());
+            let left = deadline.saturating_duration_since(crate::clock::Instant::now());
             if left.is_zero() {
                 return;
             }
@@ -1016,6 +1033,11 @@ pub fn latest<T: Send + 'static>(
         clock: clock.clone(),
         due: Cell::new(None),
     };
+    // No threads on wasm32 (a browser tab): `run` never starts, and the
+    // signal stays `None`. `latest_every` keeps to the app's timers there.
+    #[cfg(target_arch = "wasm32")]
+    let _ = (clock, sender, run);
+    #[cfg(not(target_arch = "wasm32"))]
     runtime.start_thread(Box::new(move || {
         clock.running(true);
         std::thread::spawn(move || {
@@ -1072,5 +1094,16 @@ pub fn latest_every<T: Send + 'static>(
     period: Duration,
     mut next: impl FnMut() -> T + Send + 'static,
 ) -> Signal<Option<T>> {
-    latest(move |tx| while tx.send(next()) && tx.sleep(period) {})
+    #[cfg(not(target_arch = "wasm32"))]
+    return latest(move |tx| while tx.send(next()) && tx.sleep(period) {});
+    // No threads on wasm32 (a browser tab): `next` runs on the app's thread,
+    // at the start and on an [`every`](crate::every) timer.
+    #[cfg(target_arch = "wasm32")]
+    {
+        let value = signal(Some(next()));
+        crate::every(period.max(Duration::from_millis(1)), move |_| {
+            value.replace(Some(next()));
+        });
+        value
+    }
 }

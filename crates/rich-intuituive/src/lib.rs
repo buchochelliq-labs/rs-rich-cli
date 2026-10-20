@@ -94,6 +94,7 @@ mod bindings;
 pub mod border;
 mod builtin;
 mod calendar;
+mod clock;
 pub mod command_line;
 pub mod complete;
 mod datetime;

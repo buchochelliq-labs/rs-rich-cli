@@ -2870,7 +2870,7 @@ impl Node {
         // its children take.
         let clock = frame.timings.is_some().then(|| {
             frame.time_stack.push(std::time::Duration::ZERO);
-            std::time::Instant::now()
+            crate::clock::Instant::now()
         });
         self.rect.set(rect);
         // Hidden from assistive technology: nothing inside is announced,
@@ -3703,7 +3703,7 @@ impl FrameState<'_> {
     /// Node `id`, which started at `start`, is done: its own time is what
     /// its children did not take, noted if it `drew`; all of it counts
     /// towards its parent's children.
-    pub fn timed(&mut self, id: NodeId, start: std::time::Instant, drew: bool) {
+    pub fn timed(&mut self, id: NodeId, start: crate::clock::Instant, drew: bool) {
         let all = start.elapsed();
         let inner = self.time_stack.pop().unwrap_or_default();
         if let Some(outer) = self.time_stack.last_mut() {
