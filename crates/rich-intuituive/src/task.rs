@@ -734,7 +734,7 @@ pub(crate) struct ThreadClock {
 
 /// `Instant::now()` at the clock's start. On `wasm32-unknown-unknown` std
 /// has no clock (`Instant::now` panics) and no threads to keep to it, so
-/// the wall's time there stays at zero (experimental: the playground spike).
+/// the wall's time there stays at zero.
 #[cfg(not(target_arch = "wasm32"))]
 struct WallStart(Instant);
 #[cfg(target_arch = "wasm32")]

@@ -202,6 +202,9 @@ pub struct EventLoop<'a> {
     /// The component a button press went to: its moves and release follow
     /// it there (a drag), wherever the pointer goes.
     grab: Option<usize>,
+    /// Whether the first turn (start and paint) has run: [`run`](Self::run)
+    /// or the first [`step`](Self::step) or [`pump`](Self::pump).
+    primed: bool,
 }
 
 impl<'a> EventLoop<'a> {
@@ -222,6 +225,7 @@ impl<'a> EventLoop<'a> {
             rows: Vec::new(),
             shown: Vec::new(),
             grab: None,
+            primed: false,
         }
     }
 
@@ -550,67 +554,156 @@ impl<'a> EventLoop<'a> {
     /// of them as interrupted.
     pub fn run(&mut self) -> io::Result<()> {
         let result = self.run_inner();
-        let finish = self.painter.finish(self.options.transient);
-        let written = self.backend.write_frame(&finish);
+        let written = self.finish();
         result.and(written)
     }
 
     fn run_inner(&mut self) -> io::Result<()> {
-        loop {
+        self.prime()?;
+        while self.running() {
+            let event = self.backend.read(self.timeout())?;
+            self.turn(event)?;
+        }
+        Ok(())
+    }
+
+    /// The first turn: start the components and paint them.
+    fn prime(&mut self) -> io::Result<()> {
+        if !std::mem::replace(&mut self.primed, true) {
             self.start()?;
             self.paint()?;
-            if !self.running() {
-                return Ok(());
+        }
+        Ok(())
+    }
+
+    /// One turn of the loop after a read: `event` (none when the read
+    /// timed out) to the components, then the ticks and timers due, then
+    /// start what was mounted meanwhile and paint.
+    fn turn(&mut self, event: Option<Event>) -> io::Result<()> {
+        match event {
+            None => {}
+            Some(Event::Key(key)) if key.is_interrupt() => {
+                for (component, _) in &mut self.mounted {
+                    component.interrupt();
+                }
             }
-            let timeout = self
-                .deadline()
-                .map(|deadline| deadline.saturating_sub(self.backend.elapsed()));
-            match self.backend.read(timeout)? {
-                None => {}
-                Some(Event::Key(key)) if key.is_interrupt() => {
-                    for (component, _) in &mut self.mounted {
-                        component.interrupt();
-                    }
-                }
-                // Raw mode turns off the terminal's own Ctrl+Z, so it
-                // arrives as a key: suspend as the terminal would have. The
-                // region is finished first, as for a hand-off, so the
-                // shell's "Stopped" goes below it.
-                Some(Event::Key(key)) if key == Key::ctrl('z') && self.backend.can_suspend() => {
-                    let finish = self.painter.finish(false);
-                    self.backend.write_frame(&finish)?;
-                    self.backend.suspend()?;
+            // Raw mode turns off the terminal's own Ctrl+Z, so it arrives
+            // as a key: suspend as the terminal would have. The region is
+            // finished first, as for a hand-off, so the shell's "Stopped"
+            // goes below it.
+            Some(Event::Key(key)) if key == Key::ctrl('z') && self.backend.can_suspend() => {
+                let finish = self.painter.finish(false);
+                self.backend.write_frame(&finish)?;
+                self.backend.suspend()?;
+                self.painter.reset();
+                let (columns, rows) = self.backend.size();
+                self.resized(columns, rows)?;
+            }
+            Some(Event::Resize { columns, rows }) => {
+                // Back from a suspend started outside: what is on the
+                // screen is the shell's, not the region.
+                if self.backend.take_resumed() {
                     self.painter.reset();
-                    let (columns, rows) = self.backend.size();
-                    self.resized(columns, rows)?;
                 }
-                Some(Event::Resize { columns, rows }) => {
-                    // Back from a suspend started outside: what is on the
-                    // screen is the shell's, not the region.
-                    if self.backend.take_resumed() {
-                        self.painter.reset();
-                    }
-                    self.resized(columns, rows)?;
-                }
-                Some(Event::Mouse(mouse)) => {
-                    if let Some(index) = self.mouse_target(mouse) {
-                        if let Some(event) = self.locate(index, mouse) {
-                            self.deliver(index, &event)?;
-                        }
-                    }
-                }
-                Some(event) => {
-                    if let Some(index) = self
-                        .mounted
-                        .iter()
-                        .position(|(component, _)| !component.finished())
-                    {
+                self.resized(columns, rows)?;
+            }
+            Some(Event::Mouse(mouse)) => {
+                if let Some(index) = self.mouse_target(mouse) {
+                    if let Some(event) = self.locate(index, mouse) {
                         self.deliver(index, &event)?;
                     }
                 }
             }
-            self.fire_due()?;
+            Some(event) => {
+                if let Some(index) = self
+                    .mounted
+                    .iter()
+                    .position(|(component, _)| !component.finished())
+                {
+                    self.deliver(index, &event)?;
+                }
+            }
         }
+        self.fire_due()?;
+        self.start()?;
+        self.paint()
+    }
+
+    /// Push driving, for a host that cannot block in
+    /// [`Backend::read`] (a browser tab, another program's event loop):
+    /// deliver `event`, as [`run`](Self::run) does with one it read, then
+    /// fire the ticks and timers due by the backend's
+    /// [`elapsed`](Backend::elapsed) time and paint. Returns whether a
+    /// component is still running. The first call (of this or
+    /// [`pump`](Self::pump)) starts the components and paints them first;
+    /// once none is running, events are dropped. Call
+    /// [`finish`](Self::finish) at the end.
+    ///
+    /// Steps give the same results as [`run`](Self::run) given the same
+    /// events at the same times. [`PushBackend`](crate::PushBackend) is a
+    /// backend made for it: the host sets its time and takes what was
+    /// painted.
+    ///
+    /// ```
+    /// use rich_interact::{EventLoop, Event, Key, KeyCode, LoopOptions, Outcome, PushBackend, Select};
+    ///
+    /// let backend = PushBackend::new(30, 6);
+    /// let port = backend.port();
+    /// let mut event_loop = EventLoop::new(backend, LoopOptions::default());
+    /// let handle = event_loop.mount(Select::new("Pick", vec!["red".to_string(), "green".to_string()]));
+    /// event_loop.pump().unwrap();
+    /// assert!(port.take_output().contains("red"));
+    /// event_loop.step(Event::Key(Key::new(KeyCode::Down))).unwrap();
+    /// let running = event_loop.step(Event::Key(Key::new(KeyCode::Enter))).unwrap();
+    /// assert!(!running);
+    /// event_loop.finish().unwrap();
+    /// assert_eq!(handle.take(), Some(Outcome::Done("green".to_string())));
+    /// ```
+    pub fn step(&mut self, event: Event) -> io::Result<bool> {
+        self.prime()?;
+        if self.running() {
+            self.turn(Some(event))?;
+        }
+        Ok(self.running())
+    }
+
+    /// Push driving without an event: the turn [`run`](Self::run) takes
+    /// when a read times out. Fires the ticks and timers due by the
+    /// backend's time, starts what was mounted, and paints; returns whether
+    /// a component is still running. Call it when
+    /// [`timeout`](Self::timeout) has passed (after moving the backend's
+    /// clock), and once at the start to paint the first view.
+    pub fn pump(&mut self) -> io::Result<bool> {
+        if self.primed {
+            if self.running() {
+                self.turn(None)?;
+            }
+        } else {
+            self.prime()?;
+        }
+        Ok(self.running())
+    }
+
+    /// How long until a tick or timer is due, by the backend's time:
+    /// when to [`pump`](Self::pump) next. `None`: only an event changes
+    /// anything.
+    pub fn timeout(&self) -> Option<Duration> {
+        self.deadline()
+            .map(|deadline| deadline.saturating_sub(self.backend.elapsed()))
+    }
+
+    /// Whether a mounted component is still running.
+    pub fn is_running(&self) -> bool {
+        self.running()
+    }
+
+    /// End painting: leave the last view (or clear it, when
+    /// [`transient`](LoopOptions::transient)) and give the cursor back.
+    /// [`run`](Self::run) calls it; a host driving the loop with
+    /// [`step`](Self::step) calls it once at the end.
+    pub fn finish(&mut self) -> io::Result<()> {
+        let finish = self.painter.finish(self.options.transient);
+        self.backend.write_frame(&finish)
     }
 }
 
