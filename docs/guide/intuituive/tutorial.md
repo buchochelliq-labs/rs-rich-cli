@@ -218,7 +218,8 @@ fn confirm_delete(todos: Signal<Vec<Todo>>, id: u32) -> Node {
 }
 ```
 
-`cx.pop()` closes the modal, and the focus goes back where it was.
+`cx.pop()` closes the modal, and the focus goes back where it was (or
+where a `cx.focus(x)` made just before `cx.modal(..)` put it).
 `with_untracked` reads without subscribing: the modal's text does not need
 to follow later changes.
 

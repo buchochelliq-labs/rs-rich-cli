@@ -21,6 +21,43 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `RELEASES.toml`, both lockfiles, the version tables and the CLI reference
   follow.
 
+### intuiTUIve: round 7's four bugs (rs-rich-intuituive)
+
+- **The focus after a modal.** A `cx.focus(x)` made just before
+  `cx.modal(..)` (or a push or pop-up) moves the focus on the screen
+  below, so closing the modal gives it back to `x`, not to the node
+  focused before. A handler's focus moves and screens now take effect in
+  the order it asked for them. A node focused before it was laid out (by a
+  watch as the app starts, inside a `switch`'s page) has its focus path
+  once it is laid out, so a command line closing gives the focus back to
+  it (the tasks clone).
+- **A styled `layers` node covers its whole rectangle**, the gaps its
+  inset children leave included: the layers below no longer show through
+  (the blocks clone).
+- **`layout::squarify` keeps the largest item's tile** when the rest's
+  tile would be a strip too thin for the minimum: the rest grows until it
+  fits, where every item used to go into it (the disk clone).
+- **A focused text box keeps its keys from `previews_keys` containers.**
+  An input, text area or open `command_line` takes the keys it uses that
+  have no Ctrl or Alt (letters, Enter, the arrows) before a previewing
+  container round it, so a command line can sit inside the app's keymap;
+  Ctrl and Alt keys still go to the container first (the csv clone).
+- The tasks, blocks, disk and csv clones lose their workarounds; csv's
+  `<n>G` ends the number in the goto line's `on_change`.
+
+### intuiTUIve, rs-rich-ext: csv's million-row filter is fast again (rs-rich-intuituive, rs-rich-ext)
+
+- **`TableSource::rows(range, each)`**: a run of rows in order, by
+  default a `row` each; `view_of`'s passes read through it, a thousand
+  rows at a time, so a source can read in bulk.
+- **`rich_ext::transform::Pattern`**: a regular expression (fancy-regex,
+  as `KeepLines`) compiled once and run on a `&str` (`is_match`,
+  `try_is_match`), no `Text` built.
+- The csv clone's filter over a million rows takes 3.8 s in the
+  unoptimised build, from 15.4 s (0.27 s in release, from 2.3 s), with a
+  release benchmark bounding it at a second
+  (`a_million_row_filter_is_fast`, ignored by default).
+
 ### Releases: one run for every crate (scripts, release.yml)
 
 - **A release tag publishes the whole release.** `release-<name>` (the

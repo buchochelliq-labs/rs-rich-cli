@@ -197,7 +197,8 @@ Layers composite: where a layer draws nothing (the room round a centred
 column, a gap between its children) the ones below it show, so a backdrop
 is one `fill` under the content. A panel covers what is inside its frame,
 and a node with a background (`.bg(..)`, `.style(..)`) its whole
-rectangle; text covers the cells it writes. When any layer is to draw,
+rectangle, the gaps its children leave included (a `layers` node whose
+children are inset); text covers the cells it writes. When any layer is to draw,
 they all draw once, bottom first, none clearing what is under it, so the
 board's ticks never show through the panel. A click goes to the top layer under the pointer,
 and the Tab order and the accessibility tree follow the children's order
@@ -241,7 +242,9 @@ row([
 weights out as tiles in proportion, as near square as they let them be (a
 cell `aspect` times taller than wide), covering the rectangle edge to edge;
 the smallest that would make a tile below the minimum share one tile for
-the rest (`Squarified { tiles, rest }`). `treemap(items, |key, rect| node)`
+the rest (`Squarified { tiles, rest }`), made larger than their share
+where that would be a strip too thin for a tile (one item of 96% beside
+it). `treemap(items, |key, rect| node)`
 is the node: a tile per `(key, weight)`, its node kept while its key and
 size stay, and `treemap_with(.., TreemapOptions::new().min_tile(8, 3)
 .aspect(2.0).rest(|n| node))` for the rest's tile:
