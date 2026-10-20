@@ -24,6 +24,7 @@ pub enum ValueHint {
 
 /// One allowed value, with optional help.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Choice {
     pub value: String,
     /// Empty when the value needs no explanation.
@@ -70,6 +71,7 @@ impl<V: Into<String>, H: Into<String>> From<(V, H)> for Choice {
 /// assert!(matches!(color.value, ValueHint::Choices(ref c) if c.len() == 3));
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct ArgSpec {
     /// A stable identifier; also the default value name.
     pub id: String,
@@ -353,6 +355,7 @@ pub struct HeadingNote {
 /// assert_eq!(spec.usage_lines(), vec!["rich [OPTIONS] [RESOURCE] [COMMAND]".to_string()]);
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct CommandSpec {
     pub name: String,
     /// The executable name, when it differs from `name`.

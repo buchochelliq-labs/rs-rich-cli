@@ -193,6 +193,7 @@ const SERIES_STYLES: usize = 5;
 /// Whatever is asked for, an ASCII-only console (its encoding is not UTF-8,
 /// or [`Fidelity`] is `Ascii`) gets [`Ascii`](Self::Ascii).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub enum Charset {
     /// The chart's natural set: blocks for sparklines and bars, Braille for
     /// line and scatter charts; ASCII on an ASCII-only console.

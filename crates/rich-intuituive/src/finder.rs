@@ -3,7 +3,9 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use crate::clock::Instant;
 
 use rich::markup::escape;
 use rich_interact::fuzzy::fuzzy;
@@ -163,6 +165,7 @@ impl<T> Feed<T> {
 
 /// A [`fuzzy_list`]'s options: a title, a border, what Esc does, the
 /// prompt.
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct FuzzyOptions {
     title: Option<String>,
     border: Option<Border>,

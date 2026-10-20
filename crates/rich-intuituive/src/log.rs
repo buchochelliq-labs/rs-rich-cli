@@ -75,6 +75,7 @@ const WHEEL_STEP: isize = 3;
 /// its target (the module or subsystem that wrote it, as `tracing` and
 /// `log` name it).
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct LogLine {
     markup: String,
     level: Option<Severity>,

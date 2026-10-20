@@ -61,7 +61,7 @@ $ rich micro list --micro-project
 With `--emoji` (the flag that turns on `:emoji:` codes, off by default as
 upstream has it), `rich --print` also replaces `:micro:name:`:
 
-```console
+```console { .rich-playground data-kind="cli" }
 $ rich -p --emoji "Deploying :micro:status/loading: then :micro:status/success: :sparkles:"
 Deploying ⏳ then ✅ ✨
 ```
@@ -85,7 +85,7 @@ Tokens also expand where each label's `:emoji:` codes do:
   destinations, autolinks, reference definitions); `\:micro:name:` stays as
   written.
 
-```console
+```console { .rich-playground data-kind="cli" }
 $ rich -p "All checks passed" --panel rounded --title ":micro:status/success: CI"
 $ rich README.md    # :micro:status/success: in the text draws the asset
 ```

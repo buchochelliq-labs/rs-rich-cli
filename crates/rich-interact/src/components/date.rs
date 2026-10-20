@@ -936,6 +936,7 @@ macro_rules! date_builders {
 /// assert_eq!(outcome.unwrap(), Outcome::Done(Date::new(2026, 10, 25)));
 /// assert_eq!(record.last_frame(), "? Due › 2026-10-25");
 /// ```
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct DatePicker(Chooser);
 
 impl DatePicker {
@@ -1003,6 +1004,7 @@ impl DatePicker {
 /// let (outcome, _) = headless::run(picker, script, 40, 6);
 /// assert_eq!(outcome.unwrap(), Outcome::Done(Time::new(14, 15, 0)));
 /// ```
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct TimePicker(Chooser);
 
 impl TimePicker {
@@ -1074,6 +1076,7 @@ impl TimePicker {
 /// assert_eq!(outcome.unwrap(), Outcome::Done(expected));
 /// assert_eq!(record.last_frame(), "? Meeting › 2026-10-18 14:30");
 /// ```
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct DateTimePicker(Chooser);
 
 impl DateTimePicker {

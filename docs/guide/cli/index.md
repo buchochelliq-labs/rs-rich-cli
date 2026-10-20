@@ -1,4 +1,4 @@
-# The `rich` command
+# ![](../../assets/rs-rich/cli.svg){ .rs-icon } The `rich` command
 
 `rich` renders files that are hard to read raw — Markdown, JSON, CSV, source
 code, Jupyter notebooks, logs, YAML — as formatted, coloured terminal output.
@@ -125,7 +125,7 @@ records exactly which parts are upstream and which are additions.
 | `env` | — | Environment variables, with secret-named values and credentials inside values masked (best effort); PATH entries checked | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
 | `capture` | — | Run a command and show, export or record its output | [Viewers](walkthrough.md#viewing-and-inspecting-anything) |
 | `chart` | — | Draw CSV, JSON or stdin as a sparkline, bars, lines, points or a heatmap | [Charts](../ext/charts.md#from-the-shell-rich-chart) |
-| `mermaid`, `mmd` | — | Draw a Mermaid flowchart as text | [From Mermaid](../diagram/index.md#from-mermaid) |
+| `mermaid`, `mmd` | — | Draw a Mermaid flowchart, sequence or ER diagram as text | [From Mermaid](../diagram/index.md#from-mermaid) |
 | `dot`, `graphviz` | — | Draw a DOT (Graphviz) graph as text | [Diagrams](../diagram/index.md#dot-graphviz) |
 | `deps` | — | A Cargo dependency tree or graph; `--why CRATE`; feature, build-time, advisory and licence reports | [Dependency graphs](../ext/sources.md#cargo-dependency-graphs), [supply-chain reports](../ext/sources.md#supply-chain-reports) |
 | `schema` | — | A JSON Schema, SQL DDL or Arrow schema as a tree, what changed between two, or an ER diagram (`--er`) | [JSON Schemas](../ext/sources.md) |

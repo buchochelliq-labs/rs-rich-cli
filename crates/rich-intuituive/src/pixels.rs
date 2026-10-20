@@ -268,6 +268,7 @@ impl PixelBuf {
 /// buffer; [`Sprite::from_pixels`](crate::sprite::Sprite::from_pixels)
 /// makes cell art of it for a [`stage`](crate::sprite::stage).
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct PixelSprite {
     width: u16,
     height: u16,

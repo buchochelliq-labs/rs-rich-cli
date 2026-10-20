@@ -171,6 +171,7 @@ impl<S: VirtualRows> ResultSet<S> {
     }
 
     /// Show rows from `offset` (0-based).
+    #[must_use]
     pub fn offset(mut self, offset: usize) -> Self {
         self.offset = offset;
         self
@@ -178,24 +179,28 @@ impl<S: VirtualRows> ResultSet<S> {
 
     /// Show at most `rows` rows (default [`DEFAULT_LIMIT`], at most
     /// `MAX_HEIGHT`).
+    #[must_use]
     pub fn limit(mut self, rows: usize) -> Self {
         self.limit = rows.min(MAX_HEIGHT);
         self
     }
 
     /// How long the query took, for the footer.
+    #[must_use]
     pub fn elapsed(mut self, elapsed: Duration) -> Self {
         self.elapsed = Some(elapsed);
         self
     }
 
     /// The marker for null cells (default `NULL`).
+    #[must_use]
     pub fn null_marker(mut self, marker: impl Into<String>) -> Self {
         self.null = marker.into();
         self
     }
 
     /// A title above the table (console markup).
+    #[must_use]
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self

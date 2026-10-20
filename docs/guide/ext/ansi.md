@@ -101,7 +101,7 @@ intermediates, final)`, `osc_meaning(body)`, `control_name(byte)`,
 
 ## On the command line
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 ls --color=always | rich ansi explain
 rich ansi explain capture.txt --escapes-only
 rich ansi explain capture.txt --ansi-inline

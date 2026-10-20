@@ -68,6 +68,7 @@ pub struct Preview {
 impl Preview {
     /// A heading drawn above the lines (`"output"`, `"command"`), and the
     /// summary's first word.
+    #[must_use]
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self

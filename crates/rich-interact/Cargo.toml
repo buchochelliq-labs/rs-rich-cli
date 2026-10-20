@@ -29,12 +29,21 @@ name = "rich_interact"
 workspace = true
 
 [features]
+default = ["syntax"]
+# Syntax highlighting through syntect: the file picker's code previews, and
+# rs-rich-ext's default features (`syntax`, `markdown`). On by default; an
+# app built for a browser (the docs playground) turns it off to leave
+# syntect out, and a preview then shows the code as plain text.
+syntax = ["rich/syntax", "rich-ext/syntax", "rich-ext/markdown"]
 # `DataExplorer`: explore a JSON, YAML, TOML, XML, INI or dotenv document
 # (#465), parsed by rich-ext's data layer.
 data = ["rich-ext/data"]
 # Micro assets (rs-rich-micro): `AssetKind::Micro` in `AssetPicker`, and
 # `StatusItem::micro`. Pulls in image decoding.
 micro = ["dep:rich-micro"]
+# `vim::Vim`: a Vim preset for the text editors (modes, motions, operators,
+# counts and `.`), a `KeyMode` over `edit::Buffer`. Off by default.
+vim = []
 # The termion backend (#677): `BackendKind::Termion`, Unix only (on other
 # platforms the feature compiles to nothing).
 termion = ["dep:termion"]
@@ -62,18 +71,29 @@ name = "explore_scale"
 required-features = ["data"]
 
 [dependencies]
-rich = { workspace = true, features = ["syntax"] }
-rich-ext.workspace = true
+rich.workspace = true
+# Without its defaults, so `syntax` decides whether syntect comes in. A
+# path dependency, as a workspace one cannot turn its defaults off.
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext", version = "0.0.18", default-features = false }
+# The text buffer's search (`edit::Search`): plain strings and regular
+# expressions (already in the tree, through rs-rich).
+fancy-regex.workspace = true
 rich-micro = { workspace = true, optional = true }
+# The termwiz backend (MIT), off by default: wezterm's terminal layer, with
+# its own input parser and capability probe.
+termwiz = { version = "0.23", optional = true }
+
+[target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Raw mode, the alternate screen, and key and mouse events on every platform.
 # `use-dev-tty` reads events through poll/select instead of mio: macOS's
 # kqueue cannot watch `/dev/tty` (keys when stdin is a pipe, as in
 # `seq 1 99 | rich pager`), and its edge-triggered read filter misses keys
 # typed while the session was suspended. One event source on every Unix.
+# Not on wasm32: a browser has no terminal. There `crossterm_stub` stands in
+# (every call fails with `Unsupported`), and a page drives the loop through
+# `EventLoop::step` and `PushBackend` (the docs playground). CI checks the
+# wasm32-unknown-unknown build.
 crossterm = { version = "0.29", default-features = false, features = ["events", "bracketed-paste", "windows", "use-dev-tty"] }
-# The termwiz backend (MIT), off by default: wezterm's terminal layer, with
-# its own input parser and capability probe.
-termwiz = { version = "0.23", optional = true }
 
 [target.'cfg(unix)'.dependencies]
 # The termion backend (MIT), off by default and Unix only.

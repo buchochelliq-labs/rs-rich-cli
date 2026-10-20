@@ -67,7 +67,7 @@ Point `rich` at a file and it picks a renderer from the extension: `.md`,
 do man pages, [below](#org-asciidoc-and-man-pages)); **anything else with an
 extension is syntax-highlighted**.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich README.md
 rich data.json
 rich main.rs
@@ -75,7 +75,7 @@ rich main.rs
 
 Force a renderer when the extension is missing or misleading:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --markdown CHANGELOG
 rich --syntax --width 100 script
 rich markdown CHANGELOG
@@ -93,7 +93,7 @@ may set. `rich doctor` lists the highlighters and themes available. See the
 
 rich-cli's source options work on source files, CSV and notebooks:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich main.rs --head 20            # the first 20 lines (-h 20)
 rich main.rs -n -g                # line numbers and indentation guides
 rich script --lexer python        # highlight as Python, whatever the name
@@ -119,7 +119,7 @@ line.
 `--rst` renders reStructuredText as rich-cli does, through a port of
 `rich-rst`. A `.rst` file is detected by its extension:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich README.rst
 rich --rst docs/intro.txt
 rich --rst notes.rst --lexer ruby   # code blocks that name no language
@@ -267,7 +267,7 @@ with batch or explicit/automatic paging.
 0.0.6 adds task-oriented subcommands while keeping every existing flat flag
 working without warnings:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich markdown README.md
 rich json data.json
 rich csv data.csv
@@ -287,7 +287,7 @@ By default, the upstream modes (`rich FILE`, `--print`, `--markdown`, `--json`,
 `--csv`, …) keep ESC bytes in input, matching upstream `rich` behavior. Use
 `--sanitize` when displaying content you do not trust:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --sanitize suspicious.txt
 ```
 
@@ -324,7 +324,7 @@ quote, so `rich $'x\e]0;title\a.txt'` reports `cannot read x␛]0;title␇.txt`.
 
 ## Render a CSV as a table
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --csv team.csv --title "Team"
 ```
 
@@ -373,7 +373,7 @@ evidence behind each type, use `rich profile`.
 hold. It is repeatable, and each rule is `COLUMN OP VALUE:STYLE`, or
 `COLUMN OP VALUE:TARGET:STYLE` to style more than the cell:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --csv services.csv --style-rule 'latency>500:bold red'
 rich services.csv --style-rule 'status=failed:row:on red' --style-rule 'note empty:dim'
 rich services.csv --rules rules.toml
@@ -569,7 +569,7 @@ Use `jsonl` / `--jsonl` for newline-delimited JSON. Each line is parsed and
 rendered independently, so the command can consume long streams without holding
 the complete input in memory:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 tail -f app.jsonl | rich jsonl -
 rich --jsonl events.ndjson
 ```
@@ -581,7 +581,7 @@ Malformed records fail fast by default and report the line number.
 Use `log` / `--log` for logs: JSON Lines and the common text formats. Each
 record is written as it is read:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich log app.jsonl
 tail -f app.jsonl | rich log -
 ```
@@ -611,7 +611,7 @@ does, and is written indented under it; before any record it is written as
 text. Blank lines are skipped, and colour codes are taken out before a line
 is read.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich log app.log --parser logfmt
 ```
 
@@ -619,7 +619,7 @@ rich log app.log --parser logfmt
 ones above it (trace, debug, info, warn, error, fatal); give several with
 commas or by repeating it. A record keeps its continuation lines.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich log app.jsonl --level warn+
 rich log app.jsonl --level debug,error
 ```
@@ -644,7 +644,7 @@ value that is a number too), times as instants whatever their offsets
 (`time>=2026-10-18T10:00:00Z`), and anything else as text. A missing field
 fails every test but `!=`, `!~` and `!FIELD`. The value may be quoted.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich log app.jsonl --where 'service=api' --where 'latency_ms>500'
 rich log app.jsonl --where 'msg~(?i)timeout'
 ```
@@ -665,7 +665,7 @@ times aside) once, with `× N (last TIME)` under it. It is on by default with
 `--follow` (where, on a terminal, the count grows in place) and in the live
 view; `--no-collapse` turns it off there.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich log app.jsonl --collapse
 ```
 
@@ -678,7 +678,7 @@ It ends with a summary: the records shown, counts by level, and the groups
 with errors. With `--follow`, a header is written whenever the group
 changes.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich log app.jsonl --group trace
 ```
 
@@ -699,7 +699,7 @@ line, instead of on its line. `--time relative` shows each time since the
 first record shown (`+1.250s`), `--time none` leaves times out, and `--time
 absolute`, the default, shows them as written.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich log app.jsonl --fields --time relative
 ```
 
@@ -729,7 +729,7 @@ values and continuation lines, such as an OSC 52 clipboard write in a JSON
 field, are shown as inert symbols, in `--output jsonl` too. `--no-sanitize`
 lets them through.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich log app.jsonl --redact --redact-pattern 'card=\d+'
 ```
 
@@ -752,7 +752,7 @@ rich log -i -f app.jsonl
 If the delimiter cannot be determined and the file is not `.csv`/`.tsv`, `rich`
 reports it and **exits non-zero** rather than inventing a one-column table:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --csv notes.txt
 ```
 
@@ -765,7 +765,7 @@ rich: Could not determine delimiter
 `rich inspect` (or `--inspect`) reads JSON, YAML, TOML, XML, INI or dotenv from a
 file, a URL or stdin and draws it as a tree. It is not in upstream rich-cli.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich inspect deploy.yaml
 ```
 
@@ -812,7 +812,7 @@ video. With `--inspect` they take a JSONPath; for text, `--print` and
 `--syntax` (including files shown as syntax by their extension, such as `.log`)
 they take a regular expression, matched against each line.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich app.log --filter 'WARN|ERROR' --highlight ERROR
 rich inspect deploy.yaml --filter '$..port' --highlight '$.servers[1]'
 ```
@@ -915,7 +915,7 @@ anywhere the footer says so.
 
 ## Render Markdown, and keep the links readable
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich notes.md
 ```
 
@@ -930,13 +930,13 @@ keeps them. Pass `-y/--hyperlinks` to emit real clickable
 [OSC 8](https://gist.github.com/egmontkob/eb114294efbcd5adb1944c9f3cb5feda)
 hyperlinks instead — useful in a terminal, lossy in a pipe:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --hyperlinks notes.md
 ```
 
 ## Frame and position the output
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --panel rounded --panel-style dim --print "Ready"
 ```
 
@@ -964,7 +964,7 @@ case (`heavy_head`, `minimal`, `simple`, `markdown`, …): the names
 
 ## Export what you rendered
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich report.md --export-html report.html
 rich report.md --export-svg report.svg
 ```
@@ -997,7 +997,7 @@ call is `rich_record::render::png::segments_png`.
 
 ## Compare two images
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --diff before.png after.png --threshold 2
 ```
 
@@ -1010,7 +1010,7 @@ differs — which makes it usable as a CI gate. See
 When the two files are not both images, `rich diff` compares them as text. It
 is not in upstream rich-cli.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich diff old.rs new.rs
 ```
 
@@ -1099,7 +1099,7 @@ to stderr. Controls in benchmark names are shown as inert text.
 colours and styles, cursor and screen control, OSC 8 hyperlinks, window titles
 and raw escapes. Then it prints the text a terminal would show.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 ls --color=always | rich ansi explain
 rich ansi explain capture.txt --escapes-only
 ```
@@ -1122,7 +1122,7 @@ they are only ever printed as visible text.
 
 ## Render a still image
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --image photo.png --width 60
 rich image photo.png --image-mode blocks --height 20
 ```
@@ -1137,7 +1137,7 @@ comparison report to fall back on. See
 
 ### Fit, crop and transparent backgrounds
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image photo.png --image-mode blocks --width 44 --height 12 --image-fit contain
 rich image photo.png --image-mode blocks --width 44 --height 12 --image-fit cover --image-anchor top
 rich image logo.png --image-fit contain --width 44 --height 12 --image-background '#542080'
@@ -1162,7 +1162,7 @@ terminal. `--width`, the terminal width, `--image-max-width` and
 `--image-max-height` only shrink it, keeping the aspect ratio. Set
 `image_fit = "native"` in [your config](#config-profiles) to make it the default.
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image icon.png --image-mode blocks --image-fit native
 ```
 
@@ -1207,7 +1207,7 @@ let art = ImageArt::from_path("logo.png")?
 
 ### Quadrant blocks
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image logo.png --image-mode quadrants --width 60
 ```
 
@@ -1278,7 +1278,7 @@ The reusable builders live in art; `ImageOptions` remains source-compatible.
 
 ### Brightness, contrast and gamma
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image photo.png --image-brightness 1.2 --image-contrast 1.4 --image-gamma 0.8
 ```
 
@@ -1331,7 +1331,7 @@ terminal clear codes. See [watch recipes](recipes.md#watch-json-while-editing).
 `rich chart` draws numbers from a CSV, TSV, JSON or JSON Lines file, a URL
 or stdin (0.0.15):
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich chart sales.csv                                  # every numeric column as a line
 rich chart sales.csv --kind bar --x month --y api     # a bar per row, labelled
 seq 1 20 | rich chart --kind spark                    # numbers piped in
@@ -1783,7 +1783,7 @@ click on a group's title narrows to it.
 `rich` writes rendered output to stdout and diagnostics to stderr, so the two
 can be separated:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --csv data.csv > table.txt 2> errors.txt
 ```
 
@@ -1816,7 +1816,7 @@ fi
 For automation, `--report json` emits a result/error envelope on stderr while
 leaving stdout for rendered content:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --report json jsonl events.ndjson > rendered.txt 2> report.json
 ```
 
@@ -1978,7 +1978,7 @@ wrong with it, and `config show` lists the rules in effect.
 
 Inspect and validate without rendering:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich config validate --config rich.toml --profile ci
 rich config show --config rich.toml --profile ci --width 64
 ```
@@ -1992,7 +1992,7 @@ are recorded in the [0.0.11 release notes](releases/0.0.11.md).
 
 To see where each value comes from, and what it overrides:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich config explain --config rich.toml --profile ci --width 64
 rich config explain width --profile ci
 rich config reference
@@ -2035,7 +2035,7 @@ warning = "bold yellow"
 "markdown.h1" = "bold magenta"
 ```
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --config rich.toml --theme night --print '[notice]Ready[/]'
 rich --config rich.toml --theme night --theme-style 'notice=bold green' --print '[notice]Ready[/]'
 ```
@@ -2061,7 +2061,7 @@ notice = bold cyan
 repr.number = underline magenta
 ```
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --theme-file night.ini --print '[notice]Ready[/] in 42 ms'
 ```
 
@@ -2210,7 +2210,7 @@ in `rich_ext::redact`; see
 
 ## Inspect your environment
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich doctor
 rich doctor --report json > doctor.json
 rich doctor --config rich.toml --profile ci
@@ -2433,7 +2433,7 @@ only tapes you trust.
 
 ## Shell completions and generated docs
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich completions bash > ~/.local/share/bash-completion/completions/rich
 rich completions zsh > "${fpath[1]}/_rich"
 rich docs man --output man/     # rich.1 plus one page per subcommand
@@ -2586,7 +2586,7 @@ and `batch_name_template`; explicit flags override configuration.
 
 ### Still-image transforms and exports (0.0.9)
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich image photo.png --image-mode blocks --image-rotate 90 \
   --image-flip-horizontal --image-grayscale --image-color ansi256 \
   --image-dither bayer4x4 --export-html photo.html --export-svg photo.svg

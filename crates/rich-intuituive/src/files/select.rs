@@ -72,7 +72,7 @@ pub fn selection(miller: Miller) -> MultiSelect<PathBuf> {
         }
     });
     if let Some(set) = tabs.get_untracked() {
-        selection.scoped(&set);
+        let _ = selection.scoped(&set);
     }
     miller.selection.replace(Some(selection));
     selection

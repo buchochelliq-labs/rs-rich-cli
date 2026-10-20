@@ -84,6 +84,7 @@ const MARKING: [&str; 3] = ["mark", "mark-up", "mark-all"];
 
 /// A fuzzy single choice among items. Enter returns the focused item's
 /// value; Escape cancels.
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct Select<T> {
     prompt: String,
     items: Vec<Item<T>>,
@@ -1169,6 +1170,7 @@ impl<T: Clone> Component for Select<T> {
 /// A fuzzy multiple choice: Tab marks items (Shift+Tab marks and moves up,
 /// Ctrl+A marks every match), Enter returns the marked items in list
 /// order, or the focused one when none is marked.
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct MultiSelect<T>(Select<T>);
 
 impl<T> MultiSelect<T> {

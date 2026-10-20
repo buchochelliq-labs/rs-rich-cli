@@ -202,10 +202,11 @@ fn drawable(c: char) -> bool {
 fn printable(graph: &Graph) -> Cow<'_, Graph> {
     let clean = |text: &str| text.chars().all(drawable);
     let dirty = graph.nodes().iter().any(|node| !clean(&node.label))
-        || graph
-            .edges()
-            .iter()
-            .any(|edge| edge.label.as_deref().is_some_and(|label| !clean(label)))
+        || graph.edges().iter().any(|edge| {
+            [&edge.label, &edge.start_label, &edge.end_label]
+                .into_iter()
+                .any(|label| label.as_deref().is_some_and(|label| !clean(label)))
+        })
         || graph
             .clusters()
             .iter()
@@ -240,8 +241,9 @@ struct EdgeGeo {
     /// Heads at the first and last point.
     start: Head,
     end: Head,
-    /// Text, its leftmost column and its row.
-    label: Option<(String, i64, i64)>,
+    /// Texts (the label, and those at the ends), each with its leftmost
+    /// column and its row.
+    labels: Vec<(String, i64, i64)>,
 }
 
 /// A cluster's frame: its outline, and the label for its top border.
@@ -288,7 +290,7 @@ impl Geometry {
             for &(x, y) in &edge.points {
                 take(x, y, x, y);
             }
-            if let Some((text, x, y)) = &edge.label {
+            for (text, x, y) in &edge.labels {
                 take(*x, *y, x + cell_len(text) as i64 - 1, *y);
             }
         }
@@ -332,7 +334,7 @@ impl Geometry {
                     point.1 = mirror(point.1);
                 }
             }
-            if let Some((text, x, y)) = &mut edge.label {
+            for (text, x, y) in &mut edge.labels {
                 if horizontal {
                     *x = mirror(*x + cell_len(text) as i64 - 1);
                 } else {
@@ -368,7 +370,7 @@ impl Geometry {
                 point.0 -= min_x;
                 point.1 -= min_y;
             }
-            if let Some((_, x, y)) = &mut edge.label {
+            for (_, x, y) in &mut edge.labels {
                 *x -= min_x;
                 *y -= min_y;
             }
@@ -750,6 +752,13 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
     let mut label_left = vec![0i64; pieces.len()];
     let mut gap_tracks = vec![0i64; ranks];
     let mut gap_labels = vec![0i64; ranks];
+    // Before the tracks, room for the texts where pieces leave a node
+    // (`gap_starts`); after the labels, for those where they reach one
+    // (`gap_ends`). Top-down, each text's column and row in its region.
+    let mut gap_starts = vec![0i64; ranks];
+    let mut gap_ends = vec![0i64; ranks];
+    let mut start_at = vec![(0i64, 0i64); pieces.len()];
+    let mut end_at = vec![(0i64, 0i64); pieces.len()];
     let label_of = |p: usize| -> Option<String> {
         let piece = &pieces[p];
         let edge = &graph.edges()[piece.edge];
@@ -760,6 +769,26 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
             }
             _ => None,
         }
+    };
+    // The text at a piece's upper end (`at_start`) or lower end, where that
+    // end is a node: the edge's own start or end text, swapped when the
+    // edge was reversed to break a cycle.
+    let end_text = |p: usize, at_start: bool| -> Option<String> {
+        let piece = &pieces[p];
+        let index = piece.edge;
+        let edge = &graph.edges()[index];
+        let vertex = if at_start { piece.from } else { piece.to };
+        if edge.stroke == Stroke::Invisible || vertices[vertex].node.is_none() {
+            return None;
+        }
+        let text = if at_start != reversed[index] {
+            &edge.start_label
+        } else {
+            &edge.end_label
+        };
+        text.as_deref()
+            .filter(|text| !text.is_empty())
+            .map(edge_text)
     };
     // Pieces by the rank they leave, in piece order.
     let mut leaving_rank: Vec<Vec<usize>> = vec![Vec::new(); ranks];
@@ -772,14 +801,69 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
             graph.edges()[pieces[p].edge].stroke == Stroke::Invisible
         });
         if horizontal {
-            // Labels sit on each piece's final run, one per row.
+            // Labels sit on each piece's final run, one per row; the texts at
+            // its ends on its first and final runs.
             gap_labels[r] = here
                 .iter()
                 .filter_map(|&p| label_of(p))
                 .map(|text| cell_len(&text) as i64 + 2)
                 .max()
                 .unwrap_or(0);
+            let room = |at_start: bool| {
+                here.iter()
+                    .filter_map(|&p| end_text(p, at_start))
+                    .map(|text| cell_len(&text) as i64 + 1)
+                    .max()
+                    .unwrap_or(0)
+            };
+            gap_starts[r] = room(true);
+            gap_ends[r] = room(false);
         } else {
+            // The texts at the ends sit beside the line, right of it where
+            // that is clear of other lines, each on its own row of its region.
+            for (at_start, ports, at, rows) in [
+                (true, &port_from, &mut start_at, &mut gap_starts[r]),
+                (false, &port_to, &mut end_at, &mut gap_ends[r]),
+            ] {
+                let entries: Vec<i64> = here
+                    .iter()
+                    .filter(|&&p| graph.edges()[pieces[p].edge].stroke != Stroke::Invisible)
+                    .map(|&p| ports[p])
+                    .collect();
+                let mut ends: Vec<i64> = Vec::new();
+                let mut placed: Vec<(usize, i64, i64)> = here
+                    .iter()
+                    .filter_map(|&p| {
+                        let text = end_text(p, at_start)?;
+                        let width = cell_len(&text) as i64;
+                        let own = ports[p];
+                        let clear = |left: i64| {
+                            entries
+                                .iter()
+                                .all(|&x| x == own || x < left - 1 || x > left + width)
+                        };
+                        let left = [own + 2, own - 1 - width, own + 1, own - width]
+                            .into_iter()
+                            .find(|&left| clear(left))
+                            .unwrap_or(own + 2);
+                        at[p].0 = left;
+                        Some((p, left - 1, left + width))
+                    })
+                    .collect();
+                placed.sort_by_key(|&(_, lo, _)| lo);
+                for (p, lo, hi) in placed {
+                    let slot = match ends.iter().position(|&end| end < lo) {
+                        Some(slot) => slot,
+                        None => {
+                            ends.push(i64::MIN);
+                            ends.len() - 1
+                        }
+                    };
+                    ends[slot] = hi;
+                    at[p].1 = slot as i64;
+                }
+                *rows = ends.len() as i64;
+            }
             // Every piece runs straight along its entry position through the
             // label rows. A label sits on its own line, or beside it when that
             // would cover another piece's line.
@@ -861,8 +945,10 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
             layer_start[r] = layer_start[r - 1]
                 + thickness[r - 1]
                 + after[r - 1]
+                + gap_starts[r - 1]
                 + gap_tracks[r - 1]
                 + gap_labels[r - 1]
+                + gap_ends[r - 1]
                 + 2
                 + before[r];
         }
@@ -915,7 +1001,7 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
             continue;
         }
         let mut points: Vec<(i64, i64)> = Vec::new();
-        let mut label = None;
+        let mut labels = Vec::new();
         for &p in &chains[index] {
             let piece = &pieces[p];
             let (from, to) = (&vertices[piece.from], &vertices[piece.to]);
@@ -928,22 +1014,43 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
             let end_along = layer_start[to.rank];
             let gap_start = layer_start[r] + thickness[r] + after[r];
             let (a, b) = (port_from[p], port_to[p]);
+            // The regions after the box: start texts, tracks, labels, end
+            // texts, then the cell before the next rank's boxes.
+            let tracks_start = gap_start + 1 + gap_starts[r];
+            let labels_start = tracks_start + gap_tracks[r];
+            let ends_start = labels_start + gap_labels[r];
             points.push(to_xy(a, start_along));
             if let Some(t) = track[p] {
-                let along = gap_start + 1 + t;
+                let along = tracks_start + t;
                 points.push(to_xy(a, along));
                 points.push(to_xy(b, along));
             }
             points.push(to_xy(b, end_along));
             if let Some(text) = label_of(p) {
                 let width = cell_len(&text) as i64;
-                label = Some(if horizontal {
-                    let region = gap_start + 1 + gap_tracks[r];
-                    let left = region + (gap_labels[r] - width) / 2;
+                labels.push(if horizontal {
+                    let left = labels_start + (gap_labels[r] - width) / 2;
                     (text, left, b)
                 } else {
-                    let row = gap_start + 1 + gap_tracks[r] + label_slot[p];
+                    let row = labels_start + label_slot[p];
                     (text, label_left[p], row)
+                });
+            }
+            if let Some(text) = end_text(p, true) {
+                labels.push(if horizontal {
+                    (text, gap_start + 1, a)
+                } else {
+                    let (left, slot) = start_at[p];
+                    (text, left, gap_start + 1 + slot)
+                });
+            }
+            if let Some(text) = end_text(p, false) {
+                labels.push(if horizontal {
+                    let left = ends_start + gap_ends[r] - cell_len(&text) as i64;
+                    (text, left, b)
+                } else {
+                    let (left, slot) = end_at[p];
+                    (text, left, ends_start + slot)
                 });
             }
         }
@@ -958,7 +1065,7 @@ fn layout(graph: &Graph, horizontal: bool) -> Result<Geometry, String> {
             stroke: edge.stroke,
             start,
             end,
-            label,
+            labels,
         });
     }
     if let (Some(grouping), Some(across)) = (&grouping, &across) {
@@ -1620,7 +1727,7 @@ fn render(graph: &Graph, geometry: &Geometry, ascii: bool, width: i64, height: i
     }
 
     for edge in &geometry.edges {
-        if let Some((text, x, y)) = &edge.label {
+        for (text, x, y) in &edge.labels {
             canvas.text(*x, *y, text);
         }
     }

@@ -610,11 +610,13 @@ impl TemplateLinks {
         }
     }
     /// The template for whole-file links.
+    #[must_use]
     pub fn file_template(mut self, template: impl Into<String>) -> Self {
         self.file = Some(template.into());
         self
     }
     /// A value for `{name}` in the templates.
+    #[must_use]
     pub fn var(mut self, name: impl Into<String>, value: impl Into<String>) -> Self {
         self.vars.insert(name.into(), value.into());
         self
@@ -716,6 +718,7 @@ impl LinkProvider for Hyperlinker {
 /// A review-style rendering of a [`Patch`]: a file tree with per-file
 /// counts, then each file's header and highlighted hunks, with annotations
 /// under their lines and a changed-line summary at the end.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct PatchView {
     patch: Patch,
     annotations: Vec<Annotation>,

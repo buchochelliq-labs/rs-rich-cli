@@ -13,6 +13,7 @@ type OnChange<K> = Rc<dyn Fn(Option<&K>)>;
 type OnLoaded<K, T> = Rc<dyn Fn(&K, &T)>;
 
 /// How a [`preview_of_with`] pane behaves, and the signal it shares.
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct PreviewOfOptions<K: 'static, T: 'static> {
     state: Option<Signal<T>>,
     clear_after: Option<Duration>,
@@ -162,7 +163,7 @@ where
         },
     );
     if let Some(delay) = clear_after {
-        loaded.stale_after(delay);
+        let _ = loaded.stale_after(delay);
     }
     on_write_ref(loaded.state, move |load, _| match load {
         Load::Ready(Some((key, value))) => {

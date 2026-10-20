@@ -1,0 +1,27 @@
+Vendored @bjorn3/browser_wasi_shim 0.4.2
+========================================
+
+The docs playground's terminal runs the `rich` CLI, built for wasm32-wasip1,
+under this WASI shim, in a Web Worker. These files are copied unchanged from
+the npm package's `dist/` directory (the ES module build); the package's
+`tsconfig.tsbuildinfo` is left out.
+
+  Source:    https://registry.npmjs.org/@bjorn3/browser_wasi_shim/-/browser_wasi_shim-0.4.2.tgz
+  Integrity: sha512-/iHkCVUG3VbcbmEHn5iIUpIrh7a7WPiwZ3sHy4HZKZzBdSadwdddYDZAII2zBvQYV0Lfi8naZngPCN7WPHI/hA==
+             (the registry's dist.integrity, checked when the files were copied)
+  Licence:   MIT OR Apache-2.0 (LICENSE-MIT and LICENSE-APACHE, beside this file)
+  Upstream:  https://github.com/bjorn3/browser_wasi_shim
+
+Each file's SHA-256 is pinned in scripts/check_playground_blocks.mjs, which
+fails when a file changes without the list changing with it.
+
+The playground does not patch these files. 0.4.2's `args_sizes_get` counts
+each argument in UTF-16 units instead of UTF-8 bytes, so an argument with
+non-ASCII text would overrun its buffer; docs/assets/rich-shell/wasi.js
+replaces that one import on its own WASI instance.
+
+Updating: download the new tarball, check it against the registry's
+dist.integrity, copy dist/*.js (and the licences) over these, update the
+hashes in the check and the version here and in docs/design/docs-playground.md,
+and run the checks (scripts/check_playground_blocks.mjs and
+scripts/check_playground_page.mjs).

@@ -26,6 +26,10 @@
 //! turn default features off and pick a bundle (`bundle-web`, `bundle-system`,
 //! `bundle-backend`, `bundle-web-extra`).
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 use std::ops::Range;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};

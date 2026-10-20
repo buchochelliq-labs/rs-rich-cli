@@ -192,6 +192,18 @@ struct MarkdownOptions {
 }
 
 impl Markdown {
+    /// The Markdown source this was parsed from (upstream `Markdown.markup`).
+    /// Not upstream as a method; it changes nothing.
+    ///
+    /// ```
+    /// use rich::markdown::Markdown;
+    ///
+    /// assert_eq!(Markdown::new("# Title\n").markup(), "# Title\n");
+    /// ```
+    pub fn markup(&self) -> &str {
+        &self.source
+    }
+
     /// Parse CommonMark `source` into renderable blocks.
     ///
     /// Hyperlinks are on, matching `rich.markdown.Markdown(hyperlinks=True)`.
@@ -269,7 +281,9 @@ impl Markdown {
 
     /// Highlight code blocks, and inline code when an
     /// [`inline_code_lexer`](Self::inline_code_lexer) is set, with `highlighter`
-    /// instead of the default [`SyntectHighlighter`](crate::syntax::SyntectHighlighter).
+    /// instead of the console's default or the built-in engine (syntect with
+    /// the `syntax` feature; without it, code blocks are plain unless a
+    /// highlighter is given here or on the console, see [`Syntax`]).
     /// Theme names are then the highlighter's own.
     pub fn highlighter(mut self, highlighter: Arc<dyn CodeHighlighter>) -> Self {
         self.options.highlighter = Some(highlighter);
@@ -2037,6 +2051,8 @@ mod tests {
         console.render_to_string(markdown)
     }
 
+    // Asserts syntect's colours or its themes' padded background.
+    #[cfg(feature = "syntax")]
     #[test]
     fn code_theme_changes_the_code_block_colours() {
         let source = "```rust\nfn main() {}\n```";
@@ -2145,6 +2161,8 @@ mod tests {
         assert!(inline.contains("\x1b[4mgo()"), "{inline:?}");
     }
 
+    // Asserts syntect's colours or its themes' padded background.
+    #[cfg(feature = "syntax")]
     #[test]
     fn inline_code_lexer_highlights_instead_of_the_code_style() {
         let source = "Call `fn main() {}` now.";
@@ -2246,6 +2264,8 @@ mod tests {
         assert!(!out.contains("id="), "we omit the random link id");
     }
 
+    // Asserts syntect's colours or its themes' padded background.
+    #[cfg(feature = "syntax")]
     #[test]
     fn fenced_code_block_is_highlighted() {
         // Functional (not byte-parity): the fenced code renders via Syntax, so

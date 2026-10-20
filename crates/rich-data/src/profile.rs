@@ -356,6 +356,7 @@ impl Profile {
     }
 
     /// Name what was profiled, for the heading.
+    #[must_use]
     pub fn with_name(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
@@ -449,6 +450,7 @@ impl Profile {
     /// let out = console.render_export(&profile.to_table());
     /// assert!(out.contains("\x1b[1;31mb"), "{out:?}");
     /// ```
+    #[must_use]
     pub fn style_rules(mut self, rules: StyleRules) -> Self {
         self.rules = Rules(rules);
         self

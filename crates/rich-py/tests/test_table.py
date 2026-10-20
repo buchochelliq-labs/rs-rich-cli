@@ -182,3 +182,90 @@ def test_markup_off_leaves_headers_and_titles_literal():
     table = Table("[b]h\\", title="[i]t")
     expected = "  [i]t   \n┏━━━━━━━┓\n┃ [b]h\\ ┃\n┡━━━━━━━┩\n└───────┘\n"
     assert render(table, width=30, markup=False) == expected
+
+
+# ---------------------------------------------------------------------------
+# Rich's `columns` and `rows`, read back as Rich 15.0.0 holds them
+
+
+def described(module, highlight=False):
+    """A table built the same way with `module` (rich.table or rs_rich.table),
+    described through Rich's attributes."""
+    from importlib import import_module
+
+    text = import_module(module.replace(".table", ".text"))
+    style = import_module(module.replace(".table", ".style"))
+    table = import_module(module).Table("first", title="T", highlight=highlight)
+    table.add_row("a")
+    table.add_column("second", "sum", header_style="bold", style=style.Style(italic=True), justify="right",
+                     vertical="middle", overflow="fold", width=8, min_width=2, max_width=9, ratio=2, no_wrap=True)
+    table.add_row(text.Text("t"), None, style="red", end_section=True)
+    table.add_row("x", "y", "z")
+    table.add_section()
+
+    def value(item):
+        return ("Text", item.plain) if isinstance(item, text.Text) else item
+
+    columns = [
+        {
+            "header": value(column.header),
+            "footer": value(column.footer),
+            "styles": [str(column.header_style), str(column.footer_style), str(column.style)],
+            "layout": [column.justify, column.vertical, column.overflow, column.no_wrap, column.highlight],
+            "sizes": [column.width, column.min_width, column.max_width, column.ratio, column.flexible],
+            "cells": [value(cell) for cell in column.cells],
+        }
+        for column in table.columns
+    ]
+    rows = [(str(row.style) if row.style is not None else None, row.end_section) for row in table.rows]
+    return columns, rows
+
+
+@pytest.mark.parametrize("highlight", [False, True])
+def test_columns_and_rows_read_as_rich_holds_them(highlight):
+    pytest.importorskip("rich")
+    assert described("rs_rich.table", highlight) == described("rich.table", highlight)
+
+
+def test_columns_and_rows_are_copies():
+    table = Table("a")
+    table.add_row("1")
+    column = table.columns[0]
+    with pytest.raises(AttributeError):
+        column.justify = "right"
+    assert repr(column) == "Column(header='a', justify='left', index=0)"
+    assert repr(table.rows[0]) == "Row(style=None, end_section=False)"
+
+
+# ---------------------------------------------------------------------------
+# Plain-text cells (rich_ext::table::PlainRows; not in Rich)
+
+
+def test_plain_rows_and_columns_are_never_markup():
+    table = Table(show_footer=True)
+    table.add_plain_column("[n]", "[sum]", justify="right")
+    table.add_plain_rows([["[1]"], ["[/]"]])
+    assert render(table, width=20) == (
+        "┏━━━━━━━┓\n┃   [n] ┃\n┡━━━━━━━┩\n│   [1] │\n│   [/] │\n├───────┤\n│ [sum] │\n└───────┘\n"
+    )
+    plain = Table("h")
+    plain.add_plain_row("[bold]x[/]", style="dim", end_section=True)
+    plain.add_plain_row(None, 3, ":smile:")
+    assert render(plain, width=40).splitlines()[3] == "│ [bold]x[/] │   │         │"
+    assert [cell.plain for cell in plain.columns[1].cells] == ["", "3"]
+    assert plain.rows[0].style == "dim" and plain.rows[0].end_section
+    assert ":smile:" in render(plain, width=40)
+
+
+def test_plain_rows_take_rows_of_cells():
+    table = Table("a")
+    with pytest.raises(TypeError, match="iterable of rows"):
+        table.add_plain_rows(["ab"])
+    assert table.row_count == 0
+    table.add_plain_rows(iter([("1",), ["2"]]))
+    assert table.row_count == 2
+
+
+def test_plain_columns_check_their_sizes():
+    with pytest.raises(ValueError, match="width must be at most"):
+        Table().add_plain_column("a", width=10**9)

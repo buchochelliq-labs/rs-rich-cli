@@ -268,6 +268,7 @@ impl Runtime {
     }
 
     /// Start a thread with `start` once the app runs, or now if it does.
+    #[cfg_attr(target_arch = "wasm32", allow(dead_code))]
     pub(crate) fn start_thread(&self, start: StartThread) {
         let mut threads = self.threads.borrow_mut();
         match threads.as_mut() {

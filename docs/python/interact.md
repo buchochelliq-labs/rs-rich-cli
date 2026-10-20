@@ -280,10 +280,11 @@ yes
 ## Form
 
 `Form(title)` asks several named fields together; `text`, `masked`, `input`
-(a configured `Input`), `choice` and `toggle` add fields and return the
-form. Tab and the arrows move; Enter moves on and, on the last field,
-submits once every field validates. The answer is a `dict`: `str` for text
-and choices, `bool` for toggles.
+(a configured `Input`), `choice`, `multi`, `toggle` and `file` add fields
+and return the form. Tab and the arrows move; Enter moves on and, on the
+last field, submits once every field validates. The answer is a `dict`:
+`str` for text and choices, `bool` for toggles, a `list` of `str` for
+multi-selects and a `pathlib.Path` for files.
 
 ```python
 from rs_rich.interact import Form, Script
@@ -306,6 +307,30 @@ print(record.last_frame)
 ```
 
 ![A form with its three answered fields](media/interact-form.svg)
+
+`multi(name, label, options, *, chosen=[], limit=None)` lets any number of
+options be chosen (Left and Right move between them, Space or `x` chooses
+one; `limit` caps how many), answering them in the options' order.
+`file(name, label, picker)` takes a `FilePicker`, whose root, mode,
+extensions and jail apply: Space opens it under the field, picking closes
+it, and with nothing picked the answer is the picker's `default` (the field
+fails without one).
+
+```python
+import pathlib
+
+from rs_rich.interact import FilePicker, Form
+
+form = (Form("Release")
+        .multi("targets", "Targets", ["linux", "macos", "windows"], chosen=["linux"])
+        .file("notes", "Notes", FilePicker(".", default="CHANGELOG.md")))
+answers = form.headless("right space enter enter").value
+print(answers["targets"], answers["notes"], isinstance(answers["notes"], pathlib.Path))
+```
+
+```text
+['linux', 'macos'] CHANGELOG.md True
+```
 
 ## Pager
 

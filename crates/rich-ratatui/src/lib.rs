@@ -83,6 +83,10 @@
 //! |---|---|---|
 //! | `interact` | no | `RatatuiComponent`, through `rs-rich-interact` (and crossterm) |
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 pub mod buffer;
 #[cfg(feature = "interact")]
 mod interact;

@@ -140,6 +140,7 @@ impl std::error::Error for QrError {}
 /// assert_eq!(tiny.render_export(&code), "QR code needs 27 columns\n");
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct QrCode {
     modules: Vec<bool>,
     size: usize,

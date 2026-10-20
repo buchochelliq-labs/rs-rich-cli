@@ -406,6 +406,7 @@ impl TimingsReport {
 
     /// Show the `limit` slowest units ([`DEFAULT_LIMIT`] by default); the
     /// rest are counted underneath.
+    #[must_use]
     pub fn limit(mut self, limit: usize) -> Self {
         self.limit = limit.max(1);
         self

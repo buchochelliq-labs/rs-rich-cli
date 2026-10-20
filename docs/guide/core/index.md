@@ -1,4 +1,4 @@
-# The core library
+# ![](../../assets/rs-rich/core.svg){ .rs-icon } The core library
 
 `rs-rich` (imported as `rich`) is the core of the project: a module-for-module
 port of Python [`rich`](https://github.com/Textualize/rich). Everything that
@@ -109,9 +109,20 @@ cargo run -p rs-rich --example guide_tables -- --svg out # write the screenshots
 Each screenshot sits under the snippet that drew it. The first table on
 the [Tables](tables.md) page, for instance:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_tables.rs:basic"
 ```
+
+```text { .rich-playground data-kind="table" data-title="Star Wars Movies" data-caption="Box office, USD" data-justify=",,right" data-width="60" }
+Released,Title,Box Office
+"Dec 20, 2019",The Rise of Skywalker,"$952,110,690"
+"May 25, 2018",Solo,"$393,151,347"
+"Dec 15, 2017",The Last Jedi,"$1,332,539,889"
+```
+
+</div>
 
 ![A table with a title, a caption and a right-justified column](../../media/guide/guide_tables-basic.svg)
 

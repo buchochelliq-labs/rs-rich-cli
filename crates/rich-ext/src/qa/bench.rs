@@ -127,14 +127,17 @@ impl Bench {
             max_samples: 10_000,
         }
     }
+    #[must_use]
     pub fn warmup(mut self, d: Duration) -> Self {
         self.warmup = d;
         self
     }
+    #[must_use]
     pub fn target_time(mut self, d: Duration) -> Self {
         self.target = d;
         self
     }
+    #[must_use]
     pub fn samples(mut self, min: usize, max: usize) -> Self {
         self.min_samples = min.max(1);
         self.max_samples = max.max(self.min_samples);
@@ -217,6 +220,7 @@ impl BenchRun {
             measurements,
         }
     }
+    #[must_use]
     pub fn host(mut self, host: impl Into<String>) -> Self {
         self.host = Some(host.into());
         self
@@ -530,6 +534,7 @@ fn spread(m: &Measurement) -> [f64; 4] {
 /// A [`Comparison`] as a table: a change column coloured by verdict, a
 /// sparkline of min/median/p95/max for baseline then candidate, and a
 /// summary line.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct ComparisonView<'a> {
     comparison: &'a Comparison,
     ascii: Option<bool>,

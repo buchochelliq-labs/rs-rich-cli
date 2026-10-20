@@ -88,6 +88,7 @@ pub enum Shape {
 
 /// A node.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is laid out or rendered"]
 pub struct Node {
     /// What edges refer to it by.
     pub id: String,
@@ -152,6 +153,12 @@ pub struct Edge {
     pub to: usize,
     /// Text drawn beside the edge, on one line.
     pub label: Option<String>,
+    /// Text drawn next to the line where it leaves `from` (DOT's
+    /// `taillabel`; an ER diagram's cardinality at that end), on one line.
+    pub start_label: Option<String>,
+    /// Text drawn next to the line where it reaches `to` (DOT's
+    /// `headlabel`), on one line.
+    pub end_label: Option<String>,
     pub stroke: Stroke,
     /// The head at `from`.
     pub start: Head,
@@ -169,6 +176,8 @@ impl Edge {
             from,
             to,
             label: None,
+            start_label: None,
+            end_label: None,
             stroke: Stroke::Solid,
             start: Head::None,
             end: Head::Arrow,
@@ -198,6 +207,7 @@ impl Edge {
 /// assert_eq!(graph.clusters()[1].parent, Some(0));
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is laid out or rendered"]
 pub struct Cluster {
     /// What it is known by (a DOT subgraph's name, `cluster` prefix
     /// included).
@@ -270,6 +280,7 @@ enum Last {
 /// assert_eq!(graph.nodes()[2].label, "cache");
 /// ```
 #[derive(Clone, Debug, Default)]
+#[must_use = "builder methods return a new value; it does nothing until it is laid out or rendered"]
 pub struct Graph {
     direction: Direction,
     nodes: Vec<Node>,
@@ -497,6 +508,27 @@ impl Graph {
         self
     }
 
+    /// Set the text at each end of the edge added last: `start` next to its
+    /// source, `end` next to its target (`None` for none). Does nothing
+    /// before any edge.
+    ///
+    /// ```
+    /// use rich_diagram::{draw, Direction, Graph};
+    ///
+    /// let graph = Graph::new(Direction::LeftRight)
+    ///     .link("customer", "order")
+    ///     .end_labels(Some("1"), Some("0..N"));
+    /// let drawing = draw(&graph, false).unwrap();
+    /// assert_eq!(drawing.lines[1], "│ customer ├─1──0..N─┤ order │");
+    /// ```
+    pub fn end_labels(mut self, start: Option<&str>, end: Option<&str>) -> Self {
+        if let Some(index) = self.last_edge {
+            self.edges[index].start_label = start.map(str::to_string);
+            self.edges[index].end_label = end.map(str::to_string);
+        }
+        self
+    }
+
     /// Make the edge added last span at least `ranks` ranks (1 is the
     /// default; at most [`MAX_EDGE_LENGTH`] is drawn). Does nothing before any
     /// edge.
@@ -559,7 +591,10 @@ impl Graph {
             node.label = f(&node.label);
         }
         for edge in &mut graph.edges {
-            if let Some(label) = &mut edge.label {
+            for label in [&mut edge.label, &mut edge.start_label, &mut edge.end_label]
+                .into_iter()
+                .flatten()
+            {
                 *label = f(label);
             }
         }

@@ -50,6 +50,7 @@ impl Rect {
     }
 
     /// The part of this rectangle inside `other`.
+    #[must_use]
     pub fn intersection(&self, other: Rect) -> Rect {
         let x = self.x.max(other.x);
         let y = self.y.max(other.y);
@@ -59,6 +60,7 @@ impl Rect {
     }
 
     /// This rectangle without a border of `n` cells on each side.
+    #[must_use]
     pub fn inner(&self, n: u16) -> Rect {
         Rect::new(
             self.x.saturating_add(n),
@@ -77,6 +79,7 @@ impl Rect {
     /// assert_eq!(Rect::new(0, 0, 10, 5).inset(1, 2, 0, 3), Rect::new(3, 1, 5, 4));
     /// assert!(Rect::new(0, 0, 4, 4).inset(0, 3, 0, 3).is_empty());
     /// ```
+    #[must_use]
     pub fn inset(&self, top: u16, right: u16, bottom: u16, left: u16) -> Rect {
         let width = self.width.saturating_sub(left.saturating_add(right));
         let height = self.height.saturating_sub(top.saturating_add(bottom));
@@ -98,6 +101,7 @@ impl Rect {
     /// assert_eq!(Rect::new(0, 0, 20, 10).centered(8, 3), Rect::new(6, 3, 8, 3));
     /// assert_eq!(Rect::new(2, 2, 4, 4).centered(10, 2), Rect::new(2, 3, 4, 2));
     /// ```
+    #[must_use]
     pub fn centered(&self, width: u16, height: u16) -> Rect {
         let (width, height) = (width.min(self.width), height.min(self.height));
         Rect::new(
@@ -118,6 +122,7 @@ impl Rect {
     /// assert_eq!(Rect::new(5, 5, 2, 2).offset(3, -2), Rect::new(8, 3, 2, 2));
     /// assert_eq!(Rect::new(1, 1, 2, 2).offset(-4, 0), Rect::new(0, 1, 2, 2));
     /// ```
+    #[must_use]
     pub fn offset(&self, dx: i32, dy: i32) -> Rect {
         let moved = |at: u16, by: i32, size: u16| {
             (i32::from(at) + by).clamp(0, i32::from(u16::MAX - size)) as u16
@@ -140,6 +145,7 @@ impl Rect {
     /// assert_eq!(a.union(Rect::new(5, 1, 1, 4)), Rect::new(0, 0, 6, 5));
     /// assert_eq!(a.union(Rect::default()), a);
     /// ```
+    #[must_use]
     pub fn union(&self, other: Rect) -> Rect {
         if other.is_empty() {
             return *self;
@@ -756,6 +762,7 @@ impl Painter {
     /// Paint an inline region that starts on the cursor's row, moving the
     /// cursor relative to where it is, so the rows above (the shell's
     /// scrollback) are left alone.
+    #[must_use]
     pub fn inline(mut self) -> Painter {
         self.inline = true;
         self

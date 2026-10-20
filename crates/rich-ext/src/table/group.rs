@@ -195,6 +195,7 @@ impl GroupBy {
     }
 
     /// Add an aggregate to each group's summary row.
+    #[must_use]
     pub fn aggregate(mut self, aggregate: Aggregate) -> Self {
         self.aggregates.push(aggregate);
         self
@@ -202,6 +203,7 @@ impl GroupBy {
 
     /// The text in the summary row's first cell, followed by that column's
     /// own aggregate if it has one (`subtotal: 2`). Empty for none.
+    #[must_use]
     pub fn label(mut self, label: impl Into<String>) -> Self {
         self.label = label.into();
         self

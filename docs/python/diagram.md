@@ -27,8 +27,8 @@ same layout draws [Mermaid](mermaid.md) flowcharts.
 Graph(direction="TD")
 Graph.node(id, label=None, *, shape="rect") -> Graph
 Graph.edge(source, target, *, label=None, stroke="solid", start=None, end="arrow",
-           min_length=1) -> Graph
-Graph.link(source, target, *, label=None) -> Graph
+           min_length=1, start_label=None, end_label=None) -> Graph
+Graph.link(source, target, *, label=None, start_label=None, end_label=None) -> Graph
 Diagram(graph, *, ascii=None)
 ```
 
@@ -39,6 +39,9 @@ Diagram(graph, *, ascii=None)
 `thick`, `dotted` and `invisible`; heads `arrow`, `circle`, `cross` or
 `None`. An edge to an id with no node adds one labelled with its id, and
 `node` on an existing id relabels it. `link` is an edge with no heads.
+`start_label` and `end_label` are texts drawn at the edge's ends, beside its
+source and target: an ER diagram's cardinalities, or DOT's `taillabel` and
+`headlabel`.
 
 A `Diagram` copies the graph when it is made. It measures to the width of
 its drawing; given less, it is cropped, never wrapped. `ascii=True` draws
@@ -65,10 +68,23 @@ print("\n".join(diagram.draw_graph(diagram.Graph().edge("a", "b"), ascii=True)))
 
 `Graph.nodes` and `Graph.edges` read the graph back (`DiagramNode`: `id`,
 `label`, `shape`; `DiagramEdge`: `source` and `target` as node indexes,
-`label`, `stroke`, `start`, `end`, `length`). A graph too large to lay out
+`label`, `stroke`, `start`, `end`, `length`, `start_label`, `end_label`). A graph too large to lay out
 (more than 2000 edges or 5000 nodes, checked before any layout work, or a
 layout past its point or cell caps) renders as a one-line note;
 `draw_graph` and `Diagram.drawing()` raise `DiagramLayoutError` instead.
+
+```python
+graph = diagram.Graph("LR").link("customer", "order", start_label="1", end_label="0..N")
+print("\n".join(diagram.draw_graph(graph)))
+print(graph.edges[0].start_label, graph.edges[0].end_label)
+```
+
+```text
+┌──────────┐         ┌───────┐
+│ customer ├─1──0..N─┤ order │
+└──────────┘         └───────┘
+1 0..N
+```
 
 ## DOT
 

@@ -5,9 +5,9 @@ from rs_rich import mermaid
 ```
 
 `rs_rich.mermaid` is the `rs-rich-mermaid` crate from Python. Rich has no
-counterpart. Flowcharts are drawn through the same layout as
+counterpart. Flowcharts and ER diagrams are drawn through the same layout as
 [`rs_rich.diagram`](diagram.md), which also builds graphs in code and reads
-DOT.
+DOT; sequence diagrams are drawn on lifelines.
 
 ## Mermaid
 
@@ -15,12 +15,21 @@ DOT.
 Mermaid(source, *, backend="text", ascii=None, mmdc=None)
 ```
 
-A renderable Mermaid diagram. Flowcharts (`graph` / `flowchart`, in any
-direction, with the common node shapes, edge strokes, heads and labels) are
-drawn as text. Anything the text renderer cannot draw (another diagram type,
-a syntax error, a chart too large to lay out) is shown as its source, in a
-code block, under a one-line note saying why. A diagram wider than the
-console is cropped, with a note.
+A renderable Mermaid diagram. Three kinds are drawn as text:
+
+- flowcharts (`graph` / `flowchart`, in any direction, with the common node
+  shapes, edge strokes, heads and labels);
+- sequence diagrams (`sequenceDiagram`): participants and actors, every
+  arrow, notes, activations, `loop` / `alt` / `opt` / `par` / `critical` /
+  `break` / `rect` blocks, `autonumber` and a title;
+- ER diagrams (`erDiagram`): entities with their attributes and keys, and
+  relationships with their labels and cardinalities (`1`, `0..1`, `0..N`,
+  `1..N`) at each end.
+
+Anything the text renderer cannot draw (another diagram type, a syntax
+error, a diagram too large to lay out) is shown as its source, in a code
+block, under a one-line note saying why. What a drawing simplifies, and a
+diagram wider than the console (which is cropped), get a note under it.
 
 `ascii=True` draws with ASCII only; `None` follows the console.
 
@@ -36,10 +45,19 @@ console.print(Mermaid("graph TD\n  A --> B", ascii=True))
 ![A Mermaid flowchart with a decision, then one drawn in ASCII](media/mermaid-flowchart.svg)
 
 ```python
-console.print(Mermaid("sequenceDiagram\n  Alice->>Bob: Hi"))
+console.print(Mermaid("sequenceDiagram\n  Alice->>+Bob: Hi\n  Bob-->>-Alice: Hello"))
+console.print(Mermaid("erDiagram\n  direction LR\n  CUSTOMER ||--o{ ORDER : places"))
 ```
 
-![A sequence diagram shown as its source under a note](media/mermaid-fallback.svg)
+![A sequence diagram on lifelines, then an ER diagram with cardinalities](media/mermaid-sequence-er.svg)
+
+A class diagram is not drawn as text, so it is shown as its source:
+
+```python
+console.print(Mermaid("classDiagram\n  Animal <|-- Duck"))
+```
+
+![A class diagram shown as its source under a note](media/mermaid-fallback.svg)
 
 ### The mmdc backend
 
@@ -56,19 +74,30 @@ background="white")` says how to run it, and
 
 ## Parsing and drawing
 
-`parse_flowchart(source)` returns a `Flowchart` (`direction`, `nodes`,
-`edges`, `notes`) and `draw_flowchart(chart, ascii=False)` a
-`MermaidDiagram` (`lines`, `width`). Where `Mermaid` shows the source, these
-raise:
+Each kind drawn as text has a parser and a drawing function:
+
+| Kind | Parse | Returns | Draw |
+|---|---|---|---|
+| Flowchart | `parse_flowchart(source)` | `Flowchart` (`direction`, `nodes`, `edges`, `notes`) | `draw_flowchart(chart, ascii=False)` |
+| Sequence | `parse_sequence(source)` | `SequenceDiagram` (`title`, `participants`, `events`, `messages`, `notes`) | `draw_sequence(diagram, ascii=False)` |
+| ER | `parse_er(source)` | `EntityDiagram` (`title`, `direction`, `entities`, `relationships`, `notes`) | `draw_er(diagram, ascii=False)` |
+
+`parse_diagram(source)` picks the parser by the diagram's header, as
+`Mermaid` does, and `draw_diagram(diagram, ascii=False)` draws any of the
+three; under the crate's names they are `mermaid.parse` and `mermaid.draw`.
+`is_sequence(source)` and `is_er(source)` read the header. Each drawing
+function also takes the source, and returns a `MermaidDiagram` (`lines`,
+`width`, and `notes` on what the drawing does not show). Where `Mermaid`
+shows the source, these raise:
 
 - `MermaidParseError`, with `kind` `"empty"`, `"unsupported"` (another
-  diagram type), `"too_large"` (over `MERMAID_MAX_SOURCE` bytes,
+  diagram type; `parse_flowchart` given a sequence or ER diagram names the
+  parser to use), `"too_large"` (over `MERMAID_MAX_SOURCE` bytes,
   `MERMAID_MAX_NODES` nodes or `MERMAID_MAX_EDGES` edges) or `"syntax"`
   (with its `line`);
-- `MermaidLayoutError` when the chart is too large to lay out.
+- `MermaidLayoutError` when the diagram is too large to lay out.
 
-Both derive from `MermaidError`. The same functions are also available under
-the crate's names, `mermaid.parse` and `mermaid.draw`.
+Both derive from `MermaidError`.
 
 ```python
 chart = mermaid.parse_flowchart("graph TD\n  A[Start] -.->|maybe| B((End))")
@@ -94,6 +123,34 @@ FlowchartEdge(source=0, target=1, label='maybe', stroke='dotted', start=None, en
  ( End )
  ╰─────╯
 syntax 2 line 2: an arrow needs a node after it
+```
+
+A sequence diagram's `events` are its statements in order, each with a
+`kind` (`"message"`, `"note"`, `"activate"`, `"deactivate"`, `"start"`,
+`"divider"` or `"end"`); `messages` are the messages alone. An ER diagram's
+relationships carry each end's cardinality by name and as the drawing writes
+it:
+
+```python
+diagram = mermaid.parse("sequenceDiagram\n  actor U as User\n  U->>+API: GET /items\n  API-->>-U: 200")
+print([(p.label, p.kind) for p in diagram.participants])
+print([event.kind for event in diagram.events])
+print(diagram.messages[1])
+er = mermaid.parse("erDiagram\n  CUSTOMER ||--o{ ORDER : places\n  CUSTOMER {\n    string id PK\n  }")
+relationship = er.relationships[0]
+print(relationship.source_cardinality, relationship.target_notation, er.entities[0].attributes[0])
+try:
+    mermaid.parse("pie\n  \"a\": 1")
+except mermaid.MermaidParseError as error:
+    print(error.kind, error)
+```
+
+```text
+[('User', 'actor'), ('API', 'participant')]
+['message', 'activate', 'message', 'deactivate']
+SequenceMessage(source=1, target=0, text='200', line='dotted', start=None, end='arrow', number=None)
+exactly_one 0..N ErAttribute(data_type='string', name='id', keys=['PK'], comment=None)
+unsupported pie chart diagrams are not drawn as text
 ```
 
 ## Markdown fences

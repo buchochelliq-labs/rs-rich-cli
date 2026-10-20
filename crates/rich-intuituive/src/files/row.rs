@@ -173,6 +173,7 @@ pub(crate) type MarkerFn = Rc<dyn Fn(Option<usize>, &Path) -> Marker>;
 
 /// How a [`file_list`] looks and what it reads besides its entries.
 #[derive(Clone, Default)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct FileListOptions {
     pub(crate) icons: bool,
     pub(crate) linemode: Option<Signal<Linemode>>,

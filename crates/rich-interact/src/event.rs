@@ -278,6 +278,7 @@ impl Key {
     /// kitty keyboard protocol): it [`matches`](Key::matches) a binding for
     /// itself only. A [`Session`](crate::Session) with the protocol on
     /// reads keys so, and a test marks them to stand for such a terminal.
+    #[must_use]
     pub const fn exact(self) -> Key {
         Key {
             exact: true,
@@ -295,6 +296,7 @@ impl Key {
     /// as Ctrl+Space, and Ctrl+Shift with a letter as Ctrl and the letter.
     /// Any other key arrives as itself. The result is not
     /// [`exact`](Key::exact).
+    #[must_use]
     pub fn legacy(self) -> Key {
         let mut key = Key {
             exact: false,
@@ -715,6 +717,7 @@ fn csi_key(parameters: &str, last: char) -> Option<Key> {
     Some(Key::with(code, modifiers))
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn modifiers(state: crossterm::event::KeyModifiers) -> Modifiers {
     use crossterm::event::KeyModifiers as M;
     Modifiers {
@@ -724,6 +727,7 @@ fn modifiers(state: crossterm::event::KeyModifiers) -> Modifiers {
     }
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn button(button: crossterm::event::MouseButton) -> Button {
     use crossterm::event::MouseButton as B;
     match button {
@@ -739,6 +743,7 @@ fn button(button: crossterm::event::MouseButton) -> Button {
 /// [`Key::matches`]). With the kitty protocol pushed, use
 /// [`from_crossterm_kitty`]. Repeats arrive as presses, releases as
 /// [`Event::KeyUp`]; focus changes are dropped.
+#[cfg(not(target_arch = "wasm32"))]
 pub fn from_crossterm(event: crossterm::event::Event) -> Option<Event> {
     translate(event, false)
 }
@@ -746,10 +751,12 @@ pub fn from_crossterm(event: crossterm::event::Event) -> Option<Event> {
 /// [`from_crossterm`] for a terminal with the kitty keyboard protocol
 /// pushed (`PushKeyboardEnhancementFlags` with at least
 /// `DISAMBIGUATE_ESCAPE_CODES`): every key is [`exact`](Key::exact).
+#[cfg(not(target_arch = "wasm32"))]
 pub fn from_crossterm_kitty(event: crossterm::event::Event) -> Option<Event> {
     translate(event, true)
 }
 
+#[cfg(not(target_arch = "wasm32"))]
 fn translate(event: crossterm::event::Event, exact: bool) -> Option<Event> {
     use crossterm::event::{
         Event as E, KeyCode as K, KeyEventKind, KeyModifiers as M, MouseEventKind as MK,

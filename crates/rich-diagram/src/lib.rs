@@ -44,6 +44,10 @@
 //! ([`Graph::same_rank`]) puts its nodes side by side where the layered
 //! layout can. What a drawing could not show is in [`Drawing::notes`].
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 mod cluster;
 pub mod diagram;
 pub mod dot;

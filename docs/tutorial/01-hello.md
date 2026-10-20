@@ -1,5 +1,7 @@
 # 1. Your first output
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 use rich::Console;
 
@@ -9,6 +11,13 @@ fn main() {
     console.print_str("[bold]bold[/], [red]red[/], [bold blue]both[/]");
 }
 ```
+
+```text { .rich-playground data-kind="markup" }
+Hello, world
+[bold]bold[/], [red]red[/], [bold blue]both[/]
+```
+
+</div>
 
 `print_str` parses **console markup** — the `[tag]…[/]` syntax — then applies
 highlighting and writes the result.
@@ -37,12 +46,20 @@ myprogram > out.txt    # plain text, no escape codes
 `print_str` is for markup. Anything that implements `Renderable` — a `Table`, a
 `Panel`, a `Markdown` document — goes through `print`:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 use rich::{Console, Rule};
 
 let console = Console::new();
 console.print(&Rule::new("Section"));
 ```
+
+```text { .rich-playground data-kind="rule" }
+Section
+```
+
+</div>
 
 ![Rule](../assets/rule.svg)
 
@@ -51,9 +68,17 @@ console.print(&Rule::new("Section"));
 A `[` only starts a tag when what follows could be one. To be certain a bracket
 is literal, escape it:
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 console.print_str("\[not a tag] but [bold]this is[/]");
 ```
+
+```text { .rich-playground data-kind="markup" }
+\[not a tag] but [bold]this is[/]
+```
+
+</div>
 
 There is also `rich::markup::escape` for text you did not write:
 

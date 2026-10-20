@@ -37,3 +37,7 @@ crates/rich-art/examples/assets/waving_cat.gif
 node_modules/
 # The versioned build writes this beside mkdocs.yml while it runs
 .mkdocs-versioned.yml
+
+# The docs playground's modules: built by playground/build.sh (and CI), never committed.
+/docs/assets/playground/
+/docs/assets/playground-*.tar.gz

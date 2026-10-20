@@ -2,8 +2,8 @@
   "tape": "docs/tapes/jump.tape",
   "tape_fnv1a64": "d7f941f0f404f735",
   "recorder": "rs-rich-record 0.0.9",
-  "rich": "rich (rs-rich-cli) 0.0.21",
-  "commit": "0633cb7c29d7a72aca4140c93824108bb909ba2a",
+  "rich": null,
+  "commit": "f9f6c0a64ec31b16a78fca81f2669608dd51c7a5",
   "screenshots": [
     "groups",
     "search",

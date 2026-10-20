@@ -1,5 +1,6 @@
 # Porting a ratatui app
 
+![Tui, Memo's calf, holding a cursor](../../assets/intuituive/mascot/tui.svg){ .tui-mascot width="112" }
 This page is for people with a [ratatui](https://ratatui.rs) app who want to
 move it to intuiTUIve. You do not have to move all of it at once:
 

@@ -29,6 +29,12 @@ tree.add(label, *, style=None, guide_style=None, expanded=True,
 `add` returns the new child, so a branch can be built in one line. `children`
 is the list of child trees, which you may change directly.
 
+`tree.add_plain(label, ...)` (rs-rich's, not Rich's) adds a child whose
+label is taken literally, never as markup: a `str` becomes a `Text`, `None`
+is empty and any other value is its `str()`. It takes `add`'s keywords. Use
+it for labels from data, such as file names, where a `[` would otherwise be
+read as a tag (see [plain-text cells](table.md#plain-text-cells)).
+
 ```python
 console = Console(width=30)
 tree = Tree("[b]project[/]")

@@ -281,7 +281,7 @@ fn build(probe: Probe, options: Options, placed: Option<Arc<Mutex<view::Placed>>
     // or, uncapped, a frame on every turn of the loop.
     let tick_game = game.clone();
     let tick_draw = draw.clone();
-    fixed_step(TIC, move |_, steps| {
+    let _ = fixed_step(TIC, move |_, steps| {
         let mut game = tick_game.borrow_mut();
         for _ in 0..steps {
             if bench {

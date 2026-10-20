@@ -1,0 +1,10 @@
+                                         Staff
+
+                                  +---------------------+
+                                  |      Employee       |
+ +------------+                   +---------------------+                    +---------+
+@| DEPARTMENT +.1..works in..0..N.+ int  id          PK +-0..N--staffs--1..N-+ PROJECT |
+ +------------+                   | int  manager_id  FK |                    +---------+
+                                  +---------------------+
+Mermaid: Employee relates to itself: `manages`, 0..1 to 0..N
+Mermaid: DEPARTMENT relates to itself: 1 to 1

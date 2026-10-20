@@ -40,6 +40,7 @@ impl EventLayer {
     }
 
     /// Emit an event when a span opens (default off).
+    #[must_use]
     pub fn span_open(mut self, open: bool) -> Self {
         self.open = open;
         self
@@ -47,6 +48,7 @@ impl EventLayer {
 
     /// Emit an event when a span closes, with how long it was open (default
     /// off).
+    #[must_use]
     pub fn span_close(mut self, close: bool) -> Self {
         self.close = close;
         self

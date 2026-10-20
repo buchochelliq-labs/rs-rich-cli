@@ -462,6 +462,7 @@ struct SpriteData {
 /// assert_eq!(blink.frame_at(Duration::from_millis(500)), 0);
 /// ```
 #[derive(Clone)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct Sprite(Rc<SpriteData>);
 
 impl std::fmt::Debug for Sprite {
@@ -736,6 +737,7 @@ pub fn tween(from: (f64, f64), to: (f64, f64), duration: Duration, easing: Easin
 /// goes there), a z order (higher over lower; equal ones in the order
 /// given), a flip, and the frame (by the clock, unless fixed).
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct Placed<K = usize> {
     id: K,
     sprite: Sprite,
@@ -930,6 +932,7 @@ type Hover<K> = Box<dyn FnMut(Option<K>, &mut Ctx)>;
 
 /// How a [`stage_with`] draws, and what its sprites do when clicked or
 /// pointed at.
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct StageOptions<K> {
     backdrop: Option<Node>,
     half_cells: bool,

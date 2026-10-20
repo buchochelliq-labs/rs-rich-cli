@@ -108,7 +108,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--rule-style <STYLE>` | With --rule, the line's style. Default: `bright_green`. |
 | `--rule-char <CHARACTER>` | With --rule, the character(s) the line is drawn with. Default: `─`. |
 | `--log-presentation <MODE>` | With --log, select log presentation. Default: `plain`. Config: `log_presentation`. Possible values: `plain`, `rich`. |
-| `--mermaid-backend <BACKEND>` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code. Config: `mermaid_backend`. Possible values: `text`, `mmdc`, `off`. |
+| `--mermaid-backend <BACKEND>` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts, sequence and ER diagrams as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code. Config: `mermaid_backend`. Possible values: `text`, `mmdc`, `off`. |
 | `--dot-backend <BACKEND>` | How DOT graphs (`rich dot`, ```dot fences in Markdown) are drawn: text draws them natively, graphviz also makes --export-svg write Graphviz's own SVG (the `dot` program, installed separately), off leaves fences as code. Config: `dot_backend`. Possible values: `text`, `graphviz`, `off`. |
 | `--highlighter <NAME>` | The code highlighter for source, Markdown code, view and diff: syntect (the default), or lumis in a build with the lumis feature. Config: `highlighter`. |
 | `--code-theme <NAME>` | A theme of the chosen code highlighter, e.g. ansi_dark (`rich doctor --report json` lists them) Config: `code_theme`. |
@@ -357,7 +357,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `unicode` | Show graphemes, code points, UTF-8 bytes, widths and invalid sequences |
 | `env` | List environment variables, secrets masked; `rich env PATH` checks each PATH entry |
 | `capture` | Run `rich capture -- COMMAND ARGS…` and show or export its output (--cast FILE records it, --redact masks secrets), then exit with the command's status |
-| `mermaid`, `mmd` | Draw a Mermaid diagram: flowcharts as text, every type through mmdc where built in (.mmd and .mermaid files are detected) |
+| `mermaid`, `mmd` | Draw a Mermaid diagram: flowcharts, sequence and ER diagrams as text, every type through mmdc where built in (.mmd and .mermaid files are detected) |
 | `dot`, `graphviz` | Draw a DOT (Graphviz) graph as text (.dot and .gv files are detected); what the native parser does not support is refused with its line |
 | `deps` | A Cargo dependency tree from `cargo metadata`, crates resolved at several versions marked; --why CRATE for what pulls a crate in, --graph to draw it; --features, --licenses, --policy FILE, --timings FILE, --sizes and --audit FILE for supply-chain reports, --baseline FILE to compare timings or sizes |
 | `schema` | A JSON Schema, SQL DDL or Arrow schema as a tree: types, required markers, constraints, keys, $refs resolved; with two schemas (of any of these formats), what changed between them and which changes break; --er draws an ER diagram |
@@ -977,7 +977,7 @@ rich capture [OPTIONS] [RESOURCE]
 
 ### rich mermaid
 
-Draw a Mermaid diagram: flowcharts as text, every type through mmdc where built in (.mmd and .mermaid files are detected)
+Draw a Mermaid diagram: flowcharts, sequence and ER diagrams as text, every type through mmdc where built in (.mmd and .mermaid files are detected)
 
 #### Usage
 
@@ -989,7 +989,7 @@ rich mermaid [OPTIONS] [RESOURCE]
 
 | Option | Description |
 | --- | --- |
-| `--mermaid-backend <BACKEND>` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code. Possible values: `text`, `mmdc`, `off`. |
+| `--mermaid-backend <BACKEND>` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts, sequence and ER diagrams as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code. Possible values: `text`, `mmdc`, `off`. |
 
 #### Layout
 
@@ -1772,19 +1772,19 @@ rich completions <SHELL>
 
 Bash
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich completions bash > ~/.local/share/bash-completion/completions/rich
 ```
 
 Zsh
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich completions zsh > "${fpath[1]}/_rich"
 ```
 
 Fish
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich completions fish > ~/.config/fish/completions/rich.fish
 ```
 
@@ -1923,19 +1923,19 @@ rich micro [list | show | preview | add | remove | create | install | uninstall 
 
 Every asset, drawn as this terminal can
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich micro list
 ```
 
 One asset, inline and magnified
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich micro preview status/loading
 ```
 
 Micro assets in text
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich -p --emoji "Deploying :micro:status/loading: done :micro:status/success:"
 ```
 
@@ -2207,13 +2207,13 @@ rich banner [OPTIONS] [TEXT]...
 
 A banner in the standard font
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich banner Hello
 ```
 
 Centred, in rainbow colours
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich banner --gradient rainbow --align center 'Ship it'
 ```
 
@@ -2316,7 +2316,7 @@ rich shell status --exit CODE [--duration D] [--command TEXT] [--min-duration SE
 
 ✖ error $ cargo test  exit 101  4.2s
 
-```sh
+```sh { .rich-playground data-kind="cli" }
 rich shell status --exit 101 --duration 4.2 --command 'cargo test'
 ```
 
@@ -2488,7 +2488,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `panel` | enum: `ascii`, `ascii2`, `square`, `rounded`, `heavy`, `double`, `ascii_double_head`, `square_double_head`, `minimal`, `minimal_heavy_head`, `minimal_double_head`, `simple`, `simple_head`, `simple_heavy`, `horizontals`, `heavy_edge`, `heavy_head`, `double_edge`, `markdown`, `none` | | | `--panel` | Wrap output in a panel, shrunk to fit its content (none = no panel) |
 | `padding` | string | | | `--padding` | Wrap output in padding (1, 2, or 4 comma-separated ints) |
 | `log_presentation` | enum: `plain`, `rich` | `plain` | | `--log-presentation` | With --log, select log presentation |
-| `mermaid_backend` | enum: `text`, `mmdc`, `off` | | | `--mermaid-backend` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code |
+| `mermaid_backend` | enum: `text`, `mmdc`, `off` | | | `--mermaid-backend` | How Mermaid diagrams (`rich mermaid`, ```mermaid fences in Markdown) are drawn: text draws flowcharts, sequence and ER diagrams as text, mmdc uses Mermaid's own CLI (a build with the mmdc feature; `rich mermaid` tries it first there), off leaves fences as code |
 | `dot_backend` | enum: `text`, `graphviz`, `off` | | | `--dot-backend` | How DOT graphs (`rich dot`, ```dot fences in Markdown) are drawn: text draws them natively, graphviz also makes --export-svg write Graphviz's own SVG (the `dot` program, installed separately), off leaves fences as code |
 | `rules` | array of rule tables | | | `--style-rule` | Style the cells, rows or columns of a data table by value: COLUMN OP VALUE:STYLE or COLUMN OP VALUE:row:STYLE (e.g. 'latency>500:bold red', 'status=failed:row:on red'); OP is == != < <= > >= *= ^= $= or a word such as contains or empty. Repeatable; applies to --csv, `rich profile`'s table and `rich inspect --table`, and has no effect elsewhere |
 | `highlighter` | string | | | `--highlighter` | The code highlighter for source, Markdown code, view and diff: syntect (the default), or lumis in a build with the lumis feature |

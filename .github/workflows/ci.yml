@@ -149,6 +149,16 @@ jobs:
               exit 1
             fi
           done
+          # `code` and `markdown` keep `Syntax` and `Markdown` without syntect,
+          # for a highlighter such as rs-rich-ext's `sql`.
+          found="$(cargo tree -p rs-rich-ext --no-default-features \
+            --features sql,markdown -e normal --prefix none \
+            | grep -E '^(syntect|bincode|onig) ' || true)"
+          if [ -n "$found" ]; then
+            echo "::error::rs-rich-ext with sql and core's code,markdown still depends on:"
+            echo "$found"
+            exit 1
+          fi
 
       - name: Verify interactive stdin and NO_COLOR in a terminal
         run: python3 scripts/test_cli_terminal.py --binary target/debug/rich
@@ -180,6 +190,10 @@ jobs:
           # Without syntect and pulldown-cmark: no `Syntax`, no `Markdown`.
           - crate: rs-rich
             args: "--no-default-features"
+          # `Syntax` and `Markdown` without syntect: code renders through a
+          # registered highlighter, or plain.
+          - crate: rs-rich
+            args: "--no-default-features --features code,markdown"
           # rich-art is zero-dependency by default; its image/GIF support is
           # opt-in, and each config compiles different code. `--all-features`
           # rather than naming them, so new features are covered automatically.
@@ -195,6 +209,13 @@ jobs:
           # `--all-features` above covers them with everything else.
           - crate: rs-rich-ext
             args: "--no-default-features --features qr"
+          # The SQL highlighter on its own: no syntect, no `Syntax`.
+          - crate: rs-rich-ext
+            args: "--no-default-features --features sql"
+          # The SQL highlighter behind core's `Syntax` and Markdown fences,
+          # still without syntect (the `sql_without_syntect` test).
+          - crate: rs-rich-ext
+            args: "--no-default-features --features sql,markdown"
           - crate: rs-rich-art
             args: ""
           - crate: rs-rich-art
@@ -211,6 +232,9 @@ jobs:
           # Interactive components: session, event loop, PTY restoration.
           - crate: rs-rich-interact
             args: ""
+          # The Vim preset for the text editors, off by default.
+          - crate: rs-rich-interact
+            args: "--features vim"
           # Micro assets: model, packages, registry, markup (hostile-package
           # conformance tests included).
           - crate: rs-rich-micro
@@ -608,7 +632,7 @@ jobs:
       - name: Build the CLI and the examples the tapes run
         run: >-
           cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive
-          -p rs-rich-embed --features rs-rich-cli/serve,rs-rich-intuituive/files,rs-rich-intuituive/archive,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm,rs-rich-intuituive/viz,rs-rich-intuituive/wav,rich-ext/yaml,rich-ext/jsonpath,rich-ext/data
+          -p rs-rich-embed --features rs-rich-cli/serve,rs-rich-intuituive/files,rs-rich-intuituive/archive,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm,rs-rich-intuituive/viz,rs-rich-intuituive/wav,rs-rich-intuituive/vim,rich-ext/yaml,rich-ext/jsonpath,rich-ext/data
           --bins --examples --locked
 
       # rs-rich-ext's examples are guide programs; the surface tape runs one.
@@ -668,9 +692,55 @@ jobs:
       - name: Benchmark against ratatui (release)
         run: cargo test --release --locked -p rs-rich-intuituive --test versus_ratatui -- --ignored --nocapture
 
+  # The browser build (docs/design/docs-playground.md, tier 3): the core, the
+  # extensions, rs-rich-interact and intuiTUIve for wasm32-unknown-unknown,
+  # with and without syntect, so a new crossterm, `Instant` or thread call
+  # outside the crates' wasm gates fails here rather than in the playground.
+  # rs-rich-web without its server (`default-features = false`), whose
+  # input decoder the playground uses; and the CLI for wasm32-wasip1.
+  wasm:
+    name: wasm32 build (playground crates)
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: wasm32-unknown-unknown, wasm32-wasip1
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Check (default features)
+        run: >-
+          cargo check --locked --target wasm32-unknown-unknown
+          -p rs-rich -p rs-rich-ext -p rs-rich-interact -p rs-rich-intuituive
+
+      - name: Check (no syntect, as an app build)
+        run: >-
+          cargo check --locked --target wasm32-unknown-unknown --no-default-features
+          -p rs-rich -p rs-rich-ext -p rs-rich-interact -p rs-rich-intuituive -p rs-rich-web
+
+      - name: Check (the explorer and intuiTUIve's plugins that build there)
+        run: >-
+          cargo check --locked --target wasm32-unknown-unknown
+          -p rs-rich-interact -p rs-rich-intuituive
+          --features rs-rich-interact/data,rs-rich-intuituive/viz,rs-rich-intuituive/files
+
+      # The playground's terminal (tier 2) runs the CLI on WASI: a change in a
+      # crate the CLI uses that breaks that build fails here, on its own PR.
+      - name: Check (the CLI on WASI)
+        run: >-
+          cargo check --locked --target wasm32-wasip1
+          -p rs-rich-cli --no-default-features --features art,mermaid
+
   ci-ok:
     name: ci-ok
-    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate]
+    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, wasm]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()

@@ -22,6 +22,7 @@ const ASCII_SHADES: [char; 2] = ['.', ':'];
 /// A threshold band of a [`Gauge`]: from the band before it (or the bottom
 /// of the scale) up to and including [`upto`](Self::upto).
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Band {
     /// The top of the band, inclusive.
     pub upto: f64,
@@ -145,6 +146,7 @@ fn fit(width: usize, natural: Columns, full: bool) -> Columns {
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Gauge {
     label: String,
     value: f64,
@@ -508,6 +510,7 @@ impl Renderable for Gauge {
 /// );
 /// ```
 #[derive(Clone, Debug, Default, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct BulletChart {
     gauges: Vec<Gauge>,
     bar_width: Option<usize>,

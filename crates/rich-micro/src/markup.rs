@@ -675,6 +675,7 @@ impl MicroTransform {
         }
     }
 
+    #[must_use]
     pub fn preference(mut self, preference: FallbackPreference) -> Self {
         self.preference = preference;
         self

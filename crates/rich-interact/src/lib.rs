@@ -86,6 +86,11 @@
 //! assert_eq!(record.last_frame(), "count: 2");
 //! ```
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
+pub mod caret;
 pub mod chrome;
 pub mod clipboard;
 pub mod component;
@@ -94,6 +99,7 @@ pub mod compose;
 pub mod dates;
 pub mod datetime;
 pub mod edit;
+pub mod edit_keys;
 pub mod event;
 pub mod event_loop;
 pub mod fuzzy;
@@ -106,8 +112,11 @@ pub mod overlay;
 pub mod paint;
 pub mod plugin;
 pub mod policy;
+pub mod push;
 pub mod session;
 pub mod viewport;
+#[cfg(feature = "vim")]
+pub mod vim;
 mod zone;
 
 pub use chrome::{Breadcrumbs, StatusBar, StatusItem};
@@ -137,6 +146,7 @@ pub use keymap::{Binding, Keymap};
 pub use overlay::{Command, Help, Menu, Overlays, Palette, Shortcuts};
 pub use plugin::PluginView;
 pub use policy::{Fallback, LineIo, NotInteractive, Policy, Reason};
+pub use push::{PushBackend, PushPort};
 pub use session::{
     synchronized_update, Backend, BackendKind, Output, Session, SessionOptions, Waker,
 };
@@ -203,4 +213,52 @@ impl<C: Component + ?Sized> Component for &mut C {
 /// different types with one output ([`compose::Child`]).
 impl<C: Component + ?Sized> Component for Box<C> {
     forward_component!();
+}
+
+/// crossterm's surface on wasm32, where there is no terminal: every call
+/// fails with [`Unsupported`](std::io::ErrorKind::Unsupported), so a
+/// [`Session`] never starts and [`run`] follows its [`Policy`]'s fallback.
+/// A browser drives components through [`EventLoop::step`] and a
+/// [`PushBackend`] instead.
+#[cfg(target_arch = "wasm32")]
+pub(crate) mod crossterm_stub {
+    fn no<T>() -> std::io::Result<T> {
+        Err(std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "no terminal on wasm",
+        ))
+    }
+    pub mod terminal {
+        pub fn enable_raw_mode() -> std::io::Result<()> {
+            super::no()
+        }
+        pub fn disable_raw_mode() -> std::io::Result<()> {
+            super::no()
+        }
+        pub fn size() -> std::io::Result<(u16, u16)> {
+            super::no()
+        }
+        pub fn supports_keyboard_enhancement() -> std::io::Result<bool> {
+            super::no()
+        }
+    }
+    pub mod cursor {
+        pub fn position() -> std::io::Result<(u16, u16)> {
+            super::no()
+        }
+    }
+    /// The stub event is uninhabited: nothing to translate.
+    pub fn from_crossterm(event: event::Event) -> Option<crate::event::Event> {
+        match event {}
+    }
+    pub use from_crossterm as from_crossterm_kitty;
+    pub mod event {
+        pub enum Event {}
+        pub fn poll(_: std::time::Duration) -> std::io::Result<bool> {
+            super::no()
+        }
+        pub fn read() -> std::io::Result<Event> {
+            super::no()
+        }
+    }
 }

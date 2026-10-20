@@ -66,6 +66,7 @@ impl PathEvent {
 
 /// How [`watch_path_with`] watches.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct WatchOptions {
     /// Watch every directory below too (off: the path itself, and a
     /// directory's direct entries).

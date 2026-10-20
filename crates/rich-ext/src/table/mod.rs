@@ -16,6 +16,8 @@
 //!   under a live display, re-rendering only the rows that changed.
 //! * [`rules`]: conditional styles, rules that style a cell, row or column
 //!   by value ([`TableData::style_rules`]).
+//! * [`plain`]: [`PlainRows`] and [`PlainTree`], data into a core `Table`
+//!   or `Tree` as plain text, never parsed as markup.
 //! * [`virtualized`]: [`VirtualTable`], one window of a large row source
 //!   ([`VirtualRows`]) with fixed or sampled column widths, in constant
 //!   memory.
@@ -49,6 +51,7 @@
 
 pub mod data;
 pub mod group;
+pub mod plain;
 pub mod rules;
 pub mod sort;
 pub mod stream;
@@ -63,6 +66,7 @@ use rich::{ColumnOptions, Console, Justify, Style, Table, Text};
 
 pub use data::TableData;
 pub use group::{Aggregate, Group, GroupBy};
+pub use plain::{PlainRows, PlainTree};
 pub use rules::{ColumnRef, Comparison, ResolvedRules, RuleError, StyleRule, StyleRules, Target};
 pub use sort::{Compare, Order, SortKey};
 pub use stream::{RenderStats, StreamingTable, Window};
@@ -254,12 +258,14 @@ impl Column {
     }
 
     /// Justify the column's cells.
+    #[must_use]
     pub fn justify(mut self, justify: Justify) -> Self {
         self.options.justify = justify;
         self
     }
 
     /// Replace every core column option (width, ratio, no_wrap, style, …).
+    #[must_use]
     pub fn options(mut self, options: ColumnOptions) -> Self {
         self.options = options;
         self
@@ -267,6 +273,7 @@ impl Column {
 
     /// Display values through `formatter` instead of [`Value::to_text`].
     /// Aggregates other than counts are formatted the same way.
+    #[must_use]
     pub fn format(mut self, formatter: impl Fn(&Value) -> Text + Send + Sync + 'static) -> Self {
         self.formatter = Some(Arc::new(formatter));
         self

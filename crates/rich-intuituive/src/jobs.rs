@@ -1,7 +1,9 @@
 //! Cancellable background jobs with progress, and a panel listing them: a
 //! task manager for any work (copies, downloads, builds, exports).
 
-use std::time::{Duration, Instant};
+use std::time::Duration;
+
+use crate::clock::Instant;
 
 use rich::markup::escape;
 pub use rich_ext::cancel::CancelToken;
@@ -517,6 +519,7 @@ pub fn job_line_with<P: JobProgress>(job: &Job<P>, options: &JobsPanelOptions) -
 
 /// How a [`jobs_panel_with`] shows its jobs.
 #[derive(Clone, Debug)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct JobsPanelOptions {
     failed_title: bool,
 }

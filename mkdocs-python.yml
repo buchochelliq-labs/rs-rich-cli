@@ -12,6 +12,10 @@ site_dir: site/python
 
 theme:
   name: material
+  # rs-rich's mark and favicon, copied from docs/assets/rs-rich/ by
+  # scripts/gen_rs_rich_hero.py (this site is built from docs/python alone).
+  logo: assets/mark.svg
+  favicon: assets/favicon.svg
   icon:
     repo: fontawesome/brands/github
   palette:
@@ -19,14 +23,14 @@ theme:
     - media: "(prefers-color-scheme: dark)"
       scheme: slate
       primary: black
-      accent: deep purple
+      accent: custom
       toggle:
         icon: material/weather-sunny
         name: Switch to light mode
     - media: "(prefers-color-scheme: light)"
       scheme: default
       primary: black
-      accent: deep purple
+      accent: custom
       toggle:
         icon: material/weather-night
         name: Switch to dark mode
@@ -40,6 +44,10 @@ theme:
     - search.highlight
     - search.suggest
     - toc.follow
+
+# rs-rich's gold accent and the home page's hero banner.
+extra_css:
+  - assets/extra.css
 
 plugins:
   - search
@@ -121,6 +129,7 @@ nav:
       - Layout and live output: ext/layout.md
       - CLI authoring: ext/cli-authoring.md
       - Testing and QA: ext/testing.md
+      - GitHub Markdown export: ext/markdown-export.md
   - Art, charts and diagrams:
       - Art (images, FIGlet, GIFs, diffs): art.md
       - Charts: chart.md

@@ -20,8 +20,17 @@ the whole site is rebuilt and deployed as one Pages artifact.
 GitHub Pages takes at most 1 GB, so the oldest releases are left out until the
 site fits under --budget-mb.
 
+The docs playground (docs/design/docs-playground.md) needs each version's own
+wasm module in `<version>/assets/playground/`. Main's is built by docs.yml into
+docs/assets/playground/ before this runs, so it is copied with main's docs. A
+release's is the `playground-X.Y.Z.tar.gz` the release workflow attached to its
+GitHub release; it is downloaded for a version whose docs have the playground's
+script. A release without one keeps plain code blocks: the script finds no
+`playground.json` and offers no button.
+
     python scripts/build_versioned_docs.py                 # dev + newest releases
     python scripts/build_versioned_docs.py --releases 1    # a quick check
+    python scripts/build_versioned_docs.py --no-playground # no downloads
 """
 import argparse
 import html
@@ -34,6 +43,8 @@ import sys
 import tarfile
 import tempfile
 import tomllib
+import urllib.error
+import urllib.request
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
@@ -149,6 +160,74 @@ def build(source, out, version, url, strict):
         subprocess.run(command + (["--strict"] if strict else []), cwd=source, check=True)
 
 
+def repo_url():
+    """The repository's URL, from mkdocs.yml, without a trailing slash."""
+    text = (ROOT / "mkdocs.yml").read_text(encoding="utf-8")
+    return re.search(r"^repo_url:\s*(\S+)", text, re.M)[1].rstrip("/")
+
+
+# The largest playground archive accepted (the modules are about 5 MB).
+PLAYGROUND_MAX_BYTES = 40_000_000
+
+
+def playground_url(repo, version):
+    """Where the release workflow attaches release `version`'s module."""
+    return f"{repo}/releases/download/release-{version}/playground-{version}.tar.gz"
+
+
+def fetch(url):
+    """The bytes at `url`, or None when there is nothing there (404)."""
+    try:
+        with urllib.request.urlopen(url, timeout=60) as response:
+            data = response.read(PLAYGROUND_MAX_BYTES + 1)
+    except urllib.error.HTTPError as error:
+        if error.code == 404:
+            return None
+        raise
+    if len(data) > PLAYGROUND_MAX_BYTES:
+        raise ValueError(f"{url} is over {PLAYGROUND_MAX_BYTES} bytes")
+    return data
+
+
+def add_playground(site, version, repo, fetch=fetch):
+    """Put release `version`'s playground module into its built `site`.
+
+    Only when the site has the playground's script (older releases' docs do
+    not), and only when the release has the archive. Returns whether it was
+    added. A download that fails for another reason than a 404 leaves the
+    version without the playground, with a warning, rather than failing the
+    whole site."""
+    if not (site / "assets" / "playground.js").exists():
+        return False
+    url = playground_url(repo, version)
+    try:
+        data = fetch(url)
+    except (OSError, ValueError) as error:
+        print(f"  playground for {version} not downloaded ({error}); its blocks stay plain",
+              flush=True)
+        return False
+    if data is None:
+        print(f"  no playground for {version} (nothing at {url})", flush=True)
+        return False
+    target = site / "assets" / "playground"
+    if target.exists():
+        shutil.rmtree(target)
+    target.mkdir(parents=True)
+    try:
+        with tarfile.open(fileobj=io.BytesIO(data), mode="r:gz") as tar:
+            # `data`: no absolute paths, no `..`, no links out, no devices.
+            tar.extractall(target, filter="data")
+        stamp = json.loads((target / "playground.json").read_text(encoding="utf-8"))
+        if stamp.get("format") != 1 or "lean" not in stamp.get("modules", {}):
+            raise ValueError("not a playground stamp")
+    except (tarfile.TarError, OSError, ValueError) as error:
+        shutil.rmtree(target)
+        print(f"  playground for {version} rejected ({error}); its blocks stay plain", flush=True)
+        return False
+    print(f"  playground for {version} added", flush=True)
+    return True
+
+
 def size_mb(path):
     return sum(f.stat().st_size for f in path.rglob("*") if f.is_file()) / 1e6
 
@@ -197,9 +276,12 @@ def main():
     parser.add_argument("--releases", type=int, default=6, help="the most releases to keep")
     parser.add_argument("--budget-mb", type=float, default=950, help="the site's size limit")
     parser.add_argument("--no-dev", action="store_true", help="leave main's docs out")
+    parser.add_argument("--no-playground", action="store_true",
+                        help="do not download the releases' playground modules")
     args = parser.parse_args()
 
     url = site_root()
+    repo = repo_url()
     out = args.out.resolve()
     if out.exists():
         shutil.rmtree(out)
@@ -222,6 +304,8 @@ def main():
             # An old release's docs are as they were then: warnings do not fail them.
             build(source, out / version, version, url, strict=False)
             shutil.rmtree(source)
+            if not args.no_playground:
+                add_playground(out / version, version, repo)
             if size_mb(out) > args.budget_mb:
                 print(f"  {version} leaves the site over {args.budget_mb:.0f} MB; it and older "
                       "releases are left out", flush=True)

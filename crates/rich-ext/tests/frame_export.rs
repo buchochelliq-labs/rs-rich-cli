@@ -142,6 +142,9 @@ fn strip_svg_links(svg: &str) -> String {
 }
 
 /// A document with regions and links, exported and compared with fixtures.
+// The fixtures hold syntect's colours for the document's code block; with
+// `markdown` but not `syntax` (core's `code`), the block is plain.
+#[cfg(feature = "syntax")]
 #[test]
 fn export_fixtures() {
     let console = console(48);

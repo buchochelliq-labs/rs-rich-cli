@@ -64,6 +64,7 @@ pub enum Labels {
 /// assert_eq!(axis.label_values(), vec![1.0, 10.0, 100.0, 1000.0]);
 /// ```
 #[derive(Clone, Debug, Default, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Axis {
     bounds: Option<[f64; 2]>,
     title: Option<String>,
@@ -460,6 +461,7 @@ pub enum GraphType {
 
 /// One named set of `(x, y)` points in a [`Chart`].
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Dataset {
     name: String,
     points: Vec<(f64, f64)>,
@@ -670,6 +672,7 @@ pub enum Layering {
 /// );
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Chart {
     datasets: Vec<Dataset>,
     x_axis: Axis,

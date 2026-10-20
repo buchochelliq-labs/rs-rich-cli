@@ -91,6 +91,7 @@ const MIN_BAR: usize = 4;
 
 /// A size as a bar against a total or limit. See the [module docs](self).
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct SizeBar {
     used: u64,
     total: u64,

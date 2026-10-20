@@ -80,6 +80,7 @@ impl SortKey {
     }
 
     /// Compare this key's cells as plain strings.
+    #[must_use]
     pub fn lexical(mut self) -> Self {
         self.compare = Compare::Lexical;
         self

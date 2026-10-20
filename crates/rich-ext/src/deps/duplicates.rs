@@ -193,6 +193,7 @@ impl Consolidation {
     }
 
     /// Only the duplicates reached through the kinds in `kinds`.
+    #[must_use]
     pub fn kinds(mut self, kinds: &[DepKind]) -> Self {
         self.duplicates = self.graph.consolidation(kinds);
         self

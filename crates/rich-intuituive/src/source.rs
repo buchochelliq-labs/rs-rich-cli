@@ -203,6 +203,7 @@ pub type CellOrder = Arc<dyn Fn(&str, &str) -> Ordering + Send + Sync>;
 /// sort them by a column, and find the rows another test passes. Each part
 /// is off by default.
 #[derive(Clone, Default)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct ViewQuery {
     pub keep: Option<RowTest>,
     pub sort: Option<(usize, Order)>,

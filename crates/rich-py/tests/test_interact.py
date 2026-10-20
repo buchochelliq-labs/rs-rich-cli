@@ -362,6 +362,30 @@ def test_form_validation_focuses_the_failing_field():
     assert f.headless(Script().keys("enter enter").text("root").keys("enter enter")).value == {"user": "root", "admin": False}
 
 
+def test_form_multi_selects_answer_lists():
+    f = Form("Pick").multi("tags", "Tags", ["a", "b", "c"], chosen=["c"])
+    assert f.headless("space right right space enter").value == {"tags": ["a"]}
+    assert f.headless("enter").value == {"tags": ["c"]}
+    with pytest.raises(ValueError, match="not one of the options"):
+        Form("F").multi("t", "T", ["a"], chosen=["z"])
+    with pytest.raises(ValueError, match="at least one option"):
+        Form("F").multi("t", "T", [])
+
+
+def test_form_file_fields_answer_paths(tmp_path):
+    import pathlib
+
+    from rs_rich.interact import FilePicker
+
+    (tmp_path / "notes.txt").write_text("x")
+    f = Form("Open").file("path", "File", FilePicker(tmp_path, default=tmp_path / "notes.txt"))
+    value = f.headless("enter").value
+    assert value == {"path": tmp_path / "notes.txt"}
+    assert isinstance(value["path"], pathlib.Path)
+    picked = Form("Open").file("path", "File", FilePicker(tmp_path)).headless(Script().keys("space").text("notes").keys("enter enter"))
+    assert picked.value == {"path": tmp_path / "notes.txt"}
+
+
 def test_form_fields_from_inputs_and_unique_names():
     f = Form("F").input("n", Input("Number", default="7"))
     assert f.headless("enter").value == {"n": "7"}

@@ -186,6 +186,10 @@ pub struct AccessNode {
     pub state: AccessState,
     /// Where it is on the screen.
     pub rect: Rect,
+    /// Why it is invalid, when it says
+    /// ([`error_message`](crate::Node::error_message), an input's
+    /// [`validate`](crate::Node::validate)).
+    pub error: Option<String>,
 }
 
 impl AccessNode {
@@ -238,6 +242,10 @@ impl AccessNode {
             line.push_str(", ");
             line.push_str(word);
         }
+        if let Some(error) = self.error.as_deref().filter(|_| state.invalid) {
+            line.push_str(": ");
+            line.push_str(error);
+        }
         line
     }
 
@@ -275,6 +283,9 @@ impl AccessNode {
         if let Some((at, of)) = state.position {
             out.push(("aria-posinset", at.to_string()));
             out.push(("aria-setsize", of.to_string()));
+        }
+        if let Some(error) = self.error.as_ref().filter(|_| state.invalid) {
+            out.push(("aria-description", error.clone()));
         }
         out
     }
@@ -407,6 +418,7 @@ mod tests {
             focused: false,
             disabled: false,
             state,
+            error: None,
             rect: Rect::default(),
         }
     }

@@ -109,11 +109,17 @@ rich-micro = { workspace = true, optional = true }
 toml = "1.1"
 tempfile = "3"
 same-file = "1"
+fastrand = "2"
+
+# Host-only: signals, file watching and the capability file system behind
+# `--batch`'s output tree. None builds for WASI (the docs playground runs the
+# CLI as `wasm32-wasip1`), so there the features that need them report that
+# they are not available in the browser.
+[target.'cfg(not(target_os = "wasi"))'.dependencies]
 ctrlc = "3.4"
 notify.workspace = true
 cap-std = "4"
 cap-fs-ext = "4"
-fastrand = "2"
 
 [target."cfg(unix)".dependencies]
 # Kill a `--preview` command's whole process group, not just its shell.

@@ -191,6 +191,7 @@ pub struct Map<'a, C: Component, M> {
 impl<'a, C: Component, M> Map<'a, C, M> {
     /// What cancelling means (default: [`Flow::Cancel`], which cancels the
     /// container too).
+    #[must_use]
     pub fn on_cancel(mut self, cancel: impl FnMut() -> Flow<M> + 'a) -> Self {
         self.cancel = Box::new(cancel);
         self
@@ -663,6 +664,7 @@ macro_rules! binding_builders {
         /// Run `handler` when one of `keys` bubbles up unused by the
         /// focused child: an action of yours, listed in the keymap under
         /// this container's context.
+        #[must_use]
         pub fn on(
             mut self,
             action: &str,
@@ -677,6 +679,7 @@ macro_rules! binding_builders {
 
         /// Run `handler` when one of `keys` is pressed, before the focused
         /// child sees it.
+        #[must_use]
         pub fn shortcut(
             mut self,
             action: &str,
@@ -691,6 +694,7 @@ macro_rules! binding_builders {
 
         /// Make `keys` do this container's `action` (`focus-next`, and the
         /// container's own); no keys unbinds it.
+        #[must_use]
         pub fn rebind(mut self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
             self.bindings.keymap.rebind(action, keys);
             self
@@ -703,6 +707,7 @@ macro_rules! binding_builders {
 
         /// Report the mouse even when no child asks for it: for a click to
         /// focus a child, or a border to drag.
+        #[must_use]
         pub fn with_mouse(mut self, on: bool) -> Self {
             self.mouse = on;
             self
@@ -737,11 +742,13 @@ impl<'a, M> Stack<'a, M> {
     }
 
     /// Add a child sized [`Size::Auto`].
+    #[must_use]
     pub fn child(self, child: impl Component<Output = M> + 'a) -> Self {
         self.sized(Size::Auto, child)
     }
 
     /// Add a child sized `size`.
+    #[must_use]
     pub fn sized(mut self, size: Size, child: impl Component<Output = M> + 'a) -> Self {
         self.push(size, Box::new(child));
         self
@@ -754,6 +761,7 @@ impl<'a, M> Stack<'a, M> {
     }
 
     /// Leave `cells` empty between children.
+    #[must_use]
     pub fn gap(mut self, cells: usize) -> Self {
         self.gap = cells;
         self
@@ -1052,21 +1060,25 @@ macro_rules! axis_stack {
             }
 
             /// Add a child sized [`Size::Auto`].
+            #[must_use]
             pub fn child(self, child: impl Component<Output = M> + 'a) -> Self {
                 $name(self.0.child(child))
             }
 
             /// Add a child sized `size`.
+            #[must_use]
             pub fn sized(self, size: Size, child: impl Component<Output = M> + 'a) -> Self {
                 $name(self.0.sized(size, child))
             }
 
             /// Leave `cells` empty between children.
+            #[must_use]
             pub fn gap(self, cells: usize) -> Self {
                 $name(self.0.gap(cells))
             }
 
             /// See [`Stack::on`].
+            #[must_use]
             pub fn on(
                 self,
                 action: &str,
@@ -1078,6 +1090,7 @@ macro_rules! axis_stack {
             }
 
             /// See [`Stack::shortcut`].
+            #[must_use]
             pub fn shortcut(
                 self,
                 action: &str,
@@ -1089,11 +1102,13 @@ macro_rules! axis_stack {
             }
 
             /// See [`Stack::rebind`].
+            #[must_use]
             pub fn rebind(self, action: &str, keys: impl IntoIterator<Item = Key>) -> Self {
                 $name(self.0.rebind(action, keys))
             }
 
             /// See [`Stack::with_mouse`].
+            #[must_use]
             pub fn with_mouse(self, on: bool) -> Self {
                 $name(self.0.with_mouse(on))
             }
@@ -1228,18 +1243,21 @@ impl<'a, M> Split<'a, M> {
 
     /// The first pane's share, in percent, until the border is moved
     /// (default 50).
+    #[must_use]
     pub fn ratio(mut self, percent: u8) -> Self {
         self.ratio = percent.min(100);
         self
     }
 
     /// Put the border after `cells` of the first pane, until moved.
+    #[must_use]
     pub fn at(mut self, cells: usize) -> Self {
         self.divider.set_position(Some(cells));
         self
     }
 
     /// Both panes at least `cells` along the axis (default 1).
+    #[must_use]
     pub fn min(mut self, cells: usize) -> Self {
         self.divider.min_before = cells;
         self.divider.min_after = cells;
@@ -1248,6 +1266,7 @@ impl<'a, M> Split<'a, M> {
 
     /// The first pane at least `first` cells and the second at least
     /// `second`.
+    #[must_use]
     pub fn mins(mut self, first: usize, second: usize) -> Self {
         self.divider.min_before = first;
         self.divider.min_after = second;
@@ -1255,6 +1274,7 @@ impl<'a, M> Split<'a, M> {
     }
 
     /// The border's style (default: the theme's, dim).
+    #[must_use]
     pub fn style(mut self, style: Style) -> Self {
         self.style = style;
         self
@@ -1504,6 +1524,7 @@ impl<'a, M> Tabs<'a, M> {
     }
 
     /// Add a tab.
+    #[must_use]
     pub fn tab(mut self, title: impl Into<String>, child: impl Component<Output = M> + 'a) -> Self {
         self.push(title, Box::new(child));
         self
@@ -1525,6 +1546,7 @@ impl<'a, M> Tabs<'a, M> {
     }
 
     /// The styles of the shown tab's title and the others'.
+    #[must_use]
     pub fn styles(mut self, selected: Style, unselected: Style) -> Self {
         self.selected = selected;
         self.unselected = unselected;
@@ -1532,6 +1554,7 @@ impl<'a, M> Tabs<'a, M> {
     }
 
     /// Show tab `index` first.
+    #[must_use]
     pub fn active(mut self, index: usize) -> Self {
         self.select(index);
         self
@@ -1808,35 +1831,41 @@ impl<'a, M> Layer<'a, M> {
     }
 
     /// Centred, `width` × `height` cells with the border (default 40 × 10).
+    #[must_use]
     pub fn size(mut self, width: usize, height: usize) -> Self {
         self.placement = Placement::Center { width, height };
         self
     }
 
+    #[must_use]
     pub fn placement(mut self, placement: Placement) -> Self {
         self.placement = placement;
         self
     }
 
     /// A title in the top border.
+    #[must_use]
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
     }
 
     /// Draw a border round it (default: yes).
+    #[must_use]
     pub fn border(mut self, on: bool) -> Self {
         self.border = on;
         self
     }
 
     /// Dim what is under it (default: for a modal).
+    #[must_use]
     pub fn backdrop(mut self, on: bool) -> Self {
         self.backdrop = on;
         self
     }
 
     /// Whether Escape, reaching the host unused, closes it (default: yes).
+    #[must_use]
     pub fn dismissable(mut self, on: bool) -> Self {
         self.dismissable = on;
         self
@@ -1947,6 +1976,7 @@ impl<'a, M> Layers<'a, M> {
     /// Open a layer made by `layer` when one of `keys` reaches the host
     /// unused, with no layer open: a help dialog on `?`, a palette on
     /// Ctrl+P.
+    #[must_use]
     pub fn open_on(
         mut self,
         action: &str,
@@ -1967,12 +1997,14 @@ impl<'a, M> Layers<'a, M> {
     }
 
     /// The style put over the base under a modal (default: dim).
+    #[must_use]
     pub fn backdrop_style(mut self, style: Style) -> Self {
         self.backdrop = style;
         self
     }
 
     /// The style of a layer's border (default: none).
+    #[must_use]
     pub fn border_style(mut self, style: Style) -> Self {
         self.border = style;
         self

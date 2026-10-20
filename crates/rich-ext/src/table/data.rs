@@ -54,6 +54,7 @@ use super::{frame_builders, headers, style, Column, Frame, Value};
 /// );
 /// ```
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct TableData {
     columns: Vec<Column>,
     rows: Vec<Vec<Value>>,

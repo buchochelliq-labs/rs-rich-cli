@@ -49,6 +49,13 @@ pub(crate) struct Rule {
 
 impl AsRenderable for Rule {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
+        Ok(Box::new(self.build(py)?))
+    }
+}
+
+impl Rule {
+    /// Core's rule.
+    pub(crate) fn build(&self, py: Python<'_>) -> PyResult<CoreRule> {
         let title = self.title.bind(py);
         let rule = if let Ok(text) = title.extract::<PyRef<'_, Text>>() {
             CoreRule::with_title_text(text.inner.clone())
@@ -72,12 +79,11 @@ impl AsRenderable for Rule {
             "right" => HorizontalAlign::Right,
             _ => HorizontalAlign::Center,
         };
-        Ok(Box::new(
-            rule.characters(self.characters.clone())
-                .style(style)
-                .end(self.end.clone())
-                .align(align),
-        ))
+        Ok(rule
+            .characters(self.characters.clone())
+            .style(style)
+            .end(self.end.clone())
+            .align(align))
     }
 }
 

@@ -18,6 +18,7 @@ pub struct ConfigSource {
 
 /// One configurable setting.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct ConfigEntry {
     pub key: String,
     /// The value type as users write it: `integer`, `string`, `bool`,
@@ -86,6 +87,7 @@ impl ConfigEntry {
 /// assert!(out.contains("  2. user (~/.config/tool.toml) — Your settings"));
 /// ```
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct ConfigReference {
     pub title: String,
     pub description: String,

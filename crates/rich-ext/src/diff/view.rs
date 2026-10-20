@@ -43,6 +43,7 @@ pub(crate) enum Tag {
 /// assert_eq!(out, "@@ -1,2 +1,2 @@\n  a\n- b\n+ c");
 /// ```
 #[derive(Clone)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct DiffView {
     old: Vec<Text>,
     new: Vec<Text>,

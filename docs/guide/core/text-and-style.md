@@ -17,9 +17,22 @@ programmatically, and `Style` when you need a style as a value.
 `console.print_str` parses markup. So do panel and table titles, rule titles,
 spinner and status text, and prompt questions.
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_text.rs:markup"
 ```
+
+```text { .rich-playground data-kind="markup" data-width="64" }
+[bold]bold[/] [italic]italic[/] [underline]underline[/] [strike]strike[/]
+[bold red]nested [italic]and inner[/italic] outer[/bold red] plain
+[b]short[/b] [i]forms[/] [reverse] reverse [/] [dim]dim[/]
+[link=https://github.com/Textualize/rich]a hyperlink[/link]
+A literal \[bold] tag, and :rocket: :sparkles: emoji
+user said: \[red]not markup\[/red]
+```
+
+</div>
 
 ![Markup tags, nesting, links, escapes and emoji](../../media/guide/guide_text-markup.svg)
 
@@ -54,9 +67,20 @@ returns a `Result` — use it when a markup mistake should be an error.
 A style definition is a space-separated list of words — the same grammar
 inside a markup tag and in `Style::parse`.
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_text.rs:colors"
 ```
+
+```text { .rich-playground data-kind="markup" data-width="64" }
+[red]red[/] [bright_green]bright_green[/] [grey62]grey62[/]
+[#ff8800]#ff8800[/] [rgb(90,160,255)]rgb(90,160,255)[/] [color(201)]color(201)[/]
+[white on dark_blue] white on dark_blue [/] [black on #ffcc00] on hex [/]
+[bold not italic]bold not italic[/] [i]italic [not i]not[/] again[/]
+```
+
+</div>
 
 ![Named, hex, RGB and 256-colour colours, backgrounds and negation](../../media/guide/guide_text-colors.svg)
 
@@ -178,9 +202,17 @@ resolved `Style` is written as its definition (`red on blue`). An
 `Justify` decides where spare cells go on each line: `Left`, `Center`,
 `Right` or `Full` (stretch the gaps; the last line stays left).
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_text.rs:justify"
 ```
+
+```text { .rich-playground data-kind="panel" data-justify="center" data-title="Center" data-width="40" }
+Justification decides where the spare cells on each line go.
+```
+
+</div>
 
 ![Left, centre, right and full justification](../../media/guide/guide_text-justify.svg)
 
@@ -189,9 +221,17 @@ resolved `Style` is written as its definition (`red on blue`). An
 `…`, `Ignore` leaves it alone. `no_wrap(true)` keeps each line on one line, so
 the overflow method applies to the whole line.
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_text.rs:overflow"
 ```
+
+```text { .rich-playground data-kind="panel" data-overflow="ellipsis" data-title="Ellipsis" data-width="40" }
+supercalifragilisticexpialidocious-and-then-some
+```
+
+</div>
 
 ![Fold, crop and ellipsis overflow](../../media/guide/guide_text-overflow.svg)
 
@@ -213,9 +253,20 @@ The built-in
 colours what looks like code: numbers, strings, booleans, `None`, paths, URLs,
 UUIDs, IP addresses, call syntax.
 
+<div class="rich-playground-pair" markdown>
+
 ```rust
 --8<-- "crates/rich/examples/guide_text.rs:highlight"
 ```
+
+```text { .rich-playground data-kind="markup" data-width="64" }
+int 42, float 3.14, hex 0xff, str 'quoted', bool True / None
+path /usr/local/bin/rich, url https://example.com/a?b=1
+uuid 123e4567-e89b-12d3-a456-426614174000, ip 192.168.0.1
+call Point(x=1, y=2) → {'k': [1, 2]}
+```
+
+</div>
 
 ![Automatic repr highlighting](../../media/guide/guide_text-highlight.svg)
 

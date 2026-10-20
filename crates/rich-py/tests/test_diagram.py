@@ -59,6 +59,21 @@ def test_the_builder_chains_and_reads_back():
     assert graph.edges[1].end is None and graph.edges[1].label == "peer"
 
 
+def test_edges_carry_texts_at_their_ends():
+    # rich_diagram's `Graph::end_labels` doc example.
+    graph = diagram.Graph("LR").link("customer", "order", start_label="1", end_label="0..N")
+    assert diagram.draw_graph(graph)[1] == "│ customer ├─1──0..N─┤ order │"
+    edge = graph.edges[0]
+    assert (edge.start_label, edge.end_label) == ("1", "0..N")
+    assert repr(edge) == (
+        "DiagramEdge(source=0, target=1, label=None, stroke='solid', start=None, end=None, length=1, "
+        "start_label='1', end_label='0..N')"
+    )
+    plain = diagram.Graph().edge("a", "b", end_label="n").edges[0]
+    assert (plain.start_label, plain.end_label) == (None, "n")
+    assert "start_label" not in repr(diagram.Graph().edge("a", "b").edges[0])
+
+
 def test_a_diagram_copies_its_graph():
     graph = api_db()
     picture = diagram.Diagram(graph)

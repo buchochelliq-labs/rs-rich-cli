@@ -5,8 +5,16 @@
 //! [`Segment`]s (a solid block: each line is padded to the render width with
 //! the theme background).
 //!
-//! Highlighting goes through a [`CodeHighlighter`]. The default,
-//! [`SyntectHighlighter`], uses the `syntect` crate.
+//! Highlighting goes through a [`CodeHighlighter`]: the `Syntax`'s own
+//! ([`Syntax::highlighter`]), else the console's default
+//! ([`ConsoleCodeHighlighting`](crate::protocol::ConsoleCodeHighlighting)),
+//! else the built-in one. With the `syntax` feature (on by default) the
+//! built-in one is `SyntectHighlighter`, which uses the `syntect` crate.
+//! With only the `code` feature there is no built-in engine: a `Syntax` with
+//! no highlighter of its own and none on the console renders as plain,
+//! unhighlighted code, in the same layout (padding, line numbers, wrapping,
+//! `background_color` and stylized ranges still apply; there is no theme
+//! background).
 //!
 //! **Divergence:** upstream uses Pygments; `syntect` ships different grammars
 //! and themes. So the *coloring is functional, not byte-identical* to Python
@@ -19,9 +27,11 @@ use std::sync::Arc;
 #[cfg(feature = "syntax-cache")]
 #[path = "syntax_cache.rs"]
 mod cache;
+#[cfg(feature = "syntax")]
 #[path = "syntax_syntect.rs"]
 mod syntect_adapter;
 
+#[cfg(feature = "syntax")]
 pub use syntect_adapter::SyntectHighlighter;
 
 use crate::cells::cell_len;
@@ -41,6 +51,21 @@ use crate::text::Text;
 const DEFAULT_TAB_SIZE: usize = 4;
 
 /// A block of syntax-highlighted source code. Mirrors `rich.syntax.Syntax`.
+///
+/// The highlighting engine is the one given to
+/// [`highlighter`](Self::highlighter), else the console's default
+/// ([`ConsoleCodeHighlighting`](crate::protocol::ConsoleCodeHighlighting)),
+/// else syntect with the `syntax` feature. A build with only the `code`
+/// feature has no engine of its own, so a `Syntax` with neither renders as
+/// plain code in the same layout:
+///
+/// ```
+/// use rich::{Console, Syntax};
+///
+/// let console = Console::builder().width(12).color_system(None).build();
+/// let out = console.render_to_string(&Syntax::new("SELECT 1", "sql").padding(1));
+/// assert!(out.contains(" SELECT 1"));
+/// ```
 pub struct Syntax {
     code: String,
     language: Option<String>,
@@ -50,7 +75,7 @@ pub struct Syntax {
     /// `(top, right, bottom, left)`.
     padding: (usize, usize, usize, usize),
     tab_size: usize,
-    /// `None` means [`SyntectHighlighter`].
+    /// `None` means the console's default, else the built-in engine.
     highlighter: Option<Arc<dyn CodeHighlighter>>,
     line_numbers: bool,
     start_line: i64,
@@ -151,8 +176,9 @@ impl Syntax {
         }
     }
 
-    /// Highlight with `highlighter` instead of the default
-    /// [`SyntectHighlighter`]. Theme names are the highlighter's own.
+    /// Highlight with `highlighter` instead of the console's default or the
+    /// built-in engine (`SyntectHighlighter` with the `syntax` feature, plain
+    /// code without it). Theme names are the highlighter's own.
     pub fn highlighter(mut self, highlighter: Arc<dyn CodeHighlighter>) -> Self {
         self.highlighter = Some(highlighter);
         self
@@ -270,7 +296,7 @@ impl Syntax {
     /// validate the result against the source (see [`CodeHighlighter`]).
     ///
     /// The engine is this `Syntax`'s own, else `console`'s default (whose theme
-    /// then applies unless this `Syntax` names one), else syntect.
+    /// then applies unless this `Syntax` names one), else the built-in one.
     fn highlighted(&self, code: &str, console: Option<&Console>) -> HighlightedCode {
         let (engine, theme) = self.engine_and_theme(console);
         let language = self.language.as_deref();
@@ -282,6 +308,55 @@ impl Syntax {
         };
         let highlighted = result.unwrap_or_default();
         validate(code, highlighted)
+    }
+}
+
+/// The engine a `Syntax` uses when neither it nor the console names one.
+#[cfg(feature = "syntax")]
+fn builtin_highlighter() -> Arc<dyn CodeHighlighter> {
+    SyntectHighlighter::shared()
+}
+
+/// The engine a `Syntax` uses when neither it nor the console names one:
+/// without the `syntax` feature there is none, so the code stays plain.
+#[cfg(not(feature = "syntax"))]
+fn builtin_highlighter() -> Arc<dyn CodeHighlighter> {
+    use std::sync::OnceLock;
+    static SHARED: OnceLock<Arc<dyn CodeHighlighter>> = OnceLock::new();
+    SHARED.get_or_init(|| Arc::new(PlainCode)).clone()
+}
+
+/// Plain code: every line unstyled, whatever the language or theme.
+#[cfg(not(feature = "syntax"))]
+struct PlainCode;
+
+#[cfg(not(feature = "syntax"))]
+impl CodeHighlighter for PlainCode {
+    fn highlight(
+        &self,
+        code: &str,
+        _language: Option<&str>,
+        _theme: &str,
+    ) -> Result<HighlightedCode, HighlightError> {
+        Ok(HighlightedCode {
+            lines: code
+                .split('\n')
+                .map(|_| HighlightedLine::default())
+                .collect(),
+            ..HighlightedCode::default()
+        })
+    }
+
+    fn default_theme(&self) -> &str {
+        "plain"
+    }
+
+    fn themes(&self) -> Vec<String> {
+        vec!["plain".to_string()]
+    }
+
+    fn languages(&self) -> Vec<String> {
+        Vec::new()
     }
 }
 
@@ -340,7 +415,8 @@ fn line_pieces<'a>(
 impl Syntax {
     /// The highlighting engine and theme name: this `Syntax`'s own, else
     /// `console`'s default (whose theme then applies unless this `Syntax`
-    /// names one), else syntect's.
+    /// names one), else the built-in engine's (syntect, or plain code
+    /// without the `syntax` feature).
     fn engine_and_theme(&self, console: Option<&Console>) -> (Arc<dyn CodeHighlighter>, String) {
         use crate::protocol::ConsoleCodeHighlighting;
         let default = match &self.highlighter {
@@ -351,7 +427,7 @@ impl Syntax {
             .highlighter
             .clone()
             .or_else(|| default.map(|d| d.highlighter.clone()))
-            .unwrap_or_else(SyntectHighlighter::shared);
+            .unwrap_or_else(builtin_highlighter);
         let theme = self
             .theme
             .as_deref()
@@ -986,6 +1062,8 @@ mod tests {
             .render_to_string(&Syntax::new(code, lang))
     }
 
+    // Asserts syntect's colours or its themes' padded background.
+    #[cfg(feature = "syntax")]
     #[test]
     fn measured_syntax_still_prints_at_full_width() {
         // Upstream renders a printed Syntax at the console width (its background
@@ -998,6 +1076,8 @@ mod tests {
         assert_eq!(cell_len(out.lines().next().unwrap()), 30, "{out:?}");
     }
 
+    // Asserts syntect's colours or its themes' padded background.
+    #[cfg(all(feature = "syntax", feature = "markdown"))]
     #[test]
     fn a_lone_carriage_return_breaks_the_line_like_pygments() {
         // Expected output captured from rich 15.0.0 (color_system=None) with
@@ -1027,6 +1107,37 @@ mod tests {
         );
     }
 
+    /// Without syntect and with no highlighter, code is plain, in the same
+    /// layout: padding and line numbers, no colour and no background.
+    #[cfg(not(feature = "syntax"))]
+    #[test]
+    fn without_syntect_code_renders_plain_in_the_same_layout() {
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(20)
+            .build();
+        let plain = Syntax::new("fn main() {}\nlet x;", "rust").padding(1);
+        let out = console.render_to_string(&plain);
+        assert!(!out.contains('\x1b'), "{out:?}");
+        assert_eq!(
+            out,
+            "                    \n fn main() {}       \n let x;             \n                    "
+        );
+        let numbered = console.render_to_string(
+            &Syntax::new("a\nb", "python")
+                .line_numbers(true)
+                .theme("monokai"),
+        );
+        assert!(
+            numbered.contains("1 ") && numbered.contains("a"),
+            "{numbered:?}"
+        );
+        let text = Syntax::new("x = 1", "python").highlight();
+        assert_eq!(text.plain(), "x = 1");
+        assert!(text.spans().is_empty());
+    }
+
     #[test]
     fn splitlines_matches_python() {
         assert_eq!(
@@ -1037,6 +1148,8 @@ mod tests {
         assert!(python_splitlines("").is_empty());
     }
 
+    // Asserts syntect's colours or its themes' padded background.
+    #[cfg(feature = "syntax")]
     #[test]
     fn highlights_rust_keyword() {
         // Functional (not byte-parity): assert the code text survives and the
@@ -1101,6 +1214,8 @@ mod tests {
     /// A blank source line has no segments, and folding an empty row yielded
     /// zero rows rather than one empty one — so wrapping silently deleted every
     /// blank line in the file, and the loss was baked into exports.
+    // Asserts syntect's colours or its themes' padded background.
+    #[cfg(feature = "syntax")]
     #[test]
     fn word_wrap_keeps_blank_lines() {
         let console = Console::builder().width(20).color_system(None).build();
@@ -1129,6 +1244,8 @@ mod tests {
     /// requested 30 and tore the background block.
     ///
     /// Both expectations captured verbatim from real rich 15.0.0.
+    // Asserts syntect's colours or its themes' padded background.
+    #[cfg(feature = "syntax")]
     #[test]
     fn tabs_are_expanded_before_highlighting() {
         let console = Console::builder().width(30).color_system(None).build();
@@ -1150,6 +1267,8 @@ mod tests {
 
     /// A tab advances to the next multiple of the tab size, so it is *not* a
     /// fixed run of spaces — the width of the text before it decides.
+    // Asserts syntect's colours or its themes' padded background.
+    #[cfg(feature = "syntax")]
     #[test]
     fn a_tab_advances_to_the_next_tab_stop() {
         let console = Console::builder().width(20).color_system(None).build();
@@ -1173,6 +1292,8 @@ mod tests {
     /// one cell and the padding was computed the same way, so the row looked
     /// exactly `width` wide to us while the terminal advanced the tab to the
     /// next 8-cell stop and the block overran by seven.
+    // Asserts syntect's colours or its themes' padded background.
+    #[cfg(feature = "syntax")]
     #[test]
     fn a_tabbed_line_measures_the_requested_width() {
         /// Width as the *terminal* renders it: a tab jumps to the next 8-cell
@@ -1324,7 +1445,6 @@ mod tests {
     /// theme wins; with no default, output is unchanged.
     #[test]
     fn a_console_default_highlighter_applies_where_none_is_given() {
-        use crate::markdown::Markdown;
         use crate::protocol::{CodeHighlighting, ConsoleCodeHighlighting};
         let plain = || {
             Console::builder()
@@ -1355,14 +1475,19 @@ mod tests {
             .contains("\x1b[1mx = 1"));
         // The Syntax's own highlighter beats the console's, and the console's
         // theme (a name of another engine) does not follow it.
+        #[cfg(feature = "syntax")]
         let own = with(Some("underline"))
             .render_to_string(&syntax().highlighter(SyntectHighlighter::shared()));
+        #[cfg(feature = "syntax")]
         assert_eq!(own, plain().render_to_string(&syntax()));
         // Markdown code blocks follow the console.
-        let markdown = Markdown::new("```python\nx = 1\n```");
-        assert!(with(None)
-            .render_to_string(&markdown)
-            .contains("\x1b[1mx = 1"));
+        #[cfg(feature = "markdown")]
+        {
+            let markdown = crate::markdown::Markdown::new("```python\nx = 1\n```");
+            assert!(with(None)
+                .render_to_string(&markdown)
+                .contains("\x1b[1mx = 1"));
+        }
         // `highlight_for` sees the console; `highlight` does not.
         assert!(!syntax().highlight_for(&with(None)).spans().is_empty());
         assert_eq!(
@@ -1508,6 +1633,8 @@ mod tests {
 
     /// Upstream's `ANSI_DARK`/`ANSI_LIGHT` colours, by Pygments token class,
     /// applied through the TextMate scopes syntect reports.
+    // Asserts syntect's colours or its themes' padded background.
+    #[cfg(feature = "syntax")]
     #[test]
     fn ansi_themes_use_upstream_palette_colours() {
         let code = "# note\n@wraps\ndef greet(name):\n    return f\"hi {name}\" and 42\n";

@@ -330,6 +330,7 @@ impl Redactor {
     }
 
     /// Add a built-in detector.
+    #[must_use]
     pub fn detector(mut self, detector: Detector) -> Self {
         self.rules.push(Rule::Detector(detector));
         self
@@ -363,6 +364,7 @@ impl Redactor {
 
     /// The replacement text (default `********`). `{kind}` is replaced by
     /// the matching rule's name, so `[{kind}]` gives `[jwt]`.
+    #[must_use]
     pub fn mask(mut self, mask: impl Into<String>) -> Self {
         self.mask = mask.into();
         self
@@ -374,6 +376,7 @@ impl Redactor {
     /// always keep their width). A mask of one repeated character, like the
     /// default, fills the width; any other mask is cut, or padded with
     /// spaces.
+    #[must_use]
     pub fn preserve_width(mut self, on: bool) -> Self {
         self.preserve_width = on;
         self

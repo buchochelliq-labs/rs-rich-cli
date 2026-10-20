@@ -1,0 +1,4 @@
+# Build outputs: ./build.sh writes these.
+/target/
+/web/pkg/
+/web/xterm/

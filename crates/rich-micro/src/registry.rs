@@ -72,6 +72,7 @@ impl MicroRoots {
     }
 
     /// Load the project layer (or not).
+    #[must_use]
     pub fn trust_project(mut self, trusted: bool) -> Self {
         self.project_trusted = trusted;
         self

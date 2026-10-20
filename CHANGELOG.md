@@ -9,6 +9,200 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Python: this cohort's Rust APIs, and rs-rich's identity on the Python site (rs-rich on PyPI)
+
+- `rs_rich.ext.markdown_export`: GitHub-flavoured Markdown from the Python
+  renderables (`to_gfm`, `GfmExporter`, `GfmDocument`, `GfmOptions`,
+  `PanelStyle`, `fit_github_comment`, `truncate_markdown`,
+  `GITHUB_COMMENT_LIMIT`). `Table`, `Tree`, `Panel`, `Rule`, `Text`, markup,
+  `Syntax` and `Markdown` are read as the Rust crate reads them; a `Group`
+  writes each item as its own block.
+- `rs_rich.ext.sql`: the SQL highlighter without syntect (`SqlHighlighter`,
+  with an optional fallback, `highlight`, `tokenize`, `token_style`,
+  `is_sql`). `highlighter="sql"` picks it for `Syntax` and `Markdown`, and
+  `rs_rich.plugins.SqlPlugin` registers it with a plugin host. The wheel
+  builds rs-rich-ext with `sql`.
+- Plain-text cells: `Table.add_plain_row`, `add_plain_rows`,
+  `add_plain_column` and `Tree.add_plain` take data literally, never as
+  markup.
+- `Table.columns` and `Table.rows`, as in Rich: read-only `Column` and
+  `Row` copies (`rs_rich.table.Column`, `rs_rich.table.Row`), compared with
+  Rich 15.0.0.
+- `rs_rich.mermaid` parses and draws sequence and ER diagrams
+  (`parse_sequence`, `draw_sequence`, `parse_er`, `draw_er`, with
+  `SequenceDiagram`, `EntityDiagram` and their parts); `parse` and `draw`
+  pick the kind by the header, as `Mermaid` does. `parse_flowchart` given a
+  sequence or ER diagram names the parser to use, and `MermaidDiagram` has
+  the drawing's `notes`.
+- `rs_rich.diagram`: edges' `start_label` and `end_label`, in
+  `Graph.edge`, `Graph.link` and `DiagramEdge`.
+- `Form.multi` and `Form.file` in `rs_rich.interact`: their answers are a
+  `list` of `str` and a `pathlib.Path` (a path was a `str`).
+- The Python site has rs-rich's mark, favicon and gold accent, and the hero
+  banner on its home page, with pip's install line
+  (`scripts/gen_rs_rich_hero.py` writes it and copies the mark into
+  `docs/python/assets/`). New pages and sections for all of the above; the
+  Mermaid page's "not drawn as text" example is a class diagram now.
+
+### Docs: rs-rich's own identity, and intuiTUIve as a sub-site
+
+- rs-rich has a mark (a styled "r" in a terminal tile, with a gold span and
+  a gold cell), a favicon, wordmarks with "rich" reversed out of a gold span,
+  27 line icons for the site's sections, a preview sheet and a hero banner
+  (`scripts/gen_rs_rich_hero.py`), under `docs/assets/rs-rich/`. They share
+  intuiTUIve's ink and shapes, with gold (`#c08600`) where intuiTUIve has
+  purple, so the two read as parent and child.
+- The site uses the mark as its logo and favicon, and gold as its accent;
+  intuiTUIve's pages keep its purple.
+- The home page and the README open with the hero; the home page links to
+  intuiTUIve in a card of its own and ends with every section and its icon.
+  The guide's front page lists each crate's section with its icon, and each
+  crate's page shows its icon by its title.
+- intuiTUIve is a top-level section of the site, after the Guide, with its
+  overview as the section's page. Its pages keep their URLs.
+
+### rs-rich-mermaid, rs-rich-diagram, rs-rich-cli: sequence and ER diagrams drawn as text
+
+- **Sequence diagrams** (`sequenceDiagram`) are drawn as text, no longer
+  shown as source: participants and actors (`as` aliases) heading their
+  lifelines; every arrow (`->>`, `-->>`, `->`, `-->`, `-x`, `--x`, `-)`,
+  `--)`, `<<->>`, `<<-->>`) with its line and tip; self-messages; notes left
+  of, right of and over one or two participants; activation bars
+  (`activate`/`deactivate` and `+`/`-`); `loop`, `alt`/`else`, `opt`,
+  `par`/`and`, `critical`/`option`, `break` and `rect` frames with their
+  labels; `autonumber` and `title`. Columns are sized to their text, so
+  nothing overlaps; a diagram wider than the width is cropped with a note.
+  `rich_mermaid::sequence` parses and draws them.
+- **ER diagrams** (`erDiagram`) are drawn through the layered layout:
+  entities as table boxes (type, name, `PK`/`FK`/`UK`, comment), solid
+  identifying and dotted non-identifying relationships with their labels,
+  and the cardinality at each end as text (`1`, `0..1`, `0..N`, `1..N`),
+  symbols and word forms alike; `direction` and a front-matter title.
+  `rich_mermaid::er` parses and draws them.
+- `box`, `create`, `destroy` and participant types are drawn simplified, with
+  a note; other syntax in either kind falls back to the source under a note
+  naming it. Without Sixel graphics, the `mmdc` backend draws both as text,
+  as it does flowcharts.
+- **Texts at an edge's ends** in rs-rich-diagram: `Edge::start_label` and
+  `end_label` (the `Graph::end_labels` builder call) are drawn where the line
+  leaves and reaches a node, on the line left-right and beside it top-down,
+  clear of the other lines. DOT's `taillabel` and `headlabel` map to them.
+  Graphs without them draw as before.
+- `rich mermaid` and ```` ```mermaid ```` fences pick both kinds up; the help
+  and the CLI reference say so.
+- Tests: parser tests for each construct, Unicode and ASCII snapshots,
+  cropping, fallbacks, random sources (never wider than asked, never a
+  panic) and bounded work on the largest sources.
+
+### Builders are `#[must_use]` (rs-rich-ext, rs-rich-interact, rs-rich-intuituive, rs-rich-art, rs-rich-diagram, rs-rich-mermaid, rs-rich-micro, rs-rich-data, rs-rich-record, rs-rich-web, rs-rich-embed, rs-rich-ratatui, rs-rich-plugin-api)
+
+- **A dropped builder now warns.** A builder method takes `self` and
+  returns `Self`, so `node.on_key(..);` on its own line moved the node
+  away and did nothing. 184 types that are only useful once used
+  (intuiTUIve's `Node`, its `*Options` structs and widgets, rs-rich-ext's
+  charts and views, rs-rich-interact's components, `Graph`, the art
+  renderables, `RichWidget`) are `#[must_use]`, and so are 423 setters on
+  other types.
+- No breaking change: code that uses its builders compiles as before;
+  code that drops one gets an `unused_must_use` warning.
+- Setters on `Copy` handles that work through shared state
+  (`Transport::tick`, `Timer::max_catch_up`, `MultiSelect::scoped`,
+  `Resource::stale_after`, …) warn too, for one rule everywhere; they still
+  make their change when the result is dropped, so `let _ =` keeps the old
+  behaviour without the warning.
+- Every crate but `rs-rich` (the mirror is unchanged) turns on
+  `clippy::return_self_not_must_use`, so new builders stay covered; the
+  rule is in `CONTRIBUTING.md`, "API conventions".
+
+### rs-rich: `Syntax` and `Markdown` without syntect (feature `code`)
+
+- **`code`**, a new feature with no dependencies: `Syntax`, the
+  `CodeHighlighter` plumbing and everything `Markdown` needs. `syntax` is
+  now `code` plus syntect, `markdown` implies `code` instead of `syntax`,
+  and `syntax-cache` and `onig` stay on `syntax`. The default features, and
+  the default output, are unchanged; the golden tests pass as they were.
+- With `code` but not `syntax`, a `Syntax` or Markdown code block
+  highlights with its own highlighter or the console's default (which
+  `rs-rich-ext`'s registry installs), and with neither renders as plain
+  code in the same layout. `SyntectHighlighter` stays behind `syntax`.
+  Recorded as [Divergences #39](docs/DIVERGENCES.md).
+- CI builds, lints and tests `--no-default-features --features
+  code,markdown`, and checks that `rs-rich-ext` with `sql,markdown` and no
+  default features carries no syntect or bincode.
+
+### rs-rich: read-only accessors for tables, panels, rules and Markdown
+
+- Getters that mirror upstream's public attributes and change nothing:
+  `Table::columns` and `Table::rows` (the now-public `table::Column`, with
+  `header`, `footer`, `justify`, `style`, `header_style` and
+  `footer_style`, and `table::Row`, with `cells`, `style` and
+  `end_section`), `Table::get_title`, `get_caption`, `get_show_header`,
+  `get_show_footer`, `get_show_lines`, `get_box`, `get_header_style` and
+  `get_footer_style`; `Panel::renderable`, `get_title`, `get_subtitle`,
+  `get_title_align` and `get_subtitle_align`; `Rule::get_title` and
+  `get_align`; `Markdown::markup`. A `get_` prefix where the builder
+  already has the name, as `Tree::get_style`. Output is unchanged.
+
+### rs-rich-ext: Markdown for GitHub
+
+- **`markdown_export`** writes renderables as GitHub-flavoured Markdown, for
+  pull request comments and job summaries. `GfmDocument` collects blocks;
+  `ToGfm` is implemented for `Table` (a GFM table: header, an alignment row
+  from each column's justify, `|` escaped, cell styles as `**`, `*`, `~~`
+  and links), `Tree` (nested lists), `Panel` (a blockquote, or
+  `<details><summary>` with `PanelStyle::Details`), `Rule` (`---`), `Text`
+  and markup (inline Markdown, code from `code`-named styles), `Syntax` (a
+  fence with its language) and groups. Anything else, `Columns` included,
+  is its plain rendering in a ```` ```text ```` fence at a set width.
+- Exact: tables, panels, rules and Markdown are read through core's new
+  read-only accessors, not their rendering, so every table is written as
+  it is (a grid, a table without edges, a cell of several lines as
+  `<br>`), styles named `code` survive in table cells, and a core
+  `Markdown` is written as its source. Only what exposes nothing (a
+  panel's non-text body, `Columns`) is rendered and read back, or plain.
+- `fit_github_comment` and `truncate_markdown` cut Markdown to GitHub's
+  65 536-character comment limit at a line break, close an open fence or
+  `<details>` block, and say how much was kept.
+- Guide: [Markdown for GitHub](docs/guide/ext/markdown-export.md).
+
+### rs-rich-ext: plain-text table cells
+
+- **`table::PlainRows`**, an extension trait for the core `Table`:
+  `add_plain_row`, `add_plain_rows`, `add_plain_column`,
+  `add_plain_column_justify` and `plain_column_footer` take cells as plain
+  text, so `[bold]x[/]`, a `[` in a file name or `:smile:` stay as written.
+  The core `add_row` still reads a `&str` as markup, as upstream does.
+- **`table::PlainTree::add_plain`** does the same for tree labels.
+- Guide: [Plain-text cells](docs/guide/ext/tables.md#plain-text-cells).
+
+### rs-rich-ext: a SQL highlighter without syntect
+
+- **`sql::SqlHighlighter`** (feature `sql`, off by default, no new
+  dependencies): a `CodeHighlighter` on a hand-written lexer for SQL,
+  answering to `sql` and the aliases `postgresql`, `mysql`, `sqlite`,
+  `bigquery`, `snowflake`, `duckdb` and others. Keywords (with common
+  dialect words), types, constants, functions, names, quoted names
+  (`""`, backticks, `[]`), strings (`''` escapes, `E''`, dollar quotes,
+  triple quotes), numbers, nested comments, parameters, operators and Jinja
+  blocks (`{{ }}`, `{% %}`, `{# #}`) for dbt, in `monokai`, `ansi_dark`
+  and `ansi_light`. `with_fallback` hands other languages to another
+  highlighter; `SqlPlugin` registers it as `"sql"`.
+- `sql::highlight` returns highlighted SQL as a `Text`, for builds without
+  `Syntax`; `sql::tokenize` returns the tokens.
+- `rs-rich-ext` forwards core's new `code` feature: `code` is new,
+  `syntax` is `code` plus syntect, and `markdown` now needs only `code`
+  (it used to turn on `syntax`, so syntect). `sql` turns on `code`. The
+  default features are unchanged.
+- With `default-features = false, features = ["sql", "markdown"]` on
+  `rs-rich-ext` alone, a `Syntax` and a Markdown ```` ```sql ```` fence are
+  highlighted by `SqlHighlighter` from the registry with no syntect in the
+  build (the `sql_without_syntect` test, which CI runs that way).
+- Tests: token classes on tricky input, unterminated strings and comments,
+  and 3000 random inputs that must tokenize and highlight without a panic;
+  a `Syntax` block and a Markdown ```` ```sql ```` fence highlighted through
+  the console. CI builds the feature on its own.
+- Guide: [SQL without syntect](docs/guide/ext/code-highlighters.md#sql-without-syntect).
+
 ### rs-rich-embed: Chrome's DevTools over a pipe on Linux and macOS
 
 - **No DevTools port on Unix.** `ChromeEngine` starts Chrome with
@@ -34,7 +228,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   page, under `docs/assets/intuituive/`. The overview page shows the
   wordmark and an icon beside each page; the crate README shows the mark.
 - A widget index (`guide/intuituive/widget-index.md`): every widget and
-  component, 88 in seven groups, each with an icon, its constructor, a line
+  component, 101 in eight groups, each with an icon, its constructor, a line
   on what it is and a link to the section that documents it.
 - A mascot: Memo, a purple elephant with block-cursor eyes who holds up the
   mark's lit cell, in five poses, at 32 and 16 px, and as a 32x32 pixel
@@ -170,6 +364,34 @@ the workspace):
   `fx.shimmer`, `fx.rain` and `fx.skeleton`. The `fx` example is a
   gallery of them all.
 
+### Text editing: rebindable keys, Emacs and Vim presets, search, word wrap (rs-rich-interact, rs-rich-intuituive)
+
+- `edit::Buffer` gains a kill ring (`kill_to_end`, `kill_word`, `yank`,
+  `yank_pop`, joined consecutive kills), a mark (`set_mark`), paragraph
+  moves, `delete_next_word`, search (`Search::plain`, `Search::regex` with
+  fancy-regex, `ignore_case`; `match_count`, `select_match`), an undo limit
+  (`set_history_limit`, 1000 by default), tab width and hard tabs, and
+  `wrap_line` with `WrapMode::Word`, `Grapheme` and `None`.
+- New `edit_keys`: the editors' keys as a keymap of named actions
+  (`editor_keymap`, `emacs_keymap`, `resolve`, `perform`) and the `KeyMode`
+  hook for modal presets. New `caret::CaretShape` for DECSCUSR.
+- New off-by-default `vim` feature (rs-rich-interact and rs-rich-intuituive):
+  `vim::Vim`, with normal, insert, visual and visual line modes, motions,
+  operators, counts and `.`.
+- rs-rich-interact's `TextArea` runs the buffer's new actions and gains
+  `emacs_keys()`.
+- intuiTUIve's `text_area` and `input` gain `rebind_key`, `edit_keymap`,
+  `emacs_keys`, `key_mode`, `vim` and `vim_inserting`, `mode_status`,
+  `search(TextSearch)` with match highlighting and the `search_bar` find
+  bar, `wrap_mode`, `cursor_line`, `caret_shape` (the app sends DECSCUSR
+  and puts the user's shape back) and `draw_caret`, `tab_width` and
+  `hard_tabs`, `undo_limit`, and `validate` (a message shown and given to
+  assistive technology). `Node::error_message` and `AccessNode::error` carry
+  a message for any node. Editors without these options behave as before.
+- A `textarea` example (ratatui-textarea's examples as a gallery) and the
+  guide pages [Editing text](docs/guide/intuituive/text-editing.md) and
+  [The text buffer and editor keys](docs/guide/interact/editing.md).
+
 ### Recording: a held key repeats only while it is held (rs-rich-record)
 
 - `Hold` (and a `KeyDown` held through a `Sleep`) sends the repeats due
@@ -177,6 +399,72 @@ the workspace):
   sent the ones due in its sleep, so a slow machine (macOS CI) recorded
   more repeats than the tape asked for. The count is now exact on every
   machine, and the test asserts it.
+
+### Docs: a playground in the docs (tier 1)
+
+- Guide and tutorial blocks whose input is text (console markup, CSV,
+  JSON, Markdown, code, chart values, diffs, data documents) have a
+  **Try it** button: rs-rich, compiled to wasm, renders the edited input in
+  the reader's tab, with the Rust that renders it beside the block. A new
+  [Playground](docs/playground.md) page has every kind at full size. Nothing
+  loads until the first click; the lean module (no syntect) serves most
+  blocks, and the full one loads only for `syntax` and `markdown`. Output is
+  rs-rich's own HTML export in a sandboxed frame, or xterm.js on request.
+- **Copy link** puts a block's input and options in the link's fragment,
+  compressed and size-capped; opening it restores them as text.
+- The modules come from `playground/` (not published, outside the
+  workspace). The `docs` workflow builds main's and renders every playground
+  block with them under Node, so a block that stops rendering fails the docs
+  build; a browser check covers the page. The release workflow attaches
+  `playground-X.Y.Z.tar.gz` to the release, and the versioned docs download
+  it; a release without one keeps plain code blocks.
+
+### Docs: the CLI in the playground (tier 2; rs-rich-cli)
+
+- CLI examples in the docs have a **Try it** button: it opens a terminal
+  (xterm.js) on the page with the block's commands filled in at the
+  prompt, run by `rich` compiled for WASI (`wasm32-wasip1`, about 2.5 MB
+  gzipped, loaded on the first click). The prompt is a small line runner:
+  pipes, `;`, `&&`, `||`, redirects, variables, globs and a few builtins
+  (`echo`, `cat`, `ls`, `seq`, …) over sample files. **Stop** ends a
+  runaway command; **Save as tape** downloads the session as a tape that
+  `rich record` replays.
+- 127 CLI examples on 16 pages run; the rest (URLs, `--watch`, `capture`,
+  `record`, `rich deps`, `git` and `jq`) stay plain code. The docs check
+  runs every marked block under Node and fails on an example that runs but
+  is not marked.
+- rs-rich-cli builds for `wasm32-wasip1` with `art,mermaid`: host-only
+  dependencies are gated; under WASI `--demo` and `rich spin` exit 2 as not
+  available and `rich log` reads stdin without a thread. Native builds are
+  unchanged. CI checks the WASI build.
+
+### Docs: apps in the playground (tier 3; rs-rich-interact, rs-rich-intuituive, rs-rich-web)
+
+- The [Playground](docs/playground.md) page runs `rich choose` (and
+  `--multi`), `rich filter`, `rich pager` and `rich explore`, and
+  intuiTUIve's to-do, form, meters and sprites examples, in xterm.js with
+  the keyboard and the mouse; the intuiTUIve tutorial runs its to-do app
+  beside the Rust. A third module (`app`, no syntect, about 1 MB gzipped)
+  loads only on **Run it**, in a Web Worker that **Stop** ends. The docs
+  checks start every app block under Node, and drive them with keys and
+  clicks in Chromium.
+- rs-rich-interact: `EventLoop::step`, `pump`, `timeout`, `is_running`
+  and `finish`, a push API beside `run` for a host that cannot block (a
+  browser tab, another program's loop), with the same outcomes and bytes
+  as `run` on the same input; `PushBackend` and `PushPort` are a backend
+  for it whose clock and screen the host owns.
+- rs-rich-interact and rs-rich-intuituive: a `syntax` feature, on by
+  default, so nothing changes for an existing build; off, syntect is left
+  out. Both build for `wasm32-unknown-unknown`, checked in CI. On wasm32,
+  intuiTUIve keeps short spans (double clicks, throttles, the inspector's
+  timings) on the app's clock, runs `spawn`, `spawn_stream` and the
+  `files` plugin's work on the app's thread, and keeps `latest_every` to
+  an `every` timer; `latest` and a meter's peak hold are not available
+  there.
+- rs-rich-web: a `server` feature, on by default with `syntax`, around
+  everything that serves (`serve`, `serve_command`, `Server`, the page,
+  the session processes). Without it the crate is `input` (the page's key
+  and mouse decoder) and `dom`, with no networking or PTYs, for wasm32.
 
 ### Docs: one site per release, with a version selector
 

@@ -31,7 +31,7 @@ rich --no-config --watch status.json notes.md
 
 Redirecting stdout deliberately renders one snapshot and exits:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich json status.json --no-config --watch --width 72 > status.txt
 ```
 
@@ -120,7 +120,7 @@ rich README.md --config rich.toml --profile docs --export-html rendered/readme.h
 Explicit CLI values override config defaults, including short aliases and
 subcommand render modes:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich json status.json --config rich.toml --profile compact -w 64
 rich json status.json --config rich.toml --profile docs
 ```
@@ -141,7 +141,7 @@ booleans. Arguments after `--` remain operands.
 
 Inspect or validate configuration without rendering an input:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich config validate --config rich.toml --profile ci
 rich config show --config rich.toml --profile compact --width 64
 rich json status.json --config rich.toml --profile compact --no-pager
@@ -173,7 +173,7 @@ image_background = "#202830"
 
 ## Page tall terminal output automatically
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich markdown README.md --no-config --auto-pager
 rich markdown README.md --no-config --auto-pager > readme.txt
 rich markdown README.md --config rich.toml --no-pager
@@ -186,7 +186,7 @@ disables only automatic paging. Existing explicit `--pager` remains available.
 
 ## Keep a subject near an image edge
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image photo.png --no-config --image-mode blocks --width 40 --height 12 \
   --image-fit cover --image-anchor top-left --image-background '#202830'
 ```
@@ -271,7 +271,7 @@ Lean builds explain the unavailable art section.
 Use any local `photo.png` with gradients. Explicit ASCII/blocks mode keeps the
 comparison independent of terminal graphics detection:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image photo.png --no-config --image-mode blocks --width 60 --image-color truecolor
 rich image photo.png --no-config --image-mode blocks --width 60 --image-color ansi256
 rich image photo.png --no-config --image-mode blocks --width 60 \
@@ -288,7 +288,7 @@ diffs ignore these controls. The dithers are `floyd-steinberg`, `bayer4x4` and
 `--image-color-distance oklab` measures perceptually instead, which keeps hues
 truer on the ANSI16 palette:
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich image photo.png --no-config --image-mode quadrants --width 60 \
   --image-color ansi16 --image-dither atkinson --image-color-distance oklab
 ```
@@ -298,7 +298,7 @@ preserves the existing rendering policy. These controls require the `art` featur
 
 ## Gate CI on a text diff
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich diff expected.txt actual.txt --threshold 5 --no-pager
 ```
 
@@ -334,14 +334,14 @@ rich capture --redact --export-html deploy.html -- ./deploy.sh
 
 ## Check PATH and secrets in the environment
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich env PATH           # one row per entry: ok, missing, duplicate or empty
 rich env AWS 'DB_*'     # filter names by substring or glob; secrets are masked
 ```
 
 ## Read any file, and compare two configs
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich view src/main.rs --search todo
 rich inspect deploy.yaml --compare deploy.prod.yaml
 rich inspect settings.json --select '$.servers[*].name' --redact
@@ -352,7 +352,7 @@ output. `inspect --compare` lists added, removed and changed values.
 
 ## Use an upstream rich theme file
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --theme-file night.ini --print '[notice]Ready[/] in 42 ms'
 ```
 
@@ -362,7 +362,7 @@ working-directory `rich.toml` cannot set it.
 
 ## Install shell completions
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich completions bash > ~/.local/share/bash-completion/completions/rich
 rich completions zsh  > "${fpath[1]}/_rich"
 rich completions fish > ~/.config/fish/completions/rich.fish

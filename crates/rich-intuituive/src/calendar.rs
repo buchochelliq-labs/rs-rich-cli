@@ -94,6 +94,7 @@ type Styler = Rc<dyn Fn(Date) -> Option<String>>;
 ///
 /// It is `Clone` but not `Copy` (0.0.19): it holds strings and a function.
 #[derive(Clone, Default)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct CalendarOptions {
     pub today: Option<Date>,
     pub min: Option<Date>,
@@ -916,6 +917,7 @@ impl Widget for Month {
 /// many across (as many as fit by default), the gaps between them, and
 /// the year's heading.
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct YearOptions {
     pub(crate) calendar: CalendarOptions,
     pub(crate) across: Option<u16>,

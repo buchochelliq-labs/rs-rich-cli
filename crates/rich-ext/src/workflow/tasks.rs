@@ -120,6 +120,7 @@ impl TaskTree {
 
     /// A heading shown above the tasks and used by
     /// [`CompletionSummary`](super::CompletionSummary).
+    #[must_use]
     pub fn title(mut self, title: impl Into<String>) -> Self {
         self.title = Some(title.into());
         self
@@ -501,6 +502,7 @@ fn guides(ascii: bool) -> [&'static str; 4] {
 
 /// How a [`TaskTree`] is rendered. See the [module docs](self).
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct TaskTreeView<'a> {
     tree: &'a TaskTree,
     collapse_finished: bool,

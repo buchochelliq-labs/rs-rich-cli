@@ -72,6 +72,7 @@ impl CancelToken {
 
     /// A token cancelled when this one is, which can also be cancelled on its
     /// own without affecting this one.
+    #[must_use]
     pub fn child(&self) -> Self {
         CancelToken {
             node: Arc::new(Node {

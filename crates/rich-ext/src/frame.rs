@@ -486,6 +486,7 @@ pub struct Change {
 
 /// Rows of styled runs, with interned styles. See the [module docs](self).
 #[derive(Clone, Debug, Default)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Frame {
     /// Each row as a range of `runs`.
     rows: Vec<Range<u32>>,

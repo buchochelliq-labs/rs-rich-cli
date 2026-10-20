@@ -439,6 +439,7 @@ pub enum LoopMode {
 
 impl LoopMode {
     /// The next mode, in termusic's order (`m`).
+    #[must_use]
     pub fn cycle(self) -> LoopMode {
         match self {
             LoopMode::Random => LoopMode::Playlist,
@@ -1470,7 +1471,7 @@ pub fn music_app_seeded(root: PathBuf, seed: u64) -> App {
     App::new(move || {
         let m = Player::new(root, seed);
         // The end of a track goes on by the loop mode.
-        m.head.on_end(move |cx| m.next(cx, true));
+        let _ = m.head.on_end(move |cx| m.next(cx, true));
         // The lyric line follows playback.
         let line = memo(move || {
             let pos = m.head.position();

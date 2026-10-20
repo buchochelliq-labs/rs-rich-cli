@@ -56,6 +56,7 @@ pub use crate::tree::{
 /// in view), the least and the most it may be, and where its cells sit in
 /// it.
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct Column {
     pub title: String,
     pub size: Size,
@@ -288,6 +289,7 @@ type RowStyle = Box<dyn Fn(usize) -> Option<String>>;
 
 /// What a [`table_with`] adds to a [`table`]. Every field is off by default.
 #[derive(Default)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct TableOptions {
     /// The column and order rows are sorted by, which a click on a header
     /// (or `s`) sets and the header shows with an arrow. The rows closure

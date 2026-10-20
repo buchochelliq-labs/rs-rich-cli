@@ -192,7 +192,7 @@ impl std::error::Error for HighlightError {}
 ///     fn languages(&self) -> Vec<String> { Vec::new() }
 /// }
 ///
-/// # #[cfg(feature = "syntax")] {
+/// # #[cfg(feature = "code")] {
 /// use rich::{Console, Syntax};
 /// use std::sync::Arc;
 ///
@@ -282,8 +282,10 @@ impl std::fmt::Debug for CodeHighlighting {
 /// A [`Syntax`](crate::syntax::Syntax) without a highlighter of its own, and
 /// so Markdown code blocks, highlights with the console's when it renders;
 /// the console's theme applies when the `Syntax` names none. Without one,
-/// the default [`SyntectHighlighter`](crate::syntax::SyntectHighlighter) is
-/// used, as before: upstream has no such setting.
+/// the default `SyntectHighlighter` is used, as before: upstream has no such
+/// setting. In a build with core's `code` feature but not `syntax` there is
+/// no default engine, and this is how code gets highlighted at all; without
+/// one, code renders plain.
 pub trait ConsoleCodeHighlighting {
     fn set_code_highlighting(&mut self, value: Option<CodeHighlighting>);
     fn code_highlighting(&self) -> Option<&CodeHighlighting>;

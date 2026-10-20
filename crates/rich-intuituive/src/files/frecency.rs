@@ -151,6 +151,7 @@ impl Frecency {
 
     /// Count a visit to each directory `miller`'s columns show, as Yazi
     /// tells zoxide.
+    #[must_use]
     pub fn follow(self, miller: Miller) -> Frecency {
         let store = self;
         watch(move || miller.cwd.get(), move |dir, _| store.visit(&dir));

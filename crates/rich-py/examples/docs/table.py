@@ -58,10 +58,22 @@ def leading(console):
     # --8<-- [end:leading]
 
 
+def plain(console):
+    # --8<-- [start:plain]
+    table = Table(show_footer=True)
+    table.add_plain_column("[file]", "[total]")
+    table.add_plain_column("bytes", justify="right")
+    table.add_plain_rows([("notes[1].txt", 120), ("a:smile:b", 3)])
+    table.add_plain_row("[bold]x[/]", None)
+    console.print(table)
+    # --8<-- [end:plain]
+
+
 shots = Shots("table")
 shots.shot("first", first, width=40)
 shots.shot("columns", columns, width=32)
 shots.shot("rows", rows, width=40)
 shots.shot("footers", footers, width=40)
+shots.shot("plain", plain, width=40)
 shots.shot("leading", leading, width=40)
 shots.finish()

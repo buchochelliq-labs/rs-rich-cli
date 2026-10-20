@@ -41,6 +41,7 @@ impl Suggestion {
         }
     }
 
+    #[must_use]
     pub fn description(mut self, description: impl Into<String>) -> Suggestion {
         self.description = Some(description.into());
         self
@@ -82,6 +83,7 @@ pub fn input_keymap() -> Keymap {
 }
 
 /// One line of text.
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct Input {
     prompt: String,
     /// The text and the caret, which moves by grapheme cluster.

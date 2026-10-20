@@ -36,6 +36,7 @@ impl Completion {
     }
 
     /// Show `detail` beside it in the pop-up, dimmed.
+    #[must_use]
     pub fn detail(mut self, detail: impl Into<String>) -> Completion {
         self.detail = Some(detail.into());
         self
@@ -86,6 +87,7 @@ pub(crate) type Completer = Rc<dyn Fn(&str, usize) -> Vec<Completion>>;
 /// on Tab, the default), whether the top candidate's rest shows as ghost
 /// text (on by default), and how many rows the pop-up shows.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct CompleteOptions {
     pub(crate) auto: bool,
     pub(crate) ghost: bool,
@@ -265,6 +267,7 @@ impl From<&str> for InputHistory {
 
 impl InputHistory {
     /// Keep at most `entries` (500 by default); the oldest go.
+    #[must_use]
     pub fn limit(self, entries: usize) -> InputHistory {
         self.limit.set(entries.max(1));
         self

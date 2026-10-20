@@ -28,6 +28,11 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
         Ok(options) => options,
         Err(message) => return emit_error(false, ExitClass::Usage, &message),
     };
+    // The tour runs commands as processes and exports to a temporary
+    // directory; WASI has neither.
+    if !options.list && cfg!(target_os = "wasi") {
+        return emit_error(false, ExitClass::Usage, &crate::host::unavailable("--demo"));
+    }
     if options.list {
         println!("core       Core renderables and extensions");
         println!("workflows  Configuration, batch, exports, watch, inspectors and capture");
@@ -147,6 +152,9 @@ fn tour(no_color: bool, delay: Duration, group: Option<&str>) -> std::io::Result
     let watch_child: WatchChild = Arc::new(Mutex::new(None));
     // GIF playback owns Rust's stdout lock. Duplicate the OS handle so
     // terminal restoration never waits for that lock; pipes need no controls.
+    #[cfg(not(any(unix, windows)))]
+    let mut terminal: Option<std::fs::File> = None;
+    #[cfg(any(unix, windows))]
     let mut terminal = if std::io::stdout().is_terminal() {
         #[cfg(unix)]
         let terminal = {
@@ -164,7 +172,7 @@ fn tour(no_color: bool, delay: Duration, group: Option<&str>) -> std::io::Result
     };
     let cleanup = root.path().to_owned();
     let child = Arc::clone(&watch_child);
-    ctrlc::set_handler(move || {
+    crate::host::on_interrupt(move || {
         if let Ok(mut slot) = child.lock() {
             if let Some(mut child) = slot.take() {
                 let _ = child.kill();

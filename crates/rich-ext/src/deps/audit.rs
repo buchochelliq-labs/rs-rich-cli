@@ -418,6 +418,7 @@ impl AdvisoryReport {
     }
 
     /// Say how many dependencies were checked.
+    #[must_use]
     pub fn dependency_count(mut self, count: u64) -> Self {
         self.dependency_count = Some(count);
         self

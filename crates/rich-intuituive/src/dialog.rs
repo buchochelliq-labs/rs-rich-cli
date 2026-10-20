@@ -307,6 +307,7 @@ impl Ctx {
 /// cells wide and as tall as its content by default) and its title's
 /// style (the theme's `popup.title` by default).
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct ConfirmOptions {
     pub width: Size,
     pub height: Size,
@@ -352,6 +353,7 @@ type OnChange = Box<dyn FnMut(&str, &mut Ctx)>;
 
 /// Where a [`prompt_with`](Ctx::prompt_with) opens, its caret, its
 /// title's style, and what hears each edit and Esc.
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct PromptOptions {
     origin: Origin,
     offset: Offset,
@@ -468,6 +470,7 @@ impl PromptOptions {
 
 /// The size and title style of a [`pick_with`](Ctx::pick_with) menu.
 #[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct PickOptions {
     /// Where it goes from its origin and its size; `None` sizes it to the
     /// items and the title.

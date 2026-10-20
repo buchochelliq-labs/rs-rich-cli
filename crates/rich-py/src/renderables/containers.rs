@@ -99,6 +99,13 @@ pub(crate) struct Group {
     fit: bool,
 }
 
+impl Group {
+    /// The renderables, in order (for the Markdown export).
+    pub(crate) fn items<'py>(&self, py: Python<'py>) -> Vec<Bound<'py, PyAny>> {
+        self.renderables.bind(py).iter().collect()
+    }
+}
+
 impl AsRenderable for Group {
     fn to_renderable(&self, py: Python<'_>) -> PyResult<Box<dyn Renderable>> {
         Ok(Box::new(Stack::from_list(
@@ -208,6 +215,13 @@ fn group(py: Python<'_>, fit: bool) -> PyResult<Bound<'_, PyCFunction>> {
 #[pyclass(name = "Renderables", module = "rs_rich.containers")]
 pub(crate) struct Renderables {
     renderables: Py<PyList>,
+}
+
+impl Renderables {
+    /// The renderables, in order (for the Markdown export).
+    pub(crate) fn items<'py>(&self, py: Python<'py>) -> Vec<Bound<'py, PyAny>> {
+        self.renderables.bind(py).iter().collect()
+    }
 }
 
 impl AsRenderable for Renderables {

@@ -40,6 +40,7 @@ type OnCancel = Box<dyn FnMut(&mut Ctx)>;
 /// # let _ = filter;
 /// ```
 #[derive(Default)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct Mode {
     prefix: String,
     title: Option<String>,
@@ -283,6 +284,7 @@ impl CommandLine {
 /// How a [`command_line_with`] looks: one row (the default) or two (the
 /// title on its own row above the line, taskwarrior-tui's).
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct CommandLineOptions {
     pub(crate) two_rows: bool,
 }

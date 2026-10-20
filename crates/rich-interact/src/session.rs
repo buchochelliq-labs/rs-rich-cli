@@ -37,6 +37,8 @@
 //! calls [`run`](crate::run) from inside another) fails with
 //! [`io::ErrorKind::ResourceBusy`] and changes nothing.
 
+#[cfg(target_arch = "wasm32")]
+use crate::crossterm_stub as crossterm;
 use std::cell::Cell;
 use std::fmt;
 use std::io::{self, Write};
@@ -46,7 +48,11 @@ use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Once;
 use std::time::{Duration, Instant};
 
-use crate::event::{from_crossterm, from_crossterm_kitty, Event};
+#[cfg(target_arch = "wasm32")]
+use crate::crossterm_stub::{from_crossterm, from_crossterm_kitty};
+use crate::event::Event;
+#[cfg(not(target_arch = "wasm32"))]
+use crate::event::{from_crossterm, from_crossterm_kitty};
 
 #[cfg(all(unix, feature = "termion"))]
 mod with_termion;

@@ -30,6 +30,10 @@
 //! public `rich` / `rich-ext` / `rich-art` / `rich-diagram` / `rich-mermaid`
 //! / `rich-interact` / `rich-micro` / `rich-record` / `rich-web` APIs.
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 use std::io::{BufRead, IsTerminal, Read, Write};
 use std::path::{Path, PathBuf};
 use std::process::ExitCode;
@@ -41,6 +45,7 @@ mod authoring;
 #[cfg(feature = "art")]
 mod banner;
 mod batch;
+#[cfg_attr(target_os = "wasi", path = "batch_output_wasi.rs")]
 mod batch_output;
 mod batch_paths;
 #[cfg(test)]
@@ -52,6 +57,7 @@ mod controls;
 mod demo;
 mod doctor;
 mod documents;
+mod host;
 mod inspect;
 #[cfg(feature = "interact")]
 mod interactive;
@@ -728,7 +734,8 @@ struct Cli {
 /// `--mermaid-backend`.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum MermaidBackend {
-    /// Flowcharts as text; other diagrams as source. The default for fences.
+    /// Flowcharts, sequence and ER diagrams as text; other diagrams as
+    /// source. The default for fences.
     Text,
     /// Mermaid's own CLI first (the `mmdc` feature). The default for
     /// `rich mermaid` in a build that has it.
@@ -1114,6 +1121,9 @@ fn dispatch(args: Vec<String>) -> ExitCode {
             {
                 return fail(&cli, ExitClass::Usage, message);
             }
+            if cli.batch && cfg!(target_os = "wasi") {
+                return fail(&cli, ExitClass::Usage, host::unavailable("--batch"));
+            }
             if cli.batch {
                 if let Err(error) = batch::install_interrupt_handler() {
                     return fail(
@@ -1436,6 +1446,8 @@ fn glob_match(pattern: &str, text: &str) -> bool {
 #[derive(Clone, Copy, PartialEq, Eq)]
 enum GlobUnit {
     Char(char),
+    // Only Unix names are bytes; elsewhere (Windows, WASI) they are text.
+    #[cfg_attr(not(unix), allow(dead_code))]
     Byte(u8),
 }
 
@@ -4096,6 +4108,9 @@ fn run_watch(mut cli: Cli) -> ExitCode {
         return first_failure.unwrap_or_else(|| ExitClass::Success.exit_code());
     }
     // From here on the output repaints: micro assets keep their fallback.
+    if cfg!(target_os = "wasi") {
+        return fail(&cli, ExitClass::Usage, host::unavailable("--watch"));
+    }
     watch::start_watching();
     let resource = resource.as_str();
     if !is_url(resource) {

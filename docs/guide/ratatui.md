@@ -1,4 +1,4 @@
-# Using rich with ratatui
+# ![](../assets/rs-rich/ratatui.svg){ .rs-icon } Using rich with ratatui
 
 `rs-rich-ratatui` (`rich_ratatui`) connects rs-rich and
 [ratatui](https://ratatui.rs), both ways. A ratatui app can draw rich

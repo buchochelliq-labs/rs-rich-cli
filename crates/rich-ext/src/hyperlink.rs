@@ -103,6 +103,7 @@ impl Hyperlinker {
     }
 
     /// Turn linking on or off.
+    #[must_use]
     pub fn enabled(mut self, enabled: bool) -> Self {
         self.enabled = enabled;
         self
@@ -114,18 +115,21 @@ impl Hyperlinker {
     }
 
     /// Link `http(s)://` URLs (default on).
+    #[must_use]
     pub fn urls(mut self, urls: bool) -> Self {
         self.urls = urls;
         self
     }
 
     /// Link file paths and `path:line:column` locations (default on).
+    #[must_use]
     pub fn paths(mut self, paths: bool) -> Self {
         self.paths = paths;
         self
     }
 
     /// Resolve relative paths against `dir`.
+    #[must_use]
     pub fn base_dir(mut self, dir: impl Into<PathBuf>) -> Self {
         self.base_dir = Some(dir.into());
         self
@@ -135,6 +139,7 @@ impl Hyperlinker {
     /// example `vscode://file{path}:{line}:{column}`. `{path}` is absolute and
     /// already starts with `/`, so the template has no slash of its own before
     /// it. `{line}` and `{column}` default to 1 when a location has none.
+    #[must_use]
     pub fn editor(mut self, template: impl Into<String>) -> Self {
         self.editor = Some(template.into());
         self
@@ -143,6 +148,7 @@ impl Hyperlinker {
     /// The repository web URL (`https://github.com/owner/repo`) that `#123`
     /// references link into. `owner/repo#123` links into that repository on
     /// the same host.
+    #[must_use]
     pub fn repository(mut self, url: impl Into<String>) -> Self {
         self.repository = Some(url.into().trim_end_matches('/').to_string());
         self

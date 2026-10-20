@@ -344,6 +344,7 @@ impl WebView {
 
     /// Show the address bar (default) or not: an app may draw its own from
     /// the [handle](Self::handle)'s signals.
+    #[must_use]
     pub fn address_bar(mut self, on: bool) -> WebView {
         self.bar = on;
         self
@@ -351,6 +352,7 @@ impl WebView {
 
     /// Keys (space-separated names, as [`Node::on_key`] takes them) that
     /// are not sent to the page but go on to the app's bindings.
+    #[must_use]
     pub fn release_keys(mut self, keys: &str) -> WebView {
         self.release
             .extend(keys.split_whitespace().filter_map(Key::parse));

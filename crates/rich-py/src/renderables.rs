@@ -38,7 +38,10 @@ mod layout;
 mod padding;
 mod rule;
 
+pub(crate) use containers::{Group, Renderables};
 pub(crate) use rule::ends_inline as rule_ends_inline;
+pub(crate) use rule::Rule;
+pub(crate) use tree::Tree;
 
 /// The child whose segments end a `Styled`, `Constrain` or `Group` (its last
 /// renderable): upstream's yield them as they are, open last line included.

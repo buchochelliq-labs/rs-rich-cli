@@ -92,6 +92,7 @@ pub fn move_item<T>(items: &mut [T], from: usize, to: usize) {
 /// let (outcome, _) = headless::run(reorder, script, 40, 8);
 /// assert_eq!(outcome.unwrap(), Outcome::Done(vec!["gamma", "alpha", "beta"]));
 /// ```
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct Reorder<T> {
     prompt: String,
     items: Vec<Item<T>>,

@@ -24,7 +24,7 @@ include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
 # meters and spectra on docs.rs too; `audio` is left out, as its ALSA
 # headers may not be there to build it.
 [package.metadata.docs.rs]
-features = ["art", "micro", "watch", "files", "archive", "pcm", "viz", "tracing"]
+features = ["art", "micro", "watch", "files", "archive", "pcm", "viz", "tracing", "vim"]
 
 [lib]
 name = "intuituive"
@@ -33,6 +33,12 @@ name = "intuituive"
 workspace = true
 
 [features]
+default = ["syntax"]
+# Syntax highlighting through syntect, in rs-rich-interact and rs-rich-ext
+# (their `syntax` features, and rs-rich-ext's `markdown`). On by default;
+# an app built for a browser (the docs playground) turns it off to leave
+# syntect out. The `files` previews need it.
+syntax = ["rich-interact/syntax", "rich-ext/syntax", "rich-ext/markdown"]
 # `App::run_with(BackendKind::Termion)`: the termion backend of
 # rs-rich-interact (Unix only).
 termion = ["rich-interact/termion"]
@@ -74,12 +80,17 @@ art = ["dep:rich-art", "rich-art/image", "rich-art/kitty", "rich-art/sixel", "ri
 # animations) as sprites for a stage, fitted in half blocks. Off by
 # default.
 micro = ["art", "dep:rich-micro"]
+# `Node::vim`: Vim's keys for `text_area` and `input` (normal, insert and
+# visual modes, motions, operators, counts and `.`), rs-rich-interact's
+# `vim::Vim` preset. A plugin over the core's `key_mode` hook. Off by
+# default.
+vim = ["rich-interact/vim"]
 # `files`: a file manager's components (Miller columns, file lists,
 # previews by type, a watched directory model, background file jobs with
 # progress, a streaming fuzzy finder), on rs-rich-ext's `listing`, `open`,
 # `file_ops`, `trash` and `git`. Local times through rs-rich-ext's
 # `local-time` (chrono). Off by default.
-files = ["rich-ext/local-time"]
+files = ["syntax", "rich-ext/local-time"]
 # `files` with archive previews and extraction (tar, tar.gz, zip) through
 # rs-rich-ext's `archive` (zip, flate2). Off by default.
 archive = ["files", "rich-ext/archive"]
@@ -90,6 +101,11 @@ archive = ["files", "rich-ext/archive"]
 # A plugin. Off by default.
 tracing = ["rich-ext/tracing", "dep:tracing", "dep:tracing-subscriber"]
 
+# ratatui-textarea's examples as one gallery; its Vim tab needs `vim`.
+[[example]]
+name = "textarea"
+required-features = ["vim"]
+
 # The scope-tui rebuild reads raw PCM (`audio::pcm`), the `pcm` plugin's.
 [[example]]
 name = "scope"
@@ -97,8 +113,10 @@ required-features = ["pcm"]
 
 [dependencies]
 rich.workspace = true
-rich-ext.workspace = true
-rich-interact.workspace = true
+# Both without their defaults, so `syntax` decides whether syntect comes
+# in. Path dependencies, as workspace ones cannot turn defaults off.
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext", version = "0.0.18", default-features = false }
+rich-interact = { package = "rs-rich-interact", path = "../rich-interact", version = "0.0.9", default-features = false }
 cpal = { version = "0.18.2", optional = true }
 hound = { version = "3.5", optional = true }
 notify = { workspace = true, optional = true }

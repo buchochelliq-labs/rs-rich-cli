@@ -132,6 +132,7 @@ impl LintFinding {
 
 /// The target a render is linted for.
 #[derive(Clone, Debug)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct LintOptions {
     /// Widths to render at (default 20, 40, 80). Output checks use the widest.
     pub widths: Vec<usize>,

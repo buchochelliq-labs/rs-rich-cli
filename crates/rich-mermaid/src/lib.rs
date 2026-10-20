@@ -1,8 +1,10 @@
 //! Mermaid diagrams for the `rich` Rust port.
 //!
-//! [`Mermaid`] renders a diagram's source. Flowcharts (`graph` / `flowchart`)
-//! are drawn as text with box-drawing characters, through `rs-rich-diagram`'s
-//! layered layout, with no external tools. With the optional `mmdc` feature,
+//! [`Mermaid`] renders a diagram's source. Three kinds are drawn as text with
+//! box-drawing characters (or ASCII), with no external tools: flowcharts
+//! (`graph` / `flowchart`, [`flowchart`]) and ER diagrams (`erDiagram`,
+//! [`er`]) through `rs-rich-diagram`'s layered layout, and sequence diagrams
+//! (`sequenceDiagram`, [`sequence`]) on lifelines. With the optional `mmdc` feature,
 //! and when asked for with [`Backend::Mmdc`], every diagram type is rendered
 //! by Mermaid's own CLI and shown as an image through `rs-rich-art`. Whatever cannot be drawn is shown as its source, in a code
 //! block, under a one-line note saying why.
@@ -20,6 +22,10 @@
 //! assert!(out.contains("│ A ├─►│ B │"), "{out}");
 //! ```
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 use std::sync::Arc;
 
 use rich::console::{Console, ConsoleOptions};
@@ -30,10 +36,12 @@ use rich::syntax::Syntax;
 use rich::text::Text;
 use rich_plugin_api::{Plugin, PluginError, PluginMetadata, PluginRegistrar, SourceRenderer};
 
+pub mod er;
 pub mod flowchart;
 pub mod layout;
 #[cfg(feature = "mmdc")]
 pub mod mmdc;
+pub mod sequence;
 
 pub use flowchart::{parse, Flowchart, ParseError};
 pub use layout::{draw, Diagram};
@@ -41,12 +49,14 @@ pub use layout::{draw, Diagram};
 /// Which renderer to try first.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub enum Backend {
-    /// Draw flowcharts as text; show other diagram types as source.
+    /// Draw flowcharts, sequence diagrams and ER diagrams as text; show
+    /// other diagram types as source.
     #[default]
     Text,
     /// Try Mermaid's own CLI first. Needs the `mmdc` feature and `mmdc`
     /// installed; falls back to text (or source) when it is unavailable or
-    /// fails. Without a graphics protocol, flowcharts still prefer text.
+    /// fails. Without a graphics protocol, the diagrams drawn as text still
+    /// prefer text.
     Mmdc,
 }
 
@@ -63,6 +73,7 @@ pub struct MermaidOptions {
 
 /// A Mermaid diagram.
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Mermaid {
     source: String,
     options: MermaidOptions,
@@ -92,7 +103,7 @@ impl Mermaid {
     }
 
     fn render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let parsed = flowchart::parse(&self.source);
+        let parsed = Parsed::parse(&self.source);
         match self.options.backend {
             Backend::Text => {}
             #[cfg(feature = "mmdc")]
@@ -110,18 +121,18 @@ impl Mermaid {
         self.render_text(parsed, console, options, None)
     }
 
-    /// Draw a flowchart as text, or show the source with the reason it could
+    /// Draw a diagram as text, or show the source with the reason it could
     /// not be. `why` explains a fallback from another backend.
     fn render_text(
         &self,
-        parsed: Result<Flowchart, ParseError>,
+        parsed: Result<Parsed, ParseError>,
         console: &Console,
         options: &ConsoleOptions,
         why: Option<String>,
     ) -> Vec<Segment> {
         let chart = match parsed {
-            Ok(chart) if chart.nodes.is_empty() => {
-                return self.source_block(console, options, "the flowchart has no nodes")
+            Ok(chart) if chart.is_empty() => {
+                return self.source_block(console, options, chart.empty_reason())
             }
             Ok(chart) => chart,
             Err(error) => {
@@ -133,7 +144,7 @@ impl Mermaid {
             }
         };
         let ascii = self.options.ascii.unwrap_or_else(|| console.ascii_only());
-        let diagram = match layout::draw(&chart, ascii) {
+        let diagram = match chart.draw(ascii) {
             Ok(diagram) => diagram,
             Err(reason) => {
                 return self.source_block(console, options, &format!("too large to draw: {reason}"))
@@ -149,7 +160,8 @@ impl Mermaid {
         if let Some(why) = why {
             notes.push(format!("{why}; drawn as text"));
         }
-        notes.extend(chart.notes.iter().cloned());
+        notes.extend(chart.notes().iter().cloned());
+        notes.extend(diagram.notes.iter().cloned());
         if diagram.width > width {
             notes.push(format!("cropped to {width} of {} columns", diagram.width));
         }
@@ -188,16 +200,16 @@ impl Mermaid {
     #[cfg(feature = "mmdc")]
     fn render_mmdc(
         &self,
-        parsed: Result<Flowchart, ParseError>,
+        parsed: Result<Parsed, ParseError>,
         console: &Console,
         options: &ConsoleOptions,
     ) -> Vec<Segment> {
         use rich_art::{ImageArt, ImageMode};
 
         let (graphics, color) = graphics(console);
-        // Block characters blur the text in a diagram. A flowchart reads
-        // better drawn as text unless the terminal can show real pixels.
-        if !graphics && matches!(&parsed, Ok(chart) if !chart.nodes.is_empty()) {
+        // Block characters blur the text in a diagram. One drawn as text
+        // reads better so unless the terminal can show real pixels.
+        if !graphics && matches!(&parsed, Ok(chart) if !chart.is_empty()) {
             return self.render_text(parsed, console, options, None);
         }
         let png = match mmdc::render_png(&self.source, &self.options.mmdc) {
@@ -237,6 +249,60 @@ impl Mermaid {
                 segments
             }
             Err(error) => self.render_text(parsed, console, options, Some(error.to_string())),
+        }
+    }
+}
+
+/// A source parsed as one of the kinds drawn as text.
+enum Parsed {
+    Flowchart(Flowchart),
+    Sequence(sequence::Sequence),
+    Er(er::EntityDiagram),
+}
+
+impl Parsed {
+    /// Parse by the header: a sequence or ER diagram, else a flowchart (whose
+    /// parser names every other kind).
+    fn parse(source: &str) -> Result<Parsed, ParseError> {
+        if sequence::is_sequence(source) {
+            sequence::parse(source).map(Parsed::Sequence)
+        } else if er::is_er(source) {
+            er::parse(source).map(Parsed::Er)
+        } else {
+            flowchart::parse(source).map(Parsed::Flowchart)
+        }
+    }
+
+    fn is_empty(&self) -> bool {
+        match self {
+            Parsed::Flowchart(chart) => chart.nodes.is_empty(),
+            Parsed::Sequence(diagram) => diagram.participants.is_empty(),
+            Parsed::Er(diagram) => diagram.entities.is_empty(),
+        }
+    }
+
+    fn empty_reason(&self) -> &'static str {
+        match self {
+            Parsed::Flowchart(_) => "the flowchart has no nodes",
+            Parsed::Sequence(_) => "the sequence diagram has no participants",
+            Parsed::Er(_) => "the ER diagram has no entities",
+        }
+    }
+
+    fn draw(&self, ascii: bool) -> Result<Diagram, String> {
+        match self {
+            Parsed::Flowchart(chart) => layout::draw(chart, ascii),
+            Parsed::Sequence(diagram) => sequence::draw(diagram, ascii),
+            Parsed::Er(diagram) => er::draw(diagram, ascii),
+        }
+    }
+
+    /// What the parser simplified.
+    fn notes(&self) -> &[String] {
+        match self {
+            Parsed::Flowchart(chart) => &chart.notes,
+            Parsed::Sequence(diagram) => &diagram.notes,
+            Parsed::Er(diagram) => &diagram.notes,
         }
     }
 }
@@ -343,7 +409,9 @@ impl MermaidPlugin {
 impl Plugin for MermaidPlugin {
     fn metadata(&self) -> PluginMetadata {
         PluginMetadata::new("mermaid", "Mermaid diagrams", env!("CARGO_PKG_VERSION"))
-            .description("Mermaid flowcharts as text, and every diagram type through mmdc")
+            .description(
+                "Mermaid flowcharts, sequence and ER diagrams as text, and every diagram type through mmdc",
+            )
     }
 
     fn register(&self, registrar: &mut dyn PluginRegistrar) -> Result<(), PluginError> {

@@ -63,6 +63,13 @@ impl fmt::Display for ParseError {
     fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
         match self {
             ParseError::Empty => f.write_str("the diagram is empty"),
+            // Sequence and ER diagrams are drawn, by their own parsers.
+            ParseError::Unsupported(kind) if kind == "sequence" => {
+                f.write_str("not a flowchart: sequence diagrams are parsed by `sequence::parse`")
+            }
+            ParseError::Unsupported(kind) if kind == "entity relationship" => {
+                f.write_str("not a flowchart: ER diagrams are parsed by `er::parse`")
+            }
             ParseError::Unsupported(kind) => {
                 write!(f, "{kind} diagrams are not drawn as text")
             }
@@ -145,7 +152,7 @@ pub fn parse(source: &str) -> Result<Flowchart, ParseError> {
 }
 
 /// Drop a `%%` comment (including `%%{init: …}%%` directives).
-fn strip_comment(line: &str) -> &str {
+pub(crate) fn strip_comment(line: &str) -> &str {
     match line.find("%%") {
         Some(at) => &line[..at],
         None => line,
@@ -291,6 +298,8 @@ impl Parser {
                         from,
                         to,
                         label: link.label.clone(),
+                        start_label: None,
+                        end_label: None,
                         stroke: link.stroke,
                         start: link.start,
                         end: link.end,
@@ -713,7 +722,7 @@ pub fn clean_label(text: &str) -> String {
 }
 
 /// Source text quoted in an error: control characters removed, shortened.
-fn printable(text: &str, limit: usize) -> String {
+pub(crate) fn printable(text: &str, limit: usize) -> String {
     let clean: String = text.chars().filter(|c| !c.is_control()).collect();
     if clean.chars().count() > limit {
         let short: String = clean.chars().take(limit).collect();
@@ -763,7 +772,13 @@ mod tests {
             parse("sequenceDiagram\n  A->>B: hi")
                 .unwrap_err()
                 .to_string(),
-            "sequence diagrams are not drawn as text"
+            "not a flowchart: sequence diagrams are parsed by `sequence::parse`"
+        );
+        assert_eq!(
+            parse("erDiagram\n  A ||--o{ B : has")
+                .unwrap_err()
+                .to_string(),
+            "not a flowchart: ER diagrams are parsed by `er::parse`"
         );
         assert_eq!(
             parse("---\ntitle: x\n---\nstateDiagram-v2\n[*] --> A"),

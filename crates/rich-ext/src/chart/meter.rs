@@ -65,6 +65,7 @@ pub enum MeterScale {
 /// assert_eq!(console.render_export(&meter), "L #####-|-- 0.75\n");
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct LevelMeter {
     level: f64,
     peak: Option<f64>,
@@ -431,6 +432,7 @@ impl crate::a11y::AccessibleText for LevelMeter {
 /// assert_eq!(hold.update(0.3, at(600)), 0.3);
 /// ```
 #[derive(Clone, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct PeakHold {
     hold: Duration,
     /// Level units a second it falls by once the hold is over; 0 drops.

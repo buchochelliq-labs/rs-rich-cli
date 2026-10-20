@@ -181,6 +181,7 @@ impl Sort {
     }
 
     /// Reversed (or not).
+    #[must_use]
     pub fn reverse(mut self, on: bool) -> Sort {
         self.reverse = on;
         self
@@ -381,12 +382,14 @@ impl Walk {
 
     /// Include the entries whose name starts with a dot (and walk into
     /// such directories).
+    #[must_use]
     pub fn hidden(mut self, on: bool) -> Walk {
         self.hidden = on;
         self
     }
 
     /// Go at most `depth` levels down: 1 is the root's own entries.
+    #[must_use]
     pub fn max_depth(mut self, depth: usize) -> Walk {
         self.max_depth = Some(depth);
         self
@@ -394,6 +397,7 @@ impl Walk {
 
     /// List but never walk into directories called `name` (`.git`,
     /// `target`, `node_modules`).
+    #[must_use]
     pub fn skip_dir(mut self, name: impl Into<String>) -> Walk {
         self.skip.push(name.into());
         self

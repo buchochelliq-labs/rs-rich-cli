@@ -187,6 +187,7 @@ impl Pan {
 /// follows the focused column. `‹` and `›` at the ends of the headings say
 /// that columns are out of view on that side.
 /// [`freeze_columns`](Self::freeze_columns) keeps leading columns in place.
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct TableSelect<T> {
     select: Select<T>,
     /// The headings as drawn (controls shown as pictures).
@@ -610,6 +611,7 @@ pub fn tree_keymap() -> Keymap {
 /// the path to the focused node (#464). Ctrl+Y copies that path (the
 /// node's [`ActionTarget::value`](crate::ActionTarget::value)) to the
 /// terminal's [clipboard](crate::clipboard).
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct TreeSelect<T> {
     select: Select<T>,
     parents: Arc<[Option<usize>]>,

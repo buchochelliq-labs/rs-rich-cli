@@ -1,6 +1,6 @@
 ❯ place=$(rich jump --commands commands --recent .jump-recent docs src)
 ? Jump › approval
-Headings #  +6 more · tab                         │    46
+Headings #  +7 more · tab                         │    46
 ❯ Screenshot approvals  ## docs/guide/ext/qa.md:5 │    47 The sections below explain each tool.
   ApprovalQueue and Jump  ### docs/guide/interact │    48
   The approval queue  ## docs/guide/interact/revi │    49 ## Screenshot approvals

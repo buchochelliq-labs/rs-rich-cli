@@ -304,6 +304,21 @@ impl MermaidPlugin {
     }
 }
 
+/// The SQL highlighter (`rich_ext::sql::SqlPlugin`), registered as `"sql"`.
+#[pyclass(name = "SqlPlugin", module = "rs_rich.plugins", extends = Plugin, frozen)]
+pub(crate) struct SqlPlugin;
+
+#[pymethods]
+impl SqlPlugin {
+    #[new]
+    fn new() -> PyClassInitializer<Self> {
+        PyClassInitializer::from(Plugin {
+            native: Some(Arc::new(rich_ext::sql::SqlPlugin)),
+        })
+        .add_subclass(SqlPlugin)
+    }
+}
+
 /// The lumis (tree-sitter) code highlighter, registered as `"lumis"`. Only
 /// in wheels built with the `lumis` feature.
 #[cfg(feature = "lumis")]
@@ -404,6 +419,7 @@ pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_class::<Plugin>()?;
     m.add_class::<BuiltinPlugin>()?;
     m.add_class::<MermaidPlugin>()?;
+    m.add_class::<SqlPlugin>()?;
     #[cfg(feature = "lumis")]
     m.add_class::<LumisPlugin>()?;
     Ok(())

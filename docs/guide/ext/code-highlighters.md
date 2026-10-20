@@ -27,8 +27,8 @@ syntect is the default everywhere and is what upstream parity is measured
 with. Choose lumis for tree-sitter's more precise parsing, its languages or its
 themes, and accept the larger build.
 
-A `Syntax` with no highlighter of its own uses syntect, with its default
-theme, `base16-ocean.dark`:
+A `Syntax` with no highlighter of its own uses syntect (core's default
+`syntax` feature), with its default theme, `base16-ocean.dark`:
 
 ```rust
 --8<-- "crates/rich-ext/examples/guide_highlighters.rs:default"
@@ -73,6 +73,66 @@ The first highlight loads syntect's grammars and themes, which takes seconds
 in a debug build. An interactive app can do that on a worker thread at
 start-up with `rich_ext::syntax::preload(&["rust", "markdown"])` (see
 [Warming up syntax highlighting](files-and-signals.md#warming-up-syntax-highlighting)).
+
+## SQL without syntect
+
+The `sql` feature of `rs-rich-ext` adds `sql::SqlHighlighter`, a
+`CodeHighlighter` built on a hand-written SQL lexer: pure Rust, no
+dependencies, no grammar files. It answers to `sql` and to `postgresql`,
+`postgres`, `mysql`, `mariadb`, `sqlite`, `bigquery`, `snowflake`, `duckdb`,
+`tsql` and `plsql`, and knows their common words (`QUALIFY`, `PRAGMA`,
+`ILIKE`, `INT64`, `VARIANT`, …).
+
+```rust
+use rich::protocol::{CodeHighlighting, ConsoleCodeHighlighting};
+use rich::Console;
+use rich_ext::sql::SqlHighlighter;
+
+let mut console = Console::new();
+console.set_code_highlighting(Some(CodeHighlighting {
+    highlighter: SqlHighlighter::shared(),
+    theme: Some("ansi_dark".into()),
+}));
+// Every `Syntax` and Markdown ```sql fence this console renders.
+```
+
+What it tells apart:
+
+| class | examples |
+|---|---|
+| keywords, types, constants | `SELECT`, `VARCHAR`, `NULL` |
+| functions | a name before `(`: `count(`, `coalesce(` |
+| names and quoted names | `orders`, `"Order Id"`, `` `col` ``, `[dbo].[t]` |
+| strings | `'it''s'`, `E'\n'`, `$$ … $$`, `$fn$ … $fn$`, `'''raw'''`, `X'FF'` |
+| numbers | `42`, `.5`, `1.5e-3`, `0xFF` |
+| comments | `-- …`, `/* … */` (nested) |
+| parameters | `:name`, `@name`, `@@var`, `$1`, `?` |
+| operators, punctuation | `<>`, `\|\|`, `::`, `->>`; `( ) , ;` |
+| Jinja blocks | `{{ ref('orders') }}`, `{% if … %}`, `{# … #}`, as dbt models use them |
+
+A name after a `.` is a name even when it is a keyword (`t.date`), and `[`
+after a name or `ARRAY` is a subscript, not a quoted name. An unterminated
+string, comment or block runs to the end of the input; the lexer never
+fails. `#` is an operator (PostgreSQL), not a MySQL comment.
+
+Its themes are `monokai` (the default), `ansi_dark` and `ansi_light`; a theme
+it does not know colours SQL with `monokai`, so a console set up with
+another engine's theme still colours SQL. Other languages are plain text,
+or go to another highlighter with `SqlHighlighter::with_fallback(…)`.
+`sql::SqlPlugin` registers it as the highlighter `"sql"`.
+
+!!! note "Dropping syntect"
+    The `syntax` feature brings syntect; the `code` feature has `Syntax`
+    without it, and `markdown` needs only `code`. `rs-rich-ext` forwards all
+    three, and `sql` turns on `code`, so one dependency is enough:
+    `rs-rich-ext` with `default-features = false, features = ["sql",
+    "markdown"]` (leave out `markdown` if you need no Markdown). Then install `SqlPlugin` as the default code highlighter (or set it on
+    the console as above): every `Syntax` and ```` ```sql ```` fence is
+    highlighted by this lexer, and `cargo tree` shows no syntect or bincode.
+    Code in other languages is plain in such a build, unless another
+    highlighter is registered or given as the fallback. Without `Syntax` at
+    all, `rich_ext::sql::highlight(code, theme)` returns the highlighted SQL
+    as a `Text`; `sql::tokenize` gives the tokens.
 
 ## Write your own
 

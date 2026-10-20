@@ -278,6 +278,9 @@ pub(super) fn run(cli: &Cli, console: &Console) -> ExitCode {
     }
     let mut stream = Stream::new(cli, console, redactor);
     let read = match path {
+        Some(_) if options.follow && cfg!(target_os = "wasi") => {
+            return fail(cli, ExitClass::Usage, crate::host::unavailable("--follow"))
+        }
         Some(path) if options.follow => return follow(cli, path, stream),
         Some(path) => read_file(&fs_path(path), &mut stream),
         None => read_stdin(|event| match event {
@@ -388,6 +391,9 @@ fn read_stdin(mut each: impl FnMut(Tailed<'_>) -> io::Result<()>) -> io::Result<
         };
         eprintln!("rich: reading stdin; finish input with {eof}");
     }
+    if cfg!(target_os = "wasi") {
+        return read_stdin_inline(each);
+    }
     let (sender, receiver) = mpsc::sync_channel::<io::Result<Vec<String>>>(64);
     std::thread::spawn(move || {
         let stdin = io::stdin();
@@ -429,11 +435,27 @@ fn read_stdin(mut each: impl FnMut(Tailed<'_>) -> io::Result<()>) -> io::Result<
     }
 }
 
+/// Standard input, read in order on this thread: WASI has no threads to
+/// read it on. There a pipe is a whole input, so it is never quiet.
+#[cfg_attr(not(target_os = "wasi"), allow(dead_code))]
+fn read_stdin_inline(mut each: impl FnMut(Tailed<'_>) -> io::Result<()>) -> io::Result<()> {
+    let mut reader = io::BufReader::with_capacity(1 << 16, io::stdin().lock());
+    let mut buffer = Vec::new();
+    loop {
+        buffer.clear();
+        match reader.read_until(b'\n', &mut buffer) {
+            Ok(0) => return Ok(()),
+            Ok(_) => each(Tailed::Line(&String::from_utf8_lossy(&buffer)))?,
+            Err(error) => return Err(read_error(error)),
+        }
+    }
+}
+
 /// Follow `path` until Ctrl+C: what it holds, then what is appended to it,
 /// starting over when it is truncated or replaced (log rotation).
 fn follow(cli: &Cli, path: &str, mut stream: Stream<'_>) -> ExitCode {
     STOP.store(false, Ordering::SeqCst);
-    let _ = ctrlc::set_handler(|| STOP.store(true, Ordering::SeqCst));
+    let _ = crate::host::on_interrupt(|| STOP.store(true, Ordering::SeqCst));
     let result = tail(
         path,
         |event| match event {

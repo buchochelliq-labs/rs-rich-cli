@@ -165,17 +165,20 @@ impl Actions {
     }
 
     /// Offer `action` on every target.
+    #[must_use]
     pub fn action(mut self, action: Action) -> Actions {
         self.entries.push((action, None));
         self
     }
 
     /// Offer `action` on targets of one kind.
+    #[must_use]
     pub fn action_for(self, kind: TargetKind, action: Action) -> Actions {
         self.action_if(action, move |target| target.kind == kind)
     }
 
     /// Offer `action` where `filter` says it applies.
+    #[must_use]
     pub fn action_if(
         mut self,
         action: Action,
@@ -186,6 +189,7 @@ impl Actions {
     }
 
     /// Every action from `other` after these.
+    #[must_use]
     pub fn extend(mut self, other: Actions) -> Actions {
         self.entries.extend(other.entries);
         self
@@ -237,6 +241,7 @@ impl Actions {
 
 /// One choosable thing: a value of any type, and how to show and find it.
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Item<T> {
     pub value: T,
     /// The main line.

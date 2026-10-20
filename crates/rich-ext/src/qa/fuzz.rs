@@ -80,6 +80,7 @@ impl Rng {
 
 /// Generation bounds.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct GenOptions {
     /// Container nesting depth (default 3).
     pub max_depth: usize,
@@ -1005,15 +1006,18 @@ impl Invariants {
             custom: Vec::new(),
         }
     }
+    #[must_use]
     pub fn fits_width(mut self, on: bool) -> Self {
         self.fits_width = on;
         self
     }
+    #[must_use]
     pub fn measure_bounds(mut self, on: bool) -> Self {
         self.measure_bounds = on;
         self
     }
     /// Add a named check.
+    #[must_use]
     pub fn custom(
         mut self,
         name: impl Into<String>,

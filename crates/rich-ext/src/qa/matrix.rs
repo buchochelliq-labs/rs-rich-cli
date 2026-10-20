@@ -216,6 +216,7 @@ impl MatrixReport {
     pub fn failures(&self) -> impl Iterator<Item = &Cell> {
         self.cells.iter().filter(|c| c.status != CellStatus::Pass)
     }
+    #[must_use]
     pub fn symbols(mut self, set: SymbolSet) -> Self {
         self.symbols = Some(set);
         self

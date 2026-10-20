@@ -127,6 +127,7 @@ impl AllocStats {
         })
     }
     /// What happened between `earlier` and this reading.
+    #[must_use]
     pub fn since(&self, earlier: &AllocStats) -> AllocStats {
         AllocStats {
             allocations: self.allocations.saturating_sub(earlier.allocations),
@@ -177,6 +178,7 @@ impl Timing {
 
 /// What [`profile`] runs.
 #[derive(Clone, Debug, PartialEq, Eq)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct ProfileOptions {
     /// Render width (default: the console's width).
     pub width: Option<usize>,

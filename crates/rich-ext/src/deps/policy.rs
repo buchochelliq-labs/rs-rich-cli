@@ -249,6 +249,7 @@ impl Policy {
 
     /// Allow these licences (and only these, with the others allowed so
     /// far): `MIT`, `Apache-2.0 WITH LLVM-exception`.
+    #[must_use]
     pub fn allow<S: AsRef<str>>(mut self, ids: impl IntoIterator<Item = S>) -> Self {
         let mut list = self.allow.take().unwrap_or_default();
         for id in ids {
@@ -261,6 +262,7 @@ impl Policy {
     }
 
     /// Deny these licences, whatever the allow list says.
+    #[must_use]
     pub fn deny<S: AsRef<str>>(mut self, ids: impl IntoIterator<Item = S>) -> Self {
         for id in ids {
             if let Some(licensee) = self.licensee("deny", id.as_ref()) {
@@ -271,6 +273,7 @@ impl Policy {
     }
 
     /// Let one crate use more licences.
+    #[must_use]
     pub fn exception(mut self, exception: PolicyException) -> Self {
         if let Some(requirement) = &exception.version {
             if meets("0.0.0", requirement).is_none() {
@@ -293,6 +296,7 @@ impl Policy {
 
     /// What to do with [conflicts](conflicts) ([`ConflictMode::Warn`] by
     /// default).
+    #[must_use]
     pub fn conflicts(mut self, mode: ConflictMode) -> Self {
         self.conflicts = mode;
         self
@@ -300,6 +304,7 @@ impl Policy {
 
     /// Leave out the workspace's unpublished crates, as cargo-deny's
     /// `private.ignore` does (see [`unpublished`]).
+    #[must_use]
     pub fn ignore_private(mut self, ignore: bool) -> Self {
         self.ignore_private = ignore;
         self
@@ -1020,12 +1025,14 @@ impl PolicyReport {
     }
 
     /// Name the policy in the heading (its file, say).
+    #[must_use]
     pub fn named(mut self, name: impl Into<String>) -> Self {
         self.name = Some(name.into());
         self
     }
 
     /// Check every package's licence against `root`'s ([`conflicts`]).
+    #[must_use]
     pub fn root(self, root: &LicensedPackage) -> Self {
         let found = conflicts(root, &self.packages);
         self.with_conflicts(found)
@@ -1033,6 +1040,7 @@ impl PolicyReport {
 
     /// Add conflicts found elsewhere (each workspace member against what it
     /// depends on, say).
+    #[must_use]
     pub fn with_conflicts(mut self, conflicts: Vec<Conflict>) -> Self {
         if self.mode == ConflictMode::Ignore {
             return self;
@@ -1053,6 +1061,7 @@ impl PolicyReport {
     }
 
     /// Add a note under the report.
+    #[must_use]
     pub fn note(mut self, note: impl Into<String>) -> Self {
         self.notes.push(note.into());
         self

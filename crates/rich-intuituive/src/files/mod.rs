@@ -138,7 +138,7 @@ pub(crate) fn background(what: &str, work: impl FnOnce(Proxy) + Send + 'static) 
     let proxy = runtime.proxy();
     let tasks = runtime.tasks.clone();
     tasks.fetch_add(1, Ordering::SeqCst);
-    std::thread::spawn(move || {
+    crate::clock::off_thread(move || {
         // Counted done however the work ends, a panic included.
         struct Done(std::sync::Arc<std::sync::atomic::AtomicUsize>);
         impl Drop for Done {

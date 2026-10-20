@@ -1077,23 +1077,49 @@ impl Confirm {
 // ---------------------------------------------------------------------------
 // Form
 
+/// A multi-select field: its label, options, those chosen to begin with and
+/// how many may be chosen.
+struct Multi {
+    label: String,
+    options: Vec<String>,
+    chosen: Vec<String>,
+    limit: Option<usize>,
+}
+
+impl Multi {
+    fn copy(&self) -> Multi {
+        Multi {
+            label: self.label.clone(),
+            options: self.options.clone(),
+            chosen: self.chosen.clone(),
+            limit: self.limit,
+        }
+    }
+}
+
 enum Field {
     Input(Py<Input>),
     Choice(String, Vec<String>),
     Toggle(String, bool),
+    Multi(Multi),
+    File(String, Py<super::pickers::FilePicker>),
 }
 
 enum FieldBuild {
     Input(InputBuild),
     Choice(String, Vec<String>),
     Toggle(String, bool),
+    Multi(Multi),
+    File(String, super::pickers::FileBuild),
 }
 
 /// `Form(title, *, theme=None)`: named fields answered together. Add fields
-/// with `text`, `masked`, `input`, `choice` and `toggle` (each returns the
-/// form, so calls chain). Tab and the arrows move between fields; Enter on
-/// the last submits, after every field's validation passes. The answer is
-/// a `dict` of field name to `str` (text and choices) or `bool` (toggles).
+/// with `text`, `masked`, `input`, `choice`, `multi`, `toggle` and `file`
+/// (each returns the form, so calls chain). Tab and the arrows move between
+/// fields; Enter on the last submits, after every field's validation
+/// passes. The answer is a `dict` of field name to `str` (text and
+/// choices), `bool` (toggles), `list` of `str` (multi-selects) or
+/// `pathlib.Path` (files).
 #[pyclass(name = "Form", module = "rs_rich.interact", frozen)]
 pub(crate) struct Form {
     #[pyo3(get)]
@@ -1116,6 +1142,16 @@ impl Build for FormBuild {
                 FieldBuild::Input(input) => form.input(name, input.input()),
                 FieldBuild::Choice(label, options) => form.choice(name, label, options),
                 FieldBuild::Toggle(label, on) => form.toggle(name, label, on),
+                FieldBuild::Multi(multi) => {
+                    let form = form
+                        .multi(name, multi.label, multi.options)
+                        .chosen(multi.chosen);
+                    match multi.limit {
+                        Some(limit) => form.limit(limit),
+                        None => form,
+                    }
+                }
+                FieldBuild::File(label, picker) => form.file(name, label, picker.build()),
             };
         }
         form
@@ -1148,6 +1184,10 @@ impl Form {
                             FieldBuild::Choice(label.clone(), options.clone())
                         }
                         Field::Toggle(label, on) => FieldBuild::Toggle(label.clone(), *on),
+                        Field::Multi(multi) => FieldBuild::Multi(multi.copy()),
+                        Field::File(label, picker) => {
+                            FieldBuild::File(label.clone(), picker.get().prepare())
+                        }
                     };
                     (name.clone(), field)
                 })
@@ -1162,8 +1202,10 @@ impl Form {
         // Never block in the collector: a form being changed is alive.
         if let Ok(fields) = self.fields.try_lock() {
             for (_, field) in fields.iter() {
-                if let Field::Input(input) = field {
-                    visit.call(input)?;
+                match field {
+                    Field::Input(input) => visit.call(input)?,
+                    Field::File(_, picker) => visit.call(picker)?,
+                    _ => {}
                 }
             }
         }
@@ -1254,6 +1296,52 @@ impl Form {
         Form::push(slf, name, Field::Choice(label, options))
     }
 
+    /// Any number of `options`: Left and Right move between them, Space (or
+    /// `x`) chooses one. `chosen` are chosen to begin with; `limit` is the
+    /// most that may be. Answers a `list` of the options chosen, in the
+    /// options' order.
+    #[pyo3(signature = (name, label, options, *, chosen=Vec::new(), limit=None))]
+    fn multi<'py>(
+        slf: &Bound<'py, Self>,
+        name: String,
+        label: String,
+        options: Vec<String>,
+        chosen: Vec<String>,
+        limit: Option<usize>,
+    ) -> PyResult<Bound<'py, Self>> {
+        if options.is_empty() {
+            return Err(PyValueError::new_err(
+                "a multi-select needs at least one option",
+            ));
+        }
+        if let Some(unknown) = chosen.iter().find(|c| !options.contains(c)) {
+            return Err(PyValueError::new_err(format!(
+                "{unknown:?} is not one of the options"
+            )));
+        }
+        let multi = Multi {
+            label,
+            options,
+            chosen,
+            limit,
+        };
+        Form::push(slf, name, Field::Multi(multi))
+    }
+
+    /// A path picked with `picker` (a `FilePicker`: its root, mode,
+    /// extensions and jail apply). Space opens it under the field; picking
+    /// closes it, and Escape closes it with no change. Answers a
+    /// `pathlib.Path`: the path picked, else the picker's `default`; with
+    /// neither, the field fails.
+    fn file<'py>(
+        slf: &Bound<'py, Self>,
+        name: String,
+        label: String,
+        picker: Bound<'py, super::pickers::FilePicker>,
+    ) -> PyResult<Bound<'py, Self>> {
+        Form::push(slf, name, Field::File(label, picker.unbind()))
+    }
+
     /// Yes or no, changed with Space, Left, Right, `y` and `n`.
     #[pyo3(signature = (name, label, on=false))]
     fn toggle<'py>(
@@ -1295,7 +1383,8 @@ fn answers(py: Python<'_>, answers: Answers) -> PyResult<Py<PyAny>> {
             Value::Text(text) => dict.set_item(name, text)?,
             Value::Flag(flag) => dict.set_item(name, flag)?,
             Value::List(list) => dict.set_item(name, list)?,
-            Value::Path(path) => dict.set_item(name, path.to_string_lossy().into_owned())?,
+            // A `pathlib.Path`, as `FilePicker` answers.
+            Value::Path(path) => dict.set_item(name, path)?,
         }
     }
     Ok(dict.into_any().unbind())

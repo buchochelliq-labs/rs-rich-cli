@@ -222,6 +222,36 @@ impl Renderable for Rule {
     }
 }
 
+/// Read access to a rule's title and alignment: upstream's public `Rule`
+/// fields. Not upstream as methods; they change nothing.
+///
+/// ```
+/// use rich::{HorizontalAlign, Rule};
+/// use rich::table::Cell;
+///
+/// let rule = Rule::new("Next").align(HorizontalAlign::Left);
+/// assert!(matches!(rule.get_title(), Some(Cell::Markup(t)) if t == "Next"));
+/// assert_eq!(rule.get_align(), HorizontalAlign::Left);
+/// assert!(Rule::line().get_title().is_none());
+/// ```
+impl Rule {
+    /// The title (upstream `Rule.title`): a [`Cell::Text`](crate::table::Cell::Text)
+    /// for [`with_title_text`](Self::with_title_text), else a
+    /// [`Cell::Markup`](crate::table::Cell::Markup); `None` for a plain line.
+    pub fn get_title(&self) -> Option<crate::table::Cell> {
+        match (&self.title_text, &self.title) {
+            (Some(text), _) => Some(crate::table::Cell::Text(text.clone())),
+            (None, Some(title)) => Some(crate::table::Cell::Markup(title.clone())),
+            (None, None) => None,
+        }
+    }
+
+    /// The title's alignment (upstream `Rule.align`).
+    pub fn get_align(&self) -> HorizontalAlign {
+        self.align
+    }
+}
+
 impl Rule {
     /// The title as plain text, for a region's label. Not upstream.
     fn title_plain(&self, console: &Console) -> String {

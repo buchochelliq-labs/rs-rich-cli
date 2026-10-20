@@ -102,6 +102,7 @@ fn hidden_name(name: &OsStr) -> bool {
 
 /// Browse from a root and pick a path. Returns the path, joined to the
 /// root as given (a root of `.` gives paths relative to it).
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct FilePicker {
     root: PathBuf,
     /// The canonical root, when jailed.
@@ -805,9 +806,16 @@ impl Renderable for FilePreview {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let waiting = Shown::Note("preview unavailable: the read has not finished".into());
         match self.shown().unwrap_or(&waiting) {
+            #[cfg(feature = "syntax")]
             Shown::Code(code, language) => {
                 rich::syntax::Syntax::new(code.clone(), language.clone())
                     .rich_render(console, options)
+            }
+            // Without syntect (the `syntax` feature off): the code as it is.
+            #[cfg(not(feature = "syntax"))]
+            Shown::Code(code, language) => {
+                let _ = language;
+                Text::new(code.clone()).rich_render(console, options)
             }
             Shown::Lines(lines) => Text::new(lines.join("\n")).rich_render(console, options),
             Shown::Note(note) => {

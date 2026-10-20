@@ -240,6 +240,7 @@ impl Node {
     }
 
     /// Builder: set the source position.
+    #[must_use]
     pub fn at_position(mut self, position: Option<Position>) -> Self {
         self.meta.position = position;
         self
@@ -359,6 +360,7 @@ impl Node {
 
     /// A copy with every string or number leaf that `redactor` masks
     /// replaced, keeping the structure.
+    #[must_use]
     pub fn redacted(&self, redactor: &dyn Redactor) -> Node {
         redact::apply(self, redactor)
     }
@@ -598,6 +600,7 @@ impl Path {
     }
 
     /// This path plus `key`.
+    #[must_use]
     pub fn child_key(&self, key: &str) -> Path {
         let mut path = self.clone();
         path.0.push(PathSegment::Key(key.to_string()));
@@ -605,6 +608,7 @@ impl Path {
     }
 
     /// This path plus `[index]`.
+    #[must_use]
     pub fn child_index(&self, index: usize) -> Path {
         let mut path = self.clone();
         path.0.push(PathSegment::Index(index));

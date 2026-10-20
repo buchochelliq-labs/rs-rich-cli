@@ -160,6 +160,7 @@ impl SourceSnippet {
     }
 
     /// Label the primary span (`^^^ message`).
+    #[must_use]
     pub fn primary_label(mut self, message: impl Into<String>) -> Self {
         self.labels[0].message = Some(message.into());
         self
@@ -424,6 +425,7 @@ impl Suggestion {
 }
 
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct Diagnostic {
     message: String,
     level: Option<Level>,

@@ -1,9 +1,8 @@
-# Terminal apps (intuiTUIve)
+# intuiTUIve: terminal apps
 
-![intuiTUIve](../../assets/intuituive/wordmark-dark.svg#only-dark){ .tui-wordmark width="300" }
-![intuiTUIve](../../assets/intuituive/wordmark-light.svg#only-light){ .tui-wordmark width="300" }
+![intuiTUIve: terminal apps from signals. Describe the screen once; when a signal changes, only the cells that changed are redrawn. With Memo the elephant and her calf Tui beside a small to-do app.](../../assets/intuituive/hero-dark.svg#only-dark){ .tui-hero }
+![intuiTUIve: terminal apps from signals. Describe the screen once; when a signal changes, only the cells that changed are redrawn. With Memo the elephant and her calf Tui beside a small to-do app.](../../assets/intuituive/hero-light.svg#only-light){ .tui-hero }
 
-![Memo, intuiTUIve's elephant, waving her trunk and holding up a lit cell](../../assets/intuituive/mascot/elephant-hero.svg){ .tui-mascot width="128" }
 `rs-rich-intuituive` (`intuituive`, new and early) is a framework for
 terminal apps, full-screen or inline. You describe the screen once as a
 tree of nodes and keep your state in **signals**. When a signal changes, the nodes that
@@ -79,6 +78,7 @@ thing it introduces:
 | ![](../../assets/intuituive/panels.svg){ .tui-icon width="20" } [Panels, themes and stylesheets](panels.md) | Borders, titles, rules and shared borders; themes and theme files; styles on a node; CSS stylesheets and `:error` |
 | ![](../../assets/intuituive/input.svg){ .tui-icon width="20" } [State, keys and the mouse](input.md) | Signals, memos and watches; focus, scopes and directions; key sequences, held keys, releases and repeat; the mouse, tooltips, drag-and-drop; bindings, the help and the command palette |
 | ![](../../assets/intuituive/components.svg){ .tui-icon width="20" } [Inputs, text and dates](components.md) | Hosted components, inputs with completion and history, a command line, text areas, calendars, date and time pickers, queries over records |
+| ![](../../assets/intuituive/text-editing.svg){ .tui-icon width="20" } [Editing text: keys, search and presets](text-editing.md) | Rebinding the editing keys, the Emacs and Vim presets, search and a find bar, word wrap, the cursor line, the caret's shape, tabs, the undo limit, validation messages |
 | ![](../../assets/intuituive/controls.svg){ .tui-icon width="20" } [Buttons and form controls](controls.md) | Buttons in three looks, check boxes, radio groups, switches, sliders, select fields, collapsible sections, spinners and a node shown as loading |
 | ![](../../assets/intuituive/lists.svg){ .tui-icon width="20" } [Lists, trees and tabs](lists.md) | How lists look, ranges, selections, finding and reordering; trees by path, by key and lazy; split panes; tab strips and tab sets; logs |
 | ![](../../assets/intuituive/tables.svg){ .tui-icon width="20" } [Tables and scrolling](tables.md) | Tables, sorting, a cell cursor, options that follow state, rows from a source, scrolling and scrollbars |

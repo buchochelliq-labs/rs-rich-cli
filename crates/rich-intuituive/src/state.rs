@@ -8,7 +8,7 @@
 
 use std::io::{self, Write};
 use std::path::{Path, PathBuf};
-use std::time::{Duration, SystemTime, UNIX_EPOCH};
+use std::time::Duration;
 
 use crate::reactive::{signal, Signal};
 
@@ -153,7 +153,7 @@ struct Lock(PathBuf);
 
 impl Lock {
     fn take(path: &Path) -> io::Result<Lock> {
-        let start = std::time::Instant::now();
+        let start = crate::clock::Instant::now();
         loop {
             match std::fs::OpenOptions::new()
                 .write(true)
@@ -290,14 +290,13 @@ fn store(file: Option<PathBuf>) -> FrecencyStore {
 }
 
 fn now() -> u64 {
-    SystemTime::now()
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| d.as_secs())
+    crate::clock::unix_seconds()
 }
 
 impl FrecencyStore {
     /// Keep at most `keys` keys (500 by default): past it, the least used
     /// go.
+    #[must_use]
     pub fn keep(self, keys: usize) -> FrecencyStore {
         self.limits.update(|l| l.keep = keys.max(1));
         self
@@ -306,6 +305,7 @@ impl FrecencyStore {
     /// Age every rank once they add up to more than `total` (10 000 by
     /// default, zoxide's `_ZO_MAXAGE`): they are scaled down to 90% of
     /// it, and a key under one visit goes.
+    #[must_use]
     pub fn max_age(self, total: f64) -> FrecencyStore {
         self.limits.update(|l| l.max_age = total.max(1.0));
         self

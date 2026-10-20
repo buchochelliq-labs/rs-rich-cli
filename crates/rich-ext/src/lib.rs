@@ -60,6 +60,10 @@
 //! assert!(out.contains("\x1b[1;36m7\x1b[0m"));
 //! ```
 
+// A builder method that returns `Self` is `#[must_use]`: dropping its
+// result drops the value (CONTRIBUTING.md, "API conventions").
+#![warn(clippy::return_self_not_must_use)]
+
 pub mod a11y;
 pub mod ansi_explain;
 // Tar, tar.gz and zip listings and extraction.
@@ -96,6 +100,7 @@ pub mod hex;
 pub mod highlighter;
 // Directory entries, sorting, line-mode cells and a lazy tree walk.
 pub mod listing;
+pub mod markdown_export;
 // Which program opens a file: Yazi's opener rules.
 pub mod open;
 pub mod palette;
@@ -110,6 +115,9 @@ pub mod rst;
 pub mod sanitize;
 pub mod size_bar;
 pub mod source_view;
+// A pure-Rust SQL highlighter (no syntect), with Jinja blocks for dbt.
+#[cfg(feature = "sql")]
+pub mod sql;
 pub mod surface;
 // Warming up syntax highlighting on a worker thread.
 #[cfg(feature = "syntax")]

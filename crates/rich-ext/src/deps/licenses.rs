@@ -442,6 +442,7 @@ impl LicenseReport {
 
     /// Keep only the packages `keep` accepts (say, those a
     /// [`DepGraph`](super::DepGraph) reaches).
+    #[must_use]
     pub fn retain(mut self, keep: impl FnMut(&LicensedPackage) -> bool) -> Self {
         self.packages.retain(keep);
         self

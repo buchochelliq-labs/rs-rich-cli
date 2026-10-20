@@ -45,6 +45,7 @@ const USAGE_LABEL: &str = "Usage: ";
 /// assert!(out.contains("--level <LEVEL>  How much [default: low] [possible values: low, high]"));
 /// ```
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct HelpView {
     spec: CommandSpec,
     long: bool,

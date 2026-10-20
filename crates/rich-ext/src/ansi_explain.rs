@@ -1115,6 +1115,7 @@ pub enum ViewMode {
 }
 
 /// A renderable [`Explanation`]. Colourless output carries the full meaning.
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct ExplanationView<'a> {
     explanation: &'a Explanation,
     mode: ViewMode,

@@ -18,7 +18,7 @@ output is compared with the Rust crates'.
 | `rich.color` | `Color`, `ColorTriplet`, `ColorSystem`, `ColorType`, `ColorParseError`, `parse_rgb_hex`, `blend_rgb` ([Color](color.md)) |
 | `rich.markup`, `rich.emoji` | `escape`, `render`, `Tag`; `Emoji`, `NoEmoji` |
 | `rich.box`, `rich.errors`, `rich.terminal_theme` | every box, exception and palette |
-| `Table` | every constructor, `add_column` and `add_row` option (footers, `width`, `min_width`, `leading`, `row_styles`, sections, annotation styles and justification), `add_section`, `Table.grid`; headers, footers and cells of any renderable. Headers are strings or renderables, not `Column` objects ([Table](table.md)) |
+| `Table` | every constructor, `add_column` and `add_row` option (footers, `width`, `min_width`, `leading`, `row_styles`, sections, annotation styles and justification), `add_section`, `Table.grid`; headers, footers and cells of any renderable; `columns` and `rows` read back as Rich's `Column` and `Row` (read-only copies). Headers are strings or renderables, not `Column` objects ([Table](table.md)) |
 | `Panel` | every option, around any renderable ([Panel](panel.md)) |
 | `Rule`, `Padding`, `Align`, `VerticalCenter`, `Constrain`, `Styled`, `Bar`, `Spinner`, `SPINNERS` | yes ([Rules, padding, alignment and bars](rule.md)) |
 | `Columns`, `Group`, `group`, `Layout` (splitters, `Region`, `LayoutRender`, `refresh_screen`), `containers.Renderables`, `measure_renderables` | yes ([Layout, columns and groups](layout.md)) |
@@ -37,7 +37,7 @@ The port's own crates:
 
 | Crate | rs_rich |
 |---|---|
-| `rs_rich.ext.*` (39 modules) | No Rich counterpart; output compared byte for byte with `rs-rich-ext` ([Extensions](ext/index.md)) |
+| `rs_rich.ext.*` (45 modules) | No Rich counterpart; output compared byte for byte with `rs-rich-ext` ([Extensions](ext/index.md)) |
 | `rs_rich.art` (images, FIGlet, GIFs, image diff) | No Rich counterpart; matches `rs-rich-art` byte for byte. Printing `ImageArt` is strict: it raises `ImageArtError` rather than falling back to ASCII ([Art](art.md)) |
 | `rs_rich.chart` | No Rich counterpart; matches `rich_ext::chart`, compared with its doc examples ([Charts](chart.md)) |
 | `rs_rich.diagram` | No Rich counterpart; matches `rs-rich-diagram`, compared with its doc examples ([Diagrams](diagram.md)) |
@@ -57,7 +57,7 @@ The port's own crates:
 | `text.spans` returns a copy | Spans live in the core `Text`; assign `text.spans` to change them. |
 | Meta data on `Text` spans holds `None`, `bool`, `int`, `float`, `str` and lists or tuples of them (a tuple reads back as a list); other values raise `TypeError` | Core's style meta keeps that subset of what `marshal` can store. A `Style` alone keeps any meta. |
 | `Spinner.render()` with renderable text returns a grid, not a `Table`; `Status.renderable` is not a `Spinner` | The live area's spinner is core's; both print the same. |
-| `Progress.make_tasks_table()` returns a renderable grid; `get_table_column()` returns `None` for a column made without `table_column=`; `SpinnerColumn` has no `spinner` attribute (use `set_spinner()`) | There is no `rs_rich.table.Column`. |
+| `Progress.make_tasks_table()` returns a renderable grid; `get_table_column()` returns `None` for a column made without `table_column=`; `SpinnerColumn` has no `spinner` attribute (use `set_spinner()`) | A table's columns are not `Column` objects it holds: `rs_rich.table.Column` is a read-only copy (`Table.columns`). |
 | A `Text` with a style of its own, rendered justified inside a container (a table cell), has its padding in a separate ANSI run | Core renders the padding as a second segment in the same style; the terminal shows the same. |
 | The theme stack, and `capture()`, belong to the console | Rich keeps the theme stack per thread. Captures are per thread, as in Rich. |
 | `repr(box.ROUNDED)` is `box.ROUNDED` | Rich prints `Box(...)` with the box's characters. Boxes compare and render the same. |

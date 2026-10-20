@@ -27,7 +27,19 @@ def signed_range(console):
     # --8<-- [end:range]
 
 
+def sql_highlighter(console):
+    from rs_rich.ext import sql
+    from rs_rich.markdown import Markdown
+
+    # --8<-- [start:sql]
+    console.print(Syntax("SELECT id FROM {{ ref('orders') }} -- dbt", "sql", highlighter="sql"))
+    fences = "```sql\nselect 1 as n\n```\n\n```python\nn = 1\n```"
+    console.print(Markdown(fences, code_theme="ansi_dark", highlighter=sql.SqlHighlighter("syntect")))
+    # --8<-- [end:sql]
+
+
 shots = Shots("syntax")
 shots.shot("syntax", fib, width=44)
 shots.shot("range", signed_range, width=30)
+shots.shot("sql", sql_highlighter, width=60)
 shots.finish()

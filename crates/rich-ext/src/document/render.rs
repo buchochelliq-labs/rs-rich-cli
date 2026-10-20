@@ -47,6 +47,7 @@ const MIN_CONTENT: usize = 12;
 /// OSC 8 link), code in `Syntax`'s default theme (or the console's code
 /// highlighting), and no fence renderers.
 #[derive(Clone)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct RenderOptions {
     /// `true`: a link's text carries an OSC 8 hyperlink. `false`: the target
     /// is written out after the text, `text (https://…)`, as `rich -m` does
@@ -140,6 +141,7 @@ impl RenderOptions {
 /// assert!(out.contains("Some italic text."));
 /// ```
 #[derive(Clone, Debug)]
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct DocumentView {
     document: Document,
     diagnostics: Vec<Diagnostic>,

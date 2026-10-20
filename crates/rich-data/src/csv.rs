@@ -79,12 +79,14 @@ impl CsvReader {
     }
 
     /// Use this delimiter, with excel's quoting, instead of sniffing.
+    #[must_use]
     pub fn delimiter(mut self, delimiter: char) -> Self {
         self.dialect = Some(Dialect::excel(delimiter));
         self
     }
 
     /// Use this dialect instead of sniffing.
+    #[must_use]
     pub fn dialect(mut self, dialect: Dialect) -> Self {
         self.dialect = Some(dialect);
         self
@@ -93,6 +95,7 @@ impl CsvReader {
     /// The delimiter to fall back to when the sniffer finds none, as
     /// `rich --csv` falls back to `,` for a `.csv` file and a tab for a
     /// `.tsv` one.
+    #[must_use]
     pub fn fallback(mut self, delimiter: char) -> Self {
         self.fallback = Some(delimiter);
         self
@@ -100,12 +103,14 @@ impl CsvReader {
 
     /// Whether the first row is a header (`true`/`false`), instead of
     /// sniffing it.
+    #[must_use]
     pub fn header(mut self, header: bool) -> Self {
         self.header = if header { Header::Yes } else { Header::No };
         self
     }
 
     /// Set the header decision, [`Header::Sniff`] included.
+    #[must_use]
     pub fn header_mode(mut self, header: Header) -> Self {
         self.header = header;
         self

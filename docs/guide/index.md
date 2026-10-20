@@ -12,6 +12,33 @@ This guide walks through all of it. Every code sample on these pages is taken
 from an example program that CI compiles, and every screenshot is that program's
 real output, exported to SVG by the library itself.
 
+| Section | Crate | What it covers |
+|---|---|---|
+| ![](../assets/rs-rich/core.svg){ .rs-icon width="20" } [Core](core/index.md) | `rs-rich` | The faithful port of rich: console, markup, tables, layout, progress, Markdown, export |
+| ![](../assets/rs-rich/ext.svg){ .rs-icon width="20" } [Extensions](ext/index.md) | `rs-rich-ext` | Everything added on top: diagnostics, structured data, charts, workflows, QA tooling |
+| ![](../assets/rs-rich/art.svg){ .rs-icon width="20" } [Art](art/index.md) | `rs-rich-art` | Banners, images, GIFs and image diffs |
+| ![](../assets/rs-rich/interact.svg){ .rs-icon width="20" } [Interactive](interact/index.md) | `rs-rich-interact` | Pickers, inputs, forms, pagers and explorers |
+| ![](../assets/rs-rich/ratatui.svg){ .rs-icon width="20" } [Using rich with ratatui](ratatui.md) | `rs-rich-ratatui` | Rich renderables as ratatui widgets, and back |
+| ![](../assets/rs-rich/diagram.svg){ .rs-icon width="20" } [Diagrams](diagram/index.md) | `rs-rich-diagram` | Graphs, Mermaid flowcharts and DOT sources |
+| ![](../assets/rs-rich/data.svg){ .rs-icon width="20" } [Data and schemas](data/index.md) | `rs-rich-data` | CSV, JSON Lines and Arrow sources, profiles and schemas |
+| ![](../assets/rs-rich/micro.svg){ .rs-icon width="20" } [Micro assets](micro/index.md) | `rs-rich-micro` | Emoji-sized inline images |
+| ![](../assets/rs-rich/cli.svg){ .rs-icon width="20" } [The rich CLI](cli/index.md) | `rs-rich-cli` | The `rich` command |
+
+<div class="rs-subsite" markdown>
+
+![intuiTUIve's mark](../assets/intuituive/mark.svg){ .rs-mark width="48" }
+
+<div markdown>
+
+**Built on rs-rich: [intuiTUIve](intuituive/index.md)** (`rs-rich-intuituive`),
+the framework for full terminal apps. It has its own section, after this
+guide: signals, a retained tree of nodes, widgets, and only the changed
+cells redrawn.
+
+</div>
+
+</div>
+
 A Markdown document from the core, a dashboard of `rs-rich-ext` charts in a
 core `Layout`, and an `rs-rich-interact` explorer searching a YAML file:
 
@@ -47,13 +74,13 @@ core `Layout`, and an `rs-rich-interact` explorer searching a YAML file:
 | [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `rich_ext` | Everything that is not in upstream rich: diagnostics, hyperlinks, logging adapters and tracing spans, structured data, CLI authoring, diffs, test and QA tooling, capability detection, accessibility, workflow renderables (commands, task trees, transfers, countdowns, notifications, tables, badges, size bars, formatters, experimental redaction), charts (sparklines, bars, line charts, gauges, heatmaps, status matrices, KPI cards, timelines), and Cargo dependency and JSON Schema trees. Mostly opt-in features. | [Extensions](ext/index.md), [Charts](ext/charts.md) |
 | `rs-rich-plugin-api` (new in 0.0.12) | `rich_plugin_api`, or `rich_ext::plugin` | The plugin contract: implement `Plugin` to add highlighters, code highlighters, themes, box styles, source and fence renderers, transforms and components. Depends on core only. | [Plugins](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/PLUGINS.md) |
 | `rs-rich-lumis` (new in 0.0.12) | `rich_lumis` | The lumis syntax highlighter (tree-sitter, over 100 languages, 250+ Neovim themes, plus `ansi_dark`/`ansi_light`), for `Syntax`, Markdown or the plugin host. | [Plugins](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/PLUGINS.md) |
-| `rs-rich-mermaid` (new in 0.0.12) | `rich_mermaid` | Mermaid diagrams: flowcharts drawn as text in every direction (through `rs-rich-diagram`'s layout), every diagram type through `mmdc` (optional), and ```` ```mermaid ```` fences in Markdown. | [Plugins](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/PLUGINS.md) |
+| `rs-rich-mermaid` (new in 0.0.12) | `rich_mermaid` | Mermaid diagrams: flowcharts and ER diagrams drawn as text in every direction (through `rs-rich-diagram`'s layout), sequence diagrams on lifelines, every diagram type through `mmdc` (optional), and ```` ```mermaid ```` fences in Markdown. | [Plugins](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/PLUGINS.md) |
 | `rs-rich-diagram` (new in 0.0.15) | `rich_diagram` | Graph diagrams: a graph model with a chaining builder, the layered layout Mermaid's flowcharts draw through, and a `Diagram` renderable in box drawing or ASCII that crops to the width it is given; DOT (Graphviz) sources parsed natively, a `dot` fence plugin (`plugin` feature) and Graphviz's own SVG (`graphviz` feature). | [Diagrams](diagram/index.md) |
 | `rs-rich-data` (new in 0.0.16) | `rich_data` | Tabular data: CSV, TSV, JSON Lines, serde and Arrow row sources, type inference, column statistics, bounded profiles, data-quality reports, SQL result sets and windows over long inputs, and ER diagrams of a schema. | [Tabular data](data/index.md), [Schemas](data/schemas.md), [Developer views](data/developer-views.md) |
 | [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | through `rich_ext` | Compile-time checked markup (`richf!`), `#[derive(Rich)]` and print macros. Enabled by ext's `macros` feature. | [Macros](ext/macros.md) |
 | [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `rich_art` | FIGlet banners, images as ASCII, Braille, blocks, quadrants, Sixel, Kitty or iTerm2 graphics, animated GIFs, perceptual image diffs. | [Art](art/index.md) |
 | `rs-rich-interact` (new in 0.0.13) | `rich_interact` | Interactive components: fuzzy pickers, input, confirm, forms, pagers, a text area, file, colour, asset and date pickers and data explorers, composable with containers, overlays and a keymap; the terminal session and its keys, natural dates and time zones. | [Interactive](interact/index.md) |
-| `rs-rich-intuituive` (new in 0.0.17) | `intuituive` | intuiTUIve, a framework for full-screen terminal apps: signals and memos, a retained tree of nodes (text, rich renderables, rich-interact components, logs), widgets, focus, keys and clicks, sprites and pixel buffers, and only the changed cells sent to the terminal. | [Terminal apps](intuituive/index.md) |
+| `rs-rich-intuituive` (new in 0.0.17) | `intuituive` | intuiTUIve, a framework for full-screen terminal apps: signals and memos, a retained tree of nodes (text, rich renderables, rich-interact components, logs), widgets, focus, keys and clicks, sprites and pixel buffers, and only the changed cells sent to the terminal. | [intuiTUIve](intuituive/index.md) |
 | `rs-rich-web` (new in 0.0.18) | `rich_web` | Serving intuiTUIve apps, or any terminal program on a PTY, to a web browser: one per tab over a WebSocket, drawn by a vendored xterm.js page or, for apps, a DOM renderer with ARIA, behind a URL token, an origin check and a session cap. | [Serving an app to a browser](intuituive/web.md) |
 | `rs-rich-embed` (new in 0.0.18) | `rich_embed` | Other programs and web pages inside an intuiTUIve app: a terminal pane that runs any program (a shell, `htop`, a terminal browser) with scrollback, and a web view with an address bar, each over a swappable backend (`PtyHost`, `WebEngine`); a headless Chrome over DevTools and Browsh's HTTP mode behind features. | [Embedding programs and pages](intuituive/embed.md) |
 | `rs-rich-ratatui` (new in 0.0.17) | `rich_ratatui` | ratatui interop: any rich renderable as a ratatui widget, ratatui widgets as rich-interact components (`interact` feature), and the style, colour, line and buffer-cell conversions underneath. | [Using rich with ratatui](ratatui.md) |
@@ -108,7 +135,8 @@ images all rely on that.
 
 | Crate | Feature | Turns on |
 |---|---|---|
-| `rs-rich` | *(default)* `syntax`, `markdown` | `Syntax` (syntect) and `Markdown` (pulldown-cmark; implies `syntax`). With `default-features = false` everything else in the faithful core remains, without syntect, its bincode 1.x or pulldown-cmark. |
+| `rs-rich` | *(default)* `syntax`, `markdown` | `Syntax` with syntect as its highlighter, and `Markdown` (pulldown-cmark; implies `code`). With `default-features = false` everything else in the faithful core remains, without syntect, its bincode 1.x or pulldown-cmark. |
+| | `code` | `Syntax` and the `CodeHighlighter` plumbing without syntect (`syntax` implies it). Code highlights through a highlighter you give it or register (such as `rich_ext::sql`), and is plain otherwise. `features = ["code", "markdown"]` keeps `Syntax` and `Markdown` without syntect. |
 | | `syntax-cache`, `json-escape-safe` | Opt-in divergences from upstream, documented in [Divergences](../DIVERGENCES.md). |
 | | `onig` | Oniguruma instead of pure-Rust `fancy-regex` for syntax highlighting: 2–4× faster, same output, needs a C compiler ([Divergences #26](../DIVERGENCES.md)). |
 | `rs-rich-ext` | *(default)* `syntax`, `markdown` | Core's two features, plus what needs them: `rst`, `cli_doc::markdown_view`, the `syntect` registry entry and `testing::conformance`. Without `syntax`, `source_view`, `SourceDiff` and `PatchView` render unhighlighted. |

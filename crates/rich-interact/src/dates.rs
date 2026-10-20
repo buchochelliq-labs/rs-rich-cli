@@ -105,6 +105,7 @@ impl DateOptions {
     }
 
     /// Weeks start on `weekday` (0 Monday to 6 Sunday).
+    #[must_use]
     pub fn week_start(mut self, weekday: u32) -> DateOptions {
         self.week_start = weekday % 7;
         self

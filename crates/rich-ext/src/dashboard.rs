@@ -61,18 +61,21 @@ impl DiagnosticsDashboard {
     }
 
     /// Hide diagnostics less serious than `level` (error is the most serious).
+    #[must_use]
     pub fn min_level(mut self, level: Level) -> Self {
         self.min_level = Some(level);
         self
     }
 
     /// Link file headings and locations with `linker`.
+    #[must_use]
     pub fn hyperlinker(mut self, linker: Hyperlinker) -> Self {
         self.linker = Some(linker);
         self
     }
 
     /// How many codes the frequency table lists (0 hides it).
+    #[must_use]
     pub fn top_codes(mut self, count: usize) -> Self {
         self.top_codes = count;
         self

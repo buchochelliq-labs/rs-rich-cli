@@ -73,6 +73,7 @@ impl ProgramEngine {
     }
 
     /// Arguments before the address.
+    #[must_use]
     pub fn args<I: IntoIterator<Item = S>, S: Into<OsString>>(mut self, args: I) -> ProgramEngine {
         if let Some((_, own)) = &mut self.program {
             own.extend(args.into_iter().map(Into::into));

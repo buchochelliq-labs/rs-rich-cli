@@ -37,6 +37,7 @@ impl Choice {
 }
 
 /// A question with a body, warnings and choices. Returns the chosen id.
+#[must_use = "a component does nothing until it is run or mounted"]
 pub struct Confirm {
     title: String,
     body: Vec<Arc<dyn Renderable + Send + Sync>>,

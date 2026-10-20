@@ -41,6 +41,7 @@ impl Caps {
 
 /// One segment of a [`status_bar`]: markup (which may read signals) on a
 /// style of its own. Made by [`seg`].
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct StatusSegment {
     markup: Box<dyn Fn() -> String>,
     style: Box<dyn Fn() -> String>,

@@ -1,6 +1,6 @@
 # Comparing images
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --diff before.png after.png
 ```
 
@@ -42,7 +42,7 @@ too small to be listed, so the shares do not sum to 100%. `Mean ΔE` is how
 
 ## Choosing how the picture is drawn
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --diff before.png after.png --image-mode sixel
 ```
 
@@ -91,7 +91,7 @@ keeps it out of a redirected report.
 
 ## As a CI gate
 
-```bash
+```bash { .rich-playground data-kind="cli" }
 rich --diff baseline.png current.png --threshold 2 --image-mode none
 ```
 

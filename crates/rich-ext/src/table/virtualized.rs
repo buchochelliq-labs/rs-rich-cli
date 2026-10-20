@@ -438,6 +438,7 @@ impl Page {
 ///
 /// The frame (title, caption, box, edges, expand, border style) is set with
 /// the same builders as [`TableData`](super::TableData).
+#[must_use = "builder methods return a new value; it does nothing until it is rendered or used"]
 pub struct VirtualTable<S> {
     source: S,
     columns: Vec<Column>,
