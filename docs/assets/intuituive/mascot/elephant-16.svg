@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" role="img" aria-label="Memo, intuiTUIve's elephant">
+<rect x="7" y="9" width="8" height="5" rx="2" fill="#7c4dff"/>
+<rect x="7" y="12" width="3" height="4" rx="1" fill="#7c4dff"/>
+<rect x="12" y="12" width="3" height="4" rx="1" fill="#7c4dff"/>
+<rect x="8" y="1" width="8" height="9" rx="3" fill="#5a32d6"/>
+<rect x="10" y="3" width="4" height="5" rx="1.5" fill="#b9a1ff"/>
+<rect x="1" y="1" width="9" height="9" rx="4" fill="#7c4dff"/>
+<path d="M4 8.5C3.8 11.5 2.2 14 1.2 12.5" fill="none" stroke="#7c4dff" stroke-width="2.4" stroke-linecap="round"/>
+<rect x="5" y="4" width="2" height="2" rx="0.5" fill="#1c1a24"/>
+</svg>

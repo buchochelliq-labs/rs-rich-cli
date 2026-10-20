@@ -132,3 +132,28 @@
     content: none;
   }
 }
+
+/* intuiTUIve's pages: the wordmark carries its own colours, one file per
+   scheme (#only-dark / #only-light); the topic icons are black line icons
+   set inline beside the text, turned light on the slate scheme. */
+.md-typeset img.tui-wordmark {
+  margin: 0.4rem 0 1rem;
+  border-radius: 0;
+  box-shadow: none;
+}
+.md-typeset img.tui-icon[src$=".svg"]:not([src^="http"]) {
+  display: inline-block;
+  margin: 0 0.35rem 0 0;
+  vertical-align: -0.3em;
+  border-radius: 0;
+  box-shadow: none;
+}
+[data-md-color-scheme="slate"] .md-typeset img.tui-icon {
+  filter: invert(0.92);
+}
+.md-typeset img.tui-mascot[src$=".svg"]:not([src^="http"]) {
+  float: right;
+  margin: 0 0 0.5rem 1rem;
+  border-radius: 0;
+  box-shadow: none;
+}

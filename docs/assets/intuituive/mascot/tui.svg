@@ -1,0 +1,24 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Tui, Memo's calf">
+<rect x="62" y="96" width="12" height="18" rx="5" fill="#5a32d6"/>
+<rect x="78" y="97" width="11" height="17" rx="5" fill="#5a32d6"/>
+<path d="M99 84c5 1 7 5 6 9" fill="none" stroke="#5a32d6" stroke-width="3.5" stroke-linecap="round"/>
+<rect x="44" y="70" width="58" height="38" rx="19" fill="#7c4dff"/>
+<rect x="48" y="94" width="15" height="22" rx="6" fill="#7c4dff"/>
+<rect x="82" y="94" width="15" height="22" rx="6" fill="#7c4dff"/>
+<rect x="51" y="111" width="3.5" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="56.5" y="111" width="3.5" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="85" y="111" width="3.5" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="90.5" y="111" width="3.5" height="3" rx="0.6" fill="#b9a1ff"/>
+<rect x="62" y="30" width="38" height="44" rx="17" fill="#5a32d6"/>
+<rect x="69" y="37" width="24" height="30" rx="10" fill="#b9a1ff"/>
+<rect x="18" y="28" width="60" height="58" rx="29" fill="#7c4dff"/>
+<path d="M30 78C22 84 13 80 14 70" fill="none" stroke="#5a32d6" stroke-width="15" stroke-linecap="round"/>
+<path d="M30 78C22 84 13 80 14 70" fill="none" stroke="#7c4dff" stroke-width="11" stroke-linecap="round"/>
+<rect x="36" y="48" width="9" height="13" rx="3" fill="#1c1a24"/>
+<rect x="54" y="48" width="8" height="13" rx="3" fill="#1c1a24"/>
+<rect x="37.8" y="49.8" width="3.2" height="3.2" rx="0.6" fill="#f4f1ff"/>
+<rect x="55.6" y="49.8" width="3" height="3.2" rx="0.6" fill="#f4f1ff"/>
+<rect x="60" y="64" width="8" height="4" rx="2" fill="#b9a1ff"/>
+<path d="M42 70q4 3.5 8 0" fill="none" stroke="#1c1a24" stroke-width="2.5" stroke-linecap="round"/>
+<rect x="8" y="58" width="11" height="3.5" rx="1.2" fill="#f4f1ff" stroke="#5a32d6" stroke-width="1.5"/>
+</svg>

@@ -26,6 +26,21 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   TCP socket while a view is open; frames arrive over the pipe and over the
   port.
 
+### intuiTUIve: a logo and topic icons (docs)
+
+- intuiTUIve has a mark (a node tree drawn with box-drawing guides, one
+  cell lit: the one a signal redraws), a favicon-sized mark, a wordmark
+  with TUI reversed out like a selection, and a line icon for each guide
+  page, under `docs/assets/intuituive/`. The overview page shows the
+  wordmark and an icon beside each page; the crate README shows the mark.
+- A widget index (`guide/intuituive/widget-index.md`): every widget and
+  component, 88 in seven groups, each with an icon, its constructor, a line
+  on what it is and a link to the section that documents it.
+- A mascot: Memo, a purple elephant with block-cursor eyes who holds up the
+  mark's lit cell, in five poses, at 32 and 16 px, and as a 32x32 pixel
+  sprite for half blocks; and her calf Tui, alone and holding Memo's tail
+  (`docs/assets/intuituive/mascot/`). The overview page shows Memo waving.
+
 ### Versions: the 0.0.21 versions are open
 
 - Every package moves one patch past the 0.0.20 cohort, as the
