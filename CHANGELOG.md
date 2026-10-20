@@ -47,6 +47,26 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   opens the next versions records the last commit of the release's notes
   there (`docs/BRANCHING.md`).
 
+### Interact: Huh-style forms and a paginator (rs-rich-interact)
+
+- `Form` gains the rest of Huh's fields: `multi` (several options, with
+  `chosen` and `limit`), `note` (read-only text that focus passes over),
+  `file` (a path picked with a `FilePicker` opened under the field), and
+  `dynamic_choice`, whose options come from the answers above it and follow
+  them as they change. `describe` puts a line of help under any field.
+- `Form::group` splits a form into pages shown one at a time over a
+  paginator: Enter on a page's last field or Page Down checks the page
+  first, Page Up goes back, and a submit that fails shows the page of the
+  field that failed. Each new field has a line-by-line form without a
+  terminal.
+- `Value` gains `List` and `Path` (a breaking change for an exhaustive
+  `match`), and `Answers` gains `list` and `path`.
+- New `Paginator`: dots (`● ○ ○`) or a fraction (`2/3`), moved with the
+  arrows, Page Up and Down, Home and End, the wheel or a click on a dot.
+  It is state to embed (`bounds`, `handle_key`, `indicator`) and a
+  component of its own over a list of items. New `FilePicker::reopen`, and
+  a `huh_form` example.
+
 ## 0.0.20 cohort — published 2026-10-19
 
 Published on 2026-10-19 from `56c6c97` by one `release.yml` run (tag

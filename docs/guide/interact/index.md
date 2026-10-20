@@ -157,17 +157,34 @@ let sheet = Confirm::new("Apply this change to production?")
 
 ### Form
 
-Several fields answered together.
+Several fields answered together, in the manner of Charm's Huh.
 
 - **Field kinds:** text (any configured `Input`), masked text for passwords
-  (`Form::masked`), a choice among
-  options, and yes/no toggles.
+  (`Form::masked`), a choice among options (`choice`), several options at
+  once (`multi`), a file or directory picked with a `FilePicker` (`file`),
+  yes/no toggles (`toggle`), and notes (`note`). A note is read-only text:
+  focus passes over it and it has no answer.
+- **Descriptions:** `describe(text)` puts a dim line of help under the field
+  just added.
+- **Multi-select:** Left and Right move between the options and Space (or
+  `x`) chooses one. `chosen([..])` chooses some to begin with, and
+  `limit(n)` stops at `n`. The answer is a `Value::List`, in the options'
+  order.
+- **A file field:** Space (or a click) opens the picker under the field,
+  with its root, mode, extensions and jail. Picking closes it, and Escape
+  closes it with no change. With nothing picked, the picker's `default`
+  answers; without one, the field fails with "nothing picked yet".
+- **A dynamic choice:** `dynamic_choice(name, label, options)` takes a
+  function from the answers above the field to its options. It runs again
+  after every key, so the options follow the earlier answers. The option
+  chosen stays chosen while it is still offered.
 - **Moving:** Tab and the arrows move between fields; Enter moves on and, on
   the last field, submits.
 - **Errors:** submitting checks every field, puts each failure's message under
   its field, and focuses the first one.
 
-The result, `Answers`, gives each value by field name.
+The result, `Answers`, gives each value by field name: `text`, `flag`,
+`list` and `path`.
 
 ```rust
 let form = Form::new("New service")
@@ -177,6 +194,66 @@ let form = Form::new("New service")
     .toggle("tls", "TLS", true);
 let answers = run(form, &options)?.value();
 ```
+
+#### Pages
+
+`group(title)` starts a new page. The fields added after it are shown
+together, and the pages one at a time, with a `Paginator` under them. Before
+any field, `group` titles the first page.
+
+- **Moving between pages:** Enter on a page's last field, or Page Down,
+  checks that page's fields. The next page shows only when they all pass;
+  otherwise each error is under its field. Page Up goes back without a
+  check. With the mouse on, a click on a page's dot goes there, through the
+  same checks.
+- **Submitting:** Ctrl+S checks every page. When a field fails on another
+  page, that page shows with the field focused.
+- **The indicator:** dots by default; `page_style(PaginatorStyle::Fraction)`
+  shows `1/2` instead.
+
+```rust
+let form = Form::new("Deploy a service")
+    .group("The service")
+    .note("Two pages", "Enter on a page's last field checks the page and moves on.")
+    .input("name", Input::new("Name"))
+    .describe("lower case, like api")
+    .multi("features", "Features", ["tls", "metrics", "logs"])
+    .chosen(["tls"])
+    .group("Where it runs")
+    .choice("cloud", "Cloud", ["aws", "gcp"])
+    .dynamic_choice("region", "Region", |answers| match answers.text("cloud") {
+        Some("gcp") => vec!["us-central1".into(), "europe-west1".into()],
+        _ => vec!["us-east-1".into(), "eu-west-1".into()],
+    });
+```
+
+The first page, after typing a name and choosing a second feature, and the
+second page once GCP is chosen (from the headless renderer):
+
+```text
+? Deploy a service
+  The service
+  Two pages
+    Enter on a page's last field checks the page and moves on.
+  Name      api
+            lower case, like api
+❯ Features  ◉ tls  ◉ metrics  ○ logs
+  ● ○
+  tab/↑↓ move · enter next page · pgup/pgdn page · ctrl+s submit · esc cancel
+
+? Deploy a service
+  Where it runs
+  Cloud     gcp
+❯ Region    ◂ us-central1 ▸
+  ○ ●
+  tab/↑↓ move · enter submit · pgup/pgdn page · ctrl+s submit · esc cancel
+```
+
+Without a terminal, a form asks a line a field. Each page's title comes
+before its fields, and a note's text where it is. A multi-select takes its
+options comma-separated, and a file field a path (empty for the picker's
+default). The `huh_form` example (`cargo run -p rs-rich-interact --example
+huh_form`) runs the form above with a file field.
 
 ![A form with an error under its field](../../media/tapes/components/form-error.png)
 
@@ -201,6 +278,38 @@ resize.
 - **Without a terminal:** it writes the content out in full.
 
 ![Searching in the pager](../../media/tapes/components/pager.png)
+
+### Paginator
+
+Which page of several is showing, as dots (`● ○ ○`) or a fraction (`1/3`),
+like Bubbles' paginator. It is state with a one-line indicator, to embed
+wherever a list or a form needs pages (a `Form`'s groups use it), and a
+component of its own.
+
+- **On its own:** `Paginator::over(title, items, per_page)` shows a page of
+  items above the indicator; Enter returns the page shown (from 0), and
+  Escape or `q` cancels.
+- **Keys:** Left and Right (and `h`, `l`, Page Up, Page Down) move a page;
+  Home and End go to the ends. Each is rebindable (`paginator_keymap`).
+- **The mouse:** with `with_mouse(true)`, a click on a dot goes to its page
+  and the wheel moves a page.
+- **Looks:** `style(PaginatorStyle::Fraction)` shows `n/m`; `dots(active,
+  inactive)` changes the dots. Dots that do not fit the width show as a
+  fraction. The current dot is in the theme's `checked_style`, and the
+  others in `hint`.
+- **Embedded:** `next_page`, `previous_page`, `set_page`, `set_pages`,
+  `bounds(len, per_page)` (the slice of a list on the current page),
+  `handle_key(key)` for a container's keys, and `indicator(width)` and
+  `page_at(width, column)` to draw it and to place a click.
+- **Without a terminal:** it lists every item and asks for a page number.
+
+```text
+? Components
+  Form
+  Pager
+  ○ ● ○
+  ←/→ page · enter choose · esc cancel
+```
 
 ### TextArea
 
