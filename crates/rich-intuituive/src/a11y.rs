@@ -54,6 +54,15 @@ pub enum Role {
     CheckBox,
     /// A toggle that is on (checked) or off.
     Switch,
+    /// A value along a range: a [`slider`](crate::slider). Its value is
+    /// the number it holds.
+    Slider,
+    /// One of a group of options: a [`radio`](crate::radio) group. Its
+    /// value is the option chosen.
+    RadioGroup,
+    /// A field that shows one choice and opens a list of the others: a
+    /// [`select_field`](crate::select_field). Its value is the choice.
+    ComboBox,
 }
 
 impl Role {
@@ -84,6 +93,9 @@ impl Role {
             Role::Separator => "separator",
             Role::CheckBox => "checkbox",
             Role::Switch => "switch",
+            Role::Slider => "slider",
+            Role::RadioGroup => "radiogroup",
+            Role::ComboBox => "combobox",
         }
     }
 
@@ -97,6 +109,8 @@ impl Role {
             Role::MenuItem => "menu item",
             Role::TextBox => "text box",
             Role::CheckBox => "check box",
+            Role::RadioGroup => "radio group",
+            Role::ComboBox => "combo box",
             role => role.name(),
         }
     }
@@ -113,6 +127,8 @@ impl Role {
                 | Role::Menu
                 | Role::MenuBar
                 | Role::Grid
+                | Role::RadioGroup
+                | Role::ComboBox
         )
     }
 }
@@ -228,7 +244,7 @@ impl AccessNode {
     /// Its ARIA attributes, for a DOM renderer: `role`, `aria-label`, and
     /// each state that is set (`aria-expanded`, `aria-checked`,
     /// `aria-selected`, `aria-busy`, `aria-disabled`, `aria-invalid`,
-    /// `aria-posinset` and `aria-setsize`). A widget of items' states go
+    /// a slider's `aria-valuenow`, `aria-posinset` and `aria-setsize`). A widget of items' states go
     /// on its selected item's element.
     pub fn aria_attributes(&self) -> Vec<(&'static str, String)> {
         let mut out = vec![("role", self.role.name().to_string())];
@@ -251,6 +267,10 @@ impl AccessNode {
             if on {
                 out.push((name, "true".to_string()));
             }
+        }
+        // A slider's value is its number.
+        if let Some(value) = self.value.as_ref().filter(|_| self.role == Role::Slider) {
+            out.push(("aria-valuenow", value.clone()));
         }
         if let Some((at, of)) = state.position {
             out.push(("aria-posinset", at.to_string()));

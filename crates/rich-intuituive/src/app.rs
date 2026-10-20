@@ -1030,7 +1030,7 @@ fn style(definition: &str) -> Style {
 }
 
 impl Theme {
-    fn preset(border: &str, focused: &str, names: [(&str, &str); 6]) -> Theme {
+    fn preset(border: &str, focused: &str, names: &[(&str, &str)]) -> Theme {
         Theme {
             border: style(border),
             border_focused: style(focused),
@@ -1047,13 +1047,18 @@ impl Theme {
         Theme::preset(
             "blue",
             "bright_cyan",
-            [
+            &[
                 ("accent", "bright_cyan"),
                 ("muted", "dim"),
                 ("good", "green"),
                 ("warn", "yellow"),
                 ("bad", "bold red"),
                 ("selected", "reverse"),
+                // The stock buttons' faces; with the focus, `bold reverse`
+                // over them unless `button.focus` says otherwise.
+                ("button", "white on grey30"),
+                ("button.primary", "black on cyan"),
+                ("button.danger", "white on red3"),
             ],
         )
     }
@@ -1063,13 +1068,16 @@ impl Theme {
         Theme::preset(
             "grey50",
             "blue",
-            [
+            &[
                 ("accent", "blue"),
                 ("muted", "grey42"),
                 ("good", "green4"),
                 ("warn", "dark_orange3"),
                 ("bad", "bold red3"),
                 ("selected", "reverse"),
+                ("button", "black on grey82"),
+                ("button.primary", "white on blue"),
+                ("button.danger", "white on red3"),
             ],
         )
     }
@@ -1079,13 +1087,17 @@ impl Theme {
         Theme::preset(
             "dim",
             "bold",
-            [
+            &[
                 ("accent", "bold"),
                 ("muted", "dim"),
                 ("good", "bold"),
                 ("warn", "underline"),
                 ("bad", "bold reverse"),
                 ("selected", "reverse"),
+                ("button", "reverse"),
+                ("button.focus", "bold underline"),
+                ("button.primary", "bold reverse"),
+                ("button.danger", "bold reverse"),
             ],
         )
     }
@@ -3481,7 +3493,9 @@ impl App {
             };
             // A multi-line text box's value is its caret's line, as an
             // item's is the selected one.
-            let value = if role.has_items() || (role == Role::TextBox && node.cursor().is_some()) {
+            let value = if let Some(value) = node.access_value() {
+                Some(value)
+            } else if role.has_items() || (role == Role::TextBox && node.cursor().is_some()) {
                 node.cursor().map(|at| {
                     let inner = crate::node::translate(node.inner.get(), shift);
                     let item = Rect::new(

@@ -244,6 +244,7 @@ fn item_role(role: Role) -> Option<&'static str> {
         Role::TabList => "tab",
         Role::Menu | Role::MenuBar => "menuitem",
         Role::Grid => "gridcell",
+        Role::RadioGroup => "radio",
         _ => return None,
     })
 }
@@ -359,6 +360,28 @@ mod tests {
             })
         );
         assert_eq!(json["rect"], json!([0, 1, 10, 3]));
+        // A radio group's chosen option is a checked radio.
+        let group = AccessNode {
+            role: Role::RadioGroup,
+            name: "Size".into(),
+            value: Some("Medium".into()),
+            state: AccessState {
+                checked: Some(true),
+                position: Some((2, 3)),
+                ..AccessState::default()
+            },
+            ..list.clone()
+        };
+        let json = node(&group);
+        assert_eq!(json["item"]["role"], "radio");
+        assert_eq!(
+            json["item"]["attrs"],
+            json!([
+                ["aria-checked", "true"],
+                ["aria-posinset", "2"],
+                ["aria-setsize", "3"]
+            ])
+        );
         // A button keeps its own attributes and reads by its label.
         let button = AccessNode {
             role: Role::Button,

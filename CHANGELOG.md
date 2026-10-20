@@ -53,6 +53,41 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `RELEASES.toml`, both lockfiles, the version tables and the CLI reference
   follow.
 
+### intuiTUIve: stock form controls (rs-rich-intuituive, rs-rich-web, rs-rich on PyPI)
+
+- `button(label, on_press)`: Enter, Space or a click (a press let go over
+  it) presses it; `.variant(ButtonVariant::Primary | Danger)` picks its
+  face from the theme's `button`, `button.primary` or `button.danger`
+  (the dark, light and mono themes name all three); it looks picked under
+  the focus or the pointer, pressed while the mouse holds it, greyed out
+  with `disabled_when`, and three rows tall draws lit and shaded edges in
+  colours a theme names.
+- `checkbox(label, Signal<bool>)`, `switch_toggle(label, Signal<bool>)`,
+  `radio(options, Signal<usize>)` (the arrows move the choice within the
+  group), `slider(Signal<f64>, range, step)` (the arrows, PageUp/PageDown,
+  Home/End, a click, a drag and the wheel), `select_field(options,
+  Signal<usize>)` (a menu under it on `open_menu`'s list, opened at the
+  choice; letters jump to the option they start, closed or open) and
+  `collapsible(title, Signal<bool>, child)`.
+- `spinner(name)`: rich's named spinners as a node, turned by an `after`
+  timer only while it spins (`.spinning_when(..)`), hidden from screen
+  readers. `.loading_when(..)` dims any node under a spinner and marks it
+  busy.
+- Each has a role and states for assistive technology: new
+  `Role::Slider`, `Role::RadioGroup` and `Role::ComboBox`;
+  `Widget::access_value` for a value the cells do not say (a slider's
+  number, sent to a browser as `aria-valuenow`); `DrawCx::disabled`. The
+  DOM renderer gives a radio group's chosen item the `radio` role, and
+  `rs_rich.tui.Role` names the three new roles.
+- Each draws in theme styles with fallbacks (`checkbox.on`, `switch.on`,
+  `slider.filled`, `control.focus`, …), so a theme file or
+  `.theme_styles(..)` restyles it. A select field's menu, and only its,
+  takes letters rather than j and k.
+- `examples/controls.rs` is a settings form of all of them, and the guide
+  has a page for them (Buttons and form controls). The `access` example's
+  check box, switch, buttons and spinner, the widget gallery's three
+  hand-drawn buttons and `checked_when`'s doc example use them now.
+
 ### Recording: a held key repeats only while it is held (rs-rich-record)
 
 - `Hold` (and a `KeyDown` held through a `Sleep`) sends the repeats due

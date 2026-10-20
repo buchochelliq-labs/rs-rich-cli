@@ -735,6 +735,9 @@ py_enum! {
         Separator = "separator" => intuituive::a11y::Role::Separator,
         CheckBox = "checkbox" => intuituive::a11y::Role::CheckBox,
         Switch = "switch" => intuituive::a11y::Role::Switch,
+        Slider = "slider" => intuituive::a11y::Role::Slider,
+        RadioGroup = "radiogroup" => intuituive::a11y::Role::RadioGroup,
+        ComboBox = "combobox" => intuituive::a11y::Role::ComboBox,
     }
     role_arg {
         /// What a screen reader says: `"button"`, `"list item"`, `"text box"`.

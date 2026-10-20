@@ -576,6 +576,7 @@ impl Widget for CommandBar {
             shift: cx.shift,
             wants_hover: cx.wants_hover,
             watchers: cx.watchers,
+            disabled: cx.disabled,
         };
         self.area.draw(&mut inner, &mut part);
     }

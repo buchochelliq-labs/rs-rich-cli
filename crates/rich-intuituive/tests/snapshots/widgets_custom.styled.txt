@@ -1,7 +1,7 @@
  Block  Text  List  Table  Tabs  Scrollbar  Calendar  Popup  Borders [bold black on cyan] Custom [/]
 
-  Three buttons, each a widget of its own: it draws its face and edges, takes
-  the pointer and the keys, and looks picked while it has the focus or the
+  Three stock buttons, each with a look of its own from theme styles: a face,
+  a lit top edge and a shaded bottom one, picked while it has the focus or the
   pointer, and pressed while a button is held on it.
 
               [#c04040 on #802020]▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔[/]   [#60d060 on #309030]▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔[/]   [#4060c0 on #203080]▔▔▔▔▔▔▔▔▔▔▔▔▔▔▔[/]

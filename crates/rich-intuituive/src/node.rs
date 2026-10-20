@@ -617,19 +617,30 @@ impl Node {
     /// Checked while `condition` holds, not checked while it does not
     /// (ARIA's `aria-checked`). Its role becomes
     /// [`CheckBox`](crate::a11y::Role::CheckBox) unless set; set
-    /// [`Switch`](crate::a11y::Role::Switch) for a toggle.
+    /// [`Switch`](crate::a11y::Role::Switch) for a toggle. The stock
+    /// [`checkbox`](crate::checkbox) and
+    /// [`switch_toggle`](crate::switch_toggle) are checked by their
+    /// signals already; this is for a node of your own that is on or off.
     ///
     /// ```
+    /// use intuituive::a11y::Role;
+    /// use intuituive::checkbox;
     /// use intuituive::prelude::*;
     ///
     /// let app = App::new(|| {
-    ///     let on = signal(true);
-    ///     text(move || format!("{} Wrap lines", if on.get() { "☑" } else { "☐" }))
-    ///         .label("Wrap lines")
-    ///         .checked_when(move || on.get())
-    ///         .focusable()
-    ///         .on_key("space", move |_| on.update(|on| *on = !*on))
+    ///     let (wrap, recording) = (signal(true), signal(false));
+    ///     column([
+    ///         checkbox("Wrap lines", wrap),
+    ///         text(move || if recording.get() { "● REC" } else { "○ REC" }.into())
+    ///             .label("Recording")
+    ///             .role(Role::Switch)
+    ///             .checked_when(move || recording.get()),
+    ///     ])
     /// });
+    /// let mut driver = app.driver(16, 2);
+    /// driver.settle();
+    /// let read: Vec<String> = driver.accessibility().iter().map(|n| n.describe()).collect();
+    /// assert_eq!(read, ["Wrap lines, check box, checked", "Recording, switch, not checked"]);
     /// ```
     pub fn checked_when(mut self, condition: impl Fn() -> bool + 'static) -> Node {
         self.checked_when = Some(Box::new(condition));
@@ -716,6 +727,12 @@ impl Node {
         }
         self.widget_mut(|panel: &mut Panel| panel.shown_title())
             .filter(|title| !title.is_empty())
+    }
+
+    /// Its widget's [value](Widget::access_value) for assistive
+    /// technology, if it gives one.
+    pub(crate) fn access_value(&self) -> Option<String> {
+        self.body.borrow().widget.access_value()
     }
 
     /// Where its selected item is, on its widget's surface.
@@ -3102,6 +3119,7 @@ impl Node {
                     shift: frame.shift,
                     wants_hover: &frame.wants_hover,
                     watchers: frame.watchers,
+                    disabled: self.disabled(),
                 };
                 let mut canvas = Canvas {
                     screen: &mut *screen,
@@ -3258,6 +3276,7 @@ impl Node {
                     shift: frame.shift,
                     wants_hover: &frame.wants_hover,
                     watchers: frame.watchers,
+                    disabled: self.disabled(),
                 };
                 let mut canvas = Canvas {
                     screen: &mut *screen,
