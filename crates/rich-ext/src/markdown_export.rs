@@ -98,6 +98,7 @@ pub enum PanelStyle {
 
 /// Options for [`GfmExporter`] and [`GfmDocument`].
 #[derive(Clone, Debug)]
+#[must_use = "options do nothing until they are passed to what takes them"]
 pub struct GfmOptions {
     width: usize,
     panel: PanelStyle,
