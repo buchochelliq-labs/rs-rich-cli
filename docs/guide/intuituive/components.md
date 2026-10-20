@@ -65,7 +65,9 @@ column([
   them: a rename that selects the name before its extension is
   `input(name).select(0..stem)`.
 - Both are text boxes for assistive technology, with their text as the
-  value. Validate them with `.error_when(..)`, as any node.
+  value. Validate them with `.error_when(..)`, as any node, or with
+  `.validate(|text| Option<String>)`, which shows the message too and gives
+  it to assistive technology ([Editing text](text-editing.md#validating-an-input)).
 
 ### Completion, history and a command line
 
@@ -168,6 +170,10 @@ or an accented letter is one step. The keys:
 
 The mouse places the caret, drags a selection, and a double or triple click
 selects a word or a line; the wheel scrolls.
+
+The keys are a keymap of named actions: rebind them, take the Emacs or Vim
+preset, search with a find bar, wrap at words, and more, in
+[Editing text](text-editing.md).
 
 Only the lines in view are wrapped, highlighted and drawn, so a file of a
 hundred thousand lines pages as fast as a short one. Highlighting starts at

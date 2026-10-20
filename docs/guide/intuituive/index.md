@@ -75,6 +75,7 @@ thing it introduces:
 | [Panels, themes and stylesheets](panels.md) | Borders, titles, rules and shared borders; themes and theme files; styles on a node; CSS stylesheets and `:error` |
 | [State, keys and the mouse](input.md) | Signals, memos and watches; focus, scopes and directions; key sequences, held keys, releases and repeat; the mouse, tooltips, drag-and-drop; bindings, the help and the command palette |
 | [Inputs, text and dates](components.md) | Hosted components, inputs with completion and history, a command line, text areas, calendars, date and time pickers, queries over records |
+| [Editing text: keys, search and presets](text-editing.md) | Rebinding the editing keys, the Emacs and Vim presets, search and a find bar, word wrap, the cursor line, the caret's shape, tabs, the undo limit, validation messages |
 | [Lists, trees and tabs](lists.md) | How lists look, ranges, selections, finding and reordering; trees by path, by key and lazy; split panes; tab strips and tab sets; logs |
 | [Tables and scrolling](tables.md) | Tables, sorting, a cell cursor, options that follow state, rows from a source, scrolling and scrollbars |
 | [Chrome, your own widgets and effects](widgets.md) | Status bars, breadcrumbs, key hints, facts; the `Widget` trait; effects |

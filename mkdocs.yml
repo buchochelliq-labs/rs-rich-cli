@@ -137,6 +137,7 @@ nav:
           - Overlays and chrome: guide/interact/overlays.md
           - Explorers, copying and live lists: guide/interact/explorers.md
           - Approval queues and jumping to anything: guide/interact/review-and-jump.md
+          - The text buffer and editor keys: guide/interact/editing.md
       - Terminal apps (rs-rich-intuituive):
           - guide/intuituive/index.md
           - "Tutorial: a to-do app": guide/intuituive/tutorial.md
@@ -144,6 +145,7 @@ nav:
           - Panels, themes and stylesheets: guide/intuituive/panels.md
           - State, keys and the mouse: guide/intuituive/input.md
           - Inputs, text and dates: guide/intuituive/components.md
+          - "Editing text: keys, search and presets": guide/intuituive/text-editing.md
           - Lists, trees and tabs: guide/intuituive/lists.md
           - Tables and scrolling: guide/intuituive/tables.md
           - Chrome, your own widgets and effects: guide/intuituive/widgets.md
