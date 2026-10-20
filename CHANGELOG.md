@@ -384,6 +384,25 @@ the workspace):
   `playground-X.Y.Z.tar.gz` to the release, and the versioned docs download
   it; a release without one keeps plain code blocks.
 
+### Docs: the CLI in the playground (tier 2; rs-rich-cli)
+
+- CLI examples in the docs have a **Try it** button: it opens a terminal
+  (xterm.js) on the page with the block's commands filled in at the
+  prompt, run by `rich` compiled for WASI (`wasm32-wasip1`, about 2.5 MB
+  gzipped, loaded on the first click). The prompt is a small line runner:
+  pipes, `;`, `&&`, `||`, redirects, variables, globs and a few builtins
+  (`echo`, `cat`, `ls`, `seq`, …) over sample files. **Stop** ends a
+  runaway command; **Save as tape** downloads the session as a tape that
+  `rich record` replays.
+- 127 CLI examples on 16 pages run; the rest (URLs, `--watch`, `capture`,
+  `record`, `rich deps`, `git` and `jq`) stay plain code. The docs check
+  runs every marked block under Node and fails on an example that runs but
+  is not marked.
+- rs-rich-cli builds for `wasm32-wasip1` with `art,mermaid`: host-only
+  dependencies are gated; under WASI `--demo` and `rich spin` exit 2 as not
+  available and `rich log` reads stdin without a thread. Native builds are
+  unchanged. CI checks the WASI build.
+
 ### Docs: apps in the playground (tier 3; rs-rich-interact, rs-rich-intuituive, rs-rich-web)
 
 - The [Playground](docs/playground.md) page runs `rich choose` (and

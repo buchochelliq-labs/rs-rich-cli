@@ -697,7 +697,7 @@ jobs:
   # with and without syntect, so a new crossterm, `Instant` or thread call
   # outside the crates' wasm gates fails here rather than in the playground.
   # rs-rich-web without its server (`default-features = false`), whose
-  # input decoder the playground uses.
+  # input decoder the playground uses; and the CLI for wasm32-wasip1.
   wasm:
     name: wasm32 build (playground crates)
     runs-on: ubuntu-latest
@@ -710,7 +710,7 @@ jobs:
       - name: Install Rust toolchain
         uses: dtolnay/rust-toolchain@stable
         with:
-          targets: wasm32-unknown-unknown
+          targets: wasm32-unknown-unknown, wasm32-wasip1
 
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
@@ -730,6 +730,13 @@ jobs:
           cargo check --locked --target wasm32-unknown-unknown
           -p rs-rich-interact -p rs-rich-intuituive
           --features rs-rich-interact/data,rs-rich-intuituive/viz,rs-rich-intuituive/files
+
+      # The playground's terminal (tier 2) runs the CLI on WASI: a change in a
+      # crate the CLI uses that breaks that build fails here, on its own PR.
+      - name: Check (the CLI on WASI)
+        run: >-
+          cargo check --locked --target wasm32-wasip1
+          -p rs-rich-cli --no-default-features --features art,mermaid
 
   ci-ok:
     name: ci-ok
