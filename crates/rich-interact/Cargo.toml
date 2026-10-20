@@ -64,6 +64,9 @@ required-features = ["data"]
 [dependencies]
 rich = { workspace = true, features = ["syntax"] }
 rich-ext.workspace = true
+# The text buffer's search (`edit::Search`): plain strings and regular
+# expressions (already in the tree, through rs-rich).
+fancy-regex.workspace = true
 rich-micro = { workspace = true, optional = true }
 # Raw mode, the alternate screen, and key and mouse events on every platform.
 # `use-dev-tty` reads events through poll/select instead of mio: macOS's

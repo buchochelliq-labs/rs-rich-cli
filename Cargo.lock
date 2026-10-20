@@ -3003,6 +3003,7 @@ name = "rs-rich-interact"
 version = "0.0.9"
 dependencies = [
  "crossterm",
+ "fancy-regex 0.19.2",
  "filedescriptor",
  "libc",
  "portable-pty",

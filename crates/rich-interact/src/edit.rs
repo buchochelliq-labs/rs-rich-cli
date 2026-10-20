@@ -8,7 +8,15 @@
 //! Every change is one [`replace`](Buffer::replace) of a range with text, so
 //! every change can be undone. Typing in a run (characters at the caret,
 //! one after another) undoes as one step, and so does deleting in a run;
-//! moving the caret ends the run.
+//! moving the caret ends the run. The history keeps the last
+//! [`HISTORY`] steps unless [`set_history_limit`](Buffer::set_history_limit)
+//! says otherwise.
+//!
+//! Text killed ([`kill_to_end`](Buffer::kill_to_end) and the other `kill_`
+//! methods) goes on a kill ring, as Emacs and readline keep one:
+//! [`yank`](Buffer::yank) puts the last kill back, and
+//! [`yank_pop`](Buffer::yank_pop) right after it swaps in the one before.
+//! A [`Search`] finds a plain string or a regular expression, line by line.
 //!
 //! ```
 //! use rich_interact::edit::Buffer;
@@ -22,18 +30,32 @@
 //! assert_eq!(buffer.text(), "fn main() {}");
 //! ```
 
+use std::cell::RefCell;
+use std::collections::VecDeque;
+use std::ops::Range;
+
 use rich::cells::split_graphemes;
 
-/// The cells a tab takes on screen.
+/// The cells a tab takes on screen, unless a buffer's
+/// [`set_tab_width`](Buffer::set_tab_width) says otherwise.
 pub const TAB: usize = 4;
 
-/// What [`Buffer::indent`] inserts, and [`Buffer::outdent`] takes away.
-const INDENT: &str = "    ";
+/// The undo steps a buffer keeps unless
+/// [`set_history_limit`](Buffer::set_history_limit) says otherwise.
+pub const HISTORY: usize = 1000;
+
+/// The kills the kill ring keeps.
+const KILLS: usize = 16;
 
 /// The grapheme clusters of `line` as (start, end, cells): rich's, with a
 /// tab one of its own, [`TAB`] cells wide, rather than joined to the one
 /// before it as a zero-width character is.
 pub fn graphemes(line: &str) -> Vec<(usize, usize, usize)> {
+    graphemes_with(line, TAB)
+}
+
+/// [`graphemes`], a tab `tab` cells wide.
+pub fn graphemes_with(line: &str, tab: usize) -> Vec<(usize, usize, usize)> {
     let mut out = Vec::new();
     let mut start = 0;
     for piece in line.split('\t') {
@@ -41,7 +63,7 @@ pub fn graphemes(line: &str) -> Vec<(usize, usize, usize)> {
         out.extend(spans.into_iter().map(|(s, e, w)| (start + s, start + e, w)));
         start += piece.len();
         if start < line.len() {
-            out.push((start, start + 1, TAB));
+            out.push((start, start + 1, tab));
             start += 1;
         }
     }
@@ -50,7 +72,84 @@ pub fn graphemes(line: &str) -> Vec<(usize, usize, usize)> {
 
 /// The cells `text` (one line) takes on screen.
 pub fn cells(text: &str) -> usize {
-    graphemes(text).iter().map(|(_, _, width)| width).sum()
+    cells_with(text, TAB)
+}
+
+/// [`cells`], a tab `tab` cells wide.
+pub fn cells_with(text: &str, tab: usize) -> usize {
+    graphemes_with(text, tab)
+        .iter()
+        .map(|(_, _, width)| width)
+        .sum()
+}
+
+/// How a line longer than the room is shown: [`wrap_line`].
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum WrapMode {
+    /// One row a line, scrolled sideways.
+    None,
+    /// Broken at the last grapheme cluster that fits (a character wrap).
+    #[default]
+    Grapheme,
+    /// Broken after the last space that fits, so words stay whole; a word
+    /// longer than the room is broken as [`Grapheme`](Self::Grapheme) does.
+    Word,
+}
+
+/// The rows `line` takes `room` cells wide (a tab `tab` cells), as byte
+/// ranges covering it end to end: one for [`WrapMode::None`] or a line that
+/// fits. With [`WrapMode::Word`] a row ends after a space, and the one space
+/// that does not fit hangs past the room rather than starting the next row.
+///
+/// ```
+/// use rich_interact::edit::{wrap_line, WrapMode};
+///
+/// let line = "the quick brown fox";
+/// let rows = |mode| -> Vec<&str> {
+///     wrap_line(line, 8, 4, mode).into_iter().map(|r| &line[r]).collect()
+/// };
+/// assert_eq!(rows(WrapMode::Word), ["the ", "quick ", "brown ", "fox"]);
+/// assert_eq!(rows(WrapMode::Grapheme), ["the quic", "k brown ", "fox"]);
+/// assert_eq!(wrap_line("abcdefghijkl", 5, 4, WrapMode::Word), [0..5, 5..10, 10..12]);
+/// assert_eq!(wrap_line(line, 8, 4, WrapMode::None).len(), 1);
+/// ```
+pub fn wrap_line(line: &str, room: usize, tab: usize, mode: WrapMode) -> Vec<Range<usize>> {
+    if mode == WrapMode::None {
+        return std::iter::once(0..line.len()).collect();
+    }
+    let room = room.max(1);
+    let mut rows = Vec::new();
+    let (mut start, mut used) = (0, 0);
+    // Where a row may end after a space, and the cells up to it.
+    let mut space: Option<(usize, usize)> = None;
+    for (at, end, width) in graphemes_with(line, tab) {
+        let blank = line[at..end].starts_with(char::is_whitespace);
+        if used + width > room && at > start {
+            if mode == WrapMode::Word && blank {
+                // The space hangs: the row ends after it.
+                rows.push(start..end);
+                (start, used, space) = (end, 0, None);
+                continue;
+            }
+            match space.filter(|_| mode == WrapMode::Word) {
+                Some((after, cells)) if after > start => {
+                    rows.push(start..after);
+                    (start, used) = (after, used - cells);
+                }
+                _ => {
+                    rows.push(start..at);
+                    (start, used) = (at, 0);
+                }
+            }
+            space = None;
+        }
+        used += width;
+        if blank {
+            space = Some((end, used));
+        }
+    }
+    rows.push(start..line.len());
+    rows
 }
 
 /// The characters in `text` as a limit counts them: grapheme clusters,
@@ -97,6 +196,99 @@ pub fn clean(text: &str) -> String {
         }
     }
     out
+}
+
+/// What to find in a buffer ([`Buffer::set_search`]): a plain string or a
+/// regular expression (fancy-regex's syntax, look-around included), matched
+/// within each line, so a match never spans a line break. Empty matches
+/// are skipped.
+///
+/// ```
+/// use rich_interact::edit::Search;
+///
+/// let plain = Search::plain("a.b");
+/// assert_eq!(plain.find_in("a.b axb"), [0..3]);
+/// let regex = Search::regex(r"a.b").unwrap();
+/// assert_eq!(regex.find_in("a.b axb"), [0..3, 4..7]);
+/// let any_case = Search::plain("Fox").ignore_case(true);
+/// assert_eq!(any_case.find_in("fox FOX"), [0..3, 4..7]);
+/// assert!(Search::regex("(").is_err());
+/// ```
+#[derive(Clone, Debug)]
+pub struct Search {
+    source: String,
+    regex: bool,
+    ignore_case: bool,
+    compiled: fancy_regex::Regex,
+}
+
+impl Search {
+    /// Find `text` as it is.
+    pub fn plain(text: &str) -> Search {
+        Search::build(text, false, false).expect("an escaped pattern compiles")
+    }
+
+    /// Find matches of the regular expression `pattern`; the error says
+    /// why it does not compile.
+    pub fn regex(pattern: &str) -> Result<Search, String> {
+        Search::build(pattern, true, false)
+    }
+
+    /// Plain when `regex` is false, else a regular expression.
+    pub fn new(pattern: &str, regex: bool) -> Result<Search, String> {
+        Search::build(pattern, regex, false)
+    }
+
+    /// Match letters of either case.
+    pub fn ignore_case(self, on: bool) -> Search {
+        Search::build(&self.source, self.regex, on).unwrap_or(self)
+    }
+
+    fn build(source: &str, regex: bool, ignore_case: bool) -> Result<Search, String> {
+        let body = if regex {
+            std::borrow::Cow::Borrowed(source)
+        } else {
+            fancy_regex::escape(source)
+        };
+        let pattern = if ignore_case {
+            format!("(?i:{body})")
+        } else {
+            body.into_owned()
+        };
+        let compiled = fancy_regex::Regex::new(&pattern).map_err(|e| e.to_string())?;
+        Ok(Search {
+            source: source.to_string(),
+            regex,
+            ignore_case,
+            compiled,
+        })
+    }
+
+    /// The pattern as given.
+    pub fn pattern(&self) -> &str {
+        &self.source
+    }
+
+    pub fn is_regex(&self) -> bool {
+        self.regex
+    }
+
+    pub fn is_ignore_case(&self) -> bool {
+        self.ignore_case
+    }
+
+    /// The byte ranges it matches in `line`, in order, none empty.
+    pub fn find_in(&self, line: &str) -> Vec<Range<usize>> {
+        if self.source.is_empty() {
+            return Vec::new();
+        }
+        self.compiled
+            .find_iter(line)
+            .map_while(Result::ok)
+            .filter(|m| m.start() < m.end())
+            .map(|m| m.range())
+            .collect()
+    }
 }
 
 /// A place in the text: a line, and a byte offset into it on a grapheme
@@ -147,13 +339,45 @@ pub struct Buffer {
     /// Where a selection started; the caret is its other end.
     anchor: Option<Pos>,
     limit: Option<usize>,
-    undo: Vec<Step>,
+    undo: VecDeque<Step>,
     redo: Vec<Step>,
     /// Bumped by every change, so a view knows when to draw again.
     revision: u64,
     /// [`count`](Self::count), kept up to date by each change, so a limit
     /// costs a keystroke only the lines it touches.
     chars: usize,
+    /// The undo steps kept; `None` keeps them all.
+    history: Option<usize>,
+    /// The cells a tab takes, and what an indent is.
+    tab: usize,
+    hard_tabs: bool,
+    /// The kill ring, the newest last.
+    kills: Vec<String>,
+    /// The revision and caret right after the last kill: a kill straight
+    /// after it joins it.
+    killed: Option<(u64, Pos)>,
+    /// What the last yank put in, while it may be swapped
+    /// ([`yank_pop`](Self::yank_pop)).
+    yanked: Option<Yanked>,
+    search: Option<Search>,
+    /// Bumped when the search changes.
+    searches: u64,
+    /// Every match, for the revision and search they were found for.
+    found: RefCell<Option<Found>>,
+}
+
+/// Every match in a buffer, for the revision and the search they were
+/// found for.
+type Found = (u64, u64, Vec<(Pos, Pos)>);
+
+/// A yank that [`Buffer::yank_pop`] may swap for an older kill.
+#[derive(Clone, Copy, Debug)]
+struct Yanked {
+    start: Pos,
+    end: Pos,
+    /// The kill it put in.
+    index: usize,
+    revision: u64,
 }
 
 impl Default for Buffer {
@@ -174,24 +398,112 @@ impl Buffer {
             caret: Pos::default(),
             anchor: None,
             limit: None,
-            undo: Vec::new(),
+            undo: VecDeque::new(),
             redo: Vec::new(),
             revision: 0,
+            history: Some(HISTORY),
+            tab: TAB,
+            hard_tabs: false,
+            kills: Vec::new(),
+            killed: None,
+            yanked: None,
+            search: None,
+            searches: 0,
+            found: RefCell::new(None),
         }
     }
 
     /// Replace everything with `text`, the caret at its start; the undo
-    /// history is forgotten.
+    /// history is forgotten. The settings (the limit, the tab width, the
+    /// history limit), the kill ring and the search stay.
     pub fn set_text(&mut self, text: &str) {
-        let limit = self.limit;
-        *self = Buffer {
-            revision: self.revision + 1,
-            ..Buffer::new(text)
-        };
-        self.limit = limit;
-        if let Some(limit) = limit {
+        let fresh = Buffer::new(text);
+        self.lines = fresh.lines;
+        self.chars = fresh.chars;
+        self.caret = Pos::default();
+        self.anchor = None;
+        self.undo.clear();
+        self.redo.clear();
+        self.killed = None;
+        self.yanked = None;
+        self.revision += 1;
+        if let Some(limit) = self.limit {
             self.cut_to(limit);
         }
+    }
+
+    /// Keep at most `steps` undo steps (the oldest go first); `None` keeps
+    /// them all. [`HISTORY`] by default.
+    ///
+    /// ```
+    /// use rich_interact::edit::Buffer;
+    ///
+    /// let mut buffer = Buffer::new("");
+    /// buffer.set_history_limit(Some(2));
+    /// for word in ["a", "\n", "b", "\n"] {
+    ///     buffer.insert(word);
+    /// }
+    /// assert!(buffer.undo() && buffer.undo());
+    /// assert!(!buffer.undo(), "only two steps were kept");
+    /// assert_eq!(buffer.text(), "a\n");
+    /// ```
+    pub fn set_history_limit(&mut self, steps: Option<usize>) {
+        self.history = steps;
+        self.trim_history();
+    }
+
+    pub fn history_limit(&self) -> Option<usize> {
+        self.history
+    }
+
+    fn trim_history(&mut self) {
+        if let Some(steps) = self.history {
+            while self.undo.len() > steps {
+                self.undo.pop_front();
+            }
+            self.redo.truncate(steps);
+        }
+    }
+
+    /// The cells a tab takes ([`TAB`] by default, at least 1), and the
+    /// spaces [`indent`](Self::indent) inserts and
+    /// [`outdent`](Self::outdent) takes away.
+    pub fn set_tab_width(&mut self, cells: usize) {
+        self.tab = cells.max(1);
+        self.revision += 1;
+    }
+
+    pub fn tab_width(&self) -> usize {
+        self.tab
+    }
+
+    /// Indent with a tab character rather than spaces.
+    pub fn set_hard_tabs(&mut self, on: bool) {
+        self.hard_tabs = on;
+    }
+
+    pub fn hard_tabs(&self) -> bool {
+        self.hard_tabs
+    }
+
+    /// What one indent is: a tab, or a tab's width of spaces.
+    fn indent_text(&self) -> String {
+        if self.hard_tabs {
+            "\t".to_string()
+        } else {
+            " ".repeat(self.tab)
+        }
+    }
+
+    /// The grapheme clusters of `text` (one line) with this buffer's tab
+    /// width: see [`graphemes`].
+    pub fn graphemes(&self, text: &str) -> Vec<(usize, usize, usize)> {
+        graphemes_with(text, self.tab)
+    }
+
+    /// The cells `text` (one line) takes with this buffer's tab width.
+    pub fn cells(&self, text: &str) -> usize {
+        cells_with(text, self.tab)
     }
 
     /// At most `chars` characters (grapheme clusters, line breaks one each);
@@ -440,25 +752,26 @@ impl Buffer {
             removed,
             inserted: text.to_string(),
         };
-        if let Some(step) = self.undo.last_mut() {
+        if let Some(step) = self.undo.back_mut() {
             if run.is_some() && step.run == run && step.after.0 == before.0 {
                 step.changes.push(change);
                 step.after = (after, None);
                 return;
             }
         }
-        self.undo.push(Step {
+        self.undo.push_back(Step {
             changes: vec![change],
             before,
             after: (after, None),
             run,
         });
+        self.trim_history();
     }
 
     /// The step being typed or deleted is done: the next edit starts a new
     /// one.
     fn end_run(&mut self) {
-        if let Some(step) = self.undo.last_mut() {
+        if let Some(step) = self.undo.back_mut() {
             step.run = None;
         }
     }
@@ -514,32 +827,416 @@ impl Buffer {
         self.edit(Pos::new(line, start), self.caret, "", None);
     }
 
-    /// Indent: the selected lines (all of each) by four spaces, else four
-    /// spaces at the caret.
-    pub fn indent(&mut self) {
-        match self.selection() {
-            Some((start, end)) if start.line != end.line => {
-                self.each_line(start.line, end, |_| Some((0, 0, INDENT)));
-            }
-            _ => self.insert(INDENT),
+    /// Delete from the caret to the end of the word after it (Alt+D in
+    /// Emacs and readline, where it kills: [`kill_next_word`](Self::kill_next_word)).
+    pub fn delete_next_word(&mut self) {
+        let caret = self.caret;
+        let end = self.word_end_after(caret);
+        if end != caret {
+            self.edit(caret, end, "", None);
+            self.caret = caret;
         }
     }
 
-    /// Outdent: up to four leading spaces (or a tab) off the selected lines,
-    /// or the caret's.
+    /// Kill from `start` to `end`: delete it and put it on the kill ring.
+    /// A kill straight after a kill joins it, as one entry: after it when
+    /// `forward`, before it otherwise, so killing a line piece by piece
+    /// yanks back as the line.
+    pub fn kill(&mut self, start: Pos, end: Pos, forward: bool) {
+        let (start, end) = (self.clamp(start), self.clamp(end));
+        let (start, end) = if start <= end {
+            (start, end)
+        } else {
+            (end, start)
+        };
+        if start == end {
+            return;
+        }
+        let text = self.slice(start, end);
+        let joins = self.killed == Some((self.revision, self.caret)) && !self.kills.is_empty();
+        self.edit(start, end, "", None);
+        match self.kills.last_mut() {
+            Some(last) if joins && forward => last.push_str(&text),
+            Some(last) if joins => last.insert_str(0, &text),
+            _ => self.push_kill(&text),
+        }
+        self.killed = Some((self.revision, self.caret));
+        self.yanked = None;
+    }
+
+    /// Put `text` on the kill ring as its newest entry, as a kill would:
+    /// what [`yank`](Self::yank) puts in next.
+    pub fn push_kill(&mut self, text: &str) {
+        self.kills.push(text.to_string());
+        if self.kills.len() > KILLS {
+            self.kills.remove(0);
+        }
+        self.killed = None;
+    }
+
+    /// The kill ring, the newest last.
+    pub fn kills(&self) -> &[String] {
+        &self.kills
+    }
+
+    /// Kill from the caret to the line's end (Ctrl+K); at the end of a line,
+    /// the line break.
+    ///
+    /// ```
+    /// use rich_interact::edit::Buffer;
+    ///
+    /// let mut buffer = Buffer::new("one\ntwo");
+    /// buffer.kill_to_end();
+    /// buffer.kill_to_end();
+    /// assert_eq!(buffer.text(), "two");
+    /// buffer.end(false);
+    /// buffer.yank();
+    /// assert_eq!(buffer.text(), "twoone\n", "the two kills yank as one");
+    /// ```
+    pub fn kill_to_end(&mut self) {
+        let caret = self.caret;
+        let length = self.lines[caret.line].len();
+        let end = if caret.at < length {
+            Pos::new(caret.line, length)
+        } else {
+            self.after(caret)
+        };
+        self.kill(caret, end, true);
+    }
+
+    /// Kill from the line's start to the caret (Ctrl+U).
+    pub fn kill_to_start(&mut self) {
+        let caret = self.caret;
+        self.kill(Pos::new(caret.line, 0), caret, false);
+    }
+
+    /// Kill the selection, else the word before the caret back to the
+    /// previous space, as [`delete_word`](Self::delete_word) deletes it
+    /// (Ctrl+W).
+    pub fn kill_word(&mut self) {
+        if let Some((start, end)) = self.selection() {
+            self.kill(start, end, true);
+            return;
+        }
+        let Pos { line, at } = self.caret;
+        let before = &self.lines[line][..at];
+        let start = before
+            .trim_end_matches(' ')
+            .rfind(' ')
+            .map_or(0, |space| space + 1);
+        self.kill(Pos::new(line, start), self.caret, false);
+    }
+
+    /// Kill to the end of the word after the caret (Alt+D).
+    pub fn kill_next_word(&mut self) {
+        let end = self.word_end_after(self.caret);
+        self.kill(self.caret, end, true);
+    }
+
+    /// Kill to the start of the word before the caret (Alt+Backspace).
+    pub fn kill_previous_word(&mut self) {
+        let start = self.word_start_before(self.caret);
+        self.kill(start, self.caret, false);
+    }
+
+    /// Kill the selection, if there is one; whether there was.
+    pub fn kill_selection(&mut self) -> bool {
+        match self.selection() {
+            Some((start, end)) => {
+                self.kill(start, end, true);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Put the newest kill in at the caret (replacing the selection), the
+    /// caret after it (Ctrl+Y in Emacs); whether there was one.
+    pub fn yank(&mut self) -> bool {
+        let Some(index) = self.kills.len().checked_sub(1) else {
+            return false;
+        };
+        self.yank_index(index, None);
+        true
+    }
+
+    /// Right after a [`yank`](Self::yank) (or another `yank_pop`), swap what
+    /// it put in for the kill before it on the ring, going round (Alt+Y);
+    /// whether it did.
+    ///
+    /// ```
+    /// use rich_interact::edit::Buffer;
+    ///
+    /// let mut buffer = Buffer::new("");
+    /// buffer.push_kill("first");
+    /// buffer.push_kill("second");
+    /// buffer.yank();
+    /// assert_eq!(buffer.text(), "second");
+    /// assert!(buffer.yank_pop());
+    /// assert_eq!(buffer.text(), "first");
+    /// buffer.left(false);
+    /// assert!(!buffer.yank_pop(), "only straight after a yank");
+    /// ```
+    pub fn yank_pop(&mut self) -> bool {
+        let Some(yanked) = self.yanked else {
+            return false;
+        };
+        if yanked.revision != self.revision || yanked.end != self.caret || self.kills.is_empty() {
+            self.yanked = None;
+            return false;
+        }
+        let count = self.kills.len();
+        let index = (yanked.index.min(count - 1) + count - 1) % count;
+        self.yank_index(index, Some((yanked.start, yanked.end)));
+        true
+    }
+
+    /// Put kill `index` in place of `range` (else the selection or the
+    /// caret), remembering it for [`yank_pop`](Self::yank_pop).
+    fn yank_index(&mut self, index: usize, range: Option<(Pos, Pos)>) {
+        let text = self.kills[index].clone();
+        if let Some((start, end)) = range {
+            self.select(start, end);
+        }
+        let start = self.selection().map_or(self.caret, |(start, _)| start);
+        self.insert(&text);
+        self.end_run();
+        self.killed = None;
+        self.yanked = Some(Yanked {
+            start,
+            end: self.caret,
+            index,
+            revision: self.revision,
+        });
+    }
+
+    /// Whether line `index` holds only spaces.
+    fn blank(&self, index: usize) -> bool {
+        self.lines[index].trim().is_empty()
+    }
+
+    /// To the blank line after this paragraph (Alt+} in Emacs, `}` in Vim),
+    /// else the end of the text.
+    pub fn paragraph_down(&mut self, select: bool) {
+        let count = self.lines.len();
+        let mut line = self.caret.line;
+        while line + 1 < count && self.blank(line) {
+            line += 1;
+        }
+        while line < count && !self.blank(line) {
+            line += 1;
+        }
+        let to = if line < count {
+            Pos::new(line, 0)
+        } else {
+            Pos::new(count - 1, self.lines[count - 1].len())
+        };
+        self.move_to(to, select);
+    }
+
+    /// To the blank line before this paragraph (Alt+{ in Emacs, `{` in
+    /// Vim), else the start of the text.
+    pub fn paragraph_up(&mut self, select: bool) {
+        let mut line = self.caret.line;
+        while line > 0 && self.blank(line) {
+            line -= 1;
+        }
+        while line > 0 && !self.blank(line) {
+            line -= 1;
+        }
+        self.move_to(Pos::new(line, 0), select);
+    }
+
+    /// Find `search` from now on (`None` stops): the matches are
+    /// [`matches`](Self::matches), and [`search_forward`](Self::search_forward)
+    /// and [`search_back`](Self::search_back) go to them.
+    ///
+    /// ```
+    /// use rich_interact::edit::{Buffer, Pos, Search};
+    ///
+    /// let mut buffer = Buffer::new("one fish\ntwo fish\nred fish");
+    /// buffer.set_search(Some(Search::plain("fish")));
+    /// assert_eq!(buffer.match_count(), 3);
+    /// assert!(buffer.search_forward(false));
+    /// assert_eq!(buffer.caret(), Pos::new(0, 4));
+    /// assert!(buffer.search_back(false), "round to the last");
+    /// assert_eq!(buffer.caret(), Pos::new(2, 4));
+    /// assert_eq!(buffer.match_index(), Some(2));
+    /// assert!(buffer.select_match(true), "round to the first, selected");
+    /// assert_eq!(buffer.selected_text().as_deref(), Some("fish"));
+    /// ```
+    pub fn set_search(&mut self, search: Option<Search>) {
+        self.search = search;
+        self.searches += 1;
+    }
+
+    pub fn search(&self) -> Option<&Search> {
+        self.search.as_ref()
+    }
+
+    /// The matches on lines `lines` (as many as there are), in order:
+    /// what a view highlights.
+    pub fn matches(&self, lines: Range<usize>) -> Vec<(Pos, Pos)> {
+        let Some(search) = &self.search else {
+            return Vec::new();
+        };
+        let end = lines.end.min(self.lines.len());
+        (lines.start.min(end)..end)
+            .flat_map(|line| {
+                search
+                    .find_in(&self.lines[line])
+                    .into_iter()
+                    .map(move |r| (Pos::new(line, r.start), Pos::new(line, r.end)))
+            })
+            .collect()
+    }
+
+    /// Every match, found once a revision and search.
+    fn all_matches(&self) -> std::cell::Ref<'_, Vec<(Pos, Pos)>> {
+        let key = (self.revision, self.searches);
+        let fresh = matches!(&*self.found.borrow(), Some((r, s, _)) if (*r, *s) == key);
+        if !fresh {
+            let all = self.matches(0..self.lines.len());
+            *self.found.borrow_mut() = Some((key.0, key.1, all));
+        }
+        std::cell::Ref::map(self.found.borrow(), |found| {
+            &found.as_ref().expect("just found").2
+        })
+    }
+
+    /// How many matches there are in the whole text.
+    pub fn match_count(&self) -> usize {
+        self.all_matches().len()
+    }
+
+    /// Which match (from 0) starts at the caret, or at the selection's
+    /// start: the one [`search_forward`](Self::search_forward) or
+    /// [`select_match`](Self::select_match) went to.
+    pub fn match_index(&self) -> Option<usize> {
+        let at = self.selection().map_or(self.caret, |(start, _)| start);
+        let all = self.all_matches();
+        all.binary_search_by(|(start, _)| start.cmp(&at)).ok()
+    }
+
+    /// The first match starting after `from` (at it too when `inclusive`),
+    /// going forward or back, round past the end.
+    fn next_match(&self, from: Pos, forward: bool, inclusive: bool) -> Option<(Pos, Pos)> {
+        let search = self.search.as_ref()?;
+        let count = self.lines.len();
+        let hits = |line: usize| -> Vec<(Pos, Pos)> {
+            search
+                .find_in(&self.lines[line])
+                .into_iter()
+                .map(|r| (Pos::new(line, r.start), Pos::new(line, r.end)))
+                .collect()
+        };
+        let beyond = |start: Pos| {
+            if forward {
+                start > from || inclusive && start == from
+            } else {
+                start < from || inclusive && start == from
+            }
+        };
+        // The rest of the line `from` is on.
+        let here = hits(from.line);
+        let first = if forward {
+            here.iter().find(|m| beyond(m.0))
+        } else {
+            here.iter().rev().find(|m| beyond(m.0))
+        };
+        if let Some(hit) = first {
+            return Some(*hit);
+        }
+        // The other lines, round past the end.
+        for step in 1..count {
+            let line = if forward {
+                (from.line + step) % count
+            } else {
+                (from.line + count - step) % count
+            };
+            let found = hits(line);
+            if let Some(hit) = if forward { found.first() } else { found.last() } {
+                return Some(*hit);
+            }
+        }
+        // Back on the first line, from its other end.
+        if forward {
+            here.first().copied()
+        } else {
+            here.last().copied()
+        }
+    }
+
+    /// Move the caret to the start of the next match after it, round past
+    /// the end; whether there is one.
+    pub fn search_forward(&mut self, select: bool) -> bool {
+        self.search_to(true, select)
+    }
+
+    /// Move the caret to the start of the match before it, round past the
+    /// start; whether there is one.
+    pub fn search_back(&mut self, select: bool) -> bool {
+        self.search_to(false, select)
+    }
+
+    fn search_to(&mut self, forward: bool, select: bool) -> bool {
+        match self.next_match(self.caret, forward, false) {
+            Some((start, _)) => {
+                let start = self.clamp(start);
+                self.move_to(start, select);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Select the next match (`forward`) or the one before, the caret at
+    /// its end: a find bar's Enter. With nothing selected, a match at the
+    /// caret counts as the next; whether there is one.
+    pub fn select_match(&mut self, forward: bool) -> bool {
+        let (from, inclusive) = match self.selection() {
+            Some((start, _)) => (start, false),
+            None => (self.caret, forward),
+        };
+        match self.next_match(from, forward, inclusive) {
+            Some((start, end)) => {
+                self.select(start, end);
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Indent: the selected lines (all of each) by a tab's width of spaces
+    /// (four, unless [`set_tab_width`](Self::set_tab_width) says otherwise;
+    /// a tab with [`set_hard_tabs`](Self::set_hard_tabs)), else as much at
+    /// the caret.
+    pub fn indent(&mut self) {
+        let indent = self.indent_text();
+        match self.selection() {
+            Some((start, end)) if start.line != end.line => {
+                self.each_line(start.line, end, |_| Some((0, 0, indent.clone())));
+            }
+            _ => self.insert(&indent),
+        }
+    }
+
+    /// Outdent: up to a tab's width of leading spaces (or a tab) off the
+    /// selected lines, or the caret's.
     pub fn outdent(&mut self) {
         let (first, end) = match self.selection() {
             Some((start, end)) => (start.line, end),
             None => (self.caret.line, self.caret),
         };
+        let tab = self.tab;
         self.each_line(first, end, |line| {
             let n = if line.starts_with('\t') {
                 1
             } else {
                 line.len() - line.trim_start_matches(' ').len()
             }
-            .min(INDENT.len());
-            (n > 0).then_some((0, n, ""))
+            .min(tab);
+            (n > 0).then_some((0, n, String::new()))
         });
     }
 
@@ -550,7 +1247,7 @@ impl Buffer {
         &mut self,
         first: usize,
         end: Pos,
-        f: impl Fn(&str) -> Option<(usize, usize, &'static str)>,
+        f: impl Fn(&str) -> Option<(usize, usize, String)>,
     ) {
         let last = if end.at == 0 && end.line > first {
             end.line - 1
@@ -565,7 +1262,7 @@ impl Buffer {
                 continue;
             };
             let start = Pos::new(line, from);
-            let (_, removed) = self.splice(start, Pos::new(line, to), text);
+            let (_, removed) = self.splice(start, Pos::new(line, to), &text);
             let shift = |pos: &mut Pos| {
                 if pos.line == line && pos.at > from {
                     pos.at = (pos.at + text.len()).saturating_sub(to - from).max(from);
@@ -578,7 +1275,7 @@ impl Buffer {
             changes.push(Change {
                 start,
                 removed,
-                inserted: text.to_string(),
+                inserted: text,
             });
         }
         if changes.is_empty() {
@@ -587,17 +1284,18 @@ impl Buffer {
         self.caret = self.clamp(caret);
         self.anchor = anchor.map(|a| self.clamp(a));
         self.redo.clear();
-        self.undo.push(Step {
+        self.undo.push_back(Step {
             changes,
             before,
             after: (self.caret, self.anchor),
             run: None,
         });
+        self.trim_history();
     }
 
     /// Undo the last step; whether there was one.
     pub fn undo(&mut self) -> bool {
-        let Some(step) = self.undo.pop() else {
+        let Some(step) = self.undo.pop_back() else {
             return false;
         };
         for change in step.changes.iter().rev() {
@@ -621,7 +1319,7 @@ impl Buffer {
             self.splice(change.start, end, &change.inserted);
         }
         (self.caret, self.anchor) = step.after;
-        self.undo.push(step);
+        self.undo.push_back(step);
         true
     }
 
@@ -706,9 +1404,9 @@ impl Buffer {
             .line
             .saturating_add_signed(delta)
             .min(self.lines.len() - 1);
-        let column = cells(&self.lines[self.caret.line][..self.caret.at]);
+        let column = self.cells(&self.lines[self.caret.line][..self.caret.at]);
         let (mut used, mut at) = (0, 0);
-        for (_, end, width) in graphemes(&self.lines[target]) {
+        for (_, end, width) in self.graphemes(&self.lines[target]) {
             if used + width > column {
                 break;
             }
@@ -739,7 +1437,19 @@ impl Buffer {
     /// To the start of the word before the caret (Ctrl+←): over spaces and
     /// punctuation, then over a word, crossing lines.
     pub fn word_left(&mut self, select: bool) {
-        let mut pos = self.caret;
+        let pos = self.word_start_before(self.caret);
+        self.move_to(pos, select);
+    }
+
+    /// To the end of the word after the caret (Ctrl+→).
+    pub fn word_right(&mut self, select: bool) {
+        let pos = self.word_end_after(self.caret);
+        self.move_to(pos, select);
+    }
+
+    /// Where [`word_left`](Self::word_left) goes from `pos`.
+    pub fn word_start_before(&self, pos: Pos) -> Pos {
+        let mut pos = pos;
         let mut cache = None;
         // Over what is not a word, back to the end of one.
         loop {
@@ -756,12 +1466,12 @@ impl Buffer {
             }
             pos = before;
         }
-        self.move_to(pos, select);
+        pos
     }
 
-    /// To the end of the word after the caret (Ctrl+→).
-    pub fn word_right(&mut self, select: bool) {
-        let mut pos = self.caret;
+    /// Where [`word_right`](Self::word_right) goes from `pos`.
+    pub fn word_end_after(&self, pos: Pos) -> Pos {
+        let mut pos = pos;
         let mut cache = None;
         loop {
             let after = self.step(pos, true, &mut cache);
@@ -777,7 +1487,7 @@ impl Buffer {
             }
             pos = after;
         }
-        self.move_to(pos, select);
+        pos
     }
 
     /// Whether the grapheme from `start` to `end` (on one line) is part of
@@ -1012,6 +1722,203 @@ mod tests {
         assert_eq!((b.text().as_str(), b.caret()), ("cd", Pos::new(0, 0)));
         b.undo();
         assert_eq!(b.text(), "abcd");
+    }
+
+    #[test]
+    fn kills_join_and_yank_back_and_cycle() {
+        let mut b = Buffer::new("alpha beta gamma");
+        b.end(false);
+        b.kill_previous_word();
+        b.kill_previous_word();
+        assert_eq!(b.text(), "alpha ");
+        assert_eq!(b.kills(), ["beta gamma"], "backward kills join before");
+        b.home(false);
+        b.kill_next_word();
+        assert_eq!(b.text(), " ");
+        assert_eq!(b.kills().len(), 2, "a move between kills starts a new one");
+        assert!(b.yank());
+        assert_eq!(b.text(), "alpha ");
+        assert!(b.yank_pop());
+        assert_eq!(b.text(), "beta gamma ");
+        assert!(b.yank_pop(), "round the ring");
+        assert_eq!(b.text(), "alpha ");
+        b.undo();
+        assert_eq!(b.text(), "beta gamma ");
+    }
+
+    #[test]
+    fn a_kill_with_a_selection_takes_it() {
+        let mut b = Buffer::new("one two");
+        b.word_right(true);
+        b.kill_word();
+        assert_eq!(b.text(), " two");
+        assert_eq!(b.kills(), ["one"]);
+        assert!(!b.kill_selection());
+    }
+
+    #[test]
+    fn delete_next_word_keeps_the_caret_and_the_ring() {
+        let mut b = Buffer::new("say hello world");
+        b.set_caret(Pos::new(0, 3), false);
+        b.delete_next_word();
+        assert_eq!(b.text(), "say world");
+        assert_eq!(b.caret(), Pos::new(0, 3));
+        assert!(b.kills().is_empty());
+        assert!(!b.yank());
+    }
+
+    #[test]
+    fn paragraph_moves_stop_at_blank_lines() {
+        let mut b = Buffer::new("a\nb\n\n\nc\nd\n\ne");
+        b.paragraph_down(false);
+        assert_eq!(b.caret(), Pos::new(2, 0));
+        b.paragraph_down(false);
+        assert_eq!(b.caret(), Pos::new(6, 0));
+        b.paragraph_down(true);
+        assert_eq!(b.caret(), Pos::new(7, 1), "the end of the text");
+        assert_eq!(b.selected_text().as_deref(), Some("\ne"));
+        b.paragraph_up(false);
+        assert_eq!(b.caret(), Pos::new(6, 0));
+        b.paragraph_up(false);
+        assert_eq!(b.caret(), Pos::new(3, 0));
+        b.paragraph_up(false);
+        assert_eq!(b.caret(), Pos::new(0, 0));
+    }
+
+    #[test]
+    fn the_history_keeps_the_newest_steps() {
+        let mut b = Buffer::new("");
+        assert_eq!(b.history_limit(), Some(HISTORY));
+        b.set_history_limit(Some(3));
+        for i in 0..10 {
+            b.insert(&format!("{i}\n"));
+        }
+        let mut undone = 0;
+        while b.undo() {
+            undone += 1;
+        }
+        assert_eq!(undone, 3);
+        assert_eq!(b.text(), "0\n1\n2\n3\n4\n5\n6\n");
+        b.set_history_limit(None);
+        for _ in 0..2000 {
+            b.insert("\n");
+        }
+        let mut undone = 0;
+        while b.undo() {
+            undone += 1;
+        }
+        assert_eq!(undone, 2000, "unlimited");
+    }
+
+    #[test]
+    fn tab_width_and_hard_tabs_set_the_indent() {
+        let mut b = Buffer::new("x\ty");
+        assert_eq!(b.cells("x\ty"), 6);
+        b.set_tab_width(2);
+        assert_eq!(b.cells("x\ty"), 4);
+        b.indent();
+        assert_eq!(b.text(), "  x\ty");
+        b.outdent();
+        assert_eq!(b.text(), "x\ty");
+        b.set_hard_tabs(true);
+        b.select_all();
+        b.insert("a\nb");
+        b.select_all();
+        b.indent();
+        assert_eq!(b.text(), "\ta\n\tb");
+        b.outdent();
+        assert_eq!(b.text(), "a\nb");
+        // A move down keeps the column in cells, tabs counted at their width.
+        let mut b = Buffer::new("\tx\nabcdef");
+        b.set_tab_width(2);
+        b.set_caret(Pos::new(0, 1), false);
+        b.vertical(1, false);
+        assert_eq!(b.caret(), Pos::new(1, 2));
+    }
+
+    #[test]
+    fn set_text_keeps_the_settings_and_the_ring() {
+        let mut b = Buffer::new("abc");
+        b.set_tab_width(8);
+        b.set_history_limit(Some(5));
+        b.push_kill("k");
+        b.set_search(Some(Search::plain("b")));
+        b.set_text("bbb");
+        assert_eq!(
+            (b.tab_width(), b.history_limit(), b.kills().len()),
+            (8, Some(5), 1)
+        );
+        assert_eq!(b.match_count(), 3);
+        assert!(!b.undo());
+    }
+
+    #[test]
+    fn search_goes_round_both_ways_and_follows_edits() {
+        let mut b = Buffer::new("ab ab\nxx\nab");
+        b.set_search(Some(Search::plain("ab")));
+        assert_eq!(b.match_count(), 3);
+        // Forward from the caret skips a match starting there.
+        assert!(b.search_forward(false));
+        assert_eq!(b.caret(), Pos::new(0, 3));
+        assert!(b.search_forward(false));
+        assert_eq!(b.caret(), Pos::new(2, 0));
+        assert!(b.search_forward(false));
+        assert_eq!(b.caret(), Pos::new(0, 0), "round past the end");
+        assert!(b.search_back(false));
+        assert_eq!(b.caret(), Pos::new(2, 0), "round past the start");
+        assert_eq!(b.match_index(), Some(2));
+        b.insert("ab");
+        assert_eq!(b.match_count(), 4, "counted again after an edit");
+        assert_eq!(
+            b.matches(1..3),
+            [
+                (Pos::new(2, 0), Pos::new(2, 2)),
+                (Pos::new(2, 2), Pos::new(2, 4))
+            ]
+        );
+        b.set_search(Some(Search::regex("x+").unwrap()));
+        assert_eq!(b.match_count(), 1);
+        b.set_search(Some(Search::plain("")));
+        assert_eq!(b.match_count(), 0);
+        assert!(!b.search_forward(false));
+        b.set_search(None);
+        assert!(b.matches(0..3).is_empty());
+    }
+
+    #[test]
+    fn select_match_takes_the_one_at_the_caret_then_moves_on() {
+        let mut b = Buffer::new("aaaa");
+        b.set_search(Some(Search::plain("aa")));
+        assert!(b.select_match(true));
+        assert_eq!(b.selection(), Some((Pos::new(0, 0), Pos::new(0, 2))));
+        assert!(b.select_match(true));
+        assert_eq!(b.selection(), Some((Pos::new(0, 2), Pos::new(0, 4))));
+        assert!(b.select_match(false));
+        assert_eq!(b.selection(), Some((Pos::new(0, 0), Pos::new(0, 2))));
+        assert!(b.select_match(false), "round to the last");
+        assert_eq!(b.selection(), Some((Pos::new(0, 2), Pos::new(0, 4))));
+    }
+
+    #[test]
+    fn word_wrap_keeps_words_whole_and_covers_the_line() {
+        let line = "a bb ccc dddd";
+        for room in 1..15 {
+            for mode in [WrapMode::Grapheme, WrapMode::Word] {
+                let rows = wrap_line(line, room, 4, mode);
+                assert_eq!(rows.first().unwrap().start, 0);
+                assert_eq!(rows.last().unwrap().end, line.len());
+                assert!(rows.windows(2).all(|w| w[0].end == w[1].start));
+            }
+        }
+        let rows: Vec<&str> = wrap_line(line, 6, 4, WrapMode::Word)
+            .into_iter()
+            .map(|r| &line[r])
+            .collect();
+        assert_eq!(rows, ["a bb ", "ccc ", "dddd"]);
+        assert_eq!(wrap_line(line, 6, 4, WrapMode::None).len(), 1);
+        assert_eq!(wrap_line("", 6, 4, WrapMode::Word)[0], 0..0);
+        // A wide character never splits, and a tab counts its width.
+        assert_eq!(wrap_line("ab\tcd", 4, 2, WrapMode::Grapheme), [0..3, 3..5]);
     }
 
     #[test]
