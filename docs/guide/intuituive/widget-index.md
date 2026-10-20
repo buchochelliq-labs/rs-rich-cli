@@ -1,5 +1,6 @@
 # Widget index
 
+![Memo holding up a sign with a prompt on it](../../assets/intuituive/mascot/elephant-sign.svg){ .tui-mascot width="112" }
 Every widget and component an intuiTUIve app is built from, with the
 constructor that makes it and the guide section that documents it. Widgets
 from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and

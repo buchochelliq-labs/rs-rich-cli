@@ -37,6 +37,7 @@ for a complete library example.
 |---|---|
 | ![The raycaster example: a first-person maze in half blocks](media/tapes/raycast/start.png) | ![The raycaster's map, recorded from a tape](media/tapes/raycast/map.png) |
 
+![Memo, intuiTUIve's elephant, waving, with her calf Tui holding her tail](assets/intuituive/mascot/memo-and-tui.svg){ .tui-mascot width="224" }
 0.0.20, published on 2026-10-19 ([release notes](releases/0.0.20.md)),
 is the intuiTUIve demo loop's release: eleven well-known terminal
 apps rebuilt on [intuiTUIve](guide/intuituive/index.md) (Yazi, scope-tui,
