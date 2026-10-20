@@ -1,8 +1,8 @@
 # Roadmap
 
 What each release delivered, and where this goes next: the
-[plan to 1.0.0](plans/1.0.0.md), after the 0.0.19 cohort (published) and
-with 0.0.20 in review.
+[plan to 1.0.0](plans/1.0.0.md), after the 0.0.20 cohort (published
+2026-10-19) and with 0.0.21 in progress.
 Ordered by what unblocks people, not by what is most interesting to build.
 
 Two rules constrain everything here:
@@ -216,7 +216,7 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
-## 0.0.21 — parity, the marketplace's foundation, round 7's leftovers (planned)
+## 0.0.21 — parity, the marketplace's foundation, round 7's leftovers (in progress)
 
 The [0.0.21 plan](plans/0.0.21.md), stage 2 of the [plan to 1.0.0](plans/1.0.0.md):
 every partial row in [Module status](PORTING.md) ported or recorded as a
@@ -225,8 +225,10 @@ crate that resolves, downloads and locks plugins; Chrome's DevTools over a
 pipe on Linux and macOS (Windows keeps the port); and what the demo loop's
 seventh round found: four intuiTUIve bugs, csv's filter regression, the
 recorder's frame rate on macOS and whether APNG stays a default output.
+Its first wave is running: round 7's bugs, the DevTools pipe on Unix and
+the marketplace's listing format.
 
-## 0.0.20 — the intuiTUIve demo loop (in review)
+## 0.0.20 — the intuiTUIve demo loop (published 2026-10-19)
 
 Rounds 2 to 7 of [the demo loop](design/intuituive-demo-gaps.md): eleven
 well-known terminal apps rebuilt on intuiTUIve, what they lacked added as
@@ -235,10 +237,10 @@ and lists that follow state; completion, a command line, a query language
 and natural dates with time zones; sprites, pixel buffers, held keys,
 timers and frame pacing; styles that do not pile up; `rich record`
 following terminal graphics, recording every frame and holding keys, with
-APNG output; and core's `Text::markup()` (core 0.0.10). See the
-[changelog](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/CHANGELOG.md).
+APNG output; and core's `Text::markup()` (core 0.0.10). The first release
+published by one release run. See the [release notes](releases/0.0.20.md).
 
-## 0.0.19 — layout, editing, isolation and docs (published)
+## 0.0.19 — layout, editing, isolation and docs (published 2026-10-18 and 2026-10-19)
 
 The [0.0.19 plan](plans/0.0.19.md) is stage 1 of the
 [plan to 1.0.0](plans/1.0.0.md): flex alignment and wrapping, a text-area

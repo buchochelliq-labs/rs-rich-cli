@@ -50,7 +50,8 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 
 ## New in 0.0.20
 
-The intuiTUIve demo loop: eleven well-known terminal apps rebuilt on
+Published on 2026-10-19 ([release notes](docs/releases/0.0.20.md)). The
+intuiTUIve demo loop: eleven well-known terminal apps rebuilt on
 intuiTUIve (Yazi, scope-tui, gitui, bottom, Slumber, csvlens, diskonaut,
 termusic, taskwarrior-tui, a falling-block game and a Doom-style raycaster),
 each gap they found added to the framework, and each clone rebuilt on it
@@ -173,9 +174,9 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 ## Releases
 
 Each release has notes in [`docs/releases/`](docs/releases/) (the newest
-published one is [0.0.19](docs/releases/0.0.19.md)), and
-[`CHANGELOG.md`](CHANGELOG.md) lists every change. What comes next is in the
-[roadmap](docs/ROADMAP.md) and the [0.0.21 plan](docs/plans/0.0.21.md). The
+published one is [0.0.20](docs/releases/0.0.20.md)), and
+[`CHANGELOG.md`](CHANGELOG.md) lists every change. 0.0.21 is in progress: see
+the [roadmap](docs/ROADMAP.md) and the [0.0.21 plan](docs/plans/0.0.21.md). The
 manifest table above describes this checkout; crates.io is the source for
 published versions.
 

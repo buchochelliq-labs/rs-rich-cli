@@ -37,7 +37,8 @@ for a complete library example.
 |---|---|
 | ![The raycaster example: a first-person maze in half blocks](media/tapes/raycast/start.png) | ![The raycaster's map, recorded from a tape](media/tapes/raycast/map.png) |
 
-0.0.20 is the intuiTUIve demo loop's release: eleven well-known terminal
+0.0.20, published on 2026-10-19 ([release notes](releases/0.0.20.md)),
+is the intuiTUIve demo loop's release: eleven well-known terminal
 apps rebuilt on [intuiTUIve](guide/intuituive/index.md) (Yazi, scope-tui,
 gitui, bottom, Slumber, csvlens, diskonaut, termusic, taskwarrior-tui, a
 falling-block game and a Doom-style raycaster), what each lacked added to
@@ -61,9 +62,9 @@ story round by round.
 - **Core:** [`Text::markup()`](guide/core/text-and-style.md#back-to-markup),
   a port of upstream's `Text.markup`.
 
-Earlier releases are under [Releases](releases/0.0.19.md) in the
-navigation; the [roadmap](ROADMAP.md) and the
-[0.0.21 plan](plans/0.0.21.md) say what comes next.
+Earlier releases are under [Releases](releases/0.0.20.md) in the
+navigation; 0.0.21 is in progress, and the [roadmap](ROADMAP.md) and the
+[0.0.21 plan](plans/0.0.21.md) say what it brings.
 
 ### Which version are these docs for?
 
