@@ -232,5 +232,10 @@ name = "guide_documents"
 required-features = ["syntax"]
 
 [[example]]
+name = "guide_markdown_export"
+# Checks the Markdown it prints.
+test = true
+
+[[example]]
 name = "guide_charts_extra"
 required-features = ["qr"]

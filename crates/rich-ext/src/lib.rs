@@ -96,6 +96,7 @@ pub mod hex;
 pub mod highlighter;
 // Directory entries, sorting, line-mode cells and a lazy tree walk.
 pub mod listing;
+pub mod markdown_export;
 // Which program opens a file: Yazi's opener rules.
 pub mod open;
 pub mod palette;

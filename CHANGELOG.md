@@ -9,6 +9,26 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### rs-rich-ext: Markdown for GitHub
+
+- **`markdown_export`** writes renderables as GitHub-flavoured Markdown, for
+  pull request comments and job summaries. `GfmDocument` collects blocks;
+  `ToGfm` is implemented for `Table` (a GFM table: header, an alignment row
+  from each column's justify, `|` escaped, cell styles as `**`, `*`, `~~`
+  and links), `Tree` (nested lists), `Panel` (a blockquote, or
+  `<details><summary>` with `PanelStyle::Details`), `Rule` (`---`), `Text`
+  and markup (inline Markdown, code from `code`-named styles), `Syntax` (a
+  fence with its language) and groups. Anything else, `Columns` included,
+  is its plain rendering in a ```` ```text ```` fence at a set width.
+- The core `Table`, `Panel` and `Rule` expose no cells, body or title, so
+  they are rendered wide and read back; a table with no borders to read, or
+  whose rows cannot be told apart, falls back to its plain rendering. A
+  core `Markdown` does not give its source back: `push_markdown` takes it.
+- `fit_github_comment` and `truncate_markdown` cut Markdown to GitHub's
+  65 536-character comment limit at a line break, close an open fence or
+  `<details>` block, and say how much was kept.
+- Guide: [Markdown for GitHub](docs/guide/ext/markdown-export.md).
+
 ### rs-rich-embed: Chrome's DevTools over a pipe on Linux and macOS
 
 - **No DevTools port on Unix.** `ChromeEngine` starts Chrome with
