@@ -9,6 +9,18 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Versions: the 0.0.21 versions are open
+
+- Every package moves one patch past the 0.0.20 cohort, as the
+  [0.0.21 plan](docs/plans/0.0.21.md) lists: core 0.0.11, macros 0.0.5,
+  plugin API 0.0.5, art 0.0.14, diagram 0.0.4, Mermaid 0.0.7, lumis 0.0.5,
+  ext 0.0.18, micro 0.0.7, record 0.0.9, interact 0.0.9, ratatui 0.0.6,
+  intuituive 0.0.6, embed 0.0.4, web 0.0.4, data 0.0.5, the CLI 0.0.21 and
+  `rs-rich` 0.0.9 on PyPI. Parity work changes core, and Cargo's 0.0.x
+  requirements are exact, so every crate that depends on it moves too.
+  `RELEASES.toml`, both lockfiles, the version tables and the CLI reference
+  follow.
+
 ### Docs: one site per release, with a version selector
 
 - The documentation site keeps a copy of the docs for each release, picked
