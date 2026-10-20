@@ -78,6 +78,7 @@ impl PushBackend {
 
     /// Paint inline, from the row the host's cursor is on, instead of on
     /// the alternate screen.
+    #[must_use]
     pub fn inline(mut self) -> PushBackend {
         self.alternate_screen = false;
         self

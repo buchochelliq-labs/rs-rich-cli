@@ -240,6 +240,7 @@ impl Search {
     }
 
     /// Match letters of either case.
+    #[must_use]
     pub fn ignore_case(self, on: bool) -> Search {
         Search::build(&self.source, self.regex, on).unwrap_or(self)
     }
