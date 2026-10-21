@@ -1934,7 +1934,7 @@ pub enum PrintObject<'a> {
     /// `highlight`.
     Str(&'a str),
     /// A `Text`, joined with the strings around it.
-    Text(Text),
+    Text(&'a Text),
     /// Any other renderable, which stands alone.
     Renderable(&'a dyn Renderable),
 }
@@ -2102,7 +2102,7 @@ impl Console {
                     };
                     texts.push(self.render_str_with(content, &render_str)?);
                 }
-                PrintObject::Text(text) => texts.push(text.clone()),
+                PrintObject::Text(text) => texts.push((*text).clone()),
                 PrintObject::Renderable(renderable) => {
                     flush(&mut texts, &mut emit);
                     emit(*renderable, None);

@@ -1025,7 +1025,7 @@ fn console_print() -> String {
     out += &print_objects(
         &[
             O::Str("[b]x[/b]"),
-            O::Text(Text::styled("y", "red")),
+            O::Text(&Text::styled("y", "red")),
             O::Renderable(&panel),
             O::Str("z"),
             O::Str("1"),
@@ -1092,7 +1092,7 @@ fn console_print() -> String {
         },
     );
     out += &print_objects(
-        &[O::Str("mid"), O::Text(Text::new("text"))],
+        &[O::Str("mid"), O::Text(&Text::new("text"))],
         PrintOptions {
             justify: Some(Justify::Center),
             ..Default::default()
