@@ -35,18 +35,17 @@ The official keys are not compiled in yet: until they are,
 `KeySet::official` refuses and only explicit keys (in tests) verify
 anything.
 
-```rust,no_run
+```rust,ignore
 use std::time::SystemTime;
 use rich_marketplace::{resolve, verify_index, Host, HttpsTransport, Installer, KeySet, Request};
 
-# fn run(index: &[u8], signature: &str, listing: &[u8]) -> Result<(), Box<dyn std::error::Error>> {
+// `index`, `signature` and `listing` are the files fetched from the marketplace.
 let keys = KeySet::official()?;
 let index = verify_index(&keys, index, signature, None, SystemTime::now())?;
 let listing = index.read_listing("shout", listing)?;
 let version = resolve(&listing, &Host::current(), &Request::Newest)?;
 let installer = Installer::new("plugins", HttpsTransport::new());
 installer.install(&index, &listing, version, SystemTime::now())?;
-# Ok(()) }
 ```
 
 ## License
