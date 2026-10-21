@@ -165,6 +165,13 @@ impl Renderable for LiveRender {
         }
         segments
     }
+
+    /// Upstream yields no line break after the last line, so a printed
+    /// `LiveRender` leaves the cursor at its end (where `position_cursor`
+    /// expects it).
+    fn print_end_line(&self, _options: &ConsoleOptions) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]

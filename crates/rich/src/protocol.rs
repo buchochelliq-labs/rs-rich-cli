@@ -53,6 +53,16 @@ pub trait Renderable {
     fn vertical(&self) -> Option<crate::align::VerticalAlign> {
         None
     }
+
+    /// Whether a top-level print ends this renderable's last line. This
+    /// port's renderables *separate* lines, where upstream's end each line
+    /// with `"\n"`, so a print adds the final line break. A renderable
+    /// whose upstream output stops without one (`Screen`, `LiveRender`, a
+    /// `Rule` whose `end` has no newline) returns `false`, and the next
+    /// output continues its last line. `options` are the print's options.
+    fn print_end_line(&self, _options: &ConsoleOptions) -> bool {
+        true
+    }
 }
 
 /// Optional line-streaming extension point for renderables.

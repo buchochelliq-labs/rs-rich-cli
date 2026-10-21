@@ -805,18 +805,25 @@ impl Console {
     /// returning the string (including the single trailing newline). For tests
     /// and export.
     pub fn render_export(&self, renderable: &dyn Renderable) -> String {
-        let segments = self.render_segments(renderable);
-        let mut out = self.segments_to_string(&segments);
-        if !segments.is_empty() {
-            out.push('\n');
-        }
-        out
+        self.render_export_with(renderable, &self.options())
     }
 
-    /// Render a value and write it to stdout, followed by a newline.
+    /// Render a value and write it to stdout, followed by a newline (unless
+    /// the renderable ends without one upstream:
+    /// [`Renderable::print_end_line`]).
     pub fn print(&self, renderable: &dyn Renderable) {
-        let segments = self.render_segments(renderable);
-        self.emit(segments);
+        self.print_with(renderable, &self.options());
+    }
+
+    /// Whether printing `renderable` under `options` ends its last line: a
+    /// renderable that `print(justify=…)` wraps in `Align` always does.
+    fn print_ends_line(renderable: &dyn Renderable, options: &ConsoleOptions) -> bool {
+        renderable.print_end_line(options)
+            || (renderable.printed_text().is_none()
+                && matches!(
+                    options.justify,
+                    Justify::Left | Justify::Center | Justify::Right
+                ))
     }
 
     /// Print with explicit render options, the equivalent of upstream's
@@ -826,7 +833,7 @@ impl Console {
     /// drops the text's own `justify`, `overflow` and `no_wrap`.
     pub fn print_with(&self, renderable: &dyn Renderable, options: &ConsoleOptions) {
         let segments = self.render_segments_with(renderable, options);
-        self.emit(segments);
+        self.emit_end(segments, Self::print_ends_line(renderable, options));
     }
 
     /// Like [`render_export`](Self::render_export), with explicit render
@@ -838,7 +845,7 @@ impl Console {
     ) -> String {
         let segments = self.render_segments_with(renderable, options);
         let mut out = self.segments_to_string(&segments);
-        if !segments.is_empty() {
+        if !segments.is_empty() && Self::print_ends_line(renderable, options) {
             out.push('\n');
         }
         out
