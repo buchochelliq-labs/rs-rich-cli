@@ -1,16 +1,20 @@
 //! A status indicator with a spinner.
 //!
-//! Port of `rich/status.py` (the renderable surface). A [`Status`] shows a
-//! spinner animation followed by a status message, parsed as console markup.
-//! Upstream drives it with its own `Live` loop; here a `Status` is a
-//! renderable whose spinner reads the console's clock
-//! ([`Console::get_time`]), so it animates when redrawn by a
-//! [`Live`](crate::live::Live) display. [`Status::renderable`] rendered at a
-//! point in time is the testable surface, and
+//! Port of `rich/status.py`. A [`Status`] shows a spinner animation followed
+//! by a status message, parsed as console markup. It is a renderable whose
+//! spinner reads the console's clock ([`Console::get_time`]), and
+//! [`Status::start`] runs it in its own transient live display, as
+//! upstream's `with Status(...)` does ([`LiveStatus`]).
 //! [`Status::update`] follows upstream: a new spinner name replaces the
-//! spinner (restarting its animation), anything else updates it in place.
+//! spinner (restarting its animation) and redraws, anything else updates it
+//! in place for the next refresh.
+
+use std::io::Write;
+use std::sync::{Arc, Mutex};
 
 use crate::console::{Console, ConsoleOptions};
+use crate::file_proxy::{FileProxy, ProxyStream};
+use crate::live::{AutoLive, Live, LiveHandle, LiveOptions};
 use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
@@ -23,6 +27,7 @@ pub struct Status {
     spinner_style: StyleType,
     speed: f64,
     spinner: Spinner,
+    refresh_per_second: f64,
 }
 
 impl Status {
@@ -38,7 +43,15 @@ impl Status {
             status,
             spinner_style,
             speed: 1.0,
+            refresh_per_second: 12.5,
         }
+    }
+
+    /// How often [`start`](Self::start)'s display redraws (upstream
+    /// `refresh_per_second`, default 12.5).
+    pub fn refresh_per_second(mut self, refresh_per_second: f64) -> Self {
+        self.refresh_per_second = refresh_per_second;
+        self
     }
 
     fn rebuild(mut self, name: &str) -> Self {
@@ -105,6 +118,118 @@ impl Status {
     /// The underlying spinner. Mirrors upstream's `Status.renderable`.
     pub fn renderable(&self) -> &Spinner {
         &self.spinner
+    }
+}
+
+/// A [`Status`] shared with its display's refresh thread.
+struct StatusView(Arc<Mutex<Status>>);
+
+impl Renderable for StatusView {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        lock(&self.0).rich_render(console, options)
+    }
+
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        lock(&self.0).measure(console, options)
+    }
+}
+
+fn lock(status: &Mutex<Status>) -> std::sync::MutexGuard<'_, Status> {
+    status
+        .lock()
+        .unwrap_or_else(|poisoned| poisoned.into_inner())
+}
+
+impl Status {
+    /// Start the status animation in a transient live display, redrawn
+    /// [`refresh_per_second`](Self::refresh_per_second) times a second on a
+    /// background thread. Port of `Status.start` (upstream's
+    /// `Live(transient=True)`, started without a first refresh, so the first
+    /// frame comes with the first tick); stop it with [`LiveStatus::stop`].
+    pub fn start<W: Write + Send + 'static>(self, console: Console, writer: W) -> LiveStatus<W> {
+        let refresh_per_second = self.refresh_per_second;
+        let shared = Arc::new(Mutex::new(self));
+        let live = Live::spawn_options(
+            Box::new(StatusView(shared.clone())),
+            console,
+            writer,
+            refresh_per_second,
+            LiveOptions {
+                transient: true,
+                refresh_on_start: false,
+                ..LiveOptions::default()
+            },
+        );
+        LiveStatus {
+            status: shared,
+            live,
+        }
+    }
+}
+
+/// A running [`Status`] display, returned by [`Status::start`].
+pub struct LiveStatus<W: Write + Send + 'static> {
+    status: Arc<Mutex<Status>>,
+    live: AutoLive<W>,
+}
+
+impl<W: Write + Send + 'static> LiveStatus<W> {
+    /// [`Status::update`] on the running status. As upstream, a new spinner
+    /// redraws at once (and returns once drawn); other changes show at the
+    /// next refresh.
+    pub fn update(
+        &self,
+        status: Option<&str>,
+        spinner: Option<&str>,
+        spinner_style: Option<StyleType>,
+        speed: Option<f64>,
+    ) {
+        lock(&self.status).update(status, spinner, spinner_style, speed);
+        if spinner.is_some() {
+            self.live.refresh_wait();
+        }
+    }
+
+    /// Redraw now, returning once the frame is written (upstream's
+    /// `status._live.refresh()`).
+    pub fn refresh(&self) {
+        self.live.refresh_wait();
+    }
+
+    /// Print `renderable` above the status (upstream's `status.console.print`).
+    pub fn print(&self, renderable: Box<dyn Renderable + Send>) {
+        self.live.print(renderable);
+    }
+
+    /// [`print`](Self::print) a string as console markup.
+    pub fn print_str(&self, content: impl Into<String>) {
+        self.live.print_str(content);
+    }
+
+    /// A writer standing in for stdout while the status runs; see
+    /// [`AutoLive::stdout`].
+    pub fn stdout(&self) -> FileProxy<LiveHandle<W>, std::io::Stdout> {
+        self.live.stdout()
+    }
+
+    /// [`stdout`](Self::stdout) for stderr.
+    pub fn stderr(&self) -> FileProxy<LiveHandle<W>, std::io::Stderr> {
+        self.live.stderr()
+    }
+
+    /// A proxy for `stream` over any `file`.
+    pub fn file_proxy<F: Write>(
+        &self,
+        stream: ProxyStream,
+        file: F,
+    ) -> FileProxy<LiveHandle<W>, F> {
+        self.live.file_proxy(stream, file)
+    }
+
+    /// Stop the animation, erase the status, and return the output sink.
+    /// Port of `Status.stop`.
+    pub fn stop(self) -> W {
+        self.live.stop()
     }
 }
 

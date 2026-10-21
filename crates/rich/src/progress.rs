@@ -848,6 +848,8 @@ pub struct Progress {
     expand: bool,
     transient: bool,
     disable: bool,
+    redirect_stdout: bool,
+    redirect_stderr: bool,
 }
 
 impl Default for Progress {
@@ -861,6 +863,8 @@ impl Default for Progress {
             expand: false,
             transient: false,
             disable: false,
+            redirect_stdout: true,
+            redirect_stderr: true,
         }
     }
 }
@@ -906,6 +910,19 @@ impl Progress {
     /// Erase the display when it stops (upstream `transient`).
     pub fn transient(mut self, transient: bool) -> Self {
         self.transient = transient;
+        self
+    }
+
+    /// Print what is written to [`LiveProgress::stdout`] above the display
+    /// (upstream `redirect_stdout`, default true).
+    pub fn redirect_stdout(mut self, redirect: bool) -> Self {
+        self.redirect_stdout = redirect;
+        self
+    }
+
+    /// The same for [`LiveProgress::stderr`] (upstream `redirect_stderr`).
+    pub fn redirect_stderr(mut self, redirect: bool) -> Self {
+        self.redirect_stderr = redirect;
         self
     }
 
@@ -1163,18 +1180,6 @@ impl Renderable for Progress {
     }
 }
 
-/// A [`Progress`] shared with the auto-refresh thread of a live display.
-struct ProgressView(Arc<std::sync::Mutex<Progress>>);
-
-impl Renderable for ProgressView {
-    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        match self.0.lock() {
-            Ok(progress) => progress.rich_render(console, options),
-            Err(poisoned) => poisoned.into_inner().rich_render(console, options),
-        }
-    }
-}
-
 impl Progress {
     /// Start an auto-refreshing live display of this progress, redrawn
     /// `refresh_per_second` times a second on a background thread. Port of
@@ -1191,27 +1196,41 @@ impl Progress {
             return LiveProgress {
                 progress: Arc::new(std::sync::Mutex::new(self)),
                 live: None,
-                writer: Some(writer),
+                disabled: Some(std::sync::Mutex::new((console, writer))),
                 interactive: true,
-                holder: std::sync::Mutex::new(None),
+                holder: Arc::new(std::sync::Mutex::new(None)),
+                handle: crate::live::LiveHandle::detached(),
             };
         }
-        let transient = self.transient;
-        let interactive = console.is_terminal();
+        let options = crate::live::LiveOptions {
+            transient: self.transient,
+            redirect_stdout: self.redirect_stdout,
+            redirect_stderr: self.redirect_stderr,
+            ..crate::live::LiveOptions::default()
+        };
+        // `Console.is_interactive`: a terminal that is not dumb.
+        let interactive = console.is_terminal() && !crate::console::is_dumb_terminal();
         let shared = Arc::new(std::sync::Mutex::new(self));
-        let live = crate::live::Live::spawn_with(
-            Box::new(ProgressView(shared.clone())),
+        let view = shared.clone();
+        let live = crate::live::Live::spawn_get_renderable(
+            // Upstream's `get_renderable`: the task table as of this refresh.
+            move || {
+                let progress = view.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                Box::new(progress.make_tasks_table()) as Box<dyn Renderable>
+            },
             console,
             writer,
             refresh_per_second,
-            transient,
+            options,
         );
+        let holder: crate::live::Holder = Arc::new(std::sync::Mutex::new(None));
         LiveProgress {
             progress: shared,
+            handle: live.handle().with_holder(holder.clone()),
             live: Some(live),
-            writer: None,
+            disabled: None,
             interactive,
-            holder: std::sync::Mutex::new(None),
+            holder,
         }
     }
 }
@@ -1221,19 +1240,22 @@ impl Progress {
 pub struct LiveProgress<W: std::io::Write + Send + 'static> {
     progress: Arc<std::sync::Mutex<Progress>>,
     live: Option<crate::live::AutoLive<W>>,
-    /// The sink of a disabled display, which never reaches a live thread.
-    writer: Option<W>,
+    /// The console and sink of a disabled display, which never reaches a
+    /// live thread; prints go straight to the sink.
+    disabled: Option<std::sync::Mutex<(Console, W)>>,
     /// Whether the console is a terminal; `stop` ends a file with a newline.
     interactive: bool,
     /// The thread inside [`with`](LiveProgress::with), if any. Upstream's lock
     /// is an `RLock`; ours is not, so re-entry is detected rather than left to
     /// deadlock on the mutex or on the refresh thread.
-    holder: std::sync::Mutex<Option<std::thread::ThreadId>>,
+    holder: crate::live::Holder,
+    /// The refresh thread, for prints and proxies (detached when disabled).
+    handle: crate::live::LiveHandle<W>,
 }
 
 /// Clears [`LiveProgress`]'s `holder` when a `with` block ends, unwinding
 /// included.
-struct HolderGuard<'a>(&'a std::sync::Mutex<Option<std::thread::ThreadId>>);
+struct HolderGuard<'a>(&'a crate::live::Holder);
 
 impl Drop for HolderGuard<'_> {
     fn drop(&mut self) {
@@ -1326,6 +1348,68 @@ impl<W: std::io::Write + Send + 'static> LiveProgress<W> {
                 live.refresh_wait();
             }
         }
+    }
+
+    /// Print `renderable` above the display. Port of `Progress.print`
+    /// (`console.print` through the live display's render hook). The print
+    /// is queued on the refresh thread, so it is safe inside
+    /// [`with`](Self::with).
+    pub fn print(&self, renderable: Box<dyn Renderable + Send>) {
+        if self.live.is_some() {
+            self.handle.print(renderable);
+        } else {
+            self.print_disabled(|console| console.print(renderable.as_ref()));
+        }
+    }
+
+    /// Print straight to a disabled display's sink: no live hook is pushed.
+    fn print_disabled(&self, print: impl FnOnce(&Console)) {
+        if let Some(disabled) = &self.disabled {
+            let mut guard = disabled
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let (console, writer) = &mut *guard;
+            let output = console.capture(print);
+            let _ = writer.write_all(output.as_bytes());
+        }
+    }
+
+    /// [`print`](Self::print) a string as console markup.
+    pub fn print_str(&self, content: impl Into<String>) {
+        if self.live.is_some() {
+            self.handle.print_str(content);
+        } else {
+            let content = content.into();
+            self.print_disabled(|console| console.print_str(&content));
+        }
+    }
+
+    /// A writer standing in for stdout while the display runs: whole lines
+    /// print above it (upstream's `redirect_stdout` `FileProxy`). A disabled
+    /// display writes straight to stdout.
+    pub fn stdout(
+        &self,
+    ) -> crate::file_proxy::FileProxy<crate::live::LiveHandle<W>, std::io::Stdout> {
+        self.handle
+            .file_proxy(crate::file_proxy::ProxyStream::Stdout, std::io::stdout())
+    }
+
+    /// [`stdout`](Self::stdout) for stderr.
+    pub fn stderr(
+        &self,
+    ) -> crate::file_proxy::FileProxy<crate::live::LiveHandle<W>, std::io::Stderr> {
+        self.handle
+            .file_proxy(crate::file_proxy::ProxyStream::Stderr, std::io::stderr())
+    }
+
+    /// A proxy for `stream` over any `file`, which receives the writes when
+    /// the display is not redirecting.
+    pub fn file_proxy<F: std::io::Write>(
+        &self,
+        stream: crate::file_proxy::ProxyStream,
+        file: F,
+    ) -> crate::file_proxy::FileProxy<crate::live::LiveHandle<W>, F> {
+        self.handle.file_proxy(stream, file)
     }
 
     /// Iterate `iter`, advancing a new task by one after each item is
@@ -1424,10 +1508,14 @@ impl<W: std::io::Write + Send + 'static> LiveProgress<W> {
                 }
                 writer
             }
-            None => self
-                .writer
-                .take()
-                .expect("a disabled display keeps its writer"),
+            None => {
+                self.disabled
+                    .take()
+                    .expect("a disabled display keeps its writer")
+                    .into_inner()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .1
+            }
         };
         let progress = match Arc::try_unwrap(std::mem::replace(
             &mut self.progress,

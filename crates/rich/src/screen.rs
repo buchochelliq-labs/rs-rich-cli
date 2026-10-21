@@ -43,35 +43,51 @@ impl Screen {
 
 impl Renderable for Screen {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        let width = options.max_width;
-        let height = options.height.unwrap_or_else(|| console.height());
-
-        let lines = match &self.renderable {
-            Some(renderable) => {
-                let child_options = options.update_dimensions(width, height);
-                console.render_lines(renderable.as_ref(), &child_options, true)
-            }
-            None => Vec::new(),
-        };
-        let mut lines = Segment::set_shape(lines, width, height);
-
-        // Lay the background style under every cell (content and blank fill).
-        if let Some(style) = &self.style {
-            for line in &mut lines {
-                *line = Segment::apply_style(line, style);
-            }
-        }
-
-        let mut segments = Vec::new();
-        let last = lines.len().saturating_sub(1);
-        for (index, line) in lines.into_iter().enumerate() {
-            segments.extend(line);
-            if index != last {
-                segments.push(Segment::line());
-            }
-        }
-        segments
+        render_screen(
+            self.renderable.as_deref(),
+            self.style.as_ref(),
+            console,
+            options,
+        )
     }
+}
+
+/// `Screen.__rich_console__` over a borrowed renderable, so a `Live` display
+/// in alternate-screen mode can fill the screen with the renderable it owns.
+pub(crate) fn render_screen(
+    renderable: Option<&dyn Renderable>,
+    style: Option<&Style>,
+    console: &Console,
+    options: &ConsoleOptions,
+) -> Vec<Segment> {
+    let width = options.max_width;
+    let height = options.height.unwrap_or_else(|| console.height());
+
+    let lines = match renderable {
+        Some(renderable) => {
+            let child_options = options.update_dimensions(width, height);
+            console.render_lines(renderable, &child_options, true)
+        }
+        None => Vec::new(),
+    };
+    let mut lines = Segment::set_shape(lines, width, height);
+
+    // Lay the background style under every cell (content and blank fill).
+    if let Some(style) = style {
+        for line in &mut lines {
+            *line = Segment::apply_style(line, style);
+        }
+    }
+
+    let mut segments = Vec::new();
+    let last = lines.len().saturating_sub(1);
+    for (index, line) in lines.into_iter().enumerate() {
+        segments.extend(line);
+        if index != last {
+            segments.push(Segment::line());
+        }
+    }
+    segments
 }
 
 #[cfg(test)]
