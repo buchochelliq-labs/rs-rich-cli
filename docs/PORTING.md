@@ -45,18 +45,18 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 |-------------------|-----------|:------:|:------:|
 | `box.py` (all boxes, `substitute`, `get_plain_headed_box`) | `box.rs` | 🟢 | ✅ |
 | `rule.py` | `rule.rs` | ✅ | ✅ (+ `upstream_features.tsv`: `end`, `style` names, `Text` titles, ASCII fallback); read-only `get_title`/`get_align` for upstream's public attributes |
-| `padding.py` | `padding.rs` | 🟡 | ✅ (+ `expand`, `indent`, height in `core_gaps.tsv`) |
-| `panel.py` | `panel.rs` | 🟡 | ✅ (+ `upstream_features.tsv`: `style`, `height`, `Text` titles; `api_gaps.tsv`: `Text` subtitles, `safe_box`; `audit_edges.tsv`: `width=0`); read-only `renderable`, `get_title`, `get_subtitle` and their aligns for upstream's public attributes |
-| `align.py` | `align.rs` | 🟡 | ✅ (+ `vertical`, `style`, `pad`, `width`, `height`, `VerticalCenter`, table-cell `vertical` in `core_gaps.tsv`) |
-| `constrain.py` | `constrain.rs` | 🟡 | ✅ |
-| `table.py` | `table.rs` | 🟡 | ✅ (renderable cells via `Cell`, `ColumnOptions`, markup `str` cells, `__rich_measure__`; `api_gaps.tsv`: `width`, `min_width`, footers, `leading`, `row_styles`, row styles and sections, header/footer/title/caption styles and justification, `Text` annotations, `safe_box`, extra cells adding columns); read-only `columns` (`Column`), `rows` (`Row`) and `get_*` settings for upstream's public attributes |
+| `padding.py` | `padding.rs` | 🟢 | ✅ (+ `expand`, `indent`, height in `core_gaps.tsv`; `parity_widgets.tsv`: `style` as a theme name or definition, `Padding::unpack`, no room for the content, wide characters when fitted, inside a layout) |
+| `panel.py` | `panel.rs` | 🟢 | ✅ (+ `upstream_features.tsv`: `style`, `height`, `Text` titles; `api_gaps.tsv`: `Text` subtitles, `safe_box`; `audit_edges.tsv`: `width=0`; `parity_widgets.tsv`: `height=0` read as unset, heights below the border, wide and ellipsized titles, title control codes, every box shape, style names, 4-sided padding, `fit` with titles, `highlight`, measurement); read-only `renderable`, `get_title`, `get_subtitle` and their aligns for upstream's public attributes |
+| `align.py` | `align.rs` | 🟢 | ✅ (+ `vertical`, `style`, `pad`, `width`, `height`, `VerticalCenter`, table-cell `vertical` in `core_gaps.tsv`; `parity_widgets.tsv`: `width=0`/`height=0` read as unset, content taller than the height, `pad=False` blank lines, style names, `VerticalCenter` in a layout); an invalid `align`/`vertical` cannot be written, as they are enums |
+| `constrain.py` | `constrain.rs` | 🟢 | ✅ (`parity_widgets.tsv`: `width=0` renders nothing, `None`, measured in a table) |
+| `table.py` | `table.rs` | 🟢 | ✅ (renderable cells via `Cell`, `ColumnOptions`, markup `str` cells, `__rich_measure__`; `api_gaps.tsv`: `width`, `min_width`, footers, `leading`, `row_styles`, row styles and sections, header/footer/title/caption styles and justification, `Text` annotations, `safe_box`, extra cells adding columns; `parity_widgets.tsv`: wrapping columns squeezed by `no_wrap` neighbours at every width, many columns in a narrow console, legacy Windows and ASCII-only boxes); read-only `columns` (`Column`), `rows` (`Row`) and `get_*` settings for upstream's public attributes |
 | `columns.py` | `columns.rs` | ✅ | ✅ (markup/`Text`/renderable items; `upstream_features.tsv`: `padding`, `width`, `column_first`, `right_to_left`, `align`, `title`) |
 | `tree.py` | `tree.rs` | ✅ | ✅ (markup labels, `__rich_measure__`; `upstream_features.tsv`: `style`, `guide_style` heavy/double/ASCII guides, `expanded`, `hide_root`, `highlight`) |
-| `layout.py` | `layout.rs` | 🟡 | ✅ (+ `upstream_features.tsv`: `name`/`visible`, `split`/`add_split`/`unsplit`, lookup, placeholder panel, `tree`, `map`); `refresh_screen` with `Console::update_screen`/`update_screen_lines` (`api_gaps.tsv`); `size=0` is flexible and `ratio_resolve` is exact (`audit_edges.tsv`) |
+| `layout.py` | `layout.rs` | 🟢 | ✅ (+ `upstream_features.tsv`: `name`/`visible`, `split`/`add_split`/`unsplit`, lookup, placeholder panel, `tree`, `map`); `refresh_screen` with `Console::update_screen`/`update_screen_lines` (`api_gaps.tsv`); `size=0` is flexible and `ratio_resolve` is exact (`audit_edges.tsv`); minimum sizes past the total, `ratio=0`, hidden children and nested splits (`parity_widgets.tsv`); only the two built-in splitters ([DIVERGENCES §40](DIVERGENCES.md#40-layout-has-only-the-row-and-column-splitters)) |
 | `styled.py` | `styled.rs` | 🟢 | ✅ |
-| `screen.py` | `screen.rs` | 🟡 | — |
+| `screen.py` | `screen.rs` | 🟢 | ✅ `parity_widgets.tsv`: several renderables, `style` (names too), `application_mode`, no line break after the last row when printed, inside a panel |
 | `progress_bar.py` | `progress_bar.rs` | 🟢 | ✅ `bar_*`, `progress_three`, `progress_bar.tsv` (pulse, ASCII, no-colour) |
-| `bar.py` | `bar.rs` | 🟡 | ✅ (+ `color`/`bgcolor` in `core_gaps.tsv`) |
+| `bar.py` | `bar.rs` | 🟢 | ✅ (+ `color`/`bgcolor` in `core_gaps.tsv`; `parity_widgets.tsv`: `begin` below 0 and `end` past `size` clamped, empty and reversed ranges, measurement) |
 
 ## Live & progress
 
@@ -90,10 +90,10 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `pager.py` | `pager.rs` | 🟡 |
 | `prompt.py` | `prompt.rs` | 🟡 |
 | `_unicode_data/` (21 version tables, `UNICODE_VERSION`) | `cell_widths.rs` | 🟢 |
-| `box.substitute` (legacy/ASCII fallback) | `box.rs` | 🟡 | ✅ |
+| `box.substitute` (legacy/ASCII fallback) | `box.rs` | 🟢 | ✅ upstream's whole `LEGACY_WINDOWS_SUBSTITUTIONS` table, the `ascii` flag of a custom `Box::new`, from the render options (`parity_widgets.tsv`); the console flags are not detected from the terminal ([DIVERGENCES §6](DIVERGENCES.md#6-box-substitution-is-opt-in-no-legacy-terminal-auto-detection)) |
 | `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | — | not ported: the legacy console is unsupported ([DIVERGENCES §38](DIVERGENCES.md#38-the-windows-legacy-console-is-not-supported)) |
 | `jupyter.py`, `file_proxy.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⬜ |
-| `_ratio.py` (`ratio_resolve`) | `ratio.rs` | 🟡 | ✅ |
+| `_ratio.py` (`ratio_resolve`, `ratio_reduce`, `ratio_distribute`) | `ratio.rs` | 🟢 | ✅ (`parity_widgets.tsv`: each function on its edge values) |
 | `_loop.py`, `_pick.py`, `_stack.py`, `_timer.py` | internal helpers | ⬜ |
 | `_export_format.py`, `Console.export_html` | `export.rs` | 🟡 | ✅ (links, `code_format`, SVG `font_aspect_ratio` in `core_gaps.tsv`; extreme and non-finite ratios in `audit_edges.tsv`) |
 
