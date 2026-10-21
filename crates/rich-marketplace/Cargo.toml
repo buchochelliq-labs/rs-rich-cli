@@ -1,0 +1,66 @@
+# crates/rich-marketplace — the client side of the rs-rich plugin marketplace
+# (0.0.22 workstream 7, #232): the signed index and its key chain, listings,
+# resolving a version against the running host, downloads and the lockfile.
+#
+# Not a port of anything upstream: an rs-rich addition. The contract is
+# docs/design/marketplace.md. No terminal code: `rich plugin` (rs-rich-cli)
+# prints, prompts and decides; this crate verifies, resolves and installs.
+# Independent SemVer from 0.0.1. See AGENTS.md → Versioning.
+[package]
+name = "rs-rich-marketplace"
+version = "0.0.1"
+description = "The rs-rich plugin marketplace client: a minisign-signed index, its key chain, listings, version resolution, verified downloads and the lockfile"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-marketplace"
+keywords = ["plugin", "marketplace", "minisign", "rich"]
+categories = ["command-line-interface", "cryptography"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[package.metadata.docs.rs]
+all-features = true
+
+[lib]
+name = "rich_marketplace"
+
+[lints]
+workspace = true
+
+[features]
+default = ["http"]
+# `HttpsTransport`: downloads with ureq, the client the CLI's `fetch` feature
+# already uses (rustls with bundled roots, HTTPS only, redirects too). Off,
+# the crate has only the `Transport` trait and `MemoryTransport`.
+http = ["dep:ureq"]
+
+[dependencies]
+# The host's versions and checks (`PLUGIN_API_VERSION`, `abi::ABI_MAJOR`,
+# `abi::is_supported`, `is_valid_name`), so resolution decides as the
+# loaders do.
+rich-plugin-api.workspace = true
+# `Theme::from_file`, the parser `--theme-file` uses, to check a theme.
+rich.workspace = true
+# Pure-Rust minisign verification (Ed25519 over BLAKE2b-512); no other
+# dependencies.
+minisign-verify = "0.3"
+serde_json.workspace = true
+# Only for the strict JSON reader's visitor (duplicate keys refused); no derive.
+serde = "1"
+# SemVer 2.0 precedence for listing versions.
+semver = "1"
+# Listing and artifact hashes. The version rs-rich-micro already uses.
+sha2 = "0.11"
+# A micro pack's `pack.json`, read from its archive: the reader and codecs
+# rs-rich-micro uses, so the tree gains nothing.
+zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+ureq = { workspace = true, optional = true }
+
+[dev-dependencies]
+# Signs the fixture marketplace with the test keys in tests/fixtures/keys.
+minisign = "0.10"
