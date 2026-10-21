@@ -11,10 +11,12 @@
 //! animates one from the progress clock.
 //!
 //! Scope: all built-in spinners (vendored in `spinner_data.rs`), trailing text
-//! as console markup and a frame style. Upstream's non-text trailing
-//! renderables (a `Table.grid` of frame and renderable) are not ported.
+//! as console markup ([`Spinner::text`]), as a literal [`Text`]
+//! ([`Spinner::with_text`]) or as any renderable ([`Spinner::renderable`],
+//! upstream's `Table.grid` of frame and renderable), and a frame style.
 
 use std::cell::Cell;
+use std::sync::{Arc, Mutex};
 
 use crate::console::{Console, ConsoleOptions};
 use crate::measure::Measurement;
@@ -30,6 +32,9 @@ pub struct Spinner {
     interval: f64,
     // Boxed so a spinner stays small inside `ProgressColumn`.
     text: Option<Box<Text>>,
+    /// Upstream's `text` when it is neither a `str` nor a `Text`: shown in a
+    /// grid beside the frame. Shared so a table cell can render it.
+    renderable: Option<Arc<Mutex<Box<dyn Renderable + Send>>>>,
     style: Option<StyleType>,
     speed: Cell<f64>,
     /// Upstream's `start_time`: set by the first render.
@@ -68,6 +73,7 @@ impl Spinner {
             frames,
             interval,
             text: None,
+            renderable: None,
             style: None,
             speed: Cell::new(1.0),
             start_time: Cell::new(None),
@@ -76,10 +82,35 @@ impl Spinner {
         }
     }
 
+    /// Look up a built-in spinner by name, or `None` where upstream's
+    /// constructor raises `KeyError("no spinner called 'name'")`.
+    /// [`new`](Self::new) falls back to `dots` instead.
+    pub fn try_new(name: &str) -> Option<Self> {
+        crate::spinner_data::spinner_data(name).map(|_| Spinner::new(name))
+    }
+
     /// Trailing text after the frame, parsed as console markup (upstream
     /// passes a `str` through `Text.from_markup`).
     pub fn text(mut self, text: impl Into<String>) -> Self {
         self.text = Some(Box::new(markup(&text.into())));
+        self.renderable = None;
+        self
+    }
+
+    /// Trailing text after the frame, used as it is (upstream's `text=`
+    /// given a `Text`).
+    pub fn with_text(mut self, text: Text) -> Self {
+        self.text = Some(Box::new(text));
+        self.renderable = None;
+        self
+    }
+
+    /// Any renderable after the frame (upstream's `text=` given another
+    /// renderable): the frame and the renderable are laid out in a
+    /// `Table.grid(padding=1)`.
+    pub fn renderable(mut self, renderable: Box<dyn Renderable + Send>) -> Self {
+        self.renderable = Some(Arc::new(Mutex::new(renderable)));
+        self.text = None;
         self
     }
 
@@ -115,6 +146,40 @@ impl Spinner {
     /// `Spinner.render`: the first call fixes the start time, the frame carries
     /// the spinner style and `Text.assemble(frame, " ", text)` adds the text.
     pub fn render(&self, time: f64) -> Text {
+        let frame = self.frame(time);
+        match &self.text {
+            // `Text.assemble` turns the frame's style into a span over the
+            // frame alone, so the trailing text keeps its own styling.
+            Some(text) if !text.plain().is_empty() => {
+                let mut assembled = Text::new("");
+                assembled.append(frame.plain(), self.style.clone());
+                assembled.append(" ", None);
+                assembled.append_text(text)
+            }
+            _ => frame,
+        }
+    }
+
+    /// [`render`](Self::render) for any trailing renderable: upstream's
+    /// `render` returns a `Table.grid(padding=1)` of the frame and the
+    /// renderable set with [`renderable`](Self::renderable), and the
+    /// assembled text otherwise.
+    pub fn render_renderable(&self, time: f64) -> Box<dyn Renderable> {
+        let Some(renderable) = &self.renderable else {
+            return Box::new(self.render(time));
+        };
+        let frame = self.frame(time);
+        let mut table = crate::table::Table::grid().padding(1, 1, 1, 1);
+        table.add_row_cells(vec![
+            crate::table::Cell::Text(frame),
+            crate::table::Cell::Renderable(Arc::new(Shared(renderable.clone()))),
+        ]);
+        Box::new(table)
+    }
+
+    /// The styled frame at `time`, moving the animation on as upstream's
+    /// `render` does.
+    fn frame(&self, time: f64) -> Text {
         let start = self.start_time.get().unwrap_or(time);
         self.start_time.set(Some(start));
         let frame_no = (time - start) * self.speed.get() / (self.interval / 1000.0)
@@ -129,23 +194,30 @@ impl Spinner {
             self.speed.set(pending);
             self.update_speed.set(0.0);
         }
-        match &self.text {
-            // `Text.assemble` turns the frame's style into a span over the
-            // frame alone, so the trailing text keeps its own styling.
-            Some(text) if !text.plain().is_empty() => {
-                let mut assembled = Text::new("");
-                assembled.append(frame_str, self.style.clone());
-                assembled.append(" ", None);
-                assembled.append_text(text)
-            }
-            _ => {
-                let mut frame = Text::new(frame_str);
-                if let Some(style) = &self.style {
-                    frame.set_base_style(style.clone());
-                }
-                frame
-            }
+        let mut frame = Text::new(frame_str);
+        if let Some(style) = &self.style {
+            frame.set_base_style(style.clone());
         }
+        frame
+    }
+}
+
+/// A spinner's trailing renderable as a table cell.
+struct Shared(Arc<Mutex<Box<dyn Renderable + Send>>>);
+
+impl Renderable for Shared {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .rich_render(console, options)
+    }
+
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        self.0
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner())
+            .measure(console, options)
     }
 }
 
@@ -154,12 +226,20 @@ impl Renderable for Spinner {
     /// ([`Console::get_time`]), so each redraw inside a `Live` display moves
     /// the animation on.
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        if self.renderable.is_some() {
+            return self
+                .render_renderable(console.get_time())
+                .rich_render(console, options);
+        }
         self.render(console.get_time())
             .rich_render(console, options)
     }
 
     /// Port of `Spinner.__rich_measure__`, which measures `self.render(0)`.
     fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
+        if self.renderable.is_some() {
+            return self.render_renderable(0.0).measure(console, options);
+        }
         self.render(0.0).measure(console, options)
     }
 }
@@ -175,6 +255,13 @@ mod tests {
         assert_eq!(names[0], "dots");
         assert!(names.iter().all(|name| spinner_frames(name).is_some()));
         assert!(spinner_frames("nope").is_none());
+    }
+
+    #[test]
+    fn an_unknown_name_is_refused_by_try_new() {
+        // Upstream raises `KeyError("no spinner called 'nope'")`.
+        assert!(Spinner::try_new("nope").is_none());
+        assert!(Spinner::try_new("line").is_some());
     }
     use crate::color::ColorSystem;
 

@@ -13,9 +13,12 @@ use std::sync::Arc;
 
 use rich::color::ColorSystem;
 use rich::console::Console;
+use rich::protocol::Renderable;
+use rich::table::Table;
 use rich::text::Text;
 use rich::{
-    Live, LiveOptions, Progress, ProgressColumn, ProxyStream, Status, TaskId, VerticalOverflow,
+    Live, LiveOptions, Progress, ProgressColumn, ProxyStream, Spinner, Status, TaskId,
+    VerticalOverflow,
 };
 
 fn markup(source: &str) -> Box<Text> {
@@ -72,17 +75,61 @@ impl Files {
     }
 }
 
-fn run_live(case: &serde_json::Value, console: Console, files: &mut Files) -> Vec<u8> {
+fn spinner(case: &serde_json::Value) -> Spinner {
+    let mut spinner = Spinner::try_new(case["name"].as_str().unwrap()).expect("spinner");
+    if let Some(style) = case["style"].as_str() {
+        spinner = spinner.style(style);
+    }
+    let source = case["text"][1].as_str().unwrap();
+    match case["text"][0].as_str().unwrap() {
+        "markup" => spinner.text(source),
+        "text" => spinner.with_text(Text::new(source)),
+        "table" => {
+            let mut table = Table::new();
+            table.add_column("job");
+            table.add_row(&[source]);
+            spinner.renderable(Box::new(table))
+        }
+        other => panic!("unknown spinner text {other:?}"),
+    }
+}
+
+fn run_spinner(case: &serde_json::Value, console: Console, now: &Arc<AtomicU64>) -> Vec<u8> {
+    let spinner = spinner(case);
+    let mut output = String::new();
+    for step in case["steps"].as_array().expect("steps") {
+        let time = step[1].as_f64().unwrap();
+        output.push_str(&match step[0].as_str().expect("op") {
+            "render" => {
+                let frame = spinner.render_renderable(time);
+                console.capture(|console| console.print(frame.as_ref()))
+            }
+            "print" => {
+                now.store(time.to_bits(), Ordering::SeqCst);
+                console.capture(|console| console.print(&spinner))
+            }
+            other => panic!("unknown spinner step {other:?}"),
+        });
+    }
+    output.into_bytes()
+}
+
+fn run_live(
+    case: &serde_json::Value,
+    console: Console,
+    files: &mut Files,
+    now: &Arc<AtomicU64>,
+) -> Vec<u8> {
     let options = options(case);
-    let mut live = Live::new(
-        markup(case["markup"].as_str().unwrap()),
-        console,
-        Vec::<u8>::new(),
-    )
-    .options(&options);
+    let renderable: Box<dyn Renderable> = match case["kind"].as_str() {
+        Some("live_spinner") => Box::new(spinner(case)),
+        _ => markup(case["markup"].as_str().unwrap()),
+    };
+    let mut live = Live::new(renderable, console, Vec::<u8>::new()).options(&options);
     for step in case["steps"].as_array().expect("steps") {
         match step[0].as_str().expect("op") {
             "start" => live.start_with(step[1].as_bool().unwrap()),
+            "time" => now.store(step[1].as_f64().unwrap().to_bits(), Ordering::SeqCst),
             "stop" => live.stop(),
             "update" => live.update_with(
                 markup(step[1].as_str().unwrap()),
@@ -227,7 +274,8 @@ fn parity_live() {
             .build();
         let mut files = Files::default();
         let output = match case["kind"].as_str().expect("kind") {
-            "live" => run_live(&case, console, &mut files),
+            "live" | "live_spinner" => run_live(&case, console, &mut files, &now),
+            "spinner" => run_spinner(&case, console, &now),
             "progress" => run_progress(&case, console, &mut files, &now),
             "status" => run_status(&case, console, &mut files, &now),
             other => panic!("unknown kind {other:?}"),
@@ -249,5 +297,5 @@ fn parity_live() {
         );
         checked += 1;
     }
-    assert_eq!(checked, 32, "expected every parity_live case to run");
+    assert_eq!(checked, 36, "expected every parity_live case to run");
 }

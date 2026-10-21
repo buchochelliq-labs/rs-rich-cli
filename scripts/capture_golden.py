@@ -4132,9 +4132,30 @@ PARITY_LIVE_CASES: list[tuple[str, dict]] = [
                            "steps": [["time", 1.0]]}),
     ("status_redirect", {"kind": "status", "width": 30, "message": "Busy", "spinner": "line",
                          "steps": [["refresh"], ["write", "stdout", "out\n"], ["time", 0.2]]}),
+    ("spinner_text_object", {"kind": "spinner", "width": 30, "name": "dots",
+                             "text": ["text", "[b]literal[/b]"], "style": "green",
+                             "steps": [["render", 0], ["render", 0.1]]}),
+    ("spinner_renderable_table", {"kind": "spinner", "width": 20, "name": "line",
+                                  "text": ["table", "boxed"], "style": "red",
+                                  "steps": [["render", 0], ["render", 0.13], ["print", 0.26]]}),
+    ("spinner_renderable_wraps", {"kind": "spinner", "width": 16, "name": "dots",
+                                  "text": ["table", "a longer table cell"], "style": None,
+                                  "steps": [["render", 0]]}),
+    ("spinner_renderable_in_live", {"kind": "live_spinner", "width": 20, "name": "line",
+                                    "text": ["table", "x"], "style": None,
+                                    "steps": [["start", True], ["time", 0.13], ["refresh"], ["stop"]]}),
     ("status_not_terminal", {"kind": "status", "width": 30, "terminal": False, "message": "Busy",
                              "spinner": "dots", "steps": [["refresh"], ["print", "p"]]}),
 ]
+
+
+def _parity_live_table(cell: str):
+    from rich.table import Table
+
+    table = Table()
+    table.add_column("job")
+    table.add_row(cell)
+    return table
 
 
 def run_parity_live_case(case) -> list[str]:
@@ -4161,7 +4182,19 @@ def run_parity_live_case(case) -> list[str]:
         sys.stdout, sys.stderr = out, err
         options = case.get("options", {})
         kind = case["kind"]
-        if kind == "live":
+        spinner = None
+        if kind in ("spinner", "live_spinner"):
+            from rich.spinner import Spinner
+
+            text_kind, text_source = case["text"]
+            text = {"markup": lambda: text_source, "text": lambda: Text(text_source),
+                    "table": lambda: _parity_live_table(text_source)}[text_kind]()
+            spinner = Spinner(case["name"], text=text, style=case["style"])
+        if kind == "spinner":
+            display = None
+        elif kind == "live_spinner":
+            display = Live(spinner, console=console, auto_refresh=False, **options)
+        elif kind == "live":
             display = Live(Text.from_markup(case["markup"]), console=console, auto_refresh=False,
                            **options)
         elif kind == "progress":
@@ -4182,7 +4215,7 @@ def run_parity_live_case(case) -> list[str]:
                 display.update(Text.from_markup(step[1]), refresh=step[2])
             elif op == "refresh":
                 (display._live if kind == "status" else display).refresh()
-            elif op == "print":
+            elif op == "print" and kind != "spinner":
                 console.print(step[1])
             elif op == "write":
                 getattr(sys, step[1]).write(step[2])
@@ -4196,9 +4229,14 @@ def run_parity_live_case(case) -> list[str]:
                 display.advance(step[1], step[2])
             elif op == "status":
                 display.update(**step[1])
+            elif op == "render":
+                console.print(spinner.render(step[1]))
+            elif op == "print" and kind == "spinner":
+                now[0] = float(step[1])
+                console.print(spinner)
             else:
                 raise SystemExit(f"unknown parity live step {op!r}")
-        if kind != "live":
+        if kind in ("progress", "status"):
             display.stop()
     finally:
         sys.stdout, sys.stderr = saved_streams
