@@ -231,7 +231,7 @@ Format: what differs · why · how to remove it (if temporary).
   A `code_format` using conversions or format specs (`{code!r}`, `{width:>5}`)
   is refused with `ExportFormatError` rather than formatted.
 
-### 16. `Progress` — columns, task model, pulse and live display done
+### 16. `Progress`: two permanent differences (settled in 0.0.22)
 - **Resolved (0.0.10, core 0.0.6):** the time, rate and spinner columns and the
   task model are ported: an injectable clock (`Progress::clock`, upstream's
   `get_time`), task start/stop/finish times, the 30-second speed sample window,
@@ -258,40 +258,65 @@ Format: what differs · why · how to remove it (if temporary).
     narrow-width wrapping match. `transient`, `disable`, and
     `wrap_file`/`open` (`LiveProgress::wrap_read`/`open`) are ported
     (goldens in `progress_time.tsv` and `progress_live.tsv`).
-- **Still differs:**
-  - Task totals and counts are `f64`, so `{task.total}` formats a whole number
-    as an int. Upstream keeps whatever type the caller passed.
-  - `track` advances inline rather than through upstream's `_TrackThread`
-    batching (`update_period`). The counts match; the refresh timing differs.
-  - `open` reads bytes; upstream's text mode (`TextIOWrapper`) is left to the
-    caller, for example `BufReader::lines` over the returned reader.
-  - `redirect_stdout`/`redirect_stderr` follow `Live` (§17).
-- **Why:** Rust has no dynamic int/float, and text decoding belongs to the
-  caller's reader.
-- **Remove:** under the Live/progress issue (#6).
+- **Resolved (0.0.22):**
+  - `track` follows upstream's `_TrackThread`: a thread advances the task
+    by the items counted every `update_period`, and when the iterator is
+    exhausted or dropped the task's completed is set to the count and the
+    display refreshed (`LiveProgress::track_with` takes `completed`, an
+    existing task and the period).
+  - The display takes its table at each refresh through `Live`'s
+    `get_renderable`, as upstream does, so a print between refreshes draws
+    the table of the last refresh below it.
+  - `Progress.print` (`LiveProgress::print`/`print_str`) and
+    `redirect_stdout`/`redirect_stderr` (`LiveProgress::stdout`/`stderr`)
+    go through the live display (§17). Golden `parity_live.tsv`.
+- **Permanent:**
+  - Task totals and counts are `f64`, so `{task.total}` formats a whole
+    number as an int. Upstream keeps whatever type the caller passed.
+    Rust has no dynamic int/float.
+  - `open` reads bytes; upstream's text mode (`TextIOWrapper`) is left to
+    the caller, for example `BufReader::lines` over the returned reader.
+    Text decoding belongs to the caller's reader.
+- **Not a divergence:** a `LiveProgress` always runs the refresh thread
+  (upstream `auto_refresh=True`). For a manual display, render the
+  `Progress` itself in a `Live`.
 
-### 17. `Live` — auto-refresh thread done; alt-screen/redirect deferred
-- **Differs:** `Live` implements the deterministic `start`/`update`/`refresh`/`stop`
-  flow (byte-parity with upstream's `auto_refresh=False`, `transient=False` Live),
-  **and** a background **auto-refresh thread** — `Live::spawn(...)` returns an
-  [`AutoLive`] handle that redraws every `1/refresh_per_second` (and on each
-  `update`), a port of upstream's `refresh_per_second`. The thread constructs and
-  owns the `Live` internally, so only `Send` inputs (renderable/console/writer)
-  cross over — which made `Console` `Send` (its highlighter boxes are now
-  `dyn Highlighter + Send`). `Live::spawn` returns only once the first frame
-  is drawn, and `AutoLive::refresh_wait` redraws synchronously, as upstream's
-  `start()` and `refresh()` do; the final newline is written only when the
-  last render had height (`last_render_height`). `transient` erases the
-  display on stop (`Live::transient`, `Live::spawn_with`), and a non-terminal
-  stop writes the final frame without a newline, as upstream does. Still
-  deferred: the alt-screen mode,
-  stdout/stderr redirection, and the console render-hook integration; `Live` also
-  renders to a generic `Write` sink rather than through `Console`'s own file.
-- **Why:** those remaining pieces are large plumbing; the refresh loop itself is
-  ported and (with a long interval, so no timeout fires) even deterministically
-  tested to emit the same stream through the thread.
-- **Remove:** add a refresh thread + `transient`/alt-screen handling, and route
-  through `Console`, under the Live/progress issue (#6).
+### 17. `Live`: owns its console and sink; redirect through proxy writers (settled in 0.0.22)
+- **Resolved (0.0.22):** the alternate screen (`Live::screen`, upstream
+  `screen=True`: the renderable fills a `Screen`, homed on each refresh,
+  and the screen is switched off at stop), upstream's render hook
+  (`Live::print`/`print_str`: the display is erased, the output printed,
+  and the display drawn again below it), the stdout/stderr redirect
+  (`file_proxy.rs`, below), `start(refresh)` (`Live::start_with`),
+  `update(refresh)` (`Live::update_with`, taken at the next refresh),
+  `get_renderable`, `is_started`, and dumb terminals (no redraws, no
+  control codes). `Status::start` runs a status in its own transient
+  display. Golden `parity_live.tsv` (38 cases).
+- **Permanent:**
+  - **The redirect is a writer, not the process's stdout.** Upstream
+    assigns a `FileProxy` to `sys.stdout` and `sys.stderr`, so a plain
+    `print` lands above the display. Rust cannot do that safely:
+    `print!` and `std::io::stdout()` always reach file descriptor 1;
+    `std::io::set_output_capture` is unstable and internal; and moving the
+    descriptor with `dup2` needs unsafe, platform-specific calls that
+    would also capture the display's own output and every other thread's.
+    So `Live::stdout`/`stderr` (and the same on `AutoLive`,
+    `LiveProgress`, `LiveStatus`) return a `FileProxy` the program writes
+    to instead. Behind it everything is upstream's: lines are buffered and
+    decoded from ANSI, `flush` prints a partial line as console markup, a
+    partial line is flushed when the display stops (CPython's `close` on
+    the dropped proxy), and the proxy writes to its file whenever the
+    display is not redirecting (stopped, the flag off, or not a terminal).
+  - **A `Live` owns its console and output sink.** Upstream's display
+    pushes a render hook onto a shared console, so any `console.print`
+    goes above it; here the console and the sink are moved into the
+    `Live` (and into its refresh thread), so printing goes through
+    `Live::print`. The output is the same.
+  - **No nested displays.** Upstream 14+ lets a second `Live` on the same
+    console join the first, which draws both as a `Group`. Because each
+    `Live` owns its console, a second one cannot find the first; give one
+    `Live` a `Group` of both renderables instead.
+  - Jupyter widgets are not ported (§19).
 
 ### 18. Syntax highlighting uses `syntect`, not Pygments (non-byte-parity)
 - **Differs:** `Syntax` (`syntax.rs`) highlights code with the `syntect` crate,
