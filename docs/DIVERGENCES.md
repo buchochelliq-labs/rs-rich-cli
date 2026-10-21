@@ -299,7 +299,11 @@ Format: what differs · why · how to remove it (if temporary).
   the token colors are **not byte-identical** to Python rich — this is the one
   renderable whose output is functional rather than golden-tested. The default
   theme is `base16-ocean.dark` (a syntect built-in), not rich's `ansi_dark`/
-  `monokai`. The `Syntax.from_path` loader and `dedent` are not yet ported.
+  `monokai`. `dedent` and `Syntax.from_path` are ported (golden
+  `syntax_dedent_*` and `syntax_from_path` in `parity_docs.tsv`);
+  `guess_lexer` answers with the path's extension, which syntect looks
+  grammars up by, rather than a Pygments alias, and `from_path` reads UTF-8
+  only.
 - **Upstream layout (0.0.x).** `line_numbers`, `start_line`, `line_range`,
   `highlight_lines`, `code_width`, `background_color`, `indent_guides`,
   `stylize_range`, 4-sided padding and unpadded lines for transparent themes
@@ -312,8 +316,9 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** Rust has no Pygments; `syntect` is the standard Rust equivalent
   (mirrors how `cells` delegates East-Asian-width to `unicode-width`). Byte-parity
   is impossible across highlighter engines.
-- **Remove:** not removable while using a different engine; the divergence is
-  inherent. Future work can add line numbers and the path/loader conveniences.
+- **Verdict (0.0.22): permanent.** Not removable while using a different
+  engine; the divergence is inherent. Everything around the highlighter (the
+  layout, line numbers, ranges, padding, `dedent`, `from_path`) is parity.
 - **Pluggable engine (0.0.12).** Highlighting goes through the
   `protocol::CodeHighlighter` trait. `SyntectHighlighter` is the default, and
   `Syntax::highlighter` / `Markdown::highlighter` accept any other engine. With

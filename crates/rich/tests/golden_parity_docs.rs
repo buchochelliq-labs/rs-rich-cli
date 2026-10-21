@@ -13,7 +13,7 @@ use rich::markdown::Markdown;
 use rich::pretty::{pretty_repr, Pretty, ReprLimits};
 use rich::scope::{render_scope, ScopeOptions};
 use rich::table::Cell;
-use rich::{ColorSystem, Console, Json, Justify, Overflow, Panel, Renderable, Table};
+use rich::{ColorSystem, Console, Json, Justify, Overflow, Panel, Renderable, Syntax, Table};
 use serde_json::Value;
 
 use pyvalue::pretty_value;
@@ -106,6 +106,29 @@ fn render(case: &Value) -> String {
     }
     let renderable: Box<dyn Renderable> = match kind {
         "pretty" => Box::new(pretty(case)),
+        "syntax" => {
+            let mut syntax = match case.get("path").and_then(Value::as_str) {
+                Some(path) => Syntax::from_path(
+                    std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+                        .join("../..")
+                        .join(path),
+                    Some("text"),
+                )
+                .expect("readable fixture"),
+                None => Syntax::new(case["code"].as_str().expect("code"), "text"),
+            };
+            syntax = syntax
+                .theme("ansi_dark")
+                .dedent(opt_bool(&options, "dedent").unwrap_or(false))
+                .line_numbers(opt_bool(&options, "line_numbers").unwrap_or(false));
+            if let Some(tab_size) = opt_usize(&options, "tab_size") {
+                syntax = syntax.tab_size(tab_size);
+            }
+            if let Some(range) = options.get("line_range").and_then(Value::as_array) {
+                syntax = syntax.line_range(range[0].as_i64(), range[1].as_i64());
+            }
+            Box::new(syntax)
+        }
         "markdown" => {
             let mut markdown = Markdown::new(case["source"].as_str().expect("source"));
             if let Some(hyperlinks) = opt_bool(&options, "hyperlinks") {

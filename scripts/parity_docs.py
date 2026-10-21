@@ -129,6 +129,17 @@ def render_case(case: dict) -> str:
             renderable = JSON(case["source"], **options)
         except Exception as error:  # noqa: BLE001 - the error class is the output
             return f"<{type(error).__name__}>"
+    elif kind == "syntax":
+        from rich.syntax import Syntax
+
+        options.setdefault("theme", "ansi_dark")
+        if "line_range" in options:
+            options["line_range"] = tuple(options["line_range"])
+        if "path" in case:
+            path = pathlib.Path(__file__).resolve().parent.parent / case["path"]
+            renderable = Syntax.from_path(str(path), lexer="text", **options)
+        else:
+            renderable = Syntax(case["code"], "text", **options)
     elif kind == "scope":
         scope = {key: python_value(value) for key, value in case["scope"]}
         renderable = render_scope(scope, **options)
@@ -298,6 +309,22 @@ PARITY_DOCS_CASES: list[tuple[str, dict]] = [
             "[1]: data:image/png;base64,AAA\n\n![i][1]\n",
         ])
     ],
+    # syntax.py: `dedent` and `from_path`.
+    *[
+        (f"syntax_dedent_{index}", {"kind": "syntax", "width": 30, "code": code, "options": {"dedent": True, **extra}})
+        for index, (code, extra) in enumerate([
+            ("    def f():\n        return 1\n", {}),
+            ("    a\n\n      \n    b", {"line_numbers": True}),
+            ("\t\tx\n\t\ty\n", {"tab_size": 2}),
+            ("\t x\n\t\ty\n", {}),
+            ("  a\n b\n", {}),
+            ("x\n    y\n", {}),
+            ("   \n", {}),
+            ("    a\r\n    b\r\n", {}),
+        ])
+    ],
+    ("syntax_no_dedent", {"kind": "syntax", "width": 30, "code": "    a\n    b\n", "options": {}}),
+    ("syntax_from_path", {"kind": "syntax", "width": 40, "path": "LICENSE", "options": {"line_numbers": True, "line_range": [1, 3]}}),
     ("scope_wide_keys", {"kind": "scope", "width": 24, "scope": [["界界", "界"], ["🙂", [1, 2, 3, 4, 5, 6, 7, 8]]]}),
 ]
 
