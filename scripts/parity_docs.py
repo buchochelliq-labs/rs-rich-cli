@@ -118,6 +118,17 @@ def render_case(case: dict) -> str:
     console = _console(case.get("width", 40))
     if kind == "pretty":
         renderable = Pretty(python_value(case["value"]), **options)
+    elif kind == "markdown":
+        from rich.markdown import Markdown
+
+        renderable = Markdown(case["source"], **options)
+    elif kind == "json":
+        from rich.json import JSON
+
+        try:
+            renderable = JSON(case["source"], **options)
+        except Exception as error:  # noqa: BLE001 - the error class is the output
+            return f"<{type(error).__name__}>"
     elif kind == "scope":
         scope = {key: python_value(value) for key, value in case["scope"]}
         renderable = render_scope(scope, **options)
@@ -261,6 +272,20 @@ PARITY_DOCS_CASES: list[tuple[str, dict]] = [
         ["data", NESTED], ["long_name_here", "a very long string value"], ["objects", OBJECTS],
     ]}),
     ("scope_empty", {"kind": "scope", "width": 40, "scope": []}),
+    # markdown.py: tables nested in containers (DIVERGENCES §33).
+    *[
+        (f"markdown_nested_table_{index}", {"kind": "markdown", "width": 30, "source": source})
+        for index, source in enumerate([
+            "> a|b\n> -|:\n> x|y\n",
+            "> a|b\n> -|-\n> x|y\n",
+            "- a|b\n  -|:\n  x|y\n",
+            "- item\n\n  a|b\n  -|-\n  x|y\n",
+            "1. item\n\n   a|b\n   -|:|-\n",
+            "> - a|b\n>   :|-\n>   x|y\n",
+            "> > a | b\n> > --|\n",
+            "- a|b|c\n  -||-\n",
+        ])
+    ],
     ("scope_wide_keys", {"kind": "scope", "width": 24, "scope": [["界界", "界"], ["🙂", [1, 2, 3, 4, 5, 6, 7, 8]]]}),
 ]
 

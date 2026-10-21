@@ -11,7 +11,9 @@ use std::sync::Arc;
 use rich::pretty::{pretty_repr, Pretty, ReprLimits};
 use rich::scope::{render_scope, ScopeOptions};
 use rich::table::Cell;
-use rich::{ColorSystem, Console, Justify, Overflow, Panel, Renderable, Table};
+use rich::json::JsonOptions;
+use rich::markdown::Markdown;
+use rich::{ColorSystem, Console, Json, Justify, Overflow, Panel, Renderable, Table};
 use serde_json::Value;
 
 use pyvalue::pretty_value;
@@ -104,6 +106,35 @@ fn render(case: &Value) -> String {
     }
     let renderable: Box<dyn Renderable> = match kind {
         "pretty" => Box::new(pretty(case)),
+        "markdown" => {
+            let mut markdown = Markdown::new(case["source"].as_str().expect("source"));
+            if let Some(hyperlinks) = opt_bool(&options, "hyperlinks") {
+                markdown = markdown.hyperlinks(hyperlinks);
+            }
+            if let Some(justify) = justify(&options) {
+                markdown = markdown.justify(justify);
+            }
+            Box::new(markdown)
+        }
+        "json" => {
+            let mut json_options = JsonOptions::default();
+            match options.get("indent") {
+                Some(Value::Null) => json_options.indent = None,
+                Some(Value::Number(n)) => {
+                    json_options.indent = JsonOptions::indent_spaces(n.as_i64().expect("int"))
+                }
+                Some(Value::String(s)) => json_options.indent = Some(s.clone()),
+                _ => {}
+            }
+            json_options.sort_keys = opt_bool(&options, "sort_keys").unwrap_or(false);
+            json_options.ensure_ascii = opt_bool(&options, "ensure_ascii").unwrap_or(false);
+            json_options.highlight = opt_bool(&options, "highlight").unwrap_or(true);
+            json_options.allow_nan = opt_bool(&options, "allow_nan").unwrap_or(true);
+            match Json::with_options(case["source"].as_str().expect("source"), &json_options) {
+                Ok(json) => Box::new(json),
+                Err(_) => return "<error>".to_string(),
+            }
+        }
         "scope" => {
             let scope = case["scope"].as_array().expect("scope").iter().map(|pair| {
                 (

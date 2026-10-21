@@ -494,15 +494,17 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** `Renderable::rich_render` has no error channel (see §31).
 - **Remove:** would need a fallible render path.
 
-### 33. An invalid GFM delimiter row inside a list or quote stays a table
-- **Differs:** pulldown-cmark accepts delimiter rows markdown-it rejects (a
-  cell of a lone `:`, an empty cell between two others, a cell count that
-  differs from the header's). At the top level such a "table" is re-parsed as
-  the paragraph markdown-it prints (golden `gfm_invalid_delimiter_row`);
-  nested in a list item or block quote it still renders as a table.
-- **Why:** the re-parse works on the table's source range, which inside a
-  container still carries the container's markers.
-- **Remove:** strip the container prefixes from each line before re-parsing.
+### 33. ~~An invalid GFM delimiter row inside a list or quote stays a table~~ (resolved in 0.0.22)
+- **Resolved:** a table nested in a list item or block quote is checked
+  against markdown-it's delimiter-row rules too. The container markers of its
+  later lines (`> `, the item's indent) are stripped before the re-parse, so a
+  rejected one prints as the paragraph markdown-it prints (golden
+  `markdown_nested_table_*` in `parity_docs.tsv`).
+- **Still differs (permanent):** markdown-it tries its table rule before its
+  list rule, so `- a|b` over an indented `  -|-` is a table whose header cell
+  is `- a` upstream; pulldown-cmark starts a list there. Matching it would mean
+  replacing pulldown-cmark's block parser, for a document no one writes on
+  purpose.
 
 ### 34. `rich -j` is `--json` and `rich -x` is `--syntax`
 - **Differs:** in rich-cli 1.8.1, `-j` is `--emoji` and `-x` is `--lexer`

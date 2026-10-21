@@ -753,9 +753,10 @@ fn reject_invalid_links<'a>(
 /// many cells as the header row. A rejected table is re-parsed as ordinary
 /// text (tables off), with its offsets moved back into `source`.
 ///
-/// Only top-level tables are re-parsed: inside a list or quote the source
-/// range carries the container's markers, which a standalone parse would
-/// read as new containers.
+/// Inside a list or quote the range's later lines carry the container's
+/// markers (`> `, the item's indent), which a standalone parse would read as
+/// new containers; they are stripped first, up to the column the table
+/// starts at, and the offsets map back through them.
 fn reject_invalid_tables<'a>(
     source: &'a str,
     events: impl Iterator<Item = (Event<'a>, std::ops::Range<usize>)>,
@@ -777,20 +778,18 @@ fn reject_invalid_tables<'a>(
             Event::End(TagEnd::BlockQuote(_) | TagEnd::List(_) | TagEnd::FootnoteDefinition) => {
                 depth = depth.saturating_sub(1)
             }
-            Event::Start(Tag::Table(_)) if depth == 0 => {
-                let table = &source[range.clone()];
+            Event::Start(Tag::Table(_)) => {
+                let (table, offsets) = strip_container_prefixes(source, range.clone(), depth);
                 let mut lines = table.split('\n');
                 let header = lines.next().unwrap_or("");
                 let delimiter = lines.next().unwrap_or("");
                 if !markdown_it_table_start(header, delimiter) {
-                    let offset = range.start;
-                    out.extend(
-                        Parser::new_ext(table, Options::empty())
-                            .into_offset_iter()
-                            .map(|(event, inner)| {
-                                (event, inner.start + offset..inner.end + offset)
-                            }),
-                    );
+                    let at = |inner: usize| offsets.get(inner).copied().unwrap_or(range.end);
+                    let events: Vec<_> = Parser::new_ext(&table, Options::empty())
+                        .into_offset_iter()
+                        .map(|(event, inner)| (event.into_static(), at(inner.start)..at(inner.end)))
+                        .collect();
+                    out.extend(events);
                     skipping = true;
                     continue;
                 }
@@ -800,6 +799,39 @@ fn reject_invalid_tables<'a>(
         out.push((event, range));
     }
     out
+}
+
+/// The source of a table at `range`, with the container markers of its
+/// later lines removed when it is nested (`depth > 0`): leading spaces and
+/// `>` up to the column the table's first line starts at. Also returns, for
+/// each byte of the result (and one past its end), the offset in `source`.
+fn strip_container_prefixes(
+    source: &str,
+    range: std::ops::Range<usize>,
+    depth: usize,
+) -> (String, Vec<usize>) {
+    let line_start = source[..range.start].rfind('\n').map_or(0, |i| i + 1);
+    let indent = if depth == 0 { 0 } else { range.start - line_start };
+    let mut text = String::with_capacity(range.len());
+    let mut offsets = Vec::with_capacity(range.len() + 1);
+    let mut at = range.start;
+    for (index, line) in source[range.clone()].split_inclusive('\n').enumerate() {
+        let mut skip = 0;
+        if index > 0 {
+            for byte in line.bytes().take(indent) {
+                if byte == b' ' || byte == b'>' {
+                    skip += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        text.push_str(&line[skip..]);
+        offsets.extend(at + skip..at + line.len());
+        at += line.len();
+    }
+    offsets.push(range.end);
+    (text, offsets)
 }
 
 /// markdown-it's test for a table start (`rules_block/table.py`): the
