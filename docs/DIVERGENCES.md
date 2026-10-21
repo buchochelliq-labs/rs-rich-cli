@@ -18,7 +18,7 @@ open ones are **permanent**, each for the reason in its entry:
 | Resolved earlier | §1 (table), §8, §10, §11, §13, §14 (stack), §27 |
 | Permanent: the language or platform | §1 (`UNICODE_VERSION`), §3, §3a, §6, §14 (per console), §14a, §15, §19 (reflection), §20, §25, §30, §38 |
 | Permanent: another engine | §9 and §18 (syntect, not Pygments), §21 (pulldown-cmark's emphasis) |
-| Permanent: an API or CLI choice | §2, §34, §41 |
+| Permanent: an API or CLI choice | §2, §34, §46 |
 | Permanent: ours, opt-in or additive | §22, §23, §26, §35, §36, §37, §39 |
 | Owned by the widget workstream | §7, §12, §29, §31, §32 |
 | Owned by the live workstream | §16, §17 |
@@ -687,7 +687,7 @@ open ones are **permanent**, each for the reason in its entry:
 - **Remove:** not planned.
 - **Verdict (0.0.22): permanent** (decided for 1.0.0).
 
-### 41. Prompts have no `password` option
+### 46. Prompts have no `password` option
 - **Differs:** upstream's `Prompt(password=True)` reads the answer with
   `getpass`, which turns the terminal's echo off. The port's prompts read
   through an `InputSource` and have no `password` option: the standard one

@@ -88,7 +88,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `emoji.py`, `_emoji_codes.py`, `_emoji_replace.py` | `emoji.rs` | 🟢 | the full table, `_emoji_replace` with `default_variant`, and the `Emoji` renderable with `NoEmoji` (unit tests from rich 15.0.0) |
 | `filesize.py` | `filesize.rs` | 🟢 | `decimal` with `precision` and `separator` (`decimal_with`), `pick_unit_and_suffix` (unit tests from rich 15.0.0) |
 | `pager.py` | `pager.rs` | 🟢 | `Pager`, `SystemPager` (pydoc's pager choice), and `Console.pager`'s `styles` and `links` (`page_with_links`) |
-| `prompt.py` | `prompt.rs` | 🟢 | ✅ `prompts.tsv`, `prompt_ask.tsv`; numbers parse as Python's `int()`/`float()` (underscores), float defaults print as `str(float)`, the default only for an empty answer, case folding beyond ASCII (unit tests); no `password` (DIVERGENCES §41) |
+| `prompt.py` | `prompt.rs` | 🟢 | ✅ `prompts.tsv`, `prompt_ask.tsv`; numbers parse as Python's `int()`/`float()` (underscores), float defaults print as `str(float)`, the default only for an empty answer, case folding beyond ASCII (unit tests); no `password` (DIVERGENCES §46) |
 | `_unicode_data/` (21 version tables, `UNICODE_VERSION`) | `cell_widths.rs` | 🟢 |
 | `box.substitute` (legacy/ASCII fallback) | `box.rs` | 🟡 | ✅ |
 | `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | — | not ported: the legacy console is unsupported ([DIVERGENCES §38](DIVERGENCES.md#38-the-windows-legacy-console-is-not-supported)) |
