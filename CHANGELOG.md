@@ -9,6 +9,27 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Core parity: the rendering core (rs-rich)
+
+- Twelve core rows are now complete: `color` (with `palette`), `style`,
+  `segment`, `markup`, `text`, `terminal_theme`, `protocol`, `measure`,
+  `errors`, `ansi`, `highlighter` and `containers`. 34 new golden cases in
+  `parity_core.tsv` check them against rich 15.0.0.
+- Rendering changes: a renderable without its own measure now measures as
+  `(0, max_width)`, as upstream does, so `Columns` and `Markdown` in a table
+  cell size like upstream. `Text::from_markup` replaces `:emoji:` codes.
+  `AnsiDecoder` drops private escapes such as `\x1b7`. Markup `[@handler]`
+  tags give their spans meta. Colour and style errors carry upstream's
+  messages.
+- New API: `Console::print_objects` with every `print` keyword, and
+  `Console::line`, `rule`, `out`, `print_json` and `measure`; `Lines`,
+  `Palette`, `StyleStack`, `NullHighlighter`, `JSONHighlighter`, `Tag`,
+  `Segments` and `SegmentLines`; the missing `Segment`, `Text`, `Span`,
+  `Style`, `Color` and `Measurement` methods; more `RichError` variants.
+- New divergences §40 to §44 record what cannot match: stale cached style
+  strings, the Python object protocols, file objects and Jupyter, control
+  codes as a flag, and the literal subset in markup handler tags.
+
 ## 0.0.21 cohort — to be published
 
 To be published from `main` by one `release.yml` run (tag
