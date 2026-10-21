@@ -719,7 +719,10 @@ fn text_wrap() -> String {
         }
     }
     out += "no_wrap\n";
-    out += &text_lines(&console, &text.wrap(&console, 12, None, None, 8, Some(true)));
+    out += &text_lines(
+        &console,
+        &text.wrap(&console, 12, None, None, 8, Some(true)),
+    );
     out += "ignore\n";
     out += &text_lines(
         &console,
@@ -815,7 +818,11 @@ fn segment_split_cells() -> String {
         let segment = Segment::new(text, Some(Style::parse("bold").unwrap()));
         for cut in 0..segment.cell_length() + 2 {
             let (before, after) = segment.split_cells(cut);
-            out.push(format!("{text} {cut}: {} {}", seg(&[before]), seg(&[after])));
+            out.push(format!(
+                "{text} {cut}: {} {}",
+                seg(&[before]),
+                seg(&[after])
+            ));
         }
     }
     lines(&out)
@@ -829,7 +836,16 @@ fn segment_divide() -> String {
         Segment::new("xyz", None),
     ];
     let mut out = Vec::new();
-    let cases: [&[usize]; 8] = [&[], &[0], &[0, 0, 2], &[1, 4, 6], &[3, 5, 9], &[2, 20], &[4], &[8, 8]];
+    let cases: [&[usize]; 8] = [
+        &[],
+        &[0],
+        &[0, 0, 2],
+        &[1, 4, 6],
+        &[3, 5, 9],
+        &[2, 20],
+        &[4],
+        &[8, 8],
+    ];
     for cuts in cases {
         let pieces: Vec<String> = Segment::divide(&segments, cuts)
             .iter()
@@ -883,7 +899,11 @@ fn segment_shape() -> String {
         vec![Segment::new("a", None)],
     ];
     let join = |lines: Vec<Vec<Segment>>| -> String {
-        lines.iter().map(|line| seg(line)).collect::<Vec<_>>().join(" ")
+        lines
+            .iter()
+            .map(|line| seg(line))
+            .collect::<Vec<_>>()
+            .join(" ")
     };
     let shape = |(width, height): (usize, usize)| format!("({width}, {height})");
     let mut out = vec![
@@ -891,7 +911,12 @@ fn segment_shape() -> String {
         shape(Segment::get_shape(&shape_lines)),
         shape(Segment::get_shape(&[])),
     ];
-    for (height, new_lines) in [(None, false), (Some(5), false), (Some(2), false), (Some(4), true)] {
+    for (height, new_lines) in [
+        (None, false),
+        (Some(5), false),
+        (Some(2), false),
+        (Some(4), true),
+    ] {
         out.push(join(Segment::set_shape_with(
             &shape_lines,
             3,
@@ -901,7 +926,11 @@ fn segment_shape() -> String {
         )));
     }
     type Align = fn(&[Vec<Segment>], usize, usize, Option<&Style>, bool) -> Vec<Vec<Segment>>;
-    let aligns: [Align; 3] = [Segment::align_top, Segment::align_middle, Segment::align_bottom];
+    let aligns: [Align; 3] = [
+        Segment::align_top,
+        Segment::align_middle,
+        Segment::align_bottom,
+    ];
     for align in aligns {
         for (height, new_lines) in [(6, false), (4, true), (3, false), (2, false)] {
             out.push(join(align(&shape_lines, 4, height, Some(&blue), new_lines)));
@@ -926,7 +955,11 @@ fn segment_misc() -> String {
         seg(&Segment::filter_control(&segments, true)),
         seg(&Segment::strip_styles(&segments)),
         seg(&Segment::apply_style_with(&segments, Some(&italic), None)),
-        seg(&Segment::apply_style_with(&segments, None, Some(&parse("blue")))),
+        seg(&Segment::apply_style_with(
+            &segments,
+            None,
+            Some(&parse("blue")),
+        )),
         seg(&Segment::apply_style_with(
             &segments,
             Some(&italic),
@@ -949,16 +982,182 @@ fn segments_render() -> String {
         ]
     };
     let mut out = print(&console, &Panel::new(Box::new(Segments::new(pair(), true))));
-    out += &print(&console, &Panel::new(Box::new(Segments::new(pair(), false))));
+    out += &print(
+        &console,
+        &Panel::new(Box::new(Segments::new(pair(), false))),
+    );
     let seg_lines = vec![
-        vec![Segment::new("a", Some(red.clone())), Segment::new("b", None)],
+        vec![
+            Segment::new("a", Some(red.clone())),
+            Segment::new("b", None),
+        ],
         vec![Segment::new("cd", None)],
     ];
     out += &print(
         &console,
         &Panel::new(Box::new(SegmentLines::new(seg_lines.clone(), true))),
     );
-    out += &print(&console, &Panel::new(Box::new(SegmentLines::new(seg_lines, false))));
+    out += &print(
+        &console,
+        &Panel::new(Box::new(SegmentLines::new(seg_lines, false))),
+    );
+    out
+}
+
+// --- console.py -----------------------------------------------------------------
+
+fn console_print() -> String {
+    use rich::console::{PrintObject as O, PrintOptions};
+    let console = console(20);
+    let print_objects = |objects: &[O<'_>], options: PrintOptions<'_>| -> String {
+        console.capture(|c| c.print_objects(objects, &options).unwrap())
+    };
+    let panel = Panel::new(Box::new(String::from("p"))).expand(false);
+    let mut out = String::new();
+    out += &print_objects(
+        &[O::Str("a"), O::Str("b")],
+        PrintOptions {
+            sep: "-",
+            end: "!\n",
+            ..Default::default()
+        },
+    );
+    out += &print_objects(
+        &[
+            O::Str("[b]x[/b]"),
+            O::Text(Text::styled("y", "red")),
+            O::Renderable(&panel),
+            O::Str("z"),
+            O::Str("1"),
+        ],
+        PrintOptions::default(),
+    );
+    out += &format!(
+        "<{}>\n",
+        print_objects(
+            &[],
+            PrintOptions {
+                end: "",
+                ..Default::default()
+            }
+        )
+    );
+    out += &format!("<{}>\n", print_objects(&[], PrintOptions::default()));
+    out += &print_objects(
+        &[O::Str("the quick brown fox jumps")],
+        PrintOptions {
+            width: Some(10),
+            ..Default::default()
+        },
+    );
+    out += &print_objects(
+        &[O::Str("hello")],
+        PrintOptions {
+            style: Some("red on blue".into()),
+            ..Default::default()
+        },
+    );
+    let xs = "x".repeat(30);
+    out += &print_objects(&[O::Str(&xs)], PrintOptions::default());
+    let ys = "y".repeat(30);
+    out += &print_objects(
+        &[O::Str(&ys)],
+        PrintOptions {
+            crop: false,
+            no_wrap: Some(true),
+            overflow: Some(Overflow::Ignore),
+            ..Default::default()
+        },
+    );
+    let soft = "soft ".repeat(6);
+    out += &print_objects(
+        &[O::Str(&soft)],
+        PrintOptions {
+            soft_wrap: Some(true),
+            ..Default::default()
+        },
+    );
+    out += &print_objects(
+        &[O::Str("one\ntwo")],
+        PrintOptions {
+            new_line_start: true,
+            ..Default::default()
+        },
+    );
+    out += &print_objects(
+        &[O::Str("one")],
+        PrintOptions {
+            new_line_start: true,
+            ..Default::default()
+        },
+    );
+    out += &print_objects(
+        &[O::Str("mid"), O::Text(Text::new("text"))],
+        PrintOptions {
+            justify: Some(Justify::Center),
+            ..Default::default()
+        },
+    );
+    out += &print_objects(
+        &[O::Renderable(&panel)],
+        PrintOptions {
+            justify: Some(Justify::Right),
+            ..Default::default()
+        },
+    );
+    out += &print_objects(
+        &[O::Str("[b]no[/b] :smile:")],
+        PrintOptions {
+            markup: Some(false),
+            emoji: Some(false),
+            ..Default::default()
+        },
+    );
+    out += &print_objects(
+        &[O::Str("1 2 None 'str'")],
+        PrintOptions {
+            highlight: Some(true),
+            ..Default::default()
+        },
+    );
+    out += &print_objects(
+        &[O::Str("a")],
+        PrintOptions {
+            end: "",
+            ..Default::default()
+        },
+    );
+    out += &print_objects(
+        &[O::Str("b"), O::Str("c")],
+        PrintOptions {
+            sep: "",
+            end: "--\n",
+            ..Default::default()
+        },
+    );
+    out
+}
+
+fn console_methods() -> String {
+    use rich::align::HorizontalAlign;
+    let console = console(20);
+    let mut out = console.capture(|c| {
+        c.line(2);
+        c.rule("T", "=", "red", HorizontalAlign::Left);
+        c.rule("", "─", "rule.line", HorizontalAlign::Center);
+        c.out(&["a", "b [b]c[/b]"], ",", "\n", Some("bold".into()), None)
+            .unwrap();
+        c.out(&["1 2"], " ", "|\n", None, Some(true)).unwrap();
+        c.print_json(
+            r#"{"a": [1, true, null], "b": "x"}"#,
+            &rich::json::JsonOptions::default(),
+        )
+        .unwrap();
+    });
+    out += &lines(&[
+        pair(console.measure(&Text::new("hello world"), None)),
+        pair(console.measure(&Panel::new(Box::new(String::from("ab"))), None)),
+    ]);
     out
 }
 
@@ -996,6 +1195,8 @@ fn build(name: &str) -> String {
         "segment_shape" => segment_shape(),
         "segment_misc" => segment_misc(),
         "segments_render" => segments_render(),
+        "console_print" => console_print(),
+        "console_methods" => console_methods(),
         other => panic!("no builder for parity_core case {other:?}"),
     }
 }
@@ -1020,5 +1221,5 @@ fn parity_core() {
         checked += 1;
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
-    assert_eq!(checked, 32, "expected every parity core case to run");
+    assert_eq!(checked, 34, "expected every parity core case to run");
 }

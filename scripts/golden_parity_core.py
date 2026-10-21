@@ -622,6 +622,46 @@ def _segments_render() -> str:
     return out
 
 
+# --- console.py -----------------------------------------------------------------
+
+
+def _console_print() -> str:
+    console = _console(20)
+    out = ""
+    out += _print(console, "a", "b", sep="-", end="!\n")
+    out += _print(console, "[b]x[/b]", Text("y", style="red"), Panel("p", expand=False), "z", 1)
+    out += "<" + _print(console, end="") + ">\n"
+    out += "<" + _print(console) + ">\n"
+    out += _print(console, "the quick brown fox jumps", width=10)
+    out += _print(console, "hello", style="red on blue")
+    out += _print(console, "x" * 30)
+    out += _print(console, "y" * 30, crop=False, no_wrap=True, overflow="ignore")
+    out += _print(console, "soft " * 6, soft_wrap=True)
+    out += _print(console, "one\ntwo", new_line_start=True)
+    out += _print(console, "one", new_line_start=True)
+    out += _print(console, "mid", Text("text"), justify="center")
+    out += _print(console, Panel("p", expand=False), justify="right")
+    out += _print(console, "[b]no[/b] :smile:", markup=False, emoji=False)
+    out += _print(console, "1 2 None 'str'", highlight=True)
+    out += _print(console, "a", end="")
+    out += _print(console, "b", "c", sep="", end="--\n")
+    return out
+
+
+def _console_methods() -> str:
+    console = _console(20)
+    with console.capture() as capture:
+        console.line(2)
+        console.rule("T", characters="=", style="red", align="left")
+        console.rule()
+        console.out("a", "b [b]c[/b]", sep=",", style="bold")
+        console.out("1 2", highlight=True, end="|\n")
+        console.print_json('{"a": [1, true, null], "b": "x"}')
+    out = capture.get()
+    out += _lines(tuple(console.measure(Text("hello world"))), tuple(console.measure(Panel("ab"))))
+    return out
+
+
 PARITY_CORE_CASES = [
     ("measure_api", _measure_api),
     ("measure_default", _measure_default),
@@ -655,6 +695,8 @@ PARITY_CORE_CASES = [
     ("segment_shape", _segment_shape),
     ("segment_misc", _segment_misc),
     ("segments_render", _segments_render),
+    ("console_print", _console_print),
+    ("console_methods", _console_methods),
 ]
 
 
