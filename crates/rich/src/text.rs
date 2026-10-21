@@ -43,6 +43,91 @@ pub struct Span {
     pub style: StyleType,
 }
 
+impl Span {
+    /// A span of `style` over `[start, end)`.
+    pub fn new(start: usize, end: usize, style: impl Into<StyleType>) -> Self {
+        Span {
+            start,
+            end,
+            style: style.into(),
+        }
+    }
+
+    /// Split at `offset`, when it falls inside the span. Port of
+    /// `Span.split`.
+    pub fn split(&self, offset: usize) -> (Span, Option<Span>) {
+        if offset < self.start || offset >= self.end {
+            return (self.clone(), None);
+        }
+        let first = Span::new(self.start, self.end.min(offset), self.style.clone());
+        let second = Span::new(first.end, self.end, self.style.clone());
+        (first, Some(second))
+    }
+
+    /// The span moved by `offset`. Port of `Span.move`.
+    ///
+    /// # Panics
+    ///
+    /// When the move would take an offset below zero.
+    pub fn move_by(&self, offset: isize) -> Span {
+        let shift = |value: usize| {
+            value
+                .checked_add_signed(offset)
+                .expect("span moved before the start")
+        };
+        Span::new(shift(self.start), shift(self.end), self.style.clone())
+    }
+
+    /// The span cropped to end at `offset`. Port of `Span.right_crop`.
+    pub fn right_crop(&self, offset: usize) -> Span {
+        if offset >= self.end {
+            return self.clone();
+        }
+        Span::new(self.start, offset.min(self.end), self.style.clone())
+    }
+
+    /// The span with its end moved `cells` further. Port of `Span.extend`.
+    pub fn extend(&self, cells: usize) -> Span {
+        Span::new(self.start, self.end + cells, self.style.clone())
+    }
+}
+
+/// One part of [`Text::assemble`]: a string, a string with a style, or a
+/// `Text`.
+#[derive(Debug, Clone)]
+pub enum TextPart {
+    /// Unstyled text.
+    Str(String),
+    /// Text under a style.
+    Styled(String, StyleType),
+    /// A `Text`, with its own spans.
+    Text(Text),
+}
+
+impl From<&str> for TextPart {
+    fn from(text: &str) -> Self {
+        TextPart::Str(text.to_string())
+    }
+}
+
+impl From<String> for TextPart {
+    fn from(text: String) -> Self {
+        TextPart::Str(text)
+    }
+}
+
+impl From<Text> for TextPart {
+    fn from(text: Text) -> Self {
+        TextPart::Text(text)
+    }
+}
+
+impl<S: Into<StyleType>> From<(&str, S)> for TextPart {
+    fn from((text, style): (&str, S)) -> Self {
+        TextPart::Styled(text.to_string(), style.into())
+    }
+}
+
 /// Styled text. Mirrors `rich.text.Text`.
 #[derive(Debug, Clone, Default)]
 pub struct Text {
@@ -64,6 +149,36 @@ pub struct Text {
     /// Tab stop width. `None` defers to the console's `tab_size` when
     /// rendered, then to [`DEFAULT_TAB_SIZE`]. Upstream's `Text.tab_size`.
     tab_size: Option<usize>,
+    /// Upstream's `Text.end`; `None` is its default, a newline.
+    end: Option<String>,
+}
+
+/// Two texts are equal when their plain strings and spans are. Port of
+/// `Text.__eq__`.
+impl PartialEq for Text {
+    fn eq(&self, other: &Text) -> bool {
+        self.plain == other.plain && self.spans == other.spans
+    }
+}
+
+/// `text + other`: a copy with `other` appended. Port of `Text.__add__`.
+impl std::ops::Add<&Text> for &Text {
+    type Output = Text;
+
+    fn add(self, other: &Text) -> Text {
+        self.clone().append_text(other)
+    }
+}
+
+/// `text + "str"`. Port of `Text.__add__`.
+impl std::ops::Add<&str> for &Text {
+    type Output = Text;
+
+    fn add(self, other: &str) -> Text {
+        let mut text = self.clone();
+        text.append(other, None);
+        text
+    }
 }
 
 impl Text {
@@ -89,6 +204,7 @@ impl Text {
             overflow: None,
             no_wrap: None,
             tab_size: None,
+            end: None,
         }
     }
 
@@ -106,6 +222,7 @@ impl Text {
             overflow: None,
             no_wrap: None,
             tab_size: None,
+            end: None,
         }
     }
 
@@ -275,6 +392,7 @@ impl Text {
             overflow: self.overflow,
             no_wrap: self.no_wrap,
             tab_size: self.tab_size,
+            end: self.end.clone(),
         }
     }
 
@@ -448,15 +566,9 @@ impl Text {
         }
     }
 
-    /// Replace tabs with spaces up to the next `tab_size` stop. Port of
-    /// `Text.expand_tabs`.
-    ///
-    /// Styles extend over the inserted spaces, so a styled tab pads in its own
-    /// style rather than punching an unstyled hole (upstream reaches the same
-    /// result via `extend_style`).
     /// Append `count` spaces, extending any span that reached the end so the
     /// padding takes its style. Port of `Text.extend_style`.
-    fn extend_style(&mut self, count: usize) {
+    pub fn extend_style(&mut self, count: usize) {
         if count == 0 {
             return;
         }
@@ -469,6 +581,12 @@ impl Text {
         }
     }
 
+    /// Replace tabs with spaces up to the next `tab_size` stop. Port of
+    /// `Text.expand_tabs`.
+    ///
+    /// Styles extend over the inserted spaces, so a styled tab pads in its own
+    /// style rather than punching an unstyled hole (upstream reaches the same
+    /// result via `extend_style`).
     pub fn expand_tabs(&mut self, tab_size: usize) {
         if !self.plain.contains('\t') || tab_size == 0 {
             return;
@@ -773,6 +891,216 @@ impl Text {
             }
         }
         output
+    }
+
+    /// Text assembled from `parts`, under a base `style`. Port of
+    /// `Text.assemble` (set `justify`, `overflow`, `no_wrap` and `tab_size`
+    /// with the builders, and `meta` with [`apply_meta`](Self::apply_meta)).
+    pub fn assemble<P: Into<TextPart>>(
+        parts: impl IntoIterator<Item = P>,
+        style: impl Into<StyleType>,
+    ) -> Text {
+        let mut text = Text::styled("", style);
+        for part in parts {
+            match part.into() {
+                TextPart::Str(plain) => text.append(&plain, None),
+                TextPart::Styled(plain, style) => text.append(&plain, Some(style)),
+                TextPart::Text(other) => text = text.append_text(&other),
+            }
+        }
+        text
+    }
+
+    /// Replace the plain string. Port of the `Text.plain` setter: control
+    /// codes are stripped, and when the text gets shorter, spans past the
+    /// new end are dropped and the rest clipped to it.
+    pub fn set_plain_text(&mut self, plain: &str) {
+        if plain == self.plain {
+            return;
+        }
+        let plain = Text::strip_control_codes(plain);
+        let length = plain.len();
+        let shorter = length < self.plain.len();
+        self.plain = plain;
+        if shorter {
+            self.spans.retain(|span| span.start < length);
+            for span in &mut self.spans {
+                span.end = span.end.min(length);
+            }
+        }
+    }
+
+    /// Whether `needle` occurs in the plain text. Port of `Text.__contains__`
+    /// (pass a `Text`'s [`plain`](Self::plain) for a `Text`).
+    pub fn contains(&self, needle: &str) -> bool {
+        self.plain.contains(needle)
+    }
+
+    /// The text from byte `start` to byte `end`, with its spans. Port of
+    /// `Text.__getitem__` with a slice (`text[start:end]`).
+    pub fn slice(&self, start: usize, end: usize) -> Text {
+        let length = self.plain.len();
+        let end = end.min(length);
+        let start = start.min(end);
+        self.divide(&[start, end]).swap_remove(1)
+    }
+
+    /// Remove `suffix` from the end, if the text ends with it. Port of
+    /// `Text.remove_suffix`.
+    pub fn remove_suffix(&mut self, suffix: &str) {
+        if self.plain.ends_with(suffix) {
+            self.right_crop(suffix.len());
+        }
+    }
+
+    /// The style at byte `offset` (from the end when negative): the base style
+    /// combined with every span covering it, resolved against `console`'s
+    /// theme. Port of `Text.get_style_at_offset`.
+    pub fn get_style_at_offset(&self, console: &crate::console::Console, offset: isize) -> Style {
+        let offset = if offset < 0 {
+            self.plain.len() as isize + offset
+        } else {
+            offset
+        };
+        let mut style = console.get_style(&self.style).unwrap_or_default();
+        for span in &self.spans {
+            if (span.end as isize) > offset && offset >= span.start as isize {
+                let span_style = console.get_style(&span.style).unwrap_or_default();
+                style = style.combine(&span_style);
+            }
+        }
+        style
+    }
+
+    /// Pad or crop to exactly `new_length` bytes. Port of `Text.set_length`
+    /// (padding with spaces, which are one byte each).
+    pub fn set_length(&mut self, new_length: usize) {
+        let length = self.plain.len();
+        if length < new_length {
+            self.pad_right(new_length - length, ' ');
+        } else if length > new_length {
+            self.right_crop(length - new_length);
+        }
+    }
+
+    /// Truncate to `width` cells, then pad with `character` to align the text
+    /// `left`, `center` or `right` (any other value is right). Port of
+    /// `Text.align`.
+    pub fn align(&mut self, align: crate::align::HorizontalAlign, width: usize, character: char) {
+        self.truncate(width, None, false);
+        let excess_space = width.saturating_sub(cell_len(&self.plain));
+        if excess_space > 0 {
+            match align {
+                crate::align::HorizontalAlign::Left => self.pad_right(excess_space, character),
+                crate::align::HorizontalAlign::Center => {
+                    let left = excess_space / 2;
+                    self.pad_left(left, character);
+                    self.pad_right(excess_space - left, character);
+                }
+                crate::align::HorizontalAlign::Right => self.pad_left(excess_space, character),
+            }
+        }
+    }
+
+    /// Append `(content, style)` tokens, faster than appending one at a
+    /// time. Port of `Text.append_tokens`.
+    pub fn append_tokens<S: Into<StyleType>>(
+        &mut self,
+        tokens: impl IntoIterator<Item = (String, Option<S>)>,
+    ) -> &mut Self {
+        for (content, style) in tokens {
+            let content = Text::strip_control_codes(&content);
+            let start = self.plain.len();
+            self.plain.push_str(&content);
+            if let Some(style) = style.map(Into::into) {
+                if !is_falsy_style(&style) {
+                    self.spans.push(Span::new(start, self.plain.len(), style));
+                }
+            }
+        }
+        self
+    }
+
+    /// Add the spans of `text` to this one, unchanged. Port of
+    /// `Text.copy_styles`.
+    pub fn copy_styles(&mut self, text: &Text) {
+        self.spans.extend(text.spans.iter().cloned());
+    }
+
+    /// One line per line of the text, each padded or cropped to `width` bytes.
+    /// Port of `Text.fit`.
+    pub fn fit(&self, width: usize) -> crate::containers::Lines {
+        let mut lines = crate::containers::Lines::default();
+        for mut line in self.split("\n", false, false) {
+            line.set_length(width);
+            lines.append(line);
+        }
+        lines
+    }
+
+    /// Word-wrap into lines no wider than `width` cells, justified and
+    /// overflowed. Port of `Text.wrap`: `justify`, `overflow` and `no_wrap`
+    /// fall back to the text's own, then to the defaults.
+    pub fn wrap(
+        &self,
+        console: &crate::console::Console,
+        width: usize,
+        justify: Option<Justify>,
+        overflow: Option<Overflow>,
+        tab_size: usize,
+        no_wrap: Option<bool>,
+    ) -> crate::containers::Lines {
+        let wrap_justify = justify.or(self.justify).unwrap_or(Justify::Default);
+        let wrap_overflow = overflow.or(self.overflow).unwrap_or(Overflow::Fold);
+        let ignore = overflow == Some(Overflow::Ignore);
+        let no_wrap = no_wrap.or(self.no_wrap).unwrap_or(false) || ignore;
+        let mut lines = crate::containers::Lines::default();
+        for mut line in self.split("\n", false, true) {
+            if line.plain.contains('\t') {
+                line.expand_tabs(tab_size);
+            }
+            let mut new_lines = if no_wrap {
+                if ignore {
+                    lines.append(line);
+                    continue;
+                }
+                crate::containers::Lines::new(vec![line])
+            } else {
+                let breaks =
+                    crate::wrap::divide_line(&line.plain, width, wrap_overflow == Overflow::Fold);
+                let offsets: Vec<usize> = breaks
+                    .into_iter()
+                    .map(|offset| char_to_byte(&line.plain, offset))
+                    .collect();
+                let mut divided = line.divide(&offsets);
+                for piece in &mut divided {
+                    piece.rstrip_end(width);
+                }
+                crate::containers::Lines::new(divided)
+            };
+            if wrap_justify != Justify::Default {
+                new_lines.justify(console, width, wrap_justify, wrap_overflow);
+            }
+            for piece in new_lines.lines_mut() {
+                piece.truncate(width, Some(wrap_overflow), false);
+            }
+            lines.extend(new_lines);
+        }
+        lines
+    }
+
+    /// What a printed `Text` ends with: a newline unless set otherwise.
+    /// Upstream's `Text.end`. Containers in this port always break lines
+    /// between renderables (DIVERGENCES §29), so only callers that join
+    /// texts themselves see it.
+    pub fn get_end(&self) -> &str {
+        self.end.as_deref().unwrap_or("\n")
+    }
+
+    /// Set what the text ends with. Upstream's `Text(end=…)`.
+    pub fn end(mut self, end: impl Into<String>) -> Self {
+        self.end = Some(end.into());
+        self
     }
 
     /// The unstyled string content.

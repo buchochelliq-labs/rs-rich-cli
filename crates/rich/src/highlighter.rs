@@ -1,7 +1,8 @@
 //! Built-in highlighters.
 //!
 //! Port of upstream `rich/highlighter.py` — the [`RegexHighlighter`] base and
-//! the [`ReprHighlighter`] / [`ISO8601Highlighter`] built-ins. Patterns
+//! the [`NullHighlighter`], [`ReprHighlighter`], [`JSONHighlighter`] and
+//! [`ISO8601Highlighter`] built-ins. Patterns
 //! (`repr_patterns.rs` for repr) use lookbehind/alternation, so we compile them
 //! with `fancy-regex`.
 //!
@@ -148,6 +149,82 @@ fn iso8601_patterns() -> &'static [Regex] {
 impl Highlighter for ISO8601Highlighter {
     fn highlight(&self, text: &mut Text) {
         run_highlighter(text, "iso8601.", iso8601_patterns());
+    }
+}
+
+/// A highlighter that leaves text alone, which may be used to disable
+/// highlighting. Port of `rich.highlighter.NullHighlighter`.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct NullHighlighter;
+
+impl NullHighlighter {
+    pub fn new() -> Self {
+        NullHighlighter
+    }
+}
+
+impl Highlighter for NullHighlighter {
+    fn highlight(&self, _text: &mut Text) {}
+}
+
+/// `JSONHighlighter.JSON_STR`: a JSON string, escaped quotes included.
+const JSON_STR: &str = r#"(?<![\\\w])(?P<str>b?".*?(?<!\\)")"#;
+
+/// The single combined pattern of `JSONHighlighter.highlights`.
+fn json_patterns() -> &'static [Regex] {
+    static COMPILED: OnceLock<Vec<Regex>> = OnceLock::new();
+    COMPILED.get_or_init(|| {
+        let combined = [
+            r"(?P<brace>[\{\[\(\)\]\}])",
+            r"\b(?P<bool_true>true)\b|\b(?P<bool_false>false)\b|\b(?P<null>null)\b",
+            r"(?P<number>(?<!\w)\-?[0-9]+\.?[0-9]*(e[\-\+]?\d+?)?\b|0x[0-9a-fA-F]*)",
+            JSON_STR,
+        ]
+        .join("|");
+        compile(&[combined.as_str()])
+    })
+}
+
+fn json_string() -> &'static Regex {
+    static COMPILED: OnceLock<Regex> = OnceLock::new();
+    COMPILED.get_or_init(|| Regex::new(JSON_STR).expect("valid JSON string pattern"))
+}
+
+/// Highlights JSON: braces, `true`/`false`/`null`, numbers and strings, then
+/// marks each string followed by a `:` (past any whitespace) as a key. Port
+/// of `rich.highlighter.JSONHighlighter`.
+#[derive(Debug, Default, Clone, Copy)]
+pub struct JSONHighlighter;
+
+impl JSONHighlighter {
+    pub fn new() -> Self {
+        JSONHighlighter
+    }
+}
+
+impl Highlighter for JSONHighlighter {
+    fn highlight(&self, text: &mut Text) {
+        run_highlighter(text, "json.", json_patterns());
+        let plain = text.plain().to_string();
+        let mut keys = Vec::new();
+        for found in json_string().find_iter(&plain) {
+            let Ok(found) = found else { break };
+            // The first character past any whitespace decides.
+            if plain[found.end()..]
+                .chars()
+                .find(|c| !matches!(c, ' ' | '\n' | '\r' | '\t'))
+                == Some(':')
+            {
+                keys.push((found.start(), found.end()));
+            }
+        }
+        for (start, end) in keys {
+            text.push_span(crate::text::Span {
+                start,
+                end,
+                style: crate::style::StyleType::Name("json.key".to_string()),
+            });
+        }
     }
 }
 

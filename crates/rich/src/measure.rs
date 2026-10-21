@@ -19,6 +19,12 @@ impl Measurement {
         Measurement { minimum, maximum }
     }
 
+    /// The difference between the maximum and the minimum. Port of
+    /// `Measurement.span`.
+    pub fn span(&self) -> isize {
+        self.maximum as isize - self.minimum as isize
+    }
+
     /// Keep both bounds non-negative with `minimum <= maximum`. Port of
     /// `Measurement.normalize`.
     pub fn normalize(&self) -> Measurement {
@@ -29,6 +35,12 @@ impl Measurement {
     /// Cap both bounds at `width`. Port of `Measurement.with_maximum`.
     pub fn with_maximum(&self, width: usize) -> Measurement {
         Measurement::new(self.minimum.min(width), self.maximum.min(width))
+    }
+
+    /// Raise both bounds to at least `width`. Port of
+    /// `Measurement.with_minimum`.
+    pub fn with_minimum(&self, width: usize) -> Measurement {
+        Measurement::new(self.minimum.max(width), self.maximum.max(width))
     }
 
     /// Measure `renderable` within `options.max_width`. Port of
@@ -50,16 +62,34 @@ impl Measurement {
 
     /// Clamp both bounds into `[min_width, max_width]`. Port of `Measurement.clamp`.
     pub fn clamp(&self, min_width: Option<usize>, max_width: Option<usize>) -> Measurement {
-        let mut minimum = self.minimum;
-        let mut maximum = self.maximum;
+        let mut measurement = *self;
         if let Some(lo) = min_width {
-            minimum = minimum.max(lo);
-            maximum = maximum.max(lo);
+            measurement = measurement.with_minimum(lo);
         }
         if let Some(hi) = max_width {
-            minimum = minimum.min(hi);
-            maximum = maximum.min(hi);
+            measurement = measurement.with_maximum(hi);
         }
-        Measurement { minimum, maximum }
+        measurement
     }
+}
+
+/// The measurement that fits every one of `renderables`: the largest minimum
+/// and the largest maximum, or `(0, 0)` when there are none. Port of
+/// `rich.measure.measure_renderables`.
+pub fn measure_renderables(
+    console: &Console,
+    options: &ConsoleOptions,
+    renderables: &[&dyn Renderable],
+) -> Measurement {
+    if renderables.is_empty() {
+        return Measurement::new(0, 0);
+    }
+    let measurements: Vec<Measurement> = renderables
+        .iter()
+        .map(|renderable| Measurement::get(console, options, *renderable))
+        .collect();
+    Measurement::new(
+        measurements.iter().map(|m| m.minimum).max().unwrap_or(0),
+        measurements.iter().map(|m| m.maximum).max().unwrap_or(0),
+    )
 }
