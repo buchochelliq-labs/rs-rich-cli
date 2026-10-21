@@ -842,9 +842,23 @@ impl Text {
     /// Build styled text from console markup. Port of `Text.from_markup`.
     ///
     /// Tag names are stored on the spans and resolved when the text is rendered,
-    /// so no theme is needed here.
+    /// so no theme is needed here. `:emoji:` codes are replaced, as upstream's
+    /// default `emoji=True` does.
     pub fn from_markup(markup_text: &str) -> Result<Text> {
-        markup::render(markup_text)
+        Text::from_markup_with(markup_text, StyleType::default(), true, None)
+    }
+
+    /// Text from console markup with a base `style`, `:emoji:` codes replaced
+    /// when `emoji` is set. Port of `Text.from_markup(text, style=…,
+    /// emoji=…, emoji_variant=…)`; set `justify`, `overflow` and `end` with
+    /// the builders.
+    pub fn from_markup_with(
+        markup_text: &str,
+        style: impl Into<StyleType>,
+        emoji: bool,
+        emoji_variant: Option<crate::emoji::EmojiVariant>,
+    ) -> Result<Text> {
+        markup::render_with(markup_text, style, emoji, emoji_variant)
     }
 
     /// Console markup that renders this text: the plain string with every

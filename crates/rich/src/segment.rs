@@ -389,6 +389,465 @@ impl Segment {
     }
 }
 
+impl Segment {
+    /// Whether the segment carries control codes. Port of
+    /// `Segment.is_control`.
+    pub fn is_control(&self) -> bool {
+        self.control
+    }
+
+    /// Split into two segments at cell `cut`. A double-width character
+    /// that straddles the cut becomes a space on each side. Port of
+    /// `Segment.split_cells`.
+    pub fn split_cells(&self, cut: usize) -> (Segment, Segment) {
+        let with_text = |text: String| Segment {
+            text,
+            style: self.style.clone(),
+            control: self.control,
+        };
+        let chars: Vec<char> = self.text.chars().collect();
+        if chars.iter().all(|&c| crate::cells::char_cell_width(c) == 1) {
+            if cut >= chars.len() {
+                return (self.clone(), with_text(String::new()));
+            }
+            return (
+                with_text(chars[..cut].iter().collect()),
+                with_text(chars[cut..].iter().collect()),
+            );
+        }
+        let cell_length = self.cell_length();
+        if cut >= cell_length {
+            return (self.clone(), with_text(String::new()));
+        }
+        let size = |c: char| crate::cells::char_cell_width(c);
+        let text = |range: std::ops::Range<usize>| -> String { chars[range].iter().collect() };
+        let mut pos = ((cut as f64 / cell_length as f64) * chars.len() as f64) as usize;
+        // Upstream searches without a bound, and loops forever when the cut
+        // falls inside a multi-character grapheme; this gives up after one
+        // pass over the text and splits as `cells.split_text` does.
+        for _ in 0..=chars.len() * 2 + 2 {
+            let cell_pos = crate::cells::cell_len(&text(0..pos));
+            if cell_pos == cut {
+                return (with_text(text(0..pos)), with_text(text(pos..chars.len())));
+            }
+            if cell_pos + 1 == cut && pos < chars.len() && size(chars[pos]) == 2 {
+                return (
+                    with_text(text(0..pos) + " "),
+                    with_text(" ".to_string() + &text(pos + 1..chars.len())),
+                );
+            }
+            if cell_pos == cut + 1 && pos > 0 && size(chars[pos - 1]) == 2 {
+                return (
+                    with_text(text(0..pos - 1) + " "),
+                    with_text(" ".to_string() + &text(pos..chars.len())),
+                );
+            }
+            if cell_pos < cut {
+                pos = (pos + 1).min(chars.len());
+            } else {
+                pos = pos.saturating_sub(1);
+            }
+        }
+        let (before, after) = crate::cells::split_text(&self.text, cut);
+        (with_text(before), with_text(after))
+    }
+
+    /// Apply `style` under each segment's own style and `post_style` over
+    /// it; control segments lose their style. Port of `Segment.apply_style`
+    /// with both arguments ([`apply_style`](Self::apply_style) is the
+    /// port's line-aware form of the `style`-only path).
+    pub fn apply_style_with(
+        segments: &[Segment],
+        style: Option<&Style>,
+        post_style: Option<&Style>,
+    ) -> Vec<Segment> {
+        let style = style.filter(|style| !style.is_null());
+        let post_style = post_style.filter(|style| !style.is_null());
+        segments
+            .iter()
+            .map(|segment| {
+                let mut own = segment.style.clone();
+                if let Some(style) = style {
+                    own = if segment.control {
+                        None
+                    } else {
+                        Some(match &own {
+                            Some(own) => style.combine(own),
+                            None => style.clone(),
+                        })
+                    };
+                }
+                if let Some(post_style) = post_style {
+                    own = if segment.control {
+                        None
+                    } else {
+                        Some(match own.filter(|own| !own.is_null()) {
+                            Some(own) => own.combine(post_style),
+                            None => post_style.clone(),
+                        })
+                    };
+                }
+                Segment {
+                    text: segment.text.clone(),
+                    style: own,
+                    control: segment.control,
+                }
+            })
+            .collect()
+    }
+
+    /// Keep only the control segments (`is_control`) or only the others.
+    /// Port of `Segment.filter_control`.
+    pub fn filter_control(segments: &[Segment], is_control: bool) -> Vec<Segment> {
+        segments
+            .iter()
+            .filter(|segment| segment.control == is_control)
+            .cloned()
+            .collect()
+    }
+
+    /// Split into lines on `\n`, each with whether a newline ended it; a
+    /// last line without one comes only when it holds something. Port of
+    /// `Segment.split_lines_terminator`.
+    pub fn split_lines_terminator(segments: &[Segment]) -> Vec<(Vec<Segment>, bool)> {
+        let mut lines = Vec::new();
+        let mut line: Vec<Segment> = Vec::new();
+        for segment in segments {
+            if segment.text.contains('\n') && !segment.control {
+                let mut pieces = segment.text.split('\n').peekable();
+                while let Some(piece) = pieces.next() {
+                    if !piece.is_empty() {
+                        line.push(Segment::new(piece, segment.style.clone()));
+                    }
+                    if pieces.peek().is_some() {
+                        lines.push((std::mem::take(&mut line), true));
+                    }
+                }
+            } else {
+                line.push(segment.clone());
+            }
+        }
+        if !line.is_empty() {
+            lines.push((line, false));
+        }
+        lines
+    }
+
+    /// Split into lines on `\n` and fit each to `length` cells, padding with
+    /// `style` when `pad` is set and ending each terminated line with a
+    /// newline segment when `include_new_lines` is. Port of
+    /// `Segment.split_and_crop_lines`.
+    pub fn split_and_crop_lines(
+        segments: &[Segment],
+        length: usize,
+        style: Option<&Style>,
+        pad: bool,
+        include_new_lines: bool,
+    ) -> Vec<Vec<Segment>> {
+        Segment::split_lines_terminator(segments)
+            .into_iter()
+            .map(|(line, terminated)| {
+                let mut cropped =
+                    Segment::adjust_line_length_with(&line, length, style.cloned(), pad);
+                if terminated && include_new_lines {
+                    cropped.push(Segment::line());
+                }
+                cropped
+            })
+            .collect()
+    }
+
+    /// [`adjust_line_length`](Self::adjust_line_length) with upstream's `pad`
+    /// argument: a short line is padded only when it is set. Port of
+    /// `Segment.adjust_line_length`.
+    pub fn adjust_line_length_with(
+        line: &[Segment],
+        length: usize,
+        style: Option<Style>,
+        pad: bool,
+    ) -> Vec<Segment> {
+        let line_length: usize = line.iter().map(Segment::cell_length).sum();
+        if line_length < length && !pad {
+            return line.to_vec();
+        }
+        Segment::adjust_line_length(line, length, style)
+    }
+
+    /// The cell length of a line, control segments excluded. Port of
+    /// `Segment.get_line_length`.
+    pub fn get_line_length(line: &[Segment]) -> usize {
+        line.iter()
+            .filter(|segment| !segment.control)
+            .map(|segment| cell_len(&segment.text))
+            .sum()
+    }
+
+    /// The width of the widest line and the number of lines. Port of
+    /// `Segment.get_shape`.
+    pub fn get_shape(lines: &[Vec<Segment>]) -> (usize, usize) {
+        let width = lines
+            .iter()
+            .map(|line| Segment::get_line_length(line))
+            .max()
+            .unwrap_or(0);
+        (width, lines.len())
+    }
+
+    /// Every line adjusted to `width`, then blank lines of `style` added up
+    /// to `height` (the line count when `None`); blank lines end in `\n`
+    /// with `new_lines`. Port of `Segment.set_shape`, which, unlike
+    /// [`set_shape`](Self::set_shape), does not drop lines past `height`.
+    pub fn set_shape_with(
+        lines: &[Vec<Segment>],
+        width: usize,
+        height: Option<usize>,
+        style: Option<&Style>,
+        new_lines: bool,
+    ) -> Vec<Vec<Segment>> {
+        let height = height.filter(|&height| height > 0).unwrap_or(lines.len());
+        let mut shaped: Vec<Vec<Segment>> = lines
+            .iter()
+            .map(|line| Segment::adjust_line_length(line, width, style.cloned()))
+            .collect();
+        while shaped.len() < height {
+            shaped.push(vec![Segment::blank(width, style, new_lines)]);
+        }
+        shaped
+    }
+
+    /// A blank line of `width` cells in `style`.
+    fn blank(width: usize, style: Option<&Style>, new_lines: bool) -> Segment {
+        let mut text = " ".repeat(width);
+        if new_lines {
+            text.push('\n');
+        }
+        Segment::new(text, style.cloned())
+    }
+
+    /// Lines aligned to the top of `height` rows: blank lines of `style`
+    /// below. Port of `Segment.align_top`.
+    pub fn align_top(
+        lines: &[Vec<Segment>],
+        width: usize,
+        height: usize,
+        style: Option<&Style>,
+        new_lines: bool,
+    ) -> Vec<Vec<Segment>> {
+        Segment::align_vertical(lines, width, height, style, new_lines, |extra| (0, extra))
+    }
+
+    /// Lines aligned to the bottom of `height` rows: blank lines above. Port
+    /// of `Segment.align_bottom`.
+    pub fn align_bottom(
+        lines: &[Vec<Segment>],
+        width: usize,
+        height: usize,
+        style: Option<&Style>,
+        new_lines: bool,
+    ) -> Vec<Vec<Segment>> {
+        Segment::align_vertical(lines, width, height, style, new_lines, |extra| (extra, 0))
+    }
+
+    /// Lines in the middle of `height` rows, the odd blank line below. Port
+    /// of `Segment.align_middle`.
+    pub fn align_middle(
+        lines: &[Vec<Segment>],
+        width: usize,
+        height: usize,
+        style: Option<&Style>,
+        new_lines: bool,
+    ) -> Vec<Vec<Segment>> {
+        Segment::align_vertical(lines, width, height, style, new_lines, |extra| {
+            (extra / 2, extra - extra / 2)
+        })
+    }
+
+    /// The shared body of the `align_*` methods: `split` divides the extra
+    /// rows into (above, below). With exactly `height` rows the lines come
+    /// back unchanged, and with more they are cut to `height`.
+    fn align_vertical(
+        lines: &[Vec<Segment>],
+        width: usize,
+        height: usize,
+        style: Option<&Style>,
+        new_lines: bool,
+        split: impl Fn(usize) -> (usize, usize),
+    ) -> Vec<Vec<Segment>> {
+        if lines.len() >= height {
+            return lines[..height].to_vec();
+        }
+        let (above, below) = split(height - lines.len());
+        let blank = vec![Segment::blank(width, style, new_lines)];
+        let mut aligned = vec![blank.clone(); above];
+        aligned.extend(lines.iter().cloned());
+        aligned.extend(std::iter::repeat_n(blank, below));
+        aligned
+    }
+
+    /// The segments with every hyperlink removed. Port of
+    /// `Segment.strip_links`.
+    pub fn strip_links(segments: &[Segment]) -> Vec<Segment> {
+        segments
+            .iter()
+            .map(|segment| match &segment.style {
+                Some(style) if !segment.control => Segment {
+                    text: segment.text.clone(),
+                    style: (!style.is_null()).then(|| style.update_link(None)),
+                    control: false,
+                },
+                _ => segment.clone(),
+            })
+            .collect()
+    }
+
+    /// The segments with no styles at all. Port of `Segment.strip_styles`.
+    pub fn strip_styles(segments: &[Segment]) -> Vec<Segment> {
+        segments
+            .iter()
+            .map(|segment| Segment {
+                text: segment.text.clone(),
+                style: None,
+                control: segment.control,
+            })
+            .collect()
+    }
+
+    /// Cut the segments at each cell offset in `cuts` (ascending), one list
+    /// per piece; a segment that straddles a cut is split with
+    /// [`split_cells`](Self::split_cells). Port of `Segment.divide`.
+    pub fn divide(segments: &[Segment], cuts: &[usize]) -> Vec<Vec<Segment>> {
+        let mut result = Vec::new();
+        let mut cuts = cuts.iter().copied();
+        let mut cut = loop {
+            match cuts.next() {
+                None => return result,
+                Some(0) => result.push(Vec::new()),
+                Some(cut) => break cut,
+            }
+        };
+        let mut pieces: Vec<Segment> = Vec::new();
+        let mut pos = 0usize;
+        for segment in segments {
+            let mut segment = segment.clone();
+            while !segment.text.is_empty() {
+                let end_pos = if segment.control {
+                    pos
+                } else {
+                    pos + cell_len(&segment.text)
+                };
+                if end_pos < cut {
+                    pieces.push(segment.clone());
+                    pos = end_pos;
+                    break;
+                }
+                if end_pos == cut {
+                    pieces.push(segment.clone());
+                    result.push(std::mem::take(&mut pieces));
+                    pos = end_pos;
+                    match cuts.next() {
+                        Some(next) => cut = next,
+                        None => {
+                            if !pieces.is_empty() {
+                                result.push(pieces);
+                            }
+                            return result;
+                        }
+                    }
+                    break;
+                }
+                let (before, after) = segment.split_cells(cut - pos);
+                segment = after;
+                pieces.push(before);
+                result.push(std::mem::take(&mut pieces));
+                pos = cut;
+                match cuts.next() {
+                    Some(next) => cut = next,
+                    None => {
+                        if !pieces.is_empty() {
+                            result.push(pieces);
+                        }
+                        return result;
+                    }
+                }
+            }
+        }
+        result.push(pieces);
+        result
+    }
+}
+
+/// A list of segments that renders as they are, or one per line with
+/// `new_lines`. Port of `rich.segment.Segments`.
+#[derive(Clone, Debug, Default)]
+pub struct Segments {
+    pub segments: Vec<Segment>,
+    pub new_lines: bool,
+}
+
+impl Segments {
+    pub fn new(segments: Vec<Segment>, new_lines: bool) -> Self {
+        Segments {
+            segments,
+            new_lines,
+        }
+    }
+}
+
+impl crate::protocol::Renderable for Segments {
+    /// Upstream ends each segment with a newline under `new_lines`; this
+    /// port's renderables separate lines, so the last newline is left to
+    /// the caller.
+    fn rich_render(
+        &self,
+        _console: &crate::console::Console,
+        _options: &crate::console::ConsoleOptions,
+    ) -> Vec<Segment> {
+        if !self.new_lines {
+            return self.segments.clone();
+        }
+        let mut out = Vec::with_capacity(self.segments.len() * 2);
+        for (index, segment) in self.segments.iter().enumerate() {
+            if index > 0 {
+                out.push(Segment::line());
+            }
+            out.push(segment.clone());
+        }
+        out
+    }
+}
+
+/// Lines of segments that render one after another, each ending in a
+/// newline with `new_lines`. Port of `rich.segment.SegmentLines`.
+#[derive(Clone, Debug, Default)]
+pub struct SegmentLines {
+    pub lines: Vec<Vec<Segment>>,
+    pub new_lines: bool,
+}
+
+impl SegmentLines {
+    pub fn new(lines: Vec<Vec<Segment>>, new_lines: bool) -> Self {
+        SegmentLines { lines, new_lines }
+    }
+}
+
+impl crate::protocol::Renderable for SegmentLines {
+    /// As [`Segments`], the last line's newline is left to the caller.
+    fn rich_render(
+        &self,
+        _console: &crate::console::Console,
+        _options: &crate::console::ConsoleOptions,
+    ) -> Vec<Segment> {
+        let mut out = Vec::new();
+        for (index, line) in self.lines.iter().enumerate() {
+            if index > 0 && self.new_lines {
+                out.push(Segment::line());
+            }
+            out.extend(line.iter().cloned());
+        }
+        out
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

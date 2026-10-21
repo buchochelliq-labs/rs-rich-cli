@@ -20,8 +20,8 @@ use rich::terminal_theme::{
 };
 use rich::{
     Color, ColorSystem, ColorTriplet, Columns, Console, ISO8601Highlighter, JSONHighlighter,
-    Justify, NullHighlighter, Overflow, Panel, Renderable, ReprHighlighter, Rule, Style, Table,
-    Text,
+    Justify, NullHighlighter, Overflow, Panel, Renderable, ReprHighlighter, Rule, Segment, Style,
+    Table, Text,
 };
 
 /// `_console`: truecolor, no highlighting.
@@ -591,6 +591,377 @@ fn markup_tag_and_style() -> String {
     out
 }
 
+// --- text.py --------------------------------------------------------------------
+
+fn text_lines<'a>(console: &Console, lines: impl IntoIterator<Item = &'a Text>) -> String {
+    lines
+        .into_iter()
+        .map(|line| format!("|{}|\n", print(console, line).trim_end_matches('\n')))
+        .collect()
+}
+
+fn named(name: &str) -> StyleType {
+    StyleType::Name(name.to_string())
+}
+
+fn text_api() -> String {
+    let console = console(30);
+    let mut text = Text::styled("Hello, World!", "bold");
+    text.stylize("red", 0, 5);
+    text.stylize("underline", 3, 9);
+    let mut out = print(&console, &text.slice(7, 12));
+    out += &print(&console, &text.slice(3, 9));
+    let mut spanned = Text::new("ab");
+    spanned.push_span(rich::text::Span::new(0, 1, "red"));
+    out += &lines(&[
+        py_bool(text.contains("World")).to_string(),
+        py_bool(text.contains(Text::new("World").plain())).to_string(),
+        py_bool(text.contains("xyz")).to_string(),
+        py_bool(Text::new("ab") == Text::new("ab")).to_string(),
+        py_bool(spanned == Text::new("ab")).to_string(),
+        py_bool(Text::styled("ab", "red") == Text::new("ab")).to_string(),
+    ]);
+    out += &print(&console, &(&text + " more"));
+    out += &print(&console, &(&text + &Text::styled("x", "blue")));
+    for offset in [0isize, 3, 6, -1, -4] {
+        out += &format!(
+            "{offset}: {}\n",
+            text.get_style_at_offset(&console, offset).definition()
+        );
+    }
+    out
+}
+
+fn text_edit() -> String {
+    use rich::align::HorizontalAlign;
+    use rich::text::TextPart;
+    let console = console(30);
+    let assembled = Text::assemble(
+        [
+            TextPart::from("a"),
+            TextPart::Styled("b".into(), named("red")),
+            TextPart::Text(Text::styled("c", "blue")),
+        ],
+        "italic",
+    );
+    let mut out = print(&console, &assembled);
+    let mut text = Text::styled("file.py", "green");
+    text.stylize("bold", 4, 7);
+    text.remove_suffix(".py");
+    text.remove_suffix(".rs");
+    out += &print(&console, &text);
+    for length in [3, 10] {
+        let mut text = Text::styled("abcdef", "on blue");
+        text.stylize("red", 2, 6);
+        text.set_length(length);
+        out += &text_lines(&console, [&text]);
+    }
+    let mut text = Text::new("ab");
+    text.stylize("red", 0, 2);
+    text.stylize("blue", 0, 1);
+    text.extend_style(3);
+    text.extend_style(0);
+    out += &text_lines(&console, [&text]);
+    let mut text = Text::new("plain");
+    text.extend_style(2);
+    out += &text_lines(&console, [&text]);
+    for align in [
+        HorizontalAlign::Left,
+        HorizontalAlign::Center,
+        HorizontalAlign::Right,
+    ] {
+        for width in [3, 9] {
+            let mut text = Text::styled("hello", "red");
+            text.align(align, width, '.');
+            out += &text_lines(&console, [&text]);
+        }
+    }
+    let mut text = Text::new("x");
+    text.append_tokens([
+        ("a".to_string(), Some("red")),
+        ("b".to_string(), None),
+        ("c\x07".to_string(), Some("bold")),
+        (String::new(), Some("blue")),
+    ]);
+    out += &print(&console, &text);
+    let mut target = Text::new("abcdef");
+    let mut source = Text::new("zz");
+    source.stylize("red", 0, 2);
+    source.stylize("bold", 1, 4);
+    target.copy_styles(&source);
+    out += &print(&console, &target);
+    out
+}
+
+const WRAP_SOURCE: &str = "The quick brown fox jumps over\tthe lazy dog supercalifragilistic";
+
+fn text_wrap() -> String {
+    let console = console(40);
+    let mut out = String::new();
+    let mut text = Text::new(WRAP_SOURCE);
+    text.stylize("red", 4, 9);
+    text.stylize("bold", 10, 19);
+    for (justify, justify_name) in [
+        (Justify::Left, "left"),
+        (Justify::Center, "center"),
+        (Justify::Right, "right"),
+        (Justify::Full, "full"),
+        (Justify::Default, "default"),
+    ] {
+        for (overflow, overflow_name) in [
+            (Overflow::Fold, "fold"),
+            (Overflow::Crop, "crop"),
+            (Overflow::Ellipsis, "ellipsis"),
+        ] {
+            out += &format!("{justify_name}/{overflow_name}\n");
+            let wrapped = text.wrap(&console, 12, Some(justify), Some(overflow), 4, None);
+            out += &text_lines(&console, &wrapped);
+        }
+    }
+    out += "no_wrap\n";
+    out += &text_lines(&console, &text.wrap(&console, 12, None, None, 8, Some(true)));
+    out += "ignore\n";
+    out += &text_lines(
+        &console,
+        &text.wrap(&console, 12, None, Some(Overflow::Ignore), 8, None),
+    );
+    let own = Text::new("one two three four")
+        .justify(Justify::Right)
+        .overflow(Overflow::Ellipsis)
+        .no_wrap(false);
+    out += "own\n";
+    out += &text_lines(&console, &own.wrap(&console, 7, None, None, 8, None));
+    out
+}
+
+fn text_fit() -> String {
+    let console = console(20);
+    let mut text = Text::new("abc\ndefgh\n\nij\n");
+    text.stylize("red", 1, 6);
+    text_lines(&console, &text.fit(4))
+}
+
+fn text_from_markup() -> String {
+    let console = console(30);
+    let mut out = print(
+        &console,
+        &Text::from_markup(":smile: [b]x[/b] :thumbs_up:").unwrap(),
+    );
+    out += &print(&console, &Text::from_markup("no tags :smile:").unwrap());
+    out += &print(
+        &console,
+        &Text::from_markup_with("[b]:smile:[/b]", "", false, None).unwrap(),
+    );
+    out += &print(
+        &console,
+        &Text::from_markup_with("a [i]b[/i]", "red", true, None).unwrap(),
+    );
+    out
+}
+
+fn span_repr(span: &rich::text::Span) -> String {
+    let style = match &span.style {
+        StyleType::Name(name) => py_repr(name),
+        StyleType::Style(style) => style.definition(),
+    };
+    format!("Span({}, {}, {style})", span.start, span.end)
+}
+
+fn span_api() -> String {
+    let span = rich::text::Span::new(2, 5, "red");
+    let split = |offset: usize| {
+        let (first, second) = span.split(offset);
+        format!(
+            "({}, {})",
+            span_repr(&first),
+            second.map_or("None".to_string(), |second| span_repr(&second))
+        )
+    };
+    lines(&[
+        split(3),
+        split(1),
+        split(5),
+        span_repr(&span.move_by(2)),
+        span_repr(&span.right_crop(4)),
+        span_repr(&span.right_crop(9)),
+        span_repr(&span.extend(2)),
+        span_repr(&span.extend(0)),
+    ])
+}
+
+// --- segment.py -----------------------------------------------------------------
+
+fn seg(segments: &[Segment]) -> String {
+    let items: Vec<String> = segments
+        .iter()
+        .map(|segment| {
+            format!(
+                "{}{}:{}",
+                py_repr(&segment.text),
+                if segment.control { "C" } else { "" },
+                segment
+                    .style
+                    .as_ref()
+                    .map_or("None".to_string(), Style::definition)
+            )
+        })
+        .collect();
+    format!("[{}]", items.join(", "))
+}
+
+fn segment_split_cells() -> String {
+    let mut out = Vec::new();
+    for text in ["abcdef", "日本語テキスト", "a日b本c", "😀x😀"] {
+        let segment = Segment::new(text, Some(Style::parse("bold").unwrap()));
+        for cut in 0..segment.cell_length() + 2 {
+            let (before, after) = segment.split_cells(cut);
+            out.push(format!("{text} {cut}: {} {}", seg(&[before]), seg(&[after])));
+        }
+    }
+    lines(&out)
+}
+
+fn segment_divide() -> String {
+    let red = Style::parse("red").unwrap();
+    let segments = vec![
+        Segment::new("abc", None),
+        Segment::new("日本", Some(red)),
+        Segment::new("xyz", None),
+    ];
+    let mut out = Vec::new();
+    let cases: [&[usize]; 8] = [&[], &[0], &[0, 0, 2], &[1, 4, 6], &[3, 5, 9], &[2, 20], &[4], &[8, 8]];
+    for cuts in cases {
+        let pieces: Vec<String> = Segment::divide(&segments, cuts)
+            .iter()
+            .map(|piece| seg(piece))
+            .collect();
+        let cuts: Vec<String> = cuts.iter().map(usize::to_string).collect();
+        out.push(format!("[{}]: {}", cuts.join(", "), pieces.join(" ")));
+    }
+    lines(&out)
+}
+
+fn segment_lines() -> String {
+    let red = Style::parse("red").unwrap();
+    let segments = vec![
+        Segment::new("ab\ncdef", None),
+        Segment::new("gh\n", Some(red.clone())),
+        Segment::new("\n", None),
+        Segment::new("tail", None),
+    ];
+    let mut out = Vec::new();
+    for (line, terminated) in Segment::split_lines_terminator(&segments) {
+        out.push(format!("{} {}", seg(&line), py_bool(terminated)));
+    }
+    let split: Vec<String> = Segment::split_lines(&segments)
+        .iter()
+        .map(|line| py_repr(&seg(line)))
+        .collect();
+    out.push(format!("[{}]", split.join(", ")));
+    for (length, pad, include) in [(3, true, true), (5, false, true), (5, true, false)] {
+        let cropped: Vec<String> =
+            Segment::split_and_crop_lines(&segments, length, Some(&red), pad, include)
+                .iter()
+                .map(|line| seg(line))
+                .collect();
+        out.push(cropped.join(" "));
+    }
+    out.push(seg(&Segment::adjust_line_length_with(
+        &[Segment::new("ab", None)],
+        4,
+        None,
+        false,
+    )));
+    lines(&out)
+}
+
+fn segment_shape() -> String {
+    let blue = Style::parse("on blue").unwrap();
+    let shape_lines = vec![
+        vec![Segment::new("ab", None)],
+        vec![Segment::new("abcd", None), Segment::control("\x1b[1m")],
+        vec![Segment::new("a", None)],
+    ];
+    let join = |lines: Vec<Vec<Segment>>| -> String {
+        lines.iter().map(|line| seg(line)).collect::<Vec<_>>().join(" ")
+    };
+    let shape = |(width, height): (usize, usize)| format!("({width}, {height})");
+    let mut out = vec![
+        Segment::get_line_length(&shape_lines[1]).to_string(),
+        shape(Segment::get_shape(&shape_lines)),
+        shape(Segment::get_shape(&[])),
+    ];
+    for (height, new_lines) in [(None, false), (Some(5), false), (Some(2), false), (Some(4), true)] {
+        out.push(join(Segment::set_shape_with(
+            &shape_lines,
+            3,
+            height,
+            Some(&blue),
+            new_lines,
+        )));
+    }
+    type Align = fn(&[Vec<Segment>], usize, usize, Option<&Style>, bool) -> Vec<Vec<Segment>>;
+    let aligns: [Align; 3] = [Segment::align_top, Segment::align_middle, Segment::align_bottom];
+    for align in aligns {
+        for (height, new_lines) in [(6, false), (4, true), (3, false), (2, false)] {
+            out.push(join(align(&shape_lines, 4, height, Some(&blue), new_lines)));
+        }
+    }
+    lines(&out)
+}
+
+fn segment_misc() -> String {
+    let parse = |definition: &str| Style::parse(definition).unwrap();
+    let segments = vec![
+        Segment::new("a", Some(parse("red link https://x"))),
+        Segment::control("\x07"),
+        Segment::new("b", None),
+        Segment::new("c", Some(Style::new())),
+        Segment::new("d", Some(parse("bold"))),
+    ];
+    let italic = parse("italic");
+    lines(&[
+        seg(&Segment::strip_links(&segments)),
+        seg(&Segment::filter_control(&segments, false)),
+        seg(&Segment::filter_control(&segments, true)),
+        seg(&Segment::strip_styles(&segments)),
+        seg(&Segment::apply_style_with(&segments, Some(&italic), None)),
+        seg(&Segment::apply_style_with(&segments, None, Some(&parse("blue")))),
+        seg(&Segment::apply_style_with(
+            &segments,
+            Some(&italic),
+            Some(&parse("underline")),
+        )),
+        seg(&Segment::apply_style_with(&segments, None, None)),
+        py_bool(Segment::new("abc", None).is_control()).to_string(),
+        py_bool(Segment::control("abc").is_control()).to_string(),
+    ])
+}
+
+fn segments_render() -> String {
+    use rich::segment::{SegmentLines, Segments};
+    let console = console(12);
+    let red = Style::parse("red").unwrap();
+    let pair = || {
+        vec![
+            Segment::new("one", Some(red.clone())),
+            Segment::new("two", None),
+        ]
+    };
+    let mut out = print(&console, &Panel::new(Box::new(Segments::new(pair(), true))));
+    out += &print(&console, &Panel::new(Box::new(Segments::new(pair(), false))));
+    let seg_lines = vec![
+        vec![Segment::new("a", Some(red.clone())), Segment::new("b", None)],
+        vec![Segment::new("cd", None)],
+    ];
+    out += &print(
+        &console,
+        &Panel::new(Box::new(SegmentLines::new(seg_lines.clone(), true))),
+    );
+    out += &print(&console, &Panel::new(Box::new(SegmentLines::new(seg_lines, false))));
+    out
+}
+
 fn build(name: &str) -> String {
     match name {
         "measure_api" => measure_api(),
@@ -613,6 +984,18 @@ fn build(name: &str) -> String {
         "markup_meta" => markup_meta(),
         "markup_errors" => markup_errors(),
         "markup_tag_and_style" => markup_tag_and_style(),
+        "text_api" => text_api(),
+        "text_edit" => text_edit(),
+        "text_wrap" => text_wrap(),
+        "text_fit" => text_fit(),
+        "text_from_markup" => text_from_markup(),
+        "span_api" => span_api(),
+        "segment_split_cells" => segment_split_cells(),
+        "segment_divide" => segment_divide(),
+        "segment_lines" => segment_lines(),
+        "segment_shape" => segment_shape(),
+        "segment_misc" => segment_misc(),
+        "segments_render" => segments_render(),
         other => panic!("no builder for parity_core case {other:?}"),
     }
 }
@@ -637,5 +1020,5 @@ fn parity_core() {
         checked += 1;
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
-    assert_eq!(checked, 20, "expected every parity core case to run");
+    assert_eq!(checked, 32, "expected every parity core case to run");
 }
