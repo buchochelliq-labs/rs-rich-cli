@@ -151,6 +151,9 @@ impl<T: Transport, C: ArtifactChecker> Installer<T, C> {
             number,
             extension(&artifact.url)
         );
+        // Read the lockfile first, so a broken one stops the install
+        // before anything is written.
+        let mut lockfile = self.lockfile()?;
         let destination = self.root.join(&relative);
         write_atomically(&destination, &bytes).map_err(|e| LockfileError::Io {
             path: destination.display().to_string(),
@@ -167,7 +170,6 @@ impl<T: Transport, C: ArtifactChecker> Installer<T, C> {
             index_serial: index.serial(),
             path: relative,
         };
-        let mut lockfile = self.lockfile()?;
         let previous = lockfile.insert(entry.clone());
         lockfile.save(&self.lockfile_path())?;
         if let Some(previous) = previous {
