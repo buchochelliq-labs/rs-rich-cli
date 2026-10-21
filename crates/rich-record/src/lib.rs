@@ -34,9 +34,10 @@
 //! let tape = tape::parse(&source)?;
 //! let recording = record::record(&tape, "demo", &record::Options::default())?;
 //! let fonts = rich_record::render::raster::Fonts::embedded();
-//! // The tape's `Output` formats; `Formats::ALL` puts no further limit on them.
+//! // The tape's `Output` formats, or every format but the APNG without one.
+//! let formats = recording.default_formats();
 //! let written = record::write_selected(&recording, "media/demo".as_ref(), "demo",
-//!                                      record::Formats::ALL, &fonts, &Default::default(), None)?;
+//!                                      formats, &fonts, &Default::default(), None)?;
 //! for skipped in &written.skipped {
 //!     eprintln!("skipped {}: {}", skipped.path.display(), skipped.reason);
 //! }
