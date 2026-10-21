@@ -5793,7 +5793,14 @@ impl Renderable for Notebook {
 /// Text.from_ansi joins decoded lines, preserving their style spans.
 fn notebook_ansi(source: &str) -> Text {
     let mut result = Text::new("");
-    for (index, line) in AnsiDecoder::new().decode(source).iter().enumerate() {
+    // rich-cli 1.8.1 runs on rich 12, whose `AnsiDecoder.decode` split with
+    // `splitlines`: no final empty line, and `\r\n` ends a line.
+    let mut decoder = AnsiDecoder::new();
+    let lines: Vec<Text> = source
+        .lines()
+        .map(|line| decoder.decode_line(line))
+        .collect();
+    for (index, line) in lines.iter().enumerate() {
         if index > 0 {
             result.append("\n", None);
         }
@@ -7048,7 +7055,7 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
         raw.replace('\x1b', "\\x1b")
     )));
     let mut decoder = rich::AnsiDecoder::new();
-    for line in decoder.decode(raw) {
+    for line in raw.lines().map(|line| decoder.decode_line(line)) {
         console.print(&Text::new("  output: ").append_text(&line));
     }
 

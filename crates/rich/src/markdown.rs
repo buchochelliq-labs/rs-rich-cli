@@ -811,7 +811,11 @@ fn strip_container_prefixes(
     depth: usize,
 ) -> (String, Vec<usize>) {
     let line_start = source[..range.start].rfind('\n').map_or(0, |i| i + 1);
-    let indent = if depth == 0 { 0 } else { range.start - line_start };
+    let indent = if depth == 0 {
+        0
+    } else {
+        range.start - line_start
+    };
     let mut text = String::with_capacity(range.len());
     let mut offsets = Vec::with_capacity(range.len() + 1);
     let mut at = range.start;

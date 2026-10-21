@@ -440,15 +440,13 @@ Format: what differs · why · how to remove it (if temporary).
   (the rich-cli `--syntax` bottom pad that compensated for it was removed in the
   same change).
 
-### 28. `AnsiDecoder::decode` splits lines like rich 12
-- **Differs:** `decode` splits with `str::lines` (Python's `splitlines` for
-  `\n`/`\r\n`), as rich 12.6 did; rich 15.0.0 splits after each `\n`, keeps a
-  `\r` before it (which then resets the line) and yields a final empty line
-  for text ending in a newline. `AnsiDecoder::decode_split_newlines` is the 15.0
-  behaviour, which `Text::from_ansi` uses.
-- **Why kept:** rich-cli's notebook rendering relies on the old split
-  (`notebook_group_uses_upstream_cell_spacing_and_output_execution_count`).
-- **Remove:** switch `decode` to the 15.0 split with that CLI path.
+### 28. ~~`AnsiDecoder::decode` splits lines like rich 12~~ (resolved in 0.0.22)
+- **Resolved:** `decode` now splits as rich 15.0.0 does: after each `\n`,
+  keeping a `\r` before it (which then resets the line), with a final empty
+  line for text ending in a newline (unit test `decode_splits_as_rich_15`,
+  values from rich 15.0.0). `decode_split_newlines` stays as the same thing
+  under its old name. rich-cli's notebook and capture views, which follow
+  rich-cli 1.8.1 on rich 12, decode `text.lines()` one line at a time.
 
 ### 29. Renderables cannot end without a newline when printed
 - **Differs:** `Console::print` always ends the output line, so `Rule(end=…)`

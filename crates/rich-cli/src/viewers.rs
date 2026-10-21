@@ -535,7 +535,12 @@ fn format_elapsed(elapsed: Duration) -> String {
 /// and duration below.
 pub(crate) fn capture_view(captured: &Captured) -> Box<dyn Renderable> {
     let output = String::from_utf8_lossy(&captured.output()).into_owned();
-    let mut lines = AnsiDecoder::new().decode(output.trim_end_matches('\n'));
+    let mut decoder = AnsiDecoder::new();
+    let mut lines: Vec<Text> = output
+        .trim_end_matches('\n')
+        .lines()
+        .map(|line| decoder.decode_line(line))
+        .collect();
     let mut text = Text::new("");
     for (index, line) in lines.drain(..).enumerate() {
         if index > 0 {
