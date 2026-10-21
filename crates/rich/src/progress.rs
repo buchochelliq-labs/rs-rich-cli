@@ -1632,7 +1632,8 @@ impl TrackState {
         let thread = std::thread::spawn(move || {
             let mut last = 0;
             // `while not wait(update_period)`: until told to stop.
-            while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = stopped.recv_timeout(period) {
+            while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = stopped.recv_timeout(period)
+            {
                 let now = count.load(Ordering::SeqCst);
                 if now != last {
                     progress

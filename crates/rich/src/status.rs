@@ -18,12 +18,13 @@ use crate::live::{AutoLive, Live, LiveHandle, LiveOptions};
 use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
-use crate::spinner::Spinner;
+use crate::spinner::{Spinner, SpinnerText};
 use crate::style::StyleType;
+use crate::text::Text;
 
 /// A spinner + message status indicator. Mirrors `rich.status.Status`.
 pub struct Status {
-    status: String,
+    status: SpinnerText,
     spinner_style: StyleType,
     speed: f64,
     spinner: Spinner,
@@ -34,11 +35,25 @@ impl Status {
     /// A status showing `message` with the default `dots` spinner, styled
     /// `status.spinner` (green in the default theme).
     pub fn new(message: impl Into<String>) -> Self {
-        let status = message.into();
+        Status::from_content(SpinnerText::Markup(message.into()))
+    }
+
+    /// A status showing `message` as it is (upstream's `Status(Text(...))`).
+    pub fn from_text(message: Text) -> Self {
+        Status::from_content(SpinnerText::Text(message))
+    }
+
+    /// A status showing any renderable beside the spinner (upstream's
+    /// `Status(renderable)`), in a `Table.grid` as [`Spinner::renderable`].
+    pub fn from_renderable(renderable: Box<dyn Renderable + Send>) -> Self {
+        Status::from_content(SpinnerText::Renderable(Arc::new(Mutex::new(renderable))))
+    }
+
+    fn from_content(status: SpinnerText) -> Self {
         let spinner_style = StyleType::Name("status.spinner".to_string());
         Status {
             spinner: Spinner::new("dots")
-                .text(status.clone())
+                .content(&status)
                 .style(spinner_style.clone()),
             status,
             spinner_style,
@@ -56,7 +71,7 @@ impl Status {
 
     fn rebuild(mut self, name: &str) -> Self {
         self.spinner = Spinner::new(name)
-            .text(self.status.clone())
+            .content(&self.status)
             .style(self.spinner_style.clone())
             .speed(self.speed);
         self
@@ -92,8 +107,34 @@ impl Status {
         spinner_style: Option<StyleType>,
         speed: Option<f64>,
     ) {
+        self.update_content(
+            status.map(|status| SpinnerText::Markup(status.to_string())),
+            spinner,
+            spinner_style,
+            speed,
+        );
+    }
+
+    /// [`update`](Self::update) with the status as a [`Text`], used as it is.
+    pub fn update_text(&mut self, status: Text) {
+        self.update_content(Some(SpinnerText::Text(status)), None, None, None);
+    }
+
+    /// [`update`](Self::update) with the status as any renderable.
+    pub fn update_renderable(&mut self, status: Box<dyn Renderable + Send>) {
+        let status = SpinnerText::Renderable(Arc::new(Mutex::new(status)));
+        self.update_content(Some(status), None, None, None);
+    }
+
+    fn update_content(
+        &mut self,
+        status: Option<SpinnerText>,
+        spinner: Option<&str>,
+        spinner_style: Option<StyleType>,
+        speed: Option<f64>,
+    ) {
         if let Some(status) = status {
-            self.status = status.to_string();
+            self.status = status;
         }
         if let Some(style) = spinner_style {
             self.spinner_style = style;
@@ -103,15 +144,13 @@ impl Status {
         }
         if let Some(name) = spinner {
             self.spinner = Spinner::new(name)
-                .text(self.status.clone())
+                .content(&self.status)
                 .style(self.spinner_style.clone())
                 .speed(self.speed);
         } else {
-            self.spinner.update(
-                Some(&self.status),
-                Some(self.spinner_style.clone()),
-                Some(self.speed),
-            );
+            self.spinner.update_content(&self.status);
+            self.spinner
+                .update(None, Some(self.spinner_style.clone()), Some(self.speed));
         }
     }
 
@@ -188,6 +227,12 @@ impl<W: Write + Send + 'static> LiveStatus<W> {
         if spinner.is_some() {
             self.live.refresh_wait();
         }
+    }
+
+    /// Run `f` on the running status (for [`Status::update_text`] and
+    /// [`Status::update_renderable`]); the change shows at the next refresh.
+    pub fn with<R>(&self, f: impl FnOnce(&mut Status) -> R) -> R {
+        f(&mut lock(&self.status))
     }
 
     /// Redraw now, returning once the frame is written (upstream's

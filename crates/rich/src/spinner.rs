@@ -108,10 +108,45 @@ impl Spinner {
     /// Any renderable after the frame (upstream's `text=` given another
     /// renderable): the frame and the renderable are laid out in a
     /// `Table.grid(padding=1)`.
-    pub fn renderable(mut self, renderable: Box<dyn Renderable + Send>) -> Self {
-        self.renderable = Some(Arc::new(Mutex::new(renderable)));
-        self.text = None;
+    pub fn renderable(self, renderable: Box<dyn Renderable + Send>) -> Self {
+        self.content(&SpinnerText::Renderable(Arc::new(Mutex::new(renderable))))
+    }
+
+    /// Set the trailing content, as given to upstream's `text=`.
+    pub(crate) fn content(mut self, content: &SpinnerText) -> Self {
+        self.set_content(content);
         self
+    }
+
+    /// Replace the trailing content when it is truthy in upstream's sense
+    /// (`if text:` in `Spinner.update`): a non-empty string or `Text`, or
+    /// any other renderable.
+    pub(crate) fn update_content(&mut self, content: &SpinnerText) {
+        let truthy = match content {
+            SpinnerText::Markup(markup) => !markup.is_empty(),
+            SpinnerText::Text(text) => !text.plain().is_empty(),
+            SpinnerText::Renderable(_) => true,
+        };
+        if truthy {
+            self.set_content(content);
+        }
+    }
+
+    fn set_content(&mut self, content: &SpinnerText) {
+        match content {
+            SpinnerText::Markup(source) => {
+                self.text = Some(Box::new(markup(source)));
+                self.renderable = None;
+            }
+            SpinnerText::Text(text) => {
+                self.text = Some(Box::new(text.clone()));
+                self.renderable = None;
+            }
+            SpinnerText::Renderable(renderable) => {
+                self.renderable = Some(renderable.clone());
+                self.text = None;
+            }
+        }
     }
 
     /// Set the animation speed multiplier (default 1.0).
@@ -200,6 +235,15 @@ impl Spinner {
         }
         frame
     }
+}
+
+/// What upstream's `text=` holds: a `str` (console markup), a `Text`, or
+/// another renderable (shared, so a status can hand it to a new spinner).
+#[derive(Clone)]
+pub(crate) enum SpinnerText {
+    Markup(String),
+    Text(Text),
+    Renderable(Arc<Mutex<Box<dyn Renderable + Send>>>),
 }
 
 /// A spinner's trailing renderable as a table cell.

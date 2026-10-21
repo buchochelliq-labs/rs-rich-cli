@@ -4144,6 +4144,11 @@ PARITY_LIVE_CASES: list[tuple[str, dict]] = [
     ("spinner_renderable_in_live", {"kind": "live_spinner", "width": 20, "name": "line",
                                     "text": ["table", "x"], "style": None,
                                     "steps": [["start", True], ["time", 0.13], ["refresh"], ["stop"]]}),
+    ("status_renderable", {"kind": "status", "width": 30, "message": ["table", "job"], "spinner": "line",
+                           "steps": [["refresh"], ["time", 0.13], ["status_text", "[b]literal[/b]"],
+                                     ["refresh"]]}),
+    ("status_text_object", {"kind": "status", "width": 30, "message": ["text", "[i]as is[/i]"],
+                            "spinner": "line", "steps": [["refresh"], ["status_text", ""], ["refresh"]]}),
     ("status_not_terminal", {"kind": "status", "width": 30, "terminal": False, "message": "Busy",
                              "spinner": "dots", "steps": [["refresh"], ["print", "p"]]}),
 ]
@@ -4202,7 +4207,11 @@ def run_parity_live_case(case) -> list[str]:
                                auto_refresh=False, get_time=lambda: now[0], **options)
             display.start()
         else:
-            display = Status(case["message"], console=console, spinner=case["spinner"])
+            message = case["message"]
+            if isinstance(message, list):
+                message = (_parity_live_table(message[1]) if message[0] == "table"
+                           else Text(message[1]))
+            display = Status(message, console=console, spinner=case["spinner"])
             display._live.auto_refresh = False
             display.start()
         for step in case["steps"]:
@@ -4229,6 +4238,8 @@ def run_parity_live_case(case) -> list[str]:
                 display.advance(step[1], step[2])
             elif op == "status":
                 display.update(**step[1])
+            elif op == "status_text":
+                display.update(Text(step[1]))
             elif op == "render":
                 console.print(spinner.render(step[1]))
             elif op == "print" and kind == "spinner":

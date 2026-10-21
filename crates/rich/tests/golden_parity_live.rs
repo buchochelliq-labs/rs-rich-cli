@@ -75,6 +75,13 @@ impl Files {
     }
 }
 
+fn table(cell: &str) -> Table {
+    let mut table = Table::new();
+    table.add_column("job");
+    table.add_row(&[cell]);
+    table
+}
+
 fn spinner(case: &serde_json::Value) -> Spinner {
     let mut spinner = Spinner::try_new(case["name"].as_str().unwrap()).expect("spinner");
     if let Some(style) = case["style"].as_str() {
@@ -84,12 +91,7 @@ fn spinner(case: &serde_json::Value) -> Spinner {
     match case["text"][0].as_str().unwrap() {
         "markup" => spinner.text(source),
         "text" => spinner.with_text(Text::new(source)),
-        "table" => {
-            let mut table = Table::new();
-            table.add_column("job");
-            table.add_row(&[source]);
-            spinner.renderable(Box::new(table))
-        }
+        "table" => spinner.renderable(Box::new(table(source))),
         other => panic!("unknown spinner text {other:?}"),
     }
 }
@@ -212,7 +214,17 @@ fn run_status(
     files: &mut Files,
     now: &Arc<AtomicU64>,
 ) -> Vec<u8> {
-    let live = Status::new(case["message"].as_str().unwrap())
+    let status = match &case["message"] {
+        serde_json::Value::String(message) => Status::new(message.as_str()),
+        message => {
+            let source = message[1].as_str().unwrap();
+            match message[0].as_str().unwrap() {
+                "table" => Status::from_renderable(Box::new(table(source))),
+                _ => Status::from_text(Text::new(source)),
+            }
+        }
+    };
+    let live = status
         .spinner(case["spinner"].as_str().unwrap())
         .refresh_per_second(1e-9)
         .start(console, Vec::<u8>::new());
@@ -221,6 +233,10 @@ fn run_status(
             "time" => now.store(step[1].as_f64().unwrap().to_bits(), Ordering::SeqCst),
             "refresh" => live.refresh(),
             "print" => live.print_str(step[1].as_str().unwrap()),
+            "status_text" => {
+                let text = Text::new(step[1].as_str().unwrap());
+                live.with(|status| status.update_text(text));
+            }
             "status" => live.update(
                 step[1]["status"].as_str(),
                 step[1]["spinner"].as_str(),
@@ -297,5 +313,5 @@ fn parity_live() {
         );
         checked += 1;
     }
-    assert_eq!(checked, 36, "expected every parity_live case to run");
+    assert_eq!(checked, 38, "expected every parity_live case to run");
 }
