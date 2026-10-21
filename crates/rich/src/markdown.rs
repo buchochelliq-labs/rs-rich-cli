@@ -350,10 +350,16 @@ fn inline_style(strong: usize, emphasis: usize, strike: usize) -> Option<Style> 
 
 /// `markdown.link_url` plus the OSC 8 target, which is what upstream pushes for
 /// a link when `hyperlinks=True`.
+///
+/// An empty destination (`[k]()`) gives no OSC 8 at all: upstream's
+/// `Style(link="")` renders no hyperlink, as its link is falsy.
 fn link_style(url: &str) -> Style {
-    Style::parse(LINK_URL_STYLE)
-        .expect("valid style")
-        .with_link(url.to_string())
+    let style = Style::parse(LINK_URL_STYLE).expect("valid style");
+    if url.is_empty() {
+        style
+    } else {
+        style.with_link(url.to_string())
+    }
 }
 
 /// Upstream's `MarkdownContext.style_stack.current`: the product of every style
@@ -454,7 +460,7 @@ fn image_text(
     // wins, the image's own destination is the fallback, and neither being set
     // leaves the title unlinked.
     if hyperlinks {
-        let target = link.unwrap_or(destination);
+        let target = link.filter(|link| !link.is_empty()).unwrap_or(destination);
         if !target.is_empty() {
             title.stylize(Style::new().with_link(target.to_string()), 0, end);
         }
@@ -1151,7 +1157,73 @@ fn escape_refused_definitions(source: &str) -> Option<String> {
     Some(escaped)
 }
 
+/// Whether a list item's source is its marker alone (`-`, `2)`), which
+/// markdown-it gives no paragraph, as against an item whose inline content
+/// prints as nothing (`- ![]()`), which still has one.
+fn is_bare_item(item: &str) -> bool {
+    let rest = item.trim_start();
+    let rest = rest.strip_prefix(['-', '*', '+']).unwrap_or_else(|| {
+        let digits = rest.trim_start_matches(|c: char| c.is_ascii_digit());
+        digits.strip_prefix(['.', ')']).unwrap_or(rest)
+    });
+    rest.trim().is_empty()
+}
+
+/// markdown-it lets a table interrupt a paragraph (`a\nb|c\n-|-` is a
+/// paragraph `a` and then a table); pulldown-cmark does not, and keeps the
+/// lines in the paragraph. A blank line is put before each such header row in
+/// a top-level paragraph and the source parsed again. `None` when there is
+/// none.
+fn split_paragraph_tables(source: &str) -> Option<String> {
+    let mut depth = 0usize;
+    let mut starts: Vec<usize> = Vec::new();
+    for (event, range) in Parser::new_ext(source, Options::ENABLE_TABLES).into_offset_iter() {
+        match event {
+            Event::Start(Tag::BlockQuote(_) | Tag::List(_) | Tag::FootnoteDefinition(_)) => {
+                depth += 1
+            }
+            Event::End(TagEnd::BlockQuote(_) | TagEnd::List(_) | TagEnd::FootnoteDefinition) => {
+                depth = depth.saturating_sub(1)
+            }
+            Event::Start(Tag::Paragraph) if depth == 0 => {
+                let lines: Vec<(usize, &str)> = source[range.clone()]
+                    .split_inclusive('\n')
+                    .scan(range.start, |at, line| {
+                        let start = *at;
+                        *at += line.len();
+                        Some((start, line.trim_end_matches('\n')))
+                    })
+                    .collect();
+                for pair in lines.windows(2).skip(1) {
+                    let (start, header) = pair[0];
+                    let delimiter = pair[1].1;
+                    let indent = delimiter.len() - delimiter.trim_start_matches(' ').len();
+                    if indent < 4 && markdown_it_table_start(header, delimiter) {
+                        starts.push(start);
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if starts.is_empty() {
+        return None;
+    }
+    let mut split = String::with_capacity(source.len() + starts.len());
+    let mut from = 0;
+    for start in starts {
+        split.push_str(&source[from..start]);
+        split.push('\n');
+        from = start;
+    }
+    split.push_str(&source[from..]);
+    Some(split)
+}
+
 fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
+    let split = split_paragraph_tables(source);
+    let source = split.as_deref().unwrap_or(source);
     let escaped = escape_refused_definitions(source);
     let source = escaped.as_deref().unwrap_or(source);
     let hyperlinks = !md.no_hyperlinks;
@@ -1504,7 +1576,13 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                 // anything still pending belongs to this item. markdown-it still
                 // emits a (hidden) paragraph for it, so upstream justifies it as
                 // a paragraph.
-                if let Some(mut text) = current.take() {
+                // An empty item (`-` alone) has no paragraph at all upstream,
+                // so it renders no rows.
+                let bare = is_bare_item(&source[range.clone()]);
+                if let Some(mut text) = current
+                    .take()
+                    .filter(|text| !(bare && text.plain().is_empty()))
+                {
                     text.set_justify(paragraph_justify);
                     sink(&mut blocks, &mut stack).push(Block::Text(text, None));
                 }
@@ -1747,6 +1825,12 @@ impl Renderable for Markdown {
             lines.push(Vec::new());
         }
 
+        // A document whose only row is a block's leading gap (`-` alone: an
+        // empty list) prints that one blank line. Joined rows would give no
+        // segment at all, which prints nothing; an empty one prints the line.
+        if lines.len() == 1 && lines[0].is_empty() {
+            return vec![Segment::new("", None)];
+        }
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);
         for (index, line) in lines.into_iter().enumerate() {

@@ -560,6 +560,10 @@ open ones are **permanent**, each for the reason in its entry:
   later lines (`> `, the item's indent) are stripped before the re-parse, so a
   rejected one prints as the paragraph markdown-it prints (golden
   `markdown_nested_table_*` in `parity_docs.tsv`).
+- **Also resolved:** markdown-it lets a table interrupt a paragraph
+  (`p\na|b\n-|-` is a paragraph and then a table); pulldown-cmark keeps those
+  lines in the paragraph. A top-level paragraph is now split before such a
+  header row (golden `markdown_fuzz_*`).
 - **Still differs (permanent):** markdown-it tries its table rule before its
   list rule, so `- a|b` over an indented `  -|-` is a table whose header cell
   is `- a` upstream; pulldown-cmark starts a list there. Matching it would mean

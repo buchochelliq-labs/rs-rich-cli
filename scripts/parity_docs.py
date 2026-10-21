@@ -340,6 +340,22 @@ PARITY_DOCS_CASES: list[tuple[str, dict]] = [
             ("indent_zero", '{"a": [1]}', {"options": {"indent": 0}}),
         ]
     ],
+    # markdown.py: found by the differential fuzzer.
+    *[
+        (f"markdown_fuzz_{index}", {"kind": "markdown", "width": 24, "source": source, "options": options})
+        for index, (source, options) in enumerate([
+            ("[k]()", {}),
+            ("[k](<>) ![i]()", {}),
+            ("-", {}),
+            ("x\n\n-\n- b\n\n2)", {}),
+            ("- a\n-\n- b", {}),
+            ("_\na|b\n-|-", {}),
+            ("p\nq\na|b\n-|-\nc|d\n\nr", {"hyperlinks": False}),
+            ("p\na|b\n-|:|-", {}),
+            ("- ![]()", {"hyperlinks": False}),
+            ("1. []()\n2.", {}),
+        ])
+    ],
     ("scope_wide_keys", {"kind": "scope", "width": 24, "scope": [["界界", "界"], ["🙂", [1, 2, 3, 4, 5, 6, 7, 8]]]}),
 ]
 
