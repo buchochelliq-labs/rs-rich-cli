@@ -4342,8 +4342,44 @@ PARITY_WIDGET_CASES = [
     ("layout_ratio", _pw_ratio),
     # table.py: a wrapping column squeezed to nothing (DIVERGENCES §7)
     ("table_squeezed_column", lambda: "".join(
-        _cg_print(_cg_console(width), _pw_squeezed_table())
-        for width in [12, 10, 9, 8]
+        _cg_print(_cg_console(width), _pw_squeezed_table(**options))
+        for options in [
+            {},
+            {"box": None},
+            {"show_edge": False},
+            {"pad_edge": False},
+            {"padding": (0, 2)},
+            {"collapse_padding": True, "box": box.SIMPLE},
+        ]
+        for width in range(1, 16)
+    )),
+    ("table_squeezed_three", lambda: "".join(
+        _cg_print(_cg_console(width), _pw_squeezed_three(layout))
+        for layout in ["nww", "wnw", "nnw", "nmw", "wwn"]
+        for width in range(3, 26, 2)
+    )),
+    ("table_many_columns", lambda: "".join(
+        _cg_print(_cg_console(width), _pw_many_columns(count, table_box))
+        for count, width, table_box in [
+            (20, 80, box.SQUARE),
+            (29, 80, box.SQUARE),
+            (40, 80, box.SQUARE),
+            (12, 20, box.ROUNDED),
+            (12, 20, None),
+        ]
+    )),
+    # rule.py / live_render.py: output that ends without a line break
+    ("rule_end", lambda: _ag_print_all(
+        _cg_console(10),
+        Rule("t", end=""),
+        Rule("t", end="!"),
+        Rule("t", end="\n\n"),
+        Rule(end=""),
+        Rule("t", align="left", end="x\ny"),
+        Text("after"),
+    ) + _ag_print_all(_cg_console(4), Rule("t", end=""), Rule("t", align="right", end=""), Text("z"))),
+    ("live_render_print", lambda: _ag_print_all(
+        _cg_console(10), LiveRender(Text("a\nb")), Text("after")
     )),
 ]
 
@@ -4354,11 +4390,28 @@ def _pw_table_cell(*renderables) -> Table:
     return table
 
 
-def _pw_squeezed_table() -> Table:
-    table = Table()
+def _pw_squeezed_table(**options) -> Table:
+    table = Table(**options)
     table.add_column("key", no_wrap=True)
     table.add_column("value")
     table.add_row("abcdefgh", "wrap me")
+    return table
+
+
+def _pw_many_columns(count: int, table_box) -> Table:
+    table = Table(box=table_box)
+    for index in range(count):
+        table.add_column(f"c{index}")
+    table.add_row(*[str(index) for index in range(count)])
+    return table
+
+
+def _pw_squeezed_three(layout: str) -> Table:
+    """Three columns, `n` for a long `no_wrap` one and `w` for a wrapping one."""
+    table = Table(padding=(0, 1))
+    for index, kind in enumerate(layout):
+        table.add_column(f"h{index}", no_wrap=kind == "n", min_width=1 if kind == "m" else None)
+    table.add_row(*["abcdefghij" if kind == "n" else "ab cd" for kind in layout])
     return table
 
 

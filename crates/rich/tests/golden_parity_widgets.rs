@@ -14,7 +14,7 @@ use rich::ratio::{ratio_distribute, ratio_reduce, ratio_resolve, Edge};
 use rich::table::Cell;
 use rich::{
     Align, Bar, Color, ColorSystem, Console, ConsoleOptions, Constrain, HorizontalAlign, Justify,
-    Layout, Overflow, Padding, Panel, Renderable, Screen, Segment, Style, Table, Text,
+    Layout, LiveRender, Overflow, Padding, Panel, Renderable, Rule, Screen, Segment, Table, Text,
     VerticalAlign, VerticalCenter,
 };
 
@@ -200,12 +200,36 @@ fn screen(screen: Screen, width: usize, height: usize) -> String {
     print(&sized(width, height), &screen)
 }
 
-fn squeezed_table() -> Table {
-    let mut table = Table::new();
+fn squeezed_table(variant: fn(Table) -> Table) -> Table {
+    let mut table = variant(Table::new());
     table.add_column("key");
     table.column_no_wrap();
     table.add_column("value");
     table.add_row(&["abcdefgh", "wrap me"]);
+    table
+}
+
+/// `_pw_squeezed_three`: `n` a long `no_wrap` column, `w` a wrapping one,
+/// `m` a wrapping one with `min_width=1`.
+fn squeezed_three(layout: &str) -> Table {
+    let mut table = Table::new().padding(0, 1, 0, 1);
+    for (index, kind) in layout.chars().enumerate() {
+        table.add_column(format!("h{index}"));
+        match kind {
+            'n' => {
+                table.column_no_wrap();
+            }
+            'm' => {
+                table.column_min_width(1);
+            }
+            _ => {}
+        }
+    }
+    let cells: Vec<&str> = layout
+        .chars()
+        .map(|kind| if kind == 'n' { "abcdefghij" } else { "ab cd" })
+        .collect();
+    table.add_row(&cells);
     table
 }
 
@@ -603,17 +627,82 @@ fn build(name: &str) -> String {
         }),
         "layout_ratio" => ratio(),
         // table.py
-        "table_squeezed_column" => [12, 10, 9, 8]
+        "table_squeezed_column" => {
+            let variants: [fn(Table) -> Table; 6] = [
+                |t| t,
+                |t| t.without_box(),
+                |t| t.show_edge(false),
+                |t| t.pad_edge(false),
+                |t| t.padding(0, 2, 0, 2),
+                |t| t.collapse_padding(true).box_set(boxes::SIMPLE),
+            ];
+            variants
+                .into_iter()
+                .flat_map(|variant| {
+                    (1..16).map(move |width| print(&console(width), &squeezed_table(variant)))
+                })
+                .collect()
+        }
+        "table_squeezed_three" => ["nww", "wnw", "nnw", "nmw", "wwn"]
             .into_iter()
-            .map(|width| print(&console(width), &squeezed_table()))
+            .flat_map(|layout| {
+                (3..26)
+                    .step_by(2)
+                    .map(move |width| print(&console(width), &squeezed_three(layout)))
+            })
             .collect(),
+        "table_many_columns" => [
+            (20, 80, Some(boxes::SQUARE)),
+            (29, 80, Some(boxes::SQUARE)),
+            (40, 80, Some(boxes::SQUARE)),
+            (12, 20, Some(boxes::ROUNDED)),
+            (12, 20, None),
+        ]
+        .into_iter()
+        .map(|(count, width, table_box)| {
+            let mut table = match table_box {
+                Some(table_box) => Table::new().box_set(table_box),
+                None => Table::new().without_box(),
+            };
+            for index in 0..count {
+                table.add_column(format!("c{index}"));
+            }
+            let cells: Vec<String> = (0..count).map(|index| index.to_string()).collect();
+            table.add_row(&cells.iter().map(String::as_str).collect::<Vec<_>>());
+            print(&console(width), &table)
+        })
+        .collect(),
+        // rule.py / live_render.py
+        "rule_end" => {
+            print_all(
+                &console(10),
+                &[
+                    &Rule::new("t").end(""),
+                    &Rule::new("t").end("!"),
+                    &Rule::new("t").end("\n\n"),
+                    &Rule::line().end(""),
+                    &Rule::new("t").align(HorizontalAlign::Left).end("x\ny"),
+                    &Text::new("after"),
+                ],
+            ) + &print_all(
+                &console(4),
+                &[
+                    &Rule::new("t").end(""),
+                    &Rule::new("t").align(HorizontalAlign::Right).end(""),
+                    &Text::new("z"),
+                ],
+            )
+        }
+        "live_render_print" => print_all(
+            &console(10),
+            &[&LiveRender::new(text("a\nb")), &Text::new("after")],
+        ),
         other => panic!("no Rust builder for parity widget case {other:?}"),
     }
 }
 
 #[test]
 fn parity_widgets() {
-    let _ = Style::new();
     let data = include_str!("golden/parity_widgets.tsv");
     let mut failures = Vec::new();
     let mut checked = 0;
@@ -632,5 +721,5 @@ fn parity_widgets() {
         checked += 1;
     }
     assert!(failures.is_empty(), "{}", failures.join("\n"));
-    assert_eq!(checked, 43, "expected every parity widget case to run");
+    assert_eq!(checked, 47, "expected every parity widget case to run");
 }
