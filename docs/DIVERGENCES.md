@@ -623,8 +623,11 @@ open ones are **permanent**, each for the reason in its entry:
   docstrings use.
 - **Remove:** as more of docutils' directives are ported.
 - **Verdict (0.0.22): permanent** for the parts docutils alone can do.
-  0.0.22 moves the target from rich-rst 1.3.2 to 2.x (see the release
-  notes).
+  The target is moving from rich-rst 1.3.2 to 2.2.0, a rewrite (docutils
+  vendored, Sphinx directives, real tables, list markers): its output for
+  every fixture is captured in `fixtures/rst-next/` and measured by an
+  ignored test in `crates/rich-ext/tests/rst.rs`; the port still matches
+  1.3.2 until it is switched over.
 
 ### 36. Semantic regions: an opt-in seam, no default change (#226)
 - **Differs:** nothing by default. `rich::protocol` adds `RegionSink`, set on
