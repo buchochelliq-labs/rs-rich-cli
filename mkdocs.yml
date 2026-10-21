@@ -204,6 +204,7 @@ nav:
   - Known issues: known-issues.md
   - Development plans:
       - "Plan to 1.0.0": plans/1.0.0.md
+      - "Parity, the marketplace and round 7's last items": plans/0.0.22.md
       - "Parity, the marketplace and round 7's leftovers": plans/0.0.21.md
       - "Layout, editing, isolation and docs": plans/0.0.19.md
       - "intuiTUIve grows up": plans/0.0.18.md
