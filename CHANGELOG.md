@@ -9,6 +9,36 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Parity: documents, `scope.py` and the verdicts (rs-rich, rs-rich-cli, scripts)
+
+- `scope.py` is ported: `rich::scope::render_scope` draws names and values
+  as upstream does, golden-tested against rich 15.0.0.
+- `pretty.py`'s layout is ported over `PrettyValue`, a description of the
+  Python object: `Pretty::from_value`, `pretty_repr`, `traverse` and
+  `Node`, with every `Pretty` option. `Pretty::new` over `Debug` stays.
+- New goldens in `crates/rich/tests/golden/parity_docs.tsv` (86 cases,
+  `scripts/parity_docs.py`): Pretty, scope, Markdown, JSON and Syntax.
+- Markdown: tables nested in lists and quotes, tables that interrupt a
+  paragraph, refused reference definitions, empty list items and empty link
+  destinations now print as upstream prints them.
+- `AnsiDecoder::decode` splits lines as rich 15.0.0 does. The CLI's notebook
+  and capture views keep rich 12's split, as rich-cli 1.8.1 does.
+- `Syntax::dedent`, `Syntax::from_path` and `Syntax::guess_lexer`;
+  `Json::from_data`; `filesize::decimal_with` (`precision`, `separator`);
+  the `Emoji` renderable and `NoEmoji`; `Console::export_text_styled` and
+  `save_text`, `save_html`, `save_svg`; `Console::page_with_links`, and
+  paging now drops hyperlinks unless asked, as upstream does.
+- Prompts parse numbers as Python's `int()` and `float()` do, print float
+  defaults as Python does, take the default only for an empty answer, and
+  fold case beyond ASCII.
+- DIVERGENCES: every open entry has a verdict, with a summary at the top;
+  §24, §28 and §33 are resolved, and §46 records the prompts' missing
+  `password` option.
+- `scripts/diff_rich.py` also generates Markdown, Tree, Columns, Progress
+  frames, Pretty and JSON cases.
+- rich-rst 2.2.0's output is captured in `fixtures/rst-next/` and measured by
+  an ignored test; `rich --rst` still matches 1.3.2.
+
 ## 0.0.21 cohort — to be published
 
 To be published from `main` by one `release.yml` run (tag
