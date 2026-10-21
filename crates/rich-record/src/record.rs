@@ -1383,8 +1383,10 @@ mod tests {
         let mut recording = recording();
         // No `Output`: every format but the APNG.
         assert_eq!(recording.default_formats(), Formats::DEFAULT);
-        assert!(!Formats::DEFAULT.apng && Formats::DEFAULT.gif && Formats::DEFAULT.mp4);
-        assert!(Formats::ALL.apng);
+        const {
+            assert!(!Formats::DEFAULT.apng && Formats::DEFAULT.gif && Formats::DEFAULT.mp4);
+            assert!(Formats::ALL.apng);
+        }
         let fonts = raster::Fonts::embedded();
         let video = Formats {
             gif: true,

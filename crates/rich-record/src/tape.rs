@@ -620,7 +620,7 @@ pub struct Tape {
     pub caption: Option<String>,
     /// `Set KeyOverlay`: `None` when the tape does not say.
     pub key_overlay: Option<bool>,
-    /// `Output`, in order. Empty: every format.
+    /// `Output`, in order. Empty: every format but the APNG.
     pub outputs: Vec<Output>,
     /// `Set Framerate`: video frames a second.
     pub frame_rate: Option<f64>,

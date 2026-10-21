@@ -27,9 +27,10 @@ the screen with a VT emulator, and writes:
   by rs-rich-ext's frame exporter, like rich's other SVG output), and a text
   grid;
 - an asciinema v2 cast, with input events and the palette in its header;
-- a GIF and an animated PNG (APNG) with a key overlay, and an MP4 when FFmpeg
-  is installed: every settled screen update, dropped to the tape's frame rate
-  (`Set Framerate 35`, `--fps`) and with identical frames merged;
+- a GIF with a key overlay, an MP4 when FFmpeg is installed, and an
+  animated PNG (APNG) when asked: every settled screen update, dropped to
+  the tape's frame rate (`Set Framerate 35`, `--fps`) and with identical
+  frames merged;
 - a self-contained HTML page: a small player (no CDN, no terminal emulator)
   and the screenshots as selectable text.
 
