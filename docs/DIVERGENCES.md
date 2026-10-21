@@ -7,6 +7,22 @@ exactly like upstream. Anything that is purely *our own* feature belongs in
 
 Format: what differs · why · how to remove it (if temporary).
 
+## Verdicts (0.0.22)
+
+Every entry has a verdict. **Resolved** entries are struck through. The
+open ones are **permanent**, each for the reason in its entry:
+
+| Kind | Entries |
+|---|---|
+| Resolved in 0.0.22 | §5's residual, §24, §28, §33 (one list-marker edge stays, see the entry) |
+| Resolved earlier | §1 (table), §8, §10, §11, §13, §14 (stack), §27 |
+| Permanent: the language or platform | §1 (`UNICODE_VERSION`), §3, §3a, §6, §14 (per console), §14a, §15, §19 (reflection), §20, §25, §30, §38 |
+| Permanent: another engine | §9 and §18 (syntect, not Pygments), §21 (pulldown-cmark's emphasis) |
+| Permanent: an API or CLI choice | §2, §34 |
+| Permanent: ours, opt-in or additive | §22, §23, §26, §35, §36, §37, §39 |
+| Owned by the widget workstream | §7, §12, §29, §31, §32 |
+| Owned by the live workstream | §16, §17 |
+
 ## Current divergences
 
 ### 1. ~~Cell-width table delegated to `unicode-width`~~ — RESOLVED
@@ -31,6 +47,11 @@ Format: what differs · why · how to remove it (if temporary).
 - **Still divergent:** upstream's `_unicode_data.load()` honours a
   `UNICODE_VERSION` environment variable to select any of 21 tables (4.1.0–17.0.0);
   we always use the shipped one. Tracked separately.
+- **Verdict (0.0.22): the remainder is permanent.** Upstream's
+  `UNICODE_VERSION` picks one of 21 vendored tables for terminals that
+  measure with an old Unicode; shipping all 21 would multiply the table's
+  size for a variable almost no one sets. The port measures with the newest
+  table, upstream's default.
 
 ### 2. Markup: the lenient print path is opt-out, not opt-in
 - **Differs:** the *scanner* now matches upstream exactly. `markup::render` uses
@@ -55,6 +76,12 @@ Format: what differs · why · how to remove it (if temporary).
   than a runtime condition.
 - **Remove:** make the strict form the default, renaming the lenient one to
   `*_lossy`.
+- **Verdict (0.0.22): permanent, an API choice.** The strict path exists
+  (`try_print_str`, `try_print_justified`, `try_build_text`) and the CLI uses
+  it; the lenient default only differs for malformed markup. Making strict
+  the default renames public methods across every crate, which belongs to
+  the 0.1.0 API review, not to parity. `@`-tag meta payloads need Python's
+  `literal_eval`, and meta never renders (see §3a).
 
 ### 3a. `Style.meta` is a typed map, not marshal bytes
 - **Differs:** upstream stores `meta` as `marshal.dumps(dict)`; `Style` here
@@ -65,6 +92,8 @@ Format: what differs · why · how to remove it (if temporary).
   markup `[@handler]` tags do not produce meta (so `Text.markup` of such text
   has no `[none]…[/none]` tag where upstream writes one).
 - **Why:** Rust has no marshal; the map round-trips what the bindings need.
+- **Verdict (0.0.22): permanent.** Rust has no `marshal`, and meta never
+  reaches the terminal.
 
 ### 3. Byte offsets in `Text` spans
 - **Differs:** upstream `Text` uses code-point offsets for spans; our `Text` uses
@@ -74,6 +103,8 @@ Format: what differs · why · how to remove it (if temporary).
   example highlighter are unaffected.
 - **Remove:** not planned unless a public API needs code-point indexing; if so,
   expose a char-index helper without changing the internal representation.
+- **Verdict (0.0.22): permanent.** Internal only: no output differs, and the
+  public offsets that matter are converted.
 
 ### 5. ~~Over-long-word fold suppresses one empty chunk vs upstream~~ (resolved)
 - **Resolved:** `Text` word-wrapping (`_wrap.divide_line`) and the over-long-word
@@ -89,6 +120,9 @@ Format: what differs · why · how to remove it (if temporary).
   still differs from upstream for *multi-codepoint graphemes folded below their
   own width* (ZWJ emoji, regional-indicator flags) — vanishingly rare, and it
   would need a grapheme-segmentation dependency to close.
+- **Verdict (0.0.22): resolved.** The residual above no longer holds:
+  `cells::chop_cells` is upstream's grapheme form, over the ported
+  `split_graphemes`, so ZWJ sequences and flags fold as upstream folds them.
 
 ### 6. Box substitution is opt-in (no legacy-terminal auto-detection)
 - **Differs:** `Box.substitute` **is** ported — `Box::substitute` maps the fancy
@@ -105,6 +139,10 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** auto-detecting `ascii_only` from a non-UTF-8 encoding at
   `Console` build time remains possible. `legacy_windows` is never
   auto-detected: the legacy console is not supported (§38).
+- **Verdict (0.0.22): permanent.** Upstream detects from
+  `sys.stdout.encoding`, which has no portable Rust equivalent (a Rust
+  string is always UTF-8). The flags are there for callers that know their
+  terminal.
 
 ### 7. `Table` — one rare padding edge remains
 - **Differs:** sizing (content, shrink-to-fit, `expand`), per-column justify,
@@ -144,6 +182,8 @@ Format: what differs · why · how to remove it (if temporary).
   document ending in a thematic break is also matched — golden `markdown_hr_end`.)
 - **Why:** code blocks go through `syntect`, not Pygments (#18).
 - **Remove:** see the Syntax entry (#18).
+- **Verdict (0.0.22): permanent,** for code blocks only, as §18. Every other
+  element is parity.
 
 ### 10. ~~`AnsiDecoder` skips OSC hyperlinks~~ (resolved)
 - **Resolved:** the decoder now reads OSC 8 sequences (`\x1b]8;<params>;<url>\x1b\`)
@@ -203,6 +243,8 @@ Format: what differs · why · how to remove it (if temporary).
   belongs to the `Console` value, which fits a console that `Live::spawn` moves
   to another thread. Golden `theme_stack.tsv` covers push, pop, nested push,
   `use_theme`, `Theme.config` and `from_file` byte for byte.
+- **Verdict (0.0.22): permanent** for the remaining difference: a stack per
+  console is what a console moved between threads needs.
 
 ### 14a. `Style::parse` results are not cached
 - **Differs:** upstream LRU-caches style-definition parsing; we re-resolve names
@@ -212,6 +254,7 @@ Format: what differs · why · how to remove it (if temporary).
   render, which is where it mattered; a global cache would need a lock or
   thread-local and has not been shown to be worth it.
 - **Remove:** measure first; add only if a profile justifies it.
+- **Verdict (0.0.22): permanent.** A cache changes speed, not output.
 
 ### 15. Exports done (HTML both forms + SVG); SVG needs an explicit `unique_id`
 - **Differs:** `Console::export_html` (inline styles), `export_html_classes` (the
@@ -230,6 +273,9 @@ Format: what differs · why · how to remove it (if temporary).
   (`export::export_html_with`, `svg::export_svg_with`, golden `core_gaps.tsv`).
   A `code_format` using conversions or format specs (`{code!r}`, `{width:>5}`)
   is refused with `ExportFormatError` rather than formatted.
+- **Verdict (0.0.22): permanent.** The default id hashes Python's `repr()` of
+  every segment, which only CPython can produce; an explicit `unique_id`
+  gives upstream's bytes.
 
 ### 16. `Progress` — columns, task model, pulse and live display done
 - **Resolved (0.0.10, core 0.0.6):** the time, rate and spinner columns and the
@@ -384,6 +430,13 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** a 1:1 port isn't possible without reflection; the Rust-native analogs
   deliver the same *utility* (colorized value/error/log rendering).
 - **Remove:** inherent to the language difference; not removable.
+- **Verdict (0.0.22): narrowed, the rest permanent.** `pretty.py`'s layout
+  is now ported over `PrettyValue`, a description of the Python object
+  (`Pretty::from_value`, `pretty_repr`, and `scope.py`'s `render_scope`
+  on top), byte for byte against rich 15.0.0 (`parity_docs.tsv`). What stays
+  Rust-native needs reflection: `Pretty::new` over `Debug`, `inspect`,
+  `repr.py`'s decorators, tracebacks with frames and locals, and
+  `logging`'s rich tracebacks.
 
 ### 20. Hyperlinks omit upstream's random `id=` field
 - **Differs:** `Style::with_link` renders an OSC 8 hyperlink as
@@ -395,6 +448,8 @@ Format: what differs · why · how to remove it (if temporary).
   affects hover-grouping of a multi-segment link.
 - **Remove:** add a stable per-link id (e.g. a hash of the URL) if hover grouping
   is ever needed — but it still wouldn't match upstream's random value.
+- **Verdict (0.0.22): permanent.** A random value cannot be golden-tested,
+  and the link works without it.
 
 ### 21. Strikethrough across emphasis (narrowed in 0.0.10)
 - **Resolved (0.0.10, core 0.0.6):** tilde runs of any length now pair as
@@ -417,6 +472,11 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** port markdown-it's emphasis delimiter handling into the same
   `balance_pairs` pass, under the Markdown issue (#9). Pinned by
   `tildes_crossing_a_later_emphasis_stay_literal`.
+- **Verdict (0.0.22): permanent.** The one remaining case needs a tilde pair
+  and an emphasis span that cross, which no one writes on purpose. Fixing it
+  means our own CommonMark emphasis pairing in place of pulldown-cmark's
+  (an outer `*` can re-pair once the inner span dissolves), a parser of its
+  own for one malformed input.
 
 ### 24. ~~A refused Markdown reference definition is not printed~~ (resolved in 0.0.22)
 - **Resolved:** a reference definition whose destination markdown-it's
@@ -437,6 +497,7 @@ Format: what differs · why · how to remove it (if temporary).
   depth) cost quadratic memory until the process was killed; a machine-dependent
   cutoff cannot be reproduced exactly.
 - **Remove:** not removable exactly; the constant can be tuned.
+- **Verdict (0.0.22): permanent.** CPython's cutoff depends on its C stack.
 
 ### 27. ~~A `Text`'s trailing blank line is lost inside containers~~ (resolved)
 - **Resolved:** `Text` marks a final empty line with an empty segment, which
@@ -471,6 +532,7 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** the rendered output is a Rust string; upstream's own output cannot
   be written to a UTF-8 terminal either (`UnicodeEncodeError`).
 - **Remove:** not removable without non-UTF-8 output.
+- **Verdict (0.0.22): permanent.** A Rust string cannot hold a surrogate.
 
 ### 31. Unknown style names in renderable options resolve to no style
 - **Differs:** upstream's `Console.get_style` raises `MissingStyle` for a name
@@ -523,6 +585,7 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** changing `-j` and `-x` would break scripts written for this CLI
   to fix scripts written for rich-cli, and both uses are common.
 - **Remove:** a major CLI release could move them to upstream's meanings.
+- **Verdict (0.0.22): permanent** until a major CLI release.
 
 ### 35. `rich --rst` renders a subset of reStructuredText
 - **Differs:** rich-cli's `--rst` hands the document to docutils, and
@@ -555,6 +618,9 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** there is no docutils for Rust, and the subset is what READMEs and
   docstrings use.
 - **Remove:** as more of docutils' directives are ported.
+- **Verdict (0.0.22): permanent** for the parts docutils alone can do.
+  0.0.22 moves the target from rich-rst 1.3.2 to 2.x (see the release
+  notes).
 
 ### 36. Semantic regions: an opt-in seam, no default change (#226)
 - **Differs:** nothing by default. `rich::protocol` adds `RegionSink`, set on
@@ -572,6 +638,7 @@ Format: what differs · why · how to remove it (if temporary).
   the renderables; the render tree (`docs/design/render-tree.md`) needs them
   for semantic HTML and accessibility. Upstream has no equivalent.
 - **Remove:** not planned; the seam is additive.
+- **Verdict (0.0.22): permanent.** Opt-in and additive.
 
 ### 37. Frame export (`rich_ext::frame`) differs from `export_html` and `export_svg` in small ways
 - **Differs:** `Frame::to_html` and `Frame::to_svg` use core's templates and
@@ -599,6 +666,7 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** these are our exporters (the render tree's), not upstream's; they
   keep what core's lose.
 - **Remove:** not planned.
+- **Verdict (0.0.22): permanent.** These are our exporters, not upstream's.
 
 ### 38. The Windows legacy console is not supported
 
@@ -613,6 +681,7 @@ Format: what differs · why · how to remove it (if temporary).
   Decided for 1.0.0 on 2026-10-11 ([plan](plans/1.0.0.md), decision 7;
   [#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12)).
 - **Remove:** not planned.
+- **Verdict (0.0.22): permanent** (decided for 1.0.0).
 
 ## Feature-flagged divergences
 
@@ -633,6 +702,8 @@ spelling to preserve bytes within the width; atomicity is impossible there.
 Cropping remains intentionally lossy presentation output. This behavior requires
 JSON lexical context unavailable in generic Text rendering. Remove this special
 handling if upstream adopts the same escape-aware layout.
+- **Verdict (0.0.22): permanent.** Off by default; the default build is
+  unchanged.
 
 ## Explicit text encoding extension (0.0.4 development)
 
@@ -661,6 +732,8 @@ dependency on extensions. See [encoding policy](troubleshooting.md#text-encoding
   `CodeHighlighter` (such as lumis) is unaffected by the feature.
 - **Enable:** `cargo build -p rs-rich-cli --release --features syntax-cache`.
   See [benchmarks](benchmarks.md#004-repeated-source-syntax-results).
+- **Verdict (0.0.22): permanent.** Off by default; the default build is
+  unchanged.
 
 ### 26. Optional Oniguruma regex engine (`onig`)
 
@@ -681,6 +754,8 @@ dependency on extensions. See [encoding policy](troubleshooting.md#text-encoding
   could still differ.
 - **Enable:** `cargo build -p rs-rich-cli --release --features onig`, or
   `rs-rich = { version = "…", features = ["onig"] }`.
+- **Verdict (0.0.22): permanent.** Off by default; the default build is
+  unchanged.
 
 ### 39. `Syntax` and `Markdown` without syntect (`code`)
 
@@ -700,3 +775,5 @@ dependency on extensions. See [encoding policy](troubleshooting.md#text-encoding
   which carries a security advisory, and keep `Syntax` and Markdown fences.
 - **Enable:** `rs-rich = { version = "…", default-features = false,
   features = ["code", "markdown"] }`.
+- **Verdict (0.0.22): permanent.** Off by default; the default build is
+  unchanged.
