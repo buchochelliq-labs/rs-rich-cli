@@ -153,7 +153,13 @@ fn render(case: &Value) -> String {
             json_options.ensure_ascii = opt_bool(&options, "ensure_ascii").unwrap_or(false);
             json_options.highlight = opt_bool(&options, "highlight").unwrap_or(true);
             json_options.allow_nan = opt_bool(&options, "allow_nan").unwrap_or(true);
-            match Json::with_options(case["source"].as_str().expect("source"), &json_options) {
+            let source = case["source"].as_str().expect("source");
+            let json = if case.get("from_data").and_then(Value::as_bool) == Some(true) {
+                Json::from_data(&serde_json::from_str(source).expect("data"), &json_options)
+            } else {
+                Json::with_options(source, &json_options)
+            };
+            match json {
                 Ok(json) => Box::new(json),
                 Err(_) => return "<error>".to_string(),
             }

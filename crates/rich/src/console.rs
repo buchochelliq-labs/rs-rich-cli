@@ -968,6 +968,59 @@ impl Console {
         segments_to_plain(&segments)
     }
 
+    /// Like [`export_text`](Self::export_text) with escape codes. Port of
+    /// `Console.export_text(styles=True)`: each segment in the console's
+    /// colour system (upstream's style keeps the codes printing rendered),
+    /// or in truecolor, `Style.render`'s default, without one.
+    pub fn export_text_styled(&self, f: impl FnOnce(&Console)) -> String {
+        let system = self.color_system().unwrap_or(ColorSystem::Truecolor);
+        self.record(f)
+            .iter()
+            .map(|segment| match &segment.style {
+                Some(style) => style.render(&segment.text, Some(system)),
+                None => segment.text.clone(),
+            })
+            .collect()
+    }
+
+    /// Write what `f` prints to `path` as text, with escape codes when
+    /// `styles`. Port of `Console.save_text`.
+    pub fn save_text(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        styles: bool,
+        f: impl FnOnce(&Console),
+    ) -> std::io::Result<()> {
+        let text = if styles {
+            self.export_text_styled(f)
+        } else {
+            self.export_text(f)
+        };
+        std::fs::write(path, text)
+    }
+
+    /// Write what `f` prints to `path` as HTML with a stylesheet. Port of
+    /// `Console.save_html` (its default `inline_styles=False`).
+    pub fn save_html(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        f: impl FnOnce(&Console),
+    ) -> std::io::Result<()> {
+        std::fs::write(path, self.export_html_classes(f))
+    }
+
+    /// Write what `f` prints to `path` as SVG. Port of `Console.save_svg`;
+    /// as for [`export_svg`](Self::export_svg), the `unique_id` is given.
+    pub fn save_svg(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        title: &str,
+        unique_id: &str,
+        f: impl FnOnce(&Console),
+    ) -> std::io::Result<()> {
+        std::fs::write(path, self.export_svg(title, unique_id, f))
+    }
+
     /// Buffer everything printed inside `f` and display it through the system
     /// pager. The Rust analogue of upstream's `with console.pager():` block.
     ///
@@ -2194,6 +2247,27 @@ mod tests {
             linked(true),
             "\x1b]8;;https://x.io\x1b\\\x1b[1mhi\x1b[0m\x1b]8;;\x1b\\ there\n"
         );
+    }
+
+    #[test]
+    fn export_text_styled_renders_truecolor() {
+        // rich 15.0.0, recording `[#ff8800]x[/] y`, `export_text(styles=True)`:
+        // `\x1b[91mx…` on a `standard` console, truecolor with no colour.
+        let console = |system| {
+            Console::builder()
+                .force_terminal(true)
+                .color_system(system)
+                .width(20)
+                .no_color(false)
+                .build()
+        };
+        let export =
+            |console: Console| console.export_text_styled(|c| c.print_str("[#ff8800]x[/] y"));
+        assert_eq!(
+            export(console(Some(ColorSystem::Standard))),
+            "\x1b[91mx\x1b[0m y\n"
+        );
+        assert_eq!(export(console(None)), "\x1b[38;2;255;136;0mx\x1b[0m y\n");
     }
 
     #[test]

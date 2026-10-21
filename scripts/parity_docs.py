@@ -126,7 +126,10 @@ def render_case(case: dict) -> str:
         from rich.json import JSON
 
         try:
-            renderable = JSON(case["source"], **options)
+            if case.get("from_data"):
+                renderable = JSON.from_data(json.loads(case["source"]), **options)
+            else:
+                renderable = JSON(case["source"], **options)
         except Exception as error:  # noqa: BLE001 - the error class is the output
             return f"<{type(error).__name__}>"
     elif kind == "syntax":
@@ -325,6 +328,18 @@ PARITY_DOCS_CASES: list[tuple[str, dict]] = [
     ],
     ("syntax_no_dedent", {"kind": "syntax", "width": 30, "code": "    a\n    b\n", "options": {}}),
     ("syntax_from_path", {"kind": "syntax", "width": 40, "path": "LICENSE", "options": {"line_numbers": True, "line_range": [1, 3]}}),
+    # json.py: `JSON.from_data` and the options.
+    *[
+        (f"json_{name}", {"kind": "json", "width": 40, "source": source, **extra})
+        for name, source, extra in [
+            ("from_data", '{"b": [1, 2.5, 1e16, -0.0, "x"], "a": {"n": null, "t": true}, "é": "ü"}', {"from_data": True}),
+            ("from_data_sorted_ascii", '{"b": 1, "a": "é\\u2028"}', {"from_data": True, "options": {"sort_keys": True, "ensure_ascii": True, "indent": 4}}),
+            ("from_data_flat", '[1, {"a": []}, {}]', {"from_data": True, "options": {"indent": None}}),
+            ("from_data_tab_indent", '{"a": [1]}', {"from_data": True, "options": {"indent": "\t"}}),
+            ("no_highlight", '{"a": [1, "b"]}', {"options": {"highlight": False}}),
+            ("indent_zero", '{"a": [1]}', {"options": {"indent": 0}}),
+        ]
+    ],
     ("scope_wide_keys", {"kind": "scope", "width": 24, "scope": [["界界", "界"], ["🙂", [1, 2, 3, 4, 5, 6, 7, 8]]]}),
 ]
 
