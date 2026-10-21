@@ -9,6 +9,24 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### rs-rich-marketplace 0.0.1 (new): the plugin marketplace client
+
+- Verifies `index.json` and its minisign signature with `minisign-verify`
+  (pure Rust; the legacy unhashed algorithm is refused): the key id before
+  the signature, the trusted comment's serial, the `schema_version`, a
+  rollback against the last serial accepted, and the expiry.
+- Walks the key chain: each generation signed by both keys of the one
+  before, or by its backup key alone when it revokes a lost main key.
+- Reads listings through the index (their SHA-256, then the schema's rules
+  and the ones beyond it) and resolves the newest version the host loads,
+  with rs-rich-plugin-api's own checks, never a yanked one.
+- Installs over HTTPS only through a `Transport` (`HttpsTransport` on ureq,
+  behind the default `http` feature): at most the declared size, the
+  SHA-256, a check by kind, an atomic move into place and the lockfile.
+  Each load checks the file against the lockfile. No terminal code.
+- Tested against a fixture marketplace signed with test keys checked into
+  the crate. The official keys are not compiled in yet.
+
 ## 0.0.21 cohort — to be published
 
 To be published from `main` by one `release.yml` run (tag
