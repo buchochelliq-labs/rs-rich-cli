@@ -6,11 +6,19 @@
 /// Format `size` bytes as a decimal (base-1000) string, e.g. `1.5 kB`.
 /// Port of `filesize.decimal`.
 pub fn decimal(size: u64) -> String {
+    decimal_with(size, 1, " ")
+}
+
+/// [`decimal`] with `precision` decimal places and `separator` between the
+/// value and the unit. Port of `filesize.decimal(size, precision=…,
+/// separator=…)`.
+pub fn decimal_with(size: u64, precision: usize, separator: &str) -> String {
     to_str(
         size,
         &["kB", "MB", "GB", "TB", "PB", "EB", "ZB", "YB"],
         1000.0,
-        1,
+        precision,
+        separator,
     )
 }
 
@@ -74,7 +82,7 @@ pub fn pick_unit_and_suffix<'a>(size: u64, suffixes: &[&'a str], base: u64) -> (
     (unit as u64, suffix)
 }
 
-fn to_str(size: u64, suffixes: &[&str], base: f64, precision: usize) -> String {
+fn to_str(size: u64, suffixes: &[&str], base: f64, precision: usize, separator: &str) -> String {
     if size == 1 {
         return "1 byte".to_string();
     }
@@ -93,7 +101,7 @@ fn to_str(size: u64, suffixes: &[&str], base: f64, precision: usize) -> String {
         }
     }
     let value = base * size_f / unit;
-    format!("{value:.precision$} {suffix}")
+    format!("{value:.precision$}{separator}{suffix}")
 }
 
 #[cfg(test)]
@@ -113,6 +121,19 @@ mod tests {
         assert_eq!(decimal(1_000_000), "1.0 MB");
         assert_eq!(decimal(1_500_000_000), "1.5 GB");
         assert_eq!(decimal(1_000_000_000_000_000_000), "1.0 EB");
+    }
+
+    #[test]
+    fn precision_and_separator_match_upstream() {
+        // Captured from real rich 15.0.0 `filesize.decimal(size, precision=…,
+        // separator=…)`.
+        assert_eq!(decimal_with(30000, 2, ""), "30.00kB");
+        assert_eq!(decimal_with(1_234_567, 0, " "), "1 MB");
+        assert_eq!(decimal_with(1250, 1, "_"), "1.2_kB");
+        assert_eq!(decimal_with(1350, 1, ""), "1.4kB");
+        assert_eq!(decimal_with(999_999, 3, "\t"), "999.999\tkB");
+        assert_eq!(decimal_with(1, 3, ""), "1 byte");
+        assert_eq!(decimal_with(12, 3, ""), "12 bytes");
     }
 
     #[test]
