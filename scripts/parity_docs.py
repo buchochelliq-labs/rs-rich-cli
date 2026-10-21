@@ -286,6 +286,18 @@ PARITY_DOCS_CASES: list[tuple[str, dict]] = [
             "- a|b|c\n  -||-\n",
         ])
     ],
+    # markdown.py: refused reference definitions (DIVERGENCES §24).
+    *[
+        (f"markdown_refused_definition_{index}", {"kind": "markdown", "width": 40, "source": source, "options": {"hyperlinks": False}})
+        for index, source in enumerate([
+            "[r][1]\n\n[1]: javascript:x\n",
+            "[1]: javascript:alert(1)\n[r][1] after\n",
+            "a [r][1] b\n\n[1]: vbscript:y \"title\"\n\n[2]: https://ok.example\n\n[s][2]\n",
+            "> [1]: javascript:x\n> text\n",
+            "  [1]: data:text/html,x\n\n[r][1]\n",
+            "[1]: data:image/png;base64,AAA\n\n![i][1]\n",
+        ])
+    ],
     ("scope_wide_keys", {"kind": "scope", "width": 24, "scope": [["界界", "界"], ["🙂", [1, 2, 3, 4, 5, 6, 7, 8]]]}),
 ]
 

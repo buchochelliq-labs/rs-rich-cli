@@ -1114,7 +1114,42 @@ fn pair_strikethrough<'a>(
     out
 }
 
+/// markdown-it keeps a reference definition only when `validateLink` takes
+/// its destination; a refused one (`[1]: javascript:x`) is ordinary paragraph
+/// text. pulldown-cmark consumes every definition, so the `[` of each refused
+/// one is escaped and the source parsed again: the line then prints as the
+/// paragraph markdown-it prints, and links to the label stay literal. `None`
+/// when no definition is refused.
+fn escape_refused_definitions(source: &str) -> Option<String> {
+    let parser = Parser::new_ext(source, Options::ENABLE_TABLES);
+    let mut starts: Vec<usize> = parser
+        .reference_definitions()
+        .iter()
+        .filter(|(_, def)| !validate_link(&normalize_link(&def.dest)))
+        .filter_map(|(_, def)| {
+            source[def.span.clone()]
+                .find('[')
+                .map(|at| def.span.start + at)
+        })
+        .collect();
+    if starts.is_empty() {
+        return None;
+    }
+    starts.sort_unstable();
+    let mut escaped = String::with_capacity(source.len() + starts.len());
+    let mut from = 0;
+    for start in starts {
+        escaped.push_str(&source[from..start]);
+        escaped.push('\\');
+        from = start;
+    }
+    escaped.push_str(&source[from..]);
+    Some(escaped)
+}
+
 fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
+    let escaped = escape_refused_definitions(source);
+    let source = escaped.as_deref().unwrap_or(source);
     let hyperlinks = !md.no_hyperlinks;
     let paragraph_justify = md.justify.unwrap_or(Justify::Left);
     let mut blocks: Vec<Block> = Vec::new();

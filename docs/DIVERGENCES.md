@@ -413,19 +413,14 @@ Format: what differs · why · how to remove it (if temporary).
   `balance_pairs` pass, under the Markdown issue (#9). Pinned by
   `tildes_crossing_a_later_emphasis_stay_literal`.
 
-### 24. A refused Markdown reference definition is not printed
-- **Differs:** link, image and autolink destinations go through markdown-it's
-  `normalizeLink` and `validateLink` as upstream (`markdown_url.rs`, golden
-  `markdown_links.tsv`), so `[j](javascript:x)` stays literal text. But a
-  *reference definition* whose destination `validateLink` refuses
-  (`[1]: javascript:x`) is not a definition upstream, so its line prints as a
-  paragraph; pulldown-cmark consumes the line as a definition, and it prints
-  nothing here. The link using it (`[r][1]`) does print as literal text, as
-  upstream.
-- **Why:** pulldown-cmark resolves definitions during block parsing, and turns
-  no event for the consumed line that could be put back.
-- **Remove:** re-emit the source span of each refused definition
-  (`Parser::reference_definitions()` carries it) as a paragraph block.
+### 24. ~~A refused Markdown reference definition is not printed~~ (resolved in 0.0.22)
+- **Resolved:** a reference definition whose destination markdown-it's
+  `validateLink` refuses (`[1]: javascript:x`) is not a definition upstream,
+  so its line prints as a paragraph. The port now finds such definitions in
+  pulldown-cmark's `reference_definitions()`, escapes their `[` and parses
+  again, so the line prints as upstream prints it, continuation lines
+  included, and links using the label stay literal (golden
+  `markdown_refused_definition_*` in `parity_docs.tsv`).
 
 ### 25. JSON nesting stops at exactly 10 000 levels
 - **Differs:** `Json::new` refuses documents nested deeper than
