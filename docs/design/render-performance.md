@@ -382,6 +382,46 @@ Each goes through the benchmark below before it is kept. Ideas 1, 2, 4, 6
 and 7 change the core painter. Idea 3 is the virtual scroll view's.
 Ideas 9 and 12 are the image layer's and rs-rich-web's.
 
+## Compression
+
+Measured on 2026-10-25, on the docs tapes' recorded output: 931 frames of
+200 bytes or more, 4.16 MB in all, compress to 0.60 MB with zlib at level 1
+(14%). That runs at about 86 MB/s even from Python, about 52 µs a frame.
+Terminal output is very repetitive: escape sequences, runs of blanks, the
+same styles again and again.
+
+Where it can and cannot help:
+
+- **A local terminal: not at all.** A terminal reads raw bytes and cannot
+  decompress. On a local PTY, compressing only adds work. Here the gain
+  comes from saying less: the encoder work above (style deltas, cheaper
+  moves, ECH, EL and REP, scrolling) is compression in the terminal's own
+  vocabulary.
+- **SSH:** `ssh -C` (or `Compression yes`) already compresses the whole
+  stream with zlib. That is worth saying in the docs for slow links. Mosh
+  goes further: it sends state differences and echoes keys locally.
+- **rs-rich-web over a network: yes.** That is where frames cross a real
+  link.
+  - tungstenite 0.30 has no permessage-deflate, so it would be ours to
+    add.
+  - The cleanest option is binary frames compressed with deflate
+    (`flate2`, already in the workspace), and decompressed in the page
+    with the browser's built-in `DecompressionStream("deflate-raw")`. That
+    needs no JavaScript library.
+  - It applies to both the xterm.js stream and the DOM renderer's JSON.
+    The DOM renderer would also gain from a binary encoding before any
+    compression.
+  - It is turned on only above a size threshold, and only where the
+    measured link is slower than the compressor.
+- **Kitty images:** the graphics protocol takes zlib-compressed pixels
+  (`o=z`), which matters for raw RGBA frames (Doom's gap 3).
+- **Recordings:** casts and tapes can be stored compressed, but they are
+  small already.
+
+The benchmark gains a simulated link (bytes per second plus a fixed
+latency per write), so each strategy and compression setting is judged by
+time to the screen, not only by bytes.
+
 ## Benchmarks
 
 A benchmark comes first and decides the defaults. Each scene runs at
