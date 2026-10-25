@@ -66,6 +66,8 @@ pub struct Browser {
     pub keymap: Signal<Keymap>,
     pub bookmarks: Signal<Bookmarks>,
     pub images: Signal<Images>,
+    /// How images show where no site says otherwise.
+    pub images_default: Signal<Images>,
     /// The terminal's size in cells.
     pub viewport: Memo<(u16, u16)>,
     tab: Signal<Tab>,
@@ -1011,6 +1013,31 @@ fn bookmarks_list(b: Browser, cx: &mut Ctx) {
     );
 }
 
+/// A new document's site settings: its view, whether images show, and the
+/// width Chrome lays it out at. (`audio` and `fps` are read, and wait for
+/// the media phase: sound is a switch of the browser's launch.)
+fn apply_site(b: Browser, url: &str) {
+    let site = b.config.with_untracked(|c| c.site(url).cloned());
+    let base = b.images_default.get_untracked();
+    let images = match site.as_ref().and_then(|s| s.images) {
+        Some(false) => Images::None,
+        _ => base,
+    };
+    if b.images.get_untracked() != images {
+        b.images.set(images);
+    }
+    if let Some(view) = site
+        .as_ref()
+        .and_then(|s| s.view)
+        .filter(|v| *v != View::Raster)
+    {
+        b.view.set(view);
+    }
+    let (columns, rows) = b.viewport.get_untracked();
+    let width = site.as_ref().and_then(|s| s.width).unwrap_or(columns);
+    b.send(Command::Resize(width, rows.saturating_sub(2)));
+}
+
 /// Apply one of the tab's updates, on the app's thread.
 fn apply(b: Browser, update: Update, cx: &mut Ctx) {
     match update {
@@ -1023,8 +1050,12 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
                 b.hints.set(None);
                 b.find_at.set(usize::MAX);
             }
+            let url = page.url.clone();
             b.page.set(Some(page));
             b.refresh_controls();
+            if new_document {
+                apply_site(b, &url);
+            }
         }
         Update::State(state) => b.state.set(state),
         Update::Done(id, result) => {
@@ -1223,6 +1254,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             keymap: signal(keymap.clone()),
             bookmarks: signal(bookmarks),
             images: signal(images),
+            images_default: signal(images),
             viewport: viewport(),
             tab: signal(tab),
             waiting: signal(HashMap::new()),

@@ -301,6 +301,15 @@ renderable. It composes `rs-rich-intuituive`'s public `Widget` trait,
 golden fixture covers it. See
 [Embedding programs and pages](guide/intuituive/embed.md).
 
+### Noctiluca, the terminal web browser (noctiluca, not upstream)
+
+`noctiluca` (`crates/noctiluca`, 0.0.1) has no upstream module to port:
+Python `rich` has no browser. It drives Chrome through `rs-rich-embed`'s
+public `ChromeEngine` and `DevTools`, draws with `rs-rich-intuituive`'s
+stock widgets and nodes, and adds nothing to intuiTUIve core. Core is
+unchanged and no golden fixture covers it. See
+[the design note](design/browser.md).
+
 ### The plugin marketplace (rs-rich-marketplace, not upstream)
 
 `rs-rich-marketplace` (`crates/rich-marketplace`, 0.0.1) has no upstream

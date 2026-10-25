@@ -57,6 +57,11 @@ rich-cli ──▶ rich-data ──▶ rich-ext ──▶ rich       (tabular da
              rich-embed ──▶ rich-intuituive, rich-record   (a terminal pane and a web view: `PtyHost`
                   └ ─ ▶ tungstenite, image       (portable-pty), `WebEngine`; Chrome over DevTools behind
                                                  its `chrome` feature, Browsh behind `browsh`)
+             noctiluca ──▶ rich-intuituive, rich-embed   (Noctiluca, the terminal web browser: its engine
+                  └──▶ rich                       trait over embed's ChromeEngine, the page model, reader
+                                                 mode and the projection, web widgets over stock ones.
+                                                 A leaf: nothing depends on it, and it adds nothing to
+                                                 intuiTUIve core)
 rich-cli ─ ─ ▶ rich-web ──▶ rich-intuituive, rich-embed   (serving to a browser: a WebSocket session per
                                                  tab, an app or a program on a PTY (rs-rich-embed's
                                                  `PtyHost`), a vendored xterm.js page or a DOM renderer
@@ -105,6 +110,7 @@ possible, and keep the boundary free of core back-dependencies.
 | `rs-rich-web`  | independent SemVer | whenever we ship anything              |
 | `rs-rich-embed` | independent SemVer | whenever we ship anything             |
 | `rs-rich-marketplace` | independent SemVer | whenever we ship anything       |
+| `noctiluca`    | independent SemVer | whenever we ship anything              |
 | `rs-rich-macros` | independent SemVer | whenever we ship anything            |
 | `rs-rich-art`  | independent SemVer | whenever we ship anything              |
 | `rs-rich` (PyPI, `crates/rich-py`) | independent SemVer, `python-v…` tags | whenever we ship anything |

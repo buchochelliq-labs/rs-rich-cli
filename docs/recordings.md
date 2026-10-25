@@ -740,6 +740,24 @@ shows a local page and Ctrl+L opens another. See
 
 [Tape](tapes/embed.tape) · [Cast](media/tapes/embed/embed.cast) · [GIF](media/tapes/embed/embed.gif) · [Page](media/tapes/embed/embed.html)
 
+## A terminal web browser
+
+Noctiluca (0.0.22, the reader phase): a page in reader mode, link hints,
+a followed link and back, the live F1 overlay of every action with the
+reason one cannot run, and the projection one key away. The tape replays
+Chrome's saved snapshots of the crate's fixture pages, since the tape job
+runs no browser. See [the design note](design/browser.md).
+
+<div class="tape-player" data-cast="../media/tapes/noctiluca/noctiluca.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/noctiluca/noctiluca.gif" alt="Noctiluca reading a local page in reader mode, following a link by its hint, and listing its actions">
+</div>
+
+| Reader mode | Link hints | F1 | The projection |
+|---|---|---|---|
+| ![A page in reader mode](media/tapes/noctiluca/reader.png) | ![Hint labels on the links](media/tapes/noctiluca/hints.png) | ![The live action overlay](media/tapes/noctiluca/actions.png) | ![The page by Chrome's geometry](media/tapes/noctiluca/projection.png) |
+
+[Tape](tapes/noctiluca.tape) · [Cast](media/tapes/noctiluca/noctiluca.cast) · [GIF](media/tapes/noctiluca/noctiluca.gif) · [Page](media/tapes/noctiluca/noctiluca.html)
+
 ## Charts from data
 
 `rich chart` draws CSV, JSON or numbers piped in: bars labelled by a

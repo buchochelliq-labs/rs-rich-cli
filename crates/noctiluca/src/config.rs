@@ -920,6 +920,17 @@ mod tests {
     }
 
     #[test]
+    fn the_sample_config_reads_without_a_warning() {
+        let config = Config::parse(include_str!("../config.sample.toml")).unwrap();
+        assert!(config.warnings.is_empty(), "{:?}", config.warnings);
+        assert_eq!(
+            config.site("https://github.com/x").and_then(|s| s.view),
+            Some(View::Reader)
+        );
+        assert!(config.shortcuts.contains_key("wiki"));
+    }
+
+    #[test]
     fn a_saved_site_key_keeps_the_users_comments() {
         let dir = std::env::temp_dir().join(format!("noctiluca-config-{}", std::process::id()));
         std::fs::create_dir_all(&dir).unwrap();

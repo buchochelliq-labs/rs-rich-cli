@@ -30,24 +30,8 @@ fn engine() -> FakeEngine {
             snapshot.dom["strings"][at] = format!("https://fixture.example/{name}.html").into();
         }
     }
-    // A click on a link goes where it points; a click on Send submits.
-    engine.on_act(follow)
-}
-
-/// What a click does on the fixture pages.
-fn follow(action: &PageAction, state: &mut FakeState) {
-    let PageAction::Click(node) = action else {
-        return;
-    };
-    let Some(current) = state.current.clone() else {
-        return;
-    };
-    let page = &state.pages[&current];
-    let model = noctiluca::model::build(page, &mut noctiluca::model::Revisions::new());
-    if let Some(href) = model.control(*node).and_then(|c| c.href.clone()) {
-        let name = href.rsplit('/').next().unwrap_or_default().to_string();
-        state.go(&name);
-    }
+    // A click on a link goes where it points (the fake engine's default).
+    engine
 }
 
 fn options(config: Config, url: &str) -> Options {

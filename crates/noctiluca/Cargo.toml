@@ -1,10 +1,10 @@
 # crates/noctiluca — Noctiluca, a terminal web browser on intuiTUIve.
 #
 # Not a port of anything upstream: an rs-rich addition. Its design is
-# docs/design/browser.md. This is the first spike: a local page read
-# through rs-rich-embed's ChromeEngine (DevTools, sandbox on), its
-# headings and paragraphs printed as rich Text. Not published, and not in
-# the release tooling yet. Independent SemVer from 0.0.1.
+# docs/design/browser.md. The reader phase: a page read through
+# rs-rich-embed's ChromeEngine (DevTools, sandbox on), drawn as terminal
+# text in an intuiTUIve app, its controls as stock widgets. Independent
+# SemVer from 0.0.1.
 [package]
 name = "noctiluca"
 version = "0.0.1"
@@ -15,7 +15,11 @@ repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
 rust-version.workspace = true
-publish = false
+readme = "README.md"
+documentation = "https://docs.rs/noctiluca"
+keywords = ["terminal", "browser", "tui", "chrome", "rich"]
+categories = ["command-line-utilities"]
+include = ["src/**/*", "README.md", "LICENSE", "config.sample.toml", "Cargo.toml"]
 
 [lints]
 workspace = true

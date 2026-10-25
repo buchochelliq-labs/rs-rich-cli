@@ -104,6 +104,26 @@ impl FakeState {
     }
 }
 
+/// What a click does when a test says nothing else: a link goes where
+/// it points, to the saved page its address's last segment names.
+pub fn follow(action: &PageAction, state: &mut FakeState) {
+    let PageAction::Click(node) = action else {
+        return;
+    };
+    let Some(page) = state
+        .current
+        .as_ref()
+        .and_then(|name| state.pages.get(name))
+    else {
+        return;
+    };
+    let model = crate::model::build(page, &mut crate::model::Revisions::new());
+    if let Some(href) = model.control(*node).and_then(|c| c.href.clone()) {
+        let target = href.rsplit('/').next().unwrap_or_default().to_string();
+        state.go(&target);
+    }
+}
+
 impl Engine for FakeEngine {
     fn resize(&mut self, _columns: u16, _rows: u16) -> io::Result<()> {
         Ok(())
@@ -181,8 +201,9 @@ impl Engine for FakeEngine {
         {
             let mut state = self.lock();
             state.actions.push(action.clone());
-            if let Some(hook) = hook.as_mut() {
-                hook(action, &mut state);
+            match hook.as_mut() {
+                Some(hook) => hook(action, &mut state),
+                None => follow(action, &mut state),
             }
         }
         self.on_act = hook;
