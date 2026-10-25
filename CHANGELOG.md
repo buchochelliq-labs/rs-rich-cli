@@ -137,6 +137,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `Accessibility.getFullAXTree`, …), answered on a channel of its own. A
   call DevTools refuses fails only that call. The first step of the
   Noctiluca browser's CDP work (`docs/design/browser.md`).
+- `DevTools::listen`: the page's and the browser's events by method
+  (`Runtime.bindingCalled`, `Browser.downloadWillBegin`, …), on a channel.
+- Switches, all off by default (Noctiluca's decisions 3 and 4):
+  `ChromeEngine::audio` (the browser starts with `--mute-audio` unless
+  asked), `ChromeEngine::downloads` (`Downloads::Deny`, or
+  `Downloads::Quarantine` into a private directory, each file under its
+  download's id, never a name the page chose) and `ChromeEngine::profile`
+  (a kept profile, made private and never removed). Live tests: a
+  quarantined download is announced and kept under its id; a denied one
+  never begins.
 - `ChromeEngine` no longer ends when DevTools refuses a
   `Page.getNavigationHistory` sent while a navigation swaps the page's
   renderer process (`about:blank` to a `file://` page, or to another site):
@@ -144,15 +154,43 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   of a three-page read. The history is asked for again at the next
   navigation event.
 
-### noctiluca (new, not published)
+### noctiluca 0.0.1 (new): a terminal web browser, the reader phase
 
-- The first spike of Noctiluca, a terminal web browser on intuiTUIve
-  (`crates/noctiluca`, 0.0.1, `publish = false`): `noctiluca FILE` opens a
-  local page in a sandboxed headless Chrome through rs-rich-embed, reads it
-  with one `DOMSnapshot.captureSnapshot` (no script of ours in the page),
-  and prints its headings and paragraphs as rich `Text`, control
-  characters stripped. The `snapshot_cost` example measures snapshot and
-  accessibility-tree cost per page.
+- `noctiluca [URL | FILE | KEYWORD WORDS…]` opens a page in a sandboxed
+  headless Chrome (a system Chrome first, for its codecs) and draws it in
+  an intuiTUIve app: the projection, Chrome's geometry snapped to cells,
+  by default; reader mode, one readable column, one key away (`r`).
+- The page model comes from `DOMSnapshot.captureSnapshot` and
+  `Accessibility.getFullAXTree`: headings, paragraphs, lists, quotes,
+  code, tables, images and controls, with what Chrome hides left out. A
+  script in an isolated world of its own only says "something changed";
+  the pings are debounced into one reading. Every string from the page is
+  cleaned before it reaches the terminal, and a password's value is never
+  read.
+- Forms are stock intuiTUIve widgets behind small adapters. An edit is a
+  draft until Enter; the commit is refused as a conflict if the page
+  changed the value meanwhile. Every action is checked against the page
+  (same document, same node, same meaning) before it runs.
+- Link hints (`f`), the address bar (`o`, `Ctrl+L`) with keywords and a
+  search, back and forward (`H`, `L`), find (`/`), bookmarks, and the live
+  F1 overlay of every action, with the reason one cannot run, generated
+  from the registry that runs them. Keys are rs-rich-interact keymaps,
+  rebound from the config.
+- `noctiluca/config.toml`: keywords, the search engine, keys (a vim or a
+  plain preset), the first view, media, an opt-in kept profile, and
+  per-site tables with their own view, images, width, a site search and
+  keys bound to actions or to an element's role and name (never a script
+  or a selector). A key can be bound on a site from F1; the file keeps its
+  comments. `noctiluca keys [--site HOST]` lists them.
+- `--dump text|ax|json` prints the page's model, for scripts and CI.
+  `--no-js`, `--audio`, `--profile`, `--images`, `--raster` (rs-rich-embed's
+  screencast view, for debugging).
+- Tests: the model, layout, config and app on Chrome's saved snapshots of
+  the fixture pages; the binary on a PTY (start, read, quit, the
+  terminal's modes restored; an escape-sequence fixture; Kitty placeholder
+  bytes); live tests against Chrome as a normal user, which CI's new
+  `browser` job runs. A docs tape. `publish = false` is gone, so 0.0.1
+  can be reserved on crates.io.
 
 ### Versions: the 0.0.22 versions are open
 

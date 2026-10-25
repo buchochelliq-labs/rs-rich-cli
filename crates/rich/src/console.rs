@@ -2138,7 +2138,14 @@ impl Console {
             match end {
                 Some(end) if !end.is_empty() => rendered.push(Segment::new(end, None)),
                 Some(_) => {}
-                None if !rendered.is_empty() => rendered.push(Segment::line()),
+                // A renderable that ends without a line break upstream
+                // (`Screen`, `LiveRender`, a rule with an open `end`) keeps
+                // its last line open, as `print` does.
+                None if !rendered.is_empty()
+                    && Self::print_ends_line(renderable, &render_options) =>
+                {
+                    rendered.push(Segment::line())
+                }
                 None => {}
             }
             // The style goes on each line, never on the newlines.
@@ -2677,6 +2684,29 @@ mod tests {
         }));
         assert!(unwound.is_err());
         assert!(console.theme().get("accent").is_none());
+    }
+
+    #[test]
+    fn print_objects_keeps_a_renderable_s_open_last_line() {
+        // A `Screen` ends without a line break when printed
+        // (`Renderable::print_end_line`); `print_objects` must not add one.
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(crate::color::ColorSystem::Truecolor))
+            .width(4)
+            .height(2)
+            .build();
+        let screen = crate::screen::Screen::new(Box::new(Text::new("hi")));
+        let printed = console.capture(|c| c.print(&screen));
+        let objects = console.capture(|c| {
+            c.print_objects(
+                &[PrintObject::Renderable(&screen)],
+                &PrintOptions::default(),
+            )
+            .unwrap()
+        });
+        assert_eq!(objects, printed);
+        assert!(!objects.ends_with('\n'), "{objects:?}");
     }
 
     #[test]

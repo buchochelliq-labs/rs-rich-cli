@@ -440,7 +440,10 @@ impl<W: Write> Live<W> {
     /// partial frame's line and show the cursor, as the `finally` of
     /// upstream's `stop()` does whatever its refresh raised.
     fn abort(&mut self) {
-        if !self.started {
+        // `stop()` clears `started` before its final refresh, but stays
+        // hooked until it has restored the terminal: a panic in that refresh
+        // still needs the restore.
+        if !self.started && !self.hooked {
             return;
         }
         self.started = false;
@@ -1030,6 +1033,32 @@ mod tests {
             }
             Text::new("ok").rich_render(console, options)
         }
+    }
+
+    #[test]
+    fn a_final_refresh_that_panics_still_restores_the_cursor() {
+        // The first frame renders; the refresh `stop()` makes panics. That
+        // refresh runs after `started` is cleared, so the restore must not
+        // depend on it.
+        let auto = Live::spawn(
+            Box::new(PanicsLater {
+                renders: std::sync::Arc::new(std::sync::atomic::AtomicUsize::new(0)),
+                fail_after: 1,
+            }),
+            console(),
+            Vec::<u8>::new(),
+            0.1,
+        );
+        let (output, error) = match auto.try_stop() {
+            Ok(output) => (output, None),
+            Err(failure) => (failure.writer, Some(failure.message)),
+        };
+        let output = String::from_utf8(output).unwrap();
+        assert!(
+            output.ends_with("\x1b[?25h"),
+            "cursor left hidden: {output:?}"
+        );
+        assert_eq!(error.as_deref(), Some("render failed"));
     }
 
     #[test]
