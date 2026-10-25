@@ -42,6 +42,16 @@ gets only generic pieces from this work (see
   the view and the address and the status bar with the media state, the
   row and the keys; `about:noctiluca`'s codec table. See
   [Media regions](#media-regions).
+- **Pictures and GIFs (0.0.23, branch `023-media`)**: every picture is
+  decoded from the page's own file and drawn over its region in Kitty,
+  iTerm2, Sixel or half blocks; small pictures stay in their line of
+  text; animated GIFs move within the byte budget they share with video,
+  step down when it is short, and stop when frozen; a picture with no
+  caption gets an `Image:` line. The picture code is rs-rich-art's
+  `picture` and `frames` features, with intuiTUIve's `art` as glue. The
+  news and video fixtures (`news.html`, `media-grid.html`) have tapes.
+  Known limits: an inline SVG picture shows its alt text; only bytes are
+  paced, not the time an encode takes.
 - **Next**: 0.2, forms and tables (a login form, a dashboard and a
   settings page as fixtures); rs-rich-embed's faster loop and several
   pages (tabs).
@@ -261,9 +271,9 @@ drawn and by the media scheduler read the same set.
 | Rule (name) | What it does | Default | Applied by | Test |
 |---|---|---|---|---|
 | Decorative pictures drop (`decorative-images`) | A spacer or tracking pixel (under 8 x 8 CSS pixels) always drops; a picture marked `alt=""`, `aria-hidden` or `role=presentation` drops only when it is icon-sized (at most 16 CSS pixels tall, under a row). An empty-alt picture of real size (a card's thumbnail, a comment's avatar, titled by the text beside it) stays, drawn without a caption | on | layout | `adapt.rs`: `decorative_pictures_drop_and_real_ones_stay` |
-| Small pictures stay inline (`inline-pictures`) | An image at most two rows tall inside a line of text (an emote, a badge, an icon) is drawn in its line, at its cells. A live log's entries carry theirs as `Run::picture` | on | pictures (A) | (in progress) |
+| Small pictures stay inline (`inline-pictures`) | An image at most two rows tall inside a line of text (an emote, a badge, an icon) is drawn in its line, at its cells. A live log's entries carry theirs as `Run::picture` | on | pictures | `tests/pictures.rs`: `small_pictures_in_a_logs_lines_are_drawn_in_their_cells` |
 | Picture heights are capped (`cap-pictures`) | A picture is at most `MAX_PICTURE_ROWS` (14) rows, narrowed to keep its shape; what is under it in its column moves up by the rows saved | on | layout, pictures | `adapt.rs`: `tall_pictures_are_capped_and_what_is_under_moves_up` |
-| A caption under each picture (`captions`) | A picture with alt text, at least three rows tall, and no `<figcaption>` gets an `Image: …` line under it | on | layout (A) | A's |
+| A caption under each picture (`captions`) | A picture with alt text, at least three rows tall, and no `<figcaption>` gets an `Image: …` line under it, wrapped to the picture's box when the picture is capped | on | layout | `tests/pictures.rs`: `a_capped_pictures_caption_wraps_to_its_box_and_the_rule_switches_it_off` |
 | Buttons as `[ label ]` (`icon-buttons`) | A button reads as its accessible name in brackets, an icon-only one too; a face wider than its box pushes the controls after it on its row. Off, an icon-only button is a shaded box, as its picture would be | on | layout | `adapt.rs`: `icon_buttons_read_as_their_name` |
 | Grids fit the terminal (`snap-grids`) | A grid's (or a wrapping flex row's) items get equal cell widths that tile it, and when a column would be under `MIN_GRID_CELLS` (16) cells, fewer columns, the items flowing into more rows; what is under the grid moves by the rows it grew | on | layout | `adapt.rs`: `grids_snap_their_columns_to_the_cells` |
 | Navigation collapses on narrow terminals (`collapse-nav`) | Under `NARROW_COLUMNS` (100), a navigation or complementary landmark with no field and no live log in it becomes one row: its name, then its links (each still a hint target). A sidebar gives its columns to what is beside it | on | layout | `adapt.rs`: `navigation_collapses_to_a_row_on_a_narrow_terminal` |
@@ -636,12 +646,15 @@ rate instead of `ByteBudget::guess`.
   cells unless `--images` or `[media] images` names a protocol. Frames go
   into `b.live` beside the GIFs', so the projection and reader mode draw
   them where the poster was.
-- **Where it should hook into the painter.** The budget is
-  `ByteBudget::guess()` today. Once the painter's frame budget lands
-  (023-paint and 023-core), `video_pacing` in `app.rs` should take its
-  `bytes_per_second` from the painter's measured output rate, and the
-  GIFs' `Motion` and the videos' `Pacing` should share one budget rather
-  than each having all of it.
+- **One budget.** The GIFs' `Motion` and the videos' `Pacing` share one
+  `ByteBudget` (`[media] bandwidth`, or `ByteBudget::guess()`), split
+  equally among the regions that move, and read the `bandwidth` rule
+  through the effective adaptations. A `Pacer` plans for the largest
+  frame of the last few rather than their average, so one costly frame
+  does not overrun the share.
+- **Where it should hook into the painter.** Once the painter's frame
+  budget lands (023-paint and 023-core), the budget's `bytes_per_second`
+  should come from the painter's measured output rate.
 
 Tests: `tests/video.rs` (live: `motion.webm` plays, pauses, seeks, its
 `currentTime` moves and its frames change; a region's bytes over every
@@ -1161,6 +1174,12 @@ Use cases 2 and 4.
 
 Non-goal: pixel-exact layout. Cells are not Chrome's glyphs.
 
+Status (0.0.23): the GIF criterion holds on `news.html`'s GIF
+(`tests/pictures.rs`: two different frames a second within budget,
+freezing stops the bytes, a slow terminal steps down to cells, Kitty
+loops the frames itself). Pictures are drawn from their own files.
+Sticky layers, the raster view and the canvas fallback are still to do.
+
 ### 0.4: media: video and audio
 
 Use case 5.
@@ -1176,6 +1195,11 @@ Use case 5.
   `canPlayType`.
 
 Non-goal: DRM playback, ever.
+
+Status (0.0.23): done. `tests/video.rs` covers play, pause, seek, mute,
+the cap, the step down and the codec table; `audio.rs` the ALSA sink;
+`tests/video.rs` also checks that a video keeps playing while a live log
+updates within its cap.
 
 ### 0.5: automation API
 

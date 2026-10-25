@@ -24,6 +24,44 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 - **`rich serve --compress`** (CLI, `serve` feature): deflates frames of 1 KiB or more for pages that can undo it. Off by default; worth it over a slow link.
 
+### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
+
+- **Pictures where the page puts them.** Noctiluca decodes each picture
+  from the page's own file (through Chrome's resource cache, then `data:`
+  addresses, then a capture) and draws it over its region in Kitty,
+  iTerm2, Sixel or half blocks. Small pictures in a line of text, such as
+  a log's badges and emotes, are drawn in their cells. CSS background
+  pictures count too.
+- **Animated GIFs move**, within the terminal's byte budget, and step
+  down from Sixel to half blocks when the budget is short. Kitty gets the
+  frames once and loops them itself. GIFs and video share one budget,
+  set with `[media] bandwidth`. Freezing (F4) stops them, and Kitty gets
+  a still.
+- **Captions**: a picture with no caption of its own gets an `Image:`
+  line under it, wrapped to its box. The `captions` adaptation switches
+  this off.
+- **Page colours off** (`--adapt=-page-colors`): on a light terminal the
+  page keeps its own colours on white; on a dark one their lightness is
+  inverted (OKLab) on black, keeping hue.
+- **New fixtures**: `news.html` and `media-grid.html`, with pictures made
+  by `media/make.py`, and their tapes in the recordings.
+- **rs-rich-art's `picture` feature**: `Picture` (decoded once, with an
+  id and version, animated or still), `Player`, `PictureTag` for tagging
+  cells with the picture drawn over them, and `picture_bytes`. Its
+  `frames` feature adds `ByteBudget` and `Pacer`, which pace frames within
+  a byte budget (planning for the largest recent frame) and step down
+  Kitty, iTerm2, Sixel, then cells. `kitty::transmit_rgba` and
+  `graphics::play_mark` are new.
+- **intuiTUIve's `art` feature** is glue over them: `picture_of` draws a
+  live picture node, and the image layer finds tagged cells, counts the
+  bytes it writes and uploads Kitty pictures from their first visible
+  row. An overlay picture is drawn only where its rows show whole.
+- **rs-rich-interact**: a session woken by another thread reads a waiting
+  key at once, so input is not starved while frames are sent.
+- **Faster debug builds of pictures**: the workspace builds `image`,
+  `icy_sixel`, `quantette` and `palette` optimised in the dev profile. A
+  Sixel encode went from 3 s to 35 ms.
+
 ### Video in Noctiluca, and the PoC's header and status bar (noctiluca, rich-embed)
 
 - **A playing video plays in its region.** Chrome's screencast runs only
