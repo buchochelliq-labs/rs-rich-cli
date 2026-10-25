@@ -1,12 +1,12 @@
-◀▶ Stream with log file:///home/user/wt-logs/crates/noctiluca/tests/fixtures/stream-with-log.html projection
+◀▶ Stream with log file:///noctiluca/fixtures/stream-with-log.html projection
        Lanternfish Lab
  ▀▀▀▀▀
  ▀▀▀▀▀ Live: the bay glows tonight
- Image                                                        Chat
- :                                                            moderator ada: the water is glowing
- Lante                                                        :glow: #1
- rnfis                                                        bea: that blue is unreal #2
- h Lab                                                        cy: how deep is the camera? #3
+ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    Chat
+ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    moderator ada: the water is glowing
+ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    :glow: #1
+ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    bea: that blue is unreal #2
+ ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    cy: how deep is the camera? #3
  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    moderator ada: hello from the harbour
  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    #4
  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░                    bea: :glow: :glow: #5
@@ -16,13 +16,13 @@
  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
  ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
- ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
- ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
- ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
- ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
- ░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░░
 
-                                                              Send a message [_]             [ Send ]
+
+
+
+
+
+                                                              Send a message [_]             [Send]
 
 
 

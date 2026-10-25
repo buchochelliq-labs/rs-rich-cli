@@ -102,6 +102,8 @@ again.
 - A chat's input is an ordinary field: `f` and its hint, type, Enter, then
   its Send button.
 
+![A chat log beside a stream in Noctiluca's projection (recorded before the video and the chat's pictures landed)](../media/tapes/stream-with-log/stream.svg)
+
 ## Terminal adaptations
 
 A page is drawn as Chrome lays it out, with a few named rules that make
