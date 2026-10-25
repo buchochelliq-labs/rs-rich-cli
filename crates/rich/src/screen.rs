@@ -126,43 +126,38 @@ fn render_screen_with(
     console: &Console,
     options: &ConsoleOptions,
 ) -> Vec<Segment> {
-        // `width, height = options.size`.
-        let width = options.size.width;
-        let height = options.size.height;
-        // `console.render_lines(self.renderable or "", render_options,
-        // style=style, pad=True)`.
-        let render_options = options.update_dimensions(width, height);
-        let lines = console.render_lines_styled(
-            content,
-            &render_options,
-            style.as_ref(),
-            true,
-        );
-        // `Segment.set_shape(lines, width, height, style=style)`.
-        let pad_style = style.clone();
-        let mut lines: Vec<Vec<Segment>> = lines
-            .into_iter()
-            .take(height)
-            .map(|line| Segment::adjust_line_length(&line, width, pad_style.clone()))
-            .collect();
-        while lines.len() < height {
-            lines.push(vec![Segment::new(" ".repeat(width), pad_style.clone())]);
-        }
+    // `width, height = options.size`.
+    let width = options.size.width;
+    let height = options.size.height;
+    // `console.render_lines(self.renderable or "", render_options,
+    // style=style, pad=True)`.
+    let render_options = options.update_dimensions(width, height);
+    let lines = console.render_lines_styled(content, &render_options, style.as_ref(), true);
+    // `Segment.set_shape(lines, width, height, style=style)`.
+    let pad_style = style.clone();
+    let mut lines: Vec<Vec<Segment>> = lines
+        .into_iter()
+        .take(height)
+        .map(|line| Segment::adjust_line_length(&line, width, pad_style.clone()))
+        .collect();
+    while lines.len() < height {
+        lines.push(vec![Segment::new(" ".repeat(width), pad_style.clone())]);
+    }
 
-        let new_line = if application_mode {
-            Segment::new("\n\r", None)
-        } else {
-            Segment::line()
-        };
-        let mut segments = Vec::new();
-        let last = lines.len().saturating_sub(1);
-        for (index, line) in lines.into_iter().enumerate() {
-            segments.extend(line);
-            if index != last {
-                segments.push(new_line.clone());
-            }
+    let new_line = if application_mode {
+        Segment::new("\n\r", None)
+    } else {
+        Segment::line()
+    };
+    let mut segments = Vec::new();
+    let last = lines.len().saturating_sub(1);
+    for (index, line) in lines.into_iter().enumerate() {
+        segments.extend(line);
+        if index != last {
+            segments.push(new_line.clone());
         }
-        segments
+    }
+    segments
 }
 
 #[cfg(test)]

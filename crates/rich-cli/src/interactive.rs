@@ -1755,7 +1755,7 @@ enum PreviewState {
     /// Not drawn yet.
     Idle,
     Running,
-    Done(Text),
+    Done(Box<Text>),
 }
 
 /// `--preview COMMAND` for one item: the command starts the first time the
@@ -1891,7 +1891,7 @@ impl CommandPreview {
                 shown.trim_start_matches('\n'),
                 rich::style::StyleType::default(),
             );
-            *state.lock().unwrap_or_else(|e| e.into_inner()) = PreviewState::Done(text);
+            *state.lock().unwrap_or_else(|e| e.into_inner()) = PreviewState::Done(Box::new(text));
         });
         Ok(())
     }
@@ -1964,7 +1964,7 @@ impl Renderable for CommandPreview {
         let text = {
             let mut state = self.state.lock().unwrap_or_else(|e| e.into_inner());
             match &*state {
-                PreviewState::Done(text) => text.clone(),
+                PreviewState::Done(text) => (**text).clone(),
                 PreviewState::Running => Text::new("…"),
                 PreviewState::Idle => {
                     *state = PreviewState::Running;
@@ -1974,7 +1974,7 @@ impl Renderable for CommandPreview {
                         Err(message) => {
                             let text = Text::new(message);
                             *self.state.lock().unwrap_or_else(|e| e.into_inner()) =
-                                PreviewState::Done(text.clone());
+                                PreviewState::Done(Box::new(text.clone()));
                             text
                         }
                     }
