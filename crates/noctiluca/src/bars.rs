@@ -82,16 +82,10 @@ pub fn header(b: Browser) -> Node {
     .fixed(1)
     .name("header");
     let address = text(move || {
-        let (title, url) = b.page.with(|p| {
-            p.as_ref()
-                .map(|p| (p.title.clone(), p.url.clone()))
-                .unwrap_or_default()
-        });
-        let url = if crate::about::is_about(&url, &title) {
-            crate::about::ADDRESS.to_string()
-        } else {
-            url
-        };
+        let url = b
+            .page
+            .with(|p| p.as_ref().map(|p| p.url.clone()))
+            .unwrap_or_default();
         format!(" {}", markup(&truncate(&url, 200)))
     })
     .no_wrap()

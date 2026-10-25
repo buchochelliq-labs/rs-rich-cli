@@ -24,8 +24,8 @@ use rich_embed::{
 use serde_json::{json, Value};
 
 use crate::engine::{
-    Engine, EngineEvent, Format, Frame, HistoryStep, MediaOp, Metrics, PageAction, PageSnapshot,
-    Playback, Rect, TabId,
+    Engine, EngineEvent, Format, Frame, HistoryStep, LiveRead, MediaOp, Metrics, PageAction,
+    PageSnapshot, Playback, Rect, TabId,
 };
 
 /// How long one DevTools call may take.
@@ -49,12 +49,22 @@ pub const SNAPSHOT_STYLES: &[&str] = &[
     "white-space",
     "opacity",
     "background-image",
+    "overflow-y",
+    "flex-wrap",
 ];
 
 /// The script of the isolated world. It reports only that something
-/// changed, at most every 50 ms, and never what. The field sample catches
-/// a value a page script sets with no event (a password's value is left
-/// out of it).
+/// changed, at most every 50 ms, and never what: `''` for any change,
+/// `'live'` when every change was inside a live log the tab has read
+/// (then only those logs are read again, through [`LIVE_READ`]). The
+/// field sample catches a value a page script sets with no event (a
+/// password's value is left out of it).
+///
+/// Live logs are `role=log`, `aria-live` boxes, and scroll boxes the page
+/// appends element children to. Their entries are kept by node, never by
+/// text, with a revision that a change inside an entry moves; a read
+/// sends only the entries whose revision the tab has not seen. A field's
+/// value inside an entry is never read.
 pub const PING_SCRIPT: &str = r#"(function start(tries) {
   const ping = globalThis.__noctilucaChanged;
   if (globalThis.__noctilucaWatching) return;
@@ -64,17 +74,148 @@ pub const PING_SCRIPT: &str = r#"(function start(tries) {
     return;
   }
   globalThis.__noctilucaWatching = true;
-  let queued = false;
+  let queued = false, liveQueued = false;
   const changed = () => {
     if (queued) return;
     queued = true;
     setTimeout(() => { queued = false; try { ping(''); } catch (e) {} }, 50);
   };
-  new MutationObserver(changed).observe(document,
-    { subtree: true, childList: true, attributes: true, characterData: true });
+  const liveChanged = () => {
+    if (queued || liveQueued) return;
+    liveQueued = true;
+    setTimeout(() => { liveQueued = false; if (!queued) try { ping('live'); } catch (e) {} }, 50);
+  };
+  const live = { known: new WeakSet(), appended: new Set(), ids: new WeakMap(),
+                 revs: new WeakMap(), sent: new WeakMap(), next: 1, count: 0 };
+  globalThis.__noctilucaLive = live;
+  const style = el => getComputedStyle(el);
+  const shows = el => el.checkVisibility
+    ? el.checkVisibility({ visibilityProperty: true, opacityProperty: true })
+    : el.getClientRects().length > 0;
+  const isLog = el => {
+    const role = (el.getAttribute('role') || '').toLowerCase().split(/\s+/);
+    const said = (el.getAttribute('aria-live') || '').trim();
+    return role.includes('log') || said === 'polite' || said === 'assertive' || live.appended.has(el);
+  };
+  const boxOf = node => {
+    let el = node && (node.nodeType === 1 ? node : node.parentElement);
+    for (; el && el !== document.body && el !== document.documentElement; el = el.parentElement)
+      if (isLog(el)) return el;
+    return null;
+  };
+  const skipped = /^(SCRIPT|STYLE|TEMPLATE|NOSCRIPT|HEAD|TITLE|META|LINK)$/;
+  const elements = el => [...el.children].filter(c => !skipped.test(c.tagName) && shows(c));
+  const texty = el => [...el.childNodes].some(n => n.nodeType === 3 && n.nodeValue.trim() !== '');
+  // The box the entries are in: the log, or the one box it wraps them in.
+  live.root = box => {
+    let at = box;
+    for (let depth = 0; depth < 32; depth++) {
+      const mine = elements(at);
+      if (mine.length !== 1 || texty(at)) break;
+      const theirs = elements(mine[0]);
+      if (!theirs.length || texty(mine[0]) || theirs.some(g => style(g).display.startsWith('inline'))) break;
+      at = mine[0];
+    }
+    return at;
+  };
+  const entryOf = (box, node) => {
+    const root = live.root(box);
+    let at = node;
+    while (at && at.parentNode !== root) at = at.parentNode;
+    return at && at.nodeType === 1 ? at : null;
+  };
+  const idOf = el => {
+    let id = live.ids.get(el);
+    if (!id) { id = live.next++; live.ids.set(el, id); }
+    return id;
+  };
+  const runs = entry => {
+    const out = [];
+    let budget = 2000;
+    const walk = n => {
+      if (--budget < 0) return;
+      if (n.nodeType === 3) {
+        const css = style(n.parentElement);
+        out.push({ t: n.nodeValue, c: css.color,
+                   b: Number(css.fontWeight) >= 600, i: css.fontStyle !== 'normal' });
+        return;
+      }
+      if (n.nodeType !== 1 || skipped.test(n.tagName) || /^(INPUT|TEXTAREA|SELECT)$/.test(n.tagName)) return;
+      if (!shows(n)) return;
+      if (n.tagName === 'IMG') {
+        const r = n.getBoundingClientRect();
+        out.push({ img: { src: n.currentSrc || n.getAttribute('src') || '', alt: n.getAttribute('alt'),
+                          w: r.width, h: r.height,
+                          hidden: !!n.closest('[aria-hidden="true"]') ||
+                                  /^(presentation|none)$/.test(n.getAttribute('role') || '') } });
+        return;
+      }
+      if (n.tagName === 'BR') { out.push({ t: '\n' }); return; }
+      for (let c = n.firstChild; c; c = c.nextSibling) walk(c);
+    };
+    walk(entry);
+    return out;
+  };
+  // Every entry's key in order, and the runs of those the tab has not seen.
+  live.read = (box, full) => {
+    live.known.add(box);
+    let sent = live.sent.get(box);
+    if (!sent || full) { sent = new Map(); live.sent.set(box, sent); }
+    const tail = elements(live.root(box)).slice(-500);
+    const top = box.getBoundingClientRect().top;
+    const order = [], fresh = [], keep = new Map();
+    let first = null;
+    for (const el of tail) {
+      const id = idOf(el), rev = live.revs.get(el) || 0;
+      order.push(id);
+      if (sent.get(id) !== rev) fresh.push([id, runs(el)]);
+      keep.set(id, rev);
+      if (first === null && el.getBoundingClientRect().bottom > top + 1) first = id;
+    }
+    live.sent.set(box, keep);
+    return { order, fresh, first };
+  };
+  live.boxes = () => [...live.appended].filter(el => el.isConnected);
+  // Whether every change is inside a live log the tab has read; entries
+  // that changed get a new revision. A scroll box the page appends
+  // elements to becomes a log, and the tab learns of it by a full read.
+  const sort = records => {
+    let all = true;
+    for (const r of records) {
+      const target = r.target;
+      if (r.type === 'childList' && target.nodeType === 1 && r.nextSibling === null &&
+          !live.appended.has(target) && !isLog(target) &&
+          [...r.addedNodes].some(n => n.nodeType === 1)) {
+        const overflow = style(target).overflowY;
+        if (overflow === 'auto' || overflow === 'scroll') {
+          live.appended.add(target);
+          live.count++;
+          all = false;
+          continue;
+        }
+      }
+      const box = boxOf(target);
+      if (!box || !live.known.has(box)) { all = false; continue; }
+      const entry = entryOf(box, target);
+      if (entry) live.revs.set(entry, (live.revs.get(entry) || 0) + 1);
+    }
+    return all;
+  };
+  new MutationObserver(records => { if (sort(records)) liveChanged(); else changed(); })
+    .observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+  // A picture loading inside a live log the tab has read changes only
+  // its entry.
+  const event = e => {
+    const box = e.type === 'load' && boxOf(e.target);
+    if (box && live.known.has(box)) {
+      const entry = entryOf(box, e.target);
+      if (entry) live.revs.set(entry, (live.revs.get(entry) || 0) + 1);
+      liveChanged();
+    } else changed();
+  };
   for (const type of ['input', 'change', 'load', 'toggle', 'play', 'playing', 'pause', 'ended',
                       'volumechange', 'seeked', 'loadedmetadata'])
-    document.addEventListener(type, changed, true);
+    document.addEventListener(type, event, true);
   let last = '';
   setInterval(() => {
     const fields = document.querySelectorAll('input,select,textarea');
@@ -102,6 +243,14 @@ pub const SEEK_SCRIPT: &str = "function(d) { \
 /// array), on a video element that is never added to the page.
 pub const CAN_PLAY_SCRIPT: &str =
     "(() => { const v = document.createElement('video'); return TYPES.map(t => v.canPlayType(t)); })()";
+
+/// Read a live log's entries in the isolated world, with the log's node
+/// as `this` (see [`PING_SCRIPT`]).
+pub const LIVE_READ: &str =
+    "function(full) { const live = globalThis.__noctilucaLive; return live ? live.read(this, full) : null; }";
+
+/// The object group of a live read's handles, released after each.
+const LIVE_GROUP: &str = "noctiluca-live";
 
 /// The CSS pixels one cell stands for: the page is laid out at the
 /// terminal's size times this. Narrower than rs-rich-embed's 10 x 20,
@@ -151,6 +300,9 @@ pub struct ChromeBackend {
     engine: ChromeEngine,
     devtools: DevTools,
     events: Receiver<DevToolsEvent>,
+    /// The execution context of the isolated world that pings, from its
+    /// last ping: live logs are read in it, where their state is.
+    world: Option<i64>,
 }
 
 impl ChromeBackend {
@@ -207,6 +359,7 @@ impl ChromeBackend {
             engine,
             devtools,
             events,
+            world: None,
         })
     }
 
@@ -550,6 +703,106 @@ impl Engine for ChromeBackend {
         Ok(value.as_bool().unwrap_or(true))
     }
 
+    fn read_live(&mut self, _tab: TabId, node: i64, full: bool) -> io::Result<LiveRead> {
+        let context = self
+            .world
+            .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "no live world yet"))?;
+        let result = (|| {
+            let object = self.call(
+                "DOM.resolveNode",
+                json!({"backendNodeId": node, "executionContextId": context,
+                       "objectGroup": LIVE_GROUP}),
+            )?;
+            let object = object["object"]["objectId"]
+                .as_str()
+                .ok_or_else(|| io::Error::new(ErrorKind::NotFound, "the log is gone"))?;
+            // Not as a user's gesture: a read must leave the page as it was.
+            self.call(
+                "Runtime.callFunctionOn",
+                json!({"objectId": object, "functionDeclaration": LIVE_READ,
+                       "arguments": [{"value": full}], "returnByValue": true}),
+            )
+        })();
+        let _ = self.call(
+            "Runtime.releaseObjectGroup",
+            json!({"objectGroup": LIVE_GROUP}),
+        );
+        let value = result?;
+        if value.get("exceptionDetails").is_some() {
+            return Err(io::Error::other("the live read failed"));
+        }
+        let value = &value["result"]["value"];
+        let key = |v: &Value| v.as_u64();
+        Ok(LiveRead {
+            order: value["order"]
+                .as_array()
+                .map(|all| all.iter().filter_map(key).collect())
+                .unwrap_or_default(),
+            fresh: value["fresh"]
+                .as_array()
+                .map(|all| {
+                    all.iter()
+                        .filter_map(|pair| Some((key(&pair[0])?, pair[1].clone())))
+                        .collect()
+                })
+                .unwrap_or_default(),
+            first_shown: key(&value["first"]),
+        })
+    }
+
+    fn appended(&mut self, _tab: TabId) -> io::Result<Vec<i64>> {
+        let Some(context) = self.world else {
+            return Ok(Vec::new());
+        };
+        let count = self.call(
+            "Runtime.evaluate",
+            json!({"expression": "globalThis.__noctilucaLive ? globalThis.__noctilucaLive.count : 0",
+                   "contextId": context, "returnByValue": true}),
+        )?;
+        let count = count["result"]["value"].as_i64().unwrap_or(0);
+        if count == 0 {
+            return Ok(Vec::new());
+        }
+        let result = (|| {
+            let boxes = self.call(
+                "Runtime.evaluate",
+                json!({"expression": "globalThis.__noctilucaLive.boxes()", "contextId": context,
+                       "objectGroup": LIVE_GROUP}),
+            )?;
+            let array = boxes["result"]["objectId"]
+                .as_str()
+                .ok_or_else(|| io::Error::other("no boxes"))?;
+            let properties = self.call(
+                "Runtime.getProperties",
+                json!({"objectId": array, "ownProperties": true}),
+            )?;
+            let mut nodes = Vec::new();
+            for property in properties["result"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .take(64)
+            {
+                let Some(object) = property["value"]["objectId"].as_str() else {
+                    continue;
+                };
+                if property["value"]["subtype"] != "node" {
+                    continue;
+                }
+                let node = self.call("DOM.describeNode", json!({"objectId": object}))?;
+                if let Some(id) = node["node"]["backendNodeId"].as_i64() {
+                    nodes.push(id);
+                }
+            }
+            Ok(nodes)
+        })();
+        let _ = self.call(
+            "Runtime.releaseObjectGroup",
+            json!({"objectGroup": LIVE_GROUP}),
+        );
+        result
+    }
+
     fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
         let metrics = self.call("Page.getLayoutMetrics", json!({}))?;
         // The `css…` sizes are CSS pixels; the older names are device
@@ -610,11 +863,20 @@ impl Engine for ChromeBackend {
             let text = |key: &str| crate::clean::clean(params[key].as_str().unwrap_or_default());
             match event.method.as_str() {
                 "Runtime.bindingCalled" if params["name"] == BINDING => {
-                    if out.last() != Some(&EngineEvent::Changed) {
-                        out.push(EngineEvent::Changed);
+                    if let Some(context) = params["executionContextId"].as_i64() {
+                        self.world = Some(context);
+                    }
+                    let event = if params["payload"] == "live" {
+                        EngineEvent::Live
+                    } else {
+                        EngineEvent::Changed
+                    };
+                    if out.last() != Some(&event) {
+                        out.push(event);
                     }
                 }
                 "Page.frameNavigated" if params["frame"].get("parentId").is_none() => {
+                    self.world = None;
                     let url = params["frame"]["url"].as_str().unwrap_or_default();
                     out.push(EngineEvent::Navigated(crate::clean::clean(url)));
                 }
@@ -652,6 +914,8 @@ mod tests {
         // It calls the binding with an empty string: it never reports what
         // changed, so nothing of the page's leaves through it.
         assert!(PING_SCRIPT.contains("ping('')"));
+        assert!(PING_SCRIPT.contains("ping('live')"));
+        assert_eq!(PING_SCRIPT.matches("ping(").count(), 2);
         assert!(!PING_SCRIPT.contains("ping(sample"));
         assert!(PING_SCRIPT.contains("'password'"));
     }

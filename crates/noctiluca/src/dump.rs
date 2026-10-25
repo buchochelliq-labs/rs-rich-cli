@@ -108,6 +108,11 @@ pub fn json_of(page: &Page) -> Value {
                 ),
                 BlockKind::Media(i) => ("media", json!({"media": i})),
                 BlockKind::Control(i) => ("control", json!({"control": i})),
+                BlockKind::Log(i) => (
+                    "log",
+                    json!({"log": i, "label": page.logs[*i].label,
+                           "entries": page.logs[*i].entries.iter().map(|e| e.text()).collect::<Vec<_>>()}),
+                ),
             };
             let mut value = json!({"kind": kind, "text": b.text(), "quote": b.quote, "rect": rect(&b.rect)});
             if let (Value::Object(v), Value::Object(e)) = (&mut value, extra) {

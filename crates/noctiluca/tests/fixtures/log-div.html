@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Log</title>
+<!-- One live log, built from <div>: log-ul.html and log-div.html hold
+     the same entries in different constructs, and project the same. -->
+<style>
+  body { margin: 8px; font: 16px sans-serif }
+  #log { display: block; list-style: none; margin: 0; padding: 0; width: 400px; height: 144px; overflow-y: auto }
+  #log > * { display: block; margin: 0; padding: 0 }
+  .author { font-weight: bold }
+  img { width: 18px; height: 18px; vertical-align: middle }
+</style>
+<h1>Messages</h1>
+<div id="log" role="log" aria-label="Messages">
+  <div><span class="author" style="color: #ff7f50">ada</span>: first light</div>
+  <div><span class="author" style="color: #9acd32">bea</span>: it glows <img alt=":glow:" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 18 18'%3E%3Ccircle cx='9' cy='9' r='8' fill='%2335d0ff'/%3E%3C/svg%3E"></div>
+  <div><span class="author" style="color: #ff7f50">ada</span>: <em>so</em> blue</div>
+</div>
+<p>Under the log.</p>
+<script>
+  // The page's own script appends, as a live log's does.
+  const log = document.getElementById('log');
+  window.post = (author, words) => {
+    const row = document.createElement('div');
+    const who = document.createElement('span');
+    who.className = 'author'; who.style.color = '#da70d6'; who.textContent = author;
+    row.append(who, ': ' + words);
+    log.append(row);
+  };
+</script>

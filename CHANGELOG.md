@@ -9,6 +9,19 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **Noctiluca's live logs and terminal adaptations** (noctiluca): a
+  `role=log`, `aria-live` or appended scroll box is followed through a
+  live-only change ping and read incrementally, with no new snapshot. It
+  shows its newest entries, with their colours and small pictures, and
+  holds still while scrolled up (`{`, `}`). Eleven named terminal adaptations
+  (decorative pictures, capped pictures, icon buttons, snapped grids,
+  collapsed navigation, pictures of text, live tails, readable page
+  colours and more), each
+  switched off in `[adapt]`, with `--adapt=-RULE` or all with `--no-adapt`;
+  `a` toggles the faithful projection and `?` lists the rules. New
+  fixtures: `stream-with-log.html`, `log-ul.html`, `log-div.html`,
+  `adapt.html`.
+
 - **`rich serve --compress`** (CLI, `serve` feature): deflates frames of 1 KiB or more for pages that can undo it. Off by default; worth it over a slow link.
 
 ### Video in Noctiluca, and the PoC's header and status bar (noctiluca, rich-embed)
@@ -25,8 +38,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **The header** shows the view, how pictures reach the terminal, the
   title and the address; **the status bar** the media state
   (`media PLAYING 0:03 / 0:05`), the row and the keys.
-- **`about:noctiluca`** lists the codecs the browser says it plays
-  (`canPlayType`).
+- **`about:noctiluca`** (`?`, `Alt+I`): one about page with the version,
+  the terminal adaptations and which are on, and the codecs the browser
+  says it plays (`canPlayType`).
 - **rs-rich-embed's screencast on demand**: `screencast_on_demand` decodes
   and acknowledges a frame only when `take_screencast` takes it, so Chrome
   paints no more than are used. Frames carry their scroll position and

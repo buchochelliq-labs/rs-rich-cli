@@ -758,6 +758,26 @@ runs no browser. See [the design note](design/browser.md).
 
 [Tape](tapes/noctiluca.tape) · [Cast](media/tapes/noctiluca/noctiluca.cast) · [GIF](media/tapes/noctiluca/noctiluca.gif) · [Page](media/tapes/noctiluca/noctiluca.html)
 
+### A live log beside a stream
+
+Noctiluca (0.0.23) on `stream-with-log.html`, a local page built from
+ordinary HTML: a `role=log` chat beside the stream, its authors in their
+colours, scrolled up (it holds still) and back, the about page's terminal
+adaptations, and the faithful projection one key away. Recorded before
+the video and the chat's small pictures landed (work in progress), and
+from Chrome's saved snapshot, so the log does not move here; the live
+tests follow it in Chrome.
+
+<div class="tape-player" data-cast="../media/tapes/stream-with-log/stream-with-log.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/stream-with-log/stream-with-log.gif" alt="Noctiluca showing a chat log beside a stream, scrolling the log up and back, listing its terminal adaptations and switching to the faithful projection">
+</div>
+
+| The log beside the stream | Scrolled up | The adaptations | Faithful |
+|---|---|---|---|
+| ![A chat log beside a stream](media/tapes/stream-with-log/stream.png) | ![The log scrolled up, holding still](media/tapes/stream-with-log/paused.png) | ![The about page listing the terminal adaptations](media/tapes/stream-with-log/about.png) | ![The faithful projection](media/tapes/stream-with-log/faithful.png) |
+
+[Tape](tapes/stream-with-log.tape) · [Cast](media/tapes/stream-with-log/stream-with-log.cast) · [GIF](media/tapes/stream-with-log/stream-with-log.gif) · [Page](media/tapes/stream-with-log/stream-with-log.html)
+
 ## Charts from data
 
 `rich chart` draws CSV, JSON or numbers piped in: bars labelled by a

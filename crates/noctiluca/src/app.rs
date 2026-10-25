@@ -21,13 +21,16 @@ use rich_intuituive::{
     spawn_stream, Action, ImageView, Picture, Pixels,
 };
 
-use crate::actions::{self, ACTIONS};
+use crate::actions::{self, keys_label, ACTIONS};
+use crate::adapt::{Adapt, RULES};
 use crate::bookmarks::{Bookmark, Bookmarks};
 use crate::cdp::CELL;
 use crate::clean::{markup, truncate};
 use crate::config::{remove_site_key, save_site_key, Config, Images, Site, Target, View};
 use crate::engine::{Engine, HistoryStep, MediaOp, NodeId, Playback};
-use crate::layout::{self, hint_labels, matches, to_text, Line, Marks, Piece, Projection};
+use crate::layout::{
+    self, hint_labels, matches, scroll_log, to_text, Line, LogScroll, Marks, Piece, Projection,
+};
 use crate::model::{Binding, MediaKind, Page, Role};
 use crate::pictures::{self, Live};
 use crate::tab::{Command, Intent, Refusal, Tab, Update};
@@ -101,6 +104,12 @@ pub struct Browser {
     /// The regions on screen and the pacing's intervals, as last told to
     /// the tab.
     regions_sent: Signal<RegionsSent>,
+    /// The terminal adaptations configured.
+    pub adapt: Signal<Adapt>,
+    /// Whether the faithful projection is shown: no adaptation at all.
+    pub faithful: Signal<bool>,
+    /// Where the user has scrolled each live log.
+    pub logs: Signal<HashMap<NodeId, LogScroll>>,
     /// The protocol pictures are drawn with, from [`images`](Self::images).
     pub pixels: Memo<Pixels>,
     /// Whether moving pictures are held still (`media.freeze`).
@@ -178,8 +187,19 @@ impl Browser {
         self.config.with(|c| c.site(&url).cloned())
     }
 
-    /// What the views lay out with: hint labels only (find marks are drawn
-    /// over the layout, not part of it).
+    /// The adaptations in effect: none while the faithful projection is
+    /// shown.
+    pub fn effective_adapt(&self) -> Adapt {
+        if self.faithful.get() {
+            Adapt::none()
+        } else {
+            self.adapt.get()
+        }
+    }
+
+    /// What the views lay out with: hint labels, the adaptations and the
+    /// live logs' scroll (find marks are drawn over the layout, not part
+    /// of it).
     pub fn hint_marks(&self) -> Marks {
         let hints = self
             .hints
@@ -190,6 +210,8 @@ impl Browser {
             .unwrap_or_default();
         Marks {
             hints,
+            adapt: self.effective_adapt(),
+            logs: self.logs.get(),
             ..Marks::default()
         }
     }
@@ -207,6 +229,8 @@ impl Browser {
             hints,
             find: self.find.get(),
             current: None,
+            adapt: self.effective_adapt(),
+            logs: self.logs.get(),
         }
     }
 
@@ -363,6 +387,12 @@ pub fn availability(b: Browser, id: &str) -> Result<(), String> {
                 Err("No video or audio on this page.".into())
             }
         }
+        "log.older" | "log.newer"
+            if b.page
+                .with(|p| p.as_ref().is_none_or(|p| p.logs.is_empty())) =>
+        {
+            Err("No live log on this page.".into())
+        }
         "bookmark" | "reload" | "address" | "site.bind" | "site.keys" if !has_page => {
             Err("No page yet.".into())
         }
@@ -484,6 +514,47 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
             }
         }
         "bookmarks" => bookmarks_list(b, cx),
+        "adapt" => {
+            b.faithful.update(|f| *f = !*f);
+            if b.faithful.get_untracked() {
+                b.say("[yellow]faithful[/] projection: no terminal adaptations");
+            } else {
+                let on = b.adapt.get_untracked().active().count();
+                b.say(format!("adapted projection: {on} adaptations on"));
+            }
+        }
+        "log.older" | "log.newer" => {
+            let Some((node, rows)) = current_log(b) else {
+                return;
+            };
+            let step = (rows / 2).max(1) as isize;
+            let by = if id == "log.older" { -step } else { step };
+            let next = b.page.with_untracked(|p| {
+                let log = p.as_ref()?.logs.iter().find(|l| l.node == node)?;
+                let now = b
+                    .logs
+                    .with_untracked(|l| l.get(&node).copied().unwrap_or_default());
+                Some(scroll_log(log, now, by))
+            });
+            if let Some(next) = next {
+                b.logs.update(|l| {
+                    if next == LogScroll::Follow {
+                        l.remove(&node);
+                    } else {
+                        l.insert(node, next);
+                    }
+                });
+                b.say(if next == LogScroll::Follow {
+                    "live log: following its newest entries".to_string()
+                } else {
+                    format!(
+                        "live log: [yellow]paused[/] · {} to follow again",
+                        markup(&keys_label_of(b, "log.newer"))
+                    )
+                });
+            }
+        }
+        "about" => drop(b.send(Command::Open(crate::about::ADDRESS.into()))),
         "media.play_pause" | "media.mute" | "media.volume_up" | "media.volume_down"
         | "media.seek_back" | "media.seek_forward" => {
             let Some((node, playback)) = current_media(b) else {
@@ -508,6 +579,89 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
         "quit" => cx.quit(),
         _ => {}
     }
+}
+
+fn keys_label_of(b: Browser, id: &str) -> String {
+    b.keymap.with_untracked(|k| keys_label(k, id))
+}
+
+/// The live log the log keys scroll, and its rows: the first in view in
+/// the projection, else the page's first.
+pub fn current_log(b: Browser) -> Option<(NodeId, usize)> {
+    let first = b
+        .page
+        .with_untracked(|p| p.as_ref()?.logs.first().map(|l| (l.node, 10)));
+    if b.view.get_untracked() == View::Reader {
+        return first;
+    }
+    let top = b.scroll.get_untracked().min(usize::MAX as u64) as usize;
+    let height = b.viewport.get_untracked().1 as usize;
+    b.layout
+        .with_untracked(|l| {
+            let top = top.min(l.lines.len().saturating_sub(1));
+            l.logs
+                .iter()
+                .find(|(_, row, rows)| *row < top + height && top < row + rows)
+                .map(|(node, _, rows)| (*node, *rows))
+        })
+        .or(first)
+}
+
+/// The about page (`about:noctiluca`): the version, the browser, every
+/// terminal adaptation, on or off, and what the browser can play, as its
+/// `canPlayType` `answers` to [`crate::about::CODECS`] say.
+fn about(b: Browser, answers: Vec<String>, product: String, cx: &mut Ctx) {
+    cx.modal(Size::Percent(90), Size::Percent(90), move || {
+        let answers = answers.clone();
+        let product = product.clone();
+        let body = text(move || {
+            let configured = b.adapt.get();
+            let faithful = b.faithful.get();
+            let mut lines = vec![
+                format!("[bold]Noctiluca[/] {}", env!("CARGO_PKG_VERSION")),
+                format!("Browser: {}", markup(&product)),
+                String::new(),
+                if faithful {
+                    "[bold]Terminal adaptations[/]: [yellow]off, the faithful projection[/]".into()
+                } else {
+                    "[bold]Terminal adaptations[/] (active rules):".into()
+                },
+            ];
+            for rule in RULES {
+                let on = configured.on(rule.rule) && !faithful;
+                lines.push(format!(
+                    " {} {:<20} [dim]{}[/]",
+                    if on { "[green]on [/]" } else { "[dim]off[/]" },
+                    rule.name,
+                    markup(rule.what)
+                ));
+            }
+            lines.push(String::new());
+            lines.push(
+                "[bold]Codecs[/]: what this browser says it can play (canPlayType). DRM playback is never tried."
+                    .into(),
+            );
+            for ((name, kind), answer) in crate::about::CODECS.iter().zip(&answers) {
+                lines.push(format!(
+                    " {:<14} {:<15} [dim]{}[/]",
+                    name,
+                    crate::about::verdict(answer),
+                    markup(kind)
+                ));
+            }
+            lines.push(String::new());
+            lines.push(format!(
+                "[dim]{} toggles adapted and faithful · \\[adapt] in the config or --adapt=-RULE switch one off · Esc closes[/]",
+                markup(&keys_label_of(b, "adapt"))
+            ));
+            lines.join("\n")
+        });
+        scroll_with(body, signal(0u16))
+            .focusable()
+            .autofocus()
+            .on_key("esc q", |cx| cx.pop())
+            .panel(crate::about::TITLE)
+    });
 }
 
 /// The video or audio the media actions work on: the one playing, else
@@ -1414,6 +1568,7 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
                 b.controls.update(HashMap::clear);
                 b.videos.set(Rc::new(HashMap::new()));
                 b.pacing.with_untracked(|p| p.borrow_mut().clear());
+                b.logs.update(HashMap::clear);
                 b.scroll.set(0);
                 b.hints.set(None);
                 b.find_at.set(usize::MAX);
@@ -1465,6 +1620,7 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
             markup(&name)
         )),
         Update::DownloadDone { .. } => {}
+        Update::About { answers, product } => about(b, answers, product, cx),
     }
 }
 
@@ -1770,6 +1926,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         .unwrap_or_else(|| "about:blank".into());
     let first_view = view.unwrap_or(config.view);
     let images = images.unwrap_or(config.images);
+    let configured_adapt = config.adapt;
     App::new(move || {
         let (keymap, warnings) = actions::keymap(config.preset, &config.keys);
         let mut warnings = [config.warnings.clone(), warnings].concat();
@@ -1786,6 +1943,9 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         });
         let hints: Signal<Option<Hints>> = signal(None);
         let find: Signal<Option<String>> = signal(None);
+        let adapt = signal(configured_adapt);
+        let faithful = signal(false);
+        let logs: Signal<HashMap<NodeId, LogScroll>> = signal(HashMap::new());
         let port = viewport();
         let layout = memo(move || {
             let width = port.get().0;
@@ -1796,6 +1956,12 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                             .map(|h| h.labels.iter().map(|(l, c)| (*c, l.clone())).collect())
                     })
                     .unwrap_or_default(),
+                adapt: if faithful.get() {
+                    Adapt::none()
+                } else {
+                    adapt.get()
+                },
+                logs: logs.get(),
                 ..Marks::default()
             };
             let view = view.get();
@@ -1847,6 +2013,9 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             images: images_signal,
             images_default: signal(images),
             viewport: port,
+            adapt,
+            faithful,
+            logs,
             pixels: memo(move || pictures::pixels(images_signal.get())),
             frozen: signal(false),
             live: signal(Rc::new(HashMap::new())),

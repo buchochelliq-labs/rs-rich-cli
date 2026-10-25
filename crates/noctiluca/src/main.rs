@@ -182,6 +182,8 @@ fn browse(args: Args) -> std::io::Result<()> {
         config.fps = fps;
     }
     config.audio |= args.audio;
+    config.adapt = noctiluca::args::adapt_of(&args, config.adapt)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
     let marks = bookmarks::default_path()
         .map(|p| Bookmarks::load(&p))
         .transpose()?

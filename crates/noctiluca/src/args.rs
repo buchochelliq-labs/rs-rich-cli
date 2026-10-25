@@ -30,6 +30,10 @@ pub struct Args {
     pub dump: Option<Dump>,
     pub no_js: bool,
     pub config: Option<PathBuf>,
+    /// `--adapt LIST`: rules switched off (`-name`) or on (`+name`).
+    pub adapt: Option<String>,
+    /// `--no-adapt`: the faithful projection, every rule off.
+    pub no_adapt: bool,
 }
 
 /// What the command line asks for.
@@ -61,6 +65,10 @@ usage: noctiluca [OPTIONS] [URL | FILE | KEYWORD WORDS…]
   --fps N                              the media frame cap
   --dump text|ax|json                  print the page's model and exit
   --no-js                              turn the page's script off
+  --adapt -RULE,+RULE,…                switch terminal adaptations off or on
+                                       (decorative-images, collapse-nav, …;
+                                       ? while browsing lists them)
+  --no-adapt                           every adaptation off: the faithful view
   --config PATH                        another config file
   -h, --help | -V, --version
 
@@ -121,6 +129,18 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
             "--raster" => view(View::Raster)?,
             "--audio" => parsed.audio = true,
             "--no-js" => parsed.no_js = true,
+            "--no-adapt" => parsed.no_adapt = true,
+            "--adapt" => {
+                let value = value_of(name, inline, &mut rest)?;
+                crate::adapt::Adapt::default()
+                    .apply(&value)
+                    .map_err(|e| format!("--adapt: {e}"))?;
+                let list = parsed
+                    .adapt
+                    .take()
+                    .map_or(value.clone(), |l| format!("{l},{value}"));
+                parsed.adapt = Some(list);
+            }
             "--profile" => {
                 let name = value_of(name, inline, &mut rest)?;
                 if name.is_empty()
@@ -172,6 +192,23 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
         return Err("--dump needs a page".into());
     }
     Ok(Run::Browse(parsed))
+}
+
+/// The adaptations `args` ask for, starting from `configured` (the
+/// config's): `--adapt`'s list applied, then `--no-adapt` switching all
+/// of them off.
+pub fn adapt_of(
+    args: &Args,
+    configured: crate::adapt::Adapt,
+) -> Result<crate::adapt::Adapt, String> {
+    let mut adapt = match &args.adapt {
+        Some(list) => configured.apply(list)?,
+        None => configured,
+    };
+    if args.no_adapt {
+        adapt = crate::adapt::Adapt::none();
+    }
+    Ok(adapt)
 }
 
 /// `--name=value` as the name and the value.
@@ -226,6 +263,26 @@ mod tests {
             }
         );
         assert_eq!(parse(&["-h"]).unwrap(), Run::Help);
+    }
+
+    #[test]
+    fn adaptations_switch_off_one_by_one_or_all() {
+        let Run::Browse(args) =
+            parse(&["--adapt=-decorative-images,-collapse-nav", "x.html"]).unwrap()
+        else {
+            panic!()
+        };
+        assert_eq!(
+            args.adapt.as_deref(),
+            Some("-decorative-images,-collapse-nav")
+        );
+        let Run::Browse(args) = parse(&["--no-adapt", "x.html"]).unwrap() else {
+            panic!()
+        };
+        assert!(args.no_adapt);
+        assert!(parse(&["--adapt", "-sparkles"])
+            .unwrap_err()
+            .contains("not an adaptation"));
     }
 
     #[test]

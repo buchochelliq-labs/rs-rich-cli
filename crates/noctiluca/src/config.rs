@@ -10,6 +10,8 @@
 //! - `[media]`: `audio`, `fps` (moving pictures' ceiling), `images`,
 //!   `bandwidth` (bytes a second for moving pictures: `"512K"`, `"4M"`).
 //! - `[profile]`: `name`, a kept profile (opt-in).
+//! - `[adapt]`: each terminal adaptation by name (`collapse-nav = false`),
+//!   on or off; see [`crate::adapt`].
 //! - `[site."PATTERN"]`: per-site `view`, `images`, `audio`, `fps`,
 //!   `width`, `keyword` and `[site."PATTERN".keys]`.
 //!
@@ -21,6 +23,7 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::adapt::{Adapt, Rule, RULES};
 use crate::url::{complete_address, encode_query, host, looks_like_address};
 
 /// A view of a page.
@@ -192,6 +195,8 @@ pub struct Config {
     /// A kept profile's name, if one is asked for.
     pub profile: Option<String>,
     pub sites: Vec<Site>,
+    /// The terminal adaptations that are on.
+    pub adapt: Adapt,
     /// What was not understood, for the user.
     pub warnings: Vec<String>,
     /// The file it came from, which edits go to.
@@ -268,6 +273,7 @@ impl Default for Config {
             bandwidth: None,
             profile: None,
             sites: Vec::new(),
+            adapt: Adapt::default(),
             warnings: Vec::new(),
             path: None,
         }
@@ -368,6 +374,7 @@ impl Config {
         let mut bandwidth = None;
         let mut profile = None;
         let mut sites = Vec::new();
+        let mut adapt = Adapt::default();
         for (section, value) in &table {
             let Some(body) = value.as_table() else {
                 warn(format!("{section}: expected a table"));
@@ -495,6 +502,18 @@ impl Config {
                         }
                     }
                 }
+                "adapt" => {
+                    for (key, value) in body {
+                        match (Rule::parse(key), value) {
+                            (Some(rule), toml::Value::Boolean(on)) => adapt.set(rule, *on),
+                            (Some(_), _) => warn(format!("adapt.{key}: expected true or false")),
+                            (None, _) => warn(format!(
+                                "adapt.{key}: not an adaptation (they are {})",
+                                RULES.iter().map(|r| r.name).collect::<Vec<_>>().join(", ")
+                            )),
+                        }
+                    }
+                }
                 "site" => {
                     for (pattern, value) in body {
                         match value.as_table() {
@@ -518,6 +537,7 @@ impl Config {
         config.bandwidth = bandwidth;
         config.profile = profile;
         config.sites = sites;
+        config.adapt = adapt;
         Ok(config)
     }
 
@@ -970,6 +990,8 @@ mod tests {
             Some(View::Reader)
         );
         assert!(config.shortcuts.contains_key("wiki"));
+        // The sample spells out the defaults.
+        assert_eq!(config.adapt, Adapt::default());
     }
 
     #[test]

@@ -18,9 +18,9 @@ use std::time::{Duration, Instant};
 
 use noctiluca::about;
 use noctiluca::cdp::{ChromeBackend, ChromeOptions};
-use noctiluca::engine::{Engine, MediaOp, NodeId, Playback, TabId};
+use noctiluca::engine::{MediaOp, NodeId, Playback};
 use noctiluca::file_url;
-use noctiluca::model::{BlockKind, Page};
+use noctiluca::model::Page;
 use noctiluca::tab::{Command, Tab, Update};
 use noctiluca::video::{Pacing, VideoFrame};
 use rich_art::picture::{count_picture_bytes, picture_bytes, ByteBudget, Pixels};
@@ -310,35 +310,48 @@ fn a_slow_terminal_steps_video_down_to_character_art() {
 
 #[test]
 fn the_about_pages_codec_table_matches_can_play_type() {
-    let Some(mut engine) = start() else { return };
-    let answers = engine.can_play(TabId(0), &about::types()).unwrap();
-    // Chrome plays VP9 in WebM, whatever its build.
-    assert_eq!(answers[4], "probably", "{answers:?}");
-    let mut w = Watch::new(engine);
-    w.tab.send(Command::Open(about::ADDRESS.into()));
-    w.until("the about page", |w| {
-        w.page.as_ref().is_some_and(|p| p.title == about::TITLE)
-    });
-    let page = w.page.clone().unwrap();
-    assert!(about::is_about(&page.url, &page.title));
-    let table = page
-        .blocks
+    let Some(engine) = start() else { return };
+    // What the page itself hears from canPlayType, asked in its own
+    // world, apart from the engine's isolated one.
+    let devtools = engine.devtools().clone();
+    let types = serde_json::to_string(&about::types()).unwrap();
+    let direct = devtools
+        .call(
+            "Runtime.evaluate",
+            serde_json::json!({"expression": format!(
+                "(() => {{ const v = document.createElement('video'); \
+                  return {types}.map(t => v.canPlayType(t)); }})()"
+            ), "returnByValue": true}),
+            Duration::from_secs(30),
+        )
+        .unwrap();
+    let direct: Vec<String> = direct["result"]["value"]
+        .as_array()
+        .unwrap()
         .iter()
-        .find_map(|b| match &b.kind {
-            BlockKind::Table(t) => Some(t.clone()),
-            _ => None,
-        })
-        .expect("a codec table");
-    let rows: Vec<Vec<String>> = table
-        .rows
-        .iter()
-        .map(|r| r.iter().map(|c| c.text()).collect())
+        .map(|v| v.as_str().unwrap_or_default().to_string())
         .collect();
-    // The header, then one row a codec, each saying what Chrome said.
-    assert_eq!(rows.len(), about::CODECS.len() + 1, "{rows:?}");
-    for (((name, kind), answer), row) in about::CODECS.iter().zip(&answers).zip(&rows[1..]) {
-        assert_eq!(row[0], *name);
-        assert_eq!(row[1], *kind);
-        assert_eq!(row[2], about::verdict(answer), "{name}");
+    // Chrome plays VP9 in WebM, whatever its build.
+    assert_eq!(direct[4], "probably", "{direct:?}");
+    let w = Watch::new(engine);
+    w.tab.send(Command::Open(about::ADDRESS.into()));
+    let start = Instant::now();
+    let (answers, product) = loop {
+        match w.updates.recv_timeout(Duration::from_millis(100)) {
+            Ok(Update::About { answers, product }) => break (answers, product),
+            _ => assert!(start.elapsed() < Duration::from_secs(30), "no about page"),
+        }
+    };
+    // The table the about page draws: one row a codec, saying what
+    // Chrome said.
+    assert_eq!(answers, direct);
+    assert_eq!(answers.len(), about::CODECS.len());
+    assert!(!product.is_empty() && product != "unknown", "{product}");
+    for ((name, _), answer) in about::CODECS.iter().zip(&answers) {
+        let verdict = about::verdict(answer);
+        assert!(
+            ["yes (probably)", "maybe", "no"].contains(&verdict),
+            "{name}: {verdict}"
+        );
     }
 }

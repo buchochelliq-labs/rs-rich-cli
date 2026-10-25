@@ -248,16 +248,63 @@ Optimising for the terminal is welcome when it is generic: a named rule
 about constructs and cells, applied to every page alike, with a test on a
 fixture.
 
-| Rule | What it does | Test |
-|---|---|---|
-| Decorative pictures drop | An image with an empty `alt`, `aria-hidden`, or smaller than 8 x 8 CSS pixels (a spacer, a tracking pixel) is not a media region | (in progress) |
-| Small pictures stay inline | An image at most two rows tall inside a line of text (an emote, a badge, an icon) is drawn in its line, at its cells | (in progress) |
-| Picture heights are capped | A picture is at most `MAX_PICTURE_ROWS` rows; what is under it in its columns moves up by the rows saved | (in progress) |
-| A caption under each picture | A picture with alt text and no `<figcaption>` gets an `Image: …` line under it | (in progress) |
-| Buttons as `[ label ]` | A button reads as its accessible name in brackets, an icon-only one too | (in progress) |
-| Grids fit the terminal | Chrome lays the page out at the terminal's width, so a responsive grid picks its column count from the cells there are | (in progress) |
-| A live log shows its tail | A `role=log` or `aria-live` box shows its newest entries that fit, and holds still while the user has scrolled it up | (in progress) |
-| Frame rates and tiers follow bandwidth | Each moving region's frame rate comes from a byte budget, at most 8 a second, and it steps down Kitty, iTerm2, Sixel, then cells when short | `tests/video.rs`: `a_regions_bytes_over_two_seconds_stay_under_its_cap`, `a_slow_terminal_steps_video_down_to_character_art` |
+Each rule has a name (`crate::adapt`), and each can be switched off on
+its own: `[adapt]` in the config (`collapse-nav = false`), `--adapt` on
+the command line (`--adapt=-decorative-images,-collapse-nav`,
+`+text-over-pictures`), and `--no-adapt` for all of them. A key (`a`)
+toggles between the adapted and the **faithful** projection, and the
+about page (`?`) lists the rules and which are on. A rule is on by
+default unless it changes what the page means. The projection reads one
+`Adapt` set through `Marks::adapt`; the rules applied where pictures are
+drawn and by the media scheduler read the same set.
+
+| Rule (name) | What it does | Default | Applied by | Test |
+|---|---|---|---|---|
+| Decorative pictures drop (`decorative-images`) | A spacer or tracking pixel (under 8 x 8 CSS pixels) always drops; a picture marked `alt=""`, `aria-hidden` or `role=presentation` drops only when it is icon-sized (at most 16 CSS pixels tall, under a row). An empty-alt picture of real size (a card's thumbnail, a comment's avatar, titled by the text beside it) stays, drawn without a caption | on | layout | `adapt.rs`: `decorative_pictures_drop_and_real_ones_stay` |
+| Small pictures stay inline (`inline-pictures`) | An image at most two rows tall inside a line of text (an emote, a badge, an icon) is drawn in its line, at its cells. A live log's entries carry theirs as `Run::picture` | on | pictures (A) | (in progress) |
+| Picture heights are capped (`cap-pictures`) | A picture is at most `MAX_PICTURE_ROWS` (14) rows, narrowed to keep its shape; what is under it in its column moves up by the rows saved | on | layout, pictures | `adapt.rs`: `tall_pictures_are_capped_and_what_is_under_moves_up` |
+| A caption under each picture (`captions`) | A picture with alt text, at least three rows tall, and no `<figcaption>` gets an `Image: …` line under it | on | layout (A) | A's |
+| Buttons as `[ label ]` (`icon-buttons`) | A button reads as its accessible name in brackets, an icon-only one too; a face wider than its box pushes the controls after it on its row. Off, an icon-only button is a shaded box, as its picture would be | on | layout | `adapt.rs`: `icon_buttons_read_as_their_name` |
+| Grids fit the terminal (`snap-grids`) | A grid's (or a wrapping flex row's) items get equal cell widths that tile it, and when a column would be under `MIN_GRID_CELLS` (16) cells, fewer columns, the items flowing into more rows; what is under the grid moves by the rows it grew | on | layout | `adapt.rs`: `grids_snap_their_columns_to_the_cells` |
+| Navigation collapses on narrow terminals (`collapse-nav`) | Under `NARROW_COLUMNS` (100), a navigation or complementary landmark with no field and no live log in it becomes one row: its name, then its links (each still a hint target). A sidebar gives its columns to what is beside it | on | layout | `adapt.rs`: `navigation_collapses_to_a_row_on_a_narrow_terminal` |
+| Text over pictures of text (`text-over-pictures`) | A picture with alt text inside a heading, a link or a button, or a banner (four times wider than tall, at most three rows), is drawn as its alt text in one row | off: it changes meaning | layout | `adapt.rs`: `a_picture_of_text_reads_as_its_text_when_asked` |
+| A live log shows its tail (`live-tail`) | A `role=log`, `aria-live` or appended scroll box shows its newest entries that fit, and holds still while the user has scrolled it up (`{`, `}`); off, it shows from the entry Chrome shows first | on | layout | `logs.rs`, `live_logs.rs`, `app.rs` |
+| Page colours, readable (`page-colors`) | Every run keeps the page's colour as CSS. A saturated colour (a red "LIVE", an author's name) is drawn, mixed toward white on a dark terminal or toward black on a light one until it reads; a grey, or a colour near black or white (chroma under 0.25), takes the terminal's own foreground. The background is dark unless `COLORFGBG` says light. Links keep their link style. Off, no page colour is drawn | on | layout | `adapt.rs` unit tests; `logs.rs`: `authors_keep_their_colour` |
+| Frame rates and tiers follow bandwidth (`bandwidth`) | Each moving region's frame rate comes from a byte budget, at most 8 a second, and it steps down Kitty, iTerm2, Sixel, then cells when short | on | media scheduler | `tests/video.rs`: `a_regions_bytes_over_two_seconds_stay_under_its_cap`, `a_slow_terminal_steps_video_down_to_character_art`; `tests/pictures.rs`: `an_animated_gif_moves_within_its_budget`, `a_slow_terminal_steps_the_gif_down_to_character_art` |
+
+The faithful projection (`--no-adapt`, or `a`) is checked against the
+adapted one on the fixture: `adapt.rs`,
+`no_adapt_gives_the_faithful_projection`.
+
+### Live logs
+
+Built in 0.0.23. Any live log, by generic semantics only: a box with
+`role=log` (or the AX role `log`), an `aria-live` box (`polite` or
+`assertive`) whose content is element entries (a live box of plain text,
+a status line, is ordinary text), or a scroll box the page appends
+element children to. A log's entries are the element children of its
+entry box: the log itself, or the one box it wraps them in (a scroller
+inside a panel). A log built from `<ul aria-live>` and one from
+`<div role=log>` read and project alike (`log-ul.html`, `log-div.html`).
+
+- **The live ping.** The isolated world's `MutationObserver` sorts each
+  batch of changes. When every change is inside a log the tab has read,
+  it pings `'live'` instead of `''`, and moves the revision of each entry
+  that changed. A picture loading in a log is a live change too. A scroll
+  box the page appends to becomes a log at the next full reading.
+- **Incremental reads.** On a live ping the tab reads only its logs
+  (`Engine::read_live`): in the same isolated world, a function returns
+  the entries' keys in order and the runs of only those whose revision
+  the tab has not seen. Entries are keyed by node, never by text. Each
+  run carries its colour when it differs from its entry's (an author's
+  name), and each picture its source, alt text and size. A field's value
+  inside an entry is never read. No snapshot is taken: measured on
+  `stream-with-log.html`, a new entry shows in well under 600 ms with no
+  full reading (`live_logs.rs`).
+- **The view.** The projection gives a log its own box, at its rows, and
+  shows its tail (the `live-tail` rule). `{` scrolls it up, by half its
+  rows in entries, and it holds still on the entry at its bottom while
+  new ones come; `}` scrolls down, and at the end it follows again.
 
 ### The engine trait
 
@@ -608,9 +655,10 @@ AAC as playable (`canPlayType`: "probably"). That contradicts the lead's
 note that Chromium lacks them: plain open-source Chromium builds usually
 do lack them, but Chrome for Testing has them. So Noctiluca prefers a
 system Chrome, then Chrome for Testing, then Chromium, and shows the
-codec table in its about page, `about:noctiluca` (built: an HTML page
-Noctiluca makes and opens as a `data:` address, its table filled with
-`canPlayType`'s answers for fifteen types). Full Chrome in `--headless=new` granted
+codec table in its about page, `about:noctiluca` (built: one page, opened
+by `?` or by going to the address, with the version, the terminal
+adaptations and a table of `canPlayType`'s answers for fifteen types,
+asked of the browser when it opens). Full Chrome in `--headless=new` granted
 Widevine access in a test here; its headless shell did not. Either way, DRM
 playback is out of scope by policy: Noctiluca never tries a licence
 request.

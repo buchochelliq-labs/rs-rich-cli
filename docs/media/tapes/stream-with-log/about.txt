@@ -1,0 +1,32 @@
+◀▶ Stream with log file:///noctiluca/fixtures/stream-with-log.html projection
+       Lanternfish Lab
+ ▀▀▀▀╭─ About Noctiluca ───────────────────────────────────────────────────────────────────────────────╮
+ ▀▀▀▀│Noctiluca 0.0.1                                                                                  │
+ ░░░░│                                                                                                 │
+ ░░░░│Terminal adaptations (active rules):                                                             │
+ ░░░░│ on  decorative-images    drop spacers, tracking pixels and icons marked decorative              │
+ ░░░░│ on  inline-pictures      keep small pictures (emotes, badges, icons) in their line              │
+ ░░░░│ on  cap-pictures         cap picture heights; what is under them moves up                       │
+ ░░░░│ on  captions             an Image: line under a picture with alt text and no caption            │
+ ░░░░│ on  icon-buttons         show buttons, icon-only ones too, as [ label ] from their name         │
+ ░░░░│ on  snap-grids           snap grids to the width, columns from the cells there are              │
+ ░░░░│ on  collapse-nav         collapse navigation and sidebars to a row on narrow terminals          │
+ ░░░░│ off text-over-pictures   draw a picture of text as its text (changes meaning: off)              │
+ ░░░░│ on  live-tail            live logs show their newest entries unless scrolled up                 │
+ ░░░░│ on  page-colors          keep saturated text colours, readable; greys follow the terminal       │
+ ░░░░│ on  bandwidth            lower frame rate and tier when the terminal is short of bandwidth      │
+ ░░░░│                                                                                                 │
+     │a toggles adapted and faithful ·  in the config or --adapt=-RULE switch one off · Esc closes     │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     ╰─────────────────────────────────────────────────────────────────────────────────────────────────╯
+
+
+f1 actions · f hints · o open · r reader · q quit

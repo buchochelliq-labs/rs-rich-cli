@@ -42,6 +42,23 @@ images = "auto"
 # blocks. Unset: 4M on this machine, 256K over SSH.
 # bandwidth = "4M"
 
+[adapt]
+# Terminal adaptations: named rules about constructs, never about a site.
+# Every rule is on but text-over-pictures, which changes what a page
+# means. `a` toggles all of them off and on while browsing, `?` lists
+# them, and --adapt=-RULE or --no-adapt sets them for one run.
+decorative-images = true
+inline-pictures = true
+cap-pictures = true
+captions = true
+icon-buttons = true
+snap-grids = true
+collapse-nav = true
+text-over-pictures = false
+live-tail = true
+page-colors = true
+bandwidth = true
+
 [profile]
 # A kept profile (its cookies and storage stay between runs), opt-in. By
 # default each run has a temporary, private one.

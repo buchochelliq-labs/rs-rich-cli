@@ -175,11 +175,30 @@ pub struct Metrics {
     pub viewport_height: f64,
 }
 
+/// A live log's entries, as the engine read them without a snapshot.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct LiveRead {
+    /// Its entries' keys, oldest first (the newest [`MAX_ENTRIES`] at
+    /// most).
+    ///
+    /// [`MAX_ENTRIES`]: crate::model::MAX_ENTRIES
+    pub order: Vec<u64>,
+    /// The entries that are new or changed since the last read of this
+    /// log (all of them when the read was `full`): each key and its runs,
+    /// untrusted, for [`crate::model::live_runs`].
+    pub fresh: Vec<(u64, Value)>,
+    /// The first entry Chrome shows in the box, at its own scroll.
+    pub first_shown: Option<u64>,
+}
+
 /// What happened in the engine since it was last asked.
 #[derive(Clone, Debug, PartialEq)]
 pub enum EngineEvent {
     /// Something on the page changed: the isolated world's ping.
     Changed,
+    /// Only live logs the tab has read changed (entries appended, edited
+    /// or removed): their entries are read again, not the whole page.
+    Live,
     /// The main frame went to a new document.
     Navigated(String),
     /// The page finished loading.
@@ -267,6 +286,18 @@ pub trait Engine: Send {
     /// The browser's name and version, for the about page.
     fn product(&mut self, _tab: TabId) -> String {
         "unknown".into()
+    }
+    /// The entries of the live log on `node`, read incrementally: only
+    /// the new and changed ones come with their runs, unless `full`.
+    fn read_live(&mut self, _tab: TabId, _node: NodeId, _full: bool) -> io::Result<LiveRead> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "no live reads here",
+        ))
+    }
+    /// The scroll boxes the page has appended entries to: live logs too.
+    fn appended(&mut self, _tab: TabId) -> io::Result<Vec<NodeId>> {
+        Ok(Vec::new())
     }
     /// What happened since the last call.
     fn events(&mut self) -> Vec<EngineEvent>;
