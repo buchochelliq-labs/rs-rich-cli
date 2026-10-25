@@ -112,7 +112,7 @@ allows this kind of change; it is not a divergence.
 
 | module | upstream function | what the fast path does | pinned by |
 |---|---|---|---|
-| `color.rs` | `ColorTriplet.hex` | writes `#rrggbb` digit by digit, not through `format!` | `color::tests::hex_matches_format` |
+| `color.rs` | `ColorTriplet.hex` | writes `#rrggbb` on the stack and copies it into an inline `CompactString` once (a colour's name), not through `format!` | `color::tests::hex_matches_format` |
 | `cells.rs` | `get_character_cell_size` | answers printable ASCII, Latin-1, Latin Extended, IPA, Greek, Cyrillic, box drawing, blocks, Braille, CJK ideographs to U+9FBB and Hangul syllables without the table search; the same in all 21 tables | `cells::tests::common_widths_match_every_table` (every character it answers, every table) |
 | `cells.rs` | `cell_len` (`_cell_len`) | counts ASCII by its printable bytes; otherwise sums the widths while it looks for a joiner or VS16 (`unjoined_cell_len`), in one pass | `cells::tests::ascii_cell_len_matches_the_table` |
 | `cells.rs` | `split_graphemes` | one walk over the characters instead of collecting them and indexing | `cells::tests::split_graphemes_matches_the_indexed_scan` (the first port as reference) |
@@ -125,6 +125,16 @@ allows this kind of change; it is not a divergence.
 | `text.rs` | `Text.__init__` (`strip_control_codes`) | `Text::new` and `Text::styled` keep a string without control codes rather than copying it; control codes are searched as bytes | the goldens, `text` tests |
 | `text.rs` | `Text.truncate` (in the wrap path) | a line that fits is handed back without a copy, measured by its segments when no joiner or VS16 can join across them | the goldens, `text` tests, the fuzzer |
 | `segment.rs`, `console.rs` | `Segment.split_lines` in `Console.render_lines` | `split_lines_owned` moves the rendered segments into lines instead of cloning them | `segment::tests::split_lines_owned_matches_split_lines` |
+
+**Light strings (0.0.23, a public API change).** `Segment.text` and
+`Color.name` are `compact_str::CompactString`s (re-exported as
+`rich::CompactString`), not `String`s: up to 24 bytes are kept inline, so
+a short run or a colour's name allocates nothing. The maintainer decided
+this on 2026-10-25; it changes the fields' type, not what is rendered
+(the goldens, the parity tables, the fuzzer and a byte compare of 30,081
+cases agree). A sync keeps the types: where upstream builds a segment's
+text or a colour's name, build the `CompactString` directly
+(`.into()` from a `&str` or a `String`).
 
 ## `rich-cli` (tool — tracks upstream 1.8.1, see UPSTREAM.toml)
 

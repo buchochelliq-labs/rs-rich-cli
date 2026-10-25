@@ -409,97 +409,135 @@ with the test that pins it.
 
 Instructions for 20 frames at 80x24, millions, after each kept step:
 
-| Step | Churn | Chart | TableSort | Unicode |
-|---|---:|---:|---:|---:|
-| Before | 225 | 51 | 264 | 111 |
-| `ColorTriplet::hex` without `format!` | 134 | 51 | 264 | 111 |
-| Common widths without the table search; ASCII `cell_len` by bytes | 134 | 51 | 202 | 96 |
-| rs-rich-ext's widths are rich's | 133 | 51 | 202 | 95 |
-| Emoji scan and unescape skip text without `:` or `\` | 133 | 51 | 183 | 89 |
-| `Style::normalize` cache (upstream's `lru_cache`) | 133 | 51 | 172 | 84 |
-| `divide_line`'s words are slices | 133 | 51 | 159 | 81 |
-| Markup tags found by scanning for brackets, not the regex | 133 | 51 | 125 | 69 |
-| `truncate_line` hands back a line that fits | 133 | 51 | 116 | 67 |
-| `render_lines` moves segments into lines | 133 | 46 | 108 | 64 |
-| Closing-tag text only for its error; ASCII words by bytes | 133 | 46 | 98 | 62 |
-| `cell_len` in one pass | 133 | 46 | 97 | 58 |
-| Markup borrows its text runs; `Text` keeps the string it is given | 133 | 46 | 90 | 56 |
-| FNV-1a for the normalize cache | 133 | 46 | 89 | 55 |
-| `split_graphemes` in one pass | 133 | 46 | 88 | 53 |
-| `divide_line` measures a word once | 133 | 46 | 87 | 51 |
+Churn: 6.01M at the start (rich's path). Drawn with `Canvas::put_rgb`,
+each true-colour pair's SGR encoded once per style id and kept whole (so
+a change of both colours is one copy): 1.58M.
 
-At 200x60: churn 1,375M to 800M, the chart 161M to 150M, TableSort 679M
-to 245M, ListPage 548M to 210M, Unicode 280M to 133M. Allocations a frame
-fell with them (the regression baseline is updated): TableSort 12,022 to
-3,288 at 80x24, churn 9,711 to 5,871, Unicode 4,618 to 1,412, the
-status clock 162 to 109.
+The chart, one row a kept step:
 
-The paint benchmark, best of three interleaved runs of the binaries
-before and after (µs a frame, `cells`; bytes unchanged everywhere):
+| Step | Chart |
+|---|---:|
+| Start (rich's path) | 2.14M |
+| `CellGrid` of plain cells and a `StyleTable`; drawn with `Draw` and `write_runs`; `bresenham` an iterator | 1.23M |
+| The grid's cells copied straight into the screen (`write_cell_grid`); `Op` specs `Arc<str>` | 0.92M |
+| A cell of one character written without a UTF-8 check (`Cell::single_char`) | 0.85M |
+| The pen names a style's cached SGR (`Held`) rather than copying it | 0.79M |
+| Braille lines set their dots directly; `Bounds::clip` skips Liang-Barsky inside the bounds (same arithmetic); `DotCanvas` layers `u32` | 0.71M |
+| `raster_into` (no second grid and blit); `Layer::finish` matches its pixels once; a spec looked up once a run of steps | 0.64M |
+| The painter passes unchanged cells a run at a time | 0.61M |
+| The painter keeps the SGR of each change between two cached styles (`SgrChanges`) | 0.58M |
 
-| Size | Scene | before | after |
-|---|---|---:|---:|
-| 80x24 | StatusClock | 14.9 | 8.3 |
-| 80x24 | LogAppend | 112.6 | 79.7 |
-| 80x24 | TableSort | 1,377 | 457 |
-| 80x24 | Churn | 1,022 | 661 |
-| 80x24 | Chart | 356 | 295 |
-| 80x24 | Unicode | 552 | 236 |
-| 200x60 | TableSort | 3,549 | 1,340 |
-| 200x60 | Churn | 6,892 | 4,689 |
-| 200x60 | Chart | 1,133 | 1,054 |
-| 200x60 | Unicode | 1,415 | 619 |
+The last step is 4% of the instructions but most of the chart's paint
+time (69 to 21 µs at 80x24): it replaces string compares and copies a
+cell with one lookup.
 
-Against ratatui (`tests/versus_ratatui.rs`, best of three interleaved
-runs; ratatui's time is its best across all six):
+At 200x60: churn 36.5M to 9.5M a frame, the chart 7.1M to 1.8M.
 
-| Size | Scene | ratatui | before | after | after / ratatui |
+#### rich's strings made light
+
+The maintainer also decided (2026-10-25) to make rich's per-cell strings
+lighter in rich itself, a breaking change to `rs-rich` 0.0.x with the
+output unchanged. `Segment.text` and `Color.name` became
+`compact_str::CompactString` (re-exported as `rich::CompactString`).
+
+Why `CompactString` and not `Arc<str>` or `Cow<'static, str>`: the
+profile's cost was making the strings, not copying them. Every frame
+builds its segments' text and its colours' names anew (`Color::from_rgb`
+names a colour `#rrggbb`), so `Arc<str>` would still allocate once each,
+and `Cow<'static, str>` only saves for text known at compile time, which
+neither a run nor a colour's name is. `CompactString` keeps up to 24
+bytes inline: a colour's name (7 bytes) and most runs never allocate.
+Measured, rich's path, allocations a frame (the baseline gate):
+
+| Scene, 80x24 | before | after |
+|---|---:|---:|
+| ChurnRich (a `Segment` and a `Style` a cell) | 5,871 | 111 |
+| ChartRich | 1,410 | 598 |
+| TableSort | 3,288 | 2,179 |
+| Unicode | 1,410 | 1,068 |
+| ListPage | 510 | 124 |
+| LogAppend | 260 | 200 |
+
+and instructions a frame: ChurnRich 5.52M to 3.73M, TableSort 3.98M to
+3.54M, ListPage 0.59M to 0.46M, Unicode 2.23M to 2.14M, ChartRich 1.36M
+to 1.29M. One thing it cost first: `CompactString::push` a character at a
+time is slower than the allocation it saves (ChurnRich went to 6.35M), so
+`ColorTriplet::hex` builds the name on the stack and copies it in once.
+
+Verified as for every change to the mirror: `cargo test -p rs-rich` (the
+goldens and the parity tables), `diff_render` byte for byte against the
+starting binary on 30,081 cases under the newest Unicode table and under
+4.1.0, and the differential fuzzer against Python rich 15.0.0 (its corpus
+and 3,000 generated cases each for seeds 11 and 23).
+
+#### The two paths, side by side
+
+The paint benchmark, `cells`, best of three interleaved runs of the
+starting binary and the final one (µs a frame; bytes unchanged
+everywhere):
+
+| Size | Scene | start | rich's path now | fast path now |
+|---|---|---:|---:|---:|
+| 80x24 | Churn | 718 | 244 | 94 |
+| 80x24 | Chart | 302 | 138 | 55 |
+| 200x60 | Churn | 4,430 | 1,704 | 697 |
+| 200x60 | Chart | 1,059 | 404 | 139 |
+
+rich's path gained from the light strings and from everything the two
+paths share (the chart's grid, the painter); the fast path is still 2.5
+to 3 times faster, as it builds no segment or style at all. In
+instructions a frame at 80x24: rich's path is 2.4 times the fast path's
+on churn (3.73M against 1.58M; it was 3.5 times before the light
+strings) and 2.2 times on the chart (1.29M against 0.58M).
+
+The other scenes, through rich's path as before (start, now): TableSort
+454 to 379 µs, Unicode 235 to 203, ListPage 63 to 37, ListRow 102 to 55,
+LogAppend 79 to 48 at 80x24; at 200x60 TableSort 1,247 to 1,061, Unicode
+615 to 515, ListPage 303 to 181, LogAppend 398 to 207. The small scenes
+(blink, typing, the clock) are unchanged within noise (3.5 to 13 µs).
+
+#### Against ratatui, now
+
+`tests/versus_ratatui.rs`, release, best of three runs (ratatui's time is
+its best across them):
+
+| Size | Scene | ratatui | intuiTUIve | / ratatui | before |
 |---|---|---:|---:|---:|---:|
-| 80x24 | Status tick | 79 µs | 11 µs | 8 µs | 0.10 |
-| 80x24 | Selection move | 86 µs | 34 µs | 21 µs | 0.24 |
-| 80x24 | Log append | 89 µs | 22 µs | 19 µs | 0.21 |
-| 80x24 | Churn, every cell | 319 µs | 801 µs | 504 µs | 1.58 |
-| 80x24 | Chart redrawn | 77 µs | 299 µs | 270 µs | 3.5 |
-| 200x60 | Churn, every cell | 1,903 µs | 4,868 µs | 3,494 µs | 1.84 |
-| 200x60 | Chart redrawn | 309 µs | 1,011 µs | 985 µs | 3.2 |
+| 80x24 | Status tick | 88 µs, 37 B | 8 µs, 18 B | 0.10 | 0.10 |
+| 80x24 | Selection move | 88 µs, 184 B | 23 µs, 118 B | 0.26 | 0.24 |
+| 80x24 | Log append | 93 µs, 443 B | 16 µs, 325 B | 0.17 | 0.21 |
+| 80x24 | Churn, every cell | 340 µs, 62.0 kB | 104 µs, 61.4 kB | 0.31 | 1.58 |
+| 80x24 | Chart redrawn | 84 µs, 4.2 kB | 60 µs, 2.8 kB | 0.71 | 3.5 |
+| 200x60 | Churn, every cell | 2,049 µs, 376 kB | 762 µs, 368 kB | 0.37 | 1.84 |
+| 200x60 | Chart redrawn | 353 µs, 14.7 kB | 166 µs, 8.7 kB | 0.47 | 3.2 |
 
-Churn is now within 1.6 times ratatui's time at 80x24 and 1.8 times at
-200x60 (it was 2.5 and 2.6). The chart barely moved, because rich was
-never much of it.
+The target, within 1.5 times ratatui's time on churn and the chart, is
+met with room: both are now faster than ratatui's, with fewer bytes.
 
-**Tried and dropped, because the count said so:**
+#### Tried and dropped
 
-- *A per-render style cache in `Text::line_segments`*, upstream's
-  `style_cache` in `Text.render`, keyed by the active spans: TableSort
-  went from 90M to 103M. Hashing the key for every segment costs more
-  than the combine it saves; the base style is usually null, so the
-  combine is one clone.
-- *Comparing a style's key before the style itself* in
-  `StyleTable::intern`: churn 1.5% fewer, the chart 2% more (a run of one
-  style now hashes every cell). Mixed, so left out; with the previous
-  agent's colour-pair attempt, `intern` stays as it was.
-- *`Color`'s equality comparing the name last*, after kind, number and
-  triplet: under 0.3% on churn.
+- *Formatting a true-colour pair's parameters on the stack and copying
+  them in with one `push_str`*: the UTF-8 check (`str::from_utf8`, not
+  inlined) cost more than the byte pushes it saved (churn's painter went
+  up). Caching the encoded pair per style id (`RgbCodes`) replaced it.
+- *Recycling the pen's `Sgr` buffers between frames*: fewer allocations,
+  but the copies stayed; naming the cached parameters by style id
+  (`Held`) removed both.
 
-**What is left:**
+#### What is left
 
-- **Churn** is now mostly allocation (37% of its instructions are malloc
-  and free) and rs-rich-ext's painter (a third). rich's share is the
-  three strings each cell owns: the segment's text and the two colours'
-  names (`Segment.text` and `Color.name` are public `String`s). Making
-  those cheaper is a change to rich's public API, which is a decision for
-  a human, not a fast path. Without it, 1.5 times ratatui needs the
-  painter (`set_pen`, `rgb_code`) and `StyleTable::intern` made cheaper,
-  or the scene to use rs-rich-ext's `put_rgb`.
-- **The chart** is rs-rich-ext's own code: `Chart::grid` 38%,
-  `CellGrid::into_lines` and `Line::push` (a `String` and a `Style` clone
-  per run) about a third. rich's part is 8%.
-- **Text** (TableSort, the lists, Unicode): what is left in rich is
-  building a `Style` and a `String` per segment (`line_segments`, about
-  12%), the markup parse (about 20%) and wrapping (about 10%). The
-  painter is now 11 to 27% of these scenes.
-- **A `Style::parse` cache** (upstream has one) would save under 1% of
-  TableSort: not tried.
+- **The painter** is now most of a frame that changes a lot (churn's 60
+  of 94 µs at 80x24): moving the pen (`goto_into`, `move_pen`) and the
+  bookkeeping per written cell.
+- **rich's path** still builds a `Style` per segment (colour names now
+  inline, but each `Style` is a struct of two `Color`s and an
+  `Option<String>` link) and interns it (`style_key` is 5% of churn
+  through rich's path); text scenes are still mostly markup and
+  wrapping (above).
+- **More widgets on the fast path:** `LevelMeter`, `Distribution`,
+  `SmallMultiples` and the bullet chart keep rich's path (their
+  `rich_render` returns early in places); lists and tables in intuiTUIve
+  draw rich text, which the profile has not yet shown worth a fast path.
 
 ### Noctiluca
 

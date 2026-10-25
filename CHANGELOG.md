@@ -9,6 +9,57 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Breaking: rich's per-cell strings are `CompactString`s (core)
+
+- **`Segment.text` and `Color.name` are `rich::CompactString`s**, not
+  `String`s (a re-export of `compact_str::CompactString`). Up to 24 bytes
+  are kept inline, so a short run or a colour's name (`#rrggbb`)
+  allocates nothing. The maintainer decided this on 2026-10-25. Output is
+  unchanged: the goldens, the parity tables, the differential fuzzer
+  against Python rich 15.0.0 and a byte compare of 30,081 cases against
+  the binary from before all agree. Rendering through rich's segments
+  allocates far less: a full-screen colour swatch drawn as segments went
+  from 5,871 allocations a frame to 111, and from 680 to about 300 µs at
+  80x24; a table of markup from 3,288 allocations to 2,179.
+- **Migration.** Reads compile unchanged: the fields deref to `&str`, and
+  compare with `&str` and `String`. Where a `String` was moved out or
+  cloned, write `segment.text.to_string()` (or `.into_string()` to move
+  it, `.as_str()` to borrow). Where one is assigned, add `.into()`:
+  `segment.text = label.into()`. `Segment::new` and `Segment::control`
+  take `impl Into<CompactString>`, so `&str`, `String`, `&String`,
+  `Cow<str>` and `Box<str>` still work; a `char`, or a value only known as
+  `impl Into<String>`, needs `.into()` to a `String` (or `.to_string()`)
+  first.
+  The Python package's API is unchanged.
+
+### rs-rich-ext's fast path, intuiTUIve's default (ext, intuituive)
+
+- **Two drawing paths.** rich's path (render to segments, then write them
+  into a screen) stays the faithful reference. rs-rich-ext gains a fast
+  path that writes cells straight into a `Screen`: `surface::Draw`
+  (`draw(console, options, screen, rect)`), `surface::TextRun` (a
+  borrowed text and an interned style id) with `Screen::write_runs`, and
+  `surface::draw_rendered` for rich's path. `Chart`, `Canvas`,
+  `Sparkline`, `BarChart`, `LineChart`, `FillGauge`, `LineGauge`,
+  `Heatmap`, `KpiCard`, `PieChart`, `BarSpectrum`, `StatusMatrix`,
+  `Spectrogram` and `Timeline` implement it; a test draws each both ways
+  and compares every cell.
+- **intuiTUIve draws with it by default.** `Canvas::draw(console,
+  &drawable)`, and the nodes `drawn(|| …)` and `drawn_described(|| …)`
+  (a `described` node through the fast path). The `viz` nodes
+  (sparkline, spectrogram, bar spectrum, persistence) use it.
+- **Faster everywhere a frame changes a lot.** The chart keeps plain
+  cells, not a `String` and a `Style` each, and rasters into its own
+  grid; the painter encodes a true-colour pair's SGR once per style,
+  keeps the SGR for each change between two styles, names a style's
+  cached parameters instead of copying them, and passes unchanged cells a
+  run at a time. Against ratatui (`tests/versus_ratatui.rs`, 80x24):
+  every cell changing, 104 µs to ratatui's 340 (it was 1.6 times
+  ratatui's); a chart redrawn, 60 µs to 84 (it was 3.5 times). Bytes are
+  unchanged.
+- **Fixed:** rs-rich-ext measures U+9FBC to U+9FFF as rich does (one cell
+  under `UNICODE_VERSION` before 5.2); see below.
+
 ### rich renders faster, byte for byte the same (core, ext)
 
 - **Fast paths in the mirror, output unchanged.** As AGENTS.md now allows,
@@ -26,7 +77,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   colour in two thirds: 1.6 times ratatui's time, down from 2.5. The
   goldens, the parity tables, the differential fuzzer and a byte compare
   of 30,081 cases against the binary from before all agree.
-- **rs-rich-ext measures cells with rich's widths.** Its own quick widths
+- **Fixed: rs-rich-ext measures cells with rich's widths.** Its own quick widths
   had taken U+9FBC to U+9FFF as two cells in every Unicode version; rich's
   tables before 5.2 measure them one.
 

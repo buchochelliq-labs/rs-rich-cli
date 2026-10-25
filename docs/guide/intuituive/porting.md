@@ -64,7 +64,7 @@ covers both. Three complete ports show where it leads:
 | `Tabs` | `tabs(titles, selected)` with `switch(\|\| tab.get(), build)` for the content; `.divider(..)`, `.tab_padding(..)` |
 | `Scrollbar` and a scroll offset | `scroll(child)`: a viewport with keys, the wheel and a scrollbar; `.scrollbar(Scrollbar::new()..)` on lists, tables, trees, text areas and logs; `scrollbar(position, len, view, bar)` on its own |
 | An input field (`tui-input`, by hand) | `input(signal)`, `number_input(signal, range)` |
-| `Chart`, `Canvas` | `rich_ext::chart::{Chart, Canvas}` (laid out as ratatui's) via `renderable` |
+| `Chart`, `Canvas` | `rich_ext::chart::{Chart, Canvas}` (laid out as ratatui's) via `drawn` (the fast path) or `renderable` |
 | `Gauge`, `Sparkline`, `BarChart` | `rich_ext::chart` (`Gauge`, `Sparkline`, `BarChart`) via `renderable` |
 | `Clear` + a centred popup | `cx.modal(width, height, build)`; `cx.modal_with(.., ModalOptions::new().shadow(..).backdrop(..), ..)` for a shadow |
 | A popup placed next to a widget | `cx.popup(anchor, Placement::Below, width, height, build)` |
@@ -524,8 +524,10 @@ names (see [Backends](running.md#backends)).
 [the benchmark](index.md#against-ratatui) has intuiTUIve ahead on a status
 tick, a selection move and a log append, because it redraws and sends only
 what changed. Where every cell changes each frame (a full-screen swatch, a
-chart redrawn whole), ratatui is ahead in time though not in bytes, as the
-same page shows. For a log or a list that scrolls, try
+chart redrawn whole) it is ahead too when it draws through rs-rich-ext's
+fast path (`Canvas::put_rgb`, `Canvas::draw`, `drawn`), as the same page
+shows; a `renderable` drawn as rich segments takes longer. For a log or a
+list that scrolls, try
 `App::paint_strategy(PaintStrategy::Best)` (see [paint
 strategies](running.md#paint-strategies)).
 

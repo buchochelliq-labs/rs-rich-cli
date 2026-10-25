@@ -177,6 +177,18 @@ A parity break still fails CI. Keep the upstream structure so syncs stay easy:
 It is not a divergence, since behaviour is identical, so nothing goes in
 DIVERGENCES.
 
+One public API change was made for speed: `Segment.text` and `Color.name`
+became `CompactString`s in 0.0.23, by the maintainer's explicit decision
+on 2026-10-25 (output unchanged). Any other change to rich's public types
+needs the same explicit decision.
+
+**Two drawing paths.** rich's path (render to `Segment`s, then write them
+into a screen) is the faithful reference. rs-rich-ext's fast path
+(`surface::Draw`, `TextRun`, `Screen::write_runs`) writes cells straight
+into a `Screen`, and is what rs-rich-ext's widgets and intuiTUIve draw
+with by default. Both must give the same cells: a fast path comes with a
+test that compares it with rich's path.
+
 **intuiTUIve's core components are generic.** `crates/rich-intuituive`'s
 always-compiled code holds only components other components can reuse: no
 domain types, names or parameters (files and paths, audio, one app, one

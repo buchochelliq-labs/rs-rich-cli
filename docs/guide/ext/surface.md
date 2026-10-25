@@ -99,6 +99,33 @@ The first frame enters the alternate screen and writes every cell. The
 second frame changed two cells, the rollout time and the tick, and sends
 only those two cells and the moves to reach them.
 
+## The fast path
+
+`Drawing::render` renders with rich: a `Vec` of `Segment`s, each owning its
+text and a `Style`, which the screen then takes apart into cells. That is
+the faithful path, and works for every renderable. rs-rich-ext's own
+charts also implement `surface::Draw`, which writes the same cells
+straight into the screen, each style interned once:
+
+```rust
+use rich_ext::chart::{Chart, Dataset};
+use rich_ext::surface::{Rect, Surface};
+
+let mut surface = Surface::new(Vec::new(), 40, 10);
+let chart = Chart::new([Dataset::new([(0.0, 0.0), (1.0, 1.0), (2.0, 0.5)])]);
+surface
+    .draw(|s| s.draw(Rect::new(0, 0, 40, 10), &chart))
+    .unwrap();
+```
+
+The cells are the ones `render` gives; `rich_ext/tests/fast_path.rs` draws
+every chart both ways and compares them. For drawing of your own,
+`Screen::put_rgb` sets one cell in two true colours, `Screen::put` one
+character in an interned style, and `Screen::write_runs` writes rows of
+`TextRun`s (a borrowed text and an interned style id) as `write_lines`
+writes segments. intuiTUIve draws through this path by default
+(`Canvas::draw`, `drawn`).
+
 ## Compared with ratatui
 
 ratatui's `Terminal::draw(|frame| …)` has the same shape, and the
