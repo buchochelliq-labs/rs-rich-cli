@@ -16,7 +16,7 @@
 
 use std::collections::HashMap;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
 use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -150,8 +150,14 @@ struct Running {
     ended: Receiver<()>,
 }
 
-/// Every tab spawned and not yet stopped.
+/// Every tab spawned and not yet stopped. A tab whose thread has ended is
+/// pruned when the next one is spawned, so the list holds live tabs only.
 static RUNNING: Mutex<Vec<Running>> = Mutex::new(Vec::new());
+
+/// Drop the entries whose thread has ended: their channel is closed.
+fn prune(running: &mut Vec<Running>) {
+    running.retain(|r| !matches!(r.ended.try_recv(), Err(TryRecvError::Disconnected)));
+}
 
 /// Stop every tab's thread and wait, up to `timeout` in all, until each
 /// has ended. Ending drops its engine: a browser it started stops, and its
@@ -180,13 +186,14 @@ impl Tab {
         let (commands, receive) = mpsc::channel();
         let stop = Arc::new(AtomicBool::new(false));
         let (ended, done) = mpsc::channel::<()>();
-        RUNNING
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .push(Running {
+        {
+            let mut running = RUNNING.lock().unwrap_or_else(|e| e.into_inner());
+            prune(&mut running);
+            running.push(Running {
                 stop: stop.clone(),
                 ended: done,
             });
+        }
         thread::spawn(move || {
             // Dropped last, after the engine, even when the thread panics.
             let _ended = ended;
@@ -551,5 +558,41 @@ fn run(
                 worker.dirty.get_or_insert_with(Instant::now);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::FakeEngine;
+
+    #[test]
+    fn ended_tabs_leave_the_registry() {
+        let dir = std::env::temp_dir().join(format!("noctiluca-tab-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let spawn = || Tab::spawn(Box::new(FakeEngine::from_dir(&dir).unwrap()), |_| {});
+        // Fifty tabs made and dropped: each thread ends once its tab goes.
+        for _ in 0..50 {
+            drop(spawn());
+        }
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let live = spawn();
+            let ended = RUNNING
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|r| matches!(r.ended.try_recv(), Err(TryRecvError::Disconnected)))
+                .count();
+            drop(live);
+            // The new spawn pruned every tab that had ended by then; give
+            // the rest time to end, and look again.
+            if ended == 0 && RUNNING.lock().unwrap().len() <= 8 {
+                break;
+            }
+            assert!(Instant::now() < deadline, "ended tabs stay registered");
+            thread::sleep(Duration::from_millis(20));
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
