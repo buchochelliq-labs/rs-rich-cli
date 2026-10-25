@@ -57,7 +57,7 @@ semver = "1"
 sha2 = "0.11"
 # A micro pack's `pack.json`, read from its archive: the reader and codecs
 # rs-rich-micro uses, so the tree gains nothing.
-zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 ureq = { workspace = true, optional = true }
 
