@@ -26,6 +26,14 @@ pub(crate) fn is_control_code(c: char) -> bool {
     matches!(c, '\u{7}' | '\u{8}' | '\u{b}' | '\u{c}' | '\r')
 }
 
+/// Whether `text` holds any [`is_control_code`] character. They are all
+/// ASCII, and no byte of a multi-byte UTF-8 character is, so the bytes can
+/// be searched without decoding the characters.
+pub(crate) fn has_control_code(text: &str) -> bool {
+    text.bytes()
+        .any(|b| matches!(b, 0x07 | 0x08 | 0x0b | 0x0c | b'\r'))
+}
+
 /// Cell width of a tab stop: upstream's `Console.tab_size` default, and the
 /// fallback when neither a text nor its console sets one (`tab_size or 8`).
 pub const DEFAULT_TAB_SIZE: usize = 8;
@@ -187,17 +195,28 @@ impl Text {
     /// carriage return. Tab and newline are deliberately kept — they are layout,
     /// not control.
     fn strip_control_codes(text: &str) -> String {
-        if text.chars().any(is_control_code) {
+        if has_control_code(text) {
             text.chars().filter(|c| !is_control_code(*c)).collect()
         } else {
             text.to_string()
         }
     }
 
+    /// [`strip_control_codes`](Self::strip_control_codes) of a string the
+    /// caller owns: handed back as it is when it has none, rather than
+    /// copied (docs/PORTING.md, "Performance notes").
+    fn strip_control_codes_owned(text: String) -> String {
+        if has_control_code(&text) {
+            Text::strip_control_codes(&text)
+        } else {
+            text
+        }
+    }
+
     /// Plain, unstyled text.
     pub fn new(plain: impl Into<String>) -> Self {
         Text {
-            plain: Text::strip_control_codes(&plain.into()),
+            plain: Text::strip_control_codes_owned(plain.into()),
             spans: Vec::new(),
             style: StyleType::default(),
             justify: None,
@@ -215,7 +234,7 @@ impl Text {
             // Strips too: upstream's `Text.__init__` does this regardless of
             // style, and a constructor that skipped it would reintroduce the
             // offset divergence the moment a caller added spans.
-            plain: Text::strip_control_codes(&plain.into()),
+            plain: Text::strip_control_codes_owned(plain.into()),
             spans: Vec::new(),
             style: style.into(),
             justify: None,

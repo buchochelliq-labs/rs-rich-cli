@@ -175,7 +175,7 @@ fn tag_matches(markup: &str) -> Vec<TagMatch> {
 
 /// One item from the scanner: either literal text or a tag.
 enum Event<'a> {
-    Text(String),
+    Text(std::borrow::Cow<'a, str>),
     Tag {
         name: &'a str,
         parameters: Option<String>,
@@ -204,13 +204,13 @@ fn parse(markup: &str) -> Result<Vec<Event<'_>>> {
             // backslash each, and only an odd remainder escapes the tag.
             let (backslashes, escaped) = (escapes.len() / 2, escapes.len() % 2 == 1);
             if backslashes > 0 {
-                events.push(Event::Text("\\".repeat(backslashes)));
+                events.push(Event::Text("\\".repeat(backslashes).into()));
                 start += backslashes * 2;
             }
             if escaped {
                 // The tag is escaped: emit it as literal text, minus its
                 // backslashes, and do not open anything.
-                events.push(Event::Text(whole[escapes.len()..].to_string()));
+                events.push(Event::Text(whole[escapes.len()..].into()));
                 position = end;
                 continue;
             }
@@ -238,13 +238,13 @@ fn parse(markup: &str) -> Result<Vec<Event<'_>>> {
 
 /// `\[` in ordinary text is a literal bracket. Upstream applies exactly this
 /// replacement to every text run it yields.
-fn unescape_brackets(text: &str) -> String {
-    // Without a backslash there is nothing to replace: copy it without
-    // setting up the substring search (docs/PORTING.md, "Performance notes").
+fn unescape_brackets(text: &str) -> std::borrow::Cow<'_, str> {
+    // Without a backslash there is nothing to replace: borrow it, without a
+    // copy or the substring search (docs/PORTING.md, "Performance notes").
     if !text.contains('\\') {
-        return text.to_string();
+        return text.into();
     }
-    text.replace("\\[", "[")
+    text.replace("\\[", "[").into()
 }
 
 /// Append text to the plain buffer, dropping control codes as it goes.
@@ -254,7 +254,7 @@ fn unescape_brackets(text: &str) -> String {
 /// the text out from under them — which panicked on any markup containing a
 /// carriage return.
 fn push_plain(plain: &mut String, chunk: &str) {
-    if chunk.chars().any(crate::text::is_control_code) {
+    if crate::text::has_control_code(chunk) {
         plain.extend(chunk.chars().filter(|c| !crate::text::is_control_code(*c)));
     } else {
         plain.push_str(chunk);
@@ -684,7 +684,8 @@ impl LiteralParser {
 }
 
 fn render_inner(markup: &str, emoji: bool, base_style: &StyleType) -> Result<Text> {
-    let mut plain = String::new();
+    // Never longer than the markup but for emoji, which it mostly is not.
+    let mut plain = String::with_capacity(markup.len());
     let mut raw_spans: Vec<RawSpan> = Vec::new();
     // Open tags, as `(normalized name, parameters, start offset)`. The name is
     // normalized on the way in so that `[b]…[/bold]` matches, as upstream does.
@@ -692,7 +693,11 @@ fn render_inner(markup: &str, emoji: bool, base_style: &StyleType) -> Result<Tex
 
     for event in parse(markup)? {
         match event {
-            Event::Text(chunk) if emoji => push_plain(&mut plain, &crate::emoji::replace(&chunk)),
+            // Every emoji code is between colons: text without one is
+            // pushed as it is, without the emoji scan's copy.
+            Event::Text(chunk) if emoji && chunk.contains(':') => {
+                push_plain(&mut plain, &crate::emoji::replace(&chunk))
+            }
             Event::Text(chunk) => push_plain(&mut plain, &chunk),
             Event::Tag {
                 name: tag_name,
