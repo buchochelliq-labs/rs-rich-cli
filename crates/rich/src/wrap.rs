@@ -4,33 +4,41 @@
 //! **char** indices, matching upstream) at which a string should be split to fit
 //! within a cell width. [`Text`](crate::text::Text) uses it to wrap.
 
+use std::iter::Peekable;
+use std::str::CharIndices;
+
 use crate::cells::{cell_len, chop_cells};
 
 /// Yield each word as `(start_char, end_char, word)` where a "word" is any
 /// leading whitespace + a non-whitespace run + its trailing whitespace.
 /// Port of `_wrap.words` (regex `\s*\S+\s*`).
-fn words(text: &str) -> Vec<(usize, usize, String)> {
-    let chars: Vec<char> = text.chars().collect();
-    let n = chars.len();
-    let mut result = Vec::new();
-    let mut pos = 0;
-    while pos < n {
-        let start = pos;
-        while pos < n && chars[pos].is_whitespace() {
-            pos += 1;
+///
+/// The word is a slice of `text` and the scan walks it once, rather than
+/// collecting its characters and each word into new strings
+/// (docs/PORTING.md, "Performance notes").
+fn words(text: &str) -> Vec<(usize, usize, &str)> {
+    // Step past a run of whitespace (`space`) or of anything else, counting
+    // the characters into `index`.
+    fn skip(chars: &mut Peekable<CharIndices>, index: &mut usize, space: bool) {
+        while chars.next_if(|(_, c)| c.is_whitespace() == space).is_some() {
+            *index += 1;
         }
-        if pos >= n {
+    }
+    let mut result = Vec::new();
+    let mut chars = text.char_indices().peekable();
+    // The char index of the next character `chars` yields.
+    let mut index = 0usize;
+    while let Some(&(start_byte, _)) = chars.peek() {
+        let start = index;
+        skip(&mut chars, &mut index, true);
+        if chars.peek().is_none() {
             // Only whitespace remained: the `\S+` part can't match, so no word.
             break;
         }
-        while pos < n && !chars[pos].is_whitespace() {
-            pos += 1;
-        }
-        while pos < n && chars[pos].is_whitespace() {
-            pos += 1;
-        }
-        let word: String = chars[start..pos].iter().collect();
-        result.push((start, pos, word));
+        skip(&mut chars, &mut index, false);
+        skip(&mut chars, &mut index, true);
+        let end_byte = chars.peek().map_or(text.len(), |(byte, _)| *byte);
+        result.push((start, index, &text[start_byte..end_byte]));
     }
     result
 }
@@ -56,11 +64,11 @@ pub fn divide_line(text: &str, width: usize, fold: bool) -> Vec<usize> {
         let word_fits_remaining_space = remaining_space >= word_length as isize;
 
         if word_fits_remaining_space {
-            cell_offset += cell_len(&word);
+            cell_offset += cell_len(word);
         } else if word_length > width {
             // The word doesn't fit on any line.
             if fold {
-                let folded_word = chop_cells(&word, width);
+                let folded_word = chop_cells(word, width);
                 let last_index = folded_word.len().saturating_sub(1);
                 let mut start = start;
                 for (index, line) in folded_word.iter().enumerate() {
@@ -77,12 +85,12 @@ pub fn divide_line(text: &str, width: usize, fold: bool) -> Vec<usize> {
                 if start != 0 {
                     break_positions.push(start);
                 }
-                cell_offset = cell_len(&word);
+                cell_offset = cell_len(word);
             }
         } else if cell_offset != 0 && start != 0 {
             // Fits on the next (empty) line.
             break_positions.push(start);
-            cell_offset = cell_len(&word);
+            cell_offset = cell_len(word);
         }
     }
 
@@ -92,6 +100,56 @@ pub fn divide_line(text: &str, width: usize, fold: bool) -> Vec<usize> {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `words` as first ported, collecting characters: the slices the
+    /// faster scan returns are its words, at its offsets.
+    #[test]
+    fn words_match_the_collecting_scan() {
+        fn reference(text: &str) -> Vec<(usize, usize, String)> {
+            let chars: Vec<char> = text.chars().collect();
+            let n = chars.len();
+            let mut result = Vec::new();
+            let mut pos = 0;
+            while pos < n {
+                let start = pos;
+                while pos < n && chars[pos].is_whitespace() {
+                    pos += 1;
+                }
+                if pos >= n {
+                    break;
+                }
+                while pos < n && !chars[pos].is_whitespace() {
+                    pos += 1;
+                }
+                while pos < n && chars[pos].is_whitespace() {
+                    pos += 1;
+                }
+                result.push((start, pos, chars[start..pos].iter().collect()));
+            }
+            result
+        }
+        const ALPHABET: [char; 10] = [
+            'a', ' ', '\t', '\n', 'é', '界', '\u{3000}', '\u{1c}', 'x', '\u{200d}',
+        ];
+        let mut seed = 0x2545_f491u32;
+        for length in 0..40 {
+            for _ in 0..50 {
+                let text: String = (0..length)
+                    .map(|_| {
+                        seed ^= seed << 13;
+                        seed ^= seed >> 17;
+                        seed ^= seed << 5;
+                        ALPHABET[seed as usize % ALPHABET.len()]
+                    })
+                    .collect();
+                let fast: Vec<(usize, usize, String)> = words(&text)
+                    .into_iter()
+                    .map(|(start, end, word)| (start, end, word.to_string()))
+                    .collect();
+                assert_eq!(fast, reference(&text), "{text:?}");
+            }
+        }
+    }
 
     #[test]
     fn no_break_when_it_fits() {

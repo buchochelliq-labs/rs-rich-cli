@@ -905,9 +905,24 @@ mod tests {
     #[test]
     fn normalize_cache_is_transparent() {
         let definitions = [
-            "b", "BOLD", " bold red on blue ", "repr.number", "Repr.Number ", "not bold",
-            "not BOLD", "link https://x.io", "#ff0000", "rgb(1,2,3)", "", "none", "bold none",
-            "on", "color(300)", "@click", "b i u", "u2",
+            "b",
+            "BOLD",
+            " bold red on blue ",
+            "repr.number",
+            "Repr.Number ",
+            "not bold",
+            "not BOLD",
+            "link https://x.io",
+            "#ff0000",
+            "rgb(1,2,3)",
+            "",
+            "none",
+            "bold none",
+            "on",
+            "color(300)",
+            "@click",
+            "b i u",
+            "u2",
         ];
         for _ in 0..2 {
             for definition in definitions {
