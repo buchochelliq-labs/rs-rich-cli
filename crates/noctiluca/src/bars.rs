@@ -23,15 +23,13 @@ const BAND: &str = "white on rgb(53,31,83)";
 /// The address's and the status bar's band.
 const DARK: &str = "rgb(200,203,215) on rgb(24,26,35)";
 
-/// How the view's pictures reach the terminal, as the header says it.
-pub fn pixels_name(images: Images) -> &'static str {
+/// How the view's pictures reach the terminal, as the header says it:
+/// the protocol in use (`auto` resolved to what the terminal speaks), or
+/// `NO PICTURES`.
+pub fn pixels_name(images: Images, pixels: rich_intuituive::Pixels) -> String {
     match images {
-        Images::Auto => "AUTO",
-        Images::Kitty => "KITTY",
-        Images::Sixel => "SIXEL",
-        Images::Iterm2 => "ITERM2",
-        Images::Ansi => "CELLS",
-        Images::None => "NO PICTURES",
+        Images::None => "NO PICTURES".into(),
+        _ => pixels.name().to_uppercase(),
     }
 }
 
@@ -73,7 +71,7 @@ pub fn header(b: Browser) -> Node {
             .with(|p| p.as_ref().map(|p| p.title.clone()))
             .unwrap_or_default();
         let view = b.view.get().name().to_uppercase();
-        let pixels = pixels_name(b.images.get());
+        let pixels = pixels_name(b.images.get(), b.pixels.get());
         format!(
             " [bold]NOCTILUCA[/]   {view} + {pixels}   {back}{forward}{loading}   [bold]{}[/]",
             markup(&truncate(&title, 80))
