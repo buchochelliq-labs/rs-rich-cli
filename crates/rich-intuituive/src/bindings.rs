@@ -501,8 +501,9 @@ impl Node {
     ///
     /// It needs to know when the key is let go: where the terminal
     /// reports the key's release ([`Ctx::releases_reported`]), or with
-    /// [`App::synthesize_releases`](crate::App::synthesize_releases) on.
-    /// Elsewhere the binding fires on each of the terminal's repeats, as
+    /// [`App::synthesize_releases`](crate::App::synthesize_releases) (or
+    /// [`synthesize_releases_with`](crate::App::synthesize_releases_with))
+    /// on. Elsewhere the binding fires on each of the terminal's repeats, as
     /// one without `repeat` does.
     ///
     /// ```
@@ -538,7 +539,8 @@ impl Node {
     /// held by then (`w` is let go as `W` once Shift is down). Releases
     /// come from a terminal that reports them (see
     /// [`Ctx::releases_reported`]), or are made up by the app
-    /// ([`App::synthesize_releases`](crate::App::synthesize_releases)).
+    /// ([`App::synthesize_releases`](crate::App::synthesize_releases),
+    /// [`App::synthesize_releases_with`](crate::App::synthesize_releases_with)).
     /// [`Ctx::key`] says which key it was.
     ///
     /// ```

@@ -231,7 +231,9 @@ before and the scene keeps its colours.
   keys whose release will not come. `held_keys()` holds only keys whose
   release is known (or made up by `synthesize_releases`, whose `hold` must
   outlast the terminal's repeat delay, about 500 ms, far too long for a tap
-  in a game), so the model keeps both kinds in one place.
+  in a game), so the model keeps both kinds in one place. Since 0.0.22,
+  `synthesize_releases_with(Holds::new(first, repeat))` lets go soon after
+  the last repeat, as the latch does.
 - **Pausing** is still the model's flag: the modal's screen keeps the
   game's timer, so `Timer::pause` would only save the stepping it does
   not do.

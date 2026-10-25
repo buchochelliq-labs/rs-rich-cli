@@ -215,7 +215,11 @@ App::new(|| {
   and the rest), as a game wants it.
   **`App::synthesize_releases(Some(hold))`** makes up the releases that do
   not come, `hold` after a key's last press or repeat: pick it longer than
-  the terminal's repeat delay. A test sets what its terminal reports with
+  the terminal's repeat delay.
+  **`App::synthesize_releases_with(Holds::new(first, repeat))`** holds a
+  key `first` after its press and `repeat` after each repeat: a game
+  passes 400 ms and 120 ms, so a held key outlasts the repeat delay and a
+  let-go key stops soon after its last repeat. A test sets what its terminal reports with
   `driver.set_releases(..)` and sends releases with
   `driver.send(Event::KeyUp(..))`.
 - **Repeat under the app's control:** `.repeat(delay, rate)` after a

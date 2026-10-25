@@ -475,7 +475,8 @@ impl Ctx {
     /// Which key releases the terminal reports: none, every key's but the
     /// text keys' (the kitty keyboard protocol), or every key's (with
     /// [`App::all_keys`], or the Windows console). Releases the app makes
-    /// up ([`App::synthesize_releases`]) are not counted.
+    /// up ([`App::synthesize_releases`], [`App::synthesize_releases_with`])
+    /// are not counted.
     pub fn releases_reported(&self) -> Releases {
         self.releases
     }
@@ -1921,8 +1922,9 @@ pub struct App {
     /// Which key releases the backend reports.
     releases: Releases,
     /// Releases made up for keys whose release is not reported, after
-    /// this long without a repeat ([`synthesize_releases`](Self::synthesize_releases)).
-    synthesize: Option<Duration>,
+    /// this long without a press or repeat
+    /// ([`synthesize_releases_with`](Self::synthesize_releases_with)).
+    synthesize: Option<Holds>,
     /// The keys held down, and what [`held_keys`] reads.
     held: Vec<Held>,
     held_keys: Signal<Vec<Key>>,
@@ -1933,11 +1935,59 @@ pub struct App {
 }
 
 /// A key held down: as a [plain key](plain_key), when it was last pressed
-/// or repeated, and whether its release will be reported.
+/// or repeated, whether it has repeated, and whether its release will be
+/// reported.
 struct Held {
     key: Key,
     last: Duration,
+    repeated: bool,
     reported: bool,
+}
+
+impl Held {
+    /// When its made-up release is due under `holds`.
+    fn due(&self, holds: Holds) -> Duration {
+        match self.repeated {
+            true => self.last + holds.repeat,
+            false => self.last + holds.first,
+        }
+    }
+}
+
+/// How long a key whose release is not reported stays held
+/// ([`App::synthesize_releases_with`]): `first` after it is pressed,
+/// `repeat` after each of the terminal's repeats. Pick `first` longer than
+/// the keyboard's repeat delay (often 400 to 500 ms) and `repeat` longer
+/// than the gap between repeats (often 30 to 50 ms): a held key then
+/// stays held, and is let go about `repeat` after it is.
+///
+/// ```
+/// use intuituive::Holds;
+/// use std::time::Duration;
+///
+/// let holds = Holds::new(Duration::from_millis(400), Duration::from_millis(120));
+/// assert_eq!(holds.first, Duration::from_millis(400));
+/// assert_eq!(Holds::same(Duration::from_millis(300)).repeat, Duration::from_millis(300));
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub struct Holds {
+    /// How long a key stays held after it is pressed.
+    pub first: Duration,
+    /// How long a key stays held after each repeat.
+    pub repeat: Duration,
+}
+
+impl Holds {
+    /// `first` after a press, `repeat` after each repeat.
+    pub fn new(first: Duration, repeat: Duration) -> Holds {
+        Holds { first, repeat }
+    }
+
+    /// `hold` after a press and after each repeat alike.
+    pub fn same(hold: Duration) -> Holds {
+        Holds::new(hold, hold)
+    }
 }
 
 /// A binding repeating while its key is held ([`Node::repeat`]): the
@@ -1981,7 +2031,8 @@ pub fn plain_key(key: Key) -> Key {
 /// the order they went down: a game moves while `w` is in it. A key is
 /// held from its press until its release, which the terminal reports
 /// (see [`Ctx::releases_reported`]) or the app makes up
-/// ([`App::synthesize_releases`]). A key whose release will come neither
+/// ([`App::synthesize_releases`], [`App::synthesize_releases_with`]). A
+/// key whose release will come neither
 /// way is never in it: on a terminal without releases, and with none made
 /// up, it stays empty. Nodes that read it draw again as keys go down and
 /// up.
@@ -2780,9 +2831,46 @@ impl App {
     /// driver.advance(Duration::from_millis(1));
     /// assert_eq!(driver.screen().plain()[0].trim_end(), "0 held");
     /// ```
+    ///
+    /// To hold a key longer after its press than after its repeats, use
+    /// [`synthesize_releases_with`](Self::synthesize_releases_with):
+    /// `Some(hold)` here is [`Holds::same(hold)`](Holds::same).
     #[must_use]
     pub fn synthesize_releases(mut self, hold: Option<Duration>) -> App {
-        self.synthesize = hold;
+        self.synthesize = hold.map(Holds::same);
+        self
+    }
+
+    /// Make up the release of a key whose release the terminal does not
+    /// report, as [`synthesize_releases`](Self::synthesize_releases) does,
+    /// with one hold after the press and another after each repeat: the
+    /// key stays held across the keyboard's repeat delay, and is let go
+    /// soon after its last repeat. A key whose release is reported is
+    /// never let go by a timeout.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::{held_keys, Holds};
+    /// use std::time::Duration;
+    ///
+    /// let ms = Duration::from_millis;
+    /// let app = App::new(|| {
+    ///     let held = held_keys();
+    ///     text(move || format!("{} held", held.get().len()))
+    /// })
+    /// .synthesize_releases_with(Holds::new(ms(400), ms(120)));
+    /// let mut driver = app.driver(10, 1);
+    /// driver.press("w");
+    /// driver.advance(ms(300));
+    /// driver.press("w"); // the terminal's first repeat
+    /// driver.advance(ms(119));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1 held");
+    /// driver.advance(ms(1));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "0 held");
+    /// ```
+    #[must_use]
+    pub fn synthesize_releases_with(mut self, holds: Holds) -> App {
+        self.synthesize = Some(holds);
         self
     }
 
@@ -5485,11 +5573,13 @@ impl App {
         let reported = self.releases.reported(&key);
         if let Some(held) = self.held.iter_mut().find(|held| held.key == plain) {
             held.last = self.now;
+            held.repeated = true;
             return true;
         }
         self.held.push(Held {
             key: plain,
             last: self.now,
+            repeated: false,
             reported,
         });
         self.publish_held();
@@ -5515,11 +5605,11 @@ impl App {
     /// Releases made up for keys held `hold` without a repeat, and the
     /// repeats due, at `now`. Whether to quit.
     fn held_due(&mut self, now: Duration) -> bool {
-        if let Some(hold) = self.synthesize {
+        if let Some(holds) = self.synthesize {
             let gone: Vec<Key> = self
                 .held
                 .iter()
-                .filter(|held| !held.reported && now >= held.last + hold)
+                .filter(|held| !held.reported && now >= held.due(holds))
                 .map(|held| held.key)
                 .collect();
             for key in gone {
@@ -5547,11 +5637,11 @@ impl App {
 
     /// When the next made-up release or repeat is due.
     fn held_next(&self) -> Option<Duration> {
-        let releases = self.synthesize.and_then(|hold| {
+        let releases = self.synthesize.and_then(|holds| {
             self.held
                 .iter()
                 .filter(|held| !held.reported)
-                .map(|held| held.last + hold)
+                .map(|held| held.due(holds))
                 .min()
         });
         let repeats = self.repeats.iter().map(|repeat| repeat.next).min();

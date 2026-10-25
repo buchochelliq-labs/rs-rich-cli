@@ -28,6 +28,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **Scope cycling past hidden panes.** `Node::focus_scope_reveal` lets
   `focus_next_scope` reach a hidden pane and show it. http's Tab in
   fullscreen uses it in place of its own pane ring.
+- **Made-up releases with two holds.** `App::synthesize_releases_with`
+  takes `Holds { first, repeat }`: a key whose release is not reported
+  stays held `first` after its press and `repeat` after each repeat. A
+  game holds a key across the keyboard's repeat delay and lets it go soon
+  after its last repeat. `synthesize_releases(Some(hold))` is
+  `Holds::same(hold)`, as before (rs-rich-doom's core gap 4).
 
 ### intuiTUIve: four generic controls for changing state (intuituive, interact)
 

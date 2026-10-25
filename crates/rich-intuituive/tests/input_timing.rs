@@ -405,6 +405,84 @@ fn synthesized_releases_end_a_hold_after_the_timeout() {
     assert_eq!(first(&driver), "11 up");
 }
 
+/// An app that shows the keys held, made up with `holds`.
+fn held_app(holds: intuituive::Holds) -> App {
+    App::new(|| {
+        let held = intuituive::held_keys();
+        text(move || {
+            let keys: Vec<String> = held.get().iter().map(|k| k.to_string()).collect();
+            format!("keys:{}", keys.join(" "))
+        })
+    })
+    .synthesize_releases_with(holds)
+}
+
+/// Doom (core gap 4): a first-press hold across the keyboard's repeat
+/// delay, and a shorter hold after each repeat.
+#[test]
+fn made_up_releases_hold_longer_after_the_press_than_after_a_repeat() {
+    let mut driver = held_app(intuituive::Holds::new(ms(400), ms(120))).driver(10, 1);
+    driver.press("w");
+    driver.advance(ms(399));
+    assert_eq!(first(&driver), "keys:w");
+    driver.advance(ms(1));
+    assert_eq!(first(&driver), "keys:");
+    // Pressed again at 450 ms, repeating at 480 and 510 ms.
+    driver.advance(ms(50));
+    driver.press("w");
+    driver.advance(ms(30));
+    driver.press("w");
+    driver.advance(ms(30));
+    driver.press("w");
+    assert_eq!(first(&driver), "keys:w");
+    // 120 ms after the last repeat, at 630 ms: let go.
+    driver.advance(ms(119));
+    assert_eq!(first(&driver), "keys:w");
+    driver.advance(ms(1));
+    assert_eq!(first(&driver), "keys:");
+}
+
+/// A key whose release is reported is not let go by a made-up release.
+#[test]
+fn made_up_releases_leave_a_reported_release_alone() {
+    use intuituive::interact::Releases;
+    let mut driver = held_app(intuituive::Holds::new(ms(400), ms(120))).driver(10, 1);
+    driver.set_releases(Releases::All);
+    driver.press("w");
+    driver.advance(ms(300));
+    driver.press("w");
+    driver.advance(ms(5000));
+    assert_eq!(first(&driver), "keys:w");
+    driver.send(up("w"));
+    assert_eq!(first(&driver), "keys:");
+}
+
+/// `synthesize_releases(Some(hold))` holds alike after a press and a
+/// repeat, as before; `None` makes none up.
+#[test]
+fn one_hold_is_the_same_after_a_press_and_a_repeat() {
+    let one = App::new(|| {
+        let held = intuituive::held_keys();
+        text(move || format!("{}", held.get().len()))
+    });
+    let mut driver = one.synthesize_releases(Some(ms(300))).driver(10, 1);
+    driver.press("w");
+    driver.advance(ms(299));
+    assert_eq!(first(&driver), "1");
+    driver.press("w");
+    driver.advance(ms(299));
+    assert_eq!(first(&driver), "1");
+    driver.advance(ms(1));
+    assert_eq!(first(&driver), "0");
+    let none = App::new(|| {
+        let held = intuituive::held_keys();
+        text(move || format!("{}", held.get().len()))
+    });
+    let mut driver = none.synthesize_releases(None).driver(10, 1);
+    driver.press("w");
+    assert_eq!(first(&driver), "0");
+}
+
 /// Doom: a modifier on its own is a key, bound and held by name.
 #[test]
 fn a_modifier_alone_is_a_key() {
