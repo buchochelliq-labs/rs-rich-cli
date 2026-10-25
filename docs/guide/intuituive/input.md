@@ -119,6 +119,11 @@ column([
   had the focus last; focusing the pane as a whole gives it back.
   `cx.focus_next_scope()` and `cx.focus_previous_scope()` move between
   panes (Slumber's and lazygit's Tab), Tab still moving between nodes.
+  They pass a hidden pane by, unless it was made with
+  **`.focus_scope_reveal(|| can, |cx| show)`**: then, while `can()` holds,
+  reaching it calls `show` (which sets what its `shown_when` reads), and
+  the focus goes inside once it is laid out. A pane shown alone, in
+  fullscreen, so moves on to the next pane, shown in its place.
 - **`cx.focus_direction(Direction::Left)`** moves to the neighbour on a
   side by where things were drawn (between scopes when the focus is in
   one), and `.bind_directional_focus("ctrl+left H", "ctrl+right L",
@@ -210,7 +215,11 @@ App::new(|| {
   and the rest), as a game wants it.
   **`App::synthesize_releases(Some(hold))`** makes up the releases that do
   not come, `hold` after a key's last press or repeat: pick it longer than
-  the terminal's repeat delay. A test sets what its terminal reports with
+  the terminal's repeat delay.
+  **`App::synthesize_releases_with(Holds::new(first, repeat))`** holds a
+  key `first` after its press and `repeat` after each repeat: a game
+  passes 400 ms and 120 ms, so a held key outlasts the repeat delay and a
+  let-go key stops soon after its last repeat. A test sets what its terminal reports with
   `driver.set_releases(..)` and sends releases with
   `driver.send(Event::KeyUp(..))`.
 - **Repeat under the app's control:** `.repeat(delay, rate)` after a
@@ -369,6 +378,59 @@ A variant of `bind_scaled` may say itself its own way: with a label as a
 third item, `("alt", 0.2, "⅕")` is listed `alt ⅕` rather than `alt ×0.2`.
 A help row too long for the help wraps under its description.
 
+### A live list
+
+The help and the palette are live: while either is open, it reads the
+bindings again each time something they depend on changes. A binding
+whose condition starts to hold comes into the list, one whose condition
+stops leaves it, and one that becomes unavailable is greyed. The palette
+keeps the focus on the same command, by its id, as the list changes or is
+filtered, and checks a command again as it runs it: one that stopped
+applying after it was listed does not run.
+
+A binding that cannot run now can still be listed, with why:
+
+```rust
+label("editor").bind_unless(
+    move || (!dirty.get()).then(|| "nothing to save".to_string()),
+    "ctrl+s",
+    "Save",
+    save,
+)
+```
+
+**`.bind_unless(|| reason, keys, description, handler)`** is listed in the
+help and the palette as `Save (nothing to save)`, greyed, while the
+closure gives a reason, and in a `key_hints()` footer greyed. Meanwhile
+its keys pass it by, as a `bind_when` binding's do, and Enter on it in the
+palette does nothing. **`.unless(|| reason, |node| …)`** does the same for
+every binding the closure adds.
+
+Actions that are not key bindings (a page's commands, a document's
+outline) get the same palette from **`action_overlay(actions, run)`**:
+`actions` is a closure that returns `Action`s (an `id`, a `label`, shortcut
+`keys` and an `unavailable` reason) and may read signals, and `run` gets
+the id of the one chosen. `cx.action_palette(actions, run)` opens it as a
+modal titled Actions, so the focus comes back where it was when it closes,
+and no key reaches the screen beneath while it is open.
+
+```rust
+.on_key("ctrl+k", move |cx| {
+    cx.action_palette(
+        move || {
+            vec![
+                Action::new("toggle", if playing.get() { "Pause" } else { "Play" }).keys("space"),
+                match queued.get() {
+                    true => Action::new("next", "Next track"),
+                    false => Action::new("next", "Next track").unavailable("queue is empty"),
+                },
+            ]
+        },
+        move |id, cx| run_action(id, cx),
+    )
+})
+```
+
 ### Bindings in a state, sections and help options
 
 ```rust
@@ -395,7 +457,8 @@ label("scope")
 - **`.bind_when(|| cond, keys, description, handler)`** binds a key that
   applies only while `cond()` is true: a key passes a binding that does
   not apply by (to another of the key, on the node or above), and the
-  help, the palette, the which-key pop-up and `key_hints()` leave it out.
+  help, the palette, the which-key pop-up and `key_hints()` leave it out
+  (`.bind_unless` lists it greyed instead; see [a live list](#a-live-list)).
   Two bindings may so share a key under different conditions: `p` for
   peaks in one mode and phase in another. `.when(|| cond, |node| …)`
   does the same for every binding the closure adds, of any kind

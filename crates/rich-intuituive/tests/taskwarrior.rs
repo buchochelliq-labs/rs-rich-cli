@@ -733,6 +733,13 @@ fn the_projects_and_timesheet_views() {
         ]
     );
     assert_eq!(r[10], "5 projects (7 tasks)");
+    // A tree table: home closes and opens.
+    d.press("down space");
+    // The column narrows to the rows shown.
+    assert_eq!(rows(&d)[4], "+ home      2");
+    assert_eq!(rows(&d)[5], "travel      2");
+    d.press("right");
+    assert_eq!(rows(&d)[5], "  bills      1");
     d.press("bracketright");
     assert!(has(
         &d,

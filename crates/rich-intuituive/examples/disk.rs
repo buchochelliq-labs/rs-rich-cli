@@ -1159,14 +1159,19 @@ pub fn disk_app(options: Options) -> App {
             .on_key("backspace ctrl+d", move |cx| d.delete(cx))
             .on_key("q ctrl+c", quit_box)
     })
-    // Under 50 x 15, diskonaut's message; only `q` and Ctrl+C work there.
-    .min_size(
+    // Under 50 x 15, diskonaut's message, shorter on a narrow window; only
+    // `q` and Ctrl+C work there.
+    .min_size_forms(
         50,
         15,
-        format!(
-            "[bold]{}[/]",
-            escape("Terminal window is too small ¯\\_(ツ)_/¯")
-        ),
+        [
+            "Terminal window is too small ¯\\_(ツ)_/¯",
+            "Window too small ¯\\_(ツ)_/¯",
+            "too small ¯\\_(ツ)_/¯",
+            "¯\\_(ツ)_/¯",
+            "!!!",
+        ]
+        .map(|form| format!("[bold]{}[/]", escape(form))),
     )
 }
 

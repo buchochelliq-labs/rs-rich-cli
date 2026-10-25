@@ -45,7 +45,10 @@ use intuituive::query::{
 use intuituive::reactive::NodeId;
 use intuituive::rich::markup::escape;
 use intuituive::rich::Style;
-use intuituive::widgets::{table_with, Column, Order, TableLayout, TableOptions};
+use intuituive::widgets::{
+    table_with, tree_table_rows, Column, Order, TableLayout, TableOptions, TreeRow,
+    TreeTableOptions,
+};
 use intuituive::Level;
 use rich_ext::chart::{Axis, Chart, Dataset, GraphType, Labels, LegendPosition, Marker};
 
@@ -889,7 +892,7 @@ fn sort_procs(procs: &mut [Proc], view: &ProcView) {
     }
 }
 
-fn cells(p: &Proc, view: &ProcView, first: String, prefix: &str) -> Vec<String> {
+fn cells(p: &Proc, view: &ProcView, first: String) -> Vec<String> {
     let name = if view.command { &p.command } else { &p.name };
     let mem = if view.mem_bytes {
         binary_string(p.mem)
@@ -898,7 +901,7 @@ fn cells(p: &Proc, view: &ProcView, first: String, prefix: &str) -> Vec<String> 
     };
     vec![
         first,
-        escape(&format!("{prefix}{name}")),
+        escape(name),
         format!("{:.1}%", p.cpu),
         mem,
         per_second(p.read),
@@ -980,7 +983,7 @@ pub fn proc_rows(
                     .expect("a group");
                 let (_, pids) = sums.swap_remove(at);
                 ProcRow {
-                    cells: cells(&p, view, pids.len().to_string(), ""),
+                    cells: cells(&p, view, pids.len().to_string()),
                     name: p.name.clone(),
                     pids,
                 }
@@ -993,7 +996,7 @@ pub fn proc_rows(
         .map(|p| ProcRow {
             pids: vec![p.pid],
             name: p.name.clone(),
-            cells: cells(p, view, p.pid.to_string(), ""),
+            cells: cells(p, view, p.pid.to_string()),
         })
         .collect()
 }
@@ -1032,55 +1035,26 @@ fn tree_rows(
     for list in children.values_mut() {
         sort_procs(list, view);
     }
-    /// What every level of the walk reads.
-    struct Walk<'a> {
-        children: &'a BTreeMap<u32, Vec<Proc>>,
-        collapsed: &'a BTreeSet<u32>,
-        view: &'a ProcView,
-        prefixes: Vec<&'static str>,
-        rows: Vec<ProcRow>,
+    // The tree, drawn as a tree table draws it: bottom's guides, and `+`
+    // on a collapsed parent.
+    fn row(p: &Proc, children: &BTreeMap<u32, Vec<Proc>>, view: &ProcView) -> TreeRow<u32> {
+        let kids = children.get(&p.pid).map(Vec::as_slice).unwrap_or(&[]);
+        TreeRow::new(p.pid, cells(p, view, p.pid.to_string()))
+            .children(kids.iter().map(|kid| row(kid, children, view)))
     }
-    impl Walk<'_> {
-        fn walk(&mut self, p: &Proc, last: bool, depth: usize) {
-            let kids = self.children.get(&p.pid).map(Vec::as_slice).unwrap_or(&[]);
-            let shut = self.collapsed.contains(&p.pid) && !kids.is_empty();
-            let branch = if depth == 0 {
-                String::new()
-            } else {
-                let corner = if last { '└' } else { '├' };
-                format!("{}{corner}─ ", self.prefixes.concat())
-            };
-            let prefix = if shut { format!("{branch}+ ") } else { branch };
-            self.rows.push(ProcRow {
-                pids: vec![p.pid],
-                name: p.name.clone(),
-                cells: cells(p, self.view, p.pid.to_string(), &prefix),
-            });
-            if shut {
-                return;
-            }
-            if depth > 0 {
-                self.prefixes.push(if last { "   " } else { "│  " });
-            }
-            for (i, kid) in kids.iter().enumerate() {
-                self.walk(kid, i + 1 == kids.len(), depth + 1);
-            }
-            if depth > 0 {
-                self.prefixes.pop();
-            }
-        }
-    }
-    let mut walk = Walk {
-        children: &children,
-        collapsed,
-        view,
-        prefixes: Vec::new(),
-        rows: Vec::new(),
-    };
-    for root in &roots {
-        walk.walk(root, true, 0);
-    }
-    walk.rows
+    let tree: Vec<TreeRow<u32>> = roots.iter().map(|p| row(p, &children, view)).collect();
+    let options = TreeTableOptions::new().tree_column(1);
+    tree_table_rows(&tree, |pid| collapsed.contains(pid), &options)
+        .into_iter()
+        .map(|shown| ProcRow {
+            pids: vec![shown.key],
+            name: by_pid
+                .get(&shown.key)
+                .map(|p| p.name.clone())
+                .unwrap_or_default(),
+            cells: shown.cells,
+        })
+        .collect()
 }
 
 // ---------------------------------------------------------------------------

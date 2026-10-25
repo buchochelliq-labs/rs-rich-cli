@@ -835,7 +835,7 @@ impl Player {
     /// The gauge's title, termusic's.
     pub fn progress_title(self) -> String {
         format!(
-            "Status: {} | Volume: {} | Speed: {:^.1} | Gapless: {}",
+            " Status: {} | Volume: {} | Speed: {:^.1} | Gapless: {} ",
             self.status(),
             self.volume.get(),
             self.speed.get() as f32 / 10.0,
@@ -850,7 +850,7 @@ impl Player {
             (p.len(), total)
         });
         format!(
-            "Playlist ──┤ Total {n} tracks | {} | Mode: {} ├─",
+            "─ Playlist ──┤ Total {n} tracks | {} | Mode: {} ├─",
             fmt_short(total),
             self.mode.get().symbol()
         )
@@ -859,9 +859,13 @@ impl Player {
     pub fn lyric_title(self) -> String {
         match self.playing() {
             Some(track) if self.status() != Status::Stopped => {
-                format!("Lyrics of {:^.20} - {:^.20}", track.artist(), track.title())
+                format!(
+                    " Lyrics of {:^.20} - {:^.20} ",
+                    track.artist(),
+                    track.title()
+                )
             }
-            _ => "No track is playing".into(),
+            _ => " No track is playing ".into(),
         }
     }
 
@@ -1008,7 +1012,7 @@ fn library_view(m: Player) -> Node {
             }
         })
     });
-    tree.panel("Library")
+    tree.panel(" Library ").title_flush()
 }
 
 fn delete(m: Player, cx: &mut Ctx) {
@@ -1132,7 +1136,9 @@ fn playlist_view(m: Player) -> Node {
                 );
             })
         });
-    table.panel_with(move || rich::markup::escape(&m.playlist_title()))
+    table
+        .panel_text_with(move || m.playlist_title())
+        .title_flush()
 }
 
 /// The cover, over the playlist's bottom right corner as termusic draws it
@@ -1173,8 +1179,9 @@ fn progress_view(m: Player) -> Node {
             .height(1)
     });
     gauge
-        .panel_with(move || rich::markup::escape(&m.progress_title()))
+        .panel_text_with(move || m.progress_title())
         .title_align(Align::Center)
+        .title_flush()
 }
 
 fn lyric_view(m: Player) -> Node {
@@ -1182,8 +1189,9 @@ fn lyric_view(m: Player) -> Node {
         .theme_styles([("selected", "bold bright_yellow")])
         .name("Lyrics");
     lines
-        .panel_with(move || rich::markup::escape(&m.lyric_title()))
+        .panel_text_with(move || m.lyric_title())
         .title_align(Align::Center)
+        .title_flush()
 }
 
 fn footer() -> Node {

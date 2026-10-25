@@ -77,6 +77,9 @@ pub(crate) struct KeyBinding {
     pub shown: Option<Vec<Key>>,
     /// When it applies ([`bind_when`](Node::bind_when)); `None`, always.
     pub when: Option<BindingCondition>,
+    /// Why it does not apply now, while it is listed
+    /// ([`bind_unless`](Node::bind_unless)); `None`, never unavailable.
+    pub unavailable: Option<BindingReason>,
     /// Its keys fire with any modifiers held
     /// ([`any_modifiers`](Node::any_modifiers)).
     pub any_modifiers: bool,
@@ -97,6 +100,13 @@ pub(crate) struct KeyBinding {
 /// lists it.
 pub(crate) type BindingCondition = Rc<dyn Fn() -> bool>;
 
+/// Why a binding is unavailable, when it is: read as a
+/// [`BindingCondition`] is.
+pub(crate) type BindingReason = Rc<dyn Fn() -> Option<String>>;
+
+/// What shows a hidden focus scope ([`Node::focus_scope_reveal`]).
+pub(crate) type Reveal = Rc<dyn Fn(&mut Ctx)>;
+
 impl KeyBinding {
     pub(crate) fn new(keys: Vec<Key>, description: &str, handler: KeyHandler) -> KeyBinding {
         KeyBinding {
@@ -105,6 +115,7 @@ impl KeyBinding {
             section: None,
             shown: None,
             when: None,
+            unavailable: None,
             any_modifiers: false,
             fall_through: false,
             hidden: false,
@@ -123,11 +134,24 @@ impl KeyBinding {
         self.any_modifiers && self.live_keys().iter().any(|own| code(own) == code(&key))
     }
 
-    /// Whether it applies now: no condition, or its condition holds.
+    /// Whether it applies now: listed, and not unavailable.
     pub(crate) fn active(&self) -> bool {
+        self.listed() && self.reason().is_none()
+    }
+
+    /// Whether the help and the palette list it: its condition holds. One
+    /// listed may still be [unavailable](Self::reason).
+    pub(crate) fn listed(&self) -> bool {
         self.when
             .as_ref()
             .is_none_or(|when| crate::reactive::untracked(|| when()))
+    }
+
+    /// Why it is unavailable now, if it is ([`bind_unless`](Node::bind_unless)).
+    pub(crate) fn reason(&self) -> Option<String> {
+        self.unavailable
+            .as_ref()
+            .and_then(|reason| crate::reactive::untracked(|| reason()))
     }
 
     /// Its keys while it applies; none while it does not, so a key passes
@@ -203,6 +227,9 @@ pub struct Node {
     /// the focus last.
     focus_scope: bool,
     scope_last: Cell<Option<NodeId>>,
+    /// Shows it when scope cycling reaches it hidden
+    /// ([`focus_scope_reveal`](Self::focus_scope_reveal)).
+    scope_reveal: Option<(BindingCondition, Reveal)>,
     /// What runs when the focus comes into it, or a node inside it, from
     /// outside (`true`), and when it leaves (`false`).
     pub(crate) focus_handlers: RefCell<Vec<(bool, Handler)>>,
@@ -498,6 +525,7 @@ impl Node {
             focus_passes: false,
             focus_scope: false,
             scope_last: Cell::new(None),
+            scope_reveal: None,
             focus_handlers: RefCell::new(Vec::new()),
             keys: RefCell::new(Vec::new()),
             releases: RefCell::new(Vec::new()),
@@ -1482,6 +1510,69 @@ impl Node {
         self
     }
 
+    /// Make this node a [focus scope](Self::focus_scope) that
+    /// [`Ctx::focus_next_scope`](crate::Ctx::focus_next_scope) and
+    /// [`focus_previous_scope`](crate::Ctx::focus_previous_scope) visit even
+    /// while it is hidden ([`shown_when`](Self::shown_when)), as long as
+    /// `when` holds: reaching it, they call `reveal` to show it (set what
+    /// its `shown_when` reads), and the focus goes inside it once it is
+    /// laid out. A pane shown alone (fullscreen, zoomed) that Tab moves on
+    /// from: the next pane is shown in its place. A hidden scope without
+    /// it, or whose `when` does not hold (a closed sidebar), is passed by.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let shown = signal(0);
+    ///     let pane = |n: usize, name: &'static str| {
+    ///         label(name)
+    ///             .focusable()
+    ///             .name(name)
+    ///             .focus_scope_reveal(|| true, move |_| shown.set(n))
+    ///             .shown_when(move || shown.get() == n)
+    ///     };
+    ///     column([pane(0, "one"), pane(1, "two")]).on_key("tab", |cx| cx.focus_next_scope())
+    /// });
+    /// let mut driver = app.driver(5, 2);
+    /// driver.settle();
+    /// driver.assert_focused("one");
+    /// driver.press("tab");
+    /// driver.assert_focused("two");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "two");
+    /// ```
+    pub fn focus_scope_reveal(
+        mut self,
+        when: impl Fn() -> bool + 'static,
+        reveal: impl Fn(&mut Ctx) + 'static,
+    ) -> Node {
+        self.focus_scope = true;
+        self.scope_reveal = Some((Rc::new(when), Rc::new(reveal)));
+        self
+    }
+
+    /// What shows it when scope cycling reaches it hidden, while it may be.
+    pub(crate) fn scope_reveal(&self) -> Option<Reveal> {
+        let (when, reveal) = self.scope_reveal.as_ref()?;
+        crate::reactive::untracked(|| when()).then(|| reveal.clone())
+    }
+
+    /// [`walk`](Self::walk) into hidden nodes too, telling `f` whether
+    /// each is hidden (it or an ancestor); what is hidden from assistive
+    /// technology is left out, as in the focus order.
+    pub(crate) fn walk_hidden(&self, f: &mut dyn FnMut(&Node, bool)) {
+        self.walk_hidden_inner(false, f);
+    }
+
+    fn walk_hidden_inner(&self, above: bool, f: &mut dyn FnMut(&Node, bool)) {
+        if self.access_hidden {
+            return;
+        }
+        let hidden = above || self.hidden();
+        f(self, hidden);
+        self.each_child(&mut |child| child.walk_hidden_inner(hidden, f));
+    }
+
     /// Whether it is a [focus scope](Self::focus_scope).
     pub(crate) fn is_focus_scope(&self) -> bool {
         self.focus_scope
@@ -2043,6 +2134,61 @@ impl Node {
     pub fn title_align(self, align: Align) -> Node {
         self.widget_mut(|panel: &mut Panel| panel.code.title_align = Some(align));
         self
+    }
+
+    /// For a [panel](Self::panel): its titles at the corners, with no
+    /// space added either side, as a ratatui `Block` draws its title:
+    /// `┌Staged Changes───┐`, and a right-hand title against the right
+    /// corner (`──{main}┘`). Put the spaces in the title for termusic's
+    /// `╭ Library ─`. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("…")
+    ///         .panel("Staged Changes")
+    ///         .border(Border::Plain)
+    ///         .title_flush()
+    ///         .add_title(Edge::Bottom, Align::End, "{main}")
+    /// });
+    /// let mut driver = app.driver(20, 3);
+    /// driver.settle();
+    /// let rows = driver.screen().plain();
+    /// assert_eq!(rows[0], "┌Staged Changes────┐");
+    /// assert_eq!(rows[2], "└────────────{main}┘");
+    /// ```
+    pub fn title_flush(self) -> Node {
+        self.widget_mut(|panel: &mut Panel| panel.code.flush = true);
+        self
+    }
+
+    /// Wrap this node in a [panel](Self::panel) titled `title` as plain
+    /// text: brackets show as they are (`Recipe [r]`, `History [ctrl h]`),
+    /// where [`panel`](Self::panel) reads them as console markup.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("…").panel_text("Recipe [r]"));
+    /// let mut driver = app.driver(18, 3);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "╭─ Recipe [r] ───╮");
+    /// ```
+    pub fn panel_text(self, title: &str) -> Node {
+        self.panel(&rich::markup::escape(title))
+    }
+
+    /// [`panel_with`](Self::panel_with), its title read as plain text, as
+    /// [`panel_text`](Self::panel_text)'s is.
+    pub fn panel_text_with(self, title: impl Fn() -> String + 'static) -> Node {
+        self.panel_with(move || rich::markup::escape(&title()))
+    }
+
+    /// [`add_title`](Self::add_title) with `text` as plain text: brackets
+    /// show as they are. Ignored on nodes that are not panels.
+    pub fn add_title_text(self, edge: Edge, align: Align, text: &str) -> Node {
+        self.add_title(edge, align, rich::markup::escape(text))
     }
 
     /// For a [panel](Self::panel): another title, console markup, at the
@@ -3117,6 +3263,7 @@ impl Node {
                     style,
                     title_style: &title_style,
                     titles: &titles,
+                    flush: false,
                 };
                 for edge in crate::border::draw_frame(screen, console, &look, rect) {
                     frame.damage.push(edge);

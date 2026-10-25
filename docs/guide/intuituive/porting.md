@@ -55,7 +55,7 @@ covers both. Three complete ports show where it leads:
 | `Constraint::Fill(w)` / `Min(0)` | `.flex(w)` (the default) |
 | `Constraint::Min(n)` / `Max(n)` | `.min_size(n)` / `.max_size(n)` on any child |
 | Content-sized rows (measured by hand) | `.auto()` |
-| `Block::bordered().title(t)` | `.panel(t)`; `.padding(v, h)` for space |
+| `Block::bordered().title(t)` | `.panel(t)`, and `.title_flush()` for the title at the corner; `.padding(v, h)` for space |
 | `Paragraph`, `Line`, `Span` | `text!("…{signal}…")`, `label("…")`, console markup |
 | `List` + `ListState` | `list(items, selected)` (scrolls, highlights, binds ↑↓ jk); `list_optional` for `select(None)` |
 | `highlight_symbol`, `HighlightSpacing`, `ListDirection`, `scroll_padding`, `ListItem::style` | `.symbol(..)`, `.highlight_spacing(..)`, `.direction(..)`, `.scroll_padding(n)`, `.row_style(\|i\| ..)` on the list; `.multiline()` for items of several lines |
@@ -74,7 +74,7 @@ covers both. Three complete ports show where it leads:
 | Mouse hit-testing against stored `Rect`s | `.on_click(…)`, `.on_mouse(…)`; events arrive in the node's own coordinates and bubble |
 | A tick rate in the loop | `every(interval, …)`, which returns a `Timer` to pause or re-time; `fixed_step(period, \|cx, steps\| …)` for a game's timestep |
 | `KeyEventKind::Release`, keys held down | `.on_key_up(..)`, `.bind_release(..)`, `held_keys()`; `App::all_keys(true)` for every key's release |
-| A "terminal too small" check before drawing | `App::min_size(w, h, message)` |
+| A "terminal too small" check before drawing | `App::min_size(w, h, message)`; `min_size_with(w, h, \|\| node)` for a node of its own, `min_size_forms` for shorter forms |
 | Threads and channels into the loop | `spawn(work, done)`, `resource(fetch)`, `Proxy::run` |
 | "When X changes, do Y" in the loop | `watch(\|\| x.get(), \|x, cx\| …)` |
 | `ratatui::init()` / `restore()` | `App::run()` (restores on every exit, panics included) |
