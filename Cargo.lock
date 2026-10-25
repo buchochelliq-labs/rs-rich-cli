@@ -2147,8 +2147,10 @@ dependencies = [
 name = "noctiluca"
 version = "0.0.1"
 dependencies = [
+ "image",
  "rs-rich",
  "rs-rich-embed",
+ "rs-rich-intuituive",
  "serde_json",
 ]
 

@@ -20,11 +20,11 @@ publish = false
 [lints]
 workspace = true
 
-[[bin]]
-name = "noctiluca"
-path = "src/main.rs"
 
 [dependencies]
 rich.workspace = true
 rich-embed = { workspace = true, features = ["chrome"] }
+rich-intuituive = { workspace = true, features = ["art"] }
 serde_json.workspace = true
+# Stills of image regions in tests, and their decoding through rs-rich-art.
+image = { workspace = true }
