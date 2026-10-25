@@ -13,9 +13,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `role=log`, `aria-live` or appended scroll box is followed through a
   live-only change ping and read incrementally, with no new snapshot. It
   shows its newest entries, with their colours and small pictures, and
-  holds still while scrolled up (`[`, `]`). Ten named terminal adaptations
+  holds still while scrolled up (`[`, `]`). Eleven named terminal adaptations
   (decorative pictures, capped pictures, icon buttons, snapped grids,
-  collapsed navigation, pictures of text, live tails and more), each
+  collapsed navigation, pictures of text, live tails, readable page
+  colours and more), each
   switched off in `[adapt]`, with `--adapt=-RULE` or all with `--no-adapt`;
   `a` toggles the faithful projection and `?` lists the rules. New
   fixtures: `stream-with-log.html`, `log-ul.html`, `log-div.html`,

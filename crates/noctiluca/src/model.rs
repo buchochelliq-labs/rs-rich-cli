@@ -58,8 +58,9 @@ pub struct Run {
     /// The control (a link, mostly) this text belongs to: an index into
     /// [`Page::controls`].
     pub control: Option<usize>,
-    /// Its own colour, as a rich colour (`rgb(r,g,b)`), when it differs
-    /// from its block's: an author's name in a log, a highlighted word.
+    /// The page's colour for it, as CSS (`rgb(255, 0, 0)`): the
+    /// [page colours](crate::adapt::Rule::PageColors) rule decides how it
+    /// shows. Links have none: they are drawn as links.
     pub color: Option<String>,
     /// A small picture in the line (an emote, a badge): the text is its
     /// alt text, which stands in where pictures are not drawn.
@@ -960,8 +961,6 @@ struct Context {
     /// Inside a label of a control, or a control: its text is the
     /// control's name, not text of its own.
     silent: bool,
-    /// The block's own colour: a run in another colour keeps it.
-    color: String,
     /// The landmark it is in: an index into [`Page::regions`].
     region: Option<usize>,
     /// Hidden from assistive technology by an ancestor.
@@ -1101,11 +1100,10 @@ impl Walker<'_> {
                     italic: context.italic || matches!(dom.style(i, 5), "italic" | "oblique"),
                     code: context.code,
                     control: context.control,
-                    color: (context.control.is_none()
-                        && !context.color.is_empty()
-                        && color != context.color)
-                        .then(|| terminal_color(color))
-                        .flatten(),
+                    // The page's own colour, as CSS: the layout's
+                    // page-colors rule decides what of it shows.
+                    color: (context.control.is_none() && !color.is_empty())
+                        .then(|| truncate(&clean(color), 64)),
                     picture: None,
                 };
                 self.push(run, dom.rect(i));
@@ -1320,7 +1318,6 @@ impl Walker<'_> {
         self.flush(context);
         inner.frame = dom.rect(i).unwrap_or(context.frame);
         inner.node = backend;
-        inner.color = dom.style(i, 2).to_string();
         inner.kind = match (heading, name) {
             (Some(level), _) => BlockKind::Heading(level),
             (None, "LI") => {
@@ -1468,7 +1465,6 @@ impl Walker<'_> {
                 kind: BlockKind::Paragraph,
                 frame,
                 node: dom.backend[child],
-                color: dom.style(child, 2).to_string(),
                 control: None,
                 silent: false,
                 ..context.clone()
@@ -1775,42 +1771,6 @@ impl Walker<'_> {
     }
 }
 
-/// A page's CSS colour as a rich colour for the terminal (`rgb(r,g,b)`),
-/// or `None` for a transparent or unreadable one. A colour too dark to
-/// read on a dark terminal is lifted toward white, keeping its hue.
-pub fn terminal_color(css: &str) -> Option<String> {
-    let inner = css
-        .trim()
-        .strip_prefix("rgba(")
-        .or_else(|| css.trim().strip_prefix("rgb("))?
-        .strip_suffix(')')?;
-    let parts: Vec<f64> = inner
-        .split([',', ' ', '/'])
-        .filter(|p| !p.is_empty())
-        .map(|p| p.trim().parse::<f64>())
-        .collect::<Result<_, _>>()
-        .ok()?;
-    if parts.len() < 3 || parts.get(3).is_some_and(|a| *a < 0.1) {
-        return None;
-    }
-    let channel = |v: f64| v.clamp(0.0, 255.0);
-    let (mut r, mut g, mut b) = (channel(parts[0]), channel(parts[1]), channel(parts[2]));
-    let luma = (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0;
-    if luma < 0.35 {
-        // Mix toward white until it reads: at most two thirds of the way.
-        let t = ((0.35 - luma) / 0.35 * 0.66).min(0.66);
-        r += (255.0 - r) * t;
-        g += (255.0 - g) * t;
-        b += (255.0 - b) * t;
-    }
-    Some(format!(
-        "rgb({},{},{})",
-        r.round() as u8,
-        g.round() as u8,
-        b.round() as u8
-    ))
-}
-
 /// The runs of a live log's entry as the engine's isolated world reads it
 /// (`[{t, c, b, i}, {img: {src, alt, w, h, hidden}}, …]`, untrusted):
 /// cleaned, with whitespace collapsed as a browser does.
@@ -1856,7 +1816,10 @@ pub fn live_runs(value: &Value, base: &str) -> Vec<Run> {
             text: truncate(&text, MAX_TEXT),
             bold: part["b"].as_bool().unwrap_or(false),
             italic: part["i"].as_bool().unwrap_or(false),
-            color: part["c"].as_str().and_then(terminal_color),
+            color: part["c"]
+                .as_str()
+                .filter(|c| !c.is_empty())
+                .map(|c| truncate(&clean(c), 64)),
             ..Run::default()
         });
     }
@@ -1993,7 +1956,6 @@ pub fn build_with(
         depth: 0,
         control: None,
         silent: false,
-        color: String::new(),
         region: None,
         aria_hidden: false,
     };

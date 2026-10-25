@@ -54,8 +54,8 @@ fn authors_keep_their_colour() {
     let first = &page.logs[0].entries[0].runs[0];
     assert_eq!(first.text, "ada");
     assert!(first.bold);
-    // #ff7f50, light enough to stay as it is.
-    assert_eq!(first.color.as_deref(), Some("rgb(255,127,80)"));
+    // The page's colour, as CSS; the layout decides how it shows.
+    assert_eq!(first.color.as_deref(), Some("rgb(255, 127, 80)"));
     let emote = page.logs[0].entries[1]
         .runs
         .iter()
@@ -72,7 +72,25 @@ fn authors_keep_their_colour() {
         .flat_map(|l| &l.spans)
         .find(|s| s.text == "ada")
         .unwrap();
+    // #ff7f50 is saturated and light enough: it stays as it is.
     assert!(author.style.contains("rgb(255,127,80)"), "{author:?}");
+    // The words are black on the page: the terminal's own colour here.
+    let words = lines
+        .iter()
+        .flat_map(|l| &l.spans)
+        .find(|s| s.text.contains("first light"))
+        .unwrap();
+    assert!(!words.style.contains("rgb"), "{words:?}");
+    // Without the rule, no page colour at all.
+    let marks = Marks {
+        adapt: Adapt::default().with(Rule::PageColors, false),
+        ..Marks::default()
+    };
+    let plain_lines = project(&page, 100, (8.0, 18.0), &marks).lines;
+    assert!(plain_lines
+        .iter()
+        .flat_map(|l| &l.spans)
+        .all(|s| !s.style.contains("rgb")));
 }
 
 /// The log of `log-div` with `n` entries, `#1` to `#n`.

@@ -185,7 +185,7 @@ pub fn matches(line: &str, query: &str) -> Vec<(usize, usize)> {
 }
 
 /// The style of a run in a block.
-fn run_style(run: &Run, base: &str, page: &Page) -> String {
+fn run_style(run: &Run, base: &str, page: &Page, adapt: Adapt) -> String {
     let mut parts: Vec<&str> = Vec::new();
     if !base.is_empty() {
         parts.push(base);
@@ -199,7 +199,12 @@ fn run_style(run: &Run, base: &str, page: &Page) -> String {
     if run.code {
         parts.push("cyan");
     }
-    if let Some(color) = &run.color {
+    let color = run
+        .color
+        .as_deref()
+        .filter(|_| adapt.on(Rule::PageColors) && run.control.is_none())
+        .and_then(|css| crate::adapt::page_color(css, crate::adapt::background()));
+    if let Some(color) = &color {
         parts.push(color);
     }
     if run.picture.is_some() {
@@ -238,7 +243,7 @@ fn spans(runs: &[Run], base: &str, page: &Page, marks: &Marks) -> Vec<Span> {
         last = run.control;
         out.push(Span {
             text: run.text.clone(),
-            style: run_style(run, base, page),
+            style: run_style(run, base, page, marks.adapt),
             control: run.control,
         });
     }

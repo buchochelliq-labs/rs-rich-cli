@@ -51,6 +51,7 @@ snap-grids = true
 collapse-nav = true
 text-over-pictures = false
 live-tail = true
+page-colors = true
 bandwidth = true
 
 [profile]

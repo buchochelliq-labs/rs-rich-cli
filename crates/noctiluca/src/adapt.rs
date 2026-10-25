@@ -51,6 +51,12 @@ pub enum Rule {
     /// Each moving region's frame rate and tier step down when the
     /// terminal is short of bandwidth.
     Bandwidth,
+    /// The page's text colours, for the terminal: saturated colours stay
+    /// (a red "LIVE", an author's name), greys and colours near the
+    /// foreground follow the terminal's own, and every kept colour is
+    /// made readable on the terminal's background. Off, text has no page
+    /// colour at all.
+    PageColors,
 }
 
 /// What a rule is, for the config, the command line and the about page.
@@ -120,6 +126,12 @@ pub const RULES: &[RuleInfo] = &[
         rule: Rule::LiveTail,
         name: "live-tail",
         what: "live logs show their newest entries unless scrolled up",
+        default: true,
+    },
+    RuleInfo {
+        rule: Rule::PageColors,
+        name: "page-colors",
+        what: "keep saturated text colours, readable; greys follow the terminal",
         default: true,
     },
     RuleInfo {
@@ -312,6 +324,86 @@ pub fn picture_cells(
     (MAX_PICTURE_ROWS, width.clamp(1, columns.max(1)))
 }
 
+/// The terminal's background, light or dark.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Background {
+    Dark,
+    Light,
+}
+
+/// The terminal's background as `COLORFGBG` says it (`15;0`: light text
+/// on black), a convention many terminals set; dark when unknown.
+pub fn background() -> Background {
+    static FOUND: std::sync::OnceLock<Background> = std::sync::OnceLock::new();
+    *FOUND.get_or_init(|| {
+        let bg = std::env::var("COLORFGBG")
+            .ok()
+            .and_then(|v| v.rsplit(';').next()?.trim().parse::<u8>().ok());
+        match bg {
+            Some(7 | 9..=15) => Background::Light,
+            _ => Background::Dark,
+        }
+    })
+}
+
+/// How far from grey a colour must be (its chroma, 0 to 1) to keep it.
+pub const MIN_CHROMA: f64 = 0.25;
+
+/// A page's CSS colour (`rgb(255, 0, 0)`, `rgba(…)`) for the terminal,
+/// by the [page colours](Rule::PageColors) rule: `None` for a grey, a
+/// colour near black or white, or a transparent one (the terminal's own
+/// foreground then); a saturated one as a rich colour, lifted or darkened
+/// until it reads on `background`, keeping its hue.
+pub fn page_color(css: &str, background: Background) -> Option<String> {
+    let css = css.trim();
+    let inner = css
+        .strip_prefix("rgba(")
+        .or_else(|| css.strip_prefix("rgb("))?
+        .strip_suffix(')')?;
+    let parts: Vec<f64> = inner
+        .split([',', ' ', '/'])
+        .filter(|p| !p.is_empty())
+        .map(|p| p.trim().parse::<f64>())
+        .collect::<Result<_, _>>()
+        .ok()?;
+    if parts.len() < 3 || parts.get(3).is_some_and(|a| *a < 0.1) {
+        return None;
+    }
+    let (mut r, mut g, mut b) = (
+        parts[0].clamp(0.0, 255.0),
+        parts[1].clamp(0.0, 255.0),
+        parts[2].clamp(0.0, 255.0),
+    );
+    let chroma = (r.max(g).max(b) - r.min(g).min(b)) / 255.0;
+    if chroma < MIN_CHROMA {
+        return None;
+    }
+    let luma = |r: f64, g: f64, b: f64| (0.2126 * r + 0.7152 * g + 0.0722 * b) / 255.0;
+    // Mix toward white (on dark) or black (on light) until it reads.
+    for _ in 0..8 {
+        let l = luma(r, g, b);
+        match background {
+            Background::Dark if l < 0.45 => {
+                r += (255.0 - r) * 0.2;
+                g += (255.0 - g) * 0.2;
+                b += (255.0 - b) * 0.2;
+            }
+            Background::Light if l > 0.55 => {
+                r *= 0.8;
+                g *= 0.8;
+                b *= 0.8;
+            }
+            _ => break,
+        }
+    }
+    Some(format!(
+        "rgb({},{},{})",
+        r.round() as u8,
+        g.round() as u8,
+        b.round() as u8
+    ))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
@@ -322,7 +414,7 @@ mod tests {
         assert!(adapt.on(Rule::DecorativeImages) && adapt.on(Rule::LiveTail));
         assert!(!adapt.on(Rule::TextOverPictures));
         assert!(Adapt::none().is_none());
-        assert_eq!(RULES.len(), 10);
+        assert_eq!(RULES.len(), 11);
         for info in RULES {
             assert_eq!(Rule::parse(info.name), Some(info.rule));
         }
@@ -346,6 +438,36 @@ mod tests {
             .apply("-nope")
             .unwrap_err()
             .contains("decorative-images"));
+    }
+
+    #[test]
+    fn saturated_colours_stay_readable_and_greys_follow_the_terminal() {
+        // A red "LIVE" and a coral author's name stay; light enough already.
+        assert_eq!(
+            page_color("rgb(255, 127, 80)", Background::Dark).as_deref(),
+            Some("rgb(255,127,80)")
+        );
+        // Greys and near-black or near-white text take the terminal's own.
+        for grey in [
+            "rgb(17, 17, 17)",
+            "rgb(102, 102, 102)",
+            "rgb(240, 240, 245)",
+        ] {
+            assert_eq!(page_color(grey, Background::Dark), None, "{grey}");
+        }
+        assert_eq!(page_color("rgba(255, 0, 0, 0)", Background::Dark), None);
+        // A dark blue is lifted on a dark terminal, darkened stays on light.
+        let lifted = page_color("rgb(20, 40, 160)", Background::Dark).unwrap();
+        assert_ne!(lifted, "rgb(20,40,160)");
+        assert_eq!(
+            page_color("rgb(20, 40, 160)", Background::Light).as_deref(),
+            Some("rgb(20,40,160)")
+        );
+        // A yellow is darkened on a light terminal.
+        assert_ne!(
+            page_color("rgb(255, 215, 0)", Background::Light).as_deref(),
+            Some("rgb(255,215,0)")
+        );
     }
 
     #[test]

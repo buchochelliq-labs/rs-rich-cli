@@ -128,14 +128,13 @@ pub const PING_SCRIPT: &str = r#"(function start(tries) {
     return id;
   };
   const runs = entry => {
-    const base = style(entry).color;
     const out = [];
     let budget = 2000;
     const walk = n => {
       if (--budget < 0) return;
       if (n.nodeType === 3) {
         const css = style(n.parentElement);
-        out.push({ t: n.nodeValue, c: css.color !== base ? css.color : null,
+        out.push({ t: n.nodeValue, c: css.color,
                    b: Number(css.fontWeight) >= 600, i: css.fontStyle !== 'normal' });
         return;
       }

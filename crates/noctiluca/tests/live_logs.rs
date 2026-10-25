@@ -210,7 +210,7 @@ fn new_entries_come_within_the_budget_without_a_full_read() {
         assert!(last
             .runs
             .iter()
-            .any(|r| r.text == "dee" && r.color.as_deref() == Some("rgb(255,215,0)")));
+            .any(|r| r.text == "dee" && r.color.as_deref() == Some("rgb(255, 215, 0)")));
         assert!(last.runs.iter().any(|r| r
             .picture
             .as_ref()
@@ -284,7 +284,7 @@ fn a_sent_message_reads_back() {
             .is_some_and(|e| e == "you: hello from the terminal")
     });
     let mine = page.logs[0].entries.last().unwrap();
-    assert_eq!(mine.runs[0].color.as_deref(), Some("rgb(53,208,255)"));
+    assert_eq!(mine.runs[0].color.as_deref(), Some("rgb(53, 208, 255)"));
 }
 
 #[test]

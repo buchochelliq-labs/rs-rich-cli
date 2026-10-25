@@ -119,6 +119,7 @@ site, and each can be switched off.
 | `collapse-nav` | On a narrow terminal (under 100 columns), a navigation or sidebar becomes one row of its links | on |
 | `text-over-pictures` | Draws a picture of text (a heading or button image, a banner) as its text | off: it changes meaning |
 | `live-tail` | A live log shows its newest entries unless you scrolled it up | on |
+| `page-colors` | Keeps the page's saturated text colours (a red label, a chat name), readable on your terminal; greys follow your terminal's own colour | on |
 | `bandwidth` | Lowers a video's frame rate and picture tier when the terminal is short of bandwidth | on |
 
 - `a` (`Alt+A` in the plain keys) toggles between the adapted and the
