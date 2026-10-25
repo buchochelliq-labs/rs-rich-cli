@@ -1853,7 +1853,11 @@ fn projection_view(b: Browser) -> Node {
                     .next()
                     .unwrap_or_default();
                 // Only a row a picture covers reads the pictures.
-                if b.images.get() == Images::None || !l.regions.iter().any(|r| r.on(row)) {
+                let inline: Vec<&(layout::Region, String)> =
+                    l.inline.iter().filter(|(r, _)| r.on(row)).collect();
+                if b.images.get() == Images::None
+                    || (inline.is_empty() && !l.regions.iter().any(|r| r.on(row)))
+                {
                     return vec![segments];
                 }
                 let nodes: Vec<Option<NodeId>> = b.page.with(|p| {
@@ -1862,18 +1866,27 @@ fn projection_view(b: Browser) -> Node {
                         .map(|r| p.as_ref()?.media.get(r.media).map(|m| m.node))
                         .collect()
                 });
-                let spliced = pictures::splice(
-                    console,
-                    &cells,
-                    segments,
-                    width,
-                    row,
-                    &l.regions,
-                    |region| {
+                // The media regions, then the small pictures in the row's
+                // lines, each with its picture.
+                let mut on_row: Vec<layout::Region> =
+                    l.regions.iter().filter(|r| r.on(row)).copied().collect();
+                on_row.extend(inline.iter().map(|(r, _)| *r));
+                let pixels = b.pixels.get();
+                let small = |region: &layout::Region| -> Option<(Picture, Pixels)> {
+                    let (_, src) = inline.iter().find(|(r, _)| r == region)?;
+                    let picture = b
+                        .page
+                        .with(|p| p.as_ref()?.inline_pictures.get(src).cloned())?;
+                    Some((picture, pixels))
+                };
+                let spliced =
+                    pictures::splice(console, &cells, segments, width, row, &on_row, |region| {
+                        if region.media == usize::MAX {
+                            return small(region);
+                        }
                         let at = l.regions.iter().position(|r| r == region)?;
                         shown_picture(b, nodes.get(at).copied().flatten()?)
-                    },
-                );
+                    });
                 vec![b.page.with(|p| match p {
                     Some(page) => play_marks(spliced, width, row, &l.regions, page),
                     None => spliced,

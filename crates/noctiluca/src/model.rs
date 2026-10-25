@@ -451,6 +451,9 @@ pub struct Page {
     pub has_ax: bool,
     /// Its live logs.
     pub logs: Vec<Log>,
+    /// The small pictures in its lines ([`Run::picture`]: emotes, badges,
+    /// avatars), decoded on the tab's worker, by source address.
+    pub inline_pictures: HashMap<String, rich_intuituive::Picture>,
     /// Its navigation and complementary landmarks.
     pub regions: Vec<Region>,
     /// Its grids and wrapping flex rows.

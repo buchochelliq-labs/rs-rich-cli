@@ -31,6 +31,10 @@ pub struct Span {
     pub style: String,
     /// The control it belongs to.
     pub control: Option<usize>,
+    /// A small picture drawn over its cells (an emote, a badge): its
+    /// source, a key of [`Page::inline_pictures`]. The text stands in
+    /// where pictures are not drawn.
+    pub picture: Option<String>,
 }
 
 impl Span {
@@ -39,6 +43,7 @@ impl Span {
             text: text.into(),
             style: style.into(),
             control: None,
+            picture: None,
         }
     }
 }
@@ -237,14 +242,25 @@ fn spans(runs: &[Run], base: &str, page: &Page, marks: &Marks) -> Vec<Span> {
                     text: format!("[{label}]"),
                     style: "bold black on yellow".into(),
                     control: run.control,
+                    picture: None,
                 });
             }
         }
         last = run.control;
+        // A small picture in the line keeps its cells, its alt text
+        // standing in for it, in one piece.
+        let picture = run
+            .picture
+            .as_ref()
+            .filter(|p| !p.src.is_empty() && marks.adapt.on(Rule::InlinePictures));
         out.push(Span {
-            text: run.text.clone(),
+            text: match picture {
+                Some(p) => inline_cells(&p.alt, p.width),
+                None => run.text.clone(),
+            },
             style: run_style(run, base, page, marks.adapt),
             control: run.control,
+            picture: picture.map(|p| p.src.clone()),
         });
     }
     out
@@ -286,6 +302,8 @@ pub fn wrap(spans: &[Span], width: usize, first: &[Span], rest: &[Span]) -> Vec<
             Some(last)
                 if last.style == span.style
                     && last.control == span.control
+                    && last.picture.is_none()
+                    && span.picture.is_none()
                     && !last.text.is_empty() =>
             {
                 last.text.push_str(text)
@@ -294,6 +312,7 @@ pub fn wrap(spans: &[Span], width: usize, first: &[Span], rest: &[Span]) -> Vec<
                 text: text.to_string(),
                 style: span.style.clone(),
                 control: span.control,
+                picture: span.picture.clone(),
             }),
         }
     };
@@ -717,12 +736,48 @@ fn cut_line(first: &[Span], spans: &[Span], width: usize) -> Line {
             text,
             style: span.style.clone(),
             control: span.control,
+            picture: span.picture.clone(),
         });
         if used >= width {
             break;
         }
     }
     line
+}
+
+/// The cells a small picture in a line takes, as text: its alt text (or
+/// `▫`) cut or padded to its width in cells (a cell is 8 CSS pixels, one
+/// to twelve of them), in one piece (no-break spaces), so wrapping never
+/// splits it. The picture is drawn over them; where it is not, the text
+/// stands in.
+pub fn inline_cells(alt: &str, width_px: f64) -> String {
+    let cells = ((width_px / 8.0).round() as usize).clamp(1, 12);
+    let alt = if alt.trim().is_empty() {
+        "▫"
+    } else {
+        alt.trim()
+    };
+    let mut out = String::new();
+    let mut used = 0;
+    let total = cell_len(alt);
+    for c in alt.chars() {
+        let c = if c == ' ' { '\u{a0}' } else { c };
+        let w = cell_len(&c.to_string());
+        if used + w > cells || (total > cells && used + w + 1 > cells) {
+            if total > cells && used < cells {
+                out.push('…');
+                used += 1;
+            }
+            break;
+        }
+        out.push(c);
+        used += w;
+    }
+    while used < cells {
+        out.push('\u{a0}');
+        used += 1;
+    }
+    out
 }
 
 /// A face without the spaces inside its brackets: `[ Send ]` as `[Send]`.
@@ -829,6 +884,9 @@ pub struct Projection {
     pub logs: Vec<(NodeId, usize, usize)>,
     /// The media regions, in the order they were placed.
     pub regions: Vec<Region>,
+    /// The small pictures in lines, one row each, with their sources (keys
+    /// of [`Page::inline_pictures`]); their `media` is `usize::MAX`.
+    pub inline: Vec<(Region, String)>,
 }
 
 impl Projection {
@@ -864,7 +922,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         log: Option<NodeId>,
         /// A media region's index and its picture's rows (the lines after
         /// are its caption).
-        media: Option<(usize, usize)>,
+        media: Option<(usize, usize, usize)>,
         /// Kept to one line, cut with `…` (a control's face).
         one_line: bool,
     }
@@ -947,6 +1005,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                             text: format!("[{label}]"),
                             style: "bold black on yellow".into(),
                             control: Some(c),
+                            picture: None,
                         });
                     }
                     row.push(Span::new(" ", ""));
@@ -955,6 +1014,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                         text: page.controls[c].name.clone(),
                         style: "underline bright_blue".into(),
                         control: Some(c),
+                        picture: None,
                     });
                 }
             }
@@ -1087,6 +1147,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                 let full = ((media.rect.height / ch).round() as usize).clamp(1, MAX_MEDIA_ROWS);
                 let (rows, w) =
                     crate::adapt::picture_cells(media.rect, m1 - m0, ch, adapt, MAX_MEDIA_ROWS);
+                let wide = m1;
                 let m1 = m0 + w;
                 let mut lines: Vec<Line> = (0..rows)
                     .map(|r| {
@@ -1112,14 +1173,19 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                         *last = mark;
                     }
                 }
-                if media.kind == MediaKind::Image
+                // Captioned, the box keeps its whole width, so a capped
+                // (narrowed) picture's caption wraps to the page's width
+                // for it, not the picture's.
+                let captioned = adapt.on(Rule::Captions)
+                    && media.kind == MediaKind::Image
                     && !media.captioned
                     && !media.alt.is_empty()
-                    && rows >= CAPTIONED_ROWS
-                {
+                    && rows >= CAPTIONED_ROWS;
+                let x1 = if captioned { wide.max(m1) } else { m1 };
+                if captioned {
                     lines.extend(wrap(
                         &[Span::new(format!("Image: {}", media.alt), "italic")],
-                        w.max(1),
+                        (x1 - m0).max(1),
                         &[],
                         &[],
                     ));
@@ -1129,12 +1195,12 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     bottom: media.rect.y + rows as f64 * ch,
                     left: media.rect.x,
                     x0: m0,
-                    x1: m1,
+                    x1,
                     wrap: None,
                     lines,
                     node: media.node,
                     log: None,
-                    media: Some((*index, rows)),
+                    media: Some((*index, rows, w)),
                     one_line: false,
                 });
                 if rows < full {
@@ -1150,6 +1216,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                         text: format!("[{label}]"),
                         style: "bold black on yellow".into(),
                         control: Some(*index),
+                        picture: None,
                     });
                 }
                 let style = if control.disabled { "dim" } else { "reverse" };
@@ -1166,6 +1233,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     text,
                     style: style.into(),
                     control: Some(*index),
+                    picture: None,
                 };
                 one_row.push(items.len());
                 let mut item = text_item(
@@ -1353,7 +1421,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         usize,
         Vec<Line>,
         crate::engine::NodeId,
-        Option<(usize, usize)>,
+        Option<(usize, usize, usize)>,
     );
     let boxes: Vec<Placed> = items
         .into_iter()
@@ -1366,6 +1434,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         .collect();
     let mut placed_logs = Vec::new();
     let mut regions = Vec::new();
+    let mut inline: Vec<(Region, String)> = Vec::new();
     // Each row's first box: its node, which of its lines, and that line's
     // place on the page.
     let mut owner: Vec<Option<(crate::engine::NodeId, usize, f64)>> = Vec::new();
@@ -1384,11 +1453,11 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             let (log, rows) = logs.remove(at);
             placed_logs.push((log, y, rows));
         }
-        if let Some((index, rows)) = media {
+        if let Some((index, rows, cols)) = media {
             regions.push(Region {
                 row: y,
                 column: x0,
-                cols: x1 - x0,
+                cols: cols.min(x1 - x0),
                 rows,
                 media: index,
             });
@@ -1402,6 +1471,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             owner[row].get_or_insert((node, k, top + k as f64 * ch));
             let mut x = x0;
             for span in &line.spans {
+                let start = x;
                 let style = styles
                     .iter()
                     .position(|(s, c)| *s == span.style && *c == span.control)
@@ -1432,6 +1502,20 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                         grid[row][x + extra] = Some((String::new(), style));
                     }
                     x += w;
+                }
+                if let Some(src) = &span.picture {
+                    if x > start {
+                        inline.push((
+                            Region {
+                                row,
+                                column: start,
+                                cols: x - start,
+                                rows: 1,
+                                media: usize::MAX,
+                            },
+                            src.clone(),
+                        ));
+                    }
                 }
             }
         }
@@ -1488,6 +1572,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                         text: c,
                         style,
                         control,
+                        picture: None,
                     }),
                 }
             }
@@ -1513,6 +1598,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         rows,
         logs: placed_logs,
         regions,
+        inline,
     }
 }
 

@@ -302,6 +302,11 @@ struct Worker<'a> {
     decode: Sender<Job>,
     /// Pictures decoded, from the decoder thread.
     decoded: Receiver<(StillKey, Picture)>,
+    /// The small pictures in lines, decoded by source, and those asked for.
+    inline: HashMap<String, Picture>,
+    inline_asked: HashSet<String>,
+    decode_inline: Sender<(String, Arc<[u8]>)>,
+    decoded_inline: Receiver<(String, Picture)>,
     /// Where Chrome's view was last seen: images near it are captured
     /// first.
     metrics: Option<Metrics>,
@@ -333,6 +338,7 @@ impl Worker<'_> {
             self.live.clear();
         }
         self.follow_logs(&mut page);
+        self.dress_inline(&mut page);
         for media in &mut page.media {
             let key = still_key(media.node, picture_source(media), media.rect);
             if let Some(still) = self.stills.get(&key) {
@@ -407,10 +413,51 @@ impl Worker<'_> {
         }
         let mut next = (*page).clone();
         self.follow_logs(&mut next);
+        self.dress_inline(&mut next);
         if next != *page {
             let next = Arc::new(next);
             self.page = Some(next.clone());
             (self.update)(Update::Page(next));
+        }
+    }
+
+    /// Give `page` the small pictures of its lines that are decoded, and
+    /// ask for those not yet asked for: each source's original bytes (or a
+    /// `data:` address's), decoded once whatever number of lines show it.
+    fn dress_inline(&mut self, page: &mut Page) {
+        let mut sources: Vec<String> = Vec::new();
+        let mut note = |run: &Run| {
+            if let Some(picture) = run.picture.as_ref().filter(|p| !p.src.is_empty()) {
+                if !sources.contains(&picture.src) {
+                    sources.push(picture.src.clone());
+                }
+            }
+        };
+        for block in &page.blocks {
+            block.runs.iter().for_each(&mut note);
+        }
+        for log in &page.logs {
+            for entry in &log.entries {
+                entry.runs.iter().for_each(&mut note);
+            }
+        }
+        page.inline_pictures.clear();
+        for src in sources {
+            if let Some(picture) = self.inline.get(&src) {
+                page.inline_pictures.insert(src, picture.clone());
+                continue;
+            }
+            if self.inline_asked.len() >= MAX_INLINE || !self.inline_asked.insert(src.clone()) {
+                continue;
+            }
+            let bytes = if let Some(data) = src.strip_prefix("data:") {
+                data_bytes(data)
+            } else {
+                self.engine.resource(TabId(0), &src).ok()
+            };
+            if let Some(bytes) = bytes.filter(|b| decodable(b)) {
+                let _ = self.decode_inline.send((src, bytes.into()));
+            }
         }
     }
 
@@ -532,6 +579,10 @@ impl Worker<'_> {
             self.pictures.insert(key, picture);
             any = true;
         }
+        while let Ok((src, picture)) = self.decoded_inline.try_recv() {
+            self.inline.insert(src, picture);
+            any = true;
+        }
         let Some(page) = self.page.clone().filter(|_| any) else {
             return;
         };
@@ -542,6 +593,7 @@ impl Worker<'_> {
                 media.picture = Some(picture.clone());
             }
         }
+        self.dress_inline(&mut next);
         if next != *page {
             let next = Arc::new(next);
             self.page = Some(next.clone());
@@ -771,6 +823,9 @@ impl Worker<'_> {
     }
 }
 
+/// At most this many sources of small pictures in lines are read.
+const MAX_INLINE: usize = 2000;
+
 /// What a still is kept by: the node, its address and its size.
 type StillKey = (NodeId, String, u64, u64);
 /// A still for the decoder thread.
@@ -794,8 +849,8 @@ fn data_bytes(data: &str) -> Option<Vec<u8>> {
 
 /// The decoder thread: each still into a picture, an animated GIF with its
 /// frames. It ends when the tab does.
-fn decoder() -> (Sender<Job>, Receiver<(StillKey, Picture)>) {
-    let (send, jobs) = mpsc::channel::<Job>();
+fn decoder<K: Send + 'static>() -> (Sender<(K, Arc<[u8]>)>, Receiver<(K, Picture)>) {
+    let (send, jobs) = mpsc::channel::<(K, Arc<[u8]>)>();
     let (done, decoded) = mpsc::channel();
     thread::spawn(move || {
         while let Ok((key, bytes)) = jobs.recv() {
@@ -830,6 +885,7 @@ fn still_key(node: NodeId, src: &str, rect: Rect) -> StillKey {
 
 fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn Fn(Update)) {
     let (decode, decoded) = decoder();
+    let (decode_inline, decoded_inline) = decoder();
     let mut worker = Worker {
         engine,
         update,
@@ -841,6 +897,10 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
         pictures: HashMap::new(),
         decode,
         decoded,
+        inline: HashMap::new(),
+        inline_asked: HashSet::new(),
+        decode_inline,
+        decoded_inline,
         metrics: None,
         frames: Frames::default(),
         on_screen: HashSet::new(),

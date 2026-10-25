@@ -1,4 +1,5 @@
-"""Make the pictures of Noctiluca's media fixtures (news.html, media-grid.html).
+"""Make the pictures of Noctiluca's media fixtures (news.html, media-grid.html,
+stream-with-log.html).
 
 Every picture is drawn here from shapes and gradients, so the fixtures carry
 no third-party image. Run from anywhere: `python3 -I make.py` (needs Pillow);
@@ -170,6 +171,27 @@ def poster(size=(640, 360)):
     return image
 
 
+def badge(size=(18, 18)):
+    """A chat badge: a green rounded square with a white tick."""
+    image = Image.new("RGBA", size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    w, h = size
+    draw.rounded_rectangle([0, 0, w - 1, h - 1], radius=4, fill=(0, 168, 107, 255))
+    draw.line([(4, 9), (7, 13), (14, 5)], fill=(255, 255, 255, 255), width=2)
+    return image
+
+
+def emote(size=(18, 18)):
+    """A chat emote: a glowing blue drop."""
+    image = Image.new("RGBA", size, (0, 0, 0, 0))
+    draw = ImageDraw.Draw(image)
+    w, h = size
+    draw.ellipse([1, 4, w - 2, h - 1], fill=(53, 208, 255, 255))
+    draw.polygon([(w // 2, 0), (3, 9), (w - 4, 9)], fill=(53, 208, 255, 255))
+    draw.ellipse([5, 8, 9, 12], fill=(255, 255, 255, 255))
+    return image
+
+
 def tide_gif(path, size=(160, 96), frames=12):
     """An animated GIF: waves rolling under a moon, looping."""
     w, h = size
@@ -201,6 +223,8 @@ def main():
         thumbnail(n).save(os.path.join(out, f"thumb-{n + 1}.jpg"), quality=80)
     for n in range(4):
         avatar(n).save(os.path.join(out, f"avatar-{n + 1}.png"), optimize=True)
+    badge().save(os.path.join(out, "badge.png"), optimize=True)
+    emote().save(os.path.join(out, "emote.png"), optimize=True)
     tide_gif(os.path.join(out, "tide.gif"))
 
 

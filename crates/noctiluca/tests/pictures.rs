@@ -186,3 +186,95 @@ fn kitty_plays_the_gif_itself_and_a_freeze_sends_its_still() {
     assert!(frozen.contains("a=T,U=1"), "no still sent");
     assert!(!frozen.contains("s=3"), "still animated");
 }
+
+#[test]
+fn small_pictures_in_a_logs_lines_are_drawn_in_their_cells() {
+    // The stream page's log: each message's badge and emotes are small
+    // pictures in its line, drawn in half blocks in place of their alt
+    // text.
+    let mut driver = driver("stream-with-log.html", Images::Ansi, 120, 40);
+    let (_, drawn) = run_until(&mut driver, Duration::from_secs(20), |_, screen| {
+        screen
+            .lines()
+            .any(|l| l.contains("the water is glowing") && l.contains('▀'))
+    });
+    let text = screen(&driver);
+    assert!(drawn, "no small picture drawn:\n{text}");
+    // A badge in front of its author, also a picture.
+    assert!(
+        text.lines().any(|l| l.contains("▀ ada")),
+        "no badge drawn:\n{text}"
+    );
+    assert!(!text.contains(":glow:"), "an emote left as text:\n{text}");
+}
+
+/// A page of one tall picture, 400 x 600 CSS pixels, with a long alt text
+/// and no caption of its own.
+fn tall_picture() -> noctiluca::model::Page {
+    use noctiluca::engine::Rect;
+    use noctiluca::model::{Block, BlockKind, Media, MediaKind, Page};
+    let rect = Rect::new(0.0, 0.0, 400.0, 600.0);
+    let mut page = Page::default();
+    page.media.push(Media {
+        node: 1,
+        kind: MediaKind::Image,
+        rect,
+        alt: "A lighthouse on a cliff above a bay where the water glows blue at night".into(),
+        src: "lighthouse.jpg".into(),
+        still: None,
+        picture: None,
+        captioned: false,
+        playback: None,
+        poster: String::new(),
+        controls: false,
+        empty_alt: false,
+        aria_hidden: false,
+        in_label: false,
+    });
+    page.blocks.push(Block {
+        kind: BlockKind::Media(0),
+        runs: Vec::new(),
+        quote: 0,
+        rect,
+        frame: rect,
+        node: 1,
+        region: None,
+    });
+    page
+}
+
+#[test]
+fn a_capped_pictures_caption_wraps_to_its_box_and_the_rule_switches_it_off() {
+    use noctiluca::adapt::{Adapt, Rule};
+    use noctiluca::layout::{project, Marks};
+    let page = tall_picture();
+    let marks = Marks::default();
+    let projection = project(&page, 100, (8.0, 18.0), &marks);
+    let region = projection.regions[0];
+    // Capped: fewer rows, narrowed to keep its shape.
+    assert!(region.rows < 600 / 18, "{region:?}");
+    assert!(region.cols < 50, "{region:?}");
+    let caption: Vec<String> = projection.lines[region.row + region.rows..]
+        .iter()
+        .map(|l| l.plain().trim_end().to_string())
+        .take_while(|l| !l.is_empty())
+        .collect();
+    assert!(caption[0].starts_with("Image: A lighthouse"), "{caption:?}");
+    // Wrapped to the picture's box (50 cells), not to the narrowed picture.
+    assert!(
+        caption
+            .iter()
+            .any(|l| rich::cells::cell_len(l) > region.cols),
+        "{caption:?}"
+    );
+    assert!(caption.iter().all(|l| rich::cells::cell_len(l) <= 50));
+    // Without the captions rule, no line of ours.
+    let mut adapt = Adapt::default();
+    adapt.set(Rule::Captions, false);
+    let marks = Marks {
+        adapt,
+        ..Marks::default()
+    };
+    let plain = project(&page, 100, (8.0, 18.0), &marks);
+    assert!(!plain.lines.iter().any(|l| l.plain().contains("Image:")));
+}

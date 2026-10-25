@@ -80,7 +80,14 @@ impl Cells {
         if let Some(lines) = self.made.borrow().get(&key) {
             return lines.clone();
         }
-        let lines = Rc::new(picture.lines(console, view(pixels), cols as u16, rows as u16));
+        // A small picture in a line (one row: an emote, a badge) keeps
+        // all of itself; a region fills its box.
+        let view = if rows == 1 {
+            ImageView::new().pixels(pixels)
+        } else {
+            view(pixels)
+        };
+        let lines = Rc::new(picture.lines(console, view, cols as u16, rows as u16));
         let mut made = self.made.borrow_mut();
         // Old frames go; what is on screen is made again at once.
         if made.len() > 512 {
@@ -223,6 +230,9 @@ impl Motion {
                 continue;
             }
             let moving = self.moving(media.node, &animation, region, pixels, now);
+            // Short of bytes from the start (its estimate under the floor):
+            // step down before sending a frame at all.
+            while moving.pacer.settle(&budget, share) {}
             if !frozen && moving.player.due(now) && moving.pacer.due(now, &budget, share) {
                 let id = moving.player.frame().id();
                 let spent = picture_bytes(id).saturating_sub(moving.bytes);
