@@ -378,3 +378,78 @@ fn a_site_with_audio_off_keeps_its_media_muted() {
     wait_for(&mut driver, "Unmute");
     assert!(state.lock().unwrap().media[&3].muted);
 }
+
+fn projection(config: Config, url: &str) -> Options {
+    Options {
+        view: Some(View::Projection),
+        ..options(config, url)
+    }
+}
+
+#[test]
+fn a_key_toggles_the_adapted_and_the_faithful_projection_and_about_lists_the_rules() {
+    // adapt.html was laid out at 72 columns: a narrow terminal.
+    let mut driver = app(
+        Box::new(engine()),
+        projection(Config::default(), "adapt.html"),
+    )
+    .driver(72, 40);
+    wait_for(&mut driver, "≡ Sections: News Sea Sky About");
+    driver.press("a");
+    wait_for(&mut driver, "faithful");
+    let text = screen(&driver);
+    assert!(!text.contains("≡ Sections"), "{text}");
+    driver.press("?");
+    wait_for(&mut driver, "About Noctiluca");
+    let text = screen(&driver);
+    assert!(text.contains("off, the faithful projection"), "{text}");
+    driver.press("esc");
+    driver.press("a");
+    wait_for(&mut driver, "≡ Sections");
+    driver.press("?");
+    wait_for(&mut driver, "active rules");
+    let text = screen(&driver);
+    for rule in ["decorative-images", "collapse-nav", "live-tail"] {
+        let line = text.lines().find(|l| l.contains(rule)).unwrap();
+        assert!(line.contains("on "), "{line}");
+    }
+    let line = text
+        .lines()
+        .find(|l| l.contains("text-over-pictures"))
+        .unwrap();
+    assert!(line.contains("off"), "{line}");
+}
+
+#[test]
+fn the_config_switches_a_rule_off() {
+    let config = Config::parse("[adapt]\ncollapse-nav = false\n").unwrap();
+    assert!(config.warnings.is_empty(), "{:?}", config.warnings);
+    let mut driver = app(Box::new(engine()), projection(config, "adapt.html")).driver(72, 40);
+    wait_for(&mut driver, "Before the pictures.");
+    assert!(!screen(&driver).contains('≡'));
+    driver.press("?");
+    wait_for(&mut driver, "About Noctiluca");
+    let text = screen(&driver);
+    let line = text.lines().find(|l| l.contains("collapse-nav")).unwrap();
+    assert!(line.contains("off"), "{line}");
+}
+
+#[test]
+fn a_live_log_scrolls_up_and_holds_then_follows_again() {
+    let mut driver = app(
+        Box::new(engine()),
+        projection(Config::default(), "log-div.html"),
+    )
+    .driver(100, 30);
+    wait_for(&mut driver, "ada: so blue");
+    driver.press("[");
+    wait_for(&mut driver, "paused");
+    let text = screen(&driver);
+    assert!(
+        text.contains("ada: first light") && !text.contains("so blue"),
+        "{text}"
+    );
+    driver.press("]");
+    wait_for(&mut driver, "following its newest entries");
+    assert!(screen(&driver).contains("ada: so blue"));
+}
