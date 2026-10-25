@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/music.tape",
   "tape_fnv1a64": "3b7483f2e3f22fe2",
-  "recorder": "rs-rich-record 0.0.8",
+  "recorder": "rs-rich-record 0.0.10",
   "rich": null,
-  "commit": "384b53e0ecc535c8d40bae6729fde95527f61fda",
+  "commit": "a8ae0c6b93b7add5ed87674f130c2339a9e43498",
   "screenshots": [
     "library",
     "playing",

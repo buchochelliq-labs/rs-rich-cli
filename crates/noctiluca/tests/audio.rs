@@ -20,8 +20,10 @@ use noctiluca::tab::{Command, Tab, Update};
 /// The RMS of 16-bit little-endian samples.
 fn rms(bytes: &[u8]) -> f64 {
     let samples: Vec<f64> = bytes
-        .chunks_exact(2)
-        .map(|b| i16::from_le_bytes([b[0], b[1]]) as f64 / 32768.0)
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|b| i16::from_le_bytes(*b) as f64 / 32768.0)
         .collect();
     if samples.is_empty() {
         return 0.0;
