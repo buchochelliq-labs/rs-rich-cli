@@ -107,9 +107,9 @@ bytes.
 
 | 80x24, release | ratatui | intuiTUIve |
 |---|---:|---:|
-| status tick | 92 µs, 37 B | **12 µs, 18 B** |
-| selection move | 83 µs, 184 B | **33 µs, 118 B** |
-| log append | 95 µs, 443 B | **23 µs, 325 B** |
+| status tick | 79 µs, 37 B | **8 µs, 18 B** |
+| selection move | 86 µs, 184 B | **21 µs, 118 B** |
+| log append | 89 µs, 443 B | **19 µs, 325 B** |
 
 Two more scenes are reported, not gated: a frame where every cell changes
 (an RGB swatch, as ratatui's `colors-rgb`), and a braille chart redrawn each
@@ -118,10 +118,10 @@ nothing when everything does, though intuiTUIve sends fewer bytes:
 
 | 80x24, release | ratatui | intuiTUIve |
 |---|---:|---:|
-| churn, every cell | **327 µs**, 62 kB | 788 µs, **61 kB** |
-| a chart redrawn | **83 µs**, 4.2 kB | 299 µs, **2.8 kB** |
+| churn, every cell | **319 µs**, 62 kB | 504 µs, **61 kB** |
+| a chart redrawn | **77 µs**, 4.2 kB | 270 µs, **2.8 kB** |
 
-[The rendering performance note](../../design/render-performance.md#what-was-built-measured)
+[The rendering performance note](../../design/render-performance.md#rich-made-faster-measured)
 has where the rest of that time goes, and every paint strategy measured.
 [The design note](../../design/intuituive.md) explains why. It also lists
 the architectural problems in ratatui that intuiTUIve is built to avoid:

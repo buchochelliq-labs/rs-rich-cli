@@ -9,6 +9,27 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### rich renders faster, byte for byte the same (core, ext)
+
+- **Fast paths in the mirror, output unchanged.** As AGENTS.md now allows,
+  `crates/rich` gains fast paths beside the ported code, each pinned by a
+  test and listed in docs/PORTING.md's "Performance notes": colour hex
+  names without `format!`; common characters' widths without the table
+  search, ASCII measured by its bytes, and `cell_len` in one pass; markup
+  tags found by scanning for brackets (the `RE_TAGS` regex stays as the
+  tests' reference), text runs borrowed, and closing-tag text built only
+  for its error; a `Style::normalize` cache, as upstream's `lru_cache`;
+  word wrapping over slices; `split_graphemes` in one pass; lines that
+  fit handed back without a copy; rendered segments moved into lines. A
+  table of markup redraws in a third of the time it took (1,377 to 457 µs
+  at 80x24), text in many scripts in under half, and every cell changing
+  colour in two thirds: 1.6 times ratatui's time, down from 2.5. The
+  goldens, the parity tables, the differential fuzzer and a byte compare
+  of 30,081 cases against the binary from before all agree.
+- **rs-rich-ext measures cells with rich's widths.** Its own quick widths
+  had taken U+9FBC to U+9FFF as two cells in every Unicode version; rich's
+  tables before 5.2 measure them one.
+
 ### Faster frames, paint strategies and a timedemo (ext, intuituive, interact)
 
 - **Frame stats with timings and counts.** `FrameStats` gains each frame's
