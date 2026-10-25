@@ -4,8 +4,9 @@
 //!
 //! A binary-boundary convenience (docs/PORTING.md): it composes rs-rich-ext's
 //! registry and loaders. Nothing loads unless the user asks: a runtime plugin
-//! needs a build with the `dylib-plugins` or `wasm-plugins` feature, and a
-//! path on the command line or in the user's own config. A project's
+//! needs a path on the command line or in the user's own config, or an
+//! approved `rich plugin install`. WASM loading (`wasm-plugins`) is a default
+//! feature; native loading (`dylib-plugins`) is not. A project's
 //! `./rich.toml` may not list plugins (see `config::UNTRUSTED_PLUGINS`).
 use super::*;
 use rich_ext::plugin::abi::ABI_MAJOR;

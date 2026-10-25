@@ -3,8 +3,8 @@
 //! with rs-rich-marketplace's test keys. No network: a local marketplace
 //! serves artifacts from its `artifacts/HOST/PATH` mirror only.
 //!
-//! The WASM cases need the `wasm-plugins` feature (CI's `--all-features`
-//! run and the plugin compatibility job); the rest run in every build.
+//! The WASM cases need the `wasm-plugins` feature (a default build has it);
+//! the rest run in every build.
 //!
 //! `write_test_marketplace` (ignored) writes the same marketplace, with the
 //! official plugins listed at this workspace's versions, for the CI job that
@@ -12,7 +12,7 @@
 //!
 //! ```bash
 //! RICH_TEST_MARKETPLACE=/tmp/market cargo test -p rs-rich-cli \
-//!     --features wasm-plugins --test plugin_marketplace -- --ignored write_test_marketplace
+//!     --test plugin_marketplace -- --ignored write_test_marketplace
 //! ```
 
 use std::io::Cursor;

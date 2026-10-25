@@ -18,7 +18,7 @@ cargo install rs-rich-cli     # installs a binary called `rich`
 rich --version
 ```
 
-The package is `rs-rich-cli`; the binary is `rich`. Six default Cargo
+The package is `rs-rich-cli`; the binary is `rich`. Seven default Cargo
 features can be turned off for a smaller, network-free binary:
 
 | Feature | Adds |
@@ -28,10 +28,11 @@ features can be turned off for a smaller, network-free binary:
 | `mermaid` | `rich mermaid` and ```` ```mermaid ```` fences, drawn as text |
 | `record` | `rich record`: scripted terminal recordings (implies `png`) |
 | `png` | `--export-png`, through the recorder's rasteriser |
+| `wasm-plugins` | sandboxed WASM plugins: `--plugin PATH`, a trusted config's `plugins`, and those `rich plugin install` installs |
 | `interact` | the interactive commands (`rich choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`, `color`, `asset`, `explore`, `date`) |
 
 `rich chart`, `rich dot`, `rich deps` and `rich schema` are in every build.
-`lumis`, `mmdc`, `arrow`, `dylib-plugins`, `wasm-plugins`, `syntax-cache`,
+`lumis`, `mmdc`, `arrow`, `dylib-plugins`, `syntax-cache`,
 `onig`, `json-escape-safe` and `serve` (`rich
 serve`, a program in a web browser) are off by default; the
 [crate README](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/crates/rich-cli#features)

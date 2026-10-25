@@ -298,7 +298,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--theme <NAME>` | Select a named theme from config. Config: `theme`. |
 | `--theme-style <NAME=STYLE>...` | Override a theme binding; repeatable and worker-safe. |
 | `--theme-file <PATH>` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it. Config: `theme_file`. |
-| `--plugin <PATH>...` | Load a runtime plugin: a WASM module (.wasm, sandboxed) or a native library (.so, .dylib, .dll, which runs its own code), in a build with the wasm-plugins or dylib-plugins feature; repeatable. `rich plugins list` shows what is loaded. Config: `plugins`. |
+| `--plugin <PATH>...` | Load a runtime plugin: a WASM module (.wasm, sandboxed; the default wasm-plugins feature) or a native library (.so, .dylib, .dll, which runs its own code; a build with the dylib-plugins feature); repeatable. `rich plugins list` shows what is loaded. Config: `plugins`. |
 | `--micro-project`, `--no-micro-project` | Load micro assets from the project's .rich/micro/ (off by default: a project's assets load only when you trust it; ./rich.toml cannot turn this on) Config: `micro_project`. |
 
 ### Output & reports
@@ -2862,7 +2862,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `collision` | enum: `error`, `overwrite`, `suffix` | `error` | | `--collision` | Batch policy for existing destinations |
 | `theme` | string | | | `--theme` | Select a named theme from config |
 | `theme_file` | string | | | `--theme-file` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it |
-| `plugins` | list of paths | | | `--plugin` | Load a runtime plugin: a WASM module (.wasm, sandboxed) or a native library (.so, .dylib, .dll, which runs its own code), in a build with the wasm-plugins or dylib-plugins feature; repeatable. `rich plugins list` shows what is loaded |
+| `plugins` | list of paths | | | `--plugin` | Load a runtime plugin: a WASM module (.wasm, sandboxed; the default wasm-plugins feature) or a native library (.so, .dylib, .dll, which runs its own code; a build with the dylib-plugins feature); repeatable. `rich plugins list` shows what is loaded |
 | `micro_project` | bool | | | `--micro-project` | Load micro assets from the project's .rich/micro/ (off by default: a project's assets load only when you trust it; ./rich.toml cannot turn this on) |
 | `no_color` | bool | | `NO_COLOR` | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) |
 | `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there |

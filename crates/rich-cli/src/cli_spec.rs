@@ -1455,9 +1455,10 @@ fn config_options() -> Vec<ArgSpec> {
             "plugin",
             "PATH",
             CONFIG,
-            "Load a runtime plugin: a WASM module (.wasm, sandboxed) or a native library \
-             (.so, .dylib, .dll, which runs its own code), in a build with the wasm-plugins \
-             or dylib-plugins feature; repeatable. `rich plugins list` shows what is loaded",
+            "Load a runtime plugin: a WASM module (.wasm, sandboxed; the default wasm-plugins \
+             feature) or a native library (.so, .dylib, .dll, which runs its own code; a build \
+             with the dylib-plugins feature); repeatable. `rich plugins list` shows what is \
+             loaded",
         )
         .value(ValueHint::File)
         .multiple(true)

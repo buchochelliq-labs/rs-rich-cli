@@ -2282,7 +2282,7 @@ serves intuiTUIve apps.
 rich plugins list
 rich plugins info mermaid
 rich plugins list --report json
-rich --plugin ~/plugins/shout.wasm -m README.md   # a build with wasm-plugins
+rich --plugin ~/plugins/shout.wasm -m README.md   # a sandboxed WASM plugin
 ```
 
 `rich plugins list` shows every plugin the binary has: the built-ins, any
@@ -2291,10 +2291,9 @@ each one's source (`built-in`, `linked`, `native`, `wasm`), version, ABI and
 capabilities. `rich plugins info NAME` shows one, with its path and
 description.
 
-Runtime plugins need a build with a feature that is off by default:
-`cargo install rs-rich-cli --features wasm-plugins` for sandboxed WASM modules,
-`--features dylib-plugins` for native libraries, which run their own code with
-your permissions. `--plugin PATH` loads one for a single run, and is
+A default build loads sandboxed WASM modules (the `wasm-plugins` feature, on
+by default since 0.0.22). Native libraries, which run their own code with
+your permissions, need `cargo install rs-rich-cli --features dylib-plugins`. `--plugin PATH` loads one for a single run, and is
 repeatable. To load them every time, list them in your own config:
 
 ```toml
@@ -2338,8 +2337,7 @@ Before it writes anything, `install` shows the package's tier
 (`official`, `reviewed` or `community`), its source and revision, the
 artifact's URL, SHA-256 and size, and its capabilities and permissions,
 then asks. Without a terminal it asks nothing: pass `--yes`, or it exits 3.
-Answering no exits 1. A WASM plugin needs a build with `wasm-plugins`, and
-is loaded in the sandbox before it is installed, to check that its
+Answering no exits 1. A WASM plugin is loaded in the sandbox before it is installed, to check that its
 manifest matches its listing.
 
 An installed, enabled WASM plugin loads on every run. Its file is checked

@@ -253,9 +253,10 @@ that declares a capability kind the host does not know.
 `native`, `wasm`), version, ABI and capabilities, and `rich plugins info NAME`
 shows one; both take `--report json`. A default build has three built in:
 `rich-ext` (the syntect code highlighter), `dot` and `mermaid`, plus `lumis` in
-a build with that feature. In a build with `dylib-plugins` or
-`wasm-plugins` (`cargo install rs-rich-cli --features wasm-plugins`),
-`--plugin PATH` loads a runtime plugin for one run, and a `plugins = [...]`
+a build with that feature. A default build loads WASM plugins (its
+`wasm-plugins` feature, on by default since 0.0.22), and a build with
+`dylib-plugins` (`cargo install rs-rich-cli --features dylib-plugins`)
+native ones too. `--plugin PATH` loads a runtime plugin for one run, and a `plugins = [...]`
 list in `~/.config/rich/config.toml` or a file given with `--config` loads
 them every time. A WASM plugin installed with `rich plugin install` (below)
 loads every time too, until it is disabled. Loaded plugins draw Markdown
@@ -337,7 +338,8 @@ rich plugin browse                # the same, in a selector with provenance
   capabilities must equal the listing's. Only then is the file written,
   with the lockfile.
 - **Loading.** An installed, enabled WASM plugin loads on every run without
-  `--plugin`, in a build with `wasm-plugins`. Each file is read once,
+  `--plugin` (a build without the default `wasm-plugins` feature warns and
+  skips them). Each file is read once,
   checked against the lockfile, and loaded from the bytes checked. A file
   that changed on disk is not loaded: the run goes on without it and warns.
   A plugin named with `--plugin` wins over an installed copy.
@@ -402,9 +404,11 @@ Plugins are code from someone else. What each kind can do, and what stands in
 its way:
 
 - **Nothing loads unless the user opts in.** Compile-time plugins are chosen
-  by whoever builds the binary. Runtime plugins need a Cargo feature that is
-  off by default, and then a path: on the command line, or in the user's own
-  config. A project's `./rich.toml` may **not** list plugins; `rich` ignores
+  by whoever builds the binary. A runtime plugin needs a path: on the
+  command line, or in the user's own config, or an install the user approved
+  with `rich plugin install`. The `rich` binary loads sandboxed WASM plugins
+  by default (its `wasm-plugins` feature, since 0.0.22); native libraries
+  need its `dylib-plugins` feature, which stays off by default. A project's `./rich.toml` may **not** list plugins; `rich` ignores
   the list with a warning, so cloning a repository and running `rich` in it
   never loads that repository's code. (The same rule keeps a project config
   from choosing `mermaid_backend = "mmdc"`, `dot_backend = "graphviz"` or

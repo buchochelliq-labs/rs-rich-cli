@@ -52,6 +52,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   asks before it writes anything; `--yes` answers for a script, and without
   a terminal nothing is asked or written (exit 3). A crate is refused with
   its `cargo add` line.
+- **`wasm-plugins` is a default feature of rs-rich-cli**, so a default
+  `rich` loads sandboxed WASM plugins with `--plugin` and installs them
+  from the marketplace. Native plugins (`dylib-plugins`) stay off by
+  default. The Python wheel's feature list is unchanged.
 - **An installed, enabled WASM plugin loads on every run without
   `--plugin`.** Its file is checked against the lockfile on each load; a
   changed file is not loaded, and the run warns.

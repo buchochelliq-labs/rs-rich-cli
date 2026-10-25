@@ -769,13 +769,13 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      - name: Build rich with WASM plugins
-        run: cargo build -p rs-rich-cli --features wasm-plugins --locked
+      - name: Build rich (WASM plugins are a default feature)
+        run: cargo build -p rs-rich-cli --locked
 
       - name: Write the test marketplace
         run: >-
           RICH_TEST_MARKETPLACE="$RUNNER_TEMP/marketplace"
-          cargo test -p rs-rich-cli --features wasm-plugins --locked --test plugin_marketplace
+          cargo test -p rs-rich-cli --locked --test plugin_marketplace
           -- --ignored --exact write_test_marketplace
 
       - name: Install the official plugins and the fixture plugin
