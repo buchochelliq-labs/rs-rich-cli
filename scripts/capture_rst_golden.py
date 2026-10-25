@@ -14,6 +14,13 @@ would downgrade rich; see AGENTS.md):
     pip install "rich==15.0.0" "rich-rst==1.3.2" "docutils==0.23"
     python scripts/capture_rst_golden.py
 
+With `--next`, it captures the release the port is moving to instead
+(`next` under `[rich-rst]` in UPSTREAM.toml; 2.x vendors its own docutils)
+into `fixtures/rst-next/`, which `rst.rs` measures but does not yet require:
+
+    pip install "rich==15.0.0" "rich-rst==2.2.0"
+    python scripts/capture_rst_golden.py --next
+
 Only documents without code blocks are captured in colour: code is
 highlighted by Pygments upstream and by syntect here, as `--syntax` is.
 OSC 8 link ids are random upstream and absent here, so they are dropped.
@@ -47,13 +54,16 @@ COLOUR = {
 }
 
 
-def check_versions() -> None:
+def check_versions(next_release: bool) -> None:
     pins = tomllib.loads((ROOT / "UPSTREAM.toml").read_text())
     for section in ("rich", "rich-rst"):
-        expected = pins[section]["version"]
+        key = "next" if next_release and section == "rich-rst" else "version"
+        expected = pins[section][key]
         installed = importlib.metadata.version(pins[section]["pypi"])
         if installed != expected:
             sys.exit(f"{section}: installed {installed}, expected {expected} from UPSTREAM.toml")
+    if next_release:
+        return
     expected = pins["rich-rst"]["docutils"]
     installed = importlib.metadata.version("docutils")
     if installed != expected:
@@ -82,16 +92,19 @@ def render(source: str, width: int, colour: bool) -> str:
 
 
 def main() -> None:
-    check_versions()
+    next_release = "--next" in sys.argv[1:]
+    check_versions(next_release)
+    target = FIXTURES.with_name("rst-next") if next_release else FIXTURES
+    target.mkdir(exist_ok=True)
     for path in sorted(FIXTURES.glob("*.rst")):
         source = path.read_text()
         for width in WIDTHS:
-            out = path.with_name(f"{path.stem}.{width}.txt")
+            out = target / f"{path.stem}.{width}.txt"
             out.write_text(render(source, width, colour=False), newline="\n")
             if path.stem in COLOUR:
-                out = path.with_name(f"{path.stem}.{width}.ansi")
+                out = target / f"{path.stem}.{width}.ansi"
                 out.write_text(render(source, width, colour=True), newline="\n")
-    print(f"captured {FIXTURES.relative_to(ROOT)}")
+    print(f"captured {target.relative_to(ROOT)}")
 
 
 if __name__ == "__main__":

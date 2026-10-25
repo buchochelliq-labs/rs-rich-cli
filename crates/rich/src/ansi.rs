@@ -162,18 +162,20 @@ impl AnsiDecoder {
         }
     }
 
-    /// Decode a multi-line terminal string into one [`Text`] per line.
+    /// Decode a multi-line terminal string into one [`Text`] per line. Port
+    /// of `AnsiDecoder.decode`: `re.split(r"(?<=\n)", text)` then
+    /// `line.rstrip("\n")`. Only `\n` ends a line (a `\r` before it is kept,
+    /// so it resets the line), and text ending in a newline, or empty text,
+    /// yields a final empty line.
+    ///
+    /// rich 12 split with `splitlines` instead; for that, decode
+    /// `text.lines()` one at a time with [`decode_line`](Self::decode_line).
     pub fn decode(&mut self, terminal_text: &str) -> Vec<Text> {
-        // `str::lines` matches Python's `splitlines` for `\n`/`\r\n` endings.
-        terminal_text.lines().map(|l| self.decode_line(l)).collect()
+        self.decode_split_newlines(terminal_text)
     }
 
-    /// Decode as upstream 15.0.0's `AnsiDecoder.decode` splits:
-    /// `re.split(r"(?<=\n)", text)` then `line.rstrip("\n")`. Only `\n` ends
-    /// a line (a `\r` before it is kept, so it resets the line), and text
-    /// ending in a newline, or empty text, yields a final empty line.
-    /// [`decode`](Self::decode) keeps the older `splitlines` behaviour that
-    /// existing callers rely on.
+    /// The same as [`decode`](Self::decode), which it was the only form of
+    /// before 0.0.22.
     pub fn decode_split_newlines(&mut self, terminal_text: &str) -> Vec<Text> {
         terminal_text
             .split_inclusive('\n')
@@ -277,6 +279,29 @@ mod tests {
     use super::*;
     use crate::color::ColorSystem;
     use crate::console::Console;
+
+    #[test]
+    fn decode_splits_as_rich_15() {
+        // Captured from rich 15.0.0's `AnsiDecoder().decode(s)` (`.markup`).
+        let cases: [(&str, &[&str]); 5] = [
+            ("a\r\nb\n", &["", "b", ""]),
+            ("", &[""]),
+            ("x", &["x"]),
+            ("a\n\nb", &["a", "", "b"]),
+            (
+                "\x1b[1mz\nw\x1b[0m\n",
+                &["[bold]z[/bold]", "[bold]w[/bold]", ""],
+            ),
+        ];
+        for (input, expected) in cases {
+            let got: Vec<String> = AnsiDecoder::new()
+                .decode(input)
+                .iter()
+                .map(Text::markup)
+                .collect();
+            assert_eq!(got, expected, "{input:?}");
+        }
+    }
 
     fn round_trip(input: &str) -> String {
         let mut decoder = AnsiDecoder::new();

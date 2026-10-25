@@ -102,7 +102,7 @@ fn render_for(report: &Report, console: &Console) {
     // The target renders for those capabilities (256 colours, ASCII)...
     let ansi: String = target.text(&table);
     // ...and the result is ordinary ANSI text.
-    for line in AnsiDecoder::new().decode(&ansi) {
+    for line in AnsiDecoder::new().decode(ansi.trim_end_matches('\n')) {
         console.print(&line);
     }
 }

@@ -61,6 +61,8 @@ from rich.text import Text
 from rich.theme import Theme as RichTheme
 from rich.tree import Tree
 
+from parity_docs import capture_parity_docs
+
 
 def _progress_table():
     """The default-column Progress display (no time columns) as a static grid."""
@@ -2971,6 +2973,7 @@ def main() -> None:
     from golden_parity_core import capture_parity_core
 
     capture_parity_core(golden_dir())
+    capture_parity_docs()
 
 
 # --- core gaps (bindings foundation) ------------------------------------------

@@ -975,6 +975,59 @@ impl Console {
         segments_to_plain(&segments)
     }
 
+    /// Like [`export_text`](Self::export_text) with escape codes. Port of
+    /// `Console.export_text(styles=True)`: each segment in the console's
+    /// colour system (upstream's style keeps the codes printing rendered),
+    /// or in truecolor, `Style.render`'s default, without one.
+    pub fn export_text_styled(&self, f: impl FnOnce(&Console)) -> String {
+        let system = self.color_system().unwrap_or(ColorSystem::Truecolor);
+        self.record(f)
+            .iter()
+            .map(|segment| match &segment.style {
+                Some(style) => style.render(&segment.text, Some(system)),
+                None => segment.text.clone(),
+            })
+            .collect()
+    }
+
+    /// Write what `f` prints to `path` as text, with escape codes when
+    /// `styles`. Port of `Console.save_text`.
+    pub fn save_text(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        styles: bool,
+        f: impl FnOnce(&Console),
+    ) -> std::io::Result<()> {
+        let text = if styles {
+            self.export_text_styled(f)
+        } else {
+            self.export_text(f)
+        };
+        std::fs::write(path, text)
+    }
+
+    /// Write what `f` prints to `path` as HTML with a stylesheet. Port of
+    /// `Console.save_html` (its default `inline_styles=False`).
+    pub fn save_html(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        f: impl FnOnce(&Console),
+    ) -> std::io::Result<()> {
+        std::fs::write(path, self.export_html_classes(f))
+    }
+
+    /// Write what `f` prints to `path` as SVG. Port of `Console.save_svg`;
+    /// as for [`export_svg`](Self::export_svg), the `unique_id` is given.
+    pub fn save_svg(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        title: &str,
+        unique_id: &str,
+        f: impl FnOnce(&Console),
+    ) -> std::io::Result<()> {
+        std::fs::write(path, self.export_svg(title, unique_id, f))
+    }
+
     /// Buffer everything printed inside `f` and display it through the system
     /// pager. The Rust analogue of upstream's `with console.pager():` block.
     ///
@@ -987,18 +1040,42 @@ impl Console {
     }
 
     /// Like [`page`](Self::page) but with an explicit [`Pager`](crate::pager::Pager)
-    /// — the seam upstream exposes as `Console.pager(pager=…)`.
+    /// — the seam upstream exposes as `Console.pager(pager=…)`. Hyperlinks
+    /// are stripped, as upstream's default `links=False` does.
     pub fn page_with(
         &self,
         pager: &dyn crate::pager::Pager,
         styles: bool,
         f: impl FnOnce(&Console),
     ) -> std::io::Result<()> {
-        let segments = self.record(f);
-        let content = if styles {
-            self.segments_to_string(&segments)
-        } else {
+        self.page_with_links(pager, styles, false, f)
+    }
+
+    /// Like [`page_with`](Self::page_with), keeping hyperlinks when `links`
+    /// and `styles` are both set. Port of `Console.pager(pager, styles,
+    /// links)`: without `styles` everything is plain, and without `links`
+    /// each style loses its link (`Segment.strip_links`).
+    pub fn page_with_links(
+        &self,
+        pager: &dyn crate::pager::Pager,
+        styles: bool,
+        links: bool,
+        f: impl FnOnce(&Console),
+    ) -> std::io::Result<()> {
+        let mut segments = self.record(f);
+        let content = if !styles {
             segments_to_plain(&segments)
+        } else {
+            if !links {
+                for segment in &mut segments {
+                    if let Some(style) = segment.style.as_mut() {
+                        if style.link().is_some() {
+                            *style = style.update_link(None);
+                        }
+                    }
+                }
+            }
+            self.segments_to_string(&segments)
         };
         pager.show(&content)
     }
@@ -2447,6 +2524,45 @@ mod tests {
             styled.0.lock().unwrap().as_str(),
             "\x1b[1;31mhi\x1b[0m there\n"
         );
+
+        // Links go unless `links` is set too (rich 15.0.0's
+        // `console.pager(styles=True, links=…)`, less the random `id=`).
+        let linked = |links: bool| {
+            let recorder = Recorder::default();
+            console
+                .page_with_links(&recorder, true, links, |c| {
+                    c.print_str("[bold link=https://x.io]hi[/] there")
+                })
+                .unwrap();
+            let out = recorder.0.lock().unwrap().clone();
+            out
+        };
+        assert_eq!(linked(false), "\x1b[1mhi\x1b[0m there\n");
+        assert_eq!(
+            linked(true),
+            "\x1b]8;;https://x.io\x1b\\\x1b[1mhi\x1b[0m\x1b]8;;\x1b\\ there\n"
+        );
+    }
+
+    #[test]
+    fn export_text_styled_renders_truecolor() {
+        // rich 15.0.0, recording `[#ff8800]x[/] y`, `export_text(styles=True)`:
+        // `\x1b[91mx…` on a `standard` console, truecolor with no colour.
+        let console = |system| {
+            Console::builder()
+                .force_terminal(true)
+                .color_system(system)
+                .width(20)
+                .no_color(false)
+                .build()
+        };
+        let export =
+            |console: Console| console.export_text_styled(|c| c.print_str("[#ff8800]x[/] y"));
+        assert_eq!(
+            export(console(Some(ColorSystem::Standard))),
+            "\x1b[91mx\x1b[0m y\n"
+        );
+        assert_eq!(export(console(None)), "\x1b[38;2;255;136;0mx\x1b[0m y\n");
     }
 
     #[test]

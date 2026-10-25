@@ -127,9 +127,8 @@ impl PromptBase {
         if self.case_sensitive {
             choices.iter().any(|choice| choice == value)
         } else {
-            choices
-                .iter()
-                .any(|choice| choice.eq_ignore_ascii_case(value))
+            let value = value.to_lowercase();
+            choices.iter().any(|choice| choice.to_lowercase() == value)
         }
     }
 
@@ -140,9 +139,10 @@ impl PromptBase {
         if self.case_sensitive {
             return None;
         }
+        let value = value.trim().to_lowercase();
         choices
             .iter()
-            .find(|choice| choice.eq_ignore_ascii_case(value.trim()))
+            .find(|choice| choice.to_lowercase() == value)
             .cloned()
     }
 
@@ -294,7 +294,7 @@ impl Confirm {
     /// Port of `Confirm.process_response` — case-insensitive, and anything that
     /// is not a choice is rejected outright.
     pub fn process_response(&self, value: &str) -> Result<bool, InvalidResponse> {
-        let value = value.trim().to_ascii_lowercase();
+        let value = value.trim().to_lowercase();
         match value.as_str() {
             "y" => Ok(true),
             "n" => Ok(false),
@@ -319,7 +319,7 @@ impl Confirm {
             let Some(value) = self.base.ask_once(console, input, rendered)? else {
                 return Ok(default.unwrap_or(false));
             };
-            if value.trim().is_empty() {
+            if value.is_empty() {
                 if let Some(default) = default {
                     return Ok(default);
                 }
@@ -344,6 +344,49 @@ pub struct FloatPrompt {
     base: PromptBase,
 }
 
+/// Python's `str()` of a prompt's default value.
+trait PyStr {
+    fn py_str(self) -> String;
+}
+
+impl PyStr for i64 {
+    fn py_str(self) -> String {
+        self.to_string()
+    }
+}
+
+impl PyStr for f64 {
+    /// `str(1.0)` is `1.0` and `str(1e20)` is `1e+20`, where Rust writes
+    /// `1` and `100000000000000000000`.
+    fn py_str(self) -> String {
+        crate::pyformat::float_repr(self)
+    }
+}
+
+/// The text with the underscores Python's `int()` and `float()` allow (one
+/// between two digits) removed, or `None` when one is misplaced.
+fn without_digit_underscores(value: &str) -> Option<String> {
+    if !value.contains('_') {
+        return Some(value.to_string());
+    }
+    let chars: Vec<char> = value.chars().collect();
+    let mut out = String::with_capacity(value.len());
+    for (index, &ch) in chars.iter().enumerate() {
+        if ch == '_' {
+            let before = index.checked_sub(1).map(|i| chars[i]);
+            let after = chars.get(index + 1).copied();
+            if !(before.is_some_and(|c| c.is_ascii_digit())
+                && after.is_some_and(|c| c.is_ascii_digit()))
+            {
+                return None;
+            }
+        } else {
+            out.push(ch);
+        }
+    }
+    Some(out)
+}
+
 /// Generate the two numeric prompts, which differ only in their parse target and
 /// their rejection message.
 macro_rules! numeric_prompt {
@@ -363,15 +406,15 @@ macro_rules! numeric_prompt {
             /// The rendered question, as [`ask`](Self::ask) would print it.
             pub fn make_prompt(&self, console: &Console, default: Option<$ty>) -> Text {
                 self.base
-                    .make_prompt(console, default.map(|d| d.to_string()).as_deref())
+                    .make_prompt(console, default.map(PyStr::py_str).as_deref())
             }
 
-            /// Parse one answer, rejecting anything that is not a number.
+            /// Parse one answer as Python's `int()` / `float()` would,
+            /// rejecting anything that is not a number.
             pub fn process_response(&self, value: &str) -> Result<$ty, InvalidResponse> {
-                value
-                    .trim()
-                    .parse::<$ty>()
-                    .map_err(|_| InvalidResponse($message.to_string()))
+                without_digit_underscores(value.trim())
+                    .and_then(|value| value.parse::<$ty>().ok())
+                    .ok_or_else(|| InvalidResponse($message.to_string()))
             }
 
             pub fn ask(&self, console: &Console, default: Option<$ty>) -> std::io::Result<$ty> {
@@ -384,13 +427,13 @@ macro_rules! numeric_prompt {
                 input: &mut dyn InputSource,
                 default: Option<$ty>,
             ) -> std::io::Result<$ty> {
-                let rendered = default.map(|d| d.to_string());
+                let rendered = default.map(PyStr::py_str);
                 loop {
                     let Some(value) = self.base.ask_once(console, input, rendered.as_deref())?
                     else {
                         return Ok(default.unwrap_or_default());
                     };
-                    if value.trim().is_empty() {
+                    if value.is_empty() {
                         if let Some(default) = default {
                             return Ok(default);
                         }
@@ -515,5 +558,61 @@ mod tests {
         let prompt = Prompt::new("Pick").choices(["a", "b"]).show_choices(false);
         assert!(!prompt.make_prompt(&console, None).plain().contains("[a/b]"));
         assert!(prompt.process_response("c").is_err());
+    }
+
+    #[test]
+    fn numbers_parse_as_python_does() {
+        // Captured from rich 15.0.0's `process_response` and `make_prompt`.
+        let int = IntPrompt::new("q");
+        let ints: Vec<Option<i64>> = ["1_000", " +5 ", "1__0", "_1", "1_", "0x10", "-0"]
+            .iter()
+            .map(|v| int.process_response(v).ok())
+            .collect();
+        assert_eq!(ints, [Some(1000), Some(5), None, None, None, None, Some(0)]);
+        let float = FloatPrompt::new("q");
+        let floats: Vec<Option<String>> = [
+            "1_0.5",
+            "inf",
+            "-Infinity",
+            ".5",
+            "5.",
+            "1e3",
+            "1e1_0",
+            "abc",
+        ]
+        .iter()
+        .map(|v| {
+            float
+                .process_response(v)
+                .ok()
+                .map(crate::pyformat::float_repr)
+        })
+        .collect();
+        let expected = [
+            "10.5",
+            "inf",
+            "-inf",
+            "0.5",
+            "5.0",
+            "1000.0",
+            "10000000000.0",
+        ];
+        let expected: Vec<Option<String>> = expected
+            .iter()
+            .map(|v| Some(v.to_string()))
+            .chain([None])
+            .collect();
+        assert_eq!(floats, expected);
+        assert!(float.process_response("nan").unwrap().is_nan());
+        let console = console();
+        assert_eq!(float.make_prompt(&console, Some(1.0)).plain(), "q (1.0): ");
+        assert_eq!(
+            float.make_prompt(&console, Some(1e20)).plain(),
+            "q (1e+20): "
+        );
+        let prompt = Prompt::new("q")
+            .choices(["Ärger", "b"])
+            .case_sensitive(false);
+        assert_eq!(prompt.process_response("ärger").unwrap(), "Ärger");
     }
 }

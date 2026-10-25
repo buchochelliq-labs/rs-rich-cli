@@ -182,6 +182,14 @@ impl Json {
         Json::with_options(text, &JsonOptions::default())
     }
 
+    /// Format data as JSON with `options`. Port of `JSON.from_data` for the
+    /// data JSON can hold (Rust has no arbitrary objects to `default=`):
+    /// objects keep their key order, as a Python `dict` does.
+    pub fn from_data(data: &serde_json::Value, options: &JsonOptions) -> Result<Self> {
+        let text = serde_json::to_string(data).map_err(|e| RichError::Json(e.to_string()))?;
+        Json::with_options(&text, options)
+    }
+
     /// Parse `text` as JSON and format it with `options`. Port of
     /// `rich.json.JSON(json, indent=…, highlight=…, …)`.
     pub fn with_options(text: &str, options: &JsonOptions) -> Result<Self> {

@@ -15,7 +15,8 @@
 //! - Text: [`text`], [`cells`], [`wrap`], [`emoji`], [`highlighter`], [`ansi`].
 //! - Renderables: [`panel`], [`table`], [`tree`], [`layout`], [`columns`],
 //!   [`align`], [`padding`], [`constrain`], [`rule`], [`bar`], [`markdown`],
-//!   [`syntax`], [`json`], [`pretty`], [`traceback`], [`log_render`].
+//!   [`syntax`], [`json`], [`pretty`], [`scope`], [`traceback`],
+//!   [`log_render`].
 //! - Live output: [`live`], [`progress`] (with [`track`]), [`progress_bar`],
 //!   [`spinner`], [`status`].
 //! - Input and paging: [`prompt`], [`pager`].
@@ -83,6 +84,7 @@ pub mod ratio;
 pub mod region;
 mod repr_patterns;
 pub mod rule;
+pub mod scope;
 pub mod screen;
 pub mod segment;
 pub mod spinner;
@@ -127,7 +129,7 @@ pub use crate::log_render::{level_text, LogLevel, LogRecord, LogRender};
 pub use crate::padding::Padding;
 pub use crate::pager::{Pager, SystemPager};
 pub use crate::panel::Panel;
-pub use crate::pretty::Pretty;
+pub use crate::pretty::{Pretty, PrettyValue};
 pub use crate::progress::{
     track, BarColumn, CustomColumn, CustomProgressColumn, LiveProgress, Progress, ProgressColumn,
     ProgressReader, SpinnerColumn, Task, TaskId, TaskUpdate, TextColumn, TimeRemainingColumn,
@@ -140,6 +142,7 @@ pub use crate::protocol::{
 };
 pub use crate::region::Region;
 pub use crate::rule::Rule;
+pub use crate::scope::render_scope;
 pub use crate::screen::Screen;
 pub use crate::segment::Segment;
 pub use crate::spinner::Spinner;
