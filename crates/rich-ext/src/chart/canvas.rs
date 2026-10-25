@@ -182,31 +182,52 @@ pub(crate) fn octant(bits: u8) -> char {
 }
 
 /// The points on the line from `a` to `b`, both ends included.
-pub(crate) fn bresenham(a: (i64, i64), b: (i64, i64)) -> Vec<(i64, i64)> {
-    let (mut x0, mut y0) = a;
-    let (x1, y1) = b;
-    let dx = (x1 - x0).abs();
-    let dy = -(y1 - y0).abs();
-    let sx = if x0 < x1 { 1 } else { -1 };
-    let sy = if y0 < y1 { 1 } else { -1 };
-    let mut err = dx + dy;
-    let mut out = Vec::with_capacity((dx.max(-dy) + 1) as usize);
-    loop {
-        out.push((x0, y0));
-        if x0 == x1 && y0 == y1 {
-            break;
-        }
-        let e2 = 2 * err;
-        if e2 >= dy {
-            err += dy;
-            x0 += sx;
-        }
-        if e2 <= dx {
-            err += dx;
-            y0 += sy;
-        }
+pub(crate) fn bresenham(a: (i64, i64), b: (i64, i64)) -> Bresenham {
+    let (dx, dy) = ((b.0 - a.0).abs(), -(b.1 - a.1).abs());
+    Bresenham {
+        at: Some(a),
+        end: b,
+        dx,
+        dy,
+        sx: if a.0 < b.0 { 1 } else { -1 },
+        sy: if a.1 < b.1 { 1 } else { -1 },
+        err: dx + dy,
     }
-    out
+}
+
+/// The points of a [`bresenham`] line, one at a time, without a buffer.
+pub(crate) struct Bresenham {
+    at: Option<(i64, i64)>,
+    end: (i64, i64),
+    dx: i64,
+    dy: i64,
+    sx: i64,
+    sy: i64,
+    err: i64,
+}
+
+impl Iterator for Bresenham {
+    type Item = (i64, i64);
+
+    fn next(&mut self) -> Option<(i64, i64)> {
+        let (mut x0, mut y0) = self.at?;
+        let point = (x0, y0);
+        if point == self.end {
+            self.at = None;
+            return Some(point);
+        }
+        let e2 = 2 * self.err;
+        if e2 >= self.dy {
+            self.err += self.dy;
+            x0 += self.sx;
+        }
+        if e2 <= self.dx {
+            self.err += self.dx;
+            y0 += self.sy;
+        }
+        self.at = Some((x0, y0));
+        Some(point)
+    }
 }
 
 #[cfg(test)]
@@ -233,9 +254,12 @@ mod tests {
 
     #[test]
     fn lines_include_both_ends() {
-        assert_eq!(bresenham((0, 0), (3, 0)).len(), 4);
-        assert_eq!(bresenham((0, 0), (0, 0)), vec![(0, 0)]);
-        assert_eq!(bresenham((2, 2), (0, 0)), vec![(2, 2), (1, 1), (0, 0)]);
+        assert_eq!(bresenham((0, 0), (3, 0)).count(), 4);
+        assert_eq!(bresenham((0, 0), (0, 0)).collect::<Vec<_>>(), vec![(0, 0)]);
+        assert_eq!(
+            bresenham((2, 2), (0, 0)).collect::<Vec<_>>(),
+            vec![(2, 2), (1, 1), (0, 0)]
+        );
         let mut c = DotCanvas::new(2, 1);
         c.line((0, 3), (3, 0), 0);
         assert_eq!(c.row_string(0), "⡠⠊");

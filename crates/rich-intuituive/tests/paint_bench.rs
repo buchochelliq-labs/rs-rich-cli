@@ -53,16 +53,21 @@ enum Scene {
     ListRow,
     /// A table re-sorted: every row changes, its styles stay.
     TableSort,
-    /// Every cell in a new colour.
+    /// Every cell in a new colour, drawn with rs-rich-ext's fast path.
     Churn,
-    /// A braille chart redrawn.
+    /// A braille chart redrawn, drawn with rs-rich-ext's fast path.
     Chart,
+    /// [`Churn`](Scene::Churn) through rich's path: a `Segment` and a
+    /// `Style` a cell.
+    ChurnRich,
+    /// [`Chart`](Scene::Chart) through rich's path: rendered to segments.
+    ChartRich,
     /// Text of many scripts redrawn: combining accents, wide CJK and
     /// Hangul, Greek. What takes the grapheme-splitting path.
     Unicode,
 }
 
-const SCENES: [Scene; 10] = [
+const SCENES: [Scene; 12] = [
     Scene::Blink,
     Scene::Typing,
     Scene::StatusClock,
@@ -73,6 +78,8 @@ const SCENES: [Scene; 10] = [
     Scene::Churn,
     Scene::Chart,
     Scene::Unicode,
+    Scene::ChurnRich,
+    Scene::ChartRich,
 ];
 
 const STRATEGIES: [PaintStrategy; 5] = [
@@ -224,6 +231,8 @@ fn app(scene: Scene, rows: u16) -> App {
         }),
         Scene::Churn => bench::churn_app(),
         Scene::Chart => bench::chart_app(),
+        Scene::ChurnRich => bench::churn_rich_app(),
+        Scene::ChartRich => bench::chart_rich_app(),
     }
 }
 
@@ -521,6 +530,52 @@ fn every_strategy_reproduces_every_scene() {
     }
 }
 
+/// Every cell of `screen`: its text, width and style.
+fn cells_of(screen: &Screen) -> Vec<(String, u8, Option<rich::Style>)> {
+    let area = screen.area();
+    let mut out = Vec::new();
+    for y in 0..area.height {
+        for x in 0..area.width {
+            let cell = screen.cell(x, y);
+            let style = screen.style(cell.style).cloned();
+            out.push((cell.text().to_string(), cell.width, style));
+        }
+    }
+    out
+}
+
+/// rich's path and rs-rich-ext's fast path draw each two-path scene to
+/// the same cells, and paint them to the same bytes, frame after frame.
+#[test]
+fn the_two_paths_draw_the_same_cells() {
+    let _serial = serial();
+    for (fast, rich) in [
+        (Scene::Churn, Scene::ChurnRich),
+        (Scene::Chart, Scene::ChartRich),
+    ] {
+        for (w, h) in [(20, 6), (80, 24), (133, 41)] {
+            let key = Event::Key(Key::parse(fast.key()).unwrap());
+            let mut a = app(fast, h).driver(w, h);
+            let mut b = app(rich, h).driver(w, h);
+            for frame in 0..6 {
+                for driver in [&mut a, &mut b] {
+                    if frame > 0 {
+                        driver.event(key.clone());
+                    }
+                    driver.update(Duration::ZERO);
+                }
+                let (bytes_a, bytes_b) = (a.render(), b.render());
+                assert_eq!(
+                    cells_of(a.screen()),
+                    cells_of(b.screen()),
+                    "{fast:?} at {w}x{h}, frame {frame}"
+                );
+                assert_eq!(bytes_a, bytes_b, "{fast:?} at {w}x{h}, frame {frame}");
+            }
+        }
+    }
+}
+
 #[test]
 fn the_scenes_change_what_they_say() {
     let _serial = serial();
@@ -581,7 +636,12 @@ fn paint_strategies_benchmark() {
     for (w, h) in [(80, 24), (200, 60)] {
         for &scene in &scenes {
             let frames = match scene {
-                Scene::Churn | Scene::Chart | Scene::TableSort | Scene::Unicode => frames / 4,
+                Scene::Churn
+                | Scene::Chart
+                | Scene::ChurnRich
+                | Scene::ChartRich
+                | Scene::TableSort
+                | Scene::Unicode => frames / 4,
                 // The field holds a screen's width of typing.
                 Scene::Typing => frames.min(60),
                 _ => frames,

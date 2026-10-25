@@ -333,6 +333,23 @@ impl Cell {
     }
 }
 
+/// A run of text in one style, for rs-rich-ext's fast path
+/// ([`Screen::write_runs`]): the text borrowed, the style an id already
+/// interned in the screen written to. rich's [`Segment`] owns its text and
+/// its [`Style`]; a run owns neither, so a line of runs costs no
+/// allocation a run.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub struct TextRun<'a> {
+    pub text: &'a str,
+    pub style: StyleId,
+}
+
+impl<'a> TextRun<'a> {
+    pub fn new(text: &'a str, style: StyleId) -> TextRun<'a> {
+        TextRun { text, style }
+    }
+}
+
 /// The grid of cells, and the styles they use.
 ///
 /// The style table only grows as cells are written; a screen kept between
@@ -355,6 +372,10 @@ pub struct Screen {
     /// [`forget_scrolls`](Self::forget_scrolls), newest last (a few): what
     /// a painter tries first when it looks for rows that moved.
     scrolled: Vec<(Rect, u16)>,
+    /// Scratch for writing lines, kept so a frame allocates none: each
+    /// segment's style id, and a run's graphemes.
+    scratch_ids: Vec<StyleId>,
+    scratch_spans: Vec<(usize, usize, usize)>,
 }
 
 impl Screen {
@@ -367,6 +388,8 @@ impl Screen {
             layer: None,
             layered: HashMap::default(),
             scrolled: Vec::new(),
+            scratch_ids: Vec::new(),
+            scratch_spans: Vec::new(),
         }
     }
 
@@ -677,126 +700,225 @@ impl Screen {
         if !direct {
             return false;
         }
-        let mut spans: Vec<(usize, usize, usize)> = Vec::new();
+        let mut spans = std::mem::take(&mut self.scratch_spans);
+        let mut ids = std::mem::take(&mut self.scratch_ids);
         for row in 0..rect.height {
-            let y = rect.y + row;
-            let mut x = rect.x;
-            // What a zero-width grapheme joins: the cell last written, or,
-            // before any, the row's first (`lead` gathers them); none once
-            // the row is cut at the edge.
-            let mut last: Option<u16> = None;
-            let mut lead = String::new();
-            let mut cut = false;
-            for segment in lines.get(row as usize).into_iter().flatten() {
-                if segment.control {
-                    continue;
-                }
+            let line = lines.get(row as usize).map_or(&[][..], Vec::as_slice);
+            ids.clear();
+            for segment in line {
                 // A style that sets nothing is no style.
                 let style = segment.style.as_ref().filter(|s| !s.is_null());
-                let id = self.styles.intern(style);
-                // One look at the text: ASCII printables pass at once.
-                let (mut simple, mut controls) = (true, false);
-                for c in segment.text.chars() {
-                    if (' '..='~').contains(&c) {
-                        continue;
-                    }
-                    if super::control_picture(c).is_some() {
-                        controls = true;
-                    } else if !matches!(char_width(c), 1 | 2) || c == '\u{200d}' || c == '\u{fe0f}'
-                    {
-                        simple = false;
-                    }
-                }
-                if simple && !controls {
-                    // A character a grapheme: straight into cells.
-                    let mut chars = segment.text.chars();
-                    if !lead.is_empty() && !cut {
-                        if let Some(c) = chars.next() {
-                            lead.push(c);
-                            let piece = std::mem::take(&mut lead);
-                            self.put_grapheme(
-                                rect,
-                                &mut x,
-                                y,
-                                &piece,
-                                char_width(c),
-                                id,
-                                &mut last,
-                                &mut cut,
-                            );
-                        }
-                    }
-                    for c in chars {
-                        if cut {
-                            break;
-                        }
-                        if x >= rect.right() {
-                            cut = true;
-                            break;
-                        }
-                        let width = char_width(c) as u16;
-                        if width == 2 && x + 1 >= rect.right() {
-                            self.cell_mut(x, y).set(" ", 1, id);
-                            x += 1;
-                            cut = true;
-                            continue;
-                        }
-                        *self.cell_mut(x, y) = Cell::char(c, width as u8, id);
-                        if width == 2 {
-                            self.cell_mut(x + 1, y).set("", 0, id);
-                        }
-                        last = Some(x);
-                        x += width;
-                    }
-                    continue;
-                }
-                let sanitized;
-                let text = if controls {
-                    sanitized = segment
-                        .text
-                        .chars()
-                        .map(|c| super::control_picture(c).unwrap_or(c))
-                        .collect::<String>();
-                    sanitized.as_str()
+                ids.push(if segment.control {
+                    StyleId::NONE
                 } else {
-                    segment.text.as_str()
-                };
-                spans.clear();
-                spans.extend(rich::cells::split_graphemes(text).0);
-                for &(from, to, width) in &spans {
-                    let piece = &text[from..to];
-                    if width == 0 {
-                        if cut {
-                            continue;
-                        }
-                        match last {
-                            Some(at) => {
-                                let cell = *self.cell(at, y);
-                                let joined = format!("{}{piece}", cell.text());
-                                *self.cell_mut(at, y) = Cell::new(&joined, cell.width, cell.style);
-                            }
-                            None => lead.push_str(piece),
-                        }
-                        continue;
-                    }
-                    if !lead.is_empty() && !cut {
-                        let piece = std::mem::take(&mut lead) + piece;
-                        self.put_grapheme(rect, &mut x, y, &piece, width, id, &mut last, &mut cut);
-                    } else {
-                        self.put_grapheme(rect, &mut x, y, piece, width, id, &mut last, &mut cut);
-                    }
-                }
+                    self.styles.intern(style)
+                });
             }
-            while x < rect.right() {
-                *self.cell_mut(x, y) = Cell::blank();
-                x += 1;
-            }
+            let pieces = line
+                .iter()
+                .zip(&ids)
+                .filter(|(segment, _)| !segment.control)
+                .map(|(segment, &id)| (segment.text.as_str(), id));
+            self.write_row(rect, rect.y + row, pieces, &mut spans);
         }
+        self.scratch_spans = spans;
+        self.scratch_ids = ids;
         true
     }
 
+    /// The fast path's [`write_lines`](Self::write_lines): rows of
+    /// [`TextRun`]s, each a borrowed text and a style already interned in
+    /// this screen, written into `rect` as `write_lines` writes the same
+    /// text in the same styles, without a [`Segment`] or a [`Style`] a run.
+    /// Rows and columns the runs do not reach are cleared. A run with a
+    /// line break falls back to `write_lines` (its text cannot be one row).
+    ///
+    /// ```
+    /// use rich::{Segment, Style};
+    /// use rich_ext::frame::StyleId;
+    /// use rich_ext::surface::{Rect, Screen, TextRun};
+    ///
+    /// let mut fast = Screen::new(6, 1);
+    /// let bold = fast.intern(Some(&Style::parse("bold").unwrap()));
+    /// fast.write_runs(
+    ///     Rect::new(0, 0, 6, 1),
+    ///     &[vec![TextRun::new("ab", bold), TextRun::new("c", StyleId::NONE)]],
+    /// );
+    /// // The same cells as rich's path.
+    /// let mut slow = Screen::new(6, 1);
+    /// slow.write_lines(
+    ///     Rect::new(0, 0, 6, 1),
+    ///     &[vec![Segment::new("ab", Some(Style::parse("bold").unwrap())), Segment::new("c", None)]],
+    /// );
+    /// assert_eq!(fast.lines(), slow.lines());
+    /// ```
+    pub fn write_runs<'t, L: AsRef<[TextRun<'t>]>>(&mut self, rect: Rect, lines: &[L]) {
+        let rect = rect.intersection(self.area());
+        if rect.is_empty() {
+            return;
+        }
+        let lines = &lines[..lines.len().min(rect.height as usize)];
+        // What only the Frame path writes: a line break inside a run, or a
+        // style with metadata (region tags).
+        let mut checked = None;
+        let framed = lines.iter().flat_map(AsRef::as_ref).any(|run| {
+            run.text.contains('\n')
+                || checked != Some(run.style) && {
+                    checked = Some(run.style);
+                    self.styles
+                        .get(run.style)
+                        .is_some_and(|s| s.meta_ref().is_some())
+                }
+        });
+        if framed {
+            let segments: Vec<Vec<Segment>> = lines
+                .iter()
+                .map(|line| {
+                    line.as_ref()
+                        .iter()
+                        .map(|run| Segment::new(run.text, self.style(run.style).cloned()))
+                        .collect()
+                })
+                .collect();
+            self.write_lines(rect, &segments);
+            return;
+        }
+        self.split_edges(rect);
+        let mut spans = std::mem::take(&mut self.scratch_spans);
+        let mut ids = std::mem::take(&mut self.scratch_ids);
+        for row in 0..rect.height {
+            let line = lines.get(row as usize).map_or(&[][..], AsRef::as_ref);
+            ids.clear();
+            // A style that sets nothing is no style, as for segments.
+            ids.extend(line.iter().map(|run| match self.styles.get(run.style) {
+                Some(style) if style.is_null() => StyleId::NONE,
+                _ => run.style,
+            }));
+            let pieces = line.iter().zip(&ids).map(|(run, &id)| (run.text, id));
+            self.write_row(rect, rect.y + row, pieces, &mut spans);
+        }
+        self.scratch_spans = spans;
+        self.scratch_ids = ids;
+    }
+
+    /// One row of [`write_lines`](Self::write_lines) and
+    /// [`write_runs`](Self::write_runs): `pieces` of text, each in a style
+    /// of this screen, from the left of `rect` on row `y`; the rest of the
+    /// row is cleared.
+    fn write_row<'t>(
+        &mut self,
+        rect: Rect,
+        y: u16,
+        pieces: impl Iterator<Item = (&'t str, StyleId)>,
+        spans: &mut Vec<(usize, usize, usize)>,
+    ) {
+        let mut x = rect.x;
+        // What a zero-width grapheme joins: the cell last written, or,
+        // before any, the row's first (`lead` gathers them); none once
+        // the row is cut at the edge.
+        let mut last: Option<u16> = None;
+        let mut lead = String::new();
+        let mut cut = false;
+        for (text, id) in pieces {
+            // One look at the text: ASCII printables pass at once.
+            let (mut simple, mut controls) = (true, false);
+            for c in text.chars() {
+                if (' '..='~').contains(&c) {
+                    continue;
+                }
+                if super::control_picture(c).is_some() {
+                    controls = true;
+                } else if !matches!(char_width(c), 1 | 2) || c == '\u{200d}' || c == '\u{fe0f}' {
+                    simple = false;
+                }
+            }
+            if simple && !controls {
+                // A character a grapheme: straight into cells.
+                let mut chars = text.chars();
+                if !lead.is_empty() && !cut {
+                    if let Some(c) = chars.next() {
+                        lead.push(c);
+                        let piece = std::mem::take(&mut lead);
+                        self.put_grapheme(
+                            rect,
+                            &mut x,
+                            y,
+                            &piece,
+                            char_width(c),
+                            id,
+                            &mut last,
+                            &mut cut,
+                        );
+                    }
+                }
+                for c in chars {
+                    if cut {
+                        break;
+                    }
+                    if x >= rect.right() {
+                        cut = true;
+                        break;
+                    }
+                    let width = char_width(c) as u16;
+                    if width == 2 && x + 1 >= rect.right() {
+                        self.cell_mut(x, y).set(" ", 1, id);
+                        x += 1;
+                        cut = true;
+                        continue;
+                    }
+                    *self.cell_mut(x, y) = Cell::char(c, width as u8, id);
+                    if width == 2 {
+                        self.cell_mut(x + 1, y).set("", 0, id);
+                    }
+                    last = Some(x);
+                    x += width;
+                }
+                continue;
+            }
+            let sanitized;
+            let text = if controls {
+                sanitized = text
+                    .chars()
+                    .map(|c| super::control_picture(c).unwrap_or(c))
+                    .collect::<String>();
+                sanitized.as_str()
+            } else {
+                text
+            };
+            spans.clear();
+            spans.extend(rich::cells::split_graphemes(text).0);
+            for &(from, to, width) in spans.iter() {
+                let piece = &text[from..to];
+                if width == 0 {
+                    if cut {
+                        continue;
+                    }
+                    match last {
+                        Some(at) => {
+                            let cell = *self.cell(at, y);
+                            let joined = format!("{}{piece}", cell.text());
+                            *self.cell_mut(at, y) = Cell::new(&joined, cell.width, cell.style);
+                        }
+                        None => lead.push_str(piece),
+                    }
+                    continue;
+                }
+                if !lead.is_empty() && !cut {
+                    let piece = std::mem::take(&mut lead) + piece;
+                    self.put_grapheme(rect, &mut x, y, &piece, width, id, &mut last, &mut cut);
+                } else {
+                    self.put_grapheme(rect, &mut x, y, piece, width, id, &mut last, &mut cut);
+                }
+            }
+        }
+        while x < rect.right() {
+            *self.cell_mut(x, y) = Cell::blank();
+            x += 1;
+        }
+    }
+
     /// One grapheme `width` cells wide at `x` of row `y`, for
-    /// [`write_simple_lines`](Self::write_simple_lines): cut to a space at
+    /// [`write_row`](Self::write_row): cut to a space at
     /// the rectangle's edge, nothing past it.
     #[allow(clippy::too_many_arguments)]
     fn put_grapheme(
@@ -1236,6 +1358,10 @@ pub struct Painter {
     codes: Vec<Option<Sgr>>,
     /// The SGR parameters of the style being set, when they are not cached.
     scratch: Sgr,
+    /// True-colour pairs' parameters, per style id.
+    rgb_codes: RgbCodes,
+    /// The pen's parameters from the last frame, kept for their buffers.
+    spare: Option<Sgr>,
     /// Painting an inline region below the cursor, with relative moves,
     /// rather than the whole screen with absolute ones.
     inline: bool,
@@ -1401,6 +1527,8 @@ impl Painter {
             system,
             codes: Vec::new(),
             scratch: Sgr::default(),
+            rgb_codes: RgbCodes::default(),
+            spare: None,
             inline: false,
             cursor: None,
             height: 0,
@@ -1620,6 +1748,7 @@ impl Painter {
             }
         }
         self.codes = codes;
+        self.rgb_codes.clear();
     }
 
     /// Drop the styles `screen`'s cells no longer use, when its table has
@@ -1681,6 +1810,7 @@ impl Painter {
             }
             self.previous = None;
             self.codes.clear();
+            self.rgb_codes.clear();
             vec![screen.area()]
         } else {
             // A column either side too: writing a rectangle can turn the
@@ -1760,6 +1890,9 @@ impl Painter {
         }
         if pen.rgb.is_some() || pen.codes.as_ref().is_some_and(|c| !c.full.is_empty()) {
             out.push_str("\x1b[0m");
+        }
+        if let Some(codes) = pen.codes.take() {
+            self.spare = Some(codes);
         }
         self.stats.style_bytes += out.len() - before;
         let stats = &mut self.stats;
@@ -2214,6 +2347,20 @@ impl Painter {
         if pen.style == Some(style) {
             return;
         }
+        // A colour pair (no link) in true colour while no link is open:
+        // straight to the colours.
+        if pen.link.is_none() {
+            if let (Some(pair), Some(ColorSystem::Truecolor), Some(old)) =
+                (screen.styles.rgb(style), self.system, pen.rgb)
+            {
+                if old != pair {
+                    rgb_delta(old, pair, self.rgb_codes.get(style, pair), out);
+                }
+                pen.rgb = Some(pair);
+                pen.style = Some(style);
+                return;
+            }
+        }
         let resolved = screen.style(style);
         // A URL holding a control would end the OSC early and drive the
         // terminal with the rest: such a link is dropped.
@@ -2238,7 +2385,7 @@ impl Painter {
             // and from the last pair only the colour that changed.
             match pen.rgb {
                 Some(old) if old == pair => {}
-                Some(old) => rgb_delta(old, pair, out),
+                Some(old) => rgb_delta(old, pair, self.rgb_codes.get(style, pair), out),
                 None => {
                     self.scratch.set_rgb(pair.0, pair.1);
                     if pen.codes.as_ref() != Some(&self.scratch) {
@@ -2253,40 +2400,52 @@ impl Painter {
         if let Some((fg, bg)) = pen.rgb.take() {
             // What the pen holds, as parameters again.
             self.scratch.set_rgb(fg, bg);
-            pen.codes = Some(self.scratch.clone());
+            let held = pen
+                .codes
+                .get_or_insert_with(|| self.spare.take().unwrap_or_default());
+            held.clone_from(&self.scratch);
         }
         self.sgr(screen, style);
         let codes = self.codes[style.index()].as_ref().expect("cached above");
         // Styles that differ only in their link share colours: no SGR.
         if pen.codes.as_ref() != Some(codes) {
             codes.write_from(pen.codes.as_ref(), out);
-            match &mut pen.codes {
-                Some(current) => current.clone_from(codes),
-                None => pen.codes = Some(codes.clone()),
-            }
+            // The last frame's buffers, rather than new ones.
+            let held = pen
+                .codes
+                .get_or_insert_with(|| self.spare.take().unwrap_or_default());
+            held.clone_from(codes);
         }
         pen.style = Some(style);
     }
 }
 
 /// The SGR that changes a true-colour pen from `old` to `new`: only the
-/// colours that differ (a colour gone is its default, 39 or 49).
-fn rgb_delta(old: (Option<Rgb>, Option<Rgb>), new: (Option<Rgb>, Option<Rgb>), out: &mut String) {
+/// colours that differ (a colour gone is its default, 39 or 49). `sgr` is
+/// `new`'s, encoded.
+fn rgb_delta(
+    old: (Option<Rgb>, Option<Rgb>),
+    new: (Option<Rgb>, Option<Rgb>),
+    sgr: RgbSgr<'_>,
+    out: &mut String,
+) {
+    let fg = old.0 != new.0;
+    let bg = old.1 != new.1;
+    if fg && bg && new.0.is_some() && new.1.is_some() {
+        out.push_str(sgr.whole);
+        return;
+    }
     out.push_str("\x1b[");
     let mut first = true;
-    for (was, now, lead, default) in [(old.0, new.0, "38;2;", "39"), (old.1, new.1, "48;2;", "49")]
-    {
-        if was == now {
+    for (changed, now, code, default) in [(fg, new.0, sgr.fg, "39"), (bg, new.1, sgr.bg, "49")] {
+        if !changed {
             continue;
         }
         if !first {
             out.push(';');
         }
         first = false;
-        match now {
-            Some(rgb) => rgb_code(out, lead, rgb),
-            None => out.push_str(default),
-        }
+        out.push_str(if now.is_some() { code } else { default });
     }
     out.push('m');
 }
@@ -2363,6 +2522,85 @@ fn push_u8(out: &mut String, n: u8) {
         out.push(char::from(b'0' + n / 10 % 10));
     }
     out.push(char::from(b'0' + n % 10));
+}
+
+/// A true-colour pair's SGR, encoded once per style id: where it starts
+/// in [`RgbCodes::text`], and how long the foreground's and the
+/// background's parameters are.
+#[derive(Clone, Copy)]
+struct RgbAt {
+    at: u32,
+    fg: u8,
+    bg: u8,
+}
+
+/// The encoded SGR of the true-colour pairs a painter has written, by
+/// style id: a colour frame repeats its pairs, so each is formatted once,
+/// not once a cell. Each is kept whole (`ESC [ 38;2;r;g;b ; 48;2;r;g;b m`),
+/// so a change of both colours is one copy, and either colour's
+/// parameters are a slice of it.
+#[derive(Default)]
+struct RgbCodes {
+    text: String,
+    at: Vec<Option<RgbAt>>,
+}
+
+/// What [`RgbCodes::get`] hands back: the whole SGR, and the foreground's
+/// and the background's parameters (empty when missing).
+struct RgbSgr<'a> {
+    whole: &'a str,
+    fg: &'a str,
+    bg: &'a str,
+}
+
+impl RgbCodes {
+    fn clear(&mut self) {
+        self.text.clear();
+        self.at.clear();
+    }
+
+    /// Style `id`'s SGR, its colours `pair`.
+    fn get(&mut self, id: StyleId, pair: (Option<Rgb>, Option<Rgb>)) -> RgbSgr<'_> {
+        if self.at.len() <= id.index() {
+            self.at.resize(id.index() + 1, None);
+        }
+        let at = match self.at[id.index()] {
+            Some(at) => at,
+            None => {
+                let start = self.text.len();
+                self.text.push_str("\x1b[");
+                if let Some(fg) = pair.0 {
+                    rgb_code(&mut self.text, "38;2;", fg);
+                }
+                let middle = self.text.len();
+                if pair.0.is_some() && pair.1.is_some() {
+                    self.text.push(';');
+                }
+                let second = self.text.len();
+                if let Some(bg) = pair.1 {
+                    rgb_code(&mut self.text, "48;2;", bg);
+                }
+                let end = self.text.len();
+                self.text.push('m');
+                let at = RgbAt {
+                    at: start as u32,
+                    fg: (middle - start - 2) as u8,
+                    bg: (end - second) as u8,
+                };
+                self.at[id.index()] = Some(at);
+                at
+            }
+        };
+        let start = at.at as usize;
+        let fg = start + 2..start + 2 + at.fg as usize;
+        let joint = usize::from(at.fg > 0 && at.bg > 0);
+        let bg = fg.end + joint..fg.end + joint + at.bg as usize;
+        RgbSgr {
+            whole: &self.text[start..bg.end + 1],
+            fg: &self.text[fg],
+            bg: &self.text[bg],
+        }
+    }
 }
 
 /// For each row, the merged column spans the rectangles cover.

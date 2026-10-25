@@ -58,6 +58,10 @@ pub fn wave(tick: u64) -> Vec<(f64, f64)> {
 pub struct Swatch {
     pub tick: Signal<u64>,
     pub grid: Vec<Vec<(u8, u8, u8)>>,
+    /// Drawn through rich's path (a `Segment` and a `Style` a cell, written
+    /// with `Canvas::lines`) rather than rs-rich-ext's fast path
+    /// (`Canvas::put_rgb`): the same cells, for the two-path comparison.
+    pub rich: bool,
 }
 
 impl intuituive::Widget for Swatch {
@@ -66,6 +70,23 @@ impl intuituive::Widget for Swatch {
         let (width, rows) = (canvas.width() as usize, canvas.height() as usize);
         if self.grid.len() != rows * 2 || self.grid.first().map(Vec::len) != Some(width) {
             self.grid = swatch_grid(width, rows);
+        }
+        if !self.rich {
+            let rgb = |(r, g, b): (u8, u8, u8)| Some([r, g, b]);
+            for y in 0..rows {
+                let (upper, lower) = (&self.grid[y * 2], &self.grid[y * 2 + 1]);
+                for x in 0..width {
+                    let column = (x + shift) % width.max(1);
+                    canvas.put_rgb(
+                        x as u16,
+                        y as u16,
+                        '▀',
+                        rgb(upper[column]),
+                        rgb(lower[column]),
+                    );
+                }
+            }
+            return;
         }
         let colour = |(r, g, b): (u8, u8, u8)| rich::Color::from_rgb(r, g, b);
         let lines: Vec<Vec<rich::Segment>> = (0..rows)
@@ -87,33 +108,72 @@ impl intuituive::Widget for Swatch {
 }
 
 /// Every cell in a new colour each frame (an RGB swatch, as ratatui's
-/// `colors-rgb`): `t` moves it on.
+/// `colors-rgb`): `t` moves it on. Drawn with rs-rich-ext's fast path.
 pub fn churn_app() -> App {
-    App::new(|| {
+    swatch_app(false)
+}
+
+/// [`churn_app`] drawn through rich's `Segment`s and `Style`s.
+pub fn churn_rich_app() -> App {
+    swatch_app(true)
+}
+
+fn swatch_app(rich: bool) -> App {
+    App::new(move || {
         let tick = signal(0u64);
         intuituive::widget(Swatch {
             tick,
             grid: Vec::new(),
+            rich,
         })
         .on_key("t", move |_| tick.update(|t| *t += 1))
         .on_key("q", |cx| cx.quit())
     })
 }
 
-/// A braille line chart of a moving sine wave: `t` moves it on.
+/// The benchmark's chart: a braille line of the wave at `tick`, `width`
+/// x `height`.
+pub fn wave_chart(tick: u64, width: u16, height: u16) -> rich_ext::chart::Chart {
+    use rich_ext::chart::{Axis, Chart, Dataset, GraphType, Marker};
+    Chart::new([Dataset::new(wave(tick))
+        .marker(Marker::Braille)
+        .graph_type(GraphType::Line)
+        .style("cyan")])
+    .x_axis(Axis::default().bounds(0.0, 20.0))
+    .y_axis(Axis::default().bounds(-1.0, 1.0))
+    .width(width as usize)
+    .height(height.max(2) as usize)
+}
+
+/// A braille line chart of a moving sine wave: `t` moves it on. Drawn with
+/// rs-rich-ext's fast path.
 pub fn chart_app() -> App {
     App::new(|| {
-        use rich_ext::chart::{Axis, Chart, Dataset, GraphType, Marker};
+        let tick = signal(0u64);
+        intuituive::widget(WaveChart { tick })
+            .on_key("t", move |_| tick.update(|t| *t += 1))
+            .on_key("q", |cx| cx.quit())
+    })
+}
+
+/// The chart as a widget drawing through the fast path.
+struct WaveChart {
+    tick: Signal<u64>,
+}
+
+impl intuituive::Widget for WaveChart {
+    fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        let chart = wave_chart(self.tick.get(), canvas.width(), canvas.height());
+        canvas.draw(cx.console(), &chart);
+    }
+}
+
+/// [`chart_app`] rendered to rich segments and written as lines.
+pub fn chart_rich_app() -> App {
+    App::new(|| {
         let tick = signal(0u64);
         leaf(move |console, width, height| {
-            let chart = Chart::new([Dataset::new(wave(tick.get()))
-                .marker(Marker::Braille)
-                .graph_type(GraphType::Line)
-                .style("cyan")])
-            .x_axis(Axis::default().bounds(0.0, 20.0))
-            .y_axis(Axis::default().bounds(-1.0, 1.0))
-            .width(width as usize)
-            .height(height.max(2) as usize);
+            let chart = wave_chart(tick.get(), width, height);
             let options = console.options().update_width(width as usize);
             console.render_lines(&chart, &options, false)
         })

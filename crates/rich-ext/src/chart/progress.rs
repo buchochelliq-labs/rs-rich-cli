@@ -300,6 +300,24 @@ struct GaugeStyles {
     label_on_rest: Style,
 }
 
+impl crate::surface::Draw for FillGauge {
+    fn draw(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        screen: &mut crate::surface::Screen,
+        rect: crate::surface::Rect,
+    ) {
+        super::draw_lines(
+            self.lines(console, options),
+            options.max_width,
+            options,
+            screen,
+            rect,
+        );
+    }
+}
+
 impl Renderable for FillGauge {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         lines_to_segments(self.lines(console, options), options.max_width)
@@ -487,6 +505,24 @@ impl LineGauge {
             style(&self.unfilled_style, "chart.gauge.unfilled"),
         );
         line
+    }
+}
+
+impl crate::surface::Draw for LineGauge {
+    fn draw(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        screen: &mut crate::surface::Screen,
+        rect: crate::surface::Rect,
+    ) {
+        super::draw_lines(
+            vec![self.line_of(console, options)],
+            options.max_width,
+            options,
+            screen,
+            rect,
+        );
     }
 }
 

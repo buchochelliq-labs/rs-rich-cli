@@ -42,12 +42,65 @@ mod screen;
 use std::io::{self, Write};
 use std::sync::Arc;
 
-use rich::{Console, Renderable, Segment};
+use rich::{Console, ConsoleOptions, Renderable, Segment};
 
 use crate::frame::{plan_graphics, Change, Frame, Placement, PlacementSource};
 
 pub(crate) use screen::char_width;
-pub use screen::{Cell, PaintStats, PaintStrategy, Painter, Rect, Screen};
+pub use screen::{Cell, PaintStats, PaintStrategy, Painter, Rect, Screen, TextRun};
+
+/// Drawing straight into a [`Screen`]'s cells: rs-rich-ext's fast path.
+///
+/// rich renders to [`Segment`]s, each owning its text and a [`Style`]
+/// (whose colours own their names), and a [`Screen`] turns those back into
+/// cells. rich's path is the faithful one, and stays the reference: rich's
+/// public types are unchanged. A renderable that also implements `Draw`
+/// writes the same cells without building them: its own data goes into
+/// the screen's cells with each style interned once
+/// ([`Screen::write_runs`], [`Screen::put_rgb`], [`Screen::put`]).
+/// rs-rich-ext's charts implement it, and intuiTUIve draws with it by
+/// default.
+///
+/// rich's path is [`draw_rendered`]: render, then [`Screen::write_lines`].
+/// An implementation must give the same cells as it (the tests compare the
+/// two for every chart that has one).
+///
+/// ```
+/// use rich::Console;
+/// use rich_ext::chart::{Dataset, Chart};
+/// use rich_ext::surface::{Draw, Rect, Screen};
+///
+/// let console = Console::builder().width(30).build();
+/// let options = console.options().update_width(30).update_height(8);
+/// let chart = Chart::new([Dataset::new([(0.0, 0.0), (1.0, 1.0), (2.0, 0.5)])]);
+/// let rect = Rect::new(0, 0, 30, 8);
+///
+/// let mut fast = Screen::new(30, 8);
+/// chart.draw(&console, &options, &mut fast, rect);
+///
+/// let mut rich_path = Screen::new(30, 8);
+/// rich_path.write_lines(rect, &console.render_lines(&chart, &options, false));
+/// assert_eq!(fast.lines(), rich_path.lines());
+/// ```
+pub trait Draw: Renderable {
+    /// Draw into `rect` of `screen`, rendered with `options` (its width and
+    /// height are the rectangle's): the cells `screen.write_lines(rect,
+    /// &console.render_lines(self, options, false))` would give.
+    fn draw(&self, console: &Console, options: &ConsoleOptions, screen: &mut Screen, rect: Rect);
+}
+
+/// rich's path, the reference [`Draw`] is held to: `renderable` rendered
+/// with `options`, its lines written into `rect` of `screen`.
+pub fn draw_rendered(
+    console: &Console,
+    renderable: &dyn Renderable,
+    options: &ConsoleOptions,
+    screen: &mut Screen,
+    rect: Rect,
+) {
+    let lines = console.render_lines(renderable, options, false);
+    screen.write_lines(rect, &lines);
+}
 
 /// Begins a synchronized update (DEC private mode 2026): the terminal holds
 /// the screen until [`END_SYNCHRONIZED_UPDATE`].
@@ -453,6 +506,22 @@ impl Drawing<'_> {
             .update_height(rect.height.max(1) as usize);
         let lines = self.console.render_lines(renderable, &options, false);
         self.write_lines(rect, lines);
+    }
+
+    /// [`render`](Self::render) through rs-rich-ext's fast path
+    /// ([`Draw`]): the same cells. With graphics to place, rich's path, which
+    /// they are found in.
+    pub fn draw(&mut self, rect: Rect, drawable: &dyn Draw) {
+        if self.graphics.is_some() {
+            return self.render(rect, drawable);
+        }
+        let options = self
+            .console
+            .options()
+            .update_width(rect.width.max(1) as usize)
+            .update_height(rect.height.max(1) as usize);
+        drawable.draw(self.console, &options, self.screen, rect);
+        self.damage.push(rect);
     }
 
     /// Write rendered `lines` into `rect`, replacing what was there (see

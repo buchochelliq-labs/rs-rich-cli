@@ -10,9 +10,12 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 use super::canvas::{bresenham, octant, quadrant, sextant};
 use super::world::MapResolution;
 use super::{
-    cell_units, cells, lines_to_segments, theme_style, user_style, Charset, DotCanvas, Line,
+    cell_units, cells, draw_grid, lines_to_segments, theme_style, user_style, Charset, DotCanvas,
+    Line,
 };
 use crate::fidelity::ascii_text;
+use crate::frame::{StyleId, StyleTable};
+use crate::surface::{Cell, Draw, Rect, Screen, TextRun};
 
 /// Rows a [`Canvas`] takes unless [`Canvas::height`] says otherwise.
 const DEFAULT_HEIGHT: usize = 10;
@@ -449,6 +452,12 @@ fn background_style(style: Style) -> Style {
     }
 }
 
+impl Draw for Canvas {
+    fn draw(&self, console: &Console, options: &ConsoleOptions, screen: &mut Screen, rect: Rect) {
+        draw_grid(self.grid(console, options), options, screen, rect);
+    }
+}
+
 impl Renderable for Canvas {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         lines_to_segments(self.grid(console, options).into_lines(), options.max_width)
@@ -768,17 +777,23 @@ impl Layer {
     /// Copy the cells this layer drew in onto `out`.
     fn finish(&self, out: &mut CellGrid, styles: &Styles) {
         let columns = self.resolution().0;
+        // Each style interned in `out` once.
+        let ids: Vec<StyleId> = styles
+            .resolved
+            .iter()
+            .map(|style| out.intern(style.as_ref()))
+            .collect();
         for row in 0..self.height {
             for col in 0..self.width {
                 let cell = match (&self.pixels, self.marker) {
                     (Pixels::Braille(canvas), _) => match canvas.cell(col, row) {
-                        (c, Some(style)) if canvas.is_set(col, row) => Some((c, styles.get(style))),
+                        (c, Some(style)) if canvas.is_set(col, row) => Some((c, ids[style])),
                         _ => None,
                     },
                     (Pixels::Pattern { bits, styles: set }, marker) => {
                         let i = row * self.width + col;
                         (bits[i] != 0).then(|| {
-                            let style = set[i].and_then(|s| styles.get(s));
+                            let style = set[i].map_or(StyleId::NONE, |s| ids[s]);
                             (marker.pattern(bits[i]), style)
                         })
                     }
@@ -786,6 +801,7 @@ impl Layer {
                         let upper = grid[2 * row * columns + col];
                         let lower = grid[(2 * row + 1) * columns + col];
                         half_block(upper, lower, styles)
+                            .map(|(c, style)| (c, out.intern(style.as_ref())))
                     }
                     (Pixels::Grid(grid), marker) => grid[row * columns + col].map(|s| {
                         let glyph = match marker {
@@ -794,11 +810,11 @@ impl Layer {
                             Marker::Ascii(c) => c,
                             _ => '•',
                         };
-                        (glyph, styles.get(s))
+                        (glyph, ids[s])
                     }),
                 };
                 if let Some((c, style)) = cell {
-                    out.set(row, col, c.to_string(), style);
+                    out.set_char(row, col, c, style);
                 }
             }
         }
@@ -909,11 +925,18 @@ pub(crate) fn raster(ops: &[Op], view: &View, console: &Console) -> CellGrid {
 /// A grid of terminal cells: each empty, or a character (with any marks
 /// after it) and a style. The second cell of a wide character holds an
 /// empty string.
+///
+/// The cells are plain data: the text inline (a [`Cell`]) and the style an
+/// id into the grid's own [`StyleTable`], each style kept once. Setting a
+/// cell allocates nothing, and the grid becomes lines a run at a time, or
+/// goes straight into a [`Screen`](crate::surface::Screen)'s cells (see
+/// [`draw`](Self::draw)).
 #[derive(Clone, Debug)]
 pub(crate) struct CellGrid {
     width: usize,
     height: usize,
-    cells: Vec<Option<(String, Option<Style>)>>,
+    cells: Vec<Option<Cell>>,
+    styles: StyleTable,
 }
 
 impl CellGrid {
@@ -922,24 +945,64 @@ impl CellGrid {
             width,
             height,
             cells: vec![None; width * height],
+            styles: StyleTable::new(),
         }
+    }
+
+    /// The id of `style` in this grid.
+    pub(crate) fn intern(&mut self, style: Option<&Style>) -> StyleId {
+        self.styles.intern(style)
+    }
+
+    /// The style behind `id`.
+    fn style(&self, id: StyleId) -> Option<&Style> {
+        self.styles.get(id)
     }
 
     /// Set one cell, blanking the other half of any wide character it
     /// cuts in two. Out of range is ignored.
     pub(crate) fn set(&mut self, row: usize, col: usize, text: String, style: Option<Style>) {
+        let id = self.intern(style.as_ref());
+        self.set_id(row, col, &text, id);
+    }
+
+    /// [`set`](Self::set) with a style already interned.
+    pub(crate) fn set_id(&mut self, row: usize, col: usize, text: &str, style: StyleId) {
         if row >= self.height || col >= self.width {
             return;
         }
+        let width = if text.len() == 1 {
+            1
+        } else {
+            cells(text).min(u8::MAX as usize) as u8
+        };
+        self.put(row, col, Cell::new(text, width, style));
+    }
+
+    /// [`set`](Self::set) with one character, its style already interned.
+    pub(crate) fn set_char(&mut self, row: usize, col: usize, c: char, style: StyleId) {
+        if row >= self.height || col >= self.width {
+            return;
+        }
+        let mut buffer = [0u8; 4];
+        let text = c.encode_utf8(&mut buffer);
+        let width = char_cell_width(c).min(u8::MAX as usize) as u8;
+        self.put(row, col, Cell::new(text, width, style));
+    }
+
+    fn put(&mut self, row: usize, col: usize, cell: Cell) {
         let i = row * self.width + col;
-        let blank = || Some((" ".to_string(), None));
-        if !text.is_empty() && col > 0 && matches!(&self.cells[i], Some((t, _)) if t.is_empty()) {
-            self.cells[i - 1] = blank();
+        let blank = Some(Cell::new(" ", 1, StyleId::NONE));
+        if !cell.text().is_empty()
+            && col > 0
+            && matches!(&self.cells[i], Some(c) if c.text().is_empty())
+        {
+            self.cells[i - 1] = blank;
         }
-        if col + 1 < self.width && matches!(&self.cells[i], Some((t, _)) if cells(t) > 1) {
-            self.cells[i + 1] = blank();
+        if col + 1 < self.width && matches!(&self.cells[i], Some(c) if c.width > 1) {
+            self.cells[i + 1] = blank;
         }
-        self.cells[i] = Some((text, style));
+        self.cells[i] = Some(cell);
     }
 
     /// Write `text` from `col`, stopping before column `end` (and the
@@ -952,6 +1015,7 @@ impl CellGrid {
         style: Option<Style>,
         end: usize,
     ) {
+        let id = self.intern(style.as_ref());
         let end = end.min(self.width);
         let units = cell_units(text);
         let mut at = col;
@@ -960,15 +1024,11 @@ impl CellGrid {
             let unit = &units[i];
             let wide = i + 1 < units.len() && units[i + 1].is_empty() && !unit.is_empty();
             if wide && at + 1 >= end {
-                self.set(row, at, " ".to_string(), style.clone());
+                self.set_id(row, at, " ", id);
                 break;
             }
-            let unit = if unit.is_empty() && i == 0 {
-                " ".to_string()
-            } else {
-                unit.clone()
-            };
-            self.set(row, at, unit, style.clone());
+            let unit = if unit.is_empty() && i == 0 { " " } else { unit };
+            self.set_id(row, at, unit, id);
             at += 1;
             i += 1;
         }
@@ -977,17 +1037,36 @@ impl CellGrid {
     /// Put `style` under every cell: empty cells become spaces in it, and
     /// drawn cells take it under their own.
     pub(crate) fn underlay(&mut self, style: &Style) {
-        for cell in &mut self.cells {
-            *cell = Some(match cell.take() {
-                None => (" ".to_string(), Some(style.clone())),
-                Some((text, own)) => {
-                    let combined = match own {
-                        Some(own) => style.combine(&own),
-                        None => style.clone(),
+        let under = self.intern(Some(style));
+        // Each style combined once: by own id, the combined id.
+        let mut combined: Vec<Option<StyleId>> = vec![None; self.styles.len()];
+        for at in 0..self.cells.len() {
+            let cell = match self.cells[at] {
+                None => Cell::new(" ", 1, under),
+                Some(cell) => {
+                    let own = cell.style;
+                    let id = match combined.get(own.index()).copied().flatten() {
+                        Some(id) => id,
+                        None => {
+                            let id = match self.styles.get(own).cloned() {
+                                Some(own_style) => {
+                                    self.styles.intern(Some(&style.combine(&own_style)))
+                                }
+                                None => under,
+                            };
+                            if combined.len() <= own.index() {
+                                combined.resize(own.index() + 1, None);
+                            }
+                            combined[own.index()] = Some(id);
+                            id
+                        }
                     };
-                    (text, Some(combined))
+                    let mut cell = cell;
+                    cell.style = id;
+                    cell
                 }
-            });
+            };
+            self.cells[at] = Some(cell);
         }
     }
 
@@ -995,8 +1074,9 @@ impl CellGrid {
     /// empty. Out of range is ignored.
     pub(crate) fn restyle(&mut self, row: usize, col: usize, style: Option<Style>) {
         if row < self.height && col < self.width {
-            if let Some((_, own)) = &mut self.cells[row * self.width + col] {
-                *own = style;
+            let id = self.intern(style.as_ref());
+            if let Some(cell) = &mut self.cells[row * self.width + col] {
+                cell.style = id;
             }
         }
     }
@@ -1004,10 +1084,24 @@ impl CellGrid {
     /// Copy the non-empty cells of `other` here, its top left at (`row`,
     /// `col`).
     pub(crate) fn blit(&mut self, other: &CellGrid, row: usize, col: usize) {
+        // Each of `other`'s styles interned here once.
+        let mut ids: Vec<Option<StyleId>> = vec![None; other.styles.len()];
         for r in 0..other.height {
             for c in 0..other.width {
-                if let Some((text, style)) = &other.cells[r * other.width + c] {
-                    self.set(row + r, col + c, text.clone(), style.clone());
+                if let Some(cell) = other.cells[r * other.width + c] {
+                    let id = match ids[cell.style.index()] {
+                        Some(id) => id,
+                        None => {
+                            let id = self.intern(other.style(cell.style));
+                            ids[cell.style.index()] = Some(id);
+                            id
+                        }
+                    };
+                    if row + r < self.height && col + c < self.width {
+                        let mut cell = cell;
+                        cell.style = id;
+                        self.put(row + r, col + c, cell);
+                    }
                 }
             }
         }
@@ -1018,7 +1112,7 @@ impl CellGrid {
     pub(crate) fn row_string(&self, row: usize) -> String {
         (0..self.width)
             .map(|c| match &self.cells[row * self.width + c] {
-                Some((t, _)) => t.clone(),
+                Some(cell) => cell.text().to_string(),
                 None => " ".to_string(),
             })
             .collect()
@@ -1029,24 +1123,94 @@ impl CellGrid {
     pub(crate) fn style_at(&self, row: usize, col: usize) -> Option<Style> {
         self.cells[row * self.width + col]
             .as_ref()
-            .and_then(|(_, s)| s.clone())
+            .and_then(|cell| self.style(cell.style).cloned())
     }
 
+    /// The rows as lines, a run of one style at a time.
     pub(crate) fn into_lines(self) -> Vec<Line> {
-        let width = self.width;
-        let mut cells = self.cells.into_iter();
+        let mut text = String::new();
         (0..self.height)
-            .map(|_| {
+            .map(|row| {
                 let mut line = Line::new();
-                for cell in cells.by_ref().take(width) {
-                    match cell {
-                        Some((text, style)) => line.push(&text, style),
-                        None => line.push(" ", None),
+                let cells = &self.cells[row * self.width..(row + 1) * self.width];
+                let mut style = None;
+                for cell in cells {
+                    let (piece, id) = match cell {
+                        Some(cell) => (cell.text(), cell.style),
+                        None => (" ", StyleId::NONE),
+                    };
+                    if piece.is_empty() {
+                        continue;
                     }
+                    if style != Some(id) {
+                        if let Some(last) = style {
+                            line.push(&text, self.style(last).cloned());
+                        }
+                        text.clear();
+                        style = Some(id);
+                    }
+                    text.push_str(piece);
                 }
+                if let Some(last) = style {
+                    line.push(&text, self.style(last).cloned());
+                }
+                text.clear();
                 line
             })
             .collect()
+    }
+
+    /// The fast path: the grid straight into `rect` of `screen`, the cells
+    /// that [`Screen::write_lines`] of its rendered lines (`into_lines`, then
+    /// [`lines_to_segments`]) would give, without building a line, a
+    /// segment or a style a run.
+    /// At most `rows` rows.
+    pub(crate) fn draw(&self, screen: &mut Screen, rect: Rect, rows: usize) {
+        let mut ids: Vec<Option<StyleId>> = vec![None; self.styles.len()];
+        let rows = self.height.min(rect.height as usize).min(rows);
+        // Each row's runs of one style, their text one after another in
+        // one buffer: (start, end, screen style) and where each row ends.
+        let mut text = String::with_capacity(rows * self.width);
+        let mut spans: Vec<(usize, usize, StyleId)> = Vec::new();
+        let mut ends = Vec::with_capacity(rows);
+        for row in 0..rows {
+            let cells = &self.cells[row * self.width..(row + 1) * self.width];
+            let mut style = None;
+            for cell in cells {
+                let (piece, own) = match cell {
+                    Some(cell) => (cell.text(), cell.style),
+                    None => (" ", StyleId::NONE),
+                };
+                if piece.is_empty() {
+                    continue;
+                }
+                if style != Some(own) {
+                    style = Some(own);
+                    let id =
+                        *ids[own.index()].get_or_insert_with(|| screen.intern(self.style(own)));
+                    spans.push((text.len(), text.len(), id));
+                }
+                text.push_str(piece);
+                if let Some(last) = spans.last_mut() {
+                    last.1 = text.len();
+                }
+            }
+            ends.push(spans.len());
+        }
+        let runs: Vec<TextRun<'_>> = spans
+            .iter()
+            .map(|&(from, to, id)| TextRun::new(&text[from..to], id))
+            .collect();
+        let mut start = 0;
+        let lines: Vec<&[TextRun<'_>]> = ends
+            .iter()
+            .map(|&end| {
+                let line = &runs[start..end];
+                start = end;
+                line
+            })
+            .collect();
+        screen.write_runs(rect, &lines);
     }
 }
 

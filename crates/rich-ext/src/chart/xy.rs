@@ -1058,17 +1058,18 @@ impl Chart {
         }
 
         // Axis lines.
+        let (x_id, y_id) = (grid.intern(x_style.as_ref()), grid.intern(y_style.as_ref()));
         if let Some(row) = axis_x {
             for col in gx..w {
-                grid.set(row, col, h_line.to_string(), x_style.clone());
+                grid.set_char(row, col, h_line, x_id);
             }
         }
         if let Some(col) = axis_y {
             for row in 0..gh {
-                grid.set(row, col, v_line.to_string(), y_style.clone());
+                grid.set_char(row, col, v_line, y_id);
             }
             if let Some(row) = axis_x {
-                grid.set(row, col, corner.to_string(), x_style.clone());
+                grid.set_char(row, col, corner, x_id);
             }
         }
 
@@ -1535,6 +1536,19 @@ impl Chart {
     pub(crate) fn with_y_bounds(mut self, min: f64, max: f64) -> Self {
         self.y_axis.bounds = Some([min, max]);
         self
+    }
+}
+
+impl crate::surface::Draw for Chart {
+    fn draw(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        screen: &mut crate::surface::Screen,
+        rect: crate::surface::Rect,
+    ) {
+        let view = self.stacked_view();
+        super::draw_grid(view.grid(console, options), options, screen, rect);
     }
 }
 
