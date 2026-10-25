@@ -363,3 +363,18 @@ Ctrl+C), and the app comes back as it was once there is room:
 ```rust
 App::new(build).min_size(64, 28, "Terminal must be at least 64 x 28!").run()
 ```
+
+The message can be a node of its own, or shorter on a narrow window.
+`App::min_size_with(w, h, || node)` shows what the closure builds, centred
+at its own size (a box in the app's colours, a tip under the message);
+it is built the first time the terminal is too small, and kept.
+`App::min_size_forms(w, h, [long, shorter, shortest])` shows the longest
+form that fits the width, on one line, as a [`fit_text`](widgets.md) does:
+
+```rust
+App::new(build).min_size_forms(
+    50,
+    15,
+    ["Terminal window is too small ¯\\_(ツ)_/¯", "Window too small ¯\\_(ツ)_/¯", "!!!"],
+)
+```

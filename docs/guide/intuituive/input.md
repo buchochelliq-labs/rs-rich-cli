@@ -119,6 +119,11 @@ column([
   had the focus last; focusing the pane as a whole gives it back.
   `cx.focus_next_scope()` and `cx.focus_previous_scope()` move between
   panes (Slumber's and lazygit's Tab), Tab still moving between nodes.
+  They pass a hidden pane by, unless it was made with
+  **`.focus_scope_reveal(|| can, |cx| show)`**: then, while `can()` holds,
+  reaching it calls `show` (which sets what its `shown_when` reads), and
+  the focus goes inside once it is laid out. A pane shown alone, in
+  fullscreen, so moves on to the next pane, shown in its place.
 - **`cx.focus_direction(Direction::Left)`** moves to the neighbour on a
   side by where things were drawn (between scopes when the focus is in
   one), and `.bind_directional_focus("ctrl+left H", "ctrl+right L",

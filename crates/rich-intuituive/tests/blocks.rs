@@ -371,6 +371,12 @@ fn a_small_terminal_asks_for_more_room() {
         "{}",
         dump(&driver)
     );
+    // In the original's box, the zoom tip under the message.
+    assert!(
+        has(&driver, "┌") && has(&driver, "Tip: On many systems"),
+        "{}",
+        dump(&driver)
+    );
     driver.resize(80, 30);
     driver.settle();
     assert!(has(&driver, "start: space quit: q"));

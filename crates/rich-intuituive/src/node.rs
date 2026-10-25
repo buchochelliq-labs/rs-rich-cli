@@ -224,6 +224,9 @@ pub struct Node {
     /// the focus last.
     focus_scope: bool,
     scope_last: Cell<Option<NodeId>>,
+    /// Shows it when scope cycling reaches it hidden
+    /// ([`focus_scope_reveal`](Self::focus_scope_reveal)).
+    scope_reveal: Option<(Rc<dyn Fn() -> bool>, Rc<dyn Fn(&mut Ctx)>)>,
     /// What runs when the focus comes into it, or a node inside it, from
     /// outside (`true`), and when it leaves (`false`).
     pub(crate) focus_handlers: RefCell<Vec<(bool, Handler)>>,
@@ -519,6 +522,7 @@ impl Node {
             focus_passes: false,
             focus_scope: false,
             scope_last: Cell::new(None),
+            scope_reveal: None,
             focus_handlers: RefCell::new(Vec::new()),
             keys: RefCell::new(Vec::new()),
             releases: RefCell::new(Vec::new()),
@@ -1501,6 +1505,69 @@ impl Node {
     pub fn focus_scope(mut self) -> Node {
         self.focus_scope = true;
         self
+    }
+
+    /// Make this node a [focus scope](Self::focus_scope) that
+    /// [`Ctx::focus_next_scope`](crate::Ctx::focus_next_scope) and
+    /// [`focus_previous_scope`](crate::Ctx::focus_previous_scope) visit even
+    /// while it is hidden ([`shown_when`](Self::shown_when)), as long as
+    /// `when` holds: reaching it, they call `reveal` to show it (set what
+    /// its `shown_when` reads), and the focus goes inside it once it is
+    /// laid out. A pane shown alone (fullscreen, zoomed) that Tab moves on
+    /// from: the next pane is shown in its place. A hidden scope without
+    /// it, or whose `when` does not hold (a closed sidebar), is passed by.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let shown = signal(0);
+    ///     let pane = |n: usize, name: &'static str| {
+    ///         label(name)
+    ///             .focusable()
+    ///             .name(name)
+    ///             .focus_scope_reveal(|| true, move |_| shown.set(n))
+    ///             .shown_when(move || shown.get() == n)
+    ///     };
+    ///     column([pane(0, "one"), pane(1, "two")]).on_key("tab", |cx| cx.focus_next_scope())
+    /// });
+    /// let mut driver = app.driver(5, 2);
+    /// driver.settle();
+    /// driver.assert_focused("one");
+    /// driver.press("tab");
+    /// driver.assert_focused("two");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "two");
+    /// ```
+    pub fn focus_scope_reveal(
+        mut self,
+        when: impl Fn() -> bool + 'static,
+        reveal: impl Fn(&mut Ctx) + 'static,
+    ) -> Node {
+        self.focus_scope = true;
+        self.scope_reveal = Some((Rc::new(when), Rc::new(reveal)));
+        self
+    }
+
+    /// What shows it when scope cycling reaches it hidden, while it may be.
+    pub(crate) fn scope_reveal(&self) -> Option<Rc<dyn Fn(&mut Ctx)>> {
+        let (when, reveal) = self.scope_reveal.as_ref()?;
+        crate::reactive::untracked(|| when()).then(|| reveal.clone())
+    }
+
+    /// [`walk`](Self::walk) into hidden nodes too, telling `f` whether
+    /// each is hidden (it or an ancestor); what is hidden from assistive
+    /// technology is left out, as in the focus order.
+    pub(crate) fn walk_hidden(&self, f: &mut dyn FnMut(&Node, bool)) {
+        self.walk_hidden_inner(false, f);
+    }
+
+    fn walk_hidden_inner(&self, above: bool, f: &mut dyn FnMut(&Node, bool)) {
+        if self.access_hidden {
+            return;
+        }
+        let hidden = above || self.hidden();
+        f(self, hidden);
+        self.each_child(&mut |child| child.walk_hidden_inner(hidden, f));
     }
 
     /// Whether it is a [focus scope](Self::focus_scope).

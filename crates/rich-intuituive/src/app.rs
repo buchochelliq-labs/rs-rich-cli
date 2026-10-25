@@ -2842,30 +2842,92 @@ impl App {
     /// assert_eq!(driver.screen().plain()[0].trim_end(), "board");
     /// ```
     #[must_use]
-    pub fn min_size(mut self, width: u16, height: u16, message: impl Into<String>) -> App {
-        use crate::node::{column, label, row, switch};
+    pub fn min_size(self, width: u16, height: u16, message: impl Into<String>) -> App {
         let message = message.into();
+        self.min_size_with(width, height, move || {
+            crate::node::label(message.clone()).text_align(crate::TextAlign::Center)
+        })
+    }
+
+    /// [`min_size`](Self::min_size) with a message in several forms,
+    /// longest first: the longest that fits the terminal's width is shown,
+    /// on one line, centred (diskonaut's `Terminal window is too small`,
+    /// then `Window too small`, then `!!!`). None fits: the last, cut.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("map")).min_size_forms(
+    ///     50,
+    ///     15,
+    ///     ["Terminal window is too small", "Too small", "!"],
+    /// );
+    /// let mut driver = app.driver(30, 5);
+    /// driver.settle();
+    /// assert!(driver.screen().plain().join("").contains("Terminal window is too small"));
+    /// driver.resize(12, 5);
+    /// driver.settle();
+    /// assert!(driver.screen().plain().join("").contains("Too small"));
+    /// ```
+    #[must_use]
+    pub fn min_size_forms<S: Into<String>>(
+        self,
+        width: u16,
+        height: u16,
+        forms: impl IntoIterator<Item = S>,
+    ) -> App {
+        let forms: Vec<String> = forms.into_iter().map(Into::into).collect();
+        self.min_size_with(width, height, move || {
+            let forms = forms.clone();
+            crate::node::fit_text(move || forms.clone())
+        })
+    }
+
+    /// [`min_size`](Self::min_size) with a node of its own: what `too_small`
+    /// builds is shown centred, at its own size, below `width` x `height`
+    /// (a boxed message in the app's colours, a tip under it). It is built
+    /// when the terminal is first too small, and kept; it may read signals
+    /// ([`viewport`](crate::viewport) among them). Keys go nowhere but `q`,
+    /// as with `min_size`, and to the node's own bindings.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("board")).min_size_with(30, 10, || {
+    ///     label("Too small!").panel("").border(Border::Plain)
+    /// });
+    /// let mut driver = app.driver(16, 5);
+    /// driver.settle();
+    /// let rows = driver.screen().plain();
+    /// assert_eq!(rows[1], " ┌──────────┐   ");
+    /// assert_eq!(rows[2], " │Too small!│   ");
+    /// ```
+    #[must_use]
+    pub fn min_size_with(
+        mut self,
+        width: u16,
+        height: u16,
+        too_small: impl Fn() -> Node + 'static,
+    ) -> App {
+        use crate::node::{column, label, row, switch};
         let runtime = self.runtime.clone();
-        let root =
-            runtime.enter(|| {
-                let app = std::mem::replace(&mut self.layers[0].root, label(""));
-                let app = std::cell::RefCell::new(Some(app));
-                let viewport = crate::reactive::viewport();
-                let small = move || {
-                    let (w, h) = viewport.get();
-                    (w, h) != (0, 0) && (w < width || h < height)
-                };
-                switch(small, move |small| match small {
-                    true => column([row([
-                        label(message.clone()).text_align(crate::TextAlign::Center)
-                    ])
+        let root = runtime.enter(|| {
+            let app = std::mem::replace(&mut self.layers[0].root, label(""));
+            let app = std::cell::RefCell::new(Some(app));
+            let viewport = crate::reactive::viewport();
+            let small = move || {
+                let (w, h) = viewport.get();
+                (w, h) != (0, 0) && (w < width || h < height)
+            };
+            switch(small, move |small| match small {
+                true => column([row([too_small().auto()])
                     .justify(crate::Justify::Center)
                     .auto()])
-                    .justify(crate::Justify::Center)
-                    .on_key("q", |cx| cx.quit()),
-                    false => app.borrow_mut().take().unwrap_or_else(|| label("")),
-                })
-            });
+                .justify(crate::Justify::Center)
+                .on_key("q", |cx| cx.quit()),
+                false => app.borrow_mut().take().unwrap_or_else(|| label("")),
+            })
+        });
         self.layers[0].root = root;
         self
     }
@@ -4799,12 +4861,34 @@ impl App {
         path.iter().rev().find(|id| scopes.contains(id)).copied()
     }
 
-    /// Focus the next focus scope (or the previous one).
+    /// The focus scopes scope cycling visits, in tree order: those shown
+    /// with a node inside that takes the focus, and those hidden that
+    /// [reveal](crate::Node::focus_scope_reveal) themselves, each with
+    /// what shows it.
+    fn scope_ring(&self) -> Vec<(NodeId, Option<Rc<dyn Fn(&mut Ctx)>>)> {
+        let mut ring = Vec::new();
+        self.top().root.walk_hidden(&mut |node, hidden| {
+            if !node.is_focus_scope() {
+                return;
+            }
+            match (hidden, node.scope_reveal()) {
+                (true, Some(reveal)) => ring.push((node.id, Some(reveal))),
+                (true, None) => {}
+                (false, _) => ring.push((node.id, None)),
+            }
+        });
+        ring.retain(|(scope, reveal)| reveal.is_some() || self.first_inside(*scope).is_some());
+        ring
+    }
+
+    /// Focus the next focus scope (or the previous one), showing a hidden
+    /// one that reveals itself.
     fn focus_scope_step(&mut self, forward: bool) {
-        let scopes = self.focus_scopes();
-        if scopes.is_empty() {
+        let ring = self.scope_ring();
+        if ring.is_empty() {
             return;
         }
+        let scopes: Vec<NodeId> = ring.iter().map(|(id, _)| *id).collect();
         let at = self
             .focused_scope(&scopes)
             .and_then(|scope| scopes.iter().position(|s| *s == scope));
@@ -4815,6 +4899,15 @@ impl App {
             (Some(i), true) => (i + 1) % n,
             (Some(i), false) => (i + n - 1) % n,
         };
+        if let Some(reveal) = ring[next].1.clone() {
+            let mut cx = self.ctx();
+            let runtime = self.runtime.clone();
+            runtime.enter(|| reveal(&mut cx));
+            self.apply(cx);
+            // Focused once the frame after shows it.
+            let root = self.top().root.id;
+            self.runtime.mark_dirty(root);
+        }
         self.focus_inside(scopes[next]);
     }
 
