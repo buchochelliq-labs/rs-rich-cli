@@ -16,6 +16,22 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `Accessibility.getFullAXTree`, …), answered on a channel of its own. A
   call DevTools refuses fails only that call. The first step of the
   Noctiluca browser's CDP work (`docs/design/browser.md`).
+- `ChromeEngine` no longer ends when DevTools refuses a
+  `Page.getNavigationHistory` sent while a navigation swaps the page's
+  renderer process (`about:blank` to a `file://` page, or to another site):
+  "Not attached to an active page" ended the engine about one run in four
+  of a three-page read. The history is asked for again at the next
+  navigation event.
+
+### noctiluca (new, not published)
+
+- The first spike of Noctiluca, a terminal web browser on intuiTUIve
+  (`crates/noctiluca`, 0.0.1, `publish = false`): `noctiluca FILE` opens a
+  local page in a sandboxed headless Chrome through rs-rich-embed, reads it
+  with one `DOMSnapshot.captureSnapshot` (no script of ours in the page),
+  and prints its headings and paragraphs as rich `Text`, control
+  characters stripped. The `snapshot_cost` example measures snapshot and
+  accessibility-tree cost per page.
 
 ## 0.0.21 cohort — to be published
 

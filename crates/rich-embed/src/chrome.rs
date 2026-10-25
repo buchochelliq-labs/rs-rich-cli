@@ -1020,7 +1020,13 @@ impl Session {
                 .unwrap_or(Pending::Other);
             if let Some(error) = message.get("error") {
                 return match kind {
-                    Pending::Other => Ok(()),
+                    // The history is asked for again at the next
+                    // navigation event. A request sent while a navigation
+                    // swaps the page's renderer process (from `about:blank`
+                    // to a `file://` page, or to another site) is refused
+                    // with "Not attached to an active page"; that must not
+                    // end the engine.
+                    Pending::Other | Pending::History => Ok(()),
                     // An app's call failing fails only that call.
                     Pending::Call(answer) => {
                         let _ = answer.send(Err(io::Error::other(error.to_string())));
