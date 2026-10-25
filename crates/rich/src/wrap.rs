@@ -83,7 +83,16 @@ pub fn divide_line(text: &str, width: usize, fold: bool) -> Vec<usize> {
     let mut cell_offset = 0usize;
 
     for (start, _end, word) in words(text) {
-        let word_length = cell_len(word.trim_end());
+        let trimmed = word.trim_end();
+        let unjoined = crate::cells::unjoined_cell_len(trimmed);
+        let word_length = unjoined.unwrap_or_else(|| cell_len(trimmed));
+        // `cell_len(word)`: with no joiner or selector in the word, its
+        // trailing whitespace only adds its own width, so the word is not
+        // measured twice (docs/PORTING.md, "Performance notes").
+        let whole_length = || match unjoined {
+            Some(length) => length + cell_len(&word[trimmed.len()..]),
+            None => cell_len(word),
+        };
         // Signed, because upstream's `width - cell_offset` goes NEGATIVE once a
         // line has overshot (an unfoldable word wider than the whole width bumps
         // `cell_offset` past `width`). Clamping that to zero made a following
@@ -94,7 +103,7 @@ pub fn divide_line(text: &str, width: usize, fold: bool) -> Vec<usize> {
         let word_fits_remaining_space = remaining_space >= word_length as isize;
 
         if word_fits_remaining_space {
-            cell_offset += cell_len(word);
+            cell_offset += whole_length();
         } else if word_length > width {
             // The word doesn't fit on any line.
             if fold {
@@ -115,12 +124,12 @@ pub fn divide_line(text: &str, width: usize, fold: bool) -> Vec<usize> {
                 if start != 0 {
                     break_positions.push(start);
                 }
-                cell_offset = cell_len(word);
+                cell_offset = whole_length();
             }
         } else if cell_offset != 0 && start != 0 {
             // Fits on the next (empty) line.
             break_positions.push(start);
-            cell_offset = cell_len(word);
+            cell_offset = whole_length();
         }
     }
 
