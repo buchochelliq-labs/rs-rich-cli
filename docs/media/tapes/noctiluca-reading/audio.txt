@@ -1,4 +1,5 @@
-◀▶ Audio fixture https://fixture.example/audio.html reader
+ NOCTILUCA   READER + CELLS   ◀▶   Audio fixture
+ https://fixture.example/audio.html
 A test tone
 
 audio: Test tone
@@ -25,6 +26,5 @@ Sound plays on the machine Chrome runs on.
 
 
 
-
-
-opening https://fixture.example/audio.html
+ opening https://fixture.example/audio.html
+ f1 actions | f hints | o open | r reader | q quit

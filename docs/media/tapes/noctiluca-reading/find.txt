@@ -1,4 +1,5 @@
-◀▶ The glowing coast - Fixture News https://fixture.example/article.html reader
+ NOCTILUCA   READER + CELLS   ◀▶   The glowing coast - Fixture News
+ https://fixture.example/article.html
 Fixture News
 
 World Science
@@ -25,6 +26,5 @@ Related
 
 
 
-
-
-match 1 of 2
+ match 1 of 2
+ f1 actions | f hints | o open | r reader | q quit

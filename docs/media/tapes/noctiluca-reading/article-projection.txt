@@ -1,4 +1,5 @@
-◀▶ The glowing coast - Fixture News https://fixture.example/article.html projection
+ NOCTILUCA   PROJECTION + CELLS   ◀▶   The glowing coast - Fixture News
+ https://fixture.example/article.html
 Fixture News
  World Science
 
@@ -8,7 +9,7 @@ Fixture News
 
  By A. Writer, 25 October 2026
 
-      Blue…
+      ▀▀▀▀▀
       The bloom at midnight.
 
  Last night the bay lit up blue. Every wave that broke left a line of light.
@@ -25,6 +26,5 @@ Fixture News
 
 
 
-
-
-opening https://fixture.example/article.html
+ opening https://fixture.example/article.html
+ f1 actions | f hints | o open | r reader | q quit

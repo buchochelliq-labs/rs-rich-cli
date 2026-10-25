@@ -1,12 +1,12 @@
 ❯ place=$(rich jump --commands commands --recent .jump-recent docs src)
 ? Jump ›
-Files  +144 more · tab                            │     1 # The rs-rich guide
+Files  +145 more · tab                            │     1 # The rs-rich guide
 ❯ docs/guide/index.md                             │     2
   docs/guide/noctiluca.md                         │     3 rs-rich brings Python's [rich](https://github.com/Te
   docs/guide/ratatui.md                           │     4 styled text, tables, trees, progress bars, syntax hi
   docs/guide/art/banners.md                       │     5 in the terminal, plus exports to HTML and SVG. On to
   docs/guide/art/gifs.md                          │     6 adds Rust-first extensions (diagnostics, structured
-Headings #  +991 more · tab                       │     7 diffs, test tooling, capability detection, accessibi
+Headings #  +998 more · tab                       │     7 diffs, test tooling, capability detection, accessibi
   The rs-rich guide  # docs/guide/index.md:1      │     8 workflow renderables and charts), graph diagrams, in
   The pieces  ## docs/guide/index.md:83           │     9 micro assets, image and GIF art, and the `rich` comm
   How it fits together  ## docs/guide/index.md:10 │    10

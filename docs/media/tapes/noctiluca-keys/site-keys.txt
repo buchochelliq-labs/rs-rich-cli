@@ -1,7 +1,8 @@
-◀▶ Reader fixture https://fixture.example/reader.html reader
-Plankton                                                                                           ┃
-     ╭─ Site shortcuts ───────────────────────────────────────────────────────────────────────╮    ┃
-Tiny │▸          n  link "the second page"  [fixture.example]                                 │    ┃
+ NOCTILUCA   READER + CELLS   ◀▶   Reader fixture
+ https://fixture.example/reader.html
+Plank╭─ Site shortcuts ───────────────────────────────────────────────────────────────────────╮    ┃
+     │▸          n  link "the second page"  [fixture.example]                                 │    ┃
+Tiny │                                                                                        │    ┃
      │                                                                                        │    ┃
 Kinds│                                                                                        │    ┃
      │                                                                                        │    ┃
@@ -22,9 +23,8 @@ Name │                                                                        
 ─────│                                                                                        │    ┃
 Nocti│                                                                                        │    ┃
 Copep│                                                                                        │    ┃
-     │                                                                                        │    ┃
-image│Enter tests · d removes · e binds another key · s: this host or *.host · Esc closes     │    ┃
-▀▀▀▀▀╰────────────────────────────────────────────────────────────────────────────────────────╯    ┃
-                                                                                                   ┃
-                                                                                                   │
-f1 actions · f hints · o open · r reader · q quit
+     │Enter tests · d removes · e binds another key · s: this host or *.host · Esc closes     │    │
+image╰────────────────────────────────────────────────────────────────────────────────────────╯    │
+▀▀▀▀▀                                                                                              │
+ reader | row 1/29
+ f1 actions | f hints | o open | r reader | q quit

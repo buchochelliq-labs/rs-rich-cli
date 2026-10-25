@@ -1,4 +1,5 @@
-◀▶ Form fixture https://fixture.example/form.html projection
+ NOCTILUCA   PROJECTION + CELLS   ◀▶   Form fixture
+ https://fixture.example/form.html
 
  Sign up
 
@@ -6,11 +7,11 @@
       Name [Ada_]                  Secret [••••••••]
                                                             [ ] Send news
    Size
-    ( )     (•) Large
-    Small
-       Mirror ‹First mirror ▾› Volume ◀ 50 ▶   [ Send [ Unavailable ]
-                                               ]
- [ Schedule remote update ]
+    ( ) Small       (•) Large
+
+       Mirror ‹First mirror ▾›        Volume ◀ 50 ▶   [Send] [Unavailable]
+
+ [Schedule remote update]
 
 
 
@@ -25,6 +26,5 @@
 
 
 
-
-
-projection view
+ projection view
+ f1 actions | f hints | o open | r reader | q quit
