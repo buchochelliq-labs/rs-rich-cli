@@ -243,12 +243,13 @@ publication.
 
 ## Features
 
-These five are on by default and can be dropped for a smaller binary:
+These are on by default and can be dropped for a smaller binary:
 
 - **`fetch`** — URL support (`rich <url>`), via `ureq` with bundled TLS roots.
 - **`art`** — `--gif` playback and `--diff`/`--image` picture rendering, via [`rs-rich-art`](https://crates.io/crates/rs-rich-art), and micro assets (`rich micro`, `:micro:name:` with `--emoji`), via [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro).
 - **`mermaid`** — `rich mermaid` and Mermaid fences in Markdown, drawn as text, via [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid).
 - **`record`** — `rich record TAPE`: scripted terminal sessions rendered as screenshots, casts, GIF and MP4, via [`rs-rich-record`](https://crates.io/crates/rs-rich-record).
+- **`wasm-plugins`** — sandboxed WASM plugins (wasmi: no imports, fuel and memory limits), loaded with `--plugin PATH`, from a trusted config, or installed with `rich plugin install`. On by default since 0.0.22.
 - **`interact`** — `rich choose`, `filter`, `input`, `confirm`, `pager`, `write`, `file`, `color`, `asset`, `date` and `explore`, via [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact).
 
 `rich dot`, `rich deps`, `rich schema` and `rich chart` are in every build:
@@ -260,7 +261,7 @@ Off by default:
 - **`lumis`** — the tree-sitter highlighter (`--highlighter lumis`), via [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis). It compiles many grammars, so the binary is much larger, and it needs Rust 1.91.
 - **`mmdc`** — the `mmdc` Mermaid backend. It starts Mermaid's CLI, which must be installed separately.
 - **`arrow`** — `rich schema` reading Arrow IPC files and streams (`.arrow`, `.feather`, `.arrows`, `.ipc`), via [`rs-rich-data`](https://crates.io/crates/rs-rich-data)'s Arrow adapter. It compiles the Arrow array and IPC crates.
-- **`dylib-plugins`**, **`wasm-plugins`** — runtime plugins loaded with `--plugin PATH` or from a trusted config: native libraries, or sandboxed WASM modules.
+- **`dylib-plugins`** — native-library plugins loaded with `--plugin PATH` or from a trusted config. They run their own code with your permissions.
 - **`serve`** — `rich serve [--bind ADDR] [--port N] [--max-sessions N] [--allow-origin ORIGIN]... -- PROGRAM`: a terminal program in a web browser, one copy per tab on a pseudo-terminal of its own, via [`rs-rich-web`](https://crates.io/crates/rs-rich-web). It listens on 127.0.0.1 with a random token in the printed address; off by default so a default build has no network server.
 
 ```bash

@@ -4,8 +4,9 @@
 //!
 //! A binary-boundary convenience (docs/PORTING.md): it composes rs-rich-ext's
 //! registry and loaders. Nothing loads unless the user asks: a runtime plugin
-//! needs a build with the `dylib-plugins` or `wasm-plugins` feature, and a
-//! path on the command line or in the user's own config. A project's
+//! needs a path on the command line or in the user's own config, or an
+//! approved `rich plugin install`. WASM loading (`wasm-plugins`) is a default
+//! feature; native loading (`dylib-plugins`) is not. A project's
 //! `./rich.toml` may not list plugins (see `config::UNTRUSTED_PLUGINS`).
 use super::*;
 use rich_ext::plugin::abi::ABI_MAJOR;
@@ -52,6 +53,25 @@ pub(crate) fn load(paths: &[String]) -> Result<Vec<RuntimePlugin>, (ExitClass, S
                 format!("plugin {}: {error}", plugin.path().display()),
             )
         })?;
+    }
+    // Then what `rich plugin install` installed and left enabled, each
+    // checked against the lockfile; one named with --plugin wins. A plugin
+    // that fails to load or to register is skipped with a warning, so a
+    // changed file never stops a render, and never loads.
+    let named: Vec<String> = loaded.iter().map(|p| p.abi().name.clone()).collect();
+    let (installed, warnings) = crate::marketplace::installed_plugins(&named);
+    for warning in warnings {
+        eprintln!("rich: warning: {}", controls::shown(&warning));
+    }
+    for plugin in installed {
+        match registry.add_plugin(&plugin) {
+            Ok(()) => loaded.push(plugin),
+            Err(error) => eprintln!(
+                "rich: warning: installed plugin {} is not loaded: {}",
+                plugin.abi().name,
+                controls::shown(&error.to_string())
+            ),
+        }
     }
     Ok(loaded)
 }

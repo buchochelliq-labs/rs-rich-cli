@@ -746,9 +746,67 @@ jobs:
           cargo check --locked --target wasm32-wasip1
           -p rs-rich-cli --no-default-features --features art,mermaid
 
+  # The plugin marketplace against this host (docs/design/marketplace.md):
+  # a test marketplace written from crates/rich-cli/tests/plugin_marketplace.rs,
+  # signed with rs-rich-marketplace's test key, listing the official plugins
+  # (Mermaid, DOT, lumis) at this workspace's versions and a fixture WASM
+  # plugin. The built binary installs from it with no network: each crate
+  # resolves for this host's plugin API and is refused with its `cargo add`
+  # line, and the WASM plugin installs (its manifest checked in the
+  # sandbox), verifies and loads on the next run without --plugin.
+  plugin-compatibility:
+    name: plugin marketplace compatibility
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build rich (WASM plugins are a default feature)
+        run: cargo build -p rs-rich-cli --locked
+
+      - name: Write the test marketplace
+        run: >-
+          RICH_TEST_MARKETPLACE="$RUNNER_TEMP/marketplace"
+          cargo test -p rs-rich-cli --locked --test plugin_marketplace
+          -- --ignored --exact write_test_marketplace
+
+      - name: Install the official plugins and the fixture plugin
+        env:
+          NO_COLOR: "1"
+        run: |
+          set -euo pipefail
+          export RICH_MARKETPLACE="$RUNNER_TEMP/marketplace"
+          export RICH_MARKETPLACE_KEYS="$RUNNER_TEMP/marketplace/keys/keys-1.json"
+          export RICH_PLUGIN_DIR="$RUNNER_TEMP/plugins"
+          rich="$PWD/target/debug/rich"
+          for id in mermaid dot lumis; do
+            "$rich" plugin info "$id" --report json 2> info.json
+            jq -e '.ok and .result.candidate != null and .result.versions[0].compatible' info.json
+            code=0
+            "$rich" plugin install "$id" --yes 2> refusal.txt || code=$?
+            test "$code" = 2
+            grep -q "cargo add rs-rich-" refusal.txt
+          done
+          "$rich" plugin install shout --yes
+          "$rich" plugin verify
+          "$rich" plugin list
+          "$rich" plugins list | grep -E 'shout +.*wasm'
+          printf '# Doc\n\n```shout\nhello there\n```\n' > doc.md
+          "$rich" -m doc.md | tee rendered.txt
+          grep -qE '^hello there *$' rendered.txt
+          rm -f info.json refusal.txt doc.md rendered.txt
+
   ci-ok:
     name: ci-ok
-    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, wasm]
+    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, wasm, plugin-compatibility]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()

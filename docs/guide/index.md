@@ -151,7 +151,7 @@ images all rely on that.
 | | `serde` | `Serialize` for capability, accessibility and ANSI reports. |
 | `rs-rich-art` | `image`, `gif`, `sixel` | Image art, GIF playback, Sixel graphics. |
 | `rs-rich-diagram` | `plugin`, `graphviz` | The `dot` fence and source renderer plugin; Graphviz's own SVG through the `dot` program. |
-| `rs-rich-cli` | `fetch`, `art`, `mermaid`, `record`, `interact` (default) | URLs; images, GIFs, image diffs and micro assets; Mermaid; `rich record`; the interactive commands. `lumis`, `mmdc`, `dylib-plugins` and `wasm-plugins` are opt-in. |
+| `rs-rich-cli` | `fetch`, `art`, `mermaid`, `record`, `interact`, `wasm-plugins` (default) | URLs; images, GIFs, image diffs and micro assets; Mermaid; `rich record`; the interactive commands; sandboxed WASM plugins. `lumis`, `mmdc` and `dylib-plugins` are opt-in. |
 
 ## Where to start
 

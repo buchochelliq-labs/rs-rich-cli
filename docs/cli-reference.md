@@ -298,7 +298,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--theme <NAME>` | Select a named theme from config. Config: `theme`. |
 | `--theme-style <NAME=STYLE>...` | Override a theme binding; repeatable and worker-safe. |
 | `--theme-file <PATH>` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it. Config: `theme_file`. |
-| `--plugin <PATH>...` | Load a runtime plugin: a WASM module (.wasm, sandboxed) or a native library (.so, .dylib, .dll, which runs its own code), in a build with the wasm-plugins or dylib-plugins feature; repeatable. `rich plugins list` shows what is loaded. Config: `plugins`. |
+| `--plugin <PATH>...` | Load a runtime plugin: a WASM module (.wasm, sandboxed; the default wasm-plugins feature) or a native library (.so, .dylib, .dll, which runs its own code; a build with the dylib-plugins feature); repeatable. `rich plugins list` shows what is loaded. Config: `plugins`. |
 | `--micro-project`, `--no-micro-project` | Load micro assets from the project's .rich/micro/ (off by default: a project's assets load only when you trust it; ./rich.toml cannot turn this on) Config: `micro_project`. |
 
 ### Output & reports
@@ -386,6 +386,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `spin` | Run a command with a spinner and a title until it exits, and exit with its status (like gum spin); without a terminal it just runs the command |
 | `record` | Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG (when asked), an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with committed ones instead |
 | `plugins` | List the plugins this build has — built in, linked, and any --plugin PATH loads — with their source, version, ABI and capabilities |
+| `plugin` | Find, install, update and check plugins and asset packs from the plugin marketplace: a signed index, every file checked by SHA-256; an installed, enabled WASM plugin loads on every run without --plugin, after its file is checked against the lockfile |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
 
 ### Environment
@@ -404,7 +405,7 @@ With no RESOURCE and no mode flag, a capability demo is shown. Layout, style, pa
 ### Exit codes
 
 - 0: success
-- 1: cancelled, or answered no (choose, filter, input, confirm, write, file, color, asset, date)
+- 1: cancelled, or answered no (choose, filter, input, confirm, write, file, color, asset, date, plugin install and update)
 - 2: usage/config error
 - 3: input/read/write error
 - 4: parse/render data error
@@ -2455,6 +2456,336 @@ rich plugins info NAME [--plugin PATH]... [--report json]
 | --- | --- |
 | `[NAME]` | The plugin's id, as `list` shows it. |
 
+### rich plugin
+
+Find, install, update and check plugins and asset packs from the plugin marketplace: a signed index, every file checked by SHA-256; an installed, enabled WASM plugin loads on every run without --plugin, after its file is checked against the lockfile
+
+#### Usage
+
+```text
+rich plugin COMMAND [ARGS] [--marketplace LOCATION] [--marketplace-keys FILE] [--plugin-dir DIR] [--report json]
+```
+
+#### Commands
+
+| Command | Description |
+| --- | --- |
+| `search` | List the marketplace's packages, or those whose id, name, description or keywords contain QUERY |
+| `info` | One package: its tier, source, versions, what loads here, and for a crate the `cargo add` line |
+| `install` | Show the tier, permissions and capabilities, ask, then download, check (size, SHA-256, the WASM manifest in the sandbox) and install; a crate is refused with its `cargo add` line |
+| `update` | Move installed packages (or those named) to the newest version this host loads, asking first; a yanked version is replaced |
+| `remove` | Uninstall packages: the lockfile entry, then the file |
+| `list` | What is installed: version, kind, tier, enabled, whether the file still matches the lockfile, and yank reasons last seen; no network |
+| `enable` | Load an installed package again on every run |
+| `disable` | Keep a package installed but do not load it |
+| `verify` | Check every installed file against the lockfile, and every installed version against the current index; yanked versions are reported with their reason; exits 4 when a file or listing does not match |
+| `browse` | The marketplace in a selector, with each package's provenance (tier, source, hash, permissions) beside the list; Enter installs, updates, removes, enables or disables |
+| `publish` | Check a local package (a WASM plugin, a micro pack or a theme), compute its SHA-256 and size, and write its listing JSON for a pull request to the marketplace repository; no network |
+
+#### Environment
+
+- RICH_MARKETPLACE: the marketplace, as --marketplace
+- RICH_MARKETPLACE_KEYS: a keys-N.json to trust, as --marketplace-keys
+- RICH_PLUGIN_DIR: the install directory, as --plugin-dir; also where every run looks for installed plugins
+
+#### rich plugin search
+
+List the marketplace's packages, or those whose id, name, description or keywords contain QUERY
+
+##### Usage
+
+```text
+rich plugin search [QUERY]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--marketplace <LOCATION>` | The marketplace: an https:// base URL, or a directory or file:// URL laid out as the marketplace repository is (artifacts from its artifacts/HOST/PATH mirror, never the network); else RICH_MARKETPLACE, else the official one. |
+| `--marketplace-keys <FILE>` | Trust this keys-N.json instead of the keys compiled in; else RICH_MARKETPLACE_KEYS. |
+| `--plugin-dir <DIR>` | Install into DIR; else RICH_PLUGIN_DIR, else $XDG_DATA_HOME/rich/plugins (~/.local/share/rich/plugins) |
+| `--report <FORMAT>` | json: the result or error envelope on stderr, nothing on stdout. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[QUERY]` | Text to look for, in any case. |
+
+#### rich plugin info
+
+One package: its tier, source, versions, what loads here, and for a crate the `cargo add` line
+
+##### Usage
+
+```text
+rich plugin info ID
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--marketplace <LOCATION>` | The marketplace: an https:// base URL, or a directory or file:// URL laid out as the marketplace repository is (artifacts from its artifacts/HOST/PATH mirror, never the network); else RICH_MARKETPLACE, else the official one. |
+| `--marketplace-keys <FILE>` | Trust this keys-N.json instead of the keys compiled in; else RICH_MARKETPLACE_KEYS. |
+| `--plugin-dir <DIR>` | Install into DIR; else RICH_PLUGIN_DIR, else $XDG_DATA_HOME/rich/plugins (~/.local/share/rich/plugins) |
+| `--report <FORMAT>` | json: the result or error envelope on stderr, nothing on stdout. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[ID]` | The package's id, as `search` shows it. |
+
+#### rich plugin install
+
+Show the tier, permissions and capabilities, ask, then download, check (size, SHA-256, the WASM manifest in the sandbox) and install; a crate is refused with its `cargo add` line
+
+##### Usage
+
+```text
+rich plugin install ID[@VERSION]... [--yes]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `-y`, `--yes` | Install without asking (for scripts); the summary is still shown. |
+| `--marketplace <LOCATION>` | The marketplace: an https:// base URL, or a directory or file:// URL laid out as the marketplace repository is (artifacts from its artifacts/HOST/PATH mirror, never the network); else RICH_MARKETPLACE, else the official one. |
+| `--marketplace-keys <FILE>` | Trust this keys-N.json instead of the keys compiled in; else RICH_MARKETPLACE_KEYS. |
+| `--plugin-dir <DIR>` | Install into DIR; else RICH_PLUGIN_DIR, else $XDG_DATA_HOME/rich/plugins (~/.local/share/rich/plugins) |
+| `--report <FORMAT>` | json: the result or error envelope on stderr, nothing on stdout. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[ID]...` | Package ids, each optionally @VERSION (the only way to get a pre-release) |
+
+##### Examples
+
+The newest version this host loads
+
+```sh
+rich plugin install shout
+```
+
+Exactly 0.2.0, without asking
+
+```sh
+rich plugin install shout@0.2.0 --yes
+```
+
+#### rich plugin update
+
+Move installed packages (or those named) to the newest version this host loads, asking first; a yanked version is replaced
+
+##### Usage
+
+```text
+rich plugin update [ID...] [--yes]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `-y`, `--yes` | Install without asking (for scripts); the summary is still shown. |
+| `--marketplace <LOCATION>` | The marketplace: an https:// base URL, or a directory or file:// URL laid out as the marketplace repository is (artifacts from its artifacts/HOST/PATH mirror, never the network); else RICH_MARKETPLACE, else the official one. |
+| `--marketplace-keys <FILE>` | Trust this keys-N.json instead of the keys compiled in; else RICH_MARKETPLACE_KEYS. |
+| `--plugin-dir <DIR>` | Install into DIR; else RICH_PLUGIN_DIR, else $XDG_DATA_HOME/rich/plugins (~/.local/share/rich/plugins) |
+| `--report <FORMAT>` | json: the result or error envelope on stderr, nothing on stdout. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[ID]...` | Package ids. |
+
+#### rich plugin remove
+
+Uninstall packages: the lockfile entry, then the file
+
+##### Usage
+
+```text
+rich plugin remove ID...
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--marketplace <LOCATION>` | The marketplace: an https:// base URL, or a directory or file:// URL laid out as the marketplace repository is (artifacts from its artifacts/HOST/PATH mirror, never the network); else RICH_MARKETPLACE, else the official one. |
+| `--marketplace-keys <FILE>` | Trust this keys-N.json instead of the keys compiled in; else RICH_MARKETPLACE_KEYS. |
+| `--plugin-dir <DIR>` | Install into DIR; else RICH_PLUGIN_DIR, else $XDG_DATA_HOME/rich/plugins (~/.local/share/rich/plugins) |
+| `--report <FORMAT>` | json: the result or error envelope on stderr, nothing on stdout. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[ID]...` | Package ids. |
+
+#### rich plugin list
+
+What is installed: version, kind, tier, enabled, whether the file still matches the lockfile, and yank reasons last seen; no network
+
+##### Usage
+
+```text
+rich plugin list
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--marketplace <LOCATION>` | The marketplace: an https:// base URL, or a directory or file:// URL laid out as the marketplace repository is (artifacts from its artifacts/HOST/PATH mirror, never the network); else RICH_MARKETPLACE, else the official one. |
+| `--marketplace-keys <FILE>` | Trust this keys-N.json instead of the keys compiled in; else RICH_MARKETPLACE_KEYS. |
+| `--plugin-dir <DIR>` | Install into DIR; else RICH_PLUGIN_DIR, else $XDG_DATA_HOME/rich/plugins (~/.local/share/rich/plugins) |
+| `--report <FORMAT>` | json: the result or error envelope on stderr, nothing on stdout. |
+
+#### rich plugin enable
+
+Load an installed package again on every run
+
+##### Usage
+
+```text
+rich plugin enable ID...
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--marketplace <LOCATION>` | The marketplace: an https:// base URL, or a directory or file:// URL laid out as the marketplace repository is (artifacts from its artifacts/HOST/PATH mirror, never the network); else RICH_MARKETPLACE, else the official one. |
+| `--marketplace-keys <FILE>` | Trust this keys-N.json instead of the keys compiled in; else RICH_MARKETPLACE_KEYS. |
+| `--plugin-dir <DIR>` | Install into DIR; else RICH_PLUGIN_DIR, else $XDG_DATA_HOME/rich/plugins (~/.local/share/rich/plugins) |
+| `--report <FORMAT>` | json: the result or error envelope on stderr, nothing on stdout. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[ID]...` | Package ids. |
+
+#### rich plugin disable
+
+Keep a package installed but do not load it
+
+##### Usage
+
+```text
+rich plugin disable ID...
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--marketplace <LOCATION>` | The marketplace: an https:// base URL, or a directory or file:// URL laid out as the marketplace repository is (artifacts from its artifacts/HOST/PATH mirror, never the network); else RICH_MARKETPLACE, else the official one. |
+| `--marketplace-keys <FILE>` | Trust this keys-N.json instead of the keys compiled in; else RICH_MARKETPLACE_KEYS. |
+| `--plugin-dir <DIR>` | Install into DIR; else RICH_PLUGIN_DIR, else $XDG_DATA_HOME/rich/plugins (~/.local/share/rich/plugins) |
+| `--report <FORMAT>` | json: the result or error envelope on stderr, nothing on stdout. |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[ID]...` | Package ids. |
+
+#### rich plugin verify
+
+Check every installed file against the lockfile, and every installed version against the current index; yanked versions are reported with their reason; exits 4 when a file or listing does not match
+
+##### Usage
+
+```text
+rich plugin verify
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--marketplace <LOCATION>` | The marketplace: an https:// base URL, or a directory or file:// URL laid out as the marketplace repository is (artifacts from its artifacts/HOST/PATH mirror, never the network); else RICH_MARKETPLACE, else the official one. |
+| `--marketplace-keys <FILE>` | Trust this keys-N.json instead of the keys compiled in; else RICH_MARKETPLACE_KEYS. |
+| `--plugin-dir <DIR>` | Install into DIR; else RICH_PLUGIN_DIR, else $XDG_DATA_HOME/rich/plugins (~/.local/share/rich/plugins) |
+| `--report <FORMAT>` | json: the result or error envelope on stderr, nothing on stdout. |
+
+#### rich plugin browse
+
+The marketplace in a selector, with each package's provenance (tier, source, hash, permissions) beside the list; Enter installs, updates, removes, enables or disables
+
+##### Usage
+
+```text
+rich plugin browse
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--marketplace <LOCATION>` | The marketplace: an https:// base URL, or a directory or file:// URL laid out as the marketplace repository is (artifacts from its artifacts/HOST/PATH mirror, never the network); else RICH_MARKETPLACE, else the official one. |
+| `--marketplace-keys <FILE>` | Trust this keys-N.json instead of the keys compiled in; else RICH_MARKETPLACE_KEYS. |
+| `--plugin-dir <DIR>` | Install into DIR; else RICH_PLUGIN_DIR, else $XDG_DATA_HOME/rich/plugins (~/.local/share/rich/plugins) |
+| `--report <FORMAT>` | json: the result or error envelope on stderr, nothing on stdout. |
+
+#### rich plugin publish
+
+Check a local package (a WASM plugin, a micro pack or a theme), compute its SHA-256 and size, and write its listing JSON for a pull request to the marketplace repository; no network
+
+##### Usage
+
+```text
+rich plugin publish FILE --url URL [--listing FILE | --license SPDX --repository URL [--description TEXT]] [--source-revision COMMIT] [--output FILE]
+```
+
+##### Options
+
+| Option | Description |
+| --- | --- |
+| `--url <URL>` | Where the file will be downloaded from (https://, ending in its extension) |
+| `--listing <FILE>` | An existing listing to add this version to (it is rewritten unless --output is given) |
+| `--output <FILE>` | Where to write the listing (default packages/ID.json) |
+| `--source-revision <COMMIT>` | The full Git commit the artifact was built from (required for a WASM plugin) |
+| `--id <ID>` | A theme's id (default: the file name); for a plugin or pack, checked against its manifest. |
+| `--version <VERSION>` | A theme's version; for a plugin or pack, checked against its manifest. |
+| `--name <TEXT>` | The human-readable name (default: the id) |
+| `--description <TEXT>` | One line on what it adds (default: a WASM plugin's own) |
+| `--tier <TIER>` | community (the default), reviewed or official; raising it needs a maintainer. |
+| `--license <SPDX>` | The SPDX license expression. |
+| `--repository <URL>` | The source repository, https://. |
+| `--homepage <URL>` | A homepage, https://. |
+| `--author <NAME>` | An author; repeatable. |
+| `--keyword <WORD>` | A search keyword; repeatable, at most 8. |
+| `--published <DATE>` | The listing date, YYYY-MM-DD (default: today, UTC) |
+
+##### Arguments
+
+| Argument | Description |
+| --- | --- |
+| `[FILE]` | The .wasm, .zip/.richmicro or .ini/.theme file. |
+
+##### Examples
+
+A new listing, packages/shout.json
+
+```sh
+rich plugin publish shout.wasm --url https://github.com/me/shout/releases/download/v0.2.0/shout.wasm --source-revision $(git rev-parse HEAD) --license MIT --repository https://github.com/me/shout
+```
+
+Add a version to an existing listing
+
+```sh
+rich plugin publish shout.wasm --url URL --source-revision COMMIT --listing packages/shout.json
+```
+
 ### rich doctor
 
 Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout
@@ -2531,7 +2862,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `collision` | enum: `error`, `overwrite`, `suffix` | `error` | | `--collision` | Batch policy for existing destinations |
 | `theme` | string | | | `--theme` | Select a named theme from config |
 | `theme_file` | string | | | `--theme-file` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it |
-| `plugins` | list of paths | | | `--plugin` | Load a runtime plugin: a WASM module (.wasm, sandboxed) or a native library (.so, .dylib, .dll, which runs its own code), in a build with the wasm-plugins or dylib-plugins feature; repeatable. `rich plugins list` shows what is loaded |
+| `plugins` | list of paths | | | `--plugin` | Load a runtime plugin: a WASM module (.wasm, sandboxed; the default wasm-plugins feature) or a native library (.so, .dylib, .dll, which runs its own code; a build with the dylib-plugins feature); repeatable. `rich plugins list` shows what is loaded |
 | `micro_project` | bool | | | `--micro-project` | Load micro assets from the project's .rich/micro/ (off by default: a project's assets load only when you trust it; ./rich.toml cannot turn this on) |
 | `no_color` | bool | | `NO_COLOR` | `--no-color` | Disable colored output (as does a non-empty NO_COLOR) |
 | `sanitize` | bool | | | `--sanitize` | Replace input terminal controls, JSON/notebook strings, titles and captions with visible inert text. On by default for `rich view`, `rich schema`, `rich log` and text `rich diff`; --no-sanitize turns it off there |

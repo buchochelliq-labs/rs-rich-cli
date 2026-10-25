@@ -4,7 +4,10 @@
 API 0.0.5). The `rs-rich-marketplace` crate (0.0.1) that verifies, resolves
 and installs from them is in 0.0.22 ([Extending](../PLUGINS.md#the-marketplace-client-0022));
 its official keys are compiled in once the maintainer has made them. The
-`rich plugin` commands follow in 0.0.22. This note is the contract
+`rich plugin` commands that use it are in 0.0.22 too
+([Extending](../PLUGINS.md#rich-plugin-installing-from-the-marketplace-0022)),
+with the marketplace repository's signing workflow kept to hand over in
+[`docs/marketplace-repo/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/docs/marketplace-repo). This note is the contract
 between the marketplace repository, the crate and the CLI. It is part of the
 1.0 promise ([the plan to 1.0.0](../plans/1.0.0.md#track-b-the-plugin-marketplace-232-463)).
 
