@@ -24,6 +24,9 @@ fn words(text: &str) -> Vec<(usize, usize, &str)> {
             *index += 1;
         }
     }
+    if text.is_ascii() {
+        return ascii_words(text);
+    }
     let mut result = Vec::new();
     let mut chars = text.char_indices().peekable();
     // The char index of the next character `chars` yields.
@@ -39,6 +42,33 @@ fn words(text: &str) -> Vec<(usize, usize, &str)> {
         skip(&mut chars, &mut index, true);
         let end_byte = chars.peek().map_or(text.len(), |(byte, _)| *byte);
         result.push((start, index, &text[start_byte..end_byte]));
+    }
+    result
+}
+
+/// [`words`] of ASCII text, where a byte is a character: the same scan over
+/// bytes, with `char::is_whitespace`'s ASCII members (space, tab, line
+/// feed, vertical tab, form feed, carriage return).
+fn ascii_words(text: &str) -> Vec<(usize, usize, &str)> {
+    let bytes = text.as_bytes();
+    let space = |at: usize| matches!(bytes[at], b' ' | b'\t'..=b'\r');
+    let mut result = Vec::new();
+    let mut pos = 0;
+    while pos < bytes.len() {
+        let start = pos;
+        while pos < bytes.len() && space(pos) {
+            pos += 1;
+        }
+        if pos == bytes.len() {
+            break;
+        }
+        while pos < bytes.len() && !space(pos) {
+            pos += 1;
+        }
+        while pos < bytes.len() && space(pos) {
+            pos += 1;
+        }
+        result.push((start, pos, &text[start..pos]));
     }
     result
 }
@@ -128,8 +158,9 @@ mod tests {
             }
             result
         }
-        const ALPHABET: [char; 10] = [
-            'a', ' ', '\t', '\n', 'é', '界', '\u{3000}', '\u{1c}', 'x', '\u{200d}',
+        const ALPHABET: [char; 13] = [
+            'a', ' ', '\t', '\n', 'é', '界', '\u{3000}', '\u{1c}', 'x', '\u{200d}', '\u{b}',
+            '\u{c}', '\r',
         ];
         let mut seed = 0x2545_f491u32;
         for length in 0..40 {
@@ -147,6 +178,13 @@ mod tests {
                     .map(|(start, end, word)| (start, end, word.to_string()))
                     .collect();
                 assert_eq!(fast, reference(&text), "{text:?}");
+                // And its ASCII characters alone, which take the byte scan.
+                let ascii: String = text.chars().filter(char::is_ascii).collect();
+                let fast: Vec<(usize, usize, String)> = words(&ascii)
+                    .into_iter()
+                    .map(|(start, end, word)| (start, end, word.to_string()))
+                    .collect();
+                assert_eq!(fast, reference(&ascii), "{ascii:?}");
             }
         }
     }

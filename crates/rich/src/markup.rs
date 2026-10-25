@@ -706,8 +706,9 @@ fn render_inner(markup: &str, emoji: bool, base_style: &StyleType) -> Result<Tex
                 if let Some(name) = tag_name.strip_prefix('/') {
                     let name = name.trim();
                     let end = plain.len();
-                    // `tag.markup` of the closing tag, as written.
-                    let closing = Tag::new(tag_name, parameters.clone()).markup();
+                    // `tag.markup` of the closing tag, as written: built only
+                    // for the error that quotes it.
+                    let closing = || Tag::new(tag_name, parameters.clone()).markup();
                     let (open_name, open_parameters, start) = if name.is_empty() {
                         // Auto-close: pop the most recent open tag, or error.
                         stack.pop().ok_or_else(|| {
@@ -726,7 +727,8 @@ fn render_inner(markup: &str, emoji: bool, base_style: &StyleType) -> Result<Tex
                             .rposition(|(open, _, _)| *open == wanted)
                             .ok_or_else(|| {
                                 RichError::Markup(format!(
-                                    "closing tag '{closing}' at position {} doesn't match any open tag",
+                                    "closing tag '{}' at position {} doesn't match any open tag",
+                                    closing(),
                                     at()
                                 ))
                             })?;
