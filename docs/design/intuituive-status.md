@@ -3,7 +3,20 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-10-25)
+## Where things stand (2026-10-25, evening)
+
+- **0.0.22 is published** (19 crates from `main` at `6e8e82e` by one
+  release run, `release-0.0.22`, on 2026-10-25; `rs-rich` 0.0.10 on PyPI,
+  `python-v0.0.10`; see the [0.0.22 release notes](../releases/0.0.22.md)).
+  The waves merged as #768 and #770, the release PR as #771.
+- **The maintainer adds crates.io Trusted Publishing entries** for the two
+  new crates, `rs-rich-marketplace` and `noctiluca`; their first versions
+  went up with the environment's token.
+- **0.0.23 is started** ([plan](../plans/0.0.23.md)): what 0.0.22 handed
+  on, filled in now that 0.0.22 is tagged. Its versions are open (every
+  package one patch past 0.0.22).
+
+## Where things stood (2026-10-25, morning)
 
 - **0.0.21 is published** (17 crates from `main` at `29084d4` by one
   release run, `release-0.0.21`, on 2026-10-21; `rs-rich` 0.0.9 on PyPI,

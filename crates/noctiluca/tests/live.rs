@@ -105,6 +105,14 @@ impl Live {
         self.tab.send(Command::Open(url.clone()));
         self.wait(name, |p| p.url == url && !p.blocks.is_empty())
     }
+
+    /// Opens a fixture with a form, and waits for its controls too: a page
+    /// can arrive with its text before its controls.
+    fn open_form(&mut self, name: &str) -> Arc<Page> {
+        let url = fixture(name);
+        self.tab.send(Command::Open(url.clone()));
+        self.wait(name, |p| p.url == url && !p.controls.is_empty())
+    }
 }
 
 #[test]
@@ -146,7 +154,7 @@ fn a_page_reads_links_follow_and_history_returns() {
 fn a_form_fills_submits_and_its_echo_reads_back() {
     let Some(binary) = chrome() else { return };
     let mut live = Live::start(binary);
-    let page = live.open("form.html");
+    let page = live.open_form("form.html");
     let by_name = |page: &Page, name: &str| {
         page.controls
             .iter()
@@ -232,14 +240,12 @@ fn a_form_fills_submits_and_its_echo_reads_back() {
 fn a_value_the_page_sets_without_an_event_is_seen_and_conflicts() {
     let Some(binary) = chrome() else { return };
     let mut live = Live::start(binary);
-    let page = live.open("form.html");
-    let find = |page: &Page, name: &str| {
-        page.controls
-            .iter()
-            .find(|c| c.name == name)
-            .cloned()
-            .unwrap()
-    };
+    let page = live.open_form("form.html");
+    // A page can arrive mid-load without its controls, so waits look up
+    // with `value` and only a settled page unwraps.
+    let control = |page: &Page, name: &str| page.controls.iter().find(|c| c.name == name).cloned();
+    let find = |page: &Page, name: &str| control(page, name).unwrap();
+    let value = |page: &Page, name: &str| control(page, name).and_then(|c| c.value);
     let remote = find(&page, "Schedule remote update");
     let id = live.tab.send(Command::Act {
         binding: remote.binding(&page),
@@ -249,7 +255,7 @@ fn a_value_the_page_sets_without_an_event_is_seen_and_conflicts() {
     // The page sets the value 300 ms later with no event; the isolated
     // world's sample pings, and the model follows.
     let page = live.wait("the remote value", |p| {
-        find(p, "Name").value.as_deref() == Some("remote value")
+        value(p, "Name").as_deref() == Some("remote value")
     });
     // An edit based on the old value is a conflict, and is not applied.
     let name = find(&page, "Name");
@@ -268,7 +274,7 @@ fn a_value_the_page_sets_without_an_event_is_seen_and_conflicts() {
     );
     live.tab.send(Command::Refresh);
     let page = live.wait("unchanged", |p| {
-        find(p, "Name").value.as_deref() == Some("remote value")
+        value(p, "Name").as_deref() == Some("remote value")
     });
     assert_eq!(find(&page, "Name").value.as_deref(), Some("remote value"));
 }

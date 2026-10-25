@@ -7,7 +7,7 @@
 # SemVer from 0.0.1.
 [package]
 name = "noctiluca"
-version = "0.0.1"
+version = "0.0.2"
 description = "A terminal web browser: page text as terminal text, media as media"
 edition.workspace = true
 license.workspace = true
