@@ -136,6 +136,12 @@ cases agree). A sync keeps the types: where upstream builds a segment's
 text or a colour's name, build the `CompactString` directly
 (`.into()` from a `&str` or a `String`).
 
+**A dependency the mirror accepts: `compact_str` 0.9.** It is the only
+third-party crate `rs-rich` gained for speed, and it changes no output.
+The maintainer accepted it on 2026-10-25 as a dependency the mirror
+takes for byte-identical speed. A sync keeps it; a new dependency of this
+kind needs the same explicit decision.
+
 ## `rich-cli` (tool — tracks upstream 1.8.1, see UPSTREAM.toml)
 
 | upstream feature | rust `crates/rich-cli/src/…` | status |

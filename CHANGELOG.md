@@ -47,6 +47,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `impl Into<String>`, needs `.into()` to a `String` (or `.to_string()`)
   first.
   The Python package's API is unchanged.
+- **A new dependency of `rs-rich`: `compact_str` 0.9.** The maintainer
+  accepted it on 2026-10-25 as a dependency the mirror takes for
+  byte-identical speed; docs/PORTING.md's "Performance notes" records it.
 
 ### rs-rich-ext's fast path, intuiTUIve's default (ext, intuituive)
 
@@ -64,6 +67,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   &drawable)`, and the nodes `drawn(|| …)` and `drawn_described(|| …)`
   (a `described` node through the fast path). The `viz` nodes
   (sparkline, spectrogram, bar spectrum, persistence) use it.
+  `described` itself stays on rich's path, so third-party
+  `AccessibleText` types keep working (the maintainer's decision of
+  2026-10-25).
 - **Faster everywhere a frame changes a lot.** The chart keeps plain
   cells, not a `String` and a `Style` each, and rasters into its own
   grid; the painter encodes a true-colour pair's SGR once per style,
