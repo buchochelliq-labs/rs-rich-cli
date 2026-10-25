@@ -276,6 +276,9 @@ fn target<'py>(
 }
 
 /// Something `print` renders, after Rich's `_collect_renderables`.
+// An `Item` lives for one `print` call and is moved once, so the size of
+// the `Text` it may hold costs nothing worth boxing it for.
+#[allow(clippy::large_enum_variant)]
 enum Item {
     /// A core renderable (one of the bindings' classes, `Align`).
     Core(Box<dyn Renderable>),
