@@ -650,7 +650,7 @@ impl Screen {
                         (' '..='~').contains(&c)
                             || c != '\n'
                                 && super::control_picture(c).is_none()
-                                && matches!(rich::cells::char_cell_width(c), 1 | 2)
+                                && matches!(char_width(c), 1 | 2)
                     })
         });
         if !simple {
@@ -668,11 +668,7 @@ impl Screen {
                         if x >= rect.right() {
                             break 'line;
                         }
-                        let width = if c.is_ascii() {
-                            1
-                        } else {
-                            rich::cells::char_cell_width(c) as u16
-                        };
+                        let width = char_width(c) as u16;
                         if width == 2 && x + 1 >= rect.right() {
                             // No room for the second column.
                             self.cell_mut(x, y).set(" ", 1, id);
@@ -838,6 +834,20 @@ impl Screen {
                     .collect()
             })
             .collect()
+    }
+}
+
+/// The cells `c` takes, as rich measures it, with the characters pictures
+/// and most text are made of answered without a table lookup.
+#[inline]
+fn char_width(c: char) -> usize {
+    if (' '..='~').contains(&c)
+        || ('\u{2500}'..='\u{259f}').contains(&c)
+        || ('\u{2800}'..='\u{28ff}').contains(&c)
+    {
+        1
+    } else {
+        rich::cells::char_cell_width(c)
     }
 }
 
@@ -1031,9 +1041,9 @@ pub struct Painter {
     previous: Option<Sent>,
     system: Option<ColorSystem>,
     /// SGR parameters per style id of the screen being painted.
-    codes: Vec<Option<String>>,
+    codes: Vec<Option<Sgr>>,
     /// The SGR parameters of the style being set, when they are not cached.
-    scratch: String,
+    scratch: Sgr,
     /// Painting an inline region below the cursor, with relative moves,
     /// rather than the whole screen with absolute ones.
     inline: bool,
@@ -1050,6 +1060,8 @@ pub struct Painter {
     stats: PaintStats,
     /// How frames become bytes.
     strategy: PaintStrategy,
+    /// Runs of blank cells may be erased (ECH, EL) rather than written.
+    erase: bool,
 }
 
 /// The pen's state while a frame is written.
@@ -1059,7 +1071,128 @@ struct Pen {
     style: Option<StyleId>,
     link: Option<String>,
     /// The SGR parameters in force; `None` before the first.
-    codes: Option<String>,
+    codes: Option<Sgr>,
+    /// The true-colour pair in force, when the last style set was one:
+    /// then it, not `codes`, says what the pen holds.
+    rgb: Option<(Option<Rgb>, Option<Rgb>)>,
+}
+
+/// A style's SGR parameters, split so a change of colour alone can be sent
+/// as that change: what a game calls a state change, kept small.
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+struct Sgr {
+    /// All of them, in the order the style writes them.
+    full: String,
+    /// The foreground colour's parameters (`31`, `38;2;r;g;b`), if any.
+    fg: String,
+    /// The background colour's.
+    bg: String,
+    /// Everything else (attributes, underline colour), in order.
+    rest: String,
+}
+
+impl Sgr {
+    fn parse(codes: &str) -> Sgr {
+        let mut sgr = Sgr {
+            full: codes.to_string(),
+            ..Sgr::default()
+        };
+        let tokens: Vec<&str> = codes.split(';').filter(|t| !t.is_empty()).collect();
+        let mut i = 0;
+        while i < tokens.len() {
+            let token = tokens[i];
+            // An extended colour takes its sub-parameters with it.
+            let take = match (token, tokens.get(i + 1).copied()) {
+                ("38" | "48" | "58", Some("5")) => 3,
+                ("38" | "48" | "58", Some("2")) => 5,
+                _ => 1,
+            };
+            let end = (i + take).min(tokens.len());
+            let group = tokens[i..end].join(";");
+            let n: u16 = token.parse().unwrap_or(0);
+            let (slot, colour) = match n {
+                30..=39 | 90..=97 => (&mut sgr.fg, true),
+                40..=49 | 100..=107 => (&mut sgr.bg, true),
+                _ => (&mut sgr.rest, false),
+            };
+            if colour {
+                // A colour set twice: the last wins, as on a terminal.
+                slot.clear();
+            }
+            if !slot.is_empty() {
+                slot.push(';');
+            }
+            slot.push_str(&group);
+            i = end;
+        }
+        sgr
+    }
+
+    /// Set from a true-colour pair, as `Style::ansi_codes` writes it.
+    fn set_rgb(&mut self, fg: Option<Rgb>, bg: Option<Rgb>) {
+        self.fg.clear();
+        self.bg.clear();
+        self.rest.clear();
+        self.full.clear();
+        if let Some(fg) = fg {
+            rgb_code(&mut self.fg, "38;2;", fg);
+        }
+        if let Some(bg) = bg {
+            rgb_code(&mut self.bg, "48;2;", bg);
+        }
+        self.full.push_str(&self.fg);
+        if !self.fg.is_empty() && !self.bg.is_empty() {
+            self.full.push(';');
+        }
+        self.full.push_str(&self.bg);
+    }
+
+    /// Write what changes the terminal's pen from `from` (unknown when
+    /// `None`) to this: nothing, the colours that changed, or a reset and
+    /// everything, whichever is shortest.
+    fn write_from(&self, from: Option<&Sgr>, out: &mut String) {
+        let full_len = 4 + if self.full.is_empty() {
+            0
+        } else {
+            1 + self.full.len()
+        };
+        if let Some(from) = from {
+            if from.full == self.full {
+                return;
+            }
+            if from.rest == self.rest {
+                let part = |now: &str, was: &str, default: usize| match (now == was, now.is_empty())
+                {
+                    (true, _) => 0,
+                    (false, true) => default,
+                    (false, false) => now.len(),
+                };
+                let fg = part(&self.fg, &from.fg, 2);
+                let bg = part(&self.bg, &from.bg, 2);
+                let delta = 3 + fg + bg + usize::from(fg > 0 && bg > 0);
+                if delta < full_len {
+                    out.push_str("\x1b[");
+                    if fg > 0 {
+                        out.push_str(if self.fg.is_empty() { "39" } else { &self.fg });
+                    }
+                    if fg > 0 && bg > 0 {
+                        out.push(';');
+                    }
+                    if bg > 0 {
+                        out.push_str(if self.bg.is_empty() { "49" } else { &self.bg });
+                    }
+                    out.push('m');
+                    return;
+                }
+            }
+        }
+        out.push_str("\x1b[0");
+        if !self.full.is_empty() {
+            out.push(';');
+            out.push_str(&self.full);
+        }
+        out.push('m');
+    }
 }
 
 impl Painter {
@@ -1068,7 +1201,7 @@ impl Painter {
             previous: None,
             system,
             codes: Vec::new(),
-            scratch: String::new(),
+            scratch: Sgr::default(),
             inline: false,
             cursor: None,
             height: 0,
@@ -1076,7 +1209,16 @@ impl Painter {
             written: Vec::new(),
             stats: PaintStats::default(),
             strategy: PaintStrategy::default(),
+            erase: true,
         }
+    }
+
+    /// Whether runs of blank cells may be erased with ECH or EL rather
+    /// than written as spaces (on by default; only blanks with the
+    /// terminal's own background are, so a terminal without
+    /// background-colour erase shows the same).
+    pub fn set_erase(&mut self, on: bool) {
+        self.erase = on;
     }
 
     /// Paint with `strategy` from now on.
@@ -1133,23 +1275,84 @@ impl Painter {
     }
 
     fn goto(&self, from: Option<(u16, u16)>, x: u16, y: u16) -> String {
-        if !self.inline {
-            return format!("\x1b[{};{}H", y + 1, x + 1);
-        }
-        let (_, from_y) = from.unwrap_or((0, 0));
         let mut out = String::new();
-        if y < from_y {
-            out.push_str(&format!("\x1b[{}A", from_y - y));
-        } else if y > from_y {
-            out.push_str(&format!("\x1b[{}B", y - from_y));
-        }
-        // A carriage return also clears a pending wrap after the last
-        // column, so the column is always counted from the left edge.
-        out.push('\r');
-        if x > 0 {
-            out.push_str(&format!("\x1b[{x}C"));
-        }
+        self.goto_into(from, x, y, u16::MAX, &mut out);
         out
+    }
+
+    /// Move the cursor from `from` (unknown when `None`) to `x`, `y`, the
+    /// cheapest way: an absolute move (CUP), or a relative one (up, down,
+    /// left, right, a carriage return, `\r\n`) when it is shorter.
+    /// `width` is the screen's: a cursor past its last column is waiting
+    /// to wrap, so only a carriage return fixes its column.
+    fn goto_into(&self, from: Option<(u16, u16)>, x: u16, y: u16, width: u16, out: &mut String) {
+        if self.inline {
+            let (_, from_y) = from.unwrap_or((0, 0));
+            if y < from_y {
+                csi(out, from_y - y, 'A');
+            } else if y > from_y {
+                csi(out, y - from_y, 'B');
+            }
+            // A carriage return also clears a pending wrap after the last
+            // column, so the column is always counted from the left edge.
+            out.push('\r');
+            if x > 0 {
+                csi(out, x, 'C');
+            }
+            return;
+        }
+        let cup = if x == 0 && y == 0 {
+            3
+        } else {
+            3 + digits(y + 1) + if x > 0 { 1 + digits(x + 1) } else { 0 }
+        };
+        let Some((fx, fy)) = from else {
+            return push_cup(out, x, y);
+        };
+        let step = |n: u16| if n == 1 { 3 } else { 3 + digits(n) };
+        let vertical = match y.cmp(&fy) {
+            std::cmp::Ordering::Equal => 0,
+            std::cmp::Ordering::Greater => step(y - fy),
+            std::cmp::Ordering::Less => step(fy - y),
+        };
+        let wrapping = fx >= width;
+        // Along the row, from where the cursor is (not while it waits to
+        // wrap), or from the left edge after a carriage return.
+        let along = if wrapping || x == fx {
+            usize::MAX
+        } else if x > fx {
+            step(x - fx)
+        } else {
+            step(fx - x)
+        };
+        let along = if x == fx && !wrapping { 0 } else { along };
+        let from_edge = 1 + if x > 0 { step(x) } else { 0 };
+        let crlf = x == 0 && y == fy + 1;
+        let relative = vertical.saturating_add(along.min(from_edge));
+        if crlf && 2 < cup && 2 <= relative {
+            out.push_str("\r\n");
+            return;
+        }
+        if relative >= cup {
+            return push_cup(out, x, y);
+        }
+        if along > from_edge {
+            out.push('\r');
+        }
+        match y.cmp(&fy) {
+            std::cmp::Ordering::Greater => csi(out, y - fy, 'B'),
+            std::cmp::Ordering::Less => csi(out, fy - y, 'A'),
+            std::cmp::Ordering::Equal => {}
+        }
+        if along <= from_edge {
+            if x > fx {
+                csi(out, x - fx, 'C');
+            } else if x < fx {
+                csi(out, fx - x, 'D');
+            }
+        } else if x > 0 {
+            csi(out, x, 'C');
+        }
     }
 
     /// Inline: go back to the region's first row (if it was made), and
@@ -1280,7 +1483,7 @@ impl Painter {
         if pen.link.is_some() {
             out.push_str("\x1b]8;;\x1b\\");
         }
-        if pen.codes.as_deref().is_some_and(|c| !c.is_empty()) {
+        if pen.rgb.is_some() || pen.codes.as_ref().is_some_and(|c| !c.full.is_empty()) {
             out.push_str("\x1b[0m");
         }
         self.stats.style_bytes += out.len() - before;
@@ -1375,11 +1578,34 @@ impl Painter {
             if screen.cell(x0, y).is_continuation() && x0 > 0 {
                 x0 -= 1;
             }
-            if pen.at != Some((x0, y)) {
-                let before = out.len();
-                out.push_str(&self.goto(pen.at, x0, y));
-                self.stats.move_bytes += out.len() - before;
+            // A run of blanks on the terminal's own background: erased
+            // (EL to the end of the row, ECH within it) when that is
+            // shorter than writing it.
+            if self.erase && !self.inline && self.plain_blank(screen, x0, y) {
+                let mut run = 1;
+                while x0 + run < end && self.plain_blank(screen, x0 + run, y) {
+                    run += 1;
+                }
+                let to_edge = x0 + run == screen.width;
+                let erase = if to_edge { 3 } else { 3 + digits(run) };
+                if usize::from(run) > erase {
+                    self.move_pen(screen, x0, y, pen, out);
+                    let before = out.len();
+                    self.set_pen(screen, StyleId::NONE, pen, out);
+                    self.stats.style_bytes += out.len() - before;
+                    if to_edge {
+                        out.push_str("\x1b[K");
+                    } else {
+                        csi(out, run, 'X');
+                    }
+                    self.stats.compared += usize::from(x0 + run - x);
+                    self.stats.written += usize::from(run);
+                    self.note_written(x0, y, x0 + run);
+                    x = x0 + run;
+                    continue;
+                }
             }
+            self.move_pen(screen, x0, y, pen, out);
             let cell = screen.cell(x0, y);
             let before = out.len();
             self.set_pen(screen, cell.style, pen, out);
@@ -1391,13 +1617,76 @@ impl Painter {
             let columns = usize::from(next - x0);
             self.stats.compared += usize::from(next - x);
             self.stats.written += columns;
-            match self.written.last_mut() {
-                Some(run) if run.y == y && run.right() == x0 => run.width = next - run.x,
-                _ => self.written.push(Rect::new(x0, y, next - x0, 1)),
-            }
+            self.note_written(x0, y, next);
             pen.at = Some((next, y));
             x = next;
         }
+    }
+
+    /// Note cells `x`..`next` of row `y` as written this paint.
+    fn note_written(&mut self, x: u16, y: u16, next: u16) {
+        match self.written.last_mut() {
+            Some(run) if run.y == y && run.right() == x => run.width = next - run.x,
+            _ => self.written.push(Rect::new(x, y, next - x, 1)),
+        }
+    }
+
+    /// Move the pen to `x`, `y`: through the cells between, when they are
+    /// a few unchanged ASCII characters in the pen's style (shorter than
+    /// any move), else the cheapest move.
+    fn move_pen(&mut self, screen: &Screen, x: u16, y: u16, pen: &mut Pen, out: &mut String) {
+        if pen.at == Some((x, y)) {
+            return;
+        }
+        let before = out.len();
+        let through = match pen.at {
+            Some((fx, fy)) if !self.inline && fy == y && fx < x && x - fx <= 3 => {
+                (fx..x).all(|gx| {
+                    let cell = screen.cell(gx, y);
+                    cell.width == 1 && cell.len == 1 && Some(cell.style) == pen.style
+                })
+            }
+            _ => false,
+        };
+        if let (true, Some((fx, _))) = (through, pen.at) {
+            for gx in fx..x {
+                out.push_str(screen.cell(gx, y).text());
+            }
+        } else {
+            self.goto_into(pen.at, x, y, screen.width, out);
+        }
+        self.stats.move_bytes += out.len() - before;
+        pen.at = Some((x, y));
+    }
+
+    /// Whether the cell at `x`, `y` is a space with no style the terminal
+    /// shows on a blank: what erasing leaves.
+    fn plain_blank(&mut self, screen: &Screen, x: u16, y: u16) -> bool {
+        let cell = screen.cell(x, y);
+        if cell.len != 1 || cell.bytes[0] != b' ' || cell.width != 1 {
+            return false;
+        }
+        if cell.style == StyleId::NONE {
+            return true;
+        }
+        let Some(style) = screen.style(cell.style) else {
+            return true;
+        };
+        // Colours and attributes would show on the blank; a link would not
+        // be opened by an erase.
+        style.link().is_none() && self.sgr(screen, cell.style).full.is_empty()
+    }
+
+    /// The SGR parameters of `style`, cached by id.
+    fn sgr(&mut self, screen: &Screen, style: StyleId) -> &Sgr {
+        if self.codes.len() <= style.index() {
+            self.codes.resize(style.index() + 1, None);
+        }
+        let system = self.system;
+        self.codes[style.index()].get_or_insert_with(|| match (screen.style(style), system) {
+            (Some(s), Some(system)) => Sgr::parse(&s.ansi_codes(system)),
+            _ => Sgr::default(),
+        })
     }
 
     fn set_pen(&mut self, screen: &Screen, style: StyleId, pen: &mut Pen, out: &mut String) {
@@ -1409,69 +1698,138 @@ impl Painter {
         // terminal with the rest: such a link is dropped.
         let link = resolved
             .and_then(|s| s.link())
-            .filter(|url| !url.chars().any(|c| super::control_picture(c).is_some()))
-            .map(str::to_string);
-        if link != pen.link {
-            match &link {
-                Some(url) => out.push_str(&format!("\x1b]8;;{url}\x1b\\")),
+            .filter(|url| !url.chars().any(|c| super::control_picture(c).is_some()));
+        if link != pen.link.as_deref() {
+            match link {
+                Some(url) => {
+                    out.push_str("\x1b]8;;");
+                    out.push_str(url);
+                    out.push_str("\x1b\\");
+                }
                 None => out.push_str("\x1b]8;;\x1b\\"),
             }
-            pen.link = link;
+            pen.link = link.map(str::to_string);
         }
-        let system = self.system;
-        let codes: &str = match (screen.styles.rgb(style), system) {
+        if let (Some(pair), Some(ColorSystem::Truecolor)) = (screen.styles.rgb(style), self.system)
+        {
             // A colour pair in true colour: written straight from the
-            // colours, as `Style::ansi_codes` would, with nothing cached.
-            (Some((fg, bg)), Some(ColorSystem::Truecolor)) => {
-                self.scratch.clear();
-                rgb_codes(&mut self.scratch, fg, bg);
-                &self.scratch
-            }
-            _ => {
-                if self.codes.len() <= style.index() {
-                    self.codes.resize(style.index() + 1, None);
+            // colours, as `Style::ansi_codes` would, with nothing cached,
+            // and from the last pair only the colour that changed.
+            match pen.rgb {
+                Some(old) if old == pair => {}
+                Some(old) => rgb_delta(old, pair, out),
+                None => {
+                    self.scratch.set_rgb(pair.0, pair.1);
+                    if pen.codes.as_ref() != Some(&self.scratch) {
+                        self.scratch.write_from(pen.codes.as_ref(), out);
+                    }
                 }
-                self.codes[style.index()].get_or_insert_with(|| match (resolved, system) {
-                    (Some(s), Some(system)) => s.ansi_codes(system),
-                    _ => String::new(),
-                })
             }
-        };
+            pen.rgb = Some(pair);
+            pen.style = Some(style);
+            return;
+        }
+        if let Some((fg, bg)) = pen.rgb.take() {
+            // What the pen holds, as parameters again.
+            self.scratch.set_rgb(fg, bg);
+            pen.codes = Some(self.scratch.clone());
+        }
+        self.sgr(screen, style);
+        let codes = self.codes[style.index()].as_ref().expect("cached above");
         // Styles that differ only in their link share colours: no SGR.
-        if pen.codes.as_deref() != Some(codes) {
-            out.push_str("\x1b[0");
-            if !codes.is_empty() {
-                out.push(';');
-                out.push_str(codes);
-            }
-            out.push('m');
+        if pen.codes.as_ref() != Some(codes) {
+            codes.write_from(pen.codes.as_ref(), out);
             match &mut pen.codes {
-                Some(current) => {
-                    current.clear();
-                    current.push_str(codes);
-                }
-                None => pen.codes = Some(codes.to_string()),
+                Some(current) => current.clone_from(codes),
+                None => pen.codes = Some(codes.clone()),
             }
         }
         pen.style = Some(style);
     }
 }
 
-/// The SGR parameters of a true-colour pair, as `Style::ansi_codes` writes
-/// them: `38;2;r;g;b`, then `48;2;r;g;b`.
-fn rgb_codes(out: &mut String, fg: Option<Rgb>, bg: Option<Rgb>) {
-    for (lead, colour) in [("38;2;", fg), ("48;2;", bg)] {
-        let Some(rgb) = colour else { continue };
-        if !out.is_empty() {
+/// The SGR that changes a true-colour pen from `old` to `new`: only the
+/// colours that differ (a colour gone is its default, 39 or 49).
+fn rgb_delta(old: (Option<Rgb>, Option<Rgb>), new: (Option<Rgb>, Option<Rgb>), out: &mut String) {
+    out.push_str("\x1b[");
+    let mut first = true;
+    for (was, now, lead, default) in [(old.0, new.0, "38;2;", "39"), (old.1, new.1, "48;2;", "49")]
+    {
+        if was == now {
+            continue;
+        }
+        if !first {
             out.push(';');
         }
-        out.push_str(lead);
-        for (i, part) in rgb.into_iter().enumerate() {
-            if i > 0 {
-                out.push(';');
-            }
-            push_u8(out, part);
+        first = false;
+        match now {
+            Some(rgb) => rgb_code(out, lead, rgb),
+            None => out.push_str(default),
         }
+    }
+    out.push('m');
+}
+
+/// `CSI n c`, with `n` left out when it is 1.
+fn csi(out: &mut String, n: u16, c: char) {
+    out.push_str("\x1b[");
+    if n != 1 {
+        push_u16(out, n);
+    }
+    out.push(c);
+}
+
+/// An absolute move to `x`, `y` (CUP), its column left out when it is the
+/// first.
+fn push_cup(out: &mut String, x: u16, y: u16) {
+    out.push_str("\x1b[");
+    if x > 0 || y > 0 {
+        push_u16(out, y + 1);
+        if x > 0 {
+            out.push(';');
+            push_u16(out, x + 1);
+        }
+    }
+    out.push('H');
+}
+
+/// The decimal digits of `n`.
+fn digits(n: u16) -> usize {
+    match n {
+        0..=9 => 1,
+        10..=99 => 2,
+        100..=999 => 3,
+        1000..=9999 => 4,
+        _ => 5,
+    }
+}
+
+/// `n` in decimal.
+fn push_u16(out: &mut String, n: u16) {
+    let mut buffer = [0u8; 5];
+    let mut at = buffer.len();
+    let mut n = n;
+    loop {
+        at -= 1;
+        buffer[at] = b'0' + (n % 10) as u8;
+        n /= 10;
+        if n == 0 {
+            break;
+        }
+    }
+    for &b in &buffer[at..] {
+        out.push(char::from(b));
+    }
+}
+
+/// `lead` and a true colour's parameters (`38;2;r;g;b`).
+fn rgb_code(out: &mut String, lead: &str, rgb: Rgb) {
+    out.push_str(lead);
+    for (i, part) in rgb.into_iter().enumerate() {
+        if i > 0 {
+            out.push(';');
+        }
+        push_u8(out, part);
     }
 }
 
@@ -1614,7 +1972,7 @@ mod tests {
         );
         let out = painter.paint(&screen, &[screen.area()]);
         assert!(
-            out.starts_with("\x1b[1;1H\x1b]8;;https://x.y\x1b\\"),
+            out.starts_with("\x1b[H\x1b]8;;https://x.y\x1b\\"),
             "{out:?}"
         );
         // One SGR for the four link cells, not four.
@@ -1655,7 +2013,7 @@ mod tests {
         painter.paint(&screen, &[]);
         screen.write_lines(screen.area(), &[line("abx")]);
         let out = painter.paint(&screen, &[screen.area()]);
-        assert_eq!(out, "\x1b[1;1H\x1b[0mab");
+        assert_eq!(out, "\x1b[H\x1b[0mab");
     }
 
     /// A small, fast generator: the same noise on every run.
@@ -1780,7 +2138,7 @@ mod tests {
         let remap = screen.compact_styles();
         painter.remap_styles(&remap);
         let out = painter.paint(&screen, &[screen.area()]);
-        assert_eq!(out, "\x1b[1;1H\x1b[0;38;2;4;5;6ma\x1b[0m");
+        assert_eq!(out, "\x1b[H\x1b[0;38;2;4;5;6ma\x1b[0m");
     }
 
     #[test]

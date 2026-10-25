@@ -2727,7 +2727,7 @@ impl App {
     /// use intuituive::prelude::*;
     /// use intuituive::PaintStrategy;
     ///
-    /// let app = App::new(|| text("hello")).paint_strategy(PaintStrategy::Best);
+    /// let app = App::new(|| label("hello")).paint_strategy(PaintStrategy::Best);
     /// let mut driver = app.driver(10, 1);
     /// driver.settle();
     /// assert_eq!(driver.screen().plain()[0].trim_end(), "hello");
