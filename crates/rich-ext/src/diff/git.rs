@@ -1033,7 +1033,7 @@ impl PatchView {
                     let pad = name_width.saturating_sub(cell_len(&prefix) + cell_len(&label));
                     // Linked to the file, labelled with its name and status.
                     let mut seg = self.path_segment(file.path(), st);
-                    seg.text = label;
+                    seg.text = label.into();
                     row.push(seg);
                     row.push(Segment::new(" ".repeat(pad + 2), None));
                     row.extend(self.counts(console, file, bar, scale));

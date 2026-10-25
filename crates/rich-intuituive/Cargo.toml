@@ -6,7 +6,7 @@
 # components. See docs/design/intuituive.md. Independent SemVer from 0.0.1.
 [package]
 name = "rs-rich-intuituive"
-version = "0.0.7"
+version = "0.0.8"
 description = "intuiTUIve: a reactive, retained terminal UI framework built on rs-rich"
 edition.workspace = true
 license.workspace = true
@@ -115,8 +115,8 @@ required-features = ["pcm"]
 rich.workspace = true
 # Both without their defaults, so `syntax` decides whether syntect comes
 # in. Path dependencies, as workspace ones cannot turn defaults off.
-rich-ext = { package = "rs-rich-ext", path = "../rich-ext", version = "0.0.19", default-features = false }
-rich-interact = { package = "rs-rich-interact", path = "../rich-interact", version = "0.0.10", default-features = false }
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext", version = "0.0.20", default-features = false }
+rich-interact = { package = "rs-rich-interact", path = "../rich-interact", version = "0.0.11", default-features = false }
 cpal = { version = "0.18.2", optional = true }
 hound = { version = "3.5", optional = true }
 notify = { workspace = true, optional = true }
@@ -137,7 +137,7 @@ alsa-sys = { version = "0.4", optional = true }
 [dev-dependencies]
 # The Yazi example (examples/files.rs) shows times in the local time zone
 # with rs-rich-ext's `fs::local_time`, behind its `local-time` feature.
-rich-ext = { workspace = true, features = ["local-time"] }
+rich-ext = { workspace = true, features = ["local-time", "testing"] }
 # PTY tests: an app run on every backend gives the terminal back
 # (tests/backends.rs).
 portable-pty = "0.9"

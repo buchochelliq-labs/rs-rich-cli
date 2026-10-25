@@ -1,0 +1,30 @@
+◀▶ Reader fixture https://fixture.example/reader.html reader
+Plankton                                                                                           ┃
+                                                                                                   ┃
+Tiny drifters of the open sea, with light of their own.                                            ┃
+                                                                                                   ┃
+Kinds                                                                                              ┃
+                    ╭─ Actions ────────────────────────────────────────────────╮                   ┃
+• Dinoflagellates   │? Action ›                                                │                   ┃
+  ◦ Noctiluca       │❯  link "the second page" [site fixture.example]        n │                   ┃
+  ◦ Pyrocystis      │   Open an address, a keyword or a search               o │                   ┃
+• Copepods          │   Open in a new tab (One tab for now: tabs come with … O │                   ┃
+1. Bloom            │   Edit this page's address                        ctrl+l │                   ┃
+2. Glow             │   Link hints: follow a link or use a control           f │                   ┃
+                    │   Back (Nothing to go back to.)                        H │                   ┃
+│ The sea was on fir│   Forward                                              L │                   ┃
+                    │   Reload                                               R │                   ┃
+▏glow = touch * 0.1 │   Next tab (One tab for now: tabs come with rs-rich… g/t │                   ┃
+▏sleep()            │   Previous tab (One tab for now: tabs come with rs-… g/T │                   ┃
+                    │   Find in page                                         / │                   ┃
+Sizes               │   Next match (Find something first.)                   n │                   ┃
+Name      │ Size    │   Previous match (Find something first.)               N │                   ┃
+──────────┼─────    │   Scroll down                                        j/↓ │                   ┃
+Noctiluca │ 1 mm    │  30/30 · ↑↓ move · enter run · esc close                 │                   ┃
+Copepod   │ 2 mm    ╰──────────────────────────────────────────────────────────╯                   ┃
+                                                                                                   ┃
+image: A glowing wave                                                                              ┃
+▀▀▀▀▀                                                                                              ┃
+                                                                                                   ┃
+                                                                                                   │
+f1 actions · f hints · o open · r reader · q quit

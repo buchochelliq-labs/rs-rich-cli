@@ -40,7 +40,8 @@ as a normal user, never as root.
   over SSH: run over SSH, it plays on the server.
 - **Safety**: everything a page says is cleaned before it reaches the
   terminal; no escape sequence passes. Downloads are refused. The
-  profile is temporary unless you keep one (`--profile NAME`).
+  profile is temporary, removed on the way out, unless you keep one
+  (`--profile NAME`).
 - **Config**: `noctiluca/config.toml` in your config directory, with
   keywords, the search engine, keys, and per-site settings and keys. See
   [`config.sample.toml`](config.sample.toml).
@@ -49,8 +50,9 @@ as a normal user, never as root.
 
 - `fake-engine` (off; **test-only**): the binary replays saved page
   snapshots from the directory `NOCTILUCA_FAKE_ENGINE` names instead of
-  starting Chrome. The PTY test and the docs tape use it. A normal build
-  ignores the variable.
+  starting Chrome. The PTY test and the docs tapes use it. A normal build
+  ignores the variable. The library's `testing::FakeEngine` is there
+  with or without it.
 
 ## Limitations
 
@@ -59,8 +61,25 @@ as a normal user, never as root.
   can notice that, and may treat Noctiluca as automation. Noctiluca does
   not try to hide it.
 - Sound plays on the machine Chrome runs on, never over SSH.
+- Still images show as pictures in reader mode only; the projection shows
+  their alt text. Video frames are not drawn yet.
 
-The guide, with every key, the config and troubleshooting, is
-[Noctiluca's page](https://buchochelliq-labs.github.io/rs-rich-cli/guide/noctiluca/)
-on the docs site. The design, its phases and what is still to come are in
+## Documentation
+
+The guide is on the docs site:
+
+- [Noctiluca](https://buchochelliq-labs.github.io/rs-rich-cli/guide/noctiluca/): the overview, with a recording against a real Chrome
+- [Getting started](https://buchochelliq-labs.github.io/rs-rich-cli/guide/noctiluca/getting-started/): install, the Chrome it needs, a first run
+- [Reading and moving around](https://buchochelliq-labs.github.io/rs-rich-cli/guide/noctiluca/reading/): views, scrolling, link hints, find, bookmarks
+- [Forms and controls](https://buchochelliq-labs.github.io/rs-rich-cli/guide/noctiluca/forms/)
+- [Going places and keys](https://buchochelliq-labs.github.io/rs-rich-cli/guide/noctiluca/keys/): keywords, switches, presets, site keys, every action
+- [Sound and media](https://buchochelliq-labs.github.io/rs-rich-cli/guide/noctiluca/media/)
+- [Configuration](https://buchochelliq-labs.github.io/rs-rich-cli/guide/noctiluca/config/): every key of `config.toml`
+- [Privacy and security](https://buchochelliq-labs.github.io/rs-rich-cli/guide/noctiluca/privacy/)
+- [Using it as a library](https://buchochelliq-labs.github.io/rs-rich-cli/guide/noctiluca/library/)
+- [Troubleshooting and FAQ](https://buchochelliq-labs.github.io/rs-rich-cli/guide/noctiluca/troubleshooting/)
+- [What works today and what's next](https://buchochelliq-labs.github.io/rs-rich-cli/guide/noctiluca/status/)
+
+The library's reference is on [docs.rs](https://docs.rs/noctiluca). The
+design, its phases and what is still to come are in
 [`docs/design/browser.md`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/design/browser.md).

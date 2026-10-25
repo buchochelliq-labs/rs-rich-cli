@@ -226,6 +226,14 @@ pub(crate) fn send(socket: &mut WebSocket<TcpStream>, text: &str, z: Compress) -
 pub(crate) struct Compress(pub Option<usize>);
 
 impl Compress {
+    /// What a session sends: framed whenever the page asked (`z=1`), as it
+    /// then reads the first byte of every binary message, and deflated
+    /// only from the server's threshold. A server that does not compress
+    /// still frames, at a threshold nothing reaches.
+    pub(crate) fn negotiate(server: Option<usize>, page_asks: bool) -> Compress {
+        Compress(page_asks.then(|| server.unwrap_or(usize::MAX)))
+    }
+
     /// `text` as the message to send.
     pub(crate) fn text(self, text: &str) -> Message {
         match self.0 {
@@ -398,5 +406,26 @@ mod tests {
         assert_eq!(parse_message("a4096"), PageMessage::Shown(4096));
         assert_eq!(parse_message("a-1"), PageMessage::Unknown);
         assert_eq!(parse_message("a"), PageMessage::Unknown);
+    }
+
+    #[test]
+    fn a_page_that_asks_gets_every_binary_message_framed() {
+        let payload = |message: Message| match message {
+            Message::Binary(bytes) => bytes.to_vec(),
+            other => panic!("not binary: {other:?}"),
+        };
+        // The page asked, the server does not compress: framed, as it is.
+        let z = Compress::negotiate(None, true);
+        assert_eq!(payload(z.bytes(b"hello\r\n")), b"\0hello\r\n");
+        assert_eq!(z.text("short"), Message::text("short"));
+        // The page did not ask: the bytes as they are, whatever the server.
+        assert_eq!(
+            payload(Compress::negotiate(Some(1), false).bytes(b"hi")),
+            b"hi"
+        );
+        // Both: below the threshold framed, from it deflated.
+        let z = Compress::negotiate(Some(4), true);
+        assert_eq!(payload(z.bytes(b"hi")), b"\0hi");
+        assert_eq!(payload(z.bytes(b"hello")).first(), Some(&1));
     }
 }

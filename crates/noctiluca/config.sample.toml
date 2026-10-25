@@ -26,7 +26,8 @@ wiki = { search = "https://en.wikipedia.org/w/index.php?search={}", home = "http
 # vim (o, f, /, H and L, g t) or plain (Ctrl+O, Alt+Left, Ctrl+F).
 preset = "vim"
 # Any action, by its id (`noctiluca keys` lists them): keys separated by
-# spaces are alternatives; `none` unbinds.
+# spaces are alternatives; `none` (or "") unbinds. A line with a key
+# name Noctiluca does not know is a warning, and only that line is skipped.
 # hints = "f ctrl+g"
 
 [media]
@@ -76,6 +77,7 @@ keyword = "s"
 [site."github.com".keys]
 # A key binds an action, an element by its accessible role and name
 # (looked up when the key is pressed), or a list of those. Never a script
-# or a CSS selector. F1, then b, binds one from the page itself.
+# or a CSS selector. Ctrl+K ("Bind a key on this site…") binds one from
+# the page itself.
 n = "scroll.down"
 "]" = { role = "link", name = "Next" }

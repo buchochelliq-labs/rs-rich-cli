@@ -578,6 +578,27 @@ struct Sample {
     style: Option<String>,
 }
 
+impl crate::surface::Draw for Sparkline {
+    fn draw(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        screen: &mut crate::surface::Screen,
+        rect: crate::surface::Rect,
+    ) {
+        let charset = self.charset.resolve(console, options, Charset::Blocks);
+        let width = options.max_width;
+        let rows = self.rows.or(options.height).unwrap_or(1).clamp(1, MAX_ROWS);
+        super::draw_lines(
+            self.lines(console, charset, width, rows),
+            width,
+            options,
+            screen,
+            rect,
+        );
+    }
+}
+
 impl Renderable for Sparkline {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let charset = self.charset.resolve(console, options, Charset::Blocks);

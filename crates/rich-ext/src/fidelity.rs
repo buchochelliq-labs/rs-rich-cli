@@ -410,7 +410,7 @@ pub fn ascii_fallback(segments: Vec<Segment>) -> Vec<Segment> {
         .into_iter()
         .map(|mut s| {
             if !s.control && !s.text.is_ascii() {
-                s.text = ascii_text(&s.text);
+                s.text = ascii_text(&s.text).into();
             }
             s
         })

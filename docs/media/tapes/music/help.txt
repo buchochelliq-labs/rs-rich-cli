@@ -1,4 +1,4 @@
-╭─ Library ────────────────────────╮╭─ Playlist ──┤ Total 5 tracks | 00:35 | Mode: 🔁 ├─ ────────────────────╮
+╭ Library ─────────────────────────╮╭─ Playlist ──┤ Total 5 tracks | 00:35 | Mode: 🔁 ├──────────────────────╮
 │  ▾ library                       ││   Duration  Title               Artist              Album              │
 │🦄  ▸ Harbour Songs               ││   [ 00:05 ] Low Earth           Nova Hale           Unknown Album      │
 │    ▾ Orbit Lights                ││🚀 [ 00:07 ] Morning Signal      Nova Hale           Unknown Album      │

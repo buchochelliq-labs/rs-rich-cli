@@ -350,7 +350,7 @@ fn snapshot_segment(s: &Segment) -> SnapshotSegment {
     ];
     let theme = rich::terminal_theme::DEFAULT_TERMINAL_THEME;
     SnapshotSegment {
-        text: s.text.clone(),
+        text: s.text.to_string(),
         control: s.control,
         foreground: s.style.as_ref().and_then(|s| s.color()).map(|c| {
             theme

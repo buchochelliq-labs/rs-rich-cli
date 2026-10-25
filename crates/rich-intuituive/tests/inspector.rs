@@ -653,3 +653,23 @@ fn linear_mode_is_the_same_with_the_inspector() {
         "{plain:?}"
     );
 }
+
+/// The panel shows the bytes the frame before sent, not the zero this
+/// frame's count starts at (the painter's counters restart each frame).
+#[test]
+fn the_panel_shows_the_bytes_the_frame_before_sent() {
+    let mut driver = inspected();
+    driver.event(Event::Key(Key::parse("+").unwrap()));
+    driver.settle();
+    let panel = panel(&driver);
+    let line = panel
+        .lines()
+        .find(|line| line.contains("B last frame"))
+        .unwrap_or_else(|| panic!("no bytes line in:\n{panel}"));
+    let sent: usize = line
+        .split_whitespace()
+        .nth(1)
+        .and_then(|n| n.parse().ok())
+        .unwrap_or_else(|| panic!("no count in {line:?}"));
+    assert!(sent > 0, "{line:?}");
+}

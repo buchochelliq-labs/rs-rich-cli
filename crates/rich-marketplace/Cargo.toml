@@ -8,7 +8,7 @@
 # Independent SemVer from 0.0.1. See AGENTS.md → Versioning.
 [package]
 name = "rs-rich-marketplace"
-version = "0.0.1"
+version = "0.0.2"
 description = "The rs-rich plugin marketplace client: a minisign-signed index, its key chain, listings, version resolution, verified downloads and the lockfile"
 edition.workspace = true
 license.workspace = true

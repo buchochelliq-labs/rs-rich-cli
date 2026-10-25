@@ -769,8 +769,9 @@ fn websocket(mut stream: TcpStream, head: &Head, shared: &Arc<Shared>, pending: 
             .unwrap_or(default)
     };
     let (columns, rows) = (size("cols", 80), size("rows", 24));
-    // Compressed only when the server allows it and the page can undo it.
-    let z = session::Compress(shared.compress.filter(|_| head.param("z") == Some("1")));
+    // Framed when the page can undo compression, compressed only when the
+    // server allows it too.
+    let z = session::Compress::negotiate(shared.compress, head.param("z") == Some("1"));
     if let (Mode::App(_), Isolation::Processes) = (&shared.mode, shared.isolation) {
         let session = isolate::Session {
             spawn: &shared.spawn,

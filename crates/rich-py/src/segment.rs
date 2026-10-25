@@ -35,7 +35,7 @@ impl Segment {
     /// A Python segment for a core one.
     pub(crate) fn from_core(py: Python<'_>, segment: &CoreSegment) -> Segment {
         Segment {
-            text: segment.text.clone(),
+            text: segment.text.to_string(),
             style: segment.style.clone(),
             control: segment.control.then(|| {
                 pyo3::types::PyBool::new(py, true)
@@ -50,7 +50,7 @@ impl Segment {
     /// This segment as a core one, text unchanged.
     pub(crate) fn to_core(&self) -> CoreSegment {
         CoreSegment {
-            text: self.text.clone(),
+            text: self.text.as_str().into(),
             style: self.style.clone(),
             control: self.is_control,
         }

@@ -198,9 +198,15 @@ impl StyleTable {
 
     fn push(&mut self, key: u64, style: Style) -> StyleId {
         let id = self.styles.len() as u32;
+        // A style of true colours alone is a pair, whichever way it came:
+        // a painter writes it from the colours.
+        let pair = truecolor_pair(&style).unwrap_or(0);
         self.styles.push(Some(style));
         self.keys.push(key);
-        self.pairs.push(0);
+        self.pairs.push(pair);
+        if pair != 0 {
+            self.rgb.entry(pair).or_insert(StyleId(id));
+        }
         // At the head of its key's chain.
         let next = self.index.insert(key, id).unwrap_or(0);
         self.chain.push(next);
@@ -356,6 +362,40 @@ fn hash_color(color: Option<&rich::Color>, hasher: &mut FxHasher) {
 /// A colour pair as a key: each colour in 25 bits, a bit for "present"
 /// above its 24 bits of RGB, the foreground in the high half. 0 is "no
 /// colour at all".
+/// The pair key of a style that sets a true-colour foreground, background
+/// or both, and nothing else.
+fn truecolor_pair(style: &Style) -> Option<u64> {
+    let rgb = |color: Option<&rich::Color>| match color {
+        None => Some(None),
+        Some(c) if c.kind == rich::color::ColorType::Truecolor => {
+            c.triplet.map(|t| Some([t.red, t.green, t.blue]))
+        }
+        Some(_) => None,
+    };
+    let (fg, bg) = (rgb(style.color())?, rgb(style.bgcolor())?);
+    if fg.is_none() && bg.is_none() {
+        return None;
+    }
+    let plain = Style::from_color(style.color().cloned(), style.bgcolor().cloned());
+    (plain == *style).then(|| pair_key(fg, bg))
+}
+
+/// Whether every character of `text` is its own grapheme, one or two
+/// cells wide: no zero-width marks, joiners or selectors to group.
+fn simple_text(text: &str) -> bool {
+    text.chars()
+        .all(|c| matches!(crate::surface::char_width(c), 1 | 2) && c != '\u{fe0f}')
+}
+
+/// `text`'s width in cells, as rich's `cell_len` gives it, without its
+/// table search for the characters most text is made of.
+fn text_width(text: &str) -> usize {
+    if text.contains(['\u{200d}', '\u{fe0f}']) {
+        return cell_len(text);
+    }
+    text.chars().map(crate::surface::char_width).sum()
+}
+
 fn pair_key(fg: Option<Rgb>, bg: Option<Rgb>) -> u64 {
     let pack = |c: Option<Rgb>| {
         c.map_or(0, |[r, g, b]| {
@@ -582,7 +622,7 @@ impl Frame {
         self.runs.push(Run {
             text: offset,
             len: text.len() as u32,
-            cells: cell_len(text) as u32,
+            cells: text_width(text) as u32,
             style,
             flags,
         });
@@ -823,7 +863,21 @@ impl Frame {
         let mut leading: Option<usize> = None;
         for run in row {
             let base = run.text as usize;
-            let (graphemes, _) = split_graphemes(self.run_text(run));
+            let text = self.run_text(run);
+            if leading.is_none() && simple_text(text) {
+                // A character a grapheme: no splitting.
+                let mut at = base;
+                for c in text.chars() {
+                    let (len, width) = (c.len_utf8(), crate::surface::char_width(c));
+                    cells.push((at..at + len, width as u8, run.style));
+                    at += len;
+                    for _ in 1..width {
+                        cells.push((at..at, 0, run.style));
+                    }
+                }
+                continue;
+            }
+            let (graphemes, _) = split_graphemes(text);
             for (start, end, width) in graphemes {
                 let range = base + start..base + end;
                 if width == 0 {
@@ -1107,7 +1161,8 @@ mod tests {
         let mut table = StyleTable::new();
         let style = Style::from_color(None, Some(rich::Color::from_rgb(1, 2, 3)));
         let id = table.intern(Some(&style));
-        assert_eq!(table.rgb(id), None, "not interned as a pair yet");
+        // A style of true colours alone is known as a pair at once.
+        assert_eq!(table.rgb(id), Some((None, Some([1, 2, 3]))));
         assert_eq!(table.intern_rgb(None, Some([1, 2, 3])), id);
         assert_eq!(table.rgb(id), Some((None, Some([1, 2, 3]))));
         assert_eq!(table.intern_rgb(None, None), StyleId::NONE);

@@ -483,11 +483,40 @@ fn watch_signals() {
                         RESUMED.store(true, Ordering::SeqCst);
                     } else {
                         restore_for_signal();
+                        run_teardowns();
                         let _ = signal_hook::low_level::emulate_default_handler(signal);
                     }
                 }
             });
     });
+}
+
+/// What [`on_terminate`] registered.
+type Teardown = Box<dyn Fn() + Send + Sync>;
+static TEARDOWNS: std::sync::Mutex<Vec<Teardown>> = std::sync::Mutex::new(Vec::new());
+
+/// Run `teardown` when SIGTERM, SIGHUP or SIGQUIT ends the process, from
+/// the first session on: on the signal thread, after the terminal is given
+/// back and before the signal's default action ends the process. Those
+/// signals end it without unwinding, so a `Drop` that stops a child
+/// process or removes temporary files never runs; this is where to do that
+/// work. Keep it short: the process ends when it returns. Teardowns run in
+/// the order they were registered, once each. Not on Windows, which has
+/// none of those signals.
+pub fn on_terminate(teardown: impl Fn() + Send + Sync + 'static) {
+    TEARDOWNS
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .push(Box::new(teardown));
+}
+
+/// Run and forget every teardown [`on_terminate`] registered.
+#[cfg(unix)]
+fn run_teardowns() {
+    let all = std::mem::take(&mut *TEARDOWNS.lock().unwrap_or_else(|e| e.into_inner()));
+    for teardown in all {
+        teardown();
+    }
 }
 
 /// [`restore`] from the signal thread. The sequences go straight to the

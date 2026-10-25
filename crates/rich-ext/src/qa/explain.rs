@@ -140,8 +140,8 @@ pub const STANDARD_NAMES: [&str; 16] = [
 pub fn downgrade_chain(color: &Color, depth: ColorDepth) -> Option<String> {
     let label = match color.kind {
         ColorType::Default => return None,
-        ColorType::Truecolor => color.triplet.map_or(color.name.clone(), |t| t.hex()),
-        _ => color.name.clone(),
+        ColorType::Truecolor => color.triplet.map_or(color.name.to_string(), |t| t.hex()),
+        _ => color.name.to_string(),
     };
     let rank = |kind: ColorType| match kind {
         ColorType::Standard | ColorType::Windows | ColorType::Default => 0,
@@ -390,7 +390,7 @@ fn run(
             }
             let label = color
                 .get_truecolor()
-                .map_or(color.name.clone(), |t| t.hex());
+                .map_or(color.name.to_string(), |t| t.hex());
             colors
                 .entry(label)
                 .or_insert_with(|| downgrade_chain(color, probe.color));

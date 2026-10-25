@@ -1,0 +1,30 @@
+◀▶ Form fixture https://fixture.example/form.html reader
+Sign up
+[a]Name Ada
+[s]Secret
+[d][ ] Send news
+
+Size
+[f][g]( ) Small
+      (•) Large
+[h]Mirror First mirror                                                                             ▾
+[j]Volume ━━━━━━━━━━━━●───────────50
+[k] Send
+ Unavailable
+[l] Schedule remote update
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+ hints  type a label:   Esc cancels

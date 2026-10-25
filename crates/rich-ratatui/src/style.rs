@@ -104,7 +104,7 @@ pub fn to_rich_color(color: RColor) -> Color {
         RColor::Reset => return Color::default_color(),
         RColor::Indexed(n) => {
             return Color {
-                name: format!("color({n})"),
+                name: format!("color({n})").into(),
                 kind: ColorType::EightBit,
                 number: Some(n),
                 triplet: None,
@@ -129,7 +129,7 @@ pub fn to_rich_color(color: RColor) -> Color {
         RColor::White => 15,
     };
     Color {
-        name: RICH_NAMES[usize::from(number)].to_string(),
+        name: RICH_NAMES[usize::from(number)].into(),
         kind: ColorType::Standard,
         number: Some(number),
         triplet: None,
@@ -369,7 +369,10 @@ mod tests {
         ];
         for name in names {
             let ours = style_from_color_name(name);
-            let theirs = name.parse::<RColor>().ok().map(|c| to_rich_color(c).name);
+            let theirs = name
+                .parse::<RColor>()
+                .ok()
+                .map(|c| to_rich_color(c).name.into_string());
             assert_eq!(ours, theirs, "{name:?}");
         }
     }

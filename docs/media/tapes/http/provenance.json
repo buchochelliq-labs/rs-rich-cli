@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/http.tape",
-  "tape_fnv1a64": "6ad061900f79c5bd",
-  "recorder": "rs-rich-record 0.0.8",
+  "tape_fnv1a64": "67c73caa2abbae99",
+  "recorder": "rs-rich-record 0.0.10",
   "rich": null,
-  "commit": "8ad212f5e94a511b2f1e36326f478ac0d4bd7d2f",
+  "commit": "3faf9077cc1204cfafc82dca8371702d487c3198",
   "screenshots": [
     "recipe",
     "response",

@@ -4167,6 +4167,92 @@ where
     };
     let widget = Described {
         draw: Box::new(draw),
+        fast: None,
+        text: None,
+    };
+    Node::from_widget(Box::new(widget), "described").what("renderable")
+}
+
+/// The options a renderable node renders with at `width` x `height`:
+/// height 0 is a measurement, as tall as it likes.
+fn node_options(console: &Console, width: u16, height: u16) -> rich::ConsoleOptions {
+    let options = console.options().update_width(width.max(1) as usize);
+    if height == 0 {
+        options
+    } else {
+        options.update_height(height as usize)
+    }
+}
+
+/// A [`renderable`] drawn through rs-rich-ext's fast path: anything with
+/// [`Draw`](rich_ext::surface::Draw) (a `Chart`, a `Canvas`, a
+/// `Sparkline` and rs-rich-ext's other charts) writes its cells straight
+/// into the screen, each style interned once, rather than as rich
+/// segments that are then taken apart. The cells are the same as
+/// [`renderable`]'s; rich's path still measures it.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::drawn;
+/// use rich_ext::chart::Sparkline;
+///
+/// let app = App::new(|| {
+///     let load = signal(vec![1.0, 3.0, 2.0, 8.0]);
+///     drawn(move || Sparkline::new(load.get())).on_key("q", |cx| cx.quit())
+/// });
+/// let screen = app.render_with(&["q"], 4, 1).unwrap();
+/// assert_eq!(screen[0], "▁▃▂█");
+/// ```
+pub fn drawn<R>(f: impl Fn() -> R + 'static) -> Node
+where
+    R: Renderable + rich_ext::surface::Draw + 'static,
+{
+    let f = Rc::new(f);
+    let measure = f.clone();
+    let draw = move |console: &Console, width: u16, height: u16, _say: bool| {
+        let options = node_options(console, width, height);
+        (console.render_lines(&measure(), &options, false), None)
+    };
+    let fast = move |console: &Console, canvas: &mut Canvas, _say: bool| {
+        canvas.draw(console, &f());
+        None
+    };
+    let widget = Described {
+        draw: Box::new(draw),
+        fast: Some(Box::new(fast)),
+        text: None,
+    };
+    Node::from_widget(Box::new(widget), "drawn").what("renderable")
+}
+
+/// A [`described`] node drawn through rs-rich-ext's fast path, as
+/// [`drawn`] is: the same cells and the same accessible name.
+pub fn drawn_described<R>(f: impl Fn() -> R + 'static) -> Node
+where
+    R: Renderable + rich_ext::a11y::AccessibleText + rich_ext::surface::Draw + 'static,
+{
+    let f = Rc::new(f);
+    let measure = f.clone();
+    let draw = move |console: &Console, width: u16, height: u16, _say: bool| {
+        let options = node_options(console, width, height);
+        (console.render_lines(&measure(), &options, false), None)
+    };
+    let fast = move |console: &Console, canvas: &mut Canvas, say: bool| {
+        let value = f();
+        canvas.draw(console, &value);
+        say.then(|| {
+            value
+                .accessible_text(canvas.width().max(1) as usize)
+                .lines()
+                .map(str::trim)
+                .filter(|l| !l.is_empty())
+                .collect::<Vec<_>>()
+                .join(". ")
+        })
+    };
+    let widget = Described {
+        draw: Box::new(draw),
+        fast: Some(Box::new(fast)),
         text: None,
     };
     Node::from_widget(Box::new(widget), "described").what("renderable")

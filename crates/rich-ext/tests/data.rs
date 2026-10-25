@@ -25,7 +25,7 @@ fn segments(renderable: &dyn Renderable) -> Vec<(String, Option<Style>)> {
     renderable
         .rich_render(&console, &console.options())
         .into_iter()
-        .map(|s| (s.text, s.style))
+        .map(|s| (s.text.into_string(), s.style))
         .collect()
 }
 

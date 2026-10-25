@@ -1,0 +1,30 @@
+◀▶ Form fixture http://127.0.0.1:8765/form.html reader
+Sign up
+Name Ada Lovelace
+Secret
+[x] Send news
+
+Size
+( ) Small
+(•) Large
+Mirror First mirror                                                                                ▾
+Volume ━━━━━━━━━━━━●───────────50
+ Send
+ Unavailable
+ Schedule remote update
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+f1 actions · f hints · o open · r reader · q quit

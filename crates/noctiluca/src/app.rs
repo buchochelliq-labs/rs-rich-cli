@@ -1113,7 +1113,7 @@ fn find_prompt(b: Browser, cx: &mut Ctx) {
     });
 }
 
-/// One row of a [`chooser`].
+/// One row of a `chooser`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
     /// Console markup.
@@ -2148,7 +2148,9 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
 
         let address = crate::bars::header(b);
         let status = crate::bars::status(b);
-        let body = switch(
+        // Built again on each switch: a view kept while hidden could miss
+        // the pages opened meanwhile.
+        let body = keyed(
             move || b.view.get(),
             move |view| match view {
                 View::Reader => reader_view(b),

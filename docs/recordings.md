@@ -817,6 +817,16 @@ them, and a compact comment list with small avatars.
 
 [Tape](tapes/media-grid.tape) · [Cast](media/tapes/media-grid/media-grid.cast) · [GIF](media/tapes/media-grid/media-grid.gif) · [Page](media/tapes/media-grid/media-grid.html)
 
+Three more tapes over the same saved pages show
+[forms and controls](tapes/noctiluca-forms.tape),
+[reading, find and media](tapes/noctiluca-reading.tape), and
+[keywords and site keys](tapes/noctiluca-keys.tape). One more,
+[`tapes/live/noctiluca-chrome.tape`](tapes/live/noctiluca-chrome.tape),
+runs a real Chrome on the crate's test pages, served from `127.0.0.1`. The
+tape job runs no browser, so that one is recorded by hand and not checked;
+its header says how. All of them are on
+[Noctiluca's guide pages](guide/noctiluca.md).
+
 ## Charts from data
 
 `rich chart` draws CSV, JSON or numbers piped in: bars labelled by a

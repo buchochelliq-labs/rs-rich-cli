@@ -135,7 +135,8 @@ pub use xy::{
     Axis, AxisScale, Chart, Dataset, GraphType, Labels, Layering, LegendPosition, OutOfBounds,
 };
 
-use rich::cells::char_cell_width;
+use crate::surface::char_width as char_cell_width;
+use crate::surface::{Rect, Screen, TextRun};
 use rich::{Console, ConsoleOptions, Segment, Style};
 
 use crate::fidelity::{Fidelity, Policy};
@@ -365,6 +366,60 @@ pub(crate) fn lines_to_segments(lines: Vec<Line>, width: usize) -> Vec<Segment> 
         line.into_segments(&mut out);
     }
     out
+}
+
+/// rs-rich-ext's fast path for a chart made of [`Line`]s: the cells
+/// [`lines_to_segments`]`(lines, width)` would give when rendered with
+/// `options` and written into `rect`, without a segment a run. See
+/// [`Draw`](crate::surface::Draw).
+pub(crate) fn draw_lines(
+    mut lines: Vec<Line>,
+    width: usize,
+    options: &ConsoleOptions,
+    screen: &mut Screen,
+    rect: Rect,
+) {
+    if options.max_width < 1 {
+        return screen.write_runs::<[TextRun<'_>; 0]>(rect, &[]);
+    }
+    if let Some(height) = options.height {
+        lines.truncate(height);
+    }
+    let block = lines
+        .iter()
+        .map(|l| l.width().min(width))
+        .max()
+        .unwrap_or(0);
+    for line in &mut lines {
+        line.crop(width);
+        let fill = block - line.width();
+        line.pad(fill);
+    }
+    let runs: Vec<Vec<TextRun<'_>>> = lines
+        .iter()
+        .take(rect.height as usize)
+        .map(|line| {
+            line.spans
+                .iter()
+                .map(|(text, style)| TextRun::new(text, screen.intern(style.as_ref())))
+                .collect()
+        })
+        .collect();
+    screen.write_runs(rect, &runs);
+}
+
+/// [`draw_lines`] for a chart drawn on a [`CellGrid`](plot_canvas::CellGrid).
+pub(crate) fn draw_grid(
+    grid: plot_canvas::CellGrid,
+    options: &ConsoleOptions,
+    screen: &mut Screen,
+    rect: Rect,
+) {
+    if options.max_width < 1 {
+        return screen.write_runs::<[TextRun<'_>; 0]>(rect, &[]);
+    }
+    let rows = options.height.unwrap_or(usize::MAX);
+    grid.draw(screen, rect, rows);
 }
 
 /// `text` as terminal cells, one entry per cell: a character with the

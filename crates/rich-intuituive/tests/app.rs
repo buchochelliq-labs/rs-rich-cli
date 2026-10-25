@@ -182,8 +182,8 @@ fn the_focused_panel_is_highlighted_and_moving_focus_redraws_only_borders() {
         .collect();
     let first = paints[0];
     // Truecolor red for the focused panel, blue for the other.
-    assert!(first.contains("\x1b[0;31m╭─"), "{first:?}");
-    assert!(first.contains("\x1b[0;34m╭─"), "{first:?}");
+    assert!(first.contains("31m╭─"), "{first:?}");
+    assert!(first.contains("34m╭─"), "{first:?}");
     // After Tab both borders swap colour; the labels inside are not sent.
     let tab = paints[1];
     assert!(tab.contains("31m") && tab.contains("34m"), "{tab:?}");

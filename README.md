@@ -53,23 +53,25 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 [Getting started](docs/getting-started.md) has a complete program; the
 [tutorial](docs/tutorial/index.md) builds up from there.
 
-## New in 0.0.21
+## New in 0.0.22
 
-Published on 2026-10-21 ([release notes](docs/releases/0.0.21.md)). Round
-7's fixes, and what the demo clones and a consumer asked for:
+Published on 2026-10-25 ([release notes](docs/releases/0.0.22.md)).
+Parity, the plugin marketplace and a terminal web browser:
 
-- **Widgets:** form controls (buttons, check boxes, switches, radios,
-  sliders, select fields), a log pane fed by `tracing`, text editing with
-  Emacs and Vim keys, effect presets, pie and stacked charts, QR codes,
-  Huh-style forms and `rich spin`.
-- **Diagrams:** Mermaid sequence and ER diagrams drawn as text.
-- **Leaner builds:** `Syntax` and `Markdown` without syntect (core's `code`
-  feature), a SQL highlighter with no syntect, and GitHub Markdown from any
-  renderable.
-- **Docs:** a playground (guide blocks, `rich` on WASI and whole apps in
-  the page), rs-rich's own mark, and intuiTUIve as a section of its own.
-- **Fixes:** round 7's four intuiTUIve bugs, csv's million-row filter fast
-  again, and no DevTools port on Linux and macOS.
+- **Parity with rich 15.0.0:** the widget, live display and document
+  modules ported or recorded as divergences, `scope.py` ported, a verdict
+  for every divergence, and the differential fuzzer on Markdown, trees,
+  columns, progress, Pretty and JSON.
+- **The marketplace:** the new `rs-rich-marketplace` crate (a signed index,
+  verified installs, a lockfile), `rich plugin` with `browse` and
+  `publish`, and WASM plugins on by default.
+- **intuiTUIve:** flush panel titles, a tree table, `min_size` with a node
+  of its own, labels that change in place, a three-state check box,
+  options known by key and a live action list.
+- **[Noctiluca](docs/guide/noctiluca.md)** (new): a web browser for the
+  terminal, on intuiTUIve and a headless Chrome.
+- **Recording:** a tape writes an APNG only when asked. Memo has a spot for
+  every crate.
 
 The [changelog](CHANGELOG.md) lists every change.
 
@@ -93,25 +95,25 @@ in the release notes; the crates.io links show available packages.
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
 |---|---|
-| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.12` |
-| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.6` |
-| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.6` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.19` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.22` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.15` |
-| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.8` |
-| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.6` |
-| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.10` |
-| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.10` |
-| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.8` |
-| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.5` |
-| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.6` |
-| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.7` |
-| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.7` |
-| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.5` |
-| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.5` |
-| [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.1` |
-| [`noctiluca`](https://crates.io/crates/noctiluca) | `0.0.1` |
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.13` |
+| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.7` |
+| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.7` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.20` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.23` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.16` |
+| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.9` |
+| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.7` |
+| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.11` |
+| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.11` |
+| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.9` |
+| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.6` |
+| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.7` |
+| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.8` |
+| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.8` |
+| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.6` |
+| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.6` |
+| [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.2` |
+| [`noctiluca`](https://crates.io/crates/noctiluca) | `0.0.2` |
 <!-- END MANIFEST VERSIONS -->
 
 | | Package | Role | Import / installed name |
@@ -180,9 +182,9 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 ## Releases
 
 Each release has notes in [`docs/releases/`](docs/releases/) (the newest
-published one is [0.0.21](docs/releases/0.0.21.md)), and
+published one is [0.0.22](docs/releases/0.0.22.md)), and
 [`CHANGELOG.md`](CHANGELOG.md) lists every change. What comes next is in the
-[roadmap](docs/ROADMAP.md) and the [0.0.22 plan](docs/plans/0.0.22.md). The
+[roadmap](docs/ROADMAP.md) and the [0.0.23 plan](docs/plans/0.0.23.md). The
 manifest table above describes this checkout; crates.io is the source for
 published versions.
 

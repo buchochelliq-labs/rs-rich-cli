@@ -60,7 +60,7 @@ use crate::item::Action;
 
 /// A segment of `text` in `style`.
 pub fn text(text: impl Into<String>, style: &Style) -> Segment {
-    Segment::new(text, Some(style.clone()))
+    Segment::new(text.into(), Some(style.clone()))
 }
 
 /// The first line of `text` as segments, unwrapped, its styles and style
@@ -84,7 +84,7 @@ pub fn icon(text: &rich::Text) -> Vec<Segment> {
 
 /// A segment of unstyled `text`.
 pub fn plain(text: impl Into<String>) -> Segment {
-    Segment::new(text, None)
+    Segment::new(text.into(), None)
 }
 
 /// The width of a line in cells.

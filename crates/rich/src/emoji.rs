@@ -64,6 +64,11 @@ pub fn replace(text: &str) -> String {
 /// code that names no variant of its own. Port of
 /// `_emoji_replace(text, default_variant=…)`.
 pub fn replace_with_variant(text: &str, default_variant: Option<EmojiVariant>) -> String {
+    // Every code is between colons: text without one comes back as it is,
+    // without the scan (docs/PORTING.md, "Performance notes").
+    if !text.contains(':') {
+        return text.to_string();
+    }
     let chars: Vec<char> = text.chars().collect();
     let len = chars.len();
     let mut out = String::with_capacity(text.len());

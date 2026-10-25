@@ -255,6 +255,28 @@ impl<K: Into<String>> FromIterator<(K, MetaValue)> for Meta {
     }
 }
 
+/// FNV-1a, for caches keyed by short strings such as tag names, which
+/// SipHash's setup would cost more to hash than the strings themselves.
+pub(crate) struct ShortKeyHasher(u64);
+
+impl Default for ShortKeyHasher {
+    fn default() -> Self {
+        ShortKeyHasher(0xcbf2_9ce4_8422_2325)
+    }
+}
+
+impl std::hash::Hasher for ShortKeyHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.0 = (self.0 ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+}
+
 /// A terminal text style. Mirrors `rich.style.Style`.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Style {
@@ -547,11 +569,11 @@ impl Style {
             }
         }
         if let Some(color) = &self.color {
-            parts.push(color.name.clone());
+            parts.push(color.name.to_string());
         }
         if let Some(bgcolor) = &self.bgcolor {
             parts.push("on".to_string());
-            parts.push(bgcolor.name.clone());
+            parts.push(bgcolor.name.to_string());
         }
         if let Some(link) = self.link.as_ref().filter(|link| !link.is_empty()) {
             parts.push("link".to_string());
@@ -576,6 +598,35 @@ impl Style {
     ///
     /// [`Theme::get_style`]: crate::theme::Theme::get_style
     pub fn normalize(definition: &str) -> String {
+        // Upstream memoises this with `@lru_cache(maxsize=1024)`; markup
+        // normalises every tag it opens or closes, so the cache keeps a
+        // frame of markup from parsing the same few names again
+        // (docs/PORTING.md, "Performance notes").
+        type Cache = std::collections::HashMap<
+            String,
+            String,
+            std::hash::BuildHasherDefault<crate::style::ShortKeyHasher>,
+        >;
+        thread_local! {
+            static CACHE: std::cell::RefCell<Cache> = std::cell::RefCell::new(Cache::default());
+        }
+        if let Some(hit) = CACHE.with(|cache| cache.borrow().get(definition).cloned()) {
+            return hit;
+        }
+        let normalized = Style::normalize_uncached(definition);
+        CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if cache.len() >= 1024 {
+                cache.clear();
+            }
+            cache.insert(definition.to_string(), normalized.clone());
+        });
+        normalized
+    }
+
+    /// [`normalize`](Self::normalize) without the cache: the port of the
+    /// function upstream's cache wraps.
+    fn normalize_uncached(definition: &str) -> String {
         match Style::parse(definition) {
             Ok(style) => style.definition(),
             Err(_) => definition.trim().to_lowercase(),
@@ -874,6 +925,47 @@ impl StyleStack {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The cached `normalize` answers what the uncached one does, on a miss
+    /// and on a hit, for definitions that parse and ones that do not.
+    #[test]
+    fn normalize_cache_is_transparent() {
+        let definitions = [
+            "b",
+            "BOLD",
+            " bold red on blue ",
+            "repr.number",
+            "Repr.Number ",
+            "not bold",
+            "not BOLD",
+            "link https://x.io",
+            "#ff0000",
+            "rgb(1,2,3)",
+            "",
+            "none",
+            "bold none",
+            "on",
+            "color(300)",
+            "@click",
+            "b i u",
+            "u2",
+        ];
+        for _ in 0..2 {
+            for definition in definitions {
+                assert_eq!(
+                    Style::normalize(definition),
+                    Style::normalize_uncached(definition),
+                    "{definition:?}"
+                );
+            }
+        }
+        // Past the cache's size it starts again, still answering the same.
+        for n in 0..1100 {
+            let definition = format!("tag{n}");
+            assert_eq!(Style::normalize(&definition), definition);
+        }
+        assert_eq!(Style::normalize("B"), "bold");
+    }
 
     /// Expectations captured from real rich 15.0.0.
     #[test]

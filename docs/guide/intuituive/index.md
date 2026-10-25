@@ -107,20 +107,23 @@ bytes.
 
 | 80x24, release | ratatui | intuiTUIve |
 |---|---:|---:|
-| status tick | 95 µs, 37 B | **15 µs, 18 B** |
-| selection move | 97 µs, 184 B | **39 µs, 118 B** |
-| log append | 94 µs, 443 B | **47 µs, 428 B** |
+| status tick | 88 µs, 37 B | **8 µs, 18 B** |
+| selection move | 88 µs, 184 B | **23 µs, 118 B** |
+| log append | 93 µs, 443 B | **16 µs, 325 B** |
 
 Two more scenes are reported, not gated: a frame where every cell changes
 (an RGB swatch, as ratatui's `colors-rgb`), and a braille chart redrawn each
-tick. There ratatui is ahead, as drawing only what changed saves nothing
-when everything does:
+tick. Both draw through rs-rich-ext's fast path (`Canvas::put_rgb` and
+`Canvas::draw`), which writes cells straight into the screen rather than
+building rich segments:
 
 | 80x24, release | ratatui | intuiTUIve |
 |---|---:|---:|
-| churn, every cell | **326 µs**, 62 kB | 3,042 µs, 66 kB |
-| a chart redrawn | **81 µs**, 4.2 kB | 463 µs, **3.1 kB** |
+| churn, every cell | 340 µs, 62 kB | **104 µs, 61 kB** |
+| a chart redrawn | 84 µs, 4.2 kB | **60 µs, 2.8 kB** |
 
+[The rendering performance note](../../design/render-performance.md#the-two-paths-side-by-side)
+has where the time goes on each path, and every paint strategy measured.
 [The design note](../../design/intuituive.md) explains why. It also lists
 the architectural problems in ratatui that intuiTUIve is built to avoid:
 redraw-everything frames, state kept apart from widgets, hand-written event

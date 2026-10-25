@@ -401,7 +401,8 @@ pub(crate) fn run_parent(browser: TcpStream, session: Session<'_>) {
         }
     };
     let (mut child, tree, listener, secrets) = started;
-    let child_stream = match connected(&listener, &secrets, &mut child, session.stopping) {
+    let memory = session.spawn.memory;
+    let child_stream = match connected(&listener, &secrets, &mut child, memory, session.stopping) {
         Ok(stream) => stream,
         Err(why) => {
             end(&mut child, tree);
@@ -575,10 +576,16 @@ fn within_memory(pid: u32, memory: Option<u64>) -> io::Result<()> {
 /// the reply. Anything else that connects meanwhile is turned away; every
 /// connection is read at once, each for at most [`HELLO_TIMEOUT`], so none
 /// holds up the process or the server stopping.
+///
+/// Its peak memory is checked again before the answer: an allocation the
+/// process began before `prlimit` can still be under way when the server
+/// first looks, and is only counted once it completes. By the time the
+/// process connects, its startup is over.
 fn connected(
     listener: &TcpListener,
     secrets: &Secrets,
     child: &mut Child,
+    memory: Option<u64>,
     stopping: &AtomicBool,
 ) -> Result<TcpStream, String> {
     let until = Instant::now() + CONNECT_TIMEOUT;
@@ -617,6 +624,14 @@ fn connected(
             }
         });
         if let Some(mut stream) = found {
+            #[cfg(not(target_os = "linux"))]
+            let _ = memory;
+            #[cfg(target_os = "linux")]
+            if let Err(error) = within_memory(child.id(), memory) {
+                return Err(format!(
+                    "The session's process could not start: its limits could not be set: {error}."
+                ));
+            }
             let answered = stream
                 .set_nonblocking(false)
                 .and_then(|()| stream.write_all(format!("{}\n", secrets.reply).as_bytes()));

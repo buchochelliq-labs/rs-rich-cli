@@ -1,0 +1,30 @@
+◀▶ Reader fixture https://fixture.example/reader.html reader
+Plankton                                                                                           ┃
+     ╭─ Site shortcuts ───────────────────────────────────────────────────────────────────────╮    ┃
+Tiny │▸          n  link "the second page"  [fixture.example]                                 │    ┃
+     │                                                                                        │    ┃
+Kinds│                                                                                        │    ┃
+     │                                                                                        │    ┃
+• Din│                                                                                        │    ┃
+  ◦ N│                                                                                        │    ┃
+  ◦ P│                                                                                        │    ┃
+• Cop│                                                                                        │    ┃
+1. Bl│                                                                                        │    ┃
+2. Gl│                                                                                        │    ┃
+     │                                                                                        │    ┃
+│ The│                                                                                        │    ┃
+     │                                                                                        │    ┃
+▏glow│                                                                                        │    ┃
+▏slee│                                                                                        │    ┃
+     │                                                                                        │    ┃
+Sizes│                                                                                        │    ┃
+Name │                                                                                        │    ┃
+─────│                                                                                        │    ┃
+Nocti│                                                                                        │    ┃
+Copep│                                                                                        │    ┃
+     │                                                                                        │    ┃
+image│Enter tests · d removes · e binds another key · s: this host or *.host · Esc closes     │    ┃
+▀▀▀▀▀╰────────────────────────────────────────────────────────────────────────────────────────╯    ┃
+                                                                                                   ┃
+                                                                                                   │
+f1 actions · f hints · o open · r reader · q quit

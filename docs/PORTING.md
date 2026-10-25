@@ -98,6 +98,50 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `_loop.py`, `_pick.py`, `_stack.py`, `_timer.py` | internal helpers | 🟢 | no modules needed: `loop_first`/`loop_last` are iterator code at each use, `pick_bool` is `Option::or`, `Stack` is a `Vec`, `timer` is `Instant` |
 | `_export_format.py`, `Console.export_html` | `export.rs` | 🟢 | ✅ (links, `code_format`, SVG `font_aspect_ratio` in `core_gaps.tsv`; extreme and non-finite ratios in `audit_edges.tsv`); `export_text(styles=True)` (`export_text_styled`) and `save_text`/`save_html`/`save_svg`. Recording is a closure (`record(f)`) rather than `record=True` and `clear=`; the SVG `unique_id` is given (DIVERGENCES §15) |
 
+## Performance notes
+
+Fast paths and caches in `crates/rich` that upstream does not have, or
+has in another form. Each sits beside the ported code it speeds up, and
+the output is byte-identical: the goldens, the parity tables and the
+differential fuzzer prove it, with a test that pins each one besides. A
+sync carries them over: when the upstream function changes, change the
+port, then check the fast path still answers the same (its test says
+where to look). The measurements are in [the render performance
+note](design/render-performance.md#rich-made-faster-measured). AGENTS.md
+allows this kind of change; it is not a divergence.
+
+| module | upstream function | what the fast path does | pinned by |
+|---|---|---|---|
+| `color.rs` | `ColorTriplet.hex` | writes `#rrggbb` on the stack and copies it into an inline `CompactString` once (a colour's name), not through `format!` | `color::tests::hex_matches_format` |
+| `cells.rs` | `get_character_cell_size` | answers printable ASCII, Latin-1, Latin Extended, IPA, Greek, Cyrillic, box drawing, blocks, Braille, CJK ideographs to U+9FBB and Hangul syllables without the table search; the same in all 21 tables | `cells::tests::common_widths_match_every_table` (every character it answers, every table) |
+| `cells.rs` | `cell_len` (`_cell_len`) | counts ASCII by its printable bytes; otherwise sums the widths while it looks for a joiner or VS16 (`unjoined_cell_len`), in one pass | `cells::tests::ascii_cell_len_matches_the_table` |
+| `cells.rs` | `split_graphemes` | one walk over the characters instead of collecting them and indexing | `cells::tests::split_graphemes_matches_the_indexed_scan` (the first port as reference) |
+| `wrap.rs` | `_wrap.words` | words are slices at the same char offsets; ASCII text is scanned by bytes | `wrap::tests::words_match_the_collecting_scan` |
+| `wrap.rs` | `divide_line` | measures a word once: with no joiner or VS16, its trailing whitespace adds its own width | the goldens, `wrap` tests, the fuzzer |
+| `markup.rs` | `RE_TAGS.finditer` in `_parse` | `tag_matches` scans for the brackets; `RE_TAGS` stays as its reference | `markup::tests::tag_matches_are_re_tags` (every string of six from the characters that matter, and 20,000 random ones) |
+| `markup.rs` | `_parse`, `render` | text runs are borrowed unless an escape is undone (`\[`); runs without a colon skip the emoji pass; a closing tag's markup is built only for its error | the goldens, `markup` tests, the fuzzer |
+| `emoji.rs` | `_emoji_replace` | text without a colon comes back without the scan | the goldens, `emoji` tests |
+| `style.rs` | `Style.normalize` (`@lru_cache(maxsize=1024)`) | a thread-local cache of 1,024 entries, emptied when full, with an FNV-1a hash | `style::tests::normalize_cache_is_transparent` |
+| `text.rs` | `Text.__init__` (`strip_control_codes`) | `Text::new` and `Text::styled` keep a string without control codes rather than copying it; control codes are searched as bytes | the goldens, `text` tests |
+| `text.rs` | `Text.truncate` (in the wrap path) | a line that fits is handed back without a copy, measured by its segments when no joiner or VS16 can join across them | the goldens, `text` tests, the fuzzer |
+| `segment.rs`, `console.rs` | `Segment.split_lines` in `Console.render_lines` | `split_lines_owned` moves the rendered segments into lines instead of cloning them | `segment::tests::split_lines_owned_matches_split_lines` |
+
+**Light strings (0.0.23, a public API change).** `Segment.text` and
+`Color.name` are `compact_str::CompactString`s (re-exported as
+`rich::CompactString`), not `String`s: up to 24 bytes are kept inline, so
+a short run or a colour's name allocates nothing. The maintainer decided
+this on 2026-10-25; it changes the fields' type, not what is rendered
+(the goldens, the parity tables, the fuzzer and a byte compare of 30,081
+cases agree). A sync keeps the types: where upstream builds a segment's
+text or a colour's name, build the `CompactString` directly
+(`.into()` from a `&str` or a `String`).
+
+**A dependency the mirror accepts: `compact_str` 0.9.** It is the only
+third-party crate `rs-rich` gained for speed, and it changes no output.
+The maintainer accepted it on 2026-10-25 as a dependency the mirror
+takes for byte-identical speed. A sync keeps it; a new dependency of this
+kind needs the same explicit decision.
+
 ## `rich-cli` (tool — tracks upstream 1.8.1, see UPSTREAM.toml)
 
 | upstream feature | rust `crates/rich-cli/src/…` | status |

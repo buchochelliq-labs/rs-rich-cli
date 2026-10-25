@@ -185,14 +185,14 @@ impl Dom {
                     if !run.is_empty() {
                         runs.push(json!([std::mem::take(&mut run), current]));
                     }
-                    runs.push(json!([cell.text, id, 2]));
+                    runs.push(json!([cell.text(), id, 2]));
                     continue;
                 }
                 if id != current && !run.is_empty() {
                     runs.push(json!([std::mem::take(&mut run), current]));
                 }
                 current = id;
-                run.push_str(&cell.text);
+                run.push_str(cell.text());
             }
             if !run.is_empty() {
                 runs.push(json!([run, current]));
