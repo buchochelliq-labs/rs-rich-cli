@@ -137,7 +137,7 @@ alsa-sys = { version = "0.4", optional = true }
 [dev-dependencies]
 # The Yazi example (examples/files.rs) shows times in the local time zone
 # with rs-rich-ext's `fs::local_time`, behind its `local-time` feature.
-rich-ext = { workspace = true, features = ["local-time"] }
+rich-ext = { workspace = true, features = ["local-time", "testing"] }
 # PTY tests: an app run on every backend gives the terminal back
 # (tests/backends.rs).
 portable-pty = "0.9"

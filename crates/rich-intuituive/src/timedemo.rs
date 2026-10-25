@@ -99,6 +99,18 @@ impl Timedemo {
         }
     }
 
+    /// The time `share` of the frames (0.5 the median, 0.99 the 99th
+    /// percentile) took at most.
+    pub fn percentile(&self, share: f64) -> Duration {
+        let mut times: Vec<Duration> = self.frames.iter().map(|f| f.time).collect();
+        if times.is_empty() {
+            return Duration::ZERO;
+        }
+        times.sort_unstable();
+        let at = ((times.len() - 1) as f64 * share.clamp(0.0, 1.0)).round() as usize;
+        times[at]
+    }
+
     /// The slowest frame's time.
     pub fn worst(&self) -> Duration {
         self.frames.iter().map(|f| f.time).max().unwrap_or_default()
@@ -121,11 +133,14 @@ impl fmt::Display for Timedemo {
         let p = self.painted();
         writeln!(
             f,
-            "{} frames in {:.1} ms ({:.0} fps); mean {:.1} µs, worst {:.1} µs, at {}x{}",
+            "{} frames in {:.1} ms ({:.0} fps); mean {:.1} µs, p50 {:.1}, p99 {:.1}, \
+             worst {:.1} µs, at {}x{}",
             self.frames.len(),
             self.frame_time().as_secs_f64() * 1e3,
             self.fps(),
             self.mean().as_secs_f64() * 1e6,
+            self.percentile(0.5).as_secs_f64() * 1e6,
+            self.percentile(0.99).as_secs_f64() * 1e6,
             self.worst().as_secs_f64() * 1e6,
             self.size.0,
             self.size.1,

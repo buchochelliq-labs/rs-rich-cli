@@ -3422,6 +3422,11 @@ impl App {
                 .or_else(PaintStrategy::from_env)
                 .unwrap_or_default(),
         );
+        // tmux redraws a scrolled region itself, so moving rows there saves
+        // little; until the benchmark says otherwise, it paints instead.
+        if std::env::var_os("TMUX").is_some() {
+            painter.set_scroll(false);
+        }
         // Accessible: no colour, so no meaning rests on it.
         painter.set_color_system(if self.text_mode() {
             None
@@ -7426,17 +7431,25 @@ impl Driver {
             }
             damage.push(screen.area());
         }
-        let painted = self.painter.paint(screen, &damage);
-        let counts = self.painter.stats();
+        // No scroll may move a picture: the terminal would move it, and the
+        // pictures' plan would not know.
+        let fixed: Vec<Rect> = app
+            .placements
+            .iter()
+            .map(|p| Rect::new(p.column as u16, p.row as u16, p.cols as u16, p.rows as u16))
+            .collect();
+        self.painter.set_fixed(&fixed);
         let mut out = String::new();
+        self.painter.paint_into(screen, &damage, &mut out);
+        screen.forget_scrolls();
+        let counts = self.painter.stats();
         // Accessible: the cursor is hidden while the frame is written, so a
         // screen reader following it reads none of the cells it passes, and
         // shown again once parked on the focus.
-        if app.accessible && app.caret_shown && !painted.is_empty() {
-            out.push_str("\x1b[?25l");
+        if app.accessible && app.caret_shown && !out.is_empty() {
+            out.insert_str(0, "\x1b[?25l");
             app.caret_shown = false;
         }
-        out.push_str(&painted);
         if let Some(source) = app.graphics.clone() {
             out.push_str(&draw_graphics(
                 &*source,

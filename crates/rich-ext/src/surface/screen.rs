@@ -351,69 +351,10 @@ pub struct Screen {
     /// What laying a style under or over a cell's made: by (layer, own,
     /// over), the combined style's id.
     layered: HashMap<(u32, u32, bool), StyleId, FxBuild>,
-    /// Each row's hash, kept as rows are written: 0 until asked for again.
-    hashes: RowHashes,
     /// The rows [`scroll_up`](Self::scroll_up) moved since
     /// [`forget_scrolls`](Self::forget_scrolls), newest last (a few): what
     /// a painter tries first when it looks for rows that moved.
     scrolled: Vec<(Rect, u16)>,
-}
-
-/// A hash per row, worked out when asked for and forgotten when the row is
-/// written: what finds rows that moved (a scroll) without comparing cells.
-/// Atomic so a screen can be read from several threads; the stores are
-/// plain ones on every common machine.
-#[derive(Debug, Default)]
-struct RowHashes(Vec<std::sync::atomic::AtomicU64>);
-
-impl Clone for RowHashes {
-    fn clone(&self) -> RowHashes {
-        RowHashes(
-            self.0
-                .iter()
-                .map(|h| {
-                    std::sync::atomic::AtomicU64::new(h.load(std::sync::atomic::Ordering::Relaxed))
-                })
-                .collect(),
-        )
-    }
-}
-
-impl RowHashes {
-    fn new(rows: u16) -> RowHashes {
-        RowHashes(
-            (0..rows)
-                .map(|_| std::sync::atomic::AtomicU64::new(0))
-                .collect(),
-        )
-    }
-
-    #[inline]
-    fn forget(&self, y: u16) {
-        if let Some(hash) = self.0.get(y as usize) {
-            hash.store(0, std::sync::atomic::Ordering::Relaxed);
-        }
-    }
-
-    fn forget_all(&self) {
-        for hash in &self.0 {
-            hash.store(0, std::sync::atomic::Ordering::Relaxed);
-        }
-    }
-}
-
-/// A row's hash: never 0, which means "not worked out".
-fn hash_cells(cells: &[Cell]) -> u64 {
-    const K: u64 = 0x517c_c1b7_2722_0a95;
-    let mut h: u64 = cells.len() as u64;
-    for cell in cells {
-        let word = u64::from(u32::from_le_bytes(cell.bytes))
-            | u64::from(cell.len) << 32
-            | u64::from(cell.width) << 40;
-        h = (h.rotate_left(5) ^ word).wrapping_mul(K);
-        h = (h.rotate_left(5) ^ cell.style.index() as u64).wrapping_mul(K);
-    }
-    h.max(1)
 }
 
 impl Screen {
@@ -425,7 +366,6 @@ impl Screen {
             styles: StyleTable::new(),
             layer: None,
             layered: HashMap::default(),
-            hashes: RowHashes::new(height),
             scrolled: Vec::new(),
         }
     }
@@ -440,34 +380,6 @@ impl Screen {
     /// Forget the scrolls made so far: after a frame is painted.
     pub fn forget_scrolls(&mut self) {
         self.scrolled.clear();
-    }
-
-    /// Row `y`'s hash: equal for rows of equal cells (and, but for a
-    /// collision, only for those). Kept between calls until the row is
-    /// written. 0 off the screen.
-    ///
-    /// ```
-    /// use rich::Segment;
-    /// use rich_ext::surface::{Rect, Screen};
-    ///
-    /// let mut screen = Screen::new(4, 3);
-    /// screen.write_lines(Rect::new(0, 0, 4, 2), &[vec![Segment::new("ab", None)]; 2]);
-    /// assert_eq!(screen.row_hash(0), screen.row_hash(1));
-    /// assert_ne!(screen.row_hash(0), screen.row_hash(2));
-    /// screen.scroll_up(screen.area(), 1);
-    /// assert_eq!(screen.row_hash(1), screen.row_hash(2));
-    /// ```
-    pub fn row_hash(&self, y: u16) -> u64 {
-        let Some(slot) = self.hashes.0.get(y as usize) else {
-            return 0;
-        };
-        let known = slot.load(std::sync::atomic::Ordering::Relaxed);
-        if known != 0 {
-            return known;
-        }
-        let hash = hash_cells(self.row(y));
-        slot.store(hash, std::sync::atomic::Ordering::Relaxed);
-        hash
     }
 
     /// Row `y`'s cells.
@@ -503,7 +415,6 @@ impl Screen {
     }
 
     fn cell_mut(&mut self, x: u16, y: u16) -> &mut Cell {
-        self.hashes.forget(y);
         let width = self.width as usize;
         &mut self.cells[y as usize * width + x as usize]
     }
@@ -565,7 +476,6 @@ impl Screen {
         for cell in &mut self.cells {
             cell.style = remap.get_or_gone(cell.style);
         }
-        self.hashes.forget_all();
         self.layer = None;
         self.layered.clear();
         remap
@@ -634,7 +544,6 @@ impl Screen {
     #[inline]
     fn put_cell(&mut self, x: u16, y: u16, ch: char, style: StyleId) {
         let ch = narrow(ch);
-        self.hashes.forget(y);
         let at = y as usize * self.width as usize + x as usize;
         let width = self.cells[at].width;
         if width == 0 && x > 0 {
@@ -1023,7 +932,6 @@ impl Screen {
             let (from, to) = ((y + rows) as usize * width, y as usize * width);
             let (a, b) = (from + rect.x as usize, from + rect.right() as usize);
             self.cells.copy_within(a..b, to + rect.x as usize);
-            self.hashes.forget(y);
         }
         self.clear(Rect::new(rect.x, rect.bottom() - rows, rect.width, rows));
     }
@@ -1197,7 +1105,7 @@ pub enum PaintStrategy {
     /// the cells that changed. The default.
     #[default]
     Cells,
-    /// Compare whole rows (by hash, then by their cells), and rewrite each
+    /// Compare whole rows, and rewrite each
     /// changed row from its first change to its last.
     Rows,
     /// Write everything: each row in turn, the rest of the screen erased.
@@ -1892,12 +1800,12 @@ impl Painter {
     /// [`PaintStrategy::Best`]'s pick for this frame.
     ///
     /// Choosing must cost less than it saves, so it encodes nothing twice:
-    /// a frame whose damage spans a few rows is painted cell by cell, as
-    /// is one where no run of rows moved; one where rows moved together
-    /// scrolls them (the move is found from row hashes, kept as rows are
-    /// written, so finding it is cheap). The benchmark found `rows` and
-    /// `full` never shorter by more than a few percent once the cell
-    /// encoder writes through short gaps, so they are not tried.
+    /// a frame where nearly every cell changed is written whole; one where
+    /// rows moved together scrolls them (rows compare as slices of plain
+    /// cells, so finding the move is cheap); any other is painted cell by
+    /// cell. The benchmark found `rows` never more than a few percent
+    /// shorter once the cell encoder writes through short gaps, so it is
+    /// not tried.
     fn choose(&mut self, screen: &Screen, rects: &[Rect]) -> PaintStrategy {
         // The whole screen damaged, and nearly every cell changed (full
         // motion: a video, a game): comparing is wasted, so write it all.

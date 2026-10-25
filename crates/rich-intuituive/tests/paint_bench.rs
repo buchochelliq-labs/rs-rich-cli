@@ -14,6 +14,10 @@
 
 mod bench;
 
+/// Counts allocations, for the allocations a frame takes.
+#[global_allocator]
+static ALLOC: CountingAllocator = CountingAllocator::system();
+
 use std::time::Duration;
 
 use intuituive::interact::headless::Script;
@@ -21,6 +25,7 @@ use intuituive::prelude::*;
 use intuituive::screen::{PaintStats, Painter, Screen};
 use intuituive::widget::{Canvas, DrawCx};
 use intuituive::PaintStrategy;
+use rich_ext::qa::profile::{AllocStats, CountingAllocator};
 use rich_interact::{Event, Key};
 
 /// A scene: an app, and the key that moves it on a frame.
@@ -293,6 +298,77 @@ fn measure(scene: Scene, strategy: PaintStrategy, width: u16, height: u16, frame
         painted,
         frames: measured.len(),
     }
+}
+
+/// Allocations a frame of `scene` takes under `strategy`, in a steady
+/// state (after a few frames), and its bytes: both exact, so a gate on
+/// them does not depend on the machine.
+fn allocations(scene: Scene, strategy: PaintStrategy, width: u16, height: u16) -> (f64, f64) {
+    const FRAMES: usize = 20;
+    let key = Event::Key(Key::parse(scene.key()).unwrap());
+    let mut driver = app(scene, height)
+        .paint_strategy(strategy)
+        .driver(width, height);
+    let mut step = |driver: &mut intuituive::Driver| {
+        driver.event(key.clone());
+        driver.update(Duration::ZERO);
+        driver.render().map_or(0, |out| out.len())
+    };
+    driver.update(Duration::ZERO);
+    driver.render();
+    for _ in 0..3 {
+        step(&mut driver);
+    }
+    let before = AllocStats::now().expect("counting");
+    let bytes: usize = (0..FRAMES).map(|_| step(&mut driver)).sum();
+    let made = AllocStats::now().expect("counting").since(&before);
+    (
+        made.allocations as f64 / FRAMES as f64,
+        bytes as f64 / FRAMES as f64,
+    )
+}
+
+/// The checked-in numbers the regression gate holds `best` to: bytes and
+/// allocations a frame, per size and scene.
+const BASELINE: &str = include_str!("paint_bench_baseline.txt");
+
+/// The regression gate: `best`'s bytes and allocations a frame on every
+/// scene, against the checked-in baseline, 10% over failing (so a
+/// regression of 20% always does). Exact counts, so it holds on any
+/// machine. `PAINT_BENCH_RECORD=1` prints a new baseline instead.
+#[test]
+fn bytes_and_allocations_hold_to_the_baseline() {
+    let record = std::env::var_os("PAINT_BENCH_RECORD").is_some();
+    let mut failures = Vec::new();
+    for (w, h) in [(80u16, 24u16), (200, 60)] {
+        for scene in SCENES {
+            let (allocs, bytes) = allocations(scene, PaintStrategy::Best, w, h);
+            if record {
+                println!("{w}x{h} {scene:?} {bytes:.0} {allocs:.0}");
+                continue;
+            }
+            let key = format!("{w}x{h} {scene:?} ");
+            let Some(line) = BASELINE.lines().find(|l| l.starts_with(&key)) else {
+                failures.push(format!("{key}: not in the baseline"));
+                continue;
+            };
+            let mut numbers = line[key.len()..]
+                .split_whitespace()
+                .map(|n| n.parse::<f64>().unwrap());
+            let (want_bytes, want_allocs) = (numbers.next().unwrap(), numbers.next().unwrap());
+            if bytes > want_bytes * 1.1 + 2.0 {
+                failures.push(format!(
+                    "{key}: {bytes:.0} bytes a frame, the baseline {want_bytes}"
+                ));
+            }
+            if allocs > want_allocs * 1.1 + 2.0 {
+                failures.push(format!(
+                    "{key}: {allocs:.0} allocations a frame, the baseline {want_allocs}"
+                ));
+            }
+        }
+    }
+    assert!(failures.is_empty(), "{failures:#?}");
 }
 
 /// How many runs of each strategy a scene takes, the fastest kept.
