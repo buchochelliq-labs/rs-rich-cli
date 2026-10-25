@@ -253,7 +253,10 @@ fn an_apps_devtools_call_reaches_the_page() {
                 wait,
             )
             .unwrap();
-        let text = answer["result"]["value"].as_str().unwrap_or_default().to_string();
+        let text = answer["result"]["value"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
         if text == "Hello" || start.elapsed() > wait {
             break text;
         }
