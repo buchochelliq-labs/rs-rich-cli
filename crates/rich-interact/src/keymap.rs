@@ -126,6 +126,9 @@ pub struct Binding {
     /// alternatives: a key sequence an app runs itself, listed in a help
     /// or a palette. A keymap does not look these up.
     pub sequence: bool,
+    /// Why it cannot be done now, when it cannot: a help or a palette
+    /// lists it greyed, with the reason, and a palette does not run it.
+    pub unavailable: Option<String>,
 }
 
 impl Binding {
@@ -141,6 +144,7 @@ impl Binding {
             keys: keys.into_iter().collect(),
             description: description.into(),
             sequence: false,
+            unavailable: None,
         }
     }
 
@@ -163,6 +167,21 @@ impl Binding {
             sequence: true,
             ..Binding::new(context, action, keys, description)
         }
+    }
+
+    /// Listed but not available now, saying `reason` (see
+    /// [`unavailable`](Self::unavailable)).
+    ///
+    /// ```
+    /// use rich_interact::keymap::{keys, Binding};
+    ///
+    /// let save = Binding::new("editor", "save", keys("ctrl+s"), "save").unavailable("read-only");
+    /// assert_eq!(save.unavailable.as_deref(), Some("read-only"));
+    /// ```
+    #[must_use]
+    pub fn unavailable(mut self, reason: impl Into<String>) -> Binding {
+        self.unavailable = Some(reason.into());
+        self
     }
 
     /// `context.action`: how configuration names it.

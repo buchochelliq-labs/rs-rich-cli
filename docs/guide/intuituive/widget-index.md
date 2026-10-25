@@ -53,12 +53,12 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 
 | | Widget | Constructor | What it is |
 |---|---|---|---|
-| ![](../../assets/intuituive/widgets/button.svg){ .tui-icon width="20" } | [button](controls.md#buttons) | `button` | A button pressed with Enter, Space or a click, in three looks |
-| ![](../../assets/intuituive/widgets/checkbox.svg){ .tui-icon width="20" } | [checkbox](controls.md#check-boxes-and-switches) | `checkbox` | A box ticked on and off, bound to a `Signal<bool>` |
-| ![](../../assets/intuituive/widgets/switch_toggle.svg){ .tui-icon width="20" } | [switch toggle](controls.md#check-boxes-and-switches) | `switch_toggle` | An on/off switch, bound to a `Signal<bool>` |
-| ![](../../assets/intuituive/widgets/radio.svg){ .tui-icon width="20" } | [radio group](controls.md#radio-groups) | `radio` | One choice of several, shown at once |
+| ![](../../assets/intuituive/widgets/button.svg){ .tui-icon width="20" } | [button](controls.md#buttons) | `button`, `button_of` | A button pressed with Enter, Space or a click, in three looks; its label may change |
+| ![](../../assets/intuituive/widgets/checkbox.svg){ .tui-icon width="20" } | [checkbox](controls.md#check-boxes-and-switches) | `checkbox`, `checkbox_tri`, `checkbox_of` | A box ticked on and off, bound to a `Signal<bool>`, or with a mixed third state |
+| ![](../../assets/intuituive/widgets/switch_toggle.svg){ .tui-icon width="20" } | [switch toggle](controls.md#check-boxes-and-switches) | `switch_toggle`, `switch_of` | An on/off switch, bound to a `Signal<bool>` |
+| ![](../../assets/intuituive/widgets/radio.svg){ .tui-icon width="20" } | [radio group](controls.md#radio-groups) | `radio`, `radio_keyed` | One choice of several, shown at once; by index or by key |
 | ![](../../assets/intuituive/widgets/slider.svg){ .tui-icon width="20" } | [slider](controls.md#sliders) | `slider` | A number in a range, by keys, click, drag or wheel |
-| ![](../../assets/intuituive/widgets/select_field.svg){ .tui-icon width="20" } | [select field](controls.md#select-fields) | `select_field` | One choice of several, from a menu that opens under it |
+| ![](../../assets/intuituive/widgets/select_field.svg){ .tui-icon width="20" } | [select field](controls.md#select-fields) | `select_field`, `select_field_keyed` | One choice of several, from a menu that opens under it; by index or by key |
 | ![](../../assets/intuituive/widgets/collapsible.svg){ .tui-icon width="20" } | [collapsible](controls.md#collapsible-sections) | `collapsible` | A titled section that opens and closes |
 | ![](../../assets/intuituive/widgets/spinner.svg){ .tui-icon width="20" } | [spinner](controls.md#spinners-and-loading) | `spinner`, `.loading_when` | An animated busy sign; a node dimmed while it loads |
 
@@ -107,7 +107,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/pick.svg){ .tui-icon width="20" } | [pick](screens.md#pop-ups) | `cx.pick` | A list in a pop-up, picked with a key |
 | ![](../../assets/intuituive/widgets/confirm.svg){ .tui-icon width="20" } | [confirm](screens.md#confirming) | `cx.confirm` | A yes-or-no question |
 | ![](../../assets/intuituive/widgets/context_menu.svg){ .tui-icon width="20" } | [context_menu](screens.md#menus) | `context_menu`, `open_menu` | A menu at the pointer or an anchor |
-| ![](../../assets/intuituive/widgets/palette.svg){ .tui-icon width="20" } | [palette](input.md#the-command-palette-and-help) | `cx.palette`, `cx.command_palette` | Every command, found by typing |
+| ![](../../assets/intuituive/widgets/palette.svg){ .tui-icon width="20" } | [palette](input.md#the-command-palette-and-help) | `cx.palette`, `cx.action_palette`, `action_overlay` | Every command, or actions of your own, found by typing, live while open |
 | ![](../../assets/intuituive/widgets/help.svg){ .tui-icon width="20" } | [help](input.md#the-command-palette-and-help) | `cx.help` | The bindings, listed by section |
 | ![](../../assets/intuituive/widgets/toast.svg){ .tui-icon width="20" } | [toast](screens.md#toasts-and-animations) | `cx.toast` | A short message that goes away on its own |
 | ![](../../assets/intuituive/widgets/notify.svg){ .tui-icon width="20" } | [notify](screens.md#toasts-and-animations) | `cx.notify` | A notification with a level and a title |

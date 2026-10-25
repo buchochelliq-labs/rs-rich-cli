@@ -77,6 +77,9 @@ pub(crate) struct KeyBinding {
     pub shown: Option<Vec<Key>>,
     /// When it applies ([`bind_when`](Node::bind_when)); `None`, always.
     pub when: Option<BindingCondition>,
+    /// Why it does not apply now, while it is listed
+    /// ([`bind_unless`](Node::bind_unless)); `None`, never unavailable.
+    pub unavailable: Option<BindingReason>,
     /// Its keys fire with any modifiers held
     /// ([`any_modifiers`](Node::any_modifiers)).
     pub any_modifiers: bool,
@@ -97,6 +100,10 @@ pub(crate) struct KeyBinding {
 /// lists it.
 pub(crate) type BindingCondition = Rc<dyn Fn() -> bool>;
 
+/// Why a binding is unavailable, when it is: read as a
+/// [`BindingCondition`] is.
+pub(crate) type BindingReason = Rc<dyn Fn() -> Option<String>>;
+
 impl KeyBinding {
     pub(crate) fn new(keys: Vec<Key>, description: &str, handler: KeyHandler) -> KeyBinding {
         KeyBinding {
@@ -105,6 +112,7 @@ impl KeyBinding {
             section: None,
             shown: None,
             when: None,
+            unavailable: None,
             any_modifiers: false,
             fall_through: false,
             hidden: false,
@@ -123,11 +131,24 @@ impl KeyBinding {
         self.any_modifiers && self.live_keys().iter().any(|own| code(own) == code(&key))
     }
 
-    /// Whether it applies now: no condition, or its condition holds.
+    /// Whether it applies now: listed, and not unavailable.
     pub(crate) fn active(&self) -> bool {
+        self.listed() && self.reason().is_none()
+    }
+
+    /// Whether the help and the palette list it: its condition holds. One
+    /// listed may still be [unavailable](Self::reason).
+    pub(crate) fn listed(&self) -> bool {
         self.when
             .as_ref()
             .is_none_or(|when| crate::reactive::untracked(|| when()))
+    }
+
+    /// Why it is unavailable now, if it is ([`bind_unless`](Node::bind_unless)).
+    pub(crate) fn reason(&self) -> Option<String> {
+        self.unavailable
+            .as_ref()
+            .and_then(|reason| crate::reactive::untracked(|| reason()))
     }
 
     /// Its keys while it applies; none while it does not, so a key passes

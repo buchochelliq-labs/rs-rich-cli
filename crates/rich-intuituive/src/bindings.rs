@@ -1,6 +1,7 @@
 //! Bindings beyond a key and a handler: ones that apply only in a state
 //! ([`Node::bind_when`], [`Node::when`], [`Node::in_mode`],
-//! [`Node::modes`]), a help section for any kind of binding
+//! [`Node::modes`]), ones listed with a reason they are unavailable
+//! ([`Node::bind_unless`]), a help section for any kind of binding
 //! ([`Node::section`]), ones that toggle or step a field of a signal
 //! ([`Node::bind_toggle`], [`Node::bind_step`],
 //! [`Node::bind_step_scaled`]), and what a binding added last does with
@@ -13,14 +14,17 @@
 //! passes it by (to another binding of the key, on the same node or
 //! above), and the help, the command palette, the which-key pop-up and a
 //! [`key_hints`](crate::widgets::key_hints) footer leave it out. Two
-//! bindings may so share a key under different conditions.
+//! bindings may so share a key under different conditions. One that is
+//! unavailable ([`Node::bind_unless`], [`Node::unless`]) is listed still,
+//! greyed with why, but its keys pass it by as well and the palette does
+//! not run it.
 
 use std::ops::RangeInclusive;
 use std::rc::Rc;
 use std::time::Duration;
 
 use crate::app::Ctx;
-use crate::node::{BindingCondition, KeyBinding, Node};
+use crate::node::{BindingCondition, BindingReason, KeyBinding, Node};
 use crate::reactive::Signal;
 
 impl Node {
@@ -95,6 +99,71 @@ impl Node {
         })
     }
 
+    /// [`bind`](Self::bind), listed in the help, the command palette and a
+    /// [`key_hints`](crate::widgets::key_hints) footer even while it is
+    /// unavailable: while `unavailable` says why (`Some("nothing to
+    /// save")`), it is greyed with the reason, its keys pass it by, and
+    /// the palette does not run it. A media player's Pause with nothing
+    /// playing, Save on a read-only file. `unavailable` is read as `when`
+    /// is, and should only read signals.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let (dirty, saved) = (signal(false), signal(0));
+    ///     text!("{saved}")
+    ///         .bind_unless(
+    ///             move || (!dirty.get()).then(|| "nothing to save".to_string()),
+    ///             "ctrl+s",
+    ///             "Save",
+    ///             move |_| saved.update(|n| *n += 1),
+    ///         )
+    ///         .on_key("e", move |_| dirty.set(true))
+    ///         .on_key("?", |cx| cx.help())
+    /// });
+    /// let mut driver = app.driver(50, 10);
+    /// driver.press("ctrl+s");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "0");
+    /// driver.press("?");
+    /// assert!(driver.screen().plain().join("\n").contains("Save (nothing to save)"));
+    /// driver.press("esc e ctrl+s");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1");
+    /// ```
+    ///
+    /// # Panics
+    /// On a name that is not a key, or on no names at all.
+    pub fn bind_unless(
+        self,
+        unavailable: impl Fn() -> Option<String> + 'static,
+        keys: &str,
+        description: &str,
+        handler: impl FnMut(&mut Ctx) + 'static,
+    ) -> Node {
+        self.unless(unavailable, |node| node.bind(keys, description, handler))
+    }
+
+    /// Make every binding `scope` adds unavailable while `unavailable`
+    /// says why, as [`bind_unless`](Self::bind_unless) does one: listed,
+    /// greyed with the reason, and not run. Within another `unless`, the
+    /// outer reason wins.
+    pub fn unless(
+        self,
+        unavailable: impl Fn() -> Option<String> + 'static,
+        scope: impl FnOnce(Node) -> Node,
+    ) -> Node {
+        let unavailable: BindingReason = Rc::new(unavailable);
+        self.scoped(scope, move |binding| {
+            binding.unavailable = Some(match binding.unavailable.take() {
+                Some(inner) => {
+                    let outer = unavailable.clone();
+                    Rc::new(move || outer().or_else(|| inner()))
+                }
+                None => unavailable.clone(),
+            });
+        })
+    }
+
     /// List every binding `scope` adds (of any kind) in the help and the
     /// command palette under the section `name`, as
     /// [`bind_in`](Self::bind_in) lists one: `bind_scaled`, `bind_cycle`,
@@ -162,7 +231,7 @@ impl Node {
         scope: impl FnOnce(Node) -> Node,
     ) -> Node {
         self.when(
-            move || mode.with_untracked(|now| *now == value),
+            move || mode.with(|now| *now == value),
             |node| node.section(section, scope),
         )
     }

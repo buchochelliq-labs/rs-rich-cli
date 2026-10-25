@@ -88,6 +88,7 @@
 #![warn(clippy::return_self_not_must_use)]
 
 pub mod a11y;
+mod actions;
 pub mod app;
 #[cfg(feature = "pcm")]
 pub mod audio;
@@ -180,6 +181,7 @@ pub use rich_interact as interact;
 /// Dates as people type them (`tomorrow`, `eow`, `3d`): rs-rich-interact's.
 pub use rich_interact::dates;
 
+pub use actions::{action_overlay, Action};
 pub use app::{
     after, every, fixed_step, held_keys, plain_key, rate, Anchor, App, Ctx, Driver, Easing,
     FrameStats, Handoff, ModalOptions, Placement, StatsHandle, Theme, Timer,

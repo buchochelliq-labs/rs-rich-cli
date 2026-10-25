@@ -9,6 +9,33 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: four generic controls for changing state (intuituive, interact)
+
+- **Labels that change in place.** `button_of`, `checkbox_of` and
+  `switch_of` read their labels from a closure. The node keeps its focus
+  and a held mouse press while the label changes, and its accessible name
+  follows it. `button`, `checkbox` and `switch_toggle` are unchanged.
+- **A three-state check box.** `CheckState { Off, On, Mixed }`,
+  `checkbox_tri` and `Node::on_mixed`. A mixed box is drawn `[-]` and read
+  as mixed: `AccessState` gains `mixed`, and a browser gets
+  `aria-checked="mixed"`. Python's `AccessState` gains `mixed` too.
+- **Options known by key.** `SelectOption<K>`, `select_field_keyed` and
+  `radio_keyed` keep the choice with its key through a reorder or a
+  relabel, and set it to `None` when the key goes. A disabled option shows
+  its reason and cannot be chosen by keys, a click or typing.
+  `MenuItem::disabled` greys a menu item the same way. The string and index
+  forms are unchanged.
+- **A live action list.** The help and the palette re-read the bindings
+  while they are open, and the palette keeps its focus on the same command
+  by id. `Node::bind_unless` and `Node::unless` list a binding greyed with a
+  reason while it cannot run. Running a binding from the palette now checks
+  its condition again: before, a command that stopped applying after the
+  palette opened still ran. `action_overlay`, `Action` and
+  `Ctx::action_palette` give actions of an app's own the same palette.
+  rs-rich-interact's `Binding` and `Command` gain `unavailable`, and
+  `Palette::set_commands`, `Palette::focus_id` and `Help::set_bindings`
+  replace what they list in place.
+
 ### Record: APNG only when asked, and every frame on a busy machine (record, CLI)
 
 - **APNG is written only when asked** (0.0.22's decision 2). A tape with no

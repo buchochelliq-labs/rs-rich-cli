@@ -25,6 +25,11 @@ use intuituive::{
     button, checkbox, collapsible, radio, select_field, slider, spinner, switch_toggle,
     ButtonVariant,
 };
+// Labels that change, three states, and options known by key:
+use intuituive::{
+    button_of, checkbox_of, checkbox_tri, radio_keyed, select_field_keyed, switch_of,
+    CheckState, SelectOption,
+};
 ```
 
 Sized `.auto()`, a control takes one row in a column and its natural
@@ -79,6 +84,25 @@ button("Red", press)
 
 A screen reader hears `Save, button`, and `disabled` when it is.
 
+### Labels that change
+
+```rust
+let playing = signal(false);
+button_of(
+    move || if playing.get() { "Pause".into() } else { "Play".into() },
+    move |_| playing.update(|p| *p = !*p),
+)
+```
+
+`button_of(label, on_press)` reads its label from a closure, as
+`text(|| ..)` does: when a signal it reads changes, the button draws
+again, and lays its row out again if the label's width changed. It is the
+same node all the while, so it keeps the focus, and a press the mouse is
+holding, as its label goes from Play to Pause. Its accessible name follows
+the label. `button(label, f)` is `button_of` with a label that never
+changes. `checkbox_of` and `switch_of` do the same for a check box and a
+switch.
+
 ## Check boxes and switches
 
 ```rust
@@ -108,6 +132,30 @@ They are read as `Wrap lines, check box, checked` and
 or off, `.checked_when(..)` gives it the same state (see
 [Accessibility](accessibility.md)).
 
+### Three states
+
+```rust
+let all = signal(CheckState::Mixed);
+checkbox_tri("All files", all)
+```
+
+```text
+[-] All files
+```
+
+A parent of children that are partly chosen is neither on nor off.
+`checkbox_tri(label, state)` holds a `Signal<CheckState>`, one of `Off`,
+`On` and `Mixed`, drawn `[ ]`, `[x]` and `[-]`. Space, Enter or a click
+turn it on from off and off from on; from mixed they turn it on, or what
+`.on_mixed(CheckState::Off)` says. Only code makes it mixed: the parent
+sets it from its children, and a change from outside redraws it, focused
+or not. A disabled box stays as it is, mixed included.
+`checkbox_of(label, state)` is the same with a label that changes.
+
+A mixed box is read as `All files, check box, mixed`: its `AccessState`
+has `mixed` set and `checked` `None`, and a browser gets
+`aria-checked="mixed"`.
+
 ## Radio groups
 
 ```rust
@@ -126,6 +174,9 @@ the last to the first, Home and End go to the ends, and a click chooses an
 option. The dot is in `radio.on` (else `accent`); with the focus, the
 chosen option takes `control.focus`. Name the group with `.label(..)`: it
 is read as `Indent with, radio group, 1 of 2: Spaces, checked`.
+
+A group whose options are known by key is
+[`radio_keyed`](#options-known-by-key), below.
 
 ## Sliders
 
@@ -174,6 +225,55 @@ start. A letter no option starts goes on up to the node's ancestors, so
 
 It is read as `Theme, combo box, 3 of 3: Solarized, collapsed`
 (`expanded` while its menu is open).
+
+## Options known by key
+
+An index says which place is chosen, not which option. When the options
+change under an open form (devices plugged in, branches fetched, accounts
+added), the choice should stay with its option. `select_field_keyed` and
+`radio_keyed` take options with a key each, and the chosen key:
+
+```rust
+#[derive(Clone, PartialEq)]
+enum Output { Speakers, Hdmi, Headset }
+
+let output = signal(Some(Output::Speakers));
+select_field_keyed(
+    move || {
+        let headset = SelectOption::new(Output::Headset, "USB headset");
+        vec![
+            SelectOption::new(Output::Speakers, "Speakers"),
+            SelectOption::new(Output::Hdmi, "HDMI"),
+            match plugged.get() {
+                true => headset,
+                false => headset.disabled("unplugged"),
+            },
+        ]
+    },
+    output,
+)
+.label("Output")
+```
+
+A `SelectOption<K>` has a `key`, a `label` (console markup), `enabled`
+and a `reason`. `SelectOption::new(key, label)` makes one that can be
+chosen; `.disabled(reason)` one that cannot. The selected signal is a
+`Signal<Option<K>>`:
+
+- A reorder or a relabel keeps the choice: it is found by its key.
+- When the chosen key goes from the options, the signal becomes `None`:
+  the field shows `(none)` and is read as `Output, combo box: none`, and a
+  group shows no dot. ↓ then goes to the first option that can be chosen.
+- A disabled option is shown greyed with its reason (`USB headset
+  (unplugged)` in a group; the reason at the right in the field's menu).
+  The arrows, Home and End pass it by, a click on it does nothing, and
+  typing its first letters does not reach it: the letter goes on up to the
+  node's ancestors.
+
+A keyed radio group also jumps to an option when its first letters are
+typed, as a select field does. The index forms, `select_field` and
+`radio`, are unchanged; [menu items](screens.md#menus) can be disabled the
+same way, with `MenuItem::disabled(reason)`.
 
 ## Collapsible sections
 

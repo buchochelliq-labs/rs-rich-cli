@@ -196,6 +196,9 @@ column([
 - **A menu**: ↑/↓ move past separators, Enter or a click runs an item
   (the menu closes first, so the item may open a screen), the pointer
   moves the selection, and Esc or a press outside closes it.
+  `MenuItem::new(..).disabled("reason")` is shown greyed, with the reason
+  where a hint would be: the arrows and letters pass it by, and Enter or a
+  click on it does nothing.
 - **`context_menu(cx, items)`** opens at the pointer from a mouse handler,
   and **`open_menu(cx, at, placement, items)`** next to a node or a `Rect`.
 

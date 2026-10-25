@@ -740,6 +740,20 @@ impl Ctx {
         self.nav.push(Nav::Palette);
     }
 
+    /// Open a palette of `actions` of your own over the current screen:
+    /// [`action_overlay`](crate::action_overlay) in a modal titled
+    /// `Actions`. It lists what `actions` returns as it changes, and runs
+    /// `run` with the id of the one chosen, if it is still available.
+    pub fn action_palette(
+        &mut self,
+        actions: impl Fn() -> Vec<crate::actions::Action> + 'static,
+        run: impl FnMut(&str, &mut Ctx) + 'static,
+    ) {
+        self.modal(Size::Percent(60), Size::Percent(60), move || {
+            crate::actions::action_overlay(actions, run).panel("Actions")
+        });
+    }
+
     /// The old name of [`palette`](Self::palette).
     #[deprecated(since = "0.0.3", note = "renamed to `palette`, to pair with `help`")]
     pub fn command_palette(&mut self) {
@@ -4223,47 +4237,60 @@ impl App {
     /// innermost first, each with its node and index; the
     /// [unlisted](crate::Node::unlisted) ones too for the `palette`.
     fn bindings(&self, palette: bool) -> Vec<(NodeId, usize, rich_interact::keymap::Binding)> {
-        let path = self
-            .focus()
-            .map(|id| self.path_to(id))
-            .filter(|p| !p.is_empty())
-            .unwrap_or_else(|| vec![self.top().root.id()]);
-        let ids: Vec<NodeId> = path.into_iter().rev().collect();
-        self.bindings_of(&ids, palette)
+        self.bindings_of(&self.focus_ids(), palette)
     }
 
-    /// [`bindings`](Self::bindings) of every node shown on the top screen:
-    /// the focus path's first, innermost first, then the others in tree
-    /// order.
-    fn all_bindings(&self) -> Vec<(NodeId, usize, rich_interact::keymap::Binding)> {
+    /// The focused node and its ancestors, innermost first (the root, with
+    /// nothing focused).
+    fn focus_ids(&self) -> Vec<NodeId> {
         let path = self
             .focus()
             .map(|id| self.path_to(id))
             .filter(|p| !p.is_empty())
             .unwrap_or_else(|| vec![self.top().root.id()]);
-        let mut ids: Vec<NodeId> = path.iter().rev().copied().collect();
+        path.into_iter().rev().collect()
+    }
+
+    /// The focus path's nodes, innermost first, then every other node of
+    /// the top screen in tree order.
+    fn all_ids(&self) -> Vec<NodeId> {
+        let mut ids = self.focus_ids();
+        let path = ids.clone();
         self.top().root.walk(&mut |node, _| {
             if !path.contains(&node.id) {
                 ids.push(node.id);
             }
         });
-        self.bindings_of(&ids, false)
+        ids
     }
 
-    /// The described bindings of the nodes `ids`, in that order.
+    /// The described bindings of the nodes `ids`, in that order, that
+    /// apply now (some perhaps [unavailable](crate::Node::bind_unless)).
     fn bindings_of(
         &self,
         ids: &[NodeId],
         palette: bool,
     ) -> Vec<(NodeId, usize, rich_interact::keymap::Binding)> {
+        self.candidates_of(ids, palette)
+            .into_iter()
+            .filter_map(|listed| {
+                let binding = crate::reactive::untracked(|| listed.now())?;
+                Some((listed.node, listed.index, binding))
+            })
+            .collect()
+    }
+
+    /// The described bindings of the nodes `ids`, in that order, whether
+    /// or not they apply now, each with what decides it: what the help and
+    /// the palette list, read again as they are drawn.
+    fn candidates_of(&self, ids: &[NodeId], palette: bool) -> Vec<crate::actions::Listed> {
+        use crate::actions::Listed;
         let mut out = Vec::new();
         for &id in ids {
             with_node(&self.top().root, id, &mut |node| {
                 let name = node.group_name();
-                // A binding that does not apply now is not listed.
                 for (index, bound) in node.keys.borrow().iter().enumerate() {
-                    if bound.description.is_empty() || !bound.active() || (bound.hidden && !palette)
-                    {
+                    if bound.description.is_empty() || (bound.hidden && !palette) {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::new(
@@ -4272,12 +4299,19 @@ impl App {
                         bound.shown.clone().unwrap_or_else(|| bound.keys.clone()),
                         bound.description.clone(),
                     );
-                    out.push((id, index, binding));
+                    out.push(Listed {
+                        node: id,
+                        index,
+                        sequence: false,
+                        binding,
+                        when: bound.when.clone(),
+                        unavailable: bound.unavailable.clone(),
+                    });
                 }
                 // Release bindings, for the help to read; the palette
                 // cannot let a key go.
                 for (index, bound) in node.releases.borrow().iter().enumerate() {
-                    if palette || bound.description.is_empty() || !bound.active() {
+                    if palette || bound.description.is_empty() {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::new(
@@ -4286,11 +4320,17 @@ impl App {
                         bound.keys.clone(),
                         format!("{} (on release)", bound.description),
                     );
-                    out.push((id, index, binding));
+                    out.push(Listed {
+                        node: id,
+                        index,
+                        sequence: false,
+                        binding,
+                        when: bound.when.clone(),
+                        unavailable: bound.unavailable.clone(),
+                    });
                 }
                 for (index, bound) in node.sequences.borrow().iter().enumerate() {
-                    if bound.description.is_empty() || !bound.active() || (bound.hidden && !palette)
-                    {
+                    if bound.description.is_empty() || (bound.hidden && !palette) {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::sequence(
@@ -4299,7 +4339,14 @@ impl App {
                         bound.keys.clone(),
                         bound.description.clone(),
                     );
-                    out.push((id, index, binding));
+                    out.push(Listed {
+                        node: id,
+                        index,
+                        sequence: true,
+                        binding,
+                        when: bound.when.clone(),
+                        unavailable: bound.unavailable.clone(),
+                    });
                 }
             });
         }
@@ -4354,19 +4401,25 @@ impl App {
 
     /// The help over the top screen, as `options` say.
     fn open_help(&mut self, options: crate::help::HelpOptions) {
-        let found = match options.all_panes {
-            true => self.all_bindings(),
-            false => self.bindings(false),
+        // What it lists is read again as it is drawn: a binding comes,
+        // goes or becomes unavailable while it is open.
+        let ids = match options.all_panes {
+            true => self.all_ids(),
+            false => self.focus_ids(),
         };
-        let all: Vec<_> = found.into_iter().map(|(_, _, b)| b).collect();
+        let listed = self.candidates_of(&ids, false);
         self.open(
             Box::new(move || {
                 let format = options.key_format;
-                let help = rich_interact::overlay::Help::from_bindings(all)
+                let help = rich_interact::overlay::Help::from_bindings(Vec::new())
                     .wrap(true)
                     .flat(options.filter_first)
                     .filter_key(options.filter_key)
                     .key_format(move |binding| format.keys(&binding.keys, binding.sequence));
+                let help = crate::actions::LiveHelp::new(
+                    help,
+                    Box::new(move || crate::actions::listed_now(&listed)),
+                );
                 crate::node::component(help, |_, cx| cx.pop())
                     .on_cancel(|cx| cx.pop())
                     .panel(&options.title)
@@ -4377,18 +4430,24 @@ impl App {
 
     /// The command palette over the top screen.
     fn open_palette(&mut self) {
-        let bindings = self.bindings(true);
-        let commands: Vec<rich_interact::overlay::Command> = bindings
+        // Read again as it is drawn, as the help is; the focus stays on a
+        // command by its id as the list changes.
+        let listed = self.candidates_of(&self.focus_ids(), true);
+        let targets: Vec<(String, NodeId, usize, bool)> = listed
             .iter()
-            .map(|(_, _, binding)| rich_interact::overlay::Command::from_binding(binding))
-            .collect();
-        let targets: Vec<(String, NodeId, usize, bool)> = bindings
-            .iter()
-            .map(|(id, index, binding)| (binding.id(), *id, *index, binding.sequence))
+            .map(|l| (l.binding.id(), l.node, l.index, l.sequence))
             .collect();
         self.open(
             Box::new(move || {
-                let palette = rich_interact::overlay::Palette::new(commands);
+                let palette = crate::actions::LivePalette::new(
+                    rich_interact::overlay::Palette::new(Vec::new()),
+                    Box::new(move || {
+                        crate::actions::listed_now(&listed)
+                            .iter()
+                            .map(rich_interact::overlay::Command::from_binding)
+                            .collect()
+                    }),
+                );
                 crate::node::component(palette, move |command, cx| {
                     cx.pop();
                     if let Some((_, id, index, sequence)) =
@@ -4427,7 +4486,9 @@ impl App {
                     true => node.sequences.borrow_mut(),
                     false => node.keys.borrow_mut(),
                 };
-                if let Some(bound) = list.get_mut(index) {
+                // One that stopped applying, or became unavailable, since
+                // it was listed (in the palette, say) does not run.
+                if let Some(bound) = list.get_mut(index).filter(|bound| bound.active()) {
                     // As its first key would, unless told the key.
                     let key = key.unwrap_or(bound.keys[0]);
                     cx.key = Some(key);
@@ -6592,11 +6653,10 @@ impl Driver {
     /// ```
     pub fn run_named(&mut self, name: &str) -> bool {
         self.settle();
-        let found = self
-            .app
-            .bindings(true)
-            .into_iter()
-            .find(|(_, _, binding)| binding.description == name);
+        let found =
+            self.app.bindings(true).into_iter().find(|(_, _, binding)| {
+                binding.description == name && binding.unavailable.is_none()
+            });
         let Some((id, index, binding)) = found else {
             return false;
         };
@@ -7442,6 +7502,47 @@ mod tests {
             cx.hovered();
             cx.pointer();
         }
+    }
+
+    /// The palette runs a binding by its node and place (`Nav::Run`), not
+    /// by its key: before 0.0.22 that skipped the binding's condition, so
+    /// a command that stopped applying after the palette listed it still
+    /// ran. Now it is checked again.
+    #[test]
+    fn running_a_binding_checks_its_condition_again() {
+        let flags = std::rc::Rc::new(std::cell::Cell::new(None));
+        let set = flags.clone();
+        let app = App::new(move || {
+            let (on, ready, ran) = (signal(true), signal(true), signal(0));
+            set.set(Some((on, ready, ran)));
+            label("x")
+                .bind_when(
+                    move || on.get(),
+                    "x",
+                    "Delete",
+                    move |_| ran.update(|n| *n += 1),
+                )
+                .bind_unless(
+                    move || (!ready.get()).then(|| "busy".to_string()),
+                    "y",
+                    "Yank",
+                    move |_| ran.update(|n| *n += 10),
+                )
+        });
+        let mut driver = app.driver(10, 1);
+        driver.settle();
+        let (on, ready, ran) = flags.get().expect("the app was built");
+        let root = driver.app.top().root.id();
+        driver.app.run_binding(root, 0, false);
+        driver.app.run_binding(root, 1, false);
+        assert_eq!(ran.get_untracked(), 11);
+        driver.app.runtime.enter(|| {
+            on.set(false);
+            ready.set(false);
+        });
+        driver.app.run_binding(root, 0, false);
+        driver.app.run_binding(root, 1, false);
+        assert_eq!(ran.get_untracked(), 11);
     }
 
     #[test]

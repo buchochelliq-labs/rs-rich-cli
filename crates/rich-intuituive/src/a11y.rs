@@ -505,6 +505,7 @@ mod tests {
             AccessState {
                 expanded: Some(true),
                 checked: None,
+                mixed: false,
                 selected: true,
                 busy: true,
                 invalid: true,
