@@ -250,9 +250,9 @@ impl Adapt {
 /// An image smaller than this many CSS pixels a side is a spacer or a
 /// tracking pixel.
 pub const DECORATIVE_PX: f64 = 8.0;
-/// A marked picture at most this many CSS pixels tall (one terminal row)
-/// is an icon.
-pub const ICON_PX: f64 = 18.0;
+/// A marked picture at most this many CSS pixels tall (under a terminal
+/// row) is an icon; an 18 px comment avatar is not.
+pub const ICON_PX: f64 = 16.0;
 /// The most rows a picture takes when pictures are capped.
 pub const MAX_PICTURE_ROWS: usize = 14;
 /// Below this many columns a terminal is narrow: navigation collapses.

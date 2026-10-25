@@ -1,0 +1,14 @@
+{
+  "tape": "docs/tapes/stream-with-log.tape",
+  "tape_fnv1a64": "ac6a469a554429bc",
+  "recorder": "rs-rich-record 0.0.10",
+  "rich": null,
+  "commit": "c2e84949e00a3fa77cf7372469743a8d5aa1fe55",
+  "screenshots": [
+    "stream",
+    "paused",
+    "about",
+    "faithful"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

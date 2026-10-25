@@ -75,10 +75,7 @@ fn navigation_collapses_to_a_row_on_a_narrow_terminal() {
     let on = lines(&page, 72, only(Rule::CollapseNav));
     assert_eq!(on[0], "≡ Sections: News Sea Sky About");
     // The main column moves into the sidebar's columns.
-    assert!(
-        on.iter().any(|l| l.starts_with("Before the")),
-        "{on:#?}"
-    );
+    assert!(on.iter().any(|l| l.starts_with("Before the")), "{on:#?}");
     let off = lines(&page, 72, Adapt::none());
     assert!(off[0].starts_with("News "), "{off:#?}");
     assert!(off.iter().all(|l| !l.contains('≡')));
@@ -194,4 +191,41 @@ fn no_adapt_gives_the_faithful_projection() {
     assert!(some.on(Rule::SnapGrids) && some.on(Rule::LiveTail));
     let collapsed = lines(&page, 72, some);
     assert!(collapsed.iter().all(|l| !l.contains('≡')));
+}
+
+#[test]
+fn thumbnails_and_avatars_titled_beside_them_survive_the_decorative_rule() {
+    // media-grid.html: its thumbnails (176 x 99) and comment avatars
+    // (18 x 18) have alt="", titled by the text beside them; a 1 x 1
+    // spacer and a 14 px aria-hidden icon are decorative.
+    let page = page("media-grid");
+    let size = |m: &noctiluca::model::Media| (m.rect.width as u32, m.rect.height as u32);
+    let dropped: Vec<_> = page
+        .media
+        .iter()
+        .filter(|m| decorative(m))
+        .map(size)
+        .collect();
+    assert_eq!(
+        dropped,
+        [(14, 14), (1, 1)],
+        "{:?}",
+        page.media.iter().map(size).collect::<Vec<_>>()
+    );
+    let shown: Vec<_> = projected(&page, 100, only(Rule::DecorativeImages))
+        .regions
+        .iter()
+        .map(|r| size(&page.media[r.media]))
+        .collect();
+    assert_eq!(
+        shown.iter().filter(|s| **s == (176, 99)).count(),
+        4,
+        "{shown:?}"
+    );
+    assert_eq!(
+        shown.iter().filter(|s| **s == (18, 18)).count(),
+        3,
+        "{shown:?}"
+    );
+    assert!(!shown.contains(&(1, 1)) && !shown.contains(&(14, 14)));
 }
