@@ -290,8 +290,16 @@ pub struct Media {
     pub alt: String,
     /// Its source address, cleaned.
     pub src: String,
-    /// A still of it, as image bytes (PNG), once captured.
+    /// Its picture's bytes once read: the original file the page loaded,
+    /// else a still of Chrome's pixels (PNG).
     pub still: Option<Arc<[u8]>>,
+    /// Its picture, decoded from [`still`](Self::still) on the tab's
+    /// worker: what the projection and reader mode draw. An animated GIF
+    /// carries its frames.
+    pub picture: Option<rich_intuituive::Picture>,
+    /// Whether the page captions it (a `<figure>` with a `<figcaption>`):
+    /// then it gets no `Image:` line of ours.
+    pub captioned: bool,
     /// A video's or an audio's playback, read from the element.
     pub playback: Option<crate::engine::Playback>,
 }
@@ -653,6 +661,54 @@ impl Dom {
     }
 }
 
+/// The address of node `i`'s CSS background picture, when it has one and
+/// no text of its own and is at least 16 x 16 CSS pixels: a thumbnail, an
+/// avatar or a banner drawn with `background-image`. The first `url(…)`
+/// of the style; gradients are not pictures.
+fn background_picture(dom: &Dom, i: usize) -> Option<String> {
+    let style = dom.style(i, 9);
+    let start = style.find("url(")? + 4;
+    let end = start + style[start..].find(')')?;
+    let url = style[start..end]
+        .trim()
+        .trim_matches(['"', '\''])
+        .to_string();
+    if url.is_empty() {
+        return None;
+    }
+    let rect = dom.rect(i)?;
+    if rect.width < 16.0 || rect.height < 16.0 {
+        return None;
+    }
+    let has_text = dom
+        .descendants(i)
+        .into_iter()
+        .any(|d| dom.kind[d] == 3 && dom.layout[d].is_some() && !dom.value[d].trim().is_empty());
+    (!has_text).then_some(url)
+}
+
+/// Whether node `i` is inside a `<figure>` (up to three levels up) that
+/// has a `<figcaption>`.
+fn captioned(dom: &Dom, i: usize) -> bool {
+    let mut at = i;
+    for _ in 0..3 {
+        let Some(parent) = usize::try_from(dom.parent[at])
+            .ok()
+            .filter(|&p| p < dom.name.len())
+        else {
+            return false;
+        };
+        if dom.name[parent] == "FIGURE" {
+            return dom
+                .descendants(parent)
+                .into_iter()
+                .any(|d| dom.name[d] == "FIGCAPTION");
+        }
+        at = parent;
+    }
+    false
+}
+
 /// The accessibility tree's nodes, by DOM node.
 struct Ax<'a> {
     by_node: HashMap<i64, &'a Value>,
@@ -909,6 +965,12 @@ impl Walker<'_> {
             }
             return;
         }
+        // A CSS background picture on a box with no text of its own (a
+        // thumbnail, an avatar, a banner): a picture region, under what
+        // the box holds. A box with text keeps its text instead.
+        if laid_out && dom.shows(i) && background_picture(dom, i).is_some() {
+            self.media(i, MediaKind::Image, context);
+        }
         // Controls: an interactive role in the AX tree, or a form element.
         let role = self.ax.role(backend).or_else(|| dom_role(dom, i));
         if let Some(role) = role {
@@ -1048,7 +1110,9 @@ impl Walker<'_> {
             .get(&i)
             .map(String::as_str)
             .or_else(|| dom.attr(i, "src"))
-            .map(|s| clean(&crate::url::resolve(&dom.url, s)))
+            .map(str::to_string)
+            .or_else(|| background_picture(dom, i))
+            .map(|s| clean(&crate::url::resolve(&dom.url, &s)))
             .unwrap_or_default();
         self.flush(context);
         let index = self.page.media.len();
@@ -1059,6 +1123,8 @@ impl Walker<'_> {
             alt: truncate(&alt, 500),
             src: truncate(&src, 2000),
             still: None,
+            picture: None,
+            captioned: captioned(dom, i),
             playback: None,
         });
         self.block(BlockKind::Media(index), i, context);

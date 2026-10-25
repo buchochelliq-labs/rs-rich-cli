@@ -46,6 +46,7 @@ pub const SNAPSHOT_STYLES: &[&str] = &[
     "text-decoration-line",
     "white-space",
     "opacity",
+    "background-image",
 ];
 
 /// The script of the isolated world. It reports only that something
@@ -491,6 +492,29 @@ impl Engine for ChromeBackend {
             duration: at(4).as_f64().filter(|d| *d >= 0.0),
             ended: at(5).as_bool().unwrap_or(false),
         })
+    }
+
+    fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {
+        let tree = self.call("Page.getFrameTree", json!({}))?;
+        let frame = tree["frameTree"]["frame"]["id"]
+            .as_str()
+            .ok_or_else(|| io::Error::other("no main frame"))?
+            .to_string();
+        let result = self.call(
+            "Page.getResourceContent",
+            json!({"frameId": frame, "url": url}),
+        )?;
+        let content = result["content"].as_str().unwrap_or_default();
+        let bytes = if result["base64Encoded"].as_bool() == Some(true) {
+            base64_decode(content)
+                .ok_or_else(|| io::Error::other("a resource that is not base64"))?
+        } else {
+            content.as_bytes().to_vec()
+        };
+        if bytes.is_empty() {
+            return Err(io::Error::new(ErrorKind::NotFound, "an empty resource"));
+        }
+        Ok(bytes)
     }
 
     fn image_ready(&mut self, _tab: TabId, node: i64) -> io::Result<bool> {

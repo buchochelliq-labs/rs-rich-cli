@@ -36,6 +36,36 @@ pub struct FakeState {
     pub viewport_height: f64,
     /// Image nodes whose picture has not loaded (lazy, below the fold).
     pub not_loaded: std::collections::HashSet<i64>,
+    /// Resources the page loaded, by address: an image's original bytes.
+    pub resources: HashMap<String, Vec<u8>>,
+    /// Where resources not in [`resources`](Self::resources) are read
+    /// from: a fixture directory, by the address's path after its last
+    /// `/fixtures/` (else its last segment). Saved snapshots name their
+    /// fixtures `file:///noctiluca/fixtures/…`.
+    pub resource_root: Option<std::path::PathBuf>,
+}
+
+impl FakeState {
+    /// The bytes of the resource at `url`, if the test has them.
+    pub fn resource(&self, url: &str) -> Option<Vec<u8>> {
+        if let Some(bytes) = self.resources.get(url) {
+            return Some(bytes.clone());
+        }
+        let root = self.resource_root.as_ref()?;
+        let path = url.split(['?', '#']).next().unwrap_or(url);
+        let relative = match path.rfind("/fixtures/") {
+            Some(at) => &path[at + "/fixtures/".len()..],
+            None => path.rsplit('/').next().unwrap_or(path),
+        };
+        // Never above the root.
+        if relative
+            .split('/')
+            .any(|part| part == ".." || part.is_empty())
+        {
+            return None;
+        }
+        std::fs::read(root.join(relative)).ok()
+    }
 }
 
 impl FakeState {
@@ -188,9 +218,14 @@ pub fn snapshot_file(path: &std::path::Path) -> io::Result<PageSnapshot> {
 
 impl FakeEngine {
     /// An engine over the snapshots in `dir` (`NAME.json` each), showing
-    /// none yet.
+    /// none yet. Resources come from the `fixtures` directory beside it,
+    /// when there is one.
     pub fn from_dir(dir: &std::path::Path) -> io::Result<FakeEngine> {
         let mut state = FakeState::default();
+        let fixtures = dir.join("..").join("fixtures");
+        if fixtures.is_dir() {
+            state.resource_root = Some(fixtures);
+        }
         for entry in std::fs::read_dir(dir)? {
             let path = entry?.path();
             if path.extension().is_some_and(|e| e == "json") {
@@ -378,6 +413,12 @@ impl Engine for FakeEngine {
 
     fn image_ready(&mut self, _tab: TabId, node: i64) -> io::Result<bool> {
         Ok(!self.lock().not_loaded.contains(&node))
+    }
+
+    fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {
+        self.lock()
+            .resource(url)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such resource"))
     }
 
     fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
