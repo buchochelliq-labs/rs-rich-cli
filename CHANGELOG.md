@@ -25,6 +25,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `minisign-verify`, which the CLI needs since 0.0.22. `docs-versions.toml`
   pins 0.0.22's docs to the commit before this one.
 
+### Fixed: rs-rich-web's memory limit holds for an allocation under way
+
+- A session's process could slip past `--memory` on Linux. If a large
+  allocation it began before the server's `prlimit` was still under way
+  when the server checked its peak, the check missed it and the session
+  reached the app. The server now checks the peak again when the process
+  connects, after its startup, and refuses it there (seen once on CI in
+  `the_memory_limit_holds_for_every_sessions_startup`).
+
 ## 0.0.22 cohort — published 2026-10-25
 
 Published on 2026-10-25 from `6e8e82e` by one `release.yml` run (tag
