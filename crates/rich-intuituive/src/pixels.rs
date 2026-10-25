@@ -794,8 +794,8 @@ mod tests {
                 for x in 0..columns {
                     let (a, b) = (got.cell(x, y), expected.cell(x, y));
                     assert_eq!(
-                        (&a.text, got.style(a.style)),
-                        (&b.text, expected.style(b.style)),
+                        (a.text(), got.style(a.style)),
+                        (b.text(), expected.style(b.style)),
                         "{mode:?} ({x}, {y})"
                     );
                 }

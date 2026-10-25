@@ -94,7 +94,7 @@ fn accessible_mode_draws_text_and_puts_the_cursor_on_the_selection() {
         .collect();
     assert!(styles.iter().all(|s| *s == "0"), "{styles:?}");
     // The focused tab strip: the cursor on its selected title, shown.
-    assert!(out.ends_with("\x1b[2;1H\x1b[?25h"), "{out:?}");
+    assert!(out.ends_with("\x1b[2H\x1b[?25h"), "{out:?}");
     // Tab to the list: the cursor goes to its selected row.
     let out = frame(&mut driver, press("tab"));
     assert!(out.ends_with("\x1b[5;2H\x1b[?25h"), "{out:?}");
@@ -508,18 +508,18 @@ fn accessible_frames_hide_the_cursor_while_they_are_written() {
     let mut driver = app.driver(20, 4);
     let out = frame(&mut driver, None);
     assert!(out.starts_with("\x1b[?25l"), "{out:?}");
-    assert!(out.ends_with("\x1b[2;1H\x1b[?25h"), "{out:?}");
+    assert!(out.ends_with("\x1b[2H\x1b[?25h"), "{out:?}");
     // A change away from the focus: the cursor is hidden before any cell
     // is written, and shown once it is back on the focus.
     let out = frame(&mut driver, press("t"));
     assert!(out.starts_with("\x1b[?25l"), "hidden first: {out:?}");
     assert!(out.contains("\x1b[1;6H\x1b[0m1"), "{out:?}");
-    assert!(out.ends_with("\x1b[2;1H\x1b[?25h"), "{out:?}");
+    assert!(out.ends_with("\x1b[2H\x1b[?25h"), "{out:?}");
     assert_eq!(out.matches("\x1b[?25h").count(), 1, "{out:?}");
     // The selection moves: hidden, the rows written, parked on the new one.
     let out = frame(&mut driver, press("down"));
     assert!(out.starts_with("\x1b[?25l"), "{out:?}");
-    assert!(out.ends_with("\x1b[3;1H\x1b[?25h"), "{out:?}");
+    assert!(out.ends_with("\x1b[3H\x1b[?25h"), "{out:?}");
     // A frame that changes nothing on the screen sends nothing: the
     // cursor stays where it is.
     driver.event(Event::Key(Key::char('x')));

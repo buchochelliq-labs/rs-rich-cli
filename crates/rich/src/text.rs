@@ -26,6 +26,14 @@ pub(crate) fn is_control_code(c: char) -> bool {
     matches!(c, '\u{7}' | '\u{8}' | '\u{b}' | '\u{c}' | '\r')
 }
 
+/// Whether `text` holds any [`is_control_code`] character. They are all
+/// ASCII, and no byte of a multi-byte UTF-8 character is, so the bytes can
+/// be searched without decoding the characters.
+pub(crate) fn has_control_code(text: &str) -> bool {
+    text.bytes()
+        .any(|b| matches!(b, 0x07 | 0x08 | 0x0b | 0x0c | b'\r'))
+}
+
 /// Cell width of a tab stop: upstream's `Console.tab_size` default, and the
 /// fallback when neither a text nor its console sets one (`tab_size or 8`).
 pub const DEFAULT_TAB_SIZE: usize = 8;
@@ -187,17 +195,28 @@ impl Text {
     /// carriage return. Tab and newline are deliberately kept — they are layout,
     /// not control.
     fn strip_control_codes(text: &str) -> String {
-        if text.chars().any(is_control_code) {
+        if has_control_code(text) {
             text.chars().filter(|c| !is_control_code(*c)).collect()
         } else {
             text.to_string()
         }
     }
 
+    /// [`strip_control_codes`](Self::strip_control_codes) of a string the
+    /// caller owns: handed back as it is when it has none, rather than
+    /// copied (docs/PORTING.md, "Performance notes").
+    fn strip_control_codes_owned(text: String) -> String {
+        if has_control_code(&text) {
+            Text::strip_control_codes(&text)
+        } else {
+            text
+        }
+    }
+
     /// Plain, unstyled text.
     pub fn new(plain: impl Into<String>) -> Self {
         Text {
-            plain: Text::strip_control_codes(&plain.into()),
+            plain: Text::strip_control_codes_owned(plain.into()),
             spans: Vec::new(),
             style: StyleType::default(),
             justify: None,
@@ -215,7 +234,7 @@ impl Text {
             // Strips too: upstream's `Text.__init__` does this regardless of
             // style, and a constructor that skipped it would reintroduce the
             // offset divergence the moment a caller added spans.
-            plain: Text::strip_control_codes(&plain.into()),
+            plain: Text::strip_control_codes_owned(plain.into()),
             spans: Vec::new(),
             style: style.into(),
             justify: None,
@@ -1497,7 +1516,7 @@ impl Text {
                 }
             }
             for line in &mut new_lines {
-                *line = truncate_line(line, width, overflow);
+                *line = truncate_line(std::mem::take(line), width, overflow);
             }
             lines.append(&mut new_lines);
         }
@@ -1790,9 +1809,20 @@ fn char_to_byte(text: &str, char_idx: usize) -> usize {
 /// the style of the first segment the cut did *not* keep whole — upstream writes
 /// the ellipsis into the plain string and lets span-trimming decide, which works
 /// out to the same rule, including when the cut lands exactly on a boundary.
-fn truncate_line(line: &[Segment], width: usize, overflow: Overflow) -> Vec<Segment> {
+fn truncate_line(line: Vec<Segment>, width: usize, overflow: Overflow) -> Vec<Segment> {
     if overflow == Overflow::Ignore {
-        return line.to_vec();
+        return line;
+    }
+    // A line that fits comes back as it is, measured without joining it: with
+    // no joiner or variation selector in it, no grapheme can span a segment
+    // boundary, so the segments' widths add up to the whole line's
+    // (docs/PORTING.md, "Performance notes").
+    let unjoined: Option<usize> = line
+        .iter()
+        .map(|segment| crate::cells::unjoined_cell_len(&segment.text))
+        .sum();
+    if unjoined.is_some_and(|length| length <= width) {
+        return line;
     }
     // Measured and cut over the WHOLE line, exactly as upstream's `Text.truncate`
     // works on `self.plain`. Summing the segments instead is wrong wherever a
@@ -1801,7 +1831,7 @@ fn truncate_line(line: &[Segment], width: usize, overflow: Overflow) -> Vec<Segm
     // reads one cell too wide and cuts text upstream keeps.
     let plain: String = line.iter().map(|segment| segment.text.as_str()).collect();
     if cell_len(&plain) <= width {
-        return line.to_vec();
+        return line;
     }
     let ellipsis = overflow == Overflow::Ellipsis;
     // `…` occupies one cell, so the kept text must stop one cell early.
@@ -1821,7 +1851,7 @@ fn truncate_line(line: &[Segment], width: usize, overflow: Overflow) -> Vec<Segm
     // on the end of the line's bytes.
     let mut cut_style: Option<Style> = line.last().and_then(|segment| segment.style.clone());
     let mut offset = 0usize;
-    for segment in line {
+    for segment in &line {
         if offset >= kept.len() {
             cut_style = segment.style.clone();
             break;
@@ -1964,7 +1994,7 @@ fn justify_line(
         // character after it, so cutting the line hands one of its cells back —
         // and padding first computes the gap from the pre-cut measurement, which
         // is zero, and leaves the line short.
-        content = truncate_line(&content, width, overflow);
+        content = truncate_line(content, width, overflow);
     }
 
     // Whether padding may join the content's first / last run: no span

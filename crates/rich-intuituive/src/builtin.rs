@@ -66,10 +66,18 @@ impl Widget for Leaf {
 pub(crate) type Describe =
     Box<dyn Fn(&Console, u16, u16, bool) -> (Vec<Vec<Segment>>, Option<String>)>;
 
+/// What a node drawn through rs-rich-ext's fast path
+/// ([`Draw`](rich_ext::surface::Draw)) does when it draws: straight into
+/// the canvas, and (when the last argument asks) says what it shows.
+pub(crate) type FastDraw = Box<dyn Fn(&Console, &mut Canvas, bool) -> Option<String>>;
+
 /// A leaf that says what it shows: its accessible name is the text of
 /// what it last drew.
 pub(crate) struct Described {
     pub draw: Describe,
+    /// Drawn through the fast path, when what it shows has one; measured
+    /// through `draw` either way.
+    pub fast: Option<FastDraw>,
     pub text: Option<String>,
 }
 
@@ -86,6 +94,10 @@ impl Widget for Described {
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+        if let Some(fast) = &self.fast {
+            self.text = fast(cx.console(), canvas, true);
+            return;
+        }
         let (lines, text) = (self.draw)(cx.console(), canvas.width(), canvas.height(), true);
         self.text = text;
         canvas.lines(&lines);

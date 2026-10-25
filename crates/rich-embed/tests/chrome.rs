@@ -35,7 +35,7 @@ fn open_a_red_page(binary: std::ffi::OsString) -> (Driver, WebHandle, bool) {
         let colour = screen
             .style(cell.style)
             .and_then(|s| s.color().and_then(Color::get_truecolor));
-        cell.text == "▀" && colour.is_some_and(|c| c.red > 200 && c.green < 60 && c.blue < 60)
+        cell.text() == "▀" && colour.is_some_and(|c| c.red > 200 && c.green < 60 && c.blue < 60)
     };
     while !red(&driver) && start.elapsed() < Duration::from_secs(60) {
         driver.update(start.elapsed());

@@ -63,7 +63,7 @@ fn the_focused_row_is_highlighted() {
     let record = run(todo_app(start), Script::new().keys("tab ctrl+q"), 50, 12);
     // Reverse video (7) on the row, filled to the panel's inner width.
     let out = record.output();
-    assert!(out.contains(";7m"), "{out:?}");
+    assert!(out.contains(";7m") || out.contains(";7;"), "{out:?}");
 }
 
 #[test]

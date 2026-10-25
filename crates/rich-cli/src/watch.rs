@@ -474,7 +474,7 @@ impl Regions {
                 .into_iter()
                 .filter(|segment| !segment.control)
                 .map(|mut segment| {
-                    segment.text = sanitize_terminal_controls(&segment.text);
+                    segment.text = sanitize_terminal_controls(&segment.text).into();
                     segment
                 })
                 .collect(),

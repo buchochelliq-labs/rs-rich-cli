@@ -227,7 +227,7 @@ mod tests {
                         .unwrap_or_default();
                     match runs.last_mut() {
                         Some((text, last)) if *last == sgr => text.push_str(&segment.text),
-                        _ => runs.push((segment.text.clone(), sgr)),
+                        _ => runs.push((segment.text.to_string(), sgr)),
                     }
                 }
                 runs

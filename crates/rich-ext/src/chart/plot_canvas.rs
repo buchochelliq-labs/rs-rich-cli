@@ -10,9 +10,12 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 use super::canvas::{bresenham, octant, quadrant, sextant};
 use super::world::MapResolution;
 use super::{
-    cell_units, cells, lines_to_segments, theme_style, user_style, Charset, DotCanvas, Line,
+    cell_units, cells, draw_grid, lines_to_segments, theme_style, user_style, Charset, DotCanvas,
+    Line,
 };
 use crate::fidelity::ascii_text;
+use crate::frame::{StyleId, StyleTable};
+use crate::surface::{Cell, Draw, Rect, Screen, TextRun};
 
 /// Rows a [`Canvas`] takes unless [`Canvas::height`] says otherwise.
 const DEFAULT_HEIGHT: usize = 10;
@@ -101,17 +104,21 @@ impl Marker {
     }
 }
 
+/// A style spec an [`Op`] draws in: shared, so a chart's thousand line
+/// steps in one style hold one string, not a thousand.
+pub(crate) type Spec = std::sync::Arc<str>;
+
 /// One recorded drawing step, in world coordinates. Styles are specs:
 /// theme keys or definitions.
 #[derive(Clone, Debug, PartialEq)]
 pub(crate) enum Op {
-    Points(Vec<(f64, f64)>, String),
-    Line((f64, f64), (f64, f64), String),
+    Points(Vec<(f64, f64)>, Spec),
+    Line((f64, f64), (f64, f64), Spec),
     /// A line, and the area between it and a level `y`.
-    Area((f64, f64), (f64, f64), f64, String),
-    Circle((f64, f64), f64, String),
-    Map(MapResolution, String),
-    Print((f64, f64), String, String),
+    Area((f64, f64), (f64, f64), f64, Spec),
+    Circle((f64, f64), f64, Spec),
+    Map(MapResolution, Spec),
+    Print((f64, f64), String, Spec),
     Layer,
     Marker(Marker),
 }
@@ -167,8 +174,7 @@ pub struct CanvasPainter {
 impl CanvasPainter {
     /// A dot at each point.
     pub fn points(&mut self, points: &[(f64, f64)], style: &str) -> &mut Self {
-        self.ops
-            .push(Op::Points(points.to_vec(), style.to_string()));
+        self.ops.push(Op::Points(points.to_vec(), style.into()));
         self
     }
 
@@ -188,7 +194,7 @@ impl CanvasPainter {
     /// or narrower ones for a region. The lines are Natural Earth's, in the
     /// public domain, simplified: see [`MapResolution`].
     pub fn map(&mut self, resolution: MapResolution, style: &str) -> &mut Self {
-        self.ops.push(Op::Map(resolution, style.to_string()));
+        self.ops.push(Op::Map(resolution, style.into()));
         self
     }
 
@@ -205,14 +211,13 @@ impl CanvasPainter {
         style: &str,
     ) -> &mut Self {
         self.ops
-            .push(Op::Area((x1, y1), (x2, y2), fill_to, style.to_string()));
+            .push(Op::Area((x1, y1), (x2, y2), fill_to, style.into()));
         self
     }
 
     /// A straight line from (`x1`, `y1`) to (`x2`, `y2`).
     pub fn line(&mut self, x1: f64, y1: f64, x2: f64, y2: f64, style: &str) -> &mut Self {
-        self.ops
-            .push(Op::Line((x1, y1), (x2, y2), style.to_string()));
+        self.ops.push(Op::Line((x1, y1), (x2, y2), style.into()));
         self
     }
 
@@ -223,10 +228,10 @@ impl CanvasPainter {
         for run in points.split(|p| !finite(p)) {
             match run {
                 [] => {}
-                [p] => self.ops.push(Op::Points(vec![*p], style.to_string())),
+                [p] => self.ops.push(Op::Points(vec![*p], style.into())),
                 _ => {
                     for pair in run.windows(2) {
-                        self.ops.push(Op::Line(pair[0], pair[1], style.to_string()));
+                        self.ops.push(Op::Line(pair[0], pair[1], style.into()));
                     }
                 }
             }
@@ -245,7 +250,7 @@ impl CanvasPainter {
 
     /// The outline of a circle: a dot every degree.
     pub fn circle(&mut self, x: f64, y: f64, radius: f64, style: &str) -> &mut Self {
-        self.ops.push(Op::Circle((x, y), radius, style.to_string()));
+        self.ops.push(Op::Circle((x, y), radius, style.into()));
         self
     }
 
@@ -253,7 +258,7 @@ impl CanvasPainter {
     /// edge. Text is drawn after every layer, over whatever is there.
     pub fn print(&mut self, x: f64, y: f64, text: &str, style: &str) -> &mut Self {
         self.ops
-            .push(Op::Print((x, y), text.to_string(), style.to_string()));
+            .push(Op::Print((x, y), text.to_string(), style.into()));
         self
     }
 
@@ -449,6 +454,12 @@ fn background_style(style: Style) -> Style {
     }
 }
 
+impl Draw for Canvas {
+    fn draw(&self, console: &Console, options: &ConsoleOptions, screen: &mut Screen, rect: Rect) {
+        draw_grid(self.grid(console, options), options, screen, rect);
+    }
+}
+
 impl Renderable for Canvas {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         lines_to_segments(self.grid(console, options).into_lines(), options.max_width)
@@ -586,6 +597,17 @@ impl Bounds {
             return None;
         }
         let (dx, dy) = (b.0 - a.0, b.1 - a.1);
+        if dx.is_finite() && dy.is_finite() && self.contains(a) && self.contains(b) {
+            // Both ends inside (and the step finite): the loop below would
+            // leave t0 at 0 and t1 at 1 (a distance to an edge over a no
+            // larger step divides to at least 1), so this is what it
+            // returns, computed the same way.
+            let end = (
+                (a.0 + dx).clamp(self.left, self.right),
+                (a.1 + dy).clamp(self.bottom, self.top),
+            );
+            return Some((a, end));
+        }
         let (mut t0, mut t1) = (0.0f64, 1.0f64);
         for (p, q) in [
             (-dx, a.0 - self.left),
@@ -639,6 +661,12 @@ impl<'a> Styles<'a> {
     }
 
     fn id(&mut self, spec: &str) -> usize {
+        // The last spec again (a dataset's thousand steps share one).
+        if let Some(last) = self.specs.last() {
+            if last == spec {
+                return self.specs.len() - 1;
+            }
+        }
         if let Some(i) = self.specs.iter().position(|s| s == spec) {
             return i;
         }
@@ -733,8 +761,18 @@ impl Layer {
             return;
         };
         let to_i = |(x, y): (usize, usize)| (x as i64, y as i64);
-        for (x, y) in bresenham(to_i(a), to_i(b)) {
-            self.set((x as usize, y as usize), style);
+        match &mut self.pixels {
+            // Straight onto the dots: the canvas keeps to its own size.
+            Pixels::Braille(canvas) => {
+                for (x, y) in bresenham(to_i(a), to_i(b)) {
+                    canvas.set(x, y, style);
+                }
+            }
+            _ => {
+                for (x, y) in bresenham(to_i(a), to_i(b)) {
+                    self.set((x as usize, y as usize), style);
+                }
+            }
         }
     }
 
@@ -765,20 +803,37 @@ impl Layer {
         }
     }
 
-    /// Copy the cells this layer drew in onto `out`.
-    fn finish(&self, out: &mut CellGrid, styles: &Styles) {
+    /// Copy the cells this layer drew in onto `out`, its columns from
+    /// `left`.
+    fn finish(&self, out: &mut CellGrid, styles: &Styles, left: usize) {
         let columns = self.resolution().0;
+        // Each style interned in `out` once.
+        let ids: Vec<StyleId> = styles
+            .resolved
+            .iter()
+            .map(|style| out.intern(style.as_ref()))
+            .collect();
+        if let Pixels::Braille(canvas) = &self.pixels {
+            for row in 0..self.height {
+                for col in 0..self.width {
+                    if !canvas.is_set(col, row) {
+                        continue;
+                    }
+                    if let (c, Some(style)) = canvas.cell(col, row) {
+                        out.set_char(row, left + col, c, ids[style]);
+                    }
+                }
+            }
+            return;
+        }
         for row in 0..self.height {
             for col in 0..self.width {
                 let cell = match (&self.pixels, self.marker) {
-                    (Pixels::Braille(canvas), _) => match canvas.cell(col, row) {
-                        (c, Some(style)) if canvas.is_set(col, row) => Some((c, styles.get(style))),
-                        _ => None,
-                    },
+                    (Pixels::Braille(_), _) => None,
                     (Pixels::Pattern { bits, styles: set }, marker) => {
                         let i = row * self.width + col;
                         (bits[i] != 0).then(|| {
-                            let style = set[i].and_then(|s| styles.get(s));
+                            let style = set[i].map_or(StyleId::NONE, |s| ids[s]);
                             (marker.pattern(bits[i]), style)
                         })
                     }
@@ -786,6 +841,7 @@ impl Layer {
                         let upper = grid[2 * row * columns + col];
                         let lower = grid[(2 * row + 1) * columns + col];
                         half_block(upper, lower, styles)
+                            .map(|(c, style)| (c, out.intern(style.as_ref())))
                     }
                     (Pixels::Grid(grid), marker) => grid[row * columns + col].map(|s| {
                         let glyph = match marker {
@@ -794,11 +850,11 @@ impl Layer {
                             Marker::Ascii(c) => c,
                             _ => '•',
                         };
-                        (glyph, styles.get(s))
+                        (glyph, ids[s])
                     }),
                 };
                 if let Some((c, style)) = cell {
-                    out.set(row, col, c.to_string(), style);
+                    out.set_char(row, left + col, c, style);
                 }
             }
         }
@@ -836,44 +892,69 @@ fn half_block(
 pub(crate) fn raster(ops: &[Op], view: &View, console: &Console) -> CellGrid {
     let (width, height) = (view.width.min(MAX_SIDE), view.height.min(MAX_SIDE));
     let mut out = CellGrid::new(width, height);
+    raster_into(ops, view, console, &mut out, 0);
+    out
+}
+
+/// [`raster`] into the columns of `out` from `left`, which must be empty
+/// there: what [`raster`] then [`CellGrid::blit`] at `left` would give,
+/// without a second grid.
+pub(crate) fn raster_into(
+    ops: &[Op],
+    view: &View,
+    console: &Console,
+    out: &mut CellGrid,
+    left: usize,
+) {
+    let (width, height) = (view.width.min(MAX_SIDE), view.height.min(MAX_SIDE));
     let Some(bounds) = Bounds::new(view.x, view.y) else {
-        return out;
+        return;
     };
     if width == 0 || height == 0 {
-        return out;
+        return;
     }
     let mut styles = Styles::new(console);
     let mut layer = Layer::new(view.marker.resolve(view.ascii), width, height);
     let mut labels = Vec::new();
+    // The last spec and its id: a dataset's steps share one.
+    let mut last: Option<(&Spec, usize)> = None;
+    let mut id_of = |styles: &mut Styles, spec| match last {
+        Some((seen, id)) if std::sync::Arc::ptr_eq(seen, spec) => id,
+        _ => {
+            let id = styles.id(spec);
+            last = Some((spec, id));
+            id
+        }
+    };
     for op in ops {
         match op {
             Op::Layer => {
-                layer.finish(&mut out, &styles);
+                layer.finish(out, &styles, left);
                 layer = Layer::new(layer.marker, width, height);
             }
             Op::Marker(marker) => {
                 let marker = marker.resolve(view.ascii);
                 if marker != layer.marker {
-                    layer.finish(&mut out, &styles);
+                    layer.finish(out, &styles, left);
                     layer = Layer::new(marker, width, height);
                 }
             }
             Op::Points(points, style) => {
-                let style = styles.id(style);
+                let style = id_of(&mut styles, style);
                 for p in points {
                     layer.point(&bounds, *p, style);
                 }
             }
             Op::Line(a, b, style) => {
-                let style = styles.id(style);
+                let style = id_of(&mut styles, style);
                 layer.line(&bounds, *a, *b, style);
             }
             Op::Area(a, b, fill, style) => {
-                let style = styles.id(style);
+                let style = id_of(&mut styles, style);
                 layer.area(&bounds, *a, *b, *fill, style);
             }
             Op::Map(resolution, style) => {
-                let style = styles.id(style);
+                let style = id_of(&mut styles, style);
                 for line in resolution.lines() {
                     for pair in line.windows(2) {
                         layer.line(&bounds, pair[0], pair[1], style);
@@ -881,7 +962,7 @@ pub(crate) fn raster(ops: &[Op], view: &View, console: &Console) -> CellGrid {
                 }
             }
             Op::Circle((x, y), radius, style) => {
-                let style = styles.id(style);
+                let style = id_of(&mut styles, style);
                 if radius.is_finite() {
                     for degree in 0..360 {
                         let (sin, cos) = f64::from(degree).to_radians().sin_cos();
@@ -892,7 +973,7 @@ pub(crate) fn raster(ops: &[Op], view: &View, console: &Console) -> CellGrid {
             Op::Print(at, text, style) => labels.push((*at, text, style)),
         }
     }
-    layer.finish(&mut out, &styles);
+    layer.finish(out, &styles, left);
     for (at, text, style) in labels {
         if let Some((col, row)) = bounds.cell(at, width, height) {
             let text = if view.ascii && !text.is_ascii() {
@@ -900,20 +981,32 @@ pub(crate) fn raster(ops: &[Op], view: &View, console: &Console) -> CellGrid {
             } else {
                 text.clone()
             };
-            out.put_text(row, col, &text, spec_style(console, style), width);
+            out.put_text(
+                row,
+                left + col,
+                &text,
+                spec_style(console, style),
+                left + width,
+            );
         }
     }
-    out
 }
 
 /// A grid of terminal cells: each empty, or a character (with any marks
 /// after it) and a style. The second cell of a wide character holds an
 /// empty string.
+///
+/// The cells are plain data: the text inline (a [`Cell`]) and the style an
+/// id into the grid's own [`StyleTable`], each style kept once. Setting a
+/// cell allocates nothing, and the grid becomes lines a run at a time, or
+/// goes straight into a [`Screen`](crate::surface::Screen)'s cells (see
+/// [`draw`](Self::draw)).
 #[derive(Clone, Debug)]
 pub(crate) struct CellGrid {
     width: usize,
     height: usize,
-    cells: Vec<Option<(String, Option<Style>)>>,
+    cells: Vec<Option<Cell>>,
+    styles: StyleTable,
 }
 
 impl CellGrid {
@@ -922,24 +1015,62 @@ impl CellGrid {
             width,
             height,
             cells: vec![None; width * height],
+            styles: StyleTable::new(),
         }
+    }
+
+    /// The id of `style` in this grid.
+    pub(crate) fn intern(&mut self, style: Option<&Style>) -> StyleId {
+        self.styles.intern(style)
+    }
+
+    /// The style behind `id`.
+    fn style(&self, id: StyleId) -> Option<&Style> {
+        self.styles.get(id)
     }
 
     /// Set one cell, blanking the other half of any wide character it
     /// cuts in two. Out of range is ignored.
     pub(crate) fn set(&mut self, row: usize, col: usize, text: String, style: Option<Style>) {
+        let id = self.intern(style.as_ref());
+        self.set_id(row, col, &text, id);
+    }
+
+    /// [`set`](Self::set) with a style already interned.
+    pub(crate) fn set_id(&mut self, row: usize, col: usize, text: &str, style: StyleId) {
         if row >= self.height || col >= self.width {
             return;
         }
+        let width = if text.len() == 1 {
+            1
+        } else {
+            cells(text).min(u8::MAX as usize) as u8
+        };
+        self.put(row, col, Cell::new(text, width, style));
+    }
+
+    /// [`set`](Self::set) with one character, its style already interned.
+    pub(crate) fn set_char(&mut self, row: usize, col: usize, c: char, style: StyleId) {
+        if row >= self.height || col >= self.width {
+            return;
+        }
+        let width = char_cell_width(c).min(u8::MAX as usize) as u8;
+        self.put(row, col, Cell::from_char(c, width, style));
+    }
+
+    fn put(&mut self, row: usize, col: usize, cell: Cell) {
         let i = row * self.width + col;
-        let blank = || Some((" ".to_string(), None));
-        if !text.is_empty() && col > 0 && matches!(&self.cells[i], Some((t, _)) if t.is_empty()) {
-            self.cells[i - 1] = blank();
+        let blank = Some(Cell::from_char(' ', 1, StyleId::NONE));
+        if !cell.is_empty_text()
+            && col > 0
+            && matches!(&self.cells[i], Some(c) if c.is_empty_text())
+        {
+            self.cells[i - 1] = blank;
         }
-        if col + 1 < self.width && matches!(&self.cells[i], Some((t, _)) if cells(t) > 1) {
-            self.cells[i + 1] = blank();
+        if col + 1 < self.width && matches!(&self.cells[i], Some(c) if c.width > 1) {
+            self.cells[i + 1] = blank;
         }
-        self.cells[i] = Some((text, style));
+        self.cells[i] = Some(cell);
     }
 
     /// Write `text` from `col`, stopping before column `end` (and the
@@ -952,6 +1083,7 @@ impl CellGrid {
         style: Option<Style>,
         end: usize,
     ) {
+        let id = self.intern(style.as_ref());
         let end = end.min(self.width);
         let units = cell_units(text);
         let mut at = col;
@@ -960,15 +1092,11 @@ impl CellGrid {
             let unit = &units[i];
             let wide = i + 1 < units.len() && units[i + 1].is_empty() && !unit.is_empty();
             if wide && at + 1 >= end {
-                self.set(row, at, " ".to_string(), style.clone());
+                self.set_id(row, at, " ", id);
                 break;
             }
-            let unit = if unit.is_empty() && i == 0 {
-                " ".to_string()
-            } else {
-                unit.clone()
-            };
-            self.set(row, at, unit, style.clone());
+            let unit = if unit.is_empty() && i == 0 { " " } else { unit };
+            self.set_id(row, at, unit, id);
             at += 1;
             i += 1;
         }
@@ -977,17 +1105,36 @@ impl CellGrid {
     /// Put `style` under every cell: empty cells become spaces in it, and
     /// drawn cells take it under their own.
     pub(crate) fn underlay(&mut self, style: &Style) {
-        for cell in &mut self.cells {
-            *cell = Some(match cell.take() {
-                None => (" ".to_string(), Some(style.clone())),
-                Some((text, own)) => {
-                    let combined = match own {
-                        Some(own) => style.combine(&own),
-                        None => style.clone(),
+        let under = self.intern(Some(style));
+        // Each style combined once: by own id, the combined id.
+        let mut combined: Vec<Option<StyleId>> = vec![None; self.styles.len()];
+        for at in 0..self.cells.len() {
+            let cell = match self.cells[at] {
+                None => Cell::new(" ", 1, under),
+                Some(cell) => {
+                    let own = cell.style;
+                    let id = match combined.get(own.index()).copied().flatten() {
+                        Some(id) => id,
+                        None => {
+                            let id = match self.styles.get(own).cloned() {
+                                Some(own_style) => {
+                                    self.styles.intern(Some(&style.combine(&own_style)))
+                                }
+                                None => under,
+                            };
+                            if combined.len() <= own.index() {
+                                combined.resize(own.index() + 1, None);
+                            }
+                            combined[own.index()] = Some(id);
+                            id
+                        }
                     };
-                    (text, Some(combined))
+                    let mut cell = cell;
+                    cell.style = id;
+                    cell
                 }
-            });
+            };
+            self.cells[at] = Some(cell);
         }
     }
 
@@ -995,20 +1142,9 @@ impl CellGrid {
     /// empty. Out of range is ignored.
     pub(crate) fn restyle(&mut self, row: usize, col: usize, style: Option<Style>) {
         if row < self.height && col < self.width {
-            if let Some((_, own)) = &mut self.cells[row * self.width + col] {
-                *own = style;
-            }
-        }
-    }
-
-    /// Copy the non-empty cells of `other` here, its top left at (`row`,
-    /// `col`).
-    pub(crate) fn blit(&mut self, other: &CellGrid, row: usize, col: usize) {
-        for r in 0..other.height {
-            for c in 0..other.width {
-                if let Some((text, style)) = &other.cells[r * other.width + c] {
-                    self.set(row + r, col + c, text.clone(), style.clone());
-                }
+            let id = self.intern(style.as_ref());
+            if let Some(cell) = &mut self.cells[row * self.width + col] {
+                cell.style = id;
             }
         }
     }
@@ -1018,7 +1154,7 @@ impl CellGrid {
     pub(crate) fn row_string(&self, row: usize) -> String {
         (0..self.width)
             .map(|c| match &self.cells[row * self.width + c] {
-                Some((t, _)) => t.clone(),
+                Some(cell) => cell.text().to_string(),
                 None => " ".to_string(),
             })
             .collect()
@@ -1029,24 +1165,112 @@ impl CellGrid {
     pub(crate) fn style_at(&self, row: usize, col: usize) -> Option<Style> {
         self.cells[row * self.width + col]
             .as_ref()
-            .and_then(|(_, s)| s.clone())
+            .and_then(|cell| self.style(cell.style).cloned())
     }
 
+    /// The rows as lines, a run of one style at a time.
     pub(crate) fn into_lines(self) -> Vec<Line> {
-        let width = self.width;
-        let mut cells = self.cells.into_iter();
+        let mut text = String::new();
         (0..self.height)
-            .map(|_| {
+            .map(|row| {
                 let mut line = Line::new();
-                for cell in cells.by_ref().take(width) {
-                    match cell {
-                        Some((text, style)) => line.push(&text, style),
-                        None => line.push(" ", None),
+                let cells = &self.cells[row * self.width..(row + 1) * self.width];
+                let mut style = None;
+                for cell in cells {
+                    if cell.is_some_and(|c| c.is_empty_text()) {
+                        continue;
+                    }
+                    let id = cell.map_or(StyleId::NONE, |c| c.style);
+                    if style != Some(id) {
+                        if let Some(last) = style {
+                            line.push(&text, self.style(last).cloned());
+                        }
+                        text.clear();
+                        style = Some(id);
+                    }
+                    match cell.map(|c| (c, c.single_char())) {
+                        None => text.push(' '),
+                        Some((_, Some(c))) => text.push(c),
+                        Some((c, None)) => text.push_str(c.text()),
                     }
                 }
+                if let Some(last) = style {
+                    line.push(&text, self.style(last).cloned());
+                }
+                text.clear();
                 line
             })
             .collect()
+    }
+
+    /// The fast path: the grid straight into `rect` of `screen`, the cells
+    /// that [`Screen::write_lines`] of its rendered lines (`into_lines`, then
+    /// [`lines_to_segments`]) would give, without building a line, a
+    /// segment or a style a run.
+    /// At most `rows` rows.
+    pub(crate) fn draw(&self, screen: &mut Screen, rect: Rect, rows: usize) {
+        let rows = self.height.min(rect.height as usize).min(rows);
+        // Every style interned once, as the rich path's segments would be:
+        // a style that sets nothing is no style; one with metadata takes
+        // the general path.
+        let mut direct = true;
+        let screen_ids: Vec<StyleId> = (0..self.styles.len())
+            .map(|i| match self.styles.get(StyleId::from_index(i)) {
+                None => StyleId::NONE,
+                Some(style) if style.is_null() => StyleId::NONE,
+                Some(style) => {
+                    direct &= style.meta_ref().is_none();
+                    screen.intern(Some(style))
+                }
+            })
+            .collect();
+        if direct && screen.write_cell_grid(rect, self.width, rows, &self.cells, &screen_ids) {
+            return;
+        }
+        let mut ids: Vec<Option<StyleId>> = vec![None; self.styles.len()];
+        // Each row's runs of one style, their text one after another in
+        // one buffer: (start, end, screen style) and where each row ends.
+        let mut text = String::with_capacity(rows * self.width);
+        let mut spans: Vec<(usize, usize, StyleId)> = Vec::new();
+        let mut ends = Vec::with_capacity(rows);
+        for row in 0..rows {
+            let cells = &self.cells[row * self.width..(row + 1) * self.width];
+            let mut style = None;
+            for cell in cells {
+                let (piece, own) = match cell {
+                    Some(cell) => (cell.text(), cell.style),
+                    None => (" ", StyleId::NONE),
+                };
+                if piece.is_empty() {
+                    continue;
+                }
+                if style != Some(own) {
+                    style = Some(own);
+                    let id =
+                        *ids[own.index()].get_or_insert_with(|| screen.intern(self.style(own)));
+                    spans.push((text.len(), text.len(), id));
+                }
+                text.push_str(piece);
+                if let Some(last) = spans.last_mut() {
+                    last.1 = text.len();
+                }
+            }
+            ends.push(spans.len());
+        }
+        let runs: Vec<TextRun<'_>> = spans
+            .iter()
+            .map(|&(from, to, id)| TextRun::new(&text[from..to], id))
+            .collect();
+        let mut start = 0;
+        let lines: Vec<&[TextRun<'_>]> = ends
+            .iter()
+            .map(|&end| {
+                let line = &runs[start..end];
+                start = end;
+                line
+            })
+            .collect();
+        screen.write_runs(rect, &lines);
     }
 }
 

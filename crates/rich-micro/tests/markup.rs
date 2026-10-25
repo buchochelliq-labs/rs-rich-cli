@@ -275,7 +275,7 @@ fn segment_placements(segments: &[rich::Segment]) -> Vec<(String, MicroMeta)> {
     segments
         .iter()
         .filter_map(|segment| {
-            MicroMeta::from_segment(segment).map(|meta| (segment.text.clone(), meta))
+            MicroMeta::from_segment(segment).map(|meta| (segment.text.to_string(), meta))
         })
         .collect()
 }

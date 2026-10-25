@@ -2429,7 +2429,7 @@ impl Console {
                 .iter()
                 .map(|segment| match &segment.style {
                     Some(style) => style.render(&segment.text, Some(ColorSystem::Truecolor)),
-                    None => segment.text.clone(),
+                    None => segment.text.to_string(),
                 })
                 .collect()
         } else {

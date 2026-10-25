@@ -49,6 +49,9 @@ rich-marketplace = { package = "rs-rich-marketplace", path = "crates/rich-market
 
 # Third-party (kept lean for the first slice)
 terminal_size = "0.4"
+# rich's per-cell strings (`Segment.text`, `Color.name`): inline up to 24
+# bytes, so a short run or a colour's name allocates nothing.
+compact_str = "0.9"
 # preserve_order keeps object keys in input order, matching Python's json module.
 # float_roundtrip: serde_json's default float parser takes a fast path that
 # can land 1 ULP away from the value in the file, so a rendered number

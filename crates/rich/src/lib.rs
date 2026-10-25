@@ -103,6 +103,12 @@ pub mod traceback;
 pub mod tree;
 pub mod wrap;
 
+/// The string type of rich's per-cell text: [`Segment::text`] and
+/// [`Color::name`]. Inline up to 24 bytes (so a short run or a colour's
+/// name allocates nothing), and a `&str` when read. Re-exported from
+/// [`compact_str`](https://docs.rs/compact_str).
+pub use compact_str::CompactString;
+
 // A small, curated prelude mirroring the most-used names from `rich`'s top level.
 pub use crate::align::{Align, HorizontalAlign, VerticalAlign, VerticalCenter};
 pub use crate::ansi::AnsiDecoder;
