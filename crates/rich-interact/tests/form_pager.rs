@@ -248,7 +248,7 @@ fn a_form_field_offers_its_suggestions() {
 fn a_search_given_up_front_shows_its_first_match() {
     let text: Vec<String> = numbered(50)
         .into_iter()
-        .map(|line| line[0].text.clone())
+        .map(|line| line[0].text.to_string())
         .collect();
     let pager = Pager::new(rich::Text::new(text.join("\n"))).search("needle");
     let (_, record) = headless::run(pager, Script::new().keys("n q"), 60, 11);

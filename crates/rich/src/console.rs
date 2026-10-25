@@ -984,7 +984,7 @@ impl Console {
             .iter()
             .map(|segment| match &segment.style {
                 Some(style) => style.render(&segment.text, Some(system)),
-                None => segment.text.clone(),
+                None => segment.text.to_string(),
             })
             .collect()
     }

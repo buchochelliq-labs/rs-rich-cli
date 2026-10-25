@@ -13,7 +13,9 @@ use crate::style::Style;
 /// A span of text with an optional style. Mirrors `rich.segment.Segment`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Segment {
-    pub text: String,
+    /// The text: a [`CompactString`](crate::CompactString), kept inline up
+    /// to 24 bytes, so a short run allocates nothing. It reads as a `&str`.
+    pub text: crate::CompactString,
     pub style: Option<Style>,
     /// Whether this segment carries terminal control codes rather than content.
     pub control: bool,
@@ -21,7 +23,7 @@ pub struct Segment {
 
 impl Segment {
     /// A plain content segment.
-    pub fn new(text: impl Into<String>, style: Option<Style>) -> Self {
+    pub fn new(text: impl Into<crate::CompactString>, style: Option<Style>) -> Self {
         Segment {
             text: text.into(),
             style,
@@ -32,14 +34,14 @@ impl Segment {
     /// A newline segment (`Segment.line()` upstream).
     pub fn line() -> Self {
         Segment {
-            text: "\n".to_string(),
+            text: crate::CompactString::const_new("\n"),
             style: None,
             control: false,
         }
     }
 
     /// A control segment (carries no visible width).
-    pub fn control(text: impl Into<String>) -> Self {
+    pub fn control(text: impl Into<crate::CompactString>) -> Self {
         Segment {
             text: text.into(),
             style: None,
@@ -435,7 +437,7 @@ impl Segment {
     /// `Segment.split_cells`.
     pub fn split_cells(&self, cut: usize) -> (Segment, Segment) {
         let with_text = |text: String| Segment {
-            text,
+            text: text.into(),
             style: self.style.clone(),
             control: self.control,
         };

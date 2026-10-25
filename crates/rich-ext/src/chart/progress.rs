@@ -663,7 +663,7 @@ mod tests {
             for s in &lines[0] {
                 let n = cells(&s.text);
                 if col < seen + n {
-                    return (s.text.clone(), s.style.clone());
+                    return (s.text.to_string(), s.style.clone());
                 }
                 seen += n;
             }
@@ -734,7 +734,7 @@ mod tests {
         let lines = console.render_lines(&gauge, &console.options(), false);
         let runs: Vec<(String, Option<Style>)> = lines[0]
             .iter()
-            .map(|s| (s.text.clone(), s.style.clone()))
+            .map(|s| (s.text.to_string(), s.style.clone()))
             .collect();
         assert_eq!(
             runs,

@@ -807,7 +807,7 @@ impl Redactor {
         if segment.control {
             let text = self.redact_ansi(&segment.text);
             return (text != segment.text).then(|| Segment {
-                text,
+                text: text.into(),
                 ..segment.clone()
             });
         }

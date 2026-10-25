@@ -61,6 +61,7 @@ json-escape-safe = []
 
 [dependencies]
 terminal_size.workspace = true
+compact_str.workspace = true
 serde_json.workspace = true
 fancy-regex.workspace = true
 pulldown-cmark = { workspace = true, optional = true }

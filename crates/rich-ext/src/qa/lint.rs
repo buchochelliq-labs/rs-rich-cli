@@ -308,7 +308,7 @@ fn is_status_token(token: &str) -> bool {
 fn color_key(style: &Style) -> (Option<String>, Option<String>) {
     let name = |c: Option<&Color>| {
         c.filter(|c| !c.is_default())
-            .map(|c| c.get_truecolor().map_or(c.name.clone(), |t| t.hex()))
+            .map(|c| c.get_truecolor().map_or(c.name.to_string(), |t| t.hex()))
     };
     (name(style.color()), name(style.bgcolor()))
 }
@@ -394,7 +394,7 @@ pub fn lint_segments(
                     if let Some((url, text)) = current.take() {
                         links_seen.push((index + 1, url, text));
                     }
-                    current = link.map(|l| (l.to_owned(), segment.text.clone()));
+                    current = link.map(|l| (l.to_owned(), segment.text.to_string()));
                 }
             }
         }
@@ -513,7 +513,7 @@ pub fn lint_segments(
                 if depth_of(color) > options.color {
                     let label = color
                         .get_truecolor()
-                        .map_or(color.name.clone(), |t| t.hex());
+                        .map_or(color.name.to_string(), |t| t.hex());
                     deep.insert(label, downgraded(color, options.color));
                 }
             }

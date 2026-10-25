@@ -2986,6 +2986,7 @@ name = "rs-rich"
 version = "0.0.12"
 dependencies = [
  "anstyle-query",
+ "compact_str",
  "fancy-regex 0.19.2",
  "pulldown-cmark",
  "serde_json",

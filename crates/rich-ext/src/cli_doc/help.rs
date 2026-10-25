@@ -339,7 +339,7 @@ impl HelpView {
             // part past the names.
             let mut help = help_lines.remove(0);
             if let Some(lead) = help.first_mut() {
-                lead.text = " ".repeat(help_indent - used);
+                lead.text = " ".repeat(help_indent - used).into();
             }
             first.extend(help);
             rows.push(first);

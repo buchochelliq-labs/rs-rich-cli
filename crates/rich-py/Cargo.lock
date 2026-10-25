@@ -234,6 +234,15 @@ dependencies = [
 ]
 
 [[package]]
+name = "castaway"
+version = "0.2.4"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "dec551ab6e7578819132c713a93c022a05d60159dc86e7a7050223577484c55a"
+dependencies = [
+ "rustversion",
+]
+
+[[package]]
 name = "cc"
 version = "1.2.67"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -293,6 +302,20 @@ name = "color_quant"
 version = "2.0.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "00c1c79b421ca69d94677a49b2ccf389dab3409952aed790594de8fa03b07989"
+
+[[package]]
+name = "compact_str"
+version = "0.9.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9dfdd1c2274d9aa354115b09dc9a901d6c5576818cdf70d14cae2bdb47df00ab"
+dependencies = [
+ "castaway",
+ "cfg-if",
+ "itoa",
+ "rustversion",
+ "ryu",
+ "static_assertions",
+]
 
 [[package]]
 name = "const-oid"
@@ -1103,6 +1126,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf8baf1c55e62ffcace7a9f06f4bd9cd3f0c4beb022d3b367256b91b87513d98"
 
 [[package]]
+name = "minisign-verify"
+version = "0.3.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "871285dc19d8d0ebe0eef3d0e99a205f2a71363b122632cbbfa4a6c370a960ce"
+
+[[package]]
 name = "miniz_oxide"
 version = "0.8.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1626,6 +1655,7 @@ name = "rs-rich"
 version = "0.0.12"
 dependencies = [
  "anstyle-query",
+ "compact_str",
  "fancy-regex 0.19.2",
  "pulldown-cmark",
  "serde_json",
@@ -1659,11 +1689,13 @@ dependencies = [
  "rs-rich-ext",
  "rs-rich-interact",
  "rs-rich-lumis",
+ "rs-rich-marketplace",
  "rs-rich-mermaid",
  "rs-rich-micro",
  "rs-rich-record",
  "same-file",
  "serde_json",
+ "sha2",
  "tempfile",
  "terminal_size",
  "toml",
@@ -1752,6 +1784,22 @@ dependencies = [
  "lumis",
  "rs-rich",
  "rs-rich-plugin-api",
+]
+
+[[package]]
+name = "rs-rich-marketplace"
+version = "0.0.1"
+dependencies = [
+ "flate2",
+ "minisign-verify",
+ "rs-rich",
+ "rs-rich-plugin-api",
+ "semver",
+ "serde",
+ "serde_json",
+ "sha2",
+ "ureq",
+ "zip",
 ]
 
 [[package]]
@@ -1909,6 +1957,12 @@ name = "rustversion"
 version = "1.0.23"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "cf54715a573b99ac80df0bc206da022bcd442c974952c7b9720069370852e21f"
+
+[[package]]
+name = "ryu"
+version = "1.0.23"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "9774ba4a74de5f7b1c1451ed6cd5285a32eddb5cccb8cc655a4e50009e06477f"
 
 [[package]]
 name = "safe_arch"
@@ -2123,6 +2177,12 @@ dependencies = [
  "psm",
  "windows-sys 0.61.2",
 ]
+
+[[package]]
+name = "static_assertions"
+version = "1.1.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "a2eb9349b6444b326872e140eb1cf5e7c522154d69e7a0ffb0fb81c06b37543f"
 
 [[package]]
 name = "streaming-iterator"

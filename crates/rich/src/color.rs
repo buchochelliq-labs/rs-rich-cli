@@ -7,6 +7,8 @@
 //! hex, `rgb(r,g,b)`, and `color(N)` (0–255). Downgrade uses the redmean
 //! nearest-color search ported verbatim from `Palette.match_color`.
 
+use compact_str::CompactString;
+
 use crate::errors::{Result, RichError};
 use crate::markup::py_repr_str;
 
@@ -62,14 +64,21 @@ impl ColorTriplet {
     /// builds a colour per cell (docs/PORTING.md, "Performance notes");
     /// `hex_matches_format` pins it to the formatted string.
     pub fn hex(&self) -> String {
+        self.hex_name().into()
+    }
+
+    /// [`hex`](Self::hex) as a colour's name: inline, no allocation.
+    pub(crate) fn hex_name(&self) -> CompactString {
         const DIGITS: &[u8; 16] = b"0123456789abcdef";
-        let mut hex = String::with_capacity(7);
-        hex.push('#');
-        for value in [self.red, self.green, self.blue] {
-            hex.push(DIGITS[usize::from(value >> 4)] as char);
-            hex.push(DIGITS[usize::from(value & 0xf)] as char);
+        // Built on the stack and copied in once: `CompactString::push` a
+        // character at a time costs more than the allocation it saves.
+        let mut hex = *b"#000000";
+        for (i, value) in [self.red, self.green, self.blue].into_iter().enumerate() {
+            hex[1 + 2 * i] = DIGITS[usize::from(value >> 4)];
+            hex[2 + 2 * i] = DIGITS[usize::from(value & 0xf)];
         }
-        hex
+        // ASCII digits and `#`.
+        CompactString::from_utf8(hex).unwrap_or_default()
     }
 
     /// `rgb(r,g,b)` (matches `ColorTriplet.rgb`).
@@ -91,8 +100,10 @@ impl ColorTriplet {
 /// A parsed color. Mirrors `rich.color.Color`.
 #[derive(Debug, Clone, PartialEq, Eq, Hash)]
 pub struct Color {
-    /// The original name/spec the color was created from.
-    pub name: String,
+    /// The original name/spec the color was created from: a
+    /// [`CompactString`](crate::CompactString), kept inline up to 24 bytes,
+    /// so a colour's name (`#rrggbb`, `bright_red`) allocates nothing.
+    pub name: crate::CompactString,
     pub kind: ColorType,
     /// Palette index for `Standard`/`EightBit`/`Windows`.
     pub number: Option<u8>,
@@ -109,7 +120,7 @@ impl Color {
     /// The terminal default color.
     pub fn default_color() -> Self {
         Color {
-            name: "default".to_string(),
+            name: CompactString::const_new("default"),
             kind: ColorType::Default,
             number: None,
             triplet: None,
@@ -125,7 +136,7 @@ impl Color {
             ColorType::EightBit
         };
         Color {
-            name: name.to_string(),
+            name: name.into(),
             kind,
             number: Some(number),
             triplet: None,
@@ -136,7 +147,7 @@ impl Color {
     /// Port of `Color.from_ansi`.
     pub fn from_ansi(number: u8) -> Self {
         Color {
-            name: format!("color({number})"),
+            name: compact_str::format_compact!("color({number})"),
             kind: if number < 16 {
                 ColorType::Standard
             } else {
@@ -152,7 +163,7 @@ impl Color {
     pub fn from_rgb(red: u8, green: u8, blue: u8) -> Self {
         let triplet = ColorTriplet::new(red, green, blue);
         Color {
-            name: triplet.hex(),
+            name: triplet.hex_name(),
             kind: ColorType::Truecolor,
             number: None,
             triplet: Some(triplet),
@@ -185,7 +196,7 @@ impl Color {
                 return Err(invalid());
             }
             return Ok(Color {
-                name: color.to_string(),
+                name: color.into(),
                 kind: ColorType::Truecolor,
                 number: None,
                 triplet: Some(parse_rgb_hex(hex)),
@@ -207,7 +218,7 @@ impl Color {
                 )));
             }
             return Ok(Color {
-                name: color.to_string(),
+                name: color.into(),
                 kind: if number < 16 {
                     ColorType::Standard
                 } else {
@@ -253,7 +264,7 @@ impl Color {
                 }
             }
             return Ok(Color {
-                name: color.to_string(),
+                name: color.into(),
                 kind: ColorType::Truecolor,
                 number: None,
                 triplet: Some(ColorTriplet::new(values[0], values[1], values[2])),
@@ -266,7 +277,7 @@ impl Color {
     /// `Color.from_triplet`.
     pub fn from_triplet(triplet: ColorTriplet) -> Self {
         Color {
-            name: triplet.hex(),
+            name: triplet.hex_name(),
             kind: ColorType::Truecolor,
             number: None,
             triplet: Some(triplet),

@@ -386,7 +386,7 @@ impl Label {
             let run = if ascii && !segment.text.is_ascii() {
                 ascii_text(&segment.text)
             } else {
-                segment.text
+                segment.text.into_string()
             };
             runs.push((run, segment.style));
         }

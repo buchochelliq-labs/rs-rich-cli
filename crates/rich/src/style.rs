@@ -569,11 +569,11 @@ impl Style {
             }
         }
         if let Some(color) = &self.color {
-            parts.push(color.name.clone());
+            parts.push(color.name.to_string());
         }
         if let Some(bgcolor) = &self.bgcolor {
             parts.push("on".to_string());
-            parts.push(bgcolor.name.clone());
+            parts.push(bgcolor.name.to_string());
         }
         if let Some(link) = self.link.as_ref().filter(|link| !link.is_empty()) {
             parts.push("link".to_string());

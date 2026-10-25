@@ -322,7 +322,7 @@ pub(crate) fn core_color(value: &Bound<'_, PyAny>) -> PyResult<CoreColor> {
         .extract()
         .map_err(|_| pyo3::exceptions::PyTypeError::new_err("a color must be a str or a Color"))?;
     Ok(CoreColor {
-        name,
+        name: name.into(),
         kind: kind_from_number(kind)?,
         number,
         triplet: triplet.map(|(red, green, blue)| ColorTriplet::new(red, green, blue)),

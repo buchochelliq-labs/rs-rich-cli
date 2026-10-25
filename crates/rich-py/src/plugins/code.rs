@@ -197,7 +197,7 @@ impl HighlightedCode {
     /// The background colour's name, as it was given (`"#272822"`).
     #[getter]
     fn background(&self) -> Option<String> {
-        self.background.as_ref().map(|c| c.name.clone())
+        self.background.as_ref().map(|c| c.name.to_string())
     }
 
     #[getter]
