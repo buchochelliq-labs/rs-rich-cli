@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::io;
 use std::sync::{Arc, Mutex};
 
-use rich_embed::PageState;
+use rich_embed::{PageState, ScreencastFrame};
 use serde_json::Value;
 
 use crate::engine::{
@@ -36,6 +36,15 @@ pub struct FakeState {
     pub viewport_height: f64,
     /// Image nodes whose picture has not loaded (lazy, below the fold).
     pub not_loaded: std::collections::HashSet<i64>,
+    /// Whether the screencast is on.
+    pub screencast: bool,
+    /// Screencast frames waiting to be taken, oldest first: a test pushes
+    /// them.
+    pub frames: Vec<ScreencastFrame>,
+    /// Resources by address: a video's poster.
+    pub resources: HashMap<String, Vec<u8>>,
+    /// `canPlayType`'s answers by media type.
+    pub codecs: HashMap<String, String>,
 }
 
 impl FakeState {
@@ -355,6 +364,10 @@ impl Engine for FakeEngine {
                         MediaOp::Pause => p.paused = true,
                         MediaOp::Mute(on) => p.muted = *on,
                         MediaOp::Volume(v) => p.volume = *v,
+                        MediaOp::Seek(d) => {
+                            let end = p.duration.unwrap_or(p.time);
+                            p.time = (p.time + d).clamp(0.0, end);
+                        }
                     }
                 }
                 state.events.push(EngineEvent::Changed);
@@ -387,6 +400,38 @@ impl Engine for FakeEngine {
             content_height: state.content_height(),
             viewport_height: state.viewport_height,
         })
+    }
+
+    fn set_screencast(&mut self, _tab: TabId, on: bool) -> io::Result<()> {
+        self.lock().screencast = on;
+        Ok(())
+    }
+
+    fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {
+        let mut state = self.lock();
+        if !state.screencast || state.frames.is_empty() {
+            return None;
+        }
+        // The newest, as a browser that paints faster than it is asked.
+        let last = state.frames.pop();
+        state.frames.clear();
+        last
+    }
+
+    fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {
+        self.lock()
+            .resources
+            .get(url)
+            .cloned()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such resource"))
+    }
+
+    fn can_play(&mut self, _tab: TabId, types: &[&str]) -> io::Result<Vec<String>> {
+        let state = self.lock();
+        Ok(types
+            .iter()
+            .map(|t| state.codecs.get(*t).cloned().unwrap_or_default())
+            .collect())
     }
 
     fn events(&mut self) -> Vec<EngineEvent> {

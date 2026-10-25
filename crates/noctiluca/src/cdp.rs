@@ -18,7 +18,9 @@ use std::path::PathBuf;
 use std::sync::mpsc::Receiver;
 use std::time::Duration;
 
-use rich_embed::{ChromeEngine, DevTools, DevToolsEvent, Downloads, PageState, WebEngine};
+use rich_embed::{
+    ChromeEngine, DevTools, DevToolsEvent, Downloads, PageState, ScreencastFrame, WebEngine,
+};
 use serde_json::{json, Value};
 
 use crate::engine::{
@@ -86,6 +88,20 @@ pub const PING_SCRIPT: &str = r#"(function start(tries) {
   changed();
 })(0)"#;
 
+/// Seek a media element by `d` seconds, within what it can seek: its
+/// seekable ranges, else its duration. Paused stays paused.
+pub const SEEK_SCRIPT: &str = "function(d) { \
+  if (typeof d !== 'number' || !isFinite(d)) throw new Error('A seek needs a number of seconds.'); \
+  if (this.readyState < 1) throw new Error('The media cannot seek yet.'); \
+  const s = this.seekable; let lo = 0, hi = isFinite(this.duration) ? this.duration : this.currentTime; \
+  if (s && s.length) { lo = s.start(0); hi = s.end(s.length - 1); } \
+  this.currentTime = Math.min(hi, Math.max(lo, this.currentTime + d)); }";
+
+/// What the browser can play: `canPlayType` for each of `TYPES` (a JSON
+/// array), on a video element that is never added to the page.
+pub const CAN_PLAY_SCRIPT: &str =
+    "(() => { const v = document.createElement('video'); return TYPES.map(t => v.canPlayType(t)); })()";
+
 /// The CSS pixels one cell stands for: the page is laid out at the
 /// terminal's size times this. Narrower than rs-rich-embed's 10 x 20,
 /// so a proportional 16 px font's average glyph is about one cell, and a
@@ -140,11 +156,14 @@ impl ChromeBackend {
     /// Start the browser and set up the isolated world.
     pub fn start(options: ChromeOptions) -> io::Result<ChromeBackend> {
         // Noctiluca reads the page, not its pixels: no screencast, so
-        // Chrome encodes no frame and the engine decodes none.
+        // Chrome encodes no frame and the engine decodes none. It runs only
+        // while a video plays, on demand: Chrome paints the next frame
+        // once the last is taken.
         let mut engine = ChromeEngine::new()
             .audio(options.audio)
             .cell_pixels(CELL.0, CELL.1)
-            .screencast(false);
+            .screencast(false)
+            .screencast_on_demand(true);
         if let Some(binary) = options.binary.clone().or_else(find_chrome) {
             engine = engine.binary(binary);
         }
@@ -442,6 +461,7 @@ impl Engine for ChromeBackend {
                         "function(v) { this.volume = Math.min(1, Math.max(0, v)); }",
                         json!(v),
                     ),
+                    MediaOp::Seek(d) => (SEEK_SCRIPT, json!(d)),
                 };
                 self.call_on(*node, function, vec![json!({"value": argument})])
                     .map(drop)
@@ -479,7 +499,8 @@ impl Engine for ChromeBackend {
         let value = self.call_on(
             node,
             "function() { return [this.paused, this.muted, this.volume, this.currentTime, \
-               isFinite(this.duration) ? this.duration : -1, this.ended]; }",
+               isFinite(this.duration) ? this.duration : -1, this.ended, this.readyState, \
+               this.error !== null]; }",
             vec![],
         )?;
         let at = |i: usize| value.get(i).cloned().unwrap_or(Value::Null);
@@ -490,6 +511,8 @@ impl Engine for ChromeBackend {
             time: at(3).as_f64().unwrap_or(0.0),
             duration: at(4).as_f64().filter(|d| *d >= 0.0),
             ended: at(5).as_bool().unwrap_or(false),
+            ready: at(6).as_u64().unwrap_or(0).min(4) as u8,
+            failed: at(7).as_bool().unwrap_or(false),
         })
     }
 
@@ -518,6 +541,47 @@ impl Engine for ChromeBackend {
             content_height: pick("cssContentSize", "contentSize", "height"),
             viewport_height: pick("cssVisualViewport", "visualViewport", "clientHeight"),
         })
+    }
+
+    fn set_screencast(&mut self, _tab: TabId, on: bool) -> io::Result<()> {
+        self.engine.set_screencast(on)
+    }
+
+    fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {
+        self.engine.take_screencast()
+    }
+
+    fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {
+        // What the page loaded, as Chrome holds it: no new request.
+        let tree = self.call("Page.getFrameTree", json!({}))?;
+        let frame = tree["frameTree"]["frame"]["id"].as_str().unwrap_or_default();
+        let content = self.call(
+            "Page.getResourceContent",
+            json!({"frameId": frame, "url": url}),
+        )?;
+        let text = content["content"].as_str().unwrap_or_default();
+        if content["base64Encoded"].as_bool().unwrap_or(false) {
+            base64_decode(text).ok_or_else(|| io::Error::other("a resource that is not base64"))
+        } else {
+            Ok(text.as_bytes().to_vec())
+        }
+    }
+
+    fn can_play(&mut self, _tab: TabId, types: &[&str]) -> io::Result<Vec<String>> {
+        let context = self.world()?;
+        let result = self.call(
+            "Runtime.evaluate",
+            json!({"expression": CAN_PLAY_SCRIPT.replace("TYPES", &json!(types).to_string()),
+                   "contextId": context, "returnByValue": true}),
+        )?;
+        let answers = result["result"]["value"].as_array().cloned().unwrap_or_default();
+        Ok(types
+            .iter()
+            .enumerate()
+            .map(|(i, _)| {
+                crate::clean::clean(answers.get(i).and_then(Value::as_str).unwrap_or_default())
+            })
+            .collect())
     }
 
     fn events(&mut self) -> Vec<EngineEvent> {

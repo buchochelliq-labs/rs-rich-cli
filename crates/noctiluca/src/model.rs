@@ -294,6 +294,11 @@ pub struct Media {
     pub still: Option<Arc<[u8]>>,
     /// A video's or an audio's playback, read from the element.
     pub playback: Option<crate::engine::Playback>,
+    /// A video's poster picture's address, cleaned; empty when it has
+    /// none.
+    pub poster: String,
+    /// Whether the element asks for the browser's own controls.
+    pub controls: bool,
 }
 
 /// An action's binding to its target: the document, the node, and the
@@ -1050,6 +1055,13 @@ impl Walker<'_> {
             .or_else(|| dom.attr(i, "src"))
             .map(|s| clean(&crate::url::resolve(&dom.url, s)))
             .unwrap_or_default();
+        let poster = dom
+            .attr(i, "poster")
+            .filter(|_| kind == MediaKind::Video)
+            .filter(|p| !p.trim().is_empty())
+            .map(|p| clean(&crate::url::resolve(&dom.url, p)))
+            .unwrap_or_default();
+        let controls = dom.attr(i, "controls").is_some();
         self.flush(context);
         let index = self.page.media.len();
         self.page.media.push(Media {
@@ -1060,6 +1072,8 @@ impl Walker<'_> {
             src: truncate(&src, 2000),
             still: None,
             playback: None,
+            poster: truncate(&poster, 2000),
+            controls,
         });
         self.block(BlockKind::Media(index), i, context);
     }
