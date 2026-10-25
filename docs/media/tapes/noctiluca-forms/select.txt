@@ -1,0 +1,30 @@
+◀▶ Form fixture https://fixture.example/form.html reader
+Sign up
+Name Ada Lovelace                                                           ● edited · Enter applies
+Secret
+[ ] Send news
+
+Size
+( ) Small
+(•) Large
+Mirror First mirror                                                                                ▾
+Volume ╭──────────────────────────────────────────╮
+ Send  │ First mirror                             │
+ Unavai│ Unavailable mirror disabled on the page  │
+ Schedu│ Second mirror                            │
+       ╰──────────────────────────────────────────╯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+f1 actions · f hints · o open · r reader · q quit

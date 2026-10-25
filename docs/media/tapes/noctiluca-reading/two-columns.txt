@@ -1,0 +1,30 @@
+◀▶ Noctiluca fixture https://fixture.example/page.html projection
+
+ Sea
+ sparkle
+
+
+
+ Noctiluca makes the waves glow at night.
+
+
+ Where it lives                 Escape test
+
+
+ Coastal water, all over the    Before[31mafter
+ world.
+
+ Written by script.
+
+
+
+
+
+
+
+
+
+
+
+
+f1 actions · f hints · o open · r reader · q quit
