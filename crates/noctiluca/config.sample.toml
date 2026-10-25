@@ -26,8 +26,8 @@ wiki = { search = "https://en.wikipedia.org/w/index.php?search={}", home = "http
 # vim (o, f, /, H and L, g t) or plain (Ctrl+O, Alt+Left, Ctrl+F).
 preset = "vim"
 # Any action, by its id (`noctiluca keys` lists them): keys separated by
-# spaces are alternatives; an empty string ("") unbinds. A key name
-# Noctiluca does not know is a warning that drops every line here.
+# spaces are alternatives; `none` (or "") unbinds. A line with a key
+# name Noctiluca does not know is a warning, and only that line is skipped.
 # hints = "f ctrl+g"
 
 [media]

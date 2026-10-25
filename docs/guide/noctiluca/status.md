@@ -17,7 +17,7 @@ terminal for. The phases and their tests are in
 | Still images | As pictures in **reader mode only** (Kitty, Sixel, iTerm2, or half blocks); the projection shows a placeholder with the alt text |
 | Sound | With `--audio`, played where Chrome runs; play, pause, mute and volume for each video and audio |
 | Scripts and CI | `--dump text`, `ax` or `json`, `--no-js` |
-| Safety | Chrome's sandbox always on, page text cleaned, downloads refused, a temporary profile unless you keep one |
+| Safety | Chrome's sandbox always on, page text cleaned, downloads refused, a temporary profile, removed on the way out, unless you keep one |
 
 Each item is tested: the model, layout, config and app tests run on
 Chrome's saved snapshots of the crate's test pages, and the live tests run
@@ -35,10 +35,6 @@ the same pages through a real Chrome in CI.
 - **Downloads are refused**, with no switch to allow them.
 - **A binding cannot start from a link hint** or the focused element; the
   `Ctrl+K` picker lists the same elements.
-- **Known issues:** the temporary profile is left behind when Noctiluca
-  quits, and after opening a page with `o` in reader mode the projection
-  can keep showing an earlier page (see
-  [Troubleshooting](troubleshooting.md#reading)).
 
 ## Planned
 

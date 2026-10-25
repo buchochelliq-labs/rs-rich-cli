@@ -62,6 +62,14 @@ per frame. Before an action runs, the tab reads the page again and checks
 the control is the same one; if not, the action is refused with a
 `Refusal` and nothing is sent.
 
+The tab's thread ends, dropping its engine, when every `Tab` is dropped,
+or when `tab::stop_all(timeout)` is called. An app's state, and the tab in
+it, can last until the process exits, when no `Drop` runs, so call
+`stop_all` on the way out, then `rich_embed::ChromeEngine::end_all()` for
+any browser still running: that is what ends the browser and removes its
+temporary profile. The binary does both when it quits, on a panic, and on
+SIGTERM, SIGHUP or SIGQUIT.
+
 A `Page` has its `url`, `title`, `blocks` (headings, paragraphs, list
 items, code, tables, media and controls, in reading order), `controls`
 (role, accessible name, value, state, options, link) and `media`. Every

@@ -88,10 +88,11 @@ See [Keywords](keys.md#keywords).
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `preset` | `"vim"` or `"plain"` | `"vim"` | The default key set |
-| any action id | string of key names | the preset's | The keys for that action, as alternatives separated by spaces. An empty string unbinds it |
+| any action id | string of key names | the preset's | The keys for that action, as alternatives separated by spaces. `"none"` or an empty string unbinds it |
 
-`noctiluca keys` lists the ids. A key name Noctiluca does not know drops
-every line of `[keys]` (see [Your own keys](keys.md#your-own-keys)).
+`noctiluca keys` lists the ids. A line with an unknown action or a key
+name Noctiluca does not know is a warning, and only that line is skipped
+(see [Your own keys](keys.md#your-own-keys)).
 
 ## `[media]`
 

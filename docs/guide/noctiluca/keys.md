@@ -112,7 +112,7 @@ commas) are alternatives:
 preset = "vim"
 hints = "f ctrl+g"        # f or Ctrl+G shows hints
 reader = "ctrl+r"
-quit = ""                 # an empty string unbinds an action
+quit = "none"             # none (or "") unbinds an action
 ```
 
 Key names are like `ctrl+g`, `alt+left`, `shift+f3`, `f6`, `pagedown`,
@@ -120,10 +120,10 @@ Key names are like `ctrl+g`, `alt+left`, `shift+f3`, `f6`, `pagedown`,
 the action it used to run. The F1 overlay and `noctiluca keys` show the
 keys in effect.
 
-A line that names no action is a warning, and the rest still apply. But a
-line with a key name Noctiluca does not know (even `none`) is a warning
-that drops **every** `[keys]` line, so the preset's keys stay. Check with
-`noctiluca keys`: it prints the warning.
+A line that names no action, or has a key name Noctiluca does not know,
+is a warning: that line is skipped, its action keeps the preset's keys,
+and every other line still applies. The warnings show on the status line
+when Noctiluca starts, and `noctiluca keys` prints them all.
 
 ## Keys on one site
 

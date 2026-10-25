@@ -378,3 +378,47 @@ fn a_site_with_audio_off_keeps_its_media_muted() {
     wait_for(&mut driver, "Unmute");
     assert!(state.lock().unwrap().media[&3].muted);
 }
+
+#[test]
+fn a_page_opened_in_reader_mode_is_the_one_the_projection_shows() {
+    let mut options = options(Config::default(), "second.html");
+    options.view = Some(View::Projection);
+    let mut driver = app(Box::new(engine()), options).driver(80, 30);
+    wait_for(&mut driver, "You followed the link");
+    driver.press("r");
+    wait_for(&mut driver, "reader");
+    // Open another page from the address bar, in reader mode.
+    driver.press("o");
+    wait_for(&mut driver, "Open: an address");
+    driver.type_text("https://fixture.example/docs.html");
+    driver.press("enter");
+    wait_for(&mut driver, "A lamp that glows");
+    driver.press("r");
+    wait_for(&mut driver, "projection");
+    let text = screen(&driver);
+    assert!(text.contains("A lamp that glows"), "{text}");
+    assert!(!text.contains("You followed the link"), "{text}");
+    // A hint, back and forward still show the right page in each view.
+    driver.press("f");
+    wait_for(&mut driver, "the guide");
+    let label = screen(&driver)
+        .split('[')
+        .filter_map(|part| part.split_once("]the guide"))
+        .map(|(label, _)| label.to_string())
+        .next()
+        .expect("a hint on the guide link");
+    driver.type_text(&label);
+    wait_for(&mut driver, "You followed the link");
+    driver.press("H");
+    wait_for(&mut driver, "A lamp that glows");
+    driver.press("r");
+    wait_for(&mut driver, "reader");
+    assert!(screen(&driver).contains("A lamp that glows"));
+    driver.press("L");
+    wait_for(&mut driver, "You followed the link");
+    driver.press("r");
+    wait_for(&mut driver, "projection");
+    let text = screen(&driver);
+    assert!(text.contains("You followed the link"), "{text}");
+    assert!(!text.contains("A lamp that glows"), "{text}");
+}

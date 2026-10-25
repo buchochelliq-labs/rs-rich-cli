@@ -11,18 +11,13 @@ A browser profile holds cookies, site storage, the cache and history.
 
 **By default, each run gets a new temporary profile**: a private folder
 (only your user can read it) in your system's temporary directory, named
-`rich-embed-chrome-…`. Nothing in it is used by the next run, so you
-start signed out of everything each time.
-
-!!! warning "A known issue in 0.0.22"
-    The temporary profile is not yet removed when Noctiluca quits. Its
-    folder stays in your temporary directory (`/tmp` on most Linux
-    systems), readable only by you, until the system clears it or you
-    delete it:
-
-    ```sh
-    rm -rf "${TMPDIR:-/tmp}"/rich-embed-chrome-*
-    ```
+`rich-embed-chrome-…`. It is removed when Noctiluca ends: when you quit,
+on `Ctrl+C`, on SIGTERM, SIGHUP or SIGQUIT (closing the terminal, say),
+and when Noctiluca panics. So each run starts signed out of
+everything, and leaves nothing behind. Only a process that cannot clean
+up (killed with SIGKILL, or a machine that loses power) leaves its folder
+in the temporary directory, readable only by you, for you or the system
+to delete.
 
 **A kept profile is opt-in.** `--profile NAME`, or `name = "NAME"` under
 `[profile]`, keeps one profile, with its cookies and storage, between

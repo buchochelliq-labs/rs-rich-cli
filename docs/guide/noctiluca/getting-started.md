@@ -108,14 +108,10 @@ An empty address bar opens the home page. More on keywords in
 
 ## Quitting
 
-Press `q` (or `Ctrl+Q` with the `plain` keys). Chrome stops with
-Noctiluca.
-
-!!! warning "A known issue in 0.0.22"
-    The temporary profile a run makes is not yet removed when Noctiluca
-    quits. It stays in your temporary directory as a
-    `rich-embed-chrome-…` folder, readable only by you. See
-    [Privacy and security](privacy.md#the-browser-profile).
+Press `q` (or `Ctrl+Q` with the `plain` keys), or `Ctrl+C`. Chrome stops
+with Noctiluca, and the run's temporary profile is removed, so nothing of
+the session is left on disk unless you asked for a
+[kept profile](privacy.md#the-browser-profile).
 
 ## Next
 

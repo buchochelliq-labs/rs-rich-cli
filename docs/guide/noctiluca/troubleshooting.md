@@ -20,10 +20,10 @@ not all of it. `noctiluca keys` prints every warning in full. An unknown
 key is only a warning, so the rest of the file still applies; a TOML
 syntax error stops Noctiluca with the line.
 
-**My `[keys]` lines do nothing.** One key name Noctiluca does not know
-drops every line of `[keys]`. `none` is one of them: to unbind an action,
-give it an empty string (`quit = ""`). `noctiluca keys` shows the warning
-and the keys in effect.
+**A `[keys]` line does nothing.** A line with an unknown action or key
+name is skipped, with a warning; the other lines still apply.
+`noctiluca keys` prints the warning and the keys in effect. To unbind an
+action, give it `"none"`.
 
 ## Reading
 
@@ -35,12 +35,6 @@ it, or to get past bot checks, CAPTCHAs or sign-in walls. See
 **The projection looks wrong.** The first projection has no fixed or
 sticky layer and no paint order, so sticky headers and overlapping boxes
 can read oddly. Press `r` for reader mode.
-
-**The projection shows an earlier page.** A known issue in 0.0.22: after
-opening a page with `o` or `Ctrl+L` while in reader mode, switching to the
-projection can keep showing an earlier page, and reloading does not help.
-The address line and reader mode show the right page. Stay in reader mode
-for that page, or start Noctiluca again.
 
 **The page stops where it should load more.** Noctiluca scrolls its own
 copy of the page, so pages that load more as you scroll (infinite scroll,
@@ -88,9 +82,11 @@ say). Name a file with `--config PATH`.
 keys belong to a host. Serve the page from a local server to bind keys on
 it.
 
-**`rich-embed-chrome-…` folders in my temporary directory.** A known
-issue in 0.0.22: a run's temporary profile is not removed when Noctiluca
-quits. See [the browser profile](privacy.md#the-browser-profile).
+**`rich-embed-chrome-…` folders in my temporary directory.** Each run's
+temporary profile is removed when Noctiluca ends, however it ends, except
+when it is killed with SIGKILL or the machine stops. Such a folder is
+readable only by you, and safe to delete once no Noctiluca runs. See
+[the browser profile](privacy.md#the-browser-profile).
 
 **`--dump` says the page "did not load in time".** `--dump` waits up to a
 minute for the page to load and stay still. A page that never stops

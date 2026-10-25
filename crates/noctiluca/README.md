@@ -33,7 +33,8 @@ as a normal user, never as root.
   over SSH: run over SSH, it plays on the server.
 - **Safety**: everything a page says is cleaned before it reaches the
   terminal; no escape sequence passes. Downloads are refused. The
-  profile is temporary unless you keep one (`--profile NAME`).
+  profile is temporary, removed on the way out, unless you keep one
+  (`--profile NAME`).
 - **Config**: `noctiluca/config.toml` in your config directory, with
   keywords, the search engine, keys, and per-site settings and keys. See
   [`config.sample.toml`](config.sample.toml).
@@ -55,8 +56,6 @@ as a normal user, never as root.
 - Sound plays on the machine Chrome runs on, never over SSH.
 - Still images show as pictures in reader mode only; the projection shows
   their alt text. Video frames are not drawn yet.
-- A run's temporary profile is not yet removed when Noctiluca quits: it
-  stays in the temporary directory as `rich-embed-chrome-…`.
 
 ## Documentation
 
