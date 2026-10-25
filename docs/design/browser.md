@@ -35,6 +35,13 @@ gets only generic pieces from this work (see
   place across readings (anchored by node), the layout is cached, a cut
   page says so, and the screencast is off. See
   [rendering performance](render-performance.md#what-landed).
+- **Video and the PoC's chrome (0.0.23, branch `023-video`)**: a playing
+  `<video>` plays in its region from Chrome's screencast, cropped, paced
+  within a byte budget and stepped down when short; play, pause, seek and
+  mute from keys and controls; a poster with a play mark; the header with
+  the view and the address and the status bar with the media state, the
+  row and the keys; `about:noctiluca`'s codec table. See
+  [Media regions](#media-regions).
 - **Next**: 0.2, forms and tables (a login form, a dashboard and a
   settings page as fixtures); rs-rich-embed's faster loop and several
   pages (tabs).
@@ -250,7 +257,7 @@ fixture.
 | Buttons as `[ label ]` | A button reads as its accessible name in brackets, an icon-only one too | (in progress) |
 | Grids fit the terminal | Chrome lays the page out at the terminal's width, so a responsive grid picks its column count from the cells there are | (in progress) |
 | A live log shows its tail | A `role=log` or `aria-live` box shows its newest entries that fit, and holds still while the user has scrolled it up | (in progress) |
-| Frame rates and tiers follow bandwidth | Each moving region's frame rate comes from a byte budget, at most 8 a second, and it steps down Kitty, iTerm2, Sixel, then cells when short | (in progress) |
+| Frame rates and tiers follow bandwidth | Each moving region's frame rate comes from a byte budget, at most 8 a second, and it steps down Kitty, iTerm2, Sixel, then cells when short | `tests/video.rs`: `a_regions_bytes_over_two_seconds_stay_under_its_cap`, `a_slow_terminal_steps_video_down_to_character_art` |
 
 ### The engine trait
 
@@ -548,12 +555,62 @@ painter's own frame budget lands (branches 023-paint and 023-core), the
 budget's `bytes_per_second` comes from the painter's measured output
 rate instead of `ByteBudget::guess`.
 
+**Video (0.0.23, branch `023-video`).** Built on that API:
+
+- **Media state, generically.** Every `<video>` and `<audio>` is read for
+  its poster, `paused`, `currentTime`, `duration`, `muted`, `volume`,
+  `readyState` and `error`, on the element in an isolated world.
+  `Playback::label` says `PLAYING`, `PAUSED`, `BUFFERING`, `ENDED` or
+  `ERROR`. A poster is the bytes the page loaded
+  (`Page.getResourceContent`), decoded through the picture path like an
+  image; a video with none shows a still of what Chrome paints there.
+- **Controls** are generic intents on the element: play, pause, mute,
+  volume and seek (`MediaOp::Seek`, within its seekable ranges, paused
+  stays paused), from the player's buttons and from keys (`p`, `[`, `]`,
+  `alt+m` in the vim set; `alt+p`, `ctrl+left`, `ctrl+right`, `alt+m` in
+  the plain one).
+- **Frames only while something plays on screen.** rs-rich-embed's
+  screencast runs on demand (`ChromeEngine::screencast_on_demand`): a
+  frame is decoded and acknowledged only when taken, so Chrome paints the
+  next only then. The tab turns it on when a video plays in a region the
+  view shows and off when none does, or when moving pictures are frozen
+  (F4). Each frame carries its scroll position
+  (`ScreencastFrame::meta`), and each playing region is cropped from it
+  (`ScreencastFrame::crop`). A region Chrome's viewport does not hold is
+  captured on its own; a paused region whose time moved (a seek) gets one
+  new frame.
+- **The frame budget.** Frames are cut at most eight a second a region,
+  or as the pacing asks. The app runs one rs-rich-art `Pacer` per region
+  (`video::Pacing`): equal shares of the `ByteBudget`, paced ten percent
+  under the share since a frame can cost more than the ones before it,
+  each frame's cost read from the painter's `picture_bytes`, and the step
+  down Kitty, iTerm2, Sixel, cells when a share allows fewer than two
+  frames a second. With `SSH_CONNECTION` or `SSH_TTY` set, video starts at
+  cells unless `--images` or `[media] images` names a protocol. Frames go
+  into `b.live` beside the GIFs', so the projection and reader mode draw
+  them where the poster was.
+- **Where it should hook into the painter.** The budget is
+  `ByteBudget::guess()` today. Once the painter's frame budget lands
+  (023-paint and 023-core), `video_pacing` in `app.rs` should take its
+  `bytes_per_second` from the painter's measured output rate, and the
+  GIFs' `Motion` and the videos' `Pacing` should share one budget rather
+  than each having all of it.
+
+Tests: `tests/video.rs` (live: `motion.webm` plays, pauses, seeks, its
+`currentTime` moves and its frames change; a region's bytes over every
+two seconds stay under its cap; a 20 kB/s terminal steps down to cells;
+the about page's table matches `canPlayType`) and `tests/video_app.rs`
+(scripted engine: the header and status bar, a frame drawn in the
+region, the seek keys, freezing and pausing stop the screencast).
+
 **Codecs and DRM.** On this machine Chrome for Testing reports H.264 and
 AAC as playable (`canPlayType`: "probably"). That contradicts the lead's
 note that Chromium lacks them: plain open-source Chromium builds usually
 do lack them, but Chrome for Testing has them. So Noctiluca prefers a
 system Chrome, then Chrome for Testing, then Chromium, and shows the
-codec table in its about page. Full Chrome in `--headless=new` granted
+codec table in its about page, `about:noctiluca` (built: an HTML page
+Noctiluca makes and opens as a `data:` address, its table filled with
+`canPlayType`'s answers for fifteen types). Full Chrome in `--headless=new` granted
 Widevine access in a test here; its headless shell did not. Either way, DRM
 playback is out of scope by policy: Noctiluca never tries a licence
 request.

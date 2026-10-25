@@ -33,7 +33,7 @@ preset = "vim"
 # Pages' sound plays on the machine Chrome runs on. Off by default.
 audio = false
 # The most frames a second a moving picture (a GIF, a video) shows: a
-# ceiling, not a target.
+# ceiling, not a target; video never goes above 8.
 fps = 8
 # auto, ansi (half blocks), kitty, sixel, iterm2, or none (alt text only).
 images = "auto"

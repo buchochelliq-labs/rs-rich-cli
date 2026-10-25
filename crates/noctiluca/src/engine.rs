@@ -5,7 +5,7 @@
 
 use std::io;
 
-use rich_embed::PageState;
+use rich_embed::{PageState, ScreencastFrame};
 use serde_json::Value;
 
 /// A tab. Only one for now: rs-rich-embed drives one page target.
@@ -91,6 +91,34 @@ pub struct Playback {
     /// Seconds; `None` while unknown, or for a live stream.
     pub duration: Option<f64>,
     pub ended: bool,
+    /// The element's `readyState`, 0 to 4: below 3 a playing element
+    /// waits for data.
+    pub ready: u8,
+    /// Whether the element failed to load its media (`error` is set).
+    pub failed: bool,
+}
+
+impl Playback {
+    /// What it is doing, as the status line says it: `PLAYING`, `PAUSED`,
+    /// `ENDED`, `BUFFERING` or `ERROR`.
+    pub fn label(&self) -> &'static str {
+        if self.failed {
+            "ERROR"
+        } else if self.ended {
+            "ENDED"
+        } else if self.paused {
+            "PAUSED"
+        } else if self.ready < 3 {
+            "BUFFERING"
+        } else {
+            "PLAYING"
+        }
+    }
+
+    /// Whether it is playing: not paused, not ended, not failed.
+    pub fn playing(&self) -> bool {
+        !self.paused && !self.ended && !self.failed
+    }
 }
 
 /// What to do to a media element.
@@ -101,6 +129,9 @@ pub enum MediaOp {
     Mute(bool),
     /// 0 to 1.
     Volume(f64),
+    /// Move this many seconds on (back when negative), kept within what
+    /// can be sought. Paused stays paused.
+    Seek(f64),
 }
 
 /// Something done to the page, as real input where the page can tell.
@@ -214,6 +245,28 @@ pub trait Engine: Send {
             io::ErrorKind::Unsupported,
             "no metrics here",
         ))
+    }
+    /// Start or stop the page's screencast: frames of the viewport as it
+    /// paints, for media that moves. Only while something plays.
+    fn set_screencast(&mut self, _tab: TabId, _on: bool) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "no screencast here",
+        ))
+    }
+    /// The newest screencast frame since the last call, with where it was
+    /// taken. Taking it lets the browser send the next.
+    fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {
+        None
+    }
+    /// What the browser says of each media type: `canPlayType`'s answer
+    /// (`"probably"`, `"maybe"` or `""`).
+    fn can_play(&mut self, _tab: TabId, types: &[&str]) -> io::Result<Vec<String>> {
+        Ok(vec![String::new(); types.len()])
+    }
+    /// The browser's name and version, for the about page.
+    fn product(&mut self, _tab: TabId) -> String {
+        "unknown".into()
     }
     /// What happened since the last call.
     fn events(&mut self) -> Vec<EngineEvent>;

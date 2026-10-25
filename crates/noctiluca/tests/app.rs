@@ -322,6 +322,8 @@ fn audio_engine() -> FakeEngine {
             time: 0.0,
             duration: Some(2.0),
             ended: false,
+            ready: 4,
+            failed: false,
         },
     );
     engine

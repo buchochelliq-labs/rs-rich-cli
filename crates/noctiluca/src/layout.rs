@@ -510,12 +510,15 @@ pub fn reader(page: &Page, width: u16, marks: &Marks) -> Vec<Piece> {
                     &quote,
                 ));
                 flush(&mut text, &mut pieces);
-                if media.kind == MediaKind::Image {
+                // A video's region shows its poster, then its frames while
+                // it plays, over its controls.
+                if matches!(media.kind, MediaKind::Image | MediaKind::Video) {
                     pieces.push(Piece::Media {
                         index: *index,
                         rows: media_rows(media.rect.height),
                     });
-                } else if matches!(media.kind, MediaKind::Video | MediaKind::Audio) {
+                }
+                if matches!(media.kind, MediaKind::Video | MediaKind::Audio) {
                     pieces.push(Piece::Player(*index));
                 }
             }
@@ -653,6 +656,21 @@ pub fn face(control: &Control) -> String {
 
 /// The most blank rows the projection keeps between two boxes.
 const MAX_GAP_ROWS: usize = 200;
+/// The play mark on a video that is not playing, as the PoC drew it: a
+/// light box with a `▶` at the region's bottom left, the rest of the row
+/// as it was. `None` for other media, a playing video, or no room.
+pub fn play_mark(media: &crate::model::Media, width: usize) -> Option<Line> {
+    if media.kind != MediaKind::Video || media.playback.is_some_and(|p| p.playing()) || width < 3 {
+        return None;
+    }
+    Some(Line {
+        spans: vec![
+            Span::new(" ▶ ", "bold black on white"),
+            Span::new("░".repeat(width - 3), "bright_black"),
+        ],
+    })
+}
+
 /// Pictures at least this many rows tall get an `Image:` line.
 const CAPTIONED_ROWS: usize = 3;
 /// The most rows a media region takes in the projection.
@@ -837,6 +855,11 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                 // A picture the page does not caption gets its alt text
                 // under it, as the PoC showed it; not a small one (an
                 // avatar, an icon), whose alt text is noise.
+                if let Some(mark) = play_mark(media, w) {
+                    if let Some(last) = lines.last_mut() {
+                        *last = mark;
+                    }
+                }
                 if media.kind == MediaKind::Image
                     && !media.captioned
                     && !media.alt.is_empty()

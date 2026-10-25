@@ -126,6 +126,20 @@ pub const ACTIONS: &[Action] = &[
         "alt+m",
         "alt+m",
     ),
+    action(
+        "media.seek_back",
+        "Back five seconds in the media",
+        "media",
+        "[",
+        "ctrl+left",
+    ),
+    action(
+        "media.seek_forward",
+        "On five seconds in the media",
+        "media",
+        "]",
+        "ctrl+right",
+    ),
     action("media.volume_up", "Volume up", "media", "+", "alt+up"),
     action("media.volume_down", "Volume down", "media", "-", "alt+down"),
     action(

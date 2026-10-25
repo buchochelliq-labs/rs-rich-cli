@@ -322,6 +322,8 @@ mod tests {
             picture: Some(picture),
             captioned: false,
             playback: None,
+            poster: String::new(),
+            controls: false,
         });
         page
     }

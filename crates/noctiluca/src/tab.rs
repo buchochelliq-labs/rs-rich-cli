@@ -17,8 +17,12 @@
 //!   bytes), else a still of Chrome's pixels. A decoder thread makes them
 //!   [`Picture`]s (an animated GIF keeps its frames), and the page is
 //!   published again with them.
+//! - **Frames**: while a video plays in a region the view shows, the
+//!   screencast runs and each playing region's frames are cut from it
+//!   ([`crate::video`]), at most eight a second, or as the app's pacing
+//!   asks ([`Command::Regions`]). A video's still is its poster.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::Arc;
 use std::thread;
@@ -30,6 +34,7 @@ use crate::engine::{
     Engine, EngineEvent, Format, HistoryStep, MediaOp, Metrics, NodeId, PageAction, Rect, TabId,
 };
 use crate::model::{build, Binding, Control, MediaKind, Page, Revisions, Role};
+use crate::video::{Frames, Region, VideoFrame};
 use rich_intuituive::Picture;
 
 /// How long after the first change ping the page is read again.
@@ -40,6 +45,9 @@ const TICK: Duration = Duration::from_millis(25);
 const STILLS_PER_READ: usize = 8;
 /// How often a playing video's or audio's time is read again.
 const PLAYBACK: Duration = Duration::from_millis(500);
+/// How long without a screencast frame before playing regions are
+/// captured on their own.
+const QUIET: Duration = Duration::from_millis(400);
 
 /// What an action does to its control.
 #[derive(Clone, Debug, PartialEq)]
@@ -97,6 +105,12 @@ pub enum Command {
     Resize(u16, u16),
     /// Read the page again now.
     Refresh,
+    /// The media regions the view shows now, and how long the app's pacing
+    /// wants between two frames of each (none: [`crate::video::MAX_FPS`]).
+    Regions {
+        on_screen: Vec<NodeId>,
+        intervals: Vec<(NodeId, Duration)>,
+    },
 }
 
 /// Why an action did not run, or failed.
@@ -148,6 +162,10 @@ pub enum Update {
         guid: String,
         path: String,
     },
+    /// A new frame of a playing region.
+    Frame(Arc<VideoFrame>),
+    /// The region stopped moving: paused, ended, gone or off screen.
+    Still(NodeId),
 }
 
 /// The owner's end of a tab.
@@ -273,6 +291,15 @@ struct Worker<'a> {
     /// Where Chrome's view was last seen: images near it are captured
     /// first.
     metrics: Option<Metrics>,
+    frames: Frames,
+    /// The regions the view shows, and the pacing's intervals.
+    on_screen: HashSet<NodeId>,
+    intervals: HashMap<NodeId, Duration>,
+    /// When the last screencast frame came.
+    last_frame: Option<Instant>,
+    /// A paused region's time when its frame was last taken: a seek while
+    /// paused takes one more.
+    shown_time: HashMap<NodeId, f64>,
 }
 
 impl Worker<'_> {
@@ -282,7 +309,7 @@ impl Worker<'_> {
         let snapshot = self.engine.snapshot(TabId(0)).ok()?;
         let mut page = build(&snapshot, &mut self.revisions);
         for media in &mut page.media {
-            let key = still_key(media.node, &media.src, media.rect);
+            let key = still_key(media.node, picture_source(media), media.rect);
             if let Some(still) = self.stills.get(&key) {
                 media.still = Some(still.clone());
             }
@@ -339,10 +366,12 @@ impl Worker<'_> {
         // one far from the view) waits: its load pings, and it is captured
         // at the reading after.
         let view = self.metrics.map_or(0.0, |m| m.scroll_y);
+        // A video with no poster to fetch shows what Chrome paints in its
+        // region: its poster, or its first frame.
         let mut candidates: Vec<_> = page
             .media
             .iter()
-            .filter(|m| m.kind == MediaKind::Image && m.still.is_none())
+            .filter(|m| matches!(m.kind, MediaKind::Image | MediaKind::Video) && m.still.is_none())
             .filter(|m| m.rect.width >= 4.0 && m.rect.height >= 4.0)
             .collect();
         candidates.sort_by(|a, b| (a.rect.y - view).abs().total_cmp(&(b.rect.y - view).abs()));
@@ -352,7 +381,7 @@ impl Worker<'_> {
                 break;
             }
             if self.engine.image_ready(TabId(0), m.node).unwrap_or(true) {
-                wanted.push((m.node, m.src.clone(), m.rect));
+                wanted.push((m.node, picture_source(m).to_string(), m.rect));
             }
         }
         if wanted.is_empty() {
@@ -419,7 +448,7 @@ impl Worker<'_> {
         };
         let mut next = (*page).clone();
         for media in &mut next.media {
-            let key = still_key(media.node, &media.src, media.rect);
+            let key = still_key(media.node, picture_source(media), media.rect);
             if let Some(picture) = self.pictures.get(&key) {
                 media.picture = Some(picture.clone());
             }
@@ -447,9 +476,137 @@ impl Worker<'_> {
         Ok(())
     }
 
+    /// The video regions now.
+    fn regions(&self) -> Vec<Region> {
+        let Some(page) = &self.page else {
+            return Vec::new();
+        };
+        page.media
+            .iter()
+            .filter(|m| m.kind == MediaKind::Video)
+            .map(|m| Region {
+                node: m.node,
+                rect: m.rect,
+                playing: m.playback.is_some_and(|p| p.playing()),
+                on_screen: self.on_screen.contains(&m.node),
+                interval: self.intervals.get(&m.node).copied(),
+            })
+            .collect()
+    }
+
+    /// Run the screencast while a region plays on screen, and send each
+    /// region's frames when they are due.
+    fn video(&mut self) {
+        let regions = self.regions();
+        let now = Instant::now();
+        let plan = self.frames.plan(&regions, now);
+        if let Some(on) = plan.screencast {
+            let _ = self.engine.set_screencast(TabId(0), on);
+            self.last_frame = on.then_some(now);
+        }
+        for node in plan.stopped {
+            (self.update)(Update::Still(node));
+        }
+        self.refresh_paused(&regions);
+        if !plan.due {
+            return;
+        }
+        let frame = self.engine.screencast_frame(TabId(0));
+        if frame.is_some() {
+            self.last_frame = Some(now);
+        }
+        // No new frame for a while: what Chrome's viewport does not hold
+        // is not painted there, so it is captured on its own.
+        let quiet = self
+            .last_frame
+            .is_none_or(|at| now.duration_since(at) >= QUIET);
+        if frame.is_none() && !quiet {
+            return;
+        }
+        let (cut, missing) = self.frames.cut(&regions, frame.as_ref(), now);
+        for video in cut {
+            self.shown_time.remove(&video.node);
+            (self.update)(Update::Frame(Arc::new(video)));
+        }
+        if frame.is_some() && !quiet {
+            // The frame came; regions out of it wait for the quiet spell
+            // before a capture, unless Chrome's view is far from them.
+            let view = self
+                .metrics
+                .map(|m| (m.scroll_y, m.scroll_y + m.viewport_height));
+            let missing: Vec<Region> = missing
+                .into_iter()
+                .filter(|r| {
+                    view.is_some_and(|(top, bottom)| r.rect.bottom() < top || r.rect.y > bottom)
+                })
+                .collect();
+            self.capture_regions(&missing, now);
+        } else {
+            self.capture_regions(&missing, now);
+        }
+    }
+
+    /// Frames of regions taken with a capture of each.
+    fn capture_regions(&mut self, regions: &[Region], now: Instant) {
+        for region in regions {
+            if let Some(pixels) = self.capture_pixels(region.rect) {
+                let video = self.frames.stamp(region.node, pixels, now);
+                (self.update)(Update::Frame(Arc::new(video)));
+            }
+        }
+    }
+
+    fn capture_pixels(&mut self, rect: Rect) -> Option<rich_embed::Pixels> {
+        let region = Rect::new(
+            rect.x,
+            rect.y,
+            rect.width.min(4000.0),
+            rect.height.min(4000.0),
+        );
+        let frame = self.engine.capture(TabId(0), region, Format::Jpeg).ok()?;
+        let image = image::load_from_memory(&frame.bytes).ok()?.to_rgb8();
+        rich_embed::Pixels::new(image.width(), image.height(), image.into_raw())
+    }
+
+    /// A paused region on screen whose time moved (a seek) gets one new
+    /// frame, so the picture shows where it went.
+    fn refresh_paused(&mut self, regions: &[Region]) {
+        let Some(page) = self.page.clone() else {
+            return;
+        };
+        for region in regions.iter().filter(|r| r.on_screen && !r.playing) {
+            let Some(time) = page
+                .media
+                .iter()
+                .find(|m| m.node == region.node)
+                .and_then(|m| m.playback)
+                .map(|p| p.time)
+            else {
+                continue;
+            };
+            let shown = *self.shown_time.entry(region.node).or_insert(time);
+            if (shown - time).abs() > 0.01 {
+                self.shown_time.insert(region.node, time);
+                self.capture_regions(std::slice::from_ref(region), Instant::now());
+            }
+        }
+    }
+
     fn run_command(&mut self, command: Command) -> Result<(), Refusal> {
         let failed = |e: std::io::Error| Refusal::Failed(crate::clean::clean(&e.to_string()));
         match command {
+            Command::Open(url) if url == crate::about::ADDRESS => {
+                // The about page, with the browser's own codec answers.
+                let answers = self
+                    .engine
+                    .can_play(TabId(0), &crate::about::types())
+                    .map_err(failed)?;
+                let product = self.engine.product(TabId(0));
+                let html = crate::about::page(&answers, &product);
+                self.engine
+                    .open(TabId(0), &crate::about::data_url(&html))
+                    .map_err(failed)
+            }
             Command::Open(url) => self.engine.open(TabId(0), &url).map_err(failed),
             Command::History(step) => self.engine.history(TabId(0), step).map_err(failed),
             Command::Resize(columns, rows) => self.engine.resize(columns, rows).map_err(failed),
@@ -460,6 +617,15 @@ impl Worker<'_> {
                 self.read();
                 Ok(())
             }
+            Command::Regions {
+                on_screen,
+                intervals,
+            } => {
+                self.on_screen = on_screen.into_iter().collect();
+                self.intervals = intervals.into_iter().collect();
+                Ok(())
+            }
+
             Command::Media { document, node, op } => {
                 let page = self
                     .read()
@@ -556,6 +722,16 @@ fn decoder() -> (Sender<Job>, Receiver<(StillKey, Picture)>) {
     (send, decoded)
 }
 
+/// Where a media region's picture comes from: a video's poster when it has
+/// one (else what Chrome paints in its region), an image's source.
+fn picture_source(media: &crate::model::Media) -> &str {
+    if media.kind == MediaKind::Video {
+        &media.poster
+    } else {
+        &media.src
+    }
+}
+
 fn still_key(node: NodeId, src: &str, rect: Rect) -> StillKey {
     (
         node,
@@ -579,6 +755,11 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
         decode,
         decoded,
         metrics: None,
+        frames: Frames::default(),
+        on_screen: HashSet::new(),
+        intervals: HashMap::new(),
+        last_frame: None,
+        shown_time: HashMap::new(),
     };
     // Read once at the start, then whenever something says to.
     let mut read_now = true;
@@ -628,6 +809,7 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
             probed = Instant::now();
             worker.follow_playback();
         }
+        worker.video();
         let due = worker
             .dirty
             .is_some_and(|since| since.elapsed() >= DEBOUNCE);
