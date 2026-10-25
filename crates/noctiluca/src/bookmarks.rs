@@ -38,9 +38,9 @@ impl Bookmarks {
             Err(e) if e.kind() == io::ErrorKind::NotFound => String::new(),
             Err(e) => return Err(e),
         };
-        let table: toml::Table = text
-            .parse()
-            .map_err(|e: toml::de::Error| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+        let table: toml::Table = text.parse().map_err(|e: toml::de::Error| {
+            io::Error::new(io::ErrorKind::InvalidData, e.to_string())
+        })?;
         let items = table
             .get("bookmark")
             .and_then(|v| v.as_array())
@@ -51,7 +51,10 @@ impl Bookmarks {
                 Some(Bookmark {
                     url: b.get("url")?.as_str()?.to_string(),
                     title: clean(b.get("title").and_then(|t| t.as_str()).unwrap_or_default()),
-                    keyword: b.get("keyword").and_then(|k| k.as_str()).map(str::to_string),
+                    keyword: b
+                        .get("keyword")
+                        .and_then(|k| k.as_str())
+                        .map(str::to_string),
                 })
             })
             .collect();
@@ -106,7 +109,8 @@ mod tests {
 
     #[test]
     fn bookmarks_round_trip_with_keywords() {
-        let path = std::env::temp_dir().join(format!("noctiluca-marks-{}.toml", std::process::id()));
+        let path =
+            std::env::temp_dir().join(format!("noctiluca-marks-{}.toml", std::process::id()));
         let _ = std::fs::remove_file(&path);
         let mut marks = Bookmarks::load(&path).unwrap();
         assert!(marks.items.is_empty());
@@ -120,7 +124,10 @@ mod tests {
         let again = Bookmarks::load(&path).unwrap();
         assert_eq!(again.items, marks.items);
         let config = crate::config::Config::default();
-        assert_eq!(config.destination("sd", "about:blank", &again.items).url(), "https://docs.rs/serde");
+        assert_eq!(
+            config.destination("sd", "about:blank", &again.items).url(),
+            "https://docs.rs/serde"
+        );
         assert!(marks.remove("https://docs.rs/serde").unwrap());
         assert!(Bookmarks::load(&path).unwrap().items.is_empty());
         std::fs::remove_file(&path).ok();

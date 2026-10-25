@@ -23,7 +23,7 @@ use rich::Text;
 use crate::model::{BlockKind, Check, Control, MediaKind, Page, Role, Run, Table};
 
 /// A run of text on a line with one style (a rich style definition).
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Span {
     pub text: String,
     pub style: String,
@@ -42,7 +42,7 @@ impl Span {
 }
 
 /// A line of spans.
-#[derive(Clone, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Debug, Default, PartialEq, Eq, Hash)]
 pub struct Line {
     pub spans: Vec<Span>,
 }
@@ -83,7 +83,11 @@ pub fn to_text(lines: &[Line], marks: &Marks, first_row: usize) -> Text {
         if let Some(query) = marks.find.as_deref().filter(|q| !q.is_empty()) {
             for (k, (at, len)) in matches(&line.plain(), query).into_iter().enumerate() {
                 let current = marks.current == Some((first_row + n, k));
-                let style = if current { "bold black on bright_yellow" } else { "black on yellow" };
+                let style = if current {
+                    "bold black on bright_yellow"
+                } else {
+                    "black on yellow"
+                };
                 text.stylize(style, start + at, start + at + len);
             }
         }
@@ -193,7 +197,11 @@ pub fn wrap(spans: &[Span], width: usize, first: &[Span], rest: &[Span]) -> Vec<
     let push = |line: &mut Line, text: &str, i: usize| {
         let span = &spans[i];
         match line.spans.last_mut() {
-            Some(last) if last.style == span.style && last.control == span.control && !last.text.is_empty() => {
+            Some(last)
+                if last.style == span.style
+                    && last.control == span.control
+                    && !last.text.is_empty() =>
+            {
                 last.text.push_str(text)
             }
             _ => line.spans.push(Span {
@@ -206,7 +214,12 @@ pub fn wrap(spans: &[Span], width: usize, first: &[Span], rest: &[Span]) -> Vec<
     let mut start_of_line = true;
     for (word, i) in words {
         if word == "\n" {
-            lines.push(std::mem::replace(&mut line, Line { spans: rest.to_vec() }));
+            lines.push(std::mem::replace(
+                &mut line,
+                Line {
+                    spans: rest.to_vec(),
+                },
+            ));
             used = prefix_width(rest);
             start_of_line = true;
             continue;
@@ -229,7 +242,12 @@ pub fn wrap(spans: &[Span], width: usize, first: &[Span], rest: &[Span]) -> Vec<
                     last.text.pop();
                 }
             }
-            lines.push(std::mem::replace(&mut line, Line { spans: rest.to_vec() }));
+            lines.push(std::mem::replace(
+                &mut line,
+                Line {
+                    spans: rest.to_vec(),
+                },
+            ));
             used = prefix_width(rest);
         }
         if w > avail(used.min(width)) && used + w > width {
@@ -240,7 +258,12 @@ pub fn wrap(spans: &[Span], width: usize, first: &[Span], rest: &[Span]) -> Vec<
                 if used + cell_len(&chunk) + cw > width && !chunk.is_empty() {
                     push(&mut line, &chunk, i);
                     chunk.clear();
-                    lines.push(std::mem::replace(&mut line, Line { spans: rest.to_vec() }));
+                    lines.push(std::mem::replace(
+                        &mut line,
+                        Line {
+                            spans: rest.to_vec(),
+                        },
+                    ));
                     used = prefix_width(rest);
                 }
                 chunk.push(c);
@@ -267,7 +290,10 @@ pub fn wrap(spans: &[Span], width: usize, first: &[Span], rest: &[Span]) -> Vec<
 pub enum Piece {
     Text(Vec<Line>),
     /// A media region: an index into [`Page::media`], `rows` tall.
-    Media { index: usize, rows: u16 },
+    Media {
+        index: usize,
+        rows: u16,
+    },
     /// Controls drawn as widgets: one control, or a group of radios.
     Controls(Vec<usize>),
 }
@@ -383,7 +409,10 @@ pub fn reader(page: &Page, width: u16, marks: &Marks) -> Vec<Piece> {
             (Some(BlockKind::ListItem { .. }), BlockKind::ListItem { .. })
                 | (Some(BlockKind::Control(_)), BlockKind::Control(_))
         );
-        if previous.is_some() && !tight && !matches!(block.kind, BlockKind::Control(_) | BlockKind::Media(_)) {
+        if previous.is_some()
+            && !tight
+            && !matches!(block.kind, BlockKind::Control(_) | BlockKind::Media(_))
+        {
             text.push(Line::default());
         }
         let quote: Vec<Span> = (0..block.quote).map(|_| Span::new("│ ", "dim")).collect();
@@ -399,16 +428,30 @@ pub fn reader(page: &Page, width: u16, marks: &Marks) -> Vec<Piece> {
                 for run in &mut runs {
                     run.text = run.text.replace('\n', " ");
                 }
-                text.extend(wrap(&spans(&runs, base, page, marks), width, &quote, &quote));
+                text.extend(wrap(
+                    &spans(&runs, base, page, marks),
+                    width,
+                    &quote,
+                    &quote,
+                ));
             }
             BlockKind::Paragraph => {
                 let base = if block.quote > 0 { "italic" } else { "" };
                 let _ = inner;
-                text.extend(wrap(&spans(&block.runs, base, page, marks), width, &quote, &quote));
+                text.extend(wrap(
+                    &spans(&block.runs, base, page, marks),
+                    width,
+                    &quote,
+                    &quote,
+                ));
             }
             BlockKind::ListItem { depth, marker } => {
                 let indent = "  ".repeat(depth.saturating_sub(1) as usize);
-                let marker = if marker.is_empty() { String::new() } else { format!("{marker} ") };
+                let marker = if marker.is_empty() {
+                    String::new()
+                } else {
+                    format!("{marker} ")
+                };
                 let hang = " ".repeat(cell_len(&marker).max(2));
                 let mut first = quote.clone();
                 first.push(Span::new(format!("{indent}{marker}"), "bright_black"));
@@ -417,7 +460,12 @@ pub fn reader(page: &Page, width: u16, marks: &Marks) -> Vec<Piece> {
                 }
                 let mut rest = quote.clone();
                 rest.push(Span::new(format!("{indent}{hang}"), ""));
-                text.extend(wrap(&spans(&block.runs, "", page, marks), width, &first, &rest));
+                text.extend(wrap(
+                    &spans(&block.runs, "", page, marks),
+                    width,
+                    &first,
+                    &rest,
+                ));
             }
             BlockKind::Code => {
                 let code = crate::model::plain(&block.runs);
@@ -444,11 +492,20 @@ pub fn reader(page: &Page, width: u16, marks: &Marks) -> Vec<Piece> {
                     MediaKind::Svg => "drawing",
                     MediaKind::Frame => "frame",
                 };
-                let alt = if media.alt.is_empty() { kind.to_string() } else { format!("{kind}: {}", media.alt) };
+                let alt = if media.alt.is_empty() {
+                    kind.to_string()
+                } else {
+                    format!("{kind}: {}", media.alt)
+                };
                 if previous.is_some() {
                     text.push(Line::default());
                 }
-                text.extend(wrap(&[Span::new(alt, "italic bright_black")], width, &quote, &quote));
+                text.extend(wrap(
+                    &[Span::new(alt, "italic bright_black")],
+                    width,
+                    &quote,
+                    &quote,
+                ));
                 flush(&mut text, &mut pieces);
                 if media.kind == MediaKind::Image {
                     pieces.push(Piece::Media {
@@ -466,7 +523,9 @@ pub fn reader(page: &Page, width: u16, marks: &Marks) -> Vec<Piece> {
                 let mut group = vec![*index];
                 let control = &page.controls[*index];
                 if control.role == Role::Radio && control.group.is_some() {
-                    while let Some(BlockKind::Control(next)) = page.blocks.get(b + 1).map(|b| &b.kind) {
+                    while let Some(BlockKind::Control(next)) =
+                        page.blocks.get(b + 1).map(|b| &b.kind)
+                    {
                         let other = &page.controls[*next];
                         if other.role == Role::Radio && other.group == control.group {
                             group.push(*next);
@@ -490,14 +549,22 @@ pub fn reader(page: &Page, width: u16, marks: &Marks) -> Vec<Piece> {
 fn wrap_chars(span: &Span, width: usize, first: &[Span], rest: &[Span]) -> Vec<Line> {
     let prefix = |p: &[Span]| p.iter().map(|s| cell_len(&s.text)).sum::<usize>();
     let mut lines = Vec::new();
-    let mut line = Line { spans: first.to_vec() };
+    let mut line = Line {
+        spans: first.to_vec(),
+    };
     let mut used = prefix(first);
     let mut chunk = String::new();
     for c in span.text.chars() {
         let w = cell_len(&c.to_string());
         if used + w > width && !chunk.is_empty() {
-            line.spans.push(Span::new(std::mem::take(&mut chunk), span.style.clone()));
-            lines.push(std::mem::replace(&mut line, Line { spans: rest.to_vec() }));
+            line.spans
+                .push(Span::new(std::mem::take(&mut chunk), span.style.clone()));
+            lines.push(std::mem::replace(
+                &mut line,
+                Line {
+                    spans: rest.to_vec(),
+                },
+            ));
             used = prefix(rest);
         }
         chunk.push(c);
@@ -526,7 +593,11 @@ pub fn face(control: &Control) -> String {
             format!("[{mark}] {name}")
         }
         Role::Radio => {
-            let mark = if control.checked == Some(Check::On) { "•" } else { " " };
+            let mark = if control.checked == Some(Check::On) {
+                "•"
+            } else {
+                " "
+            };
             format!("({mark}) {name}")
         }
         Role::Password => format!("{name} [{}]", "•".repeat(8)),
@@ -561,12 +632,25 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
         let x1 = ((right / cw).round() as usize).clamp(x0 + 1, columns);
         (x0, x1)
     };
-    let text_item = |rect: crate::engine::Rect, left: f64, right: f64, spans: Vec<Span>, first: Vec<Span>| {
-        let (x0, x1) = snap(left, right);
-        Item { top: rect.y, bottom: rect.bottom(), left, x0, x1, wrap: Some((spans, first)), lines: Vec::new() }
-    };
+    let text_item =
+        |rect: crate::engine::Rect, left: f64, right: f64, spans: Vec<Span>, first: Vec<Span>| {
+            let (x0, x1) = snap(left, right);
+            Item {
+                top: rect.y,
+                bottom: rect.bottom(),
+                left,
+                x0,
+                x1,
+                wrap: Some((spans, first)),
+                lines: Vec::new(),
+            }
+        };
     for block in &page.blocks {
-        let left = block.rect.x.min(if block.frame.width > 0.0 { block.frame.x } else { block.rect.x });
+        let left = block.rect.x.min(if block.frame.width > 0.0 {
+            block.frame.x
+        } else {
+            block.rect.x
+        });
         let right = block.frame.right().max(block.rect.right());
         match &block.kind {
             BlockKind::Table(table) => {
@@ -580,7 +664,13 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
                     for cell in row {
                         let base = if cell.header { "bold" } else { "" };
                         let spans = spans(&cell.runs, base, page, marks);
-                        items.push(text_item(cell.rect, cell.rect.x, cell.rect.right(), spans, Vec::new()));
+                        items.push(text_item(
+                            cell.rect,
+                            cell.rect.x,
+                            cell.rect.right(),
+                            spans,
+                            Vec::new(),
+                        ));
                     }
                 }
             }
@@ -591,28 +681,70 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
                 let w = m1 - m0;
                 let lines = (0..rows)
                     .map(|r| {
-                        let label = if r == rows / 2 { crate::clean::truncate(&media.alt, w) } else { String::new() };
+                        let label = if r == rows / 2 {
+                            crate::clean::truncate(&media.alt, w)
+                        } else {
+                            String::new()
+                        };
                         let pad = w.saturating_sub(cell_len(&label));
-                        Line { spans: vec![Span::new(label, "italic"), Span::new("░".repeat(pad), "bright_black")] }
+                        Line {
+                            spans: vec![
+                                Span::new(label, "italic"),
+                                Span::new("░".repeat(pad), "bright_black"),
+                            ],
+                        }
                     })
                     .collect();
-                items.push(Item { top: media.rect.y, bottom: media.rect.bottom(), left: media.rect.x, x0: m0, x1: m1, wrap: None, lines });
+                items.push(Item {
+                    top: media.rect.y,
+                    bottom: media.rect.bottom(),
+                    left: media.rect.x,
+                    x0: m0,
+                    x1: m1,
+                    wrap: None,
+                    lines,
+                });
             }
             BlockKind::Control(index) => {
                 let control = &page.controls[*index];
                 let mut first = Vec::new();
                 if let Some(label) = marks.hints.get(index) {
-                    first.push(Span { text: format!("[{label}]"), style: "bold black on yellow".into(), control: Some(*index) });
+                    first.push(Span {
+                        text: format!("[{label}]"),
+                        style: "bold black on yellow".into(),
+                        control: Some(*index),
+                    });
                 }
                 let style = if control.disabled { "dim" } else { "reverse" };
-                let span = Span { text: face(control), style: style.into(), control: Some(*index) };
-                items.push(text_item(control.rect, control.rect.x, control.rect.right(), vec![span], first));
+                let span = Span {
+                    text: face(control),
+                    style: style.into(),
+                    control: Some(*index),
+                };
+                items.push(text_item(
+                    control.rect,
+                    control.rect.x,
+                    control.rect.right(),
+                    vec![span],
+                    first,
+                ));
             }
             BlockKind::Code => {
                 let (x0, x1) = snap(left, right);
                 let code = crate::model::plain(&block.runs);
-                let lines = code.split('\n').flat_map(|row| wrap_chars(&Span::new(row, "cyan"), x1 - x0, &[], &[])).collect();
-                items.push(Item { top: block.rect.y, bottom: block.rect.bottom(), left, x0, x1, wrap: None, lines });
+                let lines = code
+                    .split('\n')
+                    .flat_map(|row| wrap_chars(&Span::new(row, "cyan"), x1 - x0, &[], &[]))
+                    .collect();
+                items.push(Item {
+                    top: block.rect.y,
+                    bottom: block.rect.bottom(),
+                    left,
+                    x0,
+                    x1,
+                    wrap: None,
+                    lines,
+                });
             }
             kind => {
                 let base = match kind {
@@ -627,7 +759,13 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
                         first.push(Span::new(format!("{marker} "), "bright_black"));
                     }
                 }
-                items.push(text_item(block.rect, left, right, spans(&block.runs, base, page, marks), first));
+                items.push(text_item(
+                    block.rect,
+                    left,
+                    right,
+                    spans(&block.runs, base, page, marks),
+                    first,
+                ));
             }
         }
     }
@@ -636,15 +774,24 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
     // rows it spans) claims, before its text wraps.
     let snapshot: Vec<(f64, f64, usize)> = items.iter().map(|i| (i.top, i.bottom, i.x0)).collect();
     for (n, item) in items.iter_mut().enumerate() {
-        let Some((spans, first)) = &item.wrap else { continue };
+        let Some((spans, first)) = &item.wrap else {
+            continue;
+        };
         let needed = item.x0
-            + first.iter().chain(spans.iter()).map(|s| cell_len(&s.text)).sum::<usize>();
+            + first
+                .iter()
+                .chain(spans.iter())
+                .map(|s| cell_len(&s.text))
+                .sum::<usize>();
         if needed > item.x1 {
             let limit = snapshot
                 .iter()
                 .enumerate()
                 .filter(|(m, (top, bottom, x0))| {
-                    *m != n && *top < item.bottom - 0.5 && item.top < *bottom - 0.5 && *x0 >= item.x1
+                    *m != n
+                        && *top < item.bottom - 0.5
+                        && item.top < *bottom - 0.5
+                        && *x0 >= item.x1
                 })
                 .map(|(_, (_, _, x0))| x0.saturating_sub(1))
                 .min()
@@ -659,8 +806,10 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
         let rb = (b.top / ch).round() as i64;
         ra.cmp(&rb).then(a.left.total_cmp(&b.left))
     });
-    let boxes: Vec<(f64, f64, usize, usize, Vec<Line>)> =
-        items.into_iter().map(|i| (i.top, i.left, i.x0, i.x1, i.lines)).collect();
+    let boxes: Vec<(f64, f64, usize, usize, Vec<Line>)> = items
+        .into_iter()
+        .map(|i| (i.top, i.left, i.x0, i.x1, i.lines))
+        .collect();
     let mut skyline = vec![0usize; columns];
     let mut grid: Vec<Vec<Option<(char, usize)>>> = Vec::new();
     let mut styles: Vec<(String, Option<usize>)> = Vec::new();
@@ -710,8 +859,14 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
                 };
                 let (style, control) = style.map(|s| styles[s].clone()).unwrap_or_default();
                 match line.spans.last_mut() {
-                    Some(last) if last.style == style && last.control == control => last.text.push(c),
-                    _ => line.spans.push(Span { text: c.to_string(), style, control }),
+                    Some(last) if last.style == style && last.control == control => {
+                        last.text.push(c)
+                    }
+                    _ => line.spans.push(Span {
+                        text: c.to_string(),
+                        style,
+                        control,
+                    }),
                 }
             }
             if let Some(last) = line.spans.last_mut() {
@@ -728,7 +883,9 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
 
 /// Labels for `count` link hints: home-row letters, all the same length.
 pub fn hint_labels(count: usize) -> Vec<String> {
-    const KEYS: &[char] = &['a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'e', 'w', 'r', 'u', 'i', 'o'];
+    const KEYS: &[char] = &[
+        'a', 's', 'd', 'f', 'g', 'h', 'j', 'k', 'l', 'e', 'w', 'r', 'u', 'i', 'o',
+    ];
     let mut length = 1;
     while KEYS.len().pow(length as u32) < count {
         length += 1;
@@ -756,11 +913,20 @@ mod tests {
     #[test]
     fn words_wrap_and_long_words_break() {
         let lines = wrap(&[s("the quick brown fox")], 10, &[], &[]);
-        assert_eq!(lines.iter().map(Line::plain).collect::<Vec<_>>(), ["the quick", "brown fox"]);
+        assert_eq!(
+            lines.iter().map(Line::plain).collect::<Vec<_>>(),
+            ["the quick", "brown fox"]
+        );
         let lines = wrap(&[s("abcdefghijkl")], 5, &[], &[]);
-        assert_eq!(lines.iter().map(Line::plain).collect::<Vec<_>>(), ["abcde", "fghij", "kl"]);
+        assert_eq!(
+            lines.iter().map(Line::plain).collect::<Vec<_>>(),
+            ["abcde", "fghij", "kl"]
+        );
         let lines = wrap(&[s("a\nb")], 10, &[s("> ")], &[s("  ")]);
-        assert_eq!(lines.iter().map(Line::plain).collect::<Vec<_>>(), ["> a", "  b"]);
+        assert_eq!(
+            lines.iter().map(Line::plain).collect::<Vec<_>>(),
+            ["> a", "  b"]
+        );
     }
 
     #[test]

@@ -6,7 +6,8 @@ use noctiluca::model::{build, Page, Revisions};
 use noctiluca::testing::snapshot_file;
 
 fn page(name: &str) -> Page {
-    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR")).join(format!("tests/snapshots/{name}.json"));
+    let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))
+        .join(format!("tests/snapshots/{name}.json"));
     build(&snapshot_file(&path).unwrap(), &mut Revisions::new())
 }
 

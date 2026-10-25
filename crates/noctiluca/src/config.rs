@@ -20,10 +20,10 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::url::{encode_query, host, looks_like_address, complete_address};
+use crate::url::{complete_address, encode_query, host, looks_like_address};
 
 /// A view of a page.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum View {
     /// Chrome's geometry snapped to cells (decision 9's default).
     #[default]
@@ -107,7 +107,11 @@ pub enum Target {
     Action(String),
     /// Activate the `nth` (from 1) element with this role and accessible
     /// name, looked up in the AX tree when the key is pressed.
-    Element { role: String, name: String, nth: usize },
+    Element {
+        role: String,
+        name: String,
+        nth: usize,
+    },
     /// Several, in order.
     Sequence(Vec<Target>),
 }
@@ -121,7 +125,11 @@ impl Target {
                 format!("{role} {name:?} (match {nth})")
             }
             Target::Element { role, name, .. } => format!("{role} {name:?}"),
-            Target::Sequence(all) => all.iter().map(Target::describe).collect::<Vec<_>>().join(", then "),
+            Target::Sequence(all) => all
+                .iter()
+                .map(Target::describe)
+                .collect::<Vec<_>>()
+                .join(", then "),
         }
     }
 }
@@ -196,10 +204,28 @@ pub fn builtin_shortcuts() -> BTreeMap<String, Shortcut> {
         home: home.to_string(),
     };
     BTreeMap::from([
-        ("rs".to_string(), make("https://docs.rs/releases/search?query={}", "https://docs.rs")),
-        ("crates".to_string(), make("https://crates.io/search?q={}", "https://crates.io")),
-        ("mdn".to_string(), make("https://developer.mozilla.org/en-US/search?q={}", "https://developer.mozilla.org")),
-        ("gh".to_string(), make("https://github.com/search?q={}", "https://github.com")),
+        (
+            "rs".to_string(),
+            make(
+                "https://docs.rs/releases/search?query={}",
+                "https://docs.rs",
+            ),
+        ),
+        (
+            "crates".to_string(),
+            make("https://crates.io/search?q={}", "https://crates.io"),
+        ),
+        (
+            "mdn".to_string(),
+            make(
+                "https://developer.mozilla.org/en-US/search?q={}",
+                "https://developer.mozilla.org",
+            ),
+        ),
+        (
+            "gh".to_string(),
+            make("https://github.com/search?q={}", "https://github.com"),
+        ),
     ])
 }
 
@@ -225,7 +251,11 @@ impl Default for Config {
 
 /// Where a platform keeps an app's configuration.
 pub fn config_dir() -> Option<PathBuf> {
-    let var = |name: &str| std::env::var_os(name).filter(|v| !v.is_empty()).map(PathBuf::from);
+    let var = |name: &str| {
+        std::env::var_os(name)
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+    };
     let base = if cfg!(windows) {
         var("APPDATA")
     } else if cfg!(target_os = "macos") {
@@ -240,7 +270,11 @@ pub fn config_dir() -> Option<PathBuf> {
 
 /// Where Noctiluca keeps its data: kept profiles and bookmarks.
 pub fn data_dir() -> Option<PathBuf> {
-    let var = |name: &str| std::env::var_os(name).filter(|v| !v.is_empty()).map(PathBuf::from);
+    let var = |name: &str| {
+        std::env::var_os(name)
+            .filter(|v| !v.is_empty())
+            .map(PathBuf::from)
+    };
     let base = if cfg!(windows) {
         var("LOCALAPPDATA")
     } else if cfg!(target_os = "macos") {
@@ -278,7 +312,10 @@ impl Config {
         match std::fs::read_to_string(&path) {
             Ok(text) => {
                 let mut config = Config::parse(&text).map_err(|e| {
-                    io::Error::new(io::ErrorKind::InvalidData, format!("{}: {e}", path.display()))
+                    io::Error::new(
+                        io::ErrorKind::InvalidData,
+                        format!("{}: {e}", path.display()),
+                    )
                 })?;
                 config.path = Some(path);
                 Ok(config)
@@ -323,18 +360,26 @@ impl Config {
                                     word.clone(),
                                     Shortcut {
                                         template: has_query.then(|| template.clone()),
-                                        home: if has_query { template_home(template) } else { template.clone() },
+                                        home: if has_query {
+                                            template_home(template)
+                                        } else {
+                                            template.clone()
+                                        },
                                     },
                                 );
                             }
                             toml::Value::Table(t) => {
-                                let template = t.get("search").and_then(|v| v.as_str()).map(str::to_string);
+                                let template =
+                                    t.get("search").and_then(|v| v.as_str()).map(str::to_string);
                                 let home = t
                                     .get("home")
                                     .and_then(|v| v.as_str())
                                     .map(str::to_string)
                                     .or_else(|| template.as_deref().map(template_home));
-                                for key in t.keys().filter(|k| !matches!(k.as_str(), "search" | "home")) {
+                                for key in t
+                                    .keys()
+                                    .filter(|k| !matches!(k.as_str(), "search" | "home"))
+                                {
                                     warn(format!("shortcuts.{word}.{key}: unknown key"));
                                 }
                                 match home {
@@ -344,15 +389,21 @@ impl Config {
                                     None => warn(format!("shortcuts.{word}: needs search or home")),
                                 }
                             }
-                            _ => warn(format!("shortcuts.{word}: expected an address, a table or false")),
+                            _ => warn(format!(
+                                "shortcuts.{word}: expected an address, a table or false"
+                            )),
                         }
                     }
                 }
                 "search" => {
                     for (key, value) in body {
                         match (key.as_str(), value.as_str()) {
-                            ("url", Some(url)) if url.contains("{}") => search = Some(url.to_string()),
-                            ("url", _) => warn("search.url: expected an address with {} for the query".into()),
+                            ("url", Some(url)) if url.contains("{}") => {
+                                search = Some(url.to_string())
+                            }
+                            ("url", _) => {
+                                warn("search.url: expected an address with {} for the query".into())
+                            }
                             _ => warn(format!("search.{key}: unknown key")),
                         }
                     }
@@ -363,10 +414,16 @@ impl Config {
                             ("preset", toml::Value::String(p)) => match p.as_str() {
                                 "vim" => preset = Preset::Vim,
                                 "plain" => preset = Preset::Plain,
-                                other => warn(format!("keys.preset: {other:?} is not vim or plain")),
+                                other => {
+                                    warn(format!("keys.preset: {other:?} is not vim or plain"))
+                                }
                             },
-                            (action, toml::Value::String(k)) => keys.push((action.to_string(), k.clone())),
-                            (action, _) => warn(format!("keys.{action}: expected keys, as a string")),
+                            (action, toml::Value::String(k)) => {
+                                keys.push((action.to_string(), k.clone()))
+                            }
+                            (action, _) => {
+                                warn(format!("keys.{action}: expected keys, as a string"))
+                            }
                         }
                     }
                 }
@@ -376,7 +433,9 @@ impl Config {
                             ("home", Some(h)) => home = Some(h.to_string()),
                             ("view", Some(v)) => match View::parse(v) {
                                 Some(v) => view = v,
-                                None => warn(format!("startup.view: {v:?} is not projection, reader or raster")),
+                                None => warn(format!(
+                                    "startup.view: {v:?} is not projection, reader or raster"
+                                )),
                             },
                             _ => warn(format!("startup.{key}: unknown key")),
                         }
@@ -399,7 +458,9 @@ impl Config {
                     for (key, value) in body {
                         match (key.as_str(), value.as_str()) {
                             ("name", Some(n)) if valid_profile(n) => profile = Some(n.to_string()),
-                            ("name", _) => warn("profile.name: letters, digits, - and _ only".into()),
+                            ("name", _) => {
+                                warn("profile.name: letters, digits, - and _ only".into())
+                            }
                             _ => warn(format!("profile.{key}: unknown key")),
                         }
                     }
@@ -441,7 +502,12 @@ impl Config {
     /// What the address bar should open for `input`: an address, a
     /// keyword's expansion, or a search, in that order. `url` is the page
     /// open now (for a site's own keyword); `bookmarks` adds theirs.
-    pub fn destination(&self, input: &str, url: &str, bookmarks: &[crate::bookmarks::Bookmark]) -> Destination {
+    pub fn destination(
+        &self,
+        input: &str,
+        url: &str,
+        bookmarks: &[crate::bookmarks::Bookmark],
+    ) -> Destination {
         let input = input.trim();
         if input.is_empty() {
             return Destination::Url(self.home.clone().unwrap_or_else(|| "about:blank".into()));
@@ -465,10 +531,17 @@ impl Config {
             (Some(template), false) => template.replace("{}", &encode_query(rest)),
             _ => shortcut.home.clone(),
         };
-        if let Some(mark) = bookmarks.iter().find(|b| b.keyword.as_deref() == Some(word)) {
+        if let Some(mark) = bookmarks
+            .iter()
+            .find(|b| b.keyword.as_deref() == Some(word))
+        {
             let shortcut = Shortcut {
                 template: mark.url.contains("{}").then(|| mark.url.clone()),
-                home: if mark.url.contains("{}") { template_home(&mark.url) } else { mark.url.clone() },
+                home: if mark.url.contains("{}") {
+                    template_home(&mark.url)
+                } else {
+                    mark.url.clone()
+                },
             };
             return Destination::Keyword(expand(&shortcut));
         }
@@ -498,7 +571,9 @@ impl Destination {
 fn valid_profile(name: &str) -> bool {
     !name.is_empty()
         && name.len() <= 64
-        && name.chars().all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
+        && name
+            .chars()
+            .all(|c| c.is_ascii_alphanumeric() || matches!(c, '-' | '_'))
 }
 
 /// Parse a site key's value: an action id, `{ role, name, nth }`, or an
@@ -514,7 +589,10 @@ fn parse_target(value: &toml::Value) -> Result<Target, String> {
                 Some(toml::Value::Integer(n)) if *n >= 1 => *n as usize,
                 Some(_) => return Err("nth counts from 1".into()),
             };
-            if let Some(other) = t.keys().find(|k| !matches!(k.as_str(), "role" | "name" | "nth")) {
+            if let Some(other) = t
+                .keys()
+                .find(|k| !matches!(k.as_str(), "role" | "name" | "nth"))
+            {
                 // No selectors and no script: a role and a name only.
                 return Err(format!("{other:?} is not role, name or nth"));
             }
@@ -546,7 +624,9 @@ fn parse_site(pattern: &str, table: &toml::Table, warn: &mut impl FnMut(String))
             ("images", toml::Value::Boolean(b)) => site.images = Some(*b),
             ("audio", toml::Value::Boolean(b)) => site.audio = Some(*b),
             ("fps", toml::Value::Integer(n)) if (1..=60).contains(n) => site.fps = Some(*n as u32),
-            ("width", toml::Value::Integer(n)) if (20..=1000).contains(n) => site.width = Some(*n as u16),
+            ("width", toml::Value::Integer(n)) if (20..=1000).contains(n) => {
+                site.width = Some(*n as u16)
+            }
             ("keyword", toml::Value::String(k)) if !k.contains(char::is_whitespace) => {
                 site.keyword = Some(k.clone())
             }
@@ -600,9 +680,9 @@ fn edit<T>(path: &Path, change: impl FnOnce(&mut toml_edit::DocumentMut) -> T) -
         Err(e) if e.kind() == io::ErrorKind::NotFound => String::new(),
         Err(e) => return Err(e),
     };
-    let mut doc: toml_edit::DocumentMut = text
-        .parse()
-        .map_err(|e: toml_edit::TomlError| io::Error::new(io::ErrorKind::InvalidData, e.to_string()))?;
+    let mut doc: toml_edit::DocumentMut = text.parse().map_err(|e: toml_edit::TomlError| {
+        io::Error::new(io::ErrorKind::InvalidData, e.to_string())
+    })?;
     let out = change(&mut doc);
     rich_intuituive::write_atomic(path, doc.to_string().as_bytes())?;
     Ok(out)
@@ -634,7 +714,12 @@ fn site_keys<'d>(doc: &'d mut toml_edit::DocumentMut, pattern: &str) -> &'d mut 
 /// Bind `keys` to `target` on the site `pattern`, in the config file at
 /// `path`, keeping everything else in it as it is. Returns what the key
 /// did on that site before, if anything.
-pub fn save_site_key(path: &Path, pattern: &str, keys: &str, target: &Target) -> io::Result<Option<String>> {
+pub fn save_site_key(
+    path: &Path,
+    pattern: &str,
+    keys: &str,
+    target: &Target,
+) -> io::Result<Option<String>> {
     edit(path, |doc| {
         let table = site_keys(doc, pattern);
         let mut value = target_value(target);
@@ -681,15 +766,24 @@ mod tests {
             Destination::Keyword("https://github.com/search?q=rs-rich+%26+co".into())
         );
         assert_eq!(go("gh"), Destination::Keyword("https://github.com".into()));
-        assert_eq!(go("crates serde"), Destination::Keyword("https://crates.io/search?q=serde".into()));
+        assert_eq!(
+            go("crates serde"),
+            Destination::Keyword("https://crates.io/search?q=serde".into())
+        );
     }
 
     #[test]
     fn the_address_bar_tries_an_address_then_a_keyword_then_a_search() {
         let config = Config::default();
         let go = |input: &str| config.destination(input, "about:blank", &[]);
-        assert_eq!(go("docs.rs/serde"), Destination::Url("https://docs.rs/serde".into()));
-        assert_eq!(go("https://gh.example"), Destination::Url("https://gh.example".into()));
+        assert_eq!(
+            go("docs.rs/serde"),
+            Destination::Url("https://docs.rs/serde".into())
+        );
+        assert_eq!(
+            go("https://gh.example"),
+            Destination::Url("https://gh.example".into())
+        );
         assert!(matches!(go("gh x"), Destination::Keyword(_)));
         assert_eq!(
             go("what is noctiluca"),
@@ -751,7 +845,11 @@ mod tests {
         assert_eq!(config.profile.as_deref(), Some("work"));
         assert_eq!(
             config.warnings,
-            ["colour: expected a table", "startup.zoom: unknown key", "[nonsense]: unknown table"]
+            [
+                "colour: expected a table",
+                "startup.zoom: unknown key",
+                "[nonsense]: unknown table"
+            ]
         );
         assert!(Config::parse("[startup").is_err());
     }
@@ -772,13 +870,22 @@ mod tests {
         )
         .unwrap();
         let view = |url: &str| config.site(url).and_then(|s| s.view);
-        assert_eq!(view("https://docs.example.com/api/x"), Some(View::Projection));
+        assert_eq!(
+            view("https://docs.example.com/api/x"),
+            Some(View::Projection)
+        );
         assert_eq!(view("https://docs.example.com/guide"), Some(View::Reader));
         assert_eq!(view("https://www.example.com/"), Some(View::Raster));
         assert_eq!(view("https://example.com/"), Some(View::Raster));
         assert_eq!(view("https://example.org/"), None);
-        assert_eq!(site_match("*.example.com", "https://evil-example.com/"), None);
-        assert_eq!(site_match("github.com", "https://GitHub.com/x"), Some((2, 10)));
+        assert_eq!(
+            site_match("*.example.com", "https://evil-example.com/"),
+            None
+        );
+        assert_eq!(
+            site_match("github.com", "https://GitHub.com/x"),
+            Some((2, 10))
+        );
     }
 
     #[test]
@@ -805,7 +912,9 @@ mod tests {
         );
         assert_eq!(config.warnings.len(), 2, "{:?}", config.warnings);
         assert_eq!(
-            config.destination("s noctiluca", "https://github.com/rs", &[]).url(),
+            config
+                .destination("s noctiluca", "https://github.com/rs", &[])
+                .url(),
             "https://html.duckduckgo.com/html/?q=site%3Agithub.com+noctiluca"
         );
     }
@@ -825,19 +934,28 @@ mod tests {
             name: "Next page".into(),
             nth: 1,
         };
-        assert_eq!(save_site_key(&path, "github.com", "]", &target).unwrap(), None);
-        let before = save_site_key(&path, "github.com", "n", &Target::Action("back".into())).unwrap();
+        assert_eq!(
+            save_site_key(&path, "github.com", "]", &target).unwrap(),
+            None
+        );
+        let before =
+            save_site_key(&path, "github.com", "n", &Target::Action("back".into())).unwrap();
         assert_eq!(before.as_deref(), Some("\"scroll.down\""));
         let text = std::fs::read_to_string(&path).unwrap();
         assert!(text.contains("# My browser.\n"), "{text}");
         assert!(text.contains("view = \"reader\" # always"), "{text}");
         assert!(text.contains("# next\n"), "{text}");
-        assert!(text.contains("\"]\" = { role = \"button\", name = \"Next page\" }"), "{text}");
+        assert!(
+            text.contains("\"]\" = { role = \"button\", name = \"Next page\" }"),
+            "{text}"
+        );
         let config = Config::parse(&text).unwrap();
         let site = config.site("https://github.com/").unwrap();
         assert_eq!(site.keys.len(), 2);
         assert!(remove_site_key(&path, "github.com", "]").unwrap());
-        assert!(!std::fs::read_to_string(&path).unwrap().contains("Next page"));
+        assert!(!std::fs::read_to_string(&path)
+            .unwrap()
+            .contains("Next page"));
         std::fs::remove_dir_all(&dir).ok();
     }
 }
