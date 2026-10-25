@@ -157,6 +157,26 @@ version.
 If you find yourself editing a faithful-port library module to add non-upstream
 behavior, stop and move it to `rich-ext`.
 
+**Performance work in the mirror is allowed, behaviour change is not.** The
+maintainer decided this on 2026-10-25. `crates/rich` may be made faster where
+its output stays byte-identical. That is proven by:
+
+- the golden fixtures;
+- the parity tables;
+- the differential fuzzer (`scripts/diff_rich.py`).
+
+A parity break still fails CI. Keep the upstream structure so syncs stay easy:
+
+- put fast paths and caches beside the ported code, not in place of it;
+- record each one in [docs/PORTING.md](docs/PORTING.md)'s "Performance
+  notes", so a sync knows to carry it over;
+- keep a change only when the benchmarks
+  (`crates/rich-intuituive/tests/paint_bench.rs` and
+  `tests/versus_ratatui.rs`) show a win.
+
+It is not a divergence, since behaviour is identical, so nothing goes in
+DIVERGENCES.
+
 **intuiTUIve's core components are generic.** `crates/rich-intuituive`'s
 always-compiled code holds only components other components can reuse: no
 domain types, names or parameters (files and paths, audio, one app, one
