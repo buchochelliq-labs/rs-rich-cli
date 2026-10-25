@@ -1821,14 +1821,8 @@ pub fn live_runs(value: &Value, base: &str) -> Vec<Run> {
             continue;
         }
         let text = part["t"].as_str().unwrap_or_default();
-        let text = if text == "\n"
-            || text
-                == "
-"
-        {
-            "
-"
-            .to_string()
+        let text = if text == "\n" {
+            "\n".to_string()
         } else {
             clean_inline(text)
         };

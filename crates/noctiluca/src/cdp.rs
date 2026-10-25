@@ -202,9 +202,19 @@ pub const PING_SCRIPT: &str = r#"(function start(tries) {
   };
   new MutationObserver(records => { if (sort(records)) liveChanged(); else changed(); })
     .observe(document, { subtree: true, childList: true, attributes: true, characterData: true });
+  // A picture loading inside a live log the tab has read changes only
+  // its entry.
+  const event = e => {
+    const box = e.type === 'load' && boxOf(e.target);
+    if (box && live.known.has(box)) {
+      const entry = entryOf(box, e.target);
+      if (entry) live.revs.set(entry, (live.revs.get(entry) || 0) + 1);
+      liveChanged();
+    } else changed();
+  };
   for (const type of ['input', 'change', 'load', 'toggle', 'play', 'playing', 'pause', 'ended',
                       'volumechange', 'seeked', 'loadedmetadata'])
-    document.addEventListener(type, changed, true);
+    document.addEventListener(type, event, true);
   let last = '';
   setInterval(() => {
     const fields = document.querySelectorAll('input,select,textarea');
