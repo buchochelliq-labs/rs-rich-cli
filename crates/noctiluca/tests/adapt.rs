@@ -76,7 +76,7 @@ fn navigation_collapses_to_a_row_on_a_narrow_terminal() {
     assert_eq!(on[0], "≡ Sections: News Sea Sky About");
     // The main column moves into the sidebar's columns.
     assert!(
-        on.iter().any(|l| l.starts_with("Before the pictures.")),
+        on.iter().any(|l| l.starts_with("Before the")),
         "{on:#?}"
     );
     let off = lines(&page, 72, Adapt::none());
@@ -92,12 +92,13 @@ fn navigation_collapses_to_a_row_on_a_narrow_terminal() {
 fn icon_buttons_read_as_their_name() {
     let page = page("adapt");
     let on = lines(&page, 72, only(Rule::IconButtons));
-    let row = &on[row_of(&on, "[ Share ]")];
-    assert!(row.contains("[ Settings ] [ Share ]"), "{row:?}");
+    // Narrow boxes: the compact faces, `[Share]`.
+    let row = &on[row_of(&on, "[Share]")];
+    assert!(row.contains("[Settings] [Share]"), "{row:?}");
     let off = lines(&page, 72, Adapt::none());
-    let row = &off[row_of(&off, "[ Share ]")];
+    let row = &off[row_of(&off, "[Share]")];
     assert!(
-        !row.contains("Settings") && row.contains("░░░░ [ Share ]"),
+        !row.contains("Settings") && row.contains("░░░░ [Share]"),
         "{row:?}"
     );
 }

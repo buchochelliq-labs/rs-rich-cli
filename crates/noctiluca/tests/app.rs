@@ -425,7 +425,7 @@ fn the_config_switches_a_rule_off() {
     let config = Config::parse("[adapt]\ncollapse-nav = false\n").unwrap();
     assert!(config.warnings.is_empty(), "{:?}", config.warnings);
     let mut driver = app(Box::new(engine()), projection(config, "adapt.html")).driver(72, 40);
-    wait_for(&mut driver, "Before the pictures.");
+    wait_for(&mut driver, "Before the");
     assert!(!screen(&driver).contains('≡'));
     driver.press("?");
     wait_for(&mut driver, "About Noctiluca");

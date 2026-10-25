@@ -1,0 +1,58 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Fixture News - Home</title>
+<!-- Written for Noctiluca's corpus: a news front page with pictures where
+     the page puts them, captions, a video with a poster, an animated GIF and
+     a grid of stories. Every picture is the fixture's own (media/make.py). -->
+<style>
+  body { font: 16px/1.4 sans-serif; margin: 0 8px; color: #111; }
+  header { display: flex; gap: 16px; align-items: baseline; border-bottom: 1px solid #ccc; }
+  header nav a { margin-right: 12px; }
+  .lead img, .lead video { display: block; width: 480px; height: 270px; object-fit: cover; }
+  .live { color: #c00; font-weight: bold; }
+  .stories { display: grid; grid-template-columns: repeat(auto-fill, minmax(240px, 1fr)); gap: 16px; }
+  .stories img { display: block; width: 240px; height: 135px; object-fit: cover; }
+  .meta { color: #666; font-size: 14px; }
+  figure { margin: 8px 0; }
+</style>
+<header>
+  <a href="news.html"><b>Fixture News</b></a>
+  <nav><a href="news.html">Home</a><a href="news.html">World</a><a href="news.html">Science</a><a href="news.html">Weather</a></nav>
+</header>
+<main>
+  <section class="lead">
+    <img src="media/harbour.jpg" alt="Boats at anchor in the harbour at night, with the town's lights on the water">
+    <p><span class="live">LIVE</span> <a href="article.html">The bay glows blue for a third night as the bloom spreads along the coast</a></p>
+    <p>Crowds gathered on the quay to watch the waves light up as they broke.</p>
+  </section>
+  <section class="lead">
+    <video src="media/motion.webm" poster="media/poster.jpg" width="480" height="270" controls aria-label="Watch: the bloom from the air"></video>
+    <p><a href="article.html">Watch: the bloom from the air</a></p>
+    <p class="meta">2 hrs ago · Science</p>
+  </section>
+  <h2>More stories</h2>
+  <div class="stories">
+    <article>
+      <figure><img src="media/market.jpg" alt="Fruit stalls under striped awnings"><figcaption>The Saturday market reopened.</figcaption></figure>
+      <h3><a href="article.html">Market traders return to the square</a></h3>
+      <p class="meta">3 hrs ago · Local</p>
+    </article>
+    <article>
+      <img src="media/storm.jpg" alt="Lightning over the fields">
+      <h3><a href="article.html">Storms expected across the north tonight</a></h3>
+      <p class="meta">5 hrs ago · Weather</p>
+    </article>
+    <article>
+      <img src="media/tide.gif" alt="Animated: the tide rolling in under the moon">
+      <h3><a href="article.html">Why the tides are higher this week</a></h3>
+      <p class="meta">8 hrs ago · Science</p>
+    </article>
+    <article>
+      <img src="media/field.jpg" alt="Green hills under a low sun">
+      <h3><a href="article.html">A warm end to the month</a></h3>
+      <p class="meta">1 day ago · Weather</p>
+    </article>
+  </div>
+</main>
+</html>

@@ -686,6 +686,45 @@ pub fn face_in(control: &Control, adapt: Adapt, cells: usize) -> String {
     face(control)
 }
 
+/// `first` then `spans` on one line of at most `width` cells, its last
+/// cell a `…` when cut.
+fn cut_line(first: &[Span], spans: &[Span], width: usize) -> Line {
+    let mut line = Line::default();
+    let mut used = 0;
+    let all: Vec<&Span> = first.iter().chain(spans).collect();
+    let total: usize = all.iter().map(|s| cell_len(&s.text)).sum();
+    for span in all {
+        let mut text = String::new();
+        for c in span.text.chars() {
+            let w = cell_len(&c.to_string());
+            if total > width && used + w + 1 > width {
+                text.push('…');
+                used = width;
+                break;
+            }
+            text.push(c);
+            used += w;
+        }
+        line.spans.push(Span {
+            text,
+            style: span.style.clone(),
+            control: span.control,
+        });
+        if used >= width {
+            break;
+        }
+    }
+    line
+}
+
+/// A face without the spaces inside its brackets: `[ Send ]` as `[Send]`.
+fn compact_face(face: &str) -> String {
+    match face.strip_prefix("[ ").and_then(|f| f.strip_suffix(" ]")) {
+        Some(name) => format!("[{name}]"),
+        None => face.to_string(),
+    }
+}
+
 /// A control's face in text: what it is and what it holds.
 pub fn face(control: &Control) -> String {
     let value = control.value.as_deref().unwrap_or("");
@@ -718,6 +757,8 @@ pub fn face(control: &Control) -> String {
 
 /// The most blank rows the projection keeps between two boxes.
 const MAX_GAP_ROWS: usize = 200;
+/// Pictures at least this many rows tall get an `Image:` line.
+const CAPTIONED_ROWS: usize = 3;
 /// The most rows a media region takes in the projection.
 const MAX_MEDIA_ROWS: usize = 200;
 
@@ -801,6 +842,8 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         /// A media region's index and its picture's rows (the lines after
         /// are its caption).
         media: Option<(usize, usize)>,
+        /// Kept to one line, cut with `…` (a control's face).
+        one_line: bool,
     }
     let mut items: Vec<Item> = Vec::new();
     let snap = |left: f64, right: f64| -> (usize, usize) {
@@ -828,6 +871,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             node,
             log: None,
             media: None,
+            one_line: false,
         }
     };
     let adapt = marks.adapt;
@@ -917,6 +961,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             node: region.node,
             log: None,
             media: None,
+            one_line: false,
         });
         if !side {
             shrunk.push((items.len() - 1, region.rect.height, x0, x1));
@@ -926,12 +971,23 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         if block.region.is_some_and(|r| collapsed[r]) {
             continue;
         }
-        let left = block.rect.x.min(if block.frame.width > 0.0 {
-            block.frame.x
+        // A block's text wraps within the box that holds it; but text that
+        // sits well inside that box (after an avatar in a flex row) keeps
+        // to where it is, and one line keeps to its own end, so what is
+        // beside it keeps its columns.
+        let framed = block.frame.width > 0.0;
+        let left = if framed && block.rect.x - block.frame.x <= 2.0 * cw {
+            block.rect.x.min(block.frame.x)
         } else {
             block.rect.x
-        });
-        let right = block.frame.right().max(block.rect.right());
+        };
+        let one_line = block.rect.height <= 1.5 * ch;
+        let right = if framed && !(one_line && block.frame.right() - block.rect.right() > 2.0 * cw)
+        {
+            block.frame.right().max(block.rect.right())
+        } else {
+            block.rect.right()
+        };
         match &block.kind {
             BlockKind::Table(table) => {
                 if !table.caption.is_empty() {
@@ -977,6 +1033,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     node: log.node,
                     log: Some(log.node),
                     media: None,
+                    one_line: false,
                 });
             }
             BlockKind::Media(index)
@@ -1025,8 +1082,13 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     })
                     .collect();
                 // A picture the page does not caption gets its alt text
-                // under it, as the PoC showed it.
-                if media.kind == MediaKind::Image && !media.captioned && !media.alt.is_empty() {
+                // under it, as the PoC showed it; not a small one (an
+                // avatar, an icon), whose alt text is noise.
+                if media.kind == MediaKind::Image
+                    && !media.captioned
+                    && !media.alt.is_empty()
+                    && rows >= CAPTIONED_ROWS
+                {
                     lines.extend(wrap(
                         &[Span::new(format!("Image: {}", media.alt), "italic")],
                         w.max(1),
@@ -1045,6 +1107,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     node: media.node,
                     log: None,
                     media: Some((*index, rows)),
+                    one_line: false,
                 });
                 if rows < full {
                     let (o0, o1) = snap(media.rect.x, media.rect.right());
@@ -1062,21 +1125,31 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     });
                 }
                 let style = if control.disabled { "dim" } else { "reverse" };
+                // A control's face is one line: a narrow box gets its
+                // compact form (`[Subscribe]`), cut with `…` if still too
+                // wide, rather than its name wrapped over rows.
                 let (c0, c1) = snap(control.rect.x, control.rect.right());
+                let room = (c1 - c0).max(3);
+                let mut text = face_in(control, adapt, c1 - c0);
+                if cell_len(&text) > room {
+                    text = compact_face(&text);
+                }
                 let span = Span {
-                    text: face_in(control, adapt, c1 - c0),
+                    text,
                     style: style.into(),
                     control: Some(*index),
                 };
                 one_row.push(items.len());
-                items.push(text_item(
+                let mut item = text_item(
                     control.node,
                     control.rect,
                     control.rect.x,
                     control.rect.right(),
                     vec![span],
                     first,
-                ));
+                );
+                item.one_line = true;
+                items.push(item);
             }
             BlockKind::Code => {
                 let (x0, x1) = snap(left, right);
@@ -1096,6 +1169,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     node: block.node,
                     log: None,
                     media: None,
+                    one_line: false,
                 });
             }
             kind => {
@@ -1233,27 +1307,8 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             item.x1 = needed.min(limit).max(item.x1);
         }
         item.lines = wrap(spans, item.x1 - item.x0, first, &[]);
-        if item.lines.len() > 1 && one_row.contains(&n) {
-            // A control's face is one row: cut, with an ellipsis.
-            let mut line = item.lines.swap_remove(0);
-            item.lines.clear();
-            if let Some(last) = line.spans.last_mut() {
-                last.text.push('…');
-            }
-            let width = item.x1 - item.x0;
-            while line.width() > width {
-                let Some(last) = line.spans.last_mut() else {
-                    break;
-                };
-                let mut chars: Vec<char> = last.text.chars().collect();
-                if chars.len() <= 1 {
-                    line.spans.pop();
-                    continue;
-                }
-                chars.remove(chars.len() - 2);
-                last.text = chars.into_iter().collect();
-            }
-            item.lines.push(line);
+        if item.one_line && item.lines.len() > 1 {
+            item.lines = vec![cut_line(first, spans, item.x1 - item.x0)];
         }
     }
     // Reading order: top, then left.

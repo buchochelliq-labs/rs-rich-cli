@@ -41,6 +41,9 @@ use crate::engine::{NodeId, PageSnapshot, Rect};
 pub const MAX_BLOCKS: usize = 20_000;
 /// At most this many characters of one text.
 const MAX_TEXT: usize = 8192;
+/// The gap, in CSS pixels, between two text boxes on one line that keeps
+/// a space between their texts: half a cell.
+const GAP: f64 = 4.0;
 /// At most this many options of one select.
 const MAX_OPTIONS: usize = 500;
 
@@ -977,6 +980,8 @@ struct Walker<'a> {
     page: Page,
     runs: Vec<Run>,
     rect: Option<Rect>,
+    /// The box of the last text in [`runs`](Self::runs).
+    last: Option<Rect>,
     marker: Option<String>,
     by_node: HashMap<NodeId, usize>,
     revisions: &'a mut Revisions,
@@ -987,6 +992,23 @@ struct Walker<'a> {
 impl Walker<'_> {
     fn push(&mut self, run: Run, rect: Option<Rect>) {
         if let Some(rect) = rect {
+            // Two boxes on one line with a gap between them (flex items,
+            // links spaced by margins) keep a space between their texts.
+            if let Some(last) = self.last {
+                let one_line = rect.y < last.bottom() - 2.0 && last.y < rect.bottom() - 2.0;
+                let ends = self
+                    .runs
+                    .last()
+                    .is_none_or(|r| r.text.ends_with(char::is_whitespace));
+                if one_line
+                    && rect.x - last.right() >= GAP
+                    && !ends
+                    && !run.text.starts_with(char::is_whitespace)
+                {
+                    self.runs.push(Run::plain(" "));
+                }
+            }
+            self.last = Some(rect);
             self.rect = Some(union(self.rect, rect));
         }
         match self.runs.last_mut() {
@@ -1009,6 +1031,7 @@ impl Walker<'_> {
     fn flush(&mut self, context: &Context) {
         let mut runs = std::mem::take(&mut self.runs);
         let rect = self.rect.take();
+        self.last = None;
         if !context.pre {
             tidy(&mut runs);
         }
@@ -1952,6 +1975,7 @@ pub fn build_with(
         },
         runs: Vec::new(),
         rect: None,
+        last: None,
         marker: None,
         by_node: HashMap::new(),
         revisions,

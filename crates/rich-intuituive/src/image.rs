@@ -389,7 +389,7 @@ impl ImageGraphics {
             return Some(graphic.clone());
         }
         let picture = tag.picture()?;
-        let escape = picture.encode_rows(tag.pixels, tag.cols, tag.rows, first, shown)?;
+        let escape = picture.encode_tag(tag, first, shown)?;
         if tag.pixels == Pixels::Kitty {
             let mut uploaded = self.uploaded.lock().unwrap_or_else(|e| e.into_inner());
             if !uploaded.contains(&tag.id) {
