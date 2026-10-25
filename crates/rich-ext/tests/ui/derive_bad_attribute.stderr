@@ -1,4 +1,4 @@
-error: invalid style: color parse error: "bodl" is not a valid color
+error: invalid style: style syntax error: unable to parse 'bodl' as color; 'bodl' is not a valid color
  --> tests/ui/derive_bad_attribute.rs:3:20
   |
 3 |     #[rich(style = "bodl")]
