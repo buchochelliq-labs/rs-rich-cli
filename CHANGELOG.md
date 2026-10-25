@@ -9,15 +9,29 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## 0.0.21 cohort — to be published
+### Versions: the 0.0.22 versions are open
 
-To be published from `main` by one `release.yml` run (tag
+- Every package moves one patch past the 0.0.21 cohort, as the
+  [0.0.22 plan](docs/plans/0.0.22.md) lists: core 0.0.12, macros 0.0.6,
+  plugin API 0.0.6, art 0.0.15, diagram 0.0.5, Mermaid 0.0.8, lumis 0.0.6,
+  ext 0.0.19, micro 0.0.8, record 0.0.10, interact 0.0.10, ratatui 0.0.7,
+  intuituive 0.0.7, embed 0.0.5, web 0.0.5, data 0.0.6, the CLI 0.0.22 and
+  `rs-rich` 0.0.10 on PyPI. Parity work changes core, and Cargo's 0.0.x
+  requirements are exact, so every crate that depends on it moves too.
+  `RELEASES.toml`, both lockfiles, the version tables, the CLI reference and
+  the intuiTUIve app template follow. `rs-rich-marketplace` joins at 0.0.1
+  with its own branch. `docs-versions.toml` pins 0.0.21's docs to the commit
+  before this one.
+
+## 0.0.21 cohort — published 2026-10-21
+
+Published on 2026-10-21 from `29084d4` by one `release.yml` run (tag
 `release-0.0.21`): core 0.0.11 / macros 0.0.5 / plugin API 0.0.5 /
 art 0.0.14 / diagram 0.0.4 / mermaid 0.0.7 / lumis 0.0.5 / ext 0.0.18 /
 micro 0.0.7 / record 0.0.9 / interact 0.0.9 / ratatui 0.0.6 /
 intuituive 0.0.6 / embed 0.0.4 / web 0.0.4 / data 0.0.5 / CLI 0.0.21, and
-`rs-rich` 0.0.9 on PyPI (`python-v0.0.9`, same commit). See
-[the release notes](docs/releases/0.0.21.md).
+`rs-rich` 0.0.9 on PyPI (`python-v0.0.9`, same commit) followed early on
+2026-10-22 (UTC). See [the release notes](docs/releases/0.0.21.md).
 
 ### Python: this cohort's Rust APIs, and rs-rich's identity on the Python site (rs-rich on PyPI)
 

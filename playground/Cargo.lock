@@ -464,7 +464,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anstyle-query",
  "fancy-regex 0.19.2",
@@ -476,7 +476,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ext"
-version = "0.0.18"
+version = "0.0.19"
 dependencies = [
  "fancy-regex 0.19.2",
  "libc",
@@ -492,7 +492,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-interact"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "crossterm",
  "fancy-regex 0.19.2",
@@ -506,7 +506,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-intuituive"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "kasuari",
  "rs-rich",
@@ -516,7 +516,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-plugin-api"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "inventory",
  "rs-rich",
@@ -524,7 +524,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-web"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "rs-rich-intuituive",
  "serde_json",

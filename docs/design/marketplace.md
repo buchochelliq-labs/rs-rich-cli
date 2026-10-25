@@ -1,8 +1,8 @@
 # The marketplace listing format (#232, #582)
 
 **Status:** the format, its schemas and its validator are in 0.0.21 (plugin
-API 0.0.5); the `rs-rich-marketplace` crate that reads them follows in
-0.0.21, and the `rich plugin` commands in 0.0.22. This note is the contract
+API 0.0.5); the `rs-rich-marketplace` crate that reads them and the
+`rich plugin` commands follow in 0.0.22. This note is the contract
 between the marketplace repository, the crate and the CLI. It is part of the
 1.0 promise ([the plan to 1.0.0](../plans/1.0.0.md#track-b-the-plugin-marketplace-232-463)).
 
@@ -338,15 +338,20 @@ pure-Rust verifier (such as `minisign-verify`). The signature is
 is `rs-rich-marketplace index serial=N`, and a client checks that `N` is the
 index's serial, so a signature cannot be moved to another index.
 
-**Keys.** Two Ed25519 key pairs, made offline by the maintainer
-([0.0.21 plan, decision 3](../plans/0.0.21.md#decisions)):
+**Keys.** Two Ed25519 key pairs, made by the maintainer with
+`minisign -G` ([0.0.22 plan, decision 1](../plans/0.0.22.md#decisions)):
 
-- **The main key** signs indexes. Its secret half stays offline; signing is
+- **The main key** signs indexes, in CI. Its secret half and its password
+  are secrets of a protected environment, `marketplace-signing`, in the
+  marketplace repository: it runs only from `main` and only after the
+  maintainer approves the run. When a listing pull request merges, the
+  workflow rebuilds `index.json`, bumps the serial and signs it:
   `minisign -S -s main.key -m index.json -t "rs-rich-marketplace index serial=42"`.
-- **The backup key** signs nothing but key rotations, and is stored apart
-  from the main key.
+- **The backup key** signs nothing but key rotations. It never enters
+  GitHub: it stays offline, apart from the main key, so a leaked main key
+  can be rotated out (below).
 
-Only the public halves leave the maintainer: they are compiled into
+Only the public halves enter either repository: they are compiled into
 `rs-rich-marketplace` (the trust root cannot come from the repository it
 verifies) and recorded in the marketplace repository as `keys/keys-1.json`.
 A client trusts the minisign key ids as well as the keys, so a signature

@@ -55,8 +55,8 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 
 ## New in 0.0.21
 
-[Release notes](docs/releases/0.0.21.md). Round 7's fixes, and what the
-demo clones and a consumer asked for:
+Published on 2026-10-21 ([release notes](docs/releases/0.0.21.md)). Round
+7's fixes, and what the demo clones and a consumer asked for:
 
 - **Widgets:** form controls (buttons, check boxes, switches, radios,
   sliders, select fields), a log pane fed by `tracing`, text editing with
@@ -93,23 +93,23 @@ in the release notes; the crates.io links show available packages.
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
 |---|---|
-| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.11` |
-| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.5` |
-| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.5` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.18` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.21` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.14` |
-| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.7` |
-| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.5` |
-| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.9` |
-| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.9` |
-| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.7` |
-| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.4` |
-| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.5` |
-| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.6` |
-| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.6` |
-| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.4` |
-| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.4` |
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.12` |
+| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.6` |
+| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.6` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.19` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.22` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.15` |
+| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.8` |
+| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.6` |
+| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.10` |
+| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.10` |
+| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.8` |
+| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.5` |
+| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.6` |
+| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.7` |
+| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.7` |
+| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.5` |
+| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.5` |
 <!-- END MANIFEST VERSIONS -->
 
 | Package | Role | Import / installed name |
@@ -176,9 +176,9 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 ## Releases
 
 Each release has notes in [`docs/releases/`](docs/releases/) (the newest
-published one is [0.0.20](docs/releases/0.0.20.md)), and
-[`CHANGELOG.md`](CHANGELOG.md) lists every change. 0.0.21 is in progress: see
-the [roadmap](docs/ROADMAP.md) and the [0.0.21 plan](docs/plans/0.0.21.md). The
+published one is [0.0.21](docs/releases/0.0.21.md)), and
+[`CHANGELOG.md`](CHANGELOG.md) lists every change. What comes next is in the
+[roadmap](docs/ROADMAP.md) and the [0.0.22 plan](docs/plans/0.0.22.md). The
 manifest table above describes this checkout; crates.io is the source for
 published versions.
 
