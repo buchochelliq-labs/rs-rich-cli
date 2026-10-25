@@ -44,6 +44,64 @@ Where this design differs from the PoC, it says so and says why.
 Never: DRM playback, extensions, getting past bot checks or sign-in walls,
 or changing browser policy.
 
+## Use cases, and how they drive the build
+
+Each phase is built for named use cases, against fixtures written for
+them, and is done when those use cases work on the fixtures.
+
+1. **Reading docs from the terminal.** Rust docs, MDN, Python, manuals.
+   Code blocks stay real text that can be copied.
+2. **The developer's web chores.** Pull requests and issues, CI logs,
+   cloud consoles, dashboards. These are mostly forms, tables and links;
+   charts show as media regions.
+3. **Remote and SSH work.** Internal dashboards, router admin pages,
+   Jupyter. The browser runs where the network is, and only text crosses
+   the link.
+4. **News and long reading.** Articles in reader mode, with their images
+   inline.
+5. **Media in a corner.** A video or a livestream beside your work, its
+   chat read-only.
+6. **Accessibility.** Pages arrive as their real accessibility tree: as
+   structure, not pixels.
+7. **Automation and agents.** A script or an AI agent drives real pages
+   through Noctiluca's page model, while a human watches the same session.
+8. **Testing and CI.** A page snapshot as text for diffs, accessibility
+   checks, and tapes of web flows.
+
+### Phases by the use cases they unlock
+
+| Phase | Unlocks | Fixtures and acceptance |
+|---|---|---|
+| 0.1, reader | 1, 4, 6 | A saved docs page, an article and a form page. Text can be selected, links followed by hint, the AX tree is complete, and no escape sequence leaks |
+| 0.2, forms and tables | 2, 3 | A login-style form, a table-heavy dashboard and a settings page. Widgets commit, conflicts are caught, tables scroll |
+| 0.3, layout projection | 2, 4 | Two-column and grid layouts stay side by side |
+| 0.4, media | 5 | The PoC's GIF and video pages. Frames stay within budget; play, pause and seek work; sound plays on the host |
+| 0.5, automation API | 7, 8 | A scripted flow on a fixture site, the same session viewable live, and a text-snapshot diff |
+
+[Phases](#phases) below holds each phase's full acceptance list. The
+reader phase is built against fixtures for use cases 1, 4 and 6 first.
+
+### How we stay honest
+
+- **Dogfood.** Use Noctiluca for this repo's own docs, pull requests and
+  CI. Each annoyance becomes an issue. Generic fixes go to intuiTUIve
+  core.
+- **A local site corpus.** Saved pages of real types, checked into the
+  fixtures, are the regression suite, the way the eleven clones serve
+  intuiTUIve. Check the licence of anything saved. Prefer pages written
+  for the corpus, or permissively licensed docs.
+- **A live-site checklist,** run on a networked machine at each phase:
+  BBC, YouTube search, Twitch, GitHub and MDN. Screenshots are filed as
+  evidence.
+- **One stated non-goal per phase,** in its section below.
+
+### The first public release
+
+Use cases 1 and 3: docs and dashboards from the terminal, over SSH too.
+They need only the reader and the forms and tables phases, and they are
+the clearest win over other terminal browsers. Media and automation come
+after.
+
 ## What was verified on this machine
 
 All of this ran in this session, on Linux with 4 CPUs, against Chrome for
@@ -633,7 +691,9 @@ test, four unit tests, and the `snapshot_cost` example.
 
 ### 0.1: reader
 
-Text, links, forms, images, history, in reader mode, in an intuiTUIve app.
+Use cases 1, 4 and 6. Text, links, first forms, images, history, in
+reader mode, in an intuiTUIve app. Fixtures: a saved docs page, an
+article and a form page.
 
 - Headings, paragraphs, lists, tables, quotes and code read in order;
   hidden text is left out.
@@ -654,7 +714,25 @@ Text, links, forms, images, history, in reader mode, in an intuiTUIve app.
   read, quit; the terminal's modes are restored.
 - A snapshot-cost budget on the fixtures, reported (not failed) in CI.
 
-### 0.2: layout projection and GIFs
+Non-goal: a faithful layout. The first projection may be rough; reader
+mode is one key away.
+
+### 0.2: forms and tables
+
+Use cases 2 and 3. Fixtures: a login-style form, a table-heavy dashboard
+and a settings page.
+
+- Every web widget commits through the guarded commit, and a value the
+  page changed under a draft is caught as a conflict, never overwritten.
+- Wide and long tables scroll in both directions with their headers kept.
+- A login-style form signs in to a fixture that checks the posted fields.
+
+Non-goal: custom widgets with poor accessibility. They read as what their
+AX tree says, and fall back to their region.
+
+### 0.3: layout projection and GIFs
+
+Use cases 2 and 4.
 
 - Flex, grid, columns and table fixtures project with columns side by
   side, checked as cell positions.
@@ -667,7 +745,11 @@ Text, links, forms, images, history, in reader mode, in an intuiTUIve app.
 - Per-region fallback: a canvas fixture shows as a region inside
   projected text.
 
-### 0.3: video and audio
+Non-goal: pixel-exact layout. Cells are not Chrome's glyphs.
+
+### 0.4: media: video and audio
+
+Use case 5.
 
 - The PoC's local `motion.webm`: play, pause, seek and mute through the
   actions; `currentTime` moves; frames change; the region's frame rate
@@ -678,6 +760,20 @@ Text, links, forms, images, history, in reader mode, in an intuiTUIve app.
   zero.
 - The about page shows the codec table, and the test checks it matches
   `canPlayType`.
+
+Non-goal: DRM playback, ever.
+
+### 0.5: automation API
+
+Use cases 7 and 8.
+
+- A script drives a flow on a fixture site through the page model and
+  the action registry, the same actions a person runs.
+- The same session is viewable live while the script runs.
+- A page snapshot as text, stable enough to diff in CI.
+
+Non-goal: getting past bot checks, CAPTCHAs or sign-in walls for a
+script.
 
 ### Never
 
