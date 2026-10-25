@@ -50,6 +50,7 @@ pub use crate::tree::{
     tree, tree_keyed, tree_lazy, tree_lazy_with, tree_reveal, tree_with, LazyItem, LazyTree,
     TreeItem, TreeKeys,
 };
+pub use crate::tree_table::{tree_table, TreeRow, TreeTableOptions};
 
 /// A table column: its title, how wide it is (cells, a percentage, a
 /// flexible share, or [`Size::Auto`]: as wide as its title and the cells

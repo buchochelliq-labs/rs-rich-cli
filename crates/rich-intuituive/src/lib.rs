@@ -162,6 +162,7 @@ mod text_area;
 pub mod text_edit;
 pub mod transport;
 mod tree;
+mod tree_table;
 mod treemap;
 #[cfg(feature = "vim")]
 pub mod vim;

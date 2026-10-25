@@ -207,3 +207,171 @@ fn a_hidden_pane_that_cannot_be_revealed_is_passed_by() {
     driver.press("f tab");
     driver.assert_focused("c");
 }
+
+// The tree table.
+
+mod tree_tables {
+    use std::collections::HashSet;
+
+    use intuituive::prelude::*;
+    use intuituive::widgets::{tree_table, Column, TreeRow, TreeTableOptions};
+    use intuituive::Driver;
+
+    fn rows(driver: &Driver) -> Vec<String> {
+        driver
+            .screen()
+            .plain()
+            .iter()
+            .map(|r| r.trim_end().to_string())
+            .collect()
+    }
+
+    /// A process tree; `r` reverses init's children, `x` drops sshd, and
+    /// the last row says which pid is selected.
+    fn procs(options: TreeTableOptions) -> App {
+        let options = std::cell::RefCell::new(Some(options));
+        App::new(move || {
+            let (reversed, dropped) = (signal(false), signal(false));
+            let selected = signal(None::<u32>);
+            let rows = move || {
+                let row = |pid: u32, name: &str| TreeRow::new(pid, [pid.to_string(), name.into()]);
+                let mut kids = vec![
+                    row(2, "sshd").children([row(4, "bash"), row(5, "vim")]),
+                    row(3, "cron"),
+                ];
+                if dropped.get() {
+                    kids.remove(0);
+                }
+                if reversed.get() {
+                    kids.reverse();
+                }
+                vec![row(1, "init").children(kids), row(9, "kthreadd")]
+            };
+            let columns = vec![
+                Column::new("PID", Size::Fixed(4)),
+                Column::new("Name", Size::Auto),
+            ];
+            let options = options.borrow_mut().take().unwrap_or_default();
+            column([
+                tree_table(columns, rows, selected, signal(HashSet::new()), options)
+                    .name("procs")
+                    .flex(1),
+                text!("{:?}", selected.get()).fixed(1),
+            ])
+            .on_key("r", move |_| reversed.update(|r| *r = !*r))
+            .on_key("x", move |_| dropped.set(true))
+        })
+    }
+
+    fn tree_column() -> TreeTableOptions {
+        TreeTableOptions::new().tree_column(1)
+    }
+
+    #[test]
+    fn rows_nest_with_guides_in_the_tree_column() {
+        let mut driver = procs(tree_column()).driver(24, 8);
+        driver.settle();
+        assert_eq!(
+            rows(&driver)[..7],
+            [
+                "PID  Name",
+                "1    init",
+                "2    ├─ sshd",
+                "4    │  ├─ bash",
+                "5    │  └─ vim",
+                "3    └─ cron",
+                "9    kthreadd",
+            ]
+        );
+        assert_eq!(rows(&driver)[7], "Some(1)");
+    }
+
+    #[test]
+    fn keys_open_close_and_move_through_the_tree() {
+        let mut driver = procs(tree_column()).driver(24, 8);
+        driver.press("down");
+        assert_eq!(rows(&driver)[7], "Some(2)");
+        // ← closes an open row.
+        driver.press("left");
+        assert_eq!(rows(&driver)[2], "2    ├─ + sshd");
+        assert_eq!(rows(&driver)[3], "3    └─ cron");
+        // ← again goes to the parent; → opens, → again to the first child.
+        driver.press("left");
+        assert_eq!(rows(&driver)[7], "Some(1)");
+        driver.press("down right");
+        assert_eq!(rows(&driver)[3], "4    │  ├─ bash");
+        driver.press("right");
+        assert_eq!(rows(&driver)[7], "Some(4)");
+        // Space on a leaf does nothing; on a parent it toggles.
+        driver.press("space up space");
+        assert_eq!(rows(&driver)[2], "2    ├─ + sshd");
+        driver.press("plus");
+        assert_eq!(rows(&driver)[3], "4    │  ├─ bash");
+        driver.press("minus");
+        assert_eq!(rows(&driver)[3], "3    └─ cron");
+    }
+
+    #[test]
+    fn the_selection_stays_on_its_row_through_a_reorder() {
+        let mut driver = procs(tree_column()).driver(24, 8);
+        driver.press("down down down");
+        assert_eq!(rows(&driver)[7], "Some(5)");
+        driver.press("r");
+        // cron first now: vim moved down a row, still selected.
+        assert_eq!(rows(&driver)[2], "3    ├─ cron");
+        assert_eq!(rows(&driver)[7], "Some(5)");
+        let styled = intuituive::testing::styled(&driver);
+        let line = styled.lines().nth(5).unwrap_or_default();
+        assert!(
+            line.contains("vim") && line.starts_with("[reverse]"),
+            "{styled}"
+        );
+    }
+
+    #[test]
+    fn a_row_that_goes_leaves_the_cursor_at_its_place() {
+        let mut driver = procs(tree_column()).driver(24, 8);
+        driver.press("down down");
+        assert_eq!(rows(&driver)[7], "Some(4)");
+        driver.press("x");
+        // bash went with sshd: the row at its place is kthreadd's.
+        assert_eq!(rows(&driver)[3], "9    kthreadd");
+        assert_eq!(rows(&driver)[7], "Some(9)");
+    }
+
+    #[test]
+    fn markers_and_guides_can_change() {
+        let options = tree_column()
+            .markers("▾ ", "▸ ")
+            .guides("  ", "  ", "  ", "  ");
+        let mut driver = procs(options).driver(24, 8);
+        driver.settle();
+        assert_eq!(rows(&driver)[1], "1    ▾ init");
+        assert_eq!(rows(&driver)[2], "2      ▾ sshd");
+        assert_eq!(rows(&driver)[3], "4        bash");
+        driver.press("down space");
+        assert_eq!(rows(&driver)[2], "2      ▸ sshd");
+    }
+
+    #[test]
+    fn rows_closed_from_outside_stay_closed_by_key() {
+        let app = App::new(|| {
+            let collapsed = signal(HashSet::from([2u32]));
+            let rows = || {
+                vec![TreeRow::new(1, ["a"])
+                    .children([TreeRow::new(2, ["b"]).children([TreeRow::new(3, ["c"])])])]
+            };
+            tree_table(
+                vec![Column::new("", Size::Auto)],
+                rows,
+                signal(None),
+                collapsed,
+                TreeTableOptions::new()
+                    .table(intuituive::widgets::TableOptions::default().header(false)),
+            )
+        });
+        let mut driver = app.driver(12, 3);
+        driver.settle();
+        assert_eq!(rows(&driver)[..2], ["a", "└─ + b"]);
+    }
+}
