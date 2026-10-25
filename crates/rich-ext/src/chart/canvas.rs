@@ -4,6 +4,9 @@
 /// cell, in Unicode's dot numbering.
 const DOT_BITS: [[u8; 4]; 2] = [[0x01, 0x02, 0x04, 0x40], [0x08, 0x10, 0x20, 0x80]];
 
+/// [`DotCanvas::layer`] of a cell no layer drew in.
+const NO_LAYER: u32 = u32::MAX;
+
 /// The longest side of a [`DotCanvas`], in cells.
 const MAX_SIDE: usize = u16::MAX as usize;
 
@@ -24,7 +27,9 @@ pub struct DotCanvas {
     width: usize,
     height: usize,
     bits: Vec<u8>,
-    layer: Vec<Option<usize>>,
+    /// The layer that last set a dot in each cell, [`NO_LAYER`] for none:
+    /// four bytes a cell, not an `Option<usize>`'s sixteen.
+    layer: Vec<u32>,
 }
 
 impl DotCanvas {
@@ -37,7 +42,7 @@ impl DotCanvas {
             width,
             height,
             bits: vec![0; width * height],
-            layer: vec![None; width * height],
+            layer: vec![NO_LAYER; width * height],
         }
     }
 
@@ -72,7 +77,9 @@ impl DotCanvas {
         }
         let cell = (y / 4) * self.width + x / 2;
         self.bits[cell] |= DOT_BITS[x % 2][y % 4];
-        self.layer[cell] = Some(layer);
+        self.layer[cell] = u32::try_from(layer)
+            .unwrap_or(NO_LAYER - 1)
+            .min(NO_LAYER - 1);
     }
 
     /// Set every dot on the straight line from `a` to `b` (Bresenham).
@@ -87,7 +94,8 @@ impl DotCanvas {
     pub fn cell(&self, col: usize, row: usize) -> (char, Option<usize>) {
         let i = row * self.width + col;
         let c = char::from_u32(0x2800 + u32::from(self.bits[i])).unwrap_or(' ');
-        (c, self.layer[i])
+        let layer = self.layer[i];
+        (c, (layer != NO_LAYER).then_some(layer as usize))
     }
 
     /// Whether a cell has any dot set.

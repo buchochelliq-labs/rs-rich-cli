@@ -302,6 +302,29 @@ impl Cell {
         Cell::char(' ', 1, StyleId::NONE)
     }
 
+    /// A single character, `width` columns wide: [`Cell::new`] of it.
+    #[inline]
+    pub(crate) fn from_char(c: char, width: u8, style: StyleId) -> Cell {
+        Cell::char(c, width, style)
+    }
+
+    /// The cell's text when it is one character, decoded from its bytes
+    /// without a UTF-8 check (they were written from a `char` or a `&str`).
+    #[inline]
+    pub(crate) fn single_char(&self) -> Option<char> {
+        let [b0, b1, b2, b3] = self.bytes.map(u32::from);
+        let code = match self.len {
+            1 => b0,
+            2 if b0 & 0xe0 == 0xc0 => (b0 & 0x1f) << 6 | (b1 & 0x3f),
+            3 if b0 & 0xf0 == 0xe0 => (b0 & 0x0f) << 12 | (b1 & 0x3f) << 6 | (b2 & 0x3f),
+            4 if b0 & 0xf8 == 0xf0 => {
+                (b0 & 0x07) << 18 | (b1 & 0x3f) << 12 | (b2 & 0x3f) << 6 | (b3 & 0x3f)
+            }
+            _ => return None,
+        };
+        char::from_u32(code)
+    }
+
     /// The grapheme the cell shows; empty for a continuation.
     pub fn text(&self) -> &str {
         if self.len == LONG {
@@ -315,6 +338,12 @@ impl Cell {
 
     pub fn is_continuation(&self) -> bool {
         self.width == 0
+    }
+
+    /// Whether the cell's text is empty (a wide character's second half).
+    #[inline]
+    pub(crate) fn is_empty_text(&self) -> bool {
+        self.len == 0
     }
 
     #[inline]
@@ -799,6 +828,122 @@ impl Screen {
         }
         self.scratch_spans = spans;
         self.scratch_ids = ids;
+    }
+
+    /// The fast path for a grid of cells, a chart's: `cells`, `width` a
+    /// row and `rows` rows, each empty (a space with no style) or a cell
+    /// whose style is an index into `ids`, the screen's style for it,
+    /// copied into `rect` as [`write_runs`](Self::write_runs) would write
+    /// the same text. Only a grid of single characters is taken (no
+    /// controls, zero-width marks or long graphemes, every wide character
+    /// followed by its empty second half); for any other nothing is
+    /// written and the result is false.
+    pub(crate) fn write_cell_grid(
+        &mut self,
+        rect: Rect,
+        width: usize,
+        rows: usize,
+        cells: &[Option<Cell>],
+        ids: &[StyleId],
+    ) -> bool {
+        let rect = rect.intersection(self.area());
+        if rect.is_empty() {
+            return true;
+        }
+        let rows = rows.min(rect.height as usize);
+        let cells = &cells[..rows * width];
+        for line in cells.chunks_exact(width.max(1)) {
+            let mut wide = false;
+            for (at, cell) in line.iter().enumerate() {
+                let Some(cell) = cell else {
+                    if wide {
+                        return false;
+                    }
+                    continue;
+                };
+                if cell.len == 0 {
+                    // The second half of a wide character, and only that.
+                    if !wide {
+                        return false;
+                    }
+                    wide = false;
+                    continue;
+                }
+                if wide {
+                    return false;
+                }
+                if cell.len == 1 {
+                    if !(b' '..=b'~').contains(&cell.bytes[0]) || cell.width != 1 {
+                        return false;
+                    }
+                    continue;
+                }
+                let Some(c) = cell.single_char() else {
+                    return false;
+                };
+                // Braille, blocks and box drawing: one column, no controls.
+                if matches!(c, '\u{2500}'..='\u{259f}' | '\u{2800}'..='\u{28ff}') && cell.width == 1
+                {
+                    continue;
+                }
+                let w = char_width(c);
+                if super::control_picture(c).is_some()
+                    || !matches!(w, 1 | 2)
+                    || c == '\u{200d}'
+                    || c == '\u{fe0f}'
+                    || usize::from(cell.width) != w
+                {
+                    return false;
+                }
+                wide = w == 2;
+                if wide && at + 1 == line.len() {
+                    return false;
+                }
+            }
+            if wide {
+                return false;
+            }
+        }
+        self.split_edges(rect);
+        let shown = width.min(rect.width as usize);
+        for row in 0..rect.height {
+            let y = rect.y + row;
+            let mut x = 0usize;
+            if (row as usize) < rows {
+                let line = &cells[row as usize * width..row as usize * width + shown];
+                while x < shown {
+                    let at = y as usize * self.width as usize + rect.x as usize + x;
+                    match line[x] {
+                        None => {
+                            self.cells[at] = Cell::blank();
+                            x += 1;
+                        }
+                        Some(cell) => {
+                            let id = ids[cell.style.index()];
+                            if cell.width == 2 {
+                                if x + 1 >= shown {
+                                    // No room for the second column.
+                                    self.cells[at] = Cell::char(' ', 1, id);
+                                    x += 1;
+                                    break;
+                                }
+                                self.cells[at] = cell.restyled(2, id);
+                                self.cells[at + 1] = Cell::new("", 0, id);
+                                x += 2;
+                            } else {
+                                self.cells[at] = cell.restyled(1, id);
+                                x += 1;
+                            }
+                        }
+                    }
+                }
+            }
+            for gx in x..rect.width as usize {
+                let at = y as usize * self.width as usize + rect.x as usize + gx;
+                self.cells[at] = Cell::blank();
+            }
+        }
+        true
     }
 
     /// One row of [`write_lines`](Self::write_lines) and
@@ -1360,8 +1505,6 @@ pub struct Painter {
     scratch: Sgr,
     /// True-colour pairs' parameters, per style id.
     rgb_codes: RgbCodes,
-    /// The pen's parameters from the last frame, kept for their buffers.
-    spare: Option<Sgr>,
     /// Painting an inline region below the cursor, with relative moves,
     /// rather than the whole screen with absolute ones.
     inline: bool,
@@ -1395,11 +1538,41 @@ struct Pen {
     at: Option<(u16, u16)>,
     style: Option<StyleId>,
     link: Option<String>,
-    /// The SGR parameters in force; `None` before the first.
-    codes: Option<Sgr>,
+    /// Whose SGR parameters are in force (unless `rgb` says).
+    held: Held,
     /// The true-colour pair in force, when the last style set was one:
     /// then it, not `codes`, says what the pen holds.
     rgb: Option<(Option<Rgb>, Option<Rgb>)>,
+}
+
+/// Whose SGR parameters a [`Pen`] holds: a style's, cached in the
+/// painter, so moving the pen copies nothing.
+#[derive(Clone, Copy, Default)]
+enum Held {
+    /// Not known: before the first.
+    #[default]
+    Unknown,
+    /// None: after a reset.
+    Reset,
+    /// The cached parameters of this style id.
+    Style(StyleId),
+}
+
+/// No parameters: what a reset leaves.
+static NO_SGR: Sgr = Sgr {
+    full: String::new(),
+    fg: String::new(),
+    bg: String::new(),
+    rest: String::new(),
+};
+
+/// The parameters `held` names, from `codes` (the painter's cache).
+fn held_codes(codes: &[Option<Sgr>], held: Held) -> Option<&Sgr> {
+    match held {
+        Held::Unknown => None,
+        Held::Reset => Some(&NO_SGR),
+        Held::Style(id) => codes.get(id.index()).and_then(Option::as_ref),
+    }
 }
 
 /// A style's SGR parameters, split so a change of colour alone can be sent
@@ -1528,7 +1701,6 @@ impl Painter {
             codes: Vec::new(),
             scratch: Sgr::default(),
             rgb_codes: RgbCodes::default(),
-            spare: None,
             inline: false,
             cursor: None,
             height: 0,
@@ -1888,11 +2060,10 @@ impl Painter {
         if pen.link.is_some() {
             out.push_str("\x1b]8;;\x1b\\");
         }
-        if pen.rgb.is_some() || pen.codes.as_ref().is_some_and(|c| !c.full.is_empty()) {
+        if pen.rgb.is_some()
+            || held_codes(&self.codes, pen.held).is_some_and(|c| !c.full.is_empty())
+        {
             out.push_str("\x1b[0m");
-        }
-        if let Some(codes) = pen.codes.take() {
-            self.spare = Some(codes);
         }
         self.stats.style_bytes += out.len() - before;
         let stats = &mut self.stats;
@@ -2113,7 +2284,7 @@ impl Painter {
     /// was sent moves with them.
     fn scroll_by(&mut self, shift: Shift, screen: &Screen, pen: &mut Pen, out: &mut String) {
         out.push_str("\x1b[0m");
-        pen.codes = Some(Sgr::default());
+        pen.held = Held::Reset;
         pen.rgb = None;
         pen.style = None;
         let whole = shift.top == 0 && shift.bottom == screen.height;
@@ -2233,18 +2404,27 @@ impl Painter {
             let before = out.len();
             self.set_pen(screen, cell.style, pen, out);
             self.stats.style_bytes += out.len() - before;
-            let text = cell.text();
-            out.push_str(text);
-            self.stats.text_bytes += text.len();
+            // An emoji with a selector or joiners is a width terminals
+            // disagree on: where the cursor ended up is not known, so the
+            // next write moves there.
+            let several = match cell.single_char() {
+                Some(c) => {
+                    out.push(c);
+                    self.stats.text_bytes += c.len_utf8();
+                    c == '\u{200d}' || c == '\u{fe0f}'
+                }
+                None => {
+                    let text = cell.text();
+                    out.push_str(text);
+                    self.stats.text_bytes += text.len();
+                    cell.len == LONG || text.contains(['\u{200d}', '\u{fe0f}'])
+                }
+            };
             let next = x0 + cell.width.max(1) as u16;
             let columns = usize::from(next - x0);
             self.stats.compared += usize::from(next - x);
             self.stats.written += columns;
             self.note_written(x0, y, next);
-            // An emoji with a selector or joiners is a width terminals
-            // disagree on: where the cursor ended up is not known, so the
-            // next write moves there.
-            let several = cell.len == LONG || text.contains(['\u{200d}', '\u{fe0f}']);
             pen.at = (!several).then_some((next, y));
             x = next;
         }
@@ -2388,34 +2568,28 @@ impl Painter {
                 Some(old) => rgb_delta(old, pair, self.rgb_codes.get(style, pair), out),
                 None => {
                     self.scratch.set_rgb(pair.0, pair.1);
-                    if pen.codes.as_ref() != Some(&self.scratch) {
-                        self.scratch.write_from(pen.codes.as_ref(), out);
-                    }
+                    self.scratch
+                        .write_from(held_codes(&self.codes, pen.held), out);
                 }
             }
             pen.rgb = Some(pair);
             pen.style = Some(style);
             return;
         }
-        if let Some((fg, bg)) = pen.rgb.take() {
-            // What the pen holds, as parameters again.
-            self.scratch.set_rgb(fg, bg);
-            let held = pen
-                .codes
-                .get_or_insert_with(|| self.spare.take().unwrap_or_default());
-            held.clone_from(&self.scratch);
-        }
         self.sgr(screen, style);
         let codes = self.codes[style.index()].as_ref().expect("cached above");
-        // Styles that differ only in their link share colours: no SGR.
-        if pen.codes.as_ref() != Some(codes) {
-            codes.write_from(pen.codes.as_ref(), out);
-            // The last frame's buffers, rather than new ones.
-            let held = pen
-                .codes
-                .get_or_insert_with(|| self.spare.take().unwrap_or_default());
-            held.clone_from(codes);
-        }
+        let from = match pen.rgb.take() {
+            Some((fg, bg)) => {
+                // What the pen holds, as parameters again.
+                self.scratch.set_rgb(fg, bg);
+                Some(&self.scratch)
+            }
+            None => held_codes(&self.codes, pen.held),
+        };
+        // Styles that differ only in their link share colours: no SGR
+        // (`write_from` writes nothing for parameters already in force).
+        codes.write_from(from, out);
+        pen.held = Held::Style(style);
         pen.style = Some(style);
     }
 }

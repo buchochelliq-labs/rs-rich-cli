@@ -5,7 +5,7 @@
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, HorizontalAlign, Renderable, Segment, Style};
 
-use super::plot_canvas::{is_ascii, raster, spec_style, CellGrid, Marker, Op, View};
+use super::plot_canvas::{is_ascii, raster_into, spec_style, CellGrid, Marker, Op, View};
 use super::{cell_units, cells, lines_to_segments, series_key, Scale, ValueFormat};
 use crate::fidelity::ascii_text;
 
@@ -1082,8 +1082,7 @@ impl Chart {
             marker,
             ascii,
         };
-        let plot = raster(&self.ops(&x, &y), &view, console);
-        grid.blit(&plot, 0, gx);
+        raster_into(&self.ops(&x, &y), &view, console, &mut grid, gx);
 
         // Titles.
         let x_title = x.title.as_ref().map(|t| (t, cells(t)));
@@ -1194,7 +1193,9 @@ impl Chart {
         let (left, right) = (x.scale.min(), x.scale.max());
         let (bottom, top) = (y.scale.min(), y.scale.max());
         let (y_spec, y_marker) = lines(&self.y_axis);
+        let y_spec: super::plot_canvas::Spec = y_spec.into();
         let (x_spec, x_marker) = lines(&self.x_axis);
+        let x_spec: super::plot_canvas::Spec = x_spec.into();
         let across = y.grid(&self.y_axis).into_iter().map(|at| {
             let line = Op::Line((left, at), (right, at), y_spec.clone());
             (line, y_marker)
@@ -1219,7 +1220,7 @@ impl Chart {
             if nth > 0 && self.layering == Layering::PerDataset {
                 ops.push(Op::Layer);
             }
-            let style = self.dataset_spec(index);
+            let style: super::plot_canvas::Spec = self.dataset_spec(index).into();
             let mapped: Vec<Option<(f64, f64)>> = dataset
                 .points
                 .iter()
