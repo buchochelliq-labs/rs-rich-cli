@@ -79,20 +79,8 @@ fn table_for(requested: &str) -> &'static [(u32, u32, u8)] {
 
 /// The number of terminal cells `text` occupies. Port of `cell_len`.
 pub fn cell_len(text: &str) -> usize {
-    // ASCII: one cell for each printable character, none for the controls
-    // (NUL and DEL included), in every table. Upstream's own shortcut is
-    // `_is_single_cell_widths`, `len(text)` for text of single-cell
-    // characters; this one also counts past controls without the table
-    // (docs/PORTING.md, "Performance notes"; pinned by
-    // `ascii_cell_len_matches_the_table`).
-    if text.is_ascii() {
-        return text.bytes().filter(|b| (b' '..=b'~').contains(b)).count();
-    }
-    // Fast path, matching upstream's: without a zero-width joiner or a
-    // variation selector nothing can change a character's measured width, so
-    // the sum of the per-character widths is the answer.
-    if !text.contains(ZERO_WIDTH_JOINER) && !text.contains(VARIATION_SELECTOR_16) {
-        return text.chars().map(char_cell_width).sum();
+    if let Some(width) = unjoined_cell_len(text) {
+        return width;
     }
 
     // Port of upstream `cells._cell_len`'s cluster pass. Two rules matter:
@@ -123,6 +111,33 @@ pub fn cell_len(text: &str) -> usize {
         index += 1;
     }
     total
+}
+
+/// [`cell_len`] of text with no zero-width joiner or variation selector
+/// 16, which is the sum of its characters' widths; `None` when it has
+/// either, so only the cluster pass can measure it. Upstream's own fast
+/// path, taken in one pass: it measures as it looks for the two
+/// characters, rather than searching for each and then measuring
+/// (docs/PORTING.md, "Performance notes").
+///
+/// ASCII text is one cell for each printable character, none for the
+/// controls (NUL and DEL included), in every table. Upstream's shortcut is
+/// `_is_single_cell_widths`, `len(text)` for text of single-cell
+/// characters; this one also counts past controls without the table
+/// (pinned by `ascii_cell_len_matches_the_table`).
+#[inline]
+pub(crate) fn unjoined_cell_len(text: &str) -> Option<usize> {
+    if text.is_ascii() {
+        return Some(text.bytes().filter(|b| (b' '..=b'~').contains(b)).count());
+    }
+    let mut total = 0;
+    for c in text.chars() {
+        if c == ZERO_WIDTH_JOINER || c == VARIATION_SELECTOR_16 {
+            return None;
+        }
+        total += char_cell_width(c);
+    }
+    Some(total)
 }
 
 /// Zero-width joiner: binds emoji into a single cluster.

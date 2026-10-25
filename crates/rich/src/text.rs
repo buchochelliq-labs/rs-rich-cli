@@ -1798,15 +1798,11 @@ fn truncate_line(line: Vec<Segment>, width: usize, overflow: Overflow) -> Vec<Se
     // no joiner or variation selector in it, no grapheme can span a segment
     // boundary, so the segments' widths add up to the whole line's
     // (docs/PORTING.md, "Performance notes").
-    if !line
+    let unjoined: Option<usize> = line
         .iter()
-        .any(|segment| segment.text.contains(['\u{200d}', '\u{fe0f}']))
-        && line
-            .iter()
-            .map(|segment| cell_len(&segment.text))
-            .sum::<usize>()
-            <= width
-    {
+        .map(|segment| crate::cells::unjoined_cell_len(&segment.text))
+        .sum();
+    if unjoined.is_some_and(|length| length <= width) {
         return line;
     }
     // Measured and cut over the WHOLE line, exactly as upstream's `Text.truncate`
