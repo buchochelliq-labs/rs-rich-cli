@@ -14,7 +14,7 @@ use rich_embed::PageState;
 use rich_intuituive::interact::keymap::{try_keys, Keymap};
 use rich_intuituive::interact::{Key, KeyCode};
 use rich_intuituive::prelude::*;
-use rich_intuituive::{image_bytes_of, image_graphics, spawn_stream, ImageView, Pixels};
+use rich_intuituive::{image_bytes_of, image_graphics, spawn_stream, Action, ImageView, Pixels};
 
 use crate::actions::{self, keys_label, ACTIONS};
 use crate::bookmarks::{Bookmark, Bookmarks};
@@ -117,13 +117,15 @@ impl Browser {
     pub fn refresh_controls(&self) {
         let page = self.page.with_untracked(Clone::clone);
         let Some(page) = page else { return };
-        self.controls.with_untracked(|all| {
-            for (node, web) in all {
-                if let Some(control) = page.control(*node) {
-                    web.sync(control);
-                }
+        // Out of the signal first: a widget's write can reach it.
+        let all: Vec<(NodeId, Rc<WebControl>)> = self
+            .controls
+            .with_untracked(|all| all.iter().map(|(n, w)| (*n, w.clone())).collect());
+        for (node, web) in all {
+            if let Some(control) = page.control(node) {
+                web.sync(&page, control);
             }
-        });
+        }
     }
 
     fn url(&self) -> String {
@@ -612,102 +614,57 @@ fn chooser(
     });
 }
 
-/// The F1 overlay: every action of the registry with its keys and, when
-/// it cannot run now, why; then this site's keys, marked as the site's.
-/// It is read again while open, so it follows the page.
-pub fn overlay_entries(b: Browser) -> Vec<(Entry, Option<OverlayItem>)> {
+/// The F1 overlay's rows: this site's keys first, marked as the site's,
+/// then every action of the registry, each with its keys and, when it
+/// cannot run now, why. It reads signals, so the overlay (intuiTUIve's
+/// live `action_overlay`, C4) follows the page while open.
+pub fn overlay_actions(b: Browser) -> Vec<Action> {
     let keymap = b.keymap.get();
     let mut out = Vec::new();
     if let Some(site) = b.site() {
-        out.push((
-            Entry {
-                text: format!("[bold]site {}[/]", markup(&site.pattern)),
-                unavailable: None,
-            },
-            None,
-        ));
-        for key in &site.keys {
-            out.push((
-                Entry {
-                    text: format!(
-                        "{:>14}  {}  [cyan]\\[site {}][/]",
-                        markup(&key.keys),
-                        markup(&key.target.describe()),
-                        markup(&site.pattern)
-                    ),
-                    unavailable: target_availability(b, &key.target).err(),
-                },
-                Some(OverlayItem::Site(key.target.clone())),
-            ));
+        for (n, key) in site.keys.iter().enumerate() {
+            out.push(Action {
+                id: format!("site:{n}"),
+                label: format!("{} [site {}]", key.target.describe(), site.pattern),
+                keys: try_keys(&key.keys).unwrap_or_default(),
+                unavailable: target_availability(b, &key.target).err(),
+            });
         }
     }
-    let mut section = "";
     for action in ACTIONS {
-        if action.section != section {
-            section = action.section;
-            out.push((
-                Entry {
-                    text: format!("[bold]{section}[/]"),
-                    unavailable: None,
-                },
-                None,
-            ));
-        }
-        let keys = keys_label(&keymap, action.id);
-        out.push((
-            Entry {
-                text: format!("{:>14}  {}", markup(&keys), markup(action.label)),
-                unavailable: availability(b, action.id).err(),
-            },
-            Some(OverlayItem::Action(action.id)),
-        ));
+        let keys = keymap
+            .bindings()
+            .into_iter()
+            .find(|binding| binding.action == action.id)
+            .map(|binding| binding.keys)
+            .unwrap_or_default();
+        out.push(Action {
+            id: action.id.to_string(),
+            label: action.label.to_string(),
+            keys,
+            unavailable: availability(b, action.id).err(),
+        });
     }
     out
 }
 
-/// What a row of the overlay runs.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum OverlayItem {
-    Action(&'static str),
-    Site(Target),
-}
-
 fn overlay(b: Browser, cx: &mut Ctx) {
-    let items: Rc<dyn Fn() -> Vec<Entry>> =
-        Rc::new(move || overlay_entries(b).into_iter().map(|(e, _)| e).collect());
-    let choose: Choose = Rc::new(move |i, cx| {
-        let item = overlay_entries(b)
-            .into_iter()
-            .nth(i)
-            .and_then(|(_, item)| item);
-        cx.pop();
-        match item {
-            // Checked again as it runs: it may have stopped applying.
-            Some(OverlayItem::Action(id)) => run(b, id, cx),
-            Some(OverlayItem::Site(target)) => run_target(b, &target, cx),
-            None => {}
-        }
-    });
-    let bind: Choose = Rc::new(move |i, cx| {
-        let item = overlay_entries(b)
-            .into_iter()
-            .nth(i)
-            .and_then(|(_, item)| item);
-        if let Some(OverlayItem::Action(id)) = item {
-            cx.pop();
-            if let Err(why) = availability(b, "site.bind") {
-                cx.toast(format!("[yellow]{}[/]", markup(&why)));
-                return;
+    cx.action_palette(
+        move || overlay_actions(b),
+        move |id, cx| match id
+            .strip_prefix("site:")
+            .and_then(|n| n.parse::<usize>().ok())
+        {
+            Some(n) => {
+                if let Some(target) = b
+                    .site()
+                    .and_then(|s| s.keys.get(n).map(|k| k.target.clone()))
+                {
+                    run_target(b, &target, cx);
+                }
             }
-            capture_key(b, Target::Action(id.to_string()), None, cx);
-        }
-    });
-    chooser(
-        "Actions",
-        "Enter runs · b binds a key to it on this site · Esc closes",
-        items,
-        vec![("enter", choose), ("b", bind)],
-        cx,
+            None => run(b, id, cx),
+        },
     );
 }
 

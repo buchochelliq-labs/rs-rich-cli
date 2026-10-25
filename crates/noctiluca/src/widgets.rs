@@ -19,7 +19,10 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 
 use rich_intuituive::prelude::*;
-use rich_intuituive::{button, checkbox, radio, select_field, slider};
+use rich_intuituive::{
+    button_of, checkbox_of, radio_keyed, select_field_keyed, slider, switch_of, CheckState,
+    SelectOption,
+};
 
 use crate::app::Browser;
 use crate::clean::markup;
@@ -28,26 +31,42 @@ use crate::engine::NodeId;
 use crate::model::{Check, Control, Page, Role};
 use crate::tab::{describe, Intent, Refusal};
 
-// The stock widgets, one function each: where C1 to C3 plug in.
+// The stock widgets, one function each: intuiTUIve's controls with live
+// labels (C1), the three-state check box (C2) and keyed options (C3).
 
-/// A button whose label is fixed when it is made (C1 makes it live).
-fn stock_button(label: String, on_press: impl FnMut(&mut Ctx) + 'static) -> Node {
-    button(label, on_press)
+/// A button whose label follows the page's name for it.
+fn stock_button(
+    label: impl Fn() -> String + 'static,
+    on_press: impl FnMut(&mut Ctx) + 'static,
+) -> Node {
+    button_of(label, on_press)
 }
 
-/// A two-state check box (C2 adds the third, mixed, state).
-fn stock_checkbox(label: String, on: Signal<bool>) -> Node {
-    checkbox(label, on)
+/// A check box with the page's three states: off, on, mixed.
+fn stock_checkbox(label: impl Fn() -> String + 'static, state: Signal<CheckState>) -> Node {
+    checkbox_of(label, state)
 }
 
-/// Radio buttons by index (C3 keys them).
-fn stock_radio(options: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) -> Node {
-    radio(options, selected)
+fn stock_switch(label: impl Fn() -> String + 'static, on: Signal<bool>) -> Node {
+    switch_of(label, on)
 }
 
-/// A select by index, with no per-option availability (C3 adds both).
-fn stock_select(options: impl Fn() -> Vec<String> + 'static, selected: Signal<usize>) -> Node {
-    select_field(options, selected)
+/// Radio buttons keyed by their own nodes.
+fn stock_radio(
+    options: impl Fn() -> Vec<SelectOption<NodeId>> + 'static,
+    selected: Signal<Option<NodeId>>,
+) -> Node {
+    radio_keyed(options, selected)
+}
+
+/// A select keyed by its options' own nodes, each with its availability:
+/// two options with one value stay apart, and a disabled one cannot be
+/// chosen in any way.
+fn stock_select(
+    options: impl Fn() -> Vec<SelectOption<NodeId>> + 'static,
+    selected: Signal<Option<NodeId>>,
+) -> Node {
+    select_field_keyed(options, selected)
 }
 
 fn stock_slider(value: Signal<f64>, range: std::ops::RangeInclusive<f64>, step: f64) -> Node {
@@ -63,8 +82,12 @@ fn stock_input(text: Signal<String>) -> Node {
 pub struct WebControl {
     pub node: NodeId,
     pub text: Signal<String>,
+    pub check: Signal<CheckState>,
     pub on: Signal<bool>,
-    pub index: Signal<usize>,
+    /// The chosen option of a select, or radio of a group, by its node.
+    pub key: Signal<Option<NodeId>>,
+    /// A radio group's radios, by node.
+    pub group: RefCell<Vec<NodeId>>,
     pub number: Signal<f64>,
     pub draft: RefCell<DraftField<String>>,
     /// The draft's state, for the line beside the field.
@@ -82,8 +105,10 @@ impl WebControl {
         WebControl {
             node: control.node,
             text: signal(value.clone()),
+            check: signal(check_state(control.checked)),
             on: signal(control.checked == Some(Check::On)),
-            index: signal(control.options.iter().position(|o| o.selected).unwrap_or(0)),
+            key: signal(control.options.iter().find(|o| o.selected).map(|o| o.key)),
+            group: RefCell::new(Vec::new()),
             number: signal(value.parse().unwrap_or(0.0)),
             draft: RefCell::new(DraftField::new(value, control.state_revision)),
             status: signal(String::new()),
@@ -93,7 +118,7 @@ impl WebControl {
     }
 
     /// Follow the page's reading of the control.
-    pub fn sync(&self, control: &Control) {
+    pub fn sync(&self, page: &Page, control: &Control) {
         if control.role.is_text() {
             let value = control.value.clone().unwrap_or_default();
             let mut draft = self.draft.borrow_mut();
@@ -109,14 +134,25 @@ impl WebControl {
         if self.pending.get() {
             return;
         }
+        let state = check_state(control.checked);
+        if self.check.get_untracked() != state {
+            self.check.set(state);
+        }
         let checked = control.checked == Some(Check::On);
         if self.on.get_untracked() != checked {
             self.on.set(checked);
         }
-        if let Some(i) = control.options.iter().position(|o| o.selected) {
-            if self.index.get_untracked() != i {
-                self.index.set(i);
-            }
+        let group = self.group.borrow().clone();
+        let key = if group.is_empty() {
+            control.options.iter().find(|o| o.selected).map(|o| o.key)
+        } else {
+            group.iter().copied().find(|n| {
+                page.control(*n)
+                    .is_some_and(|c| c.checked == Some(Check::On))
+            })
+        };
+        if self.key.get_untracked() != key {
+            self.key.set(key);
         }
         if control.role == Role::Slider {
             if let Some(n) = control.value.as_deref().and_then(|v| v.parse::<f64>().ok()) {
@@ -125,6 +161,15 @@ impl WebControl {
                 }
             }
         }
+    }
+}
+
+/// The page's check state as the widget's.
+fn check_state(checked: Option<Check>) -> CheckState {
+    match checked {
+        Some(Check::On) => CheckState::On,
+        Some(Check::Mixed) => CheckState::Mixed,
+        _ => CheckState::Off,
     }
 }
 
@@ -185,10 +230,17 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
     let node = match control.role {
         Role::Button | Role::Tab | Role::MenuItem | Role::Link => {
             let web2 = web.clone();
-            let face = if name.is_empty() {
-                "button".into()
-            } else {
-                name.clone()
+            let face = move || {
+                let name = browser.page.with(|p| {
+                    control_of(p, first)
+                        .map(|c| markup(&c.name))
+                        .unwrap_or_default()
+                });
+                if name.is_empty() {
+                    "button".to_string()
+                } else {
+                    name
+                }
             };
             let button = mark(
                 &web,
@@ -201,34 +253,50 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
             row([button, label("").flex(1)])
         }
         Role::CheckBox | Role::Switch => {
-            let label = if control.checked == Some(Check::Mixed) {
-                // C2 brings the third state; until then it is said.
-                format!("{name} [dim](mixed)[/]")
-            } else {
-                name.clone()
+            let label = move || {
+                browser.page.with(|p| {
+                    control_of(p, first)
+                        .map(|c| markup(&c.name))
+                        .unwrap_or_default()
+                })
             };
             let web2 = web.clone();
-            on_write(web.on, move |on, cx| {
-                let now = browser.page.with_untracked(|p| control_of(p, first));
-                if now.is_some_and(|c| (c.checked == Some(Check::On)) != on) && !web2.pending.get()
-                {
-                    act(browser, &web2, first, Intent::Click, cx);
-                }
-            });
-            mark(&web, stock_checkbox(label, web.on)).disabled_when(disabled)
+            if control.role == Role::Switch {
+                on_write(web.on, move |on, cx| {
+                    let now = browser.page.with_untracked(|p| control_of(p, first));
+                    if now.is_some_and(|c| (c.checked == Some(Check::On)) != on)
+                        && !web2.pending.get()
+                    {
+                        act(browser, &web2, first, Intent::Click, cx);
+                    }
+                });
+                mark(&web, stock_switch(label, web.on)).disabled_when(disabled)
+            } else {
+                on_write(web.check, move |state, cx| {
+                    let now = browser.page.with_untracked(|p| control_of(p, first));
+                    // A click on a mixed box ticks it, in the page as here.
+                    if now.is_some_and(|c| check_state(c.checked) != state) && !web2.pending.get() {
+                        act(browser, &web2, first, Intent::Click, cx);
+                    }
+                });
+                mark(&web, stock_checkbox(label, web.check)).disabled_when(disabled)
+            }
         }
         Role::Radio => {
             let group = nodes.clone();
+            web.group.replace(group.clone());
             let options = {
                 let group = group.clone();
                 move || {
                     browser.page.with(|p| {
                         group
                             .iter()
-                            .map(|n| {
-                                control_of(p, *n)
-                                    .map(|c| markup(&c.name))
-                                    .unwrap_or_default()
+                            .filter_map(|n| control_of(p, *n))
+                            .map(|c| SelectOption {
+                                key: c.node,
+                                label: markup(&c.name),
+                                enabled: !c.disabled,
+                                reason: c.disabled.then(|| "disabled".to_string()),
                             })
                             .collect()
                     })
@@ -236,14 +304,12 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
             };
             let checked = group
                 .iter()
-                .position(|n| control_of(&page, *n).is_some_and(|c| c.checked == Some(Check::On)))
-                .unwrap_or(0);
-            web.index.set(checked);
+                .copied()
+                .find(|n| control_of(&page, *n).is_some_and(|c| c.checked == Some(Check::On)));
+            web.key.set(checked);
             let web2 = web.clone();
-            on_write(web.index, move |i, cx| {
-                let Some(target) = group.get(i).copied() else {
-                    return;
-                };
+            on_write(web.key, move |key, cx| {
+                let Some(target) = key else { return };
                 let on = browser.page.with_untracked(|p| {
                     control_of(p, target).is_some_and(|c| c.checked == Some(Check::On))
                 });
@@ -252,7 +318,7 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
                 }
             });
             let label = control.group.clone().unwrap_or_default();
-            mark(&web, stock_radio(options, web.index))
+            mark(&web, stock_radio(options, web.key))
                 .label(&label)
                 .disabled_when(disabled)
         }
@@ -263,12 +329,11 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
                         .map(|c| {
                             c.options
                                 .iter()
-                                .map(|o| {
-                                    if o.disabled {
-                                        format!("{} [dim](unavailable)[/]", markup(&o.label))
-                                    } else {
-                                        markup(&o.label)
-                                    }
+                                .map(|o| SelectOption {
+                                    key: o.key,
+                                    label: markup(&o.label),
+                                    enabled: !o.disabled,
+                                    reason: o.disabled.then(|| "disabled on the page".to_string()),
                                 })
                                 .collect()
                         })
@@ -276,24 +341,18 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
                 })
             };
             let web2 = web.clone();
-            on_write(web.index, move |i, cx| {
+            on_write(web.key, move |key, cx| {
+                let Some(key) = key else { return };
                 let Some(now) = browser.page.with_untracked(|p| control_of(p, first)) else {
                     return;
                 };
-                let Some(option) = now.options.get(i) else {
+                let Some(option) = now.options.iter().find(|o| o.key == key) else {
                     return;
                 };
                 if option.selected || web2.pending.get() {
                     return;
                 }
-                if option.disabled {
-                    // Disabled options show, and cannot be chosen.
-                    cx.toast("[red]That option is disabled.[/]");
-                    if let Some(back) = now.options.iter().position(|o| o.selected) {
-                        web2.index.set(back);
-                    }
-                    return;
-                }
+                // The tab refuses a disabled option too, should one get here.
                 act(
                     browser,
                     &web2,
@@ -304,7 +363,7 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
             });
             row([
                 label(format!("{name} ")).auto(),
-                mark(&web, stock_select(options, web.index))
+                mark(&web, stock_select(options, web.key))
                     .disabled_when(disabled)
                     .flex(1),
             ])
@@ -371,8 +430,31 @@ pub fn web_widget(browser: Browser, nodes: Vec<NodeId>) -> Node {
             ])
         }
     };
-    let node = node.name(&format!("web-{first}"));
-    node.fixed(nodes.len().max(1) as u16)
+    // Link hints label widgets too: the hint of each control of the group.
+    let rows = nodes.len().max(1) as u16;
+    let tag = text(move || {
+        browser.hints.with(|hints| {
+            let Some(hints) = hints else {
+                return String::new();
+            };
+            browser.page.with(|p| {
+                let Some(page) = p else { return String::new() };
+                hints
+                    .labels
+                    .iter()
+                    .filter(|(_, i)| {
+                        page.controls
+                            .get(*i)
+                            .is_some_and(|c| nodes.contains(&c.node))
+                    })
+                    .map(|(label, _)| format!("[bold black on yellow]\\[{label}][/]"))
+                    .collect()
+            })
+        })
+    })
+    .auto();
+    let node = row([tag, node.flex(1)]).name(&format!("web-{first}"));
+    node.fixed(rows)
 }
 
 /// Keep `node`'s id as the widget to focus for its control.

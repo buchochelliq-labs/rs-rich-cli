@@ -158,6 +158,9 @@ impl ChromeBackend {
             "Browser.downloadWillBegin",
             "Browser.downloadProgress",
         ]);
+        // A binding's calls are reported only while the Runtime domain is
+        // on (measured: without it, no ping ever arrives).
+        devtools.call("Runtime.enable", json!({}), CALL)?;
         devtools.call(
             "Runtime.addBinding",
             json!({"name": BINDING, "executionContextName": WORLD}),

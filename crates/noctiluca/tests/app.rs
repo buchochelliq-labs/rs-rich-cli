@@ -11,7 +11,7 @@ use noctiluca::app::{app, Options};
 use noctiluca::bookmarks::Bookmarks;
 use noctiluca::config::{Config, View};
 use noctiluca::engine::PageAction;
-use noctiluca::testing::{FakeEngine, FakeState};
+use noctiluca::testing::FakeEngine;
 use rich_intuituive::Driver;
 
 fn snapshots() -> PathBuf {
@@ -131,13 +131,17 @@ fn the_f1_overlay_lists_the_registry_with_reasons_and_follows_the_page() {
     driver.press("f1");
     wait_for(&mut driver, "Link hints");
     let text = screen(&driver);
-    assert!(text.contains("Back  — Nothing to go back to."), "{text}");
+    assert!(text.contains("Back (Nothing to go back to.)"), "{text}");
     assert!(text.contains("One tab for now"), "{text}");
     // The page moves while the overlay is open: it follows.
     state.lock().unwrap().go("second.html");
     wait_for(&mut driver, "Second page");
     let text = screen(&driver);
-    assert!(text.contains("H  Back  "), "{text}");
+    assert!(
+        text.lines()
+            .any(|l| l.contains(" Back ") && l.trim_end().ends_with("H │")),
+        "{text}"
+    );
     assert!(!text.contains("Nothing to go back to"), "{text}");
     driver.press("esc");
 }
@@ -148,7 +152,14 @@ fn a_key_rebound_in_config_shows_in_f1_and_runs() {
     let mut driver = app(Box::new(engine()), options(config, "reader.html")).driver(100, 40);
     wait_for(&mut driver, "Tiny drifters");
     driver.press("f1");
-    wait_for(&mut driver, "ctrl+g  Link hints");
+    wait_for(&mut driver, "Link hints");
+    assert!(
+        screen(&driver)
+            .lines()
+            .any(|l| l.contains("Link hints") && l.contains("ctrl+g")),
+        "{}",
+        screen(&driver)
+    );
     driver.press("esc");
     driver.press("ctrl+g");
     wait_for(&mut driver, "[a]open sea");
@@ -164,7 +175,7 @@ fn a_site_key_overrides_a_global_one_only_on_its_site() {
     )
     .unwrap();
     assert!(config.warnings.is_empty(), "{:?}", config.warnings);
-    let mut driver = app(Box::new(engine()), options(config, "reader.html")).driver(100, 40);
+    let mut driver = app(Box::new(engine()), options(config, "reader.html")).driver(220, 40);
     wait_for(&mut driver, "Tiny drifters");
     // On its site, f is the site's: it follows "the second page".
     driver.press("f");
@@ -180,7 +191,7 @@ fn a_site_key_overrides_a_global_one_only_on_its_site() {
     driver.press("f1");
     wait_for(&mut driver, "[site https://fixture.example/reader.html]");
     assert!(
-        screen(&driver).contains("named \"Next page\" on this page."),
+        screen(&driver).contains("button \"Next page\" [site https://fixture.example/reader.html] (No button named \"Next page\" on this page.)"),
         "{}",
         screen(&driver)
     );
@@ -263,4 +274,38 @@ fn a_form_field_commits_its_draft_and_a_password_stays_masked() {
         std::thread::sleep(Duration::from_millis(10));
     }
     assert!(!screen(&driver).contains("hunter2"));
+}
+
+#[test]
+fn a_select_is_keyed_by_option_and_its_disabled_option_cannot_be_chosen() {
+    let engine = engine();
+    let state = engine.state.clone();
+    let mut driver = app(Box::new(engine), options(Config::default(), "form.html")).driver(100, 40);
+    wait_for(&mut driver, "Mirror");
+    // The hint of the Mirror select focuses it (the disabled button has
+    // no hint: a, s, d, f, g, then h).
+    driver.press("f");
+    wait_for(&mut driver, "[h]");
+    driver.press("h");
+    driver.press("enter down enter");
+    let start = Instant::now();
+    loop {
+        driver.settle();
+        let actions = state.lock().unwrap().actions.clone();
+        if let Some(PageAction::SelectOption { option, .. }) = actions
+            .iter()
+            .find(|a| matches!(a, PageAction::SelectOption { .. }))
+        {
+            // The third option, "Second mirror": the disabled second one,
+            // which has the first one's value, was skipped by its key.
+            assert_eq!(*option, 199);
+            break;
+        }
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "no choice: {actions:?}\n{}",
+            screen(&driver)
+        );
+        std::thread::sleep(Duration::from_millis(10));
+    }
 }

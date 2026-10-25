@@ -309,3 +309,33 @@ fn escape_sequences_in_a_page_reach_nothing() {
         assert!(!all.contains(bad), "{bad} reached the model");
     }
 }
+
+#[test]
+fn the_isolated_world_pings_when_the_page_changes() {
+    use noctiluca::engine::{Engine, EngineEvent, TabId};
+    let Some(binary) = chrome() else { return };
+    let mut engine = ChromeBackend::start(ChromeOptions {
+        binary: Some(binary),
+        columns: 100,
+        rows: 40,
+        ..ChromeOptions::default()
+    })
+    .unwrap();
+    engine.open(TabId(0), &fixture("second.html")).unwrap();
+    std::thread::sleep(Duration::from_secs(1));
+    engine.events();
+    // A change the page makes itself, with no event of ours.
+    engine
+        .devtools()
+        .call(
+            "Runtime.evaluate",
+            serde_json::json!({"expression": "document.body.append('more')"}),
+            Duration::from_secs(10),
+        )
+        .unwrap();
+    let start = Instant::now();
+    while !engine.events().contains(&EngineEvent::Changed) {
+        assert!(start.elapsed() < Duration::from_secs(5), "no change ping");
+        std::thread::sleep(Duration::from_millis(20));
+    }
+}
