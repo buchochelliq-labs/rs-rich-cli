@@ -1,0 +1,42 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 160 128" role="img" aria-label="Memo and her calf Tui beside small dashboard panels">
+<g transform="translate(66 21) scale(0.82)">
+<rect x="58" y="92" width="13" height="22" rx="5" fill="#5a32d6"/>
+<rect x="74" y="94" width="12" height="20" rx="5" fill="#5a32d6"/>
+<path d="M102 82c6 2 8 7 7 12" fill="none" stroke="#5a32d6" stroke-width="4" stroke-linecap="round"/>
+<rect x="38" y="62" width="66" height="44" rx="22" fill="#7c4dff"/>
+<rect x="42" y="90" width="16" height="26" rx="6" fill="#7c4dff"/>
+<path d="M44.5 111h3v3h-3zm4 0h3v3h-3zm4 0h3v3h-3z" fill="#b9a1ff"/>
+<rect x="86" y="90" width="16" height="26" rx="6" fill="#7c4dff"/>
+<path d="M88.5 111h3v3h-3zm4 0h3v3h-3zm4 0h3v3h-3z" fill="#b9a1ff"/>
+<rect x="58" y="14" width="46" height="56" rx="18" fill="#5a32d6"/>
+<rect x="66" y="22" width="30" height="38" rx="12" fill="#b9a1ff"/>
+<rect x="18" y="16" width="56" height="54" rx="24" fill="#7c4dff"/>
+<path d="M34 60C24 66 12 66 6 56" fill="none" stroke="#5a32d6" stroke-width="18" stroke-linecap="round"/>
+<path d="M34 60C24 66 12 66 6 56" fill="none" stroke="#7c4dff" stroke-width="14" stroke-linecap="round"/>
+<rect x="40" y="38" width="7" height="10" rx="2" fill="#1c1a24"/>
+<rect x="55" y="38" width="6" height="10" rx="2" fill="#1c1a24"/>
+<path d="M41.5 39.5h2.5v2.5h-2.5zm14.8 0h2.2v2.5h-2.2z" fill="#f4f1ff"/>
+<rect x="60" y="52" width="7" height="4" rx="2" fill="#b9a1ff"/>
+<path d="M44 60q4 4 9 0" fill="none" stroke="#1c1a24" stroke-width="2.5" stroke-linecap="round"/>
+</g>
+<rect x="2" y="6" width="36" height="30" rx="5" fill="#1c1a24" stroke="#b9a1ff" stroke-width="2.5"/><g fill="#2dd4bf"><rect x="9" y="22" width="5" height="9"/><rect x="17" y="16" width="5" height="15"/><rect x="25" y="12" width="5" height="19"/></g>
+<rect x="42" y="6" width="30" height="30" rx="5" fill="#1c1a24" stroke="#b9a1ff" stroke-width="2.5"/><circle cx="57" cy="21" r="8" fill="none" stroke="#b9a1ff" stroke-width="5"/><path d="M57 13a8 8 0 0 1 8 8" fill="none" stroke="#fb7185" stroke-width="5"/><path d="M65 21a8 8 0 0 1-8 8" fill="none" stroke="#fbbf24" stroke-width="5"/>
+<g transform="translate(-6 52) scale(0.58)">
+<rect x="62" y="96" width="12" height="18" rx="5" fill="#5a32d6"/>
+<rect x="78" y="97" width="11" height="17" rx="5" fill="#5a32d6"/>
+<rect x="44" y="70" width="58" height="38" rx="19" fill="#7c4dff"/>
+<rect x="48" y="94" width="15" height="22" rx="6" fill="#7c4dff"/>
+<rect x="82" y="94" width="15" height="22" rx="6" fill="#7c4dff"/>
+<path d="M51 111h3.5v3h-3.5zm5.5 0h3.5v3h-3.5zm28.5 0h3.5v3h-3.5zm5.5 0h3.5v3h-3.5z" fill="#b9a1ff"/>
+<rect x="62" y="30" width="38" height="44" rx="17" fill="#5a32d6"/>
+<rect x="69" y="37" width="24" height="30" rx="10" fill="#b9a1ff"/>
+<rect x="18" y="28" width="60" height="58" rx="29" fill="#7c4dff"/>
+<path d="M30 78C22 84 13 80 14 70" fill="none" stroke="#5a32d6" stroke-width="15" stroke-linecap="round"/>
+<path d="M30 78C22 84 13 80 14 70" fill="none" stroke="#7c4dff" stroke-width="11" stroke-linecap="round"/>
+<rect x="36" y="48" width="9" height="13" rx="3" fill="#1c1a24"/>
+<rect x="54" y="48" width="8" height="13" rx="3" fill="#1c1a24"/>
+<path d="M37.8 49.8h3.2v3.2h-3.2zm17.8 0h3v3.2h-3z" fill="#f4f1ff"/>
+<path d="M42 70q4 3.5 8 0" fill="none" stroke="#1c1a24" stroke-width="2.5" stroke-linecap="round"/>
+<rect x="8" y="58" width="11" height="3.5" rx="1.2" fill="#f4f1ff" stroke="#5a32d6" stroke-width="1.5"/>
+</g>
+</svg>
