@@ -399,8 +399,14 @@ fn ratatui(scenario: Scenario, width: u16, height: u16, frames: usize) -> Measur
 }
 
 /// A backend that feeds a run of key presses and counts what is written.
+/// One key a frame: the loop drains every event already waiting before it
+/// draws, so a read that may not wait (a zero timeout) finds none once
+/// after each event, as a terminal typed into at human speed would.
 struct Feed {
     events: VecDeque<Event>,
+    /// An event was just handed out: the next read without waiting finds
+    /// nothing.
+    gave: bool,
     size: (u16, u16),
     bytes: usize,
     writes: usize,
@@ -413,12 +419,16 @@ impl Backend for Feed {
     fn size(&self) -> (u16, u16) {
         self.size
     }
-    fn read(&mut self, _: Option<Duration>) -> io::Result<Option<Event>> {
+    fn read(&mut self, timeout: Option<Duration>) -> io::Result<Option<Event>> {
         if self.started.is_none() {
             self.started = Some(Instant::now());
             self.first = Some(self.bytes);
         }
         self.clock += Duration::from_millis(1);
+        if timeout == Some(Duration::ZERO) && std::mem::take(&mut self.gave) {
+            return Ok(None);
+        }
+        self.gave = true;
         Ok(self.events.pop_front())
     }
     fn write(&mut self, text: &str) -> io::Result<()> {
@@ -443,6 +453,7 @@ fn intuituive(scenario: Scenario, width: u16, height: u16, frames: usize) -> Mea
     events.push_back(Event::Key(Key::new(KeyCode::Char('q'))));
     let mut feed = Feed {
         events,
+        gave: false,
         size: (width, height),
         bytes: 0,
         writes: 0,

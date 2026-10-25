@@ -47,7 +47,7 @@ use crate::node::{with_node, Axis, FrameState, Node};
 use crate::notify::{Corner, Level, Note};
 use crate::place::{Offset, Origin};
 use crate::reactive::{signal, Memo, NodeId, Proxy, Runtime, Signal};
-use crate::screen::{Painter, Rect, Screen};
+use crate::screen::{PaintStats, Painter, Rect, Screen};
 use crate::widget::{Used, WidgetEvent};
 
 /// The theme style a pop-up's title is drawn in: the palette's, the
@@ -1723,13 +1723,38 @@ pub fn rate<T: 'static>(source: Signal<T>) -> Signal<u32> {
     shown
 }
 
-/// Counters from the last frame, for tests and benchmarks.
+/// Counters from the last frame, for tests, benchmarks and a performance
+/// overlay: what drew, how long each stage took, and what the painter
+/// wrote, counted as notcurses counts a render. The `total_` fields run
+/// across every frame since the app started.
+///
+/// The times are measured on the real clock (natively; on wasm32 they
+/// read zero). [`write`](Self::write) is the time the terminal took the
+/// frame's bytes, which only [`App::run`] and [`App::run_on`] see: a
+/// [`Driver`] hands its bytes back and leaves it at zero.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FrameStats {
     /// Nodes that drew.
     pub drawn: usize,
     /// Bytes written to the terminal.
     pub bytes: usize,
+    /// Time the widgets took to draw into the screen: the frame's build.
+    pub draw: Duration,
+    /// Time the painter took to turn what changed into bytes: the encode.
+    pub paint: Duration,
+    /// Time writing the frame to the terminal took.
+    pub write: Duration,
+    /// What the painter did: cells compared, written and elided, and its
+    /// bytes by kind (moves, styles, text, other).
+    pub painted: PaintStats,
+    /// Bytes written over every frame.
+    pub total_bytes: u64,
+    /// [`draw`](Self::draw) over every frame.
+    pub total_draw: Duration,
+    /// [`paint`](Self::paint) over every frame.
+    pub total_paint: Duration,
+    /// [`write`](Self::write) over every frame.
+    pub total_write: Duration,
     /// Frames drawn since the app started, this one included: ratatui's
     /// `Frame::count`.
     pub frames: u64,
@@ -3258,7 +3283,13 @@ impl App {
                     driver.app.stats.update(|stats| stats.skipped += 1);
                 } else if let Some(out) = driver.render() {
                     last_frame = Some(now);
+                    let started = crate::clock::Instant::now();
                     put(backend, linear, &out)?;
+                    let took = started.elapsed();
+                    driver.app.stats.update(|stats| {
+                        stats.write += took;
+                        stats.total_write += took;
+                    });
                     if text_frames {
                         backend.painted(&driver.screen().plain().join("\n"));
                     }
@@ -6397,6 +6428,16 @@ impl Driver {
     /// tasks they start finish, and what they change is drawn too: the
     /// frame returned is settled, and the next event finds it so.
     pub fn render(&mut self) -> Option<String> {
+        // The frame's counters start again; the rounds below add to them.
+        if !self.done && self.needs_render() {
+            self.app.stats.update(|stats| {
+                stats.bytes = 0;
+                stats.draw = Duration::ZERO;
+                stats.paint = Duration::ZERO;
+                stats.write = Duration::ZERO;
+                stats.painted = PaintStats::default();
+            });
+        }
         let mut out = self.render_once();
         // A few rounds: a watch's result may lay out anew, and set off
         // another.
@@ -6408,6 +6449,15 @@ impl Driver {
             if let Some(more) = self.render_once() {
                 out.get_or_insert_with(String::new).push_str(&more);
             }
+        }
+        if let Some(out) = &out {
+            self.app.stats.update(|stats| {
+                stats.bytes = out.len();
+                stats.total_bytes += out.len() as u64;
+                // What was written besides the cells: the cursor, graphics,
+                // lines printed above an inline region.
+                stats.painted.other_bytes += out.len().saturating_sub(stats.painted.bytes());
+            });
         }
         out
     }
@@ -7326,12 +7376,18 @@ impl Driver {
                 full = true;
             }
         }
+        let started = crate::clock::Instant::now();
         let mut damage = app.frame(&self.console, screen, full);
+        let drew = started.elapsed();
+        app.stats.update(|stats| {
+            stats.draw += drew;
+            stats.total_draw += drew;
+        });
         if app.linear {
             let out = self.lines();
-            self.app.stats.update(|stats| stats.bytes = out.len());
             return out;
         }
+        let started = crate::clock::Instant::now();
         if let Some((start, end)) = app.selection {
             let style = Style::parse("reverse").expect("a built-in style parses");
             for (x, y) in selected_cells(screen.area(), start, end) {
@@ -7340,6 +7396,7 @@ impl Driver {
             damage.push(screen.area());
         }
         let painted = self.painter.paint(screen, &damage);
+        let counts = self.painter.stats();
         let mut out = String::new();
         // Accessible: the cursor is hidden while the frame is written, so a
         // screen reader following it reads none of the cells it passes, and
@@ -7364,10 +7421,16 @@ impl Driver {
             app.motion.1 = true;
         }
         out.push_str(&app.caret(&mut self.painter));
-        app.stats.update(|stats| stats.bytes = out.len());
         // Styles no cell uses any more go, once they pile up: a picture
         // whose colours change every frame keeps a frame's worth.
         self.painter.compact(&mut self.screen);
+        let took = started.elapsed();
+        let app = &mut self.app;
+        app.stats.update(|stats| {
+            stats.paint += took;
+            stats.total_paint += took;
+            stats.painted.add(&counts);
+        });
         out
     }
 

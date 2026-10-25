@@ -46,7 +46,7 @@ use rich::{Console, Renderable, Segment};
 
 use crate::frame::{plan_graphics, Change, Frame, Placement, PlacementSource};
 
-pub use screen::{Cell, Painter, Rect, Screen};
+pub use screen::{Cell, PaintStats, Painter, Rect, Screen};
 
 /// Begins a synchronized update (DEC private mode 2026): the terminal holds
 /// the screen until [`END_SYNCHRONIZED_UPDATE`].

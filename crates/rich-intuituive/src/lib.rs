@@ -160,6 +160,7 @@ pub mod task;
 pub mod testing;
 mod text_area;
 pub mod text_edit;
+pub mod timedemo;
 pub mod transport;
 mod tree;
 mod tree_table;

@@ -707,6 +707,61 @@ impl Sent {
     }
 }
 
+/// What the last [`Painter::paint`] did, counted as notcurses counts a
+/// render: the cells it looked at and wrote, and its bytes by kind. The
+/// bytes add up to the length of what it returned.
+///
+/// ```
+/// use rich::{ColorSystem, Segment};
+/// use rich_ext::surface::{Painter, Rect, Screen};
+///
+/// let mut screen = Screen::new(10, 1);
+/// let mut painter = Painter::new(Some(ColorSystem::Truecolor));
+/// painter.paint(&screen, &[]);
+/// screen.write_lines(screen.area(), &[vec![Segment::new("hi", None)]]);
+/// let out = painter.paint(&screen, &[Rect::new(0, 0, 4, 1)]);
+/// let stats = painter.stats();
+/// // The damage, and a column to its right: two cells changed.
+/// assert_eq!((stats.compared, stats.written, stats.elided), (5, 2, 3));
+/// assert_eq!(stats.text_bytes, 2);
+/// assert_eq!(stats.bytes(), out.len());
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub struct PaintStats {
+    /// Cells compared with what was sent (every cell, on a full repaint).
+    pub compared: usize,
+    /// Cells written.
+    pub written: usize,
+    /// Cells compared and found unchanged, so not written.
+    pub elided: usize,
+    /// Bytes of cursor moves.
+    pub move_bytes: usize,
+    /// Bytes of SGR styles and hyperlinks.
+    pub style_bytes: usize,
+    /// Bytes of the cells' text.
+    pub text_bytes: usize,
+    /// Everything else: clearing the screen, erasing, scrolling.
+    pub other_bytes: usize,
+}
+
+impl PaintStats {
+    /// All the bytes the paint wrote.
+    pub fn bytes(&self) -> usize {
+        self.move_bytes + self.style_bytes + self.text_bytes + self.other_bytes
+    }
+
+    /// Add `other`'s counts to these.
+    pub fn add(&mut self, other: &PaintStats) {
+        self.compared += other.compared;
+        self.written += other.written;
+        self.elided += other.elided;
+        self.move_bytes += other.move_bytes;
+        self.style_bytes += other.style_bytes;
+        self.text_bytes += other.text_bytes;
+        self.other_bytes += other.other_bytes;
+    }
+}
+
 /// Turns screens into terminal output: the cells that changed since the
 /// last paint, inside the damaged rectangles.
 ///
@@ -732,6 +787,8 @@ pub struct Painter {
     force: bool,
     /// The cells the last paint wrote, one rectangle per run of a row.
     written: Vec<Rect>,
+    /// The last paint's counts.
+    stats: PaintStats,
 }
 
 /// The pen's state while a frame is written.
@@ -756,7 +813,14 @@ impl Painter {
             height: 0,
             force: false,
             written: Vec::new(),
+            stats: PaintStats::default(),
         }
+    }
+
+    /// What the last [`paint`](Self::paint) or [`repaint`](Self::repaint)
+    /// did: cells compared and written, and bytes by kind.
+    pub fn stats(&self) -> PaintStats {
+        self.stats
     }
 
     /// Paint an inline region that starts on the cursor's row, moving the
@@ -905,6 +969,7 @@ impl Painter {
     /// on the first paint, or after a resize or [`invalidate`](Self::invalidate)).
     pub fn paint(&mut self, screen: &Screen, damage: &[Rect]) -> String {
         self.written.clear();
+        self.stats = PaintStats::default();
         let mut out = String::new();
         let full = !matches!(&self.previous, Some(p) if p.width == screen.width && p.height == screen.height);
         let rects: Vec<Rect> = if full {
@@ -939,12 +1004,17 @@ impl Painter {
                 self.paint_span(screen, y, start, end, &mut pen, &mut out);
             }
         }
+        let before = out.len();
         if pen.link.is_some() {
             out.push_str("\x1b]8;;\x1b\\");
         }
         if pen.codes.as_deref().is_some_and(|c| !c.is_empty()) {
             out.push_str("\x1b[0m");
         }
+        self.stats.style_bytes += out.len() - before;
+        let stats = &mut self.stats;
+        stats.elided = stats.compared.saturating_sub(stats.written);
+        stats.other_bytes = out.len() - stats.move_bytes - stats.style_bytes - stats.text_bytes;
         if self.inline {
             self.cursor = pen.at.or(self.cursor);
         }
@@ -1025,6 +1095,7 @@ impl Painter {
         }
         while x < end {
             if !self.changed(screen, x, y) {
+                self.stats.compared += 1;
                 x += 1;
                 continue;
             }
@@ -1033,12 +1104,20 @@ impl Painter {
                 x0 -= 1;
             }
             if pen.at != Some((x0, y)) {
+                let before = out.len();
                 out.push_str(&self.goto(pen.at, x0, y));
+                self.stats.move_bytes += out.len() - before;
             }
             let cell = screen.cell(x0, y);
+            let before = out.len();
             self.set_pen(screen, cell.style, pen, out);
+            self.stats.style_bytes += out.len() - before;
             out.push_str(&cell.text);
+            self.stats.text_bytes += cell.text.len();
             let next = x0 + cell.width.max(1) as u16;
+            let columns = usize::from(next - x0);
+            self.stats.compared += usize::from(next - x);
+            self.stats.written += columns;
             match self.written.last_mut() {
                 Some(run) if run.y == y && run.right() == x0 => run.width = next - run.x,
                 _ => self.written.push(Rect::new(x0, y, next - x0, 1)),
