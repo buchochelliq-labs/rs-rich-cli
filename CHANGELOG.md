@@ -44,6 +44,31 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - Tested against a fixture marketplace signed with test keys checked into
   the crate. The official keys are not compiled in yet.
 
+### rs-rich: widget and layout parity (`padding`, `panel`, `align`, `constrain`, `table`, `layout`, `screen`, `bar`, `box`, `_ratio`)
+
+- A printed `Screen`, a printed `LiveRender` and a titled `Rule` whose
+  `end` has no newline now end without a line break, as upstream's do
+  (DIVERGENCES §12 and §29, resolved). `Renderable::print_end_line` is the
+  new hook; it defaults to `true`.
+- `Screen` takes several renderables (`Screen::from_renderables`),
+  `application_mode` and a style name, and its rows fill the console size.
+- `Box::substitute` applies upstream's whole legacy Windows table:
+  `HEAVY_EDGE`, `MINIMAL_HEAVY_HEAD` and `SIMPLE_HEAVY` now fall back too.
+  `Box::new` builds a custom box with upstream's `ascii` flag, and
+  `Box::substitute_for` substitutes from render options, which `Panel` and
+  `Table` now use.
+- `Padding`, `Align` and `VerticalCenter` take a style name or definition
+  as well as a `Style`. `Padding::unpack` is upstream's CSS-style unpacking.
+- A zero `height` on `Panel` and `Align`, and a zero `width` on `Align`,
+  is read as unset, as upstream's `or` reads it. `Constrain(width=0)`
+  renders nothing. `Bar` raises `begin` to 0 and lowers `end` to `size`.
+- `ratio_reduce` and `ratio_distribute` are public in `rich::ratio`, beside
+  `ratio_resolve`.
+- DIVERGENCES §7 (the table padding edge) is resolved; §31 and §32 are
+  permanent; §40 records that `Layout` has only its two built-in splitters.
+- 47 golden cases in `parity_widgets.tsv`. The ten rows are complete in
+  PORTING.
+
 ## 0.0.21 cohort — to be published
 
 To be published from `main` by one `release.yml` run (tag

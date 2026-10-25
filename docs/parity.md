@@ -18,7 +18,7 @@ Click any bar to jump to that part of the
 
 **"Partial" is the honest majority, and it is not a synonym for unfinished.** A
 module is marked partial while any part of upstream's surface is unported, even
-when everything the CLI exercises is byte-identical. Eight modules are marked
+when everything the CLI exercises is byte-identical. Seventeen modules are marked
 complete, and only because a differential sweep or the golden fixtures say so:
 
 | Module | Measurement |
@@ -29,6 +29,7 @@ complete, and only because a differential sweep or the golden fixtures say so:
 | `control.rs`, `box.rs`, `styled.rs` | full upstream surface, golden-tested |
 | `progress_bar.rs` | full upstream surface, including the pulse animation, ASCII and no-colour bars, golden-tested (`progress_bar.tsv`) |
 | `theme.rs` | full upstream surface, including the theme stack and theme files, golden-tested (`themes.tsv`, `theme_stack.tsv`) |
+| `padding.rs`, `panel.rs`, `align.rs`, `constrain.rs`, `table.rs`, `layout.rs`, `screen.rs`, `bar.rs`, `ratio.rs` | full upstream surface but `Layout`'s custom splitters ([§40](DIVERGENCES.md#40-layout-has-only-the-row-and-column-splitters)), golden-tested (`parity_widgets.tsv` and the earlier fixtures) |
 
 End to end, the current CLI renders **0 mismatches across 138 document cases**
 (Markdown, JSON and syntax at six widths each) against Python `rich` 15.0.0.

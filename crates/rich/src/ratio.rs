@@ -1,9 +1,10 @@
 //! Ratio-based size resolution.
 //!
-//! Port of `rich/_ratio.py`'s `ratio_resolve` — distributes a total span among
+//! Port of `rich/_ratio.py`. [`ratio_resolve`] distributes a total span among
 //! a set of edges, each of which may pin a fixed `size`, or flex by `ratio`
-//! down to a `minimum_size`. Used by [`Layout`](crate::layout::Layout) to size
-//! its split regions. (`Table` has its own `_ratio` helpers inline.)
+//! down to a `minimum_size`; [`Layout`](crate::layout::Layout) sizes its split
+//! regions with it. [`ratio_reduce`] and [`ratio_distribute`] size `Table`
+//! columns.
 
 /// One participant in a [`ratio_resolve`] distribution.
 #[derive(Debug, Clone, Copy)]
@@ -98,6 +99,80 @@ pub fn ratio_resolve(total: usize, edges: &[Edge]) -> Vec<usize> {
     }
 
     sizes.into_iter().map(|s| s.unwrap_or(0)).collect()
+}
+
+/// Reduce `values` by `total`, distributed across slots by `ratios` (capped by
+/// `maximums`): a slot whose maximum is 0 takes no share. Port of
+/// `rich._ratio.ratio_reduce`.
+pub fn ratio_reduce(total: i64, ratios: &[i64], maximums: &[i64], values: &[i64]) -> Vec<i64> {
+    let ratios: Vec<i64> = ratios
+        .iter()
+        .zip(maximums)
+        .map(|(&r, &m)| if m != 0 { r } else { 0 })
+        .collect();
+    let mut total_ratio: i128 = ratios.iter().map(|&r| i128::from(r)).sum();
+    if total_ratio == 0 {
+        return values.to_vec();
+    }
+    let mut total_remaining = total;
+    let mut result = Vec::with_capacity(values.len());
+    for ((&ratio, &maximum), &value) in ratios.iter().zip(maximums).zip(values) {
+        if ratio != 0 && total_ratio > 0 {
+            // `round(ratio * total_remaining / total_ratio)`: Python rounds
+            // half to even.
+            let distributed = maximum.min(
+                (ratio as f64 * total_remaining as f64 / total_ratio as f64).round_ties_even()
+                    as i64,
+            );
+            result.push(value - distributed);
+            total_remaining -= distributed;
+            total_ratio -= i128::from(ratio);
+        } else {
+            result.push(value);
+        }
+    }
+    result
+}
+
+/// Divide `total` across slots proportionally to `ratios` (ceil each share),
+/// each share floored at the matching `minimums` entry when given. Port of
+/// `rich._ratio.ratio_distribute`; where upstream asserts the ratios sum to
+/// more than 0, the whole total goes to the first slot.
+pub fn ratio_distribute(total: i64, ratios: &[i64], minimums: Option<&[i64]>) -> Vec<i64> {
+    // Upstream zeroes the ratio of any slot whose minimum is 0 (falsy).
+    let ratios: Vec<i64> = match minimums {
+        Some(mins) => ratios
+            .iter()
+            .zip(mins)
+            .map(|(&r, &m)| if m != 0 { r } else { 0 })
+            .collect(),
+        None => ratios.to_vec(),
+    };
+    // Python ints never overflow; `ratio * total_remaining` can exceed i64
+    // for a huge ratio, so the arithmetic runs in i128.
+    let mut total_ratio: i128 = ratios.iter().map(|&r| i128::from(r)).sum();
+    let mut total_remaining = i128::from(total);
+    let mut result = Vec::with_capacity(ratios.len());
+    for (index, &ratio) in ratios.iter().enumerate() {
+        let ratio = i128::from(ratio);
+        let minimum = i128::from(minimums.map_or(0, |m| m[index]));
+        let distributed = if total_ratio > 0 {
+            // `max(minimum, ceil(ratio * total_remaining / total_ratio))`;
+            // the remaining total goes negative once a minimum overshoots.
+            let numerator = ratio * total_remaining;
+            minimum.max(-(-numerator).div_euclid(total_ratio))
+        } else {
+            total_remaining
+        };
+        result.push(i64::try_from(distributed).unwrap_or(if distributed < 0 {
+            i64::MIN
+        } else {
+            i64::MAX
+        }));
+        total_ratio -= ratio;
+        total_remaining -= distributed;
+    }
+    result
 }
 
 #[cfg(test)]

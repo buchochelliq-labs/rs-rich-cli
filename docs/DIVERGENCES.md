@@ -91,11 +91,12 @@ Format: what differs · why · how to remove it (if temporary).
   would need a grapheme-segmentation dependency to close.
 
 ### 6. Box substitution is opt-in (no legacy-terminal auto-detection)
-- **Differs:** `Box.substitute` **is** ported — `Box::substitute` maps the fancy
-  boxes (`ROUNDED`/`HEAVY`/`HEAVY_HEAD`) to `SQUARE` when `legacy_windows` is set,
-  and any box drawn with non-ASCII glyphs to `ASCII` when `ascii_only` is set
-  (the built-in boxes upstream flags `ascii=True` are exactly the all-ASCII
-  ones); `Panel`/`Table` apply it, with their own `safe_box` over the
+- **Differs:** `Box.substitute` **is** ported — `Box::substitute` applies
+  upstream's whole legacy Windows table (`ROUNDED`, `HEAVY`, `HEAVY_EDGE`
+  and `HEAVY_HEAD` to `SQUARE`, `MINIMAL_HEAVY_HEAD` to `MINIMAL`,
+  `SIMPLE_HEAVY` to `SIMPLE`) when `legacy_windows` is set, and maps a box
+  not flagged `ascii` to `ASCII` when `ascii_only` is set; `Panel`/`Table`
+  apply it from their render options, with their own `safe_box` over the
   console's. The `legacy_windows`/`safe_box`/`ascii_only` console flags exist. What
   differs: those flags default **off** and are not auto-detected from the runtime
   terminal (upstream auto-detects legacy Windows / a non-UTF-8 encoding), so the
@@ -106,21 +107,14 @@ Format: what differs · why · how to remove it (if temporary).
   `Console` build time remains possible. `legacy_windows` is never
   auto-detected: the legacy console is not supported (§38).
 
-### 7. `Table` — one rare padding edge remains
-- **Differs:** sizing (content, shrink-to-fit, `expand`), per-column justify,
-  explicit per-column **width**, per-column **`ratio`/`min_width`/`max_width`**,
-  per-column **style**, **`no_wrap`** (crop to one line with ellipsis), **ellipsis
-  overflow** (the table default), a **table-level style**, `pad_edge`/`show_edge`/
-  `collapse_padding`, title, caption, and `show_lines` are all ported and
-  byte-parity, as are (0.0.12) the table `width`/`min_width`, footers,
-  `leading`, `row_styles`, row styles and sections, the header/footer/title/
-  caption styles and justification, `Text` annotations and `safe_box`
-  (`golden/api_gaps.tsv`). The only residual: a *wrapping* column squeezed to width 0 by a
-  greedy `no_wrap` neighbor still renders its cell padding (upstream drops it) — a
-  rare over-constrained case.
-- **Why:** the width-0 padding edge only appears when a table is narrower than its
-  no_wrap content plus one other column.
-- **Remove:** drop padding on zero-width columns under the Table issue (#5).
+### 7. ~~`Table` — one rare padding edge remains~~ (resolved)
+- **Resolved (0.0.22):** a wrapping column squeezed to nothing by a
+  `no_wrap` neighbour renders as upstream's does. Sweeps of two- and
+  three-column tables at every width from 1 to 25, with and without a box,
+  edges, edge padding, wider padding and collapsed padding, and of up to 40
+  columns in a narrow console, are byte-identical to rich 15.0.0
+  (`table_squeezed_column`, `table_squeezed_three` and `table_many_columns`
+  in `golden/parity_widgets.tsv`).
 
 ### 8. ~~`Json` — exotic number formatting differs from CPython~~ (resolved in 0.0.11)
 - Floats are now written with a port of Python's `float.__repr__`
@@ -165,16 +159,12 @@ Format: what differs · why · how to remove it (if temporary).
   expands to fill its region (byte-parity), via `Console::render_lines`'s height
   handling. Other containers can adopt the same pattern as needed.
 
-### 12. `Screen` keeps its trailing row separator when printed
-- **Differs:** printing a full-height `Screen` emits a trailing newline after the
-  last row (like every other renderable in this port), whereas upstream's
-  line-oriented print pipeline omits the final separator for a `Screen` that
-  exactly fills the console height.
-- **Why:** our `print` uniformly appends one newline after a renderable; matching
-  upstream's per-renderable trailing-newline suppression is a print-pipeline
-  concern that would affect the shared path.
-- **Remove:** model upstream's line-based print (crop/emit rows without a trailing
-  separator when a renderable fills the height) under the Console issue (#1).
+### 12. ~~`Screen` keeps its trailing row separator when printed~~ (resolved)
+- **Resolved (0.0.22):** a printed `Screen` ends with its last row and no
+  line break, as upstream's does, so the next output continues that row.
+  `Renderable::print_end_line` tells `Console::print` whether a renderable
+  ends its last line (`screen_print`, `screen_then_text` and
+  `screen_application_mode` in `golden/parity_widgets.tsv`).
 
 ### 13. ~~`ISO8601Highlighter` covers standard *extended* formats only~~ (resolved)
 - **Resolved:** all of upstream's ISO 8601 patterns are now ported, in the same
@@ -455,12 +445,11 @@ Format: what differs · why · how to remove it (if temporary).
   (`notebook_group_uses_upstream_cell_spacing_and_output_execution_count`).
 - **Remove:** switch `decode` to the 15.0 split with that CLI path.
 
-### 29. Renderables cannot end without a newline when printed
-- **Differs:** `Console::print` always ends the output line, so `Rule(end=…)`
-  with an `end` that has no trailing newline, and a printed `LiveRender` (which
-  upstream ends without one), still end the line. Inside containers both match
-  upstream.
-- **Why:** the port's `Renderable` output separates lines and has no `end`.
+### 29. ~~Renderables cannot end without a newline when printed~~ (resolved)
+- **Resolved (0.0.22):** `Rule(end=…)` with an `end` that has no trailing
+  newline and a printed `LiveRender` leave the line open, as upstream's do,
+  through `Renderable::print_end_line` (`rule_end` and `live_render_print`
+  in `golden/parity_widgets.tsv`). Inside containers both already matched.
 
 ### 30. A lone surrogate in `Json` prints as U+FFFD without `ensure_ascii`
 - **Differs:** Python's `json` accepts an unpaired `\uD800`-`\uDFFF` escape,
@@ -484,7 +473,10 @@ Format: what differs · why · how to remove it (if temporary).
   `Text` spans are already silent upstream.)
 - **Why:** `Renderable::rich_render` has no error channel; `Style::parse` and
   `Console::get_style` return errors for callers that want to validate first.
-- **Remove:** would need a fallible render path through every container.
+- **Remove:** not planned (verdict for 0.0.22: permanent). A render error
+  would need a fallible `rich_render` through every container and every
+  extension, for input that `Style::parse` and `Console::get_style`
+  already reject before printing.
 
 ### 32. `Columns(width=0)` with no horizontal padding renders nothing
 - **Differs:** upstream computes `max_width // (width + padding)` and raises
@@ -492,7 +484,8 @@ Format: what differs · why · how to remove it (if temporary).
   for that case instead of panicking (the Python binding raises
   `ZeroDivisionError` itself before calling core).
 - **Why:** `Renderable::rich_render` has no error channel (see §31).
-- **Remove:** would need a fallible render path.
+- **Remove:** not planned (verdict for 0.0.22: permanent), for the reason
+  in §31.
 
 ### 33. An invalid GFM delimiter row inside a list or quote stays a table
 - **Differs:** pulldown-cmark accepts delimiter rows markdown-it rejects (a
@@ -613,6 +606,19 @@ Format: what differs · why · how to remove it (if temporary).
   Decided for 1.0.0 on 2026-10-11 ([plan](plans/1.0.0.md), decision 7;
   [#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12)).
 - **Remove:** not planned.
+
+### 40. `Layout` has only the row and column splitters
+
+- **Differs:** upstream's `Layout.split(…, splitter=…)` takes a `Splitter`
+  subclass as well as a name, so a program can lay children out its own way.
+  The port's `Splitter` is a closed enum of upstream's two, `Row` and
+  `Column`; a name upstream would reject (`NoSplitter`) is `None` from
+  `Splitter::from_name`.
+- **Why:** both built-in splitters are ported and byte-identical; an open
+  splitter would make `Splitter` a trait object, losing `Copy` and `Eq` on a
+  public type, for an extension point upstream does not use itself.
+- **Remove:** add a `Splitter::Custom` that holds a trait object, if a user
+  asks for one.
 
 ## Feature-flagged divergences
 

@@ -393,16 +393,18 @@ impl Panel {
         let border_style =
             style.combine(&console.get_style(&self.border_style).unwrap_or_default());
         // `child_height = self.height or options.height or None`.
-        let height = self.height.or(options.height).filter(|&height| height > 0);
+        let height = self
+            .height
+            .filter(|&height| height > 0)
+            .or(options.height)
+            .filter(|&height| height > 0);
         // A zero `width` still draws the two-cell empty box upstream (its
         // `width - 2` is negative); a zero-width console renders nothing
         // before any renderable is asked (`Console.render`).
         // Fall back to a terminal-safe box on legacy Windows / non-UTF-8.
-        let box_set = self.box_set.substitute(
-            console.legacy_windows(),
-            self.safe_box.unwrap_or_else(|| console.safe_box()),
-            console.ascii_only(),
-        );
+        let box_set = self
+            .box_set
+            .substitute_for(options, self.safe_box.unwrap_or_else(|| console.safe_box()));
         // The padded child fills `width - 2`, or, when not expanding, its
         // measured width; a title may widen it up to the available width.
         let mut inner_width = if self.expand {
