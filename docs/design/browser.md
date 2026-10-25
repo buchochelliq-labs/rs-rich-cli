@@ -266,7 +266,8 @@ after an action of ours) and takes a new snapshot. The page cannot see an
 isolated world's globals or the binding. It can still notice extra work
 through timing; that is accepted. Measured: a binding's calls are
 reported only while the `Runtime` domain is enabled, so Noctiluca enables
-it. Some bot checks look for an enabled `Runtime`; that too is accepted.
+it. Some bot checks look for an enabled `Runtime`; that is accepted (decided
+in 0.0.22), and the README says so.
 The script also samples the form fields' values every 500 ms (passwords
 left out), as the PoC did, so a value a page script sets with no event
 is still seen.
@@ -889,7 +890,8 @@ them are kept in `tests/snapshots` (re-made with the `capture` example),
 so the model, layout, config and app tests run with no browser; the live
 tests run the same pages through Chrome as a normal user (CI's `browser`
 job), and the PTY test runs the binary over the snapshots
-(`NOCTILUCA_FAKE_ENGINE`). Beyond the list: sound (see [Audio](#audio)),
+(`NOCTILUCA_FAKE_ENGINE`, read only with the test-only `fake-engine`
+feature). Beyond the list: sound (see [Audio](#audio)),
 `--dump text|ax|json`, `--no-js`, per-site view, images and width, and a
 docs tape (`docs/tapes/noctiluca.tape`, over the snapshots, since the
 tape job runs no browser). Short of the list: the image in the `Driver`

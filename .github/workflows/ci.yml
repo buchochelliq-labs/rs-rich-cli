@@ -287,10 +287,11 @@ jobs:
             args: "--no-default-features"
           # Noctiluca, the terminal browser: its model, layout, config and
           # app tests on Chrome's saved snapshots of its fixture pages, and
-          # its binary on a PTY. Its live tests need a browser and a
-          # normal user: the `browser` job runs them.
+          # its binary on a PTY (the test-only `fake-engine` feature; the
+          # default build is the workspace jobs'). Its live tests need a
+          # browser and a normal user: the `browser` job runs them.
           - crate: noctiluca
-            args: ""
+            args: "--features fake-engine"
           # Every lumis language (its default); the bundles only select fewer.
           - crate: rs-rich-lumis
             args: ""
@@ -646,7 +647,7 @@ jobs:
       - name: Build the CLI and the examples the tapes run
         run: >-
           cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive
-          -p rs-rich-embed -p noctiluca --features rs-rich-cli/serve,rs-rich-intuituive/files,rs-rich-intuituive/archive,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm,rs-rich-intuituive/viz,rs-rich-intuituive/wav,rs-rich-intuituive/vim,rich-ext/yaml,rich-ext/jsonpath,rich-ext/data
+          -p rs-rich-embed -p noctiluca --features rs-rich-cli/serve,rs-rich-intuituive/files,rs-rich-intuituive/archive,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm,rs-rich-intuituive/viz,rs-rich-intuituive/wav,rs-rich-intuituive/vim,rich-ext/yaml,rich-ext/jsonpath,rich-ext/data,noctiluca/fake-engine
           --bins --examples --locked
 
       # rs-rich-ext's examples are guide programs; the surface tape runs one.
@@ -701,7 +702,7 @@ jobs:
         run: |
           test "$(id -u)" != 0
           cargo test --locked -p rs-rich-embed --features chrome
-          cargo test --locked -p noctiluca
+          cargo test --locked -p noctiluca --features fake-engine
 
       # What reading a page costs, per fixture: reported, never failed.
       - name: Snapshot cost (reported)

@@ -36,5 +36,20 @@ as a normal user, never as root.
   keywords, the search engine, keys, and per-site settings and keys. See
   [`config.sample.toml`](config.sample.toml).
 
+## Cargo features
+
+- `fake-engine` (off; **test-only**): the binary replays saved page
+  snapshots from the directory `NOCTILUCA_FAKE_ENGINE` names instead of
+  starting Chrome. The PTY test and the docs tape use it. A normal build
+  ignores the variable.
+
+## Limitations
+
+- Noctiluca drives Chrome over DevTools and enables its `Runtime` domain
+  (it needs it to hear the page's change pings). Some sites' bot checks
+  can notice that, and may treat Noctiluca as automation. Noctiluca does
+  not try to hide it.
+- Sound plays on the machine Chrome runs on, never over SSH.
+
 The design, its phases and what is still to come are in
 [`docs/design/browser.md`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/design/browser.md).

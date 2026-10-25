@@ -120,10 +120,12 @@ fn start_url(args: &Args, config: &Config, marks: &Bookmarks) -> Option<String> 
     )
 }
 
-/// The engine: a test's saved snapshots when `NOCTILUCA_FAKE_ENGINE`
-/// names their directory (the end-to-end test runs the binary so, with no
-/// browser), else Chrome.
+/// The engine: Chrome; or, built with the test-only `fake-engine`
+/// feature, a test's saved snapshots when `NOCTILUCA_FAKE_ENGINE` names
+/// their directory (the end-to-end test and the docs tape run the binary
+/// so, with no browser). A release build ignores the variable.
 fn engine(args: &Args, config: &Config) -> std::io::Result<Box<dyn Engine>> {
+    #[cfg(feature = "fake-engine")]
     if let Some(dir) = std::env::var_os("NOCTILUCA_FAKE_ENGINE") {
         return Ok(Box::new(noctiluca::testing::FakeEngine::from_dir(
             Path::new(&dir),

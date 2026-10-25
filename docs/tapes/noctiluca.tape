@@ -3,7 +3,10 @@
 # overlay generated from the action registry. The tape job has no
 # browser it may run with its sandbox on, so this replays Chrome's saved
 # snapshots of the crate's fixture pages (NOCTILUCA_FAKE_ENGINE, as the
-# PTY test does); the live tests run against Chrome in CI's browser job.
+# PTY test does), which needs the binary built with the test-only
+# `fake-engine` feature (`cargo build -p noctiluca --features
+# noctiluca/fake-engine`; the tape job does). The live tests run against
+# Chrome in CI's browser job.
 Set Title "Noctiluca · a terminal web browser"
 Set Size 100x30
 Set TypingDelay 40ms

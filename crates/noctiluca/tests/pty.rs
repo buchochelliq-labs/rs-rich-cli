@@ -1,7 +1,8 @@
 //! The `noctiluca` binary on a real pseudo-terminal, its output read
 //! through rs-rich-record's VT emulator: it starts, reads a page, quits,
 //! and leaves the terminal's modes as it found them. Its engine is the
-//! saved snapshots (`NOCTILUCA_FAKE_ENGINE`), so no browser is needed;
+//! saved snapshots (`NOCTILUCA_FAKE_ENGINE`, read only with the test-only
+//! `fake-engine` feature, which this test requires), so no browser is needed;
 //! what a page says reaches the terminal only as text.
 #![cfg(unix)]
 

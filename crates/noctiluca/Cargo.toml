@@ -28,6 +28,15 @@ workspace = true
 name = "noctiluca"
 path = "src/main.rs"
 
+[[test]]
+name = "pty"
+required-features = ["fake-engine"]
+
+[features]
+# Test-only: the binary replays saved snapshots from the directory
+# `NOCTILUCA_FAKE_ENGINE` names, instead of starting Chrome (the PTY test
+# and the docs tape, with no browser). Off, the variable is ignored.
+fake-engine = []
 
 [dependencies]
 rich.workspace = true

@@ -240,6 +240,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and `radio_keyed` (options keyed by their own nodes, disabled ones never
   chosen); F1 is intuiTUIve's live `action_overlay`.
 - `--dump text|ax|json` prints the page's model, for scripts and CI.
+- A test-only `fake-engine` feature, off by default: only with it does
+  the binary read `NOCTILUCA_FAKE_ENGINE` (saved snapshots instead of
+  Chrome, for the PTY test and the docs tape).
   `--no-js`, `--audio`, `--profile`, `--images`, `--raster` (rs-rich-embed's
   screencast view, for debugging).
 - Tests: the model, layout, config and app on Chrome's saved snapshots of
