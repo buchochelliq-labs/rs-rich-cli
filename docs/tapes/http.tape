@@ -8,6 +8,9 @@ Set Title "http · Slumber on intuiTUIve"
 Set Size 100x30
 Set TypingDelay 40ms
 Output gif png svg
+# The time's digits change the line's width, so the mask also takes the
+# padding up to the panel's border: "Nms", one space, then the border.
+Mask /\d+ms ([^│║]*?) +([│║])/ "Nms ${1} ${2}"
 Mask /\d+ms / "Nms "
 Mask /127\.0\.0\.1:\d+/ "127.0.0.1:PORT"
 Hide
