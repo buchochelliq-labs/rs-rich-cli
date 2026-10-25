@@ -355,3 +355,89 @@ fn the_about_pages_codec_table_matches_can_play_type() {
         );
     }
 }
+
+#[test]
+fn the_video_keeps_playing_while_the_log_updates_within_its_cap() {
+    let Some(engine) = start() else { return };
+    let mut w = Watch::new(engine);
+    let url = fixture("stream-with-log.html");
+    w.tab.send(Command::Open(url.clone()));
+    let video = |w: &Watch| -> Option<noctiluca::model::Media> {
+        w.page
+            .as_ref()?
+            .media
+            .iter()
+            .find(|m| m.kind == noctiluca::model::MediaKind::Video)
+            .cloned()
+    };
+    let entries = |w: &Watch| -> usize {
+        w.page
+            .as_ref()
+            .and_then(|p| p.logs.first())
+            .map_or(0, |l| l.entries.len())
+    };
+    w.until("the stream, playing, and its log", |w| {
+        w.page.as_ref().is_some_and(|p| p.url == url)
+            && video(w).and_then(|v| v.playback).is_some_and(|p| !p.paused)
+            && entries(w) >= 6
+    });
+    let node = video(&w).unwrap().node;
+    w.tab.send(Command::Regions {
+        on_screen: vec![node],
+        intervals: Vec::new(),
+    });
+    // Four seconds: the log gains entries (one each 1.5 s, read as live
+    // changes), and the video's frames keep coming, paced within 400 kB
+    // a second.
+    let mut pacing = Pacing::new(ByteBudget::new(400_000), Pixels::Kitty);
+    let (cols, rows) = (40, 10);
+    let before = entries(&w);
+    let (mut seen, mut drawn) = (w.frames.len(), Vec::new());
+    let mut window: Vec<(Instant, u64)> = Vec::new();
+    let mut peaks = Vec::new();
+    let end = Instant::now() + Duration::from_secs(4);
+    while Instant::now() < end {
+        w.pump(Duration::from_millis(20));
+        for frame in &w.frames[seen..] {
+            let now = Instant::now();
+            if let Some(picture) = pacing.offer(frame, cols, rows, now, picture_bytes) {
+                let bytes = picture
+                    .encode(pacing.pixels(node), cols, rows)
+                    .map_or(0, |e| e.len() as u64);
+                count_picture_bytes(picture.id(), bytes);
+                window.push((now, bytes));
+                window.retain(|(at, _)| now.duration_since(*at) <= Duration::from_secs(2));
+                peaks.push(window.iter().map(|(_, b)| b).sum::<u64>());
+                drawn.push(now);
+            }
+        }
+        seen = w.frames.len();
+    }
+    assert!(entries(&w) >= before + 2, "the log did not update");
+    assert!(
+        video(&w)
+            .and_then(|v| v.playback)
+            .is_some_and(|p| !p.paused),
+        "the video stopped"
+    );
+    // Frames throughout the four seconds, not one burst: at the start
+    // and at the end, however busy the machine.
+    let start = end - Duration::from_secs(4);
+    let early = drawn
+        .iter()
+        .any(|t| *t < start + Duration::from_millis(1500));
+    let late = drawn
+        .iter()
+        .any(|t| *t >= end - Duration::from_millis(1500));
+    assert!(
+        drawn.len() >= 4 && early && late,
+        "{} frames: {drawn:?}",
+        drawn.len()
+    );
+    let cap = pacing.cap() * 2.0;
+    let worst = peaks.iter().skip(1).copied().max().unwrap_or(0);
+    assert!(
+        (worst as f64) <= cap,
+        "{worst} bytes in two seconds, cap {cap}"
+    );
+}

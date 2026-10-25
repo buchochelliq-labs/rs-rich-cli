@@ -313,6 +313,15 @@ const MOTION: std::time::Duration = std::time::Duration::from_millis(25);
 /// Step the moving pictures in view, and publish their frames when one
 /// changed.
 fn step_motion(b: Browser, motion: &mut pictures::Motion) {
+    // GIFs and videos share one byte budget, from the config and the
+    // bandwidth rule.
+    let budget = byte_budget(b);
+    let videos = b.pacing.with_untracked(|p| {
+        let mut pacing = p.borrow_mut();
+        pacing.budget = budget;
+        pacing.moving()
+    });
+    motion.share_with(budget, videos);
     let page = b.page.get_untracked();
     let images = b.images.get_untracked();
     let next = match page {
@@ -332,6 +341,8 @@ fn step_motion(b: Browser, motion: &mut pictures::Motion) {
         }
         _ => HashMap::new(),
     };
+    b.pacing
+        .with_untracked(|p| p.borrow_mut().others = motion.moving_count());
     // The videos' frames, which come from the tab, with them.
     let mut next = next;
     b.videos.with_untracked(|v| {
@@ -1913,6 +1924,26 @@ fn projection_view(b: Browser) -> Node {
 /// The rows the header and the status bar take.
 pub const CHROME_ROWS: u16 = 4;
 
+/// The byte budget moving pictures (GIFs and videos) share: the config's
+/// `bandwidth`, else rs-rich-art's guess, at most the config's frame rate
+/// and never more than eight a second. With the bandwidth rule off (the
+/// faithful projection), no budget: every frame, never a step down.
+pub fn byte_budget(b: Browser) -> rich_art::picture::ByteBudget {
+    let adapt = b.effective_adapt();
+    b.config.with_untracked(|c| {
+        let mut budget = c.bandwidth.map_or_else(
+            rich_art::picture::ByteBudget::guess,
+            rich_art::picture::ByteBudget::new,
+        );
+        budget.max_fps = f64::from(c.fps).clamp(1.0, crate::video::MAX_FPS as f64);
+        if !adapt.on(crate::adapt::Rule::Bandwidth) {
+            budget.bytes_per_second = u64::MAX / 4;
+            budget.min_fps = 0.0;
+        }
+        budget
+    })
+}
+
 /// The frames' pacing: within the guessed byte budget, at most the
 /// config's frame rate and never more than eight a second, starting at
 /// the protocol the user asked for, else character art over SSH, else
@@ -2048,15 +2079,9 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             }
         });
         // Moving pictures in view step within the byte budget.
-        let budget = b.config.with_untracked(|c| {
-            let mut budget = c.bandwidth.map_or_else(
-                rich_art::picture::ByteBudget::guess,
-                rich_art::picture::ByteBudget::new,
-            );
-            budget.max_fps = f64::from(c.fps.max(1));
-            budget
-        });
-        let motion = Rc::new(std::cell::RefCell::new(pictures::Motion::new(budget)));
+        let motion = Rc::new(std::cell::RefCell::new(pictures::Motion::new(byte_budget(
+            b,
+        ))));
         every(MOTION, move |_| step_motion(b, &mut motion.borrow_mut()));
         // Chrome lays the page out at the terminal's size.
         watch(

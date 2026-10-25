@@ -151,6 +151,10 @@ const UNDERLAY: u64 = 25;
 /// in view, on a terminal that cannot play animations itself.
 pub struct Motion {
     budget: ByteBudget,
+    /// Other moving pictures sharing the budget (videos playing).
+    others: usize,
+    /// How many animations stepped at the last look.
+    moving: usize,
     playing: HashMap<NodeId, Moving>,
     /// Frozen animations' still frames for Kitty, by node.
     stills: HashMap<NodeId, (Picture, Picture)>,
@@ -175,6 +179,8 @@ impl Motion {
     pub fn new(budget: ByteBudget) -> Motion {
         Motion {
             budget,
+            others: 0,
+            moving: 0,
             playing: HashMap::new(),
             stills: HashMap::new(),
         }
@@ -183,6 +189,19 @@ impl Motion {
     /// The budget it keeps to.
     pub fn budget(&self) -> ByteBudget {
         self.budget
+    }
+
+    /// Keep to `budget` from now on, sharing it with `others` moving
+    /// pictures (videos playing).
+    pub fn share_with(&mut self, budget: ByteBudget, others: usize) {
+        self.budget = budget;
+        self.others = others;
+    }
+
+    /// How many animations it stepped at its last look: what it takes of
+    /// the shared budget. Kitty plays its own, for no bytes.
+    pub fn moving_count(&self) -> usize {
+        self.moving
     }
 
     /// Step the animated pictures of `page` whose regions are on rows
@@ -210,7 +229,13 @@ impl Motion {
                     .is_some_and(Picture::is_animated)
             })
             .collect();
-        let share = 1.0 / in_view.len().max(1) as f64;
+        // Kitty plays animations itself: only the others share the bytes.
+        self.moving = if pixels == Pixels::Kitty || frozen {
+            0
+        } else {
+            in_view.len()
+        };
+        let share = 1.0 / (self.moving + self.others).max(1) as f64;
         let budget = self.budget;
         let mut seen = Vec::new();
         for region in in_view {

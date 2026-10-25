@@ -828,6 +828,10 @@ const MAX_INLINE: usize = 2000;
 
 /// What a still is kept by: the node, its address and its size.
 type StillKey = (NodeId, String, u64, u64);
+/// Pictures decoded, by what they were asked for by.
+type Decoded<K> = Receiver<(K, Picture)>;
+/// Bytes to decode, by what asks for them.
+type ToDecode<K> = Sender<(K, Arc<[u8]>)>;
 /// A still for the decoder thread.
 type Job = (StillKey, Arc<[u8]>);
 
@@ -849,7 +853,7 @@ fn data_bytes(data: &str) -> Option<Vec<u8>> {
 
 /// The decoder thread: each still into a picture, an animated GIF with its
 /// frames. It ends when the tab does.
-fn decoder<K: Send + 'static>() -> (Sender<(K, Arc<[u8]>)>, Receiver<(K, Picture)>) {
+fn decoder<K: Send + 'static>() -> (ToDecode<K>, Decoded<K>) {
     let (send, jobs) = mpsc::channel::<(K, Arc<[u8]>)>();
     let (done, decoded) = mpsc::channel();
     thread::spawn(move || {

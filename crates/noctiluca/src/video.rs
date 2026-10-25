@@ -178,6 +178,8 @@ pub struct Pacing {
     pub budget: ByteBudget,
     /// The protocol a new region starts at.
     pub start: Pixels,
+    /// Other moving pictures sharing the budget (animated GIFs in view).
+    pub others: usize,
     regions: HashMap<NodeId, Paced>,
 }
 
@@ -204,6 +206,7 @@ impl Pacing {
         Pacing {
             budget,
             start,
+            others: 0,
             regions: HashMap::new(),
         }
     }
@@ -218,10 +221,15 @@ impl Pacing {
         }
     }
 
-    /// Each moving region's share of the budget.
+    /// Each moving region's share of the budget, which the other moving
+    /// pictures share too.
     fn share(&self) -> f64 {
-        let moving = self.regions.values().filter(|r| r.moving).count().max(1);
-        1.0 / moving as f64
+        1.0 / (self.moving() + self.others).max(1) as f64
+    }
+
+    /// How many regions move now.
+    pub fn moving(&self) -> usize {
+        self.regions.values().filter(|r| r.moving).count()
     }
 
     /// The share the pacer keeps to: [`HEADROOM`] under the region's
