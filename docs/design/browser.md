@@ -1000,6 +1000,16 @@ a small terminal, linked to its neighbours, like light spreading through
 dark water. The mascot is a lanternfish whose lamp is the terminal itself:
 a small glowing terminal window held out on its lure.
 
+**Drawn** (0.0.22), in `docs/assets/noctiluca/`: the logo
+(`logo.svg`) and a favicon; the lanternfish as a hero, a tip pose, a
+troubleshooting pose and 32 and 16 px silhouettes; a 32 x 32 pixel
+lanternfish (`.txt`, `.svg`, `.png`); and `memo-amazed.svg`, intuiTUIve's
+Memo wide-eyed at a page in her terminal. `ICONOGRAPHY.md` there has the
+palette (blue and cyan, beside intuiTUIve's purple), the drawing rules and
+the files. The guide's [Noctiluca page](../guide/noctiluca.md) uses them.
+Not done yet: the bloom in rs-rich-diagram and the micro-asset animations
+below.
+
 Both can be drawn with what the repo has:
 
 - **As intuiTUIve's mascots are.** Memo the elephant

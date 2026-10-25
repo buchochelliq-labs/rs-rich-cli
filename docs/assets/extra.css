@@ -171,6 +171,18 @@
   box-shadow: none;
 }
 
+/* Noctiluca's pages (docs/assets/noctiluca/): its art carries its own
+   colours, set without the screenshots' frame; its sub-site link is edged in
+   the lanternfish's blue. */
+.md-typeset img.noct-art[src$=".svg"]:not([src^="http"]) {
+  margin: 0.6rem auto 1.2rem;
+  border-radius: 0;
+  box-shadow: none;
+}
+.md-typeset .rs-subsite.noct-subsite {
+  border-left-color: #2a7fd8;
+}
+
 /* rs-rich's own identity (docs/assets/rs-rich/): a gold accent, #c08600,
    where intuiTUIve has purple. Material's `custom` accent takes it; links
    hovered on the light scheme use a darker gold so they keep 4.5:1 on

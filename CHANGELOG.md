@@ -9,6 +9,18 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Noctiluca's docs and iconography (noctiluca)
+
+- **A guide page for Noctiluca**, the terminal web browser: install,
+  opening pages, views, keys, per-site keys, sound, config, switches, tips,
+  troubleshooting and what works today. It is in the navigation and linked
+  from the home page, the guide and the crate's README.
+- **Its iconography**, in `docs/assets/noctiluca/`: the logo (a bloom of
+  small linked terminals), a favicon, a lanternfish whose lure is a
+  terminal (hero, tip and troubleshooting poses, 32 and 16 px), a 32x32
+  pixel lanternfish for a sprite, and Memo amazed at the web in her
+  terminal. `ICONOGRAPHY.md` has the palette and the rules.
+
 ### intuiTUIve: the gaps three round 7 clones shared (intuituive)
 
 - **Panel titles at the corner.** `Node::title_flush` draws a panel's

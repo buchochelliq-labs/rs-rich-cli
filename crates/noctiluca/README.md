@@ -1,5 +1,7 @@
 # Noctiluca
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/noctiluca/logo.svg" alt="Noctiluca's logo: a bloom of small terminal windows, linked, glowing in dark water" width="128" align="right">
+
 A terminal web browser on [intuiTUIve](https://crates.io/crates/rs-rich-intuituive).
 Chrome loads and runs the page; Noctiluca reads what Chrome laid out and
 draws it in cells. Text stays terminal text you can select and copy,
@@ -51,5 +53,7 @@ as a normal user, never as root.
   not try to hide it.
 - Sound plays on the machine Chrome runs on, never over SSH.
 
-The design, its phases and what is still to come are in
+The guide, with every key, the config and troubleshooting, is
+[Noctiluca's page](https://buchochelliq-labs.github.io/rs-rich-cli/guide/noctiluca/)
+on the docs site. The design, its phases and what is still to come are in
 [`docs/design/browser.md`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/design/browser.md).

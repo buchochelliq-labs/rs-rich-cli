@@ -39,6 +39,20 @@ cells redrawn.
 
 </div>
 
+<div class="rs-subsite noct-subsite" markdown>
+
+![Noctiluca's logo](../assets/noctiluca/logo.svg){ .rs-mark width="48" }
+
+<div markdown>
+
+**Built on intuiTUIve: [Noctiluca](noctiluca.md)** (`noctiluca`), a web
+browser for the terminal. Chrome runs the page; Noctiluca draws it in
+cells, with link hints, keywords and keys of your own for each site.
+
+</div>
+
+</div>
+
 A Markdown document from the core, a dashboard of `rs-rich-ext` charts in a
 core `Layout`, and an `rs-rich-interact` explorer searching a YAML file:
 
