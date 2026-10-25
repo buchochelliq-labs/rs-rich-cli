@@ -24,8 +24,29 @@ use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, ScrollCx, Used, Widget, 
 
 pub(crate) type Draw = Box<dyn Fn(&Console, u16, u16) -> Vec<Vec<Segment>>>;
 
-/// The most rows a [`scroll`](crate::scroll) lays its child out in.
+/// The most rows a [`scroll`](crate::scroll) lays its child out in: rows
+/// past it are cut off (a debug build says so once). Long content belongs
+/// in a [`scroll_virtual`](crate::scroll_virtual), which has no cap.
 pub(crate) const MAX_SCROLL_ROWS: u16 = 4000;
+
+/// In a debug build, say once on stderr that a [`scroll`](crate::scroll)
+/// cut its content at [`MAX_SCROLL_ROWS`].
+fn cut_off(rows: u16) {
+    #[cfg(debug_assertions)]
+    {
+        thread_local! {
+            static SAID: Cell<bool> = const { Cell::new(false) };
+        }
+        if !SAID.with(|said| said.replace(true)) {
+            eprintln!(
+                "intuituive: a scroll() holds {rows} rows or more and shows only the first \
+                 {MAX_SCROLL_ROWS}: use scroll_virtual for long content"
+            );
+        }
+    }
+    #[cfg(not(debug_assertions))]
+    let _ = rows;
+}
 /// The widest content a view that scrolls across lays out.
 pub(crate) const MAX_SCROLL_COLUMNS: u16 = 2000;
 
@@ -2121,6 +2142,9 @@ impl Widget for ScrollView {
             }
             w = wide(view_w);
             h = tall(w);
+        }
+        if self.vertical && h > MAX_SCROLL_ROWS {
+            cut_off(h);
         }
         self.offset.get();
         self.x_offset.get();

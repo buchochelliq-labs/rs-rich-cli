@@ -27,8 +27,6 @@ the same pages through a real Chrome in CI.
 
 - **One tab.** The tab actions are listed and say "One tab for now".
 - **The projection is rough:** no fixed or sticky layer, no paint order.
-- **Scrolling is Noctiluca's own.** Chrome's page does not scroll, so pages
-  that load more as you scroll do not load more.
 - **No pictures in the projection**, no animated GIFs (a still frame in
   reader mode), and no video frames (a video's sound plays).
 - **`--fps` and `fps` are read but change nothing yet.**
@@ -40,13 +38,12 @@ the same pages through a real Chrome in CI.
 
 **0.0.23: pictures and scrolling.**
 
-- Pictures in the projection, including pictures partly in view.
+- Pictures in the projection.
 - Animated GIFs.
-- Images that load lazily, as you scroll.
-- Infinite scroll: Noctiluca follows Chrome's scroll, so a page that loads
-  more as you scroll does.
+- Done: Chrome's scroll follows Noctiluca's, so lazy images and infinite
+  feeds load as you scroll, and a picture partly in view shows its part.
 
-**0.0.24: video.** Play, pause, seek and mute a video in its own region,
+**Also in 0.0.23: video.** Play, pause, seek and mute a video in its own region,
 its frames under a budget, stepping down to character art on a slow
 terminal.
 

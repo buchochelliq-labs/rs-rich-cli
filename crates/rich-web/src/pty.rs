@@ -57,11 +57,11 @@ impl Drop for Running<'_> {
 pub(crate) fn run(
     socket: &mut WebSocket<TcpStream>,
     mut host: Box<dyn PtyHost>,
-    columns: u16,
-    rows: u16,
+    (columns, rows): (u16, u16),
     stopping: &AtomicBool,
     running: &AtomicUsize,
     window: usize,
+    z: crate::session::Compress,
 ) -> io::Result<()> {
     // Counted before `stopping` is read, as `Handle::stop` sets `stopping`
     // before it waits for the count: a program either never starts or is
@@ -73,7 +73,7 @@ pub(crate) fn run(
     } else {
         match host.start(columns, rows) {
             Ok(()) => {
-                let result = serve(socket, &mut *host, stopping, window);
+                let result = serve(socket, &mut *host, stopping, window, z);
                 end(&mut *host);
                 result
             }
@@ -113,6 +113,7 @@ fn serve(
     host: &mut dyn PtyHost,
     stopping: &AtomicBool,
     window: usize,
+    z: crate::session::Compress,
 ) -> io::Result<Option<String>> {
     // Bytes sent that the page has not said it drew.
     let mut unshown: u64 = 0;
@@ -128,7 +129,7 @@ fn serve(
         if unshown < window {
             let out = host.read();
             for chunk in out.chunks(CHUNK) {
-                deliver(socket, Message::binary(chunk.to_vec()))?;
+                deliver(socket, z.bytes(chunk))?;
                 unshown += chunk.len() as u64;
             }
         }

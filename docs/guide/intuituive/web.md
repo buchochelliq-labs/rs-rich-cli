@@ -87,6 +87,11 @@ Server::bind("127.0.0.1:0", counter)? // port 0: any free port
   [DOM renderer](#the-dom-renderer) instead of xterm.js.
 - **`max_buffered(bytes)`** bounds the output a
   [program's](#any-terminal-program) session holds for a slow page.
+- **`compress(Some(1024))`** deflates frames of 1,024 bytes or more, for
+  a page over a slow link. The page asks for it only where the browser has
+  `DecompressionStream`, and inflates the frames itself. Frames shrink to
+  5 to 30% of their size for 15 to 60 µs of work each. Off by default: on
+  one machine it only adds work.
 - **`isolation(Isolation::Threads)`**, **`session_command(program, args)`**,
   **`session_memory(bytes)`** and **`session_cpu(time)`** decide where each
   session runs (see [below](#one-process-per-session)).
@@ -261,6 +266,7 @@ Serving htop at http://127.0.0.1:8080/?token=9b1e4c…
 | `--port N` | `8080` | The port; `0` picks a free one. |
 | `--max-sessions N` | `8` | Programs (tabs) at once; one more is refused until one ends. |
 | `--allow-origin ORIGIN` | | Also accept the page from ORIGIN, where a reverse proxy serves it. Repeatable. |
+| `--compress` | off | Compress frames of 1 KiB or more with deflate, for pages that can undo it. Worth it over a slow link (frames shrink to 5 to 30% of their size); on this computer it only adds work. |
 
 Everything after `--` (or after the first word that is not an option) is
 the program and its arguments. Ctrl+C stops the server and every program

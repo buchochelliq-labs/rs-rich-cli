@@ -269,3 +269,48 @@ fn an_apps_devtools_call_reaches_the_page() {
         .unwrap();
     assert_eq!(again["result"]["value"], 2);
 }
+
+/// With the screencast off no frame streams in, while the page still loads
+/// and answers calls; switched on, frames come.
+#[test]
+fn the_screencast_runs_only_while_it_is_on() {
+    use rich_embed::WebEngine;
+    use serde_json::json;
+
+    let Some(binary) = std::env::var_os("RICH_EMBED_CHROME") else {
+        eprintln!("skipped: set RICH_EMBED_CHROME to a Chrome or Chromium binary to run");
+        return;
+    };
+    let mut engine = ChromeEngine::new().binary(binary).screencast(false);
+    engine.resize(40, 10).unwrap();
+    engine
+        .open("data:text/html,<title>t</title><body style='background:%2300f'><h1>Hi</h1>")
+        .unwrap();
+    let devtools = engine.devtools().unwrap();
+    let frames = devtools.listen(&["Page.screencastFrame"]);
+    let wait = Duration::from_secs(60);
+    let start = Instant::now();
+    loop {
+        let answer = devtools
+            .call(
+                "Runtime.evaluate",
+                json!({"expression": "document.querySelector('h1')?.textContent ?? ''",
+                       "returnByValue": true}),
+                wait,
+            )
+            .unwrap();
+        if answer["result"]["value"] == "Hi" || start.elapsed() > wait {
+            break;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    }
+    assert!(
+        frames.recv_timeout(Duration::from_secs(2)).is_err(),
+        "a frame came with the screencast off"
+    );
+    engine.set_screencast(true).unwrap();
+    assert!(
+        frames.recv_timeout(Duration::from_secs(30)).is_ok(),
+        "no frame came with the screencast on"
+    );
+}

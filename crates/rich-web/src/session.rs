@@ -101,6 +101,7 @@ pub(crate) fn run(
     rows: u16,
     stopping: &AtomicBool,
     renderer: Renderer,
+    z: Compress,
 ) -> io::Result<()> {
     let start = Instant::now();
     let mut driver = app.driver(columns, rows);
@@ -111,8 +112,8 @@ pub(crate) fn run(
     let mut copies = Copies::default();
     let mut dom = (renderer == Renderer::Dom).then(Dom::new);
     match &dom {
-        Some(dom) => send(socket, &dom.hello())?,
-        None => send(socket, SETUP)?,
+        Some(dom) => send(socket, &dom.hello(), z)?,
+        None => send(socket, SETUP, z)?,
     }
     let result = (|| -> io::Result<()> {
         loop {
@@ -120,7 +121,7 @@ pub(crate) fn run(
                 return Ok(());
             }
             driver.update(start.elapsed());
-            tell(&mut driver, socket, &mut copies, dom.as_mut())?;
+            tell(&mut driver, socket, &mut copies, dom.as_mut(), z)?;
             if driver.is_done() {
                 return Ok(());
             }
@@ -128,14 +129,14 @@ pub(crate) fn run(
                 match &mut dom {
                     Some(dom) => {
                         for message in dom.update(&driver) {
-                            send(socket, &message)?;
+                            send(socket, &message, z)?;
                         }
                     }
-                    None if !out.is_empty() => send(socket, &out)?,
+                    None if !out.is_empty() => send(socket, &out, z)?,
                     None => {}
                 }
             }
-            tell(&mut driver, socket, &mut copies, dom.as_mut())?;
+            tell(&mut driver, socket, &mut copies, dom.as_mut(), z)?;
             if driver.is_done() {
                 return Ok(());
             }
@@ -174,7 +175,7 @@ pub(crate) fn run(
                 PageMessage::Copied(number, ok) => copies.answered(&mut driver, number, ok),
                 PageMessage::Shown(_) | PageMessage::Unknown => {}
             }
-            tell(&mut driver, socket, &mut copies, dom.as_mut())?;
+            tell(&mut driver, socket, &mut copies, dom.as_mut(), z)?;
         }
     })();
     // Leave the page's terminal as it was, then say goodbye. Errors here
@@ -182,7 +183,7 @@ pub(crate) fn run(
     if socket.can_write() && dom.is_none() {
         let mut last = driver.finish();
         last.push_str(TEARDOWN);
-        let _ = send(socket, &last);
+        let _ = send(socket, &last, z);
     }
     close(socket, None);
     result
@@ -194,21 +195,67 @@ fn tell(
     socket: &mut WebSocket<TcpStream>,
     copies: &mut Copies,
     dom: Option<&mut Dom>,
+    z: Compress,
 ) -> io::Result<()> {
     let dom = dom.is_some();
-    copies.send(driver, socket, dom)?;
+    copies.send(driver, socket, dom, z)?;
     let said = driver.take_announcements();
     if dom {
         for announcement in said {
-            send(socket, &crate::dom::say(&announcement))?;
+            send(socket, &crate::dom::say(&announcement), z)?;
         }
     }
     Ok(())
 }
 
 /// Send `text` as one message.
-pub(crate) fn send(socket: &mut WebSocket<TcpStream>, text: &str) -> io::Result<()> {
-    deliver(socket, Message::text(text))
+pub(crate) fn send(socket: &mut WebSocket<TcpStream>, text: &str, z: Compress) -> io::Result<()> {
+    deliver(socket, z.text(text))
+}
+
+/// Whether frames are compressed, and from what size: what the server
+/// allows ([`Server::compress`](crate::Server::compress)) and the page
+/// asked for (`z=1`, when it has `DecompressionStream`).
+///
+/// Compressed, every binary message starts with a byte: `0` for bytes as
+/// they are, `1` for a raw deflate stream (`deflate-raw`) of them. A text
+/// message at least the threshold long goes as a binary message of its
+/// deflated UTF-8, marked `1`; a shorter one stays text. Each message is
+/// its own deflate stream, at level 1.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+pub(crate) struct Compress(pub Option<usize>);
+
+impl Compress {
+    /// `text` as the message to send.
+    pub(crate) fn text(self, text: &str) -> Message {
+        match self.0 {
+            Some(at) if text.len() >= at => Message::binary(deflated(text.as_bytes())),
+            _ => Message::text(text),
+        }
+    }
+
+    /// A program's output as the message to send.
+    pub(crate) fn bytes(self, bytes: &[u8]) -> Message {
+        match self.0 {
+            None => Message::binary(bytes.to_vec()),
+            Some(at) if bytes.len() >= at => Message::binary(deflated(bytes)),
+            Some(_) => {
+                let mut out = Vec::with_capacity(bytes.len() + 1);
+                out.push(0);
+                out.extend_from_slice(bytes);
+                Message::binary(out)
+            }
+        }
+    }
+}
+
+/// `1`, then `bytes` as a raw deflate stream at level 1.
+fn deflated(bytes: &[u8]) -> Vec<u8> {
+    use std::io::Write;
+    let mut z = flate2::write::DeflateEncoder::new(vec![1u8], flate2::Compression::new(1));
+    // Writing to a Vec cannot fail.
+    let _ = z.write_all(bytes);
+    z.finish().unwrap_or_default()
 }
 
 /// Send `message`, as an [`io::Error`] when it fails.
@@ -271,6 +318,7 @@ impl Copies {
         driver: &mut Driver,
         socket: &mut WebSocket<TcpStream>,
         dom: bool,
+        z: Compress,
     ) -> io::Result<()> {
         for text in driver.take_copies() {
             self.sent += 1;
@@ -280,7 +328,7 @@ impl Copies {
                 let encoded = data_encoding::BASE64.encode(text.as_bytes());
                 format!("\x1b]52;c;{encoded}\x07")
             };
-            send(socket, &message)?;
+            send(socket, &message, z)?;
             self.waiting.push_back((self.sent, text));
             if self.waiting.len() > COPIES_WAITING {
                 self.waiting.pop_front();

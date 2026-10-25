@@ -138,6 +138,42 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   backend now hands out one key a frame: since input is drained before a
   frame, it had been measuring 64 keys a frame.
 
+### Long pages and endless feeds (intuituive, noctiluca, rich-embed, rich-web, CLI)
+
+- **`scroll_virtual(len, height_of, row)`** in intuiTUIve: a scroll view
+  that builds only the items near the view, so a million items cost a
+  screenful. Heights are estimated, then measured once drawn. The offset
+  is a `u64`, so there is no row cap. `.item_key` keeps the top item in
+  place when items arrive above it, `.on_near_end` loads more near the
+  end (one load at a time), and `.stand_in` draws cheap stand-ins while
+  scrolling fast (measured: about five times faster frames over cards).
+- **`scroll()` says when it cuts.** Its 4,000-row cap is documented, and a
+  debug build warns once when content is cut.
+- **`Driver::damage_since`**: the cells the last frames changed, for
+  renderers that draw the screen themselves.
+- **Noctiluca scrolls long pages and feeds.** Both views build only the
+  rows near the screen, with no row cap. Chrome's scroll follows yours,
+  so lazy images load and infinite feeds load more; near the end Chrome
+  is scrolled to its bottom. Your place stays put when the page grows
+  above it. The layout is made once per reading, not per key. A page cut
+  for length says so in the status line.
+- **Pictures partly in view** draw clipped to their visible rows in Sixel
+  and iTerm2, as in Kitty, rather than as half blocks until wholly on
+  screen (intuiTUIve's image layer). In Noctiluca, lazy images load as
+  Chrome scrolls, and an image gets its still only once its picture has
+  loaded.
+- **rs-rich-embed's screencast can be off**: `ChromeEngine::screencast`
+  and `set_screencast`. Noctiluca turns it off, so no frame is encoded or
+  decoded.
+- **rs-rich-web's DOM renderer** compares only the rows the frames
+  damaged, and makes the accessibility tree's JSON only when it changed.
+- **rs-rich-web can compress frames**, opt-in: `Server::compress`. Pages
+  with `DecompressionStream` ask for it and inflate frames themselves.
+  Measured: frames shrink to 5 to 30% for 15 to 60 µs each.
+- **`rich serve --compress`** (CLI, `serve` feature): deflates frames of
+  1 KiB or more for pages that can undo it. Off by default; worth it over
+  a slow link.
+
 ## 0.0.22 cohort — published 2026-10-25
 
 Published on 2026-10-25 from `6e8e82e` by one `release.yml` run (tag

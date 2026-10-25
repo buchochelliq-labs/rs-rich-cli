@@ -22,8 +22,8 @@ use rich_embed::{ChromeEngine, DevTools, DevToolsEvent, Downloads, PageState, We
 use serde_json::{json, Value};
 
 use crate::engine::{
-    Engine, EngineEvent, Format, Frame, HistoryStep, MediaOp, PageAction, PageSnapshot, Playback,
-    Rect, TabId,
+    Engine, EngineEvent, Format, Frame, HistoryStep, MediaOp, Metrics, PageAction, PageSnapshot,
+    Playback, Rect, TabId,
 };
 
 /// How long one DevTools call may take.
@@ -139,9 +139,12 @@ pub struct ChromeBackend {
 impl ChromeBackend {
     /// Start the browser and set up the isolated world.
     pub fn start(options: ChromeOptions) -> io::Result<ChromeBackend> {
+        // Noctiluca reads the page, not its pixels: no screencast, so
+        // Chrome encodes no frame and the engine decodes none.
         let mut engine = ChromeEngine::new()
             .audio(options.audio)
-            .cell_pixels(CELL.0, CELL.1);
+            .cell_pixels(CELL.0, CELL.1)
+            .screencast(false);
         if let Some(binary) = options.binary.clone().or_else(find_chrome) {
             engine = engine.binary(binary);
         }
@@ -445,10 +448,27 @@ impl Engine for ChromeBackend {
             }
             PageAction::ScrollTo(y) => {
                 let context = self.world()?;
+                // Past the end is the end: the document's own height.
+                let y = if y.is_finite() && *y < 1e12 {
+                    format!("{y}")
+                } else {
+                    "document.scrollingElement.scrollHeight".to_string()
+                };
                 self.call(
                     "Runtime.evaluate",
                     json!({"expression": format!("window.scrollTo(0, {y})"),
                            "contextId": context}),
+                )
+                .map(drop)
+            }
+            PageAction::Wheel(delta) => {
+                // At the viewport's top left corner, inside it whatever its
+                // size: the wheel scrolls what is under the pointer, and
+                // the document when nothing under it scrolls.
+                self.call(
+                    "Input.dispatchMouseEvent",
+                    json!({"type": "mouseWheel", "x": 4, "y": 4,
+                           "deltaX": 0, "deltaY": delta, "modifiers": 0}),
                 )
                 .map(drop)
             }
@@ -470,6 +490,33 @@ impl Engine for ChromeBackend {
             time: at(3).as_f64().unwrap_or(0.0),
             duration: at(4).as_f64().filter(|d| *d >= 0.0),
             ended: at(5).as_bool().unwrap_or(false),
+        })
+    }
+
+    fn image_ready(&mut self, _tab: TabId, node: i64) -> io::Result<bool> {
+        let value = self.call_on(
+            node,
+            "function() { return !(this instanceof HTMLImageElement) || \
+               (this.complete && this.naturalWidth > 0); }",
+            vec![],
+        )?;
+        Ok(value.as_bool().unwrap_or(true))
+    }
+
+    fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
+        let metrics = self.call("Page.getLayoutMetrics", json!({}))?;
+        // The `css…` sizes are CSS pixels; the older names are device
+        // pixels, the same at our scale factor of one.
+        let pick = |css: &str, old: &str, key: &str| {
+            metrics[css][key]
+                .as_f64()
+                .or_else(|| metrics[old][key].as_f64())
+                .unwrap_or(0.0)
+        };
+        Ok(Metrics {
+            scroll_y: pick("cssVisualViewport", "visualViewport", "pageY"),
+            content_height: pick("cssContentSize", "contentSize", "height"),
+            viewport_height: pick("cssVisualViewport", "visualViewport", "clientHeight"),
         })
     }
 

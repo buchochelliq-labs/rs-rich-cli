@@ -4337,6 +4337,13 @@ pub fn repeating<C: Component + 'static>(
 /// inside used them) and the mouse wheel, with a scrollbar when it does not
 /// fit. Focus moving to a node inside scrolls it into view. Only the nodes
 /// inside that changed draw; the rows in view are copied out.
+///
+/// It is for content of a modest size: the child is laid out and drawn
+/// whole, and rows past the 4000th (`MAX_SCROLL_ROWS`) are cut off and
+/// cannot be reached. A debug build says so once on stderr when that
+/// happens. For long or endless content (a feed, a log, search results),
+/// use [`scroll_virtual`](crate::scroll_virtual), which builds only the
+/// items near the view and has no row cap.
 pub fn scroll(child: Node) -> Node {
     scroll_with(child, crate::reactive::signal(0))
 }

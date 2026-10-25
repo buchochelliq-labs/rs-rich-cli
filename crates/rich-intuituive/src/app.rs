@@ -3453,6 +3453,7 @@ impl App {
             done: false,
             written: Vec::new(),
             written_focus: None,
+            damage_log: std::collections::VecDeque::new(),
         }
     }
 
@@ -6283,7 +6284,13 @@ pub struct Driver {
     /// screen on the stack, and what had the focus.
     written: Vec<HashMap<NodeId, String>>,
     written_focus: Option<NodeId>,
+    /// The last frames' damage, by frame number: [`Driver::damage_since`].
+    damage_log: std::collections::VecDeque<(u64, Vec<Rect>)>,
 }
+
+/// How many frames' damage a [`Driver`] keeps for
+/// [`damage_since`](Driver::damage_since).
+const DAMAGE_FRAMES: usize = 64;
 
 /// How many frames in a row a node may leave itself dirty before its own
 /// writes stop drawing it again.
@@ -7089,6 +7096,48 @@ impl Driver {
         self.app.stats.get()
     }
 
+    /// The cells the frames after frame `frame` (a
+    /// [`stats`](Self::stats)`().frames` read earlier) may have changed,
+    /// as rectangles of the [screen](Self::screen); `None` when the driver
+    /// no longer remembers back that far (it keeps the last 64 frames),
+    /// and a caller compares everything. A renderer that draws the screen
+    /// itself, such as a browser's DOM, looks only there.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     column([label("still"), text!("{n}").on_key("+", move |_| n.update(|n| *n += 1))])
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// driver.settle();
+    /// let seen = driver.stats().frames;
+    /// driver.press("+");
+    /// let damage = driver.damage_since(seen).unwrap();
+    /// assert!(damage.iter().all(|rect| rect.y == 1));
+    /// ```
+    pub fn damage_since(&self, frame: u64) -> Option<Vec<Rect>> {
+        // Linear mode writes lines, not cells.
+        if self.app.linear {
+            return None;
+        }
+        if frame >= self.app.stats.get().frames {
+            return Some(Vec::new());
+        }
+        let oldest = self.damage_log.front().map_or(u64::MAX, |(n, _)| *n);
+        if frame + 1 < oldest {
+            return None;
+        }
+        Some(
+            self.damage_log
+                .iter()
+                .filter(|(n, _)| *n > frame)
+                .flat_map(|(_, rects)| rects.iter().copied())
+                .collect(),
+        )
+    }
+
     /// The node selected in the [inspector](crate::inspect), if any.
     pub fn inspector_selected(&self) -> Option<NodeId> {
         self.app.inspector.as_ref().and_then(|i| i.selected)
@@ -7439,6 +7488,12 @@ impl Driver {
             .map(|p| Rect::new(p.column as u16, p.row as u16, p.cols as u16, p.rows as u16))
             .collect();
         self.painter.set_fixed(&fixed);
+        // Kept for a renderer that draws the screen itself.
+        let frame = app.stats.get().frames;
+        if self.damage_log.len() == DAMAGE_FRAMES {
+            self.damage_log.pop_front();
+        }
+        self.damage_log.push_back((frame, damage.clone()));
         let mut out = String::new();
         self.painter.paint_into(screen, &damage, &mut out);
         screen.forget_scrolls();

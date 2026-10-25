@@ -54,7 +54,30 @@
   var token = new URLSearchParams(window.location.search).get("token") || "";
   var scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
   var socket = new WebSocket(scheme + "//" + window.location.host + "/ws?token=" +
-    encodeURIComponent(token) + "&cols=" + size[0] + "&rows=" + size[1] + "&renderer=dom");
+    encodeURIComponent(token) + "&cols=" + size[0] + "&rows=" + size[1] + "&renderer=dom" +
+    (typeof DecompressionStream === "function" ? "&z=1" : ""));
+  socket.binaryType = "arraybuffer";
+  // Compressed frames, when the server compresses (`Server::compress`):
+  // each binary message starts with 0 (as it is) or 1 (deflate-raw). The
+  // page asks for them only where the browser can undo them. Messages are
+  // handled one after another, in order, as decompressing is async.
+  var compressed = typeof DecompressionStream === "function";
+  var queue = Promise.resolve();
+  function unpack(data) {
+    if (typeof data === "string" || !compressed) {
+      return Promise.resolve(typeof data === "string" ? data : new Uint8Array(data));
+    }
+    var bytes = new Uint8Array(data);
+    if (bytes[0] !== 1) {
+      return Promise.resolve(bytes.subarray(1));
+    }
+    var stream = new Blob([bytes.subarray(1)]).stream()
+      .pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Response(stream).arrayBuffer().then(function (out) {
+      return new Uint8Array(out);
+    });
+  }
+
   var open = false;
 
   function send(message) {
@@ -254,9 +277,18 @@
     root.focus({ preventScroll: true });
   };
   socket.onmessage = function (event) {
+    queue = queue.then(function () {
+      return unpack(event.data);
+    }).then(function (data) {
+      handle(typeof data === "string" ? data : new TextDecoder().decode(data));
+    }, function () {
+      // A frame that does not decompress is dropped.
+    });
+  };
+  function handle(text) {
     var message;
     try {
-      message = JSON.parse(event.data);
+      message = JSON.parse(text);
     } catch (e) {
       return;
     }
@@ -272,7 +304,7 @@
       case "say": announce(message); break;
       case "copy": copy(message); break;
     }
-  };
+  }
   socket.onclose = function (event) {
     var was = open;
     open = false;

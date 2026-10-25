@@ -19,7 +19,9 @@
 //!   quarantine directory, when asked: [`ChromeEngine::downloads`]);
 //! - a page target is created and attached in flat mode;
 //! - frames come from `Page.startScreencast` (JPEG, each acknowledged),
-//!   at the page's size in cells times [`ChromeEngine::cell_pixels`];
+//!   at the page's size in cells times [`ChromeEngine::cell_pixels`], while
+//!   the screencast is on ([`ChromeEngine::screencast`]): an app that reads
+//!   the page rather than its pixels turns it off, so no frame is decoded;
 //! - keys, the mouse and pastes go in as `Input.dispatchKeyEvent`,
 //!   `Input.dispatchMouseEvent` and `Input.insertText`;
 //! - the address, loading state and history come from `Page` events and
@@ -116,6 +118,7 @@ enum Request {
     Back,
     Forward,
     Reload,
+    Screencast(bool),
 }
 
 #[derive(Default)]
@@ -274,6 +277,7 @@ pub struct ChromeEngine {
     downloads: Downloads,
     listeners: Listeners,
     wire: Wire,
+    screencast: bool,
 }
 
 impl fmt::Debug for ChromeEngine {
@@ -307,6 +311,7 @@ impl ChromeEngine {
             downloads: Downloads::Deny,
             listeners: Arc::default(),
             wire: Wire::DEFAULT,
+            screencast: true,
         }
     }
 
@@ -356,6 +361,28 @@ impl ChromeEngine {
                 .filter(|arg| !turns_sandbox_off(arg) && !moves_devtools(arg)),
         );
         self
+    }
+
+    /// Whether the page's pixels stream in as frames (`Page.startScreencast`,
+    /// each JPEG decoded). On by default; an app that reads the page itself
+    /// (its snapshot, its accessibility tree) and never shows the frames
+    /// turns it off, so the browser does not encode them nor the engine
+    /// decode them. [`set_screencast`](Self::set_screencast) switches it
+    /// while the page is open: screencast on demand.
+    #[must_use]
+    pub fn screencast(mut self, on: bool) -> ChromeEngine {
+        self.screencast = on;
+        self
+    }
+
+    /// Start or stop the screencast now (see [`screencast`](Self::screencast)).
+    /// Frames come again from the next one Chrome paints.
+    pub fn set_screencast(&mut self, on: bool) -> io::Result<()> {
+        self.screencast = on;
+        if self.commands.is_none() {
+            return Ok(());
+        }
+        self.send(Request::Screencast(on))
     }
 
     /// The CSS pixels one cell of the pane stands for (default 10 x 20):
@@ -503,6 +530,7 @@ impl ChromeEngine {
         let wiring = Wiring {
             downloads: self.downloads.clone(),
             listeners: Arc::clone(&self.listeners),
+            screencast: self.screencast,
         };
         thread::spawn(move || {
             if let Err(error) = run(connect, stderr, receiver, called, &shared, cell, wiring) {
@@ -1148,12 +1176,15 @@ struct Session {
     /// The app's DevTools calls made before the page was attached.
     calls: Vec<Call>,
     listeners: Listeners,
+    /// Whether frames stream in.
+    screencast: bool,
 }
 
 /// What the engine's thread is set up with besides its channels.
 struct Wiring {
     downloads: Downloads,
     listeners: Listeners,
+    screencast: bool,
 }
 
 /// The `Browser.setDownloadBehavior` parameters for `downloads`.
@@ -1197,6 +1228,9 @@ impl Session {
             json!({"width": width, "height": height, "deviceScaleFactor": 1, "mobile": false}),
         )?;
         self.page("Page.stopScreencast", json!({}))?;
+        if !self.screencast {
+            return Ok(());
+        }
         self.page(
             "Page.startScreencast",
             json!({"format": "jpeg", "quality": 70, "maxWidth": width, "maxHeight": height,
@@ -1247,6 +1281,10 @@ impl Session {
             }
             Request::Back | Request::Forward => Ok(()),
             Request::Reload => self.page("Page.reload", json!({})),
+            Request::Screencast(on) => {
+                self.screencast = on;
+                self.screencast()
+            }
         }
     }
 
@@ -1415,6 +1453,7 @@ fn run(
         waiting: Vec::new(),
         calls: Vec::new(),
         listeners: wiring.listeners,
+        screencast: wiring.screencast,
     };
     session.send(
         "Browser.setDownloadBehavior",

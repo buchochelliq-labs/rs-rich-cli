@@ -5,8 +5,9 @@ surveys: Noctiluca and rs-rich-web's render paths, intuiTUIve's pipeline,
 and how other projects do it (sources at the end). The painter's part
 (frame stats, the timedemo, the benchmark, the faster painter and the
 paint strategies) is built on the `023-paint` branch: see [What was
-built, measured](#what-was-built-measured). The viewport and Noctiluca
-are another branch's. The maintainer asked for three things:
+built, measured](#what-was-built-measured). Steps 4 to 6 (the viewport,
+Noctiluca and rs-rich-web) are built on branch `023-scroll`: see [What
+landed](#what-landed). The maintainer asked for three things:
 
 1. **Forever scroll:** pages and lists that keep loading as you scroll,
    with only what is on screen rendered. Possibly a core optimisation.
@@ -1003,6 +1004,46 @@ The benchmark gains a simulated link (bytes per second plus a fixed
 latency per write), so each strategy and compression setting is judged by
 time to the screen, not only by bytes.
 
+**Built on `023-scroll`, opt-in:** `Server::compress(Some(threshold))`.
+A page that has `DecompressionStream` asks with `z=1`; then each binary
+message starts with a byte, `0` as it is or `1` for `deflate-raw`, and a
+text message at least the threshold long goes deflated. The page handles
+messages in order through a promise queue. Off by default.
+
+Measured per frame on rs-rich-web's own scenes, deflate at level 1, one
+stream per frame, with the compressor optimised and the rest a debug
+build (`tests/compress_measure.rs`, run by hand):
+
+| Scene, 80x24 unless said | Renderer | Bytes a frame | Deflated | Encode |
+|---|---|---:|---:|---:|
+| Churn, every cell | xterm | 26,297 | 1,506 (5%) | 59 µs |
+| Churn, every cell | DOM | 18,200 | 1,412 (7%) | 43 µs |
+| List, a row a frame | xterm | 613 | 199 (32%) | 20 µs |
+| List, a row a frame | DOM | 821 | 210 (25%) | 18 µs |
+| List, a page a frame | xterm | 1,176 | 326 (27%) | 24 µs |
+| List, a page a frame | DOM | 1,530 | 280 (18%) | 20 µs |
+| Log append | xterm | 132 | 61 (46%) | 15 µs |
+| Log append | DOM | 557 | 161 (28%) | 21 µs |
+| List at 200x60, a page a frame | xterm | 3,091 | 616 (19%) | 30 µs |
+| List at 200x60, a page a frame | DOM | 7,204 | 502 (6%) | 25 µs |
+
+Small frames gain little and still cost the encode, hence the threshold.
+On a 10 Mbit/s link a 26 kB churn frame takes 21 ms to send and 1.2 ms
+deflated, for 59 µs of work: a clear gain. On a local machine the link is
+faster than the compressor, so it stays off by default.
+
+**Not built: client pull.** A session sends each frame as it is drawn, and
+the socket's write blocks while the kernel's buffer is full, so no backlog
+grows inside the server, but frames can queue in the kernel and the
+network. VNC's and Mosh's way is to send only the newest state once the
+page says it has drawn the last: the program sessions already do this
+(the page acknowledges bytes shown). For apps, the DOM renderer is the
+natural seam: it holds the last sent lines and the damage since a frame
+number, so it can skip frames until the page acknowledges one and then
+send the rows damaged since the acknowledged frame. Mosh-style deltas
+against an acknowledged frame and local echo of typed keys go there too.
+Later work.
+
 ## Benchmarks
 
 A benchmark comes first and decides the defaults. Each scene runs at
@@ -1076,6 +1117,127 @@ Steps 1 to 3 are independent of 4 to 6, and can run alongside them.
 Steps 1 to 3 are done on the `023-paint` branch, measured first and in
 the order the profile gave: the draw's line writing, the cell layout, the
 encoder, then the strategies.
+
+## What landed
+
+Steps 4 to 6, on branch `023-scroll`. Steps 1 to 3 are the painter's
+branch (`023-paint`, merged through `023-core`): see [What was built,
+measured](#what-was-built-measured).
+
+### The virtual scroll view (step 4)
+
+- **`scroll_virtual(len, height_of, row)`** in intuiTUIve core
+  (`scroll_virtual.rs`), with `scroll_virtual_with` for the offset as a
+  `Signal<u64>`. It is generic: Noctiluca uses it, and owns nothing it
+  needs.
+  - Heights are summed in blocks of 256 items. Finding a row walks the
+    blocks, then at most 256 items, so a million items cost a few
+    thousand additions per layout, not a million.
+  - The built items cover the view and a screen either side. They are
+    rebuilt only when the view comes within half a screen of their edge,
+    so a scroll inside them only copies rows out.
+  - The scrollbar, keys, the wheel and the bar work as `scroll()`'s.
+  - `.item_key` anchors the top item in view when items above change
+    height or are inserted. It looks for the anchored key where the
+    length change puts it, then up to 4,096 items either side.
+  - `.on_near_end(threshold, load)` fires once until `len` grows.
+- **Level of detail** (game idea 3): `.stand_in(make)`, opt-in. It was
+  kept because it measured well. On a held PageDown over 100,000 cards
+  (a panel of styled text) at 80x40, in a debug build: 200 pages took
+  5.0 s with full items and 1.0 s with stand-ins, about 25 ms and 5 ms a
+  frame. Over one-line labels: 0.97 s and 0.89 s, no real gain. The
+  measurement is `tests/scroll_virtual_measure.rs`, run by hand.
+- **`scroll()`** keeps its 4,000-row cap. Its docs say so and point to
+  `scroll_virtual`, and a debug build says so once on stderr when it cuts.
+- **Not done: `list_lazy` and `virtual_table` on the shared code.** They
+  are one widget each, with a selection that drives a row-count viewport
+  and no child nodes. `scroll_virtual` is a viewport over child nodes.
+  Sharing would mean rewriting both widgets, which the ratatui parity
+  tests cover, for little gain: they already draw a screenful. Left as
+  they are.
+- **A cost to know:** when the built set changes, the node tree's
+  viewport code (`draw_view`) redraws every built item, as it does for
+  any viewport whose children changed. With the half-screen hysteresis
+  that happens about once a screen. Redrawing only the newly built items
+  needs a change in `node.rs`'s viewport drawing.
+
+### Occlusion culling (game idea 5): not built
+
+A node wholly under an opaque modal could skip drawing. It is not small
+in the frame code:
+
+- Full screens already cull: drawing starts at the topmost full screen.
+- Modals draw after the screen under them, which is drawn whole. Culling
+  there needs each node's rectangle tested against the modals' before it
+  draws, and a node skipped while covered must draw when uncovered. That
+  path exists (a modal that moves or closes redraws everything), but
+  modals with a backdrop or a shadow restyle what is under them, so the
+  cells under them are not truly hidden.
+- In a `layers` stack, a covered child must also be left out of the
+  compositing check (`will_draw`), or the stack composes anyway.
+
+The maintainer asked for game techniques to be built only when a
+measurement shows they help. No scene measured so far has a busy node
+under a modal, so it waits for one.
+
+### Noctiluca (step 5)
+
+- **Chrome's scroll follows ours.** A watch on the offset sends, once the
+  view rests 120 ms, a wheel turn (`PageAction::Wheel`, CDP
+  `Input.dispatchMouseEvent` `mouseWheel`) for up to three screens and a
+  jump (`window.scrollTo`) beyond. Each row's page y comes from the
+  projection (its box's top plus its line). `Page.getLayoutMetrics` is
+  read after each scroll (`Engine::metrics`, `Update::Metrics`); a
+  document taller than the one read is read again soon.
+- **Near the end:** the views' `on_near_end` (a screen) sends
+  `Command::LoadMore`, which scrolls Chrome to its bottom. The page is
+  read again on its change ping, as always, and the view asks again only
+  once it has more rows: one load in flight.
+- **Projection near the view: the display, not the layout.** The
+  projection's skyline is sequential: each box's row depends on every box
+  above it. Laying out only blocks near the view would place them wrong.
+  So the layout stays whole, but is made once per reading, width, view
+  and hints (a memo shared by the views, find and the scroll keys), and
+  the view builds only the rows near it, one item per row, on
+  `scroll_virtual`. The 4,000-row cap is gone from both views.
+- **Anchoring by node:** each projection row is keyed by the
+  `backendNodeId` of its first box and which of its lines it is. Content
+  arriving above keeps the row in view. In reader mode a text piece's key
+  holds its index, so there it anchors only on pieces that keep their
+  keys.
+- **The cached layout:** `view_lines()` per keypress and per draw is gone;
+  find's matches are a memo of the layout and the query.
+- **`truncated`** shows as "page cut" in the status line.
+- **No screencast:** `ChromeEngine::screencast(false)`, and
+  `set_screencast` to turn it on for a raster view.
+- **Sixel and iTerm2 pictures partly in view** draw clipped: intuiTUIve's
+  image layer (`image.rs`) places, from the first row of a picture on
+  screen, the picture fitted to all its cells and cut to the rows shown
+  (one graphic per picture, size and rows shown, made once). A picture
+  wholly in view draws as before. Kitty worked row by row already.
+- **Lazy images load as Chrome scrolls**, since Chrome's scroll follows
+  ours. Stills wait for an image's picture (`Engine::image_ready`: an
+  `<img>` that is `complete` with a natural width), so a lazy image far
+  from the view gets no blank still; its load pings, and it is captured at
+  the next reading. Stills are taken nearest Chrome's view first. A test
+  on the fake engine and a live test (`fixtures/lazy.html`).
+- **Tests:** a generated feed snapshot under the fake engine
+  (`tests/feed.rs`): the end loads more, Chrome follows (a wheel turn, a
+  jump to the bottom, a jump to the top), the row in view stays when five
+  posts arrive above it, and a 3,000-post page reaches its end. A fixture
+  page with an IntersectionObserver sentinel (`fixtures/feed.html`) and a
+  live test that loads more by the wheel and by `LoadMore`; it runs in
+  the live-browser CI job only.
+
+### rs-rich-web's DOM renderer (step 6)
+
+- intuiTUIve's `Driver` keeps the last 64 frames' damage
+  (`Driver::damage_since(frame)`). The DOM renderer compares only the
+  rows damaged since its last update, and every row when the driver no
+  longer remembers that far back, after a resize, or the first time.
+- The accessibility tree's JSON is made only when the tree changed. The
+  tree itself is still read each update, since the focus can move with no
+  frame drawn.
 
 ## Open questions
 

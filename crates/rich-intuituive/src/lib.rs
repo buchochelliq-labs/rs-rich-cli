@@ -140,6 +140,7 @@ pub mod reactive;
 mod reorder;
 mod rule;
 pub mod screen;
+mod scroll_virtual;
 mod scrollbar;
 pub mod select;
 mod select_field;
@@ -241,6 +242,7 @@ pub use reactive::{memo, on_write, on_write_ref, signal, viewport, watch, Memo, 
 pub use rich::Overflow;
 pub use rule::rule;
 pub use screen::{PaintStats, PaintStrategy};
+pub use scroll_virtual::{scroll_virtual, scroll_virtual_with};
 pub use select::{list_search, multi_select, ListSearch, Mark, MultiSelect};
 pub use select_field::{select_field, select_field_keyed, SelectOption};
 pub use sheet::{SheetError, Stylesheet};
@@ -279,9 +281,10 @@ pub mod prelude {
         after, column, component, each, effect, every, fill, fixed_step, grid, input, keyed, label,
         latest, latest_every, layers, leaf, list, list_optional, memo, number_input, on_write,
         on_write_ref, rate, renderable, repeating, resource, resource_for, row, scroll,
-        scroll_both, scroll_with, scroll_x, signal, spawn, switch, text, text_area, viewport,
-        watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow,
-        Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Timer, Widget,
+        scroll_both, scroll_virtual, scroll_with, scroll_x, signal, spawn, switch, text, text_area,
+        viewport, watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node,
+        Overflow, Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Timer,
+        Widget,
     };
     pub use crate::{described, drawn, drawn_described};
 }

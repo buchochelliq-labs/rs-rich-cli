@@ -1,0 +1,36 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<title>Feed fixture</title>
+<style>
+  body { font: 16px sans-serif; margin: 8px; }
+  .post { height: 60px; margin: 0 0 16px; }
+  #sentinel { height: 1px; }
+</style>
+</head>
+<body>
+<h1>Feed</h1>
+<main id="posts"></main>
+<div id="sentinel"></div>
+<script>
+// An infinite feed as sites write them: twenty posts at a time, appended
+// when the sentinel under the last one comes into view, up to 200.
+const posts = document.getElementById('posts');
+let count = 0;
+function more() {
+  for (let i = 0; i < 20 && count < 200; i++) {
+    count++;
+    const p = document.createElement('p');
+    p.className = 'post';
+    p.textContent = 'Post ' + count;
+    posts.append(p);
+  }
+}
+more();
+new IntersectionObserver((entries) => {
+  if (entries.some((e) => e.isIntersecting)) more();
+}).observe(document.getElementById('sentinel'));
+</script>
+</body>
+</html>

@@ -120,11 +120,28 @@ pub enum PageAction {
     SelectOption { select: NodeId, option: NodeId },
     /// Set a range input's number, firing `input` and `change`.
     SetRange { node: NodeId, value: f64 },
-    /// Scroll the page so this many CSS pixels are above the viewport.
+    /// Scroll the page so this many CSS pixels are above the viewport (a
+    /// jump: Home, End, find). `f64::MAX` is the bottom.
     ScrollTo(f64),
+    /// Turn the mouse wheel by this many CSS pixels down (up when
+    /// negative), as a user would: the page sees real scrolling, so its
+    /// lazy images load and its infinite feed's sentinels fire.
+    Wheel(f64),
     /// Play, pause, mute or set the volume of a video or audio element,
     /// as the user's own gesture.
     Media { node: NodeId, op: MediaOp },
+}
+
+/// Where the page is scrolled and how tall it is, in CSS pixels: for the
+/// CDP backend, `Page.getLayoutMetrics`.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Metrics {
+    /// The pixels above the viewport.
+    pub scroll_y: f64,
+    /// The document's height.
+    pub content_height: f64,
+    /// The viewport's height.
+    pub viewport_height: f64,
 }
 
 /// What happened in the engine since it was last asked.
@@ -175,6 +192,19 @@ pub trait Engine: Send {
     /// A video or audio element's playback now.
     fn playback(&mut self, _tab: TabId, _node: NodeId) -> io::Result<Playback> {
         Err(io::Error::new(io::ErrorKind::Unsupported, "no media here"))
+    }
+    /// Whether an image element has its picture yet: a lazy image below
+    /// the fold has none until the page scrolls near it. A still of one
+    /// that has none would be blank.
+    fn image_ready(&mut self, _tab: TabId, _node: NodeId) -> io::Result<bool> {
+        Ok(true)
+    }
+    /// Where the page is scrolled and how tall it is now.
+    fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "no metrics here",
+        ))
     }
     /// What happened since the last call.
     fn events(&mut self) -> Vec<EngineEvent>;
