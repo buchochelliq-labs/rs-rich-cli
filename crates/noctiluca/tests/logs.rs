@@ -98,7 +98,11 @@ fn authors_keep_their_colour() {
             .style
             .clone()
     };
-    assert!(span("first light").contains("rgb("), "{}", span("first light"));
+    assert!(
+        span("first light").contains("rgb("),
+        "{}",
+        span("first light")
+    );
     assert_ne!(span("first light"), words.style);
     assert!(span("ada").contains("rgb("), "{}", span("ada"));
 }

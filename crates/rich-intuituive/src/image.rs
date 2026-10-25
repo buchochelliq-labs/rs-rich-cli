@@ -300,27 +300,33 @@ struct ImageGraphics {
 
 impl PlacementSource for ImageGraphics {
     fn placements(&self, frame: &Frame) -> Vec<Placement> {
-        // Each tagged run: its row, column and tag.
+        // Each tagged run whole (cells written over a picture, a modal's,
+        // cut its runs short): its row, column and tag.
         let mut found: Vec<(usize, usize, PictureTag)> = Vec::new();
         for row in 0..frame.height() {
             let mut column = 0;
             let mut open: Option<(usize, PictureTag)> = None;
+            let mut close = |open: &mut Option<(usize, PictureTag)>, end: usize| {
+                if let Some((start, tag)) = open.take() {
+                    // Kitty's placeholders show cell by cell; an overlay
+                    // (Sixel, iTerm2) would draw over what covers it.
+                    if tag.pixels == Pixels::Kitty || end - start == tag.cols {
+                        found.push((row, start, tag));
+                    }
+                }
+            };
             for run in frame.row(row) {
                 let tag = frame.styles().get(run.style()).and_then(PictureTag::of);
                 match (&open, tag) {
                     (Some((_, a)), Some(b)) if *a == b => {}
                     _ => {
-                        if let Some((start, tag)) = open.take() {
-                            found.push((row, start, tag));
-                        }
+                        close(&mut open, column);
                         open = tag.map(|tag| (column, tag));
                     }
                 }
                 column += run.cells();
             }
-            if let Some((start, tag)) = open {
-                found.push((row, start, tag));
-            }
+            close(&mut open, column);
         }
         let has = |row: usize, column: usize, tag: &PictureTag, which: usize| {
             found.iter().any(|(r, c, t)| {
@@ -851,6 +857,32 @@ mod tests {
             "{out:?}"
         );
         assert!(!out.contains("s=3"), "{out:?}");
+    }
+
+    #[test]
+    fn an_overlay_picture_partly_covered_is_not_drawn_over_what_covers_it() {
+        let picture = Picture::new(solid(1, 2, 3));
+        let console = rich::Console::builder().width(8).build();
+        let view = ImageView::new()
+            .fit(ImageFit::Stretch)
+            .pixels(Pixels::Sixel);
+        let mut covered = picture.lines(&console, view, 8, 2);
+        // A modal's cells over the right half of its second row.
+        covered[1] = Segment::divide(&covered[1], &[4, 8]).remove(0);
+        covered[1].push(Segment::new("│box", None));
+        let app = App::new(move || {
+            let rows = covered.clone();
+            crate::node::leaf(move |_, _, _| rows.clone()).fixed(2)
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(8, 2);
+        let out = written(&mut driver, "\x1bP", 20);
+        // Only its whole first row is drawn: one row high.
+        assert!(out.contains("\x1bP"), "{out:?}");
+        let id = picture.id();
+        assert!(picture_bytes(id) > 0);
+        assert!(out.contains("\"1;1;64;16"), "{out:?}");
+        assert!(!out.contains("\"1;1;64;32"), "{out:?}");
     }
 
     #[test]

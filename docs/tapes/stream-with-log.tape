@@ -1,22 +1,25 @@
-# Noctiluca on a live stream page (0.0.23): a role=log chat beside the
-# stream, its authors in their colours, scrolled up and back, the about
-# page's terminal adaptations, and the faithful projection one key away.
-# WIP: recorded before the video and the log's small pictures landed (the
-# stream's region and the emotes show as what they are for now); it is
-# recorded again once they have. The tape job has no browser it may run
-# with its sandbox on, so this replays Chrome's saved snapshot of the
-# fixture page (NOCTILUCA_FAKE_ENGINE, built with the test-only
-# `fake-engine` feature): the log is as Chrome read it, not live. The
-# live tests run against Chrome in CI's browser job.
+# Noctiluca on a live stream page (0.0.23): the stream playing in its
+# region, a role=log chat beside it with its authors in their colours and
+# its badges and emotes as small pictures, scrolled up and back, the about
+# page's terminal adaptations and codecs, and the faithful projection one
+# key away. All of it is drawn by Noctiluca and intuiTUIve, the pictures by
+# rs-rich-art. The tape job has no browser it may run with its sandbox on,
+# so this replays what Chrome supplied for the fixture page
+# (NOCTILUCA_FAKE_ENGINE, built with the test-only `fake-engine` feature):
+# its saved snapshot, the page's own picture files, and Chrome's recorded
+# frames of the video; the log is as Chrome read it, not live. The live
+# tests run against Chrome in CI's browser job.
 Set Title "Noctiluca · a live log beside a stream"
 Set Size 110x32
 Set TypingDelay 40ms
+Mask /\d:\d\d \/ \d:\d\d/ "<time>"
+Mask /\d:\d\d \/ live/ "<time>-live"
 Hide
 Type "export NOCTILUCA_FAKE_ENGINE=$REPO/crates/noctiluca/tests/snapshots XDG_CONFIG_HOME=$PWD/config; clear"
 Enter
 Wait /❯\s*$/
 Show
-Type "noctiluca --images ansi https://fixture.example/stream-with-log.html"
+Type "noctiluca --images sixel https://fixture.example/stream-with-log.html"
 Enter
 Wait /hello from the harbour/
 Sleep 1s
