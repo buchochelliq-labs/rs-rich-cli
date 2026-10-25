@@ -10,8 +10,6 @@
 //! and an unmatched closing tag raises [`RichError::Markup`](crate::RichError).
 //! `@`-tags (meta/handlers) apply no visible style.
 
-use fancy_regex::Regex;
-
 use crate::errors::{Result, RichError};
 use crate::style::{Meta, MetaValue, Style, StyleType};
 use crate::text::{Span, Text};
@@ -106,9 +104,74 @@ fn is_tag_start(c: char) -> bool {
 ///   half as many literal backslashes and the tag still fires.
 /// - `[^\[]*?` forbids a `[` inside the tag body, so `[a[b]` is not a tag at
 ///   all — it is literal text, and scanning resumes at the inner `[`.
-static RE_TAGS: std::sync::LazyLock<Regex> = std::sync::LazyLock::new(|| {
-    Regex::new(r"((\\*)\[([a-z#/@][^\[]*?)\])").expect("RE_TAGS is a valid pattern")
+///
+/// The scan itself is [`tag_matches`], which finds the same matches without
+/// the regex engine; this expression is kept as its reference, and
+/// `tag_matches_are_re_tags` holds the two together.
+#[cfg(test)]
+static RE_TAGS: std::sync::LazyLock<fancy_regex::Regex> = std::sync::LazyLock::new(|| {
+    fancy_regex::Regex::new(r"((\\*)\[([a-z#/@][^\[]*?)\])").expect("RE_TAGS is a valid pattern")
 });
+
+/// One match of `RE_TAGS`, as byte offsets: group 1 (the whole match) is
+/// `start..end`, group 2 (the backslashes) `start..bracket`, and group 3
+/// (the tag) `bracket + 1..end - 1`.
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+struct TagMatch {
+    start: usize,
+    bracket: usize,
+    end: usize,
+}
+
+/// The matches `RE_TAGS.finditer(markup)` finds, found by scanning for the
+/// brackets: a `[` followed by a tag-start character opens a tag that the
+/// first `]` closes, unless a `[` comes first; the backslashes right before
+/// the `[`, back to the end of the previous match, belong to the match.
+/// Leftmost-first, as the regex is: a match can only start at a backslash
+/// run that leads to its `[`, so the first `[` that opens a tag starts the
+/// next match. Two to three times cheaper than the regex engine on every
+/// markup string (docs/PORTING.md, "Performance notes").
+fn tag_matches(markup: &str) -> Vec<TagMatch> {
+    let bytes = markup.as_bytes();
+    let mut matches = Vec::new();
+    // Where the regex's next search would start: the end of the last match.
+    let mut searched = 0usize;
+    let mut at = 0usize;
+    while let Some(offset) = bytes[at..].iter().position(|&b| b == b'[') {
+        let bracket = at + offset;
+        at = bracket + 1;
+        if !bytes
+            .get(bracket + 1)
+            .is_some_and(|&b| is_tag_start(char::from(b)))
+        {
+            continue;
+        }
+        // `[^\[]*?\]`: the first `]` after the tag-start character, if no
+        // `[` comes before it.
+        let body = bracket + 2;
+        match bytes[body..].iter().position(|&b| b == b']' || b == b'[') {
+            Some(close) if bytes[body + close] == b']' => {
+                let end = body + close + 1;
+                let mut start = bracket;
+                while start > searched && bytes[start - 1] == b'\\' {
+                    start -= 1;
+                }
+                matches.push(TagMatch {
+                    start,
+                    bracket,
+                    end,
+                });
+                searched = end;
+                at = end;
+            }
+            // A `[` first: that one may open a tag instead.
+            Some(_) => {}
+            // Neither: no `]` is left to close any tag.
+            None => break,
+        }
+    }
+    matches
+}
 
 /// One item from the scanner: either literal text or a tag.
 enum Event<'a> {
@@ -126,16 +189,11 @@ fn parse(markup: &str) -> Result<Vec<Event<'_>>> {
     let mut events: Vec<Event> = Vec::new();
     let mut position = 0usize;
 
-    for captures in RE_TAGS.captures_iter(markup) {
-        let captures =
-            captures.map_err(|e| RichError::Markup(format!("markup scan failed: {e}")))?;
-        let whole = captures.get(1).expect("group 1 always participates");
-        let escapes = captures.get(2).map_or("", |m| m.as_str());
-        let tag_text = captures
-            .get(3)
-            .expect("group 3 always participates")
-            .as_str();
-        let (mut start, end) = (whole.start(), whole.end());
+    for found in tag_matches(markup) {
+        let whole = &markup[found.start..found.end];
+        let escapes = &markup[found.start..found.bracket];
+        let tag_text = &markup[found.bracket + 1..found.end - 1];
+        let (mut start, end) = (found.start, found.end);
 
         if start > position {
             events.push(Event::Text(unescape_brackets(&markup[position..start])));
@@ -152,7 +210,7 @@ fn parse(markup: &str) -> Result<Vec<Event<'_>>> {
             if escaped {
                 // The tag is escaped: emit it as literal text, minus its
                 // backslashes, and do not open anything.
-                events.push(Event::Text(whole.as_str()[escapes.len()..].to_string()));
+                events.push(Event::Text(whole[escapes.len()..].to_string()));
                 position = end;
                 continue;
             }
@@ -741,6 +799,58 @@ fn render_inner(markup: &str, emoji: bool, base_style: &StyleType) -> Result<Tex
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// `tag_matches` finds what `RE_TAGS.captures_iter` finds, group for
+    /// group, on every string of up to six characters from the ones that
+    /// matter to it, and on longer random ones.
+    #[test]
+    fn tag_matches_are_re_tags() {
+        const ALPHABET: [char; 9] = ['\\', '[', ']', 'a', 'Z', '/', '@', '\n', 'é'];
+        let reference = |text: &str| -> Vec<TagMatch> {
+            RE_TAGS
+                .captures_iter(text)
+                .map(|captures| {
+                    let captures = captures.unwrap();
+                    let whole = captures.get(1).unwrap();
+                    let escapes = captures.get(2).unwrap();
+                    let tag = captures.get(3).unwrap();
+                    assert_eq!(tag.start(), escapes.end() + 1);
+                    assert_eq!(tag.end() + 1, whole.end());
+                    TagMatch {
+                        start: whole.start(),
+                        bracket: escapes.end(),
+                        end: whole.end(),
+                    }
+                })
+                .collect()
+        };
+        let check = |text: &str| assert_eq!(tag_matches(text), reference(text), "{text:?}");
+        let mut texts = vec![String::new()];
+        for _ in 0..6 {
+            texts = texts
+                .iter()
+                .flat_map(|text| ALPHABET.iter().map(move |c| format!("{text}{c}")))
+                .collect();
+            texts.iter().for_each(|text| check(text));
+        }
+        let mut seed = 0x9e37_79b9u32;
+        for _ in 0..20_000 {
+            seed ^= seed << 13;
+            seed ^= seed >> 17;
+            seed ^= seed << 5;
+            let length = seed as usize % 40;
+            let text: String = (0..length)
+                .map(|_| {
+                    seed ^= seed << 13;
+                    seed ^= seed >> 17;
+                    seed ^= seed << 5;
+                    ALPHABET[seed as usize % ALPHABET.len()]
+                })
+                .collect();
+            check(&text);
+        }
+        check("[bold red]x[/] \\[b]y\\\\[i]z[link=https://a.b/c?d=[e]]");
+    }
 
     /// Error positions are character offsets into the original markup, and
     /// emoji codes are replaced only between tags.
