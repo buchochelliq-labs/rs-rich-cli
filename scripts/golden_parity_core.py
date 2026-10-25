@@ -274,11 +274,22 @@ def _color_parse_errors() -> str:
 
 
 def _color_rich() -> str:
-    console = _console(40)
-    out = ""
-    for name in ["red", "color(100)", "#ff0080", "default"]:
-        out += _print(console, Color.parse(name))
-    return out
+    # In a fresh interpreter: after the other captures in one process, rich
+    # 15.0.0 printed the eight-bit swatch as a standard colour (a cache left
+    # warm by an earlier case), so the bytes depended on the run order.
+    return _isolated(
+        "import sys\n"
+        "from rich.color import Color\n"
+        "from rich.console import Console\n"
+        "console = Console(force_terminal=True, color_system='truecolor', width=40,\n"
+        "    highlight=False, safe_box=False, legacy_windows=False, no_color=False)\n"
+        "out = ''\n"
+        "for name in ['red', 'color(100)', '#ff0080', 'default']:\n"
+        "    with console.capture() as capture:\n"
+        "        console.print(Color.parse(name))\n"
+        "    out += capture.get()\n"
+        "sys.stdout.write(out)\n"
+    )
 
 
 def _palette_rich() -> str:
