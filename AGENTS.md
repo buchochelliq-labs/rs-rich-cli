@@ -65,6 +65,11 @@ rich-cli ─ ─ ▶ rich-web ──▶ rich-intuituive, rich-embed   (serving t
                                                  rs-rich-embed and the network sit behind rs-rich-web's
                                                  default `server` feature: without it, only its input
                                                  decoder and DOM messages, for the docs playground's wasm)
+             rich-marketplace ──▶ rich-plugin-api, rich   (the plugin marketplace client: the minisign-signed
+                                                 index and its key chain, listings, version resolution
+                                                 against the host's plugin API and ABI, verified HTTPS
+                                                 installs and the lockfile; no terminal code. ureq
+                                                 behind its default `http` feature)
 rich-py  ──▶ rich, rich-ext, rich-art, rich-mermaid, rich-diagram, rich-micro, rich-interact, rich-cli,
              rich-intuituive, rich-web, rich-embed
                            (Python bindings; outside the workspace, released to PyPI only)
@@ -99,6 +104,7 @@ possible, and keep the boundary free of core back-dependencies.
 | `rs-rich-intuituive` | independent SemVer | whenever we ship anything        |
 | `rs-rich-web`  | independent SemVer | whenever we ship anything              |
 | `rs-rich-embed` | independent SemVer | whenever we ship anything             |
+| `rs-rich-marketplace` | independent SemVer | whenever we ship anything       |
 | `rs-rich-macros` | independent SemVer | whenever we ship anything            |
 | `rs-rich-art`  | independent SemVer | whenever we ship anything              |
 | `rs-rich` (PyPI, `crates/rich-py`) | independent SemVer, `python-v…` tags | whenever we ship anything |

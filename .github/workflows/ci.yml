@@ -277,6 +277,14 @@ jobs:
             args: ""
           - crate: rs-rich-embed
             args: "--all-features"
+          # The marketplace client: the signed index, key chain, listings,
+          # resolution and installs against a fixture marketplace signed
+          # with test keys (no network), with and without its `http`
+          # transport.
+          - crate: rs-rich-marketplace
+            args: ""
+          - crate: rs-rich-marketplace
+            args: "--no-default-features"
           # Every lumis language (its default); the bundles only select fewer.
           - crate: rs-rich-lumis
             args: ""

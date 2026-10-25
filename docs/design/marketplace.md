@@ -1,7 +1,9 @@
 # The marketplace listing format (#232, #582)
 
 **Status:** the format, its schemas and its validator are in 0.0.21 (plugin
-API 0.0.5); the `rs-rich-marketplace` crate that reads them and the
+API 0.0.5). The `rs-rich-marketplace` crate (0.0.1) that verifies, resolves
+and installs from them is in 0.0.22 ([Extending](../PLUGINS.md#the-marketplace-client-0022));
+its official keys are compiled in once the maintainer has made them. The
 `rich plugin` commands follow in 0.0.22. This note is the contract
 between the marketplace repository, the crate and the CLI. It is part of the
 1.0 promise ([the plan to 1.0.0](../plans/1.0.0.md#track-b-the-plugin-marketplace-232-463)).
@@ -367,6 +369,15 @@ made by any other key is refused before it is checked.
 | Every load (each run) | The installed file's SHA-256 against the lockfile; a file changed on disk is not loaded. No network. |
 | `rich plugin verify` | Every installed file against the lockfile, and against the current index: a version yanked since is reported with its reason. |
 
+In the crate, the WASM sandbox is a hook: `rs-rich-marketplace` does not
+build the interpreter, so on its own it checks the module's header, and a
+host with `wasm-plugins` (the CLI) passes an `ArtifactChecker` that runs
+`load_wasm` and compares the manifest with `compare_wasm_manifest`. The
+download is held in memory (at most 16 MiB) and written beside the
+destination only once every check passed. The lockfile is
+`marketplace.lock.json` in the install directory, each file at
+`<id>/<id>-<version>.<ext>` beside it.
+
 An expired or unverifiable index never stops installed packages from
 loading: those are checked against the lockfile, which was written only
 after a verified install.
@@ -390,15 +401,38 @@ before it:
   pair recovers, announced in its release notes; this is why the backup key
   is used for nothing else.
 
+A generation's file, as the crate reads it (`KeySet::from_json`); an id is
+minisign's key id as `minisign` prints it, and `revoked` is optional:
+
+```json
+{
+  "schema_version": 1,
+  "generation": 2,
+  "main": {"id": "8C6B1E0F2A9D4C31", "public_key": "RWQxTJ0qDx5rjK…"},
+  "backup": {"id": "1D0A7F3E5B2C9E48", "public_key": "RWRInixbPn8KHf…"},
+  "revoked": ["057D5BF5EBC4B734"]
+}
+```
+
+Both signatures of `keys-N.json` carry the trusted comment
+`rs-rich-marketplace keys generation=N`, so a signature cannot be moved to
+another generation:
+`minisign -S -s backup.key -m keys-2.json -x keys-2.json.backup.minisig -t "rs-rich-marketplace keys generation=2"`.
+A revoked key stays revoked in every later generation.
+
 A client holds the newest generation it has verified. On refresh it fetches
 the generations after it and accepts them one at a time, each against the
 one before, before it verifies the index with the newest main key. A
 release of the crate compiles in the newest generation, so a new install
 does not walk the whole chain.
 
-**The test key.** The crate's tests sign a fixture marketplace with a key
-pair checked into its test fixtures. It is trusted only by a client built
-with explicit keys in a test, never by default.
+**The test key.** The crate's tests sign a fixture marketplace with key
+pairs checked into its test fixtures
+(`crates/rich-marketplace/tests/fixtures/keys`: two generations and a
+stranger's key), made by the ignored `generate_test_keys` test with the
+`minisign` crate as a dev-dependency (`minisign -G -W` makes the same
+files). They are trusted only by a client built with explicit keys in a
+test, never by default.
 
 ## Installing, and what is only listed
 

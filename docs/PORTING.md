@@ -299,3 +299,13 @@ renderable. It composes `rs-rich-intuituive`'s public `Widget` trait,
 `rs-rich-record`'s VT emulator and portable-pty. Core is unchanged and no
 golden fixture covers it. See
 [Embedding programs and pages](guide/intuituive/embed.md).
+
+### The plugin marketplace (rs-rich-marketplace, not upstream)
+
+`rs-rich-marketplace` (`crates/rich-marketplace`, 0.0.1) has no upstream
+module to port: Python `rich` has no plugins. It verifies the marketplace's
+signed index, resolves versions with `rs-rich-plugin-api`'s public checks
+and installs packages, and has no terminal code. Core is unchanged (it only
+calls `Theme::from_file` to check a theme) and no golden fixture covers it.
+See [the design note](design/marketplace.md) and
+[Extending](PLUGINS.md#the-marketplace-client-0022).
