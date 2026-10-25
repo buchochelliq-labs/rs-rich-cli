@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 16 16" role="img" aria-label="Noctiluca">
+<rect width="16" height="16" rx="3.5" fill="#0b1a2b"/>
+<path d="M8 8L2.7 2.7M8 8L13.3 3.1M8 8L3.1 13.3M8 8L13.1 12.9" stroke="#3ff0e0" stroke-width="1" stroke-opacity=".7"/>
+<rect x="1.2" y="1.4" width="3" height="2.6" rx=".6" fill="#9fe6ff"/>
+<rect x="11.8" y="1.8" width="3" height="2.6" rx=".6" fill="#9fe6ff"/>
+<rect x="1.6" y="12" width="3" height="2.6" rx=".6" fill="#9fe6ff"/>
+<rect x="11.6" y="11.6" width="3" height="2.6" rx=".6" fill="#9fe6ff"/>
+<rect x="4.5" y="5.2" width="7" height="5.6" rx="1.2" fill="#10304d" stroke="#3ff0e0" stroke-width="1.2"/>
+<rect x="6.3" y="7" width="1.7" height="2.2" rx=".3" fill="#eafffd"/>
+</svg>

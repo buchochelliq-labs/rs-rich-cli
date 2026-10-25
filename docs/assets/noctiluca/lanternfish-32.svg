@@ -1,0 +1,10 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 32 32" role="img" aria-label="Noctiluca's lanternfish">
+<path d="M23 19.5L30.5 13Q28.5 19.5 30.5 26Z" fill="#1d5fae" stroke="#1d5fae" stroke-width="1.5" stroke-linejoin="round"/>
+<path d="M13 13.5Q17 8 21.5 13.5Z" fill="#1d5fae" stroke="#1d5fae" stroke-width="1" stroke-linejoin="round"/>
+<path d="M3.5 20C3.5 14.5 8.5 12 14.5 12.5C19.5 13 23 16 24.5 20C23 24 19.5 27 14.5 27.5C8.5 28 3.5 25.5 3.5 20Z" fill="#2a7fd8"/>
+<circle cx="9" cy="19" r="3.8" fill="#9fe6ff"/>
+<rect x="7.2" y="16.6" width="3.6" height="4.8" rx="1" fill="#0b1a2b"/>
+<path d="M11.5 12.8C11 9 9 7.6 7 8" fill="none" stroke="#1d5fae" stroke-width="1.6" stroke-linecap="round"/>
+<rect x="1" y="1.5" width="10" height="8" rx="1.8" fill="#10304d" stroke="#3ff0e0" stroke-width="1.4"/>
+<rect x="5" y="4" width="2.2" height="3.2" rx=".4" fill="#eafffd"/>
+</svg>
