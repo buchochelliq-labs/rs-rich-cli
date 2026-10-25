@@ -925,17 +925,6 @@ impl Slumber {
         });
     }
 
-    /// The panes in Tab order: the sidebar while it is open, then the top
-    /// and bottom panes.
-    fn panes(&self) -> Vec<Pane> {
-        let mut panes = Vec::new();
-        if self.sidebar_open.get() {
-            panes.push(Pane::Sidebar);
-        }
-        panes.extend([Pane::Top, Pane::Bottom]);
-        panes
-    }
-
     fn kind(&self) -> Kind {
         match self.entry() {
             Some(Entry::Recipe(_)) => Kind::Recipe,
@@ -968,15 +957,6 @@ impl Slumber {
         if let Some(id) = self.panes.with(|p| p[at]) {
             cx.focus_within(id);
         }
-    }
-
-    fn cycle_pane(&self, by: isize, cx: &mut Ctx) {
-        let panes = self.panes();
-        let at = (panes.iter())
-            .position(|p| *p == self.pane.get())
-            .unwrap_or(0) as isize;
-        let next = panes[(at + by).rem_euclid(panes.len() as isize) as usize];
-        self.select_pane(next, cx);
     }
 
     fn open_sidebar(&self, which: Sidebar, cx: &mut Ctx) {
@@ -1158,9 +1138,9 @@ fn pipe(command: &str, input: &[u8]) -> Result<String, String> {
 // ---------------------------------------------------------------------------
 
 /// Slumber's pane: its border blue and double while the focus is inside.
-/// Titles are markup, so a key's brackets are escaped.
+/// Its title is plain text, its key's brackets shown as they are.
 fn pane(node: Node, title: &str) -> Node {
-    node.panel(&escape(title)).focus_border(Border::Double)
+    node.panel_text(title).focus_border(Border::Double)
 }
 
 /// Console markup as a `Text`.
@@ -1208,13 +1188,16 @@ fn sidebar(s: Slumber) -> Node {
     let lists =
         lists.map(|(which, node)| node.flex(1).shown_when(move || s.sidebar.get() == which));
     let title = move || {
-        escape(match s.sidebar.get() {
+        match s.sidebar.get() {
             Sidebar::Recipe => "Recipe [r]",
             Sidebar::Profile => "Profile [p]",
             Sidebar::History => "Request History [ctrl h]",
-        })
+        }
+        .to_string()
     };
-    column(lists).panel_with(title).focus_border(Border::Double)
+    column(lists)
+        .panel_text_with(title)
+        .focus_border(Border::Double)
 }
 
 /// The boxes above the panes: the profile, and the recipe while the
@@ -1679,7 +1662,7 @@ fn exchange_pane(s: Slumber) -> Node {
         },
     );
     pane(content, "Request / Response [2]")
-        .title_right(escape("History [ctrl h]"))
+        .add_title_text(Edge::Top, Align::End, "History [ctrl h]")
         .section("Response", |node| {
             node.bind("left h", "Previous tab", move |cx| switch_tab(s, -1, cx))
                 .bind("right l", "Next tab", move |cx| switch_tab(s, 1, cx))
@@ -1843,17 +1826,23 @@ fn view(s: Slumber, rects: &(RowRects, RowRects)) -> Node {
             _ => Size::Fixed(30),
         })
         .shown_when(move || s.sidebar_open.get() && matches!(full(), None | Some(Pane::Sidebar)))
-        .on_focus(move |_| s.pane.set(Pane::Sidebar));
+        .on_focus(move |_| s.pane.set(Pane::Sidebar))
+        .focus_scope_reveal(
+            move || s.sidebar_open.get(),
+            move |_| s.pane.set(Pane::Sidebar),
+        );
     let top = recipe_pane(s, rects)
         .hidden_when(move || full() == Some(Pane::Bottom))
-        .on_focus(move |_| s.pane.set(Pane::Top));
+        .on_focus(move |_| s.pane.set(Pane::Top))
+        .focus_scope_reveal(|| true, move |_| s.pane.set(Pane::Top));
     let profile = move || s.sidebar.get() == Sidebar::Profile;
     let bottom = column([
         profile_pane(s).flex(1).shown_when(profile),
         exchange_pane(s).flex(1).hidden_when(profile),
     ])
     .hidden_when(move || full() == Some(Pane::Top))
-    .on_focus(move |_| s.pane.set(Pane::Bottom));
+    .on_focus(move |_| s.pane.set(Pane::Bottom))
+    .focus_scope_reveal(|| true, move |_| s.pane.set(Pane::Bottom));
     s.panes
         .set([Some(side.id()), Some(top.id()), Some(bottom.id())]);
     let main = column([
@@ -1941,8 +1930,9 @@ pub fn http_app(path: PathBuf) -> App {
         let rects = (RowRects::new(), RowRects::new());
         column([view(s, &rects).flex(1), footer(s).fixed(1)])
             .section("Pane Navigation", |node| {
-                node.bind("tab", "Next pane", move |cx| s.cycle_pane(1, cx))
-                    .bind("shift+tab", "Previous pane", move |cx| s.cycle_pane(-1, cx))
+                // In fullscreen, the next pane is shown in its place.
+                node.bind("tab", "Next pane", |cx| cx.focus_next_scope())
+                    .bind("shift+tab", "Previous pane", |cx| cx.focus_previous_scope())
                     .bind("1", "Select top pane", move |cx| {
                         s.select_pane(Pane::Top, cx)
                     })

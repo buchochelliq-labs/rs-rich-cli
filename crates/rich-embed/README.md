@@ -1,5 +1,7 @@
 # rs-rich-embed
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-embed.svg" width="96" align="right" alt="Memo the elephant slotting a terminal pane into an app window">
+
 Other programs and web pages inside an
 [intuiTUIve](https://crates.io/crates/rs-rich-intuituive) app. Part of
 [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli), an addition

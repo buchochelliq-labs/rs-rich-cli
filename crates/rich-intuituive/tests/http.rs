@@ -618,6 +618,16 @@ fn layout_keys_hide_the_sidebar_and_fill_the_screen() {
     d.press("tab f");
     assert_has(&d, "Request / Response");
     assert_lacks(&d, "Recipe [1]");
+    // In fullscreen, Tab moves on to the hidden pane and shows it in its
+    // place (the sidebar is closed, so it is passed by), and round.
+    d.press("tab");
+    assert_has(&d, "Recipe [1]");
+    assert_lacks(&d, "Request / Response");
+    d.press("tab");
+    assert_has(&d, "Request / Response");
+    assert_lacks(&d, "Recipe [1]");
+    d.press("shift+tab");
+    assert_has(&d, "╔═ Recipe [1] ═");
 }
 
 #[test]

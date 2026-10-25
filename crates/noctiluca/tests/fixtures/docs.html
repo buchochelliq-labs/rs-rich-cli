@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>glow::Lamp - docs</title>
+<!-- Written for Noctiluca's corpus: a docs page in the shape of rustdoc. -->
+<nav aria-label="Sidebar"><ul><li><a href="#new">new</a></li><li><a href="#shine">shine</a></li></ul></nav>
+<main>
+<h1>Struct <code>glow::Lamp</code></h1>
+<p>A lamp that glows when it is touched. See <a href="second.html">the guide</a>.</p>
+<h2 id="new">Method <code>new</code></h2>
+<pre><code>pub fn new(brightness: u8) -&gt; Lamp {
+    Lamp { brightness, lit: false }
+}</code></pre>
+<h2 id="shine">Method <code>shine</code></h2>
+<p>Lights the lamp for <code>ms</code> milliseconds.</p>
+<pre><code>let mut lamp = Lamp::new(3);
+lamp.shine(250);</code></pre>
+<table><tr><th>Field</th><th>Type</th></tr><tr><td>brightness</td><td>u8</td></tr></table>
+</main>
+</html>

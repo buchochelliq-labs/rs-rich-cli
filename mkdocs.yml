@@ -13,6 +13,9 @@ exclude_docs: |
   python/
   assets/vendor/**/README.md
   assets/intuituive/mascot/MASCOT.md
+  # Files to hand over to the rs-rich-marketplace repository, not pages.
+  marketplace-repo/
+  assets/noctiluca/ICONOGRAPHY.md
 
 theme:
   name: material
@@ -192,6 +195,7 @@ nav:
       - "Embedding programs and pages (rs-rich-embed)": guide/intuituive/embed.md
       - Testing with screen readers: guide/intuituive/screen-readers.md
       - "From Python (rs_rich.tui)": guide/intuituive/python.md
+  - Noctiluca: guide/noctiluca.md
   - Gallery: gallery.md
   - Terminal recordings: recordings.md
   - CLI and art videos: demos.md

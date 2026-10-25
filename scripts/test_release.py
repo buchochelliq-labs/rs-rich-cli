@@ -15,7 +15,7 @@ import release
 NAMES = ("rs-rich", "rs-rich-plugin-api", "rs-rich-macros", "rs-rich-ext", "rs-rich-cli", "rs-rich-art",
          "rs-rich-mermaid", "rs-rich-lumis", "rs-rich-record", "rs-rich-interact", "rs-rich-micro",
          "rs-rich-diagram", "rs-rich-data", "rs-rich-ratatui", "rs-rich-intuituive", "rs-rich-web", "rs-rich-embed",
-         "rs-rich-marketplace")
+         "rs-rich-marketplace", "noctiluca")
 
 
 def workspace():

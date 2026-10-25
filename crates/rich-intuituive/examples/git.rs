@@ -1233,26 +1233,24 @@ fn error_popup(cx: &mut Ctx, error: &str) {
 }
 
 /// A panel whose title follows signals: gitui's "Diff: src/main.rs" and
-/// "Commit 3/10". A panel's titles are fixed when it is made, so the title
-/// is a layer over its top edge.
+/// "Commit 3/10", flush with the corner as a ratatui `Block`'s is
+/// (`┌Staged Changes──`): bold while `focused`, else grey.
 fn titled(
     body: Node,
     title: impl Fn() -> String + 'static,
     focused: impl Fn() -> bool + 'static,
 ) -> Node {
-    let title = text(move || {
-        let style = if focused() { "bold" } else { "bright_black" };
+    body.panel_with(move || {
+        let style = if focused() {
+            "bold default"
+        } else {
+            "bright_black"
+        };
         format!("[{style}]{}[/]", title())
     })
-    .no_wrap()
-    .place(Align::Start, Align::Start)
-    .inset(0, 0, 0, 1);
-    layers([
-        body.panel("")
-            .border(Border::Plain)
-            .border_style("bright_black"),
-        title,
-    ])
+    .border(Border::Plain)
+    .border_style("bright_black")
+    .title_flush()
 }
 
 // ---------------------------------------------------------------------
@@ -1272,18 +1270,12 @@ fn status_tab(gu: Gu) -> (Node, [NodeId; 3]) {
         || "Unstaged Changes".into(),
         focused(Focus::WorkDir),
     );
-    let branch = text(move || {
-        let shown = gu.focus.get() != Focus::Stage;
-        if shown {
-            gu.branch_label()
-        } else {
-            String::new()
-        }
-    })
-    .no_wrap()
-    .place(Align::End, Align::End)
-    .inset(0, 1, 0, 0);
-    let wd = layers([wd, branch])
+    let branch = move || match gu.focus.get() != Focus::Stage {
+        true => gu.branch_label(),
+        false => String::new(),
+    };
+    let wd = wd
+        .add_title_with(Edge::Bottom, Align::End, branch)
         .name("Unstaged Changes")
         .on_focus(move |_| gu.focus.set(Focus::WorkDir))
         .previews_keys()
@@ -1314,17 +1306,12 @@ fn status_tab(gu: Gu) -> (Node, [NodeId; 3]) {
         || "Staged Changes".into(),
         focused(Focus::Stage),
     );
-    let branch = text(move || {
-        if gu.focus.get() == Focus::Stage {
-            gu.branch_label()
-        } else {
-            String::new()
-        }
-    })
-    .no_wrap()
-    .place(Align::End, Align::Start)
-    .inset(0, 1, 0, 0);
-    let stage = layers([stage, branch])
+    let branch = move || match gu.focus.get() == Focus::Stage {
+        true => gu.branch_label(),
+        false => String::new(),
+    };
+    let stage = stage
+        .add_title_with(Edge::Top, Align::End, branch)
         .name("Staged Changes")
         .on_focus(move |_| gu.focus.set(Focus::Stage))
         .previews_keys()
@@ -1520,23 +1507,19 @@ fn commit_popup(gu: Gu, cx: &mut Ctx, amend: bool) {
     cx.modal(Size::Percent(60), Size::Percent(20), move || {
         let message = gu.message;
         let area = text_area(message).placeholder("type commit message..");
-        let branch = text(move || format!("{{{}}}", escape(&gu.branch.get())))
-            .no_wrap()
-            .place(Align::End, Align::Start)
-            .inset(0, 1, 0, 0);
-        let warning = text(move || {
+        let branch = move || format!("{{{}}}", escape(&gu.branch.get()));
+        let warning = move || {
             let first = message.with(|m| m.lines().next().map_or(0, str::len));
             if first > FIRST_LINE_LIMIT {
                 format!("[red]{}[/]", escape(&format!("[subject length: {first}]")))
             } else {
                 String::new()
             }
-        })
-        .no_wrap()
-        .place(Align::End, Align::End)
-        .inset(0, 1, 0, 0);
+        };
         let title = move || title.to_string();
-        layers([titled(area, title, || true), branch, warning])
+        titled(area, title, || true)
+            .add_title_with(Edge::Top, Align::End, branch)
+            .add_title_with(Edge::Bottom, Align::End, warning)
             .name("Commit")
             .previews_keys()
             .bind("ctrl+d", "Do Commit", move |cx| {

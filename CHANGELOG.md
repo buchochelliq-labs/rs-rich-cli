@@ -9,6 +9,85 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Noctiluca's docs and iconography (noctiluca)
+
+- **A guide page for Noctiluca**, the terminal web browser: install,
+  opening pages, views, keys, per-site keys, sound, config, switches, tips,
+  troubleshooting and what works today. It is in the navigation and linked
+  from the home page, the guide and the crate's README.
+- **Its iconography**, in `docs/assets/noctiluca/`: the logo (a bloom of
+  small linked terminals), a favicon, a lanternfish whose lure is a
+  terminal (hero, tip and troubleshooting poses, 32 and 16 px), a 32x32
+  pixel lanternfish for a sprite, and Memo amazed at the web in her
+  terminal. `ICONOGRAPHY.md` has the palette and the rules.
+
+### intuiTUIve: the gaps three round 7 clones shared (intuituive)
+
+- **Panel titles at the corner.** `Node::title_flush` draws a panel's
+  titles flush with its corners, unpadded, as a ratatui `Block` does.
+  `panel_text`, `panel_text_with` and `add_title_text` take plain-text
+  titles, brackets and all. The git clone drops its title layers, music
+  draws termusic's titles at the corner, and http drops its escapes.
+- **A tree table.** `tree_table` with `TreeRow` and `TreeTableOptions`: a
+  table whose rows nest, its selection and closed rows kept by key, with
+  Space, `+`, `-`, ← and → to open, close and move. `tree_table_rows`
+  gives the same rows for a table of an app's own. top builds its process
+  tree on it, and tasks' Projects view is one.
+- **`App::min_size` with a node or shorter forms.** `min_size_with` shows a
+  node of its own, centred; `min_size_forms` the longest form of a message
+  that fits. blocks shows the original's boxed message, and disk shortens
+  diskonaut's on a narrow window.
+- **Scope cycling past hidden panes.** `Node::focus_scope_reveal` lets
+  `focus_next_scope` reach a hidden pane and show it. http's Tab in
+  fullscreen uses it in place of its own pane ring.
+- **Made-up releases with two holds.** `App::synthesize_releases_with`
+  takes `Holds { first, repeat }`: a key whose release is not reported
+  stays held `first` after its press and `repeat` after each repeat. A
+  game holds a key across the keyboard's repeat delay and lets it go soon
+  after its last repeat. `synthesize_releases(Some(hold))` is
+  `Holds::same(hold)`, as before (rs-rich-doom's core gap 4).
+
+### intuiTUIve: four generic controls for changing state (intuituive, interact)
+
+- **Labels that change in place.** `button_of`, `checkbox_of` and
+  `switch_of` read their labels from a closure. The node keeps its focus
+  and a held mouse press while the label changes, and its accessible name
+  follows it. `button`, `checkbox` and `switch_toggle` are unchanged.
+- **A three-state check box.** `CheckState { Off, On, Mixed }`,
+  `checkbox_tri` and `Node::on_mixed`. A mixed box is drawn `[-]` and read
+  as mixed: `AccessState` gains `mixed`, and a browser gets
+  `aria-checked="mixed"`. Python's `AccessState` gains `mixed` too.
+- **Options known by key.** `SelectOption<K>`, `select_field_keyed` and
+  `radio_keyed` keep the choice with its key through a reorder or a
+  relabel, and set it to `None` when the key goes. A disabled option shows
+  its reason and cannot be chosen by keys, a click or typing.
+  `MenuItem::disabled` greys a menu item the same way. The string and index
+  forms are unchanged.
+- **A live action list.** The help and the palette re-read the bindings
+  while they are open, and the palette keeps its focus on the same command
+  by id. `Node::bind_unless` and `Node::unless` list a binding greyed with a
+  reason while it cannot run. Running a binding from the palette now checks
+  its condition again: before, a command that stopped applying after the
+  palette opened still ran. `action_overlay`, `Action` and
+  `Ctx::action_palette` give actions of an app's own the same palette.
+  rs-rich-interact's `Binding` and `Command` gain `unavailable`, and
+  `Palette::set_commands`, `Palette::focus_id` and `Help::set_bindings`
+  replace what they list in place.
+
+### Memo in the cartoon look, and a spot for every crate (docs)
+
+- **Memo's illustration look is now a cartoon**: a bold outline, soft
+  shading, pink ears and big glossy eyes. `memo-cartoon.svg` is the base
+  pose. The flat elephants and the pixel grid stay as the icon tier, for
+  favicons, small badges and the terminal. `MASCOT.md` describes both and
+  lists the cartoon's gradient ids and palette.
+- **Every crate has a spot illustration** under
+  `docs/assets/intuituive/mascot/crates/`: Memo with a prop that says what
+  the crate does, 160x128, drawn for 96 to 160 px. Each crate's README shows
+  its spot beside the title, and the crate tables in the README and on the
+  docs front page show them small. The README's top picture for
+  `rs-rich-intuituive` stays its hero.
+
 ### Record: APNG only when asked, and every frame on a busy machine (record, CLI)
 
 - **APNG is written only when asked** (0.0.22's decision 2). A tape with no
@@ -45,6 +124,45 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   Each load checks the file against the lockfile. No terminal code.
 - Tested against a fixture marketplace signed with test keys checked into
   the crate. The official keys are not compiled in yet.
+
+### `rich plugin`: install from the marketplace, and publish to it (CLI, ext)
+
+- **`rich plugin search`, `info`, `install`, `update`, `remove`, `list`,
+  `enable`, `disable` and `verify`**, on rs-rich-marketplace. `install`
+  shows the tier, source, artifact hash, capabilities and permissions and
+  asks before it writes anything; `--yes` answers for a script, and without
+  a terminal nothing is asked or written (exit 3). A crate is refused with
+  its `cargo add` line.
+- **`wasm-plugins` is a default feature of rs-rich-cli**, so a default
+  `rich` loads sandboxed WASM plugins with `--plugin` and installs them
+  from the marketplace. Native plugins (`dylib-plugins`) stay off by
+  default. The Python wheel's feature list is unchanged.
+- **An installed, enabled WASM plugin loads on every run without
+  `--plugin`.** Its file is checked against the lockfile on each load; a
+  changed file is not loaded, and the run warns.
+- **`verify`** checks every installed file against the lockfile and every
+  installed version against the current index, and reports a version
+  yanked since with its reason. `list` shows the reason from then on, and
+  `update` moves off it.
+- **A WASM install checks the module in the sandbox:** the CLI's
+  `ArtifactChecker` loads it with `rs-rich-ext`'s new `load_wasm_bytes` and
+  compares its manifest with the listing.
+- **`rich plugin browse`:** the same operations in rs-rich-interact's
+  selector, with each package's provenance beside the list.
+- **`rich plugin publish FILE --url URL`** checks a WASM plugin, micro pack
+  or theme, computes its SHA-256 and size and writes its listing for a pull
+  request to the marketplace repository. No network.
+- **The marketplace** is `--marketplace` or `RICH_MARKETPLACE`: an
+  `https://` URL, or a local directory whose artifacts come from its own
+  mirror. The keys to trust are `--marketplace-keys` or
+  `RICH_MARKETPLACE_KEYS` until the official keys are compiled in.
+- **The marketplace repository's signing workflow** (rebuild `index.json`,
+  bump the serial, sign with minisign in the protected
+  `marketplace-signing` environment) is in `docs/marketplace-repo/`, with a
+  README for the maintainer.
+- **CI installs from a test marketplace** signed with the test key: the
+  official plugins resolve for the current host and the fixture WASM plugin
+  installs and loads.
 
 ### rs-rich: widget and layout parity (`padding`, `panel`, `align`, `constrain`, `table`, `layout`, `screen`, `bar`, `box`, `_ratio`)
 
@@ -132,7 +250,80 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - rich-rst 2.2.0's output is captured in `fixtures/rst-next/` and measured by
   an ignored test; `rich --rst` still matches 1.3.2.
 
-## 0.0.21 cohort — to be published
+### rs-rich-embed
+
+- `ChromeEngine::devtools` and `DevTools::call`: an app's own DevTools
+  command to the page (`DOMSnapshot.captureSnapshot`,
+  `Accessibility.getFullAXTree`, …), answered on a channel of its own. A
+  call DevTools refuses fails only that call. The first step of the
+  Noctiluca browser's CDP work (`docs/design/browser.md`).
+- `DevTools::listen`: the page's and the browser's events by method
+  (`Runtime.bindingCalled`, `Browser.downloadWillBegin`, …), on a channel.
+- Switches, all off by default (Noctiluca's decisions 3 and 4):
+  `ChromeEngine::audio` (the browser starts with `--mute-audio` unless
+  asked), `ChromeEngine::downloads` (`Downloads::Deny`, or
+  `Downloads::Quarantine` into a private directory, each file under its
+  download's id, never a name the page chose) and `ChromeEngine::profile`
+  (a kept profile, made private and never removed). Live tests: a
+  quarantined download is announced and kept under its id; a denied one
+  never begins.
+- `ChromeEngine` no longer ends when DevTools refuses a
+  `Page.getNavigationHistory` sent while a navigation swaps the page's
+  renderer process (`about:blank` to a `file://` page, or to another site):
+  "Not attached to an active page" ended the engine about one run in four
+  of a three-page read. The history is asked for again at the next
+  navigation event.
+
+### noctiluca 0.0.1 (new): a terminal web browser, the reader phase
+
+- `noctiluca [URL | FILE | KEYWORD WORDS…]` opens a page in a sandboxed
+  headless Chrome (a system Chrome first, for its codecs) and draws it in
+  an intuiTUIve app: the projection, Chrome's geometry snapped to cells,
+  by default; reader mode, one readable column, one key away (`r`).
+- The page model comes from `DOMSnapshot.captureSnapshot` and
+  `Accessibility.getFullAXTree`: headings, paragraphs, lists, quotes,
+  code, tables, images and controls, with what Chrome hides left out. A
+  script in an isolated world of its own only says "something changed";
+  the pings are debounced into one reading. Every string from the page is
+  cleaned before it reaches the terminal, and a password's value is never
+  read.
+- Forms are stock intuiTUIve widgets behind small adapters. An edit is a
+  draft until Enter; the commit is refused as a conflict if the page
+  changed the value meanwhile. Every action is checked against the page
+  (same document, same node, same meaning) before it runs.
+- Link hints (`f`), the address bar (`o`, `Ctrl+L`) with keywords and a
+  search, back and forward (`H`, `L`), find (`/`), bookmarks, and the live
+  F1 overlay of every action, with the reason one cannot run, generated
+  from the registry that runs them. Keys are rs-rich-interact keymaps,
+  rebound from the config.
+- `noctiluca/config.toml`: keywords, the search engine, keys (a vim or a
+  plain preset), the first view, media, an opt-in kept profile, and
+  per-site tables with their own view, images, width, a site search and
+  keys bound to actions or to an element's role and name (never a script
+  or a selector). A key can be bound on a site from F1; the file keeps its
+  comments. `noctiluca keys [--site HOST]` lists them.
+- Sound, off by default: `--audio` or `[media] audio = true` starts
+  Chrome unmuted. Video and audio get Play/Pause and Mute/Unmute (live
+  labels) and a volume slider from the element's real state, and the
+  media actions are in F1. Verified leaving Chrome through a paced ALSA
+  sink (RMS 0.189 playing, 0 muted, 0.058 at 30%); not verified on a
+  physical device. Sound plays where Chrome runs, never over SSH.
+- The web widgets use intuiTUIve's new controls: `button_of`,
+  `checkbox_of` (the mixed state) and `switch_of`, `select_field_keyed`
+  and `radio_keyed` (options keyed by their own nodes, disabled ones never
+  chosen); F1 is intuiTUIve's live `action_overlay`.
+- `--dump text|ax|json` prints the page's model, for scripts and CI.
+- A test-only `fake-engine` feature, off by default: only with it does
+  the binary read `NOCTILUCA_FAKE_ENGINE` (saved snapshots instead of
+  Chrome, for the PTY test and the docs tape).
+  `--no-js`, `--audio`, `--profile`, `--images`, `--raster` (rs-rich-embed's
+  screencast view, for debugging).
+- Tests: the model, layout, config and app on Chrome's saved snapshots of
+  the fixture pages; the binary on a PTY (start, read, quit, the
+  terminal's modes restored; an escape-sequence fixture; Kitty placeholder
+  bytes); live tests against Chrome as a normal user, which CI's new
+  `browser` job runs. A docs tape. `publish = false` is gone, so 0.0.1
+  can be reserved on crates.io.
 
 ### Versions: the 0.0.22 versions are open
 

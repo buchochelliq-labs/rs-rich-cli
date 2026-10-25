@@ -13,13 +13,24 @@ gets only generic pieces from this work (see
 
 ## Where things stand
 
-- **Merged on `022-browser`** (pushed to
-  `claude/next-priority-items-3c5p8e-wip-browser`): `DevTools::call` and
-  a history fix in rs-rich-embed; the `noctiluca` spike; this note.
-- **In flight**: nothing.
-- **Next**: the decisions at [the end](#what-a-human-must-decide), then
-  rs-rich-embed's items 2 to 4 (events, the faster loop, screencast on
-  demand), then phase 0.1.
+- **Done on `022-browser`** (pushed to
+  `claude/next-priority-items-3c5p8e-wip-browser`): the reader phase,
+  0.1, as `noctiluca` 0.0.1, and rs-rich-embed's events and switches.
+  Item by item, with what is short, in [0.1: reader](#01-reader).
+- **The web widgets run on intuiTUIve's C1 to C4** (merged from ws2):
+  `button_of`, `checkbox_of` and `switch_of` with live labels,
+  `select_field_keyed` and `radio_keyed` keyed by the options' own nodes,
+  and F1 is intuiTUIve's live `action_overlay`.
+- **Sound works** (`--audio`): verified leaving Chrome through an ALSA
+  sink, not on a speaker. See [Audio](#audio).
+- **The first projection** is the default view: boxes at Chrome's
+  positions, rewrapped, pushed down by a skyline per column, grown to the
+  right into free cells. Two-column and flex layouts stay side by side.
+  No fixed or sticky layer, no paint order, media as framed alt text:
+  0.3's work.
+- **Next**: 0.2, forms and tables (a login form, a dashboard and a
+  settings page as fixtures); rs-rich-embed's faster loop, screencast on
+  demand and several pages (tabs).
 
 This note started from a proof of concept the user supplied: a Node and
 Playwright browser (`src/`), a metadata-driven widget experiment
@@ -43,6 +54,64 @@ Where this design differs from the PoC, it says so and says why.
 
 Never: DRM playback, extensions, getting past bot checks or sign-in walls,
 or changing browser policy.
+
+## Use cases, and how they drive the build
+
+Each phase is built for named use cases, against fixtures written for
+them, and is done when those use cases work on the fixtures.
+
+1. **Reading docs from the terminal.** Rust docs, MDN, Python, manuals.
+   Code blocks stay real text that can be copied.
+2. **The developer's web chores.** Pull requests and issues, CI logs,
+   cloud consoles, dashboards. These are mostly forms, tables and links;
+   charts show as media regions.
+3. **Remote and SSH work.** Internal dashboards, router admin pages,
+   Jupyter. The browser runs where the network is, and only text crosses
+   the link.
+4. **News and long reading.** Articles in reader mode, with their images
+   inline.
+5. **Media in a corner.** A video or a livestream beside your work, its
+   chat read-only.
+6. **Accessibility.** Pages arrive as their real accessibility tree: as
+   structure, not pixels.
+7. **Automation and agents.** A script or an AI agent drives real pages
+   through Noctiluca's page model, while a human watches the same session.
+8. **Testing and CI.** A page snapshot as text for diffs, accessibility
+   checks, and tapes of web flows.
+
+### Phases by the use cases they unlock
+
+| Phase | Unlocks | Fixtures and acceptance |
+|---|---|---|
+| 0.1, reader | 1, 4, 6 | A saved docs page, an article and a form page. Text can be selected, links followed by hint, the AX tree is complete, and no escape sequence leaks |
+| 0.2, forms and tables | 2, 3 | A login-style form, a table-heavy dashboard and a settings page. Widgets commit, conflicts are caught, tables scroll |
+| 0.3, layout projection | 2, 4 | Two-column and grid layouts stay side by side |
+| 0.4, media | 5 | The PoC's GIF and video pages. Frames stay within budget; play, pause and seek work; sound plays on the host |
+| 0.5, automation API | 7, 8 | A scripted flow on a fixture site, the same session viewable live, and a text-snapshot diff |
+
+[Phases](#phases) below holds each phase's full acceptance list. The
+reader phase is built against fixtures for use cases 1, 4 and 6 first.
+
+### How we stay honest
+
+- **Dogfood.** Use Noctiluca for this repo's own docs, pull requests and
+  CI. Each annoyance becomes an issue. Generic fixes go to intuiTUIve
+  core.
+- **A local site corpus.** Saved pages of real types, checked into the
+  fixtures, are the regression suite, the way the eleven clones serve
+  intuiTUIve. Check the licence of anything saved. Prefer pages written
+  for the corpus, or permissively licensed docs.
+- **A live-site checklist,** run on a networked machine at each phase:
+  BBC, YouTube search, Twitch, GitHub and MDN. Screenshots are filed as
+  evidence.
+- **One stated non-goal per phase,** in its section below.
+
+### The first public release
+
+Use cases 1 and 3: docs and dashboards from the terminal, over SSH too.
+They need only the reader and the forms and tables phases, and they are
+the clearest win over other terminal browsers. Media and automation come
+after.
 
 ## What was verified on this machine
 
@@ -188,14 +257,20 @@ Noctiluca reads the page with two DevTools calls instead:
   semantic controls come straight from it. A node's `backendDOMNodeId`
   joins it to the snapshot.
 
-To know when to read again, one small script runs in an **isolated
-world** (`Page.createIsolatedWorld`), not the page's world: a single
+To know when to read again (built: `cdp.rs`'s `PING_SCRIPT`), one small
+script runs in an **isolated world** (`Page.createIsolatedWorld`), not the page's world: a single
 `MutationObserver` and media event listeners, which call a binding
 (`Runtime.addBinding` with `executionContextName`) as a "something
 changed" ping. Noctiluca debounces the pings (about 100 ms, and at once
 after an action of ours) and takes a new snapshot. The page cannot see an
 isolated world's globals or the binding. It can still notice extra work
-through timing; that is accepted.
+through timing; that is accepted. Measured: a binding's calls are
+reported only while the `Runtime` domain is enabled, so Noctiluca enables
+it. Some bot checks look for an enabled `Runtime`; that is accepted (decided
+in 0.0.22), and the README says so.
+The script also samples the form fields' values every 500 ms (passwords
+left out), as the PoC did, so a value a page script sets with no event
+is still seen.
 
 The lead's direction asked for `Runtime.addBinding` with a
 MutationObserver. Doing that in the page's main world would bring back the
@@ -238,8 +313,9 @@ Chrome's own geometry instead:
 1. **The viewport is the terminal.** Chrome's viewport is set to
    `columns × cell width` by `rows × cell height` CSS pixels
    (`Emulation.setDeviceMetricsOverride`, which rs-rich-embed already
-   sends). The cell size comes from the terminal when it reports one, else
-   10 x 20.
+   sends). Built: 8 x 18 CSS pixels a cell, narrower than rs-rich-embed's
+   10 x 20, so a proportional 16 px font's average glyph is about one
+   cell. Reading the terminal's own cell size is still to do.
 2. **Every layout box has a kind**: text (it has inline text boxes),
    control (its AX role is interactive), or opaque. Opaque covers images,
    GIFs, video, canvas, WebGL, SVG with more than a few elements, and
@@ -364,12 +440,50 @@ over SSH, the sound plays on the server, not at the user's terminal. No
 terminal protocol carries audio. A remote audio transport would be a
 separate, optional project.
 
-rs-rich-embed starts Chrome with `--mute-audio` every time. Noctiluca
-needs an opt-in to leave it off (`--audio`), and stays muted by default.
-Volume, mute, play and pause are actions on the media element, read back
-from Chrome. The PoC showed this works: it recorded Chrome's ALSA output to
-a file sink and measured playing, muted, 30% and paused levels. That test
-is worth porting (Linux CI only).
+**Sound plays on the machine Chrome runs on, never over SSH.** Over SSH
+it plays on the server. Noctiluca says so in its README, its help and the
+player ("sound is off: start with `--audio`" when it is off).
+
+Built in 0.0.22:
+
+- `--audio`, or `[media] audio = true`, starts Chrome without
+  `--mute-audio` (rs-rich-embed's `ChromeEngine::audio`). Without it the
+  browser is muted, as before.
+- Each video and audio element gets controls in reader mode, from the
+  element's real state, read with a call on the element in an isolated
+  world: Play or Pause and Mute or Unmute (stock `button_of`, live labels,
+  C1), a volume slider (the stock slider), and its time. While something
+  plays, its state is read again every 500 ms.
+- The registry has `media.play_pause` (`p`), `media.mute` (`Alt+M`),
+  `media.volume_up` (`+`) and `media.volume_down` (`-`), in ten-point
+  steps that never unmute. F1 lists them saying what they would do now
+  ("Pause the media", "Unmute the media").
+- `[site."…"] audio = false` keeps that site's media muted. Sound is a
+  switch of the browser's launch, so a site cannot turn it on for a run
+  that started without it.
+- Play runs as the user's gesture (`userGesture` on the call), so a play
+  the user asked for is not refused as autoplay. No autoplay policy is
+  changed.
+
+**Verified on this machine** (`tests/audio.rs`, run as a normal user,
+Chrome for Testing 153). As the PoC did, the test points ALSA at a sink
+of its own: an `ALSA_CONFIG_PATH` for its process and the browser it
+starts, whose default output writes to a FIFO the test reads at a real
+device's pace (48 kHz, stereo, 16-bit; unpaced, Chrome decodes as fast as
+it can and the media clock runs away). On a local two-second 440 Hz tone:
+
+| Check | Result |
+|---|---|
+| The element plays, not muted, its `currentTime` advancing | yes |
+| RMS of the samples Chrome wrote, playing at 100% | 0.189 |
+| Muted | 0.000 |
+| At 30% | 0.058 (0.31 of full) |
+| A Chrome started without `--audio`, playing the same tone | 0.000 |
+
+**Not verified:** a physical device (loudspeakers, headphones, a
+PulseAudio or PipeWire server, macOS or Windows audio), video sound, and
+any live site. The sink proves samples leave Chrome, not that a speaker
+plays them.
 
 ### Input and focus
 
@@ -411,6 +525,107 @@ is worth porting (Linux CI only).
   short label; type it to act, Shift to open in a new tab. Hints come from
   the action registry, so they follow the same availability rules.
 - **The mouse** works throughout: click, wheel, and drag-select in text.
+
+### Going places: shortcuts, switches and keys
+
+Built in the reader phase.
+
+**Site shortcuts (keywords).** `noctiluca gh rs-rich`, or `gh rs-rich`
+typed in the address bar, expands a keyword's template:
+`gh = "https://github.com/search?q={}"`. The query is percent-encoded
+before it goes in. A keyword with no argument opens its home address
+(`gh` alone opens `https://github.com`). A few are built in: `rs`
+(docs.rs), `mdn`, `crates` (crates.io) and `gh` (GitHub). The config can
+override or remove each. Bookmarks can carry a keyword too.
+
+**The address bar decides in this order:** a URL (a scheme, a path to a
+local file, or something that looks like a host: `localhost:8080`,
+`example.com/x`), then a keyword, then a search. The search engine is
+configurable. Its default is DuckDuckGo's HTML search, with no tracking
+parameters added.
+
+**Config.** A TOML file at `noctiluca/config.toml` in the platform config
+directory (`$XDG_CONFIG_HOME`, else `~/.config`, on Linux; Application
+Support on macOS; `%APPDATA%` on Windows). `noctiluca --config PATH`
+reads another. Tables: `[shortcuts]`, `[search]`, `[keys]`, `[startup]`
+(home page, default view), `[media]` (audio on or off, an fps cap),
+`[profile]` and `[site."…"]`. An unknown key is a warning, not an error,
+so an old config still opens. The crate ships a documented sample,
+`crates/noctiluca/config.sample.toml`.
+
+**Command-line switches,** in the hand-written style of `rs-rich-cli`'s
+commands (`fn parse_args(&[String]) -> Result<Args, String>`; the CLI
+has no clap):
+
+```
+noctiluca [URL | KEYWORD ARGS…]
+  --reader | --projection | --raster    the first view
+  --audio                               let pages play sound
+  --profile NAME                        an opt-in kept profile
+  --chrome PATH                         the browser to run
+  --images ansi|kitty|sixel|iterm2|none how images reach the terminal
+  --fps N                               the media frame cap
+  --dump text|ax|json                   print the page's model and exit
+  --no-js                               turn the page's script off
+  --config PATH                         another config file
+```
+
+`--dump` is for scripts and CI (use cases 7 and 8). `--no-js` uses
+`Emulation.setScriptExecutionDisabled`, which Chrome supports cleanly.
+
+**Keys.** No new key system. Every action is a binding in a
+`rich_interact::keymap::Keymap` (context `noctiluca`), rebound from
+`[keys]` through that crate's `Overrides` (`Keymap::apply`), and bound on
+the app's root with intuiTUIve's `Node::bind` and `Node::bind_sequence`
+(for `g t`). Defaults: `o` open, `O` open in a new tab, `f` link hints,
+`/` find, `H` and `L` back and forward, `g t` and `g T` tabs, `F1`
+actions, `r` the reader toggle, `Ctrl+L` the address bar. `[keys] preset`
+chooses `vim` (those) or `plain` (arrows, `Alt+Left` and `Alt+Right`,
+`Ctrl+F`, `Ctrl+T`). The F1 overlay lists every binding from the same
+registry that runs it, so a rebinding shows there at once.
+
+**Per-site settings.** `[site."github.com"]` tables, matched by host. A
+pattern (`*.example.com`) or a URL prefix (`"https://example.com/docs/"`)
+also works, and the most specific match wins: a URL prefix over an exact
+host over a wildcard, a longer one over a shorter. A site table can set
+`keys` that apply only there, the `view`, `images` and `audio` on or off,
+an `fps` cap, a viewport `width` in cells, and a `keyword` that searches
+the current site. A site key binds to one of three things:
+
+1. a built-in action from the registry: `media.play_pause`, `hints`,
+   `reader`, `scroll.down`, `back`;
+2. "activate the element with this accessible role and name":
+   `{ role = "button", name = "Next page" }`, looked up in the AX tree
+   when the key is pressed;
+3. a sequence of those.
+
+**Binding a key from the page (built).** `Ctrl+K`, "Bind a key on this
+site…", from F1 or a key, lists the page's named controls (by role and
+accessible name) and every action. Choose one, press the key, confirm:
+Enter binds it on this host, `w` on `*.host`. A key that already does
+something here (a site key or an action) is shown, and Enter replaces
+it. A name that more than one element has is said ("3 elements are named
+"Next"; this binds match 2"), and saved with `nth`; Esc refuses it. The
+binding is written to `[site."<host>".keys]` through `toml_edit`, keeping
+the file's comments and layout, atomically, and works at once. "Site
+shortcuts…" (`K`) lists this site's keys: Enter tests one, `d` removes
+it, `e` binds it to another key, `s` moves it between the host and
+`*.host`. `noctiluca keys --site github.com` lists them. Not built yet:
+starting a binding straight from a link hint or the focused element (the
+picker lists the same elements).
+
+There is no raw JavaScript and no CSS selector. A selector or a script in
+a config file would be page scripting by another name: a shared config
+could then read or post a page's data, and a selector breaks with every
+redesign. A role and a name are what a screen reader user would say,
+they survive restyling, and activating one is the same guarded action a
+person runs by hint, re-checked against the page when it runs.
+
+The design principle stays: the code has no per-site layout and no
+hostname logic. Per-site settings are the user's own overrides over the
+same semantic actions. Site keys show in the F1 overlay, marked with the
+site table they came from. A binding whose element is not on the page is
+listed as unavailable, with the reason.
 
 ### Security
 
@@ -629,11 +844,14 @@ as a normal user, never as root.
 ### 0.0.1: the spike (done)
 
 `noctiluca FILE` prints a local page's headings and paragraphs. One live
-test, four unit tests, and the `snapshot_cost` example.
+test, four unit tests, and the `snapshot_cost` example (now
+`capture --cost`).
 
 ### 0.1: reader
 
-Text, links, forms, images, history, in reader mode, in an intuiTUIve app.
+Use cases 1, 4 and 6. Text, links, first forms, images, history, in
+reader mode, in an intuiTUIve app. Fixtures: a saved docs page, an
+article and a form page.
 
 - Headings, paragraphs, lists, tables, quotes and code read in order;
   hidden text is left out.
@@ -653,8 +871,51 @@ Text, links, forms, images, history, in reader mode, in an intuiTUIve app.
 - The binary on a PTY, read through rs-rich-record's emulator: start,
   read, quit; the terminal's modes are restored.
 - A snapshot-cost budget on the fixtures, reported (not failed) in CI.
+- [Going places](#going-places-shortcuts-switches-and-keys): keyword
+  expansion with the query escaped; the address bar's order (URL,
+  keyword, search); config parsing and its warnings; the switches; a key
+  rebound in config showing in F1; site matching, most specific first; a
+  site key overriding a global one on its site only; a role and name
+  binding activating the right element on a fixture, and a missing one
+  shown unavailable.
 
-### 0.2: layout projection and GIFs
+Non-goal: a faithful layout. The first projection may be rough; reader
+mode is one key away.
+
+**Status: done in 0.0.22**, each item tested. The fixtures are pages
+written for the corpus (`crates/noctiluca/tests/fixtures`: `reader`,
+`docs`, `article`, `form`, `echo`, `second`, `inject`, `audio`), not saved
+real pages, so their licence is the repository's. Chrome's snapshots of
+them are kept in `tests/snapshots` (re-made with the `capture` example),
+so the model, layout, config and app tests run with no browser; the live
+tests run the same pages through Chrome as a normal user (CI's `browser`
+job), and the PTY test runs the binary over the snapshots
+(`NOCTILUCA_FAKE_ENGINE`, read only with the test-only `fake-engine`
+feature). Beyond the list: sound (see [Audio](#audio)),
+`--dump text|ax|json`, `--no-js`, per-site view, images and width, and a
+docs tape (`docs/tapes/noctiluca.tape`, over the snapshots, since the
+tape job runs no browser). Short of the list: the image in the `Driver`
+screen is checked as half blocks only by eye; a binding cannot yet start
+from a hint or the focused element; `O` and `g t` say tabs need
+rs-rich-embed's several pages; the PoC's own demo pages are not copied
+in (ours cover the same ground).
+
+### 0.2: forms and tables
+
+Use cases 2 and 3. Fixtures: a login-style form, a table-heavy dashboard
+and a settings page.
+
+- Every web widget commits through the guarded commit, and a value the
+  page changed under a draft is caught as a conflict, never overwritten.
+- Wide and long tables scroll in both directions with their headers kept.
+- A login-style form signs in to a fixture that checks the posted fields.
+
+Non-goal: custom widgets with poor accessibility. They read as what their
+AX tree says, and fall back to their region.
+
+### 0.3: layout projection and GIFs
+
+Use cases 2 and 4.
 
 - Flex, grid, columns and table fixtures project with columns side by
   side, checked as cell positions.
@@ -667,7 +928,11 @@ Text, links, forms, images, history, in reader mode, in an intuiTUIve app.
 - Per-region fallback: a canvas fixture shows as a region inside
   projected text.
 
-### 0.3: video and audio
+Non-goal: pixel-exact layout. Cells are not Chrome's glyphs.
+
+### 0.4: media: video and audio
+
+Use case 5.
 
 - The PoC's local `motion.webm`: play, pause, seek and mute through the
   actions; `currentTime` moves; frames change; the region's frame rate
@@ -678,6 +943,20 @@ Text, links, forms, images, history, in reader mode, in an intuiTUIve app.
   zero.
 - The about page shows the codec table, and the test checks it matches
   `canPlayType`.
+
+Non-goal: DRM playback, ever.
+
+### 0.5: automation API
+
+Use cases 7 and 8.
+
+- A script drives a flow on a fixture site through the page model and
+  the action registry, the same actions a person runs.
+- The same session is viewable live while the script runs.
+- A page snapshot as text, stable enough to diff in CI.
+
+Non-goal: getting past bot checks, CAPTCHAs or sign-in walls for a
+script.
 
 ### Never
 
@@ -720,6 +999,16 @@ night. The logo is a bloom of tiny terminal windows. Each glowing cell is
 a small terminal, linked to its neighbours, like light spreading through
 dark water. The mascot is a lanternfish whose lamp is the terminal itself:
 a small glowing terminal window held out on its lure.
+
+**Drawn** (0.0.22), in `docs/assets/noctiluca/`: the logo
+(`logo.svg`) and a favicon; the lanternfish as a hero, a tip pose, a
+troubleshooting pose and 32 and 16 px silhouettes; a 32 x 32 pixel
+lanternfish (`.txt`, `.svg`, `.png`); and `memo-amazed.svg`, intuiTUIve's
+Memo wide-eyed at a page in her terminal. `ICONOGRAPHY.md` there has the
+palette (blue and cyan, beside intuiTUIve's purple), the drawing rules and
+the files. The guide's [Noctiluca page](../guide/noctiluca.md) uses them.
+Not done yet: the bloom in rs-rich-diagram and the micro-asset animations
+below.
 
 Both can be drawn with what the repo has:
 

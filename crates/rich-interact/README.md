@@ -1,5 +1,7 @@
 # rs-rich-interact
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-interact.svg" width="96" align="right" alt="Memo the elephant ticking a checkbox in a list">
+
 Interactive terminal components for
 [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli), the Rust port of
 Python's `rich`: the layer between printing and a full TUI framework. This

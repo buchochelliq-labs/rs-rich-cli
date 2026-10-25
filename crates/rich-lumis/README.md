@@ -1,5 +1,7 @@
 # rs-rich-lumis
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-lumis.svg" width="96" align="right" alt="Memo the elephant shining a torch on coloured code">
+
 The [lumis](https://lumis.sh) syntax highlighter for
 [`rs-rich`](https://crates.io/crates/rs-rich), the Rust port of Python's `rich`:
 tree-sitter grammars for parsing and Neovim themes for colour.

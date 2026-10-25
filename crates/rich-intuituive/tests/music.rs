@@ -217,11 +217,10 @@ fn the_tree_view_layout() {
     let root = library("layout");
     let driver = start(&root);
     let screen = rows(&driver);
-    // The panel's own title, a glyph in from the corner (termusic's sits
-    // at the corner).
-    assert!(screen[0].starts_with("╭─ Library ─"), "{}", screen[0]);
+    // The titles at the corner, as termusic's (ratatui's) are.
+    assert!(screen[0].starts_with("╭ Library ──"), "{}", screen[0]);
     assert!(
-        screen[0].contains("╭─ Playlist ──┤ Total 0 tracks | 00:00 | Mode: 🔁 ├─"),
+        screen[0].contains("╭─ Playlist ──┤ Total 0 tracks | 00:00 | Mode: 🔁 ├──"),
         "{}",
         screen[0]
     );

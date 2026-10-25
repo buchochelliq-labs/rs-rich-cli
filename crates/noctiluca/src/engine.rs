@@ -1,0 +1,181 @@
+//! The engine trait: what Noctiluca needs from a browser, so the browser
+//! behind it can change (decision 1 of `docs/design/browser.md`). Its
+//! first backend is [`ChromeBackend`](crate::cdp::ChromeBackend), over
+//! rs-rich-embed's `ChromeEngine`; tests use their own.
+
+use std::io;
+
+use rich_embed::PageState;
+use serde_json::Value;
+
+/// A tab. Only one for now: rs-rich-embed drives one page target.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct TabId(pub u32);
+
+/// A step through a tab's history.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum HistoryStep {
+    Back,
+    Forward,
+    Reload,
+}
+
+/// A rectangle in CSS pixels of the document.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Rect {
+    pub x: f64,
+    pub y: f64,
+    pub width: f64,
+    pub height: f64,
+}
+
+impl Rect {
+    pub fn new(x: f64, y: f64, width: f64, height: f64) -> Rect {
+        Rect {
+            x,
+            y,
+            width,
+            height,
+        }
+    }
+
+    pub fn right(&self) -> f64 {
+        self.x + self.width
+    }
+
+    pub fn bottom(&self) -> f64 {
+        self.y + self.height
+    }
+
+    pub fn is_empty(&self) -> bool {
+        self.width <= 0.0 || self.height <= 0.0
+    }
+}
+
+/// An image format for [`Engine::capture`].
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum Format {
+    Png,
+    Jpeg,
+}
+
+/// Pixels of a region of the page, encoded.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct Frame {
+    pub format: Format,
+    pub bytes: Vec<u8>,
+}
+
+/// The page as laid out, as the engine reports it: for the CDP backend, a
+/// `DOMSnapshot.captureSnapshot` and an `Accessibility.getFullAXTree`.
+/// Untrusted: the [model](crate::model) parses it.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct PageSnapshot {
+    pub dom: Value,
+    pub ax: Value,
+}
+
+/// A node of the page, by the engine's stable id for it (a CDP
+/// `backendNodeId`).
+pub type NodeId = i64;
+
+/// A media element's playback, read from the element itself.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Playback {
+    pub paused: bool,
+    pub muted: bool,
+    /// 0 to 1.
+    pub volume: f64,
+    /// Seconds.
+    pub time: f64,
+    /// Seconds; `None` while unknown, or for a live stream.
+    pub duration: Option<f64>,
+    pub ended: bool,
+}
+
+/// What to do to a media element.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MediaOp {
+    Play,
+    Pause,
+    Mute(bool),
+    /// 0 to 1.
+    Volume(f64),
+}
+
+/// Something done to the page, as real input where the page can tell.
+#[derive(Clone, Debug, PartialEq)]
+pub enum PageAction {
+    /// A real mouse click at the middle of the node, scrolled into view.
+    Click(NodeId),
+    /// Move the page's focus to the node.
+    Focus(NodeId),
+    /// Type `text` into what has the focus (`Input.insertText`).
+    InsertText(String),
+    /// Replace a field's value: focus it, select what it holds, type the
+    /// new value; an empty value is deleted. `input` and `change` fire.
+    SetValue { node: NodeId, value: String },
+    /// Choose one option of a select, by the option's own node: two
+    /// options with one value stay apart. Refused if it is disabled.
+    SelectOption { select: NodeId, option: NodeId },
+    /// Set a range input's number, firing `input` and `change`.
+    SetRange { node: NodeId, value: f64 },
+    /// Scroll the page so this many CSS pixels are above the viewport.
+    ScrollTo(f64),
+    /// Play, pause, mute or set the volume of a video or audio element,
+    /// as the user's own gesture.
+    Media { node: NodeId, op: MediaOp },
+}
+
+/// What happened in the engine since it was last asked.
+#[derive(Clone, Debug, PartialEq)]
+pub enum EngineEvent {
+    /// Something on the page changed: the isolated world's ping.
+    Changed,
+    /// The main frame went to a new document.
+    Navigated(String),
+    /// The page finished loading.
+    Loaded,
+    /// A download began; it waits in the quarantine for the user.
+    DownloadBegan {
+        guid: String,
+        name: String,
+        url: String,
+    },
+    /// A download finished in the quarantine.
+    DownloadDone { guid: String, path: String },
+}
+
+/// A browser engine behind Noctiluca.
+pub trait Engine: Send {
+    /// Lay pages out at `columns` x `rows` cells.
+    fn resize(&mut self, columns: u16, rows: u16) -> io::Result<()>;
+    fn open(&mut self, tab: TabId, url: &str) -> io::Result<()>;
+    /// A new tab; backends with one page refuse it.
+    fn new_tab(&mut self, _url: &str) -> io::Result<TabId> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "this engine has one tab",
+        ))
+    }
+    fn close_tab(&mut self, _tab: TabId) -> io::Result<()> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "this engine has one tab",
+        ))
+    }
+    fn history(&mut self, tab: TabId, step: HistoryStep) -> io::Result<()>;
+    /// The tab's address, title, loading state and history.
+    fn state(&self, tab: TabId) -> PageState;
+    /// The page as laid out, with its accessibility tree.
+    fn snapshot(&mut self, tab: TabId) -> io::Result<PageSnapshot>;
+    /// Pixels of `region`, in CSS pixels of the document.
+    fn capture(&mut self, tab: TabId, region: Rect, format: Format) -> io::Result<Frame>;
+    fn act(&mut self, tab: TabId, action: &PageAction) -> io::Result<()>;
+    /// A video or audio element's playback now.
+    fn playback(&mut self, _tab: TabId, _node: NodeId) -> io::Result<Playback> {
+        Err(io::Error::new(io::ErrorKind::Unsupported, "no media here"))
+    }
+    /// What happened since the last call.
+    fn events(&mut self) -> Vec<EngineEvent>;
+}

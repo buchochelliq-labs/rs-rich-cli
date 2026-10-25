@@ -1,5 +1,7 @@
 # rs-rich-plugin-api
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-plugin-api.svg" width="96" align="right" alt="Memo the elephant joining two plug connectors">
+
 The plugin contract for [`rs-rich`](https://crates.io/crates/rs-rich), the Rust
 port of Python's [`rich`](https://github.com/Textualize/rich).
 

@@ -62,6 +62,7 @@ mod inspect;
 #[cfg(feature = "interact")]
 mod interactive;
 mod logs;
+mod marketplace;
 #[cfg(feature = "art")]
 mod micro;
 mod plugins;
@@ -82,6 +83,7 @@ mod viewers;
 mod watch;
 use batch::run_batch;
 use config::{config_args, ConfigRoots};
+use marketplace::spec as marketplace_spec;
 
 use rich::cells::cell_len;
 use rich::markdown::Markdown;
@@ -1072,6 +1074,9 @@ fn dispatch(args: Vec<String>) -> ExitCode {
     if plugins::requested(&args) {
         return plugins::dispatch(&args);
     }
+    if marketplace::requested(&args) {
+        return marketplace::dispatch(&args);
+    }
     #[cfg(feature = "art")]
     if banner::requested(&args) {
         return banner::dispatch(&args);
@@ -1108,7 +1113,8 @@ fn dispatch(args: Vec<String>) -> ExitCode {
             if let Err(message) = plugins::check_linked() {
                 return fail(&cli, ExitClass::Usage, message);
             }
-            if !cli.plugins.is_empty() {
+            // `--plugin` paths, then the installed plugins (`rich plugin`).
+            if !cli.plugins.is_empty() || marketplace::has_installed() {
                 match plugins::load(&cli.plugins) {
                     Ok(loaded) => plugins::install(loaded),
                     Err((class, message)) => return fail(&cli, class, message),

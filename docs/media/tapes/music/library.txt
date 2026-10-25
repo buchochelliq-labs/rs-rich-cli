@@ -1,4 +1,4 @@
-╭─ Library ────────────────────────╮╭─ Playlist ──┤ Total 0 tracks | 00:00 | Mode: 🔁 ├─ ────────────────────╮
+╭ Library ─────────────────────────╮╭─ Playlist ──┤ Total 0 tracks | 00:00 | Mode: 🔁 ├──────────────────────╮
 │  ▾ library                       ││   Duration  Title               Artist              Album              │
 │    ▸ Harbour Songs               ││                                                                        │
 │🦄  ▾ Orbit Lights                ││                                                                        │

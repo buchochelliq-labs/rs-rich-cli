@@ -1792,6 +1792,7 @@ Exit codes are stable by failure class:
 | Code | Meaning |
 |---|---|
 | `0` | Success. With `--diff --threshold`, the change is within the threshold. |
+| `1` | Cancelled, or answered no: the interactive commands, and `rich plugin install` or `update` declined. |
 | `2` | Usage/config error, such as an invalid flag or unsupported combination. |
 | `3` | Input/read/write error, such as a missing file or failed output write. |
 | `4` | Parse/render data error, such as malformed JSON or JSONL. |
@@ -2281,7 +2282,7 @@ serves intuiTUIve apps.
 rich plugins list
 rich plugins info mermaid
 rich plugins list --report json
-rich --plugin ~/plugins/shout.wasm -m README.md   # a build with wasm-plugins
+rich --plugin ~/plugins/shout.wasm -m README.md   # a sandboxed WASM plugin
 ```
 
 `rich plugins list` shows every plugin the binary has: the built-ins, any
@@ -2290,10 +2291,9 @@ each one's source (`built-in`, `linked`, `native`, `wasm`), version, ABI and
 capabilities. `rich plugins info NAME` shows one, with its path and
 description.
 
-Runtime plugins need a build with a feature that is off by default:
-`cargo install rs-rich-cli --features wasm-plugins` for sandboxed WASM modules,
-`--features dylib-plugins` for native libraries, which run their own code with
-your permissions. `--plugin PATH` loads one for a single run, and is
+A default build loads sandboxed WASM modules (the `wasm-plugins` feature, on
+by default since 0.0.22). Native libraries, which run their own code with
+your permissions, need `cargo install rs-rich-cli --features dylib-plugins`. `--plugin PATH` loads one for a single run, and is
 repeatable. To load them every time, list them in your own config:
 
 ```toml
@@ -2312,6 +2312,66 @@ highlights printed text, and adds the transforms `--transform NAME` applies
 exit 3 when the file cannot be read, 2 otherwise (another ABI version, a name
 another plugin already provides, a build without the loader). See the
 [plugin guide](PLUGINS.md) for what plugins can do and the threat model.
+
+### Install plugins from the marketplace (0.0.22)
+
+`rich plugin` finds, installs and checks packages from the plugin
+marketplace: WASM plugins, micro packs and themes. Every file is checked by
+SHA-256 against a signed index.
+
+```bash
+rich plugin search                 # every package: kind, tier, version
+rich plugin info shout             # its tier, source, versions and permissions
+rich plugin install shout          # shows what it is and asks first
+rich plugin install shout --yes    # in a script
+rich -m README.md                  # shout loads without --plugin
+rich plugin list                   # what is installed, with no network
+rich plugin disable shout          # keep it, stop loading it
+rich plugin update                 # the newest version this host loads
+rich plugin verify                 # files against the lockfile, versions against the index
+rich plugin remove shout
+rich plugin browse                 # all of it in a selector, provenance beside the list
+```
+
+Before it writes anything, `install` shows the package's tier
+(`official`, `reviewed` or `community`), its source and revision, the
+artifact's URL, SHA-256 and size, and its capabilities and permissions,
+then asks. Without a terminal it asks nothing: pass `--yes`, or it exits 3.
+Answering no exits 1. A WASM plugin is loaded in the sandbox before it is installed, to check that its
+manifest matches its listing.
+
+An installed, enabled WASM plugin loads on every run. Its file is checked
+against the lockfile first: a file that changed is not loaded, and the run
+warns and goes on. A crate (Mermaid, DOT, lumis) is listed, never
+installed: `rich plugin install mermaid` exits 2 and prints the `cargo add`
+line to use instead.
+
+`rich plugin verify` checks every installed file and every installed
+version. It exits 4 when a file changed or a version is no longer listed
+as it was installed, and reports a version yanked since with its reason
+(exit 0); `rich plugin update` moves off it.
+
+| Setting | Flag | Environment | Default |
+|---|---|---|---|
+| Install directory | `--plugin-dir DIR` | `RICH_PLUGIN_DIR` | `$XDG_DATA_HOME/rich/plugins` (`~/.local/share/rich/plugins`) |
+| Marketplace | `--marketplace LOCATION` | `RICH_MARKETPLACE` | the official one |
+| Trusted keys | `--marketplace-keys FILE` | `RICH_MARKETPLACE_KEYS` | the keys compiled in |
+
+A marketplace location is an `https://` URL, or a directory (a path or a
+`file://` URL) laid out as the marketplace repository is. A local one
+serves each artifact from its own `artifacts/HOST/PATH`, never the
+network. Until the official keys are compiled in, pass the `keys-N.json`
+you trust with `--marketplace-keys`.
+
+`rich plugin publish FILE --url URL` checks a package you made and writes
+its listing to `packages/ID.json`, for a pull request to the marketplace
+repository. It reads the id, version and capabilities from the package,
+computes its SHA-256 and size, and needs no network. See
+[the plugin guide](PLUGINS.md#rich-plugin-installing-from-the-marketplace-0022)
+for the options and the checks.
+
+Errors use the [exit codes](#use-it-in-a-script-or-ci) above, and
+`--report json` writes the result or error envelope to stderr.
 
 ## Draw a banner (0.0.19)
 

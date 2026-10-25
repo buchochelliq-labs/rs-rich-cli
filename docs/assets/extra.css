@@ -154,7 +154,9 @@
 [data-md-color-scheme="slate"] .md-typeset img.rs-icon {
   filter: invert(0.92);
 }
-.md-typeset img.tui-mascot[src$=".svg"]:not([src^="http"]) {
+/* `[src]`, not `:not([src^="http"])`: instant navigation rewrites every
+   src to an absolute URL, which the guard would then skip. */
+.md-typeset img.tui-mascot[src] {
   float: right;
   margin: 0 0 0.5rem 1rem;
   border-radius: 0;
@@ -169,6 +171,20 @@
   margin: 0 0 1.2rem;
   border-radius: 12px;
   box-shadow: none;
+}
+
+/* Noctiluca's pages (docs/assets/noctiluca/): its art carries its own
+   colours, set without the screenshots' frame; its sub-site link is edged in
+   the lanternfish's blue. */
+.md-typeset img.noct-art[src] {
+  display: block;
+  margin: 0.6rem auto 1.2rem;
+  max-width: 100%;
+  border-radius: 0;
+  box-shadow: none;
+}
+.md-typeset .rs-subsite.noct-subsite {
+  border-left-color: #2a7fd8;
 }
 
 /* rs-rich's own identity (docs/assets/rs-rich/): a gold accent, #c08600,

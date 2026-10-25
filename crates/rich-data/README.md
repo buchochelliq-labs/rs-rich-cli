@@ -1,5 +1,7 @@
 # rs-rich-data
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-data.svg" width="96" align="right" alt="Memo the elephant arranging the cells of a table">
+
 Tabular data for [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli),
 the Rust port of Python's `rich`: one row source contract with adapters
 behind it, so a file, a stream of records or a query result becomes a table

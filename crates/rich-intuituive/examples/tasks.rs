@@ -44,7 +44,7 @@
 //! Calendar: j/k a year, J/K ten.
 
 use std::cell::RefCell;
-use std::collections::{BTreeMap, BTreeSet};
+use std::collections::{BTreeMap, BTreeSet, HashSet};
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
@@ -56,8 +56,8 @@ use intuituive::query::{self, Grammar, Kind, Query, Record, TextMatch, Value};
 use intuituive::reactive::NodeId;
 use intuituive::rich::markup::escape;
 use intuituive::widgets::{
-    table_with, tabs, year_view_with, CalendarOptions, Column, Date, HighlightSpacing, MonthTitle,
-    TableLayout, TableOptions, Weekday, YearOptions,
+    table_with, tabs, tree_table, year_view_with, CalendarOptions, Column, Date, HighlightSpacing,
+    MonthTitle, TableLayout, TableOptions, TreeRow, TreeTableOptions, Weekday, YearOptions,
 };
 use intuituive::{
     command_line_with, dates, keyed, multi_select, CommandLine, CommandLineOptions, HelpOptions,
@@ -1203,9 +1203,11 @@ fn trim_float(v: f64) -> String {
     s.trim_end_matches('0').trim_end_matches('.').to_string()
 }
 
-/// `task projects`: the projects of pending tasks as a tree, with the
-/// tasks in each (its subprojects' counted in).
-pub fn projects_text(tasks: &[Task]) -> String {
+/// `task projects`: the projects of pending tasks as a tree, each with
+/// the tasks in it (its subprojects' counted in), keyed by the project's
+/// full name; `(none)` first for the tasks with no project. With the
+/// summary under the table: `5 projects (7 tasks)`, or `No projects.`.
+pub fn project_rows(tasks: &[Task]) -> (Vec<TreeRow<String>>, String) {
     let mut counts: BTreeMap<String, usize> = BTreeMap::new();
     let mut none = 0;
     let mut total = 0;
@@ -1222,37 +1224,43 @@ pub fn projects_text(tasks: &[Task]) -> String {
         }
     }
     if total == 0 {
-        return "No projects.".to_string();
+        return (Vec::new(), "No projects.".to_string());
     }
-    let mut rows: Vec<(String, usize)> = Vec::new();
+    /// The projects under `parent` (all of the top level for `""`).
+    fn level(counts: &BTreeMap<String, usize>, parent: &str) -> Vec<TreeRow<String>> {
+        let depth = if parent.is_empty() {
+            0
+        } else {
+            parent.matches('.').count() + 1
+        };
+        counts
+            .iter()
+            .filter(|(name, _)| {
+                name.matches('.').count() == depth
+                    && (parent.is_empty() || name.starts_with(&format!("{parent}.")))
+            })
+            .map(|(name, n)| {
+                let leaf = name.rsplit('.').next().unwrap_or(name);
+                TreeRow::new(name.clone(), [escape(leaf), n.to_string()])
+                    .children(level(counts, name))
+            })
+            .collect()
+    }
+    let mut rows = Vec::new();
     if none > 0 {
-        rows.push(("(none)".to_string(), none));
+        rows.push(TreeRow::new(
+            String::new(),
+            ["(none)".to_string(), none.to_string()],
+        ));
     }
-    for (name, n) in &counts {
-        let depth = name.matches('.').count();
-        let leaf = name.rsplit('.').next().unwrap_or(name);
-        rows.push((format!("{}{leaf}", "  ".repeat(depth)), *n));
-    }
-    let width = rows
-        .iter()
-        .map(|(n, _)| n.chars().count())
-        .max()
-        .unwrap_or(0)
-        .max(7);
-    let mut out = format!(
-        "\n[underline]Project[/]{} [underline]Tasks[/]\n",
-        " ".repeat(width - 7)
-    );
-    for (name, n) in &rows {
-        out.push_str(&format!("{:width$} {n:>5}\n", escape(name)));
-    }
+    rows.extend(level(&counts, ""));
     let projects = counts.len();
-    out.push_str(&format!(
-        "\n{projects} project{} ({total} task{})",
+    let summary = format!(
+        "{projects} project{} ({total} task{})",
         if projects == 1 { "" } else { "s" },
         if total == 1 { "" } else { "s" }
-    ));
-    out
+    );
+    (rows, summary)
 }
 
 /// `task timesheet`: the tasks completed and started each week, the last
@@ -2061,9 +2069,30 @@ fn tasks_view(tw: Tw) -> Node {
     })
 }
 
-/// The Projects view: `task projects`.
+/// The Projects view: `task projects`, as a tree table whose projects
+/// open and close (Space, ←, →), indented as Taskwarrior indents them.
 fn projects_view(tw: Tw) -> Node {
-    scroll(text(move || tw.tasks.with(|t| projects_text(t))))
+    let columns = vec![
+        Column::new("[underline]Project[/]", Size::Auto).min(7),
+        Column::new("[underline]Tasks[/]", Size::Auto).align(Align::End),
+    ];
+    let options = TreeTableOptions::new()
+        .guides("  ", "  ", "  ", "  ")
+        .markers("", "+ ");
+    let projects = tree_table(
+        columns,
+        move || tw.tasks.with(|t| project_rows(t).0),
+        signal(None),
+        signal(HashSet::new()),
+        options,
+    );
+    let any = move || tw.tasks.with(|t| !project_rows(t).0.is_empty());
+    column([
+        label("").fixed(1),
+        projects.auto().shown_when(any),
+        label("").fixed(1),
+        text(move || tw.tasks.with(|t| project_rows(t).1)).fixed(1),
+    ])
 }
 
 /// The Timesheet view: `task timesheet`.
@@ -2279,12 +2308,16 @@ pub fn tasks_app(store: Box<dyn Store>, options: Options) -> App {
         watch(
             move || tw.tab.get(),
             move |tab, cx| {
-                let id = match tab {
-                    0 => tw.table.get_untracked(),
-                    _ => ids[tab],
-                };
-                if let Some(id) = id {
-                    cx.focus(id);
+                match (tab, tw.table.get_untracked()) {
+                    (0, Some(table)) => cx.focus(table),
+                    // A view's first node that takes the focus: the
+                    // projects' tree table, the calendar.
+                    (0, None) => {}
+                    _ => {
+                        if let Some(id) = ids[tab] {
+                            cx.focus_within(id);
+                        }
+                    }
                 }
             },
         );

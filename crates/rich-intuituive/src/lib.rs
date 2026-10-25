@@ -54,7 +54,7 @@
 //!   `audio::wav` reads and records WAV files (`wav`), `watch_path` wakes
 //!   the app when files change (`watch`), `image` draws an image file
 //!   in half blocks (`art`), `meter`, `sparkline`, `spectrogram` and
-//!   `bar_spectrum` show levels and spectra (`viz`), and [`files`] has a
+//!   `bar_spectrum` show levels and spectra (`viz`), and `files` has a
 //!   file manager's components: Miller columns, file lists, previews,
 //!   background file jobs and a streaming finder (`files`).
 //! - **Generic building blocks**: [`miller_of`] (Miller columns over any
@@ -88,6 +88,7 @@
 #![warn(clippy::return_self_not_must_use)]
 
 pub mod a11y;
+mod actions;
 pub mod app;
 #[cfg(feature = "pcm")]
 pub mod audio;
@@ -161,6 +162,7 @@ mod text_area;
 pub mod text_edit;
 pub mod transport;
 mod tree;
+mod tree_table;
 mod treemap;
 #[cfg(feature = "vim")]
 pub mod vim;
@@ -180,9 +182,10 @@ pub use rich_interact as interact;
 /// Dates as people type them (`tomorrow`, `eow`, `3d`): rs-rich-interact's.
 pub use rich_interact::dates;
 
+pub use actions::{action_overlay, Action};
 pub use app::{
     after, every, fixed_step, held_keys, plain_key, rate, Anchor, App, Ctx, Driver, Easing,
-    FrameStats, Handoff, ModalOptions, Placement, StatsHandle, Theme, Timer,
+    FrameStats, Handoff, Holds, ModalOptions, Placement, StatsHandle, Theme, Timer,
 };
 #[cfg(feature = "art")]
 pub use big_text::big_text;
@@ -194,7 +197,10 @@ pub use complete::{
     complete_words, history_file, history_in, history_session, CompleteOptions, Completion,
     InputHistory,
 };
-pub use controls::{button, checkbox, radio, slider, switch_toggle, ButtonVariant};
+pub use controls::{
+    button, button_of, checkbox, checkbox_of, checkbox_tri, radio, radio_keyed, slider, switch_of,
+    switch_toggle, ButtonVariant, CheckState,
+};
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use digits::digits;
 pub use effect::{effect, fill};
@@ -234,7 +240,7 @@ pub use reactive::{memo, on_write, on_write_ref, signal, viewport, watch, Memo, 
 pub use rich::Overflow;
 pub use rule::rule;
 pub use select::{list_search, multi_select, ListSearch, Mark, MultiSelect};
-pub use select_field::select_field;
+pub use select_field::{select_field, select_field_keyed, SelectOption};
 pub use sheet::{SheetError, Stylesheet};
 pub use signals::{falling, history, recent, recent_of, recent_timed, smoothed, Count, History};
 pub use solver::Solver;

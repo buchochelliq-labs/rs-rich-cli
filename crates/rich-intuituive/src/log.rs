@@ -20,7 +20,7 @@
 //! level in its theme style and the target dimmed before the message. The
 //! log then filters by level ([`Log::set_level`]), by target
 //! ([`Log::set_target_level`], with a panel to set them,
-//! [`Log::targets_view`]) and by a [query](crate::query) typed in a box
+//! [`Log::targets_view`]) and by a [query] typed in a box
 //! ([`Log::set_filter`]: words, `level:warn`, `target:db`).
 //!
 //! The view follows the end until it is scrolled back (Up, PageUp, Home,
@@ -44,7 +44,7 @@
 //! assert_eq!(screen[0].trim_end(), "ERROR app::store disk full");
 //! ```
 //!
-//! With the off-by-default `tracing` feature, [`tracing_layer`] feeds a
+//! With the off-by-default `tracing` feature, `tracing_layer` feeds a
 //! log from `tracing`, so an app shows its own `tracing::info!` lines.
 
 use std::collections::VecDeque;
@@ -496,7 +496,7 @@ impl Log {
         self.data.with(|data| data.targets.clone())
     }
 
-    /// Show only the lines `text` matches, as a [query](crate::query) in
+    /// Show only the lines `text` matches, as a [query] in
     /// [`filter_grammar`]: words in the message (ignoring case),
     /// `level:error`, `target:app::db`, `and`, `or`, `not`. An empty text
     /// shows every line. On an error the filter stays as it was.

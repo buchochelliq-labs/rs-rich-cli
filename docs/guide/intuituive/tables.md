@@ -219,6 +219,58 @@ table (and keeps the scroll across, the cursor and the widths):
   `virtual_table` asks only for the rows near the view, with
   `.multiline()` too.
 
+### Rows that nest
+
+A process tree with its columns, projects with their counts, folders with
+their sizes: `tree_table(columns, rows, selected, collapsed, options)` is a
+table whose rows nest.
+
+```rust
+use intuituive::widgets::{tree_table, Column, TreeRow, TreeTableOptions};
+
+let rows = move || {
+    vec![TreeRow::new(1, ["1", "init"]).children([
+        TreeRow::new(2, ["2", "sshd"]).children([TreeRow::new(4, ["4", "bash"])]),
+        TreeRow::new(3, ["3", "cron"]),
+    ])]
+};
+let columns = vec![Column::new("PID", Size::Fixed(4)), Column::new("Name", Size::Auto)];
+tree_table(columns, rows, selected, collapsed, TreeTableOptions::new().tree_column(1))
+```
+
+```text
+PID  Name
+1    init
+2    ├─ sshd
+4    │  └─ bash
+3    └─ cron
+```
+
+A `TreeRow<K>` has a key, its cells and its children; `rows` may read
+signals. The selection and the closed rows are kept by key: `selected` is
+a `Signal<Option<K>>` and `collapsed` a `Signal<HashSet<K>>` of the rows
+whose children are hidden. Every row with children is open until it is
+closed, as in a process tree. When the rows change (a re-sort, a process
+that exits) the selection stays on its row; a row that is gone leaves the
+cursor at its place, on the row now there.
+
+The table's keys move the selection. Space opens or closes the selected
+row, `+` opens it and `-` closes it, ← closes an open row or goes to its
+parent, and → opens a closed row or goes to its first child.
+
+`TreeTableOptions` says which column carries the tree (`.tree_column(n)`,
+the first by default), its guides (`.guides(middle, last, down, blank)`,
+`├─ `, `└─ `, `│  ` and blanks by default), its markers
+(`.markers(open, closed)`: none and `+ ` by default, bottom's look) and
+the table's own options (`.table(TableOptions)`). The rows closure sorts
+each level itself: the table's `sort_rows` would mix the levels up, but
+`.sort(..)` shows the sort in the header as for any table.
+
+For a table of your own (an index-based selection, rows that carry more
+than their cells), `tree_table_rows(&rows, |key| closed, &options)` gives
+the rows as a tree table shows them, with their guides, depth and parent.
+The top clone's process tree is built so.
+
 ### Rows from a source
 
 ```rust

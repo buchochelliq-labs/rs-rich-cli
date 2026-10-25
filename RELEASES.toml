@@ -129,6 +129,13 @@ registry = "crates.io"
 manifest = "crates/rich-marketplace/Cargo.toml"
 version = "0.0.1"
 
+# Noctiluca, the terminal web browser: a leaf, a binary of its own.
+[[package]]
+name = "noctiluca"
+registry = "crates.io"
+manifest = "crates/noctiluca/Cargo.toml"
+version = "0.0.1"
+
 [[package]]
 name = "rs-rich-cli"
 registry = "crates.io"

@@ -176,10 +176,6 @@ pub fn load_wasm(path: &Path, limits: &WasmLimits) -> Result<RuntimePlugin, Load
         path: path.to_path_buf(),
         message,
     };
-    let not_a_plugin = |message: String| LoadError::NotAPlugin {
-        path: path.to_path_buf(),
-        message,
-    };
     let limit = |message: String| LoadError::Limit {
         path: path.to_path_buf(),
         message,
@@ -194,6 +190,33 @@ pub fn load_wasm(path: &Path, limits: &WasmLimits) -> Result<RuntimePlugin, Load
         )));
     }
     let bytes = std::fs::read(path).map_err(|e| io(e.to_string()))?;
+    load_wasm_bytes(&bytes, path, limits)
+}
+
+/// [`load_wasm`] for a module already in memory: `path` is only where the
+/// plugin says it came from (its [`RuntimePlugin::path`] and the path in a
+/// [`LoadError`]). A host that checked the bytes first (against a lockfile,
+/// say) loads those bytes, not the file again.
+pub fn load_wasm_bytes(
+    bytes: &[u8],
+    path: &Path,
+    limits: &WasmLimits,
+) -> Result<RuntimePlugin, LoadError> {
+    let not_a_plugin = |message: String| LoadError::NotAPlugin {
+        path: path.to_path_buf(),
+        message,
+    };
+    let limit = |message: String| LoadError::Limit {
+        path: path.to_path_buf(),
+        message,
+    };
+    if bytes.len() as u64 > limits.module_bytes {
+        return Err(limit(format!(
+            "the module is {} bytes; at most {} are accepted",
+            bytes.len(),
+            limits.module_bytes
+        )));
+    }
 
     let mut config = Config::default();
     config
@@ -201,7 +224,7 @@ pub fn load_wasm(path: &Path, limits: &WasmLimits) -> Result<RuntimePlugin, Load
         .enforced_limits(EnforcedLimits::strict());
     let engine = Engine::new(&config);
     let module =
-        Module::new(&engine, &bytes).map_err(|e| not_a_plugin(format!("invalid WASM: {e}")))?;
+        Module::new(&engine, bytes).map_err(|e| not_a_plugin(format!("invalid WASM: {e}")))?;
     if let Some(import) = module.imports().next() {
         return Err(not_a_plugin(format!(
             "it imports `{}.{}`, but the host provides nothing to import (no WASI, no host \

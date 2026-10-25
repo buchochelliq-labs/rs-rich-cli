@@ -600,6 +600,14 @@ fn a_small_window_says_so() {
         dump(&driver)
     );
     assert!(!has(&driver, "Total:"));
+    // Narrower, a shorter form.
+    driver.resize(30, 12);
+    driver.settle();
+    assert!(
+        has(&driver, "Window too small ¯\\_(ツ)_/¯") && !has(&driver, "Terminal"),
+        "{}",
+        dump(&driver)
+    );
     driver.resize(W, H);
     driver.settle();
     assert!(

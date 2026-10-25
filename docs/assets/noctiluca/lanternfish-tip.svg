@@ -1,0 +1,33 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Noctiluca's lanternfish, holding up its terminal lure with a prompt on it">
+<defs><radialGradient id="h"><stop offset="0" stop-color="#3ff0e0" stop-opacity=".55"/><stop offset="1" stop-color="#3ff0e0" stop-opacity="0"/></radialGradient>
+<clipPath id="b"><path d="M24 78C24 58 42 48 64 50C82 52 94 64 98 78C94 92 82 102 64 104C42 106 24 98 24 78Z"/></clipPath></defs>
+<circle cx="22" cy="22" r="26" fill="url(#h)"/>
+<path d="M95 78L119 56Q113 78 119 100Z" fill="#1d5fae" stroke="#1d5fae" stroke-width="4" stroke-linejoin="round"/>
+<path d="M58 54Q70 34 86 50Z" fill="#1d5fae" stroke="#1d5fae" stroke-width="3" stroke-linejoin="round"/>
+<path d="M24 78C24 58 42 48 64 50C82 52 94 64 98 78C94 92 82 102 64 104C42 106 24 98 24 78Z" fill="#2a7fd8"/>
+<ellipse cx="62" cy="106" rx="42" ry="17" fill="#9fe6ff" clip-path="url(#b)"/>
+<rect x="44" y="93" width="4" height="4" rx="1" fill="#3ff0e0" stroke="#1d5fae" stroke-width="1"/>
+<rect x="52" y="94.5" width="4" height="4" rx="1" fill="#3ff0e0" stroke="#1d5fae" stroke-width="1"/>
+<rect x="60" y="95" width="4" height="4" rx="1" fill="#3ff0e0" stroke="#1d5fae" stroke-width="1"/>
+<rect x="68" y="94.5" width="4" height="4" rx="1" fill="#3ff0e0" stroke="#1d5fae" stroke-width="1"/>
+<rect x="76" y="93" width="4" height="4" rx="1" fill="#3ff0e0" stroke="#1d5fae" stroke-width="1"/>
+<path d="M54 62q-7 15 0 30" fill="none" stroke="#1d5fae" stroke-width="2.5" stroke-linecap="round"/>
+<path d="M66 80q12 0 16 10q-12 1-16-10Z" fill="#1d5fae" stroke="#1d5fae" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="40" cy="71" r="11" fill="#9fe6ff"/>
+<rect x="34" y="62" width="10" height="13" rx="2" fill="#0b1a2b"/>
+<rect x="35.5" y="63.5" width="3" height="3" rx=".6" fill="#eafffd"/>
+<path d="M26 85q8 7 16 0" fill="none" stroke="#0b1a2b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M46 53C46 44 42 40 34 38" fill="none" stroke="#1d5fae" stroke-width="3" stroke-linecap="round"/>
+<rect x="3" y="6" width="40" height="30" rx="5" fill="#10304d" stroke="#3ff0e0" stroke-width="2"/>
+<path d="M3 13H43" stroke="#3ff0e0" stroke-width="1.5"/>
+<circle cx="7.5" cy="9.6" r="1.2" fill="#9fe6ff"/>
+<circle cx="11.5" cy="9.6" r="1.2" fill="#9fe6ff"/>
+<circle cx="15.5" cy="9.6" r="1.2" fill="#3ff0e0"/>
+<path d="M8 17l3 2.5l-3 2.5" fill="none" stroke="#3ff0e0" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+<rect x="14" y="18" width="16" height="3" rx="1.2" fill="#9fe6ff"/>
+<rect x="8" y="25" width="24" height="3" rx="1.2" fill="#9fe6ff"/>
+<rect x="34" y="25" width="3" height="5" rx=".6" fill="#eafffd"/>
+<circle cx="104" cy="30" r="3.2" fill="none" stroke="#2a7fd8" stroke-width="1.6"/>
+<circle cx="111" cy="19" r="2.2" fill="none" stroke="#2a7fd8" stroke-width="1.4"/>
+<circle cx="103" cy="11" r="1.5" fill="none" stroke="#2a7fd8" stroke-width="1.2"/>
+</svg>

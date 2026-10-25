@@ -41,6 +41,13 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
     hero and sub-site, rs-rich's own mark, icons and hero, the Python site;
   - Python bindings for all of the above (not the new intuiTUIve widgets);
   - the Doom review note (`docs/design/doom-review.md`, for later).
+- **0.0.22 workstream 2 is on `claude/next-priority-items-3c5p8e-wip-ws2`**
+  (worktree branch `022-ws2`), not yet merged. Part B covers the browser's
+  controls C1 to C4: reactive labels, `CheckState`, keyed `SelectOption`s
+  and a live action list. Part A covers round 7's shared gaps:
+  `title_flush` and plain-text titles, `tree_table`, `min_size_with` and
+  `min_size_forms`, and `focus_scope_reveal`. Still open from that gap row:
+  directional-focus binding descriptions and `neighbour`'s ties.
 - **Next:** drive that PR to merged. Then the plan's parity workstreams (3
   to 6) and the marketplace crate; the Doom review's follow-ups (a public
   custom-palette Sixel encoder; check the live image node; measure the

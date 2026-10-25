@@ -39,6 +39,20 @@ cells redrawn.
 
 </div>
 
+<div class="rs-subsite noct-subsite" markdown>
+
+![Noctiluca's logo](../assets/noctiluca/logo.svg){ .rs-mark width="48" }
+
+<div markdown>
+
+**Built on intuiTUIve: [Noctiluca](noctiluca.md)** (`noctiluca`), a web
+browser for the terminal. Chrome runs the page; Noctiluca draws it in
+cells, with link hints, keywords and keys of your own for each site.
+
+</div>
+
+</div>
+
 A Markdown document from the core, a dashboard of `rs-rich-ext` charts in a
 core `Layout`, and an `rs-rich-interact` explorer searching a YAML file:
 
@@ -151,7 +165,7 @@ images all rely on that.
 | | `serde` | `Serialize` for capability, accessibility and ANSI reports. |
 | `rs-rich-art` | `image`, `gif`, `sixel` | Image art, GIF playback, Sixel graphics. |
 | `rs-rich-diagram` | `plugin`, `graphviz` | The `dot` fence and source renderer plugin; Graphviz's own SVG through the `dot` program. |
-| `rs-rich-cli` | `fetch`, `art`, `mermaid`, `record`, `interact` (default) | URLs; images, GIFs, image diffs and micro assets; Mermaid; `rich record`; the interactive commands. `lumis`, `mmdc`, `dylib-plugins` and `wasm-plugins` are opt-in. |
+| `rs-rich-cli` | `fetch`, `art`, `mermaid`, `record`, `interact`, `wasm-plugins` (default) | URLs; images, GIFs, image diffs and micro assets; Mermaid; `rich record`; the interactive commands; sandboxed WASM plugins. `lumis`, `mmdc` and `dylib-plugins` are opt-in. |
 
 ## Where to start
 

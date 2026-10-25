@@ -1,5 +1,7 @@
 # rs-rich-micro
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-micro.svg" width="96" align="right" alt="Memo the elephant placing a tiny flower with tweezers">
+
 Micro assets for [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli),
 the Rust port of Python's `rich`: emoji-sized inline images and animations,
 written `Deploying :micro:rocket:`. This crate is an rs-rich addition, not a

@@ -1,5 +1,7 @@
 # rich-art
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-art.svg" width="96" align="right" alt="Memo the elephant painting a pixel heart on an easel">
+
 Art renderables for [`rich`](https://crates.io/crates/rs-rich): **FIGlet-style
 text banners** (`figlet(6)` / `pyfiglet`), **images as ASCII, Braille, half
 blocks, quadrant blocks or Sixel graphics** (`jp2a` and beyond), **animated GIF

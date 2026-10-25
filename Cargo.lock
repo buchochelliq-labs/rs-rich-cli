@@ -2144,6 +2144,22 @@ dependencies = [
 ]
 
 [[package]]
+name = "noctiluca"
+version = "0.0.1"
+dependencies = [
+ "image",
+ "portable-pty",
+ "rs-rich",
+ "rs-rich-embed",
+ "rs-rich-intuituive",
+ "rs-rich-record",
+ "serde_json",
+ "toml",
+ "toml_edit",
+ "vt100",
+]
+
+[[package]]
 name = "nom"
 version = "7.1.3"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -2995,6 +3011,7 @@ dependencies = [
  "ctrlc",
  "fastrand",
  "libc",
+ "minisign",
  "notify",
  "png",
  "portable-pty",
@@ -3005,12 +3022,14 @@ dependencies = [
  "rs-rich-ext",
  "rs-rich-interact",
  "rs-rich-lumis",
+ "rs-rich-marketplace",
  "rs-rich-mermaid",
  "rs-rich-micro",
  "rs-rich-record",
  "rs-rich-web",
  "same-file",
  "serde_json",
+ "sha2 0.11.0",
  "tempfile",
  "terminal_size",
  "toml",
@@ -3955,6 +3974,7 @@ dependencies = [
  "indexmap",
  "toml_datetime",
  "toml_parser",
+ "toml_writer",
  "winnow",
 ]
 

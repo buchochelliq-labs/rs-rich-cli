@@ -37,12 +37,12 @@ workspace = true
 syntax-cache = ["rich/syntax-cache"]
 # Oniguruma regex engine for syntax highlighting (DIVERGENCES #26).
 onig = ["rich/onig"]
-default = ["fetch", "art", "mermaid", "record", "png", "interact"]
+default = ["fetch", "art", "mermaid", "record", "png", "interact", "wasm-plugins"]
 # Optional JSON display divergence; never enabled by default.
 json-escape-safe = ["rich/json-escape-safe"]
 # `fetch` enables the CLI's URL support (`rich <url>`); disable it
 # (`--no-default-features`) for a lean, network-free build.
-fetch = ["dep:ureq"]
+fetch = ["dep:ureq", "rich-marketplace/http"]
 # `art` enables `--gif` (animated GIF playback), `--diff` (perceptual image
 # diffing) and the image renderers behind `--image-mode`, including Sixel,
 # and the micro assets: `rich micro`, `:micro:` in `--print --emoji`, and
@@ -73,11 +73,12 @@ interact = ["dep:rich-interact"]
 # Off by default: it compiles lumis's grammars (a much larger binary) and needs
 # Rust 1.91.
 lumis = ["dep:rich-lumis"]
-# Runtime plugins, loaded with `--plugin PATH` or from a trusted config's
-# `plugins` list (never from a project's ./rich.toml). Both off by default:
-# `dylib-plugins` loads native libraries (they run arbitrary code), and
-# `wasm-plugins` sandboxed WASM modules (wasmi; no imports, fuel and memory
-# limits). See docs/PLUGINS.md.
+# Runtime plugins, loaded with `--plugin PATH`, from a trusted config's
+# `plugins` list (never from a project's ./rich.toml), or installed with
+# `rich plugin install`. `wasm-plugins` loads sandboxed WASM modules (wasmi;
+# no imports, fuel and memory limits) and is on by default since 0.0.22.
+# `dylib-plugins` loads native libraries, which run arbitrary code, and stays
+# off by default. See docs/PLUGINS.md.
 dylib-plugins = ["rich-ext/dylib-plugins"]
 wasm-plugins = ["rich-ext/wasm-plugins"]
 # `rich schema` reading Arrow IPC files (`.arrow`, `.feather`, `.arrows`,
@@ -105,6 +106,11 @@ rich-web = { workspace = true, optional = true }
 rich-interact = { workspace = true, optional = true, features = ["data"] }
 rich-lumis = { workspace = true, optional = true }
 rich-micro = { workspace = true, optional = true }
+# `rich plugin`: the marketplace's signed index, listings, resolution,
+# verified installs and the lockfile. Its HTTPS transport comes with `fetch`.
+rich-marketplace = { workspace = true, default-features = false }
+# `rich plugin publish`: an artifact's SHA-256 (already in the tree).
+sha2 = "0.11"
 
 toml = "1.1"
 tempfile = "3"
@@ -137,3 +143,6 @@ wat = "1"
 # `--export-png` tests decode the image (already in the tree through
 # rs-rich-record).
 png = "0.18"
+# `rich plugin` tests sign a fixture marketplace with rs-rich-marketplace's
+# test keys.
+minisign = "0.10"
