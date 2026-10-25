@@ -25,6 +25,10 @@ as a normal user, never as root.
 - **Forms**: fields, check boxes, radios, selects and sliders are
   intuiTUIve widgets. A field's edit is a draft until Enter; if the page
   changed the value meanwhile, it is a conflict, never overwritten.
+- **Sound**: off by default. `--audio` (or `[media] audio = true`) lets
+  pages play sound, with Play/Pause, Mute/Unmute and volume controls for
+  each video and audio. Sound plays on the machine Chrome runs on, never
+  over SSH: run over SSH, it plays on the server.
 - **Safety**: everything a page says is cleaned before it reaches the
   terminal; no escape sequence passes. Downloads are refused. The
   profile is temporary unless you keep one (`--profile NAME`).

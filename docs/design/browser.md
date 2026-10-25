@@ -13,13 +13,24 @@ gets only generic pieces from this work (see
 
 ## Where things stand
 
-- **Merged on `022-browser`** (pushed to
-  `claude/next-priority-items-3c5p8e-wip-browser`): `DevTools::call` and
-  a history fix in rs-rich-embed; the `noctiluca` spike; this note.
-- **In flight**: nothing.
-- **Next**: the decisions at [the end](#what-a-human-must-decide), then
-  rs-rich-embed's items 2 to 4 (events, the faster loop, screencast on
-  demand), then phase 0.1.
+- **Done on `022-browser`** (pushed to
+  `claude/next-priority-items-3c5p8e-wip-browser`): the reader phase,
+  0.1, as `noctiluca` 0.0.1, and rs-rich-embed's events and switches.
+  Item by item, with what is short, in [0.1: reader](#01-reader).
+- **The web widgets run on intuiTUIve's C1 to C4** (merged from ws2):
+  `button_of`, `checkbox_of` and `switch_of` with live labels,
+  `select_field_keyed` and `radio_keyed` keyed by the options' own nodes,
+  and F1 is intuiTUIve's live `action_overlay`.
+- **Sound works** (`--audio`): verified leaving Chrome through an ALSA
+  sink, not on a speaker. See [Audio](#audio).
+- **The first projection** is the default view: boxes at Chrome's
+  positions, rewrapped, pushed down by a skyline per column, grown to the
+  right into free cells. Two-column and flex layouts stay side by side.
+  No fixed or sticky layer, no paint order, media as framed alt text:
+  0.3's work.
+- **Next**: 0.2, forms and tables (a login form, a dashboard and a
+  settings page as fixtures); rs-rich-embed's faster loop, screencast on
+  demand and several pages (tabs).
 
 This note started from a proof of concept the user supplied: a Node and
 Playwright browser (`src/`), a metadata-driven widget experiment
@@ -246,14 +257,19 @@ Noctiluca reads the page with two DevTools calls instead:
   semantic controls come straight from it. A node's `backendDOMNodeId`
   joins it to the snapshot.
 
-To know when to read again, one small script runs in an **isolated
-world** (`Page.createIsolatedWorld`), not the page's world: a single
+To know when to read again (built: `cdp.rs`'s `PING_SCRIPT`), one small
+script runs in an **isolated world** (`Page.createIsolatedWorld`), not the page's world: a single
 `MutationObserver` and media event listeners, which call a binding
 (`Runtime.addBinding` with `executionContextName`) as a "something
 changed" ping. Noctiluca debounces the pings (about 100 ms, and at once
 after an action of ours) and takes a new snapshot. The page cannot see an
 isolated world's globals or the binding. It can still notice extra work
-through timing; that is accepted.
+through timing; that is accepted. Measured: a binding's calls are
+reported only while the `Runtime` domain is enabled, so Noctiluca enables
+it. Some bot checks look for an enabled `Runtime`; that too is accepted.
+The script also samples the form fields' values every 500 ms (passwords
+left out), as the PoC did, so a value a page script sets with no event
+is still seen.
 
 The lead's direction asked for `Runtime.addBinding` with a
 MutationObserver. Doing that in the page's main world would bring back the
@@ -296,8 +312,9 @@ Chrome's own geometry instead:
 1. **The viewport is the terminal.** Chrome's viewport is set to
    `columns × cell width` by `rows × cell height` CSS pixels
    (`Emulation.setDeviceMetricsOverride`, which rs-rich-embed already
-   sends). The cell size comes from the terminal when it reports one, else
-   10 x 20.
+   sends). Built: 8 x 18 CSS pixels a cell, narrower than rs-rich-embed's
+   10 x 20, so a proportional 16 px font's average glyph is about one
+   cell. Reading the terminal's own cell size is still to do.
 2. **Every layout box has a kind**: text (it has inline text boxes),
    control (its AX role is interactive), or opaque. Opaque covers images,
    GIFs, video, canvas, WebGL, SVG with more than a few elements, and
@@ -422,12 +439,50 @@ over SSH, the sound plays on the server, not at the user's terminal. No
 terminal protocol carries audio. A remote audio transport would be a
 separate, optional project.
 
-rs-rich-embed starts Chrome with `--mute-audio` every time. Noctiluca
-needs an opt-in to leave it off (`--audio`), and stays muted by default.
-Volume, mute, play and pause are actions on the media element, read back
-from Chrome. The PoC showed this works: it recorded Chrome's ALSA output to
-a file sink and measured playing, muted, 30% and paused levels. That test
-is worth porting (Linux CI only).
+**Sound plays on the machine Chrome runs on, never over SSH.** Over SSH
+it plays on the server. Noctiluca says so in its README, its help and the
+player ("sound is off: start with `--audio`" when it is off).
+
+Built in 0.0.22:
+
+- `--audio`, or `[media] audio = true`, starts Chrome without
+  `--mute-audio` (rs-rich-embed's `ChromeEngine::audio`). Without it the
+  browser is muted, as before.
+- Each video and audio element gets controls in reader mode, from the
+  element's real state, read with a call on the element in an isolated
+  world: Play or Pause and Mute or Unmute (stock `button_of`, live labels,
+  C1), a volume slider (the stock slider), and its time. While something
+  plays, its state is read again every 500 ms.
+- The registry has `media.play_pause` (`p`), `media.mute` (`Alt+M`),
+  `media.volume_up` (`+`) and `media.volume_down` (`-`), in ten-point
+  steps that never unmute. F1 lists them saying what they would do now
+  ("Pause the media", "Unmute the media").
+- `[site."…"] audio = false` keeps that site's media muted. Sound is a
+  switch of the browser's launch, so a site cannot turn it on for a run
+  that started without it.
+- Play runs as the user's gesture (`userGesture` on the call), so a play
+  the user asked for is not refused as autoplay. No autoplay policy is
+  changed.
+
+**Verified on this machine** (`tests/audio.rs`, run as a normal user,
+Chrome for Testing 153). As the PoC did, the test points ALSA at a sink
+of its own: an `ALSA_CONFIG_PATH` for its process and the browser it
+starts, whose default output writes to a FIFO the test reads at a real
+device's pace (48 kHz, stereo, 16-bit; unpaced, Chrome decodes as fast as
+it can and the media clock runs away). On a local two-second 440 Hz tone:
+
+| Check | Result |
+|---|---|
+| The element plays, not muted, its `currentTime` advancing | yes |
+| RMS of the samples Chrome wrote, playing at 100% | 0.189 |
+| Muted | 0.000 |
+| At 30% | 0.058 (0.31 of full) |
+| A Chrome started without `--audio`, playing the same tone | 0.000 |
+
+**Not verified:** a physical device (loudspeakers, headphones, a
+PulseAudio or PipeWire server, macOS or Windows audio), video sound, and
+any live site. The sink proves samples leave Chrome, not that a speaker
+plays them.
 
 ### Input and focus
 
@@ -542,6 +597,21 @@ the current site. A site key binds to one of three things:
    `{ role = "button", name = "Next page" }`, looked up in the AX tree
    when the key is pressed;
 3. a sequence of those.
+
+**Binding a key from the page (built).** `Ctrl+K`, "Bind a key on this
+site…", from F1 or a key, lists the page's named controls (by role and
+accessible name) and every action. Choose one, press the key, confirm:
+Enter binds it on this host, `w` on `*.host`. A key that already does
+something here (a site key or an action) is shown, and Enter replaces
+it. A name that more than one element has is said ("3 elements are named
+"Next"; this binds match 2"), and saved with `nth`; Esc refuses it. The
+binding is written to `[site."<host>".keys]` through `toml_edit`, keeping
+the file's comments and layout, atomically, and works at once. "Site
+shortcuts…" (`K`) lists this site's keys: Enter tests one, `d` removes
+it, `e` binds it to another key, `s` moves it between the host and
+`*.host`. `noctiluca keys --site github.com` lists them. Not built yet:
+starting a binding straight from a link hint or the focused element (the
+picker lists the same elements).
 
 There is no raw JavaScript and no CSS selector. A selector or a script in
 a config file would be page scripting by another name: a shared config
@@ -773,7 +843,8 @@ as a normal user, never as root.
 ### 0.0.1: the spike (done)
 
 `noctiluca FILE` prints a local page's headings and paragraphs. One live
-test, four unit tests, and the `snapshot_cost` example.
+test, four unit tests, and the `snapshot_cost` example (now
+`capture --cost`).
 
 ### 0.1: reader
 
@@ -809,6 +880,23 @@ article and a form page.
 
 Non-goal: a faithful layout. The first projection may be rough; reader
 mode is one key away.
+
+**Status: done in 0.0.22**, each item tested. The fixtures are pages
+written for the corpus (`crates/noctiluca/tests/fixtures`: `reader`,
+`docs`, `article`, `form`, `echo`, `second`, `inject`, `audio`), not saved
+real pages, so their licence is the repository's. Chrome's snapshots of
+them are kept in `tests/snapshots` (re-made with the `capture` example),
+so the model, layout, config and app tests run with no browser; the live
+tests run the same pages through Chrome as a normal user (CI's `browser`
+job), and the PTY test runs the binary over the snapshots
+(`NOCTILUCA_FAKE_ENGINE`). Beyond the list: sound (see [Audio](#audio)),
+`--dump text|ax|json`, `--no-js`, per-site view, images and width, and a
+docs tape (`docs/tapes/noctiluca.tape`, over the snapshots, since the
+tape job runs no browser). Short of the list: the image in the `Driver`
+screen is checked as half blocks only by eye; a binding cannot yet start
+from a hint or the focused element; `O` and `g t` say tabs need
+rs-rich-embed's several pages; the PoC's own demo pages are not copied
+in (ours cover the same ground).
 
 ### 0.2: forms and tables
 

@@ -229,6 +229,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   keys bound to actions or to an element's role and name (never a script
   or a selector). A key can be bound on a site from F1; the file keeps its
   comments. `noctiluca keys [--site HOST]` lists them.
+- Sound, off by default: `--audio` or `[media] audio = true` starts
+  Chrome unmuted. Video and audio get Play/Pause and Mute/Unmute (live
+  labels) and a volume slider from the element's real state, and the
+  media actions are in F1. Verified leaving Chrome through a paced ALSA
+  sink (RMS 0.189 playing, 0 muted, 0.058 at 30%); not verified on a
+  physical device. Sound plays where Chrome runs, never over SSH.
+- The web widgets use intuiTUIve's new controls: `button_of`,
+  `checkbox_of` (the mixed state) and `switch_of`, `select_field_keyed`
+  and `radio_keyed` (options keyed by their own nodes, disabled ones never
+  chosen); F1 is intuiTUIve's live `action_overlay`.
 - `--dump text|ax|json` prints the page's model, for scripts and CI.
   `--no-js`, `--audio`, `--profile`, `--images`, `--raster` (rs-rich-embed's
   screencast view, for debugging).

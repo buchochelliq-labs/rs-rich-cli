@@ -52,7 +52,8 @@ usage: noctiluca [OPTIONS] [URL | FILE | KEYWORD WORDS…]
        noctiluca keys [--site HOST] [--config PATH]
 
   --reader | --projection | --raster   the first view (default: projection)
-  --audio                              let pages play sound (off by default)
+  --audio                              let pages play sound (off by default;
+                                       it plays where Chrome runs, never over SSH)
   --profile NAME                       keep a profile between runs (opt-in)
   --chrome PATH                        the browser to run (default: a system Chrome)
   --images ansi|kitty|sixel|iterm2|none
