@@ -142,8 +142,12 @@ pub struct AccessState {
     /// Open (`Some(true)`) or closed: a tree item with children, a
     /// collapsible. `None` when it cannot open.
     pub expanded: Option<bool>,
-    /// On or off: a check box, a toggle. `None` when it is neither.
+    /// On or off: a check box, a toggle. `None` when it is neither, or
+    /// [mixed](Self::mixed).
     pub checked: Option<bool>,
+    /// Neither on nor off: a [three-state check box](crate::checkbox_tri)
+    /// whose children are partly checked (ARIA's `aria-checked="mixed"`).
+    pub mixed: bool,
     pub selected: bool,
     /// Working: loading, a task running.
     pub busy: bool,
@@ -202,6 +206,7 @@ impl AccessNode {
     /// Save, button
     /// Search, text box: foo
     /// Wrap lines, check box, checked
+    /// All files, check box, mixed
     /// ```
     ///
     /// Empty for a node with nothing to say (blank text).
@@ -231,6 +236,7 @@ impl AccessNode {
         let words = [
             (state.checked == Some(true), "checked"),
             (state.checked == Some(false), "not checked"),
+            (state.mixed, "mixed"),
             (state.selected, "selected"),
             (state.expanded == Some(true), "expanded"),
             (state.expanded == Some(false), "collapsed"),
@@ -263,7 +269,9 @@ impl AccessNode {
         if let Some(open) = state.expanded {
             out.push(("aria-expanded", open.to_string()));
         }
-        if let Some(on) = state.checked {
+        if state.mixed {
+            out.push(("aria-checked", "mixed".to_string()));
+        } else if let Some(on) = state.checked {
             out.push(("aria-checked", on.to_string()));
         }
         for (on, name) in [

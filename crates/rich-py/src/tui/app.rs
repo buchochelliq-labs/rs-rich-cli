@@ -403,7 +403,8 @@ pub(crate) struct PyAccessState(pub(crate) intuituive::a11y::AccessState);
 impl PyAccessState {
     /// For a widget's `access_state()`.
     #[new]
-    #[pyo3(signature = (*, expanded=None, checked=None, selected=false, busy=false, position=None, invalid=false))]
+    #[pyo3(signature = (*, expanded=None, checked=None, selected=false, busy=false, position=None, invalid=false, mixed=false))]
+    #[allow(clippy::too_many_arguments)]
     fn new(
         expanded: Option<bool>,
         checked: Option<bool>,
@@ -411,10 +412,12 @@ impl PyAccessState {
         busy: bool,
         position: Option<(usize, usize)>,
         invalid: bool,
+        mixed: bool,
     ) -> PyAccessState {
         PyAccessState(intuituive::a11y::AccessState {
             expanded,
             checked,
+            mixed,
             selected,
             busy,
             invalid,
@@ -436,6 +439,12 @@ impl PyAccessState {
     #[getter]
     fn checked(&self) -> Option<bool> {
         self.0.checked
+    }
+
+    /// Neither checked nor not: a three-state check box, partly checked.
+    #[getter]
+    fn mixed(&self) -> bool {
+        self.0.mixed
     }
 
     #[getter]
