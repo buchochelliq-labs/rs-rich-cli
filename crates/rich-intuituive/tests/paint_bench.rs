@@ -18,6 +18,14 @@ mod bench;
 #[global_allocator]
 static ALLOC: CountingAllocator = CountingAllocator::system();
 
+/// The counts are the process's: the tests here take turns, so none
+/// allocates while another counts.
+static SERIAL: std::sync::Mutex<()> = std::sync::Mutex::new(());
+
+fn serial() -> std::sync::MutexGuard<'static, ()> {
+    SERIAL.lock().unwrap_or_else(|e| e.into_inner())
+}
+
 use std::time::Duration;
 
 use intuituive::interact::headless::Script;
@@ -338,6 +346,7 @@ const BASELINE: &str = include_str!("paint_bench_baseline.txt");
 /// machine. `PAINT_BENCH_RECORD=1` prints a new baseline instead.
 #[test]
 fn bytes_and_allocations_hold_to_the_baseline() {
+    let _serial = serial();
     let record = std::env::var_os("PAINT_BENCH_RECORD").is_some();
     let mut failures = Vec::new();
     for (w, h) in [(80u16, 24u16), (200, 60)] {
@@ -504,6 +513,7 @@ fn check(scene: Scene, strategy: PaintStrategy, width: u16, height: u16, frames:
 
 #[test]
 fn every_strategy_reproduces_every_scene() {
+    let _serial = serial();
     for scene in SCENES {
         for strategy in STRATEGIES {
             check(scene, strategy, 80, 24, 3);
@@ -513,6 +523,7 @@ fn every_strategy_reproduces_every_scene() {
 
 #[test]
 fn the_scenes_change_what_they_say() {
+    let _serial = serial();
     for scene in SCENES {
         let mut driver = app(scene, 24).driver(80, 24);
         driver.settle();
@@ -527,6 +538,7 @@ fn the_scenes_change_what_they_say() {
 #[test]
 #[ignore = "a benchmark: run it in release with --ignored"]
 fn paint_strategies_benchmark() {
+    let _serial = serial();
     let frames = std::env::var("PAINT_BENCH_FRAMES")
         .ok()
         .and_then(|n| n.parse().ok())
@@ -630,6 +642,7 @@ fn paint_strategies_benchmark() {
 #[test]
 #[ignore = "a profiling harness: run it under a profiler"]
 fn profile_one_scene() {
+    let _serial = serial();
     let name = std::env::var("PAINT_BENCH_SCENE").unwrap_or_else(|_| "Churn".into());
     let scene = *SCENES
         .iter()
