@@ -758,24 +758,26 @@ This is identity, not architecture. It needs no new code.
 - Native terminals: Kitty, Ghostty, WezTerm, iTerm2, foot, and Sixel over
   real SSH links.
 
-## What a human must decide
+## Decisions
 
-1. **Where the engine trait lives**: in `noctiluca` with an adapter
-   (recommended), or in rs-rich-embed.
-2. **Whether intuiTUIve core takes C1 to C4**, with the APIs above. They
-   change public APIs, so they need intuiTUIve's own version bump.
-3. **rs-rich-embed's new switches**: audio on and downloads allowed. Both
-   are off by default; is that the right default for every embed user?
-4. **Profiles**: whether a kept profile is offered at all, and where
-   bookmarks live.
-5. **Which browser to prefer**: system Chrome first, for codecs, and
-   whether Chrome for Testing may be suggested to users.
-6. **CI**: installing a browser in CI, and running the live tests as a
-   normal user with user namespaces allowed.
-7. **The PoC's code**: it came from the user without a licence file in
-   the copy reviewed. Porting its rules is fine; copying its fixtures or
-   `dom.js` logic needs the user to confirm the licence.
-8. **Publishing**: `noctiluca` is free on crates.io today (checked). When
-   to reserve it, and when to add the crate to `RELEASES.toml` and the
-   release tooling.
-9. **Which mode opens by default**: the projection or reader mode.
+Answered by the user on 2026-10-25:
+
+1. **The engine trait lives in `noctiluca`**, with an adapter over
+   rs-rich-embed's `ChromeEngine`.
+2. **intuiTUIve core takes C1 to C4**, with the APIs above, in 0.0.22
+   (intuiTUIve 0.0.7). C5 stays in `noctiluca`.
+3. **rs-rich-embed gains switches** for audio and for allowing downloads,
+   both off by default.
+4. **A kept profile is opt-in only**; the default profile is temporary.
+   Bookmarks live in a file of Noctiluca's own.
+5. **The system Chrome is preferred** when one is installed, for codecs.
+6. **CI installs a browser** and runs the live tests as a normal user.
+7. **The PoC is the user's own**, so its fixtures and its `dom.js` logic may
+   be copied, as long as what is copied fits intuiTUIve's architecture:
+   generic pieces go to core or embed, the web adapters compose stock
+   widgets, and nothing domain-specific enters intuiTUIve core.
+8. **`noctiluca` is reserved soon**: it joins `RELEASES.toml` and the release
+   tooling, and its 0.0.1 can be published on its own crate tag once it is
+   on `main`.
+9. **The projection opens by default**; reader mode is one key away (not
+   answered; the recommendation stands until the user says otherwise).
