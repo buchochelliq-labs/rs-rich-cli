@@ -84,6 +84,12 @@ pub const PING_SCRIPT: &str = r#"(function start(tries) {
   changed();
 })(0)"#;
 
+/// The CSS pixels one cell stands for: the page is laid out at the
+/// terminal's size times this. Narrower than rs-rich-embed's 10 x 20,
+/// so a proportional 16 px font's average glyph is about one cell, and a
+/// line of Chrome's is about one row.
+pub const CELL: (u32, u32) = (8, 18);
+
 /// How the browser is started.
 #[derive(Clone, Debug, Default)]
 pub struct ChromeOptions {
@@ -131,7 +137,9 @@ pub struct ChromeBackend {
 impl ChromeBackend {
     /// Start the browser and set up the isolated world.
     pub fn start(options: ChromeOptions) -> io::Result<ChromeBackend> {
-        let mut engine = ChromeEngine::new().audio(options.audio);
+        let mut engine = ChromeEngine::new()
+            .audio(options.audio)
+            .cell_pixels(CELL.0, CELL.1);
         if let Some(binary) = options.binary.clone().or_else(find_chrome) {
             engine = engine.binary(binary);
         }

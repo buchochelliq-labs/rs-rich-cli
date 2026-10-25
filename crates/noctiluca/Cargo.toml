@@ -28,3 +28,7 @@ rich-intuituive = { workspace = true, features = ["art"] }
 serde_json.workspace = true
 # Stills of image regions in tests, and their decoding through rs-rich-art.
 image = { workspace = true }
+# The config file: read with toml, edited with toml_edit so the user's
+# comments and layout survive.
+toml = { version = "1.1", features = ["preserve_order"] }
+toml_edit = "0.25"

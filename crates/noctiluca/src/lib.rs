@@ -15,10 +15,13 @@
 //! Everything the page says is untrusted: control characters are stripped
 //! ([`clean`]) before any of it reaches the terminal.
 
+pub mod bookmarks;
 pub mod cdp;
 pub mod clean;
+pub mod config;
 pub mod draft;
 pub mod engine;
+pub mod layout;
 pub mod model;
 pub mod tab;
 pub mod testing;
