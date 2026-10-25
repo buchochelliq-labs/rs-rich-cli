@@ -328,6 +328,56 @@ payoff:
     - **Client-side prediction of typed characters:** local echo,
       corrected by the next frame.
 
+13. **A timedemo.**
+    - Doom's `-timedemo` replays a recorded demo (inputs only) as fast as
+      the machine can draw it, and reports frames per second. Every Doom
+      port has been compared that way for thirty years.
+    - We have the pieces: rs-rich-record's tapes record input, and the
+      headless driver runs on a virtual clock.
+    - A `timedemo` mode replays a tape against an app with no waits and
+      reports frames, time, bytes and the strategy chosen per frame.
+    - Any app becomes a benchmark scene with no code, and a user's slow
+      case becomes a reproducible report.
+14. **Lookup tables, as Doom's colormaps are.** Doom never computes a
+    shade; it looks it up. A frame of pixels in a fixed palette can keep
+    one precomputed SGR string per palette pair, instead of formatting
+    `38;2;r;g;b` per run.
+15. **Exact damage for slow-changing parts.** Doom's status bar redraws a
+    number only when it changes, while the 3D view redraws whole. Mixed
+    screens (a full-motion region beside a few static widgets) are the
+    case `best` must get right: full repaint for the moving region, cell
+    diff for the rest, per region rather than per frame.
+16. **Sample input as late as possible** (late latching). Games read
+    input just before rendering to cut latency. We drain events before a
+    frame (`DRAIN_EVENTS = 64`). A frame that is built slowly should
+    re-drain before it is encoded, so a key pressed during the build
+    shows in that frame rather than the next.
+
+### What rs-rich-doom taught us already
+
+It is our heaviest real workload: 35 full-screen frames a second, with
+sound. Its measurements and [core gaps](doom-core-gaps.md) belong here.
+
+- **Throughput:**
+  - about 34 fps in a real PTY at 80x24 and 160x50, in release, in every
+    mode;
+  - in debug, Sixel at 160x50 falls to 7.7 fps;
+  - the style table stays bounded (peak 2,766 at 80x24 Braille).
+- **Its gaps overlap this plan:**
+  - **gap 1, a live frame image node:** today each frame is encoded to
+    PNG, decoded on a worker and shown after a "loading" step;
+  - **gap 3, Kitty raw-pixel transmission and reused ids:** this is
+    idea 9;
+  - **gap 6, frame timings in `FrameStats`:** this is the stats work in
+    step 1.
+
+  They are scheduled for 0.0.23 already; this plan takes gaps 1, 3 and 6
+  into its steps rather than doing them twice.
+- **It makes the churn scene real.** Doom at 35 fps in half blocks is
+  the benchmark's "every cell changes" case, played from a recorded demo
+  as a timedemo (idea 13), with Freedoom's data downloaded in CI as its
+  own tests do.
+
 Each goes through the benchmark below before it is kept. Ideas 1, 2, 4, 6
 and 7 change the core painter. Idea 3 is the virtual scroll view's.
 Ideas 9 and 12 are the image layer's and rs-rich-web's.
@@ -353,6 +403,7 @@ strategy can never be faster by being wrong.
 | Churn, every cell | The worst case: random colours every frame |
 | A chart redrawn | Dense braille, few styles |
 | Noctiluca scrolling a long page | The browser's case |
+| rs-rich-doom's demo as a timedemo | Real full-motion churn beside a static status bar |
 
 There are two harnesses:
 
