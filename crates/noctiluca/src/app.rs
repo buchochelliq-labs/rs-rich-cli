@@ -34,6 +34,10 @@ use crate::tab::{Command, Intent, Refusal, Tab, Update};
 use crate::video::{Pacing, VideoFrame};
 use crate::widgets::{web_widget, WebControl};
 
+/// The video regions on screen and the pacing's intervals, as told to the
+/// tab.
+type RegionsSent = (Vec<NodeId>, Vec<(NodeId, Duration)>);
+
 /// What happens when an action of the tab's is answered.
 type Then = Box<dyn FnOnce(Result<(), Refusal>, &mut Ctx)>;
 
@@ -96,7 +100,7 @@ pub struct Browser {
     pacing: Signal<Rc<RefCell<Pacing>>>,
     /// The regions on screen and the pacing's intervals, as last told to
     /// the tab.
-    regions_sent: Signal<(Vec<NodeId>, Vec<(NodeId, Duration)>)>,
+    regions_sent: Signal<RegionsSent>,
     /// The protocol pictures are drawn with, from [`images`](Self::images).
     pub pixels: Memo<Pixels>,
     /// Whether moving pictures are held still (`media.freeze`).
@@ -1512,6 +1516,38 @@ fn shown_picture(b: Browser, node: NodeId) -> Option<(Picture, Pixels)> {
     Some((picture, b.pixels.get()))
 }
 
+/// The play mark over the bottom left of each video region on `row` that
+/// is not playing, as the PoC drew it over the poster.
+fn play_marks(
+    line: Vec<rich::Segment>,
+    width: usize,
+    row: usize,
+    regions: &[layout::Region],
+    page: &Page,
+) -> Vec<rich::Segment> {
+    let mut line = line;
+    for region in regions {
+        let Some(media) = page.media.get(region.media) else {
+            continue;
+        };
+        let last = region.row + region.rows.saturating_sub(1);
+        if row != last || region.cols < 3 || region.column + 3 > width {
+            continue;
+        }
+        let Some(mark) = layout::play_mark(media, region.cols) else {
+            continue;
+        };
+        let style = rich::Style::parse(&mark.spans[0].style).ok();
+        let mut pieces = rich::Segment::divide(&line, &[region.column, region.column + 3, width]);
+        pieces.resize(3, Vec::new());
+        let mut joined = std::mem::take(&mut pieces[0]);
+        joined.push(rich::Segment::new(mark.spans[0].text.clone(), style));
+        joined.extend(std::mem::take(&mut pieces[2]));
+        line = joined;
+    }
+    line
+}
+
 fn reader_view(b: Browser) -> Node {
     // The pieces and their keys, made together so they always agree.
     let reading = memo(move || {
@@ -1670,7 +1706,7 @@ fn projection_view(b: Browser) -> Node {
                         .map(|r| p.as_ref()?.media.get(r.media).map(|m| m.node))
                         .collect()
                 });
-                vec![pictures::splice(
+                let spliced = pictures::splice(
                     console,
                     &cells,
                     segments,
@@ -1681,7 +1717,11 @@ fn projection_view(b: Browser) -> Node {
                         let at = l.regions.iter().position(|r| r == region)?;
                         shown_picture(b, nodes.get(at).copied().flatten()?)
                     },
-                )]
+                );
+                vec![b.page.with(|p| match p {
+                    Some(page) => play_marks(spliced, width, row, &l.regions, page),
+                    None => spliced,
+                })]
             })
         })
         .fixed(1)
