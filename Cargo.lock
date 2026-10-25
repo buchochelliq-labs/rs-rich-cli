@@ -1816,9 +1816,9 @@ dependencies = [
 
 [[package]]
 name = "lumis"
-version = "0.15.0"
+version = "0.17.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7153a0a871b7afe9eb2d327b3e3b47887819f992fb5f68939d0a22428f5bf447"
+checksum = "6f3ccb22fcc0bda7f89aaf4c1527771e042838d80aada955ba04d47ff6dc1b40"
 dependencies = [
  "anyhow",
  "cc",
@@ -1917,29 +1917,26 @@ checksum = "c2d43a6d891318b3540680d68c91635b8064c6b3879200ef40a8e8adb099ff0c"
 
 [[package]]
 name = "lumis-core"
-version = "3.0.0"
+version = "4.1.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "7de3eaf8e5603fec5f196dfec6416ef5a44138788c90b2cbbba36418f8e21714"
+checksum = "280f08e459afb86720148b2d5f0525aee9efecff13dc0de2ecfe9a29bab0ec9c"
 dependencies = [
  "derive_builder",
  "glob",
- "prettyplease",
- "proc-macro2",
  "quote",
  "regex",
  "serde",
  "serde_json",
- "syn 3.0.3",
+ "similar",
  "toml",
  "typed-path",
- "v_htmlescape",
 ]
 
 [[package]]
 name = "lumis-wasm-runtime"
-version = "0.3.0"
+version = "0.5.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ed9be58d344555e82b9eb0f784dc0c877bb569d241aba134f81a385dfb78e9a3"
+checksum = "af7d7f39144507a5e53f8e5d74480deaa5105d1f75af76d4a08d32e064f63592"
 dependencies = [
  "etcetera",
  "lumis-core",
@@ -1952,7 +1949,7 @@ dependencies = [
  "thiserror 2.0.21",
  "toml",
  "tree-sitter",
- "wasmparser 0.259.0",
+ "wasmparser 0.262.0",
 ]
 
 [[package]]
@@ -3605,6 +3602,12 @@ source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3a9fe34e3e7a50316060351f37187a3f546bce95496156754b601a5fa71b76e"
 
 [[package]]
+name = "similar"
+version = "3.2.1"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "d2f8bec09ae8fae0f4f265a4559a9334be3929d8504e9b536df0a41302bd1733"
+
+[[package]]
 name = "siphasher"
 version = "1.0.4"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -4025,13 +4028,12 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter"
-version = "0.26.13"
+version = "0.27.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "17ebdd3a5a7e28a1890b876fdbd0c3c0fe0a6336cffaa104f11b9f720c9daa29"
+checksum = "a5129de2ccc97808c4583d48f1fb44576d015cf241e432800572bda11ef30c3b"
 dependencies = [
  "cc",
  "regex",
- "regex-syntax",
  "serde_json",
  "streaming-iterator",
  "tree-sitter-language",
@@ -4359,9 +4361,9 @@ dependencies = [
 
 [[package]]
 name = "tree-sitter-language"
-version = "0.1.8"
+version = "0.1.9"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "ca0d1bf6fdd806e43ae5198f82f527056d359def39e54e67a0f478ac09dac081"
+checksum = "d0af592be68c579aa78a16846bd19422978c3c52e438523d45ff5d1bff1f9d4a"
 
 [[package]]
 name = "tree-sitter-llvm"
@@ -5001,6 +5003,17 @@ name = "wasmparser"
 version = "0.259.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "0f7c12eac7bb587801590f6a67ff0bc84d0748513864b71108e4b311cc3df694"
+dependencies = [
+ "bitflags 2.13.1",
+ "indexmap",
+ "semver",
+]
+
+[[package]]
+name = "wasmparser"
+version = "0.262.0"
+source = "registry+https://github.com/rust-lang/crates.io-index"
+checksum = "974d643b125b272607e2fff8012ea14a8328acd7621e4bafa7afb32500052b1b"
 dependencies = [
  "bitflags 2.13.1",
  "hashbrown 0.17.1",
