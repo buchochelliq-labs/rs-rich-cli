@@ -207,6 +207,51 @@ rs-rich-intuituive: retained nodes, signals, controls, modals, tabs,
                     jobs, finder, image nodes and graphics placement
 ```
 
+### No site-specific code
+
+A rule of the maintainer's (2026-10-25). Nothing in Noctiluca checks for a
+site: no host names, no per-site selectors, no "this is a chat" case.
+Everything comes from generic web semantics, so any page built from the
+same constructs reads the same way:
+
+- **pictures** from `<img>`, `<picture>` and CSS background images;
+- **video and audio** from `<video>` and `<audio>`, with their poster,
+  controls and play state;
+- **side by side** from grids and flex rows, by Chrome's geometry;
+- **live updates** from DOM mutations plus ARIA `role=log` and
+  `aria-live`: any live log follows its new entries and sticks to its
+  bottom;
+- **inputs and buttons** from their roles and names.
+
+The user's own site keys (`[site."…"]` in the config) are the user's
+settings, not code about a site. Fixtures are test pages named by what
+they exercise (`news.html`, `media-grid.html`, `stream-with-log.html`),
+in ordinary HTML.
+
+Every cell and pixel comes from our own stack: the model and projection,
+drawn by intuiTUIve's nodes and painter, pictures encoded by rs-rich-art
+and intuiTUIve's `art` feature. Chrome supplies the DOM, the layout,
+resource bytes and, while a video plays, cropped screencast frames. No
+external converter (the PoC's chafa) and no captured page stands in for
+rendering.
+
+### Terminal adaptations
+
+Optimising for the terminal is welcome when it is generic: a named rule
+about constructs and cells, applied to every page alike, with a test on a
+fixture.
+
+| Rule | What it does | Test |
+|---|---|---|
+| Decorative pictures drop | An image with an empty `alt`, `aria-hidden`, or smaller than 8 x 8 CSS pixels (a spacer, a tracking pixel) is not a media region | (in progress) |
+| Small pictures stay inline | An image at most two rows tall inside a line of text (an emote, a badge, an icon) is drawn in its line, at its cells | (in progress) |
+| Picture heights are capped | A picture is at most `MAX_PICTURE_ROWS` rows; what is under it in its columns moves up by the rows saved | (in progress) |
+| A caption under each picture | A picture with alt text and no `<figcaption>` gets an `Image: …` line under it | (in progress) |
+| Buttons as `[ label ]` | A button reads as its accessible name in brackets, an icon-only one too | (in progress) |
+| Grids fit the terminal | Chrome lays the page out at the terminal's width, so a responsive grid picks its column count from the cells there are | (in progress) |
+| A live log shows its tail | A `role=log` or `aria-live` box shows its newest entries that fit, and holds still while the user has scrolled it up | (in progress) |
+| Frame rates and tiers follow bandwidth | Each moving region's frame rate comes from a byte budget, at most 8 a second, and it steps down Kitty, iTerm2, Sixel, then cells when short | (in progress) |
+
 ### The engine trait
 
 The browser talks to an `Engine` trait, not to Chrome. Its first backend
