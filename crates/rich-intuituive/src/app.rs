@@ -2899,8 +2899,8 @@ impl App {
     /// let mut driver = app.driver(16, 5);
     /// driver.settle();
     /// let rows = driver.screen().plain();
-    /// assert_eq!(rows[1], " ┌──────────┐   ");
-    /// assert_eq!(rows[2], " │Too small!│   ");
+    /// assert_eq!(rows[1], "  ┌──────────┐  ");
+    /// assert_eq!(rows[2], "  │Too small!│  ");
     /// ```
     #[must_use]
     pub fn min_size_with(
