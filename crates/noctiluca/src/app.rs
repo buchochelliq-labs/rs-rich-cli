@@ -1970,14 +1970,24 @@ fn projection_view(b: Browser) -> Node {
 pub const CHROME_ROWS: u16 = 4;
 
 /// The byte budget moving pictures (GIFs and videos) share: the config's
-/// `bandwidth`, else rs-rich-art's guess, at most the config's frame rate
+/// `bandwidth`, else rs-rich-art's guess, lowered to the terminal's
+/// measured output rate ([`OutputRate`]), at most the config's frame rate
 /// and never more than eight a second. With the bandwidth rule off (the
 /// faithful projection), no budget: every frame, never a step down.
 pub fn byte_budget(b: Browser) -> rich_art::picture::ByteBudget {
     let adapt = b.effective_adapt();
+    let measured = OUTPUT.with(|o| o.borrow_mut().rate());
     b.config.with_untracked(|c| {
         let mut budget = c.bandwidth.map_or_else(
-            rich_art::picture::ByteBudget::guess,
+            || {
+                let mut guess = rich_art::picture::ByteBudget::guess();
+                // The painter's measured rate, when it is lower: a terminal
+                // that takes output slower than the guess.
+                if let Some(rate) = measured {
+                    guess.bytes_per_second = guess.bytes_per_second.min(rate);
+                }
+                guess
+            },
             rich_art::picture::ByteBudget::new,
         );
         budget.max_fps = f64::from(c.fps).clamp(1.0, crate::video::MAX_FPS as f64);
@@ -1989,11 +1999,55 @@ pub fn byte_budget(b: Browser) -> rich_art::picture::ByteBudget {
     })
 }
 
+thread_local! {
+    /// The painter's counters, for the terminal's measured output rate.
+    static OUTPUT: std::cell::RefCell<OutputRate> = std::cell::RefCell::default();
+}
+
+/// How fast the terminal takes output, from the painter's [`FrameStats`]
+/// (`rich_intuituive::FrameStats`): the bytes written over the time the
+/// writes took, once enough was written to tell. A terminal that keeps up
+/// reads fast, so the rate only ever lowers the guessed budget.
+#[derive(Default)]
+pub struct OutputRate {
+    stats: Option<rich_intuituive::StatsHandle>,
+    last: (u64, Duration),
+    rate: Option<f64>,
+}
+
+/// Written since the last sample before a rate is taken from it.
+const RATE_SAMPLE: u64 = 64 * 1024;
+
+impl OutputRate {
+    /// Fold in the counters: `total_bytes` written in `total_write`.
+    pub fn observe(&mut self, total_bytes: u64, total_write: Duration) {
+        let bytes = total_bytes.saturating_sub(self.last.0);
+        let write = total_write.saturating_sub(self.last.1);
+        if bytes < RATE_SAMPLE {
+            return;
+        }
+        self.last = (total_bytes, total_write);
+        if write.is_zero() {
+            return;
+        }
+        let rate = bytes as f64 / write.as_secs_f64();
+        self.rate = Some(self.rate.map_or(rate, |before| before * 0.7 + rate * 0.3));
+    }
+
+    /// Bytes a second the terminal took, measured; `None` until known.
+    pub fn rate(&mut self) -> Option<u64> {
+        if let Some(stats) = self.stats.as_ref().map(rich_intuituive::StatsHandle::get) {
+            self.observe(stats.total_bytes, stats.total_write);
+        }
+        self.rate.map(|r| r as u64)
+    }
+}
+
 /// The frames' pacing: within the guessed byte budget, at most the
 /// config's frame rate and never more than eight a second, starting at
 /// the protocol the user asked for, else character art over SSH, else
-/// what the terminal speaks. Where the painter measures the terminal's
-/// output rate (its frame budget), the budget should come from that.
+/// what the terminal speaks. [`step_motion`] replaces the budget with
+/// [`byte_budget`]'s on its first look.
 fn video_pacing(config: &Config, images: Images) -> Pacing {
     let mut budget = rich_art::picture::ByteBudget::guess();
     budget.max_fps = (config.fps as f64).clamp(1.0, crate::video::MAX_FPS as f64);
@@ -2016,7 +2070,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
     let first_view = view.unwrap_or(config.view);
     let images = images.unwrap_or(config.images);
     let configured_adapt = config.adapt;
-    App::new(move || {
+    let app = App::new(move || {
         let (keymap, warnings) = actions::keymap(config.preset, &config.keys);
         let mut warnings = [config.warnings.clone(), warnings].concat();
         warnings.truncate(3);
@@ -2195,5 +2249,31 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                 false
             })
     })
-    .graphics(image_graphics())
+    .graphics(image_graphics());
+    let stats = app.stats_handle();
+    OUTPUT.with(|o| o.borrow_mut().stats = Some(stats));
+    app
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn the_output_rate_is_measured_once_enough_was_written() {
+        let mut rate = OutputRate::default();
+        // Too little written to tell.
+        rate.observe(10_000, Duration::from_millis(100));
+        assert_eq!(rate.rate(), None);
+        // 200 kB in a second: 200 kB a second.
+        rate.observe(200_000, Duration::from_secs(1));
+        assert_eq!(rate.rate(), Some(200_000));
+        // Then 400 kB more in a second moves it toward 400 kB a second.
+        rate.observe(600_000, Duration::from_secs(2));
+        let now = rate.rate().unwrap();
+        assert!((200_000..400_000).contains(&now), "{now}");
+        // Writes that took no time say nothing.
+        rate.observe(900_000, Duration::from_secs(2));
+        assert_eq!(rate.rate(), Some(now));
+    }
 }

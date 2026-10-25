@@ -35,8 +35,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - **Animated GIFs move**, within the terminal's byte budget, and step
   down from Sixel to half blocks when the budget is short. Kitty gets the
   frames once and loops them itself. GIFs and video share one budget,
-  set with `[media] bandwidth`. Freezing (F4) stops them, and Kitty gets
-  a still.
+  set with `[media] bandwidth`, else a guess lowered to the rate the
+  terminal took output at (intuiTUIve's `FrameStats`). Freezing (F4) stops
+  them, and Kitty gets a still.
 - **Captions**: a picture with no caption of its own gets an `Image:`
   line under it, wrapped to its box. The `captions` adaptation switches
   this off.
@@ -49,7 +50,8 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   id and version, animated or still), `Player`, `PictureTag` for tagging
   cells with the picture drawn over them, and `picture_bytes`. Its
   `frames` feature adds `ByteBudget` and `Pacer`, which pace frames within
-  a byte budget (planning for the largest recent frame) and step down
+  a byte budget (spaced and capped for the largest recent frame at the
+  current protocol) and step down
   Kitty, iTerm2, Sixel, then cells. `kitty::transmit_rgba` and
   `graphics::play_mark` are new.
 - **intuiTUIve's `art` feature** is glue over them: `picture_of` draws a

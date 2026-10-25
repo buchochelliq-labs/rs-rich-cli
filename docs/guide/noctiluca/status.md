@@ -21,8 +21,9 @@ terminal for. The phases and their tests are in
 - **One tab.**
 - **No fixed or sticky layer** and no paint order in the projection.
 - **An inline SVG drawing, a canvas and a frame** show as their alt text.
-- **The byte budget is a guess** (4 MB a second, 256 kB over SSH) unless
-  `[media] bandwidth` says otherwise. A site's `fps` is read but not
+- **The byte budget starts as a guess** (4 MB a second, 256 kB over
+  SSH), lowered to the rate your terminal takes output at once measured,
+  unless `[media] bandwidth` sets it. A site's `fps` is read but not
   applied.
 
 ## In 0.0.22 (Noctiluca 0.0.1): the reader phase

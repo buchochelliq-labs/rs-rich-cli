@@ -652,9 +652,11 @@ rate instead of `ByteBudget::guess`.
   through the effective adaptations. A `Pacer` plans for the largest
   frame of the last few rather than their average, so one costly frame
   does not overrun the share.
-- **Where it should hook into the painter.** Once the painter's frame
-  budget lands (023-paint and 023-core), the budget's `bytes_per_second`
-  should come from the painter's measured output rate.
+- **The painter's measured rate.** With no `[media] bandwidth`, the
+  guess is lowered to the rate the terminal took output at, from
+  intuiTUIve's `FrameStats` (bytes written over the time the writes took,
+  once 64 kB more was written). A terminal that keeps up reads fast, so
+  the measure only ever lowers the guess.
 
 Tests: `tests/video.rs` (live: `motion.webm` plays, pauses, seeks, its
 `currentTime` moves and its frames change; a region's bytes over every
