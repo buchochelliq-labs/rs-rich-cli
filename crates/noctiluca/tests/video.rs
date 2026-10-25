@@ -159,7 +159,9 @@ fn motion_plays_pauses_and_seeks_and_its_frames_change() {
     let last = w.frames.last().unwrap().clone();
     assert_eq!(first.node, w.node());
     // The region's own size, cut from the screencast.
-    assert_eq!((first.pixels.width, first.pixels.height), (320, 180));
+    // (A box at a fractional pixel takes in the pixel it starts in.)
+    assert!((320..=321).contains(&first.pixels.width), "{}", first.pixels.width);
+    assert!((180..=181).contains(&first.pixels.height), "{}", first.pixels.height);
     assert!(last.seq > first.seq);
     assert_ne!(
         first.pixels.rgb, last.pixels.rgb,

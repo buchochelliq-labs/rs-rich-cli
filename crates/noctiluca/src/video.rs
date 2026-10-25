@@ -30,6 +30,10 @@ use crate::engine::{NodeId, Rect};
 /// The most frames a second a region is given: the PoC's rate, a ceiling.
 pub const MAX_FPS: u32 = 8;
 
+/// How far under its share a region is paced: what a frame costs is
+/// learned from the frames before it, and one can cost more.
+pub const HEADROOM: f64 = 0.1;
+
 /// The shortest time between two frames of one region.
 pub const MIN_INTERVAL: Duration = Duration::from_millis(1000 / MAX_FPS as u64);
 
@@ -214,9 +218,16 @@ impl Pacing {
         }
     }
 
+    /// Each moving region's share of the budget.
     fn share(&self) -> f64 {
         let moving = self.regions.values().filter(|r| r.moving).count().max(1);
         1.0 / moving as f64
+    }
+
+    /// The share the pacer keeps to: [`HEADROOM`] under the region's
+    /// share, since a frame can cost more than the frames before it.
+    fn paced_share(&self) -> f64 {
+        self.share() * (1.0 - HEADROOM)
     }
 
     /// Offer `frame`, for a region of `cols` x `rows` cells, at `now`.
@@ -253,7 +264,7 @@ impl Pacing {
             if frame.seq <= region.seq {
                 return None;
             }
-            self.share()
+            self.paced_share()
         };
         let budget = self.budget;
         let region = self.regions.get_mut(&frame.node)?;
@@ -312,7 +323,7 @@ impl Pacing {
     /// How long the tab should wait between two frames of each moving
     /// region, so it cuts no frame the pacing would drop.
     pub fn intervals(&self) -> Vec<(NodeId, Duration)> {
-        let share = self.share();
+        let share = self.paced_share();
         let mut out: Vec<(NodeId, Duration)> = self
             .regions
             .iter()
