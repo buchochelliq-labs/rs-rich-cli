@@ -351,6 +351,69 @@ pub struct Screen {
     /// What laying a style under or over a cell's made: by (layer, own,
     /// over), the combined style's id.
     layered: HashMap<(u32, u32, bool), StyleId, FxBuild>,
+    /// Each row's hash, kept as rows are written: 0 until asked for again.
+    hashes: RowHashes,
+    /// The rows [`scroll_up`](Self::scroll_up) moved since
+    /// [`forget_scrolls`](Self::forget_scrolls), newest last (a few): what
+    /// a painter tries first when it looks for rows that moved.
+    scrolled: Vec<(Rect, u16)>,
+}
+
+/// A hash per row, worked out when asked for and forgotten when the row is
+/// written: what finds rows that moved (a scroll) without comparing cells.
+/// Atomic so a screen can be read from several threads; the stores are
+/// plain ones on every common machine.
+#[derive(Debug, Default)]
+struct RowHashes(Vec<std::sync::atomic::AtomicU64>);
+
+impl Clone for RowHashes {
+    fn clone(&self) -> RowHashes {
+        RowHashes(
+            self.0
+                .iter()
+                .map(|h| {
+                    std::sync::atomic::AtomicU64::new(h.load(std::sync::atomic::Ordering::Relaxed))
+                })
+                .collect(),
+        )
+    }
+}
+
+impl RowHashes {
+    fn new(rows: u16) -> RowHashes {
+        RowHashes(
+            (0..rows)
+                .map(|_| std::sync::atomic::AtomicU64::new(0))
+                .collect(),
+        )
+    }
+
+    #[inline]
+    fn forget(&self, y: u16) {
+        if let Some(hash) = self.0.get(y as usize) {
+            hash.store(0, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+
+    fn forget_all(&self) {
+        for hash in &self.0 {
+            hash.store(0, std::sync::atomic::Ordering::Relaxed);
+        }
+    }
+}
+
+/// A row's hash: never 0, which means "not worked out".
+fn hash_cells(cells: &[Cell]) -> u64 {
+    const K: u64 = 0x517c_c1b7_2722_0a95;
+    let mut h: u64 = cells.len() as u64;
+    for cell in cells {
+        let word = u64::from(u32::from_le_bytes(cell.bytes))
+            | u64::from(cell.len) << 32
+            | u64::from(cell.width) << 40;
+        h = (h.rotate_left(5) ^ word).wrapping_mul(K);
+        h = (h.rotate_left(5) ^ cell.style.index() as u64).wrapping_mul(K);
+    }
+    h.max(1)
 }
 
 impl Screen {
@@ -362,7 +425,55 @@ impl Screen {
             styles: StyleTable::new(),
             layer: None,
             layered: HashMap::default(),
+            hashes: RowHashes::new(height),
+            scrolled: Vec::new(),
         }
+    }
+
+    /// The scrolls [`scroll_up`](Self::scroll_up) made since the last
+    /// [`forget_scrolls`](Self::forget_scrolls): each rectangle and how
+    /// many rows it moved up.
+    pub fn scrolled(&self) -> &[(Rect, u16)] {
+        &self.scrolled
+    }
+
+    /// Forget the scrolls made so far: after a frame is painted.
+    pub fn forget_scrolls(&mut self) {
+        self.scrolled.clear();
+    }
+
+    /// Row `y`'s hash: equal for rows of equal cells (and, but for a
+    /// collision, only for those). Kept between calls until the row is
+    /// written. 0 off the screen.
+    ///
+    /// ```
+    /// use rich::Segment;
+    /// use rich_ext::surface::{Rect, Screen};
+    ///
+    /// let mut screen = Screen::new(4, 3);
+    /// screen.write_lines(Rect::new(0, 0, 4, 2), &[vec![Segment::new("ab", None)]; 2]);
+    /// assert_eq!(screen.row_hash(0), screen.row_hash(1));
+    /// assert_ne!(screen.row_hash(0), screen.row_hash(2));
+    /// screen.scroll_up(screen.area(), 1);
+    /// assert_eq!(screen.row_hash(1), screen.row_hash(2));
+    /// ```
+    pub fn row_hash(&self, y: u16) -> u64 {
+        let Some(slot) = self.hashes.0.get(y as usize) else {
+            return 0;
+        };
+        let known = slot.load(std::sync::atomic::Ordering::Relaxed);
+        if known != 0 {
+            return known;
+        }
+        let hash = hash_cells(self.row(y));
+        slot.store(hash, std::sync::atomic::Ordering::Relaxed);
+        hash
+    }
+
+    /// Row `y`'s cells.
+    fn row(&self, y: u16) -> &[Cell] {
+        let width = self.width as usize;
+        &self.cells[y as usize * width..(y as usize + 1) * width]
     }
 
     pub fn area(&self) -> Rect {
@@ -392,6 +503,7 @@ impl Screen {
     }
 
     fn cell_mut(&mut self, x: u16, y: u16) -> &mut Cell {
+        self.hashes.forget(y);
         let width = self.width as usize;
         &mut self.cells[y as usize * width + x as usize]
     }
@@ -453,6 +565,7 @@ impl Screen {
         for cell in &mut self.cells {
             cell.style = remap.get_or_gone(cell.style);
         }
+        self.hashes.forget_all();
         self.layer = None;
         self.layered.clear();
         remap
@@ -521,6 +634,7 @@ impl Screen {
     #[inline]
     fn put_cell(&mut self, x: u16, y: u16, ch: char, style: StyleId) {
         let ch = narrow(ch);
+        self.hashes.forget(y);
         let at = y as usize * self.width as usize + x as usize;
         let width = self.cells[at].width;
         if width == 0 && x > 0 {
@@ -899,12 +1013,17 @@ impl Screen {
             return;
         }
         let rows = rows.min(rect.height);
+        if self.scrolled.len() >= 8 {
+            self.scrolled.remove(0);
+        }
+        self.scrolled.push((rect, rows));
         self.split_edges(rect);
         let width = self.width as usize;
         for y in rect.y..rect.bottom() - rows {
             let (from, to) = ((y + rows) as usize * width, y as usize * width);
             let (a, b) = (from + rect.x as usize, from + rect.right() as usize);
             self.cells.copy_within(a..b, to + rect.x as usize);
+            self.hashes.forget(y);
         }
         self.clear(Rect::new(rect.x, rect.bottom() - rows, rect.width, rows));
     }
@@ -1004,6 +1123,57 @@ impl Sent {
     fn cell(&self, x: u16, y: u16) -> &Cell {
         &self.cells[y as usize * self.width as usize + x as usize]
     }
+
+    fn row(&self, y: u16) -> &[Cell] {
+        let width = self.width as usize;
+        &self.cells[y as usize * width..(y as usize + 1) * width]
+    }
+
+    /// Move rows `top`..`bottom` by `by` (up when positive), as the
+    /// terminal did: the rows it opened are blank.
+    fn shift(&mut self, top: u16, bottom: u16, by: i32) {
+        let width = self.width as usize;
+        let rows = (bottom - top) as i32;
+        let n = by.unsigned_abs() as u16;
+        if by > 0 {
+            for y in top..bottom - n {
+                let from = (y + n) as usize * width;
+                self.cells
+                    .copy_within(from..from + width, y as usize * width);
+            }
+        } else {
+            for y in (top + n..bottom).rev() {
+                let from = (y - n) as usize * width;
+                self.cells
+                    .copy_within(from..from + width, y as usize * width);
+            }
+        }
+        let opened = if by > 0 {
+            bottom - n..bottom
+        } else {
+            top..top + n
+        };
+        debug_assert!(rows > by.abs());
+        for y in opened {
+            let row = y as usize * width;
+            self.cells[row..row + width].fill(Cell::blank());
+        }
+    }
+}
+
+/// How far from its row a changed row is looked for among the rows sent,
+/// to find a move.
+const SCROLL_WINDOW: u16 = 32;
+
+/// Rows `top`..`bottom` that moved together by `by` rows (up when
+/// positive) since they were sent.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+struct Shift {
+    top: u16,
+    bottom: u16,
+    by: i32,
+    /// Rows the move puts right that were wrong.
+    gain: u16,
 }
 
 /// How a [`Painter`] turns a frame's changes into bytes.
@@ -1181,6 +1351,13 @@ pub struct Painter {
     strategy: PaintStrategy,
     /// Runs of blank cells may be erased (ECH, EL) rather than written.
     erase: bool,
+    /// Rows may be moved with the terminal's scrolling.
+    scroll: bool,
+    /// Where nothing may be scrolled through (a picture the terminal does
+    /// not move with its text).
+    fixed: Vec<Rect>,
+    /// The move [`PaintStrategy::Best`] found for this frame.
+    found: Option<Shift>,
 }
 
 /// The pen's state while a frame is written.
@@ -1329,7 +1506,26 @@ impl Painter {
             stats: PaintStats::default(),
             strategy: PaintStrategy::default(),
             erase: true,
+            // Windows consoles have been seen to scroll the wrong rows.
+            scroll: !cfg!(windows),
+            fixed: Vec::new(),
+            found: None,
         }
+    }
+
+    /// Whether rows may be moved with the terminal's own scrolling (SU, SD
+    /// and DECSTBM) under [`PaintStrategy::Scroll`] and
+    /// [`PaintStrategy::Best`]: on by default but on Windows. A terminal
+    /// multiplexer that redraws scroll regions itself gains little.
+    pub fn set_scroll(&mut self, on: bool) {
+        self.scroll = on;
+    }
+
+    /// Rectangles no scroll may move through (Sixel or iTerm2 pictures,
+    /// which a terminal does not move with the rows); until the next call.
+    pub fn set_fixed(&mut self, rects: &[Rect]) {
+        self.fixed.clear();
+        self.fixed.extend_from_slice(rects);
     }
 
     /// Whether runs of blank cells may be erased with ECH or EL rather
@@ -1562,11 +1758,19 @@ impl Painter {
     /// `damage` rectangles can have changed since the last paint (ignored
     /// on the first paint, or after a resize or [`invalidate`](Self::invalidate)).
     pub fn paint(&mut self, screen: &Screen, damage: &[Rect]) -> String {
+        let mut out = String::new();
+        self.paint_into(screen, damage, &mut out);
+        out
+    }
+
+    /// [`paint`](Self::paint), appending to `out`: one buffer for a whole
+    /// frame.
+    pub fn paint_into(&mut self, screen: &Screen, damage: &[Rect], out: &mut String) {
         self.written.clear();
         self.stats = PaintStats::default();
-        let mut out = String::new();
-        let full = !matches!(&self.previous, Some(p) if p.width == screen.width && p.height == screen.height);
-        let rects: Vec<Rect> = if full {
+        let base = out.len();
+        let first = !matches!(&self.previous, Some(p) if p.width == screen.width && p.height == screen.height);
+        let mut rects: Vec<Rect> = if first {
             if self.inline {
                 out.push_str(&self.reserve(screen.height));
             } else {
@@ -1587,17 +1791,66 @@ impl Painter {
                     let right = r.right().saturating_add(wide);
                     Rect::new(x, r.y, right - x, r.height).intersection(screen.area())
                 })
+                .filter(|r| !r.is_empty())
                 .collect()
         };
         let mut pen = Pen {
             at: self.cursor,
             ..Pen::default()
         };
-        for (y, spans) in row_spans(&rects, screen.height) {
-            for (start, end) in spans {
-                self.paint_span(screen, y, start, end, &mut pen, &mut out);
+        let mut strategy = match self.strategy {
+            _ if first || self.force => PaintStrategy::Cells,
+            PaintStrategy::Best => self.choose(screen, &rects),
+            other => other,
+        };
+        if strategy == PaintStrategy::Scroll {
+            let found = match self.found.take() {
+                Some(shift) => Some(shift),
+                None => self.find_shift(screen, &rects),
+            };
+            match found {
+                Some(shift) => {
+                    let before = out.len();
+                    self.scroll_by(shift, screen, &mut pen, out);
+                    self.stats.other_bytes += out.len() - before;
+                    rects.push(Rect::new(
+                        0,
+                        shift.top,
+                        screen.width,
+                        shift.bottom - shift.top,
+                    ));
+                }
+                None => strategy = PaintStrategy::Cells,
             }
         }
+        let forced = self.force;
+        if strategy == PaintStrategy::Full {
+            rects = vec![screen.area()];
+            self.force = true;
+        }
+        for (y, spans) in row_spans(&rects, screen.height) {
+            if strategy == PaintStrategy::Rows {
+                self.paint_row(screen, y, &mut pen, out);
+                continue;
+            }
+            for (start, end) in spans {
+                // A span the same as what was sent is passed over whole: a
+                // row of cells compares as one slice.
+                if !self.force {
+                    if let Some(previous) = &self.previous {
+                        let width = screen.width as usize;
+                        let row = y as usize * width;
+                        let span = row + start as usize..row + end as usize;
+                        if previous.cells[span.clone()] == screen.cells[span] {
+                            self.stats.compared += usize::from(end - start);
+                            continue;
+                        }
+                    }
+                }
+                self.paint_span(screen, y, start, end, &mut pen, out);
+            }
+        }
+        self.force = forced;
         let before = out.len();
         if pen.link.is_some() {
             out.push_str("\x1b]8;;\x1b\\");
@@ -1607,13 +1860,14 @@ impl Painter {
         }
         self.stats.style_bytes += out.len() - before;
         let stats = &mut self.stats;
+        stats.strategy = strategy;
         stats.elided = stats.compared.saturating_sub(stats.written);
-        stats.other_bytes = out.len() - stats.move_bytes - stats.style_bytes - stats.text_bytes;
+        stats.other_bytes =
+            out.len() - base - stats.move_bytes - stats.style_bytes - stats.text_bytes;
         if self.inline {
             self.cursor = pen.at.or(self.cursor);
         }
-        // Bring the copy of what was sent up to date, reusing its cells'
-        // text buffers.
+        // Bring the copy of what was sent up to date.
         match &mut self.previous {
             None => {
                 self.previous = Some(Sent {
@@ -1628,17 +1882,223 @@ impl Painter {
                     for y in rect.y..rect.bottom() {
                         let row = y as usize * width;
                         let span = row + rect.x as usize..row + rect.right() as usize;
-                        for (sent, cell) in previous.cells[span.clone()]
-                            .iter_mut()
-                            .zip(&screen.cells[span])
-                        {
-                            *sent = *cell;
-                        }
+                        previous.cells[span.clone()].copy_from_slice(&screen.cells[span]);
                     }
                 }
             }
         }
-        out
+    }
+
+    /// [`PaintStrategy::Best`]'s pick for this frame.
+    ///
+    /// Choosing must cost less than it saves, so it encodes nothing twice:
+    /// a frame whose damage spans a few rows is painted cell by cell, as
+    /// is one where no run of rows moved; one where rows moved together
+    /// scrolls them (the move is found from row hashes, kept as rows are
+    /// written, so finding it is cheap). The benchmark found `rows` and
+    /// `full` never shorter by more than a few percent once the cell
+    /// encoder writes through short gaps, so they are not tried.
+    fn choose(&mut self, screen: &Screen, rects: &[Rect]) -> PaintStrategy {
+        // The whole screen damaged, and nearly every cell changed (full
+        // motion: a video, a game): comparing is wasted, so write it all.
+        // A sample of every seventh cell says, at a seventh of the cost.
+        let area = screen.area();
+        let damaged: usize = rects
+            .iter()
+            .map(|r| r.width as usize * r.height as usize)
+            .sum();
+        if damaged >= area.width as usize * area.height as usize {
+            if let Some(previous) = &self.previous {
+                let (mut seen, mut differ) = (0usize, 0usize);
+                for (sent, now) in previous.cells.iter().zip(&screen.cells).step_by(7) {
+                    seen += 1;
+                    differ += usize::from(sent != now);
+                }
+                if differ * 10 >= seen * 9 {
+                    return PaintStrategy::Full;
+                }
+            }
+        }
+        self.found = self.find_shift(screen, rects);
+        match self.found {
+            Some(_) => PaintStrategy::Scroll,
+            None => PaintStrategy::Cells,
+        }
+    }
+
+    /// [`PaintStrategy::Rows`] on row `y`: when it differs from what was
+    /// sent, every cell from its first change to its last.
+    fn paint_row(&mut self, screen: &Screen, y: u16, pen: &mut Pen, out: &mut String) {
+        let Some(previous) = &self.previous else {
+            return;
+        };
+        let (sent, now) = (previous.row(y), screen.row(y));
+        let width = screen.width as usize;
+        self.stats.compared += width;
+        let Some(first) = (0..width).find(|&x| sent[x] != now[x]) else {
+            return;
+        };
+        let last = (0..width).rfind(|&x| sent[x] != now[x]).unwrap_or(first);
+        // A wide grapheme's second column is written with its first.
+        let end = (last + 1 + usize::from(now.get(last).is_some_and(|c| c.width >= 2))).min(width);
+        let forced = self.force;
+        self.force = true;
+        let compared = self.stats.compared;
+        self.paint_span(screen, y, first as u16, end as u16, pen, out);
+        // Counted once, above.
+        self.stats.compared = compared;
+        self.force = forced;
+    }
+
+    /// The best run of rows that moved together since they were sent, if
+    /// scrolling is allowed and one is worth it: the shift that puts the
+    /// most changed rows right, looking first at the scrolls the screen
+    /// was told of.
+    fn find_shift(&mut self, screen: &Screen, rects: &[Rect]) -> Option<Shift> {
+        if !self.scroll || self.inline {
+            return None;
+        }
+        let previous = self.previous.as_ref()?;
+        let (top, bottom) = rects
+            .iter()
+            .fold((u16::MAX, 0), |(t, b), r| (t.min(r.y), b.max(r.bottom())));
+        if bottom <= top || bottom - top < 3 {
+            return None;
+        }
+        let height = screen.height;
+        let previous = &*previous;
+        // Rows compare as slices of plain cells: a pair that differs stops
+        // at its first cell, so looking for where a row went is cheap.
+        let same = |y: u16, source: u16| screen.row(y) == previous.row(source);
+        // Candidate moves: those the screen was told of, then those the
+        // first changed rows vote for (where each is found among the rows
+        // sent near it).
+        let mut votes: Vec<(i32, u16)> = Vec::new();
+        let mut vote = |by: i32, n: u16| match votes.iter_mut().find(|(b, _)| *b == by) {
+            Some((_, count)) => *count += n,
+            None => votes.push((by, n)),
+        };
+        for &(_, rows) in &screen.scrolled {
+            vote(i32::from(rows), height);
+        }
+        // Only rows inside the damage can have changed.
+        let mut damaged = vec![false; height as usize];
+        for rect in rects {
+            for y in rect.y..rect.bottom().min(height) {
+                damaged[y as usize] = true;
+            }
+        }
+        let mut changed = 0;
+        let mut found: Vec<u16> = Vec::new();
+        for y in (top..bottom).filter(|&y| damaged[y as usize]) {
+            if same(y, y) {
+                continue;
+            }
+            changed += 1;
+            found.clear();
+            'look: for d in 1..=SCROLL_WINDOW.min(height) {
+                for source in [y.checked_add(d), y.checked_sub(d)].into_iter().flatten() {
+                    if source < height && same(y, source) {
+                        found.push(source);
+                        // A row found in many places (a blank one) says
+                        // nothing of a move.
+                        if found.len() > 8 {
+                            break 'look;
+                        }
+                    }
+                }
+            }
+            if found.len() <= 8 {
+                for &source in &found {
+                    vote(i32::from(source) - i32::from(y), 1);
+                }
+            }
+            if changed >= 6 {
+                break;
+            }
+        }
+        if changed < 3 || votes.is_empty() {
+            return None;
+        }
+        let mut best: Option<Shift> = None;
+        let consider = |by: i32, best: &mut Option<Shift>| {
+            // The longest run of rows y showing what row y + by showed.
+            let mut run_start = None;
+            let mut y = 0i32;
+            while y <= height as i32 {
+                let source = y + by;
+                let matches = y < height as i32
+                    && (0..height as i32).contains(&source)
+                    && same(y as u16, source as u16);
+                match (matches, run_start) {
+                    (true, None) => run_start = Some(y),
+                    (false, Some(start)) => {
+                        run_start = None;
+                        let gain = (start..y).filter(|&r| !same(r as u16, r as u16)).count() as u16;
+                        let (top, bottom) = if by > 0 {
+                            (start as u16, (y + by) as u16)
+                        } else {
+                            ((start + by) as u16, y as u16)
+                        };
+                        if best.is_none_or(|b| gain > b.gain) {
+                            *best = Some(Shift {
+                                top,
+                                bottom,
+                                by,
+                                gain,
+                            });
+                        }
+                    }
+                    _ => {}
+                }
+                y += 1;
+            }
+        };
+        votes.sort_unstable_by_key(|&(by, n)| (std::cmp::Reverse(n), by.abs()));
+        for &(by, _) in votes.iter().take(3) {
+            consider(by, &mut best);
+        }
+        let shift = best?;
+        // Worth a scroll: it puts at least two rows right, and more than it
+        // opens.
+        if shift.gain < 2 || i32::from(shift.gain) <= shift.by.abs() {
+            return None;
+        }
+        // No picture may sit in the rows that move.
+        let region = Rect::new(0, shift.top, screen.width, shift.bottom - shift.top);
+        if self.fixed.iter().any(|r| r.intersects(region)) {
+            return None;
+        }
+        Some(shift)
+    }
+
+    /// Move rows with the terminal's scrolling: the whole screen with SU or
+    /// SD, else inside DECSTBM margins (which home the cursor), the pen's
+    /// colours reset first so the rows opened are blank. The copy of what
+    /// was sent moves with them.
+    fn scroll_by(&mut self, shift: Shift, screen: &Screen, pen: &mut Pen, out: &mut String) {
+        out.push_str("\x1b[0m");
+        pen.codes = Some(Sgr::default());
+        pen.rgb = None;
+        pen.style = None;
+        let whole = shift.top == 0 && shift.bottom == screen.height;
+        if !whole {
+            out.push_str("\x1b[");
+            push_u16(out, shift.top + 1);
+            out.push(';');
+            push_u16(out, shift.bottom);
+            out.push('r');
+        }
+        let n = shift.by.unsigned_abs() as u16;
+        csi(out, n, if shift.by > 0 { 'S' } else { 'T' });
+        if !whole {
+            out.push_str("\x1b[r");
+        }
+        // Where the cursor is now is the terminal's business.
+        pen.at = None;
+        if let Some(previous) = &mut self.previous {
+            previous.shift(shift.top, shift.bottom, shift.by);
+        }
     }
 
     /// The cells the last [`paint`](Self::paint) or [`repaint`](Self::repaint)
@@ -1701,6 +2161,15 @@ impl Painter {
             // (EL to the end of the row, ECH within it) when that is
             // shorter than writing it.
             if self.erase && !self.inline && self.plain_blank(screen, x0, y) {
+                // Blanks the pen would skip on its way here join the run,
+                // so the erase starts where the pen is.
+                if let Some((fx, fy)) = pen.at {
+                    if fy == y && fx < x0 && (fx..x0).all(|gx| self.plain_blank(screen, gx, y)) {
+                        self.stats.compared += usize::from(x0 - fx);
+                        x = fx;
+                        x0 = fx;
+                    }
+                }
                 let mut run = 1;
                 while x0 + run < end && self.plain_blank(screen, x0 + run, y) {
                     run += 1;
@@ -1737,7 +2206,11 @@ impl Painter {
             self.stats.compared += usize::from(next - x);
             self.stats.written += columns;
             self.note_written(x0, y, next);
-            pen.at = Some((next, y));
+            // An emoji with a selector or joiners is a width terminals
+            // disagree on: where the cursor ended up is not known, so the
+            // next write moves there.
+            let several = cell.len == LONG || text.contains(['\u{200d}', '\u{fe0f}']);
+            pen.at = (!several).then_some((next, y));
             x = next;
         }
     }
@@ -1758,21 +2231,48 @@ impl Painter {
             return;
         }
         let before = out.len();
-        let through = match pen.at {
-            Some((fx, fy)) if !self.inline && fy == y && fx < x && x - fx <= 3 => {
-                (fx..x).all(|gx| {
-                    let cell = screen.cell(gx, y);
-                    cell.width == 1 && cell.len == 1 && Some(cell.style) == pen.style
-                })
-            }
-            _ => false,
-        };
-        if let (true, Some((fx, _))) = (through, pen.at) {
+        self.goto_into(pen.at, x, y, screen.width, out);
+        let jump = out.len() - before;
+        // Writing the unchanged cells between again (what the terminal
+        // shows already) can be shorter than the move, as Mosh does: a few
+        // narrow cells, counting the style changes they need.
+        if let Some((fx, fy)) = pen.at.filter(|&(fx, fy)| {
+            !self.inline && fy == y && fx < x && x - fx <= 8 && jump > usize::from(x - fx)
+        }) {
+            let mut cost = 0;
+            let mut style = pen.style;
             for gx in fx..x {
-                out.push_str(screen.cell(gx, y).text());
+                let cell = screen.cell(gx, fy);
+                if cell.width != 1 || cell.len == LONG || cell.len == 0 {
+                    cost = usize::MAX;
+                    break;
+                }
+                cost += cell.len as usize;
+                if style != Some(cell.style) {
+                    style = Some(cell.style);
+                    // A change of style: at most a reset and its parameters.
+                    cost += match screen.styles.rgb(cell.style) {
+                        Some(_) => 40,
+                        None if cell.style == StyleId::NONE => 4,
+                        None => 4 + self.sgr(screen, cell.style).full.len(),
+                    };
+                }
+                if cost >= jump {
+                    break;
+                }
             }
-        } else {
-            self.goto_into(pen.at, x, y, screen.width, out);
+            if style != pen.style && cost < jump {
+                // Coming back to the pen's style costs too.
+                cost += 8;
+            }
+            if cost < jump {
+                out.truncate(before);
+                for gx in fx..x {
+                    let cell = *screen.cell(gx, y);
+                    self.set_pen(screen, cell.style, pen, out);
+                    out.push_str(cell.text());
+                }
+            }
         }
         self.stats.move_bytes += out.len() - before;
         pen.at = Some((x, y));
