@@ -428,7 +428,7 @@ impl Ctx {
     }
 
     /// [`fixed_step`] from a handler, as [`every`](Self::every) is
-    /// [`every`](crate::every).
+    /// [`every`].
     #[track_caller]
     pub fn fixed_step(
         &mut self,
@@ -2701,7 +2701,7 @@ impl App {
     /// [placements](rich_ext::frame::Placement) on the screen's cells, and
     /// those that are new, moved, on another animation frame or wiped by
     /// cells written over them are drawn again (rs-rich-ext's
-    /// [`plan`](rich_ext::frame::plan), as its `Surface::graphics` does);
+    /// `rich_ext::frame::plan`, as its `Surface::graphics` does);
     /// an overlay that went away has its cells repainted. The cells under a
     /// placement are what a terminal without graphics shows, so the frame
     /// stays exact either way. When the app ends, `source` releases what

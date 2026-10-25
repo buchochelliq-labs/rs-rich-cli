@@ -4,7 +4,7 @@
 //! message. Builders on [`Node`] for a [`text_area`](crate::text_area) or
 //! an [`input`](crate::input); on any other node they do nothing.
 //!
-//! The editing itself is rs-rich-interact's: [`Buffer`] for the text and
+//! The editing itself is rs-rich-interact's: `Buffer` for the text and
 //! [`edit_keys`] for what the keys do, so `rich_interact`'s own editors
 //! share it.
 
@@ -392,7 +392,7 @@ impl Node {
     }
 
     /// Hand each key to `mode` first: a modal preset such as Vim's
-    /// ([`vim`](Self::vim), behind the `vim` feature). A key it passes is
+    /// (`vim`, behind the `vim` feature). A key it passes is
     /// edited as without it.
     pub fn key_mode(self, mode: impl KeyMode + 'static) -> Node {
         let mode: Rc<RefCell<dyn KeyMode>> = Rc::new(RefCell::new(mode));

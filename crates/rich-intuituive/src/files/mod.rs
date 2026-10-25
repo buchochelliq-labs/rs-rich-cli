@@ -99,7 +99,7 @@ use std::sync::atomic::Ordering;
 /// The moves of Miller's columns, for [`Miller::go`] and
 /// [`Miller::navigation_with`]: the core's.
 pub use crate::miller::Move;
-/// The core's [`hex_view`](crate::widgets::hex_view), here too.
+/// The core's [`hex_view`], here too.
 pub use crate::widgets::hex_view;
 pub use crumb::{home_dir, path_crumb, path_crumb_at, path_parts};
 pub use finder::{finder, finder_with, Finder};

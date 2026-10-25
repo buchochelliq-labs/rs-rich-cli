@@ -54,7 +54,7 @@
 //!   `audio::wav` reads and records WAV files (`wav`), `watch_path` wakes
 //!   the app when files change (`watch`), `image` draws an image file
 //!   in half blocks (`art`), `meter`, `sparkline`, `spectrogram` and
-//!   `bar_spectrum` show levels and spectra (`viz`), and [`files`] has a
+//!   `bar_spectrum` show levels and spectra (`viz`), and `files` has a
 //!   file manager's components: Miller columns, file lists, previews,
 //!   background file jobs and a streaming finder (`files`).
 //! - **Generic building blocks**: [`miller_of`] (Miller columns over any

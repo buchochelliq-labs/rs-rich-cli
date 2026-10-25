@@ -169,7 +169,7 @@ pub struct StackLayout {
     pub justify: Justify,
     pub wrap: bool,
     pub align_content: AlignContent,
-    /// How the lengths are solved ([`Solver::Native`] by default).
+    /// How the lengths are solved (`Solver::Native` by default).
     pub solver: crate::solver::Solver,
 }
 
