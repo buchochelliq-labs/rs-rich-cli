@@ -7,7 +7,9 @@ use std::time::{Duration, Instant};
 
 use rich::{Console, Text};
 use rich_ext::plugin::abi::{is_supported, AbiError, CapabilityKind, ABI_MAJOR, ABI_MINOR};
-use rich_ext::plugin_loading::{load, load_wasm, LoadError, LoadOptions, RuntimeKind, WasmLimits};
+use rich_ext::plugin_loading::{
+    load, load_wasm, load_wasm_bytes, LoadError, LoadOptions, RuntimeKind, WasmLimits,
+};
 use rich_ext::ExtensionRegistry;
 
 const SHOUT: &str = include_str!("../../rich-plugin-api/examples/wasm/shout.wat");
@@ -308,4 +310,22 @@ fn the_loader_accepts_exactly_the_versions_the_published_constants_allow() {
             loaded.err()
         );
     }
+}
+
+/// A module already in memory (bytes a host checked first) loads as the
+/// file does, named by the path given, and the size limit still holds.
+#[test]
+fn a_module_loads_from_bytes() {
+    let bytes = wat::parse_str(SHOUT).unwrap();
+    let label = PathBuf::from("installed/shout-0.1.0.wasm");
+    let plugin = load_wasm_bytes(&bytes, &label, &WasmLimits::default()).unwrap();
+    assert_eq!(plugin.abi().name, "shout");
+    assert_eq!(plugin.path(), label.as_path());
+    let small = WasmLimits {
+        module_bytes: 16,
+        ..WasmLimits::default()
+    };
+    let error = load_wasm_bytes(&bytes, &label, &small).unwrap_err();
+    assert!(matches!(error, LoadError::Limit { .. }), "{error}");
+    assert_eq!(error.path(), label.as_path());
 }

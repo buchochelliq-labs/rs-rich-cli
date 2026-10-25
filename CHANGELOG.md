@@ -44,6 +44,41 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - Tested against a fixture marketplace signed with test keys checked into
   the crate. The official keys are not compiled in yet.
 
+### `rich plugin`: install from the marketplace, and publish to it (CLI, ext)
+
+- **`rich plugin search`, `info`, `install`, `update`, `remove`, `list`,
+  `enable`, `disable` and `verify`**, on rs-rich-marketplace. `install`
+  shows the tier, source, artifact hash, capabilities and permissions and
+  asks before it writes anything; `--yes` answers for a script, and without
+  a terminal nothing is asked or written (exit 3). A crate is refused with
+  its `cargo add` line.
+- **An installed, enabled WASM plugin loads on every run without
+  `--plugin`.** Its file is checked against the lockfile on each load; a
+  changed file is not loaded, and the run warns.
+- **`verify`** checks every installed file against the lockfile and every
+  installed version against the current index, and reports a version
+  yanked since with its reason. `list` shows the reason from then on, and
+  `update` moves off it.
+- **A WASM install checks the module in the sandbox:** the CLI's
+  `ArtifactChecker` loads it with `rs-rich-ext`'s new `load_wasm_bytes` and
+  compares its manifest with the listing.
+- **`rich plugin browse`:** the same operations in rs-rich-interact's
+  selector, with each package's provenance beside the list.
+- **`rich plugin publish FILE --url URL`** checks a WASM plugin, micro pack
+  or theme, computes its SHA-256 and size and writes its listing for a pull
+  request to the marketplace repository. No network.
+- **The marketplace** is `--marketplace` or `RICH_MARKETPLACE`: an
+  `https://` URL, or a local directory whose artifacts come from its own
+  mirror. The keys to trust are `--marketplace-keys` or
+  `RICH_MARKETPLACE_KEYS` until the official keys are compiled in.
+- **The marketplace repository's signing workflow** (rebuild `index.json`,
+  bump the serial, sign with minisign in the protected
+  `marketplace-signing` environment) is in `docs/marketplace-repo/`, with a
+  README for the maintainer.
+- **CI installs from a test marketplace** signed with the test key: the
+  official plugins resolve for the current host and the fixture WASM plugin
+  installs and loads.
+
 ### rs-rich: widget and layout parity (`padding`, `panel`, `align`, `constrain`, `table`, `layout`, `screen`, `bar`, `box`, `_ratio`)
 
 - A printed `Screen`, a printed `LiveRender` and a titled `Rule` whose

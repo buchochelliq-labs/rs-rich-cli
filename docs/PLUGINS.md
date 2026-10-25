@@ -257,10 +257,11 @@ a build with that feature. In a build with `dylib-plugins` or
 `wasm-plugins` (`cargo install rs-rich-cli --features wasm-plugins`),
 `--plugin PATH` loads a runtime plugin for one run, and a `plugins = [...]`
 list in `~/.config/rich/config.toml` or a file given with `--config` loads
-them every time. Loaded plugins draw Markdown fences and highlight printed
-text, and `--transform NAME` (repeatable, in the order given) applies their
-transforms to text, `--print` and `--syntax`, after `--filter` and before
-`--highlight`.
+them every time. A WASM plugin installed with `rich plugin install` (below)
+loads every time too, until it is disabled. Loaded plugins draw Markdown
+fences and highlight printed text, and `--transform NAME` (repeatable, in
+the order given) applies their transforms to text, `--print` and
+`--syntax`, after `--filter` and before `--highlight`.
 
 ### The marketplace client (0.0.22)
 
@@ -302,6 +303,98 @@ The official public keys are not compiled in yet: `KeySet::official`
 refuses until the maintainer has made the pairs. The crate's tests sign a
 fixture marketplace with test keys checked into
 `crates/rich-marketplace/tests/fixtures/keys`, trusted only by those tests.
+
+### `rich plugin`: installing from the marketplace (0.0.22)
+
+`rich plugin` is the marketplace in the CLI, on `rs-rich-marketplace`:
+
+```bash
+rich plugin search diagram        # id, kind, tier, the version this host loads
+rich plugin info shout            # tier, source, versions, what loads here
+rich plugin install shout         # shows tier, permissions, capabilities; asks
+rich plugin install shout@0.2.0 --yes
+rich plugin list                  # what is installed; no network
+rich plugin disable shout         # keep it, do not load it
+rich plugin update                # newest for this host, asking first
+rich plugin verify                # every file, and every version against the index
+rich plugin remove shout
+rich plugin browse                # the same, in a selector with provenance
+```
+
+- **What installs.** A WASM plugin, a micro pack or a theme. A crate is
+  listed only: `install` refuses it and prints its `cargo add` line, and
+  `info` shows the same.
+- **The prompt.** `install` and `update` print the package's tier, source,
+  revision, artifact URL, SHA-256, size, requirement, capabilities and
+  permissions, then ask. Nothing is downloaded before the answer. `--yes`
+  answers for a script; without a terminal and without `--yes`, nothing is
+  asked or written and the command exits 3. Answering no exits 1.
+- **The checks.** The index's signature, key, serial (a rollback is
+  refused) and expiry; each listing's hash; the version against this host
+  (a yanked version, or one for another plugin ABI, is refused); then the
+  download's size and SHA-256. A WASM module is loaded in the sandbox with
+  the same loader `--plugin` uses, and its manifest's name, version, ABI and
+  capabilities must equal the listing's. Only then is the file written,
+  with the lockfile.
+- **Loading.** An installed, enabled WASM plugin loads on every run without
+  `--plugin`, in a build with `wasm-plugins`. Each file is read once,
+  checked against the lockfile, and loaded from the bytes checked. A file
+  that changed on disk is not loaded: the run goes on without it and warns.
+  A plugin named with `--plugin` wins over an installed copy.
+- **Verifying.** `rich plugin verify` checks every installed file against
+  the lockfile and every installed version against the current index: a
+  version no longer listed or listed with another hash is a problem (exit
+  4); a version yanked since is reported with its reason (exit 0), shown by
+  `list` from then on, and replaced by `update`.
+- **Where.** Packages go to `--plugin-dir DIR`, else `RICH_PLUGIN_DIR`, else
+  `$XDG_DATA_HOME/rich/plugins` (`~/.local/share/rich/plugins`;
+  `%LOCALAPPDATA%\rich\plugins` on Windows), as `ID/ID-VERSION.EXT` beside
+  `marketplace.lock.json`. `marketplace.state.json` there keeps the disabled
+  packages, the last index each marketplace served, the newest key
+  generation verified and the yank reasons last seen.
+- **Which marketplace.** `--marketplace LOCATION`, else `RICH_MARKETPLACE`,
+  else the official one. A location is an `https://` base URL, or a
+  directory (a path or a `file://` URL) laid out as the marketplace
+  repository is. A local marketplace serves each artifact
+  `https://HOST/PATH` from its own `artifacts/HOST/PATH`, never from the
+  network: that is how the tests and CI's compatibility job run offline.
+- **Which keys.** `--marketplace-keys FILE` (a `keys-N.json`), else
+  `RICH_MARKETPLACE_KEYS`, else the keys compiled into the crate. Until the
+  official keys are compiled in, a marketplace is trusted only through one
+  of the first two. Later key generations are fetched from the
+  marketplace's `keys/` and accepted one at a time.
+- **Errors** use the CLI's exit classes: 2 usage (an unknown id, a crate, a
+  version not listed, no trust root), 3 input (a file or download that
+  cannot be read, no terminal for the prompt), 4 data (a signature, hash,
+  manifest, yanked version or incompatible version). `--report json` writes
+  the result or error envelope on stderr and nothing on stdout.
+
+**Publishing.** `rich plugin publish FILE --url URL` checks a package and
+writes its listing, for a pull request to the marketplace repository. It
+needs no network: the file is read locally, and URL is where its author
+will upload it. A WASM plugin is loaded in the sandbox, and its manifest
+gives the id, version, ABI and capabilities (`--source-revision COMMIT` is
+required); a micro pack is read with micro's limits and its `pack.json`
+gives the id, version and assets; a theme must parse, and takes `--id` and
+`--version`. The SHA-256 and size are computed, and the listing is read
+back with the crate's own parser before it is written to
+`packages/ID.json` (or `--output`). A new listing needs `--license` and
+`--repository`; `--listing FILE` adds the version to an existing one,
+newest first, and refuses a version already listed.
+
+```bash
+rich plugin publish shout.wasm \
+  --url https://github.com/me/shout/releases/download/v0.2.0/shout.wasm \
+  --source-revision "$(git rev-parse HEAD)" \
+  --license MIT --repository https://github.com/me/shout
+```
+
+**Signing** happens in the marketplace repository, not here: when a listing
+pull request merges, its workflow rebuilds `index.json`, bumps the serial
+and signs it with the main key, held in the protected
+`marketplace-signing` environment. The workflow and its setup are kept in
+[`docs/marketplace-repo/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/docs/marketplace-repo)
+to hand over.
 
 ## Security: threat model
 

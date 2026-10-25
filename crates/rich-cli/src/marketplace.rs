@@ -122,9 +122,8 @@ pub(crate) fn spec() -> rich_ext::cli_doc::CommandSpec {
              loads on every run without --plugin, after its file is checked against the lockfile",
         )
         .usage(
-            "plugin search|info|install|update|remove|list|enable|disable|verify|browse|publish \
-             [ARGS] [--marketplace LOCATION] [--marketplace-keys FILE] [--plugin-dir DIR] \
-             [--report json]",
+            "plugin COMMAND [ARGS] [--marketplace LOCATION] [--marketplace-keys FILE] \
+             [--plugin-dir DIR] [--report json]",
         )
         .subcommand(with_common(
             CommandSpec::new("search")
