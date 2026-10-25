@@ -53,9 +53,9 @@ topic and a widget index.
 ## New in 0.0.22
 
 ![Memo, intuiTUIve's elephant, in the cartoon look](assets/intuituive/mascot/memo-cartoon.svg){ .tui-mascot width="128" }
-0.0.22 ([release notes](releases/0.0.22.md)) checks the core against
-`rich` 15.0.0 module by module, ships the plugin marketplace end to end,
-and adds a web browser for the terminal.
+0.0.22, published on 2026-10-25 ([release notes](releases/0.0.22.md)),
+checks the core against `rich` 15.0.0 module by module, ships the plugin
+marketplace end to end, and adds a web browser for the terminal.
 
 - **Parity:** the widget, live display and document modules ported or
   recorded in [DIVERGENCES](DIVERGENCES.md), `scope.py` ported, a verdict
@@ -283,6 +283,6 @@ published or not. Each crate versions independently; see
 | ![](assets/rs-rich/troubleshooting.svg){ .rs-icon width="20" } [Troubleshooting](troubleshooting.md) | When the output is not what you expected |
 | ![](assets/rs-rich/known-issues.svg){ .rs-icon width="20" } [Known issues](known-issues.md) | What is known not to work yet |
 | ![](assets/rs-rich/plans.svg){ .rs-icon width="20" } [Development plans](plans/1.0.0.md) | What each release sets out to do |
-| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.21.md) | What each release shipped |
+| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.22.md) | What each release shipped |
 | ![](assets/rs-rich/parity.svg){ .rs-icon width="20" } [Parity with Python rich](parity.md) | What matches upstream, and how it is proven |
 | ![](assets/rs-rich/contributing.svg){ .rs-icon width="20" } [Contributing](BRANCHING.md) | Branches, architecture and design notes |

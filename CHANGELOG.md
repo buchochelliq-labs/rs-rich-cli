@@ -9,15 +9,17 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## 0.0.22 cohort — to be published
+## 0.0.22 cohort — published 2026-10-25
 
-To be published from `main` by one `release.yml` run (tag
+Published on 2026-10-25 from `6e8e82e` by one `release.yml` run (tag
 `release-0.0.22`): core 0.0.12 / macros 0.0.6 / plugin API 0.0.6 /
 art 0.0.15 / diagram 0.0.5 / mermaid 0.0.8 / lumis 0.0.6 / ext 0.0.19 /
 micro 0.0.8 / record 0.0.10 / interact 0.0.10 / ratatui 0.0.7 /
 intuituive 0.0.7 / embed 0.0.5 / web 0.0.5 / data 0.0.6 /
 marketplace 0.0.1 (new) / noctiluca 0.0.1 (new) / CLI 0.0.22, and
-`rs-rich` 0.0.10 on PyPI (`python-v0.0.10`, same commit). See
+`rs-rich` 0.0.10 on PyPI (`python-v0.0.10`, same commit, the same day).
+The two new crates went up with the environment's token; the maintainer
+adds their crates.io Trusted Publishing entries. See
 [the release notes](docs/releases/0.0.22.md).
 
 ### Noctiluca's docs and iconography (noctiluca)
