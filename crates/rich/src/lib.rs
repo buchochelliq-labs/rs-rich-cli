@@ -116,7 +116,9 @@ pub use crate::control::{Control, ControlType};
 pub use crate::emoji::EmojiVariant;
 pub use crate::errors::{Result, RichError};
 pub use crate::file_proxy::{FileProxy, ProxyStream, ProxyTarget};
-pub use crate::highlighter::{ISO8601Highlighter, RegexHighlighter, ReprHighlighter};
+pub use crate::highlighter::{
+    ISO8601Highlighter, JSONHighlighter, NullHighlighter, RegexHighlighter, ReprHighlighter,
+};
 pub use crate::json::Json;
 pub use crate::layout::{Layout, LayoutRender, Splitter};
 pub use crate::live::{AutoLive, Live, LiveHandle, LiveOptions, LivePanic};

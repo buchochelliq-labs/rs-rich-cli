@@ -61,9 +61,9 @@ Format: what differs · why · how to remove it (if temporary).
   holds a `Meta` (string keys, `MetaValue` scalars and lists) kept in insertion
   order, which gives the same equality (`{a, b}` ≠ `{b, a}`, `True` ≠ `1`),
   combination (`{**a, **b}`) and truthiness. Non-marshal-able Python values have
-  no representation; `Style.from_meta`'s random `link_id` is not modelled (#20);
-  markup `[@handler]` tags do not produce meta (so `Text.markup` of such text
-  has no `[none]…[/none]` tag where upstream writes one).
+  no representation; `Style.from_meta`'s random `link_id` is not modelled (#20).
+  Tuples and lists are kept apart (`MetaValue::Tuple`, `MetaValue::List`), as
+  markup `[@handler]` tags need (§44).
 - **Why:** Rust has no marshal; the map round-trips what the bindings need.
 
 ### 3. Byte offsets in `Text` spans
@@ -644,6 +644,70 @@ Format: what differs · why · how to remove it (if temporary).
   public type, for an extension point upstream does not use itself.
 - **Remove:** add a `Splitter::Custom` that holds a trait object, if a user
   asks for one.
+
+### 41. `Style` keeps no stale cached strings
+
+- **Differs:** upstream caches a style's definition string
+  (`_style_definition`) and escape codes (`_ansi`) on the instance. `copy`,
+  `update_link` and `clear_meta_and_links` copy the cached definition, so
+  `str(style.update_link(None))` still names the old link when `str(style)`
+  ran first; and the escape codes cached for one colour system are reused
+  for another. Here a style's definition and codes are always computed from
+  what it holds.
+- **Why:** the results depend on call order, which no caller can rely on.
+  The parity fixtures avoid the order (`style_api`, `segment_misc`).
+- **Remove:** not planned.
+
+### 42. The Python object protocols have no counterpart
+
+- **Differs:** `protocol.is_renderable` and `protocol.rich_cast` (`__rich__`,
+  with its guard against objects that claim every attribute),
+  `abc.RichRenderable` (an `isinstance` hook) and
+  `_extension.load_ipython_extension` (IPython) are not ported. A Rust type
+  is renderable when it implements [`Renderable`](../crates/rich/src/protocol.rs),
+  which the compiler checks; a type that renders as another one implements
+  `Renderable` by delegating, as `Color` and `Palette` do for upstream's
+  `__rich__`. `Measurement.get` cannot meet a non-renderable, so it never
+  raises `NotRenderableError`.
+- **Why:** runtime reflection (§19); the trait is the Rust form of the
+  protocol.
+- **Remove:** inherent to the language difference; not removable.
+
+### 43. `Console` features tied to Python objects or Jupyter
+
+- **Differs:** the port's `Console` writes to standard output, and callers
+  capture output with closures (`capture`, `export_*`, `page`), not by
+  passing a Python file object (`file=`, `stderr=`, `Console.file`). There
+  is no Jupyter mode (`force_jupyter`, `is_jupyter`, `_repr_mimebundle_`),
+  no `print_exception` (Python tracebacks, §19), and no `log_locals` or
+  caller frame lookup (`_caller_frame_info`).
+- **Why:** these read Python objects at run time. The Python bindings
+  (`crates/rich-py`) provide them on top of the core.
+- **Remove:** inherent to the language difference; not removable.
+
+### 44. Segment control codes are a flag
+
+- **Differs:** upstream's `Segment.control` is a list of control codes; here
+  it is a `bool`, the codes already written into the segment's text. And
+  `Segment::simplify` never merges a control segment into the text that
+  follows it, where upstream's does (which then lets `export_html` and
+  `export_text` show the escape codes).
+- **Why:** nothing in the port reads the codes back out of a segment; the
+  merge is an upstream accident.
+- **Remove:** not planned.
+
+### 45. Markup handler tags evaluate a subset of Python literals
+
+- **Differs:** upstream's `[@handler=…]` tags run `ast.literal_eval` on the
+  parameters. The port evaluates numbers, strings, `True`, `False`, `None`,
+  tuples and lists, which is what a style's meta can hold (§3a). A dict, set,
+  bytes or complex value is a `MarkupError` here. Syntax errors carry
+  Python's messages for unclosed and mismatched brackets and unterminated
+  strings; any other invalid parameter reports `malformed node or string`
+  without the AST node and memory address upstream's `ValueError` names.
+- **Why:** there is no Python parser in Rust, and the address is different
+  on every run.
+- **Remove:** not planned.
 
 ## Feature-flagged divergences
 

@@ -2968,6 +2968,10 @@ def main() -> None:
     capture_parity_widgets()
     capture_parity_live()
 
+    from golden_parity_core import capture_parity_core
+
+    capture_parity_core(golden_dir())
+
 
 # --- core gaps (bindings foundation) ------------------------------------------
 # One fixture, `core_gaps.tsv`: `name<TAB>json(output)`. Each case is a function

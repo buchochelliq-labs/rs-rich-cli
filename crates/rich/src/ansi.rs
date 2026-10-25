@@ -84,12 +84,13 @@ fn sgr_style(code: u16) -> Option<&'static str> {
     Some(spec)
 }
 
-/// The tokenizer regex (port of `rich.ansi.re_ansi`): an OSC string
-/// (`\x1b]…\x1b\`) or an escape sequence (single-char or CSI).
+/// The tokenizer regex (port of `rich.ansi.re_ansi`): a private escape such
+/// as `\x1b7` (save cursor), which is dropped; an OSC string
+/// (`\x1b]…\x1b\`); or an escape sequence (single-char or CSI).
 fn re_ansi() -> &'static Regex {
     static RE: OnceLock<Regex> = OnceLock::new();
     RE.get_or_init(|| {
-        Regex::new(r"(?:\x1b\](.*?)\x1b\\)|(?:\x1b([(@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))")
+        Regex::new(r"(?:\x1b[0-?])|(?:\x1b\](.*?)\x1b\\)|(?:\x1b([(@-Z\\-_]|\[[0-?]*[ -/]*[@-~]))")
             .expect("valid ansi regex")
     })
 }
@@ -129,7 +130,8 @@ fn tokenize(line: &str) -> Vec<Token> {
                 // Other CSI sequences (e.g. `[2J`) are dropped.
             }
             None => {
-                // An OSC string — group 1 is its body (between `\x1b]` and the
+                // An OSC string — group 1 is its body (a private escape has
+                // neither group and yields nothing) (between `\x1b]` and the
                 // terminating `\x1b\`).
                 if let Some(osc) = caps.get(1) {
                     tokens.push(Token::Osc(osc.as_str().to_string()));
@@ -223,7 +225,14 @@ impl AnsiDecoder {
         let codes: Vec<u16> = params
             .split(';')
             .filter(|c| c.is_empty() || c.bytes().all(|b| b.is_ascii_digit()))
-            .map(|c| c.parse::<u32>().unwrap_or(0).min(255) as u16)
+            // `min(255, int(code))`: a number too long to parse is above 255.
+            .map(|c| {
+                if c.is_empty() {
+                    0
+                } else {
+                    c.parse::<u32>().map_or(255, |code| code.min(255)) as u16
+                }
+            })
             .collect();
 
         let mut iter = codes.into_iter();

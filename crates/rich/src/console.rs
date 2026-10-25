@@ -1934,6 +1934,294 @@ impl crate::protocol::ConsoleEnvironment for Console {
     }
 }
 
+/// One object passed to [`Console::print_objects`]: a string (rendered as
+/// console markup), a `Text`, or any other renderable.
+pub enum PrintObject<'a> {
+    /// A string, through `render_str` with the call's `emoji`, `markup` and
+    /// `highlight`.
+    Str(&'a str),
+    /// A `Text`, joined with the strings around it.
+    Text(&'a Text),
+    /// Any other renderable, which stands alone.
+    Renderable(&'a dyn Renderable),
+}
+
+/// The keyword arguments of upstream's `Console.print`, after defaults.
+#[derive(Clone)]
+pub struct PrintOptions<'a> {
+    pub sep: &'a str,
+    pub end: &'a str,
+    pub style: Option<crate::style::StyleType>,
+    pub justify: Option<Justify>,
+    pub overflow: Option<Overflow>,
+    pub no_wrap: Option<bool>,
+    pub emoji: Option<bool>,
+    pub markup: Option<bool>,
+    pub highlight: Option<bool>,
+    pub width: Option<usize>,
+    pub height: Option<usize>,
+    pub crop: bool,
+    pub soft_wrap: Option<bool>,
+    pub new_line_start: bool,
+}
+
+impl Default for PrintOptions<'_> {
+    fn default() -> Self {
+        PrintOptions {
+            sep: " ",
+            end: "\n",
+            style: None,
+            justify: None,
+            overflow: None,
+            no_wrap: None,
+            emoji: None,
+            markup: None,
+            highlight: None,
+            width: None,
+            height: None,
+            crop: true,
+            soft_wrap: None,
+            new_line_start: false,
+        }
+    }
+}
+
+/// The upstream `Console` methods built on its print pipeline.
+impl Console {
+    /// Print `objects` as upstream's `Console.print(*objects, sep=…, end=…,
+    /// style=…, justify=…, overflow=…, no_wrap=…, emoji=…, markup=…,
+    /// highlight=…, width=…, height=…, crop=…, soft_wrap=…,
+    /// new_line_start=…)` does. Strings and texts in a row join into one
+    /// `Text` with `sep` and end with `end`; other renderables stand alone.
+    /// Malformed markup is an error, as upstream's `MarkupError`.
+    pub fn print_objects(
+        &self,
+        objects: &[PrintObject<'_>],
+        options: &PrintOptions<'_>,
+    ) -> crate::errors::Result<()> {
+        let segments = self.render_objects(objects, options)?;
+        self.emit_end(segments, false);
+        Ok(())
+    }
+
+    /// The segments [`print_objects`](Self::print_objects) writes, ending
+    /// as upstream's do (a trailing newline included).
+    pub fn render_objects(
+        &self,
+        objects: &[PrintObject<'_>],
+        options: &PrintOptions<'_>,
+    ) -> crate::errors::Result<Vec<Segment>> {
+        let (mut no_wrap, mut overflow, mut crop) =
+            (options.no_wrap, options.overflow, options.crop);
+        // `soft_wrap=True`: no wrapping, nothing cropped.
+        if options.soft_wrap.unwrap_or(false) {
+            no_wrap = no_wrap.or(Some(true));
+            overflow = overflow.or(Some(Overflow::Ignore));
+            crop = false;
+        }
+        let align = match options.justify {
+            Some(Justify::Left) => Some(crate::align::HorizontalAlign::Left),
+            Some(Justify::Center) => Some(crate::align::HorizontalAlign::Center),
+            Some(Justify::Right) => Some(crate::align::HorizontalAlign::Right),
+            _ => None,
+        };
+        let mut render_options = self.options();
+        if let Some(justify) = options.justify {
+            render_options.justify = justify;
+        }
+        render_options.overflow = overflow;
+        render_options.no_wrap = no_wrap;
+        render_options.markup = options.markup;
+        render_options.highlight = options.highlight;
+        if let Some(width) = options.width {
+            render_options = render_options.update_width(width.min(self.width));
+        }
+        if options.height.is_some() {
+            render_options.height = options.height;
+        }
+        let style = match &options.style {
+            Some(style) => Some(self.get_style(style)?),
+            None => None,
+        };
+
+        let mut segments: Vec<Segment> = Vec::new();
+        let mut emit = |renderable: &dyn Renderable, end: Option<&str>| {
+            let mut rendered = if render_options.max_width < 1 {
+                Vec::new()
+            } else {
+                match align {
+                    Some(align) => {
+                        crate::align::Align::render_child(renderable, align, self, &render_options)
+                    }
+                    None => renderable.rich_render(self, &render_options),
+                }
+            };
+            // This port's renderables separate their lines; upstream's end
+            // each one, a text with its `end`.
+            match end {
+                Some(end) if !end.is_empty() => rendered.push(Segment::new(end, None)),
+                Some(_) => {}
+                None if !rendered.is_empty() => rendered.push(Segment::line()),
+                None => {}
+            }
+            // The style goes on each line, never on the newlines.
+            if let Some(style) = &style {
+                let mut styled = Vec::with_capacity(rendered.len());
+                for (line, terminated) in Segment::split_lines_terminator(&rendered) {
+                    styled.extend(Segment::apply_style_with(&line, Some(style), None));
+                    if terminated {
+                        styled.push(Segment::line());
+                    }
+                }
+                rendered = styled;
+            }
+            segments.extend(rendered);
+        };
+
+        // An empty print is a new line (`NewLine()`); with another `end`, an
+        // empty string.
+        let blank = [PrintObject::Str("")];
+        let objects = if objects.is_empty() && options.end != "\n" {
+            &blank[..]
+        } else {
+            objects
+        };
+        if objects.is_empty() {
+            emit(&Text::new(""), Some("\n"));
+        }
+        let mut texts: Vec<Text> = Vec::new();
+        let flush = |texts: &mut Vec<Text>, emit: &mut dyn FnMut(&dyn Renderable, Option<&str>)| {
+            if !texts.is_empty() {
+                let mut separator = Text::new(options.sep);
+                separator.set_justify_option(options.justify);
+                emit(&separator.join(texts), Some(options.end));
+                texts.clear();
+            }
+        };
+        for object in objects {
+            match object {
+                PrintObject::Str(content) => {
+                    let render_str = RenderStrOptions {
+                        emoji: options.emoji,
+                        markup: options.markup,
+                        highlight: options.highlight,
+                        ..Default::default()
+                    };
+                    texts.push(self.render_str_with(content, &render_str)?);
+                }
+                PrintObject::Text(text) => texts.push((*text).clone()),
+                PrintObject::Renderable(renderable) => {
+                    flush(&mut texts, &mut emit);
+                    emit(*renderable, None);
+                }
+            }
+        }
+        flush(&mut texts, &mut emit);
+
+        if options.new_line_start {
+            let plain: String = segments
+                .iter()
+                .map(|segment| segment.text.as_str())
+                .collect();
+            if plain.lines().count() > 1 {
+                segments.insert(0, Segment::line());
+            }
+        }
+        if crop {
+            segments = Segment::split_and_crop_lines(&segments, self.width, None, false, true)
+                .into_iter()
+                .flatten()
+                .collect();
+        }
+        Ok(segments)
+    }
+
+    /// Write `count` blank lines. Port of `Console.line`.
+    pub fn line(&self, count: usize) {
+        if count > 0 {
+            self.emit_end(vec![Segment::new("\n".repeat(count), None)], false);
+        }
+    }
+
+    /// Draw a rule with an optional title. Port of `Console.rule(title,
+    /// characters=…, style=…, align=…)`.
+    pub fn rule(
+        &self,
+        title: &str,
+        characters: &str,
+        style: impl Into<crate::style::StyleType>,
+        align: crate::align::HorizontalAlign,
+    ) {
+        let rule = crate::rule::Rule::new(title)
+            .characters(characters)
+            .style(style)
+            .align(align);
+        self.print(&rule);
+    }
+
+    /// Write `objects` joined by `sep` with no markup, emoji, wrapping or
+    /// cropping. Port of `Console.out`.
+    pub fn out(
+        &self,
+        objects: &[&str],
+        sep: &str,
+        end: &str,
+        style: Option<crate::style::StyleType>,
+        highlight: Option<bool>,
+    ) -> crate::errors::Result<()> {
+        let raw = objects.join(sep);
+        self.print_objects(
+            &[PrintObject::Str(&raw)],
+            &PrintOptions {
+                end,
+                style,
+                highlight,
+                emoji: Some(false),
+                markup: Some(false),
+                no_wrap: Some(true),
+                overflow: Some(Overflow::Ignore),
+                crop: false,
+                ..Default::default()
+            },
+        )
+    }
+
+    /// Pretty print a JSON string. Port of `Console.print_json`: a
+    /// [`Json`](crate::json::Json) printed with `soft_wrap=True`.
+    pub fn print_json(
+        &self,
+        json: &str,
+        options: &crate::json::JsonOptions,
+    ) -> crate::errors::Result<()> {
+        let renderable = crate::json::Json::with_options(json, options)?;
+        self.print_objects(
+            &[PrintObject::Renderable(&renderable)],
+            &PrintOptions {
+                soft_wrap: Some(true),
+                ..Default::default()
+            },
+        )
+    }
+
+    /// The width `renderable` needs under `options` (the console's when
+    /// `None`). Port of `Console.measure`.
+    pub fn measure(
+        &self,
+        renderable: &dyn Renderable,
+        options: Option<&ConsoleOptions>,
+    ) -> crate::measure::Measurement {
+        let default_options;
+        let options = match options {
+            Some(options) => options,
+            None => {
+                default_options = self.options();
+                &default_options
+            }
+        };
+        crate::measure::Measurement::get(self, options, renderable)
+    }
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
