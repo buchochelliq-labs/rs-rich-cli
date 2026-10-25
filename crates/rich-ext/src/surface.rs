@@ -46,6 +46,7 @@ use rich::{Console, Renderable, Segment};
 
 use crate::frame::{plan_graphics, Change, Frame, Placement, PlacementSource};
 
+pub(crate) use screen::char_width;
 pub use screen::{Cell, PaintStats, PaintStrategy, Painter, Rect, Screen};
 
 /// Begins a synchronized update (DEC private mode 2026): the terminal holds

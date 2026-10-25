@@ -959,7 +959,7 @@ impl Screen {
 /// The cells `c` takes, as rich measures it, with the characters pictures
 /// and most text are made of answered without a table lookup.
 #[inline]
-fn char_width(c: char) -> usize {
+pub(crate) fn char_width(c: char) -> usize {
     if (' '..='~').contains(&c)
         || ('\u{2500}'..='\u{259f}').contains(&c)
         || ('\u{2800}'..='\u{28ff}').contains(&c)

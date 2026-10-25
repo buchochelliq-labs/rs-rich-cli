@@ -135,7 +135,7 @@ pub use xy::{
     Axis, AxisScale, Chart, Dataset, GraphType, Labels, Layering, LegendPosition, OutOfBounds,
 };
 
-use rich::cells::char_cell_width;
+use crate::surface::char_width as char_cell_width;
 use rich::{Console, ConsoleOptions, Segment, Style};
 
 use crate::fidelity::{Fidelity, Policy};
