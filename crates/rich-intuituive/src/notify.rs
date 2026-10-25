@@ -212,6 +212,7 @@ pub(crate) fn draw(
                         style: &style,
                         title_style: &title_style,
                         titles: &titles,
+                        flush: false,
                     };
                     crate::border::draw_frame(screen, console, &look, rect);
                 }

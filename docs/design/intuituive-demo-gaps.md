@@ -1012,16 +1012,16 @@ Both are in 0.0.21 ([ee8c474](https://github.com/buchochelliq-labs/rs-rich-cli/c
 
 | Gap | Apps | Kind |
 |---|---|---|
-| Panel titles flush with the corner (ratatui's look), and plain-text titles | git, music, http | core: a title option |
-| A tree table (a table whose rows nest) | top, tasks | core |
+| Panel titles flush with the corner (ratatui's look), and plain-text titles | git, music, http | core: a title option. **Done in 0.0.22:** `title_flush`, `panel_text` |
+| A tree table (a table whose rows nest) | top, tasks | core. **Done in 0.0.22:** `tree_table`, `tree_table_rows` |
 | A treemap that joins its tiles' borders and keeps a selection | disk | core |
 | Held keys that fall back on a latch where releases are not reported | raycast | core: `held_keys_with` |
-| `App::min_size` with a node of its own, and shorter forms of the message | blocks, disk | core |
+| `App::min_size` with a node of its own, and shorter forms of the message | blocks, disk | core. **Done in 0.0.22:** `min_size_with`, `min_size_forms` |
 | A timer that runs while a condition holds (`running_when`) | blocks | core |
 | A stopped state on `Transport`; `follow_time` for a time-keyed line | music | core |
 | Command-line reads (`is_typing`, `is_asking`), a closed-bar look, mode titles from state | tasks, csv | core |
 | Keys that submit a command line (`<n>G`) | csv | core |
-| Directional-focus binding descriptions, tie-breaking in `neighbour`, scope cycling past hidden panes | top, disk, http | core |
+| Directional-focus binding descriptions, tie-breaking in `neighbour`, scope cycling past hidden panes | top, disk, http | core. **Scope cycling done in 0.0.22:** `focus_scope_reveal`; the rest is open |
 | A glyph checks column on tables, `column_highlight` from state | http, csv | core |
 | A scroll offset kept across a resize | http | core |
 | Real pixels on the `pixels` node; `PixelBuf::copy_rgb` | raycast | plugin (`art`) |

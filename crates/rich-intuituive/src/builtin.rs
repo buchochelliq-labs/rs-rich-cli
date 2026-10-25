@@ -267,11 +267,11 @@ impl Collapse {
                     .title_style
                     .as_ref()
                     .map_or_else(|| cx.theme().title.clone(), |name| cx.style(name, ""));
-                (panel.titles(), title_style)
+                (panel.titles(), title_style, panel.code.flush)
             }) else {
                 continue;
             };
-            let (titles, title_style) = titles;
+            let (titles, title_style, flush) = titles;
             let base = if Some(*i) == lit { &lit_style } else { &style };
             let title_style = base.combine(&title_style);
             let rect = local(*rect);
@@ -280,8 +280,11 @@ impl Collapse {
             }
             for (edge, y) in [(Edge::Top, rect.y), (Edge::Bottom, rect.bottom() - 1)] {
                 let on_edge: Vec<&Title> = titles.iter().filter(|t| t.edge == edge).collect();
-                let area = (rect.x + 2, rect.right() - 2);
-                let line = kind != Border::None;
+                let area = match flush {
+                    true => (rect.x + 1, rect.right() - 1),
+                    false => (rect.x + 2, rect.right() - 2),
+                };
+                let line = kind != Border::None && !flush;
                 for (x, segments, width) in
                     crate::border::title_pieces(cx.console(), &on_edge, area, line, &title_style)
                 {
@@ -851,6 +854,8 @@ pub(crate) struct PanelCode {
     pub border_style: Option<String>,
     pub title_style: Option<String>,
     pub shadow: Option<Shadow>,
+    /// Its titles at the corners, unpadded ([`Node::title_flush`](crate::Node::title_flush)).
+    pub flush: bool,
 }
 
 /// A value read from state when it is used: a panel's title or kind of
@@ -1133,6 +1138,7 @@ impl Widget for Panel {
                 style: &style,
                 title_style: &title_style,
                 titles,
+                flush: self.code.flush,
             };
             let shadow = match self.code.shadow {
                 Some(shadow) if cx.repaint() => {

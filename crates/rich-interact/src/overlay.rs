@@ -96,6 +96,9 @@ pub struct Command {
     pub context: Option<String>,
     /// Its keys are pressed one after another (`g g`), not alternatives.
     pub sequence: bool,
+    /// Why it cannot run now: listed greyed with the reason, and Enter or
+    /// a click on it does nothing.
+    pub unavailable: Option<String>,
 }
 
 impl Command {
@@ -107,6 +110,7 @@ impl Command {
             keys: Vec::new(),
             context: None,
             sequence: false,
+            unavailable: None,
         }
     }
 
@@ -128,6 +132,12 @@ impl Command {
         self
     }
 
+    /// List it greyed, saying `reason`, and do not run it.
+    pub fn unavailable(mut self, reason: impl Into<String>) -> Self {
+        self.unavailable = Some(reason.into());
+        self
+    }
+
     /// The command a binding makes: its description, under its context,
     /// with its keys.
     pub fn from_binding(binding: &Binding) -> Command {
@@ -138,6 +148,7 @@ impl Command {
             keys: binding.keys.clone(),
             context: Some(binding.context.clone()),
             sequence: binding.sequence,
+            unavailable: binding.unavailable.clone(),
         }
     }
 
@@ -301,6 +312,54 @@ impl Palette {
         self
     }
 
+    /// Put `commands` in place of those it has, as they change while it is
+    /// open: the search stays, and so does the focus, on the command of
+    /// the same id while it is still listed (else on the one at the same
+    /// place, or the last).
+    ///
+    /// ```
+    /// use rich_interact::overlay::{Command, Palette};
+    ///
+    /// let mut palette = Palette::new([Command::new("a", "Alpha"), Command::new("b", "Beta")]);
+    /// palette.focus_id("b");
+    /// palette.set_commands([Command::new("b", "Beta"), Command::new("c", "Gamma"), Command::new("a", "Alpha")]);
+    /// assert_eq!(palette.focused().unwrap().id, "b");
+    /// ```
+    pub fn set_commands(&mut self, commands: impl IntoIterator<Item = Command>) {
+        let focused = self.focused().map(|command| command.id.clone());
+        let at = self.list.cursor();
+        let offset = self.list.offset();
+        self.commands = commands.into_iter().collect();
+        // The search is kept: the candidates are matched against it again.
+        self.relist();
+        let found = focused.and_then(|id| self.position_of(&id));
+        let len = self.filter.len();
+        if len > 0 {
+            let to = found.unwrap_or(at.min(len - 1));
+            self.list.set_offset(offset.min(to));
+            self.list.select_row(to, self.page.get());
+        }
+    }
+
+    /// Focus the command `id`, if it is listed; whether it is.
+    pub fn focus_id(&mut self, id: &str) -> bool {
+        match self.position_of(id) {
+            Some(at) => {
+                self.list.select_row(at, self.page.get());
+                true
+            }
+            None => false,
+        }
+    }
+
+    /// Where the command `id` is among those matching.
+    fn position_of(&self, id: &str) -> Option<usize> {
+        self.filter
+            .matches()
+            .iter()
+            .position(|(index, _)| self.commands[self.listed[*index]].id == id)
+    }
+
     /// The commands listed now, best match first.
     pub fn matches(&self) -> Vec<&Command> {
         self.filter
@@ -378,13 +437,21 @@ impl Palette {
         ));
         category.push(kit::plain(" "));
         line.extend(kit::pad(category, category_width + 1));
-        let base = focused.then_some(&theme.focused);
+        let base = match (&command.unavailable, focused) {
+            (Some(_), true) => Some(theme.focused.combine(&theme.hint)),
+            (Some(_), false) => Some(theme.hint.clone()),
+            (None, true) => Some(theme.focused.clone()),
+            (None, false) => None,
+        };
         line.extend(kit::highlight(
             &command.label,
             &in_label,
-            base,
+            base.as_ref(),
             &theme.matched,
         ));
+        if let Some(reason) = command.unavailable.as_ref().filter(|r| !r.is_empty()) {
+            line.push(kit::text(format!(" ({reason})"), &theme.hint));
+        }
         let shortcut = command.keys_label();
         if !shortcut.is_empty() {
             let used = kit::width(&line);
@@ -428,7 +495,9 @@ impl Component for Palette {
                         let position = self.list.offset() + row.wrapping_sub(1);
                         if row >= 1 && row <= page && position < self.filter.len() {
                             self.list.select_row(position, page);
-                            if let Some(command) = self.focused() {
+                            if let Some(command) =
+                                self.focused().filter(|c| c.unavailable.is_none())
+                            {
                                 return Flow::Done(command.clone());
                             }
                         }
@@ -448,10 +517,11 @@ impl Component for Palette {
             Some("page-up") => self.move_by(-(page as isize)),
             Some("page-down") => self.move_by(page as isize),
             Some("run") => {
-                return match self.focused() {
+                // One that is unavailable stays listed, and does not run.
+                return match self.focused().filter(|c| c.unavailable.is_none()) {
                     Some(command) => Flow::Done(command.clone()),
                     None => Flow::Continue,
-                }
+                };
             }
             Some("close") => return Flow::Cancel,
             Some("delete") => {
@@ -633,6 +703,19 @@ impl Help {
         self
     }
 
+    /// Put `bindings` in place of those it has, as they change while it is
+    /// open: the search stays, and so does the scroll, as far as the new
+    /// rows reach.
+    pub fn set_bindings(&mut self, bindings: impl IntoIterator<Item = Binding>) {
+        let offset = self.scroll.offset();
+        self.bindings = bindings
+            .into_iter()
+            .filter(|binding| !binding.keys.is_empty())
+            .collect();
+        self.search_keys();
+        self.scroll.scroll_to(offset, self.page.get());
+    }
+
     /// The bindings that match the search, in keymap order.
     pub fn matches(&self) -> Vec<&Binding> {
         let mut indices: Vec<usize> = self.filter.matches().iter().map(|(i, _)| *i).collect();
@@ -708,13 +791,21 @@ impl Help {
                 .zip(&hints)
                 .filter(|(b, _)| group.is_none_or(|context| b.context == context));
             for (binding, hint) in shown {
+                // One unavailable now says why, greyed.
+                let description = match &binding.unavailable {
+                    Some(reason) if !reason.is_empty() => {
+                        format!("{} ({reason})", binding.description)
+                    }
+                    _ => binding.description.clone(),
+                };
                 let (keys, lines) = if wrapping {
-                    (
-                        wrap_keys(hint, key_width),
-                        wrap_words(&binding.description, room),
-                    )
+                    (wrap_keys(hint, key_width), wrap_words(&description, room))
                 } else {
-                    (vec![hint.clone()], vec![binding.description.clone()])
+                    (vec![hint.clone()], vec![description])
+                };
+                let (key_style, text_style) = match binding.unavailable {
+                    Some(_) => (theme.hint.clone(), Some(theme.hint.clone())),
+                    None => (theme.prompt.clone(), None),
                 };
                 let count = keys.len().max(lines.len());
                 if !styled {
@@ -727,17 +818,20 @@ impl Help {
                     match keys.get(n) {
                         // Keys alone on their row need no padding.
                         Some(keys) if text.is_none() => {
-                            line.push(kit::text(keys.clone(), &theme.prompt));
+                            line.push(kit::text(keys.clone(), &key_style));
                         }
                         Some(keys) => line.extend(kit::pad(
-                            vec![kit::text(keys.clone(), &theme.prompt)],
+                            vec![kit::text(keys.clone(), &key_style)],
                             key_width,
                         )),
                         None => line.push(kit::plain(" ".repeat(key_width))),
                     }
                     if let Some(text) = text {
                         line.push(kit::plain("  "));
-                        line.push(kit::plain(text.clone()));
+                        line.push(match &text_style {
+                            Some(style) => kit::text(text.clone(), style),
+                            None => kit::plain(text.clone()),
+                        });
                     }
                     rows.push(line);
                 }

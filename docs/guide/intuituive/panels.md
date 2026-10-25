@@ -78,6 +78,30 @@ list(rows, cursor)
     .focus_border(Border::Double)
 ```
 
+### Titles at the corner, and plain-text titles
+
+A panel puts its titles a glyph in from the corner, with a space either
+side: `╭─ Files ─`. A ratatui `Block` puts its title right at the corner,
+with no spaces added. `.title_flush()` draws a panel's titles that way,
+for an app ported from ratatui, or one that looks like one:
+
+```rust
+list(files, cursor)
+    .panel("Staged Changes")
+    .border(Border::Plain)
+    .title_flush()                                   // ┌Staged Changes─────┐
+    .add_title_with(Edge::Bottom, Align::End, branch) // ───────────{main}┘
+```
+
+Every title of the panel is flush: a right-hand one sits against the right
+corner, and a centred one is centred on the whole edge. Put spaces in a
+title to keep them: `.panel(" Library ").title_flush()` is termusic's
+`╭ Library ─`.
+
+Titles are console markup, so a title with brackets in it (`Recipe [r]`)
+loses them as a tag. `.panel_text(title)`, `.panel_text_with(|| ..)` and
+`.add_title_text(edge, align, text)` take plain text and show it as it is.
+
 ### Rules, and a border on any node
 
 `rule()` is a line across, one row tall, in the theme's border style.

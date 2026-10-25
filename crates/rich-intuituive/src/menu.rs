@@ -56,6 +56,8 @@ pub struct MenuItem {
     label: String,
     hint: String,
     action: Option<Action>,
+    /// Shown but not chosen: greyed, with why ([`disabled`](Self::disabled)).
+    disabled: Option<String>,
 }
 
 impl MenuItem {
@@ -66,6 +68,7 @@ impl MenuItem {
             label: label.to_string(),
             hint: String::new(),
             action: Some(Rc::new(RefCell::new(action))),
+            disabled: None,
         }
     }
 
@@ -75,6 +78,7 @@ impl MenuItem {
             label: String::new(),
             hint: String::new(),
             action: None,
+            disabled: None,
         }
     }
 
@@ -84,8 +88,21 @@ impl MenuItem {
         self
     }
 
+    /// Shown greyed, with `reason` (none when empty) where a hint would
+    /// be: the arrows, letters and the mouse pass it by, and Enter or a
+    /// click on it does nothing.
+    pub fn disabled(mut self, reason: impl Into<String>) -> MenuItem {
+        self.disabled = Some(reason.into());
+        self
+    }
+
     fn is_separator(&self) -> bool {
         self.action.is_none()
+    }
+
+    /// Whether the selection may rest on it: an item, not disabled.
+    fn selectable(&self) -> bool {
+        !self.is_separator() && self.disabled.is_none()
     }
 }
 
@@ -137,7 +154,7 @@ struct MenuList {
 
 impl MenuList {
     fn new(items: Vec<MenuItem>) -> MenuList {
-        let first = items.iter().position(|i| !i.is_separator()).unwrap_or(0);
+        let first = items.iter().position(MenuItem::selectable).unwrap_or(0);
         MenuList {
             items,
             selected: Cell::new(first),
@@ -154,7 +171,7 @@ impl MenuList {
         let mut at = self.selected.get() as isize;
         for _ in 0..n {
             at = (at + step).rem_euclid(n);
-            if !self.items[at as usize].is_separator() {
+            if self.items[at as usize].selectable() {
                 self.selected.set(at as usize);
                 return;
             }
@@ -177,7 +194,13 @@ impl MenuList {
 
     /// Close the menu and run item `index`.
     fn run(&self, cx: &mut EventCx, index: usize) -> Used {
-        let Some(action) = self.items.get(index).and_then(|i| i.action.clone()) else {
+        let Some(item) = self.items.get(index) else {
+            return Used::No;
+        };
+        if item.disabled.is_some() {
+            return Used::Yes;
+        }
+        let Some(action) = item.action.clone() else {
             return Used::No;
         };
         cx.app().pop();
@@ -220,12 +243,11 @@ impl Widget for MenuList {
                 .items
                 .iter()
                 .map(|i| {
-                    width(&i.label)
-                        + if i.hint.is_empty() {
-                            0
-                        } else {
-                            width(&i.hint) + 2
-                        }
+                    let hint = match &i.disabled {
+                        Some(reason) if i.hint.is_empty() => reason,
+                        _ => &i.hint,
+                    };
+                    width(&i.label) + if hint.is_empty() { 0 } else { width(hint) + 2 }
                 })
                 .max()
                 .unwrap_or(0)
@@ -248,8 +270,13 @@ impl Widget for MenuList {
                 canvas.print(0, y, &rule.repeat(w as usize), Some(&dim));
                 continue;
             }
-            // " label   hint ": a space each side, two before the hint.
-            let hint_w = width(&item.hint);
+            // " label   hint ": a space each side, two before the hint; a
+            // disabled item's reason where its hint would be.
+            let hint = match &item.disabled {
+                Some(reason) if item.hint.is_empty() => reason,
+                _ => &item.hint,
+            };
+            let hint_w = width(hint);
             let right = if hint_w > 0 { hint_w + 2 } else { 0 };
             let label_w = w.saturating_sub(right + 2).max(1);
             let mut segments = vec![Segment::new(" ", None)];
@@ -258,10 +285,23 @@ impl Widget for MenuList {
             let gap = (w as usize).saturating_sub(used + right as usize);
             segments.push(Segment::new(" ".repeat(gap.max(1)), None));
             if hint_w > 0 {
-                segments.push(Segment::new(item.hint.clone(), Some(hint_style.clone())));
+                segments.push(Segment::new(hint.clone(), Some(hint_style.clone())));
                 segments.push(Segment::new(" ", None));
             }
-            if row == self.selected.get() {
+            if item.disabled.is_some() {
+                let off = cx.style("menu.disabled", "dim");
+                segments = segments
+                    .into_iter()
+                    .map(|s| {
+                        let style = s
+                            .style
+                            .as_ref()
+                            .map_or(off.clone(), |own| own.combine(&off));
+                        Segment::new(s.text, Some(style))
+                    })
+                    .collect();
+            }
+            if row == self.selected.get() && item.selectable() {
                 segments = segments
                     .into_iter()
                     .map(|s| {
@@ -286,10 +326,14 @@ impl Widget for MenuList {
                 if key.modifiers.ctrl || key.modifiers.alt {
                     return Used::No;
                 }
+                // A disabled item says nothing letters could start.
                 let labels: Vec<String> = self
                     .items
                     .iter()
-                    .map(|i| crate::controls::plain(&i.label))
+                    .map(|i| match i.selectable() {
+                        true => crate::controls::plain(&i.label),
+                        false => String::new(),
+                    })
                     .collect();
                 let at = self.selected.get();
                 let typeahead = self.typeahead.as_mut().expect("typeahead");
@@ -300,12 +344,14 @@ impl Widget for MenuList {
             WidgetEvent::Key(key) => return self.arrows(cx, key.code),
             WidgetEvent::Mouse(mouse) => {
                 let row = mouse.row as usize;
-                let on_item = self.items.get(row).is_some_and(|i| !i.is_separator());
+                let on_item = self.items.get(row).is_some_and(MenuItem::selectable);
+                let on_disabled = self.items.get(row).is_some_and(|i| i.disabled.is_some());
                 match mouse.kind {
                     MouseKind::Moved if on_item && row != self.selected.get() => {
                         self.selected.set(row)
                     }
                     MouseKind::Down(_) if on_item => return self.run(cx, row),
+                    MouseKind::Down(_) if on_disabled => return Used::Yes,
                     MouseKind::ScrollUp => self.step(-1),
                     MouseKind::ScrollDown => self.step(1),
                     _ => return Used::No,
@@ -341,7 +387,7 @@ pub(crate) fn open_choices(
 ) {
     cx.popup(at, Placement::Below, Size::Auto, Size::Auto, move || {
         let mut list = MenuList::new(items);
-        if selected < list.items.len() && !list.items[selected].is_separator() {
+        if selected < list.items.len() && list.items[selected].selectable() {
             list.selected.set(selected);
         }
         list.typeahead = Some(crate::select_field::Typeahead::default());

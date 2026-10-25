@@ -946,14 +946,19 @@ pub fn game_app(game: Game) -> App {
         .on_key("space", shared.key(Game::space))
         .on_key("q", |cx| cx.quit())
     })
-    .min_size(
-        SCREEN_WIDTH,
-        SCREEN_HEIGHT,
-        format!(
-            "[b]Terminal must be at least {SCREEN_WIDTH} x {SCREEN_HEIGHT}![/]\n\n{}",
-            ZOOM_TIP.replace('\n', " ")
-        ),
-    )
+    .min_size_with(SCREEN_WIDTH, SCREEN_HEIGHT, small_screen)
+}
+
+/// What shows on a terminal too small for the game: the original's box in
+/// grey on its background, the message over the zoom tip.
+fn small_screen() -> Node {
+    let message = format!("[b]Terminal must be at least {SCREEN_WIDTH} x {SCREEN_HEIGHT}![/]");
+    boxed(column([
+        label(message).text_align(TextAlign::Center).fixed(1),
+        label("").fixed(1),
+        label(ZOOM_TIP),
+    ]))
+    .style(&format!("bright_black on {BG}"))
 }
 
 fn main() -> std::io::Result<()> {
