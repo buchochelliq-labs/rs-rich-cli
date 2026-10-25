@@ -71,6 +71,17 @@ in this order:
 - **The raster view** (`--raster`): the page as Chrome paints it, in half
   blocks. It is for debugging.
 
+Both text views build only the rows near the screen, so a long page
+scrolls as fast as a short one, with no row limit. Chrome's own scroll
+follows yours: a few rows move it by a turn of the wheel, a jump (`G`,
+`g g`, find) by a scroll to the place. So a page's lazy images load and
+an infinite feed keeps loading. Near the end of what was read, Noctiluca
+scrolls Chrome to its bottom and reads the page again once it changes.
+When the page grows above what you are reading, your place stays put.
+
+A page too long to read whole (more than 20,000 blocks) says
+"page cut" in the status line.
+
 ## Keys
 
 Every action has a key, and **F1 lists them all**, with the key that runs
@@ -206,6 +217,9 @@ CI.
 
 - **Lost? Press F1.** Everything Noctiluca can do is in that list, with
   its key.
+- **A feed that stops loading?** Keep going down: each time you near the
+  end, Noctiluca asks the page for more. A feed that loads only on a
+  button needs the button pressed (`f` and its hint).
 - **A busy page?** Press `r`. Reader mode drops the layout and keeps the
   words.
 - **Blocky pictures?** By default Noctiluca picks what your terminal

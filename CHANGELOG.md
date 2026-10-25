@@ -9,6 +9,31 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Long pages and endless feeds (intuituive, noctiluca, rich-embed, rich-web)
+
+- **`scroll_virtual(len, height_of, row)`** in intuiTUIve: a scroll view
+  that builds only the items near the view, so a million items cost a
+  screenful. Heights are estimated, then measured once drawn. The offset
+  is a `u64`, so there is no row cap. `.item_key` keeps the top item in
+  place when items arrive above it, `.on_near_end` loads more near the
+  end (one load at a time), and `.stand_in` draws cheap stand-ins while
+  scrolling fast (measured: about five times faster frames over cards).
+- **`scroll()` says when it cuts.** Its 4,000-row cap is documented, and a
+  debug build warns once when content is cut.
+- **`Driver::damage_since`**: the cells the last frames changed, for
+  renderers that draw the screen themselves.
+- **Noctiluca scrolls long pages and feeds.** Both views build only the
+  rows near the screen, with no row cap. Chrome's scroll follows yours,
+  so lazy images load and infinite feeds load more; near the end Chrome
+  is scrolled to its bottom. Your place stays put when the page grows
+  above it. The layout is made once per reading, not per key. A page cut
+  for length says so in the status line.
+- **rs-rich-embed's screencast can be off**: `ChromeEngine::screencast`
+  and `set_screencast`. Noctiluca turns it off, so no frame is encoded or
+  decoded.
+- **rs-rich-web's DOM renderer** compares only the rows the frames
+  damaged, and makes the accessibility tree's JSON only when it changed.
+
 ### Noctiluca's docs and iconography (noctiluca)
 
 - **A guide page for Noctiluca**, the terminal web browser: install,

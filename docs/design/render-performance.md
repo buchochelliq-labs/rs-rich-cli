@@ -2,8 +2,8 @@
 
 **Status:** proposed on 2026-10-25, for 0.0.23. Written from three
 surveys: Noctiluca and rs-rich-web's render paths, intuiTUIve's pipeline,
-and how other projects do it (sources at the end). Nothing here is built
-yet. The maintainer asked for three things:
+and how other projects do it (sources at the end). Steps 4 to 6 are built
+on branch `023-scroll`: see [What landed](#what-landed). The maintainer asked for three things:
 
 1. **Forever scroll:** pages and lists that keep loading as you scroll,
    with only what is on screen rendered. Possibly a core optimisation.
@@ -439,6 +439,119 @@ its assertions.
 6. **rs-rich-web's DOM renderer** on the damage list.
 
 Steps 1 to 3 are independent of 4 to 6, and can run alongside them.
+
+## What landed
+
+Steps 4 to 6, on branch `023-scroll`. Steps 1 to 3 are the painter's
+branch.
+
+### The virtual scroll view (step 4)
+
+- **`scroll_virtual(len, height_of, row)`** in intuiTUIve core
+  (`scroll_virtual.rs`), with `scroll_virtual_with` for the offset as a
+  `Signal<u64>`. It is generic: Noctiluca uses it, and owns nothing it
+  needs.
+  - Heights are summed in blocks of 256 items. Finding a row walks the
+    blocks, then at most 256 items, so a million items cost a few
+    thousand additions per layout, not a million.
+  - The built items cover the view and a screen either side. They are
+    rebuilt only when the view comes within half a screen of their edge,
+    so a scroll inside them only copies rows out.
+  - The scrollbar, keys, the wheel and the bar work as `scroll()`'s.
+  - `.item_key` anchors the top item in view when items above change
+    height or are inserted. It looks for the anchored key where the
+    length change puts it, then up to 4,096 items either side.
+  - `.on_near_end(threshold, load)` fires once until `len` grows.
+- **Level of detail** (game idea 3): `.stand_in(make)`, opt-in. It was
+  kept because it measured well. On a held PageDown over 100,000 cards
+  (a panel of styled text) at 80x40, in a debug build: 200 pages took
+  5.0 s with full items and 1.0 s with stand-ins, about 25 ms and 5 ms a
+  frame. Over one-line labels: 0.97 s and 0.89 s, no real gain. The
+  measurement is `tests/scroll_virtual_measure.rs`, run by hand.
+- **`scroll()`** keeps its 4,000-row cap. Its docs say so and point to
+  `scroll_virtual`, and a debug build says so once on stderr when it cuts.
+- **Not done: `list_lazy` and `virtual_table` on the shared code.** They
+  are one widget each, with a selection that drives a row-count viewport
+  and no child nodes. `scroll_virtual` is a viewport over child nodes.
+  Sharing would mean rewriting both widgets, which the ratatui parity
+  tests cover, for little gain: they already draw a screenful. Left as
+  they are.
+- **A cost to know:** when the built set changes, the node tree's
+  viewport code (`draw_view`) redraws every built item, as it does for
+  any viewport whose children changed. With the half-screen hysteresis
+  that happens about once a screen. Redrawing only the newly built items
+  needs a change in `node.rs`'s viewport drawing.
+
+### Occlusion culling (game idea 5): not built
+
+A node wholly under an opaque modal could skip drawing. It is not small
+in the frame code:
+
+- Full screens already cull: drawing starts at the topmost full screen.
+- Modals draw after the screen under them, which is drawn whole. Culling
+  there needs each node's rectangle tested against the modals' before it
+  draws, and a node skipped while covered must draw when uncovered. That
+  path exists (a modal that moves or closes redraws everything), but
+  modals with a backdrop or a shadow restyle what is under them, so the
+  cells under them are not truly hidden.
+- In a `layers` stack, a covered child must also be left out of the
+  compositing check (`will_draw`), or the stack composes anyway.
+
+The maintainer asked for game techniques to be built only when a
+measurement shows they help. No scene measured so far has a busy node
+under a modal, so it waits for one.
+
+### Noctiluca (step 5)
+
+- **Chrome's scroll follows ours.** A watch on the offset sends, once the
+  view rests 120 ms, a wheel turn (`PageAction::Wheel`, CDP
+  `Input.dispatchMouseEvent` `mouseWheel`) for up to three screens and a
+  jump (`window.scrollTo`) beyond. Each row's page y comes from the
+  projection (its box's top plus its line). `Page.getLayoutMetrics` is
+  read after each scroll (`Engine::metrics`, `Update::Metrics`); a
+  document taller than the one read is read again soon.
+- **Near the end:** the views' `on_near_end` (a screen) sends
+  `Command::LoadMore`, which scrolls Chrome to its bottom. The page is
+  read again on its change ping, as always, and the view asks again only
+  once it has more rows: one load in flight.
+- **Projection near the view: the display, not the layout.** The
+  projection's skyline is sequential: each box's row depends on every box
+  above it. Laying out only blocks near the view would place them wrong.
+  So the layout stays whole, but is made once per reading, width, view
+  and hints (a memo shared by the views, find and the scroll keys), and
+  the view builds only the rows near it, one item per row, on
+  `scroll_virtual`. The 4,000-row cap is gone from both views.
+- **Anchoring by node:** each projection row is keyed by the
+  `backendNodeId` of its first box and which of its lines it is. Content
+  arriving above keeps the row in view. In reader mode a text piece's key
+  holds its index, so there it anchors only on pieces that keep their
+  keys.
+- **The cached layout:** `view_lines()` per keypress and per draw is gone;
+  find's matches are a memo of the layout and the query.
+- **`truncated`** shows as "page cut" in the status line.
+- **No screencast:** `ChromeEngine::screencast(false)`, and
+  `set_screencast` to turn it on for a raster view.
+- **Not done: Sixel and iTerm2 pictures partly in view.** Drawing them
+  clipped needs a still cut to the visible rows in the image layer
+  (`image.rs`); they still show as half blocks until wholly on screen.
+  Kitty works row by row already.
+- **Tests:** a generated feed snapshot under the fake engine
+  (`tests/feed.rs`): the end loads more, Chrome follows (a wheel turn, a
+  jump to the bottom, a jump to the top), the row in view stays when five
+  posts arrive above it, and a 3,000-post page reaches its end. A fixture
+  page with an IntersectionObserver sentinel (`fixtures/feed.html`) and a
+  live test that loads more by the wheel and by `LoadMore`; it runs in
+  the live-browser CI job only.
+
+### rs-rich-web's DOM renderer (step 6)
+
+- intuiTUIve's `Driver` keeps the last 64 frames' damage
+  (`Driver::damage_since(frame)`). The DOM renderer compares only the
+  rows damaged since its last update, and every row when the driver no
+  longer remembers that far back, after a resize, or the first time.
+- The accessibility tree's JSON is made only when the tree changed. The
+  tree itself is still read each update, since the focus can move with no
+  frame drawn.
 
 ## Open questions
 
