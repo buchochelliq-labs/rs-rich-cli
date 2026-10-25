@@ -751,7 +751,7 @@ open ones are **permanent**, each for the reason in its entry:
   with its guard against objects that claim every attribute),
   `abc.RichRenderable` (an `isinstance` hook) and
   `_extension.load_ipython_extension` (IPython) are not ported. A Rust type
-  is renderable when it implements [`Renderable`](../crates/rich/src/protocol.rs),
+  is renderable when it implements [`Renderable`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich/src/protocol.rs),
   which the compiler checks; a type that renders as another one implements
   `Renderable` by delegating, as `Color` and `Palette` do for upstream's
   `__rich__`. `Measurement.get` cannot meet a non-renderable, so it never

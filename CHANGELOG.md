@@ -23,8 +23,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   now split where the program starts each update (a carriage return that
   redraws a line, the cursor sent home, a synchronized update begun), and
   a frame is kept for each frame interval since the last read, up to
-  0.25 s back. Screenshots and casts are unchanged. The frame-rate test's
-  lower bound holds on every platform again.
+  0.25 s back. Screenshots and casts are unchanged. This did not fix the
+  frame loss on macOS (CI still kept 5 frames over 0.5 s), which stays a
+  [known issue](docs/known-issues.md#the-recorder-keeps-fewer-frames-on-macos);
+  the frame-rate test's lower bound holds on Linux only.
 
 ### rs-rich-marketplace 0.0.1 (new): the plugin marketplace client
 

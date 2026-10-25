@@ -185,12 +185,12 @@ See [Record your own](recordings.md#record-your-own).
 
 ### A recording made on macOS plays in jumps
 
-Before 0.0.22, the recorder kept only the last of the screen updates that
-reached it together, which happens when a busy machine wakes it late: CI's
-macOS runners kept 7 frames over 0.8 s at `Set Framerate 35`. It now keeps
-one frame for each frame interval since it last read. If a video is still
-choppy, check the tape's `Set Framerate` (12 by default) and whether the
-program drew more often than that.
+CI's macOS runners keep far fewer frames than Linux at the same
+`Set Framerate` (5 frames over 0.5 s at 35 a second), and the cause is not
+known yet: see [known issues](known-issues.md#the-recorder-keeps-fewer-frames-on-macos).
+Record games on Linux for now. If a video made on Linux is choppy, check the
+tape's `Set Framerate` (12 by default) and whether the program drew more
+often than that.
 
 ### A game in a recording does not stop when the key is let go
 
