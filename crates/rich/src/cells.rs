@@ -187,56 +187,51 @@ fn is_single_cell_widths(text: &str) -> bool {
 /// U+FE0F promotes the preceding narrow character to two cells without starting
 /// a new grapheme. Zero-width characters attach to the grapheme before them.
 pub fn split_graphemes(text: &str) -> (Vec<(usize, usize, usize)>, usize) {
-    let chars: Vec<(usize, char)> = text.char_indices().collect();
-    let count = chars.len();
-    // The byte offset of code point `index`, with `count` meaning "the end".
-    let byte_at = |index: usize| chars.get(index).map_or(text.len(), |(offset, _)| *offset);
-
+    // One pass over the characters, each span's end taken from the character
+    // that ends it, rather than collecting the characters first
+    // (docs/PORTING.md, "Performance notes"). A test,
+    // `split_graphemes_matches_the_indexed_scan`, holds it to the first port.
     let mut spans: Vec<(usize, usize, usize)> = Vec::new();
     let mut total_width = 0usize;
     let mut last_measured: Option<char> = None;
-    let mut index = 0usize;
+    let mut chars = text.char_indices();
 
-    while index < count {
-        let character = chars[index].1;
+    while let Some((start, character)) = chars.next() {
+        let end = start + character.len_utf8();
         if character == ZERO_WIDTH_JOINER || character == VARIATION_SELECTOR_16 {
             let Some(last) = spans.last_mut() else {
                 // A joiner or selector opening the string joins nothing. It is
                 // nonsense, but upstream handles it, so we must too.
-                let start = byte_at(index);
-                index += 1;
-                spans.push((start, byte_at(index), 0));
+                spans.push((start, end, 0));
                 continue;
             };
             if character == ZERO_WIDTH_JOINER {
                 // Consume the joiner *and* whatever it joins — unless it is the
                 // last character, with nothing left to join.
-                index += if index < count - 1 { 2 } else { 1 };
-                last.1 = byte_at(index);
+                last.1 = chars
+                    .next()
+                    .map_or(end, |(joined, c)| joined + c.len_utf8());
             } else {
-                index += 1;
                 if last_measured.is_some_and(|previous| NARROW_TO_WIDE.contains(&previous)) {
                     last_measured = None;
                     last.2 += 1;
                     total_width += 1;
                 }
-                last.1 = byte_at(index);
+                last.1 = end;
             }
             continue;
         }
 
-        let start = byte_at(index);
         let width = char_cell_width(character);
-        index += 1;
         if width > 0 {
             last_measured = Some(character);
             total_width += width;
-            spans.push((start, byte_at(index), width));
+            spans.push((start, end, width));
         } else if let Some(last) = spans.last_mut() {
             // Zero-width characters belong to the grapheme before them.
-            last.1 = byte_at(index);
+            last.1 = end;
         } else {
-            spans.push((start, byte_at(index), 0));
+            spans.push((start, end, 0));
         }
     }
 
@@ -472,6 +467,91 @@ pub fn set_cell_size(text: &str, total: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The one-pass `split_graphemes` splits as the first port, which
+    /// indexed a collected list of characters, does.
+    #[test]
+    fn split_graphemes_matches_the_indexed_scan() {
+        fn reference(text: &str) -> (Vec<(usize, usize, usize)>, usize) {
+            let chars: Vec<(usize, char)> = text.char_indices().collect();
+            let count = chars.len();
+            // The byte offset of code point `index`, with `count` meaning "the end".
+            let byte_at = |index: usize| chars.get(index).map_or(text.len(), |(offset, _)| *offset);
+
+            let mut spans: Vec<(usize, usize, usize)> = Vec::new();
+            let mut total_width = 0usize;
+            let mut last_measured: Option<char> = None;
+            let mut index = 0usize;
+
+            while index < count {
+                let character = chars[index].1;
+                if character == ZERO_WIDTH_JOINER || character == VARIATION_SELECTOR_16 {
+                    let Some(last) = spans.last_mut() else {
+                        // A joiner or selector opening the string joins nothing. It is
+                        // nonsense, but upstream handles it, so we must too.
+                        let start = byte_at(index);
+                        index += 1;
+                        spans.push((start, byte_at(index), 0));
+                        continue;
+                    };
+                    if character == ZERO_WIDTH_JOINER {
+                        // Consume the joiner *and* whatever it joins — unless it is the
+                        // last character, with nothing left to join.
+                        index += if index < count - 1 { 2 } else { 1 };
+                        last.1 = byte_at(index);
+                    } else {
+                        index += 1;
+                        if last_measured.is_some_and(|previous| NARROW_TO_WIDE.contains(&previous))
+                        {
+                            last_measured = None;
+                            last.2 += 1;
+                            total_width += 1;
+                        }
+                        last.1 = byte_at(index);
+                    }
+                    continue;
+                }
+
+                let start = byte_at(index);
+                let width = char_cell_width(character);
+                index += 1;
+                if width > 0 {
+                    last_measured = Some(character);
+                    total_width += width;
+                    spans.push((start, byte_at(index), width));
+                } else if let Some(last) = spans.last_mut() {
+                    // Zero-width characters belong to the grapheme before them.
+                    last.1 = byte_at(index);
+                } else {
+                    spans.push((start, byte_at(index), 0));
+                }
+            }
+
+            (spans, total_width)
+        }
+        const ALPHABET: [char; 10] = [
+            'a',
+            '\u{200d}',
+            '\u{fe0f}',
+            '\u{301}',
+            '界',
+            '\u{2764}',
+            '\u{1f468}',
+            ' ',
+            '\t',
+            'é',
+        ];
+        let mut texts = vec![String::new()];
+        for _ in 0..5 {
+            texts = texts
+                .iter()
+                .flat_map(|text| ALPHABET.iter().map(move |c| format!("{text}{c}")))
+                .collect();
+            for text in &texts {
+                assert_eq!(split_graphemes(text), reference(text), "{text:?}");
+            }
+        }
+    }
 
     /// The fast path answers every character it covers as every shipped
     /// table does, so it holds whatever `UNICODE_VERSION` picks.
