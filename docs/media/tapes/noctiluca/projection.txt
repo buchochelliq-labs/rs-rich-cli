@@ -19,8 +19,8 @@
       1. Bloom                                                                                     ┃
       2. Glow                                                                                      ┃
                                                                                                    ┃
-      The sea was on fire with light.                                                              │
-                                                                                                   │
+      The sea was on fire with light.                                                              ┃
+                                                                                                   ┃
  glow = touch * 0.1                                                                                │
  sleep()                                                                                           │
  Sizes                                                                                             │

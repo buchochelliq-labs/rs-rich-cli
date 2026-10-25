@@ -472,7 +472,7 @@ impl Picture {
             lines.truncate(usize::from(height));
         }
         if view.pixels != Pixels::Cells && mode == ImageMode::Blocks {
-            lines = self.tag(console, view.pixels, lines);
+            lines = self.tag(console, view, lines);
         }
         lines
     }
@@ -482,9 +482,10 @@ impl Picture {
     fn tag(
         &self,
         console: &rich::Console,
-        pixels: Pixels,
+        view: ImageView,
         lines: Vec<Vec<Segment>>,
     ) -> Vec<Vec<Segment>> {
+        let pixels = view.pixels;
         let rows = lines.len();
         let cols = lines
             .iter()
@@ -506,6 +507,8 @@ impl Picture {
                 rows,
                 row,
                 pixels,
+                fit: view.fit,
+                anchor: view.anchor,
             }
             .style()
         };
@@ -543,8 +546,57 @@ impl Picture {
     /// placeholder cells (an animation's frames too, playing). `None` for
     /// cells, or when it will not encode.
     pub fn encode(&self, pixels: Pixels, cols: usize, rows: usize) -> Option<String> {
-        let image = &*self.shown.image;
+        self.encode_fitted(pixels, cols, rows, None, ImageAnchor::Center)
+    }
+
+    /// The escape that draws rows `first` to `first + shown` of the cells
+    /// `tag` was read from: the picture fitted as those cells were (its
+    /// view's fit and anchor), through the tag's protocol. What a painter
+    /// draws over a picture's tagged cells.
+    pub fn encode_tag(&self, tag: &PictureTag, first: usize, shown: usize) -> Option<String> {
+        let (pixels, cols, rows) = (tag.pixels, tag.cols, tag.rows);
+        if pixels == Pixels::Kitty || (first == 0 && shown >= rows) {
+            return self.encode_fitted(pixels, cols, rows, tag.fit, tag.anchor);
+        }
+        self.encode_part(
+            &self.fitted(&self.shown.image, cols, rows, tag.fit, tag.anchor),
+            pixels,
+            cols,
+            first,
+            shown,
+        )
+    }
+
+    /// `image` in `cols` x `rows` cells as `fit` says (`None`: contained).
+    fn fitted(
+        &self,
+        image: &DynamicImage,
+        cols: usize,
+        rows: usize,
+        fit: Option<ImageFit>,
+        anchor: ImageAnchor,
+    ) -> RgbaImage {
         let cell = CellPixels::DEFAULT;
+        match fit {
+            None | Some(ImageFit::Contain) | Some(ImageFit::Native) => {
+                fit_to_cells(image, cols, rows, cell)
+            }
+            Some(fit) => {
+                let (width, height) = cell.span(cols, rows);
+                crate::graphics::fill_pixels(image, width, height, fit, anchor)
+            }
+        }
+    }
+
+    fn encode_fitted(
+        &self,
+        pixels: Pixels,
+        cols: usize,
+        rows: usize,
+        fit: Option<ImageFit>,
+        anchor: ImageAnchor,
+    ) -> Option<String> {
+        let fitted = |image: &DynamicImage| self.fitted(image, cols, rows, fit, anchor);
         match pixels {
             Pixels::Cells => None,
             Pixels::Kitty if self.shown.animation.is_some() => {
@@ -552,19 +604,14 @@ impl Picture {
                     .frames()?
                     .iter()
                     .map(|frame| AnimationFrame {
-                        image: fit_to_cells(
-                            &DynamicImage::ImageRgba8(frame.image.clone()),
-                            cols,
-                            rows,
-                            cell,
-                        ),
+                        image: fitted(&DynamicImage::ImageRgba8(frame.image.clone())),
                         delay: frame.delay,
                     })
                     .collect();
                 crate::kitty::transmit_animation(self.id(), &frames, cols, rows)
             }
             Pixels::Kitty => {
-                let fitted = fit_to_cells(image, cols, rows, cell);
+                let fitted = fitted(&self.shown.image);
                 if self.shown.raw {
                     let (width, height) = fitted.dimensions();
                     return Some(crate::kitty::transmit_rgba(
@@ -580,11 +627,12 @@ impl Picture {
                 Some(crate::kitty::transmit(self.id(), &png, cols, rows))
             }
             Pixels::Sixel => {
-                let sixel = crate::SixelArt::new(image.clone()).encode_cells(cols, rows)?;
+                let image = DynamicImage::ImageRgba8(fitted(&self.shown.image));
+                let sixel = crate::SixelArt::new(image).encode_cells(cols, rows)?;
                 Some(format!("\x1b7{sixel}\x1b8"))
             }
             Pixels::Iterm => {
-                let png = encode_png(&fit_to_cells(image, cols, rows, cell))?;
+                let png = encode_png(&fitted(&self.shown.image))?;
                 Some(format!(
                     "\x1b7{}\x1b8",
                     crate::iterm::inline_image(&png, cols, rows)
@@ -608,14 +656,27 @@ impl Picture {
         if pixels == Pixels::Kitty || (first == 0 && shown >= rows) {
             return self.encode(pixels, cols, rows);
         }
+        let whole = fit_to_cells(&self.shown.image, cols, rows, CellPixels::DEFAULT);
+        self.encode_part(&whole, pixels, cols, first, shown)
+    }
+
+    /// Rows `first` to `first + shown` of `whole`, the picture already
+    /// fitted to all its cells, through Sixel or iTerm2.
+    fn encode_part(
+        &self,
+        whole: &RgbaImage,
+        pixels: Pixels,
+        cols: usize,
+        first: usize,
+        shown: usize,
+    ) -> Option<String> {
         let cell = CellPixels::DEFAULT;
-        let whole = fit_to_cells(&self.shown.image, cols, rows, cell);
         let top = (first as u32 * cell.height).min(whole.height());
         let height = (shown as u32 * cell.height).min(whole.height() - top);
         if height == 0 {
             return None;
         }
-        let part = image::imageops::crop_imm(&whole, 0, top, whole.width(), height).to_image();
+        let part = image::imageops::crop_imm(whole, 0, top, whole.width(), height).to_image();
         match pixels {
             Pixels::Sixel => {
                 let sixel = crate::SixelArt::new(DynamicImage::ImageRgba8(part))
@@ -772,10 +833,33 @@ pub struct PictureTag {
     pub rows: usize,
     pub row: usize,
     pub pixels: Pixels,
+    /// How the cells were fitted ([`ImageView::fit`]), so the pixels
+    /// drawn over them are fitted the same way.
+    pub fit: Option<ImageFit>,
+    pub anchor: ImageAnchor,
 }
 
+const FITS: [ImageFit; 4] = [
+    ImageFit::Contain,
+    ImageFit::Cover,
+    ImageFit::Stretch,
+    ImageFit::Native,
+];
+const ANCHORS: [ImageAnchor; 9] = [
+    ImageAnchor::Center,
+    ImageAnchor::Top,
+    ImageAnchor::Bottom,
+    ImageAnchor::Left,
+    ImageAnchor::Right,
+    ImageAnchor::TopLeft,
+    ImageAnchor::TopRight,
+    ImageAnchor::BottomLeft,
+    ImageAnchor::BottomRight,
+];
+
 impl PictureTag {
-    /// The meta key: `[id, cols, rows, row, protocol, version]`.
+    /// The meta key: `[id, cols, rows, row, protocol, version, fit,
+    /// anchor]`.
     pub const META_KEY: &'static str = "intuituive.image";
 
     /// The tag a cell's style carries, if any.
@@ -794,6 +878,14 @@ impl PictureTag {
             row: usize::try_from(int(3)?).ok()?,
             pixels: Pixels::from_code(int(4)?)?,
             version: int(5).and_then(|v| u32::try_from(v).ok()).unwrap_or(0),
+            fit: int(6)
+                .and_then(|v| usize::try_from(v).ok())
+                .and_then(|v| v.checked_sub(1))
+                .and_then(|v| FITS.get(v).copied()),
+            anchor: int(7)
+                .and_then(|v| usize::try_from(v).ok())
+                .and_then(|v| ANCHORS.get(v).copied())
+                .unwrap_or_default(),
         })
     }
 
@@ -809,6 +901,12 @@ impl PictureTag {
                 MetaValue::Int(self.row as i64),
                 MetaValue::Int(self.pixels.code()),
                 MetaValue::Int(i64::from(self.version)),
+                MetaValue::Int(
+                    self.fit
+                        .and_then(|f| FITS.iter().position(|x| *x == f))
+                        .map_or(0, |at| at as i64 + 1),
+                ),
+                MetaValue::Int(ANCHORS.iter().position(|a| *a == self.anchor).unwrap_or(0) as i64),
             ]),
         );
         Style::from_meta(meta)
@@ -1137,6 +1235,38 @@ mod tests {
             })
             .collect();
         assert_eq!(versions.len(), 4);
+    }
+
+    #[test]
+    fn the_pixels_are_fitted_as_the_cells_were() {
+        // A wide picture in square-ish cells: contained, it leaves bands;
+        // covered, it fills them, as its half blocks under it do.
+        let wide = Picture::new(DynamicImage::ImageRgb8(RgbImage::from_pixel(
+            100,
+            10,
+            Rgb([255, 0, 0]),
+        )));
+        let console = rich::Console::builder().width(4).build();
+        let view = ImageView::new()
+            .fit(ImageFit::Cover)
+            .anchor(ImageAnchor::Top)
+            .pixels(Pixels::Iterm);
+        let lines = wide.lines(&console, view, 4, 4);
+        let tag = PictureTag::of(lines[0][0].style.as_ref().unwrap()).unwrap();
+        assert_eq!(
+            (tag.fit, tag.anchor),
+            (Some(ImageFit::Cover), ImageAnchor::Top)
+        );
+        let covered = wide.fitted(wide.image(), 4, 4, tag.fit, tag.anchor);
+        assert!(covered.pixels().all(|p| p.0[3] == 255));
+        let contained = wide.fitted(wide.image(), 4, 4, None, ImageAnchor::Center);
+        assert!(contained.pixels().any(|p| p.0[3] == 0));
+        assert_ne!(
+            wide.encode_tag(&tag, 0, 4),
+            wide.encode(Pixels::Iterm, 4, 4)
+        );
+        // Part of it, for a picture partly in view.
+        assert!(wide.encode_tag(&tag, 1, 2).unwrap().contains("height=2;"));
     }
 
     #[test]
