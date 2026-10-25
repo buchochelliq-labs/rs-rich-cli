@@ -1,5 +1,7 @@
 # rs-rich-macros
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-macros.svg" width="96" align="right" alt="Memo the elephant stamping braces and a tick">
+
 Compile-time checked markup and derive macros for
 [`rs-rich`](https://crates.io/crates/rs-rich), the Rust port of Python `rich`.
 

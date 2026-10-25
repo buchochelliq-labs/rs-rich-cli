@@ -1,5 +1,7 @@
 # rs-rich-marketplace
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-marketplace.svg" width="96" align="right" alt="Memo the elephant at a stall of plugin boxes">
+
 The client side of the [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli)
 plugin marketplace: it reads the marketplace's signed index and listings,
 chooses a version the running host can load, and installs it. The contract

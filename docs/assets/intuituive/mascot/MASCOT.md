@@ -6,6 +6,44 @@ Memo is a purple elephant, drawn in the mark's language: the mark's deep purple
 cursors, her toes are three light cells, and in her trunk she holds up the lit
 cell from the mark: the one cell a signal redraws.
 
+## Two looks: illustrations and icons
+
+Memo has two looks, one for each size.
+
+- **Illustrations: the cartoon look.** Pictures beside a heading, in a
+  README or on a docs page, from about 96 px up, are drawn as a cartoon:
+  a bold ink outline (`#1c1a24`, 3 units at 128, 2 for inner detail)
+  around every shape; a big round head, about half her height, on a small
+  pear-shaped body with short legs, in a 3/4 view facing right; two floppy
+  ears with pink insides that frame the face without touching the eyes;
+  big tall eyes with two highlights each and small arched brows; a wide
+  open smile with a pink tongue and a blush; a tapering S-curved trunk with
+  wrinkle lines; white toenails, a hair tuft and a tufted tail. Props have their own
+  outline and a little glow or sparkle. `memo-cartoon.svg` is the base
+  pose, and the [crate spots](#crate-spots) reuse it.
+- **Icons: the flat look.** Favicons, avatars, 16 and 32 px badges and
+  anything drawn in a terminal use the flat files below and the pixel
+  grid: the mark's palette, no outline, block-cursor eyes. They stay
+  legible where the cartoon's outline and shading would turn to mud.
+
+### The cartoon palette
+
+Every cartoon file defines the same three gradients, with the same ids
+(each file is standalone, so the ids do not clash in `<img>` use):
+
+| id | Kind | Stops | For |
+|---|---|---|---|
+| `mb` | radial, cx .38 cy .3 r .8 | `#cfa9ff` 0, `#b07cf5` .55, `#8b5add` 1 | body, head, ears' backs, near legs |
+| `me` | radial, cx .55 cy .45 r .7 | `#f3cde1` 0, `#eca0e8` 1 | inner ears |
+| `ms` | linear, top to bottom | `#3a3350` 0, `#16141d` 1 | terminal screens |
+
+Flat colours: body `#b07cf5` (trunk and arms, drawn as an ink stroke
+under a body stroke), shade `#8b5add` (far legs, tail), belly highlight
+`#d6bcff` at 55%, tuft `#5b3a9e`, ink `#1c1a24`, iris `#2a1f3d`, mouth
+`#4a1d3a`. Prop accents: mint `#4ff0b0` (prompts, ticks, glow), amber
+`#f5c84a` (sparkles), coral `#f2737a` (tongue, cheeks at 45%), blue
+`#6ab8ff`.
+
 ## Names
 
 - **Memo** (she): an elephant never forgets, and `memo` is the signal that
@@ -32,6 +70,7 @@ holding her tail in a curled trunk, as calves do.
 
 | File | What it is | For |
 |---|---|---|
+| `memo-cartoon.svg` | The cartoon base: waving | The illustration look's source pose |
 | `elephant-hero.svg` | Waving, with the lit cell and a soft floor | The intuiTUIve overview page |
 | `elephant-wave.svg` | Waving | Welcome, getting started, the tutorial |
 | `elephant-sign.svg` | Holding up a sign with a prompt | Tips and notes |
@@ -44,10 +83,49 @@ holding her tail in a curled trunk, as calves do.
 | `elephant-pixel.png` | 32x32 pixels, one pixel a cell | Source for a micro asset or a sprite |
 | `elephant-pixel.txt` | The same grid as characters, with the palette | Source for a `pixels` buffer or a test |
 | `elephant-pixel.svg` | The same grid as SVG runs | The pixel version in docs |
+| `crates/*.svg` | One cartoon spot per crate (160x128), see [Crate spots](#crate-spots) | Crate READMEs and crate lists |
 | `preview.html` | Every file on dark and light | Reviewing changes |
 
 Every SVG works on the dark and the light scheme: the body is the accent,
-and the light lit cell has a dark rim.
+and the light lit cell has a dark rim. The cartoon files do too: the ink outline
+holds them on a light page, and the lavender body on a dark one.
+
+## Crate spots
+
+`crates/` holds one small spot illustration per crate, in the cartoon
+look: Memo from `memo-cartoon.svg` at the left of a 160x128 view box, with
+a prop at the right that says what the crate does. Her trunk, arm and
+expression change; her body, head and ears do not. They are meant for 96 to
+160 px beside a heading (each crate's README shows its spot at 96 px), not
+as hero pictures, and they carry no text: the caption belongs to the page.
+The ideas came from cartoon references; the drawings are original SVG.
+
+| File | Crate | What the prop says |
+|---|---|---|
+| `rs-rich.svg` | `rs-rich` | She holds up a glowing terminal with a `>_` prompt: styled output in the terminal |
+| `rs-rich-cli.svg` | `rs-rich-cli` | Brush in her trunk, a palette in her hand, a table and progress bars on the terminal: the `rich` command paints files and data |
+| `rs-rich-ext.svg` | `rs-rich-ext` | She fits a puzzle piece into a terminal: extensions slot into the core |
+| `rs-rich-plugin-api.svg` | `rs-rich-plugin-api` | She joins a plug to a socket, eyes shut with joy at the spark: the plugin contract |
+| `rs-rich-macros.svg` | `rs-rich-macros` | A rubber stamp over `{ }` and a tick: proc-macros stamp out checked code |
+| `rs-rich-art.svg` | `rs-rich-art` | She paints a pixel heart on an easel: images and FIGlet art |
+| `rs-rich-mermaid.svg` | `rs-rich-mermaid` | A flowchart of three boxes, and a fish tail on her trunk tip: Mermaid diagrams |
+| `rs-rich-diagram.svg` | `rs-rich-diagram` | A graph of small boxes and straight edges inside a terminal: graphs laid out in box drawing |
+| `rs-rich-lumis.svg` | `rs-rich-lumis` | A torch lights coloured lines of code: syntax highlighting |
+| `rs-rich-record.svg` | `rs-rich-record` | She films a terminal with a video camera, both with red record dots: tapes |
+| `rs-rich-interact.svg` | `rs-rich-interact` | She ticks one checkbox in a list: interactive components |
+| `rs-rich-micro.svg` | `rs-rich-micro` | Tweezers in her trunk hold a tiny flower over a cell grid: micro assets |
+| `rs-rich-data.svg` | `rs-rich-data` | She lifts the missing cell into a coloured table: tabular data |
+| `rs-rich-ratatui.svg` | `rs-rich-ratatui` | She stands on a bridge between two terminals: ratatui interop |
+| `rs-rich-intuituive.svg` | `rs-rich-intuituive` | Memo and Tui beside a bar chart and a donut panel: the TUI framework |
+| `rs-rich-web.svg` | `rs-rich-web` | She holds one small terminal that goes out to three browser windows: serving to a browser |
+| `rs-rich-embed.svg` | `rs-rich-embed` | She slots a terminal pane into a bigger app window: a terminal inside an app |
+| `rs-rich-marketplace.svg` | `rs-rich-marketplace` | A stall of plugin boxes, one with a seal: the signed plugin index |
+| `rs-rich-py.svg` | `rs-rich` on PyPI (`crates/rich-py`) | She meets a friendly two-colour snake: Python bindings |
+
+Two pairs are easy to confuse, so they are drawn apart on purpose. Mermaid
+is coloured flowchart boxes in the open with a fish tail; the diagram is a
+box-drawing graph inside a terminal. The web spot sends one terminal out to
+several browser windows; the embed spot puts one pane into one app window.
 
 ## In a terminal
 

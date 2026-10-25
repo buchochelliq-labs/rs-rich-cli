@@ -1,5 +1,7 @@
 # rs-rich-ratatui
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-ratatui.svg" width="96" align="right" alt="Memo the elephant on a bridge between two terminals">
+
 [ratatui](https://ratatui.rs) interop for
 [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli), the Rust port of
 Python's `rich`, both ways. This crate is an rs-rich addition, not a port:

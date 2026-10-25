@@ -1,5 +1,7 @@
 # rs-rich-web
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-web.svg" width="96" align="right" alt="Memo the elephant serving a terminal to three browser windows">
+
 Serve [intuiTUIve](https://crates.io/crates/rs-rich-intuituive) terminal apps,
 or any terminal program, to a web browser. It is part of
 [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli), an addition

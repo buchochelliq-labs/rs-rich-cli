@@ -1,5 +1,7 @@
 # rs-rich-diagram
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-diagram.svg" width="96" align="right" alt="Memo the elephant beside a box-drawing graph on a terminal">
+
 Graph diagrams for [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli),
 the Rust port of Python's `rich`: a graph model, a layered layout, and a
 renderable that draws the result with box-drawing characters, or ASCII. This

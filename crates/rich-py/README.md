@@ -1,5 +1,7 @@
 # rs-rich (Python)
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-py.svg" width="96" align="right" alt="Memo the elephant with a friendly two-colour snake">
+
 Rich-compatible terminal rendering for Python, backed by
 [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli), a Rust port of
 [Rich](https://github.com/Textualize/rich).
