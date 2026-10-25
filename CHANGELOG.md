@@ -69,6 +69,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 - 47 golden cases in `parity_widgets.tsv`. The ten rows are complete in
   PORTING.
 
+- Core: `Live` gains the alternate screen (`screen`), upstream's render hook
+  as `Live::print`, and the stdout/stderr redirect as `FileProxy` writers
+  (new `file_proxy` module), plus `start_with`, `update_with`,
+  `get_renderable` and dumb-terminal handling. `Status::start` runs a
+  status live. `Progress` prints and redirects through its display, takes
+  its table at each refresh, and `track` batches through a thread as
+  upstream's `_TrackThread` does. A `Spinner` or `Status` can show a `Text`
+  or any renderable. Golden `parity_live.tsv`; DIVERGENCES §16 and §17
+  settled.
+
 ## 0.0.21 cohort — to be published
 
 To be published from `main` by one `release.yml` run (tag

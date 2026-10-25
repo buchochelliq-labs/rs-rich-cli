@@ -62,11 +62,12 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 
 | upstream `rich/…` | rust file | status | parity |
 |-------------------|-----------|:------:|--------|
-| `progress.py` | `progress.rs` + `pyformat.rs` | 🟡 | ✅ `progress_time.tsv` step programs (columns incl. `TextColumn`/`RenderableColumn`, fields, pulse, task API, clock, expand, table-column options, `bar_width=None`), `progress_live.tsv` (live stream, transient, disable, non-terminal); user-defined columns (`CustomProgressColumn`, `upstream_features.tsv`) |
-| `spinner.py`, `_spinners.py` (full table; public via `spinner_names`/`spinner_frames`) | `spinner.rs` | 🟡 | ✅ `live_status.tsv` (start at first render, `update`, markup text, console clock, measure) |
-| `status.py` | `status.rs` | 🟡 | ✅ `live_status.tsv` (frames, `update`, console clock) |
-| `live_render.py` | `live_render.rs` | ✅ | ✅ `live_status.tsv` (`position_cursor`/`restore_cursor`, style, wrap); `vertical_overflow` (`upstream_features.tsv`; height 0 in `audit_edges.tsv`) |
-| `live.py` | `live.rs` | 🟡 | ✅ `progress_live.tsv` (start/refresh/stop stream); auto-refresh timing by unit tests |
+| `progress.py` | `progress.rs` + `pyformat.rs` | 🟢 | ✅ `progress_time.tsv` step programs (columns incl. `TextColumn`/`RenderableColumn`, fields, pulse, task API, clock, expand, table-column options, `bar_width=None`), `progress_live.tsv` (live stream, transient, disable, non-terminal); user-defined columns (`CustomProgressColumn`, `upstream_features.tsv`); `parity_live.tsv` (0.0.22: `print` against the last refresh's table, `redirect_stdout`/`redirect_stderr`, disabled print); `_TrackThread` batching and `track(completed, task_id, update_period)` by unit tests. Permanent: `f64` counts and byte-mode `open` ([DIVERGENCES §16](DIVERGENCES.md#16-progress-two-permanent-differences-settled-in-0022)); `Progress.log` waits on `Console.log` (console row) |
+| `spinner.py`, `_spinners.py` (full table; public via `spinner_names`/`spinner_frames`) | `spinner.rs` | 🟢 | ✅ `live_status.tsv` (start at first render, `update`, markup text, console clock, measure); `parity_live.tsv` (0.0.22: a `Text` used as is, a renderable in `Table.grid(padding=1)`, in a `Live`); `KeyError` for an unknown name as `Spinner::try_new` |
+| `status.py` | `status.rs` | 🟢 | ✅ `live_status.tsv` (frames, `update`, console clock); `parity_live.tsv` (0.0.22: `start`/`stop` in a transient `Live`, `update` with and without a new spinner, print, redirect, a `Text` or renderable status). `Console.status` is the console row's |
+| `live_render.py` | `live_render.rs` | 🟢 | ✅ `live_status.tsv` (`position_cursor`/`restore_cursor`, style, wrap); `vertical_overflow` (`upstream_features.tsv`; height 0 in `audit_edges.tsv`) |
+| `live.py` | `live.rs` | 🟢 | ✅ `progress_live.tsv` (start/refresh/stop stream); `parity_live.tsv` (0.0.22: render hook as `Live::print`, alternate screen, `start(refresh)`, `update(refresh)`, refresh before start, crop, dumb terminal); auto-refresh timing by unit tests. Permanent: the `Live` owns its console and sink, and nested displays are not supported ([DIVERGENCES §17](DIVERGENCES.md#17-live-owns-its-console-and-sink-redirect-through-proxy-writers-settled-in-0022)) |
+| `file_proxy.py` | `file_proxy.rs` | 🟢 | ✅ `parity_live.tsv` (0.0.22: line buffering, ANSI decoding carried across lines, `flush` as markup, the partial line flushed at stop, stderr, redirect off, not a terminal). Permanent: a `FileProxy` is a writer the program writes to, not a replacement for the process's stdout ([DIVERGENCES §17](DIVERGENCES.md#17-live-owns-its-console-and-sink-redirect-through-proxy-writers-settled-in-0022)) |
 
 ## Content renderers
 
@@ -92,7 +93,7 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 | `_unicode_data/` (21 version tables, `UNICODE_VERSION`) | `cell_widths.rs` | 🟢 |
 | `box.substitute` (legacy/ASCII fallback) | `box.rs` | 🟢 | ✅ upstream's whole `LEGACY_WINDOWS_SUBSTITUTIONS` table, the `ascii` flag of a custom `Box::new`, from the render options (`parity_widgets.tsv`); the console flags are not detected from the terminal ([DIVERGENCES §6](DIVERGENCES.md#6-box-substitution-is-opt-in-no-legacy-terminal-auto-detection)) |
 | `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | — | not ported: the legacy console is unsupported ([DIVERGENCES §38](DIVERGENCES.md#38-the-windows-legacy-console-is-not-supported)) |
-| `jupyter.py`, `file_proxy.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⬜ |
+| `jupyter.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⬜ |
 | `_ratio.py` (`ratio_resolve`, `ratio_reduce`, `ratio_distribute`) | `ratio.rs` | 🟢 | ✅ (`parity_widgets.tsv`: each function on its edge values) |
 | `_loop.py`, `_pick.py`, `_stack.py`, `_timer.py` | internal helpers | ⬜ |
 | `_export_format.py`, `Console.export_html` | `export.rs` | 🟡 | ✅ (links, `code_format`, SVG `font_aspect_ratio` in `core_gaps.tsv`; extreme and non-finite ratios in `audit_edges.tsv`) |

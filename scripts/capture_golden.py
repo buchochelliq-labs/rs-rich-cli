@@ -2966,6 +2966,7 @@ def main() -> None:
     capture_audit_edges()
     capture_audit2()
     capture_parity_widgets()
+    capture_parity_live()
 
 
 # --- core gaps (bindings foundation) ------------------------------------------
@@ -4424,6 +4425,241 @@ def capture_parity_widgets() -> None:
         lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(PARITY_WIDGET_CASES)} parity widget cases to {path}")
+
+PARITY_LIVE_HEADER = """\
+# Golden parity fixtures for workstream 5 of 0.0.22 (live display): Live's
+# render hook, alternate screen and stdout/stderr redirect (FileProxy), and the
+# live Progress and Status displays. Captured from real Python `rich` with
+# auto_refresh=False. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<case JSON>\t<JSON [console bytes, bytes passed through to
+#   stdout, bytes passed through to stderr]>
+# Case keys: "kind" ("live" | "progress" | "status"), "width", "height"
+#   (default 5), "terminal" (default true), "term" (TERM, default unchanged),
+#   "options" (Live/Progress keyword arguments)
+# Steps: ["start", refresh] | ["update", markup, refresh] | ["refresh"]
+#   | ["stop"] | ["print", markup] | ["write", "stdout"|"stderr", text]
+#   | ["flush", "stdout"|"stderr"] | ["time", t] | ["add", description, total,
+#   completed] | ["advance", id, n] | ["status", {Status.update arguments}]
+"""
+
+PARITY_LIVE_CASES: list[tuple[str, dict]] = [
+    ("hook_print", {"kind": "live", "width": 20, "markup": "frame one", "steps": [
+        ["start", True], ["print", "hello"], ["update", "frame two", True],
+        ["print", "[bold]x[/]\ny"], ["stop"]]}),
+    ("hook_print_tall_frame", {"kind": "live", "width": 20, "markup": "a\nb\nc", "steps": [
+        ["start", True], ["print", "above"], ["update", "d", True], ["print", "again"], ["stop"]]}),
+    ("hook_print_transient", {"kind": "live", "width": 20, "markup": "a\nb",
+                              "options": {"transient": True}, "steps": [
+        ["start", True], ["print", "hi"], ["stop"]]}),
+    ("hook_print_not_terminal", {"kind": "live", "width": 20, "terminal": False, "markup": "frame",
+                                 "steps": [["start", True], ["print", "hello"], ["stop"]]}),
+    ("hook_print_crop", {"kind": "live", "width": 20, "height": 2, "markup": "1\n2\n3",
+                         "options": {"vertical_overflow": "crop"}, "steps": [
+        ["start", True], ["print", "p"], ["stop"]]}),
+    ("print_before_start_and_after_stop", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["print", "before"], ["start", True], ["stop"], ["print", "after"]]}),
+    ("start_without_refresh", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["start", False], ["stop"]]}),
+    ("update_without_refresh", {"kind": "live", "width": 20, "markup": "old", "steps": [
+        ["start", True], ["update", "new", False], ["print", "p"], ["refresh"], ["stop"]]}),
+    ("refresh_before_start", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["refresh"], ["start", True], ["stop"]]}),
+    ("alt_screen", {"kind": "live", "width": 20, "height": 5, "markup": "frame one",
+                    "options": {"screen": True}, "steps": [
+        ["start", True], ["update", "frame two", True], ["print", "hello"], ["stop"]]}),
+    ("alt_screen_tall", {"kind": "live", "width": 12, "height": 3, "markup": "1\n2\n3\n4\n5",
+                         "options": {"screen": True}, "steps": [["start", True], ["stop"]]}),
+    ("alt_screen_not_terminal", {"kind": "live", "width": 20, "terminal": False, "markup": "frame",
+                                 "options": {"screen": True}, "steps": [
+        ["start", True], ["print", "p"], ["stop"]]}),
+    ("alt_screen_redirect", {"kind": "live", "width": 10, "height": 3, "markup": "x",
+                             "options": {"screen": True}, "steps": [
+        ["start", True], ["write", "stdout", "line\n"], ["stop"]]}),
+    ("redirect_lines", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["start", True], ["write", "stdout", "part"], ["write", "stdout", "ial\nline2\nrest"],
+        ["write", "stdout", "\u001b[31mred\u001b[0m\n"], ["stop"]]}),
+    ("redirect_ansi_carries", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["start", True], ["write", "stdout", "\u001b[1mbold\nstill\u001b[0m\n"], ["stop"]]}),
+    ("redirect_flush_is_markup", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["start", True], ["write", "stdout", "[bold]tail[/]"], ["flush", "stdout"], ["stop"]]}),
+    ("redirect_partial_flushed_at_stop", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["start", True], ["write", "stdout", "never ended"], ["stop"], ["write", "stdout", "after\n"]]}),
+    ("redirect_stderr", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["start", True], ["write", "stderr", "oops\n"], ["write", "stdout", "fine\n"], ["stop"]]}),
+    ("redirect_off", {"kind": "live", "width": 20, "markup": "frame",
+                      "options": {"redirect_stdout": False}, "steps": [
+        ["start", True], ["write", "stdout", "raw\n"], ["write", "stderr", "err\n"], ["stop"]]}),
+    ("redirect_not_terminal", {"kind": "live", "width": 20, "terminal": False, "markup": "frame",
+                               "steps": [["start", True], ["write", "stdout", "raw\n"], ["stop"]]}),
+    ("redirect_before_start", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["write", "stdout", "early\n"], ["start", True], ["stop"]]}),
+    ("dumb_terminal", {"kind": "live", "width": 20, "term": "dumb", "markup": "frame", "steps": [
+        ["start", True], ["update", "two", True], ["print", "p"], ["write", "stdout", "w\n"], ["stop"]]}),
+    ("dumb_terminal_transient", {"kind": "live", "width": 20, "term": "dumb", "markup": "frame",
+                                 "options": {"transient": True}, "steps": [
+        ["start", True], ["stop"]]}),
+    ("progress_print_snapshot", {"kind": "progress", "width": 30,
+                                 "columns": [["description"], ["mofn"]], "steps": [
+        ["add", "copy", 4, 0], ["refresh"], ["advance", 0, 2], ["print", "note"], ["refresh"]]}),
+    ("progress_redirect", {"kind": "progress", "width": 30,
+                           "columns": [["description"], ["mofn"]], "steps": [
+        ["add", "copy", 4, 0], ["write", "stdout", "copied a\n"], ["advance", 0, 1],
+        ["write", "stderr", "warn\n"]]}),
+    ("progress_redirect_off", {"kind": "progress", "width": 30,
+                               "columns": [["description"], ["mofn"]],
+                               "options": {"redirect_stdout": False, "redirect_stderr": False}, "steps": [
+        ["add", "copy", 4, 0], ["write", "stdout", "raw\n"], ["write", "stderr", "raw\n"]]}),
+    ("progress_disabled_print", {"kind": "progress", "width": 30,
+                                 "columns": [["description"], ["mofn"]],
+                                 "options": {"disable": True}, "steps": [
+        ["add", "copy", 4, 0], ["print", "plain"], ["write", "stdout", "raw\n"]]}),
+    ("progress_transient_print", {"kind": "progress", "width": 30,
+                                  "columns": [["description"], ["mofn"]],
+                                  "options": {"transient": True}, "steps": [
+        ["add", "copy", 4, 0], ["print", "kept"], ["advance", 0, 4]]}),
+    ("status_stream", {"kind": "status", "width": 30, "message": "Working", "spinner": "dots",
+                       "steps": [
+        ["time", 0], ["refresh"], ["time", 0.25], ["refresh"], ["status", {"status": "Next"}],
+        ["print", "log line"], ["status", {"spinner": "line"}], ["time", 0.5], ["refresh"]]}),
+    ("status_no_refresh", {"kind": "status", "width": 30, "message": "Quiet", "spinner": "dots",
+                           "steps": [["time", 1.0]]}),
+    ("status_redirect", {"kind": "status", "width": 30, "message": "Busy", "spinner": "line",
+                         "steps": [["refresh"], ["write", "stdout", "out\n"], ["time", 0.2]]}),
+    ("spinner_text_object", {"kind": "spinner", "width": 30, "name": "dots",
+                             "text": ["text", "[b]literal[/b]"], "style": "green",
+                             "steps": [["render", 0], ["render", 0.1]]}),
+    ("spinner_renderable_table", {"kind": "spinner", "width": 20, "name": "line",
+                                  "text": ["table", "boxed"], "style": "red",
+                                  "steps": [["render", 0], ["render", 0.13], ["print", 0.26]]}),
+    ("spinner_renderable_wraps", {"kind": "spinner", "width": 16, "name": "dots",
+                                  "text": ["table", "a longer table cell"], "style": None,
+                                  "steps": [["render", 0]]}),
+    ("spinner_renderable_in_live", {"kind": "live_spinner", "width": 20, "name": "line",
+                                    "text": ["table", "x"], "style": None,
+                                    "steps": [["start", True], ["time", 0.13], ["refresh"], ["stop"]]}),
+    ("status_renderable", {"kind": "status", "width": 30, "message": ["table", "job"], "spinner": "line",
+                           "steps": [["refresh"], ["time", 0.13], ["status_text", "[b]literal[/b]"],
+                                     ["refresh"]]}),
+    ("status_text_object", {"kind": "status", "width": 30, "message": ["text", "[i]as is[/i]"],
+                            "spinner": "line", "steps": [["refresh"], ["status_text", ""], ["refresh"]]}),
+    ("status_not_terminal", {"kind": "status", "width": 30, "terminal": False, "message": "Busy",
+                             "spinner": "dots", "steps": [["refresh"], ["print", "p"]]}),
+]
+
+
+def _parity_live_table(cell: str):
+    from rich.table import Table
+
+    table = Table()
+    table.add_column("job")
+    table.add_row(cell)
+    return table
+
+
+def run_parity_live_case(case) -> list[str]:
+    import io
+    import os
+
+    from rich.live import Live
+    from rich.progress import Progress
+    from rich.status import Status
+
+    saved_term = os.environ.get("TERM")
+    if "term" in case:
+        os.environ["TERM"] = case["term"]
+    saved_streams = sys.stdout, sys.stderr
+    now = [0.0]
+    buffer, out, err = io.StringIO(), io.StringIO(), io.StringIO()
+    try:
+        terminal = case.get("terminal", True)
+        console = Console(
+            file=buffer, force_terminal=terminal, color_system="truecolor" if terminal else None,
+            width=case["width"], height=case.get("height", 5), highlight=False, no_color=False,
+            legacy_windows=False, get_time=lambda: now[0],
+        )
+        sys.stdout, sys.stderr = out, err
+        options = case.get("options", {})
+        kind = case["kind"]
+        spinner = None
+        if kind in ("spinner", "live_spinner"):
+            from rich.spinner import Spinner
+
+            text_kind, text_source = case["text"]
+            text = {"markup": lambda: text_source, "text": lambda: Text(text_source),
+                    "table": lambda: _parity_live_table(text_source)}[text_kind]()
+            spinner = Spinner(case["name"], text=text, style=case["style"])
+        if kind == "spinner":
+            display = None
+        elif kind == "live_spinner":
+            display = Live(spinner, console=console, auto_refresh=False, **options)
+        elif kind == "live":
+            display = Live(Text.from_markup(case["markup"]), console=console, auto_refresh=False,
+                           **options)
+        elif kind == "progress":
+            display = Progress(*progress_columns(case["columns"]), console=console,
+                               auto_refresh=False, get_time=lambda: now[0], **options)
+            display.start()
+        else:
+            message = case["message"]
+            if isinstance(message, list):
+                message = (_parity_live_table(message[1]) if message[0] == "table"
+                           else Text(message[1]))
+            display = Status(message, console=console, spinner=case["spinner"])
+            display._live.auto_refresh = False
+            display.start()
+        for step in case["steps"]:
+            op = step[0]
+            if op == "start":
+                display.start(refresh=step[1])
+            elif op == "stop":
+                display.stop()
+            elif op == "update":
+                display.update(Text.from_markup(step[1]), refresh=step[2])
+            elif op == "refresh":
+                (display._live if kind == "status" else display).refresh()
+            elif op == "print" and kind != "spinner":
+                console.print(step[1])
+            elif op == "write":
+                getattr(sys, step[1]).write(step[2])
+            elif op == "flush":
+                getattr(sys, step[1]).flush()
+            elif op == "time":
+                now[0] = float(step[1])
+            elif op == "add":
+                display.add_task(step[1], total=step[2], completed=step[3])
+            elif op == "advance":
+                display.advance(step[1], step[2])
+            elif op == "status":
+                display.update(**step[1])
+            elif op == "status_text":
+                display.update(Text(step[1]))
+            elif op == "render":
+                console.print(spinner.render(step[1]))
+            elif op == "print" and kind == "spinner":
+                now[0] = float(step[1])
+                console.print(spinner)
+            else:
+                raise SystemExit(f"unknown parity live step {op!r}")
+        if kind in ("progress", "status"):
+            display.stop()
+    finally:
+        sys.stdout, sys.stderr = saved_streams
+        if saved_term is None:
+            os.environ.pop("TERM", None)
+        else:
+            os.environ["TERM"] = saved_term
+    return [buffer.getvalue(), out.getvalue(), err.getvalue()]
+
+
+def capture_parity_live() -> None:
+    path = golden_dir() / "parity_live.tsv"
+    lines = [PARITY_LIVE_HEADER.rstrip("\n")]
+    for name, case in PARITY_LIVE_CASES:
+        outputs = run_parity_live_case(case)
+        lines.append(f"{name}\t{json.dumps(case, ensure_ascii=False)}\t{json.dumps(outputs, ensure_ascii=False)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(PARITY_LIVE_CASES)} live display parity cases to {path}")
 
 
 if __name__ == "__main__":

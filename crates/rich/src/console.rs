@@ -1815,7 +1815,7 @@ impl ConsoleBuilder {
 /// `Console.is_dumb_terminal` (the caller supplies the `is_terminal` half):
 /// `_detect_color_system` returns no colour system for one, so its output is
 /// plain even though it is a terminal.
-fn is_dumb_terminal() -> bool {
+pub(crate) fn is_dumb_terminal() -> bool {
     std::env::var("TERM")
         .map(|term| matches!(term.to_lowercase().as_str(), "dumb" | "unknown"))
         .unwrap_or(false)
