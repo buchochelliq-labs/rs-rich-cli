@@ -211,8 +211,14 @@ fn lay_out(page: &Page, view: View, width: u16, marks: &Marks) -> Projection {
             let y = (0..lines.len())
                 .map(|r| r as f64 / rows * page.height)
                 .collect();
-            let keys = (0..lines.len() as u64).collect();
-            Projection { lines, keys, y }
+            let keys: Vec<u64> = (0..lines.len() as u64).collect();
+            let rows = keys.iter().map(|&k| (k, k as usize)).collect();
+            Projection {
+                lines,
+                keys,
+                y,
+                rows,
+            }
         }
         _ => layout::project(page, width, (CELL.0 as f64, CELL.1 as f64), marks),
     }
@@ -231,7 +237,11 @@ fn follow_scroll(b: Browser, row: u64, cx: &mut Ctx) {
     }
     let timer = cx.after(FOLLOW, move |_| {
         b.follow.set(None);
-        let to = b.layout.with_untracked(|l| l.y_of(row as usize));
+        // The first row is the page's top, whatever its margin.
+        let to = match row {
+            0 => 0.0,
+            _ => b.layout.with_untracked(|l| l.y_of(row as usize)),
+        };
         let from = b.chrome_y.get_untracked();
         let screen = b.viewport.get_untracked().1 as f64 * CELL.1 as f64;
         let delta = to - from;
@@ -1413,15 +1423,23 @@ fn projection_view(b: Browser) -> Node {
     // keyed by the row's node, so the row in view stays when the page
     // grows above it.
     let line = move |i: usize| {
+        // The row this item is: by its key, as rows move when the page
+        // grows above them.
+        let key = b
+            .layout
+            .with_untracked(|l| l.keys.get(i).copied().unwrap_or(i as u64));
         renderable(move || {
             let marks = Marks {
                 find: b.find.get(),
                 current: b.found.with(|f| f.get(b.find_at.get()).copied()),
                 ..Marks::default()
             };
-            b.layout.with(|l| match l.lines.get(i) {
-                Some(line) => to_text(std::slice::from_ref(line), &marks, i),
-                None => rich::Text::new(""),
+            b.layout.with(|l| {
+                let row = l.rows.get(&key).copied().unwrap_or(i);
+                match l.lines.get(row) {
+                    Some(line) => to_text(std::slice::from_ref(line), &marks, row),
+                    None => rich::Text::new(""),
+                }
             })
         })
         .fixed(1)
@@ -1552,7 +1570,10 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         b.send(Command::Open(start.clone()));
         // Chrome's scroll follows ours, so the page's lazy loading and
         // infinite feeds see the reader scroll.
-        watch(move || b.scroll.get(), move |row, cx| follow_scroll(b, row, cx));
+        watch(
+            move || b.scroll.get(),
+            move |row, cx| follow_scroll(b, row, cx),
+        );
 
         let address = text(move || {
             let state = b.state.get();

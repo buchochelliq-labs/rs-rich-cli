@@ -339,3 +339,42 @@ fn the_isolated_world_pings_when_the_page_changes() {
         std::thread::sleep(Duration::from_millis(20));
     }
 }
+
+/// An infinite feed loads more when the page is scrolled to its end: by a
+/// turn of the wheel, as a user scrolls, and by the jump the reader's view
+/// asks for near the end of what was read. Each read happens on the
+/// page's change ping.
+#[test]
+fn an_infinite_feed_loads_more_when_scrolled_to_its_end() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let page = live.open("feed.html");
+    assert!(page.text().contains("Post 20"), "{}", page.text());
+    assert!(!page.text().contains("Post 21"), "{}", page.text());
+    // The wheel, a screen at a time, until the sentinel shows.
+    let start = Instant::now();
+    while !live
+        .page
+        .as_ref()
+        .is_some_and(|p| p.text().contains("Post 40"))
+    {
+        assert!(
+            start.elapsed() < Duration::from_secs(30),
+            "the wheel loaded nothing"
+        );
+        live.tab.send(Command::Wheel(720.0));
+        live.wait("a reading", |_| true);
+        std::thread::sleep(Duration::from_millis(200));
+        while let Ok(update) = live.updates.try_recv() {
+            if let Update::Page(page) = update {
+                live.page = Some(page);
+            }
+        }
+    }
+    // The view's ask near the end: Chrome goes to its bottom, and the
+    // feed grows again.
+    let id = live.tab.send(Command::LoadMore);
+    assert_eq!(live.result(id), Ok(()));
+    let page = live.wait("forty more", |p| p.text().contains("Post 60"));
+    assert!(page.height > 60.0 * 76.0, "{}", page.height);
+}

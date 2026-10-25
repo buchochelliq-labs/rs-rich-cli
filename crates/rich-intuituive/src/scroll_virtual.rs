@@ -674,7 +674,9 @@ impl Node {
     /// On a [`scroll_virtual`]: item `i`'s stable key, so an item keeps
     /// its node and its measured height when items are inserted or removed
     /// around it, and the top item in view keeps its row. Without it, an
-    /// item is keyed by its index.
+    /// item is keyed by its index. A kept node may then show an item at
+    /// another index than the one it was built for: what it draws should
+    /// follow its key (or the item it was built from), not the index.
     pub fn item_key(self, key: impl Fn(usize) -> u64 + 'static) -> Node {
         self.widget_mut(|view: &mut VirtualScroll| view.key = Some(Box::new(key)));
         self

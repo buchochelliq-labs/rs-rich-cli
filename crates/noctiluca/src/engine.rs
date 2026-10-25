@@ -195,7 +195,10 @@ pub trait Engine: Send {
     }
     /// Where the page is scrolled and how tall it is now.
     fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
-        Err(io::Error::new(io::ErrorKind::Unsupported, "no metrics here"))
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "no metrics here",
+        ))
     }
     /// What happened since the last call.
     fn events(&mut self) -> Vec<EngineEvent>;

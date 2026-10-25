@@ -382,9 +382,7 @@ impl Worker<'_> {
             Command::Resize(columns, rows) => self.engine.resize(columns, rows).map_err(failed),
             Command::Scroll(y) => self.scroll(PageAction::ScrollTo(y)).map_err(failed),
             Command::Wheel(delta) => self.scroll(PageAction::Wheel(delta)).map_err(failed),
-            Command::LoadMore => self
-                .scroll(PageAction::ScrollTo(f64::MAX))
-                .map_err(failed),
+            Command::LoadMore => self.scroll(PageAction::ScrollTo(f64::MAX)).map_err(failed),
             Command::Refresh => {
                 self.read();
                 Ok(())

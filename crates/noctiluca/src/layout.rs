@@ -636,6 +636,8 @@ pub struct Projection {
     /// Where each row is on the page, in CSS pixels from its top: its
     /// box's top plus its line's offset. Chrome's scroll follows it.
     pub y: Vec<f64>,
+    /// Each key's row.
+    pub rows: HashMap<u64, usize>,
 }
 
 impl Projection {
@@ -707,7 +709,14 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     let caption = vec![Span::new(table.caption.clone(), "bold italic")];
                     let mut rect = block.rect;
                     rect.height = ch;
-                    items.push(text_item(block.node, rect, left, right, caption, Vec::new()));
+                    items.push(text_item(
+                        block.node,
+                        rect,
+                        left,
+                        right,
+                        caption,
+                        Vec::new(),
+                    ));
                 }
                 for row in &table.rows {
                     for cell in row {
@@ -927,7 +936,10 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
     // Keys: a row with no box keeps to the row above it; a key met twice
     // (a table's caption and its cells share the table's node) is told
     // apart by how often it came.
-    let (mut keys, mut y) = (Vec::with_capacity(owner.len()), Vec::with_capacity(owner.len()));
+    let (mut keys, mut y) = (
+        Vec::with_capacity(owner.len()),
+        Vec::with_capacity(owner.len()),
+    );
     let mut seen: HashMap<u64, u64> = HashMap::new();
     let mut last = (0i64, 0usize, 0.0f64);
     let mut gap = 0usize;
@@ -983,7 +995,17 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             line
         })
         .collect();
-    Projection { lines, keys, y }
+    let rows = keys
+        .iter()
+        .enumerate()
+        .map(|(row, key)| (*key, row))
+        .collect();
+    Projection {
+        lines,
+        keys,
+        y,
+        rows,
+    }
 }
 
 /// Labels for `count` link hints: home-row letters, all the same length.

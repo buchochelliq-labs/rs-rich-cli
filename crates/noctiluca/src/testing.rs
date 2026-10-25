@@ -52,11 +52,35 @@ impl FakeState {
 /// as Chrome would report them, with no accessibility tree. A test grows
 /// it to stand for a page whose IntersectionObserver appended more.
 pub fn feed_snapshot(url: &str, posts: usize) -> PageSnapshot {
+    feed_snapshot_of(url, 1, posts as i64)
+}
+
+/// [`feed_snapshot`] with posts `first` to `last`: posts before 1 stand
+/// for posts the page inserted above. Each post's nodes keep their
+/// `backendNodeId` whatever is around them, as Chrome's do.
+pub fn feed_snapshot_of(url: &str, first: i64, last: i64) -> PageSnapshot {
+    let posts = (last - first + 1).max(0) as usize;
     use serde_json::json;
     // Strings: 0 url, 1 title, then names and style values.
     let mut strings: Vec<String> = [
-        url, "Feed", "#document", "HTML", "BODY", "H1", "P", "#text", "block", "visible",
-        "rgb(0, 0, 0)", "rgba(0, 0, 0, 0)", "400", "normal", "none", "1", "700", "inline",
+        url,
+        "Feed",
+        "#document",
+        "HTML",
+        "BODY",
+        "H1",
+        "P",
+        "#text",
+        "block",
+        "visible",
+        "rgb(0, 0, 0)",
+        "rgba(0, 0, 0, 0)",
+        "400",
+        "normal",
+        "none",
+        "1",
+        "700",
+        "inline",
     ]
     .iter()
     .map(|s| s.to_string())
@@ -64,8 +88,13 @@ pub fn feed_snapshot(url: &str, posts: usize) -> PageSnapshot {
     let block = json!([8, 9, 10, 11, 12, 13, 14, 13, 15]);
     let bold = json!([8, 9, 10, 11, 16, 13, 14, 13, 15]);
     let inline = json!([17, 9, 10, 11, 12, 13, 14, 13, 15]);
-    let (mut parent, mut kind, mut name, mut value, mut backend) =
-        (vec![-1, 0, 1], vec![9, 1, 1], vec![2, 3, 4], vec![-1, -1, -1], vec![1, 2, 3]);
+    let (mut parent, mut kind, mut name, mut value, mut backend) = (
+        vec![-1, 0, 1],
+        vec![9, 1, 1],
+        vec![2, 3, 4],
+        vec![-1, -1, -1],
+        vec![1, 2, 3],
+    );
     let height = 60.0 + 36.0 * posts as f64;
     let mut layout_node = vec![0, 1, 2];
     let mut styles = vec![json!([]), block.clone(), block.clone()];
@@ -75,20 +104,20 @@ pub fn feed_snapshot(url: &str, posts: usize) -> PageSnapshot {
         json!([8, 8, 784, height - 16.0]),
     ];
     let mut text = vec![-1i64, -1, -1];
-    let mut push = |tag: i64, words: String, y: f64, style: &serde_json::Value| {
+    let mut push = |tag: i64, id: i64, words: String, y: f64, style: &serde_json::Value| {
         let element = parent.len() as i64;
         parent.push(2);
         kind.push(1);
         name.push(tag);
         value.push(-1);
-        backend.push(10 + element);
+        backend.push(id);
         let at = strings.len() as i64;
         strings.push(words);
         parent.push(element);
         kind.push(3);
         name.push(7);
         value.push(at);
-        backend.push(11 + element);
+        backend.push(id + 1);
         layout_node.push(element);
         styles.push(style.clone());
         bounds.push(json!([8, y, 784, 18]));
@@ -98,9 +127,16 @@ pub fn feed_snapshot(url: &str, posts: usize) -> PageSnapshot {
         bounds.push(json!([8, y, 60, 18]));
         text.push(at);
     };
-    push(5, "Feed".into(), 8.0, &bold);
-    for k in 0..posts {
-        push(6, format!("Post {}", k + 1), 60.0 + 36.0 * k as f64, &block);
+    push(5, 10, "Feed".into(), 8.0, &bold);
+    for (k, post) in (first..=last).enumerate() {
+        let id = 100_000 + 2 * post;
+        push(
+            6,
+            id,
+            format!("Post {post}"),
+            60.0 + 36.0 * k as f64,
+            &block,
+        );
     }
     let n = parent.len();
     let empty = || json!({"index": [], "value": []});
