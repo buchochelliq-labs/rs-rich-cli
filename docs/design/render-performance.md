@@ -444,9 +444,11 @@ Steps 1 to 3 are independent of 4 to 6, and can run alongside them.
 
 - **Decided on 2026-10-25:** `best` ships opt-in for one release, then
   becomes the default once it beats `cells` on every scene. Work starts
-  now, game-derived pieces first (the timedemo, data-oriented cells and
-  the frame stats), on two branches: the painter, and the viewport with
-  Noctiluca.
+  now on two branches: the painter, and the viewport with Noctiluca.
+- **Decided on 2026-10-25:** the game ideas are lessons, not features.
+  We learn how games optimise (measure first, profile each stage, then fix
+  the biggest measured cost) and apply that to our pipeline. Each change
+  is kept only if the benchmark shows a win.
 - **Terminals with unknown capabilities:**
   - scrolling stays off under tmux unless the benchmark shows a gain
     there;
