@@ -3,7 +3,21 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-10-20, evening)
+## Where things stand (2026-10-25)
+
+- **0.0.21 is published** (17 crates from `main` at `29084d4` by one
+  release run, `release-0.0.21`, on 2026-10-21; `rs-rich` 0.0.9 on PyPI,
+  `python-v0.0.9`; see the [0.0.21 release notes](../releases/0.0.21.md)).
+  The second wave below merged as #764 and the release PR as #765.
+- **0.0.22 is planned** ([plan](../plans/0.0.22.md), PR #767, tracker
+  #766).
+- **Wave 1's six workstreams are done**, each on a backup branch,
+  `claude/next-priority-items-3c5p8e-wip-{core,widgets,live,docs,mkt,rec}`,
+  and are being integrated.
+- **Next:** merge the six into one branch, run every gate on the merged
+  tree, then the next wave of the [plan](../plans/0.0.22.md#workstreams).
+
+## Where things stood (2026-10-20, evening)
 
 - **0.0.20 is published** (17 crates from `56c6c97`; `rs-rich` 0.0.8 on
   PyPI).

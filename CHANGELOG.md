@@ -9,15 +9,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## 0.0.21 cohort — to be published
+## 0.0.21 cohort — published 2026-10-21
 
-To be published from `main` by one `release.yml` run (tag
+Published on 2026-10-21 from `29084d4` by one `release.yml` run (tag
 `release-0.0.21`): core 0.0.11 / macros 0.0.5 / plugin API 0.0.5 /
 art 0.0.14 / diagram 0.0.4 / mermaid 0.0.7 / lumis 0.0.5 / ext 0.0.18 /
 micro 0.0.7 / record 0.0.9 / interact 0.0.9 / ratatui 0.0.6 /
 intuituive 0.0.6 / embed 0.0.4 / web 0.0.4 / data 0.0.5 / CLI 0.0.21, and
-`rs-rich` 0.0.9 on PyPI (`python-v0.0.9`, same commit). See
-[the release notes](docs/releases/0.0.21.md).
+`rs-rich` 0.0.9 on PyPI (`python-v0.0.9`, same commit) followed early on
+2026-10-22 (UTC). See [the release notes](docs/releases/0.0.21.md).
 
 ### Python: this cohort's Rust APIs, and rs-rich's identity on the Python site (rs-rich on PyPI)
 

@@ -53,8 +53,9 @@ topic and a widget index.
 ## New in 0.0.21
 
 ![Memo celebrating, trunk up, with confetti cells](assets/intuituive/mascot/elephant-celebrate.svg){ .tui-mascot width="128" }
-0.0.21 ([release notes](releases/0.0.21.md)) fixes what the demo loop's
-seventh round found and adds what the clones and a consumer asked for.
+0.0.21, published on 2026-10-21 ([release notes](releases/0.0.21.md)),
+fixes what the demo loop's seventh round found and adds what the clones and
+a consumer asked for.
 
 - **Widgets:** [form controls](guide/intuituive/controls.md) (buttons,
   check boxes, switches, radios, sliders, select fields), a log pane fed by
@@ -277,6 +278,6 @@ published or not. Each crate versions independently; see
 | ![](assets/rs-rich/troubleshooting.svg){ .rs-icon width="20" } [Troubleshooting](troubleshooting.md) | When the output is not what you expected |
 | ![](assets/rs-rich/known-issues.svg){ .rs-icon width="20" } [Known issues](known-issues.md) | What is known not to work yet |
 | ![](assets/rs-rich/plans.svg){ .rs-icon width="20" } [Development plans](plans/1.0.0.md) | What each release sets out to do |
-| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.20.md) | What each release shipped |
+| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.21.md) | What each release shipped |
 | ![](assets/rs-rich/parity.svg){ .rs-icon width="20" } [Parity with Python rich](parity.md) | What matches upstream, and how it is proven |
 | ![](assets/rs-rich/contributing.svg){ .rs-icon width="20" } [Contributing](BRANCHING.md) | Branches, architecture and design notes |

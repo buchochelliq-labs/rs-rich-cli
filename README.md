@@ -55,8 +55,8 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 
 ## New in 0.0.21
 
-[Release notes](docs/releases/0.0.21.md). Round 7's fixes, and what the
-demo clones and a consumer asked for:
+Published on 2026-10-21 ([release notes](docs/releases/0.0.21.md)). Round
+7's fixes, and what the demo clones and a consumer asked for:
 
 - **Widgets:** form controls (buttons, check boxes, switches, radios,
   sliders, select fields), a log pane fed by `tracing`, text editing with
@@ -176,9 +176,9 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 ## Releases
 
 Each release has notes in [`docs/releases/`](docs/releases/) (the newest
-published one is [0.0.20](docs/releases/0.0.20.md)), and
-[`CHANGELOG.md`](CHANGELOG.md) lists every change. 0.0.21 is in progress: see
-the [roadmap](docs/ROADMAP.md) and the [0.0.21 plan](docs/plans/0.0.21.md). The
+published one is [0.0.21](docs/releases/0.0.21.md)), and
+[`CHANGELOG.md`](CHANGELOG.md) lists every change. What comes next is in the
+[roadmap](docs/ROADMAP.md) and the [0.0.22 plan](docs/plans/0.0.22.md). The
 manifest table above describes this checkout; crates.io is the source for
 published versions.
 
