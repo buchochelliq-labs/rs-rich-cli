@@ -21,7 +21,10 @@
 //! - keys, the mouse and pastes go in as `Input.dispatchKeyEvent`,
 //!   `Input.dispatchMouseEvent` and `Input.insertText`;
 //! - the address, loading state and history come from `Page` events and
-//!   `Page.getNavigationHistory`.
+//!   `Page.getNavigationHistory`;
+//! - any other command goes to the page through [`DevTools::call`], for an
+//!   app that reads the page itself (`DOMSnapshot.captureSnapshot`,
+//!   `Accessibility.getFullAXTree`, …).
 //!
 //! The browser is found at an explicit path, else by the usual names on
 //! `PATH` ([`BINARY_NAMES`]). Nothing is downloaded.
@@ -121,6 +124,51 @@ struct Shared {
     child: Option<Child>,
 }
 
+/// A command an app sends the page, and where its answer goes.
+struct Call {
+    method: String,
+    params: Value,
+    answer: Sender<io::Result<Value>>,
+}
+
+/// The page's DevTools, for the commands the engine does not send itself:
+/// from [`ChromeEngine::devtools`]. `Clone` and `Send`: a thread of the
+/// app's may hold one. Every call goes to the page's session, after the
+/// page is attached; what the page says back is the page's, and is
+/// untrusted.
+#[derive(Clone, Debug)]
+pub struct DevTools {
+    calls: Sender<Call>,
+}
+
+impl DevTools {
+    /// Send `method` with `params` to the page, and wait up to `timeout`
+    /// for its `result`. DevTools's own error, a browser that has gone and
+    /// a timeout are errors.
+    pub fn call(&self, method: &str, params: Value, timeout: Duration) -> io::Result<Value> {
+        let (answer, wait) = mpsc::channel();
+        let call = Call {
+            method: method.to_string(),
+            params,
+            answer,
+        };
+        self.calls
+            .send(call)
+            .map_err(|_| io::Error::new(ErrorKind::BrokenPipe, "the browser has gone"))?;
+        match wait.recv_timeout(timeout) {
+            Ok(result) => result,
+            Err(mpsc::RecvTimeoutError::Timeout) => Err(io::Error::new(
+                ErrorKind::TimedOut,
+                format!("{method}: no answer in time"),
+            )),
+            Err(mpsc::RecvTimeoutError::Disconnected) => Err(io::Error::new(
+                ErrorKind::BrokenPipe,
+                "the browser has gone",
+            )),
+        }
+    }
+}
+
 fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
     shared.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -154,6 +202,7 @@ pub struct ChromeEngine {
     cell: (u32, u32),
     shared: Arc<Mutex<Shared>>,
     commands: Option<Sender<Request>>,
+    calls: Option<Sender<Call>>,
     profile: Option<PathBuf>,
     wire: Wire,
 }
@@ -182,6 +231,7 @@ impl ChromeEngine {
             cell: (10, 20),
             shared: Arc::default(),
             commands: None,
+            calls: None,
             profile: None,
             wire: Wire::DEFAULT,
         }
@@ -238,6 +288,19 @@ impl ChromeEngine {
             .find(|path| path.is_file())
     }
 
+    /// The page's DevTools, for commands of the app's own. Starts the
+    /// browser if it has not started.
+    pub fn devtools(&mut self) -> io::Result<DevTools> {
+        if self.commands.is_none() {
+            self.start()?;
+        }
+        let calls = self
+            .calls
+            .clone()
+            .ok_or_else(|| io::Error::new(ErrorKind::BrokenPipe, "the browser has gone"))?;
+        Ok(DevTools { calls })
+    }
+
     fn fail(&self, message: impl Into<String>) {
         lock(&self.shared).state.error = Some(message.into());
         notify(&self.shared);
@@ -286,10 +349,12 @@ impl ChromeEngine {
         lock(&self.shared).child = Some(child);
         let (sender, receiver) = mpsc::channel();
         self.commands = Some(sender);
+        let (calls, called) = mpsc::channel();
+        self.calls = Some(calls);
         let shared = Arc::clone(&self.shared);
         let cell = self.cell;
         thread::spawn(move || {
-            if let Err(error) = run(connect, stderr, receiver, &shared, cell) {
+            if let Err(error) = run(connect, stderr, receiver, called, &shared, cell) {
                 let mut state = lock(&shared);
                 state.state.error = Some(format!("Chrome: {error}"));
                 state.state.loading = false;
@@ -317,6 +382,7 @@ impl Drop for ChromeEngine {
     fn drop(&mut self) {
         // Closing the channel ends the thread's loop; the browser goes now.
         self.commands = None;
+        self.calls = None;
         let child = lock(&self.shared).child.take();
         if let Some(mut child) = child {
             let _ = child.kill();
@@ -830,11 +896,12 @@ impl Transport {
 }
 
 /// What a pending command's answer is for.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 enum Pending {
     CreateTarget,
     Attach,
     History,
+    /// An app's, through [`DevTools`]: the answer goes back to it.
+    Call(Sender<io::Result<Value>>),
     Other,
 }
 
@@ -853,6 +920,8 @@ struct Session {
     cell: (u32, u32),
     /// What the app asked for before the page was attached.
     waiting: Vec<Request>,
+    /// The app's DevTools calls made before the page was attached.
+    calls: Vec<Call>,
 }
 
 impl Session {
@@ -866,6 +935,15 @@ impl Session {
 
     fn page(&mut self, method: &str, params: Value) -> io::Result<()> {
         self.send(method, params, Pending::Other, true)
+    }
+
+    /// Send an app's call to the page, or keep it until there is one.
+    fn call(&mut self, call: Call) -> io::Result<()> {
+        if self.session.is_none() {
+            self.calls.push(call);
+            return Ok(());
+        }
+        self.send(&call.method, call.params, Pending::Call(call.answer), true)
     }
 
     fn screencast(&mut self) -> io::Result<()> {
@@ -941,10 +1019,15 @@ impl Session {
                 .map(|at| self.pending.remove(at).1)
                 .unwrap_or(Pending::Other);
             if let Some(error) = message.get("error") {
-                if kind != Pending::Other {
-                    return Err(io::Error::other(error.to_string()));
-                }
-                return Ok(());
+                return match kind {
+                    Pending::Other => Ok(()),
+                    // An app's call failing fails only that call.
+                    Pending::Call(answer) => {
+                        let _ = answer.send(Err(io::Error::other(error.to_string())));
+                        Ok(())
+                    }
+                    _ => Err(io::Error::other(error.to_string())),
+                };
             }
             let result = &message["result"];
             match kind {
@@ -965,6 +1048,12 @@ impl Session {
                     for command in std::mem::take(&mut self.waiting) {
                         self.apply(command)?;
                     }
+                    for call in std::mem::take(&mut self.calls) {
+                        self.call(call)?;
+                    }
+                }
+                Pending::Call(answer) => {
+                    let _ = answer.send(Ok(result.clone()));
                 }
                 Pending::History => {
                     let entries = result["entries"].as_array().cloned().unwrap_or_default();
@@ -1043,6 +1132,7 @@ fn run(
     connect: Connect,
     stderr: ChildStderr,
     commands: Receiver<Request>,
+    calls: Receiver<Call>,
     shared: &Mutex<Shared>,
     cell: (u32, u32),
 ) -> io::Result<()> {
@@ -1062,6 +1152,7 @@ fn run(
         size: (80, 24),
         cell,
         waiting: Vec::new(),
+        calls: Vec::new(),
     };
     session.send(
         "Browser.setDownloadBehavior",
@@ -1087,6 +1178,9 @@ fn run(
                     return Ok(());
                 }
             }
+        }
+        while let Ok(call) = calls.try_recv() {
+            session.call(call)?;
         }
         if let Some(text) = session.transport.read()? {
             session.message(&text, shared)?;

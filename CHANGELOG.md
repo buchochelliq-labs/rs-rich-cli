@@ -9,6 +9,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### rs-rich-embed
+
+- `ChromeEngine::devtools` and `DevTools::call`: an app's own DevTools
+  command to the page (`DOMSnapshot.captureSnapshot`,
+  `Accessibility.getFullAXTree`, …), answered on a channel of its own. A
+  call DevTools refuses fails only that call. The first step of the
+  Noctiluca browser's CDP work (`docs/design/browser.md`).
+
 ## 0.0.21 cohort — to be published
 
 To be published from `main` by one `release.yml` run (tag
