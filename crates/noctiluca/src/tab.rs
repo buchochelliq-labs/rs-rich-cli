@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 use rich_embed::PageState;
 
 use crate::engine::{
-    Engine, EngineEvent, Format, HistoryStep, MediaOp, NodeId, PageAction, Rect, TabId,
+    Engine, EngineEvent, Format, HistoryStep, MediaOp, Metrics, NodeId, PageAction, Rect, TabId,
 };
 use crate::model::{build, Binding, Control, MediaKind, Page, Revisions, Role};
 
@@ -72,8 +72,16 @@ pub enum Command {
         name: String,
         nth: usize,
     },
-    /// Scroll the page so this many CSS pixels are above its viewport.
+    /// Scroll the page so this many CSS pixels are above its viewport: a
+    /// jump. `f64::MAX` is the bottom.
     Scroll(f64),
+    /// Turn the wheel by this many CSS pixels: the page sees the user
+    /// scroll, so its lazy loading and infinite feeds go on.
+    Wheel(f64),
+    /// The reader is near the end of what was read: scroll the page to its
+    /// bottom, so an infinite feed loads more. The page is read again on
+    /// its change ping, as always.
+    LoadMore,
     /// Play, pause, mute or set the volume of the video or audio element
     /// `node` of the document `document`.
     Media {
@@ -123,6 +131,8 @@ pub enum Update {
     State(PageState),
     /// The command with this id finished.
     Done(u64, Result<(), Refusal>),
+    /// Where the page is scrolled and how tall it is, read after a scroll.
+    Metrics(Metrics),
     /// A download began, and waits in the quarantine.
     Download {
         guid: String,
@@ -349,15 +359,31 @@ impl Worker<'_> {
         }
     }
 
+    /// Scroll the page, then say where it is. A document taller than the
+    /// one read (a feed that loaded more without a ping yet) is read again
+    /// soon.
+    fn scroll(&mut self, action: PageAction) -> std::io::Result<()> {
+        self.engine.act(TabId(0), &action)?;
+        if let Ok(metrics) = self.engine.metrics(TabId(0)) {
+            let read = self.page.as_ref().map_or(0.0, |p| p.height);
+            if metrics.content_height > read + 1.0 {
+                self.dirty.get_or_insert_with(Instant::now);
+            }
+            (self.update)(Update::Metrics(metrics));
+        }
+        Ok(())
+    }
+
     fn run_command(&mut self, command: Command) -> Result<(), Refusal> {
         let failed = |e: std::io::Error| Refusal::Failed(crate::clean::clean(&e.to_string()));
         match command {
             Command::Open(url) => self.engine.open(TabId(0), &url).map_err(failed),
             Command::History(step) => self.engine.history(TabId(0), step).map_err(failed),
             Command::Resize(columns, rows) => self.engine.resize(columns, rows).map_err(failed),
-            Command::Scroll(y) => self
-                .engine
-                .act(TabId(0), &PageAction::ScrollTo(y))
+            Command::Scroll(y) => self.scroll(PageAction::ScrollTo(y)).map_err(failed),
+            Command::Wheel(delta) => self.scroll(PageAction::Wheel(delta)).map_err(failed),
+            Command::LoadMore => self
+                .scroll(PageAction::ScrollTo(f64::MAX))
                 .map_err(failed),
             Command::Refresh => {
                 self.read();

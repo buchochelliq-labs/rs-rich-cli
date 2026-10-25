@@ -620,6 +620,38 @@ const MAX_MEDIA_ROWS: usize = 200;
 /// The page projected by Chrome's geometry into a canvas `columns` wide,
 /// with cells of `cell` CSS pixels: the lines, one per row.
 pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Vec<Line> {
+    project(page, columns, cell, marks).lines
+}
+
+/// The [`projection`], with what each row is.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Projection {
+    /// The lines, one per row.
+    pub lines: Vec<Line>,
+    /// Each row's key, stable across readings of the page: the node of the
+    /// first box on it (its `backendNodeId`) and which of the box's lines
+    /// it is. A scroll view anchors on it, so the row in view stays when
+    /// the page grows above it.
+    pub keys: Vec<u64>,
+    /// Where each row is on the page, in CSS pixels from its top: its
+    /// box's top plus its line's offset. Chrome's scroll follows it.
+    pub y: Vec<f64>,
+}
+
+impl Projection {
+    /// The page's y, in CSS pixels, of row `row` (past the end, the last
+    /// row's).
+    pub fn y_of(&self, row: usize) -> f64 {
+        self.y
+            .get(row)
+            .or(self.y.last())
+            .copied()
+            .unwrap_or_default()
+    }
+}
+
+/// The [`projection`] with its rows' keys and page positions.
+pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Projection {
     let columns = columns.max(10) as usize;
     let (cw, ch) = (cell.0.max(1.0), cell.1.max(1.0));
     /// A box to place: where Chrome put it, and what it holds.
@@ -633,6 +665,8 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
         /// lines kept as they are (code, media).
         wrap: Option<(Vec<Span>, Vec<Span>)>,
         lines: Vec<Line>,
+        /// The node it shows.
+        node: crate::engine::NodeId,
     }
     let mut items: Vec<Item> = Vec::new();
     let snap = |left: f64, right: f64| -> (usize, usize) {
@@ -642,19 +676,24 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
         let x1 = ((right / cw).round() as usize).clamp(x0 + 1, columns);
         (x0, x1)
     };
-    let text_item =
-        |rect: crate::engine::Rect, left: f64, right: f64, spans: Vec<Span>, first: Vec<Span>| {
-            let (x0, x1) = snap(left, right);
-            Item {
-                top: rect.y,
-                bottom: rect.bottom(),
-                left,
-                x0,
-                x1,
-                wrap: Some((spans, first)),
-                lines: Vec::new(),
-            }
-        };
+    let text_item = |node: crate::engine::NodeId,
+                     rect: crate::engine::Rect,
+                     left: f64,
+                     right: f64,
+                     spans: Vec<Span>,
+                     first: Vec<Span>| {
+        let (x0, x1) = snap(left, right);
+        Item {
+            top: rect.y,
+            bottom: rect.bottom(),
+            left,
+            x0,
+            x1,
+            wrap: Some((spans, first)),
+            lines: Vec::new(),
+            node,
+        }
+    };
     for block in &page.blocks {
         let left = block.rect.x.min(if block.frame.width > 0.0 {
             block.frame.x
@@ -668,13 +707,14 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
                     let caption = vec![Span::new(table.caption.clone(), "bold italic")];
                     let mut rect = block.rect;
                     rect.height = ch;
-                    items.push(text_item(rect, left, right, caption, Vec::new()));
+                    items.push(text_item(block.node, rect, left, right, caption, Vec::new()));
                 }
                 for row in &table.rows {
                     for cell in row {
                         let base = if cell.header { "bold" } else { "" };
                         let spans = spans(&cell.runs, base, page, marks);
                         items.push(text_item(
+                            block.node,
                             cell.rect,
                             cell.rect.x,
                             cell.rect.right(),
@@ -713,6 +753,7 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
                     x1: m1,
                     wrap: None,
                     lines,
+                    node: media.node,
                 });
             }
             BlockKind::Control(index) => {
@@ -732,6 +773,7 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
                     control: Some(*index),
                 };
                 items.push(text_item(
+                    control.node,
                     control.rect,
                     control.rect.x,
                     control.rect.right(),
@@ -754,6 +796,7 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
                     x1,
                     wrap: None,
                     lines,
+                    node: block.node,
                 });
             }
             kind => {
@@ -770,6 +813,7 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
                     }
                 }
                 items.push(text_item(
+                    block.node,
                     block.rect,
                     left,
                     right,
@@ -816,16 +860,19 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
         let rb = (b.top / ch).round() as i64;
         ra.cmp(&rb).then(a.left.total_cmp(&b.left))
     });
-    let boxes: Vec<(f64, f64, usize, usize, Vec<Line>)> = items
+    let boxes: Vec<(f64, f64, usize, usize, Vec<Line>, crate::engine::NodeId)> = items
         .into_iter()
-        .map(|i| (i.top, i.left, i.x0, i.x1, i.lines))
+        .map(|i| (i.top, i.left, i.x0, i.x1, i.lines, i.node))
         .collect();
+    // Each row's first box: its node, which of its lines, and that line's
+    // place on the page.
+    let mut owner: Vec<Option<(crate::engine::NodeId, usize, f64)>> = Vec::new();
     let mut skyline = vec![0usize; columns];
     // Each cell holds its grapheme (a character and any zero-width marks
     // after it); an empty string is the second cell of a wide character.
     let mut grid: Vec<Vec<Option<(String, usize)>>> = Vec::new();
     let mut styles: Vec<(String, Option<usize>)> = Vec::new();
-    for (top, _, x0, x1, lines) in boxes {
+    for (top, _, x0, x1, lines, node) in boxes {
         // A page can place a block millions of pixels down: blank rows
         // past a few screens tell the reader nothing, so the gap is capped
         // and the grid grows with the content, not the coordinates.
@@ -835,7 +882,9 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
             let row = y + k;
             while grid.len() <= row {
                 grid.push(vec![None; columns]);
+                owner.push(None);
             }
+            owner[row].get_or_insert((node, k, top + k as f64 * ch));
             let mut x = x0;
             for span in &line.spans {
                 let style = styles
@@ -875,7 +924,35 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
             *slot = y + lines.len();
         }
     }
-    grid.into_iter()
+    // Keys: a row with no box keeps to the row above it; a key met twice
+    // (a table's caption and its cells share the table's node) is told
+    // apart by how often it came.
+    let (mut keys, mut y) = (Vec::with_capacity(owner.len()), Vec::with_capacity(owner.len()));
+    let mut seen: HashMap<u64, u64> = HashMap::new();
+    let mut last = (0i64, 0usize, 0.0f64);
+    let mut gap = 0usize;
+    for row in &owner {
+        let (node, k, at) = match row {
+            Some(found) => {
+                last = *found;
+                gap = 0;
+                *found
+            }
+            None => {
+                gap += 1;
+                (last.0, last.1, last.2 + gap as f64 * ch)
+            }
+        };
+        let mut hash = std::collections::hash_map::DefaultHasher::new();
+        std::hash::Hash::hash(&(node, k, gap), &mut hash);
+        let key = std::hash::Hasher::finish(&hash);
+        let count = seen.entry(key).or_default();
+        keys.push(key ^ count.wrapping_mul(0x9e37_79b9_7f4a_7c15));
+        *count += 1;
+        y.push(at);
+    }
+    let lines = grid
+        .into_iter()
         .map(|row| {
             let mut line = Line::default();
             for cell in row {
@@ -905,7 +982,8 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
             line.spans.retain(|s| !s.text.is_empty());
             line
         })
-        .collect()
+        .collect();
+    Projection { lines, keys, y }
 }
 
 /// Labels for `count` link hints: home-row letters, all the same length.

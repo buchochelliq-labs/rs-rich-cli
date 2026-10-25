@@ -10,8 +10,8 @@ use rich_embed::PageState;
 use serde_json::Value;
 
 use crate::engine::{
-    Engine, EngineEvent, Format, Frame, HistoryStep, MediaOp, PageAction, PageSnapshot, Playback,
-    Rect, TabId,
+    Engine, EngineEvent, Format, Frame, HistoryStep, MediaOp, Metrics, PageAction, PageSnapshot,
+    Playback, Rect, TabId,
 };
 
 /// What a [`FakeEngine`] shows, shared with the test.
@@ -29,6 +29,104 @@ pub struct FakeState {
     pub events: Vec<EngineEvent>,
     /// Media elements' playback, by node; media ops change it.
     pub media: HashMap<i64, Playback>,
+    /// The CSS pixels above the viewport: scrolling and the wheel move it,
+    /// within the document.
+    pub scroll_y: f64,
+    /// The viewport's height in CSS pixels.
+    pub viewport_height: f64,
+}
+
+impl FakeState {
+    /// The current page's height in CSS pixels.
+    pub fn content_height(&self) -> f64 {
+        self.current
+            .as_ref()
+            .and_then(|name| self.pages.get(name))
+            .and_then(|s| s.dom["documents"][0]["contentHeight"].as_f64())
+            .unwrap_or(0.0)
+    }
+}
+
+/// A snapshot of a feed page at `url`: a heading, then `posts` paragraphs
+/// ("Post 1", "Post 2", …), each 36 CSS pixels below the last, laid out
+/// as Chrome would report them, with no accessibility tree. A test grows
+/// it to stand for a page whose IntersectionObserver appended more.
+pub fn feed_snapshot(url: &str, posts: usize) -> PageSnapshot {
+    use serde_json::json;
+    // Strings: 0 url, 1 title, then names and style values.
+    let mut strings: Vec<String> = [
+        url, "Feed", "#document", "HTML", "BODY", "H1", "P", "#text", "block", "visible",
+        "rgb(0, 0, 0)", "rgba(0, 0, 0, 0)", "400", "normal", "none", "1", "700", "inline",
+    ]
+    .iter()
+    .map(|s| s.to_string())
+    .collect();
+    let block = json!([8, 9, 10, 11, 12, 13, 14, 13, 15]);
+    let bold = json!([8, 9, 10, 11, 16, 13, 14, 13, 15]);
+    let inline = json!([17, 9, 10, 11, 12, 13, 14, 13, 15]);
+    let (mut parent, mut kind, mut name, mut value, mut backend) =
+        (vec![-1, 0, 1], vec![9, 1, 1], vec![2, 3, 4], vec![-1, -1, -1], vec![1, 2, 3]);
+    let height = 60.0 + 36.0 * posts as f64;
+    let mut layout_node = vec![0, 1, 2];
+    let mut styles = vec![json!([]), block.clone(), block.clone()];
+    let mut bounds = vec![
+        json!([0, 0, 800, height]),
+        json!([0, 0, 800, height]),
+        json!([8, 8, 784, height - 16.0]),
+    ];
+    let mut text = vec![-1i64, -1, -1];
+    let mut push = |tag: i64, words: String, y: f64, style: &serde_json::Value| {
+        let element = parent.len() as i64;
+        parent.push(2);
+        kind.push(1);
+        name.push(tag);
+        value.push(-1);
+        backend.push(10 + element);
+        let at = strings.len() as i64;
+        strings.push(words);
+        parent.push(element);
+        kind.push(3);
+        name.push(7);
+        value.push(at);
+        backend.push(11 + element);
+        layout_node.push(element);
+        styles.push(style.clone());
+        bounds.push(json!([8, y, 784, 18]));
+        text.push(-1);
+        layout_node.push(element + 1);
+        styles.push(inline.clone());
+        bounds.push(json!([8, y, 60, 18]));
+        text.push(at);
+    };
+    push(5, "Feed".into(), 8.0, &bold);
+    for k in 0..posts {
+        push(6, format!("Post {}", k + 1), 60.0 + 36.0 * k as f64, &block);
+    }
+    let n = parent.len();
+    let empty = || json!({"index": [], "value": []});
+    let dom = json!({
+        "documents": [{
+            "documentURL": 0, "title": 1, "baseURL": 0,
+            "contentWidth": 800, "contentHeight": height,
+            "scrollOffsetX": 0, "scrollOffsetY": 0,
+            "nodes": {
+                "parentIndex": parent, "nodeType": kind, "nodeName": name,
+                "nodeValue": value, "backendNodeId": backend,
+                "attributes": vec![json!([]); n],
+                "textValue": empty(), "inputValue": empty(),
+                "inputChecked": {"index": []}, "optionSelected": {"index": []},
+                "currentSourceURL": empty(),
+            },
+            "layout": {
+                "nodeIndex": layout_node, "styles": styles, "bounds": bounds, "text": text,
+            },
+        }],
+        "strings": strings,
+    });
+    PageSnapshot {
+        dom,
+        ax: Value::Null,
+    }
 }
 
 /// What a test does when an action runs.
@@ -128,7 +226,8 @@ pub fn follow(action: &PageAction, state: &mut FakeState) {
 }
 
 impl Engine for FakeEngine {
-    fn resize(&mut self, _columns: u16, _rows: u16) -> io::Result<()> {
+    fn resize(&mut self, _columns: u16, rows: u16) -> io::Result<()> {
+        self.lock().viewport_height = rows as f64 * crate::cdp::CELL.1 as f64;
         Ok(())
     }
 
@@ -204,6 +303,13 @@ impl Engine for FakeEngine {
         {
             let mut state = self.lock();
             state.actions.push(action.clone());
+            // Scrolling moves within the document, as a browser's does.
+            let bottom = (state.content_height() - state.viewport_height).max(0.0);
+            match action {
+                PageAction::ScrollTo(y) => state.scroll_y = y.clamp(0.0, bottom),
+                PageAction::Wheel(d) => state.scroll_y = (state.scroll_y + d).clamp(0.0, bottom),
+                _ => {}
+            }
             if let PageAction::Media { node, op } = action {
                 if let Some(p) = state.media.get_mut(node) {
                     match op {
@@ -230,6 +336,15 @@ impl Engine for FakeEngine {
             .get(&node)
             .copied()
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no media"))
+    }
+
+    fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
+        let state = self.lock();
+        Ok(Metrics {
+            scroll_y: state.scroll_y,
+            content_height: state.content_height(),
+            viewport_height: state.viewport_height,
+        })
     }
 
     fn events(&mut self) -> Vec<EngineEvent> {
