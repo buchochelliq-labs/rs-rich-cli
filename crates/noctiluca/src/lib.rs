@@ -17,11 +17,13 @@
 
 pub mod actions;
 pub mod app;
+pub mod args;
 pub mod bookmarks;
 pub mod cdp;
 pub mod clean;
 pub mod config;
 pub mod draft;
+pub mod dump;
 pub mod engine;
 pub mod layout;
 pub mod model;
