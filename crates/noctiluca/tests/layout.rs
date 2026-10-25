@@ -106,3 +106,44 @@ fn the_projection_never_puts_two_texts_in_one_cell_and_keeps_reading_order() {
         assert!(lines.iter().all(|l| l.width() <= 100), "{name}");
     }
 }
+
+/// A page of one paragraph saying `text`, at `y` CSS pixels down, 80 pixels
+/// wide (ten cells of 8).
+fn one_paragraph(text: &str, y: f64) -> Page {
+    use noctiluca::engine::Rect;
+    use noctiluca::model::{Block, BlockKind, Run};
+    let mut page = page("reader");
+    let mut block = page
+        .blocks
+        .iter()
+        .find(|b| b.kind == BlockKind::Paragraph)
+        .cloned()
+        .unwrap();
+    block.runs = vec![Run::plain(text)];
+    block.rect = Rect::new(0.0, y, 80.0, 18.0);
+    block.frame = block.rect;
+    page.blocks = vec![Block { ..block }];
+    page.media.clear();
+    page
+}
+
+#[test]
+fn a_combining_mark_at_the_edge_joins_its_letter() {
+    // Ten letters fill the ten columns; the accent is the tenth's.
+    let page = one_paragraph("abcdefghij\u{0301}", 0.0);
+    let lines = projection(&page, 10, (8.0, 18.0), &Marks::default());
+    assert_eq!(lines[0].plain(), "abcdefghij\u{0301}");
+    // Away from the edge it stays on its letter too.
+    let page = one_paragraph("ae\u{0301}x", 0.0);
+    let lines = projection(&page, 10, (8.0, 18.0), &Marks::default());
+    assert_eq!(lines[0].plain(), "ae\u{0301}x");
+}
+
+#[test]
+fn a_block_far_down_the_page_does_not_grow_the_projection() {
+    // Thirty million pixels down: about 1.7 million rows at 18 pixels.
+    let page = one_paragraph("far away", 30_000_000.0);
+    let lines = projection(&page, 10, (8.0, 18.0), &Marks::default());
+    assert!(lines.len() <= 300, "{} rows", lines.len());
+    assert_eq!(lines.last().unwrap().plain(), "far away");
+}

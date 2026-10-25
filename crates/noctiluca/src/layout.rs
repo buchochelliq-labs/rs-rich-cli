@@ -612,6 +612,11 @@ pub fn face(control: &Control) -> String {
     }
 }
 
+/// The most blank rows the projection keeps between two boxes.
+const MAX_GAP_ROWS: usize = 200;
+/// The most rows a media region takes in the projection.
+const MAX_MEDIA_ROWS: usize = 200;
+
 /// The page projected by Chrome's geometry into a canvas `columns` wide,
 /// with cells of `cell` CSS pixels: the lines, one per row.
 pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Vec<Line> {
@@ -682,7 +687,7 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
             BlockKind::Media(index) => {
                 let media = &page.media[*index];
                 let (m0, m1) = snap(media.rect.x, media.rect.right());
-                let rows = ((media.rect.height / ch).round() as usize).max(1);
+                let rows = ((media.rect.height / ch).round() as usize).clamp(1, MAX_MEDIA_ROWS);
                 let w = m1 - m0;
                 let lines = (0..rows)
                     .map(|r| {
@@ -816,10 +821,15 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
         .map(|i| (i.top, i.left, i.x0, i.x1, i.lines))
         .collect();
     let mut skyline = vec![0usize; columns];
-    let mut grid: Vec<Vec<Option<(char, usize)>>> = Vec::new();
+    // Each cell holds its grapheme (a character and any zero-width marks
+    // after it); an empty string is the second cell of a wide character.
+    let mut grid: Vec<Vec<Option<(String, usize)>>> = Vec::new();
     let mut styles: Vec<(String, Option<usize>)> = Vec::new();
     for (top, _, x0, x1, lines) in boxes {
-        let y0 = (top / ch).round().max(0.0) as usize;
+        // A page can place a block millions of pixels down: blank rows
+        // past a few screens tell the reader nothing, so the gap is capped
+        // and the grid grows with the content, not the coordinates.
+        let y0 = ((top / ch).round().max(0.0) as usize).min(grid.len() + MAX_GAP_ROWS);
         let y = skyline[x0..x1].iter().copied().max().unwrap_or(0).max(y0);
         for (k, line) in lines.iter().enumerate() {
             let row = y + k;
@@ -837,13 +847,25 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
                     });
                 for c in span.text.chars() {
                     let w = cell_len(&c.to_string());
+                    if w == 0 {
+                        // A combining mark joins the grapheme before it, in
+                        // that grapheme's cell; with none before it in the
+                        // box, it is dropped.
+                        let base = (x0..x)
+                            .rev()
+                            .find(|&at| grid[row][at].as_ref().is_some_and(|(g, _)| !g.is_empty()));
+                        if let Some(Some((g, _))) = base.map(|at| &mut grid[row][at]) {
+                            g.push(c);
+                        }
+                        continue;
+                    }
                     // Never past the box: what is beside it keeps its cells.
                     if x + w > x1 {
                         break;
                     }
-                    grid[row][x] = Some((c, style));
+                    grid[row][x] = Some((c.to_string(), style));
                     for extra in 1..w {
-                        grid[row][x + extra] = Some(('\0', style));
+                        grid[row][x + extra] = Some((String::new(), style));
                     }
                     x += w;
                 }
@@ -858,17 +880,17 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
             let mut line = Line::default();
             for cell in row {
                 let (c, style) = match cell {
-                    Some(('\0', _)) => continue,
-                    Some((c, s)) => (c, Some(s)),
-                    None => (' ', None),
+                    Some((g, _)) if g.is_empty() => continue,
+                    Some((g, s)) => (g, Some(s)),
+                    None => (" ".to_string(), None),
                 };
                 let (style, control) = style.map(|s| styles[s].clone()).unwrap_or_default();
                 match line.spans.last_mut() {
                     Some(last) if last.style == style && last.control == control => {
-                        last.text.push(c)
+                        last.text.push_str(&c)
                     }
                     _ => line.spans.push(Span {
-                        text: c.to_string(),
+                        text: c,
                         style,
                         control,
                     }),

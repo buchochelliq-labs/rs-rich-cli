@@ -439,3 +439,39 @@ fn the_string_forms_still_work() {
     driver.press("up tab down");
     assert_eq!(rows(&driver)[3], "0 1");
 }
+
+#[test]
+fn an_open_menu_chooses_the_option_it_shows_after_a_reorder() {
+    let app = App::new(|| {
+        let chosen = signal(Some(Dev::Hdmi));
+        let reversed = signal(false);
+        // The list turns round a second in, under the open menu.
+        intuituive::after(std::time::Duration::from_secs(1), move |_| {
+            reversed.set(true)
+        });
+        let options = move || {
+            let mut all = vec![
+                SelectOption::new(Dev::Usb, "USB").disabled("unplugged"),
+                SelectOption::new(Dev::Hdmi, "HDMI"),
+                SelectOption::new(Dev::Jack, "Jack"),
+            ];
+            if reversed.get() {
+                all.reverse();
+            }
+            all
+        };
+        column([
+            select_field_keyed(options, chosen).fixed(1),
+            text!("{:?}", chosen.get()).fixed(1),
+        ])
+    });
+    let mut driver = app.driver(30, 8);
+    driver.settle();
+    // The menu shows USB, HDMI, Jack; down moves from HDMI to Jack.
+    driver.press("enter");
+    driver.press("down");
+    // Now Jack, HDMI, USB: the menu's third item is USB by index.
+    driver.advance(std::time::Duration::from_millis(1100));
+    driver.press("enter");
+    assert_eq!(rows(&driver)[1], "Some(Jack)");
+}

@@ -126,6 +126,9 @@ pub(crate) struct Choices {
     current: Rc<dyn Fn(bool) -> Option<usize>>,
     /// Choose option `index`.
     choose: Rc<dyn Fn(usize)>,
+    /// Pin option `index` as it is now: the returned action chooses that
+    /// same option later, by its key, even if the options have moved.
+    pin: Rc<dyn Fn(usize) -> Rc<dyn Fn()>>,
 }
 
 impl Choices {
@@ -134,6 +137,8 @@ impl Choices {
         options: impl Fn() -> Vec<String> + 'static,
         selected: Signal<usize>,
     ) -> Choices {
+        let options = Rc::new(options);
+        let count = options.clone();
         Choices {
             options: Rc::new(move || {
                 options()
@@ -152,6 +157,15 @@ impl Choices {
                 })
             }),
             choose: Rc::new(move |index| selected.set(index)),
+            pin: Rc::new(move |index| {
+                let count = count.clone();
+                // An index the options no longer reach chooses nothing.
+                Rc::new(move || {
+                    if index < count().len() {
+                        selected.set(index);
+                    }
+                })
+            }),
         }
     }
 
@@ -165,6 +179,7 @@ impl Choices {
         let options = Rc::new(options);
         let read = options.clone();
         let pick = options.clone();
+        let pinned = options.clone();
         if crate::reactive::Runtime::try_current().is_some() {
             // A removed key goes: the field says nothing is chosen.
             let all = options.clone();
@@ -209,6 +224,18 @@ impl Choices {
                     selected.set(Some(option.key));
                 }
             }),
+            pin: Rc::new(move |index| {
+                let key = pinned().into_iter().nth(index).map(|o| o.key);
+                let options = pinned.clone();
+                Rc::new(move || {
+                    let Some(key) = &key else { return };
+                    // The option with that key now, if it is still there and
+                    // may still be chosen.
+                    if options().iter().any(|o| o.key == *key && o.enabled) {
+                        selected.set(Some(key.clone()));
+                    }
+                })
+            }),
         }
     }
 
@@ -218,6 +245,13 @@ impl Choices {
 
     pub(crate) fn current(&self, tracked: bool) -> Option<usize> {
         (self.current)(tracked)
+    }
+
+    /// An action that chooses option `index` as it is now, later: by its
+    /// key for the keyed forms, so a reordered list still chooses it, and
+    /// not at all once it is gone or disabled.
+    pub(crate) fn pin(&self, index: usize) -> Rc<dyn Fn()> {
+        (self.pin)(index)
     }
 
     /// Choose option `index`, if it is there and enabled.
@@ -386,10 +420,12 @@ impl SelectField {
             .iter()
             .enumerate()
             .map(|(i, option)| {
-                let (choices, open) = (self.choices.clone(), self.open.clone());
+                // Pinned now, so a list that changes while the menu is open
+                // still chooses the option shown.
+                let (pick, open) = (self.choices.pin(i), self.open.clone());
                 let item = MenuItem::new(&option.label, move |_| {
                     open.set(false);
-                    choices.choose(i);
+                    pick();
                 });
                 match option.enabled {
                     true => item,
