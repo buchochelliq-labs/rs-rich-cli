@@ -151,6 +151,40 @@ impl Segment {
         lines
     }
 
+    /// [`split_lines`](Self::split_lines) of segments the caller is done
+    /// with: each is moved into its line rather than cloned, which a render
+    /// does once for every segment it makes (docs/PORTING.md, "Performance
+    /// notes"). `split_lines_owned_matches_split_lines` holds the two together.
+    pub(crate) fn split_lines_owned(segments: Vec<Segment>) -> Vec<Vec<Segment>> {
+        let mut lines: Vec<Vec<Segment>> = Vec::new();
+        let mut current: Vec<Segment> = Vec::new();
+        let mut empty_last_line = false;
+        for segment in segments {
+            if segment.control || !segment.text.contains('\n') {
+                if !segment.text.is_empty() {
+                    current.push(segment);
+                } else if !segment.control && current.is_empty() && !lines.is_empty() {
+                    empty_last_line = true;
+                }
+                continue;
+            }
+            empty_last_line = false;
+            let mut parts = segment.text.split('\n').peekable();
+            while let Some(part) = parts.next() {
+                if !part.is_empty() {
+                    current.push(Segment::new(part, segment.style.clone()));
+                }
+                if parts.peek().is_some() {
+                    lines.push(std::mem::take(&mut current));
+                }
+            }
+        }
+        if !current.is_empty() || empty_last_line {
+            lines.push(current);
+        }
+        lines
+    }
+
     /// Shape a set of lines into exactly `height` rows of `width` cells: crop
     /// extra rows, pad each row to `width`, and append blank rows to reach
     /// `height`. Port of `Segment.set_shape` (`style=None`, `new_lines=False`).
@@ -851,6 +885,42 @@ impl crate::protocol::Renderable for SegmentLines {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Moving the segments splits them as cloning them does, on every
+    /// sequence of up to five segments drawn from the kinds that matter.
+    #[test]
+    fn split_lines_owned_matches_split_lines() {
+        let bold = Style::parse("bold").unwrap();
+        let kinds = [
+            Segment::new("ab", None),
+            Segment::new("", None),
+            Segment::new("\n", Some(bold.clone())),
+            Segment::new("x\ny\n", Some(bold)),
+            Segment::new("\n\nz", None),
+            Segment::line(),
+            Segment::control("\x1b[2J"),
+        ];
+        let mut sequences: Vec<Vec<Segment>> = vec![Vec::new()];
+        for _ in 0..5 {
+            sequences = sequences
+                .iter()
+                .flat_map(|sequence| {
+                    kinds.iter().map(move |kind| {
+                        let mut next = sequence.clone();
+                        next.push(kind.clone());
+                        next
+                    })
+                })
+                .collect();
+            for sequence in &sequences {
+                assert_eq!(
+                    Segment::split_lines_owned(sequence.clone()),
+                    Segment::split_lines(sequence),
+                    "{sequence:?}"
+                );
+            }
+        }
+    }
 
     /// Cropping is per line, leaves short lines alone, and keeps zero-width
     /// control segments so cursor moves survive.

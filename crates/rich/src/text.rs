@@ -1801,7 +1801,11 @@ fn truncate_line(line: Vec<Segment>, width: usize, overflow: Overflow) -> Vec<Se
     if !line
         .iter()
         .any(|segment| segment.text.contains(['\u{200d}', '\u{fe0f}']))
-        && line.iter().map(|segment| cell_len(&segment.text)).sum::<usize>() <= width
+        && line
+            .iter()
+            .map(|segment| cell_len(&segment.text))
+            .sum::<usize>()
+            <= width
     {
         return line;
     }

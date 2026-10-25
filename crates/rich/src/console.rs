@@ -765,16 +765,15 @@ impl Console {
         if let Some(style) = style {
             segments = Segment::apply_style(&segments, style);
         }
-        let mut lines = Segment::split_lines(&segments);
         // An empty `Text` renders as a lone empty segment: upstream renders it
         // as its `end` newline, which `split_and_crop_lines` turns into one
         // blank line (#442).
-        if lines.is_empty()
-            && !segments.is_empty()
+        let only_empty = !segments.is_empty()
             && segments
                 .iter()
-                .all(|segment| !segment.control && segment.text.is_empty())
-        {
+                .all(|segment| !segment.control && segment.text.is_empty());
+        let mut lines = Segment::split_lines_owned(segments);
+        if lines.is_empty() && only_empty {
             lines.push(Vec::new());
         }
         if pad {
