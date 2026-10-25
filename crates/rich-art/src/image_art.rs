@@ -60,7 +60,7 @@ pub enum ImageMode {
 }
 
 /// How an image fills an explicit rectangle of terminal cells.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub enum ImageFit {
     /// Preserve the entire image, centering it with background padding.
     Contain,
@@ -84,7 +84,7 @@ pub enum ImageFit {
 ///
 /// Edge anchors center the other axis. Contain fitting and unfitted images
 /// ignore this setting. Center crops round down when the excess is odd.
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum ImageAnchor {
     /// Keep the center (the default).
     #[default]
