@@ -181,6 +181,11 @@ fn parse(markup: &str) -> Result<Vec<Event<'_>>> {
 /// `\[` in ordinary text is a literal bracket. Upstream applies exactly this
 /// replacement to every text run it yields.
 fn unescape_brackets(text: &str) -> String {
+    // Without a backslash there is nothing to replace: copy it without
+    // setting up the substring search (docs/PORTING.md, "Performance notes").
+    if !text.contains('\\') {
+        return text.to_string();
+    }
     text.replace("\\[", "[")
 }
 
