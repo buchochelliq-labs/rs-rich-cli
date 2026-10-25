@@ -442,9 +442,11 @@ Steps 1 to 3 are independent of 4 to 6, and can run alongside them.
 
 ## Open questions
 
-- **Should `best` be the default** once it beats `cells` on every scene,
-  or stay opt-in for a release? The proposal: default in the release
-  after its numbers land.
+- **Decided on 2026-10-25:** `best` ships opt-in for one release, then
+  becomes the default once it beats `cells` on every scene. Work starts
+  now, game-derived pieces first (the timedemo, data-oriented cells and
+  the frame stats), on two branches: the painter, and the viewport with
+  Noctiluca.
 - **Terminals with unknown capabilities:**
   - scrolling stays off under tmux unless the benchmark shows a gain
     there;
