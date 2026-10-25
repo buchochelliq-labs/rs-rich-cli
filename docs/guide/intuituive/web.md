@@ -266,6 +266,7 @@ Serving htop at http://127.0.0.1:8080/?token=9b1e4c…
 | `--port N` | `8080` | The port; `0` picks a free one. |
 | `--max-sessions N` | `8` | Programs (tabs) at once; one more is refused until one ends. |
 | `--allow-origin ORIGIN` | | Also accept the page from ORIGIN, where a reverse proxy serves it. Repeatable. |
+| `--compress` | off | Compress frames of 1 KiB or more with deflate, for pages that can undo it. Worth it over a slow link (frames shrink to 5 to 30% of their size); on this computer it only adds work. |
 
 Everything after `--` (or after the first word that is not an option) is
 the program and its arguments. Ctrl+C stops the server and every program

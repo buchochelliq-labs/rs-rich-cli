@@ -404,6 +404,9 @@ fn a_lazy_image_loads_and_gets_its_still_when_scrolled_near() {
         p.media.iter().any(|m| m.still.is_some())
     });
     if let Some(node) = image {
-        assert!(page.media.iter().any(|m| m.node == node && m.still.is_some()));
+        assert!(page
+            .media
+            .iter()
+            .any(|m| m.node == node && m.still.is_some()));
     }
 }

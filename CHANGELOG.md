@@ -9,6 +9,8 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **`rich serve --compress`** (CLI, `serve` feature): deflates frames of 1 KiB or more for pages that can undo it. Off by default; worth it over a slow link.
+
 ### Long pages and endless feeds (intuituive, noctiluca, rich-embed, rich-web)
 
 - **`scroll_virtual(len, height_of, row)`** in intuiTUIve: a scroll view

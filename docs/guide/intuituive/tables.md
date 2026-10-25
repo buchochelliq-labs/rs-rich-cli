@@ -92,7 +92,7 @@ let app = App::new(|| {
 - **`.on_near_end(threshold, load)`** calls `load` once the view comes
   within `threshold` rows of the end, and not again until `len` grows. One
   load is in flight at a time.
-- **`.stand_in(|i| node)`** draws a cheap stand-in for items not built yet
+- **`.stand_in(|i| node)`** (new in 0.0.23, opt-in) draws a cheap stand-in for items not built yet
   while the view scrolls fast (two screens or more before it rests for
   100 ms); full items replace them at rest. Measured on a held PageDown
   over cards (a panel of styled text), it cut frame time about five times

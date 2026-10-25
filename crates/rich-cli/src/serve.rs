@@ -16,6 +16,8 @@ use rich_ext::cli_doc::{ArgSpec, CommandSpec};
 
 /// The port unless `--port` gives one.
 const DEFAULT_PORT: u16 = 8080;
+/// Frames this size or larger are compressed under `--compress`.
+const COMPRESS_FROM: usize = 1024;
 
 /// Whether the first word that is not an option is `serve`, with no render
 /// mode flag before it (`rich -p serve` prints the word).
@@ -33,7 +35,7 @@ pub(super) fn command() -> CommandSpec {
         )
         .usage(
             "serve [--bind ADDR] [--port N] [--max-sessions N] [--allow-origin ORIGIN]... \
-             -- PROGRAM [ARGS...]",
+             [--compress] -- PROGRAM [ARGS...]",
         )
         .arg(ArgSpec::option("bind").value_name("ADDR").help(
             "The address to listen on (default 127.0.0.1, this computer only). Anything \
@@ -59,6 +61,10 @@ pub(super) fn command() -> CommandSpec {
                      a reverse proxy serves it. The token is still required",
                 ),
         )
+        .arg(ArgSpec::flag("compress").help(
+            "Compress frames of 1 KiB or more with deflate, for pages that can undo it: worth \
+             it over a slow link, extra work on this computer",
+        ))
         .arg(
             ArgSpec::positional("PROGRAM")
                 .multiple(true)
@@ -78,6 +84,7 @@ struct Args {
     port: u16,
     max_sessions: Option<usize>,
     origins: Vec<String>,
+    compress: bool,
     command: Vec<String>,
 }
 
@@ -88,6 +95,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         port: DEFAULT_PORT,
         max_sessions: None,
         origins: Vec::new(),
+        compress: false,
         command: Vec::new(),
     };
     let mut seen_command = false;
@@ -149,6 +157,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
                 }
                 parsed.origins.push(origin);
             }
+            "--compress" => parsed.compress = true,
             "--help" => parsed.help = true,
             "--no-color" | "--no-config" => {}
             other => return Err(format!("unknown option {other} for `rich serve`")),
@@ -211,6 +220,9 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
     }
     for origin in args.origins {
         server = server.allow_origin(origin);
+    }
+    if args.compress {
+        server = server.compress(Some(COMPRESS_FROM));
     }
     // Serves until Ctrl+C. On Unix the signal is waited for, so every
     // program is ended (and killed, if it ignores the hang-up) before
@@ -289,6 +301,7 @@ mod tests {
             "--allow-origin",
             "https://a.example",
             "--allow-origin=https://b.example",
+            "--compress",
             "--",
             "htop",
             "-d",
@@ -303,6 +316,7 @@ mod tests {
                 port: 9000,
                 max_sessions: Some(2),
                 origins: vec!["https://a.example".into(), "https://b.example".into()],
+                compress: true,
                 command: args(&["htop", "-d", "10"]),
             }
         );
@@ -310,6 +324,7 @@ mod tests {
         let parsed = parse_args(&args(&["serve", "bash", "-l", "--port", "1"])).unwrap();
         assert_eq!((parsed.bind.as_str(), parsed.port), ("127.0.0.1", 8080));
         assert_eq!(parsed.max_sessions, None);
+        assert!(!parsed.compress);
         assert_eq!(parsed.command, args(&["bash", "-l", "--port", "1"]));
         let parsed = parse_args(&args(&["serve", "--", "--weird-name"])).unwrap();
         assert_eq!(parsed.command, args(&["--weird-name"]));
@@ -368,6 +383,7 @@ mod tests {
             "--port",
             "--max-sessions",
             "--allow-origin",
+            "--compress",
             "PROGRAM",
             "rich serve -- htop",
         ] {
