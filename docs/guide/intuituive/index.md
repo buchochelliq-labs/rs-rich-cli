@@ -122,7 +122,7 @@ building rich segments:
 | churn, every cell | 340 µs, 62 kB | **104 µs, 61 kB** |
 | a chart redrawn | 84 µs, 4.2 kB | **60 µs, 2.8 kB** |
 
-[The rendering performance note](../../design/render-performance.md#two-paths-rich-the-reference-rs-rich-ext-the-fast-path)
+[The rendering performance note](../../design/render-performance.md#the-two-paths-side-by-side)
 has where the time goes on each path, and every paint strategy measured.
 [The design note](../../design/intuituive.md) explains why. It also lists
 the architectural problems in ratatui that intuiTUIve is built to avoid:
