@@ -2066,6 +2066,61 @@ impl Node {
         self
     }
 
+    /// For a [panel](Self::panel): its titles at the corners, with no
+    /// space added either side, as a ratatui `Block` draws its title:
+    /// `┌Staged Changes───┐`, and a right-hand title against the right
+    /// corner (`──{main}┘`). Put the spaces in the title for termusic's
+    /// `╭ Library ─`. Ignored on other nodes.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     label("…")
+    ///         .panel("Staged Changes")
+    ///         .border(Border::Plain)
+    ///         .title_flush()
+    ///         .add_title(Edge::Bottom, Align::End, "{main}")
+    /// });
+    /// let mut driver = app.driver(20, 3);
+    /// driver.settle();
+    /// let rows = driver.screen().plain();
+    /// assert_eq!(rows[0], "┌Staged Changes────┐");
+    /// assert_eq!(rows[2], "└────────────{main}┘");
+    /// ```
+    pub fn title_flush(self) -> Node {
+        self.widget_mut(|panel: &mut Panel| panel.code.flush = true);
+        self
+    }
+
+    /// Wrap this node in a [panel](Self::panel) titled `title` as plain
+    /// text: brackets show as they are (`Recipe [r]`, `History [ctrl h]`),
+    /// where [`panel`](Self::panel) reads them as console markup.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("…").panel_text("Recipe [r]"));
+    /// let mut driver = app.driver(18, 3);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0], "╭─ Recipe [r] ───╮");
+    /// ```
+    pub fn panel_text(self, title: &str) -> Node {
+        self.panel(&rich::markup::escape(title))
+    }
+
+    /// [`panel_with`](Self::panel_with), its title read as plain text, as
+    /// [`panel_text`](Self::panel_text)'s is.
+    pub fn panel_text_with(self, title: impl Fn() -> String + 'static) -> Node {
+        self.panel_with(move || rich::markup::escape(&title()))
+    }
+
+    /// [`add_title`](Self::add_title) with `text` as plain text: brackets
+    /// show as they are. Ignored on nodes that are not panels.
+    pub fn add_title_text(self, edge: Edge, align: Align, text: &str) -> Node {
+        self.add_title(edge, align, rich::markup::escape(text))
+    }
+
     /// For a [panel](Self::panel): another title, console markup, at the
     /// right of the top edge. Ignored on other nodes.
     pub fn title_right(self, markup: impl Into<String>) -> Node {
@@ -3138,6 +3193,7 @@ impl Node {
                     style,
                     title_style: &title_style,
                     titles: &titles,
+                    flush: false,
                 };
                 for edge in crate::border::draw_frame(screen, console, &look, rect) {
                     frame.damage.push(edge);

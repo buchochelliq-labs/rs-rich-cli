@@ -354,6 +354,9 @@ pub(crate) struct Frame<'a> {
     pub style: &'a Style,
     pub title_style: &'a Style,
     pub titles: &'a [Title],
+    /// Titles at the corners, with no space added either side: ratatui's
+    /// look ([`Node::title_flush`](crate::Node::title_flush)).
+    pub flush: bool,
 }
 
 /// The cells a box takes on each side, top, right, bottom and left: a side
@@ -428,15 +431,16 @@ pub(crate) fn draw_frame(
                 (glyph(pick), true)
             })
             .collect();
-        // Titles go between the corner and one glyph of line, ` Title `,
-        // or, with no line on this edge, between the sides.
-        let area = if has_line {
+        // Titles go between the corner and one glyph of line, ` Title `;
+        // flush, or with no line on this edge, between the sides.
+        let area = if has_line && !frame.flush {
             (2.min(w), w.saturating_sub(2))
         } else {
             (u16::from(left_line), w - u16::from(right_line))
         };
         let titles: Vec<&Title> = frame.titles.iter().filter(|t| t.edge == edge).collect();
-        let pieces = title_pieces(console, &titles, area, has_line, frame.title_style);
+        let padded = has_line && !frame.flush;
+        let pieces = title_pieces(console, &titles, area, padded, frame.title_style);
         let row = edge_row(&cells, frame.style, &pieces);
         let at = Rect::new(rect.x, y, w, 1);
         screen.write_lines(at, &[row]);

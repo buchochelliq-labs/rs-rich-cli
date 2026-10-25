@@ -1158,9 +1158,9 @@ fn pipe(command: &str, input: &[u8]) -> Result<String, String> {
 // ---------------------------------------------------------------------------
 
 /// Slumber's pane: its border blue and double while the focus is inside.
-/// Titles are markup, so a key's brackets are escaped.
+/// Its title is plain text, its key's brackets shown as they are.
 fn pane(node: Node, title: &str) -> Node {
-    node.panel(&escape(title)).focus_border(Border::Double)
+    node.panel_text(title).focus_border(Border::Double)
 }
 
 /// Console markup as a `Text`.
@@ -1208,13 +1208,16 @@ fn sidebar(s: Slumber) -> Node {
     let lists =
         lists.map(|(which, node)| node.flex(1).shown_when(move || s.sidebar.get() == which));
     let title = move || {
-        escape(match s.sidebar.get() {
+        match s.sidebar.get() {
             Sidebar::Recipe => "Recipe [r]",
             Sidebar::Profile => "Profile [p]",
             Sidebar::History => "Request History [ctrl h]",
-        })
+        }
+        .to_string()
     };
-    column(lists).panel_with(title).focus_border(Border::Double)
+    column(lists)
+        .panel_text_with(title)
+        .focus_border(Border::Double)
 }
 
 /// The boxes above the panes: the profile, and the recipe while the
@@ -1679,7 +1682,7 @@ fn exchange_pane(s: Slumber) -> Node {
         },
     );
     pane(content, "Request / Response [2]")
-        .title_right(escape("History [ctrl h]"))
+        .add_title_text(Edge::Top, Align::End, "History [ctrl h]")
         .section("Response", |node| {
             node.bind("left h", "Previous tab", move |cx| switch_tab(s, -1, cx))
                 .bind("right l", "Next tab", move |cx| switch_tab(s, 1, cx))
