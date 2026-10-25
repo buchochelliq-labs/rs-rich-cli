@@ -948,6 +948,8 @@ mod tests {
             Some(View::Reader)
         );
         assert!(config.shortcuts.contains_key("wiki"));
+        // The sample spells out the defaults.
+        assert_eq!(config.adapt, Adapt::default());
     }
 
     #[test]

@@ -85,6 +85,57 @@ on screen shows the part in view (Sixel and iTerm2 included).
 A page too long to read whole (more than 20,000 blocks) says
 "page cut" in the status line.
 
+## Live logs
+
+A chat beside a stream, a build log, a feed of events: any box the page
+marks `role=log` or `aria-live`, or any scroll box the page keeps
+appending rows to, is a **live log**. Noctiluca knows it from those
+constructs alone, never from the site. New rows arrive within a fraction
+of a second, and only they are read: the rest of the page is not read
+again.
+
+- The log shows its **newest entries**, in its own box, and follows them.
+- `[` scrolls it up. It then holds still while new entries come. `]`
+  scrolls it down, and at its end it follows again.
+- Each entry keeps its colours (an author's name) and its small pictures
+  (badges, emotes).
+- A chat's input is an ordinary field: `f` and its hint, type, Enter, then
+  its Send button.
+
+## Terminal adaptations
+
+A page is drawn as Chrome lays it out, with a few named rules that make
+it read better in cells. Each rule is about constructs, never about a
+site, and each can be switched off.
+
+| Rule | What it does | Default |
+|---|---|---|
+| `decorative-images` | Drops spacers, tracking pixels, and icon-sized pictures marked decorative (`alt=""`, `aria-hidden`) | on |
+| `inline-pictures` | Keeps small pictures (emotes, badges) in their line | on |
+| `cap-pictures` | Caps a picture's height; what is under it moves up | on |
+| `captions` | An `Image: …` line under a picture with alt text and no caption | on |
+| `icon-buttons` | Shows every button, icon-only ones too, as `[ label ]` from its name | on |
+| `snap-grids` | Snaps a grid's columns to the cells, with fewer columns when they would be too narrow | on |
+| `collapse-nav` | On a narrow terminal (under 100 columns), a navigation or sidebar becomes one row of its links | on |
+| `text-over-pictures` | Draws a picture of text (a heading or button image, a banner) as its text | off: it changes meaning |
+| `live-tail` | A live log shows its newest entries unless you scrolled it up | on |
+| `bandwidth` | Lowers a video's frame rate and picture tier when the terminal is short of bandwidth | on |
+
+- `a` (`Alt+A` in the plain keys) toggles between the adapted and the
+  **faithful** projection, with no rule at all.
+- `?` (`Alt+I`) opens the about page, which lists the rules and which are
+  on.
+- `--adapt=-decorative-images,-collapse-nav` switches rules off for one
+  run, and `--adapt=+text-over-pictures` switches one on. `--no-adapt`
+  switches every rule off.
+- In the config, `[adapt]` sets each rule by its name:
+
+  ```toml
+  [adapt]
+  collapse-nav = false
+  text-over-pictures = true
+  ```
+
 ## Keys
 
 Every action has a key, and **F1 lists them all**, with the key that runs
@@ -105,12 +156,15 @@ site table they came from.
 | Page down, up | `Space`, `Ctrl+D`, `Ctrl+U` | `PageDown`, `PageUp` |
 | Top, bottom | `g g`, `G` | `Home`, `End` |
 | Reader mode on or off | `r` | `Alt+R` |
+| Adapted or faithful projection | `a` | `Alt+A` |
+| Scroll a live log up, down | `[`, `]` | `Alt+PageUp`, `Alt+PageDown` |
 | Play or pause, mute | `p`, `Alt+M` | `Alt+P`, `Alt+M` |
 | Volume up, down | `+`, `-` | `Alt+Up`, `Alt+Down` |
 | Bookmark this page, bookmarks | `m`, `M` | `Ctrl+D`, `Ctrl+B` |
 | Bind a key on this site | `Ctrl+K` | `Ctrl+K` |
 | This site's shortcuts | `K` | `Ctrl+Shift+K` |
 | Every action (the overlay) | `F1` | `F1` |
+| About: version and the active adaptations | `?` | `Alt+I` |
 | Quit | `q` | `Ctrl+Q` |
 
 `[keys] preset` in the config chooses the column. Any action can be
@@ -176,6 +230,9 @@ preset = "vim"             # or plain
 audio = false
 images = "auto"            # ansi, kitty, sixel, iterm2 or none
 
+[adapt]
+collapse-nav = false       # each terminal adaptation, by name
+
 [site."github.com"]
 view = "reader"
 keyword = "s"              # `s WORDS` searches this site
@@ -206,6 +263,8 @@ noctiluca keys [--site HOST] [--config PATH]
   --fps N                              the media frame cap
   --dump text|ax|json                  print the page's model and exit
   --no-js                              turn the page's script off
+  --adapt -RULE,+RULE,…                switch terminal adaptations off or on
+  --no-adapt                           every adaptation off: the faithful view
   --config PATH                        another config file
 ```
 
