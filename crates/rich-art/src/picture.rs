@@ -996,9 +996,9 @@ const WINDOW: Duration = Duration::from_secs(2);
 /// ```
 /// use rich_art::picture::{ByteBudget, Pacer, Pixels};
 ///
-/// // 30 kB a second for a 40 x 12 cell picture in Sixel: too few frames,
+/// // 60 kB a second for a 40 x 12 cell picture in Sixel: too few frames,
 /// // so it steps down to cells.
-/// let budget = ByteBudget::new(30_000);
+/// let budget = ByteBudget::new(60_000);
 /// let mut pacer = Pacer::new(Pixels::Sixel, 40, 12);
 /// while pacer.settle(&budget, 1.0) {}
 /// assert_eq!(pacer.pixels(), Pixels::Cells);
@@ -1012,6 +1012,9 @@ pub struct Pacer {
     rows: usize,
     /// Frames sent in the last [`WINDOW`]: when, and their bytes.
     sent: VecDeque<(Instant, u64)>,
+    /// When it last stepped down: frames sent before are counted against
+    /// the window but not taken as what the next frame may cost.
+    stepped: Option<Instant>,
     /// What a frame costs at this protocol, measured; else estimated.
     measured: Option<f64>,
 }
@@ -1025,6 +1028,7 @@ impl Pacer {
             cols: cols.max(1),
             rows: rows.max(1),
             sent: VecDeque::new(),
+            stepped: None,
             measured: None,
         }
     }
@@ -1076,26 +1080,35 @@ impl Pacer {
     /// leave room for one more.
     pub fn due(&mut self, now: Instant, budget: &ByteBudget, share: f64) -> bool {
         self.forget(now);
-        let fps = self.fps(budget, share);
-        if fps <= 0.0 {
+        let per_second = budget.bytes_per_second as f64 * share.clamp(0.0, 1.0);
+        if per_second <= 0.0 {
             return false;
         }
+        // Spaced for the frame planned for, so frames that grow do not
+        // come in a burst that fills the window and then a gap.
+        let next = self.next_frame();
+        let fps = (per_second / next).min(budget.max_fps);
         if let Some((last, _)) = self.sent.back() {
             if now.duration_since(*last) < Duration::from_secs_f64(1.0 / fps) {
                 return false;
             }
         }
-        let allowed = budget.bytes_per_second as f64 * share.clamp(0.0, 1.0) * WINDOW.as_secs_f64();
         let used: u64 = self.sent.iter().map(|(_, b)| b).sum();
-        used as f64 + self.next_frame() <= allowed
+        used as f64 + next <= per_second * WINDOW.as_secs_f64()
     }
 
     /// What the next frame may cost, for keeping the window under its
-    /// cap: the largest frame of the last two seconds or the average,
-    /// whichever is more, so one large frame among small ones cannot push
-    /// the window over.
+    /// cap: the largest frame of the last two seconds at this protocol or
+    /// the average, whichever is more, so one large frame among small ones
+    /// cannot push the window over.
     fn next_frame(&self) -> f64 {
-        let largest = self.sent.iter().map(|(_, b)| *b).max().unwrap_or(0) as f64;
+        let largest = self
+            .sent
+            .iter()
+            .filter(|(at, _)| self.stepped.is_none_or(|stepped| *at >= stepped))
+            .map(|(_, b)| *b)
+            .max()
+            .unwrap_or(0) as f64;
         largest.max(self.bytes_per_frame())
     }
 
@@ -1131,6 +1144,10 @@ impl Pacer {
             Some(lower) => {
                 self.pixels = lower;
                 self.measured = None;
+                self.stepped = self
+                    .sent
+                    .back()
+                    .map(|(at, _)| *at + Duration::from_nanos(1));
                 true
             }
             None => false,
@@ -1350,5 +1367,60 @@ mod tests {
             }
         }
         assert!(count <= 9, "{count}");
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn growing_frames_are_spaced_not_sent_in_a_burst_and_a_gap() {
+        // A small first frame, then frames of 60 kB, at 100 kB a second:
+        // spaced by what the next may cost, so no long gap follows a burst
+        // of frames paced for the small one, and every two seconds stay
+        // within the cap.
+        let budget = ByteBudget::new(100_000);
+        let mut pacer = Pacer::new(Pixels::Kitty, 20, 10);
+        let start = Instant::now();
+        let mut sent: Vec<(Duration, u64)> = Vec::new();
+        for tick in 0..400u64 {
+            let at = Duration::from_millis(tick * 10);
+            let now = start + at;
+            if pacer.due(now, &budget, 1.0) {
+                let bytes = if sent.is_empty() { 10_000 } else { 60_000 };
+                pacer.sent(now, Some(bytes));
+                sent.push((at, bytes));
+            }
+        }
+        let gaps: Vec<Duration> = sent.windows(2).map(|w| w[1].0 - w[0].0).collect();
+        let longest = gaps.iter().max().copied().unwrap_or_default();
+        assert!(longest <= Duration::from_millis(1000), "{sent:?}");
+        for (i, (at, _)) in sent.iter().enumerate() {
+            let window: u64 = sent[..=i]
+                .iter()
+                .filter(|(t, _)| *at - *t <= Duration::from_secs(2))
+                .map(|(_, b)| b)
+                .sum();
+            assert!(window <= 200_000, "{window} by {at:?}");
+        }
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn after_a_step_down_frames_are_spaced_for_the_lower_protocol() {
+        // One Kitty frame of 270 kB at 400 kB a second steps down; the
+        // iTerm2 frames of 45 kB after it are spaced for 45 kB, not 270.
+        let budget = ByteBudget::new(400_000);
+        let mut pacer = Pacer::new(Pixels::Kitty, 40, 10);
+        let start = Instant::now();
+        pacer.sent(start, Some(270_000));
+        assert!(pacer.settle(&budget, 1.0));
+        let mut sent = Vec::new();
+        for tick in 1..150u64 {
+            let now = start + Duration::from_millis(tick * 10);
+            if pacer.due(now, &budget, 1.0) {
+                pacer.sent(now, Some(45_000));
+                sent.push(tick * 10);
+            }
+        }
+        assert!(sent.len() >= 8, "{sent:?}");
+        assert!(pacer.recent_bytes() <= 800_000);
     }
 }

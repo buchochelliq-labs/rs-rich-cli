@@ -386,6 +386,10 @@ fn the_video_keeps_playing_while_the_log_updates_within_its_cap() {
         on_screen: vec![node],
         intervals: Vec::new(),
     });
+    // The region's first frame: the start (the screencast turning on, the
+    // stills of a page just read) is not what this measures.
+    let first = w.frames.len();
+    w.until("the region's first frame", |w| w.frames.len() > first);
     // Four seconds: the log gains entries (one each 1.5 s, read as live
     // changes), and the video's frames keep coming, paced within 400 kB
     // a second.
