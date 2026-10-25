@@ -70,6 +70,10 @@ anstyle-query = "1.1.5"
 # Targets that exercise `Syntax` or `Markdown` need them; the rest also run
 # in the lean build (`--no-default-features`), which CI checks.
 
+[[example]]
+name = "diff_render"
+required-features = ["markdown"]
+
 [[test]]
 name = "golden"
 required-features = ["syntax", "markdown"]
@@ -85,6 +89,10 @@ required-features = ["syntax", "markdown"]
 [[test]]
 name = "golden_audit_edges"
 required-features = ["syntax", "markdown"]
+
+[[test]]
+name = "golden_parity_core"
+required-features = ["markdown"]
 
 [[test]]
 name = "golden_parity_docs"
