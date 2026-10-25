@@ -916,6 +916,16 @@ pub(crate) fn raster_into(
     let mut styles = Styles::new(console);
     let mut layer = Layer::new(view.marker.resolve(view.ascii), width, height);
     let mut labels = Vec::new();
+    // The last spec and its id: a dataset's steps share one.
+    let mut last: Option<(&Spec, usize)> = None;
+    let mut id_of = |styles: &mut Styles, spec| match last {
+        Some((seen, id)) if std::sync::Arc::ptr_eq(seen, spec) => id,
+        _ => {
+            let id = styles.id(spec);
+            last = Some((spec, id));
+            id
+        }
+    };
     for op in ops {
         match op {
             Op::Layer => {
@@ -930,21 +940,21 @@ pub(crate) fn raster_into(
                 }
             }
             Op::Points(points, style) => {
-                let style = styles.id(style);
+                let style = id_of(&mut styles, style);
                 for p in points {
                     layer.point(&bounds, *p, style);
                 }
             }
             Op::Line(a, b, style) => {
-                let style = styles.id(style);
+                let style = id_of(&mut styles, style);
                 layer.line(&bounds, *a, *b, style);
             }
             Op::Area(a, b, fill, style) => {
-                let style = styles.id(style);
+                let style = id_of(&mut styles, style);
                 layer.area(&bounds, *a, *b, *fill, style);
             }
             Op::Map(resolution, style) => {
-                let style = styles.id(style);
+                let style = id_of(&mut styles, style);
                 for line in resolution.lines() {
                     for pair in line.windows(2) {
                         layer.line(&bounds, pair[0], pair[1], style);
@@ -952,7 +962,7 @@ pub(crate) fn raster_into(
                 }
             }
             Op::Circle((x, y), radius, style) => {
-                let style = styles.id(style);
+                let style = id_of(&mut styles, style);
                 if radius.is_finite() {
                     for degree in 0..360 {
                         let (sin, cos) = f64::from(degree).to_radians().sin_cos();
@@ -1050,7 +1060,7 @@ impl CellGrid {
 
     fn put(&mut self, row: usize, col: usize, cell: Cell) {
         let i = row * self.width + col;
-        let blank = Some(Cell::new(" ", 1, StyleId::NONE));
+        let blank = Some(Cell::from_char(' ', 1, StyleId::NONE));
         if !cell.is_empty_text()
             && col > 0
             && matches!(&self.cells[i], Some(c) if c.is_empty_text())

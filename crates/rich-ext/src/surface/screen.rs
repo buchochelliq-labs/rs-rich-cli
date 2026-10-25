@@ -1290,10 +1290,6 @@ struct Sent {
 }
 
 impl Sent {
-    fn cell(&self, x: u16, y: u16) -> &Cell {
-        &self.cells[y as usize * self.width as usize + x as usize]
-    }
-
     fn row(&self, y: u16) -> &[Cell] {
         let width = self.width as usize;
         &self.cells[y as usize * width..(y as usize + 1) * width]
@@ -2324,20 +2320,6 @@ impl Painter {
         out
     }
 
-    fn changed(&self, screen: &Screen, x: u16, y: u16) -> bool {
-        if self.force {
-            return true;
-        }
-        match &self.previous {
-            None => true,
-            Some(previous) => {
-                // The copy holds the screen's style ids (moved over when the
-                // screen compacts), so they compare directly.
-                previous.cell(x, y) != screen.cell(x, y)
-            }
-        }
-    }
-
     fn paint_span(
         &mut self,
         screen: &Screen,
@@ -2354,10 +2336,22 @@ impl Painter {
             x -= 1;
         }
         while x < end {
-            if !self.changed(screen, x, y) {
-                self.stats.compared += 1;
-                x += 1;
-                continue;
+            // Past the cells the same as what was sent, a run at a time.
+            if !self.force {
+                if let Some(previous) = &self.previous {
+                    let row = y as usize * screen.width as usize;
+                    let (from, to) = (row + x as usize, row + end as usize);
+                    let same = previous.cells[from..to]
+                        .iter()
+                        .zip(&screen.cells[from..to])
+                        .take_while(|(sent, now)| sent == now)
+                        .count();
+                    self.stats.compared += same;
+                    x += same as u16;
+                    if x >= end {
+                        break;
+                    }
+                }
             }
             let mut x0 = x;
             if screen.cell(x0, y).is_continuation() && x0 > 0 {
