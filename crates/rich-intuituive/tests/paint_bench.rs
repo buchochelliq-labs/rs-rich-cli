@@ -323,8 +323,11 @@ fn measure(scene: Scene, strategy: PaintStrategy, width: u16, height: u16, frame
 fn allocations(scene: Scene, strategy: PaintStrategy, width: u16, height: u16) -> (f64, f64) {
     const FRAMES: usize = 20;
     let key = Event::Key(Key::parse(scene.key()).unwrap());
+    // Scrolling on everywhere, so the counts are the painter's and not the
+    // platform's (Windows turns it off by default).
     let mut driver = app(scene, height)
         .paint_strategy(strategy)
+        .terminal_scroll(true)
         .driver(width, height);
     let step = |driver: &mut intuituive::Driver| {
         driver.event(key.clone());

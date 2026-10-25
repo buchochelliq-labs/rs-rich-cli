@@ -252,9 +252,12 @@ exact. What the table decided:
   bytes. `best` does not try it.
 - **`full`** is only worth it when nearly every cell changed; otherwise
   it sends many times the bytes.
-- **`best`** therefore: `full` when the whole screen is damaged and a
-  sample of every seventh cell shows nine in ten changed (full motion);
-  else `scroll` when a move is found; else `cells`. It encodes nothing
+- **`best`** therefore: `scroll` when a move is found; else `cells`.
+  It first also chose `full` for full motion (the whole screen damaged,
+  nine in ten sampled cells changed), but once the cell painter skipped
+  unchanged runs, `full` was no faster on any scene and up to 17% slower
+  on CI's runners (200x60 Churn, 890 against 759 µs), with more bytes;
+  so it no longer does. It encodes nothing
   twice, so choosing costs only the search, which gives up after four
   changed rows found nowhere. It is within 5% of the best fixed strategy
   in bytes and in time on every scene (the CI gate, with a 10 µs floor

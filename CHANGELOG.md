@@ -201,10 +201,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `scroll` moves rows that moved together with the terminal's scrolling
   (SU, SD, DECSTBM), so a log line or a list scrolled one row sends about
   one row's bytes: 147 bytes a frame for the log at 80x24, down from
-  4,013. `best` scrolls when rows moved, writes everything when nearly
-  every cell changed, and otherwise paints cells. It is opt-in for this
+  4,013. `best` scrolls when rows moved and otherwise paints cells. It is opt-in for this
   release. Scrolling is off on Windows, under tmux, inline and over a
-  picture.
+  picture; `App::terminal_scroll` turns it on or off wherever the app
+  runs.
 - **A faster painter.** Cells are 12 bytes and `Copy`, with no heap
   string (read a cell's text with `Cell::text()`; the `text` field is
   gone). Lines are written straight into cells without building a
