@@ -656,6 +656,14 @@ fn profile_one_scene() {
         .ok()
         .and_then(|n| n.parse().ok())
         .unwrap_or(50);
-    let run = measure(scene, strategy, 80, 24, frames);
-    println!("{scene:?} {strategy:?}: {run:?}");
+    // `PAINT_BENCH_SIZE=200x60` profiles the larger screen.
+    let (w, h) = std::env::var("PAINT_BENCH_SIZE")
+        .ok()
+        .and_then(|s| {
+            let (w, h) = s.split_once('x')?;
+            Some((w.parse().ok()?, h.parse().ok()?))
+        })
+        .unwrap_or((80, 24));
+    let run = measure(scene, strategy, w, h, frames);
+    println!("{scene:?} {strategy:?} {w}x{h}: {run:?}");
 }
