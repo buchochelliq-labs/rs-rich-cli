@@ -1,5 +1,7 @@
 # rich-ext
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-ext.svg" width="96" align="right" alt="Memo the elephant fitting a puzzle piece into a terminal">
+
 Everything the [`rich`](https://crates.io/crates/rs-rich) Rust port adds on top
 of upstream Python `rich`: diagnostics and stack traces, structured data and
 serde helpers, checked-markup macros, `clap` and `tracing` integration, diffs

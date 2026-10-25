@@ -44,10 +44,49 @@ holding her tail in a curled trunk, as calves do.
 | `elephant-pixel.png` | 32x32 pixels, one pixel a cell | Source for a micro asset or a sprite |
 | `elephant-pixel.txt` | The same grid as characters, with the palette | Source for a `pixels` buffer or a test |
 | `elephant-pixel.svg` | The same grid as SVG runs | The pixel version in docs |
+| `crates/*.svg` | One spot per crate (160x128), see [Crate spots](#crate-spots) | Crate READMEs and crate lists |
 | `preview.html` | Every file on dark and light | Reviewing changes |
 
 Every SVG works on the dark and the light scheme: the body is the accent,
 and the light lit cell has a dark rim.
+
+## Crate spots
+
+`crates/` holds one small spot illustration per crate: Memo in the waving
+pose, at the right of a 160x128 view box, with a prop at the left that says
+what the crate does. They are meant for 96 to 160 px beside a heading (each
+crate's README shows its spot at 96 px), not as hero pictures. They carry no
+text: the caption belongs to the page. Terminals are ink with a light rim,
+so they stay visible on a dark page, and a prompt's cursor is the lit cell.
+Besides the house palette, props use four accents: mint `#2dd4bf`, amber
+`#fbbf24`, coral `#fb7185` and blue `#60a5fa`.
+
+| File | Crate | What the prop says |
+|---|---|---|
+| `rs-rich.svg` | `rs-rich` | She holds up a terminal with a `>_` prompt: styled output in the terminal |
+| `rs-rich-cli.svg` | `rs-rich-cli` | Brush in her trunk, a palette at her feet, a table and progress bars on the terminal: the `rich` command paints files and data |
+| `rs-rich-ext.svg` | `rs-rich-ext` | She fits a puzzle piece into a terminal: extensions slot into the core |
+| `rs-rich-plugin-api.svg` | `rs-rich-plugin-api` | She joins a plug to a socket, eyes shut at the spark: the plugin contract |
+| `rs-rich-macros.svg` | `rs-rich-macros` | A rubber stamp over `{ }` and a tick: proc-macros stamp out checked code |
+| `rs-rich-art.svg` | `rs-rich-art` | She paints a pixel heart on an easel: images and FIGlet art |
+| `rs-rich-mermaid.svg` | `rs-rich-mermaid` | A flowchart of three boxes, and a fish tail on her trunk tip: Mermaid diagrams |
+| `rs-rich-diagram.svg` | `rs-rich-diagram` | A graph of small boxes and straight edges inside a terminal: graphs laid out in box drawing |
+| `rs-rich-lumis.svg` | `rs-rich-lumis` | A torch lights coloured lines of code: syntax highlighting |
+| `rs-rich-record.svg` | `rs-rich-record` | A video camera aimed at a terminal with a red record dot: tapes |
+| `rs-rich-interact.svg` | `rs-rich-interact` | She ticks one checkbox in a list: interactive components |
+| `rs-rich-micro.svg` | `rs-rich-micro` | Tweezers place a tiny flower over a cell grid: micro assets |
+| `rs-rich-data.svg` | `rs-rich-data` | She places the last cell of a coloured table: tabular data |
+| `rs-rich-ratatui.svg` | `rs-rich-ratatui` | She stands on a bridge between two terminals: ratatui interop |
+| `rs-rich-intuituive.svg` | `rs-rich-intuituive` | Memo and Tui beside a bar chart and a donut panel: the TUI framework |
+| `rs-rich-web.svg` | `rs-rich-web` | One small terminal sent out to three browser windows: serving to a browser |
+| `rs-rich-embed.svg` | `rs-rich-embed` | She slots a terminal pane into a bigger app window: a terminal inside an app |
+| `rs-rich-marketplace.svg` | `rs-rich-marketplace` | A stall of plugin boxes, one with a seal: the signed plugin index |
+| `rs-rich-py.svg` | `rs-rich` on PyPI (`crates/rich-py`) | A friendly two-colour snake, and the lit cell between them: Python bindings |
+
+Two pairs are easy to confuse, so they are drawn apart on purpose. Mermaid
+is coloured flowchart boxes in the open with a fish tail; the diagram is a
+box-drawing graph inside a terminal. The web spot sends one terminal out to
+several browser windows; the embed spot puts one pane into one app window.
 
 ## In a terminal
 

@@ -1,5 +1,7 @@
 # rs-rich-cli
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-cli.svg" width="96" align="right" alt="Memo the elephant painting a table and progress bars onto a terminal">
+
 The `rs-rich-cli` package is a Rust port of the
 [`rich-cli`](https://github.com/Textualize/rich-cli) terminal toolbox — rich
 output for files, data and URLs, from the command line. Install it from

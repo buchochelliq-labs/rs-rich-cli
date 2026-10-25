@@ -1,5 +1,7 @@
 # rs-rich-mermaid
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-mermaid.svg" width="96" align="right" alt="Memo the elephant drawing a flowchart, a fish tail on her trunk">
+
 Mermaid diagrams for [`rs-rich`](https://crates.io/crates/rs-rich), the Rust port
 of Python's `rich`.
 

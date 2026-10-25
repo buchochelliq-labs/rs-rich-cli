@@ -1,5 +1,7 @@
 # rich
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich.svg" width="96" align="right" alt="Memo the elephant holding up a terminal with a prompt">
+
 A **faithful** Rust port of the Python [`rich`](https://github.com/Textualize/rich)
 terminal-rendering library.
 

@@ -1,5 +1,7 @@
 # rs-rich-record
 
+<img src="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/intuituive/mascot/crates/rs-rich-record.svg" width="96" align="right" alt="Memo the elephant filming a terminal with a video camera">
+
 Record scripted terminal sessions (**tapes**) into screenshots, asciinema
 casts, GIF and MP4. Part of [rs-rich](https://github.com/buchochelliq-labs/rs-rich-cli),
 the Rust port of Python's `rich`. This crate is an rs-rich addition, not a port.

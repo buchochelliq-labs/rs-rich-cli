@@ -113,27 +113,27 @@ in the release notes; the crates.io links show available packages.
 | [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
-| Package | Role | Import / installed name |
-|---|---|---|
-| `rs-rich` | faithful port of Python rich 15.0.0 | `use rich` |
-| `rs-rich-ext` | additions and plugin registry | `use rich_ext` |
-| `rs-rich-macros` | checked markup and derive macros (via `rs-rich-ext`'s `macros` feature) | `use rich_ext::richf` |
-| `rs-rich-cli` | CLI tracking Python rich-cli 1.8.1 | executable `rich` |
-| `rs-rich-art` | FIGlet, image→ASCII, animated GIFs | `use rich_art` |
-| `rs-rich-plugin-api` | the plugin contract: highlighters, themes, boxes, renderers, fence renderers, components | `use rich_plugin_api` |
-| `rs-rich-mermaid` | Mermaid flowcharts drawn as text, ```` ```mermaid ```` fences | `use rich_mermaid` |
-| `rs-rich-diagram` | graph model, layered layout and `Diagram` renderable; DOT (Graphviz) sources and ```` ```dot ```` fences | `use rich_diagram` |
-| `rs-rich-data` | tabular data: CSV/TSV, JSONL, serde and Arrow row sources, type inference and column statistics | `use rich_data` |
-| `rs-rich-ratatui` | ratatui interop: rich renderables as ratatui widgets, buffer and style conversions, ratatui widgets in rich-interact | `use rich_ratatui` |
-| `rs-rich-intuituive` | intuiTUIve: a reactive, retained terminal UI framework (signals, a retained tree, widgets, sprites and pixel buffers) on rich-interact | `use intuituive` |
-| `rs-rich-web` | serving intuiTUIve apps, or any terminal program, to a web browser over a WebSocket, drawn by a vendored xterm.js or an accessible DOM renderer | `use rich_web` |
-| `rs-rich-embed` | a terminal pane and a web view for intuiTUIve apps, over swappable PTY and browser backends | `use rich_embed` |
-| `rs-rich-lumis` | the lumis (tree-sitter) code highlighter | `use rich_lumis` |
-| `rs-rich-record` | scripted terminal recordings (`rich record`): screenshots, casts, GIF, APNG and MP4, with terminal graphics and held keys | `use rich_record` |
-| `rs-rich-interact` | interactive components: pickers, input, forms, pagers, explorers; the terminal session, keys, natural dates and time zones | `use rich_interact` |
-| `rs-rich-micro` | micro assets: emoji-sized inline images written `:micro:name:` | `use rich_micro` |
-| `rs-rich-marketplace` | the plugin marketplace client: a minisign-signed index and its key chain, listings, version resolution, verified installs and the lockfile | `use rich_marketplace` |
-| `rs-rich` (PyPI) | Python bindings: Rich's API over the Rust core, plus the port's crates (`rs_rich.ext`, `rs_rich.chart`, `rs_rich.diagram`, `rs_rich.interact`, `rs_rich.tui`, ...) | `import rs_rich` |
+| | Package | Role | Import / installed name |
+|---|---|---|---|
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich.svg" width="56" alt=""> | `rs-rich` | faithful port of Python rich 15.0.0 | `use rich` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-ext.svg" width="56" alt=""> | `rs-rich-ext` | additions and plugin registry | `use rich_ext` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-macros.svg" width="56" alt=""> | `rs-rich-macros` | checked markup and derive macros (via `rs-rich-ext`'s `macros` feature) | `use rich_ext::richf` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-cli.svg" width="56" alt=""> | `rs-rich-cli` | CLI tracking Python rich-cli 1.8.1 | executable `rich` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-art.svg" width="56" alt=""> | `rs-rich-art` | FIGlet, image→ASCII, animated GIFs | `use rich_art` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-plugin-api.svg" width="56" alt=""> | `rs-rich-plugin-api` | the plugin contract: highlighters, themes, boxes, renderers, fence renderers, components | `use rich_plugin_api` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-mermaid.svg" width="56" alt=""> | `rs-rich-mermaid` | Mermaid flowcharts drawn as text, ```` ```mermaid ```` fences | `use rich_mermaid` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-diagram.svg" width="56" alt=""> | `rs-rich-diagram` | graph model, layered layout and `Diagram` renderable; DOT (Graphviz) sources and ```` ```dot ```` fences | `use rich_diagram` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-data.svg" width="56" alt=""> | `rs-rich-data` | tabular data: CSV/TSV, JSONL, serde and Arrow row sources, type inference and column statistics | `use rich_data` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-ratatui.svg" width="56" alt=""> | `rs-rich-ratatui` | ratatui interop: rich renderables as ratatui widgets, buffer and style conversions, ratatui widgets in rich-interact | `use rich_ratatui` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-intuituive.svg" width="56" alt=""> | `rs-rich-intuituive` | intuiTUIve: a reactive, retained terminal UI framework (signals, a retained tree, widgets, sprites and pixel buffers) on rich-interact | `use intuituive` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-web.svg" width="56" alt=""> | `rs-rich-web` | serving intuiTUIve apps, or any terminal program, to a web browser over a WebSocket, drawn by a vendored xterm.js or an accessible DOM renderer | `use rich_web` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-embed.svg" width="56" alt=""> | `rs-rich-embed` | a terminal pane and a web view for intuiTUIve apps, over swappable PTY and browser backends | `use rich_embed` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-lumis.svg" width="56" alt=""> | `rs-rich-lumis` | the lumis (tree-sitter) code highlighter | `use rich_lumis` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-record.svg" width="56" alt=""> | `rs-rich-record` | scripted terminal recordings (`rich record`): screenshots, casts, GIF, APNG and MP4, with terminal graphics and held keys | `use rich_record` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-interact.svg" width="56" alt=""> | `rs-rich-interact` | interactive components: pickers, input, forms, pagers, explorers; the terminal session, keys, natural dates and time zones | `use rich_interact` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-micro.svg" width="56" alt=""> | `rs-rich-micro` | micro assets: emoji-sized inline images written `:micro:name:` | `use rich_micro` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-marketplace.svg" width="56" alt=""> | `rs-rich-marketplace` | the plugin marketplace client: a minisign-signed index and its key chain, listings, version resolution, verified installs and the lockfile | `use rich_marketplace` |
+| <img src="docs/assets/intuituive/mascot/crates/rs-rich-py.svg" width="56" alt=""> | `rs-rich` (PyPI) | Python bindings: Rich's API over the Rust core, plus the port's crates (`rs_rich.ext`, `rs_rich.chart`, `rs_rich.diagram`, `rs_rich.interact`, `rs_rich.tui`, ...) | `import rs_rich` |
 
 The published package names carry an `rs-` prefix because `rich` is already taken
 on crates.io by an unrelated crate. The library targets keep the short names, so
