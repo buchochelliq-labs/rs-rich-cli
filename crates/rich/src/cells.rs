@@ -79,6 +79,15 @@ fn table_for(requested: &str) -> &'static [(u32, u32, u8)] {
 
 /// The number of terminal cells `text` occupies. Port of `cell_len`.
 pub fn cell_len(text: &str) -> usize {
+    // ASCII: one cell for each printable character, none for the controls
+    // (NUL and DEL included), in every table. Upstream's own shortcut is
+    // `_is_single_cell_widths`, `len(text)` for text of single-cell
+    // characters; this one also counts past controls without the table
+    // (docs/PORTING.md, "Performance notes"; pinned by
+    // `ascii_cell_len_matches_the_table`).
+    if text.is_ascii() {
+        return text.bytes().filter(|b| (b' '..=b'~').contains(b)).count();
+    }
     // Fast path, matching upstream's: without a zero-width joiner or a
     // variation selector nothing can change a character's measured width, so
     // the sum of the per-character widths is the answer.
@@ -295,7 +304,34 @@ fn char_boundary(text: &str, index: usize) -> usize {
 /// symbols), and every disagreement misaligns a table, panel or wrap point.
 /// Port of `cells.get_character_cell_size`.
 pub fn char_cell_width(c: char) -> usize {
+    if let Some(width) = common_width(c) {
+        return width;
+    }
     width_in(cell_table(), c)
+}
+
+/// The width of the characters most text is made of, which every table
+/// upstream ships agrees on, without the table search: printable ASCII,
+/// Latin-1, Latin Extended, IPA, Greek and Cyrillic letters, box drawing,
+/// blocks and Braille (one cell), CJK ideographs and Hangul syllables
+/// (two). `None` for anything
+/// else, which [`width_in`] looks up. A fast path beside
+/// `get_character_cell_size`'s lookup (docs/PORTING.md, "Performance
+/// notes"); `common_widths_match_every_table` checks every character it
+/// answers against all 21 tables.
+#[inline]
+fn common_width(c: char) -> Option<usize> {
+    match c {
+        ' '..='~'
+        | '\u{a0}'..='\u{2ff}'
+        | '\u{370}'..='\u{482}'
+        | '\u{2500}'..='\u{259f}'
+        | '\u{2800}'..='\u{28ff}' => Some(1),
+        // Unicode 4.1 ends the ideographs at U+9FBB; later ones are wide
+        // only in the newer tables.
+        '\u{4e00}'..='\u{9fbb}' | '\u{ac00}'..='\u{d7a3}' => Some(2),
+        _ => None,
+    }
 }
 
 /// [`char_cell_width`] against an explicitly chosen table, so the version
@@ -420,6 +456,38 @@ pub fn set_cell_size(text: &str, total: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The fast path answers every character it covers as every shipped
+    /// table does, so it holds whatever `UNICODE_VERSION` picks.
+    #[test]
+    fn common_widths_match_every_table() {
+        let mut covered = 0;
+        for c in (0..=0x10ffffu32).filter_map(char::from_u32) {
+            if let Some(width) = common_width(c) {
+                covered += 1;
+                for (table, version) in TABLES.iter().zip(VERSIONS) {
+                    assert_eq!(width, width_in(table, c), "{c:?} in Unicode {version}");
+                }
+            }
+        }
+        assert!(covered > 30_000, "{covered}");
+    }
+
+    /// ASCII text measures as the sum of its characters' table widths,
+    /// controls included, in every table.
+    #[test]
+    fn ascii_cell_len_matches_the_table() {
+        for table in TABLES {
+            for byte in 0..=0x7fu8 {
+                let c = char::from(byte);
+                let expected = width_in(table, c);
+                assert_eq!(cell_len(&c.to_string()), expected, "{c:?}");
+            }
+        }
+        let text = "a\tb\u{0}c\u{7f} d\ne\u{1b}[1m";
+        let expected: usize = text.chars().map(|c| width_in(cell_table(), c)).sum();
+        assert_eq!(cell_len(text), expected);
+    }
 
     #[test]
     fn ascii_len() {
