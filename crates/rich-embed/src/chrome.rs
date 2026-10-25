@@ -378,12 +378,11 @@ impl ChromeEngine {
             if let Some(shared) = running.shared.upgrade() {
                 let child = lock(&shared).child.take();
                 if let Some(mut child) = child {
-                    let _ = child.kill();
-                    let _ = child.wait();
+                    end_browser(&mut child);
                 }
             }
             if let Some(profile) = running.profile {
-                let _ = std::fs::remove_dir_all(profile);
+                remove_profile(&profile);
             }
         }
     }
@@ -462,6 +461,11 @@ impl ChromeEngine {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped());
+        // A group of its own, so ending it ends its helpers too (the
+        // zygote, renderers, GPU and crash handler), which otherwise keep
+        // writing to the profile while it is removed.
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(&mut command, 0);
         let spawned = connect(&mut command, self.wire).and_then(|connect| {
             let child = command.spawn()?;
             Ok((child, connect))
@@ -547,14 +551,50 @@ impl Drop for ChromeEngine {
         self.calls = None;
         let child = lock(&self.shared).child.take();
         if let Some(mut child) = child {
-            let _ = child.kill();
-            let _ = child.wait();
+            end_browser(&mut child);
         }
         if let Some(profile) = &self.profile {
             if self.kept_profile.is_none() {
-                let _ = std::fs::remove_dir_all(profile);
+                remove_profile(profile);
             }
         }
+    }
+}
+
+/// End the browser and every helper in its process group, then reap it.
+fn end_browser(child: &mut Child) {
+    kill_group(child);
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Kill the process group the browser leads, with SIGKILL.
+#[cfg(unix)]
+#[allow(unsafe_code)]
+fn kill_group(child: &Child) {
+    if let Ok(group) = libc::pid_t::try_from(child.id()) {
+        // SAFETY: `killpg` takes plain integers. The browser has not been
+        // reaped, so its id still names the group it leads.
+        unsafe {
+            libc::killpg(group, libc::SIGKILL);
+        }
+    }
+}
+
+/// Elsewhere only the browser itself is ended.
+#[cfg(not(unix))]
+fn kill_group(_child: &Child) {}
+
+/// Remove a temporary profile. A helper the kill has not reached yet can
+/// still write into it for a moment, so the removal is tried again for up
+/// to a second while the directory is there.
+fn remove_profile(profile: &std::path::Path) {
+    for _ in 0..20 {
+        let _ = std::fs::remove_dir_all(profile);
+        if !profile.exists() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
 }
 

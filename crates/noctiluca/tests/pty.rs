@@ -242,6 +242,27 @@ fn profiles_left(tmp: &Path) -> Vec<String> {
         .unwrap_or_default()
 }
 
+/// What the profiles a run left hold, two levels down: which process
+/// still wrote there shows in the names.
+fn contents(tmp: &Path) -> Vec<String> {
+    let mut out = Vec::new();
+    for profile in profiles_left(tmp) {
+        let dir = tmp.join(&profile);
+        for entry in std::fs::read_dir(&dir).into_iter().flatten().flatten() {
+            let name = entry.file_name().to_string_lossy().to_string();
+            let inner: Vec<String> = std::fs::read_dir(entry.path())
+                .into_iter()
+                .flatten()
+                .flatten()
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .take(8)
+                .collect();
+            out.push(format!("{profile}/{name} {inner:?}"));
+        }
+    }
+    out
+}
+
 /// Quitting, and SIGTERM, end the browser and remove its temporary
 /// profile, through a real Chrome when `RICH_EMBED_CHROME` names one.
 #[test]
@@ -257,8 +278,9 @@ fn no_temporary_profile_is_left_after_quitting_or_sigterm() {
         while !profiles_left(tmp).is_empty() {
             assert!(
                 start.elapsed() < Duration::from_secs(10),
-                "{how} left {:?}",
-                profiles_left(tmp)
+                "{how} left {:?}, holding {:?}",
+                profiles_left(tmp),
+                contents(tmp)
             );
             std::thread::sleep(Duration::from_millis(50));
         }
