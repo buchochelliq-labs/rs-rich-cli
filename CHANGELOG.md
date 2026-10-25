@@ -33,6 +33,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   decoded.
 - **rs-rich-web's DOM renderer** compares only the rows the frames
   damaged, and makes the accessibility tree's JSON only when it changed.
+- **rs-rich-web can compress frames**, opt-in: `Server::compress`. Pages
+  with `DecompressionStream` ask for it and inflate frames themselves.
+  Measured: frames shrink to 5 to 30% for 15 to 60 µs each.
 
 ### Noctiluca's docs and iconography (noctiluca)
 

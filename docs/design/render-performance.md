@@ -422,6 +422,46 @@ The benchmark gains a simulated link (bytes per second plus a fixed
 latency per write), so each strategy and compression setting is judged by
 time to the screen, not only by bytes.
 
+**Built on `023-scroll`, opt-in:** `Server::compress(Some(threshold))`.
+A page that has `DecompressionStream` asks with `z=1`; then each binary
+message starts with a byte, `0` as it is or `1` for `deflate-raw`, and a
+text message at least the threshold long goes deflated. The page handles
+messages in order through a promise queue. Off by default.
+
+Measured per frame on rs-rich-web's own scenes, deflate at level 1, one
+stream per frame, with the compressor optimised and the rest a debug
+build (`tests/compress_measure.rs`, run by hand):
+
+| Scene, 80x24 unless said | Renderer | Bytes a frame | Deflated | Encode |
+|---|---|---:|---:|---:|
+| Churn, every cell | xterm | 26,297 | 1,506 (5%) | 59 µs |
+| Churn, every cell | DOM | 18,200 | 1,412 (7%) | 43 µs |
+| List, a row a frame | xterm | 613 | 199 (32%) | 20 µs |
+| List, a row a frame | DOM | 821 | 210 (25%) | 18 µs |
+| List, a page a frame | xterm | 1,176 | 326 (27%) | 24 µs |
+| List, a page a frame | DOM | 1,530 | 280 (18%) | 20 µs |
+| Log append | xterm | 132 | 61 (46%) | 15 µs |
+| Log append | DOM | 557 | 161 (28%) | 21 µs |
+| List at 200x60, a page a frame | xterm | 3,091 | 616 (19%) | 30 µs |
+| List at 200x60, a page a frame | DOM | 7,204 | 502 (6%) | 25 µs |
+
+Small frames gain little and still cost the encode, hence the threshold.
+On a 10 Mbit/s link a 26 kB churn frame takes 21 ms to send and 1.2 ms
+deflated, for 59 µs of work: a clear gain. On a local machine the link is
+faster than the compressor, so it stays off by default.
+
+**Not built: client pull.** A session sends each frame as it is drawn, and
+the socket's write blocks while the kernel's buffer is full, so no backlog
+grows inside the server, but frames can queue in the kernel and the
+network. VNC's and Mosh's way is to send only the newest state once the
+page says it has drawn the last: the program sessions already do this
+(the page acknowledges bytes shown). For apps, the DOM renderer is the
+natural seam: it holds the last sent lines and the damage since a frame
+number, so it can skip frames until the page acknowledges one and then
+send the rows damaged since the acknowledged frame. Mosh-style deltas
+against an acknowledged frame and local echo of typed keys go there too.
+Later work.
+
 ## Benchmarks
 
 A benchmark comes first and decides the defaults. Each scene runs at
