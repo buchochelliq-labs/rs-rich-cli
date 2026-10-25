@@ -56,8 +56,20 @@ impl ColorTriplet {
     }
 
     /// `#rrggbb` hex string (matches `ColorTriplet.hex`).
+    ///
+    /// Upstream is `f"#{red:02x}{green:02x}{blue:02x}"`. Written digit by
+    /// digit rather than through `format!`, which was half of a frame that
+    /// builds a colour per cell (docs/PORTING.md, "Performance notes");
+    /// `hex_matches_format` pins it to the formatted string.
     pub fn hex(&self) -> String {
-        format!("#{:02x}{:02x}{:02x}", self.red, self.green, self.blue)
+        const DIGITS: &[u8; 16] = b"0123456789abcdef";
+        let mut hex = String::with_capacity(7);
+        hex.push('#');
+        for value in [self.red, self.green, self.blue] {
+            hex.push(DIGITS[usize::from(value >> 4)] as char);
+            hex.push(DIGITS[usize::from(value & 0xf)] as char);
+        }
+        hex
     }
 
     /// `rgb(r,g,b)` (matches `ColorTriplet.rgb`).
@@ -787,6 +799,21 @@ impl crate::protocol::Renderable for Color {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The hand-written hex is upstream's `"#%02x%02x%02x"` for every
+    /// value of every channel.
+    #[test]
+    fn hex_matches_format() {
+        for value in 0..=255u8 {
+            let other = value.wrapping_mul(97).wrapping_add(13);
+            for (r, g, b) in [(value, other, 0), (other, value, 255), (0, other, value)] {
+                assert_eq!(
+                    ColorTriplet::new(r, g, b).hex(),
+                    format!("#{r:02x}{g:02x}{b:02x}")
+                );
+            }
+        }
+    }
 
     /// A Windows console matches against `WINDOWS_PALETTE`: `#808080` is
     /// bright black (90), not the standard palette's white (37); an 8-bit
