@@ -256,6 +256,82 @@ Prototyping a JavaScript walker that serialises only elements near the
 viewport is listed below, to be measured on a long feed before it
 replaces anything.
 
+## Ideas from game engines
+
+Games have spent decades on "draw a lot, every frame, within a budget".
+Most of their ideas carry over to a cell screen. In order of expected
+payoff:
+
+1. **Data-oriented cells.** A `Cell` is `{ text: String, width, style }`
+   (`rich-ext/src/surface/screen.rs:203`): a heap string per cell.
+   - Comparing, copying and keeping the "last sent" screen all chase a
+     pointer per cell. That is the likeliest reason churn costs 3.0 ms
+     against ratatui's 0.33.
+   - Games lay hot data out flat (structure of arrays, no per-item
+     allocation). The same here: a cell becomes a packed `u32` code point,
+     or an index into a grapheme table for the rare cluster, plus width
+     and style, in one `Vec`.
+   - Comparing a row is then comparing a slice, and hashing it is cheap.
+2. **A frame budget with adaptive quality** (dynamic resolution).
+   - Measure each frame's build and write time. When a frame runs over
+     budget, or the terminal is slow to take our writes, step quality
+     down for the regions that move:
+     - real pixels drop to half blocks, then to placeholders;
+     - a region's frame rate drops.
+   - Step quality back up when things settle.
+   - Noctiluca's media "byte budget" is this idea; it belongs in core.
+3. **Level of detail while scrolling fast.** During a fast scroll or a
+   held key, draw cheap stand-ins: text without images, and skeleton rows
+   for items not built yet. Draw full detail once the scroll rests for a
+   few frames. Lists, Noctiluca and image-heavy views all gain.
+4. **A render thread with back-pressure** (triple buffering).
+   - Build frame N+1 while frame N is still being written.
+   - If the terminal is still busy when a new frame is ready, drop the
+     stale one and send only the newest. Games drop frames rather than
+     queue them; today a slow terminal queues our writes.
+   - The frame rate follows how fast the terminal really takes bytes.
+5. **Culling.**
+   - **Frustum culling is the viewport:** the virtual scroll view above.
+   - **Occlusion culling:** a node wholly covered by an opaque layer (a
+     modal, a full-screen overlay) need not draw at all.
+   - **Spatial partitioning:** a coarse tile grid, like Textual's 100x20
+     map or a game's quadtree, makes both cheap, and also hit-testing.
+6. **Tiles with hashes.** Split the screen into tiles and keep a hash per
+   tile and per row. A frame compares hashes first, and cells only inside
+   tiles that differ. The `rows` and `scroll` strategies need row hashes
+   anyway.
+7. **Fewer state changes** (draw-call batching). GPUs sort draws to
+   change state less. A terminal's state is the cursor and the SGR pen,
+   so the encoder writes each row's runs in an order that changes the pen
+   least, and sends style deltas instead of resets. This is the encoder
+   work above, framed as state sorting.
+8. **Parallel encoding** (job systems). Rows encode independently once
+   the pen state at each row start is fixed, so a big damaged frame can
+   encode rows on several threads and join them. Worth it only past a
+   size the benchmark finds.
+9. **Asset atlases** for images. Kitty can keep an image under an id and
+   place it many times, or move a placement, without sending it again.
+   - Like a texture atlas, we upload once and place by reference.
+   - A scrolled picture then costs a placement, not a re-upload.
+   - Sprites and micro assets reuse uploaded frames, and Kitty's own
+     animation frames play a GIF with no bytes from us per frame.
+10. **Arenas and pools.** Reuse per-frame buffers (damage lists, span
+    lists, the output buffer) instead of allocating them each frame.
+11. **A frame-time overlay** (a game's performance HUD). The inspector
+    shows per-frame build, encode and write time, bytes, cells elided and
+    strategy chosen, as a small graph. That makes regressions visible
+    while using an app, not only in CI.
+12. **Network ideas, for rs-rich-web:**
+    - **Interest management:** send only what a client can see.
+    - **Delta snapshots with acknowledgements**, so a slow client gets
+      the newest state and not a backlog.
+    - **Client-side prediction of typed characters:** local echo,
+      corrected by the next frame.
+
+Each goes through the benchmark below before it is kept. Ideas 1, 2, 4, 6
+and 7 change the core painter. Idea 3 is the virtual scroll view's.
+Ideas 9 and 12 are the image layer's and rs-rich-web's.
+
 ## Benchmarks
 
 A benchmark comes first and decides the defaults. Each scene runs at
@@ -294,7 +370,8 @@ its assertions.
 
 1. **The benchmark harness and stats:** the scenes, the per-frame counts,
    and the vt100 check, with today's painter as the baseline.
-2. **The encoder improvements:** shorter style changes and cursor moves,
+2. **Data-oriented cells and row hashes** (ideas 1 and 6), then **the
+   encoder improvements:** shorter style changes and cursor moves,
    ECH, EL and REP, and one buffer.
 3. **The strategies:** `Rows`, `Full` and `Scroll`, then `Best` with
    thresholds from step 1's numbers.
