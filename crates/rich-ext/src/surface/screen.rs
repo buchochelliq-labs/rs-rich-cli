@@ -199,33 +199,137 @@ impl Rect {
 
 /// One cell: a grapheme and its style. A wide grapheme's second column is a
 /// continuation cell (empty text, width 0).
-#[derive(Clone, Debug, PartialEq, Eq)]
+///
+/// A cell is small and `Copy`, with no heap string: a grapheme of up to
+/// four bytes (every single character, and short clusters such as `e` and
+/// a combining accent) is kept inline, and a longer one (an emoji joined
+/// with ZWJs) as an index into a table of every such grapheme seen, which
+/// is shared by all screens and only grows. Comparing, copying and
+/// scrolling cells moves plain data, as a game keeps its hot data flat.
+///
+/// ```
+/// use rich_ext::frame::StyleId;
+/// use rich_ext::surface::Cell;
+///
+/// let a = Cell::new("é", 1, StyleId::NONE);
+/// let family = Cell::new("👨\u{200d}👩\u{200d}👧", 2, StyleId::NONE);
+/// assert_eq!((a.text(), family.text()), ("é", "👨\u{200d}👩\u{200d}👧"));
+/// assert_eq!(family, Cell::new("👨\u{200d}👩\u{200d}👧", 2, StyleId::NONE));
+/// assert_eq!(std::mem::size_of::<Cell>(), 12);
+/// ```
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
 pub struct Cell {
-    pub text: String,
+    /// The grapheme's UTF-8, or a long grapheme's index (little-endian).
+    bytes: [u8; 4],
+    /// How many of `bytes` are the text, or [`LONG`] for an index.
+    len: u8,
     pub width: u8,
     pub style: StyleId,
 }
 
+/// [`Cell::len`] for a grapheme kept in the shared table.
+const LONG: u8 = u8::MAX;
+
+/// The graphemes longer than four bytes, each once, for every screen: what
+/// a cell's index names. Leaked, so a cell's text is borrowed for as long
+/// as the program runs.
+struct Graphemes {
+    texts: Vec<&'static str>,
+    index: HashMap<&'static str, u32>,
+}
+
+fn graphemes() -> &'static std::sync::RwLock<Graphemes> {
+    static TABLE: std::sync::OnceLock<std::sync::RwLock<Graphemes>> = std::sync::OnceLock::new();
+    TABLE.get_or_init(|| {
+        std::sync::RwLock::new(Graphemes {
+            texts: Vec::new(),
+            index: HashMap::new(),
+        })
+    })
+}
+
 impl Cell {
-    fn blank() -> Cell {
+    /// A cell showing `text` (one grapheme), `width` columns wide (0 for a
+    /// continuation), in `style`.
+    pub fn new(text: &str, width: u8, style: StyleId) -> Cell {
+        let mut bytes = [0u8; 4];
+        let len = if text.len() <= 4 {
+            bytes[..text.len()].copy_from_slice(text.as_bytes());
+            text.len() as u8
+        } else {
+            let known = graphemes()
+                .read()
+                .unwrap_or_else(|e| e.into_inner())
+                .index
+                .get(text)
+                .copied();
+            let at = known.unwrap_or_else(|| {
+                let mut table = graphemes().write().unwrap_or_else(|e| e.into_inner());
+                if let Some(&at) = table.index.get(text) {
+                    return at;
+                }
+                let at = table.texts.len() as u32;
+                let text: &'static str = Box::leak(text.to_string().into_boxed_str());
+                table.texts.push(text);
+                table.index.insert(text, at);
+                at
+            });
+            bytes = at.to_le_bytes();
+            LONG
+        };
         Cell {
-            text: " ".into(),
-            width: 1,
-            style: StyleId::NONE,
+            bytes,
+            len,
+            width,
+            style,
         }
+    }
+
+    /// A single character, `width` columns wide.
+    #[inline]
+    fn char(c: char, width: u8, style: StyleId) -> Cell {
+        let mut bytes = [0u8; 4];
+        let len = c.encode_utf8(&mut bytes).len() as u8;
+        Cell {
+            bytes,
+            len,
+            width,
+            style,
+        }
+    }
+
+    fn blank() -> Cell {
+        Cell::char(' ', 1, StyleId::NONE)
+    }
+
+    /// The grapheme the cell shows; empty for a continuation.
+    pub fn text(&self) -> &str {
+        if self.len == LONG {
+            let at = u32::from_le_bytes(self.bytes) as usize;
+            let table = graphemes().read().unwrap_or_else(|e| e.into_inner());
+            return table.texts[at];
+        }
+        // Written from a `&str` or a `char`, so the bytes are UTF-8.
+        std::str::from_utf8(&self.bytes[..self.len as usize]).unwrap_or(" ")
     }
 
     pub fn is_continuation(&self) -> bool {
         self.width == 0
     }
 
+    #[inline]
     fn set(&mut self, text: &str, width: u8, style: StyleId) {
-        if self.text != text {
-            self.text.clear();
-            self.text.push_str(text);
+        *self = Cell::new(text, width, style);
+    }
+
+    /// The same grapheme, `width` wide, in `style`.
+    #[inline]
+    fn restyled(self, width: u8, style: StyleId) -> Cell {
+        Cell {
+            width,
+            style,
+            ..self
         }
-        self.width = width;
-        self.style = style;
     }
 }
 
@@ -280,7 +384,7 @@ impl Screen {
     /// let bold = Style::parse("bold").unwrap();
     /// screen.write_lines(Rect::new(0, 0, 4, 1), &[vec![Segment::new("ab", Some(bold.clone()))]]);
     /// let cell = screen.get(1, 0).unwrap();
-    /// assert_eq!((cell.text.as_str(), screen.style(cell.style)), ("b", Some(&bold)));
+    /// assert_eq!((cell.text(), screen.style(cell.style)), ("b", Some(&bold)));
     /// assert!(screen.get(4, 0).is_none());
     /// ```
     pub fn get(&self, x: u16, y: u16) -> Option<&Cell> {
@@ -378,7 +482,7 @@ impl Screen {
     ///     Some(Color::from_rgb(255, 0, 0)),
     ///     Some(Color::from_rgb(0, 0, 255)),
     /// );
-    /// assert_eq!((cell.text.as_str(), screen.style(cell.style)), ("▀", Some(&style)));
+    /// assert_eq!((cell.text(), screen.style(cell.style)), ("▀", Some(&style)));
     /// ```
     pub fn put_rgb(&mut self, x: u16, y: u16, ch: char, fg: Option<Rgb>, bg: Option<Rgb>) {
         if x >= self.width || y >= self.height {
@@ -422,15 +526,12 @@ impl Screen {
         if width == 0 && x > 0 {
             // The second column of a wide grapheme: its first is erased too.
             let lead = &mut self.cells[at - 1];
-            let lead_style = lead.style;
-            lead.set(" ", 1, lead_style);
+            *lead = Cell::char(' ', 1, lead.style);
         } else if width >= 2 && x + 1 < self.width {
             let next = &mut self.cells[at + 1];
-            let next_style = next.style;
-            next.set(" ", 1, next_style);
+            *next = Cell::char(' ', 1, next.style);
         }
-        let mut buffer = [0u8; 4];
-        self.cells[at].set(ch.encode_utf8(&mut buffer), 1, style);
+        self.cells[at] = Cell::char(ch, 1, style);
     }
 
     /// A wide grapheme that `rect` cuts in half, on either side, becomes a
@@ -578,9 +679,7 @@ impl Screen {
                             x += 1;
                             continue;
                         }
-                        let mut buffer = [0u8; 4];
-                        self.cell_mut(x, y)
-                            .set(c.encode_utf8(&mut buffer), width as u8, id);
+                        *self.cell_mut(x, y) = Cell::char(c, width as u8, id);
                         if width == 2 {
                             self.cell_mut(x + 1, y).set("", 0, id);
                         }
@@ -658,7 +757,7 @@ impl Screen {
                 if tx >= self.width {
                     break;
                 }
-                let cell = source.cell(from.x + column, from.y + row);
+                let cell = *source.cell(from.x + column, from.y + row);
                 let cut = cell.is_continuation() && column == 0
                     || cell.width >= 2 && (column + 1 >= from.width || tx + 1 >= self.width);
                 let styles = &mut self.styles;
@@ -671,7 +770,7 @@ impl Screen {
                 if cut {
                     self.cell_mut(tx, ty).set(" ", 1, id);
                 } else {
-                    self.cell_mut(tx, ty).set(&cell.text, cell.width, id);
+                    *self.cell_mut(tx, ty) = cell.restyled(cell.width, id);
                 }
             }
         }
@@ -689,10 +788,8 @@ impl Screen {
         let width = self.width as usize;
         for y in rect.y..rect.bottom() - rows {
             let (from, to) = ((y + rows) as usize * width, y as usize * width);
-            for x in rect.x as usize..rect.right() as usize {
-                let cell = self.cells[from + x].clone();
-                self.cells[to + x] = cell;
-            }
+            let (a, b) = (from + rect.x as usize, from + rect.right() as usize);
+            self.cells.copy_within(a..b, to + rect.x as usize);
         }
         self.clear(Rect::new(rect.x, rect.bottom() - rows, rect.width, rows));
     }
@@ -720,7 +817,7 @@ impl Screen {
                         ));
                     }
                     style = Some(cell.style);
-                    run.push_str(&cell.text);
+                    run.push_str(cell.text());
                 }
                 if let Some(id) = style.filter(|_| !run.is_empty()) {
                     line.push(Segment::new(run, self.style(id).cloned()));
@@ -737,7 +834,7 @@ impl Screen {
                 (0..self.width)
                     .map(|x| self.cell(x, y))
                     .filter(|c| !c.is_continuation())
-                    .map(|c| c.text.as_str())
+                    .map(|c| c.text())
                     .collect()
             })
             .collect()
@@ -1213,7 +1310,7 @@ impl Painter {
                             .iter_mut()
                             .zip(&screen.cells[span])
                         {
-                            sent.clone_from(cell);
+                            *sent = *cell;
                         }
                     }
                 }
@@ -1287,8 +1384,9 @@ impl Painter {
             let before = out.len();
             self.set_pen(screen, cell.style, pen, out);
             self.stats.style_bytes += out.len() - before;
-            out.push_str(&cell.text);
-            self.stats.text_bytes += cell.text.len();
+            let text = cell.text();
+            out.push_str(text);
+            self.stats.text_bytes += text.len();
             let next = x0 + cell.width.max(1) as u16;
             let columns = usize::from(next - x0);
             self.stats.compared += usize::from(next - x);
@@ -1445,7 +1543,7 @@ mod tests {
         screen.write_lines(Rect::new(0, 0, 5, 1), &[line("日本語")]);
         assert_eq!(screen.plain(), ["日本 "]);
         assert!(screen.cell(1, 0).is_continuation());
-        assert_eq!(screen.cell(4, 0).text, " ");
+        assert_eq!(screen.cell(4, 0).text(), " ");
     }
 
     #[test]

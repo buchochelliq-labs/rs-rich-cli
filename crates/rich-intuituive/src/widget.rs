@@ -1150,7 +1150,7 @@ impl Canvas<'_> {
         }
         let cell = self.screen.get(self.rect.x + x, self.rect.y + y)?;
         Some(CellView {
-            symbol: &cell.text,
+            symbol: cell.text(),
             style: self.screen.style(cell.style),
             width: cell.width,
         })

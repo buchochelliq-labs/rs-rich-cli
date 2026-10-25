@@ -7542,7 +7542,7 @@ fn selected_text(screen: &Screen, start: (u16, u16), end: (u16, u16)) -> String 
         }
         let cell = screen.cell(x, y);
         if !cell.is_continuation() {
-            rows.last_mut().expect("a row").push_str(&cell.text);
+            rows.last_mut().expect("a row").push_str(cell.text());
         }
     }
     rows.iter()

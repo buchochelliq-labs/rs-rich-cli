@@ -289,7 +289,7 @@ fn a_pixel_frame_draws_as_half_blocks() {
     let screen = driver.screen();
     let check = |x: u16, top: Color, bottom: Color| {
         let cell = screen.cell(x, 1);
-        assert_eq!(cell.text, "▀");
+        assert_eq!(cell.text(), "▀");
         let style = screen.style(cell.style).unwrap();
         assert_eq!(style.color(), Some(&top));
         assert_eq!(style.bgcolor(), Some(&bottom));
