@@ -18,6 +18,52 @@ pub struct TerminalTheme {
 }
 
 impl TerminalTheme {
+    /// A theme from its background, foreground, eight normal colors and
+    /// eight bright ones (the normal colors again when `None`). Port of
+    /// `TerminalTheme.__init__`.
+    ///
+    /// # Panics
+    ///
+    /// When `normal` or `bright` does not hold eight colors.
+    pub fn new(
+        background: (u8, u8, u8),
+        foreground: (u8, u8, u8),
+        normal: &[(u8, u8, u8)],
+        bright: Option<&[(u8, u8, u8)]>,
+    ) -> Self {
+        let bright = bright.unwrap_or(normal);
+        assert!(
+            normal.len() == 8 && bright.len() == 8,
+            "a theme has 8 normal and 8 bright colors"
+        );
+        let triplet = |(red, green, blue): (u8, u8, u8)| ColorTriplet::new(red, green, blue);
+        let mut ansi = [ColorTriplet::new(0, 0, 0); 16];
+        for (slot, color) in ansi.iter_mut().zip(normal.iter().chain(bright)) {
+            *slot = triplet(*color);
+        }
+        TerminalTheme {
+            background: triplet(background),
+            foreground: triplet(foreground),
+            ansi,
+        }
+    }
+
+    /// The background color. Upstream's `background_color` attribute.
+    pub fn background_color(&self) -> ColorTriplet {
+        self.background
+    }
+
+    /// The foreground color. Upstream's `foreground_color` attribute.
+    pub fn foreground_color(&self) -> ColorTriplet {
+        self.foreground
+    }
+
+    /// The sixteen ANSI colors as a palette. Upstream's `ansi_colors`
+    /// attribute.
+    pub fn ansi_colors(&self) -> crate::color::Palette {
+        crate::color::Palette::new(self.ansi.to_vec())
+    }
+
     /// Resolve `color` to a concrete RGB triplet under this theme. Standard
     /// colors use the theme's ANSI palette; the terminal default maps to the
     /// theme's fore/background; 8-bit and truecolor resolve directly.
@@ -146,17 +192,7 @@ pub const NIGHT_OWLISH: TerminalTheme = TerminalTheme {
     ],
 };
 
-/// Blend two triplets, `cross_fade` of the way from `color1` to `color2`
-/// (truncating toward zero, matching upstream's `int()`). Port of
-/// `rich.color.blend_rgb`.
-pub fn blend_rgb(color1: ColorTriplet, color2: ColorTriplet, cross_fade: f64) -> ColorTriplet {
-    let mix = |a: u8, b: u8| (a as f64 + (b as f64 - a as f64) * cross_fade) as u8;
-    ColorTriplet::new(
-        mix(color1.red, color2.red),
-        mix(color1.green, color2.green),
-        mix(color1.blue, color2.blue),
-    )
-}
+pub use crate::color::blend_rgb;
 
 #[cfg(test)]
 mod tests {

@@ -7,7 +7,7 @@ use crate::console::{Console, ConsoleOptions};
 use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
-use crate::style::Style;
+use crate::style::{Style, StyleType};
 
 /// Blank space around a child renderable. Mirrors `rich.padding.Padding`.
 ///
@@ -15,7 +15,7 @@ use crate::style::Style;
 pub struct Padding {
     child: Box<dyn Renderable>,
     pad: (usize, usize, usize, usize),
-    style: Style,
+    style: StyleType,
     expand: bool,
 }
 
@@ -25,7 +25,7 @@ impl Padding {
         Padding {
             child,
             pad,
-            style: Style::new(),
+            style: StyleType::Style(Style::new()),
             expand: true,
         }
     }
@@ -53,16 +53,33 @@ impl Padding {
         Padding::new(child, (vertical, horizontal, vertical, horizontal))
     }
 
-    /// Set the style applied to the padding (and blank lines).
-    pub fn style(mut self, style: Style) -> Self {
-        self.style = style;
+    /// Set the style applied to the padding (and blank lines): a [`Style`],
+    /// or a theme name or style definition resolved at render time, as
+    /// upstream's `style=` is.
+    pub fn style(mut self, style: impl Into<StyleType>) -> Self {
+        self.style = style.into();
         self
+    }
+
+    /// Unpack padding given CSS style, as `(top, right, bottom, left)`. Port
+    /// of `Padding.unpack`: one value pads every side, two are
+    /// `(vertical, horizontal)` and four are explicit. Any other count is
+    /// `None`, where upstream raises `ValueError`.
+    pub fn unpack(pad: &[usize]) -> Option<(usize, usize, usize, usize)> {
+        match *pad {
+            [pad] => Some((pad, pad, pad, pad)),
+            [top, right] => Some((top, right, top, right)),
+            [top, right, bottom, left] => Some((top, right, bottom, left)),
+            _ => None,
+        }
     }
 }
 
 impl Renderable for Padding {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let (top, right, bottom, left) = self.pad;
+        // `style = console.get_style(self.style)`.
+        let style = console.get_style(&self.style).unwrap_or_default();
         let width = if self.expand {
             options.max_width
         } else {
@@ -78,14 +95,10 @@ impl Renderable for Padding {
         }
         // Upstream renders the child with `style=style`, so the padding style
         // also sits under the content and its fill (#442).
-        let lines = console.render_lines_styled(
-            self.child.as_ref(),
-            &child_options,
-            Some(&self.style),
-            true,
-        );
+        let lines =
+            console.render_lines_styled(self.child.as_ref(), &child_options, Some(&style), true);
 
-        let style = Some(self.style.clone());
+        let style = Some(style);
         let blank = || Segment::new(" ".repeat(width), style.clone());
         let left_pad = |row: &mut Vec<Segment>| {
             if left > 0 {

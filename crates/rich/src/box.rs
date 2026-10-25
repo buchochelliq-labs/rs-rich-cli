@@ -73,6 +73,10 @@ pub struct Box {
     pub bottom: char,
     pub bottom_divider: char,
     pub bottom_right: char,
+
+    /// Whether the box draws in ASCII only (upstream's `ascii=` flag): an
+    /// ASCII-only terminal keeps it rather than substituting [`ASCII`].
+    pub ascii: bool,
 }
 
 impl Box {
@@ -80,7 +84,22 @@ impl Box {
     ///
     /// Panics at const-eval time if the template is malformed, so the built-in
     /// constants are validated when the crate compiles.
-    const fn parse(template: &str) -> Box {
+    /// A custom box from its 8-line template, as upstream's `Box(box,
+    /// ascii=…)`: each of the first eight lines must hold exactly four
+    /// characters, else `None` (upstream raises `ValueError`). `ascii` says
+    /// the glyphs are all ASCII, so [`substitute`](Self::substitute) keeps
+    /// the box on an ASCII-only terminal.
+    pub fn new(template: &str, ascii: bool) -> Option<Box> {
+        let lines: Vec<&str> = template.lines().collect();
+        if lines.len() < 8 || lines[..8].iter().any(|line| line.chars().count() != 4) {
+            return None;
+        }
+        let mut parsed = Box::parse(template, ascii);
+        parsed.ascii = ascii;
+        Some(parsed)
+    }
+
+    const fn parse(template: &str, ascii: bool) -> Box {
         let rows = split_rows(template);
         Box {
             top_left: rows[0][0],
@@ -119,6 +138,8 @@ impl Box {
             bottom: rows[7][1],
             bottom_divider: rows[7][2],
             bottom_right: rows[7][3],
+
+            ascii,
         }
     }
 
@@ -190,60 +211,37 @@ impl Box {
     /// Return a version of this box safe for the target terminal. Port of
     /// `Box.substitute`.
     ///
-    /// On a legacy Windows console (`legacy_windows` + `safe`), the fancy boxes
-    /// that legacy code pages can't draw — `ROUNDED`, `HEAVY`, `HEAVY_HEAD` —
-    /// fall back to `SQUARE` (`DOUBLE`/`SQUARE`/`MINIMAL` are kept). On a
-    /// non-UTF-8 terminal (`ascii_only`), any non-ASCII box becomes `ASCII`.
+    /// On a legacy Windows console (`legacy_windows` + `safe`), the boxes
+    /// that legacy code pages can't draw fall back, as upstream's
+    /// `LEGACY_WINDOWS_SUBSTITUTIONS`: `ROUNDED`, `HEAVY`, `HEAVY_EDGE` and
+    /// `HEAVY_HEAD` to `SQUARE`, `MINIMAL_HEAVY_HEAD` to `MINIMAL` and
+    /// `SIMPLE_HEAVY` to `SIMPLE`. On a non-UTF-8 terminal (`ascii_only`), a
+    /// box not flagged [`ascii`](Self::ascii) becomes `ASCII`.
     pub fn substitute(&self, legacy_windows: bool, safe: bool, ascii_only: bool) -> Box {
         let mut result = *self;
-        if legacy_windows && safe && (result == ROUNDED || result == HEAVY || result == HEAVY_HEAD)
-        {
-            result = SQUARE;
+        if legacy_windows && safe {
+            result = legacy_windows_substitution(result);
         }
-        if ascii_only && !result.is_ascii() {
+        if ascii_only && !result.ascii {
             result = ASCII;
         }
         result
     }
 
-    /// Whether every glyph is ASCII. Upstream passes `ascii=True` to exactly
-    /// the built-in boxes drawn in ASCII (`ASCII`, `ASCII2`,
+    /// [`substitute`](Self::substitute) under render options, as upstream's
+    /// `Box.substitute(options, safe=True)`: `options.legacy_windows` and
+    /// `options.ascii_only`.
+    pub fn substitute_for(&self, options: &crate::console::ConsoleOptions, safe: bool) -> Box {
+        self.substitute(options.legacy_windows, safe, options.ascii_only())
+    }
+
+    /// Whether the box is flagged as ASCII-only. Upstream passes `ascii=True`
+    /// to exactly the built-in boxes drawn in ASCII (`ASCII`, `ASCII2`,
     /// `ASCII_DOUBLE_HEAD`, `MARKDOWN`), which `substitute` keeps on an
-    /// ASCII-only terminal.
+    /// ASCII-only terminal; a custom box carries the flag it was made with
+    /// ([`Box::new`]).
     pub fn is_ascii(&self) -> bool {
-        [
-            self.top_left,
-            self.top,
-            self.top_divider,
-            self.top_right,
-            self.head_left,
-            self.head_vertical,
-            self.head_right,
-            self.head_row_left,
-            self.head_row_horizontal,
-            self.head_row_cross,
-            self.head_row_right,
-            self.mid_left,
-            self.mid_vertical,
-            self.mid_right,
-            self.row_left,
-            self.row_horizontal,
-            self.row_cross,
-            self.row_right,
-            self.foot_row_left,
-            self.foot_row_horizontal,
-            self.foot_row_cross,
-            self.foot_row_right,
-            self.foot_left,
-            self.foot_vertical,
-            self.foot_right,
-            self.bottom_left,
-            self.bottom,
-            self.bottom_divider,
-            self.bottom_right,
-        ]
-        .iter()
-        .all(char::is_ascii)
+        self.ascii
     }
 
     /// If this box draws its header border with special characters, the most
@@ -337,53 +335,70 @@ const fn char_from_u32(cp: u32) -> char {
     }
 }
 
+/// `LEGACY_WINDOWS_SUBSTITUTIONS.get(box, box)`.
+fn legacy_windows_substitution(b: Box) -> Box {
+    if b == ROUNDED || b == HEAVY || b == HEAVY_EDGE || b == HEAVY_HEAD {
+        SQUARE
+    } else if b == MINIMAL_HEAVY_HEAD {
+        MINIMAL
+    } else if b == SIMPLE_HEAVY {
+        SIMPLE
+    } else {
+        b
+    }
+}
+
 // ── Built-in boxes (subset of upstream `rich/box.py`) ──
 
-pub const ASCII: Box = Box::parse("+--+\n| ||\n|-+|\n| ||\n|-+|\n|-+|\n| ||\n+--+\n");
+pub const ASCII: Box = Box::parse("+--+\n| ||\n|-+|\n| ||\n|-+|\n|-+|\n| ||\n+--+\n", true);
 
-pub const SQUARE: Box = Box::parse("┌─┬┐\n│ ││\n├─┼┤\n│ ││\n├─┼┤\n├─┼┤\n│ ││\n└─┴┘\n");
+pub const SQUARE: Box = Box::parse("┌─┬┐\n│ ││\n├─┼┤\n│ ││\n├─┼┤\n├─┼┤\n│ ││\n└─┴┘\n", false);
 
-pub const ROUNDED: Box = Box::parse("╭─┬╮\n│ ││\n├─┼┤\n│ ││\n├─┼┤\n├─┼┤\n│ ││\n╰─┴╯\n");
+pub const ROUNDED: Box = Box::parse("╭─┬╮\n│ ││\n├─┼┤\n│ ││\n├─┼┤\n├─┼┤\n│ ││\n╰─┴╯\n", false);
 
-pub const HEAVY: Box = Box::parse("┏━┳┓\n┃ ┃┃\n┣━╋┫\n┃ ┃┃\n┣━╋┫\n┣━╋┫\n┃ ┃┃\n┗━┻┛\n");
+pub const HEAVY: Box = Box::parse("┏━┳┓\n┃ ┃┃\n┣━╋┫\n┃ ┃┃\n┣━╋┫\n┣━╋┫\n┃ ┃┃\n┗━┻┛\n", false);
 
 /// The default `Table` box: heavy top border + head separator, light body.
-pub const HEAVY_HEAD: Box = Box::parse("┏━┳┓\n┃ ┃┃\n┡━╇┩\n│ ││\n├─┼┤\n├─┼┤\n│ ││\n└─┴┘\n");
+pub const HEAVY_HEAD: Box = Box::parse("┏━┳┓\n┃ ┃┃\n┡━╇┩\n│ ││\n├─┼┤\n├─┼┤\n│ ││\n└─┴┘\n", false);
 
-pub const DOUBLE: Box = Box::parse("╔═╦╗\n║ ║║\n╠═╬╣\n║ ║║\n╠═╬╣\n╠═╬╣\n║ ║║\n╚═╩╝\n");
+pub const DOUBLE: Box = Box::parse("╔═╦╗\n║ ║║\n╠═╬╣\n║ ║║\n╠═╬╣\n╠═╬╣\n║ ║║\n╚═╩╝\n", false);
 
-pub const MINIMAL: Box = Box::parse("  ╷ \n  │ \n╶─┼╴\n  │ \n╶─┼╴\n╶─┼╴\n  │ \n  ╵ \n");
+pub const MINIMAL: Box = Box::parse("  ╷ \n  │ \n╶─┼╴\n  │ \n╶─┼╴\n╶─┼╴\n  │ \n  ╵ \n", false);
 
-pub const ASCII2: Box = Box::parse("+-++\n| ||\n+-++\n| ||\n+-++\n+-++\n| ||\n+-++\n");
+pub const ASCII2: Box = Box::parse("+-++\n| ||\n+-++\n| ||\n+-++\n+-++\n| ||\n+-++\n", true);
 
-pub const ASCII_DOUBLE_HEAD: Box = Box::parse("+-++\n| ||\n+=++\n| ||\n+-++\n+-++\n| ||\n+-++\n");
+pub const ASCII_DOUBLE_HEAD: Box =
+    Box::parse("+-++\n| ||\n+=++\n| ||\n+-++\n+-++\n| ||\n+-++\n", true);
 
-pub const SQUARE_DOUBLE_HEAD: Box = Box::parse("┌─┬┐\n│ ││\n╞═╪╡\n│ ││\n├─┼┤\n├─┼┤\n│ ││\n└─┴┘\n");
+pub const SQUARE_DOUBLE_HEAD: Box =
+    Box::parse("┌─┬┐\n│ ││\n╞═╪╡\n│ ││\n├─┼┤\n├─┼┤\n│ ││\n└─┴┘\n", false);
 
-pub const MINIMAL_HEAVY_HEAD: Box = Box::parse("  ╷ \n  │ \n╺━┿╸\n  │ \n╶─┼╴\n╶─┼╴\n  │ \n  ╵ \n");
+pub const MINIMAL_HEAVY_HEAD: Box =
+    Box::parse("  ╷ \n  │ \n╺━┿╸\n  │ \n╶─┼╴\n╶─┼╴\n  │ \n  ╵ \n", false);
 
-pub const MINIMAL_DOUBLE_HEAD: Box = Box::parse("  ╷ \n  │ \n ═╪ \n  │ \n ─┼ \n ─┼ \n  │ \n  ╵ \n");
+pub const MINIMAL_DOUBLE_HEAD: Box =
+    Box::parse("  ╷ \n  │ \n ═╪ \n  │ \n ─┼ \n ─┼ \n  │ \n  ╵ \n", false);
 
 /// A fully blank box (all spaces): no visible borders, though its border
 /// lines still take up rows. Not in upstream, which uses `box=None` for a
 /// table without borders.
-pub const NONE: Box = Box::parse("    \n    \n    \n    \n    \n    \n    \n    \n");
+pub const NONE: Box = Box::parse("    \n    \n    \n    \n    \n    \n    \n    \n", true);
 
 /// A boxless table with a light head/foot rule. Used by Markdown tables.
-pub const SIMPLE: Box = Box::parse("    \n    \n ── \n    \n    \n ── \n    \n    \n");
+pub const SIMPLE: Box = Box::parse("    \n    \n ── \n    \n    \n ── \n    \n    \n", false);
 
-pub const SIMPLE_HEAD: Box = Box::parse("    \n    \n ── \n    \n    \n    \n    \n    \n");
+pub const SIMPLE_HEAD: Box = Box::parse("    \n    \n ── \n    \n    \n    \n    \n    \n", false);
 
-pub const SIMPLE_HEAVY: Box = Box::parse("    \n    \n ━━ \n    \n    \n ━━ \n    \n    \n");
+pub const SIMPLE_HEAVY: Box = Box::parse("    \n    \n ━━ \n    \n    \n ━━ \n    \n    \n", false);
 
-pub const HORIZONTALS: Box = Box::parse(" ── \n    \n ── \n    \n ── \n ── \n    \n ── \n");
+pub const HORIZONTALS: Box = Box::parse(" ── \n    \n ── \n    \n ── \n ── \n    \n ── \n", false);
 
-pub const HEAVY_EDGE: Box = Box::parse("┏━┯┓\n┃ │┃\n┠─┼┨\n┃ │┃\n┠─┼┨\n┠─┼┨\n┃ │┃\n┗━┷┛\n");
+pub const HEAVY_EDGE: Box = Box::parse("┏━┯┓\n┃ │┃\n┠─┼┨\n┃ │┃\n┠─┼┨\n┠─┼┨\n┃ │┃\n┗━┷┛\n", false);
 
-pub const DOUBLE_EDGE: Box = Box::parse("╔═╤╗\n║ │║\n╟─┼╢\n║ │║\n╟─┼╢\n╟─┼╢\n║ │║\n╚═╧╝\n");
+pub const DOUBLE_EDGE: Box = Box::parse("╔═╤╗\n║ │║\n╟─┼╢\n║ │║\n╟─┼╢\n╟─┼╢\n║ │║\n╚═╧╝\n", false);
 
 /// The box Markdown tables use for GFM output (pipes + a light head rule).
-pub const MARKDOWN: Box = Box::parse("    \n| ||\n|-||\n| ||\n|-||\n|-||\n| ||\n    \n");
+pub const MARKDOWN: Box = Box::parse("    \n| ||\n|-||\n| ||\n|-||\n|-||\n| ||\n    \n", true);
 
 #[cfg(test)]
 mod tests {

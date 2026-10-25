@@ -18,7 +18,7 @@ Click any bar to jump to that part of the
 
 **"Partial" is the honest majority, and it is not a synonym for unfinished.** A
 module is marked partial while any part of upstream's surface is unported, even
-when everything the CLI exercises is byte-identical. Eight modules are marked
+when everything the CLI exercises is byte-identical. Seventeen modules are marked
 complete, and only because a differential sweep or the golden fixtures say so:
 
 | Module | Measurement |
@@ -29,6 +29,7 @@ complete, and only because a differential sweep or the golden fixtures say so:
 | `control.rs`, `box.rs`, `styled.rs` | full upstream surface, golden-tested |
 | `progress_bar.rs` | full upstream surface, including the pulse animation, ASCII and no-colour bars, golden-tested (`progress_bar.tsv`) |
 | `theme.rs` | full upstream surface, including the theme stack and theme files, golden-tested (`themes.tsv`, `theme_stack.tsv`) |
+| `padding.rs`, `panel.rs`, `align.rs`, `constrain.rs`, `table.rs`, `layout.rs`, `screen.rs`, `bar.rs`, `ratio.rs` | full upstream surface but `Layout`'s custom splitters ([§40](DIVERGENCES.md#40-layout-has-only-the-row-and-column-splitters)), golden-tested (`parity_widgets.tsv` and the earlier fixtures) |
 
 End to end, the current CLI renders **0 mismatches across 138 document cases**
 (Markdown, JSON and syntax at six widths each) against Python `rich` 15.0.0.
@@ -76,8 +77,14 @@ Golden fixtures pin cases someone thought of. `scripts/diff_rich.py` generates
 cases nobody thought of: markup, styled text with every overflow and justify
 mode, panels, tables (column justify, `no_wrap`, min/max widths, ratios, edges,
 lines, titles), rules, padding and alignment, at random widths and colour
-systems. It renders each case through the pinned Python `rich` and through the
-Rust `diff_render` example, then compares the bytes.
+systems. Since 0.0.22 it also generates the document renderers, about as often
+as all of those together: Markdown (headings, lists, quotes, tables, inline
+markup, links and images; not code blocks, which syntect colours, see
+DIVERGENCES §18), trees, columns, Progress frames (description, bar and
+percentage), `Pretty` over random Python values and JSON with its options. It
+renders each case through the pinned Python `rich` and through the Rust
+`diff_render` example, then compares the bytes. Upstream's random hyperlink
+`id=` is taken out of the Python side first (DIVERGENCES §20).
 
 - **Pull requests** replay the small checked-in corpus
   (`scripts/fixtures/diff_rich_cases.jsonl`), so CI stays fast and every case
@@ -87,8 +94,10 @@ Rust `diff_render` example, then compares the bytes.
   replayable corpus lines to the log and the job summary.
 - **Known divergences** it has found live in
   `scripts/fixtures/diff_rich_known.jsonl`, one line per case, each naming its
-  issue. 0.0.11 fixed the first eight families (#442–#449), so the file is
-  empty until the nightly run finds something new.
+  issue. 0.0.11 fixed the first eight families (#442–#449). The document
+  kinds' first runs (5,000 cases over five seeds) found six Markdown families,
+  fixed in 0.0.22; one remains there, an empty link as the only content of
+  an ordered item under `justify="full"`.
 
 The Python side renders each colour system in its own interpreter. rich memoises
 a `Style`'s escape codes on the instance whatever the colour system, so a shared

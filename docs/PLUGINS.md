@@ -262,6 +262,47 @@ text, and `--transform NAME` (repeatable, in the order given) applies their
 transforms to text, `--print` and `--syntax`, after `--filter` and before
 `--highlight`.
 
+### The marketplace client (0.0.22)
+
+`rs-rich-marketplace` finds, checks and installs packages from the
+[marketplace](design/marketplace.md); `rich plugin` is built on it. It has
+no terminal code, and it is the only place the marketplace's trust rules
+live:
+
+- **The key chain.** `KeySet` is one generation of the main key (it signs
+  indexes) and the backup key (it signs only the next generation).
+  `KeySet::walk` accepts later generations one at a time, each signed by
+  both keys of the one before, or by its backup key alone when it revokes a
+  lost main key.
+- **The index.** `verify_index` refuses a signature by any key but the
+  current main key before checking it, refuses minisign's legacy unhashed
+  algorithm, and checks the trusted comment's serial, the
+  `schema_version`, a rollback against the last serial accepted
+  (`AcceptedIndex`) and the expiry.
+- **Listings.** `VerifiedIndex::read_listing` checks a listing's SHA-256
+  against the index, then the rules `scripts/validate_marketplace.py`
+  checks.
+- **Resolution.** `resolve` picks the newest version that is not yanked and
+  that this host loads, with `abi::is_supported` and
+  `is_supported_api_version`, the loaders' own checks. A WASM version with
+  a capability kind this host does not know is skipped.
+- **Installing.** `Installer` downloads over HTTPS only, through a
+  `Transport` (`HttpsTransport`, ureq, behind the default `http` feature),
+  reads at most the declared size, checks the SHA-256, then checks the
+  artifact by kind: a WASM module's header (a host with the sandbox passes
+  an `ArtifactChecker` that runs `load_wasm` and `compare_wasm_manifest`),
+  a micro pack's `pack.json`, a theme's parse. Only then is the file moved
+  into place and recorded in the lockfile.
+- **Loading.** `Installer::load` and `Lockfile::verify` read an installed
+  file only when it still hashes to what the lockfile records. No network
+  and no index are needed, so an expired index never stops what is
+  installed.
+
+The official public keys are not compiled in yet: `KeySet::official`
+refuses until the maintainer has made the pairs. The crate's tests sign a
+fixture marketplace with test keys checked into
+`crates/rich-marketplace/tests/fixtures/keys`, trusted only by those tests.
+
 ## Security: threat model
 
 Plugins are code from someone else. What each kind can do, and what stands in
@@ -312,7 +353,8 @@ its way:
    runtime plugins, and `rich plugins list/info`, as above.
 4. **In progress — the marketplace (#232).** A Git-backed, signed index of
    packages ([the listing format](design/marketplace.md), 0.0.21), the
-   `rs-rich-marketplace` crate (0.0.21) and `rich plugin install` (0.0.22).
+   `rs-rich-marketplace` crate (0.0.22, [below](#the-marketplace-client-0022))
+   and `rich plugin install` (0.0.22).
 
 Whatever we add, the invariant holds: **the core never learns about a specific
 extension.**

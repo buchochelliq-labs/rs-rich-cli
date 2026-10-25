@@ -119,8 +119,30 @@ pub enum MetaValue {
     Int(i64),
     Float(f64),
     Str(String),
-    /// A list or tuple of values.
+    /// A list of values.
     List(Vec<MetaValue>),
+    /// A tuple of values (markup handler tags produce these). Not equal to a
+    /// list of the same values, as in Python.
+    Tuple(Vec<MetaValue>),
+}
+
+impl MetaValue {
+    /// Python's `repr()` of the value.
+    pub fn repr(&self) -> String {
+        let items =
+            |values: &[MetaValue]| -> Vec<String> { values.iter().map(MetaValue::repr).collect() };
+        match self {
+            MetaValue::None => "None".to_string(),
+            MetaValue::Bool(true) => "True".to_string(),
+            MetaValue::Bool(false) => "False".to_string(),
+            MetaValue::Int(value) => value.to_string(),
+            MetaValue::Float(value) => crate::pyformat::float_repr(*value),
+            MetaValue::Str(value) => crate::markup::py_repr_str(value),
+            MetaValue::List(values) => format!("[{}]", items(values).join(", ")),
+            MetaValue::Tuple(values) if values.len() == 1 => format!("({},)", values[0].repr()),
+            MetaValue::Tuple(values) => format!("({})", items(values).join(", ")),
+        }
+    }
 }
 
 impl PartialEq for MetaValue {
@@ -132,6 +154,7 @@ impl PartialEq for MetaValue {
             (MetaValue::Float(a), MetaValue::Float(b)) => a.to_bits() == b.to_bits(),
             (MetaValue::Str(a), MetaValue::Str(b)) => a == b,
             (MetaValue::List(a), MetaValue::List(b)) => a == b,
+            (MetaValue::Tuple(a), MetaValue::Tuple(b)) => a == b,
             _ => false,
         }
     }
@@ -148,7 +171,7 @@ impl std::hash::Hash for MetaValue {
             MetaValue::Int(value) => value.hash(state),
             MetaValue::Float(value) => value.to_bits().hash(state),
             MetaValue::Str(value) => value.hash(state),
-            MetaValue::List(values) => values.hash(state),
+            MetaValue::List(values) | MetaValue::Tuple(values) => values.hash(state),
         }
     }
 }
@@ -163,6 +186,16 @@ pub struct Meta {
 }
 
 impl Meta {
+    /// Python's `repr()` of the dict.
+    pub fn repr(&self) -> String {
+        let entries: Vec<String> = self
+            .entries
+            .iter()
+            .map(|(key, value)| format!("{}: {}", crate::markup::py_repr_str(key), value.repr()))
+            .collect();
+        format!("{{{}}}", entries.join(", "))
+    }
+
     /// An empty map.
     pub fn new() -> Self {
         Meta::default()
@@ -293,12 +326,17 @@ impl Style {
     /// A copy with the foreground and background colours removed; attributes
     /// and link survive. Port of `Style.without_color`.
     pub fn without_color(&self) -> Style {
+        // Upstream's `without_color` builds a new style with `_meta = None`,
+        // and a null style comes back as the null style.
+        if self.is_null() {
+            return Style::new();
+        }
         Style {
             color: None,
             bgcolor: None,
             attrs: self.attrs,
             link: self.link.clone(),
-            meta: self.meta.clone(),
+            meta: None,
         }
     }
 
@@ -362,7 +400,138 @@ impl Style {
         style
     }
 
-    /// Regenerate the style definition string. Port of `Style.__str__`.
+    /// The `bold` attribute: `Some(true)` on, `Some(false)` off, `None` unset.
+    /// Upstream's `Style.bold`.
+    pub fn bold(&self) -> Option<bool> {
+        self.attrs[0]
+    }
+
+    /// The `dim` attribute: `Some(true)` on, `Some(false)` off, `None` unset.
+    /// Upstream's `Style.dim`.
+    pub fn dim(&self) -> Option<bool> {
+        self.attrs[1]
+    }
+
+    /// The `italic` attribute: `Some(true)` on, `Some(false)` off, `None` unset.
+    /// Upstream's `Style.italic`.
+    pub fn italic(&self) -> Option<bool> {
+        self.attrs[2]
+    }
+
+    /// The `underline` attribute: `Some(true)` on, `Some(false)` off, `None` unset.
+    /// Upstream's `Style.underline`.
+    pub fn underline(&self) -> Option<bool> {
+        self.attrs[3]
+    }
+
+    /// The `blink` attribute: `Some(true)` on, `Some(false)` off, `None` unset.
+    /// Upstream's `Style.blink`.
+    pub fn blink(&self) -> Option<bool> {
+        self.attrs[4]
+    }
+
+    /// The `blink2` attribute: `Some(true)` on, `Some(false)` off, `None` unset.
+    /// Upstream's `Style.blink2`.
+    pub fn blink2(&self) -> Option<bool> {
+        self.attrs[5]
+    }
+
+    /// The `reverse` attribute: `Some(true)` on, `Some(false)` off, `None` unset.
+    /// Upstream's `Style.reverse`.
+    pub fn reverse(&self) -> Option<bool> {
+        self.attrs[6]
+    }
+
+    /// The `conceal` attribute: `Some(true)` on, `Some(false)` off, `None` unset.
+    /// Upstream's `Style.conceal`.
+    pub fn conceal(&self) -> Option<bool> {
+        self.attrs[7]
+    }
+
+    /// The `strike` attribute: `Some(true)` on, `Some(false)` off, `None` unset.
+    /// Upstream's `Style.strike`.
+    pub fn strike(&self) -> Option<bool> {
+        self.attrs[8]
+    }
+
+    /// The `underline2` attribute: `Some(true)` on, `Some(false)` off, `None` unset.
+    /// Upstream's `Style.underline2`.
+    pub fn underline2(&self) -> Option<bool> {
+        self.attrs[9]
+    }
+
+    /// The `frame` attribute: `Some(true)` on, `Some(false)` off, `None` unset.
+    /// Upstream's `Style.frame`.
+    pub fn frame(&self) -> Option<bool> {
+        self.attrs[10]
+    }
+
+    /// The `encircle` attribute: `Some(true)` on, `Some(false)` off, `None` unset.
+    /// Upstream's `Style.encircle`.
+    pub fn encircle(&self) -> Option<bool> {
+        self.attrs[11]
+    }
+
+    /// The `overline` attribute: `Some(true)` on, `Some(false)` off, `None` unset.
+    /// Upstream's `Style.overline`.
+    pub fn overline(&self) -> Option<bool> {
+        self.attrs[12]
+    }
+
+    /// The null style, which sets nothing. Port of `Style.null`.
+    pub fn null() -> Style {
+        Style::new()
+    }
+
+    /// A copy. Port of `Style.copy`.
+    pub fn copy(&self) -> Style {
+        self.clone()
+    }
+
+    /// Whether the background is unset or the terminal default. Port of the
+    /// `Style.transparent_background` property.
+    pub fn transparent_background(&self) -> bool {
+        self.bgcolor.as_ref().is_none_or(Color::is_default)
+    }
+
+    /// A style with only this one's background color. Port of the
+    /// `Style.background_style` property.
+    pub fn background_style(&self) -> Style {
+        Style::from_color(None, self.bgcolor.clone())
+    }
+
+    /// Combine `styles` in order, later ones winning. Port of
+    /// `Style.combine` (and `Style.chain`); upstream raises on no styles,
+    /// this returns `None`.
+    pub fn combine_all<'a>(styles: impl IntoIterator<Item = &'a Style>) -> Option<Style> {
+        let mut styles = styles.into_iter();
+        let first = styles.next()?.clone();
+        Some(styles.fold(first, |combined, style| combined.combine(style)))
+    }
+
+    /// The first style that is set. Port of `Style.pick_first`; upstream
+    /// raises `ValueError` when all are `None`, this returns `None`.
+    pub fn pick_first<T: Clone>(values: &[Option<T>]) -> Option<T> {
+        values.iter().flatten().next().cloned()
+    }
+
+    /// A copy with attribute `index` set to `value` (`None` unsets it). The
+    /// index follows upstream's bit order (0 = bold … 12 = overline).
+    pub fn with_attr(mut self, index: usize, value: Option<bool>) -> Style {
+        if let Some(slot) = self.attrs.get_mut(index) {
+            *slot = value;
+        }
+        self
+    }
+
+    /// Write `text` (this style's definition when `None`) to stdout in this
+    /// style, for testing. Port of `Style.test`.
+    pub fn test(&self, text: Option<&str>) {
+        let definition = self.definition();
+        let text = text.filter(|text| !text.is_empty()).unwrap_or(&definition);
+        println!("{}", self.render(text, Some(ColorSystem::Truecolor)));
+    }
+
     ///
     /// Attributes come first in their canonical order, then the foreground
     /// colour, then `on <bgcolour>`, then `link <url>`. A style that sets nothing
@@ -384,7 +553,7 @@ impl Style {
             parts.push("on".to_string());
             parts.push(bgcolor.name.clone());
         }
-        if let Some(link) = &self.link {
+        if let Some(link) = self.link.as_ref().filter(|link| !link.is_empty()) {
             parts.push("link".to_string());
             parts.push(link.clone());
         }
@@ -430,24 +599,29 @@ impl Style {
         let mut style = Style::new();
         let mut words = definition.split_whitespace();
         while let Some(raw) = words.next() {
-            let word = raw.to_ascii_lowercase();
+            let word = raw.to_lowercase();
             match word.as_str() {
                 "on" => {
                     let color_word = words.next().ok_or_else(|| {
                         RichError::StyleSyntax("color expected after 'on'".to_string())
                     })?;
-                    style.bgcolor = Some(Color::parse(color_word)?);
+                    style.bgcolor = Some(Color::parse(color_word).map_err(|error| {
+                        RichError::StyleSyntax(format!(
+                            "unable to parse {} as background color; {}",
+                            crate::markup::py_repr_str(color_word),
+                            error.message()
+                        ))
+                    })?);
                 }
                 "not" => {
-                    let attr_word = words.next().ok_or_else(|| {
-                        RichError::StyleSyntax("attribute expected after 'not'".to_string())
-                    })?;
+                    let attr_word = words.next().unwrap_or("");
                     // Deliberately NOT lowercased: upstream folds case only on
                     // the loop word, and looks the `not` operand up verbatim —
                     // so `"not BOLD"` is a syntax error there, and must be here.
                     let idx = attribute_index(attr_word).ok_or_else(|| {
                         RichError::StyleSyntax(format!(
-                            "{attr_word:?} is not a recognized attribute"
+                            "expected style attribute after 'not', found {}",
+                            crate::markup::py_repr_str(attr_word)
                         ))
                     })?;
                     style.attrs[idx] = Some(false);
@@ -464,7 +638,13 @@ impl Style {
                     if let Some(idx) = attribute_index(&word) {
                         style.attrs[idx] = Some(true);
                     } else {
-                        style.color = Some(Color::parse(&word)?);
+                        style.color = Some(Color::parse(&word).map_err(|error| {
+                            RichError::StyleSyntax(format!(
+                                "unable to parse {} as color; {}",
+                                crate::markup::py_repr_str(&word),
+                                error.message()
+                            ))
+                        })?);
                     }
                 }
             }
@@ -476,6 +656,13 @@ impl Style {
     ///
     /// Port of `Style.__add__`.
     pub fn combine(&self, other: &Style) -> Style {
+        // `_add`: a null style on either side leaves the other as it is.
+        if other.is_null() {
+            return self.clone();
+        }
+        if self.is_null() {
+            return other.clone();
+        }
         let mut attrs = self.attrs;
         for (slot, over) in attrs.iter_mut().zip(other.attrs.iter()) {
             if over.is_some() {
@@ -486,7 +673,12 @@ impl Style {
             color: other.color.clone().or_else(|| self.color.clone()),
             bgcolor: other.bgcolor.clone().or_else(|| self.bgcolor.clone()),
             attrs,
-            link: other.link.clone().or_else(|| self.link.clone()),
+            // `style._link or self._link`: an empty link does not win.
+            link: other
+                .link
+                .clone()
+                .filter(|link| !link.is_empty())
+                .or_else(|| self.link.clone()),
             // `if self._meta and style._meta: {**self.meta, **style.meta}`,
             // else `style._meta or self._meta`.
             meta: match (&self.meta, &other.meta) {
@@ -634,6 +826,48 @@ impl Style {
             Some(url) => format!("\x1b]8;;{url}\x1b\\{rendered}\x1b]8;;\x1b\\"),
             None => rendered,
         }
+    }
+}
+
+/// A stack of styles, each combined with the one below it. Port of
+/// `rich.style.StyleStack`.
+#[derive(Debug, Clone)]
+pub struct StyleStack {
+    stack: Vec<Style>,
+}
+
+impl StyleStack {
+    /// A stack holding `default_style`.
+    pub fn new(default_style: Style) -> Self {
+        StyleStack {
+            stack: vec![default_style],
+        }
+    }
+
+    /// The style at the top of the stack. Port of `StyleStack.current`.
+    pub fn current(&self) -> &Style {
+        self.stack
+            .last()
+            .expect("the stack keeps its default style")
+    }
+
+    /// Push `style` combined with the current one. Port of `StyleStack.push`.
+    pub fn push(&mut self, style: &Style) {
+        let combined = self.current().combine(style);
+        self.stack.push(combined);
+    }
+
+    /// Pop the top style and return the new current one. Port of
+    /// `StyleStack.pop`; popping the default style is an error (upstream
+    /// raises `IndexError` on the next access).
+    pub fn pop(&mut self) -> Result<&Style> {
+        if self.stack.len() == 1 {
+            return Err(RichError::StyleStack(
+                "pop from empty style stack".to_string(),
+            ));
+        }
+        self.stack.pop();
+        Ok(self.current())
     }
 }
 

@@ -175,21 +175,22 @@ Windows. Piped input keeps working without a hint.
 
 ## Recordings and time
 
-### `rich record` wrote an `.apng` I did not ask for
+### `rich record` wrote no `.apng`
 
-A tape without an `Output` line writes every format, and since 0.0.20 that
-includes an animated PNG beside the GIF. Name the formats you want in the
-tape (`Output gif png svg`) or on the command line
-(`--format gif,png,svg`); `--no-video` skips the GIF, the APNG, the MP4 and
-the page's player. See [Record your own](recordings.md#record-your-own).
+An animated PNG is written only when asked: name it in the tape
+(`Output gif apng`) or on the command line (`--format gif,apng`, or
+`--format all` for every format). A tape without an `Output` line writes
+every other format. 0.0.20 and 0.0.21 wrote an APNG for such a tape too.
+See [Record your own](recordings.md#record-your-own).
 
 ### A recording made on macOS plays in jumps
 
-On macOS the recorder keeps fewer frames than the tape's `Set Framerate`
-asks for (CI's runners kept 7 frames over 0.8 s where Linux keeps about 30
-a second), so a fast game's video is choppy. The screenshots and the cast
-are not affected. Record games on Linux until it is fixed; see
-[Known issues](known-issues.md#the-recorder-keeps-fewer-frames-on-macos).
+Before 0.0.22, the recorder kept only the last of the screen updates that
+reached it together, which happens when a busy machine wakes it late: CI's
+macOS runners kept 7 frames over 0.8 s at `Set Framerate 35`. It now keeps
+one frame for each frame interval since it last read. If a video is still
+choppy, check the tape's `Set Framerate` (12 by default) and whether the
+program drew more often than that.
 
 ### A game in a recording does not stop when the key is let go
 

@@ -27,16 +27,18 @@ the screen with a VT emulator, and writes:
   by rs-rich-ext's frame exporter, like rich's other SVG output), and a text
   grid;
 - an asciinema v2 cast, with input events and the palette in its header;
-- a GIF and an animated PNG (APNG) with a key overlay, and an MP4 when FFmpeg
-  is installed: every settled screen update, dropped to the tape's frame rate
-  (`Set Framerate 35`, `--fps`) and with identical frames merged;
+- a GIF with a key overlay, an MP4 when FFmpeg is installed, and an
+  animated PNG (APNG) when asked: every settled screen update, dropped to
+  the tape's frame rate (`Set Framerate 35`, `--fps`) and with identical
+  frames merged;
 - a self-contained HTML page: a small player (no CDN, no terminal emulator)
   and the screenshots as selectable text.
 
 `Set WindowFrame off`, `Set Caption "…"` and `Set KeyOverlay off` change how
 stills and video are presented, and `Output gif png` (or `Output demo.html`)
 chooses what a tape writes; a tape without an `Output` line writes every
-format, the APNG included.
+format but the APNG, which is written only when an `Output` or `--format`
+names it.
 
 ## Games and graphics
 
@@ -93,19 +95,20 @@ rs-rich-record = "0.0.8"
 ```
 
 ```rust,no_run
-use rich_record::record::{self, Formats, Options};
+use rich_record::record::{self, Options};
 use rich_record::render::raster::Fonts;
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let tape = rich_record::tape::parse(&std::fs::read_to_string("demo.tape")?)?;
     let recording = record::record(&tape, "demo", &Options::default())?;
-    // The tape's `Output` formats (all of them if it has none); `Formats::ALL`
-    // adds no further limit. `record::write` instead takes formats as given.
+    // The tape's `Output` formats, or every format but the APNG if it has
+    // none. `Formats::ALL` would add the APNG to a tape without `Output`.
+    // `record::write` instead takes formats as given.
     let written = record::write_selected(
         &recording,
         "media/demo".as_ref(),
         "demo",
-        Formats::ALL,
+        recording.default_formats(),
         &Fonts::embedded(),
         &Default::default(),
         None,

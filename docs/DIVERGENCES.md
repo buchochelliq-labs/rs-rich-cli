@@ -7,6 +7,20 @@ exactly like upstream. Anything that is purely *our own* feature belongs in
 
 Format: what differs · why · how to remove it (if temporary).
 
+## Verdicts (0.0.22)
+
+Every entry has a verdict. **Resolved** entries are struck through. The
+open ones are **permanent**, each for the reason in its entry:
+
+| Kind | Entries |
+|---|---|
+| Resolved in 0.0.22 | §5's residual, §7, §12, §24, §28, §29, §33 (one list-marker edge stays, see the entry) |
+| Resolved earlier | §1 (table), §8, §10, §11, §13, §14 (stack), §27 |
+| Permanent: the language or platform | §1 (`UNICODE_VERSION`), §3, §3a, §6, §14 (per console), §14a, §15, §19 (reflection), §20, §25, §30, §38, §41, §42, §43, §44, §45 |
+| Permanent: another engine | §9 and §18 (syntect, not Pygments), §21 (pulldown-cmark's emphasis) |
+| Permanent: an API or CLI choice | §2, §16 (`f64` counts, byte reads), §17 (a `Live` owns its console; proxy writers, not the process's stdout; no nested displays), §31, §32, §34, §40, §46 |
+| Permanent: ours, opt-in or additive | §22, §23, §26, §35, §36, §37, §39 |
+
 ## Current divergences
 
 ### 1. ~~Cell-width table delegated to `unicode-width`~~ — RESOLVED
@@ -31,6 +45,11 @@ Format: what differs · why · how to remove it (if temporary).
 - **Still divergent:** upstream's `_unicode_data.load()` honours a
   `UNICODE_VERSION` environment variable to select any of 21 tables (4.1.0–17.0.0);
   we always use the shipped one. Tracked separately.
+- **Verdict (0.0.22): the remainder is permanent.** Upstream's
+  `UNICODE_VERSION` picks one of 21 vendored tables for terminals that
+  measure with an old Unicode; shipping all 21 would multiply the table's
+  size for a variable almost no one sets. The port measures with the newest
+  table, upstream's default.
 
 ### 2. Markup: the lenient print path is opt-out, not opt-in
 - **Differs:** the *scanner* now matches upstream exactly. `markup::render` uses
@@ -55,16 +74,24 @@ Format: what differs · why · how to remove it (if temporary).
   than a runtime condition.
 - **Remove:** make the strict form the default, renaming the lenient one to
   `*_lossy`.
+- **Verdict (0.0.22): permanent, an API choice.** The strict path exists
+  (`try_print_str`, `try_print_justified`, `try_build_text`) and the CLI uses
+  it; the lenient default only differs for malformed markup. Making strict
+  the default renames public methods across every crate, which belongs to
+  the 0.1.0 API review, not to parity. `@`-tag meta payloads need Python's
+  `literal_eval`, and meta never renders (see §3a).
 
 ### 3a. `Style.meta` is a typed map, not marshal bytes
 - **Differs:** upstream stores `meta` as `marshal.dumps(dict)`; `Style` here
   holds a `Meta` (string keys, `MetaValue` scalars and lists) kept in insertion
   order, which gives the same equality (`{a, b}` ≠ `{b, a}`, `True` ≠ `1`),
   combination (`{**a, **b}`) and truthiness. Non-marshal-able Python values have
-  no representation; `Style.from_meta`'s random `link_id` is not modelled (#20);
-  markup `[@handler]` tags do not produce meta (so `Text.markup` of such text
-  has no `[none]…[/none]` tag where upstream writes one).
+  no representation; `Style.from_meta`'s random `link_id` is not modelled (#20).
+  Tuples and lists are kept apart (`MetaValue::Tuple`, `MetaValue::List`), as
+  markup `[@handler]` tags need (§44).
 - **Why:** Rust has no marshal; the map round-trips what the bindings need.
+- **Verdict (0.0.22): permanent.** Rust has no `marshal`, and meta never
+  reaches the terminal.
 
 ### 3. Byte offsets in `Text` spans
 - **Differs:** upstream `Text` uses code-point offsets for spans; our `Text` uses
@@ -74,6 +101,8 @@ Format: what differs · why · how to remove it (if temporary).
   example highlighter are unaffected.
 - **Remove:** not planned unless a public API needs code-point indexing; if so,
   expose a char-index helper without changing the internal representation.
+- **Verdict (0.0.22): permanent.** Internal only: no output differs, and the
+  public offsets that matter are converted.
 
 ### 5. ~~Over-long-word fold suppresses one empty chunk vs upstream~~ (resolved)
 - **Resolved:** `Text` word-wrapping (`_wrap.divide_line`) and the over-long-word
@@ -89,13 +118,17 @@ Format: what differs · why · how to remove it (if temporary).
   still differs from upstream for *multi-codepoint graphemes folded below their
   own width* (ZWJ emoji, regional-indicator flags) — vanishingly rare, and it
   would need a grapheme-segmentation dependency to close.
+- **Verdict (0.0.22): resolved.** The residual above no longer holds:
+  `cells::chop_cells` is upstream's grapheme form, over the ported
+  `split_graphemes`, so ZWJ sequences and flags fold as upstream folds them.
 
 ### 6. Box substitution is opt-in (no legacy-terminal auto-detection)
-- **Differs:** `Box.substitute` **is** ported — `Box::substitute` maps the fancy
-  boxes (`ROUNDED`/`HEAVY`/`HEAVY_HEAD`) to `SQUARE` when `legacy_windows` is set,
-  and any box drawn with non-ASCII glyphs to `ASCII` when `ascii_only` is set
-  (the built-in boxes upstream flags `ascii=True` are exactly the all-ASCII
-  ones); `Panel`/`Table` apply it, with their own `safe_box` over the
+- **Differs:** `Box.substitute` **is** ported — `Box::substitute` applies
+  upstream's whole legacy Windows table (`ROUNDED`, `HEAVY`, `HEAVY_EDGE`
+  and `HEAVY_HEAD` to `SQUARE`, `MINIMAL_HEAVY_HEAD` to `MINIMAL`,
+  `SIMPLE_HEAVY` to `SIMPLE`) when `legacy_windows` is set, and maps a box
+  not flagged `ascii` to `ASCII` when `ascii_only` is set; `Panel`/`Table`
+  apply it from their render options, with their own `safe_box` over the
   console's. The `legacy_windows`/`safe_box`/`ascii_only` console flags exist. What
   differs: those flags default **off** and are not auto-detected from the runtime
   terminal (upstream auto-detects legacy Windows / a non-UTF-8 encoding), so the
@@ -105,22 +138,19 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** auto-detecting `ascii_only` from a non-UTF-8 encoding at
   `Console` build time remains possible. `legacy_windows` is never
   auto-detected: the legacy console is not supported (§38).
+- **Verdict (0.0.22): permanent.** Upstream detects from
+  `sys.stdout.encoding`, which has no portable Rust equivalent (a Rust
+  string is always UTF-8). The flags are there for callers that know their
+  terminal.
 
-### 7. `Table` — one rare padding edge remains
-- **Differs:** sizing (content, shrink-to-fit, `expand`), per-column justify,
-  explicit per-column **width**, per-column **`ratio`/`min_width`/`max_width`**,
-  per-column **style**, **`no_wrap`** (crop to one line with ellipsis), **ellipsis
-  overflow** (the table default), a **table-level style**, `pad_edge`/`show_edge`/
-  `collapse_padding`, title, caption, and `show_lines` are all ported and
-  byte-parity, as are (0.0.12) the table `width`/`min_width`, footers,
-  `leading`, `row_styles`, row styles and sections, the header/footer/title/
-  caption styles and justification, `Text` annotations and `safe_box`
-  (`golden/api_gaps.tsv`). The only residual: a *wrapping* column squeezed to width 0 by a
-  greedy `no_wrap` neighbor still renders its cell padding (upstream drops it) — a
-  rare over-constrained case.
-- **Why:** the width-0 padding edge only appears when a table is narrower than its
-  no_wrap content plus one other column.
-- **Remove:** drop padding on zero-width columns under the Table issue (#5).
+### 7. ~~`Table` — one rare padding edge remains~~ (resolved)
+- **Resolved (0.0.22):** a wrapping column squeezed to nothing by a
+  `no_wrap` neighbour renders as upstream's does. Sweeps of two- and
+  three-column tables at every width from 1 to 25, with and without a box,
+  edges, edge padding, wider padding and collapsed padding, and of up to 40
+  columns in a narrow console, are byte-identical to rich 15.0.0
+  (`table_squeezed_column`, `table_squeezed_three` and `table_many_columns`
+  in `golden/parity_widgets.tsv`).
 
 ### 8. ~~`Json` — exotic number formatting differs from CPython~~ (resolved in 0.0.11)
 - Floats are now written with a port of Python's `float.__repr__`
@@ -144,6 +174,8 @@ Format: what differs · why · how to remove it (if temporary).
   document ending in a thematic break is also matched — golden `markdown_hr_end`.)
 - **Why:** code blocks go through `syntect`, not Pygments (#18).
 - **Remove:** see the Syntax entry (#18).
+- **Verdict (0.0.22): permanent,** for code blocks only, as §18. Every other
+  element is parity.
 
 ### 10. ~~`AnsiDecoder` skips OSC hyperlinks~~ (resolved)
 - **Resolved:** the decoder now reads OSC 8 sequences (`\x1b]8;<params>;<url>\x1b\`)
@@ -165,16 +197,12 @@ Format: what differs · why · how to remove it (if temporary).
   expands to fill its region (byte-parity), via `Console::render_lines`'s height
   handling. Other containers can adopt the same pattern as needed.
 
-### 12. `Screen` keeps its trailing row separator when printed
-- **Differs:** printing a full-height `Screen` emits a trailing newline after the
-  last row (like every other renderable in this port), whereas upstream's
-  line-oriented print pipeline omits the final separator for a `Screen` that
-  exactly fills the console height.
-- **Why:** our `print` uniformly appends one newline after a renderable; matching
-  upstream's per-renderable trailing-newline suppression is a print-pipeline
-  concern that would affect the shared path.
-- **Remove:** model upstream's line-based print (crop/emit rows without a trailing
-  separator when a renderable fills the height) under the Console issue (#1).
+### 12. ~~`Screen` keeps its trailing row separator when printed~~ (resolved)
+- **Resolved (0.0.22):** a printed `Screen` ends with its last row and no
+  line break, as upstream's does, so the next output continues that row.
+  `Renderable::print_end_line` tells `Console::print` whether a renderable
+  ends its last line (`screen_print`, `screen_then_text` and
+  `screen_application_mode` in `golden/parity_widgets.tsv`).
 
 ### 13. ~~`ISO8601Highlighter` covers standard *extended* formats only~~ (resolved)
 - **Resolved:** all of upstream's ISO 8601 patterns are now ported, in the same
@@ -203,6 +231,8 @@ Format: what differs · why · how to remove it (if temporary).
   belongs to the `Console` value, which fits a console that `Live::spawn` moves
   to another thread. Golden `theme_stack.tsv` covers push, pop, nested push,
   `use_theme`, `Theme.config` and `from_file` byte for byte.
+- **Verdict (0.0.22): permanent** for the remaining difference: a stack per
+  console is what a console moved between threads needs.
 
 ### 14a. `Style::parse` results are not cached
 - **Differs:** upstream LRU-caches style-definition parsing; we re-resolve names
@@ -212,6 +242,7 @@ Format: what differs · why · how to remove it (if temporary).
   render, which is where it mattered; a global cache would need a lock or
   thread-local and has not been shown to be worth it.
 - **Remove:** measure first; add only if a profile justifies it.
+- **Verdict (0.0.22): permanent.** A cache changes speed, not output.
 
 ### 15. Exports done (HTML both forms + SVG); SVG needs an explicit `unique_id`
 - **Differs:** `Console::export_html` (inline styles), `export_html_classes` (the
@@ -230,8 +261,11 @@ Format: what differs · why · how to remove it (if temporary).
   (`export::export_html_with`, `svg::export_svg_with`, golden `core_gaps.tsv`).
   A `code_format` using conversions or format specs (`{code!r}`, `{width:>5}`)
   is refused with `ExportFormatError` rather than formatted.
+- **Verdict (0.0.22): permanent.** The default id hashes Python's `repr()` of
+  every segment, which only CPython can produce; an explicit `unique_id`
+  gives upstream's bytes.
 
-### 16. `Progress` — columns, task model, pulse and live display done
+### 16. `Progress`: two permanent differences (settled in 0.0.22)
 - **Resolved (0.0.10, core 0.0.6):** the time, rate and spinner columns and the
   task model are ported: an injectable clock (`Progress::clock`, upstream's
   `get_time`), task start/stop/finish times, the 30-second speed sample window,
@@ -258,40 +292,65 @@ Format: what differs · why · how to remove it (if temporary).
     narrow-width wrapping match. `transient`, `disable`, and
     `wrap_file`/`open` (`LiveProgress::wrap_read`/`open`) are ported
     (goldens in `progress_time.tsv` and `progress_live.tsv`).
-- **Still differs:**
-  - Task totals and counts are `f64`, so `{task.total}` formats a whole number
-    as an int. Upstream keeps whatever type the caller passed.
-  - `track` advances inline rather than through upstream's `_TrackThread`
-    batching (`update_period`). The counts match; the refresh timing differs.
-  - `open` reads bytes; upstream's text mode (`TextIOWrapper`) is left to the
-    caller, for example `BufReader::lines` over the returned reader.
-  - `redirect_stdout`/`redirect_stderr` follow `Live` (§17).
-- **Why:** Rust has no dynamic int/float, and text decoding belongs to the
-  caller's reader.
-- **Remove:** under the Live/progress issue (#6).
+- **Resolved (0.0.22):**
+  - `track` follows upstream's `_TrackThread`: a thread advances the task
+    by the items counted every `update_period`, and when the iterator is
+    exhausted or dropped the task's completed is set to the count and the
+    display refreshed (`LiveProgress::track_with` takes `completed`, an
+    existing task and the period).
+  - The display takes its table at each refresh through `Live`'s
+    `get_renderable`, as upstream does, so a print between refreshes draws
+    the table of the last refresh below it.
+  - `Progress.print` (`LiveProgress::print`/`print_str`) and
+    `redirect_stdout`/`redirect_stderr` (`LiveProgress::stdout`/`stderr`)
+    go through the live display (§17). Golden `parity_live.tsv`.
+- **Permanent:**
+  - Task totals and counts are `f64`, so `{task.total}` formats a whole
+    number as an int. Upstream keeps whatever type the caller passed.
+    Rust has no dynamic int/float.
+  - `open` reads bytes; upstream's text mode (`TextIOWrapper`) is left to
+    the caller, for example `BufReader::lines` over the returned reader.
+    Text decoding belongs to the caller's reader.
+- **Not a divergence:** a `LiveProgress` always runs the refresh thread
+  (upstream `auto_refresh=True`). For a manual display, render the
+  `Progress` itself in a `Live`.
 
-### 17. `Live` — auto-refresh thread done; alt-screen/redirect deferred
-- **Differs:** `Live` implements the deterministic `start`/`update`/`refresh`/`stop`
-  flow (byte-parity with upstream's `auto_refresh=False`, `transient=False` Live),
-  **and** a background **auto-refresh thread** — `Live::spawn(...)` returns an
-  [`AutoLive`] handle that redraws every `1/refresh_per_second` (and on each
-  `update`), a port of upstream's `refresh_per_second`. The thread constructs and
-  owns the `Live` internally, so only `Send` inputs (renderable/console/writer)
-  cross over — which made `Console` `Send` (its highlighter boxes are now
-  `dyn Highlighter + Send`). `Live::spawn` returns only once the first frame
-  is drawn, and `AutoLive::refresh_wait` redraws synchronously, as upstream's
-  `start()` and `refresh()` do; the final newline is written only when the
-  last render had height (`last_render_height`). `transient` erases the
-  display on stop (`Live::transient`, `Live::spawn_with`), and a non-terminal
-  stop writes the final frame without a newline, as upstream does. Still
-  deferred: the alt-screen mode,
-  stdout/stderr redirection, and the console render-hook integration; `Live` also
-  renders to a generic `Write` sink rather than through `Console`'s own file.
-- **Why:** those remaining pieces are large plumbing; the refresh loop itself is
-  ported and (with a long interval, so no timeout fires) even deterministically
-  tested to emit the same stream through the thread.
-- **Remove:** add a refresh thread + `transient`/alt-screen handling, and route
-  through `Console`, under the Live/progress issue (#6).
+### 17. `Live`: owns its console and sink; redirect through proxy writers (settled in 0.0.22)
+- **Resolved (0.0.22):** the alternate screen (`Live::screen`, upstream
+  `screen=True`: the renderable fills a `Screen`, homed on each refresh,
+  and the screen is switched off at stop), upstream's render hook
+  (`Live::print`/`print_str`: the display is erased, the output printed,
+  and the display drawn again below it), the stdout/stderr redirect
+  (`file_proxy.rs`, below), `start(refresh)` (`Live::start_with`),
+  `update(refresh)` (`Live::update_with`, taken at the next refresh),
+  `get_renderable`, `is_started`, and dumb terminals (no redraws, no
+  control codes). `Status::start` runs a status in its own transient
+  display. Golden `parity_live.tsv` (38 cases).
+- **Permanent:**
+  - **The redirect is a writer, not the process's stdout.** Upstream
+    assigns a `FileProxy` to `sys.stdout` and `sys.stderr`, so a plain
+    `print` lands above the display. Rust cannot do that safely:
+    `print!` and `std::io::stdout()` always reach file descriptor 1;
+    `std::io::set_output_capture` is unstable and internal; and moving the
+    descriptor with `dup2` needs unsafe, platform-specific calls that
+    would also capture the display's own output and every other thread's.
+    So `Live::stdout`/`stderr` (and the same on `AutoLive`,
+    `LiveProgress`, `LiveStatus`) return a `FileProxy` the program writes
+    to instead. Behind it everything is upstream's: lines are buffered and
+    decoded from ANSI, `flush` prints a partial line as console markup, a
+    partial line is flushed when the display stops (CPython's `close` on
+    the dropped proxy), and the proxy writes to its file whenever the
+    display is not redirecting (stopped, the flag off, or not a terminal).
+  - **A `Live` owns its console and output sink.** Upstream's display
+    pushes a render hook onto a shared console, so any `console.print`
+    goes above it; here the console and the sink are moved into the
+    `Live` (and into its refresh thread), so printing goes through
+    `Live::print`. The output is the same.
+  - **No nested displays.** Upstream 14+ lets a second `Live` on the same
+    console join the first, which draws both as a `Group`. Because each
+    `Live` owns its console, a second one cannot find the first; give one
+    `Live` a `Group` of both renderables instead.
+  - Jupyter widgets are not ported (§19).
 
 ### 18. Syntax highlighting uses `syntect`, not Pygments (non-byte-parity)
 - **Differs:** `Syntax` (`syntax.rs`) highlights code with the `syntect` crate,
@@ -299,7 +358,11 @@ Format: what differs · why · how to remove it (if temporary).
   the token colors are **not byte-identical** to Python rich — this is the one
   renderable whose output is functional rather than golden-tested. The default
   theme is `base16-ocean.dark` (a syntect built-in), not rich's `ansi_dark`/
-  `monokai`. The `Syntax.from_path` loader and `dedent` are not yet ported.
+  `monokai`. `dedent` and `Syntax.from_path` are ported (golden
+  `syntax_dedent_*` and `syntax_from_path` in `parity_docs.tsv`);
+  `guess_lexer` answers with the path's extension, which syntect looks
+  grammars up by, rather than a Pygments alias, and `from_path` reads UTF-8
+  only.
 - **Upstream layout (0.0.x).** `line_numbers`, `start_line`, `line_range`,
   `highlight_lines`, `code_width`, `background_color`, `indent_guides`,
   `stylize_range`, 4-sided padding and unpadded lines for transparent themes
@@ -312,8 +375,9 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** Rust has no Pygments; `syntect` is the standard Rust equivalent
   (mirrors how `cells` delegates East-Asian-width to `unicode-width`). Byte-parity
   is impossible across highlighter engines.
-- **Remove:** not removable while using a different engine; the divergence is
-  inherent. Future work can add line numbers and the path/loader conveniences.
+- **Verdict (0.0.22): permanent.** Not removable while using a different
+  engine; the divergence is inherent. Everything around the highlighter (the
+  layout, line numbers, ranges, padding, `dedent`, `from_path`) is parity.
 - **Pluggable engine (0.0.12).** Highlighting goes through the
   `protocol::CodeHighlighter` trait. `SyntectHighlighter` is the default, and
   `Syntax::highlighter` / `Markdown::highlighter` accept any other engine. With
@@ -379,6 +443,13 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** a 1:1 port isn't possible without reflection; the Rust-native analogs
   deliver the same *utility* (colorized value/error/log rendering).
 - **Remove:** inherent to the language difference; not removable.
+- **Verdict (0.0.22): narrowed, the rest permanent.** `pretty.py`'s layout
+  is now ported over `PrettyValue`, a description of the Python object
+  (`Pretty::from_value`, `pretty_repr`, and `scope.py`'s `render_scope`
+  on top), byte for byte against rich 15.0.0 (`parity_docs.tsv`). What stays
+  Rust-native needs reflection: `Pretty::new` over `Debug`, `inspect`,
+  `repr.py`'s decorators, tracebacks with frames and locals, and
+  `logging`'s rich tracebacks.
 
 ### 20. Hyperlinks omit upstream's random `id=` field
 - **Differs:** `Style::with_link` renders an OSC 8 hyperlink as
@@ -390,6 +461,8 @@ Format: what differs · why · how to remove it (if temporary).
   affects hover-grouping of a multi-segment link.
 - **Remove:** add a stable per-link id (e.g. a hash of the URL) if hover grouping
   is ever needed — but it still wouldn't match upstream's random value.
+- **Verdict (0.0.22): permanent.** A random value cannot be golden-tested,
+  and the link works without it.
 
 ### 21. Strikethrough across emphasis (narrowed in 0.0.10)
 - **Resolved (0.0.10, core 0.0.6):** tilde runs of any length now pair as
@@ -412,20 +485,20 @@ Format: what differs · why · how to remove it (if temporary).
 - **Remove:** port markdown-it's emphasis delimiter handling into the same
   `balance_pairs` pass, under the Markdown issue (#9). Pinned by
   `tildes_crossing_a_later_emphasis_stay_literal`.
+- **Verdict (0.0.22): permanent.** The one remaining case needs a tilde pair
+  and an emphasis span that cross, which no one writes on purpose. Fixing it
+  means our own CommonMark emphasis pairing in place of pulldown-cmark's
+  (an outer `*` can re-pair once the inner span dissolves), a parser of its
+  own for one malformed input.
 
-### 24. A refused Markdown reference definition is not printed
-- **Differs:** link, image and autolink destinations go through markdown-it's
-  `normalizeLink` and `validateLink` as upstream (`markdown_url.rs`, golden
-  `markdown_links.tsv`), so `[j](javascript:x)` stays literal text. But a
-  *reference definition* whose destination `validateLink` refuses
-  (`[1]: javascript:x`) is not a definition upstream, so its line prints as a
-  paragraph; pulldown-cmark consumes the line as a definition, and it prints
-  nothing here. The link using it (`[r][1]`) does print as literal text, as
-  upstream.
-- **Why:** pulldown-cmark resolves definitions during block parsing, and turns
-  no event for the consumed line that could be put back.
-- **Remove:** re-emit the source span of each refused definition
-  (`Parser::reference_definitions()` carries it) as a paragraph block.
+### 24. ~~A refused Markdown reference definition is not printed~~ (resolved in 0.0.22)
+- **Resolved:** a reference definition whose destination markdown-it's
+  `validateLink` refuses (`[1]: javascript:x`) is not a definition upstream,
+  so its line prints as a paragraph. The port now finds such definitions in
+  pulldown-cmark's `reference_definitions()`, escapes their `[` and parses
+  again, so the line prints as upstream prints it, continuation lines
+  included, and links using the label stay literal (golden
+  `markdown_refused_definition_*` in `parity_docs.tsv`).
 
 ### 25. JSON nesting stops at exactly 10 000 levels
 - **Differs:** `Json::new` refuses documents nested deeper than
@@ -437,6 +510,7 @@ Format: what differs · why · how to remove it (if temporary).
   depth) cost quadratic memory until the process was killed; a machine-dependent
   cutoff cannot be reproduced exactly.
 - **Remove:** not removable exactly; the constant can be tuned.
+- **Verdict (0.0.22): permanent.** CPython's cutoff depends on its C stack.
 
 ### 27. ~~A `Text`'s trailing blank line is lost inside containers~~ (resolved)
 - **Resolved:** `Text` marks a final empty line with an empty segment, which
@@ -445,22 +519,19 @@ Format: what differs · why · how to remove it (if temporary).
   (the rich-cli `--syntax` bottom pad that compensated for it was removed in the
   same change).
 
-### 28. `AnsiDecoder::decode` splits lines like rich 12
-- **Differs:** `decode` splits with `str::lines` (Python's `splitlines` for
-  `\n`/`\r\n`), as rich 12.6 did; rich 15.0.0 splits after each `\n`, keeps a
-  `\r` before it (which then resets the line) and yields a final empty line
-  for text ending in a newline. `AnsiDecoder::decode_split_newlines` is the 15.0
-  behaviour, which `Text::from_ansi` uses.
-- **Why kept:** rich-cli's notebook rendering relies on the old split
-  (`notebook_group_uses_upstream_cell_spacing_and_output_execution_count`).
-- **Remove:** switch `decode` to the 15.0 split with that CLI path.
+### 28. ~~`AnsiDecoder::decode` splits lines like rich 12~~ (resolved in 0.0.22)
+- **Resolved:** `decode` now splits as rich 15.0.0 does: after each `\n`,
+  keeping a `\r` before it (which then resets the line), with a final empty
+  line for text ending in a newline (unit test `decode_splits_as_rich_15`,
+  values from rich 15.0.0). `decode_split_newlines` stays as the same thing
+  under its old name. rich-cli's notebook and capture views, which follow
+  rich-cli 1.8.1 on rich 12, decode `text.lines()` one line at a time.
 
-### 29. Renderables cannot end without a newline when printed
-- **Differs:** `Console::print` always ends the output line, so `Rule(end=…)`
-  with an `end` that has no trailing newline, and a printed `LiveRender` (which
-  upstream ends without one), still end the line. Inside containers both match
-  upstream.
-- **Why:** the port's `Renderable` output separates lines and has no `end`.
+### 29. ~~Renderables cannot end without a newline when printed~~ (resolved)
+- **Resolved (0.0.22):** `Rule(end=…)` with an `end` that has no trailing
+  newline and a printed `LiveRender` leave the line open, as upstream's do,
+  through `Renderable::print_end_line` (`rule_end` and `live_render_print`
+  in `golden/parity_widgets.tsv`). Inside containers both already matched.
 
 ### 30. A lone surrogate in `Json` prints as U+FFFD without `ensure_ascii`
 - **Differs:** Python's `json` accepts an unpaired `\uD800`-`\uDFFF` escape,
@@ -473,6 +544,7 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** the rendered output is a Rust string; upstream's own output cannot
   be written to a UTF-8 terminal either (`UnicodeEncodeError`).
 - **Remove:** not removable without non-UTF-8 output.
+- **Verdict (0.0.22): permanent.** A Rust string cannot hold a surrogate.
 
 ### 31. Unknown style names in renderable options resolve to no style
 - **Differs:** upstream's `Console.get_style` raises `MissingStyle` for a name
@@ -484,7 +556,10 @@ Format: what differs · why · how to remove it (if temporary).
   `Text` spans are already silent upstream.)
 - **Why:** `Renderable::rich_render` has no error channel; `Style::parse` and
   `Console::get_style` return errors for callers that want to validate first.
-- **Remove:** would need a fallible render path through every container.
+- **Remove:** not planned (verdict for 0.0.22: permanent). A render error
+  would need a fallible `rich_render` through every container and every
+  extension, for input that `Style::parse` and `Console::get_style`
+  already reject before printing.
 
 ### 32. `Columns(width=0)` with no horizontal padding renders nothing
 - **Differs:** upstream computes `max_width // (width + padding)` and raises
@@ -492,17 +567,24 @@ Format: what differs · why · how to remove it (if temporary).
   for that case instead of panicking (the Python binding raises
   `ZeroDivisionError` itself before calling core).
 - **Why:** `Renderable::rich_render` has no error channel (see §31).
-- **Remove:** would need a fallible render path.
+- **Remove:** not planned (verdict for 0.0.22: permanent), for the reason
+  in §31.
 
-### 33. An invalid GFM delimiter row inside a list or quote stays a table
-- **Differs:** pulldown-cmark accepts delimiter rows markdown-it rejects (a
-  cell of a lone `:`, an empty cell between two others, a cell count that
-  differs from the header's). At the top level such a "table" is re-parsed as
-  the paragraph markdown-it prints (golden `gfm_invalid_delimiter_row`);
-  nested in a list item or block quote it still renders as a table.
-- **Why:** the re-parse works on the table's source range, which inside a
-  container still carries the container's markers.
-- **Remove:** strip the container prefixes from each line before re-parsing.
+### 33. ~~An invalid GFM delimiter row inside a list or quote stays a table~~ (resolved in 0.0.22)
+- **Resolved:** a table nested in a list item or block quote is checked
+  against markdown-it's delimiter-row rules too. The container markers of its
+  later lines (`> `, the item's indent) are stripped before the re-parse, so a
+  rejected one prints as the paragraph markdown-it prints (golden
+  `markdown_nested_table_*` in `parity_docs.tsv`).
+- **Also resolved:** markdown-it lets a table interrupt a paragraph
+  (`p\na|b\n-|-` is a paragraph and then a table); pulldown-cmark keeps those
+  lines in the paragraph. A top-level paragraph is now split before such a
+  header row (golden `markdown_fuzz_*`).
+- **Still differs (permanent):** markdown-it tries its table rule before its
+  list rule, so `- a|b` over an indented `  -|-` is a table whose header cell
+  is `- a` upstream; pulldown-cmark starts a list there. Matching it would mean
+  replacing pulldown-cmark's block parser, for a document no one writes on
+  purpose.
 
 ### 34. `rich -j` is `--json` and `rich -x` is `--syntax`
 - **Differs:** in rich-cli 1.8.1, `-j` is `--emoji` and `-x` is `--lexer`
@@ -523,6 +605,7 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** changing `-j` and `-x` would break scripts written for this CLI
   to fix scripts written for rich-cli, and both uses are common.
 - **Remove:** a major CLI release could move them to upstream's meanings.
+- **Verdict (0.0.22): permanent** until a major CLI release.
 
 ### 35. `rich --rst` renders a subset of reStructuredText
 - **Differs:** rich-cli's `--rst` hands the document to docutils, and
@@ -555,6 +638,12 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** there is no docutils for Rust, and the subset is what READMEs and
   docstrings use.
 - **Remove:** as more of docutils' directives are ported.
+- **Verdict (0.0.22): permanent** for the parts docutils alone can do.
+  The target is moving from rich-rst 1.3.2 to 2.2.0, a rewrite (docutils
+  vendored, Sphinx directives, real tables, list markers): its output for
+  every fixture is captured in `fixtures/rst-next/` and measured by an
+  ignored test in `crates/rich-ext/tests/rst.rs`; the port still matches
+  1.3.2 until it is switched over.
 
 ### 36. Semantic regions: an opt-in seam, no default change (#226)
 - **Differs:** nothing by default. `rich::protocol` adds `RegionSink`, set on
@@ -572,6 +661,7 @@ Format: what differs · why · how to remove it (if temporary).
   the renderables; the render tree (`docs/design/render-tree.md`) needs them
   for semantic HTML and accessibility. Upstream has no equivalent.
 - **Remove:** not planned; the seam is additive.
+- **Verdict (0.0.22): permanent.** Opt-in and additive.
 
 ### 37. Frame export (`rich_ext::frame`) differs from `export_html` and `export_svg` in small ways
 - **Differs:** `Frame::to_html` and `Frame::to_svg` use core's templates and
@@ -599,6 +689,7 @@ Format: what differs · why · how to remove it (if temporary).
 - **Why:** these are our exporters (the render tree's), not upstream's; they
   keep what core's lose.
 - **Remove:** not planned.
+- **Verdict (0.0.22): permanent.** These are our exporters, not upstream's.
 
 ### 38. The Windows legacy console is not supported
 
@@ -612,6 +703,97 @@ Format: what differs · why · how to remove it (if temporary).
   core, which denies `unsafe_code`, for terminals almost nobody runs.
   Decided for 1.0.0 on 2026-10-11 ([plan](plans/1.0.0.md), decision 7;
   [#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12)).
+- **Remove:** not planned.
+- **Verdict (0.0.22): permanent** (decided for 1.0.0).
+
+### 46. Prompts have no `password` option
+- **Differs:** upstream's `Prompt(password=True)` reads the answer with
+  `getpass`, which turns the terminal's echo off. The port's prompts read
+  through an `InputSource` and have no `password` option: the standard one
+  echoes what is typed.
+- **Why:** turning echo off needs terminal-mode calls (termios, the Win32
+  console), that is platform code or `unsafe` in a core that denies it, or a
+  new dependency for one option. An application that needs it passes its own
+  `InputSource` that reads without echo (for example over the `rpassword`
+  crate); rich-interact's input component masks what is typed.
+- **Verdict (0.0.22): permanent** unless core takes a dependency for it
+  (a decision for the maintainer).
+
+### 40. `Layout` has only the row and column splitters
+
+- **Differs:** upstream's `Layout.split(…, splitter=…)` takes a `Splitter`
+  subclass as well as a name, so a program can lay children out its own way.
+  The port's `Splitter` is a closed enum of upstream's two, `Row` and
+  `Column`; a name upstream would reject (`NoSplitter`) is `None` from
+  `Splitter::from_name`.
+- **Why:** both built-in splitters are ported and byte-identical; an open
+  splitter would make `Splitter` a trait object, losing `Copy` and `Eq` on a
+  public type, for an extension point upstream does not use itself.
+- **Remove:** add a `Splitter::Custom` that holds a trait object, if a user
+  asks for one.
+
+### 41. `Style` keeps no stale cached strings
+
+- **Differs:** upstream caches a style's definition string
+  (`_style_definition`) and escape codes (`_ansi`) on the instance. `copy`,
+  `update_link` and `clear_meta_and_links` copy the cached definition, so
+  `str(style.update_link(None))` still names the old link when `str(style)`
+  ran first; and the escape codes cached for one colour system are reused
+  for another. Here a style's definition and codes are always computed from
+  what it holds.
+- **Why:** the results depend on call order, which no caller can rely on.
+  The parity fixtures avoid the order (`style_api`, `segment_misc`).
+- **Remove:** not planned.
+
+### 42. The Python object protocols have no counterpart
+
+- **Differs:** `protocol.is_renderable` and `protocol.rich_cast` (`__rich__`,
+  with its guard against objects that claim every attribute),
+  `abc.RichRenderable` (an `isinstance` hook) and
+  `_extension.load_ipython_extension` (IPython) are not ported. A Rust type
+  is renderable when it implements [`Renderable`](../crates/rich/src/protocol.rs),
+  which the compiler checks; a type that renders as another one implements
+  `Renderable` by delegating, as `Color` and `Palette` do for upstream's
+  `__rich__`. `Measurement.get` cannot meet a non-renderable, so it never
+  raises `NotRenderableError`.
+- **Why:** runtime reflection (§19); the trait is the Rust form of the
+  protocol.
+- **Remove:** inherent to the language difference; not removable.
+
+### 43. `Console` features tied to Python objects or Jupyter
+
+- **Differs:** the port's `Console` writes to standard output, and callers
+  capture output with closures (`capture`, `export_*`, `page`), not by
+  passing a Python file object (`file=`, `stderr=`, `Console.file`). There
+  is no Jupyter mode (`force_jupyter`, `is_jupyter`, `_repr_mimebundle_`),
+  no `print_exception` (Python tracebacks, §19), and no `log_locals` or
+  caller frame lookup (`_caller_frame_info`).
+- **Why:** these read Python objects at run time. The Python bindings
+  (`crates/rich-py`) provide them on top of the core.
+- **Remove:** inherent to the language difference; not removable.
+
+### 44. Segment control codes are a flag
+
+- **Differs:** upstream's `Segment.control` is a list of control codes; here
+  it is a `bool`, the codes already written into the segment's text. And
+  `Segment::simplify` never merges a control segment into the text that
+  follows it, where upstream's does (which then lets `export_html` and
+  `export_text` show the escape codes).
+- **Why:** nothing in the port reads the codes back out of a segment; the
+  merge is an upstream accident.
+- **Remove:** not planned.
+
+### 45. Markup handler tags evaluate a subset of Python literals
+
+- **Differs:** upstream's `[@handler=…]` tags run `ast.literal_eval` on the
+  parameters. The port evaluates numbers, strings, `True`, `False`, `None`,
+  tuples and lists, which is what a style's meta can hold (§3a). A dict, set,
+  bytes or complex value is a `MarkupError` here. Syntax errors carry
+  Python's messages for unclosed and mismatched brackets and unterminated
+  strings; any other invalid parameter reports `malformed node or string`
+  without the AST node and memory address upstream's `ValueError` names.
+- **Why:** there is no Python parser in Rust, and the address is different
+  on every run.
 - **Remove:** not planned.
 
 ## Feature-flagged divergences
@@ -633,6 +815,8 @@ spelling to preserve bytes within the width; atomicity is impossible there.
 Cropping remains intentionally lossy presentation output. This behavior requires
 JSON lexical context unavailable in generic Text rendering. Remove this special
 handling if upstream adopts the same escape-aware layout.
+- **Verdict (0.0.22): permanent.** Off by default; the default build is
+  unchanged.
 
 ## Explicit text encoding extension (0.0.4 development)
 
@@ -661,6 +845,8 @@ dependency on extensions. See [encoding policy](troubleshooting.md#text-encoding
   `CodeHighlighter` (such as lumis) is unaffected by the feature.
 - **Enable:** `cargo build -p rs-rich-cli --release --features syntax-cache`.
   See [benchmarks](benchmarks.md#004-repeated-source-syntax-results).
+- **Verdict (0.0.22): permanent.** Off by default; the default build is
+  unchanged.
 
 ### 26. Optional Oniguruma regex engine (`onig`)
 
@@ -681,6 +867,8 @@ dependency on extensions. See [encoding policy](troubleshooting.md#text-encoding
   could still differ.
 - **Enable:** `cargo build -p rs-rich-cli --release --features onig`, or
   `rs-rich = { version = "…", features = ["onig"] }`.
+- **Verdict (0.0.22): permanent.** Off by default; the default build is
+  unchanged.
 
 ### 39. `Syntax` and `Markdown` without syntect (`code`)
 
@@ -700,3 +888,5 @@ dependency on extensions. See [encoding policy](troubleshooting.md#text-encoding
   which carries a security advisory, and keep `Syntax` and Markdown fences.
 - **Enable:** `rs-rich = { version = "…", default-features = false,
   features = ["code", "markdown"] }`.
+- **Verdict (0.0.22): permanent.** Off by default; the default build is
+  unchanged.

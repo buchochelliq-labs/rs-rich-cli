@@ -5,7 +5,7 @@ plus the porting status of each. It is the lookup table used by both the
 `port-module` and `sync-upstream` skills, and the single source of truth for
 "what's done".
 
-**Status:** ⬜ not started · 🟡 partial (subset ported) · 🟢 complete
+**Status:** ⬜ not started · 🟡 partial (subset ported) · 🟢 complete (what is not ported is a recorded divergence) · ⛔ not portable, reimagined (recorded in DIVERGENCES)
 **Parity:** ✅ golden-tested against real `rich` · — none yet
 
 **Last verified:** 2026-09-24, against Python `rich` 15.0.0, at the 0.0.11
@@ -19,25 +19,25 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 
 | upstream `rich/…`                     | rust `crates/rich/src/…` | status | parity |
 |---------------------------------------|--------------------------|:------:|:------:|
-| `color.py`, `color_triplet.py`, `_palettes.py`, `palette.py` | `color.rs` | 🟡 | ✅ truecolor + 8-bit + standard; `windows` downgrade through `WINDOWS_PALETTE` and bare `grey`/`gray` rejected (`audit2.tsv`) |
-| `style.py`                            | `style.rs`               | 🟡 | ✅ (+ `meta`: an insertion-ordered `Meta` map instead of marshal bytes) |
+| `color.py`, `color_triplet.py`, `_palettes.py`, `palette.py` | `color.rs` | 🟢 | ✅ truecolor + 8-bit + standard; `windows` downgrade through `WINDOWS_PALETTE` and bare `grey`/`gray` rejected (`audit2.tsv`); `parity_core.tsv`: `ColorParseError` messages and strictness, `system`, `is_system_defined`, `get_truecolor(theme, foreground)`, `from_triplet`, `parse_rgb_hex`, `blend_rgb`, `ColorTriplet.rgb`/`normalized`, `Palette` (`match`, `__rich__`), `Color.__rich__` |
+| `style.py`                            | `style.rs`               | 🟢 | ✅ (+ `meta`: an insertion-ordered `Meta` map instead of marshal bytes, DIVERGENCES §3a); `parity_core.tsv`: attribute getters, `null`, `copy`, `chain`/`combine`, `pick_first`, `transparent_background`, `background_style`, `StyleStack`, `StyleSyntaxError` messages, `render`; no stale cached strings (§41), no random `link_id` (§20) |
 | `cells.py`, `_cell_widths.py`         | `cells.rs`               | 🟢 | ✅ 0 / 127,754 codepoints |
-| `segment.py`                          | `segment.rs`             | 🟡 | `split_and_crop_lines`/`adjust_line_length` crop (newline inside a segment, zero-width past the edge: `audit2.tsv` + unit tests) |
-| `markup.py`                           | `markup.rs`              | 🟡 | ✅ (error positions in characters of the original string, per-chunk emoji: `audit2.tsv`) |
-| `text.py` (+ justify, overflow, `tab_size`) | `text.rs`          | 🟡 | ✅ (+ `core_gaps.tsv`: tab stops, justify-padding runs; `upstream_features.tsv`: `with_indent_guides`, `detect_indentation`, `from_ansi(style=…)`, `stylize_before`; `audit2.tsv`: span sweep over many lines, empty spans, explicit `justify="default"`, `splitlines`/`isspace` measurement; `functions.tsv`: the `markup` property) |
+| `segment.py`                          | `segment.rs`             | 🟢 | `split_and_crop_lines`/`adjust_line_length` crop (`audit2.tsv` + unit tests); `parity_core.tsv`: `split_cells`, `divide`, `split_lines_terminator`, `split_and_crop_lines`, `get_line_length`, `get_shape`, `set_shape`, `align_top`/`middle`/`bottom`, `filter_control`, `strip_links`, `strip_styles`, `apply_style(style, post_style)`, `Segments`, `SegmentLines`; control codes are a flag (§44) |
+| `markup.py`                           | `markup.rs`              | 🟢 | ✅ (error positions in characters of the original string, per-chunk emoji: `audit2.tsv`); `parity_core.tsv`: `Tag`, `render(style=…, emoji=…)`, `[@handler]` meta tags (a subset of `literal_eval`, §45), closing-tag error text |
+| `text.py` (+ justify, overflow, `tab_size`) | `text.rs`          | 🟢 | ✅ (+ `core_gaps.tsv`: tab stops, justify-padding runs; `upstream_features.tsv`: `with_indent_guides`, `detect_indentation`, `from_ansi(style=…)`, `stylize_before`; `audit2.tsv`: span sweep over many lines, empty spans, explicit `justify="default"`, `splitlines`/`isspace` measurement; `functions.tsv`: the `markup` property; `parity_core.tsv`: `wrap`, `fit`, `align`, `set_length`, `remove_suffix`, `extend_style`, `assemble`, `append_tokens`, `copy_styles`, `get_style_at_offset`, slicing, `in`, `==`, `+`, `from_markup(emoji=…)`, `Span` methods). Offsets are bytes (§3); `end` is kept but containers break lines (§29) |
 | `_wrap.py`                            | `wrap.rs`                | 🟢 | ✅ 0 / 30,680 wrap cases |
 | `theme.py`, `themes.py`, `default_styles.py` | `theme.rs` | 🟢 | ✅ (theme stack and theme files since core 0.0.6) |
-| `terminal_theme.py` | `terminal_theme.rs` | 🟡 | ✅ |
-| `console.py` (+ `ConsoleOptions`, `render_lines`, `render`, `render_str`) | `console.rs`  | 🟡 | ✅ (+ `no_color.tsv`: colour removal, exports; `core_gaps.tsv`: `render`, `render_str` keywords, `tab_size`, `emoji_variant`, `markup`; `upstream_features.tsv`: `print(justify=…)` wraps renderables in `Align`) |
-| `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟡 | — (plus the opt-in `RegionSink` seam, not upstream: DIVERGENCES §36, `tests/regions.rs`) |
-| `measure.py` (+ `Renderable::measure`, fit, `Measurement.get`) | `measure.rs`       | 🟡 | ✅ `Syntax`/`JSON` measurement golden (`measure.tsv`); container `__rich_measure__` (`measure_renderables.tsv`) |
-| `errors.py`                           | `errors.rs`              | 🟡 | — |
+| `terminal_theme.py` | `terminal_theme.rs` | 🟢 | ✅ every theme's colours and `TerminalTheme(…)` with and without `bright` (`parity_core.tsv`) |
+| `console.py` (+ `ConsoleOptions`, `render_lines`, `render`, `render_str`) | `console.rs`  | 🟡 | ✅ (+ `no_color.tsv`: colour removal, exports; `core_gaps.tsv`: `render`, `render_str` keywords, `tab_size`, `emoji_variant`, `markup`; `upstream_features.tsv`: `print(justify=…)` wraps renderables in `Align`; `parity_core.tsv`: `print_objects` with every `print` keyword (`sep`, `end`, `style`, `width`, `crop`, `soft_wrap`, `new_line_start`, …), `line`, `rule`, `out`, `print_json`, `measure`). **Missing:** `log` (with `log_time`/`log_path`), `status`, the `screen()` context, `begin_capture`/`end_capture`, `record=` with `save_text`/`save_html`/`save_svg`, `quiet`, `Console(soft_wrap=…, style=…)`, `push_render_hook`/`pop_render_hook`, `set_live`/`clear_live`, `is_dumb_terminal`, size setters, `color_system="auto"` detection from the environment, `on_broken_pipe`. Permanent: file objects, Jupyter, `print_exception`, `log_locals` (§43) |
+| `protocol.py`, `abc.py`, `_extension.py` | `protocol.rs`         | 🟢 | the `Renderable` trait; `__rich__`, `rich_cast`, `RichRenderable` and the IPython extension have no counterpart (§42); the default measure is upstream's `(0, max_width)` (`parity_core.tsv`) (plus the opt-in `RegionSink` seam, not upstream: DIVERGENCES §36, `tests/regions.rs`) |
+| `measure.py` (+ `Renderable::measure`, fit, `Measurement.get`) | `measure.rs`       | 🟢 | ✅ `Syntax`/`JSON` measurement golden (`measure.tsv`); container `__rich_measure__` (`measure_renderables.tsv`); `parity_core.tsv`: `span`, `with_minimum`, `clamp`, `measure_renderables`, `(0, max_width)` for a renderable without `__rich_measure__` |
+| `errors.py`                           | `errors.rs`              | 🟢 | every exception is a `RichError` variant; `is_console_error`/`is_style_error` follow the class hierarchy (unit test); messages checked through `parity_core.tsv` |
 | `control.py`                          | `control.rs`             | 🟢 | ✅ (`alt_screen` homes the cursor; `title`) |
-| `ansi.py`                             | `ansi.rs`                | 🟡 | ✅ |
-| `highlighter.py` (Regex/Repr/ISO8601) | `highlighter.rs`         | 🟡 | ✅ |
-| `containers.py` (`Renderables`)       | `containers.rs`          | 🟡 | ✅ via `LogRender` (`core_gaps.tsv`) |
+| `ansi.py`                             | `ansi.rs`                | 🟢 | ✅ (`parity_core.tsv`: private escapes such as `\x1b7` dropped, codes past 255 clamped); `decode` keeps rich 12's line split (§28) |
+| `highlighter.py` (Regex/Repr/ISO8601/JSON/Null) | `highlighter.rs`         | 🟢 | ✅ (`parity_core.tsv`: `JSONHighlighter` keys, `NullHighlighter`, `Highlighter.__call__` as `highlighted`) |
+| `containers.py` (`Renderables`, `Lines`) | `containers.rs`          | 🟢 | ✅ via `LogRender` (`core_gaps.tsv`); `parity_core.tsv`: `Renderables`, `Lines` (`justify` in every mode, list operations, rendering) |
 | `region.py`                           | `region.rs`              | ✅ | via `Layout` regions (`upstream_features.tsv`) |
-| `scope.py`                            | (tbd)                    | ⬜ | — |
+| `scope.py`                            | `scope.rs`               | 🟢 | ✅ `render_scope` over names and `PrettyValue`s: sorting, special names, title, `indent_guides` and the `Pretty` limits (`parity_docs.tsv`) |
 
 ## Widgets & layout
 
@@ -45,57 +45,58 @@ Mirrored upstream: `rich` **15.0.0** (see [`UPSTREAM.toml`](https://github.com/b
 |-------------------|-----------|:------:|:------:|
 | `box.py` (all boxes, `substitute`, `get_plain_headed_box`) | `box.rs` | 🟢 | ✅ |
 | `rule.py` | `rule.rs` | ✅ | ✅ (+ `upstream_features.tsv`: `end`, `style` names, `Text` titles, ASCII fallback); read-only `get_title`/`get_align` for upstream's public attributes |
-| `padding.py` | `padding.rs` | 🟡 | ✅ (+ `expand`, `indent`, height in `core_gaps.tsv`) |
-| `panel.py` | `panel.rs` | 🟡 | ✅ (+ `upstream_features.tsv`: `style`, `height`, `Text` titles; `api_gaps.tsv`: `Text` subtitles, `safe_box`; `audit_edges.tsv`: `width=0`); read-only `renderable`, `get_title`, `get_subtitle` and their aligns for upstream's public attributes |
-| `align.py` | `align.rs` | 🟡 | ✅ (+ `vertical`, `style`, `pad`, `width`, `height`, `VerticalCenter`, table-cell `vertical` in `core_gaps.tsv`) |
-| `constrain.py` | `constrain.rs` | 🟡 | ✅ |
-| `table.py` | `table.rs` | 🟡 | ✅ (renderable cells via `Cell`, `ColumnOptions`, markup `str` cells, `__rich_measure__`; `api_gaps.tsv`: `width`, `min_width`, footers, `leading`, `row_styles`, row styles and sections, header/footer/title/caption styles and justification, `Text` annotations, `safe_box`, extra cells adding columns); read-only `columns` (`Column`), `rows` (`Row`) and `get_*` settings for upstream's public attributes |
+| `padding.py` | `padding.rs` | 🟢 | ✅ (+ `expand`, `indent`, height in `core_gaps.tsv`; `parity_widgets.tsv`: `style` as a theme name or definition, `Padding::unpack`, no room for the content, wide characters when fitted, inside a layout) |
+| `panel.py` | `panel.rs` | 🟢 | ✅ (+ `upstream_features.tsv`: `style`, `height`, `Text` titles; `api_gaps.tsv`: `Text` subtitles, `safe_box`; `audit_edges.tsv`: `width=0`; `parity_widgets.tsv`: `height=0` read as unset, heights below the border, wide and ellipsized titles, title control codes, every box shape, style names, 4-sided padding, `fit` with titles, `highlight`, measurement); read-only `renderable`, `get_title`, `get_subtitle` and their aligns for upstream's public attributes |
+| `align.py` | `align.rs` | 🟢 | ✅ (+ `vertical`, `style`, `pad`, `width`, `height`, `VerticalCenter`, table-cell `vertical` in `core_gaps.tsv`; `parity_widgets.tsv`: `width=0`/`height=0` read as unset, content taller than the height, `pad=False` blank lines, style names, `VerticalCenter` in a layout); an invalid `align`/`vertical` cannot be written, as they are enums |
+| `constrain.py` | `constrain.rs` | 🟢 | ✅ (`parity_widgets.tsv`: `width=0` renders nothing, `None`, measured in a table) |
+| `table.py` | `table.rs` | 🟢 | ✅ (renderable cells via `Cell`, `ColumnOptions`, markup `str` cells, `__rich_measure__`; `api_gaps.tsv`: `width`, `min_width`, footers, `leading`, `row_styles`, row styles and sections, header/footer/title/caption styles and justification, `Text` annotations, `safe_box`, extra cells adding columns; `parity_widgets.tsv`: wrapping columns squeezed by `no_wrap` neighbours at every width, many columns in a narrow console, legacy Windows and ASCII-only boxes); read-only `columns` (`Column`), `rows` (`Row`) and `get_*` settings for upstream's public attributes |
 | `columns.py` | `columns.rs` | ✅ | ✅ (markup/`Text`/renderable items; `upstream_features.tsv`: `padding`, `width`, `column_first`, `right_to_left`, `align`, `title`) |
 | `tree.py` | `tree.rs` | ✅ | ✅ (markup labels, `__rich_measure__`; `upstream_features.tsv`: `style`, `guide_style` heavy/double/ASCII guides, `expanded`, `hide_root`, `highlight`) |
-| `layout.py` | `layout.rs` | 🟡 | ✅ (+ `upstream_features.tsv`: `name`/`visible`, `split`/`add_split`/`unsplit`, lookup, placeholder panel, `tree`, `map`); `refresh_screen` with `Console::update_screen`/`update_screen_lines` (`api_gaps.tsv`); `size=0` is flexible and `ratio_resolve` is exact (`audit_edges.tsv`) |
+| `layout.py` | `layout.rs` | 🟢 | ✅ (+ `upstream_features.tsv`: `name`/`visible`, `split`/`add_split`/`unsplit`, lookup, placeholder panel, `tree`, `map`); `refresh_screen` with `Console::update_screen`/`update_screen_lines` (`api_gaps.tsv`); `size=0` is flexible and `ratio_resolve` is exact (`audit_edges.tsv`); minimum sizes past the total, `ratio=0`, hidden children and nested splits (`parity_widgets.tsv`); only the two built-in splitters ([DIVERGENCES §40](DIVERGENCES.md#40-layout-has-only-the-row-and-column-splitters)) |
 | `styled.py` | `styled.rs` | 🟢 | ✅ |
-| `screen.py` | `screen.rs` | 🟡 | — |
+| `screen.py` | `screen.rs` | 🟢 | ✅ `parity_widgets.tsv`: several renderables, `style` (names too), `application_mode`, no line break after the last row when printed, inside a panel |
 | `progress_bar.py` | `progress_bar.rs` | 🟢 | ✅ `bar_*`, `progress_three`, `progress_bar.tsv` (pulse, ASCII, no-colour) |
-| `bar.py` | `bar.rs` | 🟡 | ✅ (+ `color`/`bgcolor` in `core_gaps.tsv`) |
+| `bar.py` | `bar.rs` | 🟢 | ✅ (+ `color`/`bgcolor` in `core_gaps.tsv`; `parity_widgets.tsv`: `begin` below 0 and `end` past `size` clamped, empty and reversed ranges, measurement) |
 
 ## Live & progress
 
 | upstream `rich/…` | rust file | status | parity |
 |-------------------|-----------|:------:|--------|
-| `progress.py` | `progress.rs` + `pyformat.rs` | 🟡 | ✅ `progress_time.tsv` step programs (columns incl. `TextColumn`/`RenderableColumn`, fields, pulse, task API, clock, expand, table-column options, `bar_width=None`), `progress_live.tsv` (live stream, transient, disable, non-terminal); user-defined columns (`CustomProgressColumn`, `upstream_features.tsv`) |
-| `spinner.py`, `_spinners.py` (full table; public via `spinner_names`/`spinner_frames`) | `spinner.rs` | 🟡 | ✅ `live_status.tsv` (start at first render, `update`, markup text, console clock, measure) |
-| `status.py` | `status.rs` | 🟡 | ✅ `live_status.tsv` (frames, `update`, console clock) |
-| `live_render.py` | `live_render.rs` | ✅ | ✅ `live_status.tsv` (`position_cursor`/`restore_cursor`, style, wrap); `vertical_overflow` (`upstream_features.tsv`; height 0 in `audit_edges.tsv`) |
-| `live.py` | `live.rs` | 🟡 | ✅ `progress_live.tsv` (start/refresh/stop stream); auto-refresh timing by unit tests |
+| `progress.py` | `progress.rs` + `pyformat.rs` | 🟢 | ✅ `progress_time.tsv` step programs (columns incl. `TextColumn`/`RenderableColumn`, fields, pulse, task API, clock, expand, table-column options, `bar_width=None`), `progress_live.tsv` (live stream, transient, disable, non-terminal); user-defined columns (`CustomProgressColumn`, `upstream_features.tsv`); `parity_live.tsv` (0.0.22: `print` against the last refresh's table, `redirect_stdout`/`redirect_stderr`, disabled print); `_TrackThread` batching and `track(completed, task_id, update_period)` by unit tests. Permanent: `f64` counts and byte-mode `open` ([DIVERGENCES §16](DIVERGENCES.md#16-progress-two-permanent-differences-settled-in-0022)); `Progress.log` waits on `Console.log` (console row) |
+| `spinner.py`, `_spinners.py` (full table; public via `spinner_names`/`spinner_frames`) | `spinner.rs` | 🟢 | ✅ `live_status.tsv` (start at first render, `update`, markup text, console clock, measure); `parity_live.tsv` (0.0.22: a `Text` used as is, a renderable in `Table.grid(padding=1)`, in a `Live`); `KeyError` for an unknown name as `Spinner::try_new` |
+| `status.py` | `status.rs` | 🟢 | ✅ `live_status.tsv` (frames, `update`, console clock); `parity_live.tsv` (0.0.22: `start`/`stop` in a transient `Live`, `update` with and without a new spinner, print, redirect, a `Text` or renderable status). `Console.status` is the console row's |
+| `live_render.py` | `live_render.rs` | 🟢 | ✅ `live_status.tsv` (`position_cursor`/`restore_cursor`, style, wrap); `vertical_overflow` (`upstream_features.tsv`; height 0 in `audit_edges.tsv`) |
+| `live.py` | `live.rs` | 🟢 | ✅ `progress_live.tsv` (start/refresh/stop stream); `parity_live.tsv` (0.0.22: render hook as `Live::print`, alternate screen, `start(refresh)`, `update(refresh)`, refresh before start, crop, dumb terminal); auto-refresh timing by unit tests. Permanent: the `Live` owns its console and sink, and nested displays are not supported ([DIVERGENCES §17](DIVERGENCES.md#17-live-owns-its-console-and-sink-redirect-through-proxy-writers-settled-in-0022)) |
+| `file_proxy.py` | `file_proxy.rs` | 🟢 | ✅ `parity_live.tsv` (0.0.22: line buffering, ANSI decoding carried across lines, `flush` as markup, the partial line flushed at stop, stderr, redirect off, not a terminal). Permanent: a `FileProxy` is a writer the program writes to, not a replacement for the process's stdout ([DIVERGENCES §17](DIVERGENCES.md#17-live-owns-its-console-and-sink-redirect-through-proxy-writers-settled-in-0022)) |
 
 ## Content renderers
 
 | upstream `rich/…` | rust file | status | notes |
 |-------------------|-----------|:------:|-------|
-| `syntax.py` | `syntax.rs` | 🟡 | functional via `syntect` (non-parity, DIVERGENCES #18), behind the default `syntax` feature; `Syntax` itself is behind `code`, which `syntax` and `markdown` imply, and without `syntax` there is no built-in engine (DIVERGENCES #39); `__rich_measure__` is parity-tested; `line_numbers`, `start_line`, `line_range`, `highlight_lines`, `code_width`, `background_color`, `indent_guides`, `stylize_range`, 4-sided padding and unpadded transparent themes are golden-tested with `ansi_dark` (`upstream_features.tsv`; signed line numbers, ranges and positions and `highlight(code, line_range)` in `api_gaps.tsv`; line numbers past 64 bits in `audit_edges.tsv`); `dedent`/`from_path` not ported; not upstream: `Syntax::highlighter`, `Syntax::highlight_for` and a console-wide default engine (`ConsoleCodeHighlighting`), unused by default; adapters are checked by `rich_ext::testing::conformance` |
-| `markdown.py` | `markdown.rs` | 🟡 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images (including table-cell hoisting and adjacency) + **GFM tables** via `pulldown-cmark` (default `markdown` feature), with inline styling inside cells (golden `markdown_table_inline`); constructor options `justify`/`style` (golden `markdown_options`), inherited `overflow`/`no_wrap`/`justify` and markdown-it's delimiter-row rules (`audit2.tsv`), `code_theme`/`inline_code_lexer`/`inline_code_theme` (syntect); not upstream: `Markdown::highlighter` and `Markdown::fence_renderer` extension points, unused by default; `Markdown::markup` reads the source back (upstream's `markup` attribute); behind `markdown`, which implies `code`, not `syntax` |
-| `json.py` | `json.rs` | 🟡 | ✅ default layout, arbitrary integers, Python float `repr` and overflowing exponents; `JsonOptions` (`indent`, `sort_keys`, `ensure_ascii`, `allow_nan`, `highlight`) and print `justify`/`overflow`/`no_wrap` (`core_gaps.tsv`); lone surrogate escapes under `ensure_ascii` (`audit_edges.tsv`; without it see DIVERGENCES §30); optional escape-safe layout is off by default (DIVERGENCES §22) |
-| `pretty.py` | `pretty.rs` | 🟡 | Rust-native (`Debug` + repr highlight, #19) |
-| `repr.py`, `_inspect.py` | resp. | ⬜ | need Rust reflection — see #19 |
-| `traceback.py` | `traceback.rs` | 🟡 | Rust-native (error `source()` chain, #19) |
-| `_log_render.py` | `log_render.rs` | 🟡 | ✅ `log_render.tsv`, renderable messages (`render_renderables`) in `core_gaps.tsv`; takes a pre-formatted time (DIVERGENCES §19) |
-| `logging.py` (log::Log handler) | `rich-ext` `log_handler.rs` | 🟡 | `RichHandler` over the `log`/`tracing` adapters; UTC default time, no rich tracebacks (DIVERGENCES §19) |
+| `syntax.py` | `syntax.rs` | 🟢 | functional via `syntect` (non-parity, DIVERGENCES #18), behind the default `syntax` feature; `Syntax` itself is behind `code`, which `syntax` and `markdown` imply, and without `syntax` there is no built-in engine (DIVERGENCES #39); `__rich_measure__` is parity-tested; `line_numbers`, `start_line`, `line_range`, `highlight_lines`, `code_width`, `background_color`, `indent_guides`, `stylize_range`, 4-sided padding and unpadded transparent themes are golden-tested with `ansi_dark` (`upstream_features.tsv`; signed line numbers, ranges and positions and `highlight(code, line_range)` in `api_gaps.tsv`; line numbers past 64 bits in `audit_edges.tsv`); `dedent` and `from_path` in `parity_docs.tsv` (`guess_lexer` answers with the extension, not a Pygments alias); not upstream: `Syntax::highlighter`, `Syntax::highlight_for` and a console-wide default engine (`ConsoleCodeHighlighting`), unused by default; adapters are checked by `rich_ext::testing::conformance` |
+| `markdown.py` | `markdown.rs` | 🟢 | paragraphs/headings/inline/lists/quotes/code/links (both `hyperlinks` modes) + images (including table-cell hoisting and adjacency) + **GFM tables** via `pulldown-cmark` (default `markdown` feature), with inline styling inside cells (golden `markdown_table_inline`); constructor options `justify`/`style` (golden `markdown_options`), inherited `overflow`/`no_wrap`/`justify` and markdown-it's delimiter-row rules (`audit2.tsv`), `code_theme`/`inline_code_lexer`/`inline_code_theme` (syntect); not upstream: `Markdown::highlighter` and `Markdown::fence_renderer` extension points, unused by default; `Markdown::markup` reads the source back (upstream's `markup` attribute); behind `markdown`, which implies `code`, not `syntax`; tables nested in lists and quotes, tables that interrupt a paragraph, refused reference definitions, empty list items and empty link destinations (`parity_docs.tsv`); the differential fuzzer generates Markdown too. Remaining, permanent: code-block colours (§9, §18), one strikethrough crossing (§21), a list-marker table header (§33) |
+| `json.py` | `json.rs` | 🟢 | ✅ default layout, arbitrary integers, Python float `repr` and overflowing exponents; `JsonOptions` (`indent`, `sort_keys`, `ensure_ascii`, `allow_nan`, `highlight`) and print `justify`/`overflow`/`no_wrap` (`core_gaps.tsv`); lone surrogate escapes under `ensure_ascii` (`audit_edges.tsv`; without it see DIVERGENCES §30); optional escape-safe layout is off by default (DIVERGENCES §22); `JSON.from_data` for JSON-shaped data (`Json::from_data`, `parity_docs.tsv`; no `default=`, as Rust has no arbitrary objects); nesting cut at 10 000 levels (§25) |
+| `pretty.py` | `pretty.rs` | 🟢 | ✅ `traverse`, `Node`, `_Line`, `pretty_repr` and `Pretty` (`indent_size`, `justify`, `overflow`, `no_wrap`, `indent_guides`, `max_length`, `max_string`, `max_depth`, `expand_all`, `margin`, `insert_line`, `highlighter`, `__rich_measure__`) over a `PrettyValue` that describes the Python object: `None`, `bool`, `int`, `float`, `str`, `bytes`, `list`, `tuple`, `set`, `frozenset`, `dict`, and dataclass, namedtuple and `__rich_repr__` objects (`parity_docs.tsv`). Not portable (DIVERGENCES §19): `install`/`pprint` hooks, reflection over live objects, recursion markers, `defaultdict`/`deque`/`array`/`Counter`/`mappingproxy` braces, and the type name in the empty-repr message. `Pretty::new`/`compact` over `Debug` stay the Rust-native form |
+| `repr.py`, `_inspect.py` | — | ⛔ | need reflection over live objects (DIVERGENCES §19); `PrettyValue::Object` covers what `__rich_repr__` yields |
+| `traceback.py` | `traceback.rs` | ⛔ | Rust-native: an error's `source()` chain in a panel. Frames, source snippets and locals need a Python stack (DIVERGENCES §19) |
+| `_log_render.py` | `log_render.rs` | 🟢 | ✅ `log_render.tsv`, renderable messages (`render_renderables`) in `core_gaps.tsv`; takes a pre-formatted time rather than a `datetime` and `strftime` format (DIVERGENCES §19, permanent) |
+| `logging.py` (log::Log handler) | `rich-ext` `log_handler.rs` | ⛔ | `RichHandler` over the `log`/`tracing` adapters, not Python's `logging`; UTC default time, no rich tracebacks (DIVERGENCES §19) |
 
 ## Utilities & platform
 
 | upstream `rich/…` | rust file | status |
 |-------------------|-----------|:------:|
-| `emoji.py`, `_emoji_codes.py`, `_emoji_replace.py` | `emoji.rs` | 🟡 |
-| `filesize.py` | `filesize.rs` | 🟡 |
-| `pager.py` | `pager.rs` | 🟡 |
-| `prompt.py` | `prompt.rs` | 🟡 |
+| `emoji.py`, `_emoji_codes.py`, `_emoji_replace.py` | `emoji.rs` | 🟢 | the full table, `_emoji_replace` with `default_variant`, and the `Emoji` renderable with `NoEmoji` (unit tests from rich 15.0.0) |
+| `filesize.py` | `filesize.rs` | 🟢 | `decimal` with `precision` and `separator` (`decimal_with`), `pick_unit_and_suffix` (unit tests from rich 15.0.0) |
+| `pager.py` | `pager.rs` | 🟢 | `Pager`, `SystemPager` (pydoc's pager choice), and `Console.pager`'s `styles` and `links` (`page_with_links`) |
+| `prompt.py` | `prompt.rs` | 🟢 | ✅ `prompts.tsv`, `prompt_ask.tsv`; numbers parse as Python's `int()`/`float()` (underscores), float defaults print as `str(float)`, the default only for an empty answer, case folding beyond ASCII (unit tests); no `password` (DIVERGENCES §46) |
 | `_unicode_data/` (21 version tables, `UNICODE_VERSION`) | `cell_widths.rs` | 🟢 |
-| `box.substitute` (legacy/ASCII fallback) | `box.rs` | 🟡 | ✅ |
+| `box.substitute` (legacy/ASCII fallback) | `box.rs` | 🟢 | ✅ upstream's whole `LEGACY_WINDOWS_SUBSTITUTIONS` table, the `ascii` flag of a custom `Box::new`, from the render options (`parity_widgets.tsv`); the console flags are not detected from the terminal ([DIVERGENCES §6](DIVERGENCES.md#6-box-substitution-is-opt-in-no-legacy-terminal-auto-detection)) |
 | `_windows.py`, `_win32_console.py`, `_windows_renderer.py` | — | not ported: the legacy console is unsupported ([DIVERGENCES §38](DIVERGENCES.md#38-the-windows-legacy-console-is-not-supported)) |
-| `jupyter.py`, `file_proxy.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⬜ |
-| `_ratio.py` (`ratio_resolve`) | `ratio.rs` | 🟡 | ✅ |
-| `_loop.py`, `_pick.py`, `_stack.py`, `_timer.py` | internal helpers | ⬜ |
-| `_export_format.py`, `Console.export_html` | `export.rs` | 🟡 | ✅ (links, `code_format`, SVG `font_aspect_ratio` in `core_gaps.tsv`; extreme and non-finite ratios in `audit_edges.tsv`) |
+| `jupyter.py`, `diagnose.py`, `_fileno.py`, `_null_file.py` | resp. | ⛔ | `jupyter`: no Jupyter kernel in Rust (rich-py's bindings serve notebooks); `diagnose`: a report of the Python environment, whose counterpart is `rich doctor`; `_fileno`, `_null_file`: Python file-object plumbing that `Write` replaces. `file_proxy`: see the live workstream |
+| `_ratio.py` (`ratio_resolve`, `ratio_reduce`, `ratio_distribute`) | `ratio.rs` | 🟢 | ✅ (`parity_widgets.tsv`: each function on its edge values) |
+| `_loop.py`, `_pick.py`, `_stack.py`, `_timer.py` | internal helpers | 🟢 | no modules needed: `loop_first`/`loop_last` are iterator code at each use, `pick_bool` is `Option::or`, `Stack` is a `Vec`, `timer` is `Instant` |
+| `_export_format.py`, `Console.export_html` | `export.rs` | 🟢 | ✅ (links, `code_format`, SVG `font_aspect_ratio` in `core_gaps.tsv`; extreme and non-finite ratios in `audit_edges.tsv`); `export_text(styles=True)` (`export_text_styled`) and `save_text`/`save_html`/`save_svg`. Recording is a closure (`record(f)`) rather than `record=True` and `clear=`; the SVG `unique_id` is given (DIVERGENCES §15) |
 
 ## `rich-cli` (tool — tracks upstream 1.8.1, see UPSTREAM.toml)
 
@@ -299,3 +300,13 @@ renderable. It composes `rs-rich-intuituive`'s public `Widget` trait,
 `rs-rich-record`'s VT emulator and portable-pty. Core is unchanged and no
 golden fixture covers it. See
 [Embedding programs and pages](guide/intuituive/embed.md).
+
+### The plugin marketplace (rs-rich-marketplace, not upstream)
+
+`rs-rich-marketplace` (`crates/rich-marketplace`, 0.0.1) has no upstream
+module to port: Python `rich` has no plugins. It verifies the marketplace's
+signed index, resolves versions with `rs-rich-plugin-api`'s public checks
+and installs packages, and has no terminal code. Core is unchanged (it only
+calls `Theme::from_file` to check a theme) and no golden fixture covers it.
+See [the design note](design/marketplace.md) and
+[Extending](PLUGINS.md#the-marketplace-client-0022).

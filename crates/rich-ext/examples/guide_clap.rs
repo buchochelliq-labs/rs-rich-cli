@@ -93,7 +93,7 @@ fn render_error(console: &Console) {
         .output
         .contains("a similar argument exists: '--parallel'"));
     // `exit.output` is the rendered text; replay it on this console.
-    for line in AnsiDecoder::new().decode(&exit.output) {
+    for line in AnsiDecoder::new().decode(exit.output.trim_end_matches('\n')) {
         console.print(&line);
     }
 }
@@ -104,7 +104,7 @@ fn render_help(console: &Console) {
 
     let exit = try_parse_with_spec(console, command(), &spec(), ["deploy", "--help"]).unwrap_err();
     assert_eq!(exit.code, 0);
-    for line in AnsiDecoder::new().decode(&exit.output) {
+    for line in AnsiDecoder::new().decode(exit.output.trim_end_matches('\n')) {
         console.print(&line);
     }
 }

@@ -9,6 +9,127 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Record: APNG only when asked, and every frame on a busy machine (record, CLI)
+
+- **APNG is written only when asked** (0.0.22's decision 2). A tape with no
+  `Output` line writes every format but the APNG, as before 0.0.20; an
+  `Output apng` line, `--format apng` or `--format all` writes one.
+  `rs-rich-record` gains `Formats::DEFAULT` and
+  `Recording::default_formats`, the tape's own choice to pass to
+  `write_selected`; `Formats::ALL` still means every format.
+- **The recorder keeps every frame when it reads late.** A reader woken late
+  gets several screen updates in one read, and kept only the last: CI's
+  macOS runners kept 7 frames over 0.8 s at `Set Framerate 35`. A read is
+  now split where the program starts each update (a carriage return that
+  redraws a line, the cursor sent home, a synchronized update begun), and
+  a frame is kept for each frame interval since the last read, up to
+  0.25 s back. Screenshots and casts are unchanged. The frame-rate test's
+  lower bound holds on every platform again.
+
+### rs-rich-marketplace 0.0.1 (new): the plugin marketplace client
+
+- Verifies `index.json` and its minisign signature with `minisign-verify`
+  (pure Rust; the legacy unhashed algorithm is refused): the key id before
+  the signature, the trusted comment's serial, the `schema_version`, a
+  rollback against the last serial accepted, and the expiry.
+- Walks the key chain: each generation signed by both keys of the one
+  before, or by its backup key alone when it revokes a lost main key.
+- Reads listings through the index (their SHA-256, then the schema's rules
+  and the ones beyond it) and resolves the newest version the host loads,
+  with rs-rich-plugin-api's own checks, never a yanked one.
+- Installs over HTTPS only through a `Transport` (`HttpsTransport` on ureq,
+  behind the default `http` feature): at most the declared size, the
+  SHA-256, a check by kind, an atomic move into place and the lockfile.
+  Each load checks the file against the lockfile. No terminal code.
+- Tested against a fixture marketplace signed with test keys checked into
+  the crate. The official keys are not compiled in yet.
+
+### rs-rich: widget and layout parity (`padding`, `panel`, `align`, `constrain`, `table`, `layout`, `screen`, `bar`, `box`, `_ratio`)
+
+- A printed `Screen`, a printed `LiveRender` and a titled `Rule` whose
+  `end` has no newline now end without a line break, as upstream's do
+  (DIVERGENCES §12 and §29, resolved). `Renderable::print_end_line` is the
+  new hook; it defaults to `true`.
+- `Screen` takes several renderables (`Screen::from_renderables`),
+  `application_mode` and a style name, and its rows fill the console size.
+- `Box::substitute` applies upstream's whole legacy Windows table:
+  `HEAVY_EDGE`, `MINIMAL_HEAVY_HEAD` and `SIMPLE_HEAVY` now fall back too.
+  `Box::new` builds a custom box with upstream's `ascii` flag, and
+  `Box::substitute_for` substitutes from render options, which `Panel` and
+  `Table` now use.
+- `Padding`, `Align` and `VerticalCenter` take a style name or definition
+  as well as a `Style`. `Padding::unpack` is upstream's CSS-style unpacking.
+- A zero `height` on `Panel` and `Align`, and a zero `width` on `Align`,
+  is read as unset, as upstream's `or` reads it. `Constrain(width=0)`
+  renders nothing. `Bar` raises `begin` to 0 and lowers `end` to `size`.
+- `ratio_reduce` and `ratio_distribute` are public in `rich::ratio`, beside
+  `ratio_resolve`.
+- DIVERGENCES §7 (the table padding edge) is resolved; §31 and §32 are
+  permanent; §40 records that `Layout` has only its two built-in splitters.
+- 47 golden cases in `parity_widgets.tsv`. The ten rows are complete in
+  PORTING.
+
+- Core: `Live` gains the alternate screen (`screen`), upstream's render hook
+  as `Live::print`, and the stdout/stderr redirect as `FileProxy` writers
+  (new `file_proxy` module), plus `start_with`, `update_with`,
+  `get_renderable` and dumb-terminal handling. `Status::start` runs a
+  status live. `Progress` prints and redirects through its display, takes
+  its table at each refresh, and `track` batches through a thread as
+  upstream's `_TrackThread` does. A `Spinner` or `Status` can show a `Text`
+  or any renderable. Golden `parity_live.tsv`; DIVERGENCES §16 and §17
+  settled.
+
+### Core parity: the rendering core (rs-rich)
+
+- Twelve core rows are now complete: `color` (with `palette`), `style`,
+  `segment`, `markup`, `text`, `terminal_theme`, `protocol`, `measure`,
+  `errors`, `ansi`, `highlighter` and `containers`. 34 new golden cases in
+  `parity_core.tsv` check them against rich 15.0.0.
+- Rendering changes: a renderable without its own measure now measures as
+  `(0, max_width)`, as upstream does, so `Columns` and `Markdown` in a table
+  cell size like upstream. `Text::from_markup` replaces `:emoji:` codes.
+  `AnsiDecoder` drops private escapes such as `\x1b7`. Markup `[@handler]`
+  tags give their spans meta. Colour and style errors carry upstream's
+  messages.
+- New API: `Console::print_objects` with every `print` keyword, and
+  `Console::line`, `rule`, `out`, `print_json` and `measure`; `Lines`,
+  `Palette`, `StyleStack`, `NullHighlighter`, `JSONHighlighter`, `Tag`,
+  `Segments` and `SegmentLines`; the missing `Segment`, `Text`, `Span`,
+  `Style`, `Color` and `Measurement` methods; more `RichError` variants.
+- New divergences §41 to §45 record what cannot match: stale cached style
+  strings, the Python object protocols, file objects and Jupyter, control
+  codes as a flag, and the literal subset in markup handler tags.
+
+### Parity: documents, `scope.py` and the verdicts (rs-rich, rs-rich-cli, scripts)
+
+- `scope.py` is ported: `rich::scope::render_scope` draws names and values
+  as upstream does, golden-tested against rich 15.0.0.
+- `pretty.py`'s layout is ported over `PrettyValue`, a description of the
+  Python object: `Pretty::from_value`, `pretty_repr`, `traverse` and
+  `Node`, with every `Pretty` option. `Pretty::new` over `Debug` stays.
+- New goldens in `crates/rich/tests/golden/parity_docs.tsv` (86 cases,
+  `scripts/parity_docs.py`): Pretty, scope, Markdown, JSON and Syntax.
+- Markdown: tables nested in lists and quotes, tables that interrupt a
+  paragraph, refused reference definitions, empty list items and empty link
+  destinations now print as upstream prints them.
+- `AnsiDecoder::decode` splits lines as rich 15.0.0 does. The CLI's notebook
+  and capture views keep rich 12's split, as rich-cli 1.8.1 does.
+- `Syntax::dedent`, `Syntax::from_path` and `Syntax::guess_lexer`;
+  `Json::from_data`; `filesize::decimal_with` (`precision`, `separator`);
+  the `Emoji` renderable and `NoEmoji`; `Console::export_text_styled` and
+  `save_text`, `save_html`, `save_svg`; `Console::page_with_links`, and
+  paging now drops hyperlinks unless asked, as upstream does.
+- Prompts parse numbers as Python's `int()` and `float()` do, print float
+  defaults as Python does, take the default only for an empty answer, and
+  fold case beyond ASCII.
+- DIVERGENCES: every open entry has a verdict, with a summary at the top;
+  §24, §28 and §33 are resolved, and §46 records the prompts' missing
+  `password` option.
+- `scripts/diff_rich.py` also generates Markdown, Tree, Columns, Progress
+  frames, Pretty and JSON cases.
+- rich-rst 2.2.0's output is captured in `fixtures/rst-next/` and measured by
+  an ignored test; `rich --rst` still matches 1.3.2.
+
 ### rs-rich-embed
 
 - `ChromeEngine::devtools` and `DevTools::call`: an app's own DevTools

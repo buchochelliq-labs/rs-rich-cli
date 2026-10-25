@@ -146,11 +146,15 @@ fn meta_value(value: &Bound<'_, PyAny>) -> PyResult<MetaValue> {
     } else if value.is_exact_instance_of::<PyString>() {
         Ok(MetaValue::Str(value.extract()?))
     } else if value.is_exact_instance_of::<PyList>() || value.is_exact_instance_of::<PyTuple>() {
-        value
+        let items = value
             .try_iter()?
             .map(|item| meta_value(&item?))
-            .collect::<PyResult<Vec<_>>>()
-            .map(MetaValue::List)
+            .collect::<PyResult<Vec<_>>>()?;
+        Ok(if value.is_exact_instance_of::<PyTuple>() {
+            MetaValue::Tuple(items)
+        } else {
+            MetaValue::List(items)
+        })
     } else {
         Err(PyTypeError::new_err(format!(
             "rs_rich keeps meta values of type None, bool, int, float, str, list and tuple \
@@ -194,6 +198,13 @@ fn meta_value_to_py(py: Python<'_>, value: &MetaValue) -> PyResult<Py<PyAny>> {
                 list.append(meta_value_to_py(py, item)?)?;
             }
             list.into_any().unbind()
+        }
+        MetaValue::Tuple(items) => {
+            let items = items
+                .iter()
+                .map(|item| meta_value_to_py(py, item))
+                .collect::<PyResult<Vec<_>>>()?;
+            pyo3::types::PyTuple::new(py, items)?.into_any().unbind()
         }
     })
 }

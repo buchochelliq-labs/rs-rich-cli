@@ -27,6 +27,13 @@ const MAX_SEEN: usize = 16 * 1024 * 1024;
 /// Answers to the program's queries waiting to be written, in bytes: past
 /// it, more are dropped, as by a terminal whose reply queue is full.
 const MAX_QUEUED_REPLIES: usize = 4096;
+/// How far back, in seconds, the updates of one read are spread when the
+/// read holds several: the longest the reader is taken to have been late.
+/// A busy machine wakes the reader late, and the PTY then hands over every
+/// update written meanwhile in one read; macOS's CI runners did, and kept
+/// a fifth of the frames. A program that wrote a burst after a pause is
+/// drawn over at most this long.
+const MAX_CATCH_UP: f64 = 0.25;
 
 /// What happened, and when, in the visible parts of a session.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -75,6 +82,8 @@ struct State {
     pending: Option<f64>,
     /// When the last batch of output was recorded.
     last_frame: Option<f64>,
+    /// When the last read arrived, while visible.
+    last_read: Option<f64>,
     /// Frames kept a second, at most: the video's frame rate.
     frame_rate: f64,
     timeline: Timeline,
@@ -101,6 +110,7 @@ impl State {
             overflow: false,
             pending: None,
             last_frame: None,
+            last_read: None,
             frame_rate: FRAME_RATE,
             timeline: Timeline::default(),
             alive: true,
@@ -137,6 +147,13 @@ impl State {
         self.capture(t);
     }
 
+    /// The frame interval `at` falls in, counted from the first frame: the
+    /// `n`th covers the `n`th frame time after it and the moment before.
+    fn interval(&self, at: f64) -> f64 {
+        let first = self.timeline.frames.first().map_or(at, |(first, _)| *first);
+        ((at - first) * self.frame_rate - 1e-9).ceil()
+    }
+
     /// Keep the screen as it is at `t` as a frame, unless it is the frame
     /// before. A frame within the same frame interval as the one before
     /// (counted from the first) replaces it, since only the later of the
@@ -147,19 +164,19 @@ impl State {
             return;
         }
         let snapshot = self.terminal.snapshot(&self.theme);
-        let frames = &mut self.timeline.frames;
+        let frames = &self.timeline.frames;
         let packed = Packed::pack(&snapshot, frames.last().map(|(_, last)| last));
         let Some((last_t, last)) = frames.last() else {
-            frames.push((t, packed));
+            self.timeline.frames.push((t, packed));
             return;
         };
         if *last == packed {
             return;
         }
-        let first = frames[0].0;
-        let interval = |at: f64| ((at - first) * self.frame_rate - 1e-9).ceil();
         let resized = (last.columns(), last.height()) != (packed.columns(), packed.height());
-        if frames.len() > 1 && !resized && interval(*last_t) == interval(t) {
+        let replace = frames.len() > 1 && !resized && self.interval(*last_t) == self.interval(t);
+        let frames = &mut self.timeline.frames;
+        if replace {
             *frames.last_mut().expect("a frame") = (t, packed);
         } else {
             frames.push((t, packed));
@@ -200,6 +217,62 @@ impl State {
         {
             self.flush();
         }
+    }
+
+    /// Follow one read of the program's output, which arrived at `t` (none
+    /// while hidden); `more` is whether more may have been waiting (the
+    /// read filled the buffer). A read can hold several updates when the
+    /// reader was late: each is drawn and kept as a frame of its own, the
+    /// last at `t` and the others a frame apart before it, within the time
+    /// since the last read (and [`MAX_CATCH_UP`]). An update is settled,
+    /// and kept, when no synchronized update is open.
+    fn receive(&mut self, t: Option<f64>, bytes: &[u8], more: bool) -> std::io::Result<()> {
+        let Some(t) = t else {
+            self.terminal.process(bytes)?;
+            self.see();
+            return Ok(());
+        };
+        let pieces = updates(bytes);
+        // The frame intervals (counted from the first frame, as
+        // [`State::capture`] counts them) that began since the last read,
+        // or since [`MAX_CATCH_UP`] ago: one frame for each, the updates
+        // there are allowing, at each interval's end and the last at `t`.
+        let since = self
+            .last_read
+            .into_iter()
+            .chain(self.timeline.frames.last().map(|(at, _)| *at))
+            .fold(t - MAX_CATCH_UP, f64::max);
+        let (first, now) = match self.timeline.frames.first() {
+            Some((first, _)) => (*first, self.interval(t)),
+            None => (t, 0.0),
+        };
+        let open = (now - self.interval(since)).max(0.0) as usize;
+        let kept = open.clamp(1, pieces.len());
+        // The pieces after which a frame is kept: the last of each of
+        // `kept` even groups, so the last piece always is.
+        let mut next = 0;
+        for (index, piece) in pieces.iter().enumerate() {
+            self.terminal.process(piece)?;
+            self.see();
+            let last = index + 1 == pieces.len();
+            let frame = (next + 1) * pieces.len() / kept - 1;
+            if index < frame {
+                continue;
+            }
+            next += 1;
+            if (last && more) || self.terminal.in_synchronized_update() {
+                continue;
+            }
+            let at = if next == kept {
+                t
+            } else {
+                first + (now - (kept - next) as f64) / self.frame_rate
+            };
+            self.capture(at);
+        }
+        self.output(t, bytes);
+        self.last_read = Some(t);
+        Ok(())
     }
 
     /// Record the queued output and its frame.
@@ -329,6 +402,63 @@ pub struct Session {
 }
 
 /// Lock the state, even after a panic elsewhere left the lock poisoned.
+/// One read of output split into the updates it holds. A program starts
+/// each update the same way: a carriage return that redraws a line (not
+/// one ending it), the cursor sent home, the screen cleared, the cursor
+/// hidden, or a synchronized update begun. The first of these in the read
+/// is taken as the program's, and each later copy of it starts an update.
+/// Bytes before the first copy finish the update the last read left.
+fn updates(bytes: &[u8]) -> Vec<&[u8]> {
+    let Some((start, opener)) = (0..bytes.len()).find_map(|at| opener(bytes, at).map(|o| (at, o)))
+    else {
+        return vec![bytes];
+    };
+    let mut cuts = Vec::new();
+    if start > 0 {
+        cuts.push(start);
+    }
+    let mut at = start + opener.len();
+    while at < bytes.len() {
+        if bytes[at..].starts_with(opener) && opener_at(bytes, at, opener) {
+            cuts.push(at);
+            at += opener.len();
+        } else {
+            at += 1;
+        }
+    }
+    let mut pieces = Vec::with_capacity(cuts.len() + 1);
+    let mut from = 0;
+    for cut in cuts {
+        pieces.push(&bytes[from..cut]);
+        from = cut;
+    }
+    pieces.push(&bytes[from..]);
+    pieces
+}
+
+/// The update-starting sequence at `at`, if one is there (see [`updates`]).
+fn opener(bytes: &[u8], at: usize) -> Option<&[u8]> {
+    const OPENERS: [&[u8]; 8] = [
+        b"\x1b[H",
+        b"\x1b[;H",
+        b"\x1b[1H",
+        b"\x1b[1;1H",
+        b"\x1b[2J",
+        b"\x1b[?25l",
+        b"\x1b[?2026h",
+        b"\r",
+    ];
+    OPENERS
+        .into_iter()
+        .find(|seq| bytes[at..].starts_with(seq) && opener_at(bytes, at, seq))
+}
+
+/// Whether `seq`, found at `at`, starts an update there: a carriage
+/// return does only when another character, not a line feed, follows it.
+fn opener_at(bytes: &[u8], at: usize, seq: &[u8]) -> bool {
+    seq != b"\r" || bytes.get(at + 1).is_some_and(|next| *next != b'\n')
+}
+
 fn lock(state: &Mutex<State>) -> MutexGuard<'_, State> {
     state.lock().unwrap_or_else(PoisonError::into_inner)
 }
@@ -401,20 +531,13 @@ impl Session {
                     Ok(read) => read,
                 };
                 let mut state = lock(&shared);
-                if let Err(error) = state.terminal.process(&buffer[..read]) {
+                let t = (!state.hidden).then(|| state.now());
+                // Settled only if the read did not fill the buffer (no more
+                // was waiting).
+                if let Err(error) = state.receive(t, &buffer[..read], read == buffer.len()) {
                     // The session fails; the tape runner reports it.
                     state.error = Some(error.to_string());
                     break;
-                }
-                state.see();
-                if !state.hidden {
-                    let t = state.now();
-                    state.output(t, &buffer[..read]);
-                    // Settled: the read did not fill the buffer (no more
-                    // was waiting) and no synchronized update is open.
-                    if read < buffer.len() && !state.terminal.in_synchronized_update() {
-                        state.capture(t);
-                    }
                 }
                 let replies = state.terminal.take_replies();
                 drop(state);
@@ -621,6 +744,114 @@ mod tests {
         assert!(row_text(&before, 0).starts_with("hello"));
         let after = frames.last().unwrap().1.snapshot();
         assert_eq!((after.rows.len(), after.rows[0].len()), (6, 30));
+    }
+
+    #[test]
+    fn a_read_is_split_into_the_updates_it_holds() {
+        let split = |bytes: &[u8]| -> Vec<Vec<u8>> {
+            updates(bytes).into_iter().map(<[u8]>::to_vec).collect()
+        };
+        assert_eq!(
+            split(b"\r001\r002\r003"),
+            [&b"\r001"[..], b"\r002", b"\r003"]
+        );
+        // The end of the update the last read left comes first.
+        assert_eq!(split(b"1\r002"), [&b"1"[..], b"\r002"]);
+        // Lines are one update: a carriage return ending a line starts none.
+        assert_eq!(split(b"a\r\nb\r\nc\r\n"), [&b"a\r\nb\r\nc\r\n"[..]]);
+        // The program's own opener: here the cursor home, not the CR.
+        let frames = b"\x1b[Hab\r\ncd\x1b[Hef\r\ngh";
+        assert_eq!(split(frames), [&b"\x1b[Hab\r\ncd"[..], b"\x1b[Hef\r\ngh"]);
+        let sync = b"\x1b[?2026h1\x1b[?2026l\x1b[?2026h2\x1b[?2026l";
+        assert_eq!(split(sync).len(), 2);
+        assert_eq!(
+            split(b"plain \x1b[1mtext\x1b[0m"),
+            [&b"plain \x1b[1mtext\x1b[0m"[..]]
+        );
+    }
+
+    /// Updates written every `every` seconds, read in chunks every `wake`
+    /// seconds (a reader woken late), at `fps`: the frames kept.
+    fn late_reads(updates: usize, every: f64, wake: f64, fps: f64) -> Vec<f64> {
+        let mut state = State::new(2, 10, Theme::default());
+        state.hidden = false;
+        state.frame_rate = fps;
+        state.frame(0.0);
+        let mut written = 0;
+        let mut now = wake;
+        while written < updates {
+            let mut chunk = Vec::new();
+            while written < updates && (written + 1) as f64 * every <= now {
+                written += 1;
+                chunk.extend_from_slice(format!("\r{written:03}").as_bytes());
+            }
+            if !chunk.is_empty() {
+                state.receive(Some(now), &chunk, false).unwrap();
+            }
+            now += wake;
+        }
+        state.timeline.frames[1..].iter().map(|(t, _)| *t).collect()
+    }
+
+    #[test]
+    fn late_reads_keep_the_frames_they_hold() {
+        // The frame-rate test's tape: 75 updates 20ms apart at 35 frames a
+        // second. A prompt reader keeps about 35 a second...
+        let prompt = late_reads(75, 0.02, 0.02, 35.0);
+        // ...and so does one woken only every 130ms (6 or 7 updates a
+        // read), as on macOS's CI runners, which kept 7 frames over 0.8s.
+        for wake in [0.05, 0.13, 0.2] {
+            let late = late_reads(75, 0.02, wake, 35.0);
+            let span = late.last().unwrap() - late.first().unwrap();
+            let rate = (late.len() - 1) as f64 / span;
+            assert!(
+                late.len() as f64 >= 0.8 * prompt.len() as f64 && rate <= 35.0 * 1.1,
+                "woken every {wake}s: {} frames over {span:.2}s, {} when prompt",
+                late.len(),
+                prompt.len()
+            );
+            // In order, and every one a different screen.
+            assert!(late.windows(2).all(|w| w[0] < w[1]), "{late:?}");
+        }
+        // Never more frames than the rate: 75 updates at 12 a second.
+        let slow = late_reads(75, 0.02, 0.13, 12.0);
+        let span = slow.last().unwrap() - slow.first().unwrap();
+        assert!((slow.len() - 1) as f64 / span <= 12.0 * 1.1, "{slow:?}");
+    }
+
+    #[test]
+    fn a_burst_after_a_pause_is_drawn_briefly() {
+        let mut state = State::new(2, 10, Theme::default());
+        state.hidden = false;
+        state.frame_rate = 10.0;
+        state.frame(0.0);
+        // A hundred updates in one read, 5s after the last: at most
+        // MAX_CATCH_UP of them, before the read.
+        let burst: String = (1..=100).map(|i| format!("\r{i:03}")).collect();
+        state.receive(Some(5.0), burst.as_bytes(), false).unwrap();
+        let times: Vec<f64> = state.timeline.frames[1..].iter().map(|f| f.0).collect();
+        assert_eq!(times.len(), 2, "{times:?}");
+        assert!(
+            times[0] >= 5.0 - MAX_CATCH_UP && times[1] == 5.0,
+            "{times:?}"
+        );
+        assert!(
+            row_text(&state.timeline.frames.last().unwrap().1.snapshot(), 0).starts_with("100")
+        );
+        // Neither a read that filled the buffer (more was waiting) nor a
+        // synchronized update still open is settled: no frame until the
+        // rest arrives.
+        let before = state.timeline.frames.len();
+        state.receive(Some(5.01), b"\rabc", true).unwrap();
+        state
+            .receive(Some(5.02), b"\x1b[?2026h\rxyz", false)
+            .unwrap();
+        assert_eq!(state.timeline.frames.len(), before);
+        state.receive(Some(5.03), b"\x1b[?2026l", false).unwrap();
+        assert_eq!(state.timeline.frames.len(), before + 1);
+        assert!(
+            row_text(&state.timeline.frames.last().unwrap().1.snapshot(), 0).starts_with("xyz")
+        );
     }
 
     #[test]

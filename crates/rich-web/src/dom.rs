@@ -262,10 +262,7 @@ fn pairs(attrs: &[(&'static str, String)]) -> Value {
 /// One node of the `tree` message.
 pub fn node(node: &AccessNode) -> Value {
     let attrs = node.aria_attributes();
-    let item = node
-        .value
-        .as_ref()
-        .and_then(|value| item_role(node.role).map(|role| (role, value)));
+    let item = item_role(node.role).zip(node.value.as_ref());
     let text = match node.role {
         Role::Text | Role::Status => node.describe(),
         Role::TextBox => node.value.clone().unwrap_or_default(),

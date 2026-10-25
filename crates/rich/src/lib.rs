@@ -15,7 +15,8 @@
 //! - Text: [`text`], [`cells`], [`wrap`], [`emoji`], [`highlighter`], [`ansi`].
 //! - Renderables: [`panel`], [`table`], [`tree`], [`layout`], [`columns`],
 //!   [`align`], [`padding`], [`constrain`], [`rule`], [`bar`], [`markdown`],
-//!   [`syntax`], [`json`], [`pretty`], [`traceback`], [`log_render`].
+//!   [`syntax`], [`json`], [`pretty`], [`scope`], [`traceback`],
+//!   [`log_render`].
 //! - Live output: [`live`], [`progress`] (with [`track`]), [`progress_bar`],
 //!   [`spinner`], [`status`].
 //! - Input and paging: [`prompt`], [`pager`].
@@ -56,6 +57,7 @@ pub mod emoji;
 mod emoji_codes;
 pub mod errors;
 pub mod export;
+pub mod file_proxy;
 pub mod filesize;
 pub mod highlighter;
 pub mod json;
@@ -82,6 +84,7 @@ pub mod ratio;
 pub mod region;
 mod repr_patterns;
 pub mod rule;
+pub mod scope;
 pub mod screen;
 pub mod segment;
 pub mod spinner;
@@ -114,16 +117,19 @@ pub use crate::constrain::Constrain;
 pub use crate::control::{Control, ControlType};
 pub use crate::emoji::EmojiVariant;
 pub use crate::errors::{Result, RichError};
-pub use crate::highlighter::{ISO8601Highlighter, RegexHighlighter, ReprHighlighter};
+pub use crate::file_proxy::{FileProxy, ProxyStream, ProxyTarget};
+pub use crate::highlighter::{
+    ISO8601Highlighter, JSONHighlighter, NullHighlighter, RegexHighlighter, ReprHighlighter,
+};
 pub use crate::json::Json;
 pub use crate::layout::{Layout, LayoutRender, Splitter};
-pub use crate::live::{AutoLive, Live, LivePanic};
+pub use crate::live::{AutoLive, Live, LiveHandle, LiveOptions, LivePanic};
 pub use crate::live_render::{LiveRender, VerticalOverflow};
 pub use crate::log_render::{level_text, LogLevel, LogRecord, LogRender};
 pub use crate::padding::Padding;
 pub use crate::pager::{Pager, SystemPager};
 pub use crate::panel::Panel;
-pub use crate::pretty::Pretty;
+pub use crate::pretty::{Pretty, PrettyValue};
 pub use crate::progress::{
     track, BarColumn, CustomColumn, CustomProgressColumn, LiveProgress, Progress, ProgressColumn,
     ProgressReader, SpinnerColumn, Task, TaskId, TaskUpdate, TextColumn, TimeRemainingColumn,
@@ -136,10 +142,11 @@ pub use crate::protocol::{
 };
 pub use crate::region::Region;
 pub use crate::rule::Rule;
+pub use crate::scope::render_scope;
 pub use crate::screen::Screen;
 pub use crate::segment::Segment;
 pub use crate::spinner::Spinner;
-pub use crate::status::Status;
+pub use crate::status::{LiveStatus, Status};
 pub use crate::style::{Meta, MetaValue, Style, StyleType};
 pub use crate::styled::Styled;
 #[cfg(feature = "code")]

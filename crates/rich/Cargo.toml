@@ -87,6 +87,10 @@ name = "golden_audit_edges"
 required-features = ["syntax", "markdown"]
 
 [[test]]
+name = "golden_parity_docs"
+required-features = ["syntax", "markdown"]
+
+[[test]]
 name = "golden_upstream_features"
 required-features = ["syntax", "markdown"]
 
