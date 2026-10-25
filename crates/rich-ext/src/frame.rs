@@ -380,6 +380,22 @@ fn truecolor_pair(style: &Style) -> Option<u64> {
     (plain == *style).then(|| pair_key(fg, bg))
 }
 
+/// Whether every character of `text` is its own grapheme, one or two
+/// cells wide: no zero-width marks, joiners or selectors to group.
+fn simple_text(text: &str) -> bool {
+    text.chars()
+        .all(|c| matches!(crate::surface::char_width(c), 1 | 2) && c != '\u{fe0f}')
+}
+
+/// `text`'s width in cells, as rich's `cell_len` gives it, without its
+/// table search for the characters most text is made of.
+fn text_width(text: &str) -> usize {
+    if text.contains(['\u{200d}', '\u{fe0f}']) {
+        return cell_len(text);
+    }
+    text.chars().map(crate::surface::char_width).sum()
+}
+
 fn pair_key(fg: Option<Rgb>, bg: Option<Rgb>) -> u64 {
     let pack = |c: Option<Rgb>| {
         c.map_or(0, |[r, g, b]| {
@@ -606,7 +622,7 @@ impl Frame {
         self.runs.push(Run {
             text: offset,
             len: text.len() as u32,
-            cells: cell_len(text) as u32,
+            cells: text_width(text) as u32,
             style,
             flags,
         });
@@ -847,7 +863,21 @@ impl Frame {
         let mut leading: Option<usize> = None;
         for run in row {
             let base = run.text as usize;
-            let (graphemes, _) = split_graphemes(self.run_text(run));
+            let text = self.run_text(run);
+            if leading.is_none() && simple_text(text) {
+                // A character a grapheme: no splitting.
+                let mut at = base;
+                for c in text.chars() {
+                    let (len, width) = (c.len_utf8(), crate::surface::char_width(c));
+                    cells.push((at..at + len, width as u8, run.style));
+                    at += len;
+                    for _ in 1..width {
+                        cells.push((at..at, 0, run.style));
+                    }
+                }
+                continue;
+            }
+            let (graphemes, _) = split_graphemes(text);
             for (start, end, width) in graphemes {
                 let range = base + start..base + end;
                 if width == 0 {
