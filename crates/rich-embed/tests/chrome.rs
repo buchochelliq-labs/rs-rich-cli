@@ -224,3 +224,48 @@ fn the_browser_gets_no_sandbox_switch_and_a_private_profile() {
     assert!(!args.contains("--remote-debugging-port"), "{args}");
     assert_eq!(first, "{", "nothing came over descriptor 3");
 }
+
+/// An app's own DevTools call reaches the page and its answer comes back;
+/// a call DevTools refuses fails that call alone, and the next one works.
+#[test]
+fn an_apps_devtools_call_reaches_the_page() {
+    use rich_embed::WebEngine;
+    use serde_json::json;
+
+    let Some(binary) = std::env::var_os("RICH_EMBED_CHROME") else {
+        eprintln!("skipped: set RICH_EMBED_CHROME to a Chrome or Chromium binary to run");
+        return;
+    };
+    let mut engine = ChromeEngine::new().binary(binary);
+    engine.resize(40, 10).unwrap();
+    engine
+        .open("data:text/html,<title>t</title><h1>Hello</h1>")
+        .unwrap();
+    let devtools = engine.devtools().unwrap();
+    let wait = Duration::from_secs(60);
+    let start = Instant::now();
+    let title = loop {
+        let answer = devtools
+            .call(
+                "Runtime.evaluate",
+                json!({"expression": "document.querySelector('h1')?.textContent ?? ''",
+                       "returnByValue": true}),
+                wait,
+            )
+            .unwrap();
+        let text = answer["result"]["value"]
+            .as_str()
+            .unwrap_or_default()
+            .to_string();
+        if text == "Hello" || start.elapsed() > wait {
+            break text;
+        }
+        std::thread::sleep(Duration::from_millis(50));
+    };
+    assert_eq!(title, "Hello");
+    assert!(devtools.call("No.such.method", json!({}), wait).is_err());
+    let again = devtools
+        .call("Runtime.evaluate", json!({"expression": "1 + 1"}), wait)
+        .unwrap();
+    assert_eq!(again["result"]["value"], 2);
+}

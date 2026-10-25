@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Echo</title>
+<h1>Echo</h1>
+<p id="query">none</p>
+<script>
+document.getElementById('query').textContent =
+  'Query: ' + decodeURIComponent(location.search.slice(1).replace(/\+/g, ' '));
+</script>
+</html>

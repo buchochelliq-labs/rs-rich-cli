@@ -1,0 +1,30 @@
+◀▶ Reader fixture file:///noctiluca/fixtures/reader.html projection
+                                                                                                   ┃
+ Plankton                                                                                          ┃
+                                                                                                   ┃
+                                                                                                   ┃
+ Tiny drifters of the open sea, with light of their own.                                           ┃
+                                                                                                   ┃
+                                                                                                   ┃
+                                                                                                   ┃
+ Kinds                                                                                             ┃
+                                                                                                   ┃
+                                                                                                   ┃
+      • Dinoflagellates                                                                            ┃
+           ◦ Noctiluca                                                                             ┃
+           ◦ Pyrocystis                                                                            ┃
+      • Copepods                                                                                   ┃
+                                                                                                   ┃
+      1. Bloom                                                                                     ┃
+      2. Glow                                                                                      ┃
+                                                                                                   ┃
+      The sea was on fire with light.                                                              ┃
+                                                                                                   ┃
+ glow = touch * 0.1                                                                                ┃
+ sleep()                                                                                           ┃
+ Sizes                                                                                             ┃
+ Name     Size                                                                                     ┃
+ Noctiluc 1 mm                                                                                     │
+ a                                                                                                 │
+ Copepod  2 mm                                                                                     │
+projection view

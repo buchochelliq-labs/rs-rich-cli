@@ -1,0 +1,24 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Form fixture</title>
+<h1>Sign up</h1>
+<form action="echo.html" method="get">
+  <label>Name <input name="name" value="Ada"></label>
+  <label>Secret <input name="secret" type="password" value="hunter2"></label>
+  <label><input name="news" type="checkbox" value="yes"> Send news</label>
+  <fieldset><legend>Size</legend>
+    <label><input type="radio" name="size" value="s"> Small</label>
+    <label><input type="radio" name="size" value="l" checked> Large</label>
+  </fieldset>
+  <label>Mirror <select name="mirror">
+    <option value="same">First mirror</option>
+    <option value="same" disabled>Unavailable mirror</option>
+    <option value="same2">Second mirror</option>
+  </select></label>
+  <label>Volume <input name="volume" type="range" min="0" max="100" step="5" value="50"></label>
+  <button type="submit">Send</button>
+  <button type="button" disabled>Unavailable</button>
+</form>
+<p><button id="remote" type="button" onclick="setTimeout(()=>{document.querySelector('[name=name]').value='remote value'},300)">Schedule remote update</button></p>
+</html>

@@ -1,0 +1,57 @@
+# Noctiluca's config: a sample with every table. Copy it to
+# ~/.config/noctiluca/config.toml (Linux; Application Support on macOS,
+# %APPDATA% on Windows), or name another with `noctiluca --config PATH`.
+# A key Noctiluca does not know is a warning, never an error.
+
+[startup]
+# The first page, when none is named on the command line.
+home = "https://docs.rs"
+# projection (Chrome's layout in cells), reader (one column), or raster.
+view = "projection"
+
+[search]
+# The search engine for words the address bar does not know. {} is the
+# query, escaped. No tracking parameters are added.
+url = "https://html.duckduckgo.com/html/?q={}"
+
+[shortcuts]
+# Keywords: `gh rs-rich` in the address bar, or `noctiluca gh rs-rich`.
+# A template's {} takes the words after the keyword; the keyword alone
+# opens its site's home. A table sets both; false removes a built-in.
+gh = "https://github.com/search?q={}"
+wiki = { search = "https://en.wikipedia.org/w/index.php?search={}", home = "https://en.wikipedia.org" }
+# mdn = false
+
+[keys]
+# vim (o, f, /, H and L, g t) or plain (Ctrl+O, Alt+Left, Ctrl+F).
+preset = "vim"
+# Any action, by its id (`noctiluca keys` lists them): keys separated by
+# spaces are alternatives; `none` unbinds.
+# hints = "f ctrl+g"
+
+[media]
+# Pages' sound plays on the machine Chrome runs on. Off by default.
+audio = false
+# The frame cap for media regions.
+fps = 8
+# auto, ansi (half blocks), kitty, sixel, iterm2, or none (alt text only).
+images = "auto"
+
+[profile]
+# A kept profile (its cookies and storage stay between runs), opt-in. By
+# default each run has a temporary, private one.
+# name = "work"
+
+# Per-site settings: a host, a wildcard (*.example.com) or a URL prefix.
+# The most specific match wins: a prefix, then a host, then a wildcard.
+[site."github.com"]
+view = "reader"
+# `s WORDS` in the address bar searches this site.
+keyword = "s"
+
+[site."github.com".keys]
+# A key binds an action, an element by its accessible role and name
+# (looked up when the key is pressed), or a list of those. Never a script
+# or a CSS selector. F1, then b, binds one from the page itself.
+n = "scroll.down"
+"]" = { role = "link", name = "Next" }

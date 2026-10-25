@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 128 128" role="img" aria-label="Noctiluca's lanternfish, puzzled, its terminal lure flickering with a question mark">
+<defs><radialGradient id="h"><stop offset="0" stop-color="#3ff0e0" stop-opacity=".55"/><stop offset="1" stop-color="#3ff0e0" stop-opacity="0"/></radialGradient>
+<clipPath id="b"><path d="M24 78C24 58 42 48 64 50C82 52 94 64 98 78C94 92 82 102 64 104C42 106 24 98 24 78Z"/></clipPath></defs>
+<circle cx="14" cy="38" r="16" fill="url(#h)" opacity=".5"/>
+<path d="M95 78L119 56Q113 78 119 100Z" fill="#1d5fae" stroke="#1d5fae" stroke-width="4" stroke-linejoin="round"/>
+<path d="M58 54Q70 34 86 50Z" fill="#1d5fae" stroke="#1d5fae" stroke-width="3" stroke-linejoin="round"/>
+<path d="M24 78C24 58 42 48 64 50C82 52 94 64 98 78C94 92 82 102 64 104C42 106 24 98 24 78Z" fill="#2a7fd8"/>
+<ellipse cx="62" cy="106" rx="42" ry="17" fill="#9fe6ff" clip-path="url(#b)"/>
+<rect x="44" y="93" width="4" height="4" rx="1" fill="#3ff0e0" stroke="#1d5fae" stroke-width="1"/>
+<rect x="52" y="94.5" width="4" height="4" rx="1" fill="#3ff0e0" stroke="#1d5fae" stroke-width="1"/>
+<rect x="60" y="95" width="4" height="4" rx="1" fill="#3ff0e0" stroke="#1d5fae" stroke-width="1"/>
+<rect x="68" y="94.5" width="4" height="4" rx="1" fill="#3ff0e0" stroke="#1d5fae" stroke-width="1"/>
+<rect x="76" y="93" width="4" height="4" rx="1" fill="#3ff0e0" stroke="#1d5fae" stroke-width="1"/>
+<path d="M54 62q-7 15 0 30" fill="none" stroke="#1d5fae" stroke-width="2.5" stroke-linecap="round"/>
+<path d="M66 80q12 0 16 10q-12 1-16-10Z" fill="#1d5fae" stroke="#1d5fae" stroke-width="2" stroke-linejoin="round"/>
+<circle cx="40" cy="71" r="11" fill="#9fe6ff"/>
+<rect x="34" y="67" width="10" height="9" rx="2" fill="#0b1a2b"/>
+<path d="M33 62l11 2" stroke="#1d5fae" stroke-width="2.5" stroke-linecap="round"/>
+<path d="M27 87h12" fill="none" stroke="#0b1a2b" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"/>
+<path d="M46 53C40 40 30 36 22 44" fill="none" stroke="#1d5fae" stroke-width="3" stroke-linecap="round"/>
+<rect x="3" y="44" width="23" height="18" rx="3.5" fill="#10304d" stroke="#9fe6ff" stroke-width="2" transform="rotate(-8 14.5 53)"/>
+<path d="M10.5 50.5a3.5 3.5 0 1 1 5 3.2c-1.2.6-1.5 1.3-1.5 2.3" fill="none" stroke="#3ff0e0" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" transform="rotate(-8 14.5 53)"/>
+<rect x="12.8" y="57.3" width="2.4" height="2.4" rx=".5" fill="#3ff0e0" transform="rotate(-8 14.5 53)"/>
+<path d="M6 38l-3-4M14 36v-5M22 38l3-4" fill="none" stroke="#2a7fd8" stroke-width="2" stroke-linecap="round" stroke-dasharray="2 2"/>
+<circle cx="104" cy="30" r="3.2" fill="none" stroke="#2a7fd8" stroke-width="1.6"/>
+<circle cx="111" cy="19" r="2.2" fill="none" stroke="#2a7fd8" stroke-width="1.4"/>
+<circle cx="103" cy="11" r="1.5" fill="none" stroke="#2a7fd8" stroke-width="1.2"/>
+</svg>

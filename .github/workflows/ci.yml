@@ -285,6 +285,13 @@ jobs:
             args: ""
           - crate: rs-rich-marketplace
             args: "--no-default-features"
+          # Noctiluca, the terminal browser: its model, layout, config and
+          # app tests on Chrome's saved snapshots of its fixture pages, and
+          # its binary on a PTY (the test-only `fake-engine` feature; the
+          # default build is the workspace jobs'). Its live tests need a
+          # browser and a normal user: the `browser` job runs them.
+          - crate: noctiluca
+            args: "--features fake-engine"
           # Every lumis language (its default); the bundles only select fewer.
           - crate: rs-rich-lumis
             args: ""
@@ -640,7 +647,7 @@ jobs:
       - name: Build the CLI and the examples the tapes run
         run: >-
           cargo build -p rs-rich-cli -p rs-rich-interact -p rs-rich-intuituive
-          -p rs-rich-embed --features rs-rich-cli/serve,rs-rich-intuituive/files,rs-rich-intuituive/archive,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm,rs-rich-intuituive/viz,rs-rich-intuituive/wav,rs-rich-intuituive/vim,rich-ext/yaml,rich-ext/jsonpath,rich-ext/data
+          -p rs-rich-embed -p noctiluca --features rs-rich-cli/serve,rs-rich-intuituive/files,rs-rich-intuituive/archive,rs-rich-intuituive/watch,rs-rich-intuituive/art,rs-rich-intuituive/pcm,rs-rich-intuituive/viz,rs-rich-intuituive/wav,rs-rich-intuituive/vim,rich-ext/yaml,rich-ext/jsonpath,rich-ext/data,noctiluca/fake-engine
           --bins --examples --locked
 
       # rs-rich-ext's examples are guide programs; the surface tape runs one.
@@ -659,6 +666,52 @@ jobs:
         run: >-
           cargo test -p rs-rich-record --locked --test record
           every_shell_records_with_the_same_prompt -- --nocapture
+
+  # Noctiluca's and rs-rich-embed's live tests against a real Chrome
+  # (docs/design/browser.md, decision 6). The engine never turns Chrome's
+  # sandbox off, so they run as the runner's normal user, never as root.
+  # Ubuntu 24.04's AppArmor restricts the user namespaces the sandbox
+  # needs; that restriction is lifted on this runner. Local pages only.
+  browser:
+    name: live browser tests (Chrome, as a normal user)
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - uses: dtolnay/rust-toolchain@stable
+
+      - uses: Swatinem/rust-cache@v2
+
+      # The runner image has Google Chrome; install it if a new image does not.
+      - name: Find or install Chrome
+        run: |
+          if ! command -v google-chrome >/dev/null; then
+            wget -q -O /tmp/chrome.deb https://dl.google.com/linux/direct/google-chrome-stable_current_amd64.deb
+            sudo apt-get update && sudo apt-get install -y /tmp/chrome.deb
+          fi
+          echo "RICH_EMBED_CHROME=$(command -v google-chrome)" >> "$GITHUB_ENV"
+          google-chrome --version
+
+      - name: Let Chrome's sandbox make its namespaces
+        run: sudo sysctl -w kernel.apparmor_restrict_unprivileged_userns=0 || true
+
+      - name: Live tests (as a normal user)
+        run: |
+          test "$(id -u)" != 0
+          cargo test --locked -p rs-rich-embed --features chrome
+          cargo test --locked -p noctiluca --features fake-engine
+
+      # What reading a page costs, per fixture: reported, never failed.
+      - name: Snapshot cost (reported)
+        run: |
+          {
+            echo '### Noctiluca: snapshot cost on the fixture pages'
+            echo
+            cargo run --release --locked -p noctiluca --example capture -- --cost crates/noctiluca/tests/fixtures/*.html
+          } >> "$GITHUB_STEP_SUMMARY" || true
 
   # Every guide screenshot is the output of the example program next to it on
   # its page (scripts/capture_guide.py). Rendering them again and diffing
@@ -806,7 +859,7 @@ jobs:
 
   ci-ok:
     name: ci-ok
-    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, wasm, plugin-compatibility]
+    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, wasm, plugin-compatibility, browser]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()

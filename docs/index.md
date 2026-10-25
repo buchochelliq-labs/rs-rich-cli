@@ -258,6 +258,7 @@ published or not. Each crate versions independently; see
 | [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.5` |
 | [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.5` |
 | [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.1` |
+| [`noctiluca`](https://crates.io/crates/noctiluca) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
 ## Where next
@@ -268,6 +269,7 @@ published or not. Each crate versions independently; see
 | ![](assets/rs-rich/tutorial.svg){ .rs-icon width="20" } [Tutorial](tutorial/index.md) | From a line of text to a live progress display |
 | ![](assets/rs-rich/guide.svg){ .rs-icon width="20" } [Guide](guide/index.md) | Every crate, with examples CI compiles |
 | ![](assets/intuituive/mark.svg){ .rs-mark width="20" } [intuiTUIve](guide/intuituive/index.md) | The framework for full terminal apps, built on rs-rich |
+| ![](assets/noctiluca/favicon.svg){ .rs-mark width="20" } [Noctiluca](guide/noctiluca.md) | A web browser for the terminal, built on intuiTUIve |
 | ![](assets/rs-rich/gallery.svg){ .rs-icon width="20" } [Gallery](gallery.md) | What each renderable looks like |
 | ![](assets/rs-rich/recordings.svg){ .rs-icon width="20" } [Terminal recordings](recordings.md) | Tapes of the CLI and the apps, played in the page |
 | ![](assets/rs-rich/demos.svg){ .rs-icon width="20" } [CLI and art videos](demos.md) | The CLI and the art crate, on video |
