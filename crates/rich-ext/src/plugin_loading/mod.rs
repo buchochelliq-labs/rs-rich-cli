@@ -39,7 +39,7 @@ mod wasm;
 #[cfg(feature = "dylib-plugins")]
 pub use native::load_native;
 #[cfg(feature = "wasm-plugins")]
-pub use wasm::load_wasm;
+pub use wasm::{load_wasm, load_wasm_bytes};
 
 /// The most bytes one call may return; more is an error.
 pub const MAX_OUTPUT_BYTES: usize = 4 * 1024 * 1024;

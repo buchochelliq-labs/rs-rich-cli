@@ -53,6 +53,25 @@ pub(crate) fn load(paths: &[String]) -> Result<Vec<RuntimePlugin>, (ExitClass, S
             )
         })?;
     }
+    // Then what `rich plugin install` installed and left enabled, each
+    // checked against the lockfile; one named with --plugin wins. A plugin
+    // that fails to load or to register is skipped with a warning, so a
+    // changed file never stops a render, and never loads.
+    let named: Vec<String> = loaded.iter().map(|p| p.abi().name.clone()).collect();
+    let (installed, warnings) = crate::marketplace::installed_plugins(&named);
+    for warning in warnings {
+        eprintln!("rich: warning: {}", controls::shown(&warning));
+    }
+    for plugin in installed {
+        match registry.add_plugin(&plugin) {
+            Ok(()) => loaded.push(plugin),
+            Err(error) => eprintln!(
+                "rich: warning: installed plugin {} is not loaded: {}",
+                plugin.abi().name,
+                controls::shown(&error.to_string())
+            ),
+        }
+    }
     Ok(loaded)
 }
 

@@ -1991,6 +1991,7 @@ pub(crate) fn spec() -> CommandSpec {
                     .arg(ArgSpec::positional("name").help("The plugin's id, as `list` shows it")),
             ),
     )
+    .subcommand(super::marketplace_spec())
     .subcommand(
         CommandSpec::new("doctor")
             .about(
@@ -2023,7 +2024,7 @@ pub(crate) fn spec() -> CommandSpec {
         "Exit codes",
         "- 0: success\n\
          - 1: cancelled, or answered no (choose, filter, input, confirm, write, file, color, \
-           asset, date)\n\
+           asset, date, plugin install and update)\n\
          - 2: usage/config error\n\
          - 3: input/read/write error\n\
          - 4: parse/render data error\n\
@@ -2187,6 +2188,7 @@ mod tests {
     const BANNER: &str = include_str!("banner.rs");
     const SHELL: &str = include_str!("shell.rs");
     const SPIN: &str = include_str!("spin.rs");
+    const MARKETPLACE: &str = include_str!("marketplace.rs");
 
     /// The source of the item that starts with `start`, up to the next
     /// top-level item.
@@ -2257,6 +2259,8 @@ mod tests {
         out.extend(option_literals(item(BANNER, "fn parse_args(")));
         out.extend(option_literals(item(SHELL, "fn parse_args(")));
         out.extend(option_literals(item(SPIN, "fn parse_args(")));
+        out.extend(option_literals(item(MARKETPLACE, "fn parse(")));
+        out.extend(option_literals(item(MARKETPLACE, "const PUBLISH_OPTIONS")));
         #[cfg(feature = "art")]
         for start in ["const CREATE_VALUES", "const CREATE_FLAGS", "fn request("] {
             out.extend(option_literals(item(MICRO, start)));
