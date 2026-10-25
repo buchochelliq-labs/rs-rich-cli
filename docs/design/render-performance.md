@@ -347,6 +347,51 @@ than ratatui. The research's target for churn, within 1.5 times
 ratatui's, is not reached: most of the remaining frame is the scene
 building a rich `Style` per cell and rich's own rendering (above).
 
+### rich's own share, profiled
+
+The maintainer then allowed performance work in the mirror, as long as
+the output stays byte-identical (AGENTS.md). Before changing anything,
+callgrind on 20 frames of each heavy scene (`profile_one_scene`, which
+now takes `PAINT_BENCH_SIZE`; the `cells` strategy), share of all
+instructions, inclusive:
+
+| Scene | Ir | rich render | markup | `cell_len` | `char_cell_width` | `divide_line` | `truncate_line` | emoji | `Style::normalize` | `format!` | `intern` | painter | malloc | free |
+|---|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| 80x24 Churn | 225M | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 49 | 10 | 19 | 12 | 7 |
+| 80x24 Chart | 51M | 67 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 15 | 16 | 15 |
+| 80x24 TableSort | 264M | 53 | 37 | 26 | 22 | 25 | 12 | 6 | 6 | 2 | 0 | 3 | 9 | 10 |
+| 80x24 ListPage | 500M | 53 | 40 | 27 | 22 | 26 | 12 | 6 | 6 | 2 | 0 | 1 | 9 | 10 |
+| 80x24 Unicode | 111M | 39 | 31 | 18 | 18 | 19 | 9 | 5 | 5 | 0 | 1 | 11 | 7 | 9 |
+| 200x60 Churn | 1,375M | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 50 | 10 | 19 | 16 | 7 |
+| 200x60 Chart | 161M | 65 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 0 | 1 | 14 | 11 | 12 |
+| 200x60 TableSort | 679M | 49 | 36 | 25 | 21 | 24 | 11 | 6 | 6 | 2 | 0 | 7 | 8 | 10 |
+| 200x60 ListPage | 548M | 47 | 37 | 24 | 20 | 24 | 11 | 5 | 6 | 1 | 1 | 5 | 10 | 10 |
+| 200x60 Unicode | 280M | 39 | 30 | 18 | 18 | 18 | 9 | 5 | 5 | 0 | 1 | 13 | 7 | 9 |
+
+"rich render" is `Console::render_lines`, which for the chart is mostly
+rs-rich-ext's own chart code; "markup" is parsing the markup into a
+`Text`, before rendering. ListPage's profile is mostly its first frame,
+which renders the thousand rows it then scrolls through.
+
+What it says, by where the instructions go:
+
+- **Churn: `format!` is half of everything.** `Color::from_rgb` names a
+  colour by its hex (`#rrggbb`), through `format!` and three `{:02x}`,
+  twice a cell. `StyleTable::intern` (rs-rich-ext) is 10%, the painter
+  19%, malloc and free a fifth.
+- **The text scenes (TableSort, the lists, Unicode): rich is 70 to 90%.**
+  - `char_cell_width` alone is 18 to 22%, nearly all of `cell_len`: a
+    binary search of the width table for every character, ASCII
+    included, behind a `OnceLock` read.
+  - `divide_line` 18 to 26%: most of it `cell_len` again, and a
+    `Vec<char>` and a `String` per word.
+  - Markup 30 to 40%: the tag regex (fancy-regex) about 12%, the emoji
+    regex 6%, `Style::normalize` 6% (a full parse and `definition()` per
+    tag), malloc.
+  - `truncate_line` 9 to 12%, again mostly `cell_len`.
+- **The chart:** rich's share is small (`Segment::split_lines` 9%,
+  `Style` clones 5%); the rest is rs-rich-ext's chart and malloc.
+
 ### Noctiluca
 
 - **Chrome never scrolls.**
