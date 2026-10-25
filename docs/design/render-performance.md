@@ -456,6 +456,153 @@ Each goes through the benchmark below before it is kept. Ideas 1, 2, 4, 6
 and 7 change the core painter. Idea 3 is the virtual scroll view's.
 Ideas 9 and 12 are the image layer's and rs-rich-web's.
 
+## Lessons from games, researched
+
+A research pass on 2026-10-25 into how games optimise. Some primary pages
+were blocked; those parts are marked unverified in the pass, and nothing
+below rests on them alone.
+
+### How games work, not just what they do
+
+- **Budgets, not averages.**
+  - A frame has a budget in milliseconds, and each subsystem has a share
+    of it.
+  - Frames are judged by their time percentiles (p50, p99, max), because
+    average frames per second hides hitches.
+  - [Android's frame-pacing guide](https://developer.android.com/games/sdk/frame-pacing)
+    adds that a steady cadence matters as much as speed: a frame that
+    comes early, then a late one, reads as stutter.
+- **Profile each stage, per frame.** Tracy, PIX and Unreal Insights slice
+  time by frame into named stages, so the stage that blew the budget is
+  visible.
+- **Fixed input, repeatable runs.** The Quake and Doom timedemos replay
+  recorded input as fast as possible. CI gates fail a build on p95 or p99
+  against a baseline, with a noise floor.
+- **Data first.** Mike Acton's
+  [CppCon 2014 talk](https://github.com/CppCon/CppCon2014): reading a
+  64-byte cache line to use 4 to 8 bytes wastes about 90% of it, and
+  fitting a loop's data to the line gave a 10x speedup. Strings are his
+  example of the problem.
+- **Change state rarely.** Draw calls are sorted by a key so that
+  consecutive draws share state. Skia's Graphite still orders draws to
+  "minimize pipeline transitions".
+- **Send the latest state, never a backlog.**
+  - [Mosh](https://github.com/mobile-shell/mosh/blob/master/src/terminal/terminaldisplay.cc)
+    synchronises screen state, not the byte stream. It skips
+    intermediate frames and paces itself to the round trip.
+  - VNC sends an update only when the client asks for one.
+  - Wayland's frame callback says when to draw next, and is withheld
+    from hidden surfaces.
+  - Quake 3 sends deltas against the last state the client
+    acknowledged.
+- **Move what is there, then draw the seam.** VNC's CopyRect and the NES's
+  scroll register move pixels the display already has, so only the newly
+  exposed row or column is written.
+
+### What it says about our painter
+
+Read against `rich-ext/src/surface/screen.rs`:
+
+- **The cell layout.** `Cell { text: String, .. }` is about 32 bytes with
+  its glyph behind a pointer. The diff dereferences two heap strings per
+  cell. ratatui keeps the symbol inline (`CompactString`).
+- **Allocation in the output.** `goto` builds every cursor move with
+  `format!`, and `paint` returns a fresh `String` each frame.
+- **Colour codes.** `set_pen` sends a full reset on every style change.
+  ratatui diffs the foreground, the background and the attributes
+  separately. True colour codes are not cached.
+- **Cursor moves.**
+  - Mosh's `put_row` picks the cheapest move.
+  - It reprints a short gap of unchanged cells rather than jump over it.
+  - It uses ECH for blank runs longer than 4 and EL where the background
+    allows.
+  - It detects scrolled blocks of rows and scrolls them.
+
+Mosh's `terminaldisplay.cc` is close to a reference for the painter we
+want.
+
+### Ranked by expected payoff
+
+The columns are (a) full-screen churn, (b) scrolling, (c) small updates,
+and (d) slow or remote terminals and rs-rich-web.
+
+| Change | (a) | (b) | (c) | (d) |
+|---|---|---|---|---|
+| Cells without a heap string: inline or in planes | High | Med | Low | Low |
+| Style deltas instead of resets; cache true colour codes | High | Med | Low | High |
+| No allocation per frame: persistent buffers, no `format!` per move | Med | Med | Med | Low |
+| Cost-based moves; reprint short gaps; ECH and EL | Med | Low | Low | High |
+| Scroll in the terminal and draw the seam; render only the visible window | Low | Very high | none | Very high |
+| A coalescing scheduler: latest state only, wait for the write to drain, read input late | Med | Med | Med | Very high |
+| Skip unchanged rows inside the damage | Med | Low | Low | Low |
+| A byte budget with priorities, and lower quality when over it | Low | Low | Low | High |
+| Mosh-style deltas against an acknowledged frame, and local echo, for rs-rich-web | none | Med | High (feel) | Very high |
+
+### How we will know
+
+- **The rig first.** A stage breakdown for every scene. Frame-time
+  percentiles, bytes and allocations per frame. A CI gate that a
+  deliberate 20% regression fails.
+- **Cells without the heap:**
+  - full-screen at 80x24 within 1.5 times ratatui's 0.33 ms (1.0 ms on
+    the way there);
+  - cache misses per frame well down;
+  - the status tick still 15 µs or less.
+- **Style deltas:** the chart redraw under 150 µs, and its bytes down 30%
+  or more, with the emulator's screen identical.
+- **No allocation per frame:** zero, in steady state, on the tick and
+  chart scenes.
+- **Cost-based moves:** bytes down 20% or more on the churn and form
+  scenes.
+- **Scrolling in the terminal:**
+  - a one-row scroll of a full pane costs about one row of bytes plus
+    the control sequences;
+  - no tearing inside synchronized output;
+  - images placed again correctly.
+- **The coalescing scheduler:** under a throttled link, the time from
+  input to the latest state shown stays bounded, and the frame queue
+  stays at one or less.
+
+## Compression
+
+Measured on 2026-10-25, on the docs tapes' recorded output: 931 frames of
+200 bytes or more, 4.16 MB in all, compress to 0.60 MB with zlib at level 1
+(14%). That runs at about 86 MB/s even from Python, about 52 µs a frame.
+Terminal output is very repetitive: escape sequences, runs of blanks, the
+same styles again and again.
+
+Where it can and cannot help:
+
+- **A local terminal: not at all.** A terminal reads raw bytes and cannot
+  decompress. On a local PTY, compressing only adds work. Here the gain
+  comes from saying less: the encoder work above (style deltas, cheaper
+  moves, ECH, EL and REP, scrolling) is compression in the terminal's own
+  vocabulary.
+- **SSH:** `ssh -C` (or `Compression yes`) already compresses the whole
+  stream with zlib. That is worth saying in the docs for slow links. Mosh
+  goes further: it sends state differences and echoes keys locally.
+- **rs-rich-web over a network: yes.** That is where frames cross a real
+  link.
+  - tungstenite 0.30 has no permessage-deflate, so it would be ours to
+    add.
+  - The cleanest option is binary frames compressed with deflate
+    (`flate2`, already in the workspace), and decompressed in the page
+    with the browser's built-in `DecompressionStream("deflate-raw")`. That
+    needs no JavaScript library.
+  - It applies to both the xterm.js stream and the DOM renderer's JSON.
+    The DOM renderer would also gain from a binary encoding before any
+    compression.
+  - It is turned on only above a size threshold, and only where the
+    measured link is slower than the compressor.
+- **Kitty images:** the graphics protocol takes zlib-compressed pixels
+  (`o=z`), which matters for raw RGBA frames (Doom's gap 3).
+- **Recordings:** casts and tapes can be stored compressed, but they are
+  small already.
+
+The benchmark gains a simulated link (bytes per second plus a fixed
+latency per write), so each strategy and compression setting is judged by
+time to the screen, not only by bytes.
+
 ## Benchmarks
 
 A benchmark comes first and decides the defaults. Each scene runs at
@@ -518,9 +665,11 @@ Steps 1 to 3 are independent of 4 to 6, and can run alongside them.
 
 - **Decided on 2026-10-25:** `best` ships opt-in for one release, then
   becomes the default once it beats `cells` on every scene. Work starts
-  now, game-derived pieces first (the timedemo, data-oriented cells and
-  the frame stats), on two branches: the painter, and the viewport with
-  Noctiluca.
+  now on two branches: the painter, and the viewport with Noctiluca.
+- **Decided on 2026-10-25:** the game ideas are lessons, not features.
+  We learn how games optimise (measure first, profile each stage, then fix
+  the biggest measured cost) and apply that to our pipeline. Each change
+  is kept only if the benchmark shows a win.
 - **Terminals with unknown capabilities:**
   - scrolling stays off under tmux unless the benchmark shows a gain
     there;
