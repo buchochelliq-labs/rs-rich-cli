@@ -614,7 +614,11 @@ fn temporary_profile() -> io::Result<PathBuf> {
         #[cfg(unix)]
         std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
         match builder.create(&dir) {
-            Ok(()) => return Ok(dir),
+            Ok(()) => {
+                #[cfg(test)]
+                tests::MADE.with(|made| made.borrow_mut().push(dir.clone()));
+                return Ok(dir);
+            }
             Err(error) if error.kind() == ErrorKind::AlreadyExists => continue,
             Err(error) => return Err(error),
         }
@@ -1376,26 +1380,28 @@ mod tests {
     /// and removes a profile, which would move another's count of them.
     static STARTS: Mutex<()> = Mutex::new(());
 
+    thread_local! {
+        /// The profiles this test thread made: a count of the temporary
+        /// directory would also see those of tests that start a real Chrome
+        /// alongside.
+        pub(super) static MADE: std::cell::RefCell<Vec<PathBuf>> =
+            const { std::cell::RefCell::new(Vec::new()) };
+    }
+
     #[test]
     fn a_chrome_that_cannot_start_leaves_no_profile_behind() {
         let _starts = STARTS.lock().unwrap_or_else(|e| e.into_inner());
-        let ours = format!("rich-embed-chrome-{}-", std::process::id());
-        let profiles = || {
-            std::fs::read_dir(std::env::temp_dir())
-                .map(|dir| {
-                    dir.flatten()
-                        .filter(|e| e.file_name().to_string_lossy().starts_with(&ours))
-                        .count()
-                })
-                .unwrap_or(0)
-        };
-        let before = profiles();
+        MADE.with(|made| made.borrow_mut().clear());
         let mut engine = ChromeEngine::new().binary("/nonexistent/rich-embed-chrome");
         for _ in 0..3 {
             assert!(engine.start().is_err());
         }
         assert!(engine.profile.is_none());
-        assert_eq!(profiles(), before);
+        let made = MADE.with(|made| made.borrow().clone());
+        // Each start made a profile, and took it away again.
+        assert_eq!(made.len(), 3, "{made:?}");
+        let left: Vec<_> = made.iter().filter(|dir| dir.exists()).collect();
+        assert!(left.is_empty(), "left behind: {left:?}");
     }
 
     #[test]
