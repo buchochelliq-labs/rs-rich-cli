@@ -1501,6 +1501,10 @@ pub struct Painter {
     scratch: Sgr,
     /// True-colour pairs' parameters, per style id.
     rgb_codes: RgbCodes,
+    /// The SGR written to go from one cached style's parameters to
+    /// another's (by their ids): a frame goes between a few styles many
+    /// times, so each change is worked out once.
+    changes: SgrChanges,
     /// Painting an inline region below the cursor, with relative moves,
     /// rather than the whole screen with absolute ones.
     inline: bool,
@@ -1697,6 +1701,7 @@ impl Painter {
             codes: Vec::new(),
             scratch: Sgr::default(),
             rgb_codes: RgbCodes::default(),
+            changes: SgrChanges::default(),
             inline: false,
             cursor: None,
             height: 0,
@@ -1764,6 +1769,7 @@ impl Painter {
         if system != self.system {
             self.system = system;
             self.codes.clear();
+            self.changes.clear();
         }
     }
 
@@ -1917,6 +1923,7 @@ impl Painter {
         }
         self.codes = codes;
         self.rgb_codes.clear();
+        self.changes.clear();
     }
 
     /// Drop the styles `screen`'s cells no longer use, when its table has
@@ -1979,6 +1986,7 @@ impl Painter {
             self.previous = None;
             self.codes.clear();
             self.rgb_codes.clear();
+            self.changes.clear();
             vec![screen.area()]
         } else {
             // A column either side too: writing a rectangle can turn the
@@ -2570,6 +2578,23 @@ impl Painter {
             pen.style = Some(style);
             return;
         }
+        if let (None, Held::Style(held)) = (pen.rgb, pen.held) {
+            // From one cached style to another: worked out once.
+            if let Some(change) = self.changes.get(held, style) {
+                out.push_str(change);
+                pen.held = Held::Style(style);
+                pen.style = Some(style);
+                return;
+            }
+            self.sgr(screen, style);
+            let codes = self.codes[style.index()].as_ref().expect("cached above");
+            let before = out.len();
+            codes.write_from(held_codes(&self.codes, pen.held), out);
+            self.changes.put(held, style, &out[before..]);
+            pen.held = Held::Style(style);
+            pen.style = Some(style);
+            return;
+        }
         self.sgr(screen, style);
         let codes = self.codes[style.index()].as_ref().expect("cached above");
         let from = match pen.rgb.take() {
@@ -2690,6 +2715,40 @@ fn push_u8(out: &mut String, n: u8) {
         out.push(char::from(b'0' + n / 10 % 10));
     }
     out.push(char::from(b'0' + n % 10));
+}
+
+/// The SGR a [`Painter`] wrote to change its pen from one cached style's
+/// parameters to another's, by the two ids, in one buffer. Emptied with
+/// the parameters' cache, and when it holds more than [`SgrChanges::MAX`]
+/// bytes.
+#[derive(Default)]
+struct SgrChanges {
+    text: String,
+    at: HashMap<(u32, u32), (u32, u32), FxBuild>,
+}
+
+impl SgrChanges {
+    const MAX: usize = 1 << 16;
+
+    fn clear(&mut self) {
+        self.text.clear();
+        self.at.clear();
+    }
+
+    fn get(&self, from: StyleId, to: StyleId) -> Option<&str> {
+        let &(start, end) = self.at.get(&(from.index() as u32, to.index() as u32))?;
+        self.text.get(start as usize..end as usize)
+    }
+
+    fn put(&mut self, from: StyleId, to: StyleId, change: &str) {
+        if self.text.len() + change.len() > SgrChanges::MAX {
+            self.clear();
+        }
+        let start = self.text.len() as u32;
+        self.text.push_str(change);
+        let key = (from.index() as u32, to.index() as u32);
+        self.at.insert(key, (start, self.text.len() as u32));
+    }
 }
 
 /// A true-colour pair's SGR, encoded once per style id: where it starts
