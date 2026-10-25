@@ -9,6 +9,20 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Memo in the cartoon look, and a spot for every crate (docs)
+
+- **Memo's illustration look is now a cartoon**: a bold outline, soft
+  shading, pink ears and big glossy eyes. `memo-cartoon.svg` is the base
+  pose. The flat elephants and the pixel grid stay as the icon tier, for
+  favicons, small badges and the terminal. `MASCOT.md` describes both and
+  lists the cartoon's gradient ids and palette.
+- **Every crate has a spot illustration** under
+  `docs/assets/intuituive/mascot/crates/`: Memo with a prop that says what
+  the crate does, 160x128, drawn for 96 to 160 px. Each crate's README shows
+  its spot beside the title, and the crate tables in the README and on the
+  docs front page show them small. The README's top picture for
+  `rs-rich-intuituive` stays its hero.
+
 ### Record: APNG only when asked, and every frame on a busy machine (record, CLI)
 
 - **APNG is written only when asked** (0.0.22's decision 2). A tape with no
