@@ -1902,6 +1902,7 @@ pub struct App {
     /// How frames become bytes; `None` takes `RICH_PAINT_STRATEGY`, or
     /// the default.
     paint_strategy: Option<PaintStrategy>,
+    terminal_scroll: Option<bool>,
     /// The shortest time between two frames [`run_on`](Self::run_on)
     /// draws ([`max_fps`](Self::max_fps)).
     frame_time: Option<Duration>,
@@ -2245,6 +2246,7 @@ impl App {
             stats: StatsHandle::default(),
             bytes_before: 0,
             paint_strategy: None,
+            terminal_scroll: None,
             frame_time: None,
             text_frames: true,
             caret_shown: false,
@@ -2740,6 +2742,25 @@ impl App {
     #[must_use]
     pub fn paint_strategy(mut self, strategy: PaintStrategy) -> App {
         self.paint_strategy = Some(strategy);
+        self
+    }
+
+    /// Whether [`PaintStrategy::Scroll`] and [`PaintStrategy::Best`] may
+    /// move rows with the terminal's own scrolling. Unset, it is on, but
+    /// off on Windows (whose consoles have been seen to scroll the wrong
+    /// rows) and under tmux; set, it holds wherever the app runs.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("hello")).terminal_scroll(false);
+    /// let mut driver = app.driver(10, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "hello");
+    /// ```
+    #[must_use]
+    pub fn terminal_scroll(mut self, on: bool) -> App {
+        self.terminal_scroll = Some(on);
         self
     }
 
@@ -3431,6 +3452,9 @@ impl App {
         // little; until the benchmark says otherwise, it paints instead.
         if std::env::var_os("TMUX").is_some() {
             painter.set_scroll(false);
+        }
+        if let Some(on) = self.terminal_scroll {
+            painter.set_scroll(on);
         }
         // Accessible: no colour, so no meaning rests on it.
         painter.set_color_system(if self.text_mode() {
