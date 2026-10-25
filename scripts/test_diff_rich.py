@@ -37,7 +37,7 @@ class DiffRichTests(unittest.TestCase):
 
     def test_generator_covers_every_kind(self):
         kinds = {case["kind"] for case in diff_rich.generated_cases(seed=3, count=400)}
-        self.assertEqual(kinds, set(diff_rich.KINDS))
+        self.assertEqual(kinds, set(diff_rich.KINDS + diff_rich.DOC_KINDS))
 
     def test_generated_tables_are_rectangular(self):
         for case in diff_rich.generated_cases(seed=9, count=300):
