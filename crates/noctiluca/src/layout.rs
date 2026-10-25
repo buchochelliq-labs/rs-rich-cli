@@ -510,12 +510,15 @@ pub fn reader(page: &Page, width: u16, marks: &Marks) -> Vec<Piece> {
                     &quote,
                 ));
                 flush(&mut text, &mut pieces);
-                if media.kind == MediaKind::Image {
+                // A video's region shows its poster, then its frames while
+                // it plays, over its controls.
+                if matches!(media.kind, MediaKind::Image | MediaKind::Video) {
                     pieces.push(Piece::Media {
                         index: *index,
                         rows: media_rows(media.rect.height),
                     });
-                } else if matches!(media.kind, MediaKind::Video | MediaKind::Audio) {
+                }
+                if matches!(media.kind, MediaKind::Video | MediaKind::Audio) {
                     pieces.push(Piece::Player(*index));
                 }
             }
@@ -614,6 +617,21 @@ pub fn face(control: &Control) -> String {
 
 /// The most blank rows the projection keeps between two boxes.
 const MAX_GAP_ROWS: usize = 200;
+/// The play mark on a video that is not playing, as the PoC drew it: a
+/// light box with a `▶` at the region's bottom left, the rest of the row
+/// as it was. `None` for other media, a playing video, or no room.
+pub fn play_mark(media: &crate::model::Media, width: usize) -> Option<Line> {
+    if media.kind != MediaKind::Video || media.playback.is_some_and(|p| p.playing()) || width < 3 {
+        return None;
+    }
+    Some(Line {
+        spans: vec![
+            Span::new(" ▶ ", "bold black on white"),
+            Span::new("░".repeat(width - 3), "bright_black"),
+        ],
+    })
+}
+
 /// The most rows a media region takes in the projection.
 const MAX_MEDIA_ROWS: usize = 200;
 
@@ -738,7 +756,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                 let (m0, m1) = snap(media.rect.x, media.rect.right());
                 let rows = ((media.rect.height / ch).round() as usize).clamp(1, MAX_MEDIA_ROWS);
                 let w = m1 - m0;
-                let lines = (0..rows)
+                let mut lines: Vec<Line> = (0..rows)
                     .map(|r| {
                         let label = if r == rows / 2 {
                             crate::clean::truncate(&media.alt, w)
@@ -754,6 +772,11 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                         }
                     })
                     .collect();
+                if let Some(mark) = play_mark(media, w) {
+                    if let Some(last) = lines.last_mut() {
+                        *last = mark;
+                    }
+                }
                 items.push(Item {
                     top: media.rect.y,
                     bottom: media.rect.bottom(),

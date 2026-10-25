@@ -554,7 +554,9 @@ impl Engine for ChromeBackend {
     fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {
         // What the page loaded, as Chrome holds it: no new request.
         let tree = self.call("Page.getFrameTree", json!({}))?;
-        let frame = tree["frameTree"]["frame"]["id"].as_str().unwrap_or_default();
+        let frame = tree["frameTree"]["frame"]["id"]
+            .as_str()
+            .unwrap_or_default();
         let content = self.call(
             "Page.getResourceContent",
             json!({"frameId": frame, "url": url}),
@@ -574,7 +576,10 @@ impl Engine for ChromeBackend {
             json!({"expression": CAN_PLAY_SCRIPT.replace("TYPES", &json!(types).to_string()),
                    "contextId": context, "returnByValue": true}),
         )?;
-        let answers = result["result"]["value"].as_array().cloned().unwrap_or_default();
+        let answers = result["result"]["value"]
+            .as_array()
+            .cloned()
+            .unwrap_or_default();
         Ok(types
             .iter()
             .enumerate()
@@ -582,6 +587,14 @@ impl Engine for ChromeBackend {
                 crate::clean::clean(answers.get(i).and_then(Value::as_str).unwrap_or_default())
             })
             .collect())
+    }
+
+    fn product(&mut self, _tab: TabId) -> String {
+        let version = self
+            .call("Browser.getVersion", json!({}))
+            .unwrap_or(Value::Null);
+        let product = version["product"].as_str().unwrap_or("Chrome");
+        crate::clean::clean(product)
     }
 
     fn events(&mut self) -> Vec<EngineEvent> {

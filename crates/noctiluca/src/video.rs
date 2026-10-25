@@ -11,17 +11,19 @@
 //!   (our scroll is in rows, Chrome's follows when the view rests) is
 //!   captured on its own instead.
 //! - **At most [`MAX_FPS`] a region.** Frames are taken no faster than
-//!   that. How many of them reach the terminal, in which protocol, within
-//!   the terminal's byte budget, is rs-rich-art's frame pacing: the
-//!   [`FrameSink`] the app gives frames to.
+//!   that, or than the app's pacing asks. How many of them reach the
+//!   terminal, in which protocol, within the terminal's byte budget, is
+//!   rs-rich-art's frame pacing ([`Pacer`]), which [`Pacing`] runs per
+//!   region on the app's side.
 //!
 //! Nothing here looks at a site: any `<video>` with a playing state is a
 //! moving region.
 
-use std::sync::Arc;
+use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use rich_embed::{Pixels, ScreencastFrame};
+use rich_art::picture::{over_ssh, ByteBudget, Pacer, Picture, Pixels};
+use rich_embed::ScreencastFrame;
 
 use crate::engine::{NodeId, Rect};
 
@@ -37,19 +39,9 @@ pub struct VideoFrame {
     /// The video element.
     pub node: NodeId,
     /// The region's pixels (RGB).
-    pub pixels: Pixels,
+    pub pixels: rich_embed::Pixels,
     /// Counts the region's frames from 1.
     pub seq: u64,
-}
-
-/// Where the frames go: the picture side, which fits, encodes and paces
-/// them within the terminal's byte budget (rs-rich-art). The app keeps the
-/// newest frame of each region and draws it.
-pub trait FrameSink {
-    /// A new frame of `frame.node`'s region.
-    fn frame(&mut self, frame: Arc<VideoFrame>);
-    /// The region stopped moving (paused, ended, gone or off screen).
-    fn still(&mut self, node: NodeId);
 }
 
 /// A region that may move: a video's node and rectangle, whether it plays
@@ -60,6 +52,9 @@ pub struct Region {
     pub rect: Rect,
     pub playing: bool,
     pub on_screen: bool,
+    /// How long the app's pacing wants between two of its frames; never
+    /// less than [`MIN_INTERVAL`].
+    pub interval: Option<Duration>,
 }
 
 impl Region {
@@ -107,15 +102,16 @@ impl Frames {
             }
             keep
         });
-        plan.due = moving.iter().any(|r| self.due(r.node, now));
+        plan.due = moving.iter().any(|r| self.due(r, now));
         plan
     }
 
-    fn due(&self, node: NodeId, now: Instant) -> bool {
+    fn due(&self, region: &Region, now: Instant) -> bool {
+        let interval = region.interval.unwrap_or(MIN_INTERVAL).max(MIN_INTERVAL);
         self.last
             .iter()
-            .find(|(n, ..)| *n == node)
-            .is_none_or(|(_, at, _)| now.duration_since(*at) >= MIN_INTERVAL)
+            .find(|(n, ..)| *n == region.node)
+            .is_none_or(|(_, at, _)| now.duration_since(*at) >= interval)
     }
 
     /// Cut the due regions out of `frame`. Regions the frame does not hold
@@ -129,7 +125,7 @@ impl Frames {
         let mut cut = Vec::new();
         let mut missing = Vec::new();
         for region in regions.iter().filter(|r| r.moving()) {
-            if !self.due(region.node, now) {
+            if !self.due(region, now) {
                 continue;
             }
             let r = region.rect;
@@ -146,7 +142,7 @@ impl Frames {
     }
 
     /// A frame of `node` taken some other way (a capture of its region).
-    pub fn stamp(&mut self, node: NodeId, pixels: Pixels, now: Instant) -> VideoFrame {
+    pub fn stamp(&mut self, node: NodeId, pixels: rich_embed::Pixels, now: Instant) -> VideoFrame {
         let seq = match self.last.iter_mut().find(|(n, ..)| *n == node) {
             Some(entry) => {
                 entry.1 = now;
@@ -162,9 +158,178 @@ impl Frames {
     }
 }
 
+/// The app's side of the frames: one live [`Picture`] per region (its
+/// frames keep one id, so Kitty replaces the image it holds), drawn as
+/// rs-rich-art's [`Pacer`] allows within the terminal's [`ByteBudget`].
+///
+/// - Every moving region gets an equal share of the budget. Regions off
+///   screen get no frames (the tab sends none).
+/// - The newest frame is offered first; one that is not due is dropped.
+/// - What a frame cost is what the painter counted for its picture
+///   ([`picture_bytes`]), taken when the next frame comes: a frame not
+///   yet painted is counted at the pacer's estimate.
+/// - When the share allows fewer than the budget's floor of frames a
+///   second, the region steps down: Kitty, iTerm2, Sixel, then cells.
+pub struct Pacing {
+    pub budget: ByteBudget,
+    /// The protocol a new region starts at.
+    pub start: Pixels,
+    regions: HashMap<NodeId, Paced>,
+}
+
+/// One region's pacing.
+struct Paced {
+    pacer: Pacer,
+    picture: Picture,
+    /// The last frame given to the painter: when, and its picture's byte
+    /// count then; settled at the next frame.
+    pending: Option<(Instant, u64)>,
+    /// Whether it moves now.
+    moving: bool,
+    /// The newest frame's count, so an older one is not shown after it.
+    seq: u64,
+}
+
+/// What counts a picture's bytes: the painter's counter in the app,
+/// an encoder in a test.
+pub type ByteCounter = fn(u32) -> u64;
+
+impl Pacing {
+    /// Pacing within `budget`, starting regions at `start`.
+    pub fn new(budget: ByteBudget, start: Pixels) -> Pacing {
+        Pacing {
+            budget,
+            start,
+            regions: HashMap::new(),
+        }
+    }
+
+    /// The protocol to start video at: character art over SSH unless the
+    /// user asked for a protocol (`asked`), else what the terminal speaks.
+    pub fn start_for(asked: Option<Pixels>, detected: Pixels) -> Pixels {
+        match asked {
+            Some(pixels) => pixels,
+            None if over_ssh() => Pixels::Cells,
+            None => detected,
+        }
+    }
+
+    fn share(&self) -> f64 {
+        let moving = self.regions.values().filter(|r| r.moving).count().max(1);
+        1.0 / moving as f64
+    }
+
+    /// Offer `frame`, for a region of `cols` x `rows` cells, at `now`.
+    /// The picture to draw now when it is due, else `None`. `counted`
+    /// says what the painter has sent of a picture so far.
+    pub fn offer(
+        &mut self,
+        frame: &VideoFrame,
+        cols: usize,
+        rows: usize,
+        now: Instant,
+        counted: ByteCounter,
+    ) -> Option<Picture> {
+        let (w, h) = (frame.pixels.width, frame.pixels.height);
+        let rgba = frame.pixels.to_rgba();
+        if !self.regions.contains_key(&frame.node) {
+            let picture = Picture::from_rgba(w, h, rgba.clone())?;
+            let pacer = Pacer::new(self.start, cols, rows);
+            self.regions.insert(
+                frame.node,
+                Paced {
+                    pacer,
+                    picture,
+                    pending: None,
+                    moving: true,
+                    seq: 0,
+                },
+            );
+        }
+        let share = {
+            let region = self.regions.get_mut(&frame.node)?;
+            region.moving = true;
+            region.pacer.resize(cols, rows);
+            if frame.seq <= region.seq {
+                return None;
+            }
+            self.share()
+        };
+        let budget = self.budget;
+        let region = self.regions.get_mut(&frame.node)?;
+        // What the last frame cost, now that it was painted.
+        if let Some((at, before)) = region.pending.take() {
+            let spent = counted(region.picture.id()).saturating_sub(before);
+            region.pacer.sent(at, (spent > 0).then_some(spent));
+        }
+        while region.pacer.settle(&budget, share) {}
+        if region.seq > 0 && !region.pacer.due(now, &budget, share) {
+            return None;
+        }
+        region.picture = region.picture.next_rgba(w, h, rgba)?;
+        region.seq = frame.seq;
+        region.pending = Some((now, counted(region.picture.id())));
+        Some(region.picture.clone())
+    }
+
+    /// The region stopped moving; its last frame stays.
+    pub fn still(&mut self, node: NodeId) {
+        if let Some(region) = self.regions.get_mut(&node) {
+            region.moving = false;
+            region.pending = None;
+        }
+    }
+
+    /// Forget every region: a new document.
+    pub fn clear(&mut self) {
+        self.regions.clear();
+    }
+
+    /// Forget a region gone from the page.
+    pub fn forget(&mut self, node: NodeId) {
+        self.regions.remove(&node);
+    }
+
+    /// The protocol `node`'s frames are drawn in now.
+    pub fn pixels(&self, node: NodeId) -> Pixels {
+        self.regions
+            .get(&node)
+            .map_or(self.start, |r| r.pacer.pixels())
+    }
+
+    /// The bytes `node`'s frames cost in the last two seconds.
+    pub fn recent_bytes(&self, node: NodeId) -> u64 {
+        self.regions
+            .get(&node)
+            .map_or(0, |r| r.pacer.recent_bytes())
+    }
+
+    /// The bytes a second `node` may spend: its share of the budget.
+    pub fn cap(&self) -> f64 {
+        self.budget.bytes_per_second as f64 * self.share()
+    }
+
+    /// How long the tab should wait between two frames of each moving
+    /// region, so it cuts no frame the pacing would drop.
+    pub fn intervals(&self) -> Vec<(NodeId, Duration)> {
+        let share = self.share();
+        let mut out: Vec<(NodeId, Duration)> = self
+            .regions
+            .iter()
+            .filter(|(_, r)| r.moving)
+            .map(|(node, r)| {
+                let fps = r.pacer.fps(&self.budget, share).max(0.1);
+                (*node, Duration::from_secs_f64(1.0 / fps).max(MIN_INTERVAL))
+            })
+            .collect();
+        out.sort_by_key(|(node, _)| *node);
+        out
+    }
+}
+
 /// Whether `pixels`, cut from `frame` for `rect`, is all of `rect`: within
 /// a pixel of its size at the frame's scale.
-fn whole(pixels: &Pixels, frame: Option<&ScreencastFrame>, rect: Rect) -> bool {
+fn whole(pixels: &rich_embed::Pixels, frame: Option<&ScreencastFrame>, rect: Rect) -> bool {
     let Some(frame) = frame else {
         return false;
     };
@@ -181,11 +346,11 @@ fn whole(pixels: &Pixels, frame: Option<&ScreencastFrame>, rect: Rect) -> bool {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use rich_embed::FrameMeta;
+    use rich_embed::{FrameMeta, Pixels as Rgb};
 
     fn frame(scroll_y: f64) -> ScreencastFrame {
         ScreencastFrame {
-            pixels: Pixels::new(100, 100, vec![7; 100 * 100 * 3]).unwrap(),
+            pixels: Rgb::new(100, 100, vec![7; 100 * 100 * 3]).unwrap(),
             meta: FrameMeta {
                 scroll_y,
                 page_scale: 1.0,
@@ -202,6 +367,7 @@ mod tests {
             rect: Rect::new(10.0, y, 40.0, 20.0),
             playing,
             on_screen,
+            interval: None,
         }
     }
 
@@ -240,6 +406,19 @@ mod tests {
             count += cut.len();
         }
         assert!((15..=17).contains(&count), "{count}");
+        // The pacing asks for two a second: four in two seconds.
+        let mut frames = Frames::default();
+        let slow = [Region {
+            interval: Some(Duration::from_millis(500)),
+            ..playing[0]
+        }];
+        let count: usize = (0..200)
+            .map(|tick| {
+                let now = start + Duration::from_millis(tick * 10);
+                frames.cut(&slow, Some(&frame(0.0)), now).0.len()
+            })
+            .sum();
+        assert_eq!(count, 4);
     }
 
     #[test]

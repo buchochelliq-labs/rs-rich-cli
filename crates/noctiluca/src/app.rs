@@ -5,21 +5,23 @@
 //! The tab runs on a thread of its own ([`crate::tab`]); its updates come
 //! to the app's thread through a proxy, into signals the nodes read.
 
+use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
 use std::sync::mpsc;
 use std::sync::Arc;
+use std::time::{Duration, Instant};
 
 use rich_embed::PageState;
 use rich_intuituive::interact::keymap::{try_keys, Keymap};
 use rich_intuituive::interact::{Key, KeyCode};
 use rich_intuituive::prelude::*;
 use rich_intuituive::{
-    button_of, image_bytes_of, image_graphics, scroll_virtual_with, slider, spawn_stream, Action,
-    ImageView, Pixels,
+    button_of, image_bytes_of, image_graphics, picture_bytes, picture_of, scroll_virtual_with,
+    slider, spawn_stream, Action, ImageView, Picture, Pixels,
 };
 
-use crate::actions::{self, keys_label, ACTIONS};
+use crate::actions::{self, ACTIONS};
 use crate::bookmarks::{Bookmark, Bookmarks};
 use crate::cdp::CELL;
 use crate::clean::{markup, truncate};
@@ -28,6 +30,7 @@ use crate::engine::{Engine, HistoryStep, MediaOp, NodeId, Playback};
 use crate::layout::{self, hint_labels, matches, to_text, Line, Marks, Piece, Projection};
 use crate::model::{Binding, MediaKind, Page, Role};
 use crate::tab::{Command, Intent, Refusal, Tab, Update};
+use crate::video::{Pacing, VideoFrame};
 use crate::widgets::{web_widget, WebControl};
 
 /// What happens when an action of the tab's is answered.
@@ -85,6 +88,17 @@ pub struct Browser {
     pub images_default: Signal<Images>,
     /// The terminal's size in cells.
     pub viewport: Memo<(u16, u16)>,
+    /// Each video region's picture: its newest frame, as the pacing let
+    /// it through.
+    pub videos: Signal<HashMap<NodeId, Picture>>,
+    /// The protocol each video region is drawn in now: its pacing steps
+    /// it down when the terminal is short of bytes.
+    pub video_pixels: Signal<HashMap<NodeId, Pixels>>,
+    /// The frames' pacing within the terminal's byte budget.
+    pacing: Signal<Rc<RefCell<Pacing>>>,
+    /// The regions on screen and the pacing's intervals, as last told to
+    /// the tab.
+    regions_sent: Signal<(Vec<NodeId>, Vec<(NodeId, Duration)>)>,
     tab: Signal<Tab>,
     waiting: Signal<HashMap<u64, Then>>,
     controls: Signal<HashMap<NodeId, Rc<WebControl>>>,
@@ -285,7 +299,8 @@ pub fn availability(b: Browser, id: &str) -> Result<(), String> {
         {
             Err("Find something first.".into())
         }
-        "media.play_pause" | "media.mute" | "media.volume_up" | "media.volume_down" => {
+        "media.play_pause" | "media.mute" | "media.volume_up" | "media.volume_down"
+        | "media.seek_back" | "media.seek_forward" => {
             if current_media(b).is_some() {
                 Ok(())
             } else if b.page.with(|p| {
@@ -410,7 +425,8 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
             }
         }
         "bookmarks" => bookmarks_list(b, cx),
-        "media.play_pause" | "media.mute" | "media.volume_up" | "media.volume_down" => {
+        "media.play_pause" | "media.mute" | "media.volume_up" | "media.volume_down"
+        | "media.seek_back" | "media.seek_forward" => {
             let Some((node, playback)) = current_media(b) else {
                 return;
             };
@@ -421,6 +437,8 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
                 // Ten points at a time, kept in 0 to 100%; a muted element
                 // stays muted.
                 "media.volume_up" => MediaOp::Volume((playback.volume + 0.1).min(1.0)),
+                "media.seek_back" => MediaOp::Seek(-SEEK),
+                "media.seek_forward" => MediaOp::Seek(SEEK),
                 _ => MediaOp::Volume((playback.volume - 0.1).max(0.0)),
             };
             media_op(b, node, op);
@@ -460,10 +478,143 @@ fn media_op(b: Browser, node: NodeId, op: MediaOp) {
     });
 }
 
-/// Seconds as `m:ss`.
-fn clock(seconds: f64) -> String {
-    let s = seconds.max(0.0).floor() as u64;
-    format!("{}:{:02}", s / 60, s % 60)
+use crate::bars::clock;
+
+/// How far the seek keys move the media, in seconds: the PoC's step.
+const SEEK: f64 = 5.0;
+
+/// A video's frame from the tab: offered to its pacing, and drawn when due.
+fn video_frame(b: Browser, frame: &VideoFrame) {
+    let Some(rect) = b.page.with_untracked(|p| {
+        p.as_ref()?
+            .media
+            .iter()
+            .find(|m| m.node == frame.node)
+            .map(|m| m.rect)
+    }) else {
+        return;
+    };
+    let cols = ((rect.width / CELL.0 as f64).ceil() as usize).clamp(1, 400);
+    let rows = ((rect.height / CELL.1 as f64).ceil() as usize).clamp(1, 200);
+    let (picture, pixels) = b.pacing.with_untracked(|p| {
+        let mut pacing = p.borrow_mut();
+        let picture = pacing.offer(frame, cols, rows, Instant::now(), picture_bytes);
+        (picture, pacing.pixels(frame.node))
+    });
+    if b.video_pixels
+        .with_untracked(|v| v.get(&frame.node) != Some(&pixels))
+    {
+        b.video_pixels.update(|v| {
+            v.insert(frame.node, pixels);
+        });
+    }
+    if let Some(picture) = picture {
+        b.videos.update(|v| {
+            v.insert(frame.node, picture);
+        });
+    }
+    send_regions(b);
+}
+
+/// The video regions the view shows: those whose box meets the page's
+/// rows in view.
+fn regions_on_screen(b: Browser) -> Vec<NodeId> {
+    let rows = b.viewport.get().1 as usize;
+    let first = b.scroll.get() as usize;
+    let (top, bottom) = b.layout.with(|l| {
+        let top = if first == 0 { 0.0 } else { l.y_of(first) };
+        let bottom = if first.saturating_add(rows) >= l.lines.len() {
+            f64::MAX
+        } else {
+            l.y_of(first + rows)
+        };
+        (top, bottom)
+    });
+    b.page.with(|p| {
+        p.as_ref()
+            .map(|p| {
+                p.media
+                    .iter()
+                    .filter(|m| m.kind == MediaKind::Video)
+                    .filter(|m| m.rect.bottom() > top && m.rect.y < bottom)
+                    .map(|m| m.node)
+                    .collect()
+            })
+            .unwrap_or_default()
+    })
+}
+
+/// Tell the tab which video regions are on screen and how often each may
+/// have a frame, when that changed.
+fn send_regions(b: Browser) {
+    let on_screen = regions_on_screen(b);
+    let intervals: Vec<(NodeId, Duration)> = b.pacing.with_untracked(|p| {
+        p.borrow()
+            .intervals()
+            .into_iter()
+            // In steps of 25 ms, so a small change in the estimate does
+            // not send again.
+            .map(|(node, d)| (node, Duration::from_millis(d.as_millis() as u64 / 25 * 25)))
+            .collect()
+    });
+    let next = (on_screen, intervals);
+    if b.regions_sent.with_untracked(|sent| *sent != next) {
+        b.regions_sent.set(next.clone());
+        b.send(Command::Regions {
+            on_screen: next.0,
+            intervals: next.1,
+        });
+    }
+}
+
+/// A video's region: its newest frame while it has played, else its
+/// poster, in the protocol its pacing chose; with the play mark under it
+/// while it is not playing.
+fn video_region(b: Browser, node: NodeId) -> Node {
+    let poster = memo(move || {
+        b.page.with(|p| {
+            p.as_ref()?
+                .media
+                .iter()
+                .find(|m| m.node == node)?
+                .still
+                .clone()
+        })
+    });
+    let poster_picture = memo(move || poster.get().and_then(|bytes| Picture::decode(&bytes).ok()));
+    let picture = switch(
+        move || {
+            b.video_pixels
+                .with(|v| v.get(&node).copied())
+                .unwrap_or_else(|| b.pacing.with_untracked(|p| p.borrow().start))
+        },
+        move |pixels| {
+            picture_of(
+                move || {
+                    b.videos
+                        .with(|v| v.get(&node).cloned())
+                        .or_else(|| poster_picture.get())
+                },
+                ImageView::new().pixels(pixels),
+            )
+        },
+    )
+    .flex(1);
+    let mark = text(move || {
+        let playing = b.page.with(|p| {
+            p.as_ref()
+                .and_then(|p| p.media.iter().find(|m| m.node == node)?.playback)
+                .is_some_and(|p| p.playing())
+        });
+        if playing {
+            String::new()
+        } else {
+            "[bold black on white] ▶ [/]".into()
+        }
+    })
+    .no_wrap()
+    .fixed(1);
+    column([picture, mark])
 }
 
 /// A video's or an audio's controls, from the element's real state:
@@ -1207,7 +1358,7 @@ fn apply_site(b: Browser, url: &str) {
     }
     let (columns, rows) = b.viewport.get_untracked();
     let width = site.as_ref().and_then(|s| s.width).unwrap_or(columns);
-    b.send(Command::Resize(width, rows.saturating_sub(2)));
+    b.send(Command::Resize(width, rows.saturating_sub(CHROME_ROWS)));
 }
 
 /// Apply one of the tab's updates, on the app's thread.
@@ -1218,6 +1369,9 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
                 b.page.with_untracked(|p| p.as_ref().map(|p| p.document)) != Some(page.document);
             if new_document {
                 b.controls.update(HashMap::clear);
+                b.videos.update(HashMap::clear);
+                b.video_pixels.update(HashMap::clear);
+                b.pacing.with_untracked(|p| p.borrow_mut().clear());
                 b.scroll.set(0);
                 b.hints.set(None);
                 b.find_at.set(usize::MAX);
@@ -1258,6 +1412,11 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
                     }
                 }
             }
+        }
+        Update::Frame(frame) => video_frame(b, &frame),
+        Update::Still(node) => {
+            b.pacing.with_untracked(|p| p.borrow_mut().still(node));
+            send_regions(b);
         }
         Update::Download { name, .. } => cx.toast(format!(
             "[yellow]A download, {}, waits in quarantine.[/]",
@@ -1343,6 +1502,24 @@ fn reader_view(b: Browser) -> Node {
                     })
                 })
                 .fixed(rows)
+            }
+            PieceKey::Media(node, rows)
+                if b.page.with_untracked(|p| {
+                    p.as_ref().is_some_and(|p| {
+                        p.media
+                            .iter()
+                            .any(|m| m.node == node && m.kind == MediaKind::Video)
+                    })
+                }) =>
+            {
+                let width = b.page.with_untracked(|p| {
+                    p.as_ref()
+                        .and_then(|p| p.media.iter().find(|m| m.node == node))
+                        .map_or(10, |m| {
+                            ((m.rect.width / CELL.0 as f64).ceil() as u16).clamp(4, 120)
+                        })
+                });
+                row([video_region(b, node).fixed(width), label("").flex(1)]).fixed(rows)
             }
             PieceKey::Media(node, rows) => {
                 let width = b.page.with_untracked(|p| {
@@ -1459,6 +1636,21 @@ fn projection_view(b: Browser) -> Node {
     .name("page")
 }
 
+/// The rows the header and the status bar take.
+pub const CHROME_ROWS: u16 = 4;
+
+/// The frames' pacing: within the guessed byte budget, at most the
+/// config's frame rate and never more than eight a second, starting at
+/// the protocol the user asked for, else character art over SSH, else
+/// what the terminal speaks. Where the painter measures the terminal's
+/// output rate (its frame budget), the budget should come from that.
+fn video_pacing(config: &Config, images: Images) -> Pacing {
+    let mut budget = rich_art::picture::ByteBudget::guess();
+    budget.max_fps = (config.fps as f64).clamp(1.0, crate::video::MAX_FPS as f64);
+    let asked = (images != Images::Auto).then(|| pixels(images));
+    Pacing::new(budget, Pacing::start_for(asked, Pixels::detect()))
+}
+
 /// The browser app over `engine`.
 pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
     let Options {
@@ -1523,6 +1715,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                 None => Vec::new(),
             })
         });
+        let pacing = video_pacing(&config, images);
         let b = Browser {
             page,
             state: signal(PageState::default()),
@@ -1551,6 +1744,10 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             tab: signal(tab),
             waiting: signal(HashMap::new()),
             controls: signal(HashMap::new()),
+            videos: signal(HashMap::new()),
+            video_pixels: signal(HashMap::new()),
+            pacing: signal(Rc::new(RefCell::new(pacing))),
+            regions_sent: signal((Vec::new(), Vec::new())),
         };
         spawn_stream(move |stream| {
             let proxy = stream.proxy().clone();
@@ -1564,10 +1761,13 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         watch(
             move || b.viewport.get(),
             move |(columns, rows), _| {
-                b.send(Command::Resize(columns, rows.saturating_sub(2)));
+                b.send(Command::Resize(columns, rows.saturating_sub(CHROME_ROWS)));
             },
         );
         b.send(Command::Open(start.clone()));
+        // The tab hears which video regions the view shows, so only those
+        // get frames.
+        watch(move || regions_on_screen(b), move |_, _| send_regions(b));
         // Chrome's scroll follows ours, so the page's lazy loading and
         // infinite feeds see the reader scroll.
         watch(
@@ -1575,72 +1775,8 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             move |row, cx| follow_scroll(b, row, cx),
         );
 
-        let address = text(move || {
-            let state = b.state.get();
-            let back = if state.can_go_back {
-                "◀"
-            } else {
-                "[dim]◀[/]"
-            };
-            let forward = if state.can_go_forward {
-                "▶"
-            } else {
-                "[dim]▶[/]"
-            };
-            let loading = if state.loading { " [yellow]…[/]" } else { "" };
-            let (title, url) = b.page.with(|p| {
-                p.as_ref()
-                    .map(|p| (p.title.clone(), p.url.clone()))
-                    .unwrap_or_default()
-            });
-            let view = b.view.get().name();
-            format!(
-                "{back}{forward}{loading} [bold]{}[/] [dim]{}[/] [cyan]{view}[/]",
-                markup(&truncate(&title, 60)),
-                markup(&truncate(&url, 120))
-            )
-        })
-        .no_wrap()
-        .fixed(1)
-        .name("address");
-        let keys_for = move |id: &str| b.keymap.with(|k| keys_label(k, id));
-        let status = text(move || {
-            if let Some(hints) = b.hints.get() {
-                return format!(
-                    "[bold black on yellow] hints [/] type a label: {}  [dim]Esc cancels[/]",
-                    markup(&hints.typed)
-                );
-            }
-            let message = b.message.get();
-            if !message.is_empty() {
-                return message;
-            }
-            if let Some(find) = b.find.get() {
-                return format!(
-                    "find: {}  [dim]{} next · {} previous[/]",
-                    markup(&find),
-                    markup(&keys_for("find.next")),
-                    markup(&keys_for("find.previous"))
-                );
-            }
-            // A page with more than the model reads says so.
-            let cut = if b.page.with(|p| p.as_ref().is_some_and(|p| p.truncated)) {
-                "[yellow]page cut: too long to read whole[/] · "
-            } else {
-                ""
-            };
-            format!(
-                "{cut}[dim]{} actions · {} hints · {} open · {} reader · {} quit[/]",
-                markup(&keys_for("actions")),
-                markup(&keys_for("hints")),
-                markup(&keys_for("open")),
-                markup(&keys_for("reader")),
-                markup(&keys_for("quit"))
-            )
-        })
-        .no_wrap()
-        .fixed(1)
-        .name("status");
+        let address = crate::bars::header(b);
+        let status = crate::bars::status(b);
         let body = switch(
             move || b.view.get(),
             move |view| match view {

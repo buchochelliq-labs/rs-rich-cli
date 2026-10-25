@@ -263,6 +263,10 @@ pub trait Engine: Send {
     fn can_play(&mut self, _tab: TabId, types: &[&str]) -> io::Result<Vec<String>> {
         Ok(vec![String::new(); types.len()])
     }
+    /// The browser's name and version, for the about page.
+    fn product(&mut self, _tab: TabId) -> String {
+        "unknown".into()
+    }
     /// What happened since the last call.
     fn events(&mut self) -> Vec<EngineEvent>;
 }

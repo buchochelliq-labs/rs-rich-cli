@@ -176,7 +176,7 @@ fn the_row_in_view_keeps_its_place_when_the_page_grows_above_it() {
     for _ in 0..200 {
         if screen(&driver)
             .lines()
-            .nth(1)
+            .nth(2)
             .is_some_and(|l| l.contains("Post 20"))
         {
             break;
@@ -184,7 +184,7 @@ fn the_row_in_view_keeps_its_place_when_the_page_grows_above_it() {
         driver.press("j");
     }
     assert!(
-        screen(&driver).lines().nth(1).unwrap().contains("Post 20"),
+        screen(&driver).lines().nth(2).unwrap().contains("Post 20"),
         "{}",
         screen(&driver)
     );
@@ -200,7 +200,7 @@ fn the_row_in_view_keeps_its_place_when_the_page_grows_above_it() {
     wait_until(&mut driver, "the grown feed", |s| s.contains("Feed grown"));
     let first = screen(&driver)
         .lines()
-        .nth(1)
+        .nth(2)
         .unwrap_or_default()
         .to_string();
     assert!(first.contains("Post 20"), "{}", screen(&driver));

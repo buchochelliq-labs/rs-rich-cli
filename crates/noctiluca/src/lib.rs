@@ -15,9 +15,11 @@
 //! Everything the page says is untrusted: control characters are stripped
 //! ([`clean`]) before any of it reaches the terminal.
 
+pub mod about;
 pub mod actions;
 pub mod app;
 pub mod args;
+pub mod bars;
 pub mod bookmarks;
 pub mod cdp;
 pub mod clean;
@@ -30,6 +32,7 @@ pub mod model;
 pub mod tab;
 pub mod testing;
 pub mod url;
+pub mod video;
 pub mod widgets;
 
 pub use clean::clean;
