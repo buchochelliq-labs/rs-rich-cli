@@ -576,6 +576,31 @@ impl Style {
     ///
     /// [`Theme::get_style`]: crate::theme::Theme::get_style
     pub fn normalize(definition: &str) -> String {
+        // Upstream memoises this with `@lru_cache(maxsize=1024)`; markup
+        // normalises every tag it opens or closes, so the cache keeps a
+        // frame of markup from parsing the same few names again
+        // (docs/PORTING.md, "Performance notes").
+        thread_local! {
+            static CACHE: std::cell::RefCell<std::collections::HashMap<String, String>> =
+                std::cell::RefCell::new(std::collections::HashMap::new());
+        }
+        if let Some(hit) = CACHE.with(|cache| cache.borrow().get(definition).cloned()) {
+            return hit;
+        }
+        let normalized = Style::normalize_uncached(definition);
+        CACHE.with(|cache| {
+            let mut cache = cache.borrow_mut();
+            if cache.len() >= 1024 {
+                cache.clear();
+            }
+            cache.insert(definition.to_string(), normalized.clone());
+        });
+        normalized
+    }
+
+    /// [`normalize`](Self::normalize) without the cache: the port of the
+    /// function upstream's cache wraps.
+    fn normalize_uncached(definition: &str) -> String {
         match Style::parse(definition) {
             Ok(style) => style.definition(),
             Err(_) => definition.trim().to_lowercase(),
@@ -874,6 +899,32 @@ impl StyleStack {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The cached `normalize` answers what the uncached one does, on a miss
+    /// and on a hit, for definitions that parse and ones that do not.
+    #[test]
+    fn normalize_cache_is_transparent() {
+        let definitions = [
+            "b", "BOLD", " bold red on blue ", "repr.number", "Repr.Number ", "not bold",
+            "not BOLD", "link https://x.io", "#ff0000", "rgb(1,2,3)", "", "none", "bold none",
+            "on", "color(300)", "@click", "b i u", "u2",
+        ];
+        for _ in 0..2 {
+            for definition in definitions {
+                assert_eq!(
+                    Style::normalize(definition),
+                    Style::normalize_uncached(definition),
+                    "{definition:?}"
+                );
+            }
+        }
+        // Past the cache's size it starts again, still answering the same.
+        for n in 0..1100 {
+            let definition = format!("tag{n}");
+            assert_eq!(Style::normalize(&definition), definition);
+        }
+        assert_eq!(Style::normalize("B"), "bold");
+    }
 
     /// Expectations captured from real rich 15.0.0.
     #[test]
