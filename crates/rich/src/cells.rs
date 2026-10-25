@@ -303,6 +303,7 @@ fn char_boundary(text: &str, index: usize) -> usize {
 /// disagree on 348 code points (spacing marks, format characters, modifier
 /// symbols), and every disagreement misaligns a table, panel or wrap point.
 /// Port of `cells.get_character_cell_size`.
+#[inline]
 pub fn char_cell_width(c: char) -> usize {
     if let Some(width) = common_width(c) {
         return width;

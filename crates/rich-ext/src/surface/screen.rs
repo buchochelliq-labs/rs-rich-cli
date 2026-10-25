@@ -983,18 +983,13 @@ impl Screen {
     }
 }
 
-/// The cells `c` takes, as rich measures it, with the characters pictures
-/// and most text are made of answered without a table lookup: ASCII,
-/// Latin letters, box drawing, blocks and Braille (one cell), CJK ideographs
-/// and Hangul syllables (two), the same in every Unicode version rich's
-/// tables cover (a test checks them against rich).
+/// The cells `c` takes, as rich measures it. rich answers the characters
+/// pictures and most text are made of (ASCII, Latin letters, box drawing,
+/// blocks, Braille, CJK ideographs, Hangul) without its table search, the
+/// same in every Unicode version its tables cover.
 #[inline]
 pub(crate) fn char_width(c: char) -> usize {
-    match c {
-        ' '..='~' | '\u{c0}'..='\u{24f}' | '\u{2500}'..='\u{259f}' | '\u{2800}'..='\u{28ff}' => 1,
-        '\u{4e00}'..='\u{9fff}' | '\u{ac00}'..='\u{d7a3}' => 2,
-        _ => rich::cells::char_cell_width(c),
-    }
+    rich::cells::char_cell_width(c)
 }
 
 /// One cell wide: `ch`, or a space for a wide or zero-width character, or
@@ -2724,23 +2719,6 @@ mod tests {
         screen.put_rgb(5, 0, 'z', None, None);
         screen.put(0, 1, 'z', StyleId::NONE);
         assert_eq!(screen.plain(), ["  ␛ x"]);
-    }
-
-    #[test]
-    fn the_quick_widths_are_rich_widths() {
-        let ranges = [
-            (' ', '~'),
-            ('\u{c0}', '\u{24f}'),
-            ('\u{2500}', '\u{259f}'),
-            ('\u{2800}', '\u{28ff}'),
-            ('\u{4e00}', '\u{9fff}'),
-            ('\u{ac00}', '\u{d7a3}'),
-        ];
-        for (first, last) in ranges {
-            for c in first..=last {
-                assert_eq!(char_width(c), rich::cells::char_cell_width(c), "{c:?}");
-            }
-        }
     }
 
     #[test]
