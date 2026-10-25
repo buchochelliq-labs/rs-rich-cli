@@ -18,6 +18,9 @@ const COLUMNS: u16 = 100;
 const ROWS: u16 = 50;
 
 struct Run {
+    /// The run's own temporary directory (`TMPDIR`), where a browser's
+    /// temporary profile goes.
+    tmp: std::path::PathBuf,
     output: Arc<Mutex<Vec<u8>>>,
     writer: Box<dyn Write + Send>,
     child: Box<dyn portable_pty::Child + Send + Sync>,
@@ -47,6 +50,12 @@ impl Run {
         command.env("XDG_CONFIG_HOME", home.join("config"));
         command.env("XDG_DATA_HOME", home.join("data"));
         command.env("TERM", term);
+        static RUNS: std::sync::atomic::AtomicUsize = std::sync::atomic::AtomicUsize::new(0);
+        let n = RUNS.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        let tmp = home.join(format!("tmp-{n}"));
+        let _ = std::fs::remove_dir_all(&tmp);
+        std::fs::create_dir_all(&tmp).unwrap();
+        command.env("TMPDIR", &tmp);
         match chrome {
             Some(chrome) => command.env("RICH_EMBED_CHROME", chrome),
             None => command.env(
@@ -72,6 +81,7 @@ impl Run {
         // The master must outlive the child.
         std::mem::forget(pty.master);
         Run {
+            tmp,
             output,
             writer,
             child,
@@ -218,4 +228,65 @@ fn it_reads_a_page_through_chrome_and_follows_a_hint() {
     run.wait_for("Tiny drifters");
     let (_, terminal) = run.quit();
     assert!(!terminal.screen().alternate_screen());
+}
+
+/// The temporary profiles a run's browser left in its `TMPDIR`.
+fn profiles_left(tmp: &Path) -> Vec<String> {
+    std::fs::read_dir(tmp)
+        .map(|dir| {
+            dir.filter_map(Result::ok)
+                .map(|e| e.file_name().to_string_lossy().to_string())
+                .filter(|name| name.starts_with("rich-embed-chrome-"))
+                .collect()
+        })
+        .unwrap_or_default()
+}
+
+/// Quitting, and SIGTERM, end the browser and remove its temporary
+/// profile, through a real Chrome when `RICH_EMBED_CHROME` names one.
+#[test]
+fn no_temporary_profile_is_left_after_quitting_or_sigterm() {
+    let Some(chrome) = std::env::var_os("RICH_EMBED_CHROME") else {
+        eprintln!("skipped: set RICH_EMBED_CHROME to a Chrome or Chromium binary to run");
+        return;
+    };
+    let page = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/second.html");
+    let page = page.to_str().unwrap();
+    let wait_gone = |tmp: &Path, how: &str| {
+        let start = Instant::now();
+        while !profiles_left(tmp).is_empty() {
+            assert!(
+                start.elapsed() < Duration::from_secs(10),
+                "{how} left {:?}",
+                profiles_left(tmp)
+            );
+            std::thread::sleep(Duration::from_millis(50));
+        }
+    };
+
+    let run = Run::start_with(&["--reader", page], "xterm-256color", Some(&chrome));
+    run.wait_for("You followed the link");
+    assert_eq!(profiles_left(&run.tmp).len(), 1, "no profile while it ran");
+    let tmp = run.tmp.clone();
+    run.quit();
+    wait_gone(&tmp, "quitting");
+
+    let mut run = Run::start_with(&["--reader", page], "xterm-256color", Some(&chrome));
+    run.wait_for("You followed the link");
+    assert_eq!(profiles_left(&run.tmp).len(), 1, "no profile while it ran");
+    let pid = run.child.process_id().expect("a pid");
+    let status = std::process::Command::new("kill")
+        .args(["-TERM", &pid.to_string()])
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let start = Instant::now();
+    while run.child.try_wait().unwrap().is_none() {
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "SIGTERM did not end it"
+        );
+        std::thread::sleep(Duration::from_millis(20));
+    }
+    wait_gone(&run.tmp, "SIGTERM");
 }

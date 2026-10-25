@@ -13,9 +13,42 @@ use noctiluca::config::{data_dir, Config, View};
 use noctiluca::engine::Engine;
 use noctiluca::file_url;
 
+/// How long the way out waits for the tabs to stop their browsers.
+const STOP: Duration = Duration::from_secs(5);
+
 fn main() -> ExitCode {
+    // Every way out stops the tabs, so each browser stops and its
+    // temporary profile is removed: the end of `main` below, a panic, and
+    // SIGTERM, SIGHUP or SIGQUIT (which end the process without
+    // unwinding). Ctrl+C is a key in the app, and quits it.
+    let panic = std::panic::take_hook();
+    std::panic::set_hook(Box::new(move |info| {
+        panic(info);
+        stop_browsers();
+    }));
+    rich_intuituive::interact::session::on_terminate(stop_browsers);
     let args: Vec<String> = std::env::args().skip(1).collect();
-    let result = match parse_args(&args) {
+    let result = run(&args);
+    stop_browsers();
+    match result {
+        Ok(code) => code,
+        Err(error) => {
+            eprintln!("noctiluca: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+/// Stop each tab, which drops its engine (its browser stops, its temporary
+/// profile goes), then end any browser still running: the raster view's,
+/// or a tab's that did not stop in time.
+fn stop_browsers() {
+    noctiluca::tab::stop_all(STOP);
+    rich_embed::ChromeEngine::end_all();
+}
+
+fn run(args: &[String]) -> std::io::Result<ExitCode> {
+    let result = match parse_args(args) {
         Ok(Run::Help) => {
             println!("{USAGE}");
             Ok(())
@@ -28,16 +61,10 @@ fn main() -> ExitCode {
         Ok(Run::Browse(args)) => browse(args),
         Err(error) => {
             eprintln!("noctiluca: {error}\n\n{USAGE}");
-            return ExitCode::from(2);
+            return Ok(ExitCode::from(2));
         }
     };
-    match result {
-        Ok(()) => ExitCode::SUCCESS,
-        Err(error) => {
-            eprintln!("noctiluca: {error}");
-            ExitCode::FAILURE
-        }
-    }
+    result.map(|()| ExitCode::SUCCESS)
 }
 
 /// `noctiluca keys`: every action's keys, and a site's own.

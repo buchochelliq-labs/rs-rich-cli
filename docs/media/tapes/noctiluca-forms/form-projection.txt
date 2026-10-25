@@ -1,0 +1,30 @@
+◀▶ Form fixture https://fixture.example/form.html projection
+
+ Sign up
+
+
+      Name [Ada_]                  Secret [••••••••]
+                                                            [ ] Send news
+   Size
+    ( )     (•) Large
+    Small
+       Mirror ‹First mirror ▾› Volume ◀ 50 ▶   [ Send [ Unavailable ]
+                                               ]
+ [ Schedule remote update ]
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+projection view

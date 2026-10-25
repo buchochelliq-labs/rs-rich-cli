@@ -38,7 +38,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 use std::{fmt, io};
@@ -366,6 +366,28 @@ impl ChromeEngine {
         self
     }
 
+    /// End every browser an engine started and has not ended, and remove
+    /// each one's temporary profile, as dropping each engine would. A kept
+    /// profile stays. For the way out of a process whose engines live on
+    /// where no `Drop` reaches them (in state that lasts until the process
+    /// exits, on a thread still running, or past a signal): call it last.
+    /// An engine used after it has no browser, and starts no other.
+    pub fn end_all() {
+        let all = std::mem::take(&mut *RUNNING.lock().unwrap_or_else(PoisonError::into_inner));
+        for running in all {
+            if let Some(shared) = running.shared.upgrade() {
+                let child = lock(&shared).child.take();
+                if let Some(mut child) = child {
+                    let _ = child.kill();
+                    let _ = child.wait();
+                }
+            }
+            if let Some(profile) = running.profile {
+                let _ = std::fs::remove_dir_all(profile);
+            }
+        }
+    }
+
     /// The first browser on `PATH` by [`BINARY_NAMES`], or in a usual
     /// install location.
     pub fn find() -> Option<PathBuf> {
@@ -459,6 +481,13 @@ impl ChromeEngine {
             }
         };
         self.profile = Some(profile.clone());
+        RUNNING
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(Running {
+                shared: Arc::downgrade(&self.shared),
+                profile: self.kept_profile.is_none().then(|| profile.clone()),
+            });
         let stderr = child.stderr.take().expect("piped stderr");
         lock(&self.shared).child = Some(child);
         let (sender, receiver) = mpsc::channel();
@@ -496,8 +525,23 @@ impl ChromeEngine {
     }
 }
 
+/// A browser an engine started, for [`ChromeEngine::end_all`]: its
+/// process (in the engine's shared state) and its temporary profile.
+struct Running {
+    shared: Weak<Mutex<Shared>>,
+    profile: Option<PathBuf>,
+}
+
+/// Every browser started and not yet ended by its engine's `Drop`.
+static RUNNING: Mutex<Vec<Running>> = Mutex::new(Vec::new());
+
 impl Drop for ChromeEngine {
     fn drop(&mut self) {
+        // This engine ends its own browser here.
+        RUNNING
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .retain(|running| !std::ptr::eq(running.shared.as_ptr(), Arc::as_ptr(&self.shared)));
         // Closing the channel ends the thread's loop; the browser goes now.
         self.commands = None;
         self.calls = None;

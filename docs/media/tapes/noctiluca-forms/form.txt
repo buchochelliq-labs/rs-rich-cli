@@ -1,0 +1,30 @@
+◀▶ Form fixture https://fixture.example/form.html reader
+Sign up
+Name Ada
+Secret
+[ ] Send news
+
+Size
+( ) Small
+(•) Large
+Mirror First mirror                                                                                ▾
+Volume ━━━━━━━━━━━━●───────────50
+ Send
+ Unavailable
+ Schedule remote update
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+f1 actions · f hints · o open · r reader · q quit

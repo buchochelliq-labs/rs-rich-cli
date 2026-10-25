@@ -1,0 +1,15 @@
+{
+  "tape": "docs/tapes/noctiluca-reading.tape",
+  "tape_fnv1a64": "fc6089498f394e4d",
+  "recorder": "rs-rich-record 0.0.10",
+  "rich": null,
+  "commit": "e22eb6c6b7f36e944db485e0ee08aae1761f8c32",
+  "screenshots": [
+    "two-columns",
+    "article-projection",
+    "article-reader",
+    "find",
+    "audio"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

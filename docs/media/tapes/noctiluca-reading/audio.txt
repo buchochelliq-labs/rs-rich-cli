@@ -1,0 +1,30 @@
+◀▶ Audio fixture https://fixture.example/audio.html reader
+A test tone
+
+audio: Test tone
+ Play   Mute  Volume ━━━━━━━━━━━━━━━●not ready  sound is off: start with --audio
+
+Sound plays on the machine Chrome runs on.
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+opening https://fixture.example/audio.html

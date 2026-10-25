@@ -15,8 +15,9 @@
 //!   after their page is published, so text never waits for pictures.
 
 use std::collections::HashMap;
+use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::sync::Arc;
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -142,12 +143,55 @@ pub struct Tab {
     next: Arc<std::sync::atomic::AtomicU64>,
 }
 
+/// A tab's thread, as [`stop_all`] stops it: a flag it reads, and a
+/// channel that closes when the thread has ended and its engine is gone.
+struct Running {
+    stop: Arc<AtomicBool>,
+    ended: Receiver<()>,
+}
+
+/// Every tab spawned and not yet stopped.
+static RUNNING: Mutex<Vec<Running>> = Mutex::new(Vec::new());
+
+/// Stop every tab's thread and wait, up to `timeout` in all, until each
+/// has ended. Ending drops its engine: a browser it started stops, and its
+/// temporary profile is removed. The thread does not wait for its owner to
+/// let go of the [`Tab`], since an app's state may live until the process
+/// exits, when no thread's `Drop` runs. Call it before the process exits,
+/// on every way out.
+pub fn stop_all(timeout: Duration) {
+    let all = std::mem::take(&mut *RUNNING.lock().unwrap_or_else(|e| e.into_inner()));
+    for running in &all {
+        running.stop.store(true, Ordering::SeqCst);
+    }
+    let deadline = Instant::now() + timeout;
+    for running in all {
+        let left = deadline.saturating_duration_since(Instant::now());
+        // A message never comes: the channel closes when the thread ends.
+        let _ = running.ended.recv_timeout(left);
+    }
+}
+
 impl Tab {
     /// Run `engine` on a thread of its own. `update` is called on that
-    /// thread with each [`Update`].
+    /// thread with each [`Update`]. The thread ends, dropping the engine,
+    /// when every [`Tab`] is dropped or [`stop_all`] is called.
     pub fn spawn(engine: Box<dyn Engine>, update: impl Fn(Update) + Send + 'static) -> Tab {
         let (commands, receive) = mpsc::channel();
-        thread::spawn(move || run(engine, receive, &update));
+        let stop = Arc::new(AtomicBool::new(false));
+        let (ended, done) = mpsc::channel::<()>();
+        RUNNING
+            .lock()
+            .unwrap_or_else(|e| e.into_inner())
+            .push(Running {
+                stop: stop.clone(),
+                ended: done,
+            });
+        thread::spawn(move || {
+            // Dropped last, after the engine, even when the thread panics.
+            let _ended = ended;
+            run(engine, receive, &stop, &update);
+        });
         Tab {
             commands,
             next: Arc::default(),
@@ -430,7 +474,12 @@ fn still_key(node: NodeId, src: &str, rect: Rect) -> (NodeId, String, u64, u64) 
     )
 }
 
-fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn Fn(Update)) {
+fn run(
+    engine: Box<dyn Engine>,
+    commands: Receiver<(u64, Command)>,
+    stop: &AtomicBool,
+    update: &dyn Fn(Update),
+) {
     let mut worker = Worker {
         engine,
         update,
@@ -444,6 +493,9 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
     let mut read_now = true;
     let mut probed = Instant::now();
     loop {
+        if stop.load(Ordering::SeqCst) {
+            return;
+        }
         match commands.recv_timeout(TICK) {
             Ok((id, command)) => {
                 let acts = matches!(

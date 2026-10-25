@@ -758,6 +758,16 @@ runs no browser. See [the design note](design/browser.md).
 
 [Tape](tapes/noctiluca.tape) · [Cast](media/tapes/noctiluca/noctiluca.cast) · [GIF](media/tapes/noctiluca/noctiluca.gif) · [Page](media/tapes/noctiluca/noctiluca.html)
 
+Three more tapes over the same saved pages show
+[forms and controls](tapes/noctiluca-forms.tape),
+[reading, find and media](tapes/noctiluca-reading.tape), and
+[keywords and site keys](tapes/noctiluca-keys.tape). One more,
+[`tapes/live/noctiluca-chrome.tape`](tapes/live/noctiluca-chrome.tape),
+runs a real Chrome on the crate's test pages, served from `127.0.0.1`. The
+tape job runs no browser, so that one is recorded by hand and not checked;
+its header says how. All of them are on
+[Noctiluca's guide pages](guide/noctiluca.md).
+
 ## Charts from data
 
 `rich chart` draws CSV, JSON or numbers piped in: bars labelled by a
