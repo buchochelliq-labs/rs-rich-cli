@@ -364,7 +364,10 @@ pub fn availability(b: Browser, id: &str) -> Result<(), String> {
                 Err("No video or audio on this page.".into())
             }
         }
-        "log.older" | "log.newer" if b.page.with(|p| p.as_ref().is_none_or(|p| p.logs.is_empty())) => {
+        "log.older" | "log.newer"
+            if b.page
+                .with(|p| p.as_ref().is_none_or(|p| p.logs.is_empty())) =>
+        {
             Err("No live log on this page.".into())
         }
         "bookmark" | "reload" | "address" | "site.bind" | "site.keys" if !has_page => {
@@ -503,7 +506,9 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
             let by = if id == "log.older" { -step } else { step };
             let next = b.page.with_untracked(|p| {
                 let log = p.as_ref()?.logs.iter().find(|l| l.node == node)?;
-                let now = b.logs.with_untracked(|l| l.get(&node).copied().unwrap_or_default());
+                let now = b
+                    .logs
+                    .with_untracked(|l| l.get(&node).copied().unwrap_or_default());
                 Some(scroll_log(log, now, by))
             });
             if let Some(next) = next {

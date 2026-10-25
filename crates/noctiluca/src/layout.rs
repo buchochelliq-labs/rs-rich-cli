@@ -94,11 +94,7 @@ pub fn scroll_log(log: &Log, state: LogScroll, by: isize) -> LogScroll {
     };
     let at = match state {
         LogScroll::Follow => last,
-        LogScroll::Paused(key) => log
-            .entries
-            .iter()
-            .position(|e| e.key == key)
-            .unwrap_or(0),
+        LogScroll::Paused(key) => log.entries.iter().position(|e| e.key == key).unwrap_or(0),
     };
     let to = (at as isize + by).clamp(0, last as isize) as usize;
     if to == last {
@@ -118,12 +114,7 @@ pub fn log_lines(log: &Log, width: usize, rows: usize, page: &Page, marks: &Mark
     let mut starts = Vec::with_capacity(log.entries.len());
     for entry in &log.entries {
         starts.push(lines.len());
-        lines.extend(wrap(
-            &spans(&entry.runs, "", page, marks),
-            width,
-            &[],
-            &[],
-        ));
+        lines.extend(wrap(&spans(&entry.runs, "", page, marks), width, &[], &[]));
     }
     let line_of = |key: u64| log.entries.iter().position(|e| e.key == key);
     let (start, end) = if marks.adapt.on(Rule::LiveTail) {
@@ -136,10 +127,7 @@ pub fn log_lines(log: &Log, width: usize, rows: usize, page: &Page, marks: &Mark
         };
         (end.saturating_sub(rows), end)
     } else {
-        let start = log
-            .first_shown
-            .and_then(line_of)
-            .map_or(0, |n| starts[n]);
+        let start = log.first_shown.and_then(line_of).map_or(0, |n| starts[n]);
         (start, (start + rows).min(lines.len()))
     };
     let mut out: Vec<Line> = lines[start..end].to_vec();
@@ -854,9 +842,14 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                 && r.rect.height > 1.5 * ch
         })
         .collect();
-    // Boxes that shrank: (item, its height before, in CSS pixels), whose
-    // saved rows move what is under them up.
-    let mut shrunk: Vec<(usize, f64)> = Vec::new();
+    // Boxes that shrank: (item, its height before in CSS pixels, its
+    // columns before), whose saved rows move what is under them up.
+    let mut shrunk: Vec<(usize, f64, usize, usize)> = Vec::new();
+    // Columns freed by a collapsed sidebar: (top, bottom, first, end), for
+    // the boxes beside it to move into.
+    let mut freed: Vec<(f64, f64, usize, usize)> = Vec::new();
+    // Controls: one row each, cut rather than wrapped.
+    let mut one_row: Vec<usize> = Vec::new();
     for (r, region) in page.regions.iter().enumerate() {
         if !collapsed[r] {
             continue;
@@ -899,7 +892,14 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                 }
             }
         }
-        let (x0, x1) = snap(region.rect.x, region.rect.right());
+        let (x0, mut x1) = snap(region.rect.x, region.rect.right());
+        // A sidebar (taller than a few rows) gives its columns to what is
+        // beside it, and its row spans the page.
+        let side = region.rect.height > 3.0 * ch;
+        if side {
+            freed.push((region.rect.y, region.rect.bottom(), x0, x1));
+            x1 = columns;
+        }
         let mut line = wrap(&row, x1 - x0, &[], &[]).swap_remove(0);
         if row.len() > line.spans.len() {
             line.spans.push(Span::new(" …", "dim"));
@@ -918,7 +918,9 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             log: None,
             media: None,
         });
-        shrunk.push((items.len() - 1, region.rect.height));
+        if !side {
+            shrunk.push((items.len() - 1, region.rect.height, x0, x1));
+        }
     }
     for block in &page.blocks {
         if block.region.is_some_and(|r| collapsed[r]) {
@@ -996,7 +998,8 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     vec![Span::new(media.alt.clone(), "bold")],
                     Vec::new(),
                 ));
-                shrunk.push((items.len() - 1, media.rect.height));
+                let (t0, t1) = snap(media.rect.x, media.rect.right());
+                shrunk.push((items.len() - 1, media.rect.height, t0, t1));
             }
             BlockKind::Media(index) => {
                 let media = &page.media[*index];
@@ -1044,7 +1047,8 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     media: Some((*index, rows)),
                 });
                 if rows < full {
-                    shrunk.push((items.len() - 1, media.rect.height));
+                    let (o0, o1) = snap(media.rect.x, media.rect.right());
+                    shrunk.push((items.len() - 1, media.rect.height, o0, o1));
                 }
             }
             BlockKind::Control(index) => {
@@ -1064,6 +1068,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     style: style.into(),
                     control: Some(*index),
                 };
+                one_row.push(items.len());
                 items.push(text_item(
                     control.node,
                     control.rect,
@@ -1117,29 +1122,85 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             }
         }
     }
+    // A grid snaps first, on Chrome's own places.
+    if adapt.on(Rule::SnapGrids) {
+        for grid in &page.grids {
+            snap_grid(grid, &mut items, columns, ch, &snap, |item| {
+                (
+                    &mut item.top,
+                    &mut item.bottom,
+                    &mut item.x0,
+                    &mut item.x1,
+                    item.left,
+                )
+            });
+        }
+    }
     // What shrank moves what is under it, in its columns, up by the rows
     // it saved; top to bottom, so the moves add up.
     shrunk.sort_by(|a, b| items[a.0].top.total_cmp(&items[b.0].top));
-    for (at, before) in shrunk {
-        let (top, x0, x1) = (items[at].top, items[at].x0, items[at].x1);
+    for (at, before, x0, x1) in shrunk {
+        let top = items[at].top;
         let rows = |px: f64| (px / ch).round();
         let saved = (rows(before) - rows(items[at].bottom - top)).max(0.0) * ch;
         if saved <= 0.0 {
             continue;
         }
         let from = top + before - 0.5;
+        // Its band: its columns, widened by the boxes that start just
+        // under it (the rest of its column, which is wider than it).
+        let (mut b0, mut b1) = (x0, x1);
+        for item in items.iter() {
+            if (item.top - (from + 0.5)).abs() < 2.0 * ch && item.x0 < x1 && x0 < item.x1 {
+                b0 = b0.min(item.x0);
+                b1 = b1.max(item.x1);
+            }
+        }
         for (n, item) in items.iter_mut().enumerate() {
-            if n != at && item.top >= from && item.x0 < x1 && x0 < item.x1 {
+            if n != at && item.top >= from && item.x0 < b1 && b0 < item.x1 {
                 item.top -= saved;
                 item.bottom -= saved;
             }
         }
     }
-    if adapt.on(Rule::SnapGrids) {
-        for grid in &page.grids {
-            snap_grid(grid, &mut items, columns, ch, &snap, |item| {
-                (&mut item.top, &mut item.bottom, &mut item.x0, &mut item.x1, item.left)
+    // What is beside a collapsed sidebar moves into its columns.
+    for (top, bottom, f0, f1) in freed {
+        let width = f1 - f0;
+        for item in items.iter_mut() {
+            if item.x0 >= f1 && item.top < bottom - 0.5 && item.bottom > top + 0.5 {
+                item.x0 -= width;
+                item.x1 -= width;
+            }
+        }
+    }
+    // A control whose face needs more cells than its box pushes the
+    // controls after it on its row to the right.
+    let mut rows_of: HashMap<i64, Vec<usize>> = HashMap::new();
+    for &n in &one_row {
+        rows_of
+            .entry((items[n].top / ch).round() as i64)
+            .or_default()
+            .push(n);
+    }
+    for (_, mut row) in rows_of {
+        row.sort_by_key(|&n| items[n].x0);
+        let mut push = 0;
+        for n in row {
+            let item = &mut items[n];
+            item.x0 = (item.x0 + push).min(columns - 1);
+            item.x1 = (item.x1 + push).clamp(item.x0 + 1, columns);
+            let need = item.wrap.as_ref().map_or(0, |(spans, first)| {
+                first
+                    .iter()
+                    .chain(spans.iter())
+                    .map(|s| cell_len(&s.text))
+                    .sum::<usize>()
             });
+            if item.x0 + need > item.x1 {
+                let grown = (item.x0 + need).min(columns);
+                push += grown - item.x1;
+                item.x1 = grown;
+            }
         }
     }
     // Terminal glyphs are not Chrome's: a box whose text needs more cells
@@ -1172,6 +1233,28 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             item.x1 = needed.min(limit).max(item.x1);
         }
         item.lines = wrap(spans, item.x1 - item.x0, first, &[]);
+        if item.lines.len() > 1 && one_row.contains(&n) {
+            // A control's face is one row: cut, with an ellipsis.
+            let mut line = item.lines.swap_remove(0);
+            item.lines.clear();
+            if let Some(last) = line.spans.last_mut() {
+                last.text.push('…');
+            }
+            let width = item.x1 - item.x0;
+            while line.width() > width {
+                let Some(last) = line.spans.last_mut() else {
+                    break;
+                };
+                let mut chars: Vec<char> = last.text.chars().collect();
+                if chars.len() <= 1 {
+                    line.spans.pop();
+                    continue;
+                }
+                chars.remove(chars.len() - 2);
+                last.text = chars.into_iter().collect();
+            }
+            item.lines.push(line);
+        }
     }
     // Reading order: top, then left.
     items.sort_by(|a, b| {
@@ -1383,7 +1466,10 @@ fn snap_grid<T>(
     let cell = (width + 1) / fit - 1;
     let gap = match chrome_rows.as_slice() {
         [a, b, ..] => {
-            let bottom = a.iter().map(|&n| grid.items[n].bottom()).fold(0.0, f64::max);
+            let bottom = a
+                .iter()
+                .map(|&n| grid.items[n].bottom())
+                .fold(0.0, f64::max);
             (grid.items[b[0]].y - bottom).max(0.0)
         }
         _ => 0.0,
@@ -1404,7 +1490,10 @@ fn snap_grid<T>(
     for item in items.iter_mut() {
         let (item_top, item_bottom, x0, x1, left) = parts(item);
         let inside = grid.items.iter().position(|r| {
-            *item_top >= r.y - 0.5 && *item_top < r.bottom() && left >= r.x - 0.5 && left < r.right()
+            *item_top >= r.y - 0.5
+                && *item_top < r.bottom()
+                && left >= r.x - 0.5
+                && left < r.right()
         });
         if let Some(n) = inside {
             let (dy, n0, n1) = places[n];

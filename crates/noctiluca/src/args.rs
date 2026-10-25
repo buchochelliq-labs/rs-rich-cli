@@ -135,7 +135,10 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
                 crate::adapt::Adapt::default()
                     .apply(&value)
                     .map_err(|e| format!("--adapt: {e}"))?;
-                let list = parsed.adapt.take().map_or(value.clone(), |l| format!("{l},{value}"));
+                let list = parsed
+                    .adapt
+                    .take()
+                    .map_or(value.clone(), |l| format!("{l},{value}"));
                 parsed.adapt = Some(list);
             }
             "--profile" => {
@@ -189,6 +192,23 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
         return Err("--dump needs a page".into());
     }
     Ok(Run::Browse(parsed))
+}
+
+/// The adaptations `args` ask for, starting from `configured` (the
+/// config's): `--adapt`'s list applied, then `--no-adapt` switching all
+/// of them off.
+pub fn adapt_of(
+    args: &Args,
+    configured: crate::adapt::Adapt,
+) -> Result<crate::adapt::Adapt, String> {
+    let mut adapt = match &args.adapt {
+        Some(list) => configured.apply(list)?,
+        None => configured,
+    };
+    if args.no_adapt {
+        adapt = crate::adapt::Adapt::none();
+    }
+    Ok(adapt)
 }
 
 /// `--name=value` as the name and the value.

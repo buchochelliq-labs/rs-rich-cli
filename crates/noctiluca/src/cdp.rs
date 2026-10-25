@@ -745,7 +745,12 @@ impl Engine for ChromeBackend {
                 json!({"objectId": array, "ownProperties": true}),
             )?;
             let mut nodes = Vec::new();
-            for property in properties["result"].as_array().into_iter().flatten().take(64) {
+            for property in properties["result"]
+                .as_array()
+                .into_iter()
+                .flatten()
+                .take(64)
+            {
                 let Some(object) = property["value"]["objectId"].as_str() else {
                     continue;
                 };

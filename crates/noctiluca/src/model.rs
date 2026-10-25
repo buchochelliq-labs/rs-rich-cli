@@ -797,7 +797,9 @@ impl Dom {
             let theirs = elements(only);
             if theirs.is_empty()
                 || texty(only)
-                || theirs.iter().any(|&g| self.style(g, 0).starts_with("inline"))
+                || theirs
+                    .iter()
+                    .any(|&g| self.style(g, 0).starts_with("inline"))
             {
                 break;
             }
@@ -1198,7 +1200,10 @@ impl Walker<'_> {
         }
         let mut inner = context.clone();
         let role_attr = dom.attr(i, "role").unwrap_or_default().to_ascii_lowercase();
-        if dom.attr(i, "aria-hidden").is_some_and(|v| v.eq_ignore_ascii_case("true")) {
+        if dom
+            .attr(i, "aria-hidden")
+            .is_some_and(|v| v.eq_ignore_ascii_case("true"))
+        {
             inner.aria_hidden = true;
         }
         // Landmarks: the outermost navigation or complementary one.
@@ -1808,10 +1813,7 @@ pub fn live_runs(value: &Value, base: &str) -> Vec<Run> {
                     alt: alt.trim().to_string(),
                     width,
                     height,
-                    decorative: hidden
-                        || empty_alt
-                        || width < crate::adapt::DECORATIVE_PX
-                        || height < crate::adapt::DECORATIVE_PX,
+                    decorative: crate::adapt::is_decorative(width, height, hidden || empty_alt),
                 }),
                 ..Run::default()
             });
@@ -1819,10 +1821,14 @@ pub fn live_runs(value: &Value, base: &str) -> Vec<Run> {
             continue;
         }
         let text = part["t"].as_str().unwrap_or_default();
-        let text = if text == "\n" || text == "
-" {
+        let text = if text == "\n"
+            || text
+                == "
+"
+        {
             "
-".to_string()
+"
+            .to_string()
         } else {
             clean_inline(text)
         };

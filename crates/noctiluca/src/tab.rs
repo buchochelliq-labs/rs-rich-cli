@@ -34,7 +34,9 @@ use rich_embed::PageState;
 use crate::engine::{
     Engine, EngineEvent, Format, HistoryStep, MediaOp, Metrics, NodeId, PageAction, Rect, TabId,
 };
-use crate::model::{build_with, live_runs, Binding, Control, Entry, MediaKind, Page, Revisions, Role, Run};
+use crate::model::{
+    build_with, live_runs, Binding, Control, Entry, MediaKind, Page, Revisions, Role, Run,
+};
 use rich_intuituive::Picture;
 
 /// How long after the first change ping the page is read again.
@@ -324,9 +326,9 @@ impl Worker<'_> {
             };
             let cache = self.live.entry(log.node).or_default();
             let missing = |cache: &HashMap<u64, Vec<Run>>, read: &crate::engine::LiveRead| {
-                read.order.iter().any(|k| {
-                    !cache.contains_key(k) && !read.fresh.iter().any(|(f, _)| f == k)
-                })
+                read.order
+                    .iter()
+                    .any(|k| !cache.contains_key(k) && !read.fresh.iter().any(|(f, _)| f == k))
             };
             if missing(cache, &read) {
                 // Out of step (a new reading of ours, say): all of it again.

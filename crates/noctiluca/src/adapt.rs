@@ -19,8 +19,9 @@ use crate::model::Media;
 /// A terminal adaptation.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash, PartialOrd, Ord)]
 pub enum Rule {
-    /// An image with an empty `alt`, `aria-hidden`, or smaller than
-    /// [`DECORATIVE_PX`] a side is not a media region.
+    /// A spacer or tracking pixel (under [`DECORATIVE_PX`] a side), and an
+    /// icon-sized picture marked `alt=""`, `aria-hidden` or
+    /// `role=presentation`, is not a media region.
     DecorativeImages,
     /// An image at most two rows tall in a line of text stays in its line.
     InlinePictures,
@@ -70,7 +71,7 @@ pub const RULES: &[RuleInfo] = &[
     RuleInfo {
         rule: Rule::DecorativeImages,
         name: "decorative-images",
-        what: "drop decorative images: empty alt, aria-hidden, spacers",
+        what: "drop spacers, tracking pixels and icons marked decorative",
         default: true,
     },
     RuleInfo {
@@ -249,25 +250,38 @@ impl Adapt {
 /// An image smaller than this many CSS pixels a side is a spacer or a
 /// tracking pixel.
 pub const DECORATIVE_PX: f64 = 8.0;
+/// A marked picture at most this many CSS pixels tall (one terminal row)
+/// is an icon.
+pub const ICON_PX: f64 = 18.0;
 /// The most rows a picture takes when pictures are capped.
 pub const MAX_PICTURE_ROWS: usize = 14;
 /// Below this many columns a terminal is narrow: navigation collapses.
 pub const NARROW_COLUMNS: u16 = 100;
 /// A grid's column is at least this many cells wide when grids snap.
-pub const MIN_GRID_CELLS: usize = 18;
+pub const MIN_GRID_CELLS: usize = 16;
 /// A picture of text is a banner at least this many times wider than
 /// tall.
 pub const BANNER_RATIO: f64 = 4.0;
 
-/// Whether `media` is decorative: an image with an empty `alt`, hidden
-/// from assistive technology, or a spacer. Video, audio, canvases and
-/// frames never are.
+/// Whether `media` is decorative: a spacer or a tracking pixel (under
+/// [`DECORATIVE_PX`] a side), or an icon-sized picture (at most
+/// [`ICON_PX`] tall) marked `alt=""`, `aria-hidden` or
+/// `role=presentation`. An empty-alt picture of real size (a card's
+/// thumbnail, a comment's avatar, titled by the text beside it) is kept.
+/// Video, audio, canvases and frames never are.
 pub fn decorative(media: &Media) -> bool {
     media.kind == crate::model::MediaKind::Image
-        && (media.empty_alt
-            || media.aria_hidden
-            || media.rect.width < DECORATIVE_PX
-            || media.rect.height < DECORATIVE_PX)
+        && is_decorative(
+            media.rect.width,
+            media.rect.height,
+            media.empty_alt || media.aria_hidden,
+        )
+}
+
+/// [`decorative`] from a picture's size and whether it is marked
+/// decorative (`alt=""`, `aria-hidden`, `role=presentation`).
+pub fn is_decorative(width: f64, height: f64, marked: bool) -> bool {
+    width < DECORATIVE_PX || height < DECORATIVE_PX || (marked && height <= ICON_PX)
 }
 
 /// Whether `media` is a picture of text: an image with alt text that
@@ -321,7 +335,9 @@ mod tests {
             .unwrap();
         assert!(!adapt.on(Rule::DecorativeImages) && !adapt.on(Rule::CollapseNav));
         assert!(adapt.on(Rule::IconButtons));
-        let adapt = adapt.apply("+text-over-pictures decorative-images").unwrap();
+        let adapt = adapt
+            .apply("+text-over-pictures decorative-images")
+            .unwrap();
         assert!(adapt.on(Rule::TextOverPictures) && adapt.on(Rule::DecorativeImages));
         assert!(Adapt::default().apply("none").unwrap().is_none());
         assert!(Adapt::default().apply("-all").unwrap().is_none());
