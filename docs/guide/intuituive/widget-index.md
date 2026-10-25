@@ -74,6 +74,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/tree_lazy.svg){ .tui-icon width="20" } | [tree_lazy](lists.md#trees-split-panes-and-virtual-lists) | `tree_lazy` | A tree whose children load when opened |
 | ![](../../assets/intuituive/widgets/table.svg){ .tui-icon width="20" } | [table](tables.md#tables-tabs-and-scrolling) | `table`, `table_with` | Rows and columns with a header, sorting and a cell cursor |
 | ![](../../assets/intuituive/widgets/virtual_table.svg){ .tui-icon width="20" } | [virtual_table](tables.md#tables-tabs-and-scrolling) | `virtual_table` | A table that draws only the rows on screen |
+| ![](../../assets/intuituive/widgets/table.svg){ .tui-icon width="20" } | [tree table](tables.md#rows-that-nest) | `tree_table`, `tree_table_rows` | A table whose rows nest, opened and closed by key |
 | ![](../../assets/intuituive/widgets/source_table.svg){ .tui-icon width="20" } | [source_table](tables.md#rows-from-a-source) | `source_table`, `view_of` | A table whose rows come from a source |
 | ![](../../assets/intuituive/widgets/cells.svg){ .tui-icon width="20" } | [cells](widgets.md#bars-for-an-apps-chrome) | `cells` | One row of fixed-width cells |
 | ![](../../assets/intuituive/widgets/scrollbar.svg){ .tui-icon width="20" } | [scrollbar](tables.md#scrollbars) | `scrollbar`, `.scrollbar()` | A scrollbar beside any scrolled node |

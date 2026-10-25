@@ -104,6 +104,9 @@ pub(crate) type BindingCondition = Rc<dyn Fn() -> bool>;
 /// [`BindingCondition`] is.
 pub(crate) type BindingReason = Rc<dyn Fn() -> Option<String>>;
 
+/// What shows a hidden focus scope ([`Node::focus_scope_reveal`]).
+pub(crate) type Reveal = Rc<dyn Fn(&mut Ctx)>;
+
 impl KeyBinding {
     pub(crate) fn new(keys: Vec<Key>, description: &str, handler: KeyHandler) -> KeyBinding {
         KeyBinding {
@@ -226,7 +229,7 @@ pub struct Node {
     scope_last: Cell<Option<NodeId>>,
     /// Shows it when scope cycling reaches it hidden
     /// ([`focus_scope_reveal`](Self::focus_scope_reveal)).
-    scope_reveal: Option<(Rc<dyn Fn() -> bool>, Rc<dyn Fn(&mut Ctx)>)>,
+    scope_reveal: Option<(BindingCondition, Reveal)>,
     /// What runs when the focus comes into it, or a node inside it, from
     /// outside (`true`), and when it leaves (`false`).
     pub(crate) focus_handlers: RefCell<Vec<(bool, Handler)>>,
@@ -1549,7 +1552,7 @@ impl Node {
     }
 
     /// What shows it when scope cycling reaches it hidden, while it may be.
-    pub(crate) fn scope_reveal(&self) -> Option<Rc<dyn Fn(&mut Ctx)>> {
+    pub(crate) fn scope_reveal(&self) -> Option<Reveal> {
         let (when, reveal) = self.scope_reveal.as_ref()?;
         crate::reactive::untracked(|| when()).then(|| reveal.clone())
     }

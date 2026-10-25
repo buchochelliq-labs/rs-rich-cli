@@ -9,6 +9,26 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### intuiTUIve: the gaps three round 7 clones shared (intuituive)
+
+- **Panel titles at the corner.** `Node::title_flush` draws a panel's
+  titles flush with its corners, unpadded, as a ratatui `Block` does.
+  `panel_text`, `panel_text_with` and `add_title_text` take plain-text
+  titles, brackets and all. The git clone drops its title layers, music
+  draws termusic's titles at the corner, and http drops its escapes.
+- **A tree table.** `tree_table` with `TreeRow` and `TreeTableOptions`: a
+  table whose rows nest, its selection and closed rows kept by key, with
+  Space, `+`, `-`, ← and → to open, close and move. `tree_table_rows`
+  gives the same rows for a table of an app's own. top builds its process
+  tree on it, and tasks' Projects view is one.
+- **`App::min_size` with a node or shorter forms.** `min_size_with` shows a
+  node of its own, centred; `min_size_forms` the longest form of a message
+  that fits. blocks shows the original's boxed message, and disk shortens
+  diskonaut's on a narrow window.
+- **Scope cycling past hidden panes.** `Node::focus_scope_reveal` lets
+  `focus_next_scope` reach a hidden pane and show it. http's Tab in
+  fullscreen uses it in place of its own pane ring.
+
 ### intuiTUIve: four generic controls for changing state (intuituive, interact)
 
 - **Labels that change in place.** `button_of`, `checkbox_of` and

@@ -4865,7 +4865,7 @@ impl App {
     /// with a node inside that takes the focus, and those hidden that
     /// [reveal](crate::Node::focus_scope_reveal) themselves, each with
     /// what shows it.
-    fn scope_ring(&self) -> Vec<(NodeId, Option<Rc<dyn Fn(&mut Ctx)>>)> {
+    fn scope_ring(&self) -> Vec<(NodeId, Option<crate::node::Reveal>)> {
         let mut ring = Vec::new();
         self.top().root.walk_hidden(&mut |node, hidden| {
             if !node.is_focus_scope() {

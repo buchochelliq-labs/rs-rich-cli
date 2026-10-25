@@ -13,7 +13,6 @@ use crate::widgets::{table_with, Column, TableOptions};
 /// One row of a [`tree_table`]: what identifies it (`key`), its cells
 /// (console markup, one a column), and the rows under it.
 #[derive(Clone, Debug, PartialEq, Eq)]
-#[must_use = "builder methods return a new value; it does nothing until it is used"]
 pub struct TreeRow<K> {
     pub key: K,
     pub cells: Vec<String>,
@@ -31,6 +30,7 @@ impl<K> TreeRow<K> {
     }
 
     /// The rows under it.
+    #[must_use]
     pub fn children(mut self, children: impl IntoIterator<Item = TreeRow<K>>) -> TreeRow<K> {
         self.children = children.into_iter().collect();
         self
@@ -104,91 +104,117 @@ impl TreeTableOptions {
     }
 }
 
-/// A row as the table shows it.
-#[derive(Clone, Debug, PartialEq)]
-struct Flat<K> {
-    key: K,
-    parent: Option<K>,
-    /// Whether it has children, and whether they are shown.
-    parent_of: bool,
-    open: bool,
-    cells: Vec<String>,
+/// A row of a tree as a [`tree_table`] shows it, from
+/// [`tree_table_rows`]: its key, its parent's, how deep it is, whether it
+/// has children and shows them, and its cells with the guides and the
+/// marker in the tree column.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub struct ShownRow<K> {
+    pub key: K,
+    pub parent: Option<K>,
+    /// 0 for a row at the top level.
+    pub depth: usize,
+    /// It has children, and they are shown.
+    pub parent_of: bool,
+    pub open: bool,
+    pub cells: Vec<String>,
+}
+
+/// The rows a [`tree_table`] shows, in order, for a table of your own (an
+/// index-based selection, rows with more than their cells): each row,
+/// then, unless `closed` says it is, its children, with the guides and the
+/// markers `options` says in its tree column.
+///
+/// ```
+/// use intuituive::widgets::{tree_table_rows, TreeRow, TreeTableOptions};
+///
+/// let rows = [TreeRow::new("a", ["a"]).children([TreeRow::new("b", ["b"])])];
+/// let shown = tree_table_rows(&rows, |_| false, &TreeTableOptions::new());
+/// assert_eq!(shown[1].cells, ["└─ b"]);
+/// let shut = tree_table_rows(&rows, |key| *key == "a", &TreeTableOptions::new());
+/// assert_eq!(shut.len(), 1);
+/// assert_eq!(shut[0].cells, ["+ a"]);
+/// ```
+pub fn tree_table_rows<K: Clone>(
+    rows: &[TreeRow<K>],
+    closed: impl Fn(&K) -> bool,
+    options: &TreeTableOptions,
+) -> Vec<ShownRow<K>> {
+    let look = Look {
+        column: options.column,
+        guides: options.guides,
+        open: options.open.clone(),
+        closed: options.closed.clone(),
+    };
+    flatten(rows, &closed, &look)
 }
 
 /// The rows shown, in order: each row, then (while it is open) its
 /// children, with guides and markers in the tree column.
-fn flatten<K: Clone + Eq + Hash>(
+fn flatten<K: Clone>(
     rows: &[TreeRow<K>],
-    collapsed: &HashSet<K>,
+    closed: &dyn Fn(&K) -> bool,
     look: &Look,
-) -> Vec<Flat<K>> {
-    fn walk<K: Clone + Eq + Hash>(
-        row: &TreeRow<K>,
-        parent: Option<&K>,
-        guides: &mut Vec<&'static str>,
-        last: bool,
-        out: &mut Vec<Flat<K>>,
-        collapsed: &HashSet<K>,
-        look: &Look,
-    ) {
-        let parent_of = !row.children.is_empty();
-        let open = parent_of && !collapsed.contains(&row.key);
-        let mut prefix: String = guides.concat();
-        if parent.is_some() {
-            prefix.push_str(if last { look.guides[1] } else { look.guides[0] });
-        }
-        prefix.push_str(match (parent_of, open) {
-            (true, true) => &look.open,
-            (true, false) => &look.closed,
-            (false, _) => "",
-        });
-        let mut cells = row.cells.clone();
-        if let Some(cell) = cells.get_mut(look.column) {
-            *cell = format!("{prefix}{cell}");
-        }
-        out.push(Flat {
-            key: row.key.clone(),
-            parent: parent.cloned(),
-            parent_of,
-            open,
-            cells,
-        });
-        if !open {
-            return;
-        }
-        if parent.is_some() {
-            guides.push(if last { look.guides[3] } else { look.guides[2] });
-        }
-        let count = row.children.len();
-        for (i, child) in row.children.iter().enumerate() {
-            walk(
-                child,
-                Some(&row.key),
-                guides,
-                i + 1 == count,
-                out,
-                collapsed,
-                look,
-            );
-        }
-        if parent.is_some() {
-            guides.pop();
+) -> Vec<ShownRow<K>> {
+    struct Walk<'a, K> {
+        out: Vec<ShownRow<K>>,
+        guides: Vec<&'static str>,
+        closed: &'a dyn Fn(&K) -> bool,
+        look: &'a Look,
+    }
+    impl<K: Clone> Walk<'_, K> {
+        fn walk(&mut self, row: &TreeRow<K>, parent: Option<&K>, last: bool, depth: usize) {
+            let look = self.look;
+            let parent_of = !row.children.is_empty();
+            let open = parent_of && !(self.closed)(&row.key);
+            let mut prefix: String = self.guides.concat();
+            if parent.is_some() {
+                prefix.push_str(if last { look.guides[1] } else { look.guides[0] });
+            }
+            prefix.push_str(match (parent_of, open) {
+                (true, true) => &look.open,
+                (true, false) => &look.closed,
+                (false, _) => "",
+            });
+            let mut cells = row.cells.clone();
+            if let Some(cell) = cells.get_mut(look.column) {
+                *cell = format!("{prefix}{cell}");
+            }
+            self.out.push(ShownRow {
+                key: row.key.clone(),
+                parent: parent.cloned(),
+                depth,
+                parent_of,
+                open,
+                cells,
+            });
+            if !open {
+                return;
+            }
+            if parent.is_some() {
+                self.guides
+                    .push(if last { look.guides[3] } else { look.guides[2] });
+            }
+            let count = row.children.len();
+            for (i, child) in row.children.iter().enumerate() {
+                self.walk(child, Some(&row.key), i + 1 == count, depth + 1);
+            }
+            if parent.is_some() {
+                self.guides.pop();
+            }
         }
     }
-    let mut out = Vec::new();
+    let mut walk = Walk {
+        out: Vec::new(),
+        guides: Vec::new(),
+        closed,
+        look,
+    };
     let count = rows.len();
     for (i, row) in rows.iter().enumerate() {
-        walk(
-            row,
-            None,
-            &mut Vec::new(),
-            i + 1 == count,
-            &mut out,
-            collapsed,
-            look,
-        );
+        walk.walk(row, None, i + 1 == count, 0);
     }
-    out
+    walk.out
 }
 
 /// What [`flatten`] draws with.
@@ -262,7 +288,7 @@ pub fn tree_table<K: Clone + Eq + Hash + 'static>(
         open,
         closed,
     };
-    let flat = memo(move || collapsed.with(|shut| flatten(&rows(), shut, &look)));
+    let flat = memo(move || collapsed.with(|shut| flatten(&rows(), &|k| shut.contains(k), &look)));
     let index = signal(0usize);
     // The key follows the cursor, and the cursor the key: through a change
     // of the rows, or a key set from outside.
