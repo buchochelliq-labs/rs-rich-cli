@@ -1640,9 +1640,13 @@ impl Backend for Session {
             if RESUMED.load(Ordering::SeqCst) {
                 return Ok(Some(self.repaint()));
             }
-            // Woken: back to the loop, which has something to pick up.
+            // Woken: back to the loop, which has something to pick up. A
+            // key already waiting comes first, with no wait: an app woken
+            // over and over (frames arriving faster than it draws them)
+            // would otherwise never read the keyboard. The loop picks up
+            // what woke it all the same.
             if self.waker.as_ref().is_some_and(Waker::take) {
-                return Ok(None);
+                return self.next_event(Duration::ZERO);
             }
             // Short waits, so a resume is noticed without a key; shorter
             // where the waker cannot be waited on with the terminal.

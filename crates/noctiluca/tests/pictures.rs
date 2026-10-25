@@ -227,6 +227,7 @@ fn tall_picture() -> noctiluca::model::Page {
         playback: None,
         poster: String::new(),
         controls: false,
+        autoplay: false,
         empty_alt: false,
         aria_hidden: false,
         in_label: false,
@@ -277,4 +278,31 @@ fn a_capped_pictures_caption_wraps_to_its_box_and_the_rule_switches_it_off() {
     };
     let plain = project(&page, 100, (8.0, 18.0), &marks);
     assert!(!plain.lines.iter().any(|l| l.plain().contains("Image:")));
+}
+
+#[test]
+fn a_video_plays_chromes_recorded_frames_in_its_region() {
+    // The scripted engine replays Chrome's own frames of motion.webm, as
+    // the docs' tapes do: playing, the region's picture changes.
+    let engine = FakeEngine::from_dir(&snapshots())
+        .unwrap()
+        .replaying(&snapshots().join("frames"));
+    let mut driver = app(Box::new(engine), options("news.html", Images::Sixel)).driver(100, 40);
+    let (_, ready) = run_until(&mut driver, Duration::from_secs(20), |_, screen| {
+        screen.contains("PAUSED")
+    });
+    assert!(ready, "{}", screen(&driver));
+    written_for(&mut driver, Duration::from_secs(3));
+    // Paused, its poster's play mark is drawn into the pixels (a cell
+    // under a Sixel would be covered), so no mark cell shows.
+    assert!(
+        !screen(&driver).lines().any(|l| l.contains(" ▶ ")),
+        "{}",
+        screen(&driver)
+    );
+    key(&mut driver, "p");
+    let out = written_for(&mut driver, Duration::from_secs(3));
+    assert!(screen(&driver).contains("PLAYING"), "{}", screen(&driver));
+    let frames = out.matches("\x1bP").count();
+    assert!(frames >= 3, "{frames} frames in three seconds");
 }

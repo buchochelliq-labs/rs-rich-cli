@@ -359,6 +359,7 @@ mod tests {
             playback: None,
             poster: String::new(),
             controls: false,
+            autoplay: false,
             empty_alt: false,
             aria_hidden: false,
             in_label: false,

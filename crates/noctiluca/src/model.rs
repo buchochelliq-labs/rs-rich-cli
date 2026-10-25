@@ -337,6 +337,8 @@ pub struct Media {
     pub poster: String,
     /// Whether the element asks for the browser's own controls.
     pub controls: bool,
+    /// Whether a video or audio plays by itself (`autoplay`).
+    pub autoplay: bool,
     /// It has an `alt` attribute, and it is empty: decorative by the
     /// author's word.
     pub empty_alt: bool,
@@ -1404,6 +1406,7 @@ impl Walker<'_> {
             playback: None,
             poster: truncate(&poster, 2000),
             controls,
+            autoplay: dom.attr(i, "autoplay").is_some(),
             empty_alt: dom.attr(i, "alt").is_some_and(|a| a.trim().is_empty()),
             aria_hidden: context.aria_hidden
                 || dom

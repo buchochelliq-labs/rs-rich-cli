@@ -326,9 +326,13 @@ fn step_motion(b: Browser, motion: &mut pictures::Motion) {
     let images = b.images.get_untracked();
     let next = match page {
         Some(page) if images != Images::None && b.view.get_untracked() != View::Reader => {
-            let first = b.scroll.get_untracked() as usize;
-            let rows = first..first + usize::from(b.viewport.get_untracked().1);
+            let height = usize::from(b.viewport.get_untracked().1);
             b.layout.with_untracked(|l| {
+                // The first row in view; "the end" is a scroll past it.
+                let first = usize::try_from(b.scroll.get_untracked())
+                    .unwrap_or(usize::MAX)
+                    .min(l.lines.len().saturating_sub(height));
+                let rows = first..first.saturating_add(height);
                 motion.step(
                     &page,
                     &l.regions,
@@ -1672,15 +1676,41 @@ fn shown_picture(b: Browser, node: NodeId) -> Option<(Picture, Pixels)> {
     if let Some(live) = b.live.with(|l| l.get(&node).cloned()) {
         return Some((live.picture, live.pixels));
     }
-    let picture = b.page.with(|p| {
-        p.as_ref()?
-            .media
-            .iter()
-            .find(|m| m.node == node)?
-            .picture
-            .clone()
+    let (picture, video) = b.page.with(|p| {
+        let media = p.as_ref()?.media.iter().find(|m| m.node == node)?;
+        Some((
+            media.picture.clone()?,
+            layout::play_mark(media, 3).is_some(),
+        ))
     })?;
-    Some((picture, b.pixels.get()))
+    let pixels = b.pixels.get();
+    // A video not playing shows its poster with a play mark: in pixels,
+    // drawn into them (cells over a Sixel or iTerm2 picture would be
+    // covered); in cells, the mark is cells ([`play_marks`]).
+    if video && pixels != Pixels::Cells {
+        return Some((marked(&picture), pixels));
+    }
+    Some((picture, pixels))
+}
+
+thread_local! {
+    /// Posters with their play mark drawn in, by picture frame.
+    static MARKED: std::cell::RefCell<HashMap<(u32, u32), Picture>> =
+        std::cell::RefCell::new(HashMap::new());
+}
+
+/// `picture` with a play mark drawn into its pixels, made once.
+fn marked(picture: &Picture) -> Picture {
+    let key = (picture.id(), picture.version());
+    MARKED.with(|m| {
+        let mut made = m.borrow_mut();
+        if made.len() > 64 {
+            made.clear();
+        }
+        made.entry(key)
+            .or_insert_with(|| Picture::new(rich_art::graphics::play_mark(picture.image())))
+            .clone()
+    })
 }
 
 /// The play mark over the bottom left of each video region on `row` that
@@ -1898,9 +1928,13 @@ fn projection_view(b: Browser) -> Node {
                         let at = l.regions.iter().position(|r| r == region)?;
                         shown_picture(b, nodes.get(at).copied().flatten()?)
                     });
+                // The play mark as cells only where pictures are cells:
+                // in pixels it is drawn into the poster ([`marked`]).
                 vec![b.page.with(|p| match p {
-                    Some(page) => play_marks(spliced, width, row, &l.regions, page),
-                    None => spliced,
+                    Some(page) if pixels == Pixels::Cells => {
+                        play_marks(spliced, width, row, &l.regions, page)
+                    }
+                    _ => spliced,
                 })]
             })
         })
