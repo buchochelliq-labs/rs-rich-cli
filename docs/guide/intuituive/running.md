@@ -120,7 +120,7 @@ environment variable, when the app does not choose):
 | `rows` | Each changed row, from its first change to its last |
 | `full` | Everything, every frame |
 | `scroll` | Rows that moved together (a log's new line, a list scrolled) moved with the terminal's own scrolling, then the cells that still differ |
-| `best` | Per frame: `scroll` when rows moved, `full` when nearly every cell changed, else `cells` |
+| `best` | Per frame: `scroll` when rows moved, else `cells` |
 
 ```rust
 use intuituive::prelude::*;

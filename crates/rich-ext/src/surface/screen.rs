@@ -2103,33 +2103,15 @@ impl Painter {
     /// [`PaintStrategy::Best`]'s pick for this frame.
     ///
     /// Choosing must cost less than it saves, so it encodes nothing twice:
-    /// a frame where nearly every cell changed is written whole; one where
-    /// rows moved together scrolls them (rows compare as slices of plain
-    /// cells, so finding the move is cheap); any other is painted cell by
-    /// cell. The benchmark found `rows` never more than a few percent
-    /// shorter once the cell encoder writes through short gaps, so it is
-    /// not tried.
+    /// a frame where rows moved together scrolls them (rows compare as
+    /// slices of plain cells, so finding the move is cheap); any other is
+    /// painted cell by cell. The benchmark found `rows` never more than a
+    /// few percent shorter once the cell encoder writes through short
+    /// gaps, so it is not tried; nor is `full` for a frame where nearly
+    /// every cell changed, as painting cells by cell skips the unchanged
+    /// ones with fewer bytes and, on the benchmark's machines, no more
+    /// time (`full` was up to 17% slower on CI's).
     fn choose(&mut self, screen: &Screen, rects: &[Rect]) -> PaintStrategy {
-        // The whole screen damaged, and nearly every cell changed (full
-        // motion: a video, a game): comparing is wasted, so write it all.
-        // A sample of every seventh cell says, at a seventh of the cost.
-        let area = screen.area();
-        let damaged: usize = rects
-            .iter()
-            .map(|r| r.width as usize * r.height as usize)
-            .sum();
-        if damaged >= area.width as usize * area.height as usize {
-            if let Some(previous) = &self.previous {
-                let (mut seen, mut differ) = (0usize, 0usize);
-                for (sent, now) in previous.cells.iter().zip(&screen.cells).step_by(7) {
-                    seen += 1;
-                    differ += usize::from(sent != now);
-                }
-                if differ * 10 >= seen * 9 {
-                    return PaintStrategy::Full;
-                }
-            }
-        }
         self.found = self.find_shift(screen, rects);
         match self.found {
             Some(_) => PaintStrategy::Scroll,
