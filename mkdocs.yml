@@ -260,6 +260,7 @@ nav:
       - "Design: intuiTUIve against ratatui": design/intuituive-vs-ratatui.md
       - "Design: what the intuiTUIve demos are missing": design/intuituive-demo-gaps.md
       - "Design: the demo loop, where things stand": design/intuituive-status.md
+      - "Design: Noctiluca, a terminal web browser": design/browser.md
       - "Design: the clones' gap reports":
           - "git (gitui)": design/gaps/git.md
           - "top (bottom)": design/gaps/top.md
