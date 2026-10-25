@@ -753,6 +753,31 @@ jobs:
       - name: Benchmark against ratatui (release)
         run: cargo test --release --locked -p rs-rich-intuituive --test versus_ratatui -- --ignored --nocapture
 
+  # The paint benchmark (docs/design/render-performance.md, "Benchmarks"):
+  # nine scenes at 80x24 and 200x60 under every paint strategy, each frame's
+  # bytes replayed through vt100 and checked against a full repaint. It
+  # reports the table the design note keeps, and fails if `best` is more
+  # than 5% worse, in bytes or time, than the best fixed strategy on a scene.
+  paint-bench:
+    name: Paint strategies benchmark
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Benchmark the paint strategies (release)
+        env:
+          PAINT_BENCH_GATE: "1"
+        run: cargo test --release --locked -p rs-rich-intuituive --test paint_bench -- --ignored --nocapture paint_strategies_benchmark
+
   # The browser build (docs/design/docs-playground.md, tier 3): the core, the
   # extensions, rs-rich-interact and intuiTUIve for wasm32-unknown-unknown,
   # with and without syntect, so a new crossterm, `Instant` or thread call
@@ -859,7 +884,7 @@ jobs:
 
   ci-ok:
     name: ci-ok
-    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, wasm, plugin-compatibility, browser]
+    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, paint-bench, wasm, plugin-compatibility, browser]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()

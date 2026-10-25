@@ -707,6 +707,91 @@ impl Sent {
     }
 }
 
+/// How a [`Painter`] turns a frame's changes into bytes.
+///
+/// Every strategy draws the same screen; they differ in the bytes they
+/// send and the time they take to find them. The benchmark in
+/// rs-rich-intuituive's `tests/paint_bench.rs` measures each on a set of
+/// scenes, and `docs/design/render-performance.md` keeps its table.
+///
+/// ```
+/// use rich_ext::surface::PaintStrategy;
+///
+/// assert_eq!("best".parse::<PaintStrategy>(), Ok(PaintStrategy::Best));
+/// assert_eq!(PaintStrategy::default(), PaintStrategy::Cells);
+/// assert_eq!(PaintStrategy::Scroll.name(), "scroll");
+/// assert!("fastest".parse::<PaintStrategy>().is_err());
+/// ```
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub enum PaintStrategy {
+    /// Compare each cell inside the damage with what was sent, and write
+    /// the cells that changed. The default.
+    #[default]
+    Cells,
+    /// Compare whole rows (by hash, then by their cells), and rewrite each
+    /// changed row from its first change to its last.
+    Rows,
+    /// Write everything: each row in turn, the rest of the screen erased.
+    Full,
+    /// Find runs of rows that moved together (a log's new line, a list
+    /// scrolled), move them with the terminal's own scrolling, then write
+    /// the cells that still differ. Off where scrolling is not safe (a
+    /// Windows console, an inline region, an image in the moved rows).
+    Scroll,
+    /// Each frame, encode the strategies that apply and send the shortest,
+    /// within a bound so choosing never costs more than it saves.
+    Best,
+}
+
+impl PaintStrategy {
+    /// Every strategy, in the order of their names.
+    pub const ALL: [PaintStrategy; 5] = [
+        PaintStrategy::Cells,
+        PaintStrategy::Rows,
+        PaintStrategy::Full,
+        PaintStrategy::Scroll,
+        PaintStrategy::Best,
+    ];
+
+    /// The strategy's name: `cells`, `rows`, `full`, `scroll` or `best`.
+    pub fn name(self) -> &'static str {
+        match self {
+            PaintStrategy::Cells => "cells",
+            PaintStrategy::Rows => "rows",
+            PaintStrategy::Full => "full",
+            PaintStrategy::Scroll => "scroll",
+            PaintStrategy::Best => "best",
+        }
+    }
+
+    /// The strategy `RICH_PAINT_STRATEGY` names, if it is set to one.
+    pub fn from_env() -> Option<PaintStrategy> {
+        std::env::var("RICH_PAINT_STRATEGY")
+            .ok()?
+            .trim()
+            .parse()
+            .ok()
+    }
+}
+
+impl std::fmt::Display for PaintStrategy {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(self.name())
+    }
+}
+
+impl std::str::FromStr for PaintStrategy {
+    type Err = String;
+
+    /// A strategy by its [name](PaintStrategy::name), in any case.
+    fn from_str(name: &str) -> Result<PaintStrategy, String> {
+        PaintStrategy::ALL
+            .into_iter()
+            .find(|s| s.name().eq_ignore_ascii_case(name))
+            .ok_or_else(|| format!("no paint strategy {name:?}: cells, rows, full, scroll or best"))
+    }
+}
+
 /// What the last [`Painter::paint`] did, counted as notcurses counts a
 /// render: the cells it looked at and wrote, and its bytes by kind. The
 /// bytes add up to the length of what it returned.
@@ -742,6 +827,9 @@ pub struct PaintStats {
     pub text_bytes: usize,
     /// Everything else: clearing the screen, erasing, scrolling.
     pub other_bytes: usize,
+    /// The strategy the paint used (never [`PaintStrategy::Best`], which
+    /// picks one of the others).
+    pub strategy: PaintStrategy,
 }
 
 impl PaintStats {
@@ -759,6 +847,7 @@ impl PaintStats {
         self.style_bytes += other.style_bytes;
         self.text_bytes += other.text_bytes;
         self.other_bytes += other.other_bytes;
+        self.strategy = other.strategy;
     }
 }
 
@@ -789,6 +878,8 @@ pub struct Painter {
     written: Vec<Rect>,
     /// The last paint's counts.
     stats: PaintStats,
+    /// How frames become bytes.
+    strategy: PaintStrategy,
 }
 
 /// The pen's state while a frame is written.
@@ -814,7 +905,18 @@ impl Painter {
             force: false,
             written: Vec::new(),
             stats: PaintStats::default(),
+            strategy: PaintStrategy::default(),
         }
+    }
+
+    /// Paint with `strategy` from now on.
+    pub fn set_strategy(&mut self, strategy: PaintStrategy) {
+        self.strategy = strategy;
+    }
+
+    /// The strategy this painter paints with.
+    pub fn strategy(&self) -> PaintStrategy {
+        self.strategy
     }
 
     /// What the last [`paint`](Self::paint) or [`repaint`](Self::repaint)

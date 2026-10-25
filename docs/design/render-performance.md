@@ -65,6 +65,80 @@ Small updates are already cheaper than ratatui's. Heavy damage is where we
 lose: churn is about 9 times slower and the chart about 6 times. The log
 append sends nearly a whole pane for one new line.
 
+### Where the time and bytes go (measured)
+
+Measured on 2026-10-25 with the paint benchmark (`tests/paint_bench.rs`,
+below) and the frame stats it reads, before any optimisation: release
+build, the `cells` strategy, best of three runs, a frame's mean. "Draw"
+is the widgets drawing into the screen (rich rendering, then
+`Screen::write_lines`); "paint" is the painter turning changes into
+bytes. callgrind on 30 frames of each heavy scene splits them further.
+
+| Size | Scene | frame µs | draw µs | paint µs | B/frame | moves B | styles B | text B |
+|---|---|---:|---:|---:|---:|---:|---:|---:|
+| 80x24 | Blink | 7.6 | 5.3 | 1.8 | 16 | 7 | 7 | 2 |
+| 80x24 | Typing | 18.5 | 15.0 | 2.4 | 27 | 7 | 4 | 1 |
+| 80x24 | StatusClock | 32.7 | 26.3 | 5.4 | 31 | 15 | 14 | 2 |
+| 80x24 | LogAppend | 224.4 | 114.7 | 107.7 | 4,013 | 1,329 | 1,132 | 1,551 |
+| 80x24 | ListPage | 253.6 | 205.4 | 47.2 | 958 | 384 | 304 | 269 |
+| 80x24 | ListRow | 279.4 | 199.0 | 79.2 | 3,933 | 1,318 | 1,100 | 1,514 |
+| 80x24 | TableSort | 1,360.3 | 1,281.8 | 75.9 | 2,132 | 690 | 541 | 901 |
+| 80x24 | Churn | 1,715.4 | 1,549.5 | 160.7 | 65,740 | 305 | 59,735 | 5,700 |
+| 80x24 | Chart | 807.3 | 696.0 | 108.0 | 3,139 | 1,120 | 1,275 | 742 |
+| 200x60 | Blink | 21.1 | 13.1 | 7.1 | 16 | 7 | 7 | 2 |
+| 200x60 | Typing | 47.6 | 33.8 | 11.7 | 27 | 7 | 4 | 1 |
+| 200x60 | StatusClock | 50.7 | 36.7 | 12.8 | 31 | 15 | 14 | 2 |
+| 200x60 | LogAppend | 774.3 | 253.7 | 516.4 | 24,706 | 8,070 | 6,095 | 10,539 |
+| 200x60 | ListPage | 1,542.2 | 1,242.2 | 295.7 | 3,830 | 1,745 | 1,011 | 1,073 |
+| 200x60 | ListRow | 1,707.4 | 1,188.0 | 514.8 | 24,470 | 8,053 | 5,980 | 10,436 |
+| 200x60 | TableSort | 3,908.6 | 3,515.8 | 388.2 | 13,024 | 4,271 | 3,333 | 5,420 |
+| 200x60 | Churn | 11,351.7 | 10,403.9 | 928.2 | 398,824 | 2,488 | 361,871 | 34,464 |
+| 200x60 | Chart | 2,994.1 | 2,525.4 | 461.5 | 11,267 | 5,054 | 4,081 | 2,130 |
+
+What it says:
+
+- **The draw, not the painter, is most of a heavy frame.** Churn spends
+  90% of its frame drawing and 9% painting; the chart 86% and 13%; the
+  table 94% and 6%. The guess in the first draft, that the heap string per
+  cell makes the painter slow, is wrong for these scenes: the painter's
+  cost is small next to what feeds it.
+- **Inside the draw** (callgrind, share of all instructions):
+  - **Churn:** `Screen::write_lines` 52% (`Frame::from_segments` 15%,
+    `StyleTable::intern` 16%, a rich `Style` hashed per cell), the
+    scene building a `Style` and `Segment` per cell 31% (most of it
+    `format!` inside rich's colour constructors), and malloc and free
+    about 30% of everything across both. The painter is 10%.
+  - **Chart:** rich rendering the chart 37%, `write_lines` 38%, the
+    painter 14%.
+  - **Table and lists:** rich's text rendering (wrapping, `divide_line`)
+    41 to 46%; `write_lines` 10%; the painter 5%.
+  - **Log append:** the painter 40% (it rewrites the whole pane),
+    `Screen::scroll_up` 16% (it clones every cell's string), rendering
+    the one new line 9%.
+- **Bytes:** cursor moves are a third of every scene that writes rows
+  (LogAppend, ListRow, TableSort, Chart): each run starts with an
+  absolute CUP. Churn is 91% SGR: two full true-colour codes per cell,
+  always after a reset. The log append and the one-row scroll send a
+  whole pane for what a terminal scroll does in a few bytes.
+- **Small scenes are already cheap** (8 to 50 µs, 16 to 31 bytes):
+  whatever is added must not cost them.
+
+So the order of work follows the costs, not the list of ideas:
+
+1. **`write_lines` and the cell store** (data layout, no per-frame
+   allocation): write segments into cells without building a `Frame`,
+   memoise the style intern for runs of one style, keep cells flat and
+   `Copy` so scrolling and copying are moves, not clones. Largest share in
+   churn and the chart.
+2. **Scrolling in the terminal** for the log and lists (the `scroll`
+   strategy): the largest byte and paint cost after churn.
+3. **The encoder** (state-change minimisation): cheaper moves and SGR
+   deltas, a third of the bytes in row-writing scenes.
+4. **rich's rendering** (wrapping, `Style` building) is the largest cost
+   left in text-heavy scenes, but it is the faithful mirror's: changes go
+   upstream-first or into rs-rich-ext's own fast paths (`put_rgb` for
+   pictures already skips it).
+
 ### Noctiluca
 
 - **Chrome never scrolls.**

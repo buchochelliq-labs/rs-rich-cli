@@ -47,7 +47,7 @@ use crate::node::{with_node, Axis, FrameState, Node};
 use crate::notify::{Corner, Level, Note};
 use crate::place::{Offset, Origin};
 use crate::reactive::{signal, Memo, NodeId, Proxy, Runtime, Signal};
-use crate::screen::{PaintStats, Painter, Rect, Screen};
+use crate::screen::{PaintStats, PaintStrategy, Painter, Rect, Screen};
 use crate::widget::{Used, WidgetEvent};
 
 /// The theme style a pop-up's title is drawn in: the palette's, the
@@ -1895,6 +1895,9 @@ pub struct App {
     /// The console the last frame used, for components handling events.
     last_console: Option<Console>,
     stats: StatsHandle,
+    /// How frames become bytes; `None` takes `RICH_PAINT_STRATEGY`, or
+    /// the default.
+    paint_strategy: Option<PaintStrategy>,
     /// The shortest time between two frames [`run_on`](Self::run_on)
     /// draws ([`max_fps`](Self::max_fps)).
     frame_time: Option<Duration>,
@@ -2236,6 +2239,7 @@ impl App {
             console: None,
             last_console: None,
             stats: StatsHandle::default(),
+            paint_strategy: None,
             frame_time: None,
             text_frames: true,
             caret_shown: false,
@@ -2709,6 +2713,28 @@ impl App {
     #[must_use]
     pub fn max_fps(mut self, fps: u32) -> App {
         self.frame_time = (fps > 0).then(|| Duration::from_secs(1) / fps);
+        self
+    }
+
+    /// How each frame's changes become bytes (see [`PaintStrategy`]):
+    /// [`Cells`](PaintStrategy::Cells) by default, or what the
+    /// `RICH_PAINT_STRATEGY` environment variable names (`cells`, `rows`,
+    /// `full`, `scroll` or `best`) when the app does not choose. Every
+    /// strategy shows the same screen; [`FrameStats::painted`] says which
+    /// one each frame used and what it wrote.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::PaintStrategy;
+    ///
+    /// let app = App::new(|| text("hello")).paint_strategy(PaintStrategy::Best);
+    /// let mut driver = app.driver(10, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "hello");
+    /// ```
+    #[must_use]
+    pub fn paint_strategy(mut self, strategy: PaintStrategy) -> App {
+        self.paint_strategy = Some(strategy);
         self
     }
 
@@ -3391,6 +3417,11 @@ impl App {
         if self.inline.is_some() {
             painter = painter.inline();
         }
+        painter.set_strategy(
+            self.paint_strategy
+                .or_else(PaintStrategy::from_env)
+                .unwrap_or_default(),
+        );
         // Accessible: no colour, so no meaning rests on it.
         painter.set_color_system(if self.text_mode() {
             None

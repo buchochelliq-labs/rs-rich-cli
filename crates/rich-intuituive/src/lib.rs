@@ -240,6 +240,7 @@ pub use reactive::{memo, on_write, on_write_ref, signal, viewport, watch, Memo, 
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;
 pub use rule::rule;
+pub use screen::{PaintStats, PaintStrategy};
 pub use select::{list_search, multi_select, ListSearch, Mark, MultiSelect};
 pub use select_field::{select_field, select_field_keyed, SelectOption};
 pub use sheet::{SheetError, Stylesheet};
