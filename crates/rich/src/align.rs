@@ -9,7 +9,7 @@ use crate::console::{Console, ConsoleOptions};
 use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
-use crate::style::Style;
+use crate::style::StyleType;
 
 /// Where to position content within an available width. Shared by [`Align`],
 /// `Rule` titles, and `Panel` titles.
@@ -35,7 +35,7 @@ pub enum VerticalAlign {
 pub struct Align {
     child: Box<dyn Renderable>,
     align: HorizontalAlign,
-    style: Option<Style>,
+    style: Option<StyleType>,
     vertical: Option<VerticalAlign>,
     pad: bool,
     width: Option<usize>,
@@ -73,9 +73,10 @@ impl Align {
     }
 
     /// The background style of the padding (upstream `style=`), applied under
-    /// the whole output.
-    pub fn style(mut self, style: Style) -> Self {
-        self.style = Some(style);
+    /// the whole output: a [`Style`](crate::style::Style), or a theme name or
+    /// style definition resolved at render time.
+    pub fn style(mut self, style: impl Into<StyleType>) -> Self {
+        self.style = Some(style.into());
         self
     }
 
@@ -141,7 +142,7 @@ impl Align {
 /// Every `Align` option but the child.
 struct AlignSpec {
     align: HorizontalAlign,
-    style: Option<Style>,
+    style: Option<StyleType>,
     vertical: Option<VerticalAlign>,
     pad: bool,
     width: Option<usize>,
@@ -178,7 +179,12 @@ impl AlignSpec {
             .collect();
 
         let excess = options.max_width.saturating_sub(width);
-        let pad_style = Some(self.style.clone().unwrap_or_default());
+        // `console.get_style(self.style) if self.style is not None else None`.
+        let style = self
+            .style
+            .as_ref()
+            .map(|style| console.get_style(style).unwrap_or_default());
+        let pad_style = Some(style.clone().unwrap_or_default());
         let (left_pad, right_pad) = match self.align {
             HorizontalAlign::Left => (0, if self.pad { excess } else { 0 }),
             HorizontalAlign::Right => (excess, 0),
@@ -201,15 +207,22 @@ impl AlignSpec {
         // `blank_line`: a full-width row of the padding style, or bare.
         let blank = || {
             if self.pad {
+                // `self.width or options.max_width`: a zero width is unset.
                 vec![Segment::new(
-                    " ".repeat(self.width.unwrap_or(options.max_width)),
+                    " ".repeat(
+                        self.width
+                            .filter(|&width| width > 0)
+                            .unwrap_or(options.max_width),
+                    ),
                     pad_style.clone(),
                 )]
             } else {
                 Vec::new()
             }
         };
-        if let (Some(vertical), Some(total)) = (self.vertical, self.height.or(options.height)) {
+        // `self.height or options.height`: a zero height is unset.
+        let total = self.height.filter(|&height| height > 0).or(options.height);
+        if let (Some(vertical), Some(total)) = (self.vertical, total) {
             let (top, bottom) = match vertical {
                 VerticalAlign::Top => (0, total.saturating_sub(height)),
                 VerticalAlign::Middle => {
@@ -233,7 +246,7 @@ impl AlignSpec {
                 segments.push(Segment::line());
             }
         }
-        match self.style.as_ref().filter(|style| !style.is_null()) {
+        match style.as_ref().filter(|style| !style.is_null()) {
             Some(style) => Segment::apply_style(&segments, style),
             None => segments,
         }
@@ -260,7 +273,7 @@ impl Renderable for Align {
 /// height). Mirrors the deprecated `rich.align.VerticalCenter`.
 pub struct VerticalCenter {
     child: Box<dyn Renderable>,
-    style: Option<Style>,
+    style: Option<StyleType>,
 }
 
 impl VerticalCenter {
@@ -268,9 +281,10 @@ impl VerticalCenter {
         VerticalCenter { child, style: None }
     }
 
-    /// The style of the blank lines above and below (upstream `style=`).
-    pub fn style(mut self, style: Style) -> Self {
-        self.style = Some(style);
+    /// The style of the blank lines above and below (upstream `style=`): a
+    /// [`Style`](crate::style::Style), or a name resolved at render time.
+    pub fn style(mut self, style: impl Into<StyleType>) -> Self {
+        self.style = Some(style.into());
         self
     }
 }
@@ -285,10 +299,18 @@ impl Renderable for VerticalCenter {
             .map(|line| line.iter().map(Segment::cell_length).sum::<usize>())
             .max()
             .unwrap_or(0);
-        let height = options.height.unwrap_or(options.size.height);
+        // `options.height or options.size.height`: a zero height is unset.
+        let height = options
+            .height
+            .filter(|&height| height > 0)
+            .unwrap_or(options.size.height);
         let top = height.saturating_sub(lines.len()) / 2;
         let bottom = height.saturating_sub(top + lines.len());
-        let blank = || vec![Segment::new(" ".repeat(width), self.style.clone())];
+        let style = self
+            .style
+            .as_ref()
+            .map(|style| console.get_style(style).unwrap_or_default());
+        let blank = || vec![Segment::new(" ".repeat(width), style.clone())];
         let mut rows: Vec<Vec<Segment>> = Vec::new();
         rows.extend(std::iter::repeat_with(blank).take(top));
         rows.extend(lines);

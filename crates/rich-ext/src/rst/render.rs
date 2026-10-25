@@ -73,7 +73,7 @@ impl RestructuredText {
 /// One renderable in the visitor's list.
 enum Item {
     /// A `Text` and its `end`.
-    Text(Text, String),
+    Text(Box<Text>, String),
     /// `rich.console.NewLine`.
     NewLine,
     /// The field list's `Table("Field Name", "Field Value", show_lines=True)`,
@@ -315,13 +315,13 @@ impl<'a> Visitor<'a> {
 
     fn last_text(&mut self) -> Option<&mut Text> {
         match self.items.last_mut() {
-            Some(Item::Text(text, _)) => Some(text),
+            Some(Item::Text(text, _)) => Some(text.as_mut()),
             _ => None,
         }
     }
 
     fn push_text(&mut self, text: Text, end: &str) {
-        self.items.push(Item::Text(text, end.into()));
+        self.items.push(Item::Text(Box::new(text), end.into()));
     }
 
     fn push(&mut self, renderable: impl Renderable + 'static) {
@@ -812,7 +812,7 @@ impl Renderable for RestructuredText {
         };
         for item in &items {
             match item {
-                Item::Text(text, end) => render(text, end),
+                Item::Text(text, end) => render(text.as_ref(), end),
                 Item::NewLine => segments_newline(&mut render),
                 Item::Fields(rows) => {
                     let mut table = Table::new().show_lines(true);

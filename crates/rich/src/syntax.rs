@@ -75,6 +75,7 @@ pub struct Syntax {
     /// `(top, right, bottom, left)`.
     padding: (usize, usize, usize, usize),
     tab_size: usize,
+    dedent: bool,
     /// `None` means the console's default, else the built-in engine.
     highlighter: Option<Arc<dyn CodeHighlighter>>,
     line_numbers: bool,
@@ -115,6 +116,49 @@ const NUMBERS_COLUMN_DEFAULT_PADDING: usize = 2;
 /// Without this the raw U+0009 reached the terminal, where it jumps to the next
 /// 8-cell stop while we had measured it as one cell: a block asked to be 30
 /// wide rendered 31-32 cells and tore the background panel.
+/// Port of Python's `textwrap.dedent`: lines of only spaces and tabs become
+/// empty, then the longest run of leading spaces and tabs common to every
+/// other line is removed from each line (a space and a tab never match).
+fn dedent(code: &str) -> String {
+    let lines: Vec<&str> = code
+        .split('\n')
+        .map(|line| {
+            if !line.is_empty() && line.bytes().all(|b| b == b' ' || b == b'\t') {
+                ""
+            } else {
+                line
+            }
+        })
+        .collect();
+    let mut margin: Option<&str> = None;
+    for line in &lines {
+        let indent_len = line.len() - line.trim_start_matches([' ', '\t']).len();
+        if indent_len == line.len() {
+            continue;
+        }
+        let indent = &line[..indent_len];
+        margin = Some(match margin {
+            None => indent,
+            Some(margin) if indent.starts_with(margin) => margin,
+            Some(margin) if margin.starts_with(indent) => indent,
+            Some(margin) => {
+                let common = margin
+                    .bytes()
+                    .zip(indent.bytes())
+                    .take_while(|(x, y)| x == y)
+                    .count();
+                &margin[..common]
+            }
+        });
+    }
+    let margin = margin.unwrap_or("");
+    lines
+        .iter()
+        .map(|line| line.strip_prefix(margin).unwrap_or(line))
+        .collect::<Vec<_>>()
+        .join("\n")
+}
+
 fn expand_tabs(code: &str, tab_size: usize) -> String {
     if !code.contains('\t') {
         return code.to_string();
@@ -161,6 +205,7 @@ impl Syntax {
             word_wrap: false,
             padding: (0, 0, 0, 0),
             tab_size: DEFAULT_TAB_SIZE,
+            dedent: false,
             code: code.into(),
             language: Some(language.into()).filter(|l| !l.is_empty()),
             theme: None,
@@ -193,6 +238,46 @@ impl Syntax {
     pub fn tab_size(mut self, tab_size: usize) -> Self {
         self.tab_size = tab_size;
         self
+    }
+
+    /// Strip the leading whitespace common to every line before highlighting
+    /// (upstream `dedent`, default off), as `textwrap.dedent` does.
+    pub fn dedent(mut self, dedent: bool) -> Self {
+        self.dedent = dedent;
+        self
+    }
+
+    /// A `Syntax` for the file at `path`, read as UTF-8, highlighted as
+    /// `lexer`, or as [`guess_lexer`](Self::guess_lexer) guesses from the
+    /// path. Port of `Syntax.from_path` (its other options are this type's
+    /// builders; only UTF-8 is read, where upstream takes an `encoding`).
+    pub fn from_path(
+        path: impl AsRef<std::path::Path>,
+        lexer: Option<&str>,
+    ) -> std::io::Result<Self> {
+        let path = path.as_ref();
+        let code = std::fs::read_to_string(path)?;
+        let lexer = match lexer {
+            Some(lexer) if !lexer.is_empty() => lexer.to_string(),
+            _ => Syntax::guess_lexer(path),
+        };
+        Ok(Syntax::new(code, lexer))
+    }
+
+    /// The lexer for a path: its extension, lower-cased, or its file name
+    /// when it has none (`Makefile`), else `"default"`. Port of
+    /// `Syntax.guess_lexer`, whose answer is a Pygments alias; here it is
+    /// the name the code highlighter looks the grammar up by.
+    pub fn guess_lexer(path: impl AsRef<std::path::Path>) -> String {
+        let path = path.as_ref();
+        path.extension()
+            .map(|ext| ext.to_string_lossy().to_lowercase())
+            .or_else(|| {
+                path.file_name()
+                    .map(|name| name.to_string_lossy().into_owned())
+            })
+            .filter(|name| !name.is_empty())
+            .unwrap_or_else(|| "default".to_string())
     }
 
     /// Surround the code with `padding` cells of background on every side.
@@ -477,7 +562,11 @@ impl Syntax {
     /// does this for every lexer, the plain-text one included). Without it a
     /// lone `\r` was stripped as a control code and joined two lines.
     fn process_code(&self) -> String {
-        let mut code = expand_tabs(&self.code, self.tab_size);
+        let mut code = if self.dedent {
+            expand_tabs(&dedent(&self.code), self.tab_size)
+        } else {
+            expand_tabs(&self.code, self.tab_size)
+        };
         if !code.contains('\r') {
             return code;
         }
@@ -1321,6 +1410,13 @@ mod tests {
 
     /// `str.expandtabs` counts *characters*, not cells, and resets its column at
     /// `\n` and `\r`.
+    #[test]
+    fn guess_lexer_takes_the_extension_or_the_name() {
+        assert_eq!(Syntax::guess_lexer("src/main.RS"), "rs");
+        assert_eq!(Syntax::guess_lexer("Makefile"), "Makefile");
+        assert_eq!(Syntax::guess_lexer(""), "default");
+    }
+
     #[test]
     fn expand_tabs_matches_pythons_str_expandtabs() {
         // Left column verified against CPython's `str.expandtabs(4)`.

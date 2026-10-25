@@ -110,6 +110,7 @@ in the release notes; the crates.io links show available packages.
 | [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.7` |
 | [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.5` |
 | [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.5` |
+| [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
 | Package | Role | Import / installed name |
@@ -131,6 +132,7 @@ in the release notes; the crates.io links show available packages.
 | `rs-rich-record` | scripted terminal recordings (`rich record`): screenshots, casts, GIF, APNG and MP4, with terminal graphics and held keys | `use rich_record` |
 | `rs-rich-interact` | interactive components: pickers, input, forms, pagers, explorers; the terminal session, keys, natural dates and time zones | `use rich_interact` |
 | `rs-rich-micro` | micro assets: emoji-sized inline images written `:micro:name:` | `use rich_micro` |
+| `rs-rich-marketplace` | the plugin marketplace client: a minisign-signed index and its key chain, listings, version resolution, verified installs and the lockfile | `use rich_marketplace` |
 | `rs-rich` (PyPI) | Python bindings: Rich's API over the Rust core, plus the port's crates (`rs_rich.ext`, `rs_rich.chart`, `rs_rich.diagram`, `rs_rich.interact`, `rs_rich.tui`, ...) | `import rs_rich` |
 
 The published package names carry an `rs-` prefix because `rich` is already taken

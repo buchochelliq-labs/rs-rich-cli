@@ -2414,12 +2414,13 @@ empty command line reports nothing. PowerShell gets no OSC 133 `C` mark
 
 `rich record` runs a **tape**, a script of keys, waits and screenshots, in
 `bash` (or `zsh`, `fish`, `sh`) on a real pseudo-terminal, and writes PNG,
-SVG and text screenshots, an asciinema cast, a GIF, an animated PNG, an MP4
-(with FFmpeg) and an HTML page. Every recording in these docs is one.
+SVG and text screenshots, an asciinema cast, a GIF, an MP4 (with FFmpeg)
+and an HTML page, and an animated PNG when asked (`Output apng` or
+`--format apng`). Every recording in these docs is one.
 
 ```bash
 rich record demo.tape                     # writes recordings/demo/
-rich record --format gif,apng demo.tape   # only the video
+rich record --format gif,apng demo.tape   # only the video, the APNG too
 rich record --fps 35 game.tape            # every frame, up to 35 a second
 rich record --check demo.tape             # fail if a screenshot changed
 ```

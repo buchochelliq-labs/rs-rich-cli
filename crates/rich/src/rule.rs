@@ -67,7 +67,8 @@ impl Rule {
     /// What follows a *titled* rule (upstream `end`, default `"\n"`). As
     /// upstream, an untitled rule ignores it. The port's renderables separate
     /// lines rather than ending them, so one trailing newline of `end` is the
-    /// line end the printer adds; an `end` without one cannot suppress it.
+    /// line end the printer adds; a printed rule whose `end` has none leaves
+    /// the line open, as upstream's does.
     pub fn end(mut self, end: impl Into<String>) -> Self {
         self.end = end.into();
         self
@@ -219,6 +220,24 @@ impl Renderable for Rule {
     /// a single cell and never widens a fitted container.
     fn measure(&self, _console: &Console, _options: &ConsoleOptions) -> Measurement {
         Measurement::new(1, 1)
+    }
+
+    /// A titled rule ends with its `end`, which upstream yields as is: an
+    /// `end` without a trailing newline leaves the line open.
+    fn print_end_line(&self, options: &ConsoleOptions) -> bool {
+        let titled = match (&self.title_text, &self.title) {
+            (Some(text), _) => !text.plain().is_empty(),
+            (None, Some(title)) => !title.is_empty(),
+            (None, None) => false,
+        };
+        // `truncate_width = max(0, width - required_space)`: no room for the
+        // title draws the plain line.
+        let required_space = if self.align == HorizontalAlign::Center {
+            4
+        } else {
+            2
+        };
+        !titled || options.max_width <= required_space || self.end.ends_with('\n')
     }
 }
 

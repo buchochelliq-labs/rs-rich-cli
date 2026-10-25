@@ -13,16 +13,80 @@
 use fancy_regex::Regex;
 
 use crate::errors::{Result, RichError};
-use crate::style::{Style, StyleType};
+use crate::style::{Meta, MetaValue, Style, StyleType};
 use crate::text::{Span, Text};
 
 struct RawSpan {
     start: usize,
     end: usize,
-    /// The tag's normalized name, e.g. `bold` for `[b]`.
-    name: String,
+    style: StyleType,
+}
+
+/// A tag in console markup. Port of `rich.markup.Tag`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Tag {
+    /// The tag name, e.g. `bold`.
+    pub name: String,
     /// Anything after the first `=`, e.g. the URL of `[link=https://…]`.
-    parameters: Option<String>,
+    pub parameters: Option<String>,
+}
+
+impl Tag {
+    /// A tag named `name`, with optional `parameters`.
+    pub fn new(name: impl Into<String>, parameters: Option<String>) -> Self {
+        Tag {
+            name: name.into(),
+            parameters,
+        }
+    }
+
+    /// The tag as markup: `[name]` or `[name=parameters]`. Port of
+    /// `Tag.markup`.
+    pub fn markup(&self) -> String {
+        match &self.parameters {
+            None => format!("[{}]", self.name),
+            Some(parameters) => format!("[{}={}]", self.name, parameters),
+        }
+    }
+}
+
+/// `str(tag)`: the name, or `"{name} {parameters}"`.
+impl std::fmt::Display for Tag {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        match &self.parameters {
+            None => f.write_str(&self.name),
+            Some(parameters) => write!(f, "{} {}", self.name, parameters),
+        }
+    }
+}
+
+/// Python's `repr()` of a string.
+pub(crate) fn py_repr_str(value: &str) -> String {
+    let quote = if value.contains('\'') && !value.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    let mut out = String::with_capacity(value.len() + 2);
+    out.push(quote);
+    for ch in value.chars() {
+        match ch {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\r' => out.push_str("\\r"),
+            '\t' => out.push_str("\\t"),
+            ch if ch == quote => {
+                out.push('\\');
+                out.push(ch);
+            }
+            ch if (ch as u32) < 0x20 || ch as u32 == 0x7f => {
+                out.push_str(&format!("\\x{:02x}", ch as u32));
+            }
+            ch => out.push(ch),
+        }
+    }
+    out.push(quote);
+    out
 }
 
 /// Whether `c` may start a markup tag (the `[a-z#/@]` class in `RE_TAGS`).
@@ -182,7 +246,29 @@ pub fn escape(markup: &str) -> String {
 /// *syntax* errors — an unmatched or mismatched closing tag. An unknown tag
 /// *name* is not an error: it renders as a no-op, as it does upstream.
 pub fn render(markup: &str) -> Result<Text> {
-    render_inner(markup, false)
+    render_inner(markup, false, &StyleType::default())
+}
+
+/// [`render`] with a base `style` for the whole text and, when `emoji` is
+/// set, `:emoji:` codes replaced. Port of `markup.render(markup, style,
+/// emoji, emoji_variant)`: a string with no `[` is replaced whole, with
+/// `emoji_variant`, and not parsed.
+pub fn render_with(
+    markup: &str,
+    style: impl Into<StyleType>,
+    emoji: bool,
+    emoji_variant: Option<crate::emoji::EmojiVariant>,
+) -> Result<Text> {
+    let style = style.into();
+    if !markup.contains('[') {
+        let plain = if emoji {
+            crate::emoji::replace_with_variant(markup, emoji_variant)
+        } else {
+            markup.to_string()
+        };
+        return Ok(Text::styled(plain, style));
+    }
+    render_inner(markup, emoji, &style)
 }
 
 /// [`render`] with `:emoji:` codes replaced, as upstream's
@@ -194,10 +280,347 @@ pub fn render(markup: &str) -> Result<Text> {
 /// Callers handle a string with no `[` themselves: upstream replaces it whole,
 /// with the console's default variant, instead of parsing it.
 pub fn render_emoji(markup: &str) -> Result<Text> {
-    render_inner(markup, true)
+    render_inner(markup, true, &StyleType::default())
 }
 
-fn render_inner(markup: &str, emoji: bool) -> Result<Text> {
+/// `RE_HANDLER`: `^([\w.]*?)(\(.*?\))?$`, as `(handler name, parameters)`.
+fn match_handler(parameters: &str) -> Option<(&str, Option<&str>)> {
+    let is_name = |c: char| c.is_alphanumeric() || c == '_' || c == '.';
+    // The lazy name stops at the first `(` that starts a group running to the
+    // end; without one, the whole string must be a name.
+    if parameters.chars().all(is_name) {
+        return Some((parameters, None));
+    }
+    let open = parameters.find(|c: char| !is_name(c))?;
+    let (name, rest) = parameters.split_at(open);
+    // `\(.*?\)` then `$`: the group must start with `(` and end at the last
+    // character with `)` (`.` does not match a newline).
+    if rest.starts_with('(') && rest.ends_with(')') && rest.len() >= 2 && !rest.contains('\n') {
+        return Some((name, Some(rest)));
+    }
+    None
+}
+
+/// The meta of a closed `@` tag. Port of the `@` branch of `markup.render`:
+/// `{name: ()}` with no parameters, `{name: (handler, args)}` for a handler
+/// call like `foo(1, 'x')`, otherwise `{name: literal_eval(parameters)}`.
+fn handler_meta(name: &str, parameters: Option<&str>) -> Result<Meta> {
+    let mut meta = Meta::new();
+    let Some(raw) = parameters.filter(|parameters| !parameters.is_empty()) else {
+        meta.insert(name, MetaValue::Tuple(Vec::new()));
+        return Ok(meta);
+    };
+    let mut parameters = raw.trim();
+    let mut handler_name = "";
+    if let Some((handler, arguments)) = match_handler(parameters) {
+        handler_name = handler;
+        parameters = arguments.unwrap_or("()");
+    }
+    let value = literal_eval(parameters).map_err(|error| {
+        RichError::Markup(match error {
+            LiteralError::Syntax(message) => format!(
+                "error parsing {} in {}; {message}",
+                py_repr_str(parameters),
+                py_repr_str(raw)
+            ),
+            LiteralError::Value(message) => {
+                format!("error parsing {}; {message}", py_repr_str(raw))
+            }
+        })
+    })?;
+    let value = if handler_name.is_empty() {
+        value
+    } else {
+        let arguments = match value {
+            MetaValue::Tuple(items) => MetaValue::Tuple(items),
+            other => MetaValue::Tuple(vec![other]),
+        };
+        MetaValue::Tuple(vec![MetaValue::Str(handler_name.to_string()), arguments])
+    };
+    meta.insert(name, value);
+    Ok(meta)
+}
+
+/// Why [`literal_eval`] failed: upstream's `SyntaxError` (with its message)
+/// or any other exception (`ValueError` for a name or an operator).
+#[derive(Debug, PartialEq)]
+enum LiteralError {
+    Syntax(String),
+    Value(String),
+}
+
+/// Python's `ast.literal_eval` for the values a style's meta can hold:
+/// numbers (with one sign), strings, `True`, `False`, `None`, tuples and
+/// lists. Anything else is a `ValueError` (upstream's message names an AST
+/// node at a memory address, which this one leaves out).
+fn literal_eval(source: &str) -> std::result::Result<MetaValue, LiteralError> {
+    tokenize_check(source)?;
+    let mut parser = LiteralParser {
+        chars: source
+            .trim_matches(|c| c == ' ' || c == '\t')
+            .chars()
+            .collect(),
+        position: 0,
+    };
+    let value = parser.expression()?;
+    parser.skip_space();
+    if parser.position < parser.chars.len() {
+        return Err(parser.trailing());
+    }
+    Ok(value)
+}
+
+/// The errors Python's tokenizer raises before any parsing: an unterminated
+/// string, and unbalanced or mismatched brackets.
+fn tokenize_check(source: &str) -> std::result::Result<(), LiteralError> {
+    let syntax = |message: String| Err(LiteralError::Syntax(message));
+    let mut open: Vec<char> = Vec::new();
+    let mut chars = source.chars();
+    while let Some(c) = chars.next() {
+        match c {
+            '\'' | '"' => loop {
+                match chars.next() {
+                    None => {
+                        return syntax(
+                            "unterminated string literal (detected at line 1)".to_string(),
+                        )
+                    }
+                    Some('\\') => {
+                        chars.next();
+                    }
+                    Some(end) if end == c => break,
+                    Some(_) => {}
+                }
+            },
+            '(' | '[' | '{' => open.push(c),
+            ')' | ']' | '}' => match open.pop() {
+                None => return syntax(format!("unmatched '{c}'")),
+                Some(opener) => {
+                    let expected = match opener {
+                        '(' => ')',
+                        '[' => ']',
+                        _ => '}',
+                    };
+                    if c != expected {
+                        return syntax(format!(
+                            "closing parenthesis '{c}' does not match opening parenthesis '{opener}'"
+                        ));
+                    }
+                }
+            },
+            _ => {}
+        }
+    }
+    match open.last() {
+        Some(opener) => syntax(format!("'{opener}' was never closed")),
+        None => Ok(()),
+    }
+}
+
+struct LiteralParser {
+    chars: Vec<char>,
+    position: usize,
+}
+
+impl LiteralParser {
+    fn peek(&self) -> Option<char> {
+        self.chars.get(self.position).copied()
+    }
+
+    fn skip_space(&mut self) {
+        while matches!(self.peek(), Some(' ' | '\t')) {
+            self.position += 1;
+        }
+    }
+
+    fn malformed() -> LiteralError {
+        LiteralError::Value("malformed node or string".to_string())
+    }
+
+    /// Something follows a complete value: a name or operator is valid
+    /// Python but not a literal; anything else is a syntax error.
+    fn trailing(&self) -> LiteralError {
+        match self.peek() {
+            Some(c) if "+-*/%&|^<>=.@[(".contains(c) => Self::malformed(),
+            Some(')') => LiteralError::Syntax("unmatched ')'".to_string()),
+            Some(']') => LiteralError::Syntax("unmatched ']'".to_string()),
+            _ => LiteralError::Syntax("invalid syntax".to_string()),
+        }
+    }
+
+    fn expression(&mut self) -> std::result::Result<MetaValue, LiteralError> {
+        self.skip_space();
+        let Some(c) = self.peek() else {
+            return Err(LiteralError::Syntax("invalid syntax".to_string()));
+        };
+        match c {
+            '(' | '[' => self.sequence(c),
+            '\'' | '"' => {
+                let mut value = self.string()?;
+                // Adjacent string literals concatenate.
+                loop {
+                    self.skip_space();
+                    match self.peek() {
+                        Some('\'' | '"') => value.push_str(&self.string()?),
+                        _ => break,
+                    }
+                }
+                Ok(MetaValue::Str(value))
+            }
+            '+' | '-' => {
+                self.position += 1;
+                self.skip_space();
+                match self.peek() {
+                    Some(d) if d.is_ascii_digit() || d == '.' => match self.number()? {
+                        MetaValue::Int(value) if c == '-' => Ok(MetaValue::Int(-value)),
+                        MetaValue::Float(value) if c == '-' => Ok(MetaValue::Float(-value)),
+                        value => Ok(value),
+                    },
+                    _ => Err(Self::malformed()),
+                }
+            }
+            c if c.is_ascii_digit() || c == '.' => self.number(),
+            c if c.is_alphabetic() || c == '_' => {
+                let start = self.position;
+                while self.peek().is_some_and(|c| c.is_alphanumeric() || c == '_') {
+                    self.position += 1;
+                }
+                let word: String = self.chars[start..self.position].iter().collect();
+                match word.as_str() {
+                    "True" => Ok(MetaValue::Bool(true)),
+                    "False" => Ok(MetaValue::Bool(false)),
+                    "None" => Ok(MetaValue::None),
+                    _ => Err(Self::malformed()),
+                }
+            }
+            '{' => Err(Self::malformed()),
+            _ => Err(LiteralError::Syntax("invalid syntax".to_string())),
+        }
+    }
+
+    fn sequence(&mut self, open: char) -> std::result::Result<MetaValue, LiteralError> {
+        let close = if open == '(' { ')' } else { ']' };
+        self.position += 1;
+        let mut items = Vec::new();
+        let mut trailing_comma = false;
+        loop {
+            self.skip_space();
+            match self.peek() {
+                None => return Err(LiteralError::Syntax(format!("'{open}' was never closed"))),
+                Some(c) if c == close => {
+                    self.position += 1;
+                    break;
+                }
+                _ => {}
+            }
+            items.push(self.expression()?);
+            self.skip_space();
+            match self.peek() {
+                Some(',') => {
+                    self.position += 1;
+                    trailing_comma = true;
+                }
+                Some(c) if c == close => {
+                    trailing_comma = false;
+                }
+                None => return Err(LiteralError::Syntax(format!("'{open}' was never closed"))),
+                Some(_) => return Err(self.trailing()),
+            }
+        }
+        Ok(if open == '[' {
+            MetaValue::List(items)
+        } else if items.len() == 1 && !trailing_comma {
+            // `(x)` is just `x`.
+            items.pop().expect("one item")
+        } else {
+            MetaValue::Tuple(items)
+        })
+    }
+
+    fn string(&mut self) -> std::result::Result<String, LiteralError> {
+        let quote = self.peek().expect("a quote");
+        self.position += 1;
+        let mut value = String::new();
+        loop {
+            let Some(c) = self.peek() else {
+                return Err(LiteralError::Syntax(
+                    "unterminated string literal (detected at line 1)".to_string(),
+                ));
+            };
+            self.position += 1;
+            if c == quote {
+                return Ok(value);
+            }
+            if c != '\\' {
+                value.push(c);
+                continue;
+            }
+            let Some(escaped) = self.peek() else {
+                return Err(LiteralError::Syntax(
+                    "unterminated string literal (detected at line 1)".to_string(),
+                ));
+            };
+            self.position += 1;
+            match escaped {
+                'n' => value.push('\n'),
+                't' => value.push('\t'),
+                'r' => value.push('\r'),
+                '0' => value.push('\0'),
+                '\\' | '\'' | '"' => value.push(escaped),
+                other => {
+                    value.push('\\');
+                    value.push(other);
+                }
+            }
+        }
+    }
+
+    fn number(&mut self) -> std::result::Result<MetaValue, LiteralError> {
+        let start = self.position;
+        while self
+            .peek()
+            .is_some_and(|c| c.is_ascii_alphanumeric() || c == '_' || c == '.')
+        {
+            let c = self.peek().expect("checked");
+            self.position += 1;
+            // An exponent's sign belongs to the number.
+            if matches!(c, 'e' | 'E') && matches!(self.peek(), Some('+' | '-')) {
+                let radix_prefix = self.chars[start..].starts_with(&['0', 'x'])
+                    || self.chars[start..].starts_with(&['0', 'X']);
+                if !radix_prefix {
+                    self.position += 1;
+                }
+            }
+        }
+        let word: String = self.chars[start..self.position]
+            .iter()
+            .filter(|&&c| c != '_')
+            .collect();
+        let invalid = || LiteralError::Syntax("invalid syntax".to_string());
+        let lower = word.to_ascii_lowercase();
+        for (prefix, radix) in [("0x", 16), ("0o", 8), ("0b", 2)] {
+            if let Some(digits) = lower.strip_prefix(prefix) {
+                return i64::from_str_radix(digits, radix)
+                    .map(MetaValue::Int)
+                    .map_err(|_| invalid());
+            }
+        }
+        if word.chars().all(|c| c.is_ascii_digit()) {
+            // Python rejects a leading zero on a non-zero decimal integer.
+            if word.len() > 1 && word.starts_with('0') && word.chars().any(|c| c != '0') {
+                return Err(invalid());
+            }
+            return word.parse().map(MetaValue::Int).map_err(|_| invalid());
+        }
+        word.parse::<f64>()
+            .ok()
+            .filter(|_| !lower.contains("inf") && !lower.contains("nan"))
+            .map(MetaValue::Float)
+            .ok_or_else(invalid)
+    }
+}
+
+fn render_inner(markup: &str, emoji: bool, base_style: &StyleType) -> Result<Text> {
     let mut plain = String::new();
     let mut raw_spans: Vec<RawSpan> = Vec::new();
     // Open tags, as `(normalized name, parameters, start offset)`. The name is
@@ -220,6 +643,8 @@ fn render_inner(markup: &str, emoji: bool) -> Result<Text> {
                 if let Some(name) = tag_name.strip_prefix('/') {
                     let name = name.trim();
                     let end = plain.len();
+                    // `tag.markup` of the closing tag, as written.
+                    let closing = Tag::new(tag_name, parameters.clone()).markup();
                     let (open_name, open_parameters, start) = if name.is_empty() {
                         // Auto-close: pop the most recent open tag, or error.
                         stack.pop().ok_or_else(|| {
@@ -238,18 +663,21 @@ fn render_inner(markup: &str, emoji: bool) -> Result<Text> {
                             .rposition(|(open, _, _)| *open == wanted)
                             .ok_or_else(|| {
                                 RichError::Markup(format!(
-                                "closing tag '[/{name}]' at position {} doesn't match any open tag",
-                                at()
-                            ))
+                                    "closing tag '{closing}' at position {} doesn't match any open tag",
+                                    at()
+                                ))
                             })?;
                         stack.remove(pos)
                     };
-                    raw_spans.push(RawSpan {
-                        start,
-                        end,
-                        name: open_name,
-                        parameters: open_parameters,
-                    });
+                    let style = if open_name.starts_with('@') {
+                        StyleType::Style(Style::from_meta(handler_meta(
+                            &open_name,
+                            open_parameters.as_deref(),
+                        )?))
+                    } else {
+                        StyleType::Name(Tag::new(open_name, open_parameters).to_string())
+                    };
+                    raw_spans.push(RawSpan { start, end, style });
                 } else {
                     stack.push((Style::normalize(tag_name), parameters, plain.len()));
                 }
@@ -259,45 +687,33 @@ fn render_inner(markup: &str, emoji: bool) -> Result<Text> {
 
     // Auto-close anything still open (lenient — see module docs).
     let end = plain.len();
+    // Upstream gives these the tag string as a style name, `@` tags included:
+    // the name resolves to no style when rendered.
     while let Some((open_name, open_parameters, start)) = stack.pop() {
         raw_spans.push(RawSpan {
             start,
             end,
-            name: open_name,
-            parameters: open_parameters,
+            style: StyleType::Name(Tag::new(open_name, open_parameters).to_string()),
         });
     }
 
-    // Carry tag strings through as names — the theme of whichever console
-    // renders this text resolves them. Resolving here instead would freeze the
-    // colours at parse time and make an unknown tag an error rather than the
-    // no-op upstream produces.
-    let mut spans: Vec<Span> = Vec::with_capacity(raw_spans.len());
-    for raw in raw_spans {
-        // Zero-length spans are NOT skipped. Upstream keeps them, and they
-        // still contribute a boundary point when segments are cut, so
-        // `[b]a[i][/i]b[/b]` emits two runs rather than one merged run. Same
-        // colours either way — different bytes.
-        // `@`-prefixed tags are meta/handler tags (spans of app data). We don't
-        // model those, so they carry no styling — stated explicitly rather than
-        // left to fall out of a failed parse.
-        let style = if raw.name.starts_with('@') {
-            StyleType::Style(Style::new())
-        } else {
-            // Upstream's `str(Tag)`: the name, or `"{name} {parameters}"`. That
-            // is what turns `[link=https://x]` into the style `link https://x`,
-            // which `Style::parse` then understands.
-            StyleType::Name(match &raw.parameters {
-                Some(parameters) => format!("{} {}", raw.name, parameters),
-                None => raw.name.clone(),
-            })
-        };
-        spans.push(Span {
+    // Tag strings are carried through as names: the theme of whichever
+    // console renders this text resolves them. Resolving here instead would
+    // freeze the colours at parse time and make an unknown tag an error
+    // rather than the no-op upstream produces. Upstream's `str(Tag)` turns
+    // `[link=https://x]` into the style `link https://x`.
+    //
+    // Zero-length spans are NOT skipped. Upstream keeps them, and they still
+    // contribute a boundary point when segments are cut, so `[b]a[i][/i]b[/b]`
+    // emits two runs rather than one merged run.
+    let mut spans: Vec<Span> = raw_spans
+        .into_iter()
+        .map(|raw| Span {
             start: raw.start,
             end: raw.end,
-            style,
-        });
-    }
+            style: raw.style,
+        })
+        .collect();
     // Outer spans first, so inner (more nested) spans are combined last and win.
     //
     // Upstream is `sorted(spans[::-1], key=attrgetter("start"))`, and both halves
@@ -310,7 +726,7 @@ fn render_inner(markup: &str, emoji: bool) -> Result<Text> {
     spans.reverse();
     spans.sort_by_key(|span| span.start);
 
-    let mut text = Text::new(plain);
+    let mut text = Text::styled(plain, base_style.clone());
     for span in spans {
         text.push_span(span);
     }

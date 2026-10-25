@@ -315,7 +315,7 @@ pub type Predicate = Arc<dyn Fn(&Value) -> bool + Send + Sync>;
 
 #[derive(Clone)]
 enum Condition {
-    Compare(Comparison, Value),
+    Compare(Comparison, Box<Value>),
     Predicate(Predicate),
 }
 
@@ -349,7 +349,7 @@ impl StyleRule {
     ) -> Self {
         StyleRule {
             column: column.into(),
-            condition: Condition::Compare(comparison, value.into()),
+            condition: Condition::Compare(comparison, Box::new(value.into())),
             style,
             target: Target::Cell,
         }
@@ -403,7 +403,7 @@ impl StyleRule {
     /// a Rust predicate.
     pub fn comparison(&self) -> Option<(Comparison, &Value)> {
         match &self.condition {
-            Condition::Compare(op, operand) => Some((*op, operand)),
+            Condition::Compare(op, operand) => Some((*op, &**operand)),
             Condition::Predicate(_) => None,
         }
     }

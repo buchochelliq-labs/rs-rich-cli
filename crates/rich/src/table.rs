@@ -28,6 +28,7 @@ use crate::console::{Console, ConsoleOptions, Justify, Overflow};
 use crate::measure::Measurement;
 use crate::protocol::{LineRenderable, Renderable};
 use crate::r#box::{Box as BoxSet, RowLevel, HEAVY_HEAD};
+use crate::ratio::{ratio_distribute, ratio_reduce};
 use crate::segment::Segment;
 use crate::style::{Style, StyleType};
 use crate::text::Text;
@@ -1564,11 +1565,9 @@ impl LineRenderable for Table {
         }
         // Fall back to a terminal-safe box on legacy Windows / non-UTF-8, and
         // to a plain-headed box when there is no header to set apart.
-        let box_set = self.box_set.substitute(
-            console.legacy_windows(),
-            self.safe_box.unwrap_or_else(|| console.safe_box()),
-            console.ascii_only(),
-        );
+        let box_set = self
+            .box_set
+            .substitute_for(options, self.safe_box.unwrap_or_else(|| console.safe_box()));
         let box_set = if self.show_header {
             box_set
         } else {
@@ -1857,92 +1856,6 @@ fn render_annotation(
         no_wrap,
         tab_size,
     )
-}
-
-/// Round half to even (banker's rounding), matching Python's `round`.
-fn round_half_even(value: f64) -> i64 {
-    let floor = value.floor();
-    let diff = value - floor;
-    if (diff - 0.5).abs() < 1e-9 {
-        let f = floor as i64;
-        if f % 2 == 0 {
-            f
-        } else {
-            f + 1
-        }
-    } else {
-        value.round() as i64
-    }
-}
-
-/// Reduce `values` by `total`, distributed across slots by `ratios` (capped by
-/// `maximums`). Direct port of `rich._ratio.ratio_reduce`.
-fn ratio_reduce(total: i64, ratios: &[i64], maximums: &[i64], values: &[i64]) -> Vec<i64> {
-    let ratios: Vec<i64> = ratios
-        .iter()
-        .zip(maximums)
-        .map(|(&r, &m)| if m != 0 { r } else { 0 })
-        .collect();
-    let mut total_ratio: i128 = ratios.iter().map(|&r| i128::from(r)).sum();
-    if total_ratio == 0 {
-        return values.to_vec();
-    }
-    let mut total_remaining = total;
-    let mut result = Vec::with_capacity(values.len());
-    for ((&ratio, &maximum), &value) in ratios.iter().zip(maximums).zip(values) {
-        if ratio != 0 && total_ratio > 0 {
-            let distributed = maximum.min(round_half_even(
-                ratio as f64 * total_remaining as f64 / total_ratio as f64,
-            ));
-            result.push(value - distributed);
-            total_remaining -= distributed;
-            total_ratio -= i128::from(ratio);
-        } else {
-            result.push(value);
-        }
-    }
-    result
-}
-
-/// Divide `total` across slots proportionally to `ratios` (ceil each share),
-/// each share floored at the matching `minimums` entry when given. Port of
-/// `rich._ratio.ratio_distribute`.
-fn ratio_distribute(total: i64, ratios: &[i64], minimums: Option<&[i64]>) -> Vec<i64> {
-    // Upstream zeroes the ratio of any slot whose minimum is 0 (falsy).
-    let ratios: Vec<i64> = match minimums {
-        Some(mins) => ratios
-            .iter()
-            .zip(mins)
-            .map(|(&r, &m)| if m != 0 { r } else { 0 })
-            .collect(),
-        None => ratios.to_vec(),
-    };
-    // Python ints never overflow; `ratio * total_remaining` can exceed i64
-    // for a huge ratio, so the arithmetic runs in i128.
-    let mut total_ratio: i128 = ratios.iter().map(|&r| i128::from(r)).sum();
-    let mut total_remaining = i128::from(total);
-    let mut result = Vec::with_capacity(ratios.len());
-    for (index, &ratio) in ratios.iter().enumerate() {
-        let ratio = i128::from(ratio);
-        let minimum = i128::from(minimums.map_or(0, |m| m[index]));
-        let distributed = if total_ratio > 0 {
-            // ceil(ratio * total_remaining / total_ratio) for positive values,
-            // then floored at `minimum`.
-            let numerator = ratio * total_remaining;
-            let ceil_div = (numerator + total_ratio - 1) / total_ratio;
-            minimum.max(ceil_div)
-        } else {
-            total_remaining
-        };
-        result.push(i64::try_from(distributed).unwrap_or(if distributed < 0 {
-            i64::MIN
-        } else {
-            i64::MAX
-        }));
-        total_ratio -= ratio;
-        total_remaining -= distributed;
-    }
-    result
 }
 
 /// Reduce `widths` so their total is under `max_width`, shrinking the widest

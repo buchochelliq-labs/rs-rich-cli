@@ -350,10 +350,16 @@ fn inline_style(strong: usize, emphasis: usize, strike: usize) -> Option<Style> 
 
 /// `markdown.link_url` plus the OSC 8 target, which is what upstream pushes for
 /// a link when `hyperlinks=True`.
+///
+/// An empty destination (`[k]()`) gives no OSC 8 at all: upstream's
+/// `Style(link="")` renders no hyperlink, as its link is falsy.
 fn link_style(url: &str) -> Style {
-    Style::parse(LINK_URL_STYLE)
-        .expect("valid style")
-        .with_link(url.to_string())
+    let style = Style::parse(LINK_URL_STYLE).expect("valid style");
+    if url.is_empty() {
+        style
+    } else {
+        style.with_link(url.to_string())
+    }
 }
 
 /// Upstream's `MarkdownContext.style_stack.current`: the product of every style
@@ -454,7 +460,7 @@ fn image_text(
     // wins, the image's own destination is the fallback, and neither being set
     // leaves the title unlinked.
     if hyperlinks {
-        let target = link.unwrap_or(destination);
+        let target = link.filter(|link| !link.is_empty()).unwrap_or(destination);
         if !target.is_empty() {
             title.stylize(Style::new().with_link(target.to_string()), 0, end);
         }
@@ -753,9 +759,10 @@ fn reject_invalid_links<'a>(
 /// many cells as the header row. A rejected table is re-parsed as ordinary
 /// text (tables off), with its offsets moved back into `source`.
 ///
-/// Only top-level tables are re-parsed: inside a list or quote the source
-/// range carries the container's markers, which a standalone parse would
-/// read as new containers.
+/// Inside a list or quote the range's later lines carry the container's
+/// markers (`> `, the item's indent), which a standalone parse would read as
+/// new containers; they are stripped first, up to the column the table
+/// starts at, and the offsets map back through them.
 fn reject_invalid_tables<'a>(
     source: &'a str,
     events: impl Iterator<Item = (Event<'a>, std::ops::Range<usize>)>,
@@ -777,20 +784,18 @@ fn reject_invalid_tables<'a>(
             Event::End(TagEnd::BlockQuote(_) | TagEnd::List(_) | TagEnd::FootnoteDefinition) => {
                 depth = depth.saturating_sub(1)
             }
-            Event::Start(Tag::Table(_)) if depth == 0 => {
-                let table = &source[range.clone()];
+            Event::Start(Tag::Table(_)) => {
+                let (table, offsets) = strip_container_prefixes(source, range.clone(), depth);
                 let mut lines = table.split('\n');
                 let header = lines.next().unwrap_or("");
                 let delimiter = lines.next().unwrap_or("");
                 if !markdown_it_table_start(header, delimiter) {
-                    let offset = range.start;
-                    out.extend(
-                        Parser::new_ext(table, Options::empty())
-                            .into_offset_iter()
-                            .map(|(event, inner)| {
-                                (event, inner.start + offset..inner.end + offset)
-                            }),
-                    );
+                    let at = |inner: usize| offsets.get(inner).copied().unwrap_or(range.end);
+                    let events: Vec<_> = Parser::new_ext(&table, Options::empty())
+                        .into_offset_iter()
+                        .map(|(event, inner)| (event.into_static(), at(inner.start)..at(inner.end)))
+                        .collect();
+                    out.extend(events);
                     skipping = true;
                     continue;
                 }
@@ -800,6 +805,43 @@ fn reject_invalid_tables<'a>(
         out.push((event, range));
     }
     out
+}
+
+/// The source of a table at `range`, with the container markers of its
+/// later lines removed when it is nested (`depth > 0`): leading spaces and
+/// `>` up to the column the table's first line starts at. Also returns, for
+/// each byte of the result (and one past its end), the offset in `source`.
+fn strip_container_prefixes(
+    source: &str,
+    range: std::ops::Range<usize>,
+    depth: usize,
+) -> (String, Vec<usize>) {
+    let line_start = source[..range.start].rfind('\n').map_or(0, |i| i + 1);
+    let indent = if depth == 0 {
+        0
+    } else {
+        range.start - line_start
+    };
+    let mut text = String::with_capacity(range.len());
+    let mut offsets = Vec::with_capacity(range.len() + 1);
+    let mut at = range.start;
+    for (index, line) in source[range.clone()].split_inclusive('\n').enumerate() {
+        let mut skip = 0;
+        if index > 0 {
+            for byte in line.bytes().take(indent) {
+                if byte == b' ' || byte == b'>' {
+                    skip += 1;
+                } else {
+                    break;
+                }
+            }
+        }
+        text.push_str(&line[skip..]);
+        offsets.extend(at + skip..at + line.len());
+        at += line.len();
+    }
+    offsets.push(range.end);
+    (text, offsets)
 }
 
 /// markdown-it's test for a table start (`rules_block/table.py`): the
@@ -1082,7 +1124,108 @@ fn pair_strikethrough<'a>(
     out
 }
 
+/// markdown-it keeps a reference definition only when `validateLink` takes
+/// its destination; a refused one (`[1]: javascript:x`) is ordinary paragraph
+/// text. pulldown-cmark consumes every definition, so the `[` of each refused
+/// one is escaped and the source parsed again: the line then prints as the
+/// paragraph markdown-it prints, and links to the label stay literal. `None`
+/// when no definition is refused.
+fn escape_refused_definitions(source: &str) -> Option<String> {
+    let parser = Parser::new_ext(source, Options::ENABLE_TABLES);
+    let mut starts: Vec<usize> = parser
+        .reference_definitions()
+        .iter()
+        .filter(|(_, def)| !validate_link(&normalize_link(&def.dest)))
+        .filter_map(|(_, def)| {
+            source[def.span.clone()]
+                .find('[')
+                .map(|at| def.span.start + at)
+        })
+        .collect();
+    if starts.is_empty() {
+        return None;
+    }
+    starts.sort_unstable();
+    let mut escaped = String::with_capacity(source.len() + starts.len());
+    let mut from = 0;
+    for start in starts {
+        escaped.push_str(&source[from..start]);
+        escaped.push('\\');
+        from = start;
+    }
+    escaped.push_str(&source[from..]);
+    Some(escaped)
+}
+
+/// Whether a list item's source is its marker alone (`-`, `2)`), which
+/// markdown-it gives no paragraph, as against an item whose inline content
+/// prints as nothing (`- ![]()`), which still has one.
+fn is_bare_item(item: &str) -> bool {
+    let rest = item.trim_start();
+    let rest = rest.strip_prefix(['-', '*', '+']).unwrap_or_else(|| {
+        let digits = rest.trim_start_matches(|c: char| c.is_ascii_digit());
+        digits.strip_prefix(['.', ')']).unwrap_or(rest)
+    });
+    rest.trim().is_empty()
+}
+
+/// markdown-it lets a table interrupt a paragraph (`a\nb|c\n-|-` is a
+/// paragraph `a` and then a table); pulldown-cmark does not, and keeps the
+/// lines in the paragraph. A blank line is put before each such header row in
+/// a top-level paragraph and the source parsed again. `None` when there is
+/// none.
+fn split_paragraph_tables(source: &str) -> Option<String> {
+    let mut depth = 0usize;
+    let mut starts: Vec<usize> = Vec::new();
+    for (event, range) in Parser::new_ext(source, Options::ENABLE_TABLES).into_offset_iter() {
+        match event {
+            Event::Start(Tag::BlockQuote(_) | Tag::List(_) | Tag::FootnoteDefinition(_)) => {
+                depth += 1
+            }
+            Event::End(TagEnd::BlockQuote(_) | TagEnd::List(_) | TagEnd::FootnoteDefinition) => {
+                depth = depth.saturating_sub(1)
+            }
+            Event::Start(Tag::Paragraph) if depth == 0 => {
+                let lines: Vec<(usize, &str)> = source[range.clone()]
+                    .split_inclusive('\n')
+                    .scan(range.start, |at, line| {
+                        let start = *at;
+                        *at += line.len();
+                        Some((start, line.trim_end_matches('\n')))
+                    })
+                    .collect();
+                for pair in lines.windows(2).skip(1) {
+                    let (start, header) = pair[0];
+                    let delimiter = pair[1].1;
+                    let indent = delimiter.len() - delimiter.trim_start_matches(' ').len();
+                    if indent < 4 && markdown_it_table_start(header, delimiter) {
+                        starts.push(start);
+                        break;
+                    }
+                }
+            }
+            _ => {}
+        }
+    }
+    if starts.is_empty() {
+        return None;
+    }
+    let mut split = String::with_capacity(source.len() + starts.len());
+    let mut from = 0;
+    for start in starts {
+        split.push_str(&source[from..start]);
+        split.push('\n');
+        from = start;
+    }
+    split.push_str(&source[from..]);
+    Some(split)
+}
+
 fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
+    let split = split_paragraph_tables(source);
+    let source = split.as_deref().unwrap_or(source);
+    let escaped = escape_refused_definitions(source);
+    let source = escaped.as_deref().unwrap_or(source);
     let hyperlinks = !md.no_hyperlinks;
     let paragraph_justify = md.justify.unwrap_or(Justify::Left);
     let mut blocks: Vec<Block> = Vec::new();
@@ -1433,7 +1576,13 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                 // anything still pending belongs to this item. markdown-it still
                 // emits a (hidden) paragraph for it, so upstream justifies it as
                 // a paragraph.
-                if let Some(mut text) = current.take() {
+                // An empty item (`-` alone) has no paragraph at all upstream,
+                // so it renders no rows.
+                let bare = is_bare_item(&source[range.clone()]);
+                if let Some(mut text) = current
+                    .take()
+                    .filter(|text| !(bare && text.plain().is_empty()))
+                {
                     text.set_justify(paragraph_justify);
                     sink(&mut blocks, &mut stack).push(Block::Text(text, None));
                 }
@@ -1676,6 +1825,12 @@ impl Renderable for Markdown {
             lines.push(Vec::new());
         }
 
+        // A document whose only row is a block's leading gap (`-` alone: an
+        // empty list) prints that one blank line. Joined rows would give no
+        // segment at all, which prints nothing; an empty one prints the line.
+        if lines.len() == 1 && lines[0].is_empty() {
+            return vec![Segment::new("", None)];
+        }
         let mut segments = Vec::new();
         let last = lines.len().saturating_sub(1);
         for (index, line) in lines.into_iter().enumerate() {

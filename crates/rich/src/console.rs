@@ -805,18 +805,25 @@ impl Console {
     /// returning the string (including the single trailing newline). For tests
     /// and export.
     pub fn render_export(&self, renderable: &dyn Renderable) -> String {
-        let segments = self.render_segments(renderable);
-        let mut out = self.segments_to_string(&segments);
-        if !segments.is_empty() {
-            out.push('\n');
-        }
-        out
+        self.render_export_with(renderable, &self.options())
     }
 
-    /// Render a value and write it to stdout, followed by a newline.
+    /// Render a value and write it to stdout, followed by a newline (unless
+    /// the renderable ends without one upstream:
+    /// [`Renderable::print_end_line`]).
     pub fn print(&self, renderable: &dyn Renderable) {
-        let segments = self.render_segments(renderable);
-        self.emit(segments);
+        self.print_with(renderable, &self.options());
+    }
+
+    /// Whether printing `renderable` under `options` ends its last line: a
+    /// renderable that `print(justify=…)` wraps in `Align` always does.
+    fn print_ends_line(renderable: &dyn Renderable, options: &ConsoleOptions) -> bool {
+        renderable.print_end_line(options)
+            || (renderable.printed_text().is_none()
+                && matches!(
+                    options.justify,
+                    Justify::Left | Justify::Center | Justify::Right
+                ))
     }
 
     /// Print with explicit render options, the equivalent of upstream's
@@ -826,7 +833,7 @@ impl Console {
     /// drops the text's own `justify`, `overflow` and `no_wrap`.
     pub fn print_with(&self, renderable: &dyn Renderable, options: &ConsoleOptions) {
         let segments = self.render_segments_with(renderable, options);
-        self.emit(segments);
+        self.emit_end(segments, Self::print_ends_line(renderable, options));
     }
 
     /// Like [`render_export`](Self::render_export), with explicit render
@@ -838,7 +845,7 @@ impl Console {
     ) -> String {
         let segments = self.render_segments_with(renderable, options);
         let mut out = self.segments_to_string(&segments);
-        if !segments.is_empty() {
+        if !segments.is_empty() && Self::print_ends_line(renderable, options) {
             out.push('\n');
         }
         out
@@ -968,6 +975,59 @@ impl Console {
         segments_to_plain(&segments)
     }
 
+    /// Like [`export_text`](Self::export_text) with escape codes. Port of
+    /// `Console.export_text(styles=True)`: each segment in the console's
+    /// colour system (upstream's style keeps the codes printing rendered),
+    /// or in truecolor, `Style.render`'s default, without one.
+    pub fn export_text_styled(&self, f: impl FnOnce(&Console)) -> String {
+        let system = self.color_system().unwrap_or(ColorSystem::Truecolor);
+        self.record(f)
+            .iter()
+            .map(|segment| match &segment.style {
+                Some(style) => style.render(&segment.text, Some(system)),
+                None => segment.text.clone(),
+            })
+            .collect()
+    }
+
+    /// Write what `f` prints to `path` as text, with escape codes when
+    /// `styles`. Port of `Console.save_text`.
+    pub fn save_text(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        styles: bool,
+        f: impl FnOnce(&Console),
+    ) -> std::io::Result<()> {
+        let text = if styles {
+            self.export_text_styled(f)
+        } else {
+            self.export_text(f)
+        };
+        std::fs::write(path, text)
+    }
+
+    /// Write what `f` prints to `path` as HTML with a stylesheet. Port of
+    /// `Console.save_html` (its default `inline_styles=False`).
+    pub fn save_html(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        f: impl FnOnce(&Console),
+    ) -> std::io::Result<()> {
+        std::fs::write(path, self.export_html_classes(f))
+    }
+
+    /// Write what `f` prints to `path` as SVG. Port of `Console.save_svg`;
+    /// as for [`export_svg`](Self::export_svg), the `unique_id` is given.
+    pub fn save_svg(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        title: &str,
+        unique_id: &str,
+        f: impl FnOnce(&Console),
+    ) -> std::io::Result<()> {
+        std::fs::write(path, self.export_svg(title, unique_id, f))
+    }
+
     /// Buffer everything printed inside `f` and display it through the system
     /// pager. The Rust analogue of upstream's `with console.pager():` block.
     ///
@@ -980,18 +1040,42 @@ impl Console {
     }
 
     /// Like [`page`](Self::page) but with an explicit [`Pager`](crate::pager::Pager)
-    /// — the seam upstream exposes as `Console.pager(pager=…)`.
+    /// — the seam upstream exposes as `Console.pager(pager=…)`. Hyperlinks
+    /// are stripped, as upstream's default `links=False` does.
     pub fn page_with(
         &self,
         pager: &dyn crate::pager::Pager,
         styles: bool,
         f: impl FnOnce(&Console),
     ) -> std::io::Result<()> {
-        let segments = self.record(f);
-        let content = if styles {
-            self.segments_to_string(&segments)
-        } else {
+        self.page_with_links(pager, styles, false, f)
+    }
+
+    /// Like [`page_with`](Self::page_with), keeping hyperlinks when `links`
+    /// and `styles` are both set. Port of `Console.pager(pager, styles,
+    /// links)`: without `styles` everything is plain, and without `links`
+    /// each style loses its link (`Segment.strip_links`).
+    pub fn page_with_links(
+        &self,
+        pager: &dyn crate::pager::Pager,
+        styles: bool,
+        links: bool,
+        f: impl FnOnce(&Console),
+    ) -> std::io::Result<()> {
+        let mut segments = self.record(f);
+        let content = if !styles {
             segments_to_plain(&segments)
+        } else {
+            if !links {
+                for segment in &mut segments {
+                    if let Some(style) = segment.style.as_mut() {
+                        if style.link().is_some() {
+                            *style = style.update_link(None);
+                        }
+                    }
+                }
+            }
+            self.segments_to_string(&segments)
         };
         pager.show(&content)
     }
@@ -1808,7 +1892,7 @@ impl ConsoleBuilder {
 /// `Console.is_dumb_terminal` (the caller supplies the `is_terminal` half):
 /// `_detect_color_system` returns no colour system for one, so its output is
 /// plain even though it is a terminal.
-fn is_dumb_terminal() -> bool {
+pub(crate) fn is_dumb_terminal() -> bool {
     std::env::var("TERM")
         .map(|term| matches!(term.to_lowercase().as_str(), "dumb" | "unknown"))
         .unwrap_or(false)
@@ -1924,6 +2008,301 @@ impl crate::protocol::ConsoleEnvironment for Console {
     }
     fn render_environment(&self) -> Option<&dyn crate::protocol::RenderEnvironment> {
         self.render_environment.as_deref()
+    }
+}
+
+/// One object passed to [`Console::print_objects`]: a string (rendered as
+/// console markup), a `Text`, or any other renderable.
+pub enum PrintObject<'a> {
+    /// A string, through `render_str` with the call's `emoji`, `markup` and
+    /// `highlight`.
+    Str(&'a str),
+    /// A `Text`, joined with the strings around it.
+    Text(&'a Text),
+    /// Any other renderable, which stands alone.
+    Renderable(&'a dyn Renderable),
+}
+
+/// The keyword arguments of upstream's `Console.print`, after defaults.
+#[derive(Clone)]
+pub struct PrintOptions<'a> {
+    pub sep: &'a str,
+    pub end: &'a str,
+    pub style: Option<crate::style::StyleType>,
+    pub justify: Option<Justify>,
+    pub overflow: Option<Overflow>,
+    pub no_wrap: Option<bool>,
+    pub emoji: Option<bool>,
+    pub markup: Option<bool>,
+    pub highlight: Option<bool>,
+    pub width: Option<usize>,
+    pub height: Option<usize>,
+    pub crop: bool,
+    pub soft_wrap: Option<bool>,
+    pub new_line_start: bool,
+}
+
+impl Default for PrintOptions<'_> {
+    fn default() -> Self {
+        PrintOptions {
+            sep: " ",
+            end: "\n",
+            style: None,
+            justify: None,
+            overflow: None,
+            no_wrap: None,
+            emoji: None,
+            markup: None,
+            highlight: None,
+            width: None,
+            height: None,
+            crop: true,
+            soft_wrap: None,
+            new_line_start: false,
+        }
+    }
+}
+
+/// The upstream `Console` methods built on its print pipeline.
+impl Console {
+    /// Print `objects` as upstream's `Console.print(*objects, sep=…, end=…,
+    /// style=…, justify=…, overflow=…, no_wrap=…, emoji=…, markup=…,
+    /// highlight=…, width=…, height=…, crop=…, soft_wrap=…,
+    /// new_line_start=…)` does. Strings and texts in a row join into one
+    /// `Text` with `sep` and end with `end`; other renderables stand alone.
+    /// Malformed markup is an error, as upstream's `MarkupError`.
+    pub fn print_objects(
+        &self,
+        objects: &[PrintObject<'_>],
+        options: &PrintOptions<'_>,
+    ) -> crate::errors::Result<()> {
+        let segments = self.render_objects(objects, options)?;
+        self.emit_end(segments, false);
+        Ok(())
+    }
+
+    /// The segments [`print_objects`](Self::print_objects) writes, ending
+    /// as upstream's do (a trailing newline included).
+    pub fn render_objects(
+        &self,
+        objects: &[PrintObject<'_>],
+        options: &PrintOptions<'_>,
+    ) -> crate::errors::Result<Vec<Segment>> {
+        let (mut no_wrap, mut overflow, mut crop) =
+            (options.no_wrap, options.overflow, options.crop);
+        // `soft_wrap=True`: no wrapping, nothing cropped.
+        if options.soft_wrap.unwrap_or(false) {
+            no_wrap = no_wrap.or(Some(true));
+            overflow = overflow.or(Some(Overflow::Ignore));
+            crop = false;
+        }
+        let align = match options.justify {
+            Some(Justify::Left) => Some(crate::align::HorizontalAlign::Left),
+            Some(Justify::Center) => Some(crate::align::HorizontalAlign::Center),
+            Some(Justify::Right) => Some(crate::align::HorizontalAlign::Right),
+            _ => None,
+        };
+        let mut render_options = self.options();
+        if let Some(justify) = options.justify {
+            render_options.justify = justify;
+        }
+        render_options.overflow = overflow;
+        render_options.no_wrap = no_wrap;
+        render_options.markup = options.markup;
+        render_options.highlight = options.highlight;
+        if let Some(width) = options.width {
+            render_options = render_options.update_width(width.min(self.width));
+        }
+        if options.height.is_some() {
+            render_options.height = options.height;
+        }
+        let style = match &options.style {
+            Some(style) => Some(self.get_style(style)?),
+            None => None,
+        };
+
+        let mut segments: Vec<Segment> = Vec::new();
+        let mut emit = |renderable: &dyn Renderable, end: Option<&str>| {
+            let mut rendered = if render_options.max_width < 1 {
+                Vec::new()
+            } else {
+                match align {
+                    Some(align) => {
+                        crate::align::Align::render_child(renderable, align, self, &render_options)
+                    }
+                    None => renderable.rich_render(self, &render_options),
+                }
+            };
+            // This port's renderables separate their lines; upstream's end
+            // each one, a text with its `end`.
+            match end {
+                Some(end) if !end.is_empty() => rendered.push(Segment::new(end, None)),
+                Some(_) => {}
+                // A renderable that ends without a line break upstream
+                // (`Screen`, `LiveRender`, a rule with an open `end`) keeps
+                // its last line open, as `print` does.
+                None if !rendered.is_empty()
+                    && Self::print_ends_line(renderable, &render_options) =>
+                {
+                    rendered.push(Segment::line())
+                }
+                None => {}
+            }
+            // The style goes on each line, never on the newlines.
+            if let Some(style) = &style {
+                let mut styled = Vec::with_capacity(rendered.len());
+                for (line, terminated) in Segment::split_lines_terminator(&rendered) {
+                    styled.extend(Segment::apply_style_with(&line, Some(style), None));
+                    if terminated {
+                        styled.push(Segment::line());
+                    }
+                }
+                rendered = styled;
+            }
+            segments.extend(rendered);
+        };
+
+        // An empty print is a new line (`NewLine()`); with another `end`, an
+        // empty string.
+        let blank = [PrintObject::Str("")];
+        let objects = if objects.is_empty() && options.end != "\n" {
+            &blank[..]
+        } else {
+            objects
+        };
+        if objects.is_empty() {
+            emit(&Text::new(""), Some("\n"));
+        }
+        let mut texts: Vec<Text> = Vec::new();
+        let flush = |texts: &mut Vec<Text>, emit: &mut dyn FnMut(&dyn Renderable, Option<&str>)| {
+            if !texts.is_empty() {
+                let mut separator = Text::new(options.sep);
+                separator.set_justify_option(options.justify);
+                emit(&separator.join(texts), Some(options.end));
+                texts.clear();
+            }
+        };
+        for object in objects {
+            match object {
+                PrintObject::Str(content) => {
+                    let render_str = RenderStrOptions {
+                        emoji: options.emoji,
+                        markup: options.markup,
+                        highlight: options.highlight,
+                        ..Default::default()
+                    };
+                    texts.push(self.render_str_with(content, &render_str)?);
+                }
+                PrintObject::Text(text) => texts.push((*text).clone()),
+                PrintObject::Renderable(renderable) => {
+                    flush(&mut texts, &mut emit);
+                    emit(*renderable, None);
+                }
+            }
+        }
+        flush(&mut texts, &mut emit);
+
+        if options.new_line_start {
+            let plain: String = segments
+                .iter()
+                .map(|segment| segment.text.as_str())
+                .collect();
+            if plain.lines().count() > 1 {
+                segments.insert(0, Segment::line());
+            }
+        }
+        if crop {
+            segments = Segment::split_and_crop_lines(&segments, self.width, None, false, true)
+                .into_iter()
+                .flatten()
+                .collect();
+        }
+        Ok(segments)
+    }
+
+    /// Write `count` blank lines. Port of `Console.line`.
+    pub fn line(&self, count: usize) {
+        if count > 0 {
+            self.emit_end(vec![Segment::new("\n".repeat(count), None)], false);
+        }
+    }
+
+    /// Draw a rule with an optional title. Port of `Console.rule(title,
+    /// characters=…, style=…, align=…)`.
+    pub fn rule(
+        &self,
+        title: &str,
+        characters: &str,
+        style: impl Into<crate::style::StyleType>,
+        align: crate::align::HorizontalAlign,
+    ) {
+        let rule = crate::rule::Rule::new(title)
+            .characters(characters)
+            .style(style)
+            .align(align);
+        self.print(&rule);
+    }
+
+    /// Write `objects` joined by `sep` with no markup, emoji, wrapping or
+    /// cropping. Port of `Console.out`.
+    pub fn out(
+        &self,
+        objects: &[&str],
+        sep: &str,
+        end: &str,
+        style: Option<crate::style::StyleType>,
+        highlight: Option<bool>,
+    ) -> crate::errors::Result<()> {
+        let raw = objects.join(sep);
+        self.print_objects(
+            &[PrintObject::Str(&raw)],
+            &PrintOptions {
+                end,
+                style,
+                highlight,
+                emoji: Some(false),
+                markup: Some(false),
+                no_wrap: Some(true),
+                overflow: Some(Overflow::Ignore),
+                crop: false,
+                ..Default::default()
+            },
+        )
+    }
+
+    /// Pretty print a JSON string. Port of `Console.print_json`: a
+    /// [`Json`](crate::json::Json) printed with `soft_wrap=True`.
+    pub fn print_json(
+        &self,
+        json: &str,
+        options: &crate::json::JsonOptions,
+    ) -> crate::errors::Result<()> {
+        let renderable = crate::json::Json::with_options(json, options)?;
+        self.print_objects(
+            &[PrintObject::Renderable(&renderable)],
+            &PrintOptions {
+                soft_wrap: Some(true),
+                ..Default::default()
+            },
+        )
+    }
+
+    /// The width `renderable` needs under `options` (the console's when
+    /// `None`). Port of `Console.measure`.
+    pub fn measure(
+        &self,
+        renderable: &dyn Renderable,
+        options: Option<&ConsoleOptions>,
+    ) -> crate::measure::Measurement {
+        let default_options;
+        let options = match options {
+            Some(options) => options,
+            None => {
+                default_options = self.options();
+                &default_options
+            }
+        };
+        crate::measure::Measurement::get(self, options, renderable)
     }
 }
 
@@ -2152,6 +2531,45 @@ mod tests {
             styled.0.lock().unwrap().as_str(),
             "\x1b[1;31mhi\x1b[0m there\n"
         );
+
+        // Links go unless `links` is set too (rich 15.0.0's
+        // `console.pager(styles=True, links=…)`, less the random `id=`).
+        let linked = |links: bool| {
+            let recorder = Recorder::default();
+            console
+                .page_with_links(&recorder, true, links, |c| {
+                    c.print_str("[bold link=https://x.io]hi[/] there")
+                })
+                .unwrap();
+            let out = recorder.0.lock().unwrap().clone();
+            out
+        };
+        assert_eq!(linked(false), "\x1b[1mhi\x1b[0m there\n");
+        assert_eq!(
+            linked(true),
+            "\x1b]8;;https://x.io\x1b\\\x1b[1mhi\x1b[0m\x1b]8;;\x1b\\ there\n"
+        );
+    }
+
+    #[test]
+    fn export_text_styled_renders_truecolor() {
+        // rich 15.0.0, recording `[#ff8800]x[/] y`, `export_text(styles=True)`:
+        // `\x1b[91mx…` on a `standard` console, truecolor with no colour.
+        let console = |system| {
+            Console::builder()
+                .force_terminal(true)
+                .color_system(system)
+                .width(20)
+                .no_color(false)
+                .build()
+        };
+        let export =
+            |console: Console| console.export_text_styled(|c| c.print_str("[#ff8800]x[/] y"));
+        assert_eq!(
+            export(console(Some(ColorSystem::Standard))),
+            "\x1b[91mx\x1b[0m y\n"
+        );
+        assert_eq!(export(console(None)), "\x1b[38;2;255;136;0mx\x1b[0m y\n");
     }
 
     #[test]
@@ -2266,6 +2684,29 @@ mod tests {
         }));
         assert!(unwound.is_err());
         assert!(console.theme().get("accent").is_none());
+    }
+
+    #[test]
+    fn print_objects_keeps_a_renderable_s_open_last_line() {
+        // A `Screen` ends without a line break when printed
+        // (`Renderable::print_end_line`); `print_objects` must not add one.
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(crate::color::ColorSystem::Truecolor))
+            .width(4)
+            .height(2)
+            .build();
+        let screen = crate::screen::Screen::new(Box::new(Text::new("hi")));
+        let printed = console.capture(|c| c.print(&screen));
+        let objects = console.capture(|c| {
+            c.print_objects(
+                &[PrintObject::Renderable(&screen)],
+                &PrintOptions::default(),
+            )
+            .unwrap()
+        });
+        assert_eq!(objects, printed);
+        assert!(!objects.ends_with('\n'), "{objects:?}");
     }
 
     #[test]

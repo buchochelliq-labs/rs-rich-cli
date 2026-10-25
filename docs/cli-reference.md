@@ -384,7 +384,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `banner` | Draw TEXT as a FIGlet banner: a font, a style or colour gradient, alignment and width fitting. Built with the `art` feature |
 | `shell` | Shell integration: `init` prints a script with completions, OSC 133 prompt marks, OSC 7 and a status line after each command; `status` and `link` are its helpers |
 | `spin` | Run a command with a spinner and a title until it exits, and exit with its status (like gum spin); without a terminal it just runs the command |
-| `record` | Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG, an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with committed ones instead |
+| `record` | Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG (when asked), an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with committed ones instead |
 | `plugins` | List the plugins this build has — built in, linked, and any --plugin PATH loads — with their source, version, ABI and capabilities |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
 
@@ -2394,7 +2394,7 @@ rich spin --spinner moon --show-output -- curl -sS https://example.com
 
 ### rich record
 
-Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG, an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with committed ones instead
+Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG (when asked), an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with committed ones instead
 
 #### Usage
 
@@ -2409,7 +2409,8 @@ rich record [--check] [--output DIR] [--bin-dir DIR] [--format png,svg,cast,gif,
 - KeyDown KEY, KeyUp KEY: hold a key (Up, Ctrl+F, or one character) down, let it go; it autorepeats meanwhile (Set KeyRepeat DELAY INTERVAL, 200ms 33ms)
 - Hold KEY DURATION: KeyDown, wait, KeyUp
 - Set KittyKeyboard on: report the kitty keyboard protocol, so a program can turn it on and hear releases
-- Output apng: an animated PNG beside (or instead of) the GIF
+- Output gif png: write only these formats; without an Output line, every format but the APNG
+- Output apng (or --format apng, or all): an animated PNG beside (or instead of) the GIF; it is written only when asked
 
 ### rich plugins
 

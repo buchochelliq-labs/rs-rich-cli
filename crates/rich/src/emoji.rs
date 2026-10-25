@@ -3,7 +3,13 @@
 //! Port of upstream `rich/_emoji_replace.py` + the full `rich/_emoji_codes.py`
 //! table (see `emoji_codes.rs`). [`replace`] turns `:name:` shortcodes into
 //! emoji, with optional `:name-emoji:` / `:name-text:` variant selectors.
-//! Unknown codes are left untouched (matching upstream).
+//! Unknown codes are left untouched (matching upstream). [`Emoji`] is
+//! upstream's `rich.emoji.Emoji` renderable.
+
+use crate::console::{Console, ConsoleOptions};
+use crate::protocol::Renderable;
+use crate::segment::Segment;
+use crate::style::StyleType;
 
 const VARIANT_EMOJI: &str = "\u{fe0f}";
 const VARIANT_TEXT: &str = "\u{fe0e}";
@@ -87,6 +93,84 @@ pub fn replace_with_variant(text: &str, default_variant: Option<EmojiVariant>) -
     out
 }
 
+/// No emoji by that name. Port of `rich.emoji.NoEmoji`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct NoEmoji(pub String);
+
+impl std::fmt::Display for NoEmoji {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.0)
+    }
+}
+
+impl std::error::Error for NoEmoji {}
+
+/// A single emoji character, by name. Port of `rich.emoji.Emoji`.
+#[derive(Debug, Clone)]
+pub struct Emoji {
+    name: String,
+    style: StyleType,
+    variant: Option<EmojiVariant>,
+    character: String,
+}
+
+impl Emoji {
+    /// The emoji called `name` (exactly, as upstream's `EMOJI[name]`), or
+    /// [`NoEmoji`].
+    pub fn new(name: &str) -> Result<Emoji, NoEmoji> {
+        let character = emoji_code(name)
+            .ok_or_else(|| NoEmoji(format!("No emoji called {}", crate::pretty::str_repr(name))))?;
+        Ok(Emoji {
+            name: name.to_string(),
+            style: StyleType::from("none"),
+            variant: None,
+            character: character.to_string(),
+        })
+    }
+
+    /// The style of the emoji (upstream `style`, default `"none"`).
+    pub fn style(mut self, style: impl Into<StyleType>) -> Self {
+        self.style = style.into();
+        self
+    }
+
+    /// Append the variant's selector (upstream `variant`).
+    pub fn variant(mut self, variant: EmojiVariant) -> Self {
+        if self.variant.is_none() {
+            self.character.push_str(variant.selector());
+        } else {
+            let base = emoji_code(&self.name).unwrap_or_default();
+            self.character = format!("{base}{}", variant.selector());
+        }
+        self.variant = Some(variant);
+        self
+    }
+
+    /// The emoji's name.
+    pub fn name(&self) -> &str {
+        &self.name
+    }
+
+    /// Replace `:name:` codes in `text`. Port of `Emoji.replace`.
+    pub fn replace(text: &str) -> String {
+        replace(text)
+    }
+}
+
+impl std::fmt::Display for Emoji {
+    /// The emoji character (upstream `__str__`).
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.write_str(&self.character)
+    }
+}
+
+impl Renderable for Emoji {
+    fn rich_render(&self, console: &Console, _options: &ConsoleOptions) -> Vec<Segment> {
+        let style = console.get_style(&self.style).unwrap_or_default();
+        vec![Segment::new(self.character.clone(), Some(style))]
+    }
+}
+
 /// Python's `str.isspace()`, which `\s` follows for `str` patterns. Unlike
 /// `char::is_whitespace` it includes the separators U+001C..=U+001F.
 fn is_python_space(c: char) -> bool {
@@ -131,6 +215,32 @@ mod tests {
         assert_eq!(replace(":not_a_real_emoji:"), ":not_a_real_emoji:");
         assert_eq!(replace("no emoji"), "no emoji");
         assert_eq!(replace("ratio 3:4 done"), "ratio 3:4 done");
+    }
+
+    #[test]
+    fn emoji_renderable_matches_upstream() {
+        // Captured from rich 15.0.0: `str(Emoji("rocket", variant="text"))`,
+        // `NoEmoji("No emoji called 'nope'")`, and `Emoji` printed in red.
+        let rocket = Emoji::new("rocket").unwrap();
+        assert_eq!(rocket.to_string(), "\u{1f680}");
+        assert_eq!(
+            rocket.clone().variant(EmojiVariant::Text).to_string(),
+            "\u{1f680}\u{fe0e}"
+        );
+        assert_eq!(
+            Emoji::new("nope").unwrap_err().to_string(),
+            "No emoji called 'nope'"
+        );
+        assert!(Emoji::new("Rocket").is_err());
+        let console = crate::Console::builder()
+            .force_terminal(true)
+            .color_system(Some(crate::ColorSystem::Truecolor))
+            .width(10)
+            .build();
+        // Upstream prints no newline after it; `print` here always ends the
+        // line (DIVERGENCES §29), so compare the rendered segment.
+        let out = console.render_to_string(&rocket.style("red"));
+        assert_eq!(out, "\x1b[31m\u{1f680}\x1b[0m");
     }
 
     #[test]

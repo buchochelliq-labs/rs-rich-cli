@@ -394,8 +394,9 @@ fn every_settled_update_is_a_frame_at_the_tapes_rate() {
         "{} frames over {span:.2}s",
         counting.len()
     );
-    // macOS's runners kept 7 frames over 0.8s, where Linux keeps about
-    // 30 a second: the bound holds where the PTY's reads are known.
+    // macOS's runners kept 7 frames over 0.8s, and still 5 over 0.5s after
+    // late reads were split into frames (`session::State::receive`): the
+    // cause there is not yet known, so the bound holds on Linux only.
     #[cfg(target_os = "linux")]
     assert!(
         counting.len() as f64 >= 0.4 * (35.0 * span).min(75.0),

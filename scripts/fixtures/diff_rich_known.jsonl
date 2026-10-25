@@ -2,3 +2,4 @@
 # still differs from Python rich and names its issue. When fixing an issue, move
 # its case(s) into diff_rich_cases.jsonl (the pull-request corpus) in the same PR.
 # Replay: python scripts/diff_rich.py --corpus scripts/fixtures/diff_rich_known.jsonl
+{"kind":"markdown","name":"known_empty_link_item_full_justify","issue":769,"note":"An ordered item whose only content is an empty link (`2) []()`) under justify=full renders no row; upstream renders the number. Found by the 0.0.22 document fuzzer; default justify matches (golden markdown_fuzz_9).","source":"2) []()","width":31,"color_system":"truecolor","hyperlinks":true,"justify":"full"}

@@ -1944,8 +1944,8 @@ pub(crate) fn spec() -> CommandSpec {
             .about(
                 "Run tapes (scripted terminal sessions: type, press and hold keys, wait for \
                  screen text, take screenshots) in a real terminal and write PNG, SVG and text \
-                 screenshots, an asciinema cast, a GIF, an animated PNG, an MP4 (with FFmpeg) and \
-                 an HTML page with a player; video has every screen update at the tape's frame \
+                 screenshots, an asciinema cast, a GIF, an animated PNG (when asked), an MP4 (with \
+                 FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame \
                  rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with \
                  committed ones instead",
             )
@@ -1963,7 +1963,10 @@ pub(crate) fn spec() -> CommandSpec {
                  - Hold KEY DURATION: KeyDown, wait, KeyUp\n\
                  - Set KittyKeyboard on: report the kitty keyboard protocol, so a program can \
                  turn it on and hear releases\n\
-                 - Output apng: an animated PNG beside (or instead of) the GIF",
+                 - Output gif png: write only these formats; without an Output line, every \
+                 format but the APNG\n\
+                 - Output apng (or --format apng, or all): an animated PNG beside (or instead \
+                 of) the GIF; it is written only when asked",
             ),
     )
     .subcommand(

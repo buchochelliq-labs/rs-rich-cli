@@ -61,6 +61,8 @@ from rich.text import Text
 from rich.theme import Theme as RichTheme
 from rich.tree import Tree
 
+from parity_docs import capture_parity_docs
+
 
 def _progress_table():
     """The default-column Progress display (no time columns) as a static grid."""
@@ -2965,6 +2967,13 @@ def main() -> None:
     capture_api_gaps()
     capture_audit_edges()
     capture_audit2()
+    capture_parity_widgets()
+    capture_parity_live()
+
+    from golden_parity_core import capture_parity_core
+
+    capture_parity_core(golden_dir())
+    capture_parity_docs()
 
 
 # --- core gaps (bindings foundation) ------------------------------------------
@@ -4029,6 +4038,635 @@ def capture_audit2() -> None:
         lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
     path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(AUDIT2_CASES)} audit 2 cases to {path}")
+
+
+# --- parity: widgets and layout (0.0.22 workstream 4) --------------------------
+# One fixture, `parity_widgets.tsv`: `name<TAB>json(output)`, built with the
+# `_cg_*` consoles. The edges of `padding`, `panel`, `align`, `constrain`,
+# `table`, `layout`, `screen`, `bar`, `box.substitute` and `_ratio`: names
+# resolved through the theme, zero sizes that upstream's `or` treats as unset,
+# out-of-range `Bar` ends, the legacy Windows box table, a custom `Box`'s
+# `ascii` flag, overflowing layouts and `Screen`'s application mode and
+# trailing line. `tests/golden_parity_widgets.rs` has a Rust builder per name.
+
+from rich._ratio import (
+    ratio_distribute as _pw_ratio_distribute,
+    ratio_reduce as _pw_ratio_reduce,
+    ratio_resolve as _pw_ratio_resolve,
+)
+from rich.console import Group as _PWGroup
+from rich.screen import Screen as _PWScreen
+
+
+def _pw_ascii_console(width: int, **overrides) -> Console:
+    """A `_cg_console` writing to an ASCII stream, so `options.ascii_only`."""
+    stream = io.TextIOWrapper(io.BytesIO(), encoding="ascii")
+    return _cg_console(width, file=stream, **overrides)
+
+
+def _pw_layout(width: int, height: int, build) -> str:
+    layout = Layout()
+    build(layout)
+    return _cg_print(_cg_console(width, height=height), layout)
+
+
+def _pw_leaf(renderable, width: int, height: int) -> str:
+    """`renderable` as the only leaf of a layout: rendered with a height."""
+    return _cg_print(_cg_console(width, height=height), Layout(renderable))
+
+
+def _pw_table_boxes(console: Console) -> str:
+    out = []
+    for table_box in [
+        box.SIMPLE_HEAVY,
+        box.HEAVY_EDGE,
+        box.MINIMAL_HEAVY_HEAD,
+        box.ROUNDED,
+        box.DOUBLE_EDGE,
+        box.MARKDOWN,
+    ]:
+        table = Table("h", "i", box=table_box, show_footer=True)
+        table.columns[0].footer = "f"
+        table.add_row("a", "b")
+        out.append(_cg_print(console, table))
+    return "".join(out)
+
+
+def _pw_custom_box() -> str:
+    plain = box.Box("+-++\n| ||\n+-++\n| ||\n+-++\n+-++\n| ||\n+-++\n")
+    flagged = box.Box("+-++\n| ||\n+-++\n| ||\n+-++\n+-++\n| ||\n+-++\n", ascii=True)
+    console = _pw_ascii_console(10)
+    return "".join(
+        _cg_print(console, Panel("x", box=custom), Panel("y", box=custom, safe_box=False))
+        for custom in [plain, flagged]
+    )
+
+
+def _pw_ratio() -> str:
+    class Edge:
+        def __init__(self, size=None, ratio=1, minimum_size=1):
+            self.size, self.ratio, self.minimum_size = size, ratio, minimum_size
+
+    out = []
+    for total, edges in [
+        (10, [Edge(), Edge(), Edge()]),
+        (10, [Edge(minimum_size=8), Edge(minimum_size=8)]),
+        (7, [Edge(ratio=0), Edge(), Edge(size=3)]),
+        (5, [Edge(size=4), Edge(size=4), Edge()]),
+        (100, [Edge(ratio=3, minimum_size=50), Edge(ratio=1), Edge(ratio=2)]),
+        (3, [Edge(minimum_size=0), Edge(minimum_size=0)]),
+        (0, [Edge(), Edge(size=2)]),
+    ]:
+        out.append(f"resolve {total} {_pw_ratio_resolve(total, edges)}")
+    for total, ratios, maximums, values in [
+        (5, [1, 1, 1], [3, 3, 3], [10, 10, 10]),
+        (7, [1, 2, 0], [10, 10, 10], [8, 8, 8]),
+        (4, [1, 1], [0, 5], [6, 6]),
+        (3, [0, 0], [1, 1], [2, 2]),
+        (5, [1, 3], [1, 9], [9, 9]),
+    ]:
+        out.append(
+            f"reduce {total} {_pw_ratio_reduce(total, ratios, maximums, values)}"
+        )
+    for total, ratios, minimums in [
+        (10, [1, 1, 1], None),
+        (10, [1, 2, 3], [1, 1, 1]),
+        (4, [1, 1, 1], [5, 1, 1]),
+        (9, [2, 0, 1], [1, 0, 1]),
+        (1, [1, 1, 1, 1], [1, 1, 1, 1]),
+    ]:
+        out.append(
+            f"distribute {total} {_pw_ratio_distribute(total, ratios, minimums)}"
+        )
+    return "\n".join(out) + "\n"
+
+
+def _pw_screen(*renderables, width=6, height=3, **options) -> str:
+    return _cg_print(_cg_console(width, height=height), _PWScreen(*renderables, **options))
+
+
+PARITY_WIDGET_CASES = [
+    # constrain.py
+    ("constrain_zero", lambda: _ag_print_all(
+        _cg_console(8),
+        Panel(Constrain(Text("abc"), 0)),
+        Panel(_PWGroup(Constrain(Text("abc"), 0), "x")),
+    )),
+    ("constrain_none", lambda: _cg_print(_cg_console(5), Constrain(Text("abc def ghi"), None))),
+    ("constrain_in_table", lambda: _cg_print(
+        _cg_console(30), _pw_table_cell(Constrain(Text("hello world again"), 7))
+    )),
+    # padding.py
+    ("padding_style_name", lambda: _ag_print_all(
+        _cg_console(6),
+        Padding("x", 1, style="repr.number"),
+        Padding("y", (0, 1), style="bold on red"),
+    )),
+    ("padding_unpack", lambda: _ag_print_all(
+        _cg_console(6),
+        Padding("a", (1,), style="on blue"),
+        Padding("b", (1, 2), style="on blue"),
+        Padding("c", 1, style="on blue"),
+        Padding("d", (0, 1, 1, 2), style="on blue"),
+    )),
+    ("padding_no_room", lambda: _ag_print_all(
+        _cg_console(6),
+        Padding(Text("abc"), (1, 5, 1, 5), style="on red"),
+        Padding(Text("abc"), (1, 5, 1, 5), style="on red", expand=False),
+        Padding(Text("abc"), (0, 3, 0, 3), style="on red"),
+    )),
+    ("padding_wide_fit", lambda: _ag_print_all(
+        _cg_console(5),
+        Padding(Text("界界"), (0, 1), style="on red", expand=False),
+        Padding(Text("界界界"), (0, 1), style="on red", expand=False),
+    )),
+    ("padding_in_layout", lambda: "".join([
+        _pw_leaf(Padding(Text("a\nb\nc"), (2, 0, 2, 0), style="on red"), 4, 3),
+        _pw_leaf(Padding(Text("a\nb\nc"), (1, 1), style="on red"), 4, 4),
+    ])),
+    # panel.py
+    ("panel_height_zero_in_layout", lambda: "".join([
+        _pw_leaf(Panel("x", height=0), 8, 4),
+        _pw_leaf(Panel("x", height=3), 8, 5),
+    ])),
+    ("panel_height_small", lambda: _ag_print_all(
+        _cg_console(8),
+        Panel(Text("a\nb\nc"), height=1),
+        Panel(Text("a\nb\nc"), height=2),
+        Panel(Text("a\nb\nc"), height=4, padding=(1, 1)),
+        Panel(Text("a\nb\nc"), height=6, padding=(1, 1)),
+    )),
+    ("panel_title_wide", lambda: _ag_print_all(
+        _cg_console(12),
+        Panel("x", title="界界界界", width=9),
+        Panel("x", title="界界界界", width=10),
+        Panel("x", subtitle="a界b界c", subtitle_align="left", width=8),
+    )),
+    ("panel_title_text_options", lambda: _ag_print_all(
+        _cg_console(14),
+        Panel("x", title=Text("a long title", overflow="ellipsis"), width=12),
+        Panel("x", title=Text("T", justify="right", style="bold"), title_align="left"),
+        Panel("x", subtitle=Text("S", style="repr.number"), border_style="red"),
+        Panel("x", title=Text("tab\there"), width=14),
+    )),
+    ("panel_title_newline_control", lambda: _ag_print_all(
+        _cg_console(14),
+        Panel("x", title="a\nb\x07c"),
+        Panel("x", title="ab\x07c"),
+        Panel("x", subtitle=Text("s\nt\x1b[1mu")),
+    )),
+    ("panel_boxes", lambda: _ag_print_all(
+        _cg_console(10),
+        *[
+            Panel("x", box=panel_box, title="T", subtitle="S")
+            for panel_box in [
+                box.MARKDOWN,
+                box.MINIMAL,
+                box.SIMPLE,
+                box.HORIZONTALS,
+                box.HEAVY_EDGE,
+                box.ASCII_DOUBLE_HEAD,
+                box.SQUARE_DOUBLE_HEAD,
+            ]
+        ],
+    )),
+    ("panel_style_names", lambda: _ag_print_all(
+        _cg_console(10),
+        Panel("x", style="on red", border_style="repr.number"),
+        Panel("x", style="repr.str", border_style="bold", title="T"),
+    )),
+    ("panel_padding", lambda: _ag_print_all(
+        _cg_console(12),
+        Panel("x", padding=(1, 2, 0, 3)),
+        Panel.fit("xy", padding=(1, 2, 0, 3)),
+        Panel.fit("xy", padding=(1,)),
+        Panel("xy", padding=0, expand=False),
+    )),
+    ("panel_fit_title", lambda: _ag_print_all(
+        _cg_console(12),
+        Panel.fit("x", title="a very long title indeed"),
+        Panel.fit("x", title="mid"),
+        Panel("x", width=50),
+        Panel.fit("x", width=6, title="title"),
+    )),
+    ("panel_highlight", lambda: _ag_print_all(
+        _cg_console(14),
+        Panel("1 'a' [x]", highlight=True),
+        Panel("1 'a' [x]"),
+    )),
+    ("panel_measure", lambda: _cg_print(
+        _cg_console(40),
+        _pw_table_cell(Panel("hello there", title="a longer title"), Panel("x", width=8)),
+    )),
+    # box.substitute
+    ("box_legacy_windows", lambda: _pw_table_boxes(
+        _cg_console(20, legacy_windows=True, safe_box=True)
+    )),
+    ("box_legacy_windows_unsafe", lambda: _pw_table_boxes(
+        _cg_console(20, legacy_windows=True, safe_box=False)
+    ) + _ag_print_all(
+        _cg_console(10, legacy_windows=True, safe_box=True),
+        Panel("x", box=box.HEAVY_EDGE),
+        Panel("y", box=box.HEAVY_EDGE, safe_box=False),
+    )),
+    ("box_ascii_only", lambda: _pw_table_boxes(_pw_ascii_console(20))
+        + _ag_print_all(_pw_ascii_console(10), Panel("x"), Panel("y", box=box.MARKDOWN))),
+    ("box_custom_ascii_flag", _pw_custom_box),
+    # align.py
+    ("align_width_zero", lambda: _ag_print_all(
+        _cg_console(6),
+        Align(Text("ab"), "center", width=0, vertical="middle", height=3, style="on red"),
+        Align(Text("ab"), "right", width=0),
+        Text("end"),
+    )),
+    ("align_height_zero_in_layout", lambda: "".join([
+        _pw_leaf(Align(Text("a"), vertical="bottom", height=0), 4, 3),
+        _pw_leaf(Align(Text("a"), vertical="middle", height=1), 4, 3),
+    ])),
+    ("align_vertical_overflow", lambda: _ag_print_all(
+        _cg_console(4),
+        Align(Text("a\nb\nc\nd"), vertical="middle", height=2),
+        Align(Text("a\nb\nc\nd"), vertical="bottom", height=2),
+        Align(Text("a\nb"), vertical="middle", height=5, pad=False, style="on red"),
+    )),
+    ("align_style_pad", lambda: _ag_print_all(
+        _cg_console(8),
+        Align(Text("ab"), "center", style="on red", pad=False, vertical="middle", height=3),
+        Align(Text("ab"), "right", style="repr.number", width=4, vertical="top", height=2),
+        Align(Text("a\nbcd"), "center", style="on blue"),
+    )),
+    ("vertical_center", lambda: "".join([
+        _pw_leaf(VerticalCenter(Text("a"), style="on red"), 4, 4),
+        _pw_leaf(VerticalCenter(Text("a\nb\nc\nd\ne")), 4, 3),
+        _cg_print(_cg_console(4, height=3), VerticalCenter(Text("ab"), style="on red")),
+    ])),
+    # bar.py
+    ("bar_clamp", lambda: _ag_print_all(
+        _cg_console(8),
+        HBar(10, -2, 20, width=8),
+        HBar(10, 3, 30, width=8),
+        HBar(10, 5, 5),
+        HBar(10, 2.5, 7.75, color="red", bgcolor="blue"),
+        HBar(10, 0, 10, width=20),
+        HBar(10, 9, 3, width=4, color="green"),
+    )),
+    ("bar_measure", lambda: _cg_print(
+        _cg_console(30), _pw_table_cell(HBar(10, 2, 8), HBar(10, 2, 8, width=3))
+    )),
+    # screen.py
+    ("screen_print", lambda: _pw_screen(Text("hi"))),
+    ("screen_application_mode", lambda: _pw_screen(Text("hi"), application_mode=True)),
+    ("screen_style", lambda: _pw_screen(
+        Text.from_markup("[bold]hi[/] x"), style="on blue", width=8, height=2
+    )),
+    ("screen_renderables", lambda: _pw_screen(Text("a"), Text("bb"), Text("ccc"), height=2)),
+    ("screen_empty", lambda: _pw_screen(width=3, height=2)),
+    ("screen_then_text", lambda: _ag_print_all(
+        _cg_console(6, height=2), _PWScreen(Text("s")), Text("after")
+    )),
+    ("screen_in_panel", lambda: _cg_print(
+        _cg_console(8, height=4), Panel(_PWScreen(Text("s"), style="on red"))
+    )),
+    # layout.py
+    ("layout_minimum_overflow", lambda: "".join([
+        _pw_layout(10, 2, lambda l: l.split_row(
+            Layout(Text("aaaaaaaa"), minimum_size=8), Layout(Text("bbbbbbbb"), minimum_size=8)
+        )),
+        _pw_layout(4, 3, lambda l: l.split_column(
+            Layout(Text("a"), size=2), Layout(Text("b"), size=2), Layout(Text("c"))
+        )),
+    ])),
+    ("layout_ratio_zero", lambda: _pw_layout(9, 1, lambda l: l.split_row(
+        Layout(Text("a"), ratio=0), Layout(Text("b")), Layout(Text("c"), ratio=2)
+    ))),
+    ("layout_invisible", lambda: _pw_layout(9, 2, lambda l: l.split_row(
+        Layout(Text("a")), Layout(Text("b"), visible=False), Layout(Text("c"))
+    ))),
+    ("layout_nested", lambda: _pw_layout(12, 4, lambda l: (
+        l.split_row(Layout(name="left"), Layout(name="right", ratio=2)),
+        l["left"].split_column(Layout(Text("1"), size=1), Layout(Text("2"))),
+        l["right"].split_column(Layout(Text("3"), minimum_size=3), Layout(Text("4"))),
+    ))),
+    ("layout_ratio", _pw_ratio),
+    # table.py: a wrapping column squeezed to nothing (DIVERGENCES §7)
+    ("table_squeezed_column", lambda: "".join(
+        _cg_print(_cg_console(width), _pw_squeezed_table(**options))
+        for options in [
+            {},
+            {"box": None},
+            {"show_edge": False},
+            {"pad_edge": False},
+            {"padding": (0, 2)},
+            {"collapse_padding": True, "box": box.SIMPLE},
+        ]
+        for width in range(1, 16)
+    )),
+    ("table_squeezed_three", lambda: "".join(
+        _cg_print(_cg_console(width), _pw_squeezed_three(layout))
+        for layout in ["nww", "wnw", "nnw", "nmw", "wwn"]
+        for width in range(3, 26, 2)
+    )),
+    ("table_many_columns", lambda: "".join(
+        _cg_print(_cg_console(width), _pw_many_columns(count, table_box))
+        for count, width, table_box in [
+            (20, 80, box.SQUARE),
+            (29, 80, box.SQUARE),
+            (40, 80, box.SQUARE),
+            (12, 20, box.ROUNDED),
+            (12, 20, None),
+        ]
+    )),
+    # rule.py / live_render.py: output that ends without a line break
+    ("rule_end", lambda: _ag_print_all(
+        _cg_console(10),
+        Rule("t", end=""),
+        Rule("t", end="!"),
+        Rule("t", end="\n\n"),
+        Rule(end=""),
+        Rule("t", align="left", end="x\ny"),
+        Text("after"),
+    ) + _ag_print_all(_cg_console(4), Rule("t", end=""), Rule("t", align="right", end=""), Text("z"))),
+    ("live_render_print", lambda: _ag_print_all(
+        _cg_console(10), LiveRender(Text("a\nb")), Text("after")
+    )),
+]
+
+
+def _pw_table_cell(*renderables) -> Table:
+    table = Table(*[f"c{index}" for index in range(len(renderables))])
+    table.add_row(*renderables)
+    return table
+
+
+def _pw_squeezed_table(**options) -> Table:
+    table = Table(**options)
+    table.add_column("key", no_wrap=True)
+    table.add_column("value")
+    table.add_row("abcdefgh", "wrap me")
+    return table
+
+
+def _pw_many_columns(count: int, table_box) -> Table:
+    table = Table(box=table_box)
+    for index in range(count):
+        table.add_column(f"c{index}")
+    table.add_row(*[str(index) for index in range(count)])
+    return table
+
+
+def _pw_squeezed_three(layout: str) -> Table:
+    """Three columns, `n` for a long `no_wrap` one and `w` for a wrapping one."""
+    table = Table(padding=(0, 1))
+    for index, kind in enumerate(layout):
+        table.add_column(f"h{index}", no_wrap=kind == "n", min_width=1 if kind == "m" else None)
+    table.add_row(*["abcdefghij" if kind == "n" else "ab cd" for kind in layout])
+    return table
+
+
+def capture_parity_widgets() -> None:
+    path = golden_dir() / "parity_widgets.tsv"
+    lines = [
+        "# name\tjson(expected output) — see PARITY_WIDGET_CASES in scripts/capture_golden.py"
+    ]
+    for name, build in PARITY_WIDGET_CASES:
+        lines.append(f"{name}\t{json.dumps(build(), ensure_ascii=False)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(PARITY_WIDGET_CASES)} parity widget cases to {path}")
+
+PARITY_LIVE_HEADER = """\
+# Golden parity fixtures for workstream 5 of 0.0.22 (live display): Live's
+# render hook, alternate screen and stdout/stderr redirect (FileProxy), and the
+# live Progress and Status displays. Captured from real Python `rich` with
+# auto_refresh=False. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<case JSON>\t<JSON [console bytes, bytes passed through to
+#   stdout, bytes passed through to stderr]>
+# Case keys: "kind" ("live" | "progress" | "status"), "width", "height"
+#   (default 5), "terminal" (default true), "term" (TERM, default unchanged),
+#   "options" (Live/Progress keyword arguments)
+# Steps: ["start", refresh] | ["update", markup, refresh] | ["refresh"]
+#   | ["stop"] | ["print", markup] | ["write", "stdout"|"stderr", text]
+#   | ["flush", "stdout"|"stderr"] | ["time", t] | ["add", description, total,
+#   completed] | ["advance", id, n] | ["status", {Status.update arguments}]
+"""
+
+PARITY_LIVE_CASES: list[tuple[str, dict]] = [
+    ("hook_print", {"kind": "live", "width": 20, "markup": "frame one", "steps": [
+        ["start", True], ["print", "hello"], ["update", "frame two", True],
+        ["print", "[bold]x[/]\ny"], ["stop"]]}),
+    ("hook_print_tall_frame", {"kind": "live", "width": 20, "markup": "a\nb\nc", "steps": [
+        ["start", True], ["print", "above"], ["update", "d", True], ["print", "again"], ["stop"]]}),
+    ("hook_print_transient", {"kind": "live", "width": 20, "markup": "a\nb",
+                              "options": {"transient": True}, "steps": [
+        ["start", True], ["print", "hi"], ["stop"]]}),
+    ("hook_print_not_terminal", {"kind": "live", "width": 20, "terminal": False, "markup": "frame",
+                                 "steps": [["start", True], ["print", "hello"], ["stop"]]}),
+    ("hook_print_crop", {"kind": "live", "width": 20, "height": 2, "markup": "1\n2\n3",
+                         "options": {"vertical_overflow": "crop"}, "steps": [
+        ["start", True], ["print", "p"], ["stop"]]}),
+    ("print_before_start_and_after_stop", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["print", "before"], ["start", True], ["stop"], ["print", "after"]]}),
+    ("start_without_refresh", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["start", False], ["stop"]]}),
+    ("update_without_refresh", {"kind": "live", "width": 20, "markup": "old", "steps": [
+        ["start", True], ["update", "new", False], ["print", "p"], ["refresh"], ["stop"]]}),
+    ("refresh_before_start", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["refresh"], ["start", True], ["stop"]]}),
+    ("alt_screen", {"kind": "live", "width": 20, "height": 5, "markup": "frame one",
+                    "options": {"screen": True}, "steps": [
+        ["start", True], ["update", "frame two", True], ["print", "hello"], ["stop"]]}),
+    ("alt_screen_tall", {"kind": "live", "width": 12, "height": 3, "markup": "1\n2\n3\n4\n5",
+                         "options": {"screen": True}, "steps": [["start", True], ["stop"]]}),
+    ("alt_screen_not_terminal", {"kind": "live", "width": 20, "terminal": False, "markup": "frame",
+                                 "options": {"screen": True}, "steps": [
+        ["start", True], ["print", "p"], ["stop"]]}),
+    ("alt_screen_redirect", {"kind": "live", "width": 10, "height": 3, "markup": "x",
+                             "options": {"screen": True}, "steps": [
+        ["start", True], ["write", "stdout", "line\n"], ["stop"]]}),
+    ("redirect_lines", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["start", True], ["write", "stdout", "part"], ["write", "stdout", "ial\nline2\nrest"],
+        ["write", "stdout", "\u001b[31mred\u001b[0m\n"], ["stop"]]}),
+    ("redirect_ansi_carries", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["start", True], ["write", "stdout", "\u001b[1mbold\nstill\u001b[0m\n"], ["stop"]]}),
+    ("redirect_flush_is_markup", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["start", True], ["write", "stdout", "[bold]tail[/]"], ["flush", "stdout"], ["stop"]]}),
+    ("redirect_partial_flushed_at_stop", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["start", True], ["write", "stdout", "never ended"], ["stop"], ["write", "stdout", "after\n"]]}),
+    ("redirect_stderr", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["start", True], ["write", "stderr", "oops\n"], ["write", "stdout", "fine\n"], ["stop"]]}),
+    ("redirect_off", {"kind": "live", "width": 20, "markup": "frame",
+                      "options": {"redirect_stdout": False}, "steps": [
+        ["start", True], ["write", "stdout", "raw\n"], ["write", "stderr", "err\n"], ["stop"]]}),
+    ("redirect_not_terminal", {"kind": "live", "width": 20, "terminal": False, "markup": "frame",
+                               "steps": [["start", True], ["write", "stdout", "raw\n"], ["stop"]]}),
+    ("redirect_before_start", {"kind": "live", "width": 20, "markup": "frame", "steps": [
+        ["write", "stdout", "early\n"], ["start", True], ["stop"]]}),
+    ("dumb_terminal", {"kind": "live", "width": 20, "term": "dumb", "markup": "frame", "steps": [
+        ["start", True], ["update", "two", True], ["print", "p"], ["write", "stdout", "w\n"], ["stop"]]}),
+    ("dumb_terminal_transient", {"kind": "live", "width": 20, "term": "dumb", "markup": "frame",
+                                 "options": {"transient": True}, "steps": [
+        ["start", True], ["stop"]]}),
+    ("progress_print_snapshot", {"kind": "progress", "width": 30,
+                                 "columns": [["description"], ["mofn"]], "steps": [
+        ["add", "copy", 4, 0], ["refresh"], ["advance", 0, 2], ["print", "note"], ["refresh"]]}),
+    ("progress_redirect", {"kind": "progress", "width": 30,
+                           "columns": [["description"], ["mofn"]], "steps": [
+        ["add", "copy", 4, 0], ["write", "stdout", "copied a\n"], ["advance", 0, 1],
+        ["write", "stderr", "warn\n"]]}),
+    ("progress_redirect_off", {"kind": "progress", "width": 30,
+                               "columns": [["description"], ["mofn"]],
+                               "options": {"redirect_stdout": False, "redirect_stderr": False}, "steps": [
+        ["add", "copy", 4, 0], ["write", "stdout", "raw\n"], ["write", "stderr", "raw\n"]]}),
+    ("progress_disabled_print", {"kind": "progress", "width": 30,
+                                 "columns": [["description"], ["mofn"]],
+                                 "options": {"disable": True}, "steps": [
+        ["add", "copy", 4, 0], ["print", "plain"], ["write", "stdout", "raw\n"]]}),
+    ("progress_transient_print", {"kind": "progress", "width": 30,
+                                  "columns": [["description"], ["mofn"]],
+                                  "options": {"transient": True}, "steps": [
+        ["add", "copy", 4, 0], ["print", "kept"], ["advance", 0, 4]]}),
+    ("status_stream", {"kind": "status", "width": 30, "message": "Working", "spinner": "dots",
+                       "steps": [
+        ["time", 0], ["refresh"], ["time", 0.25], ["refresh"], ["status", {"status": "Next"}],
+        ["print", "log line"], ["status", {"spinner": "line"}], ["time", 0.5], ["refresh"]]}),
+    ("status_no_refresh", {"kind": "status", "width": 30, "message": "Quiet", "spinner": "dots",
+                           "steps": [["time", 1.0]]}),
+    ("status_redirect", {"kind": "status", "width": 30, "message": "Busy", "spinner": "line",
+                         "steps": [["refresh"], ["write", "stdout", "out\n"], ["time", 0.2]]}),
+    ("spinner_text_object", {"kind": "spinner", "width": 30, "name": "dots",
+                             "text": ["text", "[b]literal[/b]"], "style": "green",
+                             "steps": [["render", 0], ["render", 0.1]]}),
+    ("spinner_renderable_table", {"kind": "spinner", "width": 20, "name": "line",
+                                  "text": ["table", "boxed"], "style": "red",
+                                  "steps": [["render", 0], ["render", 0.13], ["print", 0.26]]}),
+    ("spinner_renderable_wraps", {"kind": "spinner", "width": 16, "name": "dots",
+                                  "text": ["table", "a longer table cell"], "style": None,
+                                  "steps": [["render", 0]]}),
+    ("spinner_renderable_in_live", {"kind": "live_spinner", "width": 20, "name": "line",
+                                    "text": ["table", "x"], "style": None,
+                                    "steps": [["start", True], ["time", 0.13], ["refresh"], ["stop"]]}),
+    ("status_renderable", {"kind": "status", "width": 30, "message": ["table", "job"], "spinner": "line",
+                           "steps": [["refresh"], ["time", 0.13], ["status_text", "[b]literal[/b]"],
+                                     ["refresh"]]}),
+    ("status_text_object", {"kind": "status", "width": 30, "message": ["text", "[i]as is[/i]"],
+                            "spinner": "line", "steps": [["refresh"], ["status_text", ""], ["refresh"]]}),
+    ("status_not_terminal", {"kind": "status", "width": 30, "terminal": False, "message": "Busy",
+                             "spinner": "dots", "steps": [["refresh"], ["print", "p"]]}),
+]
+
+
+def _parity_live_table(cell: str):
+    from rich.table import Table
+
+    table = Table()
+    table.add_column("job")
+    table.add_row(cell)
+    return table
+
+
+def run_parity_live_case(case) -> list[str]:
+    import io
+    import os
+
+    from rich.live import Live
+    from rich.progress import Progress
+    from rich.status import Status
+
+    saved_term = os.environ.get("TERM")
+    if "term" in case:
+        os.environ["TERM"] = case["term"]
+    saved_streams = sys.stdout, sys.stderr
+    now = [0.0]
+    buffer, out, err = io.StringIO(), io.StringIO(), io.StringIO()
+    try:
+        terminal = case.get("terminal", True)
+        console = Console(
+            file=buffer, force_terminal=terminal, color_system="truecolor" if terminal else None,
+            width=case["width"], height=case.get("height", 5), highlight=False, no_color=False,
+            legacy_windows=False, get_time=lambda: now[0],
+        )
+        sys.stdout, sys.stderr = out, err
+        options = case.get("options", {})
+        kind = case["kind"]
+        spinner = None
+        if kind in ("spinner", "live_spinner"):
+            from rich.spinner import Spinner
+
+            text_kind, text_source = case["text"]
+            text = {"markup": lambda: text_source, "text": lambda: Text(text_source),
+                    "table": lambda: _parity_live_table(text_source)}[text_kind]()
+            spinner = Spinner(case["name"], text=text, style=case["style"])
+        if kind == "spinner":
+            display = None
+        elif kind == "live_spinner":
+            display = Live(spinner, console=console, auto_refresh=False, **options)
+        elif kind == "live":
+            display = Live(Text.from_markup(case["markup"]), console=console, auto_refresh=False,
+                           **options)
+        elif kind == "progress":
+            display = Progress(*progress_columns(case["columns"]), console=console,
+                               auto_refresh=False, get_time=lambda: now[0], **options)
+            display.start()
+        else:
+            message = case["message"]
+            if isinstance(message, list):
+                message = (_parity_live_table(message[1]) if message[0] == "table"
+                           else Text(message[1]))
+            display = Status(message, console=console, spinner=case["spinner"])
+            display._live.auto_refresh = False
+            display.start()
+        for step in case["steps"]:
+            op = step[0]
+            if op == "start":
+                display.start(refresh=step[1])
+            elif op == "stop":
+                display.stop()
+            elif op == "update":
+                display.update(Text.from_markup(step[1]), refresh=step[2])
+            elif op == "refresh":
+                (display._live if kind == "status" else display).refresh()
+            elif op == "print" and kind != "spinner":
+                console.print(step[1])
+            elif op == "write":
+                getattr(sys, step[1]).write(step[2])
+            elif op == "flush":
+                getattr(sys, step[1]).flush()
+            elif op == "time":
+                now[0] = float(step[1])
+            elif op == "add":
+                display.add_task(step[1], total=step[2], completed=step[3])
+            elif op == "advance":
+                display.advance(step[1], step[2])
+            elif op == "status":
+                display.update(**step[1])
+            elif op == "status_text":
+                display.update(Text(step[1]))
+            elif op == "render":
+                console.print(spinner.render(step[1]))
+            elif op == "print" and kind == "spinner":
+                now[0] = float(step[1])
+                console.print(spinner)
+            else:
+                raise SystemExit(f"unknown parity live step {op!r}")
+        if kind in ("progress", "status"):
+            display.stop()
+    finally:
+        sys.stdout, sys.stderr = saved_streams
+        if saved_term is None:
+            os.environ.pop("TERM", None)
+        else:
+            os.environ["TERM"] = saved_term
+    return [buffer.getvalue(), out.getvalue(), err.getvalue()]
+
+
+def capture_parity_live() -> None:
+    path = golden_dir() / "parity_live.tsv"
+    lines = [PARITY_LIVE_HEADER.rstrip("\n")]
+    for name, case in PARITY_LIVE_CASES:
+        outputs = run_parity_live_case(case)
+        lines.append(f"{name}\t{json.dumps(case, ensure_ascii=False)}\t{json.dumps(outputs, ensure_ascii=False)}")
+    path.write_text("\n".join(lines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(PARITY_LIVE_CASES)} live display parity cases to {path}")
 
 
 if __name__ == "__main__":

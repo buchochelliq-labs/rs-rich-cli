@@ -8,6 +8,7 @@
 //! nearest-color search ported verbatim from `Palette.match_color`.
 
 use crate::errors::{Result, RichError};
+use crate::markup::py_repr_str;
 
 /// The kind of terminal a color system supports.
 ///
@@ -57,6 +58,21 @@ impl ColorTriplet {
     /// `#rrggbb` hex string (matches `ColorTriplet.hex`).
     pub fn hex(&self) -> String {
         format!("#{:02x}{:02x}{:02x}", self.red, self.green, self.blue)
+    }
+
+    /// `rgb(r,g,b)` (matches `ColorTriplet.rgb`).
+    pub fn rgb(&self) -> String {
+        format!("rgb({},{},{})", self.red, self.green, self.blue)
+    }
+
+    /// The components as floats from 0 to 1 (matches
+    /// `ColorTriplet.normalized`).
+    pub fn normalized(&self) -> (f64, f64, f64) {
+        (
+            self.red as f64 / 255.0,
+            self.green as f64 / 255.0,
+            self.blue as f64 / 255.0,
+        )
     }
 }
 
@@ -131,84 +147,169 @@ impl Color {
         }
     }
 
-    /// Parse a color from a string spec.
+    /// Parse a color from a string spec. Port of `Color.parse`.
     ///
-    /// Accepts: a standard color name, `default`, `#rrggbb`, `rgb(r,g,b)`, and
-    /// `color(N)`. Mirrors the common paths of `Color.parse`.
+    /// Accepts a color name from `ANSI_COLOR_NAMES`, `default`, `#rrggbb`,
+    /// `color(N)` (one to three digits) and `rgb(r,g,b)`, case-insensitively
+    /// and ignoring surrounding whitespace. The errors carry upstream's
+    /// `ColorParseError` messages.
     pub fn parse(color: &str) -> Result<Self> {
-        let original = color.trim();
-        let lower = original.to_ascii_lowercase();
+        let original = color;
+        let color = color.to_lowercase();
+        let color = color.trim();
+        let invalid =
+            || RichError::ColorParse(format!("{} is not a valid color", py_repr_str(original)));
 
-        if lower == "default" {
+        if color == "default" {
             return Ok(Color::default_color());
         }
-        if let Some(number) = crate::color_names::ansi_color_number(&lower) {
-            return Ok(Color::named(&lower, number));
+        if let Some(number) = crate::color_names::ansi_color_number(color) {
+            return Ok(Color::named(color, number));
         }
-        if let Some(hex) = lower.strip_prefix('#') {
-            let triplet = parse_hex(hex)
-                .ok_or_else(|| RichError::ColorParse(format!("invalid hex color {original:?}")))?;
+        // `RE_COLOR`: `^#([0-9a-f]{6})$`, `color\(([0-9]{1,3})\)$` or
+        // `rgb\(([\d\s,]+)\)$`.
+        if let Some(hex) = color.strip_prefix('#') {
+            if hex.len() != 6 || !hex.bytes().all(|b| matches!(b, b'0'..=b'9' | b'a'..=b'f')) {
+                return Err(invalid());
+            }
             return Ok(Color {
-                // Lowercased, matching upstream's `color.lower().strip()`. The
-                // name is what `Style::definition` prints, so keeping the
-                // original case would stop `on #FF0000` normalizing to
-                // `on #ff0000` — and then a mixed-case open/close tag pair would
-                // no longer match.
-                name: lower.clone(),
+                name: color.to_string(),
                 kind: ColorType::Truecolor,
                 number: None,
-                triplet: Some(triplet),
+                triplet: Some(parse_rgb_hex(hex)),
             });
         }
-        if let Some(inner) = lower.strip_prefix("rgb(").and_then(|s| s.strip_suffix(')')) {
-            let triplet = parse_rgb(inner)
-                .ok_or_else(|| RichError::ColorParse(format!("invalid rgb color {original:?}")))?;
-            return Ok(Color {
-                // Lowercased, matching upstream's `color.lower().strip()`. The
-                // name is what `Style::definition` prints, so keeping the
-                // original case would stop `on #FF0000` normalizing to
-                // `on #ff0000` — and then a mixed-case open/close tag pair would
-                // no longer match.
-                name: lower.clone(),
-                kind: ColorType::Truecolor,
-                number: None,
-                triplet: Some(triplet),
-            });
-        }
-        if let Some(inner) = lower
+        if let Some(digits) = color
             .strip_prefix("color(")
             .and_then(|s| s.strip_suffix(')'))
         {
-            let n: u16 = inner
-                .trim()
-                .parse()
-                .map_err(|_| RichError::ColorParse(format!("invalid color number {original:?}")))?;
-            if n > 255 {
+            if digits.is_empty() || digits.len() > 3 || !digits.bytes().all(|b| b.is_ascii_digit())
+            {
+                return Err(invalid());
+            }
+            let number: u16 = digits.parse().map_err(|_| invalid())?;
+            if number > 255 {
                 return Err(RichError::ColorParse(format!(
-                    "color number must be <= 255, not {n}"
+                    "color number must be <= 255 in {}",
+                    py_repr_str(color)
                 )));
             }
-            // Numbers < 16 are standard SGR colors; the rest are 8-bit palette
-            // (matching `Color.parse`'s `color_8` branch).
             return Ok(Color {
-                // Lowercased, matching upstream's `color.lower().strip()`. The
-                // name is what `Style::definition` prints, so keeping the
-                // original case would stop `on #FF0000` normalizing to
-                // `on #ff0000` — and then a mixed-case open/close tag pair would
-                // no longer match.
-                name: lower.clone(),
-                kind: if n < 16 {
+                name: color.to_string(),
+                kind: if number < 16 {
                     ColorType::Standard
                 } else {
                     ColorType::EightBit
                 },
-                number: Some(n as u8),
+                number: Some(number as u8),
                 triplet: None,
             });
         }
-        Err(RichError::ColorParse(format!(
-            "{original:?} is not a valid color"
-        )))
+        if let Some(inner) = color.strip_prefix("rgb(").and_then(|s| s.strip_suffix(')')) {
+            if inner.is_empty()
+                || !inner
+                    .chars()
+                    .all(|c| c.is_ascii_digit() || c == ',' || c.is_whitespace())
+            {
+                return Err(invalid());
+            }
+            let components: Vec<&str> = inner.split(',').collect();
+            if components.len() != 3 {
+                return Err(RichError::ColorParse(format!(
+                    "expected three components in {}",
+                    py_repr_str(original)
+                )));
+            }
+            let mut values = [0u8; 3];
+            for (slot, component) in values.iter_mut().zip(&components) {
+                // Python's `int()`, which ignores surrounding whitespace.
+                let digits = component.trim();
+                if digits.is_empty() || digits.contains(char::is_whitespace) {
+                    return Err(RichError::ColorParse(format!(
+                        "invalid literal for int() with base 10: {}",
+                        py_repr_str(component)
+                    )));
+                }
+                match digits.parse::<u16>() {
+                    Ok(value) if value <= 255 => *slot = value as u8,
+                    _ => {
+                        return Err(RichError::ColorParse(format!(
+                            "color components must be <= 255 in {}",
+                            py_repr_str(original)
+                        )))
+                    }
+                }
+            }
+            return Ok(Color {
+                name: color.to_string(),
+                kind: ColorType::Truecolor,
+                number: None,
+                triplet: Some(ColorTriplet::new(values[0], values[1], values[2])),
+            });
+        }
+        Err(invalid())
+    }
+
+    /// A truecolor from a triplet; the name is its `#rrggbb` hex. Port of
+    /// `Color.from_triplet`.
+    pub fn from_triplet(triplet: ColorTriplet) -> Self {
+        Color {
+            name: triplet.hex(),
+            kind: ColorType::Truecolor,
+            number: None,
+            triplet: Some(triplet),
+        }
+    }
+
+    /// The native color system of this color: standard for the default
+    /// color. Port of the `Color.system` property.
+    pub fn system(&self) -> ColorSystem {
+        match self.kind {
+            ColorType::Default | ColorType::Standard => ColorSystem::Standard,
+            ColorType::EightBit => ColorSystem::EightBit,
+            ColorType::Truecolor => ColorSystem::Truecolor,
+            ColorType::Windows => ColorSystem::Windows,
+        }
+    }
+
+    /// Whether the terminal defines the actual color: true for the default,
+    /// standard and Windows colors. Port of `Color.is_system_defined`.
+    pub fn is_system_defined(&self) -> bool {
+        !matches!(
+            self.system(),
+            ColorSystem::EightBit | ColorSystem::Truecolor
+        )
+    }
+
+    /// The RGB triplet this color shows as under `theme` (the default export
+    /// theme when `None`). A standard color takes the theme's ANSI color and
+    /// the default color the theme's foreground or background. Port of
+    /// `Color.get_truecolor(theme, foreground)`.
+    pub fn get_truecolor_for(
+        &self,
+        theme: Option<&crate::terminal_theme::TerminalTheme>,
+        foreground: bool,
+    ) -> ColorTriplet {
+        let theme = theme.unwrap_or(&crate::terminal_theme::DEFAULT_TERMINAL_THEME);
+        theme.resolve(self, foreground)
+    }
+
+    /// The text upstream prints for a color: `<color 'red' (standard)⬤ >`,
+    /// the dot in the color itself. Port of `Color.__rich__`.
+    pub fn rich_text(&self) -> crate::text::Text {
+        let kind = match self.kind {
+            ColorType::Default => "default",
+            ColorType::Standard => "standard",
+            ColorType::EightBit => "eight_bit",
+            ColorType::Truecolor => "truecolor",
+            ColorType::Windows => "windows",
+        };
+        let mut text =
+            crate::text::Text::new(format!("<color {} ({kind})", py_repr_str(&self.name)));
+        let dot = crate::style::Style::from_color(Some(self.clone()), None);
+        text.append("⬤", Some(dot.into()));
+        text.append(" >", None);
+        text
     }
 
     /// Resolve this color to an RGB triplet, using the palettes for indexed colors.
@@ -332,25 +433,29 @@ impl Color {
     }
 }
 
-fn parse_hex(hex: &str) -> Option<ColorTriplet> {
-    if hex.len() != 6 || !hex.bytes().all(|b| b.is_ascii_hexdigit()) {
-        return None;
-    }
-    let r = u8::from_str_radix(&hex[0..2], 16).ok()?;
-    let g = u8::from_str_radix(&hex[2..4], 16).ok()?;
-    let b = u8::from_str_radix(&hex[4..6], 16).ok()?;
-    Some(ColorTriplet::new(r, g, b))
+/// Six hex digits as a triplet. Port of `rich.color.parse_rgb_hex`.
+///
+/// # Panics
+///
+/// When `hex_color` is not six hex digits (upstream asserts its length).
+pub fn parse_rgb_hex(hex_color: &str) -> ColorTriplet {
+    assert_eq!(hex_color.len(), 6, "must be 6 characters");
+    let channel = |range: std::ops::Range<usize>| {
+        u8::from_str_radix(&hex_color[range], 16).expect("hex digits")
+    };
+    ColorTriplet::new(channel(0..2), channel(2..4), channel(4..6))
 }
 
-fn parse_rgb(inner: &str) -> Option<ColorTriplet> {
-    let parts: Vec<&str> = inner.split(',').map(str::trim).collect();
-    if parts.len() != 3 {
-        return None;
-    }
-    let r = parts[0].parse().ok()?;
-    let g = parts[1].parse().ok()?;
-    let b = parts[2].parse().ok()?;
-    Some(ColorTriplet::new(r, g, b))
+/// Blend two triplets, `cross_fade` of the way from `color1` to `color2`
+/// (truncating toward zero, as upstream's `int()` does). Port of
+/// `rich.color.blend_rgb` (upstream's default `cross_fade` is 0.5).
+pub fn blend_rgb(color1: ColorTriplet, color2: ColorTriplet, cross_fade: f64) -> ColorTriplet {
+    let mix = |a: u8, b: u8| (a as f64 + (b as f64 - a as f64) * cross_fade) as u8;
+    ColorTriplet::new(
+        mix(color1.red, color2.red),
+        mix(color1.green, color2.green),
+        mix(color1.blue, color2.blue),
+    )
 }
 
 /// The canonical xterm RGB values for the 16 system colors — the first 16
@@ -557,6 +662,126 @@ fn match_color(palette: &[ColorTriplet], color: ColorTriplet) -> u8 {
         }
     }
     best_index as u8
+}
+
+/// A palette of colors. Port of `rich.palette.Palette`.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub struct Palette {
+    colors: Vec<ColorTriplet>,
+}
+
+impl Palette {
+    /// A palette of `colors`, indexed from 0.
+    pub fn new(colors: Vec<ColorTriplet>) -> Self {
+        Palette { colors }
+    }
+
+    /// The color at `number` (`palette[number]`), if there is one.
+    pub fn get(&self, number: usize) -> Option<ColorTriplet> {
+        self.colors.get(number).copied()
+    }
+
+    /// The colors, in order.
+    pub fn colors(&self) -> &[ColorTriplet] {
+        &self.colors
+    }
+
+    /// How many colors the palette holds.
+    pub fn len(&self) -> usize {
+        self.colors.len()
+    }
+
+    /// Whether the palette holds no colors.
+    pub fn is_empty(&self) -> bool {
+        self.colors.is_empty()
+    }
+
+    /// The index of the color nearest to `color` by redmean distance, the
+    /// first on a tie. Port of `Palette.match`.
+    ///
+    /// # Panics
+    ///
+    /// On an empty palette, where upstream's `min` raises.
+    pub fn match_color(&self, color: ColorTriplet) -> usize {
+        assert!(!self.colors.is_empty(), "match on an empty palette");
+        match_color(&self.colors, color) as usize
+    }
+}
+
+impl std::ops::Index<usize> for Palette {
+    type Output = ColorTriplet;
+
+    fn index(&self, number: usize) -> &ColorTriplet {
+        &self.colors[number]
+    }
+}
+
+/// A palette prints as a table of its colors. Port of `Palette.__rich__`.
+impl crate::protocol::Renderable for Palette {
+    fn rich_render(
+        &self,
+        console: &crate::console::Console,
+        options: &crate::console::ConsoleOptions,
+    ) -> Vec<crate::segment::Segment> {
+        self.table().rich_render(console, options)
+    }
+
+    fn measure(
+        &self,
+        console: &crate::console::Console,
+        options: &crate::console::ConsoleOptions,
+    ) -> crate::measure::Measurement {
+        self.table().measure(console, options)
+    }
+}
+
+impl Palette {
+    /// The table `Palette.__rich__` returns.
+    fn table(&self) -> crate::table::Table {
+        use crate::table::{Cell, Table};
+        use crate::text::Text;
+        let mut table = Table::new()
+            .title("Palette")
+            .caption(format!("{} colors", self.colors.len()))
+            .highlight(true)
+            .caption_justify(crate::console::Justify::Right);
+        table.add_column("index");
+        table.add_column("RGB");
+        table.add_column("Color");
+        for (index, color) in self.colors.iter().enumerate() {
+            let swatch = crate::style::Style::from_color(None, Some(Color::from_triplet(*color)));
+            table.add_row_cells(vec![
+                Cell::Markup(index.to_string()),
+                Cell::Markup(format!("({}, {}, {})", color.red, color.green, color.blue)),
+                Cell::Text(Text::styled(" ".repeat(16), swatch)),
+            ]);
+        }
+        table
+    }
+}
+
+/// A color prints as its description and a dot in the color. Port of
+/// `Color.__rich__`.
+impl crate::protocol::Renderable for Color {
+    fn rich_render(
+        &self,
+        console: &crate::console::Console,
+        options: &crate::console::ConsoleOptions,
+    ) -> Vec<crate::segment::Segment> {
+        self.rich_text().rich_render(console, options)
+    }
+
+    fn measure(
+        &self,
+        console: &crate::console::Console,
+        options: &crate::console::ConsoleOptions,
+    ) -> crate::measure::Measurement {
+        self.rich_text().measure(console, options)
+    }
+
+    fn printed_text(&self) -> Option<crate::text::Text> {
+        Some(self.rich_text())
+    }
 }
 
 #[cfg(test)]

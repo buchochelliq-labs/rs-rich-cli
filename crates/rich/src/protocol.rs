@@ -21,12 +21,12 @@ use crate::text::Text;
 pub trait Renderable {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment>;
 
-    /// The `(minimum, maximum)` cell width this renderable wants. The default
-    /// assumes the renderable fills the available width (e.g. `Panel`, `Table`);
-    /// `Text` overrides it with its content width so the top-level print path can
-    /// shrink to fit. Port of `__rich_measure__` / `Measurement.get`.
+    /// The `(minimum, maximum)` cell width this renderable wants. Port of
+    /// `__rich_measure__`. The default is what upstream's `Measurement.get`
+    /// returns for a renderable without one: anything from nothing to the
+    /// whole width, `(0, max_width)`.
     fn measure(&self, _console: &Console, options: &ConsoleOptions) -> Measurement {
-        Measurement::new(options.max_width, options.max_width)
+        Measurement::new(0, options.max_width)
     }
 
     /// Whether a top-level `Console::print` shrinks this renderable to its
@@ -52,6 +52,16 @@ pub trait Renderable {
     /// None)`; [`Align`](crate::align::Align) sets it.
     fn vertical(&self) -> Option<crate::align::VerticalAlign> {
         None
+    }
+
+    /// Whether a top-level print ends this renderable's last line. This
+    /// port's renderables *separate* lines, where upstream's end each line
+    /// with `"\n"`, so a print adds the final line break. A renderable
+    /// whose upstream output stops without one (`Screen`, `LiveRender`, a
+    /// `Rule` whose `end` has no newline) returns `false`, and the next
+    /// output continues its last line. `options` are the print's options.
+    fn print_end_line(&self, _options: &ConsoleOptions) -> bool {
+        true
     }
 }
 
@@ -91,6 +101,14 @@ pub trait OwnedTableRows {
 pub trait Highlighter {
     /// Inspect `text` and apply any style spans in place.
     fn highlight(&self, text: &mut Text);
+
+    /// A highlighted copy of `text`, leaving `text` itself alone. Port of
+    /// `Highlighter.__call__` (a `str` is `Text::new(…)` first).
+    fn highlighted(&self, text: &Text) -> Text {
+        let mut copy = text.clone();
+        self.highlight(&mut copy);
+        copy
+    }
 }
 
 /// One styled byte range of a highlighted line.

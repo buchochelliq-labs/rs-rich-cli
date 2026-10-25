@@ -257,6 +257,7 @@ published or not. Each crate versions independently; see
 | [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.7` |
 | [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.5` |
 | [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.5` |
+| [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
 ## Where next

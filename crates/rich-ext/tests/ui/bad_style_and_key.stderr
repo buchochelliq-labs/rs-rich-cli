@@ -1,4 +1,4 @@
-error: invalid style: color parse error: "purplish" is not a valid color
+error: invalid style: style syntax error: unable to parse 'purplish' as color; 'purplish' is not a valid color
  --> tests/ui/bad_style_and_key.rs:2:30
   |
 2 |     let _ = rich_ext::style!("bold purplish");

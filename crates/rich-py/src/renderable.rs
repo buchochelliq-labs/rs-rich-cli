@@ -554,7 +554,9 @@ pub(crate) fn render_str_with(
         let parsed = if emoji {
             rich::markup::render_emoji(content)
         } else {
-            CoreText::from_markup(content)
+            // `from_markup` replaces emoji codes, as upstream's
+            // `Text.from_markup` does; `emoji=False` keeps them as typed.
+            CoreText::from_markup_with(content, rich::StyleType::default(), false, None)
         };
         parsed.map_err(crate::color::markup::markup_error)?
     } else if emoji {

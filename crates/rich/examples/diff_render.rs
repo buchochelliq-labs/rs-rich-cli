@@ -1,11 +1,18 @@
 use std::io::{self, BufRead};
 
+#[path = "../tests/support/pyvalue.rs"]
+mod pyvalue;
+
+use rich::json::JsonOptions;
+use rich::markdown::Markdown;
 use rich::panel::Panel;
+use rich::pretty::Pretty;
 use rich::r#box::{ASCII, DOUBLE, HEAVY, HEAVY_HEAD, MINIMAL, ROUNDED, SQUARE};
 use rich::{
     Align, ColorSystem, Console, HorizontalAlign, Justify, Overflow, Padding, Rule, Style, Table,
     Text,
 };
+use rich::{Columns, Json, ProgressColumn, Tree};
 use serde_json::{json, Value};
 
 fn box_set(name: &str) -> Result<rich::r#box::Box, String> {
@@ -125,6 +132,122 @@ fn table(case: &Value) -> Result<Table, String> {
     Ok(table)
 }
 
+fn tree(spec: &Value) -> Tree {
+    let mut tree = Tree::new(spec["label"].as_str().unwrap_or("")).expanded(
+        spec.get("expanded")
+            .and_then(Value::as_bool)
+            .unwrap_or(true),
+    );
+    add_children(&mut tree, spec);
+    tree
+}
+
+fn add_children(tree: &mut Tree, spec: &Value) {
+    for child in spec["children"].as_array().into_iter().flatten() {
+        let node = tree.add(child["label"].as_str().unwrap_or(""));
+        node.set_expanded(
+            child
+                .get("expanded")
+                .and_then(Value::as_bool)
+                .unwrap_or(true),
+        );
+        add_children(node, child);
+    }
+}
+
+/// The document renderers: Markdown, Tree, Columns, a Progress frame, Pretty
+/// and JSON, built as `document_renderable` in scripts/diff_rich.py builds them.
+fn document(case: &Value) -> Result<Box<dyn rich::Renderable>, String> {
+    let options = case.get("options").cloned().unwrap_or(Value::Null);
+    let opt_usize = |name: &str| {
+        options
+            .get(name)
+            .and_then(Value::as_u64)
+            .map(|n| n as usize)
+    };
+    let opt_bool = |name: &str| options.get(name).and_then(Value::as_bool).unwrap_or(false);
+    Ok(match field(case, "kind")? {
+        "markdown" => {
+            let mut markdown =
+                Markdown::new(field(case, "source")?).hyperlinks(flag(case, "hyperlinks", true));
+            if let Some(value) = case.get("justify").and_then(Value::as_str) {
+                markdown = markdown.justify(justify(value)?);
+            }
+            Box::new(markdown)
+        }
+        "tree" => {
+            let mut tree = tree(&case["tree"]).hide_root(flag(case, "hide_root", false));
+            if let Some(style) = case.get("guide_style").and_then(Value::as_str) {
+                tree = tree.guide_style(style);
+            }
+            Box::new(tree)
+        }
+        "columns" => {
+            let items = case["items"]
+                .as_array()
+                .ok_or("missing array field \"items\"")?
+                .iter()
+                .map(|item| item.as_str().unwrap_or("").to_string())
+                .collect();
+            let mut columns = Columns::new(items)
+                .equal(flag(case, "equal", false))
+                .expand(flag(case, "expand", false))
+                .column_first(flag(case, "column_first", false))
+                .right_to_left(flag(case, "right_to_left", false));
+            if let Some(width) = case.get("column_width").and_then(Value::as_u64) {
+                columns = columns.width(width as usize);
+            }
+            Box::new(columns)
+        }
+        "progress" => {
+            let mut progress = rich::Progress::new()
+                .columns(vec![
+                    ProgressColumn::Description,
+                    ProgressColumn::Bar,
+                    ProgressColumn::Percentage,
+                ])
+                .expand(flag(case, "expand", false));
+            for task in case["tasks"]
+                .as_array()
+                .ok_or("missing array field \"tasks\"")?
+            {
+                progress.add_task(
+                    task["description"].as_str().unwrap_or(""),
+                    task["total"].as_f64().unwrap_or(0.0),
+                    task["completed"].as_f64().unwrap_or(0.0),
+                );
+            }
+            Box::new(progress)
+        }
+        "pretty" => Box::new(
+            Pretty::from_value(pyvalue::pretty_value(&case["value"]))
+                .indent_guides(opt_bool("indent_guides"))
+                .expand_all(opt_bool("expand_all"))
+                .max_length(opt_usize("max_length"))
+                .max_string(opt_usize("max_string"))
+                .max_depth(opt_usize("max_depth")),
+        ),
+        "json" => {
+            let mut json_options = JsonOptions::default();
+            match options.get("indent") {
+                Some(Value::Null) => json_options.indent = None,
+                Some(Value::Number(n)) => {
+                    json_options.indent = JsonOptions::indent_spaces(n.as_i64().unwrap_or(0))
+                }
+                Some(Value::String(s)) => json_options.indent = Some(s.clone()),
+                _ => {}
+            }
+            json_options.sort_keys = opt_bool("sort_keys");
+            json_options.ensure_ascii = opt_bool("ensure_ascii");
+            Box::new(
+                Json::with_options(field(case, "source")?, &json_options)
+                    .map_err(|e| e.to_string())?,
+            )
+        }
+        other => return Err(format!("unknown kind {other:?}")),
+    })
+}
+
 fn field<'a>(case: &'a Value, name: &str) -> Result<&'a str, String> {
     case.get(name)
         .and_then(Value::as_str)
@@ -235,7 +358,7 @@ fn render(case: &Value) -> Result<String, String> {
             };
             Ok(console.render_to_string(&align))
         }
-        other => Err(format!("unknown kind {other:?}")),
+        _ => document(case).map(|renderable| console.render_to_string(renderable.as_ref())),
     }
 }
 

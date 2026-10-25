@@ -31,12 +31,13 @@ pub struct Bar {
 }
 
 impl Bar {
-    /// A bar covering `[begin, end]` of a `[0, size]` range.
+    /// A bar covering `[begin, end]` of a `[0, size]` range. As upstream,
+    /// `begin` is raised to 0 and `end` lowered to `size`.
     pub fn new(size: f64, begin: f64, end: f64) -> Self {
         Bar {
             size,
-            begin,
-            end,
+            begin: begin.max(0.0),
+            end: end.min(size),
             width: None,
             // Upstream default: `color="default"`, `bgcolor="default"`.
             style: Style::new()

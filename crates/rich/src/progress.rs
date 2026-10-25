@@ -848,6 +848,8 @@ pub struct Progress {
     expand: bool,
     transient: bool,
     disable: bool,
+    redirect_stdout: bool,
+    redirect_stderr: bool,
 }
 
 impl Default for Progress {
@@ -861,6 +863,8 @@ impl Default for Progress {
             expand: false,
             transient: false,
             disable: false,
+            redirect_stdout: true,
+            redirect_stderr: true,
         }
     }
 }
@@ -906,6 +910,19 @@ impl Progress {
     /// Erase the display when it stops (upstream `transient`).
     pub fn transient(mut self, transient: bool) -> Self {
         self.transient = transient;
+        self
+    }
+
+    /// Print what is written to [`LiveProgress::stdout`] above the display
+    /// (upstream `redirect_stdout`, default true).
+    pub fn redirect_stdout(mut self, redirect: bool) -> Self {
+        self.redirect_stdout = redirect;
+        self
+    }
+
+    /// The same for [`LiveProgress::stderr`] (upstream `redirect_stderr`).
+    pub fn redirect_stderr(mut self, redirect: bool) -> Self {
+        self.redirect_stderr = redirect;
         self
     }
 
@@ -1163,18 +1180,6 @@ impl Renderable for Progress {
     }
 }
 
-/// A [`Progress`] shared with the auto-refresh thread of a live display.
-struct ProgressView(Arc<std::sync::Mutex<Progress>>);
-
-impl Renderable for ProgressView {
-    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        match self.0.lock() {
-            Ok(progress) => progress.rich_render(console, options),
-            Err(poisoned) => poisoned.into_inner().rich_render(console, options),
-        }
-    }
-}
-
 impl Progress {
     /// Start an auto-refreshing live display of this progress, redrawn
     /// `refresh_per_second` times a second on a background thread. Port of
@@ -1191,27 +1196,41 @@ impl Progress {
             return LiveProgress {
                 progress: Arc::new(std::sync::Mutex::new(self)),
                 live: None,
-                writer: Some(writer),
+                disabled: Some(std::sync::Mutex::new((console, writer))),
                 interactive: true,
-                holder: std::sync::Mutex::new(None),
+                holder: Arc::new(std::sync::Mutex::new(None)),
+                handle: crate::live::LiveHandle::detached(),
             };
         }
-        let transient = self.transient;
-        let interactive = console.is_terminal();
+        let options = crate::live::LiveOptions {
+            transient: self.transient,
+            redirect_stdout: self.redirect_stdout,
+            redirect_stderr: self.redirect_stderr,
+            ..crate::live::LiveOptions::default()
+        };
+        // `Console.is_interactive`: a terminal that is not dumb.
+        let interactive = console.is_terminal() && !crate::console::is_dumb_terminal();
         let shared = Arc::new(std::sync::Mutex::new(self));
-        let live = crate::live::Live::spawn_with(
-            Box::new(ProgressView(shared.clone())),
+        let view = shared.clone();
+        let live = crate::live::Live::spawn_get_renderable(
+            // Upstream's `get_renderable`: the task table as of this refresh.
+            move || {
+                let progress = view.lock().unwrap_or_else(|poisoned| poisoned.into_inner());
+                Box::new(progress.make_tasks_table()) as Box<dyn Renderable>
+            },
             console,
             writer,
             refresh_per_second,
-            transient,
+            options,
         );
+        let holder: crate::live::Holder = Arc::new(std::sync::Mutex::new(None));
         LiveProgress {
             progress: shared,
+            handle: live.handle().with_holder(holder.clone()),
             live: Some(live),
-            writer: None,
+            disabled: None,
             interactive,
-            holder: std::sync::Mutex::new(None),
+            holder,
         }
     }
 }
@@ -1221,19 +1240,22 @@ impl Progress {
 pub struct LiveProgress<W: std::io::Write + Send + 'static> {
     progress: Arc<std::sync::Mutex<Progress>>,
     live: Option<crate::live::AutoLive<W>>,
-    /// The sink of a disabled display, which never reaches a live thread.
-    writer: Option<W>,
+    /// The console and sink of a disabled display, which never reaches a
+    /// live thread; prints go straight to the sink.
+    disabled: Option<std::sync::Mutex<(Console, W)>>,
     /// Whether the console is a terminal; `stop` ends a file with a newline.
     interactive: bool,
     /// The thread inside [`with`](LiveProgress::with), if any. Upstream's lock
     /// is an `RLock`; ours is not, so re-entry is detected rather than left to
     /// deadlock on the mutex or on the refresh thread.
-    holder: std::sync::Mutex<Option<std::thread::ThreadId>>,
+    holder: crate::live::Holder,
+    /// The refresh thread, for prints and proxies (detached when disabled).
+    handle: crate::live::LiveHandle<W>,
 }
 
 /// Clears [`LiveProgress`]'s `holder` when a `with` block ends, unwinding
 /// included.
-struct HolderGuard<'a>(&'a std::sync::Mutex<Option<std::thread::ThreadId>>);
+struct HolderGuard<'a>(&'a crate::live::Holder);
 
 impl Drop for HolderGuard<'_> {
     fn drop(&mut self) {
@@ -1328,6 +1350,68 @@ impl<W: std::io::Write + Send + 'static> LiveProgress<W> {
         }
     }
 
+    /// Print `renderable` above the display. Port of `Progress.print`
+    /// (`console.print` through the live display's render hook). The print
+    /// is queued on the refresh thread, so it is safe inside
+    /// [`with`](Self::with).
+    pub fn print(&self, renderable: Box<dyn Renderable + Send>) {
+        if self.live.is_some() {
+            self.handle.print(renderable);
+        } else {
+            self.print_disabled(|console| console.print(renderable.as_ref()));
+        }
+    }
+
+    /// Print straight to a disabled display's sink: no live hook is pushed.
+    fn print_disabled(&self, print: impl FnOnce(&Console)) {
+        if let Some(disabled) = &self.disabled {
+            let mut guard = disabled
+                .lock()
+                .unwrap_or_else(|poisoned| poisoned.into_inner());
+            let (console, writer) = &mut *guard;
+            let output = console.capture(print);
+            let _ = writer.write_all(output.as_bytes());
+        }
+    }
+
+    /// [`print`](Self::print) a string as console markup.
+    pub fn print_str(&self, content: impl Into<String>) {
+        if self.live.is_some() {
+            self.handle.print_str(content);
+        } else {
+            let content = content.into();
+            self.print_disabled(|console| console.print_str(&content));
+        }
+    }
+
+    /// A writer standing in for stdout while the display runs: whole lines
+    /// print above it (upstream's `redirect_stdout` `FileProxy`). A disabled
+    /// display writes straight to stdout.
+    pub fn stdout(
+        &self,
+    ) -> crate::file_proxy::FileProxy<crate::live::LiveHandle<W>, std::io::Stdout> {
+        self.handle
+            .file_proxy(crate::file_proxy::ProxyStream::Stdout, std::io::stdout())
+    }
+
+    /// [`stdout`](Self::stdout) for stderr.
+    pub fn stderr(
+        &self,
+    ) -> crate::file_proxy::FileProxy<crate::live::LiveHandle<W>, std::io::Stderr> {
+        self.handle
+            .file_proxy(crate::file_proxy::ProxyStream::Stderr, std::io::stderr())
+    }
+
+    /// A proxy for `stream` over any `file`, which receives the writes when
+    /// the display is not redirecting.
+    pub fn file_proxy<F: std::io::Write>(
+        &self,
+        stream: crate::file_proxy::ProxyStream,
+        file: F,
+    ) -> crate::file_proxy::FileProxy<crate::live::LiveHandle<W>, F> {
+        self.handle.file_proxy(stream, file)
+    }
+
     /// Iterate `iter`, advancing a new task by one after each item is
     /// processed. Port of `Progress.track`: the total defaults to the
     /// iterator's exact length, else the task is indeterminate.
@@ -1337,17 +1421,43 @@ impl<W: std::io::Write + Send + 'static> LiveProgress<W> {
         total: Option<f64>,
         description: impl Into<String>,
     ) -> Track<'_, I::IntoIter, W> {
+        self.track_with(iter, total, 0.0, None, description, 0.1)
+    }
+
+    /// [`track`](Self::track) with every argument of upstream's
+    /// `Progress.track`: `completed` to start from, an existing `task` (its
+    /// total and completed are set) and the `update_period` in seconds.
+    ///
+    /// As upstream's `_TrackThread`, a background thread advances the task
+    /// by the items counted every `update_period`, and when the iterator is
+    /// exhausted or dropped the task's completed is set to the count and the
+    /// display refreshed.
+    pub fn track_with<I: IntoIterator>(
+        &self,
+        iter: I,
+        total: Option<f64>,
+        completed: f64,
+        task: Option<TaskId>,
+        description: impl Into<String>,
+        update_period: f64,
+    ) -> Track<'_, I::IntoIter, W> {
         let iter = iter.into_iter();
-        let total = total.or_else(|| match iter.size_hint() {
-            (lower, Some(upper)) if lower == upper && lower > 0 => Some(lower as f64),
-            _ => None,
-        });
-        let task = self.add_task(description, total, 0.0);
+        let total = total.or_else(|| exact_length(&iter));
+        let task = match task {
+            Some(task) => {
+                let mut update = TaskUpdate::default().completed(completed);
+                if let Some(total) = total {
+                    update = update.total(total);
+                }
+                self.update(task, update);
+                task
+            }
+            None => self.add_task(description, total, completed),
+        };
         Track {
             iter,
             progress: self,
-            task,
-            pending: false,
+            state: TrackState::start(self.progress.clone(), task, update_period),
         }
     }
 
@@ -1424,10 +1534,14 @@ impl<W: std::io::Write + Send + 'static> LiveProgress<W> {
                 }
                 writer
             }
-            None => self
-                .writer
-                .take()
-                .expect("a disabled display keeps its writer"),
+            None => {
+                self.disabled
+                    .take()
+                    .expect("a disabled display keeps its writer")
+                    .into_inner()
+                    .unwrap_or_else(|poisoned| poisoned.into_inner())
+                    .1
+            }
         };
         let progress = match Arc::try_unwrap(std::mem::replace(
             &mut self.progress,
@@ -1486,20 +1600,97 @@ impl<R: std::io::BufRead, W: std::io::Write + Send + 'static> std::io::BufRead
     }
 }
 
+/// Upstream's `float(length_hint(sequence)) or None`: an exact, non-zero
+/// length.
+fn exact_length<I: Iterator>(iter: &I) -> Option<f64> {
+    match iter.size_hint() {
+        (lower, Some(upper)) if lower == upper && lower > 0 => Some(lower as f64),
+        _ => None,
+    }
+}
+
+/// Upstream's `_TrackThread`: counts the items a tracked iterator hands out
+/// and advances the task by them every `update_period` on a thread.
+struct TrackState {
+    task: TaskId,
+    /// Items counted so far (upstream's `track_thread.completed`).
+    completed: Arc<std::sync::atomic::AtomicU64>,
+    /// Whether an item has been handed out but not yet counted: upstream
+    /// counts it after the loop body, when the next item is requested.
+    pending: bool,
+    stop: Option<std::sync::mpsc::Sender<()>>,
+    thread: Option<std::thread::JoinHandle<()>>,
+}
+
+impl TrackState {
+    fn start(progress: Arc<std::sync::Mutex<Progress>>, task: TaskId, update_period: f64) -> Self {
+        use std::sync::atomic::Ordering;
+        let completed = Arc::new(std::sync::atomic::AtomicU64::new(0));
+        let (stop, stopped) = std::sync::mpsc::channel::<()>();
+        let count = completed.clone();
+        let period = std::time::Duration::from_secs_f64(update_period.max(0.0));
+        let thread = std::thread::spawn(move || {
+            let mut last = 0;
+            // `while not wait(update_period)`: until told to stop.
+            while let Err(std::sync::mpsc::RecvTimeoutError::Timeout) = stopped.recv_timeout(period)
+            {
+                let now = count.load(Ordering::SeqCst);
+                if now != last {
+                    progress
+                        .lock()
+                        .unwrap_or_else(|poisoned| poisoned.into_inner())
+                        .advance(task, (now - last) as f64);
+                    last = now;
+                }
+            }
+        });
+        TrackState {
+            task,
+            completed,
+            pending: false,
+            stop: Some(stop),
+            thread: Some(thread),
+        }
+    }
+
+    /// The next item is being requested: count the one before it.
+    fn next_requested(&mut self) {
+        if std::mem::take(&mut self.pending) {
+            self.completed
+                .fetch_add(1, std::sync::atomic::Ordering::SeqCst);
+        }
+    }
+
+    /// Upstream's `_TrackThread.__exit__`: stop the thread, then set the
+    /// task's completed to the count and refresh.
+    fn finish<W: std::io::Write + Send + 'static>(&mut self, live: &LiveProgress<W>) {
+        let Some(thread) = self.thread.take() else {
+            return;
+        };
+        self.next_requested();
+        drop(self.stop.take());
+        let _ = thread.join();
+        let completed = self.completed.load(std::sync::atomic::Ordering::SeqCst);
+        live.update(
+            self.task,
+            TaskUpdate::default()
+                .completed(completed as f64)
+                .refresh(true),
+        );
+    }
+}
+
 /// The iterator [`LiveProgress::track`] returns.
 pub struct Track<'a, I: Iterator, W: std::io::Write + Send + 'static> {
     iter: I,
     progress: &'a LiveProgress<W>,
-    task: TaskId,
-    /// Whether an item has been handed out but not yet counted: upstream
-    /// advances after the loop body, when the next item is requested.
-    pending: bool,
+    state: TrackState,
 }
 
 impl<I: Iterator, W: std::io::Write + Send + 'static> Track<'_, I, W> {
     /// The task this iterator advances.
     pub fn task(&self) -> TaskId {
-        self.task
+        self.state.task
     }
 }
 
@@ -1507,20 +1698,28 @@ impl<I: Iterator, W: std::io::Write + Send + 'static> Iterator for Track<'_, I, 
     type Item = I::Item;
 
     fn next(&mut self) -> Option<I::Item> {
-        if std::mem::take(&mut self.pending) {
-            self.progress.advance(self.task, 1.0);
-        }
+        self.state.next_requested();
         let item = self.iter.next();
         if item.is_some() {
-            self.pending = true;
+            self.state.pending = true;
         } else {
-            self.progress.refresh();
+            self.state.finish(self.progress);
         }
         item
     }
 
     fn size_hint(&self) -> (usize, Option<usize>) {
         self.iter.size_hint()
+    }
+}
+
+impl<I: Iterator, W: std::io::Write + Send + 'static> Drop for Track<'_, I, W> {
+    /// Upstream's generator closes its `with _TrackThread` block when the
+    /// loop ends early, too.
+    fn drop(&mut self) {
+        // The item handed out last was not processed to the end.
+        self.state.pending = false;
+        self.state.finish(self.progress);
     }
 }
 
@@ -1539,19 +1738,15 @@ pub fn track<I: IntoIterator>(iter: I, description: &str) -> TrackStdout<I::Into
         ProgressColumn::TimeRemaining(TimeRemainingColumn::new(false, true)),
     ]);
     let iter = iter.into_iter();
-    let total = match iter.size_hint() {
-        (lower, Some(upper)) if lower == upper && lower > 0 => Some(lower as f64),
-        _ => None,
-    };
+    let total = exact_length(&iter);
     let live = Progress::new()
         .columns(columns)
         .start(Console::new(), std::io::stdout(), 10.0);
     let task = live.add_task(description, total, 0.0);
     TrackStdout {
         iter,
+        state: TrackState::start(live.progress.clone(), task, 0.1),
         live: Some(live),
-        task,
-        pending: false,
     }
 }
 
@@ -1559,25 +1754,23 @@ pub fn track<I: IntoIterator>(iter: I, description: &str) -> TrackStdout<I::Into
 pub struct TrackStdout<I: Iterator> {
     iter: I,
     live: Option<LiveProgress<std::io::Stdout>>,
-    task: TaskId,
-    pending: bool,
+    state: TrackState,
 }
 
 impl<I: Iterator> Iterator for TrackStdout<I> {
     type Item = I::Item;
 
     fn next(&mut self) -> Option<I::Item> {
-        let live = self.live.as_ref()?;
-        if std::mem::take(&mut self.pending) {
-            live.advance(self.task, 1.0);
-        }
+        self.live.as_ref()?;
+        self.state.next_requested();
         match self.iter.next() {
             Some(item) => {
-                self.pending = true;
+                self.state.pending = true;
                 Some(item)
             }
             None => {
                 if let Some(live) = self.live.take() {
+                    self.state.finish(&live);
                     live.stop();
                 }
                 None
@@ -1589,6 +1782,8 @@ impl<I: Iterator> Iterator for TrackStdout<I> {
 impl<I: Iterator> Drop for TrackStdout<I> {
     fn drop(&mut self) {
         if let Some(live) = self.live.take() {
+            self.state.pending = false;
+            self.state.finish(&live);
             live.stop();
         }
     }
@@ -1760,18 +1955,53 @@ mod tests {
     }
 
     #[test]
+    fn the_track_thread_advances_by_the_items_counted() {
+        let live = live(vec![ProgressColumn::Description, ProgressColumn::MofN]);
+        let tracked = live.track_with(0..4, None, 0.0, None, "n", 0.001);
+        let task = tracked.task();
+        let mut seen = 0.0;
+        for item in tracked {
+            if item == 2 {
+                // Items 0 and 1 are counted; wait for the thread to see them.
+                let deadline = std::time::Instant::now() + std::time::Duration::from_secs(10);
+                while seen < 2.0 && std::time::Instant::now() < deadline {
+                    std::thread::sleep(std::time::Duration::from_millis(1));
+                    seen = live.with(|progress| progress.task(task).unwrap().completed());
+                }
+            }
+        }
+        assert_eq!(seen, 2.0);
+        let (progress, _) = live.stop();
+        assert_eq!(progress.task(task).unwrap().completed(), 4.0);
+    }
+
+    #[test]
+    fn breaking_out_of_track_counts_only_finished_items() {
+        let live = live(vec![ProgressColumn::Description, ProgressColumn::MofN]);
+        let tracked = live.track_with(0..10, None, 0.0, None, "n", 1e9);
+        let task = tracked.task();
+        for item in tracked {
+            if item == 3 {
+                break;
+            }
+        }
+        let (progress, _) = live.stop();
+        assert_eq!(progress.task(task).unwrap().completed(), 3.0);
+    }
+
+    #[test]
     fn track_counts_each_item_after_its_loop_body() {
         let live = live(vec![ProgressColumn::Description, ProgressColumn::MofN]);
         let mut seen = Vec::new();
-        let tracked = live.track(vec!['a', 'b', 'c'], None, "letters");
+        // An update period that never elapses: upstream's `_TrackThread`
+        // advances only every period, then sets the count on exit.
+        let tracked = live.track_with(vec!['a', 'b', 'c'], None, 0.0, None, "letters", 1e9);
         let task = tracked.task();
         for item in tracked {
-            // Upstream advances after the loop body, so the item being
-            // processed is not yet counted.
             let completed = live.with(|progress| progress.task(task).unwrap().completed());
             seen.push((item, completed));
         }
-        assert_eq!(seen, vec![('a', 0.0), ('b', 1.0), ('c', 2.0)]);
+        assert_eq!(seen, vec![('a', 0.0), ('b', 0.0), ('c', 0.0)]);
         let (progress, bytes) = live.stop();
         let task = progress.task(task).unwrap();
         assert_eq!((task.total(), task.completed()), (Some(3.0), 3.0));

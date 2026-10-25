@@ -31,11 +31,12 @@ when every value must survive.
 `rich record` keeps every screen update the program finished, up to the
 tape's frame rate. On Linux a game recorded at `Set Framerate 35` keeps
 about 30 frames a second; on CI's macOS runners the same recording kept 7
-frames over 0.8 s, so its video plays in jumps. Whether macOS's PTY reads
-or the recorder's settling rule merge the updates is not known yet; the
-frame-rate test keeps its lower bound on Linux only until it is. Record
-games on Linux for now. Found in 0.0.20 and still open in 0.0.21
-([plan](plans/0.0.21.md#1-round-7s-bugs-and-regressions-intuituive-record)).
+frames over 0.8 s, so its video plays in jumps. 0.0.22 splits a late read
+into the updates inside it, which did not fix macOS: its runners still kept
+5 frames over 0.5 s. The cause there is not known yet, and the frame-rate
+test keeps its lower bound on Linux only until it is. Record games on Linux
+for now. Found in 0.0.20, still open in 0.0.22
+([plan](plans/0.0.22.md#1-round-7s-last-items-record-intuituive)).
 
 ---
 
@@ -54,16 +55,6 @@ every supported Windows release has a VT-capable console, so this is a
 permanent divergence ([DIVERGENCES §38](DIVERGENCES.md#38-the-windows-legacy-console-is-not-supported),
 [#12](https://github.com/buchochelliq-labs/rs-rich-cli/issues/12)).
 **Workaround:** use Windows Terminal, or `--no-color`.
-
-### A tape without `Output` also writes an APNG
-
-Since 0.0.20 `rich record` writes every format a tape does not narrow, and
-the formats now include an animated PNG beside the GIF. An APNG is in full
-colour, so it can be several megabytes for a long recording, and encoding
-it adds time. Name what you want with an `Output` line (`Output gif png`)
-or `--format gif,png,svg`, or skip all video with `--no-video`. Whether the
-APNG stays a default is still an open question after 0.0.21
-([plan](plans/0.0.21.md#decisions)).
 
 ### The local time zone on Windows follows `TZ` when it is set
 
@@ -241,6 +232,7 @@ fixes to `view`, stack traces and hyperlinks) are in the changelog instead. Full
 |---------|----------|
 | <a id="four-intuituive-bugs-the-demo-clones-found"></a>A `cx.focus(x)` just before `cx.modal(..)` was lost when the modal closed; a styled `layers` node let the layers below show through its children's gaps; `layout::squarify` gave the largest item no tile; a `previews_keys` container took a command line's letters (round 7's four bugs) | intuituive `0.0.6` |
 | Filtering a million rows through `view_of` was slower than a hand-written loop (15.4 s against 3.3 s unoptimised) | intuituive `0.0.6`, ext `0.0.18` |
+| <a id="a-tape-without-output-also-writes-an-apng"></a>A tape without `Output` also wrote an APNG; it is now written only when `Output` or `--format` names it | record `0.0.10`, CLI `0.0.22` |
 | A held key in a tape sent extra repeats after its release on a slow machine | record `0.0.9`, CLI `0.0.21` |
 | `rich mermaid` and `rich_mermaid::Mermaid` printed a blank line after the diagram | mermaid `0.0.4`, CLI `0.0.15` |
 | `rich micro preview` labelled a still image with a frame time ("100 ms") | CLI `0.0.15` |

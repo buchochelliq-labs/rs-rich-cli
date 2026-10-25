@@ -14,6 +14,7 @@ import json
 import os
 from pathlib import Path
 import random
+import re
 import subprocess
 import sys
 import tomllib
@@ -26,6 +27,14 @@ from rich.panel import Panel
 from rich.rule import Rule
 from rich.table import Table
 from rich.text import Text
+from rich.tree import Tree
+from rich.columns import Columns
+from rich.json import JSON
+from rich.markdown import Markdown
+from rich.pretty import Pretty
+from rich.progress import BarColumn, Progress, TaskProgressColumn, TextColumn
+
+from parity_docs import python_value
 
 ROOT = Path(__file__).resolve().parent.parent
 DEFAULT_CORPUS = ROOT / "scripts" / "fixtures" / "diff_rich_cases.jsonl"
@@ -42,6 +51,14 @@ ALPHABET = "abc xyz[]/#:-_é界🙂\t"
 # (the `markup` kind already covers those).
 WORD_ALPHABET = "abc xyzé界🙂-_"
 KINDS = ["markup", "text", "panel", "table", "rule", "padding", "align"]
+# The document renderers (0.0.22): drawn as often as the rest put together.
+DOC_KINDS = ["markdown", "tree", "columns", "progress", "pretty", "json"]
+# Markdown building blocks. Code blocks are left out: they are highlighted by
+# syntect, not Pygments (DIVERGENCES §18), so they never match byte for byte.
+MD_INLINE = ["word", "**bold**", "*em*", "_em_", "`code`", "~~gone~~", "[link](https://x.io/a)",
+             "<https://auto.io>", "a~b", "*", "~~", "\\*", "é界🙂", "x_y_z", "![alt](i.png)"]
+MD_BLOCKS = ["# ", "## ", "###### ", "- ", "* ", "1. ", "2) ", "> ", "", "", ""]
+MD_EXTRA = ["---", "a|b\n-|-\nc|d", "| h | i |\n|:--|--:|\n| 1 | 2 |", "- a\n  - b", "> q\n>\n> r"]
 BOXES = ["square", "rounded", "heavy", "double", "ascii", "minimal"]
 # Tables also take `box=None`, the borderless layout `Table.grid` builds on.
 TABLE_BOXES = BOXES + ["none"]
@@ -79,11 +96,109 @@ def load_cases(path: Path) -> list[dict]:
     return cases
 
 
+def markdown_source(rng: random.Random) -> str:
+    lines = []
+    for _ in range(rng.randint(1, 6)):
+        if rng.random() < 0.15:
+            lines.append(rng.choice(MD_EXTRA))
+            continue
+        inline = " ".join(
+            word(rng, 1, 8) if piece == "word" else piece
+            for piece in (rng.choice(MD_INLINE) for _ in range(rng.randint(1, 5)))
+        )
+        lines.append(rng.choice(MD_BLOCKS) + inline)
+        if rng.random() < 0.3:
+            lines.append("")
+    return "\n".join(lines) + rng.choice(["", "\n"])
+
+
+def python_value_spec(rng: random.Random, depth: int = 0):
+    """A random value spec (see `parity_docs.python_value`)."""
+    roll = rng.random()
+    if depth >= 3 or roll < 0.45:
+        return rng.choice([
+            None, True, False, rng.randint(-1000, 10**6), rng.choice([0.5, -2.25, 1e16, 1e-5, 3.0]),
+            word(rng, 0, 14), rng.choice(["it's", 'say "hi"', "tab\tnl\n", "back\\slash"]),
+        ])
+    items = [python_value_spec(rng, depth + 1) for _ in range(rng.randint(0, 5))]
+    if roll < 0.65:
+        return items
+    if roll < 0.75:
+        return {"$": "tuple", "items": items}
+    if roll < 0.8:
+        # Small ints hash to themselves, so this interpreter's iteration order
+        # is the order every CPython gives the set.
+        return {"$": "set", "items": list(set(rng.randint(0, 9) for _ in range(len(items))))}
+    return {word(rng, 1, 6): python_value_spec(rng, depth + 1) for _ in range(rng.randint(0, 4))}
+
+
+def json_value(rng: random.Random, depth: int = 0):
+    roll = rng.random()
+    if depth >= 3 or roll < 0.5:
+        return rng.choice([None, True, False, rng.randint(-10**6, 10**6), 1.5, -0.25, 1e300, word(rng, 0, 10), "q\"u\\o\u2028"])
+    if roll < 0.75:
+        return [json_value(rng, depth + 1) for _ in range(rng.randint(0, 4))]
+    return {word(rng, 1, 6): json_value(rng, depth + 1) for _ in range(rng.randint(0, 4))}
+
+
+def tree_spec(rng: random.Random, depth: int = 0) -> dict:
+    children = [] if depth >= 3 else [tree_spec(rng, depth + 1) for _ in range(rng.randint(0, 3))]
+    return {"label": word(rng, 1, 12), "children": children, "expanded": rng.random() < 0.9}
+
+
+def document_case(rng: random.Random, kind: str, case: dict) -> None:
+    """Fill the fields of one document-renderer case."""
+    case["source"] = ""
+    if kind == "markdown":
+        case["source"] = markdown_source(rng)
+        case["hyperlinks"] = rng.random() < 0.5
+        if rng.random() < 0.3:
+            case["justify"] = rng.choice(["left", "center", "right", "full"])
+    elif kind == "tree":
+        case["tree"] = tree_spec(rng)
+        case["hide_root"] = rng.random() < 0.2
+        if rng.random() < 0.3:
+            case["guide_style"] = rng.choice(["red", "bold blue", "dim"])
+    elif kind == "columns":
+        case["items"] = [word(rng, 1, 14) for _ in range(rng.randint(0, 12))]
+        for flag in ("equal", "expand", "column_first", "right_to_left"):
+            case[flag] = rng.random() < 0.3
+        if rng.random() < 0.3 and case["width"] > 2:
+            # Wider than the console less the padding, upstream divides by
+            # zero (a column count of 0); the port draws one column.
+            case["column_width"] = rng.randint(1, case["width"] - 2)
+    elif kind == "progress":
+        case["tasks"] = [
+            {"description": word(rng, 1, 12), "total": total, "completed": rng.randint(0, total)}
+            for total in (rng.randint(1, 200) for _ in range(rng.randint(1, 4)))
+        ]
+        case["expand"] = rng.random() < 0.3
+    elif kind == "pretty":
+        case["value"] = python_value_spec(rng)
+        options = {}
+        if rng.random() < 0.3:
+            options["indent_guides"] = True
+        if rng.random() < 0.2:
+            options["expand_all"] = True
+        for name, high in (("max_length", 4), ("max_string", 8), ("max_depth", 3)):
+            if rng.random() < 0.15:
+                options[name] = rng.randint(0, high)
+        case["options"] = options
+    elif kind == "json":
+        case["source"] = json.dumps(json_value(rng), ensure_ascii=False)
+        options = {"indent": rng.choice([2, 4, None, "\t", 0])}
+        if rng.random() < 0.3:
+            options["sort_keys"] = True
+        if rng.random() < 0.3:
+            options["ensure_ascii"] = True
+        case["options"] = options
+
+
 def generated_cases(seed: int, count: int) -> list[dict]:
     rng = random.Random(seed)
     cases = []
     for index in range(count):
-        kind = rng.choice(KINDS)
+        kind = rng.choice(KINDS + DOC_KINDS)
         source = "".join(rng.choice(ALPHABET) for _ in range(rng.randint(1, 32)))
         case = {
             "kind": kind,
@@ -145,6 +260,8 @@ def generated_cases(seed: int, count: int) -> list[dict]:
                 case["style"] = rng.choice(["on blue", "red", "on #102030"])
         if kind == "align":
             case["align"] = rng.choice(ALIGNS)
+        if kind in DOC_KINDS:
+            document_case(rng, kind, case)
         cases.append(case)
     return cases
 
@@ -218,14 +335,49 @@ def python_render(case: dict) -> str:
             console.print(padding, end="")
         elif case["kind"] == "align":
             console.print(Align(Text(case["source"]), case["align"]), end="")
+        elif case["kind"] in DOC_KINDS:
+            console.print(document_renderable(case), end="")
         else:
             raise ValueError(f"unknown kind {case['kind']!r}")
     out = capture.get()
+    # Upstream tags each hyperlink with a random `id=`; the port omits it
+    # (DIVERGENCES §20), so compare without it.
+    out = re.sub(r"\x1b\]8;id=\d+;", "\x1b]8;;", out)
     # Block renderables end every line, including the last, with a newline;
     # the Rust side renders to a string without the final one.
     if case["kind"] != "markup" and case["kind"] != "text" and out.endswith("\n"):
         out = out[:-1]
     return out
+
+
+def document_renderable(case: dict):
+    kind = case["kind"]
+    if kind == "markdown":
+        return Markdown(case["source"], hyperlinks=case.get("hyperlinks", True), justify=case.get("justify"))
+    if kind == "tree":
+        def build(spec, tree):
+            for child in spec["children"]:
+                build(child, tree.add(child["label"], expanded=child.get("expanded", True)))
+            return tree
+        spec = case["tree"]
+        tree = Tree(spec["label"], guide_style=case.get("guide_style", "tree.line"),
+                    hide_root=case.get("hide_root", False), expanded=spec.get("expanded", True))
+        return build(spec, tree)
+    if kind == "columns":
+        return Columns(case["items"], equal=case.get("equal", False), expand=case.get("expand", False),
+                       column_first=case.get("column_first", False),
+                       right_to_left=case.get("right_to_left", False), width=case.get("column_width"))
+    if kind == "progress":
+        progress = Progress(TextColumn("[progress.description]{task.description}"), BarColumn(),
+                            TaskProgressColumn(), expand=case.get("expand", False))
+        for task in case["tasks"]:
+            progress.add_task(task["description"], total=task["total"], completed=task["completed"])
+        return progress.make_tasks_table(progress.tasks)
+    if kind == "pretty":
+        return Pretty(python_value(case["value"]), **case.get("options", {}))
+    if kind == "json":
+        return JSON(case["source"], **case.get("options", {}))
+    raise ValueError(f"unknown kind {kind!r}")
 
 
 def rust_render(cases: list[dict], command: list[str]) -> list[dict]:
@@ -242,7 +394,7 @@ def rust_render(cases: list[dict], command: list[str]) -> list[dict]:
     )
     if proc.returncode != 0:
         raise SystemExit(proc.stderr)
-    return [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+    return [json.loads(line) for line in proc.stdout.split("\n") if line.strip()]
 
 
 def python_render_all(cases: list[dict]) -> list[dict]:
@@ -269,7 +421,7 @@ def python_render_all(cases: list[dict]) -> list[dict]:
         )
         if proc.returncode != 0:
             raise SystemExit(proc.stderr)
-        results = [json.loads(line) for line in proc.stdout.splitlines() if line.strip()]
+        results = [json.loads(line) for line in proc.stdout.split("\n") if line.strip()]
         for index, result in zip(indices, results, strict=True):
             outputs[index] = result
     return outputs  # type: ignore[return-value]

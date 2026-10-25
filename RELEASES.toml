@@ -124,6 +124,12 @@ manifest = "crates/rich-data/Cargo.toml"
 version = "0.0.6"
 
 [[package]]
+name = "rs-rich-marketplace"
+registry = "crates.io"
+manifest = "crates/rich-marketplace/Cargo.toml"
+version = "0.0.1"
+
+[[package]]
 name = "rs-rich-cli"
 registry = "crates.io"
 manifest = "crates/rich-cli/Cargo.toml"

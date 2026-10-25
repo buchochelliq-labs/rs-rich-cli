@@ -28,7 +28,9 @@ impl Renderable for Constrain {
             None => options.max_width,
         };
         let child_options = options.update_width(width);
-        self.child.rich_render(console, &child_options)
+        // `console.render(self.renderable, child_options)`, which yields
+        // nothing in no width.
+        console.render(self.child.as_ref(), Some(&child_options))
     }
 
     /// Port of `Constrain.__rich_measure__`: the child measured within the
