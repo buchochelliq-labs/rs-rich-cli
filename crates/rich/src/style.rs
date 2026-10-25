@@ -255,6 +255,28 @@ impl<K: Into<String>> FromIterator<(K, MetaValue)> for Meta {
     }
 }
 
+/// FNV-1a, for caches keyed by short strings such as tag names, which
+/// SipHash's setup would cost more to hash than the strings themselves.
+pub(crate) struct ShortKeyHasher(u64);
+
+impl Default for ShortKeyHasher {
+    fn default() -> Self {
+        ShortKeyHasher(0xcbf2_9ce4_8422_2325)
+    }
+}
+
+impl std::hash::Hasher for ShortKeyHasher {
+    fn finish(&self) -> u64 {
+        self.0
+    }
+
+    fn write(&mut self, bytes: &[u8]) {
+        for &byte in bytes {
+            self.0 = (self.0 ^ u64::from(byte)).wrapping_mul(0x0100_0000_01b3);
+        }
+    }
+}
+
 /// A terminal text style. Mirrors `rich.style.Style`.
 #[derive(Debug, Clone, PartialEq, Eq, Default)]
 pub struct Style {
@@ -580,9 +602,13 @@ impl Style {
         // normalises every tag it opens or closes, so the cache keeps a
         // frame of markup from parsing the same few names again
         // (docs/PORTING.md, "Performance notes").
+        type Cache = std::collections::HashMap<
+            String,
+            String,
+            std::hash::BuildHasherDefault<crate::style::ShortKeyHasher>,
+        >;
         thread_local! {
-            static CACHE: std::cell::RefCell<std::collections::HashMap<String, String>> =
-                std::cell::RefCell::new(std::collections::HashMap::new());
+            static CACHE: std::cell::RefCell<Cache> = std::cell::RefCell::new(Cache::default());
         }
         if let Some(hit) = CACHE.with(|cache| cache.borrow().get(definition).cloned()) {
             return hit;
