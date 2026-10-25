@@ -15,6 +15,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   opening pages, views, keys, per-site keys, sound, config, switches, tips,
   troubleshooting and what works today. It is in the navigation and linked
   from the home page, the guide and the crate's README.
+- **Noctiluca's guide grows into ten pages** under `guide/noctiluca/`
+  (getting started, reading, forms, keys with every action, media,
+  configuration, privacy, the library, troubleshooting, and what works
+  today), with three new tapes over the saved pages (forms, reading, and
+  keywords with site keys) and a recording against a real Chrome
+  (`docs/tapes/live/`, recorded by hand, not run by CI).
 - **Its iconography**, in `docs/assets/noctiluca/`: the logo (a bloom of
   small linked terminals), a favicon, a lanternfish whose lure is a
   terminal (hero, tip and troubleshooting poses, 32 and 16 px), a 32x32

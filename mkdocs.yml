@@ -195,7 +195,18 @@ nav:
       - "Embedding programs and pages (rs-rich-embed)": guide/intuituive/embed.md
       - Testing with screen readers: guide/intuituive/screen-readers.md
       - "From Python (rs_rich.tui)": guide/intuituive/python.md
-  - Noctiluca: guide/noctiluca.md
+  - Noctiluca:
+      - guide/noctiluca.md
+      - Getting started: guide/noctiluca/getting-started.md
+      - Reading and moving around: guide/noctiluca/reading.md
+      - Forms and controls: guide/noctiluca/forms.md
+      - Going places and keys: guide/noctiluca/keys.md
+      - Sound and media: guide/noctiluca/media.md
+      - Configuration: guide/noctiluca/config.md
+      - Privacy and security: guide/noctiluca/privacy.md
+      - Using it as a library: guide/noctiluca/library.md
+      - Troubleshooting and FAQ: guide/noctiluca/troubleshooting.md
+      - "What works today and what's next": guide/noctiluca/status.md
   - Gallery: gallery.md
   - Terminal recordings: recordings.md
   - CLI and art videos: demos.md

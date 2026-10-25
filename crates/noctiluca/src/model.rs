@@ -24,7 +24,7 @@
 //!   document, a node and a meaning revision, and is refused if any moved.
 //! - **The password rule**: a password field's value is never read into
 //!   the model, whatever the snapshot holds.
-//! - **Cleaning**: every string is cleaned ([`crate::clean`]) here, so
+//! - **Cleaning**: every string is cleaned ([`crate::clean()`]) here, so
 //!   nothing in the model can carry a control character to the terminal.
 
 use std::collections::hash_map::DefaultHasher;

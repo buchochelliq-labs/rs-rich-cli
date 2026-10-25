@@ -694,7 +694,7 @@ fn find_prompt(b: Browser, cx: &mut Ctx) {
     });
 }
 
-/// One row of a [`chooser`].
+/// One row of a `chooser`.
 #[derive(Clone, Debug, PartialEq, Eq)]
 pub struct Entry {
     /// Console markup.

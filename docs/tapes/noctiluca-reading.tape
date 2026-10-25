@@ -1,6 +1,7 @@
 # Reading with Noctiluca (0.0.22): a two-column page in the projection,
 # an article with a header, a figure and an aside in the projection and
-# in reader mode, and find in page. It replays Chrome's saved snapshots
+# in reader mode, find in page, and an audio element's controls (the
+# replay has no playback, so they say it is not ready). It replays Chrome's saved snapshots
 # of the crate's fixture pages (docs/tapes/fixtures/noctiluca/make.py),
 # which needs the binary built with the test-only `fake-engine` feature.
 # The replay has no real pictures: an image's still is a flat box.
@@ -41,5 +42,13 @@ Screenshot find
 Type "n"
 Wait /match 2 of 2/
 Sleep 800ms
+Type "o"
+Wait /Open: an address/
+Sleep 300ms
+Type "https://fixture.example/audio.html"
+Enter
+Wait /A test tone/
+Sleep 1s
+Screenshot audio
 Type "q"
 Wait /❯\s*$/
