@@ -6,7 +6,7 @@
 # components. See docs/design/intuituive.md. Independent SemVer from 0.0.1.
 [package]
 name = "rs-rich-intuituive"
-version = "0.0.6"
+version = "0.0.7"
 description = "intuiTUIve: a reactive, retained terminal UI framework built on rs-rich"
 edition.workspace = true
 license.workspace = true
@@ -115,8 +115,8 @@ required-features = ["pcm"]
 rich.workspace = true
 # Both without their defaults, so `syntax` decides whether syntect comes
 # in. Path dependencies, as workspace ones cannot turn defaults off.
-rich-ext = { package = "rs-rich-ext", path = "../rich-ext", version = "0.0.18", default-features = false }
-rich-interact = { package = "rs-rich-interact", path = "../rich-interact", version = "0.0.9", default-features = false }
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext", version = "0.0.19", default-features = false }
+rich-interact = { package = "rs-rich-interact", path = "../rich-interact", version = "0.0.10", default-features = false }
 cpal = { version = "0.18.2", optional = true }
 hound = { version = "3.5", optional = true }
 notify = { workspace = true, optional = true }
