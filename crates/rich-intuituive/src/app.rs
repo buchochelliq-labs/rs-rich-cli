@@ -1895,6 +1895,10 @@ pub struct App {
     /// The console the last frame used, for components handling events.
     last_console: Option<Console>,
     stats: StatsHandle,
+    /// The bytes the frame before sent: [`Driver::render`] starts this
+    /// frame's count at zero before it draws, and the inspector shows
+    /// the last one.
+    bytes_before: usize,
     /// How frames become bytes; `None` takes `RICH_PAINT_STRATEGY`, or
     /// the default.
     paint_strategy: Option<PaintStrategy>,
@@ -2239,6 +2243,7 @@ impl App {
             console: None,
             last_console: None,
             stats: StatsHandle::default(),
+            bytes_before: 0,
             paint_strategy: None,
             frame_time: None,
             text_frames: true,
@@ -4214,7 +4219,10 @@ impl App {
                 focus: all.last().and_then(|layer| layer.focus),
                 focus_path: &focus_path,
                 hover: &hover,
-                stats: self.stats.get(),
+                stats: FrameStats {
+                    bytes: self.bytes_before,
+                    ..self.stats.get()
+                },
                 frame: inspector.frames,
                 theme,
                 viewport,
@@ -6473,6 +6481,7 @@ impl Driver {
     pub fn render(&mut self) -> Option<String> {
         // The frame's counters start again; the rounds below add to them.
         if !self.done && self.needs_render() {
+            self.app.bytes_before = self.app.stats.get().bytes;
             self.app.stats.update(|stats| {
                 stats.bytes = 0;
                 stats.draw = Duration::ZERO;

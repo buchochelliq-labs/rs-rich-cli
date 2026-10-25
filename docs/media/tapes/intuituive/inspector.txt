@@ -3,7 +3,7 @@
 ╰──────────────────────────────────────────────────────────╯│tree node timings trace               │
 ╭─ To do ──────────────────────────────────────────────────╮│frame 3 · drew 2 of 4 dirty           │
 │✓ Read the intuiTUIve tutorial                            ││damage 3 rects, 176 cells             │
-│• Build an app                                            ││sent 1416 B last frame                │
+│• Build an app                                            ││sent 1236 B last frame                │
 │                                                          ││                                      │
 │                                                          ││screen 1                              │
 │                                                          ││  column 60x22                        │
