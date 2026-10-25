@@ -474,6 +474,14 @@ impl Screen {
             return;
         }
         self.split_edges(rect);
+        if !self.write_simple_lines(rect, lines) {
+            self.write_frame_lines(rect, lines);
+        }
+    }
+
+    /// [`write_lines`](Self::write_lines) through a [`Frame`], for any
+    /// text: graphemes of several characters, controls, region tags.
+    fn write_frame_lines(&mut self, rect: Rect, lines: &[Vec<Segment>]) {
         let mut segments = Vec::new();
         for line in lines.iter().take(rect.height as usize) {
             let start = segments.len();
@@ -521,6 +529,71 @@ impl Screen {
                 x += 1;
             }
         }
+    }
+
+    /// [`write_lines`](Self::write_lines) without building a [`Frame`],
+    /// when every character of `lines` is its own grapheme, one or two cells
+    /// wide (no zero-width marks, joiners or controls, no line breaks, no
+    /// region tags): what most rendered text and every picture is. Whether
+    /// it wrote them; when it did not, nothing was changed.
+    fn write_simple_lines(&mut self, rect: Rect, lines: &[Vec<Segment>]) -> bool {
+        let lines = &lines[..lines.len().min(rect.height as usize)];
+        let simple = lines.iter().flatten().all(|segment| {
+            segment.control
+                || segment
+                    .style
+                    .as_ref()
+                    .is_none_or(|s| s.meta_ref().is_none())
+                    && segment.text.chars().all(|c| {
+                        // ASCII printables first: most text is.
+                        (' '..='~').contains(&c)
+                            || c != '\n'
+                                && super::control_picture(c).is_none()
+                                && matches!(rich::cells::char_cell_width(c), 1 | 2)
+                    })
+        });
+        if !simple {
+            return false;
+        }
+        for row in 0..rect.height {
+            let y = rect.y + row;
+            let mut x = rect.x;
+            if let Some(line) = lines.get(row as usize) {
+                'line: for segment in line.iter().filter(|s| !s.control) {
+                    // A style that sets nothing is no style.
+                    let style = segment.style.as_ref().filter(|s| !s.is_null());
+                    let id = self.styles.intern(style);
+                    for c in segment.text.chars() {
+                        if x >= rect.right() {
+                            break 'line;
+                        }
+                        let width = if c.is_ascii() {
+                            1
+                        } else {
+                            rich::cells::char_cell_width(c) as u16
+                        };
+                        if width == 2 && x + 1 >= rect.right() {
+                            // No room for the second column.
+                            self.cell_mut(x, y).set(" ", 1, id);
+                            x += 1;
+                            continue;
+                        }
+                        let mut buffer = [0u8; 4];
+                        self.cell_mut(x, y)
+                            .set(c.encode_utf8(&mut buffer), width as u8, id);
+                        if width == 2 {
+                            self.cell_mut(x + 1, y).set("", 0, id);
+                        }
+                        x += width;
+                    }
+                }
+            }
+            while x < rect.right() {
+                *self.cell_mut(x, y) = Cell::blank();
+                x += 1;
+            }
+        }
+        true
     }
 
     /// Lay `style` under the cell at `x`, `y`: it takes what the cell's own
@@ -1373,6 +1446,40 @@ mod tests {
         assert_eq!(screen.plain(), ["日本 "]);
         assert!(screen.cell(1, 0).is_continuation());
         assert_eq!(screen.cell(4, 0).text, " ");
+    }
+
+    #[test]
+    fn simple_lines_write_as_a_frame_would() {
+        let pieces = ["ab", "日本", "●x", "⣿⠁", " ", "é", "a\u{301}", "\x1b", "─┐"];
+        let styles = [
+            None,
+            Style::parse("bold red").ok(),
+            Style::parse("on blue").ok(),
+        ];
+        let mut n = 7usize;
+        for case in 0..300 {
+            let lines: Vec<Vec<Segment>> = (0..3)
+                .map(|_| {
+                    (0..4)
+                        .map(|_| {
+                            n = n.wrapping_mul(1103515245).wrapping_add(12345) >> 3;
+                            let text = pieces[n % pieces.len()];
+                            Segment::new(text, styles[n / 9 % 3].clone())
+                        })
+                        .collect()
+                })
+                .collect();
+            let rect = Rect::new((case % 3) as u16, 1, 5 + (case % 4) as u16, 3);
+            let mut fast = Screen::new(12, 5);
+            fast.write_lines(Rect::new(0, 0, 12, 5), &[line("日本語日本語")]);
+            let mut slow = fast.clone();
+            fast.write_lines(rect, &lines);
+            slow.split_edges(rect.intersection(slow.area()));
+            slow.write_frame_lines(rect.intersection(slow.area()), &lines);
+            assert_eq!(fast.lines(), slow.lines(), "{lines:?} in {rect:?}");
+            let widths = |s: &Screen| (0..12).map(|x| s.cell(x, 1).width).collect::<Vec<_>>();
+            assert_eq!(widths(&fast), widths(&slow), "{lines:?}");
+        }
     }
 
     #[test]
