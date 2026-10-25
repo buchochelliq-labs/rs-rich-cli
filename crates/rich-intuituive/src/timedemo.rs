@@ -259,7 +259,7 @@ pub fn script_from_tape(tape: &str) -> Result<(Script, (u16, u16)), String> {
     let mut typing = Duration::from_millis(40);
     for (number, line) in tape.lines().enumerate() {
         let fail = |why: &str| format!("line {}: {why}: {line:?}", number + 1);
-        let words = words(line).map_err(&fail)?;
+        let words = words(line).map_err(fail)?;
         let Some((step, args)) = words.split_first() else {
             continue;
         };
