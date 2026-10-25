@@ -44,9 +44,12 @@ enum Scene {
     Churn,
     /// A braille chart redrawn.
     Chart,
+    /// Text of many scripts redrawn: combining accents, emoji joined with
+    /// ZWJs, wide CJK. What still takes the grapheme-splitting path.
+    Unicode,
 }
 
-const SCENES: [Scene; 9] = [
+const SCENES: [Scene; 10] = [
     Scene::Blink,
     Scene::Typing,
     Scene::StatusClock,
@@ -56,6 +59,7 @@ const SCENES: [Scene; 9] = [
     Scene::TableSort,
     Scene::Churn,
     Scene::Chart,
+    Scene::Unicode,
 ];
 
 const STRATEGIES: [PaintStrategy; 5] = [
@@ -175,6 +179,33 @@ fn app(scene: Scene, rows: u16) -> App {
                     .join("\n")
             })
             .on_key("t", move |_| up.update(|up| *up = !*up))
+        }),
+        Scene::Unicode => App::new(move || {
+            let tick = signal(0usize);
+            let rows = rows as usize;
+            text(move || {
+                const WORDS: [&str; 8] = [
+                    "cafe\u{301}",
+                    "[b]日本語[/b]",
+                    "👨\u{200d}👩\u{200d}👧",
+                    "[cyan]naïve[/]",
+                    "e\u{301}te\u{301}",
+                    "한국어",
+                    "[i]Zürich[/i]",
+                    "❤\u{fe0f}",
+                ];
+                let t = tick.get();
+                (0..rows)
+                    .map(|row| {
+                        (0..12)
+                            .map(|i| WORDS[(row * 3 + i + t) % WORDS.len()])
+                            .collect::<Vec<_>>()
+                            .join(" ")
+                    })
+                    .collect::<Vec<_>>()
+                    .join("\n")
+            })
+            .on_key("t", move |_| tick.update(|t| *t += 1))
         }),
         Scene::Churn => bench::churn_app(),
         Scene::Chart => bench::chart_app(),
@@ -383,7 +414,10 @@ fn paint_strategies_benchmark() {
     };
     for (w, h) in [(80, 24), (200, 60)] {
         for &strategy in &strategies {
-            for scene in SCENES {
+            for scene in SCENES.into_iter().filter(|s| {
+                let only = std::env::var("PAINT_BENCH_SCENE").ok();
+                only.is_none_or(|o| format!("{s:?}").eq_ignore_ascii_case(&o))
+            }) {
                 check(scene, strategy, w, h, 3);
             }
         }
@@ -396,10 +430,19 @@ fn paint_strategies_benchmark() {
     }
     println!();
     println!("|---|---|{}", "---:|---:|".repeat(strategies.len()));
+    // `PAINT_BENCH_SCENE=Churn` measures only that scene.
+    let only = std::env::var("PAINT_BENCH_SCENE").ok();
+    let scenes: Vec<Scene> = SCENES
+        .into_iter()
+        .filter(|s| {
+            only.as_ref()
+                .is_none_or(|o| format!("{s:?}").eq_ignore_ascii_case(o))
+        })
+        .collect();
     for (w, h) in [(80, 24), (200, 60)] {
-        for scene in SCENES {
+        for &scene in &scenes {
             let frames = match scene {
-                Scene::Churn | Scene::Chart | Scene::TableSort => frames / 4,
+                Scene::Churn | Scene::Chart | Scene::TableSort | Scene::Unicode => frames / 4,
                 // The field holds a screen's width of typing.
                 Scene::Typing => frames.min(60),
                 _ => frames,

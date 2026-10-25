@@ -632,54 +632,135 @@ impl Screen {
         }
     }
 
-    /// [`write_lines`](Self::write_lines) without building a [`Frame`],
-    /// when every character of `lines` is its own grapheme, one or two cells
-    /// wide (no zero-width marks, joiners or controls, no line breaks, no
-    /// region tags): what most rendered text and every picture is. Whether
-    /// it wrote them; when it did not, nothing was changed.
+    /// [`write_lines`](Self::write_lines) without building a [`Frame`]:
+    /// segments go straight into cells, a character a cell where every
+    /// character is its own grapheme (most text, every picture), and
+    /// through rich's grapheme splitting where it is not (combining marks,
+    /// joined emoji). It keeps the Frame path's rules: a zero-width
+    /// grapheme joins the cell before it, even across segments, or the
+    /// row's first cell when nothing precedes it. Lines with a line break
+    /// inside a segment, or a region tag, are left to the Frame path:
+    /// whether it wrote them; when it did not, nothing was changed.
     fn write_simple_lines(&mut self, rect: Rect, lines: &[Vec<Segment>]) -> bool {
         let lines = &lines[..lines.len().min(rect.height as usize)];
-        let simple = lines.iter().flatten().all(|segment| {
+        let direct = lines.iter().flatten().all(|segment| {
             segment.control
                 || segment
                     .style
                     .as_ref()
                     .is_none_or(|s| s.meta_ref().is_none())
-                    && segment.text.chars().all(|c| {
-                        // ASCII printables first: most text is.
-                        (' '..='~').contains(&c)
-                            || c != '\n'
-                                && super::control_picture(c).is_none()
-                                && matches!(char_width(c), 1 | 2)
-                    })
+                    && !segment.text.contains('\n')
         });
-        if !simple {
+        if !direct {
             return false;
         }
+        let mut spans: Vec<(usize, usize, usize)> = Vec::new();
         for row in 0..rect.height {
             let y = rect.y + row;
             let mut x = rect.x;
-            if let Some(line) = lines.get(row as usize) {
-                'line: for segment in line.iter().filter(|s| !s.control) {
-                    // A style that sets nothing is no style.
-                    let style = segment.style.as_ref().filter(|s| !s.is_null());
-                    let id = self.styles.intern(style);
-                    for c in segment.text.chars() {
+            // What a zero-width grapheme joins: the cell last written, or,
+            // before any, the row's first (`lead` gathers them); none once
+            // the row is cut at the edge.
+            let mut last: Option<u16> = None;
+            let mut lead = String::new();
+            let mut cut = false;
+            for segment in lines.get(row as usize).into_iter().flatten() {
+                if segment.control {
+                    continue;
+                }
+                // A style that sets nothing is no style.
+                let style = segment.style.as_ref().filter(|s| !s.is_null());
+                let id = self.styles.intern(style);
+                // One look at the text: ASCII printables pass at once.
+                let (mut simple, mut controls) = (true, false);
+                for c in segment.text.chars() {
+                    if (' '..='~').contains(&c) {
+                        continue;
+                    }
+                    if super::control_picture(c).is_some() {
+                        controls = true;
+                    } else if !matches!(char_width(c), 1 | 2) || c == '\u{200d}' || c == '\u{fe0f}'
+                    {
+                        simple = false;
+                    }
+                }
+                if simple && !controls {
+                    // A character a grapheme: straight into cells.
+                    let mut chars = segment.text.chars();
+                    if !lead.is_empty() && !cut {
+                        if let Some(c) = chars.next() {
+                            lead.push(c);
+                            let piece = std::mem::take(&mut lead);
+                            self.put_grapheme(
+                                rect,
+                                &mut x,
+                                y,
+                                &piece,
+                                char_width(c),
+                                id,
+                                &mut last,
+                                &mut cut,
+                            );
+                        }
+                    }
+                    for c in chars {
+                        if cut {
+                            break;
+                        }
                         if x >= rect.right() {
-                            break 'line;
+                            cut = true;
+                            break;
                         }
                         let width = char_width(c) as u16;
                         if width == 2 && x + 1 >= rect.right() {
-                            // No room for the second column.
                             self.cell_mut(x, y).set(" ", 1, id);
                             x += 1;
+                            cut = true;
                             continue;
                         }
                         *self.cell_mut(x, y) = Cell::char(c, width as u8, id);
                         if width == 2 {
                             self.cell_mut(x + 1, y).set("", 0, id);
                         }
+                        last = Some(x);
                         x += width;
+                    }
+                    continue;
+                }
+                let sanitized;
+                let text = if controls {
+                    sanitized = segment
+                        .text
+                        .chars()
+                        .map(|c| super::control_picture(c).unwrap_or(c))
+                        .collect::<String>();
+                    sanitized.as_str()
+                } else {
+                    segment.text.as_str()
+                };
+                spans.clear();
+                spans.extend(rich::cells::split_graphemes(text).0);
+                for &(from, to, width) in &spans {
+                    let piece = &text[from..to];
+                    if width == 0 {
+                        if cut {
+                            continue;
+                        }
+                        match last {
+                            Some(at) => {
+                                let cell = *self.cell(at, y);
+                                let joined = format!("{}{piece}", cell.text());
+                                *self.cell_mut(at, y) = Cell::new(&joined, cell.width, cell.style);
+                            }
+                            None => lead.push_str(piece),
+                        }
+                        continue;
+                    }
+                    if !lead.is_empty() && !cut {
+                        let piece = std::mem::take(&mut lead) + piece;
+                        self.put_grapheme(rect, &mut x, y, &piece, width, id, &mut last, &mut cut);
+                    } else {
+                        self.put_grapheme(rect, &mut x, y, piece, width, id, &mut last, &mut cut);
                     }
                 }
             }
@@ -689,6 +770,44 @@ impl Screen {
             }
         }
         true
+    }
+
+    /// One grapheme `width` cells wide at `x` of row `y`, for
+    /// [`write_simple_lines`](Self::write_simple_lines): cut to a space at
+    /// the rectangle's edge, nothing past it.
+    #[allow(clippy::too_many_arguments)]
+    fn put_grapheme(
+        &mut self,
+        rect: Rect,
+        x: &mut u16,
+        y: u16,
+        piece: &str,
+        width: usize,
+        id: StyleId,
+        last: &mut Option<u16>,
+        cut: &mut bool,
+    ) {
+        if *cut {
+            return;
+        }
+        if *x >= rect.right() {
+            *cut = true;
+            return;
+        }
+        let width = width as u16;
+        if width >= 2 && *x + 1 >= rect.right() {
+            // No room for the second column.
+            self.cell_mut(*x, y).set(" ", 1, id);
+            *x += 1;
+            *cut = true;
+            return;
+        }
+        *self.cell_mut(*x, y) = Cell::new(piece, width as u8, id);
+        for extra in 1..width {
+            self.cell_mut(*x + extra, y).set("", 0, id);
+        }
+        *last = Some(*x);
+        *x += width;
     }
 
     /// Lay `style` under the cell at `x`, `y`: it takes what the cell's own
@@ -1906,14 +2025,29 @@ mod tests {
 
     #[test]
     fn simple_lines_write_as_a_frame_would() {
-        let pieces = ["ab", "日本", "●x", "⣿⠁", " ", "é", "a\u{301}", "\x1b", "─┐"];
+        let pieces = [
+            "ab",
+            "日本",
+            "●x",
+            "⣿⠁",
+            " ",
+            "é",
+            "a\u{301}",
+            "\x1b",
+            "─┐",
+            "\u{301}x",
+            "👨\u{200d}👩\u{200d}👧",
+            "❤\u{fe0f}",
+            "\u{200d}",
+            "e\u{301}\u{302}",
+        ];
         let styles = [
             None,
             Style::parse("bold red").ok(),
             Style::parse("on blue").ok(),
         ];
         let mut n = 7usize;
-        for case in 0..300 {
+        for case in 0..1500 {
             let lines: Vec<Vec<Segment>> = (0..3)
                 .map(|_| {
                     (0..4)
