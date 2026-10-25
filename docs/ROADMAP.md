@@ -2,7 +2,7 @@
 
 What each release delivered, and where this goes next: the
 [plan to 1.0.0](plans/1.0.0.md), after the 0.0.21 cohort (published
-2026-10-21) and with 0.0.22 planned.
+2026-10-21) and with 0.0.22 in progress.
 Ordered by what unblocks people, not by what is most interesting to build.
 
 Two rules constrain everything here:
@@ -216,7 +216,7 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
-## 0.0.22 — parity, the marketplace, round 7's last items (planned)
+## 0.0.22 — parity, the marketplace, round 7's last items (in progress)
 
 The [0.0.22 plan](plans/0.0.22.md) finishes stage 2 of the
 [plan to 1.0.0](plans/1.0.0.md): every partial row in

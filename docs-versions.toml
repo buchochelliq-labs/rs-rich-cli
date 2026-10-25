@@ -9,3 +9,6 @@
 [docs]
 # 0.0.20's notes (#762), the last commit before the 0.0.21 versions open.
 "0.0.20" = "9ed4ccbad330a52b1233395686fee52a62d221e8"
+# 0.0.21's notes (the publication), the last commit before the 0.0.22
+# versions open.
+"0.0.21" = "15f9a21d6286f1c375f38bb8b568dddb734db137"

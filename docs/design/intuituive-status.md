@@ -10,7 +10,8 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   `python-v0.0.9`; see the [0.0.21 release notes](../releases/0.0.21.md)).
   The second wave below merged as #764 and the release PR as #765.
 - **0.0.22 is planned** ([plan](../plans/0.0.22.md), PR #767, tracker
-  #766).
+  #766); its versions are open (every package one patch past 0.0.21;
+  `rs-rich-marketplace` joins at 0.0.1 with its own branch).
 - **Wave 1's six workstreams are done**, each on a backup branch,
   `claude/next-priority-items-3c5p8e-wip-{core,widgets,live,docs,mkt,rec}`,
   and are being integrated.
