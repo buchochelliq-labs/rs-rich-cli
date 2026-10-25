@@ -9,7 +9,6 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-<<<<<<< HEAD
 ### Noctiluca's docs and iconography (noctiluca)
 
 - **A guide page for Noctiluca**, the terminal web browser: install,
@@ -74,7 +73,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   rs-rich-interact's `Binding` and `Command` gain `unavailable`, and
   `Palette::set_commands`, `Palette::focus_id` and `Help::set_bindings`
   replace what they list in place.
-=======
+
 ### Memo in the cartoon look, and a spot for every crate (docs)
 
 - **Memo's illustration look is now a cartoon**: a bold outline, soft
@@ -88,7 +87,6 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   its spot beside the title, and the crate tables in the README and on the
   docs front page show them small. The README's top picture for
   `rs-rich-intuituive` stays its hero.
->>>>>>> 022-icons
 
 ### Record: APNG only when asked, and every frame on a busy machine (record, CLI)
 
