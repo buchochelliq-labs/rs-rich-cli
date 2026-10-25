@@ -1,0 +1,15 @@
+{
+  "tape": "docs/tapes/live/noctiluca-chrome.tape",
+  "tape_fnv1a64": "d6cfe7ec8e5aeacb",
+  "recorder": "rs-rich-record 0.0.10",
+  "rich": null,
+  "commit": null,
+  "screenshots": [
+    "live-projection",
+    "live-hints",
+    "live-form",
+    "live-echo",
+    "live-image"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}
