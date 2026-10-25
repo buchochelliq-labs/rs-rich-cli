@@ -106,6 +106,7 @@ site table they came from.
 | Top, bottom | `g g`, `G` | `Home`, `End` |
 | Reader mode on or off | `r` | `Alt+R` |
 | Play or pause, mute | `p`, `Alt+M` | `Alt+P`, `Alt+M` |
+| Seek back, on five seconds | `[`, `]` | `Ctrl+Left`, `Ctrl+Right` |
 | Volume up, down | `+`, `-` | `Alt+Up`, `Alt+Down` |
 | Bookmark this page, bookmarks | `m`, `M` | `Ctrl+D`, `Ctrl+B` |
 | Bind a key on this site | `Ctrl+K` | `Ctrl+K` |
@@ -115,6 +116,15 @@ site table they came from.
 
 `[keys] preset` in the config chooses the column. Any action can be
 rebound by its id: `noctiluca keys` lists the ids and their keys.
+
+**Video.** A playing video plays in its region, from Chrome's own
+frames, only while it is on screen, and at most eight frames a second:
+fewer, and in a cheaper protocol (Kitty, then iTerm2, Sixel, character
+art), when the terminal cannot take more. Over SSH it starts as character
+art unless `--images` names a protocol. A paused video shows its poster
+with a play mark. The status bar shows its state
+(`media PLAYING 0:03 / 0:05`), the row and the keys. `about:noctiluca`
+lists the codecs your Chrome says it plays.
 
 **Link hints.** `f` puts a short label on every link and control in view.
 Type a label to follow the link, or to use the control: type into a field,

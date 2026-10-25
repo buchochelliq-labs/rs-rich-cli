@@ -11,6 +11,28 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 - **`rich serve --compress`** (CLI, `serve` feature): deflates frames of 1 KiB or more for pages that can undo it. Off by default; worth it over a slow link.
 
+### Video in Noctiluca, and the PoC's header and status bar (noctiluca, rich-embed)
+
+- **A playing video plays in its region.** Chrome's screencast runs only
+  while a video plays on screen, each playing region is cropped from it,
+  and its frames are paced within the terminal's byte budget (at most
+  eight a second), stepping down Kitty, iTerm2, Sixel, then cells when the
+  budget is short. Over SSH video starts as cells unless you ask for a
+  protocol. Freezing (F4) stops the frames.
+- **Media controls**: play, pause, seek (`[` and `]`, or `ctrl+left` and
+  `ctrl+right`) and mute, from keys and the player. A paused video shows
+  its poster with a play mark.
+- **The header** shows the view, how pictures reach the terminal, the
+  title and the address; **the status bar** the media state
+  (`media PLAYING 0:03 / 0:05`), the row and the keys.
+- **`about:noctiluca`** lists the codecs the browser says it plays
+  (`canPlayType`).
+- **rs-rich-embed's screencast on demand**: `screencast_on_demand` decodes
+  and acknowledges a frame only when `take_screencast` takes it, so Chrome
+  paints no more than are used. Frames carry their scroll position and
+  crop to a rectangle of the page (`ScreencastFrame::crop`);
+  `Pixels::crop` and `Pixels::to_rgba`.
+
 ### Long pages and endless feeds (intuituive, noctiluca, rich-embed, rich-web)
 
 - **`scroll_virtual(len, height_of, row)`** in intuiTUIve: a scroll view

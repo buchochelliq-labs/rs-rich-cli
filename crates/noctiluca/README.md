@@ -27,6 +27,13 @@ as a normal user, never as root.
 - **Forms**: fields, check boxes, radios, selects and sliders are
   intuiTUIve widgets. A field's edit is a draft until Enter; if the page
   changed the value meanwhile, it is a conflict, never overwritten.
+- **Video**: a playing video plays in its region, from Chrome's own
+  frames, within what your terminal can take (at most eight frames a
+  second; Kitty, iTerm2, Sixel, then character art when it is short, and
+  character art first over SSH). `p` plays or pauses, `[` and `]` seek
+  five seconds, `alt+m` mutes, `F4` freezes moving pictures. A paused
+  video shows its poster with a play mark. `about:noctiluca` lists the
+  codecs your Chrome plays.
 - **Sound**: off by default. `--audio` (or `[media] audio = true`) lets
   pages play sound, with Play/Pause, Mute/Unmute and volume controls for
   each video and audio. Sound plays on the machine Chrome runs on, never
