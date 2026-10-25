@@ -480,6 +480,74 @@ iTerm2 placement). For video it needs a path that takes decoded RGBA
 frames without encoding PNG in between. That is a proposal for rs-rich-art
 and intuiTUIve's `art` feature: fast frame encoding.
 
+**The picture API (0.0.23).** Picture handling is rs-rich-art's
+(`rich_art::picture`, its `picture` feature): decoding, fitting, every
+protocol's encoding, a picture's identity, byte accounting and the step
+down. intuiTUIve's `art` feature holds only the node and painter glue.
+Noctiluca only decides what shows where.
+
+```rust
+// rs-rich-art, `picture` feature
+pub enum Pixels { Cells, Kitty, Sixel, Iterm }      // detect(), name(), lower()
+pub struct ImageView { mode, fit, anchor, background, pixels } // builder
+pub struct Picture;                                  // Clone, Eq by (id, version)
+impl Picture {
+    pub fn new(image: DynamicImage) -> Picture;      // a new id
+    pub fn decode(bytes: &[u8]) -> Result<Picture, String>;
+    pub fn from_rgba(width: u32, height: u32, rgba: Vec<u8>) -> Option<Picture>;
+    pub fn animated(frames: Vec<AnimationFrame>) -> Option<Picture>; // Kitty plays it
+    pub fn next(&self, image: DynamicImage) -> Picture;              // same id, version + 1
+    pub fn next_rgba(&self, width: u32, height: u32, rgba: Vec<u8>) -> Option<Picture>;
+    pub fn still(&self) -> Picture;                  // an animation stopped
+    pub fn find(id: u32, version: u32) -> Option<Picture>;
+    pub fn id(&self) -> u32;
+    pub fn version(&self) -> u32;
+    pub fn image(&self) -> &Arc<DynamicImage>;
+    pub fn is_animated(&self) -> bool;
+    pub fn frames(&self) -> Option<&[AnimationFrame]>;
+    /// Cells for rows of one's own; tagged for the painter when in pixels.
+    pub fn lines(&self, console: &Console, view: ImageView, width: u16, height: u16)
+        -> Vec<Vec<Segment>>;
+    pub fn encode(&self, pixels: Pixels, cols: usize, rows: usize) -> Option<String>;
+    pub fn encode_rows(&self, pixels: Pixels, cols: usize, rows: usize,
+                       first: usize, shown: usize) -> Option<String>;
+    pub fn release(id: u32) -> String;
+}
+pub struct PictureTag { id, version, cols, rows, row, pixels } // of(&Style), style(), picture()
+pub fn picture_bytes(id: u32) -> u64;               // escapes sent for a picture so far
+pub fn count_picture_bytes(id: u32, bytes: u64);    // called by the painter's glue
+pub struct ByteBudget { bytes_per_second, max_fps: 8.0, min_fps: 2.0 } // new(), guess()
+pub struct Pacer;                                    // one moving picture's rate and tier
+impl Pacer {
+    pub fn new(pixels: Pixels, cols: usize, rows: usize) -> Pacer;
+    pub fn pixels(&self) -> Pixels;
+    pub fn resize(&mut self, cols: usize, rows: usize);
+    pub fn estimate(pixels: Pixels, cols: usize, rows: usize) -> u64;
+    pub fn fps(&self, budget: &ByteBudget, share: f64) -> f64;
+    pub fn due(&mut self, now: Instant, budget: &ByteBudget, share: f64) -> bool;
+    pub fn sent(&mut self, now: Instant, bytes: Option<u64>);
+    pub fn settle(&mut self, budget: &ByteBudget, share: f64) -> bool; // stepped down?
+    pub fn recent_bytes(&self) -> u64;               // the last two seconds
+}
+pub fn over_ssh() -> bool;
+// rs-rich-art, `kitty`: raw pixels, no PNG (Doom's gap 3)
+pub fn transmit_rgba(id: u32, rgba: &[u8], width: u32, height: u32,
+                     cols: usize, rows: usize) -> String;
+
+// rs-rich-intuituive, `art`: the glue
+pub use rich_art::picture::{picture_bytes, ImageView, Picture, Pixels};
+pub fn picture_of(picture: impl Fn() -> Option<Picture> + 'static, view: ImageView) -> Node;
+pub fn image_graphics() -> Arc<dyn PlacementSource>; // finds tags anywhere, counts bytes
+```
+
+A live frame keeps its picture's id, so Kitty replaces the image it holds
+(one `a=d` when the app ends), and Sixel and iTerm2 draw the new frame
+over its cells. `picture_of` draws a frame at once, with no worker. A
+moving picture's `Pacer` takes its share of the `ByteBudget`; where the
+painter's own frame budget lands (branches 023-paint and 023-core), the
+budget's `bytes_per_second` comes from the painter's measured output
+rate instead of `ByteBudget::guess`.
+
 **Codecs and DRM.** On this machine Chrome for Testing reports H.264 and
 AAC as playable (`canPlayType`: "probably"). That contradicts the lead's
 note that Chromium lacks them: plain open-source Chromium builds usually
