@@ -118,7 +118,7 @@ surface.finish()
 ```
 
 ```text
-149 bytes
+114 bytes
 11 bytes
 ╭──────────────────────╮
 │ deploy               │
