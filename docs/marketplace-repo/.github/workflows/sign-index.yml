@@ -1,0 +1,155 @@
+# Rebuild and sign the marketplace index.
+#
+# This workflow belongs to the rs-rich-marketplace repository; rs-rich-cli
+# keeps it in docs/marketplace-repo/ to hand over (see the README there).
+# The contract is rs-rich-cli's docs/design/marketplace.md, "Signing".
+#
+# On every merge to main that touches packages/ (a listing pull request), on
+# a weekly schedule (an index expires after 30 days, so it is re-signed well
+# before), and by hand: the listings are validated, index.json is rebuilt
+# with the serial bumped, signed with the main key and committed to main
+# with its signature.
+#
+# The main key's secret half and its password are secrets of the protected
+# `marketplace-signing` environment: it runs only from main, and only after
+# a required reviewer (the maintainer) approves the run. The backup key
+# never enters GitHub.
+name: Sign the index
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+      - "keys/**"
+  schedule:
+    # Mondays, 06:17 UTC.
+    - cron: "17 6 * * 1"
+  workflow_dispatch:
+
+# One signing at a time, so two runs never take the same serial.
+concurrency:
+  group: marketplace-signing
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+env:
+  # The rs-rich-cli revision whose validator and schemas apply. Pin it to the
+  # release the marketplace serves (a tag), and move it with that release.
+  RS_RICH_CLI_REF: ${{ vars.RS_RICH_CLI_REF || 'main' }}
+
+jobs:
+  validate:
+    name: listings validate
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Fetch rs-rich-cli's validator and schemas
+        uses: actions/checkout@v7
+        with:
+          repository: buchochelliq-labs/rs-rich-cli
+          ref: ${{ env.RS_RICH_CLI_REF }}
+          path: .rs-rich-cli
+          sparse-checkout: |
+            scripts/validate_marketplace.py
+            schemas/marketplace
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Every listing is valid
+        run: |
+          python3 -m pip install jsonschema
+          python3 .rs-rich-cli/scripts/validate_marketplace.py --jsonschema require packages/*.json
+
+  sign:
+    name: rebuild and sign index.json
+    needs: validate
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    environment: marketplace-signing
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - name: Fetch rs-rich-cli's validator and schemas
+        uses: actions/checkout@v7
+        with:
+          repository: buchochelliq-labs/rs-rich-cli
+          ref: ${{ env.RS_RICH_CLI_REF }}
+          path: .rs-rich-cli
+          sparse-checkout: |
+            scripts/validate_marketplace.py
+            schemas/marketplace
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Install minisign and jsonschema
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y minisign
+          python3 -m pip install jsonschema
+
+      - name: Rebuild index.json with the next serial
+        id: index
+        run: |
+          serial="$(python3 scripts/build_index.py)"
+          echo "serial=$serial" >> "$GITHUB_OUTPUT"
+          python3 .rs-rich-cli/scripts/validate_marketplace.py --jsonschema require --index index.json
+
+      - name: Sign it with the main key
+        env:
+          MINISIGN_KEY: ${{ secrets.MARKETPLACE_MINISIGN_KEY }}
+          MINISIGN_PASSWORD: ${{ secrets.MARKETPLACE_MINISIGN_PASSWORD }}
+          SERIAL: ${{ steps.index.outputs.serial }}
+        run: |
+          set -euo pipefail
+          if [ -z "$MINISIGN_KEY" ] || [ -z "$MINISIGN_PASSWORD" ]; then
+            echo "::error::the marketplace-signing environment has no MARKETPLACE_MINISIGN_KEY or MARKETPLACE_MINISIGN_PASSWORD"
+            exit 1
+          fi
+          umask 077
+          key="$RUNNER_TEMP/main.key"
+          trap 'rm -f "$key"' EXIT
+          printf '%s\n' "$MINISIGN_KEY" > "$key"
+          # minisign reads the password from standard input when it is not
+          # a terminal.
+          printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s "$key" -m index.json \
+            -x index.json.minisig -t "rs-rich-marketplace index serial=$SERIAL"
+
+      - name: The signature verifies with the newest published main key
+        env:
+          SERIAL: ${{ steps.index.outputs.serial }}
+        run: |
+          set -euo pipefail
+          public="$(python3 - <<'EOF'
+          import json, pathlib, re
+          files = sorted(pathlib.Path("keys").glob("keys-*.json"),
+                         key=lambda p: int(re.search(r"(\d+)", p.name).group(1)))
+          print(json.loads(files[-1].read_text())["main"]["public_key"])
+          EOF
+          )"
+          minisign -V -P "$public" -m index.json -x index.json.minisig | tee verify.log
+          grep -qx "Trusted comment: rs-rich-marketplace index serial=$SERIAL" verify.log
+          rm verify.log
+
+      - name: Commit the signed index to main
+        env:
+          SERIAL: ${{ steps.index.outputs.serial }}
+        run: |
+          git config user.name "rs-rich-marketplace signer"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add index.json index.json.minisig
+          git commit -m "Sign the index, serial $SERIAL"
+          git push origin HEAD:main

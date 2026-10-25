@@ -13,6 +13,8 @@ exclude_docs: |
   python/
   assets/vendor/**/README.md
   assets/intuituive/mascot/MASCOT.md
+  # Files to hand over to the rs-rich-marketplace repository, not pages.
+  marketplace-repo/
 
 theme:
   name: material
