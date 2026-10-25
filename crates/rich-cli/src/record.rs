@@ -20,7 +20,12 @@ struct Args {
     output: PathBuf,
     bin_dir: Option<PathBuf>,
     check: bool,
+    /// What `--format` and `--no-video` allow.
     formats: Formats,
+    /// Whether `--format` was given. Without it, a tape writes its own
+    /// choice ([`recorder::Recording::default_formats`]), so a tape with no
+    /// `Output` writes no APNG; with it, `--format apng` or `all` writes one.
+    format_given: bool,
     font: Option<PathBuf>,
     /// `--window-frame`, `--caption` and `--key-overlay`: over the tape's.
     window_frame: Option<bool>,
@@ -66,6 +71,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             .and_then(|exe| exe.parent().map(Path::to_path_buf)),
         check: false,
         formats: Formats::ALL,
+        format_given: false,
         font: None,
         window_frame: None,
         caption: None,
@@ -117,7 +123,10 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             }
             "--output" | "-o" => parsed.output = fs_path(&value()?),
             "--bin-dir" => parsed.bin_dir = Some(fs_path(&value()?)),
-            "--format" => parsed.formats = parse_formats(&value()?)?,
+            "--format" => {
+                parsed.formats = parse_formats(&value()?)?;
+                parsed.format_given = true;
+            }
             "--font" => parsed.font = Some(fs_path(&value()?)),
             "--window-frame" => parsed.window_frame = Some(parse_switch(name, &value()?)?),
             "--key-overlay" => parsed.key_overlay = Some(parse_switch(name, &value()?)?),
@@ -130,6 +139,19 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         return Err("`rich record` needs at least one TAPE".into());
     }
     Ok(parsed)
+}
+
+impl Args {
+    /// The formats a recording may write: `--format` as given, or else the
+    /// tape's own choice (its `Output`, or every format but the APNG), less
+    /// what `--no-video` skips.
+    fn allowed(&self, recording: &recorder::Recording) -> Formats {
+        if self.format_given {
+            self.formats
+        } else {
+            recording.default_formats().intersect(self.formats)
+        }
+    }
 }
 
 /// A tape's name: its file name without the extension.
@@ -271,7 +293,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
             &recording,
             &dir,
             &stem,
-            args.formats,
+            args.allowed(&recording),
             &fonts,
             &options.theme,
             Some((path, &source)),
@@ -359,7 +381,7 @@ mod tests {
             "a.tape",
         ]))
         .unwrap_or_else(|e| panic!("{e}"));
-        assert!(args.check);
+        assert!(args.check && args.format_given);
         assert_eq!(args.output, PathBuf::from("media"));
         assert!(args.formats.png && args.formats.cast && !args.formats.gif);
         assert_eq!(args.tapes, [PathBuf::from("a.tape")]);
@@ -397,10 +419,49 @@ mod tests {
         }
         let args = parse_args(&strings(&["record", "--no-video", "a"])).unwrap();
         assert!(!args.formats.apng && !args.formats.gif && args.formats.png);
+        assert!(!args.format_given);
+        assert!(
+            parse_args(&strings(&["record", "--format", "all", "a"]))
+                .unwrap()
+                .formats
+                .apng
+        );
         let Err(error) = parse_args(&strings(&["record", "--window-frame=maybe", "a"])) else {
             panic!("--window-frame=maybe was accepted");
         };
         assert!(error.contains("on or off"), "{error}");
+    }
+
+    #[test]
+    fn an_apng_needs_an_output_or_a_format() {
+        let mut recording = recorder::Recording {
+            title: "t".into(),
+            presentation: Default::default(),
+            outputs: Vec::new(),
+            columns: 10,
+            rows: 3,
+            shots: Vec::new(),
+            masks: Vec::new(),
+            timeline: Default::default(),
+            frame_rate: 12.0,
+        };
+        let allowed = |args: &[&str], recording: &recorder::Recording| {
+            parse_args(&strings(args))
+                .unwrap_or_else(|e| panic!("{e}"))
+                .allowed(recording)
+        };
+        // No `Output`, no `--format`: everything but the APNG.
+        let chosen = allowed(&["record", "a"], &recording);
+        assert!(!chosen.apng && chosen.gif && chosen.png);
+        for format in ["apng", "all", "gif,apng"] {
+            assert!(allowed(&["record", "--format", format, "a"], &recording).apng);
+        }
+        assert!(!allowed(&["record", "--no-video", "a"], &recording).apng);
+        // `Output apng` asks for one.
+        recording.outputs = tape::parse("Output apng gif\n").unwrap().outputs;
+        let chosen = allowed(&["record", "a"], &recording);
+        assert!(chosen.apng && chosen.gif && !chosen.png);
+        assert!(!allowed(&["record", "--no-video", "a"], &recording).apng);
     }
 
     #[test]

@@ -9,6 +9,23 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Record: APNG only when asked, and every frame on a busy machine (record, CLI)
+
+- **APNG is written only when asked** (0.0.22's decision 2). A tape with no
+  `Output` line writes every format but the APNG, as before 0.0.20; an
+  `Output apng` line, `--format apng` or `--format all` writes one.
+  `rs-rich-record` gains `Formats::DEFAULT` and
+  `Recording::default_formats`, the tape's own choice to pass to
+  `write_selected`; `Formats::ALL` still means every format.
+- **The recorder keeps every frame when it reads late.** A reader woken late
+  gets several screen updates in one read, and kept only the last: CI's
+  macOS runners kept 7 frames over 0.8 s at `Set Framerate 35`. A read is
+  now split where the program starts each update (a carriage return that
+  redraws a line, the cursor sent home, a synchronized update begun), and
+  a frame is kept for each frame interval since the last read, up to
+  0.25 s back. Screenshots and casts are unchanged. The frame-rate test's
+  lower bound holds on every platform again.
+
 ## 0.0.21 cohort — to be published
 
 To be published from `main` by one `release.yml` run (tag

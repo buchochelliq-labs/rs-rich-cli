@@ -959,8 +959,9 @@ From one run it writes, under `docs/media/tapes/<tape>/`:
   [frame](guide/ext/live-and-layout.md#frames) as the rest of rich's export, so a screenshot
   looks like any other rich SVG;
 - the whole session as an asciinema cast, with the keys pressed;
-- a GIF and an animated PNG (APNG, in full colour) with the keys shown as
-  they are pressed, and an MP4 when FFmpeg is installed. Video holds every
+- a GIF with the keys shown as they are pressed, an MP4 when FFmpeg is
+  installed, and, when asked (`Output apng`, `--format apng`), an animated
+  PNG (APNG, in full colour). Video holds every
   screen update the program finished, dropped to the tape's frame rate
   (`Set Framerate`, 12 a second by default) with identical frames merged,
   and the Kitty, Sixel and iTerm2 images the program drew, over their
@@ -984,7 +985,7 @@ wide as rich measures it, so the columns after it line up.
 |---|---|
 | `Set Size 100x28`, `Set Title "…"`, `Set TypingDelay 40ms`, `Set Timeout 15s`, `Set Env NAME value` | Configure the session |
 | `Set WindowFrame off`, `Set Caption "…"`, `Set KeyOverlay off` | Presentation: leave out the window frame (title bar and buttons) around PNGs, SVGs and video; add a line of text under them and under the page's player; leave out the keys shown in video and the player. The frame and the overlay are on by default |
-| `Output gif png`, `Output demo.html` | Write only these formats (`png`, `svg`, `cast`, `gif`, `apng`, `mp4`, `html`; text grids always; without an `Output` line, all of them), or name the file a per-tape format goes to, as in VHS. Several words or lines add up; `--format` can still narrow them |
+| `Output gif png`, `Output demo.html` | Write only these formats (`png`, `svg`, `cast`, `gif`, `apng`, `mp4`, `html`; text grids always; without an `Output` line, all of them but `apng`, which is written only when an `Output` line or `--format` names it), or name the file a per-tape format goes to, as in VHS. Several words or lines add up; `--format` can still narrow them |
 | `Set Framerate 35`, `Set FontSize 10` | Video: frames a second, 1 to 60 (12 by default; `--fps` overrides it), and the size of video text in pixels, 4 to 64 (16) |
 | `Set KittyKeyboard on`, `Set KeyRepeat 200ms 33ms` | Keys: report the kitty keyboard protocol, so a program can turn it on and hear releases (off by default); a held key's autorepeat delay and interval (200ms 33ms) |
 | `Set Shell zsh` | Run in `bash` (the default), `zsh`, `fish` or `sh`, each without your profile or rc files and with the same `❯` prompt. CI records in all four |
@@ -1043,6 +1044,7 @@ rich record demo.tape                       # writes recordings/demo/
 rich record --format gif,png demo.tape      # only the GIF and the PNGs
 rich record --fps 30 game.tape              # video at 30 frames a second
 rich record --format html demo.tape         # the page: a player and the screenshots
+rich record --format all demo.tape          # every format, the animated PNG too
 rich record --window-frame off --caption 'Save to redraw' demo.tape
 rich record --check demo.tape               # fail if a screenshot changed
 ```
@@ -1051,7 +1053,7 @@ rich record --check demo.tape               # fail if a screenshot changed
 |---|---|
 | `--output DIR` | Write to `DIR/<tape>/` (default `recordings`) |
 | `--check` | Compare each screenshot's text with `DIR/<tape>/<name>.txt` instead of writing, and report screenshots the last write listed that the tape no longer takes; exits non-zero on any difference |
-| `--format LIST` | Any of `png`, `svg`, `cast`, `gif`, `apng`, `mp4`, `html`, or `all` (the default). Text grids are always written. A tape's `Output` narrows it further |
+| `--format LIST` | Any of `png`, `svg`, `cast`, `gif`, `apng`, `mp4`, `html`, or `all` (every format, `apng` included). Text grids are always written. Without it, a tape writes its `Output` formats, or every format but `apng` when it has none. A tape's `Output` narrows `--format` further |
 | `--window-frame on\|off`, `--caption TEXT`, `--key-overlay on\|off` | Override the tape's `Set WindowFrame`, `Set Caption` and `Set KeyOverlay` |
 | `--no-video` | Skip the GIF, the APNG, the MP4 and the HTML page's player |
 | `--fps N` | Video frames a second, 1 to 60, over the tape's `Set Framerate` |

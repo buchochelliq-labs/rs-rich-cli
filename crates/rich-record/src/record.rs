@@ -89,7 +89,7 @@ impl Default for Presentation {
 pub struct Recording {
     pub title: String,
     pub presentation: Presentation,
-    /// The tape's `Output` words; empty for every format.
+    /// The tape's `Output` words; empty for [`Formats::DEFAULT`].
     pub outputs: Vec<Output>,
     pub columns: u16,
     pub rows: u16,
@@ -613,17 +613,29 @@ impl Recording {
         crate::tape::apply_masks(&self.masks, &snapshot.text_grid())
     }
 
-    /// The formats to write: the tape's `Output` formats (every format when
-    /// it has none) that `requested` also allows.
-    pub fn formats(&self, requested: Formats) -> Formats {
+    /// The formats the tape asks for: its `Output` formats, or
+    /// [`Formats::DEFAULT`] (every format but the APNG) when it has none.
+    /// `rich record` writes these, less `--no-video`, when no `--format` is
+    /// given.
+    pub fn default_formats(&self) -> Formats {
         if self.outputs.is_empty() {
-            return requested;
+            return Formats::DEFAULT;
         }
         let mut tape = Formats::NONE;
         for output in &self.outputs {
             tape.set(output.format, true);
         }
-        tape.intersect(requested)
+        tape
+    }
+
+    /// The formats to write: the tape's `Output` formats that `requested`
+    /// also allows, or `requested` itself when the tape has no `Output`.
+    /// Pass [`Recording::default_formats`] for the tape's own choice.
+    pub fn formats(&self, requested: Formats) -> Formats {
+        if self.outputs.is_empty() {
+            return requested;
+        }
+        self.default_formats().intersect(requested)
     }
 
     /// The file a per-tape `format` is written to, relative to the output
@@ -663,6 +675,12 @@ impl Formats {
         apng: true,
         mp4: true,
         html: true,
+    };
+    /// What a tape with no `Output` writes: every format but the APNG,
+    /// which is written only when an `Output` or the caller names it.
+    pub const DEFAULT: Formats = Formats {
+        apng: false,
+        ..Formats::ALL
     };
     /// Everything but video encoding.
     pub const NO_VIDEO: Formats = Formats {
@@ -864,7 +882,9 @@ pub struct Skipped {
 /// Write the files the tape asks for: [`write`] with the tape's `Output`
 /// formats that `allowed` also permits ([`Recording::formats`]), so a tape
 /// that names `Output demo.png` writes a PNG and not every format. Pass
-/// [`Formats::ALL`] to honour the tape alone.
+/// [`Recording::default_formats`] to honour the tape alone: a tape with no
+/// `Output` then writes every format but the APNG. [`Formats::ALL`] lets
+/// such a tape write the APNG too.
 ///
 /// An MP4 needs FFmpeg. When the selected formats include one and FFmpeg is
 /// not installed, nothing fails: the MP4 is listed in [`Written::skipped`],
@@ -1299,6 +1319,7 @@ mod tests {
     fn outputs_choose_formats_and_files() {
         let mut recording = recording();
         assert_eq!(recording.formats(Formats::ALL), Formats::ALL);
+        assert_eq!(recording.default_formats(), Formats::DEFAULT);
         recording.outputs = crate::tape::parse("Output gif html\nOutput pages/t.html\n")
             .unwrap()
             .outputs;
@@ -1355,6 +1376,56 @@ mod tests {
             assert_eq!(written.skipped[0].reason, "ffmpeg not found");
         }
         let _ = std::fs::remove_dir_all(&dir);
+    }
+
+    #[test]
+    fn an_apng_is_written_only_when_asked() {
+        let mut recording = recording();
+        // No `Output`: every format but the APNG.
+        assert_eq!(recording.default_formats(), Formats::DEFAULT);
+        const {
+            assert!(!Formats::DEFAULT.apng && Formats::DEFAULT.gif && Formats::DEFAULT.mp4);
+            assert!(Formats::ALL.apng);
+        }
+        let fonts = raster::Fonts::embedded();
+        let video = Formats {
+            gif: true,
+            apng: true,
+            ..TEXT_ONLY
+        };
+        let run = |recording: &Recording, allowed: Formats, name: &str| {
+            let dir = scratch(name);
+            let written = write_selected(
+                recording,
+                &dir,
+                "s",
+                allowed,
+                &fonts,
+                &Theme::default(),
+                None,
+            )
+            .unwrap();
+            let apng = dir.join("s.apng").exists();
+            assert_eq!(apng, written.formats.apng, "{written:?}");
+            assert!(dir.join("s.gif").exists() || !written.formats.gif);
+            let _ = std::fs::remove_dir_all(&dir);
+            (written.formats, apng)
+        };
+        // The default: a GIF and no APNG.
+        let (formats, apng) = run(
+            &recording,
+            recording.default_formats().intersect(video),
+            "apng-default",
+        );
+        assert!(formats.gif && !apng);
+        // `--format apng` (or `all`): asked for, so written.
+        let (_, apng) = run(&recording, video, "apng-format");
+        assert!(apng);
+        // `Output apng` asks for it too.
+        recording.outputs = crate::tape::parse("Output apng\n").unwrap().outputs;
+        assert!(recording.default_formats().apng && !recording.default_formats().gif);
+        let (formats, apng) = run(&recording, recording.default_formats(), "apng-output");
+        assert!(apng && !formats.gif && !formats.png);
     }
 
     #[test]
