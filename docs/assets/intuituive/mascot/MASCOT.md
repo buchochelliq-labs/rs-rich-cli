@@ -12,10 +12,13 @@ Memo has two looks, one for each size.
 
 - **Illustrations: the cartoon look.** Pictures beside a heading, in a
   README or on a docs page, from about 96 px up, are drawn as a cartoon:
-  a bold ink outline (`#1c1a24`, 3 units at 128) around every shape, a
-  lighter lavender body with soft shading, pink inner ears, big round
-  glossy eyes with raised brows, a happy open mouth with a pink tongue,
-  chunky limbs with white toenails and a tufted tail. Props have their own
+  a bold ink outline (`#1c1a24`, 3 units at 128, 2 for inner detail)
+  around every shape; a big round head, about half her height, on a small
+  pear-shaped body with short legs, in a 3/4 view facing right; two floppy
+  ears with pink insides that frame the face without touching the eyes;
+  big tall eyes with two highlights each and small arched brows; a wide
+  open smile with a pink tongue and a blush; a tapering S-curved trunk with
+  wrinkle lines; white toenails, a hair tuft and a tufted tail. Props have their own
   outline and a little glow or sparkle. `memo-cartoon.svg` is the base
   pose, and the [crate spots](#crate-spots) reuse it.
 - **Icons: the flat look.** Favicons, avatars, 16 and 32 px badges and
