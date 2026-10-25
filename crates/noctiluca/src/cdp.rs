@@ -493,6 +493,16 @@ impl Engine for ChromeBackend {
         })
     }
 
+    fn image_ready(&mut self, _tab: TabId, node: i64) -> io::Result<bool> {
+        let value = self.call_on(
+            node,
+            "function() { return !(this instanceof HTMLImageElement) || \
+               (this.complete && this.naturalWidth > 0); }",
+            vec![],
+        )?;
+        Ok(value.as_bool().unwrap_or(true))
+    }
+
     fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
         let metrics = self.call("Page.getLayoutMetrics", json!({}))?;
         // The `css…` sizes are CSS pixels; the older names are device

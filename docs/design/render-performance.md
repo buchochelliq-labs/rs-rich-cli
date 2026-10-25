@@ -718,10 +718,17 @@ under a modal, so it waits for one.
 - **`truncated`** shows as "page cut" in the status line.
 - **No screencast:** `ChromeEngine::screencast(false)`, and
   `set_screencast` to turn it on for a raster view.
-- **Not done: Sixel and iTerm2 pictures partly in view.** Drawing them
-  clipped needs a still cut to the visible rows in the image layer
-  (`image.rs`); they still show as half blocks until wholly on screen.
-  Kitty works row by row already.
+- **Sixel and iTerm2 pictures partly in view** draw clipped: intuiTUIve's
+  image layer (`image.rs`) places, from the first row of a picture on
+  screen, the picture fitted to all its cells and cut to the rows shown
+  (one graphic per picture, size and rows shown, made once). A picture
+  wholly in view draws as before. Kitty worked row by row already.
+- **Lazy images load as Chrome scrolls**, since Chrome's scroll follows
+  ours. Stills wait for an image's picture (`Engine::image_ready`: an
+  `<img>` that is `complete` with a natural width), so a lazy image far
+  from the view gets no blank still; its load pings, and it is captured at
+  the next reading. Stills are taken nearest Chrome's view first. A test
+  on the fake engine and a live test (`fixtures/lazy.html`).
 - **Tests:** a generated feed snapshot under the fake engine
   (`tests/feed.rs`): the end loads more, Chrome follows (a wheel turn, a
   jump to the bottom, a jump to the top), the row in view stays when five

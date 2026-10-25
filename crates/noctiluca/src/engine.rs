@@ -193,6 +193,12 @@ pub trait Engine: Send {
     fn playback(&mut self, _tab: TabId, _node: NodeId) -> io::Result<Playback> {
         Err(io::Error::new(io::ErrorKind::Unsupported, "no media here"))
     }
+    /// Whether an image element has its picture yet: a lazy image below
+    /// the fold has none until the page scrolls near it. A still of one
+    /// that has none would be blank.
+    fn image_ready(&mut self, _tab: TabId, _node: NodeId) -> io::Result<bool> {
+        Ok(true)
+    }
     /// Where the page is scrolled and how tall it is now.
     fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
         Err(io::Error::new(

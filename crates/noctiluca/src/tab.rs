@@ -259,6 +259,9 @@ struct Worker<'a> {
     /// When the first change ping since the last reading came.
     dirty: Option<Instant>,
     stills: HashMap<(NodeId, String, u64, u64), Arc<[u8]>>,
+    /// Where Chrome's view was last seen: images near it are captured
+    /// first.
+    metrics: Option<Metrics>,
 }
 
 impl Worker<'_> {
@@ -322,14 +325,26 @@ impl Worker<'_> {
         let Some(page) = self.page.clone() else {
             return;
         };
-        let wanted: Vec<_> = page
+        // Nearest Chrome's view first; an image with no picture yet (a lazy
+        // one far from the view) waits: its load pings, and it is captured
+        // at the reading after.
+        let view = self.metrics.map_or(0.0, |m| m.scroll_y);
+        let mut candidates: Vec<_> = page
             .media
             .iter()
             .filter(|m| m.kind == MediaKind::Image && m.still.is_none())
             .filter(|m| m.rect.width >= 4.0 && m.rect.height >= 4.0)
-            .take(STILLS_PER_READ)
-            .map(|m| (m.node, m.src.clone(), m.rect))
             .collect();
+        candidates.sort_by(|a, b| (a.rect.y - view).abs().total_cmp(&(b.rect.y - view).abs()));
+        let mut wanted = Vec::new();
+        for m in candidates {
+            if wanted.len() == STILLS_PER_READ {
+                break;
+            }
+            if self.engine.image_ready(TabId(0), m.node).unwrap_or(true) {
+                wanted.push((m.node, m.src.clone(), m.rect));
+            }
+        }
         if wanted.is_empty() {
             return;
         }
@@ -369,6 +384,7 @@ impl Worker<'_> {
             if metrics.content_height > read + 1.0 {
                 self.dirty.get_or_insert_with(Instant::now);
             }
+            self.metrics = Some(metrics);
             (self.update)(Update::Metrics(metrics));
         }
         Ok(())
@@ -463,6 +479,7 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
         state: PageState::default(),
         dirty: None,
         stills: HashMap::new(),
+        metrics: None,
     };
     // Read once at the start, then whenever something says to.
     let mut read_now = true;

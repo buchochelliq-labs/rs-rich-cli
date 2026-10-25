@@ -34,6 +34,8 @@ pub struct FakeState {
     pub scroll_y: f64,
     /// The viewport's height in CSS pixels.
     pub viewport_height: f64,
+    /// Image nodes whose picture has not loaded (lazy, below the fold).
+    pub not_loaded: std::collections::HashSet<i64>,
 }
 
 impl FakeState {
@@ -372,6 +374,10 @@ impl Engine for FakeEngine {
             .get(&node)
             .copied()
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no media"))
+    }
+
+    fn image_ready(&mut self, _tab: TabId, node: i64) -> io::Result<bool> {
+        Ok(!self.lock().not_loaded.contains(&node))
     }
 
     fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {

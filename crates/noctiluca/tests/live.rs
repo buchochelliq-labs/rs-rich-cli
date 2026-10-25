@@ -378,3 +378,32 @@ fn an_infinite_feed_loads_more_when_scrolled_to_its_end() {
     let page = live.wait("forty more", |p| p.text().contains("Post 60"));
     assert!(page.height > 60.0 * 76.0, "{}", page.height);
 }
+
+/// A lazy image far below the fold has no still until Chrome's scroll
+/// brings it near and it loads; then it gets one.
+#[test]
+fn a_lazy_image_loads_and_gets_its_still_when_scrolled_near() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let page = live.open("lazy.html");
+    let image = page.media.first().map(|m| m.node);
+    std::thread::sleep(Duration::from_secs(1));
+    while let Ok(update) = live.updates.try_recv() {
+        if let Update::Page(page) = update {
+            live.page = Some(page);
+        }
+    }
+    let page = live.page.clone().unwrap();
+    assert!(
+        page.media.iter().all(|m| m.still.is_none()),
+        "a still before the image loaded"
+    );
+    let id = live.tab.send(Command::Scroll(7800.0));
+    assert_eq!(live.result(id), Ok(()));
+    let page = live.wait("the lazy image's still", |p| {
+        p.media.iter().any(|m| m.still.is_some())
+    });
+    if let Some(node) = image {
+        assert!(page.media.iter().any(|m| m.node == node && m.still.is_some()));
+    }
+}

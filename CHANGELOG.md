@@ -28,6 +28,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   is scrolled to its bottom. Your place stays put when the page grows
   above it. The layout is made once per reading, not per key. A page cut
   for length says so in the status line.
+- **Pictures partly in view** draw clipped to their visible rows in Sixel
+  and iTerm2, as in Kitty, rather than as half blocks until wholly on
+  screen (intuiTUIve's image layer). In Noctiluca, lazy images load as
+  Chrome scrolls, and an image gets its still only once its picture has
+  loaded.
 - **rs-rich-embed's screencast can be off**: `ChromeEngine::screencast`
   and `set_screencast`. Noctiluca turns it off, so no frame is encoded or
   decoded.

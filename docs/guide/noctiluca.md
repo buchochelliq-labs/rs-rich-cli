@@ -79,6 +79,9 @@ an infinite feed keeps loading. Near the end of what was read, Noctiluca
 scrolls Chrome to its bottom and reads the page again once it changes.
 When the page grows above what you are reading, your place stays put.
 
+Pictures load as you reach them, as in a browser, and a picture partly
+on screen shows the part in view (Sixel and iTerm2 included).
+
 A page too long to read whole (more than 20,000 blocks) says
 "page cut" in the status line.
 
