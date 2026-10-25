@@ -81,16 +81,26 @@ fn authors_keep_their_colour() {
         .find(|s| s.text.contains("first light"))
         .unwrap();
     assert!(!words.style.contains("rgb"), "{words:?}");
-    // Without the rule, no page colour at all.
+    // Without the rule, the page's own colours: on a dark terminal (the
+    // tests' default) with their lightness inverted, so the black words
+    // read light and the author stays coral.
     let marks = Marks {
         adapt: Adapt::default().with(Rule::PageColors, false),
         ..Marks::default()
     };
-    let plain_lines = project(&page, 100, (8.0, 18.0), &marks).lines;
-    assert!(plain_lines
-        .iter()
-        .flat_map(|l| &l.spans)
-        .all(|s| !s.style.contains("rgb")));
+    let raw_lines = project(&page, 100, (8.0, 18.0), &marks).lines;
+    let span = |text: &str| {
+        raw_lines
+            .iter()
+            .flat_map(|l| &l.spans)
+            .find(|s| s.text.contains(text))
+            .unwrap()
+            .style
+            .clone()
+    };
+    assert!(span("first light").contains("rgb("), "{}", span("first light"));
+    assert_ne!(span("first light"), words.style);
+    assert!(span("ada").contains("rgb("), "{}", span("ada"));
 }
 
 /// The log of `log-div` with `n` entries, `#1` to `#n`.

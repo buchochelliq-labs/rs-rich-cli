@@ -147,6 +147,28 @@ pub fn splice(
 /// character, and the painter's moves, about 25 bytes (measured).
 const UNDERLAY: u64 = 25;
 
+/// `line` as a row of the page on `backdrop` (a rich style, `on …`): padded
+/// to `width` cells, and every cell without a background of its own (not a
+/// picture's half block) given the backdrop's. The page colours rule off
+/// draws the projected page on white (a light terminal) or black.
+pub fn on_backdrop(line: Vec<Segment>, width: usize, backdrop: &str) -> Vec<Segment> {
+    let Ok(back) = rich::Style::parse(backdrop) else {
+        return line;
+    };
+    Segment::adjust_line_length(&line, width, None)
+        .into_iter()
+        .map(|mut segment| {
+            let style = segment.style.take().unwrap_or_default();
+            segment.style = Some(if style.bgcolor().is_some() {
+                style
+            } else {
+                back.combine(&style)
+            });
+            segment
+        })
+        .collect()
+}
+
 /// The moving pictures: a [`Player`] and a [`Pacer`] per animated picture
 /// in view, on a terminal that cannot play animations itself.
 pub struct Motion {
@@ -429,6 +451,32 @@ mod tests {
             last = motion.step(&page, &[REGION], 0..10, Pixels::Sixel, false, now)[&7].pixels;
         }
         assert_eq!(last, Pixels::Cells);
+    }
+
+    #[test]
+    fn the_backdrop_fills_the_row_under_the_text() {
+        let line = vec![
+            Segment::new("ink", rich::Style::parse("rgb(17,17,17)").ok()),
+            Segment::new("▀", rich::Style::parse("red on blue").ok()),
+        ];
+        let out = on_backdrop(
+            line,
+            10,
+            crate::adapt::backdrop(crate::adapt::Background::Light),
+        );
+        assert_eq!(
+            out.iter()
+                .map(|s| rich::cells::cell_len(&s.text))
+                .sum::<usize>(),
+            10
+        );
+        let white_style = rich::Style::parse("on rgb(255,255,255)").unwrap();
+        let white = white_style.bgcolor();
+        let bg = |s: &Segment| s.style.as_ref().and_then(|s| s.bgcolor().cloned());
+        // The text and the padding are on white; a picture's cell keeps its own.
+        assert_eq!(bg(&out[0]).as_ref(), white);
+        assert_eq!(bg(out.last().unwrap()).as_ref(), white);
+        assert_ne!(bg(&out[1]).as_ref(), white);
     }
 
     #[test]

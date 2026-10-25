@@ -1881,7 +1881,11 @@ fn projection_view(b: Browser) -> Node {
                 ..Marks::default()
             };
             let width = usize::from(width.max(1));
-            b.layout.with(|l| {
+            // The page colours rule off: the page's own colours, on white
+            // (a light terminal) or black.
+            let backdrop = (!b.effective_adapt().on(crate::adapt::Rule::PageColors))
+                .then(|| crate::adapt::backdrop(crate::adapt::background()));
+            let drawn = b.layout.with(|l| {
                 let row = l.rows.get(&key).copied().unwrap_or(i);
                 let Some(line) = l.lines.get(row) else {
                     return vec![Vec::new()];
@@ -1936,7 +1940,14 @@ fn projection_view(b: Browser) -> Node {
                     }
                     _ => spliced,
                 })]
-            })
+            });
+            match backdrop {
+                Some(backdrop) => drawn
+                    .into_iter()
+                    .map(|line| pictures::on_backdrop(line, width, backdrop))
+                    .collect(),
+                None => drawn,
+            }
         })
         .fixed(1)
     };

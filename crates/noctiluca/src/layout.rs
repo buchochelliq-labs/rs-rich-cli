@@ -204,11 +204,19 @@ fn run_style(run: &Run, base: &str, page: &Page, adapt: Adapt) -> String {
     if run.code {
         parts.push("cyan");
     }
-    let color = run
-        .color
-        .as_deref()
-        .filter(|_| adapt.on(Rule::PageColors) && run.control.is_none())
-        .and_then(|css| crate::adapt::page_color(css, crate::adapt::background()));
+    let background = crate::adapt::background();
+    // Adapted, saturated colours stay, made readable; off, the page's own
+    // colours, lightness inverted on a dark terminal.
+    let raw = !adapt.on(Rule::PageColors);
+    let color = run.color.as_deref().and_then(|css| {
+        if raw {
+            crate::adapt::raw_color(css, background)
+        } else if run.control.is_none() {
+            crate::adapt::page_color(css, background)
+        } else {
+            None
+        }
+    });
     if let Some(color) = &color {
         parts.push(color);
     }
@@ -217,7 +225,11 @@ fn run_style(run: &Run, base: &str, page: &Page, adapt: Adapt) -> String {
     }
     if let Some(control) = run.control.and_then(|i| page.controls.get(i)) {
         if control.role == Role::Link {
-            parts.push("underline bright_blue");
+            parts.push(if raw && color.is_some() {
+                "underline"
+            } else {
+                "underline bright_blue"
+            });
         }
     }
     parts.join(" ")

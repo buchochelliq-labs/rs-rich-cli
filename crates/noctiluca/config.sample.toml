@@ -56,6 +56,8 @@ snap-grids = true
 collapse-nav = true
 text-over-pictures = false
 live-tail = true
+# Off: the page's own colours, on white on a light terminal, lightness
+# inverted on black on a dark one (COLORFGBG says which).
 page-colors = true
 bandwidth = true
 

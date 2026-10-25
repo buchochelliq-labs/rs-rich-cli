@@ -60,7 +60,7 @@ pub struct Run {
     pub control: Option<usize>,
     /// The page's colour for it, as CSS (`rgb(255, 0, 0)`): the
     /// [page colours](crate::adapt::Rule::PageColors) rule decides how it
-    /// shows. Links have none: they are drawn as links.
+    /// shows (adapted, a link is drawn as a link; off, in its own colour).
     pub color: Option<String>,
     /// A small picture in the line (an emote, a badge): the text is its
     /// alt text, which stands in where pictures are not drawn.
@@ -1110,10 +1110,9 @@ impl Walker<'_> {
                     italic: context.italic || matches!(dom.style(i, 5), "italic" | "oblique"),
                     code: context.code,
                     control: context.control,
-                    // The page's own colour, as CSS: the layout's
-                    // page-colors rule decides what of it shows.
-                    color: (context.control.is_none() && !color.is_empty())
-                        .then(|| truncate(&clean(color), 64)),
+                    // The page's own colour, as CSS (a link's too): the
+                    // layout's page-colors rule decides what of it shows.
+                    color: (!color.is_empty()).then(|| truncate(&clean(color), 64)),
                     picture: None,
                 };
                 self.push(run, dom.rect(i));

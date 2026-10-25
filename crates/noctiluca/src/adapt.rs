@@ -404,9 +404,151 @@ pub fn page_color(css: &str, background: Background) -> Option<String> {
     ))
 }
 
+/// The parts of a CSS colour (`rgb(…)`, `rgba(…)`): red, green and blue,
+/// 0 to 255; `None` for another form or a transparent one.
+fn rgb_of(css: &str) -> Option<(f64, f64, f64)> {
+    let css = css.trim();
+    let inner = css
+        .strip_prefix("rgba(")
+        .or_else(|| css.strip_prefix("rgb("))?
+        .strip_suffix(')')?;
+    let parts: Vec<f64> = inner
+        .split([',', ' ', '/'])
+        .filter(|p| !p.is_empty())
+        .map(|p| p.trim().parse::<f64>())
+        .collect::<Result<_, _>>()
+        .ok()?;
+    if parts.len() < 3 || parts.get(3).is_some_and(|a| *a < 0.1) {
+        return None;
+    }
+    Some((
+        parts[0].clamp(0.0, 255.0),
+        parts[1].clamp(0.0, 255.0),
+        parts[2].clamp(0.0, 255.0),
+    ))
+}
+
+/// A page's CSS colour as it is, with the [page colours](Rule::PageColors)
+/// rule off: as written on a light terminal (on the page's white
+/// [backdrop](backdrop)); on a dark one, with its lightness inverted in
+/// OKLab (`L` to `1 - L`, hue and chroma kept), so near-black text becomes
+/// near-white and a red stays red (inverting RGB would make it cyan).
+/// `None` for a transparent colour or another form.
+pub fn raw_color(css: &str, background: Background) -> Option<String> {
+    let (r, g, b) = rgb_of(css)?;
+    let (r, g, b) = match background {
+        Background::Light => (r, g, b),
+        Background::Dark => {
+            let (l, a, bb) = oklab(r, g, b);
+            from_oklab(1.0 - l, a, bb)
+        }
+    };
+    Some(format!(
+        "rgb({},{},{})",
+        r.round() as u8,
+        g.round() as u8,
+        b.round() as u8
+    ))
+}
+
+/// The background drawn behind the projected page with the page colours
+/// rule off: white on a light terminal, so the page reads as designed;
+/// black on a dark one, under its inverted colours. A rich style.
+pub fn backdrop(background: Background) -> &'static str {
+    match background {
+        Background::Light => "on rgb(255,255,255)",
+        Background::Dark => "on rgb(0,0,0)",
+    }
+}
+
+/// sRGB (0 to 255) to OKLab.
+fn oklab(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
+    let linear = |c: f64| {
+        let c = c / 255.0;
+        if c <= 0.04045 {
+            c / 12.92
+        } else {
+            ((c + 0.055) / 1.055).powf(2.4)
+        }
+    };
+    let (r, g, b) = (linear(r), linear(g), linear(b));
+    let l = (0.412_221_470_8 * r + 0.536_332_536_3 * g + 0.051_445_992_9 * b).cbrt();
+    let m = (0.211_903_498_2 * r + 0.680_699_545_1 * g + 0.107_396_956_6 * b).cbrt();
+    let s = (0.088_302_461_9 * r + 0.281_718_837_6 * g + 0.629_978_700_5 * b).cbrt();
+    (
+        0.210_454_255_3 * l + 0.793_617_785_0 * m - 0.004_072_046_8 * s,
+        1.977_998_495_1 * l - 2.428_592_205_0 * m + 0.450_593_709_9 * s,
+        0.025_904_037_1 * l + 0.782_771_766_2 * m - 0.808_675_766_0 * s,
+    )
+}
+
+/// OKLab to sRGB (0 to 255), clamped into the gamut.
+fn from_oklab(l: f64, a: f64, b: f64) -> (f64, f64, f64) {
+    let l_ = (l + 0.396_337_777_4 * a + 0.215_803_757_3 * b).powi(3);
+    let m_ = (l - 0.105_561_345_8 * a - 0.063_854_172_8 * b).powi(3);
+    let s_ = (l - 0.089_484_177_5 * a - 1.291_485_548_0 * b).powi(3);
+    let r = 4.076_741_662_1 * l_ - 3.307_711_591_3 * m_ + 0.230_969_929_2 * s_;
+    let g = -1.268_438_004_6 * l_ + 2.609_757_401_1 * m_ - 0.341_319_396_5 * s_;
+    let b = -0.004_196_086_3 * l_ - 0.703_418_614_7 * m_ + 1.707_614_701_0 * s_;
+    let gamma = |c: f64| {
+        let c = c.clamp(0.0, 1.0);
+        let c = if c <= 0.003_130_8 {
+            12.92 * c
+        } else {
+            1.055 * c.powf(1.0 / 2.4) - 0.055
+        };
+        c * 255.0
+    };
+    (gamma(r), gamma(g), gamma(b))
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    fn parts(rich: &str) -> (f64, f64, f64) {
+        rgb_of(rich.replace(',', ", ").as_str()).unwrap()
+    }
+
+    /// A colour's hue in degrees, from OKLab.
+    fn hue(rgb: (f64, f64, f64)) -> f64 {
+        let (_, a, b) = oklab(rgb.0, rgb.1, rgb.2);
+        b.atan2(a).to_degrees()
+    }
+
+    #[test]
+    fn raw_colours_invert_lightness_on_a_dark_terminal_and_keep_their_hue() {
+        // Near-black page text comes out near-white on a dark terminal...
+        let text = parts(&raw_color("rgb(17, 17, 17)", Background::Dark).unwrap());
+        assert!(
+            text.0 > 185.0 && text.1 > 185.0 && text.2 > 185.0,
+            "{text:?}"
+        );
+        // ...and stays as written on a light one.
+        assert_eq!(
+            raw_color("rgb(17, 17, 17)", Background::Light).as_deref(),
+            Some("rgb(17,17,17)")
+        );
+        // A saturated red keeps its hue in both modes (RGB inversion would
+        // make it cyan).
+        let red = (220.0, 20.0, 20.0);
+        for background in [Background::Dark, Background::Light] {
+            let out = parts(&raw_color("rgb(220, 20, 20)", background).unwrap());
+            assert!(
+                out.0 > out.1 + 60.0 && out.0 > out.2 + 60.0,
+                "{background:?} {out:?}"
+            );
+            assert!((hue(out) - hue(red)).abs() < 12.0, "{background:?} {out:?}");
+        }
+        assert_eq!(raw_color("rgba(0, 0, 0, 0)", Background::Dark), None);
+        // White behind the page on a light terminal, black on a dark one.
+        assert_eq!(backdrop(Background::Light), "on rgb(255,255,255)");
+        assert_eq!(backdrop(Background::Dark), "on rgb(0,0,0)");
+        // OKLab round-trips.
+        let (l, a, b) = oklab(12.0, 200.0, 99.0);
+        let back = from_oklab(l, a, b);
+        assert!((back.0 - 12.0).abs() < 0.5 && (back.1 - 200.0).abs() < 0.5);
+    }
 
     #[test]
     fn defaults_keep_meaning() {
