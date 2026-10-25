@@ -2,8 +2,11 @@
 
 **Status:** proposed on 2026-10-25, for 0.0.23. Written from three
 surveys: Noctiluca and rs-rich-web's render paths, intuiTUIve's pipeline,
-and how other projects do it (sources at the end). Nothing here is built
-yet. The maintainer asked for three things:
+and how other projects do it (sources at the end). The painter's part
+(frame stats, the timedemo, the benchmark, the faster painter and the
+paint strategies) is built on the `023-paint` branch: see [What was
+built, measured](#what-was-built-measured). The viewport and Noctiluca
+are another branch's. The maintainer asked for three things:
 
 1. **Forever scroll:** pages and lists that keep loading as you scroll,
    with only what is on screen rendered. Possibly a core optimisation.
@@ -138,6 +141,177 @@ So the order of work follows the costs, not the list of ideas:
    left in text-heavy scenes, but it is the faithful mirror's: changes go
    upstream-first or into rs-rich-ext's own fast paths (`put_rgb` for
    pictures already skips it).
+
+### What was built, measured
+
+Everything below is from the paint benchmark (`tests/paint_bench.rs`) in
+release, best of five interleaved rounds, a frame's mean; the first table
+is the `cells` strategy at 80x24 after each step, so each step's effect
+shows on its own. Each step was kept only because the numbers moved, and
+every scene's bytes still replay through vt100 to the screen a full
+repaint draws.
+
+| Step | Blink | LogAppend | ListRow | TableSort | Churn | Chart |
+|---|---:|---:|---:|---:|---:|---:|
+| Before (µs; B) | 7.6; 16 | 224; 4,013 | 279; 3,933 | 1,360; 2,132 | 1,715; 65,740 | 807; 3,139 |
+| Lines straight into cells | 6.9 | 141 | 161 | 1,359 | 880 | 377 |
+| Cells of 12 bytes, `Copy` | 4.2 | 88 | 90 | 1,252 | 810 | 299 |
+| The encoder | 4.0; 15 | 97; 3,081 | 96; 3,014 | 1,143; 1,634 | 758; 61,370 | 310; 2,845 |
+| `best` | 3.4; 15 | 50; 147 | 54; 143 | 1,090; 1,634 | 752; 61,377 | 293; 2,845 |
+
+At 200x60, `best` against the start: the log append 774 µs and 24,706
+bytes to 101 µs and 325 bytes; the one-row scroll 1,707 µs and 24,470
+bytes to 235 µs and 320; churn 11,352 µs to 4,925; the chart 2,994 µs
+and 11,267 bytes to 1,145 µs and 8,664.
+
+**What each step was:**
+
+- **Lines straight into cells** (`Screen::write_lines`): the profile's
+  largest share in churn and the chart was building a `Frame` (a text
+  arena, runs, a `Vec` of cells a row) only to copy it into the screen.
+  Segments now go into cells directly, a character a cell where each
+  character is its own grapheme, and through rich's grapheme splitting
+  only for the segments that need it (combining marks, joined emoji),
+  with the Frame path's rules; a random test checks the two cell for
+  cell. Only a line break inside a segment, or a region tag, still takes
+  the Frame path.
+- **Data-oriented cells:** a `Cell` was `{ text: String, width, style }`.
+  It is now 12 bytes and `Copy`: a grapheme of up to four bytes inline,
+  a longer one as an index into a shared, append-only table. Comparing,
+  copying, scrolling and keeping the sent copy are plain moves; paint
+  time halved on every scene. The text is read with `Cell::text()`.
+- **The encoder** (state changes, as a game batches them): the shortest
+  of CUP (its column left out when it is the first), a relative move, a
+  carriage return and a relative move, `\r\n`, or writing through up to
+  eight unchanged cells when that is shorter, style changes counted; a
+  colour change sent as the change when the attributes stay (true-colour
+  pairs straight from the colours, no parsing); ECH and EL for blank runs
+  on the default background, starting where the pen is; numbers written
+  without `format!`; one buffer a frame (`Painter::paint_into`). Bytes
+  fell 6 to 25% on every scene that writes rows. A grapheme with a ZWJ
+  or VS16 now leaves the cursor unknown, so the next write moves there:
+  terminals disagree with rich's table on those widths.
+- **The strategies**, below.
+
+**Tried and dropped, because the benchmark said so:**
+
+- *Interning a style by its colour pair* (skipping the full hash for a
+  true-colour style): 7.6% more instructions on churn. Reverted.
+- *Row hashes kept as rows are written*, for finding scrolled rows:
+  comparing rows as slices of the new cells is cheaper, since a row that
+  differs stops at its first cell (the scroll scene at 200x60: 140 µs
+  with hashes, 99 with compares). Removed; `Screen::scrolled` keeps the
+  scrolls `scroll_up` made, which the painter tries first.
+- *REP*: vt100, our check, has no REP, and once ECH and EL take the blank
+  runs no scene has repeated runs worth it. Left out.
+
+#### The strategies, measured
+
+Every strategy on every scene (µs a frame; bytes a frame):
+
+| Size | Scene | cells | rows | full | scroll | best |
+|---|---|---:|---:|---:|---:|---:|
+| 80x24 | Blink | 3.4; 15 | 3.4; 14 | 50.2; 2,536 | 3.5; 15 | 3.4; 15 |
+| 80x24 | Typing | 13.2; 27 | 13.2; 27 | 62.7; 2,574 | 12.7; 27 | 13.3; 27 |
+| 80x24 | StatusClock | 11.6; 31 | 10.9; 31 | 61.9; 2,465 | 11.6; 31 | 12.0; 31 |
+| 80x24 | LogAppend | 96.6; 3,081 | 104.0; 3,321 | 105.6; 3,327 | 50.6; 147 | 49.9; 147 |
+| 80x24 | ListPage | 60.1; 857 | 52.9; 905 | 107.1; 3,286 | 60.6; 857 | 62.2; 857 |
+| 80x24 | ListRow | 96.1; 3,014 | 103.9; 3,244 | 107.3; 3,287 | 53.9; 143 | 53.9; 143 |
+| 80x24 | TableSort | 1,119; 1,634 | 1,132; 1,732 | 1,136; 2,361 | 1,167; 1,634 | 1,090; 1,634 |
+| 80x24 | Churn | 771; 61,369 | 723; 61,371 | 760; 61,377 | 707; 61,369 | 752; 61,377 |
+| 80x24 | Chart | 291; 2,845 | 284; 3,146 | 303; 3,272 | 295; 2,845 | 293; 2,845 |
+| 80x24 | Unicode | 472; 3,690 | 491; 3,630 | 469; 3,736 | 435; 486 | 424; 486 |
+| 200x60 | Blink | 4.6; 15 | 4.4; 14 | 204; 9,552 | 4.8; 15 | 4.6; 15 |
+| 200x60 | Typing | 18.6; 27 | 18.4; 27 | 237; 9,590 | 17.7; 27 | 20.0; 27 |
+| 200x60 | StatusClock | 13.7; 31 | 13.7; 31 | 208; 9,312 | 13.0; 31 | 13.1; 31 |
+| 200x60 | LogAppend | 410; 18,143 | 414; 18,721 | 412; 18,726 | 97; 325 | 101; 325 |
+| 200x60 | ListPage | 271; 2,941 | 253; 3,116 | 531; 18,591 | 255; 2,941 | 262; 2,941 |
+| 200x60 | ListRow | 520; 17,949 | 525; 18,503 | 525; 18,593 | 241; 320 | 235; 320 |
+| 200x60 | TableSort | 2,762; 9,762 | 2,707; 10,244 | 2,773; 11,714 | 2,871; 9,762 | 2,826; 9,762 |
+| 200x60 | Churn | 4,943; 368,098 | 4,942; 368,769 | 4,785; 368,844 | 4,709; 368,098 | 4,925; 368,844 |
+| 200x60 | Chart | 1,116; 8,664 | 1,121; 8,610 | 1,146; 8,861 | 1,158; 8,664 | 1,145; 8,664 |
+| 200x60 | Unicode | 1,314; 9,216 | 1,286; 9,066 | 1,233; 9,334 | 1,135; 486 | 1,157; 486 |
+
+Timings move by about 10% between runs on a shared machine; bytes are
+exact. What the table decided:
+
+- **`scroll`** is the one strategy that changes the order of things: a
+  log line or a one-row scroll costs about one row of bytes, 20 to 75
+  times fewer, and half the time. It finds the move by comparing the
+  first changed rows with the rows sent near them (32 either way), lets
+  them vote for a shift, and takes the run of rows the best of three
+  shifts puts right. Rows found in more than eight places (blank ones)
+  do not vote. The move is kept only if it puts more rows right than it
+  opens. It resets SGR before scrolling, scrolls the whole screen with
+  SU or SD or a band inside DECSTBM margins, and takes the cursor as
+  lost after. It is off on Windows, under tmux, in an inline app, and
+  where a picture sits in the moved rows.
+- **`rows`** is within a few percent of `cells` everywhere once the cell
+  encoder writes through short gaps, never better by more than 1% in
+  bytes. `best` does not try it.
+- **`full`** is only worth it when nearly every cell changed; otherwise
+  it sends many times the bytes.
+- **`best`** therefore: `full` when the whole screen is damaged and a
+  sample of every seventh cell shows nine in ten changed (full motion);
+  else `scroll` when a move is found; else `cells`. It encodes nothing
+  twice, so choosing costs only the search, which gives up after four
+  changed rows found nowhere. It is within 5% of the best fixed strategy
+  in bytes and in time on every scene (the CI gate, with a 10 µs floor
+  for timer noise and a second look at a failing scene).
+
+#### The draw stage, profiled after the fast path
+
+callgrind on 40 frames of each heavy scene, share of all instructions:
+
+- **TableSort and the lists:** rich rendering the markup is nearly all
+  of it: `TextNode::lines` 93%, of which markup parsing 37%, `cell_len`
+  27% (`char_cell_width`'s table search 22%), wrapping (`divide_line`)
+  26%, the emoji regex 12%. All in `crates/rich`, the mirror.
+- **Churn:** the scene building a rich `Style` per cell, 50% (most of it
+  `format!` inside rich's colour constructors), `StyleTable::intern` 10%,
+  `write_lines` 13%, the painter 19%.
+- **The chart:** rs-rich-ext's chart rendering 61% (`Chart::grid` 32%,
+  `Line::push` 25%, the raster 18%), malloc and free about a third of
+  everything. Measuring chart text without the width table took 13% off
+  its draw.
+- **Unicode text:** `TextNode::lines` 62% (markup 27%, `cell_len` 21%),
+  `write_lines` 28% before it stopped building a Frame (`Frame::cells`
+  13%, `split_graphemes` 11%, `from_segments` 8%); the draw fell from
+  1,524 to about 1,160 µs at 200x60.
+
+So what is left of a heavy frame is mostly rich's own rendering. Those
+fixes belong upstream-first: an ASCII fast path in `cell_len` and
+`char_cell_width` (upstream measures a string of single-width
+characters by its length), and colour constructors that do not format a
+name. Neither is made here; `crates/rich` is the faithful mirror.
+
+#### Allocations a frame
+
+In a steady state, under `best` (the regression baseline,
+`tests/paint_bench_baseline.txt`):
+
+| Scene | 80x24 | 200x60 |
+|---|---:|---:|
+| Blink | 65 | 65 |
+| Typing | 364 | 364 |
+| StatusClock | 162 | 162 |
+| LogAppend | 505 | 619 |
+| ListPage | 510 | 2,044 |
+| ListRow | 425 | 1,778 |
+| TableSort | 12,022 | 29,198 |
+| Churn | 9,711 | 60,223 |
+| Chart | 2,879 | 7,309 |
+| Unicode | 4,618 | 11,372 |
+
+Typing made 5,172 a keystroke before `Keymap` learnt to look a key up
+without building every binding's id when nothing is rebound. Zero a
+frame, the research's target for the tick and the chart, is not reached:
+most of what is left is rich's segments and styles, built afresh each
+frame.
+
+#### Against ratatui
+
+RATATUI_TABLE
 
 ### Noctiluca
 
@@ -623,6 +797,7 @@ strategy can never be faster by being wrong.
 | A table re-sorted | Every row changes, styles stay |
 | Churn, every cell | The worst case: random colours every frame |
 | A chart redrawn | Dense braille, few styles |
+| Text of many scripts | Combining marks, wide CJK and Hangul: the grapheme-splitting path |
 | Noctiluca scrolling a long page | The browser's case |
 | rs-rich-doom's demo as a timedemo | Real full-motion churn beside a static status bar |
 
@@ -637,6 +812,18 @@ The results table goes in this note, and `best`'s thresholds are set from
 it. CI then fails if `best` is ever more than 5% worse, in bytes or time,
 than the best fixed strategy on any scene. The existing ratatui gate keeps
 its assertions.
+
+**Built:** the in-process harness, on the timedemo (`App::timedemo`), with
+the first ten scenes, the vt100 check (it runs in every `cargo test`, at
+80x24, and in the benchmark at both sizes), the per-stage times and
+counts, and the `paint-bench` CI job. Besides the 5% gate, a second gate
+holds `best`'s bytes and allocations a frame to a checked-in baseline,
+10% over failing, so a 20% regression fails on any machine.
+`PAINT_BENCH_SCENE`, `PAINT_BENCH_STRATEGIES` and `PAINT_BENCH_FRAMES`
+narrow a run, and the `profile_one_scene` test runs one scene for a
+profiler. **Not yet:** the PTY harness, and the Noctiluca and rs-rich-doom
+scenes (Doom lives in its own repository; its demo can run through
+`App::timedemo` there).
 
 ## Order of work
 
@@ -660,6 +847,9 @@ its assertions.
 6. **rs-rich-web's DOM renderer** on the damage list.
 
 Steps 1 to 3 are independent of 4 to 6, and can run alongside them.
+Steps 1 to 3 are done on the `023-paint` branch, measured first and in
+the order the profile gave: the draw's line writing, the cell layout, the
+encoder, then the strategies.
 
 ## Open questions
 

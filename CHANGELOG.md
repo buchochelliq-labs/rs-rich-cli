@@ -9,6 +9,47 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Faster frames, paint strategies and a timedemo (ext, intuituive, interact)
+
+- **Frame stats with timings and counts.** `FrameStats` gains each frame's
+  `draw`, `paint` and `write` times with running totals, `total_bytes`,
+  and `painted`: the painter's counts (cells compared, written and
+  elided; bytes of moves, styles, text and other) and the strategy used
+  (rs-rich-doom's core gap 6). `Painter::stats` and `PaintStats` are
+  rs-rich-ext's.
+- **A timedemo.** `App::timedemo` replays a `Script` on the driver's
+  virtual clock with no waits and reports every frame, as Doom's
+  `-timedemo` does; `timedemo::script_from_tape` reads a rich-record
+  tape's input. `examples/timedemo.rs` runs it on the dashboard.
+  `rich record` records a shell, not an app, so it has no `--timedemo`.
+- **Paint strategies.** `App::paint_strategy` and `RICH_PAINT_STRATEGY`
+  choose `cells` (the default), `rows`, `full`, `scroll` or `best`.
+  `scroll` moves rows that moved together with the terminal's scrolling
+  (SU, SD, DECSTBM), so a log line or a list scrolled one row sends about
+  one row's bytes: 147 bytes a frame for the log at 80x24, down from
+  4,013. `best` scrolls when rows moved, writes everything when nearly
+  every cell changed, and otherwise paints cells. It is opt-in for this
+  release. Scrolling is off on Windows, under tmux, inline and over a
+  picture.
+- **A faster painter.** Cells are 12 bytes and `Copy`, with no heap
+  string (read a cell's text with `Cell::text()`; the `text` field is
+  gone). Lines are written straight into cells without building a
+  `Frame`. The encoder picks the shortest cursor move, sends a colour
+  change as a change, erases blank runs with ECH and EL, and writes
+  through short gaps. At 80x24, against the start of this work: churn
+  1,715 to about 750 µs a frame, the chart 807 to about 290, the log
+  append 224 to 50 (under `best`), and bytes down 6 to 25% under `cells`.
+- **Keymaps look up keys without allocating** when nothing is rebound or
+  installed: typing in a field made 5,172 allocations a keystroke, now
+  364.
+- **The paint benchmark.** `tests/paint_bench.rs`: ten scenes at 80x24 and
+  200x60 under every strategy, each frame's bytes replayed through vt100
+  against a full repaint, and two gates: `best` within 5% of the best
+  fixed strategy (a CI job beside the ratatui gate), and bytes and
+  allocations a frame held to a checked-in baseline. The ratatui gate's
+  backend now hands out one key a frame: since input is drained before a
+  frame, it had been measuring 64 keys a frame.
+
 ### Noctiluca's docs and iconography (noctiluca)
 
 - **A guide page for Noctiluca**, the terminal web browser: install,

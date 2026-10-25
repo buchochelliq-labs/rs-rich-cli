@@ -309,7 +309,7 @@ fn allocations(scene: Scene, strategy: PaintStrategy, width: u16, height: u16) -
     let mut driver = app(scene, height)
         .paint_strategy(strategy)
         .driver(width, height);
-    let mut step = |driver: &mut intuituive::Driver| {
+    let step = |driver: &mut intuituive::Driver| {
         driver.event(key.clone());
         driver.update(Duration::ZERO);
         driver.render().map_or(0, |out| out.len())
