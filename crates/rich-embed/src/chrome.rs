@@ -12,9 +12,11 @@
 //!   `127.0.0.1` (`--remote-debugging-port=0`), whose address the browser
 //!   prints on its standard error. See [`ChromeEngine`]'s security note;
 //! - the browser is started headless with a temporary profile directory
-//!   (only this user's, removed when the engine goes), its sandbox on (no
-//!   switch that turns any of it off, ever), and downloads denied
-//!   (`Browser.setDownloadBehavior`);
+//!   (only this user's, removed when the engine goes; or a kept one, when
+//!   asked: [`ChromeEngine::profile`]), its sandbox on (no switch that turns
+//!   any of it off, ever), muted (unless [`ChromeEngine::audio`]), and
+//!   downloads denied (`Browser.setDownloadBehavior`; or kept in a
+//!   quarantine directory, when asked: [`ChromeEngine::downloads`]);
 //! - a page target is created and attached in flat mode;
 //! - frames come from `Page.startScreencast` (JPEG, each acknowledged),
 //!   at the page's size in cells times [`ChromeEngine::cell_pixels`];
@@ -24,7 +26,8 @@
 //!   `Page.getNavigationHistory`;
 //! - any other command goes to the page through [`DevTools::call`], for an
 //!   app that reads the page itself (`DOMSnapshot.captureSnapshot`,
-//!   `Accessibility.getFullAXTree`, …).
+//!   `Accessibility.getFullAXTree`, …), and its events come to
+//!   [`DevTools::listen`].
 //!
 //! The browser is found at an explicit path, else by the usual names on
 //! `PATH` ([`BINARY_NAMES`]). Nothing is downloaded.
@@ -124,6 +127,33 @@ struct Shared {
     child: Option<Child>,
 }
 
+/// What the browser does with a download: [`ChromeEngine::downloads`].
+#[derive(Clone, Debug, Default, PartialEq, Eq)]
+pub enum Downloads {
+    /// Refuse every download (the default).
+    #[default]
+    Deny,
+    /// Let the browser download into this directory, each file under its
+    /// download's id (`Browser.setDownloadBehavior`'s `allowAndName`), so a
+    /// page cannot choose a name or a place. The directory is made, this
+    /// user's only. The app hears of each download through
+    /// [`DevTools::listen`] (`Browser.downloadWillBegin`,
+    /// `Browser.downloadProgress`) and decides what to keep: nothing here
+    /// opens, runs or moves a file.
+    Quarantine(PathBuf),
+}
+
+/// An event from the browser, for [`DevTools::listen`]: its method and its
+/// parameters, which are the page's and untrusted.
+#[derive(Clone, Debug, PartialEq)]
+pub struct DevToolsEvent {
+    pub method: String,
+    pub params: Value,
+}
+
+/// The apps' event listeners: the methods each wants, and where they go.
+type Listeners = Arc<Mutex<Vec<(Vec<String>, Sender<DevToolsEvent>)>>>;
+
 /// A command an app sends the page, and where its answer goes.
 struct Call {
     method: String,
@@ -139,6 +169,7 @@ struct Call {
 #[derive(Clone, Debug)]
 pub struct DevTools {
     calls: Sender<Call>,
+    listeners: Listeners,
 }
 
 impl DevTools {
@@ -167,6 +198,38 @@ impl DevTools {
             )),
         }
     }
+
+    /// The browser's events named in `methods` (`"Runtime.bindingCalled"`,
+    /// `"Browser.downloadWillBegin"`, …), from now on, as they come: the
+    /// page's own session's and the browser's. A domain's events come only
+    /// once it is enabled, which the app does with [`call`](Self::call)
+    /// (`Page` is always on). The channel ends when the browser goes; drop
+    /// the receiver to stop listening.
+    pub fn listen(&self, methods: &[&str]) -> Receiver<DevToolsEvent> {
+        let (send, receive) = mpsc::channel();
+        let methods = methods.iter().map(|m| m.to_string()).collect();
+        self.listeners
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push((methods, send));
+        receive
+    }
+}
+
+/// Send `event` to every listener that asked for its method, and forget
+/// the listeners that have gone.
+fn deliver(listeners: &Listeners, method: &str, params: &Value) {
+    let mut listeners = listeners.lock().unwrap_or_else(PoisonError::into_inner);
+    listeners.retain(|(methods, send)| {
+        if !methods.iter().any(|m| m == method) {
+            return true;
+        }
+        send.send(DevToolsEvent {
+            method: method.to_string(),
+            params: params.clone(),
+        })
+        .is_ok()
+    });
 }
 
 fn lock(shared: &Mutex<Shared>) -> MutexGuard<'_, Shared> {
@@ -203,7 +266,13 @@ pub struct ChromeEngine {
     shared: Arc<Mutex<Shared>>,
     commands: Option<Sender<Request>>,
     calls: Option<Sender<Call>>,
+    /// The profile the browser runs in, once it started.
     profile: Option<PathBuf>,
+    /// A kept profile the app chose: never removed.
+    kept_profile: Option<PathBuf>,
+    audio: bool,
+    downloads: Downloads,
+    listeners: Listeners,
     wire: Wire,
 }
 
@@ -233,8 +302,39 @@ impl ChromeEngine {
             commands: None,
             calls: None,
             profile: None,
+            kept_profile: None,
+            audio: false,
+            downloads: Downloads::Deny,
+            listeners: Arc::default(),
             wire: Wire::DEFAULT,
         }
+    }
+
+    /// Let the page's sound play (on the machine the browser runs on). Off
+    /// by default: the browser starts with `--mute-audio`.
+    #[must_use]
+    pub fn audio(mut self, on: bool) -> ChromeEngine {
+        self.audio = on;
+        self
+    }
+
+    /// What the browser does with downloads: [`Downloads::Deny`] (the
+    /// default) or [`Downloads::Quarantine`].
+    #[must_use]
+    pub fn downloads(mut self, downloads: Downloads) -> ChromeEngine {
+        self.downloads = downloads;
+        self
+    }
+
+    /// Run the browser in `dir`, a profile kept between runs (its cookies,
+    /// its storage and its cache), rather than a temporary one. Opt-in: by
+    /// default every engine gets a new, private profile, removed when it
+    /// goes. `dir` is made if it is missing (this user's only, on Unix) and
+    /// is never removed. Two browsers cannot share one profile at a time.
+    #[must_use]
+    pub fn profile(mut self, dir: impl Into<PathBuf>) -> ChromeEngine {
+        self.kept_profile = Some(dir.into());
+        self
     }
 
     /// Run the browser at `path`.
@@ -298,7 +398,10 @@ impl ChromeEngine {
             .calls
             .clone()
             .ok_or_else(|| io::Error::new(ErrorKind::BrokenPipe, "the browser has gone"))?;
-        Ok(DevTools { calls })
+        Ok(DevTools {
+            calls,
+            listeners: Arc::clone(&self.listeners),
+        })
     }
 
     fn fail(&self, message: impl Into<String>) {
@@ -317,13 +420,22 @@ impl ChromeEngine {
             self.fail(message.clone());
             return Err(io::Error::new(ErrorKind::NotFound, message));
         };
-        let profile = temporary_profile()?;
+        let profile = match &self.kept_profile {
+            Some(dir) => {
+                private_dir(dir)?;
+                dir.clone()
+            }
+            None => temporary_profile()?,
+        };
+        if let Downloads::Quarantine(dir) = &self.downloads {
+            private_dir(dir)?;
+        }
         // The window's first size; the page is sized to the pane once
         // attached.
         let mut command = Command::new(&binary);
         command
             .args(launch_args(
-                &profile, &self.args, 80, 24, self.cell, self.wire,
+                &profile, &self.args, 80, 24, self.cell, self.wire, self.audio,
             ))
             .stdin(Stdio::null())
             .stdout(Stdio::null())
@@ -340,7 +452,9 @@ impl ChromeEngine {
         let (mut child, connect) = match spawned {
             Ok(spawned) => spawned,
             Err(error) => {
-                let _ = std::fs::remove_dir_all(&profile);
+                if self.kept_profile.is_none() {
+                    let _ = std::fs::remove_dir_all(&profile);
+                }
                 return Err(error);
             }
         };
@@ -353,8 +467,12 @@ impl ChromeEngine {
         self.calls = Some(calls);
         let shared = Arc::clone(&self.shared);
         let cell = self.cell;
+        let wiring = Wiring {
+            downloads: self.downloads.clone(),
+            listeners: Arc::clone(&self.listeners),
+        };
         thread::spawn(move || {
-            if let Err(error) = run(connect, stderr, receiver, called, &shared, cell) {
+            if let Err(error) = run(connect, stderr, receiver, called, &shared, cell, wiring) {
                 let mut state = lock(&shared);
                 state.state.error = Some(format!("Chrome: {error}"));
                 state.state.loading = false;
@@ -389,7 +507,9 @@ impl Drop for ChromeEngine {
             let _ = child.wait();
         }
         if let Some(profile) = &self.profile {
-            let _ = std::fs::remove_dir_all(profile);
+            if self.kept_profile.is_none() {
+                let _ = std::fs::remove_dir_all(profile);
+            }
         }
     }
 }
@@ -501,6 +621,20 @@ fn temporary_profile() -> io::Result<PathBuf> {
     }
 }
 
+/// Make `dir` if it is missing, this user's only on Unix. A directory
+/// that is there already keeps its mode.
+fn private_dir(dir: &Path) -> io::Result<()> {
+    if dir.is_dir() {
+        return Ok(());
+    }
+    #[cfg_attr(not(unix), allow(unused_mut))]
+    let mut builder = std::fs::DirBuilder::new();
+    builder.recursive(true);
+    #[cfg(unix)]
+    std::os::unix::fs::DirBuilderExt::mode(&mut builder, 0o700);
+    builder.create(dir)
+}
+
 /// Whether `arg` is a switch that turns any part of the browser's sandbox
 /// off (`--no-sandbox`, `--disable-setuid-sandbox`, `--single-process`, …),
 /// in any spelling the browser reads as one: one dash or two (or a slash
@@ -530,8 +664,8 @@ pub(crate) fn moves_devtools(arg: &str) -> bool {
 
 /// The browser's command line: headless, with DevTools on `wire`, in its
 /// own profile, without first-run screens, extensions or background
-/// traffic. Never a switch that turns the sandbox off, nor one that moves
-/// DevTools elsewhere.
+/// traffic, muted unless `audio`. Never a switch that turns the sandbox
+/// off, nor one that moves DevTools elsewhere.
 pub(crate) fn launch_args(
     profile: &Path,
     extra: &[String],
@@ -539,6 +673,7 @@ pub(crate) fn launch_args(
     rows: u16,
     cell: (u32, u32),
     wire: Wire,
+    audio: bool,
 ) -> Vec<String> {
     let (width, height) = viewport(columns, rows, cell);
     let mut args = vec![
@@ -551,9 +686,11 @@ pub(crate) fn launch_args(
         "--disable-extensions".to_string(),
         "--disable-background-networking".to_string(),
         "--disable-sync".to_string(),
-        "--mute-audio".to_string(),
         "--hide-scrollbars".to_string(),
     ];
+    if !audio {
+        args.push("--mute-audio".to_string());
+    }
     args.extend(
         extra
             .iter()
@@ -922,6 +1059,25 @@ struct Session {
     waiting: Vec<Request>,
     /// The app's DevTools calls made before the page was attached.
     calls: Vec<Call>,
+    listeners: Listeners,
+}
+
+/// What the engine's thread is set up with besides its channels.
+struct Wiring {
+    downloads: Downloads,
+    listeners: Listeners,
+}
+
+/// The `Browser.setDownloadBehavior` parameters for `downloads`.
+pub(crate) fn download_behavior(downloads: &Downloads) -> Value {
+    match downloads {
+        Downloads::Deny => json!({"behavior": "deny"}),
+        Downloads::Quarantine(dir) => json!({
+            "behavior": "allowAndName",
+            "downloadPath": dir.display().to_string(),
+            "eventsEnabled": true,
+        }),
+    }
 }
 
 impl Session {
@@ -1088,7 +1244,17 @@ impl Session {
             return Ok(());
         }
         let params = &message["params"];
-        match message["method"].as_str().unwrap_or_default() {
+        let method = message["method"].as_str().unwrap_or_default();
+        // The page's session's events and the browser's own; never another
+        // target's.
+        let ours = match message.get("sessionId").and_then(Value::as_str) {
+            Some(id) => self.session.as_deref() == Some(id),
+            None => true,
+        };
+        if ours && !method.is_empty() {
+            deliver(&self.listeners, method, params);
+        }
+        match method {
             "Page.screencastFrame" => {
                 if let Some(ack) = params["sessionId"].as_i64() {
                     self.page("Page.screencastFrameAck", json!({"sessionId": ack}))?;
@@ -1141,6 +1307,7 @@ fn run(
     calls: Receiver<Call>,
     shared: &Mutex<Shared>,
     cell: (u32, u32),
+    wiring: Wiring,
 ) -> io::Result<()> {
     let transport = match connect {
         Connect::Port => Transport::websocket(stderr)?,
@@ -1159,10 +1326,11 @@ fn run(
         cell,
         waiting: Vec::new(),
         calls: Vec::new(),
+        listeners: wiring.listeners,
     };
     session.send(
         "Browser.setDownloadBehavior",
-        json!({"behavior": "deny"}),
+        download_behavior(&wiring.downloads),
         Pending::Other,
         false,
     )?;
@@ -1298,6 +1466,7 @@ mod tests {
             24,
             (10, 20),
             Wire::DEFAULT,
+            false,
         );
         assert!(args.contains(&"--headless=new".to_string()));
         assert!(args.contains(&"--user-data-dir=/tmp/profile".to_string()));
@@ -1311,7 +1480,7 @@ mod tests {
 
     #[test]
     fn devtools_runs_over_a_pipe_on_unix_and_a_port_elsewhere() {
-        let args = launch_args(Path::new("/p"), &[], 80, 24, (10, 20), Wire::DEFAULT);
+        let args = launch_args(Path::new("/p"), &[], 80, 24, (10, 20), Wire::DEFAULT, false);
         let pipe = args.iter().any(|arg| arg == "--remote-debugging-pipe");
         let port = args.iter().any(|arg| arg == "--remote-debugging-port=0");
         assert_eq!((pipe, port), (cfg!(unix), !cfg!(unix)), "{args:?}");
@@ -1329,7 +1498,15 @@ mod tests {
         ]
         .map(String::from)
         .to_vec();
-        let args = launch_args(Path::new("/p"), &extra, 80, 24, (10, 20), Wire::DEFAULT);
+        let args = launch_args(
+            Path::new("/p"),
+            &extra,
+            80,
+            24,
+            (10, 20),
+            Wire::DEFAULT,
+            false,
+        );
         let devtools: Vec<_> = args
             .iter()
             .filter(|arg| arg.to_ascii_lowercase().starts_with("--remote-debugging"))
@@ -1429,6 +1606,7 @@ mod tests {
             24,
             (10, 20),
             Wire::DEFAULT,
+            false,
         );
         assert!(!args
             .iter()
@@ -1490,6 +1668,140 @@ mod tests {
             }
         }
         out
+    }
+
+    #[test]
+    fn the_browser_is_muted_unless_audio_is_asked_for() {
+        let muted = launch_args(Path::new("/p"), &[], 80, 24, (10, 20), Wire::DEFAULT, false);
+        assert!(muted.contains(&"--mute-audio".to_string()));
+        let loud = launch_args(Path::new("/p"), &[], 80, 24, (10, 20), Wire::DEFAULT, true);
+        assert!(!loud.iter().any(|arg| arg.contains("mute")), "{loud:?}");
+        assert!(!ChromeEngine::new().audio);
+        assert!(ChromeEngine::new().audio(true).audio);
+    }
+
+    #[test]
+    fn downloads_are_denied_unless_a_quarantine_is_given() {
+        assert_eq!(ChromeEngine::new().downloads, Downloads::Deny);
+        assert_eq!(
+            download_behavior(&Downloads::Deny),
+            json!({"behavior": "deny"})
+        );
+        let kept = download_behavior(&Downloads::Quarantine(PathBuf::from("/q")));
+        // Named by the download's id: the page chooses neither name nor place.
+        assert_eq!(kept["behavior"], "allowAndName");
+        assert_eq!(kept["downloadPath"], "/q");
+        assert_eq!(kept["eventsEnabled"], true);
+    }
+
+    #[test]
+    fn listeners_get_only_the_methods_they_asked_for() {
+        let listeners: Listeners = Arc::default();
+        let devtools = DevTools {
+            calls: mpsc::channel().0,
+            listeners: Arc::clone(&listeners),
+        };
+        let pings = devtools.listen(&["Runtime.bindingCalled"]);
+        let gone = devtools.listen(&["Runtime.bindingCalled"]);
+        drop(gone);
+        deliver(&listeners, "Page.loadEventFired", &json!({}));
+        deliver(&listeners, "Runtime.bindingCalled", &json!({"name": "x"}));
+        assert_eq!(
+            pings.try_recv().unwrap(),
+            DevToolsEvent {
+                method: "Runtime.bindingCalled".into(),
+                params: json!({"name": "x"})
+            }
+        );
+        assert!(pings.try_recv().is_err());
+        // The dropped receiver was forgotten.
+        assert_eq!(listeners.lock().unwrap().len(), 1);
+    }
+
+    #[test]
+    fn a_kept_profile_is_made_private_and_never_removed() {
+        let _starts = STARTS.lock().unwrap_or_else(|e| e.into_inner());
+        let dir = std::env::temp_dir().join(format!("rich-embed-kept-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let mut engine = ChromeEngine::new()
+            .binary("/nonexistent/rich-embed-chrome")
+            .profile(&dir);
+        assert!(engine.start().is_err());
+        drop(engine);
+        assert!(dir.is_dir(), "a kept profile stays");
+        #[cfg(unix)]
+        {
+            use std::os::unix::fs::PermissionsExt;
+            let mode = std::fs::metadata(&dir).unwrap().permissions().mode();
+            assert_eq!(mode & 0o777, 0o700, "{mode:o}");
+        }
+        std::fs::remove_dir_all(&dir).unwrap();
+    }
+
+    /// A download a page starts, from the browser `RICH_EMBED_CHROME`
+    /// names (skipped without one): with a quarantine it is announced and
+    /// lands there under its id; denied, it never begins.
+    fn download_with(downloads: Downloads) -> Option<(DevToolsEvent, DevToolsEvent)> {
+        let binary = std::env::var_os("RICH_EMBED_CHROME")?;
+        let _starts = STARTS.lock().unwrap_or_else(|e| e.into_inner());
+        let mut engine = ChromeEngine::new().binary(binary).downloads(downloads);
+        engine.resize(20, 10).unwrap();
+        let devtools = engine.devtools().unwrap();
+        let begun = devtools.listen(&["Browser.downloadWillBegin", "Browser.downloadProgress"]);
+        engine
+            .open("data:text/html,<a id=d download=evil.sh href='data:text/plain,hi'>x</a>")
+            .unwrap();
+        let start = Instant::now();
+        while start.elapsed() < Duration::from_secs(30) {
+            let clicked = devtools.call(
+                "Runtime.evaluate",
+                json!({"expression": "document.getElementById('d') && (d.click(), 1)"}),
+                Duration::from_secs(10),
+            );
+            if clicked.is_ok_and(|r| r["result"]["value"] == 1) {
+                break;
+            }
+            thread::sleep(Duration::from_millis(50));
+        }
+        let first = begun.recv_timeout(Duration::from_secs(5)).ok()?;
+        // The engine (and the browser) must outlive the download.
+        while let Ok(event) = begun.recv_timeout(Duration::from_secs(10)) {
+            if event.params["state"] == "completed" {
+                return Some((first, event));
+            }
+        }
+        let unfinished = DevToolsEvent {
+            method: String::new(),
+            params: json!({}),
+        };
+        Some((first, unfinished))
+    }
+
+    #[test]
+    fn a_quarantined_download_is_announced_and_kept_under_its_id() {
+        if std::env::var_os("RICH_EMBED_CHROME").is_none() {
+            eprintln!("skipped: set RICH_EMBED_CHROME to a Chrome or Chromium binary to run");
+            return;
+        }
+        let dir = std::env::temp_dir().join(format!("rich-embed-q-{}", std::process::id()));
+        let _ = std::fs::remove_dir_all(&dir);
+        let (event, done) = download_with(Downloads::Quarantine(dir.clone())).expect("no download");
+        assert_eq!(event.method, "Browser.downloadWillBegin");
+        assert_eq!(event.params["suggestedFilename"], "evil.sh");
+        let guid = event.params["guid"].as_str().unwrap();
+        assert_eq!(done.params["state"], "completed", "{done:?}");
+        assert!(dir.join(guid).is_file(), "not kept under its id");
+        assert!(!dir.join("evil.sh").exists());
+        std::fs::remove_dir_all(&dir).ok();
+    }
+
+    #[test]
+    fn a_denied_download_never_begins() {
+        if std::env::var_os("RICH_EMBED_CHROME").is_none() {
+            eprintln!("skipped: set RICH_EMBED_CHROME to a Chrome or Chromium binary to run");
+            return;
+        }
+        assert!(download_with(Downloads::Deny).is_none());
     }
 
     #[test]
