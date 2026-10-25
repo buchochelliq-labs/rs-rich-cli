@@ -216,7 +216,7 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
-## 0.0.22 — parity, the marketplace, round 7's last items (in progress)
+## 0.0.22 — parity, the marketplace, round 7's last items (in release)
 
 The [0.0.22 plan](plans/0.0.22.md) finishes stage 2 of the
 [plan to 1.0.0](plans/1.0.0.md): every partial row in
@@ -225,6 +225,13 @@ ported and every divergence given a verdict; the `rs-rich-marketplace`
 crate, `rich plugin` and `rich plugin browse`, publishing and CI signing;
 the recorder on macOS, APNG written only when asked and rs-rich-doom on the
 current crates; and the gaps three demo clones share.
+What ships: the parity workstreams (every library row but `console.py`
+complete, `scope.py`, every divergence's verdict, the fuzzer on the
+documents), `rs-rich-marketplace` 0.0.1 with `rich plugin`, APNG only when
+asked, the shared gaps and four live controls, and Noctiluca 0.0.1, a
+terminal web browser (see the [release notes](releases/0.0.22.md)). The
+macOS recorder stays a known issue; rs-rich-doom's core gaps and
+`rich-rst` 2.2.0 move to [0.0.23](plans/0.0.23.md).
 
 ## 0.0.21 — parity, the marketplace's foundation, round 7's leftovers (published 2026-10-21)
 

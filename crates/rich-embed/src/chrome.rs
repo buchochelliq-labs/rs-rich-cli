@@ -38,7 +38,7 @@ use std::path::{Path, PathBuf};
 use std::process::{Child, ChildStderr, Command, Stdio};
 use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::mpsc::{self, Receiver, Sender};
-use std::sync::{Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, Weak};
 use std::thread;
 use std::time::{Duration, Instant};
 use std::{fmt, io};
@@ -366,6 +366,27 @@ impl ChromeEngine {
         self
     }
 
+    /// End every browser an engine started and has not ended, and remove
+    /// each one's temporary profile, as dropping each engine would. A kept
+    /// profile stays. For the way out of a process whose engines live on
+    /// where no `Drop` reaches them (in state that lasts until the process
+    /// exits, on a thread still running, or past a signal): call it last.
+    /// An engine used after it has no browser, and starts no other.
+    pub fn end_all() {
+        let all = std::mem::take(&mut *RUNNING.lock().unwrap_or_else(PoisonError::into_inner));
+        for running in all {
+            if let Some(shared) = running.shared.upgrade() {
+                let child = lock(&shared).child.take();
+                if let Some(mut child) = child {
+                    end_browser(&mut child);
+                }
+            }
+            if let Some(profile) = running.profile {
+                remove_profile(&profile);
+            }
+        }
+    }
+
     /// The first browser on `PATH` by [`BINARY_NAMES`], or in a usual
     /// install location.
     pub fn find() -> Option<PathBuf> {
@@ -440,6 +461,11 @@ impl ChromeEngine {
             .stdin(Stdio::null())
             .stdout(Stdio::null())
             .stderr(Stdio::piped());
+        // A group of its own, so ending it ends its helpers too (the
+        // zygote, renderers, GPU and crash handler), which otherwise keep
+        // writing to the profile while it is removed.
+        #[cfg(unix)]
+        std::os::unix::process::CommandExt::process_group(&mut command, 0);
         let spawned = connect(&mut command, self.wire).and_then(|connect| {
             let child = command.spawn()?;
             Ok((child, connect))
@@ -459,6 +485,13 @@ impl ChromeEngine {
             }
         };
         self.profile = Some(profile.clone());
+        RUNNING
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .push(Running {
+                shared: Arc::downgrade(&self.shared),
+                profile: self.kept_profile.is_none().then(|| profile.clone()),
+            });
         let stderr = child.stderr.take().expect("piped stderr");
         lock(&self.shared).child = Some(child);
         let (sender, receiver) = mpsc::channel();
@@ -496,21 +529,72 @@ impl ChromeEngine {
     }
 }
 
+/// A browser an engine started, for [`ChromeEngine::end_all`]: its
+/// process (in the engine's shared state) and its temporary profile.
+struct Running {
+    shared: Weak<Mutex<Shared>>,
+    profile: Option<PathBuf>,
+}
+
+/// Every browser started and not yet ended by its engine's `Drop`.
+static RUNNING: Mutex<Vec<Running>> = Mutex::new(Vec::new());
+
 impl Drop for ChromeEngine {
     fn drop(&mut self) {
+        // This engine ends its own browser here.
+        RUNNING
+            .lock()
+            .unwrap_or_else(PoisonError::into_inner)
+            .retain(|running| !std::ptr::eq(running.shared.as_ptr(), Arc::as_ptr(&self.shared)));
         // Closing the channel ends the thread's loop; the browser goes now.
         self.commands = None;
         self.calls = None;
         let child = lock(&self.shared).child.take();
         if let Some(mut child) = child {
-            let _ = child.kill();
-            let _ = child.wait();
+            end_browser(&mut child);
         }
         if let Some(profile) = &self.profile {
             if self.kept_profile.is_none() {
-                let _ = std::fs::remove_dir_all(profile);
+                remove_profile(profile);
             }
         }
+    }
+}
+
+/// End the browser and every helper in its process group, then reap it.
+fn end_browser(child: &mut Child) {
+    kill_group(child);
+    let _ = child.kill();
+    let _ = child.wait();
+}
+
+/// Kill the process group the browser leads, with SIGKILL.
+#[cfg(unix)]
+#[allow(unsafe_code)]
+fn kill_group(child: &Child) {
+    if let Ok(group) = libc::pid_t::try_from(child.id()) {
+        // SAFETY: `killpg` takes plain integers. The browser has not been
+        // reaped, so its id still names the group it leads.
+        unsafe {
+            libc::killpg(group, libc::SIGKILL);
+        }
+    }
+}
+
+/// Elsewhere only the browser itself is ended.
+#[cfg(not(unix))]
+fn kill_group(_child: &Child) {}
+
+/// Remove a temporary profile. A helper the kill has not reached yet can
+/// still write into it for a moment, so the removal is tried again for up
+/// to a second while the directory is there.
+fn remove_profile(profile: &std::path::Path) {
+    for _ in 0..20 {
+        let _ = std::fs::remove_dir_all(profile);
+        if !profile.exists() {
+            return;
+        }
+        std::thread::sleep(std::time::Duration::from_millis(50));
     }
 }
 

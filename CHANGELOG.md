@@ -9,12 +9,39 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+## 0.0.22 cohort — to be published
+
+To be published from `main` by one `release.yml` run (tag
+`release-0.0.22`): core 0.0.12 / macros 0.0.6 / plugin API 0.0.6 /
+art 0.0.15 / diagram 0.0.5 / mermaid 0.0.8 / lumis 0.0.6 / ext 0.0.19 /
+micro 0.0.8 / record 0.0.10 / interact 0.0.10 / ratatui 0.0.7 /
+intuituive 0.0.7 / embed 0.0.5 / web 0.0.5 / data 0.0.6 /
+marketplace 0.0.1 (new) / noctiluca 0.0.1 (new) / CLI 0.0.22, and
+`rs-rich` 0.0.10 on PyPI (`python-v0.0.10`, same commit). See
+[the release notes](docs/releases/0.0.22.md).
+
 ### Noctiluca's docs and iconography (noctiluca)
 
 - **A guide page for Noctiluca**, the terminal web browser: install,
   opening pages, views, keys, per-site keys, sound, config, switches, tips,
   troubleshooting and what works today. It is in the navigation and linked
   from the home page, the guide and the crate's README.
+- **Noctiluca's guide grows into ten pages** under `guide/noctiluca/`
+  (getting started, reading, forms, keys with every action, media,
+  configuration, privacy, the library, troubleshooting, and what works
+  today), with three new tapes over the saved pages (forms, reading, and
+  keywords with site keys) and a recording against a real Chrome
+  (`docs/tapes/live/`, recorded by hand, not run by CI).
+- **Noctiluca fixes.** A run's temporary Chrome profile is removed on
+  every way out (quitting, Ctrl+C, SIGTERM, SIGHUP or SIGQUIT, a panic);
+  before, it stayed in the temporary directory. For that, rs-rich-embed
+  gains `ChromeEngine::end_all` (end every browser still running and
+  remove its temporary profile), rs-rich-interact gains
+  `session::on_terminate` (work to do when a signal ends the process), and
+  `noctiluca::tab::stop_all` stops every tab. The projection no longer
+  shows the previous page after a page is opened with `o` in reader mode.
+  In `[keys]`, `none` unbinds an action, and a bad key name skips only its
+  own line, with a warning, instead of dropping every override.
 - **Its iconography**, in `docs/assets/noctiluca/`: the logo (a bloom of
   small linked terminals), a favicon, a lanternfish whose lure is a
   terminal (hero, tip and troubleshooting poses, 32 and 16 px), a 32x32

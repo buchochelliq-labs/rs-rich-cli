@@ -172,7 +172,19 @@ pub fn keymap(preset: Preset, overrides: &[(String, String)]) -> (Keymap, Vec<St
             warnings.push(format!("keys.{id}: no such action"));
             continue;
         }
-        pairs.push((format!("{CONTEXT}.{id}"), keys.clone()));
+        // `none` unbinds, as in rs-rich-interact's keymap files; so does
+        // an empty string.
+        let keys = if keys.trim().eq_ignore_ascii_case("none") {
+            ""
+        } else {
+            keys.as_str()
+        };
+        // A key name that is not one skips only its own line.
+        if let Err(name) = try_keys(keys) {
+            warnings.push(format!("keys.{id}: {name:?} is not a key"));
+            continue;
+        }
+        pairs.push((format!("{CONTEXT}.{id}"), keys.to_string()));
     }
     match Overrides::from_pairs(pairs) {
         Ok(overrides) => keymap.apply(&overrides),
@@ -256,6 +268,28 @@ mod tests {
         assert_eq!(warnings, ["keys.fly: no such action"]);
         let (_, warnings) = super::keymap(Preset::Vim, &[("hints".into(), "nokey".into())]);
         assert_eq!(warnings.len(), 1);
+    }
+
+    #[test]
+    fn none_unbinds_and_a_bad_key_skips_only_its_line() {
+        let (keymap, warnings) = keymap(
+            Preset::Vim,
+            &[
+                ("hints".into(), "none".into()),
+                ("find".into(), "nokey".into()),
+                ("reader".into(), "ctrl+g".into()),
+                ("quit".into(), "".into()),
+            ],
+        );
+        assert_eq!(warnings, [r#"keys.find: "nokey" is not a key"#]);
+        assert_eq!(keys_of(&keymap, "hints"), None);
+        assert_eq!(keys_of(&keymap, "quit"), None);
+        assert_eq!(action_for(&keymap, Key::char('f')), None);
+        // The bad line leaves its action on the preset's keys, and the
+        // lines after it still apply.
+        assert_eq!(keys_label(&keymap, "find"), "/");
+        assert_eq!(keys_label(&keymap, "reader"), "ctrl+g");
+        assert_eq!(action_for(&keymap, Key::char('r')), None);
     }
 
     #[test]

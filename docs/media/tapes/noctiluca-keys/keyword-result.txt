@@ -1,0 +1,30 @@
+◀▶ glow::Lamp - docs https://fixture.example/docs.html reader
+• new
+• shine
+
+Struct glow::Lamp
+
+A lamp that glows when it is touched. See the guide.
+
+Method new
+
+▏pub fn new(brightness: u8) -> Lamp {
+▏    Lamp { brightness, lit: false }
+▏}
+
+Method shine
+
+Lights the lamp for ms milliseconds.
+
+▏let mut lamp = Lamp::new(3);
+▏lamp.shine(250);
+
+Field      │ Type
+───────────┼─────
+brightness │ u8
+
+
+
+
+
+opening https://fixture.example/docs.html?q=shine

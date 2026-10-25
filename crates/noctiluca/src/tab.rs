@@ -15,8 +15,9 @@
 //!   after their page is published, so text never waits for pictures.
 
 use std::collections::HashMap;
-use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
-use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender, TryRecvError};
+use std::sync::{Arc, Mutex};
 use std::thread;
 use std::time::{Duration, Instant};
 
@@ -142,12 +143,62 @@ pub struct Tab {
     next: Arc<std::sync::atomic::AtomicU64>,
 }
 
+/// A tab's thread, as [`stop_all`] stops it: a flag it reads, and a
+/// channel that closes when the thread has ended and its engine is gone.
+struct Running {
+    stop: Arc<AtomicBool>,
+    ended: Receiver<()>,
+}
+
+/// Every tab spawned and not yet stopped. A tab whose thread has ended is
+/// pruned when the next one is spawned, so the list holds live tabs only.
+static RUNNING: Mutex<Vec<Running>> = Mutex::new(Vec::new());
+
+/// Drop the entries whose thread has ended: their channel is closed.
+fn prune(running: &mut Vec<Running>) {
+    running.retain(|r| !matches!(r.ended.try_recv(), Err(TryRecvError::Disconnected)));
+}
+
+/// Stop every tab's thread and wait, up to `timeout` in all, until each
+/// has ended. Ending drops its engine: a browser it started stops, and its
+/// temporary profile is removed. The thread does not wait for its owner to
+/// let go of the [`Tab`], since an app's state may live until the process
+/// exits, when no thread's `Drop` runs. Call it before the process exits,
+/// on every way out.
+pub fn stop_all(timeout: Duration) {
+    let all = std::mem::take(&mut *RUNNING.lock().unwrap_or_else(|e| e.into_inner()));
+    for running in &all {
+        running.stop.store(true, Ordering::SeqCst);
+    }
+    let deadline = Instant::now() + timeout;
+    for running in all {
+        let left = deadline.saturating_duration_since(Instant::now());
+        // A message never comes: the channel closes when the thread ends.
+        let _ = running.ended.recv_timeout(left);
+    }
+}
+
 impl Tab {
     /// Run `engine` on a thread of its own. `update` is called on that
-    /// thread with each [`Update`].
+    /// thread with each [`Update`]. The thread ends, dropping the engine,
+    /// when every [`Tab`] is dropped or [`stop_all`] is called.
     pub fn spawn(engine: Box<dyn Engine>, update: impl Fn(Update) + Send + 'static) -> Tab {
         let (commands, receive) = mpsc::channel();
-        thread::spawn(move || run(engine, receive, &update));
+        let stop = Arc::new(AtomicBool::new(false));
+        let (ended, done) = mpsc::channel::<()>();
+        {
+            let mut running = RUNNING.lock().unwrap_or_else(|e| e.into_inner());
+            prune(&mut running);
+            running.push(Running {
+                stop: stop.clone(),
+                ended: done,
+            });
+        }
+        thread::spawn(move || {
+            // Dropped last, after the engine, even when the thread panics.
+            let _ended = ended;
+            run(engine, receive, &stop, &update);
+        });
         Tab {
             commands,
             next: Arc::default(),
@@ -430,7 +481,12 @@ fn still_key(node: NodeId, src: &str, rect: Rect) -> (NodeId, String, u64, u64) 
     )
 }
 
-fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn Fn(Update)) {
+fn run(
+    engine: Box<dyn Engine>,
+    commands: Receiver<(u64, Command)>,
+    stop: &AtomicBool,
+    update: &dyn Fn(Update),
+) {
     let mut worker = Worker {
         engine,
         update,
@@ -444,6 +500,9 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
     let mut read_now = true;
     let mut probed = Instant::now();
     loop {
+        if stop.load(Ordering::SeqCst) {
+            return;
+        }
         match commands.recv_timeout(TICK) {
             Ok((id, command)) => {
                 let acts = matches!(
@@ -499,5 +558,41 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
                 worker.dirty.get_or_insert_with(Instant::now);
             }
         }
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::testing::FakeEngine;
+
+    #[test]
+    fn ended_tabs_leave_the_registry() {
+        let dir = std::env::temp_dir().join(format!("noctiluca-tab-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let spawn = || Tab::spawn(Box::new(FakeEngine::from_dir(&dir).unwrap()), |_| {});
+        // Fifty tabs made and dropped: each thread ends once its tab goes.
+        for _ in 0..50 {
+            drop(spawn());
+        }
+        let deadline = Instant::now() + Duration::from_secs(10);
+        loop {
+            let live = spawn();
+            let ended = RUNNING
+                .lock()
+                .unwrap()
+                .iter()
+                .filter(|r| matches!(r.ended.try_recv(), Err(TryRecvError::Disconnected)))
+                .count();
+            drop(live);
+            // The new spawn pruned every tab that had ended by then; give
+            // the rest time to end, and look again.
+            if ended == 0 && RUNNING.lock().unwrap().len() <= 8 {
+                break;
+            }
+            assert!(Instant::now() < deadline, "ended tabs stay registered");
+            thread::sleep(Duration::from_millis(20));
+        }
+        let _ = std::fs::remove_dir_all(&dir);
     }
 }
