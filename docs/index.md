@@ -53,8 +53,9 @@ topic and a widget index.
 ## New in 0.0.21
 
 ![Memo celebrating, trunk up, with confetti cells](assets/intuituive/mascot/elephant-celebrate.svg){ .tui-mascot width="128" }
-0.0.21 ([release notes](releases/0.0.21.md)) fixes what the demo loop's
-seventh round found and adds what the clones and a consumer asked for.
+0.0.21, published on 2026-10-21 ([release notes](releases/0.0.21.md)),
+fixes what the demo loop's seventh round found and adds what the clones and
+a consumer asked for.
 
 - **Widgets:** [form controls](guide/intuituive/controls.md) (buttons,
   check boxes, switches, radios, sliders, select fields), a log pane fed by
@@ -239,23 +240,23 @@ published or not. Each crate versions independently; see
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
 |---|---|
-| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.11` |
-| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.5` |
-| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.5` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.18` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.21` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.14` |
-| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.7` |
-| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.5` |
-| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.9` |
-| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.9` |
-| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.7` |
-| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.4` |
-| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.5` |
-| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.6` |
-| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.6` |
-| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.4` |
-| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.4` |
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.12` |
+| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.6` |
+| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.6` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.19` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.22` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.15` |
+| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.8` |
+| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.6` |
+| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.10` |
+| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.10` |
+| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.8` |
+| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.5` |
+| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.6` |
+| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.7` |
+| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.7` |
+| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.5` |
+| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.5` |
 | [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
@@ -278,6 +279,6 @@ published or not. Each crate versions independently; see
 | ![](assets/rs-rich/troubleshooting.svg){ .rs-icon width="20" } [Troubleshooting](troubleshooting.md) | When the output is not what you expected |
 | ![](assets/rs-rich/known-issues.svg){ .rs-icon width="20" } [Known issues](known-issues.md) | What is known not to work yet |
 | ![](assets/rs-rich/plans.svg){ .rs-icon width="20" } [Development plans](plans/1.0.0.md) | What each release sets out to do |
-| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.20.md) | What each release shipped |
+| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.21.md) | What each release shipped |
 | ![](assets/rs-rich/parity.svg){ .rs-icon width="20" } [Parity with Python rich](parity.md) | What matches upstream, and how it is proven |
 | ![](assets/rs-rich/contributing.svg){ .rs-icon width="20" } [Contributing](BRANCHING.md) | Branches, architecture and design notes |

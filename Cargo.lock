@@ -2976,7 +2976,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "anstyle-query",
  "fancy-regex 0.19.2",
@@ -2988,7 +2988,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-art"
-version = "0.0.14"
+version = "0.0.15"
 dependencies = [
  "icy_sixel",
  "image",
@@ -2997,7 +2997,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-cli"
-version = "0.0.21"
+version = "0.0.22"
 dependencies = [
  "cap-fs-ext",
  "cap-std",
@@ -3031,7 +3031,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-data"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "arrow-array",
  "arrow-ipc",
@@ -3045,7 +3045,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-diagram"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "rs-rich",
  "rs-rich-ext",
@@ -3054,7 +3054,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-embed"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "command-fds",
  "image",
@@ -3070,7 +3070,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ext"
-version = "0.0.18"
+version = "0.0.19"
 dependencies = [
  "anyhow",
  "chrono",
@@ -3103,7 +3103,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-interact"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "crossterm",
  "fancy-regex 0.19.2",
@@ -3124,7 +3124,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-intuituive"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "alsa-sys",
  "cpal",
@@ -3146,7 +3146,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-lumis"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "lumis",
  "rs-rich",
@@ -3156,7 +3156,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-macros"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "proc-macro2",
  "quote",
@@ -3183,7 +3183,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-mermaid"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "rs-rich",
  "rs-rich-art",
@@ -3194,7 +3194,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-micro"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "flate2",
  "portable-pty",
@@ -3212,7 +3212,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-plugin-api"
-version = "0.0.5"
+version = "0.0.6"
 dependencies = [
  "inventory",
  "rs-rich",
@@ -3220,7 +3220,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-ratatui"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "ratatui-core",
  "ratatui-widgets",
@@ -3231,7 +3231,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-record"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "color_quant 2.0.0",
  "fancy-regex 0.19.2",
@@ -3250,7 +3250,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-web"
-version = "0.0.4"
+version = "0.0.5"
 dependencies = [
  "data-encoding",
  "getrandom 0.4.3",
