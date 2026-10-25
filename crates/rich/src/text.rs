@@ -1497,7 +1497,7 @@ impl Text {
                 }
             }
             for line in &mut new_lines {
-                *line = truncate_line(line, width, overflow);
+                *line = truncate_line(std::mem::take(line), width, overflow);
             }
             lines.append(&mut new_lines);
         }
@@ -1790,9 +1790,20 @@ fn char_to_byte(text: &str, char_idx: usize) -> usize {
 /// the style of the first segment the cut did *not* keep whole — upstream writes
 /// the ellipsis into the plain string and lets span-trimming decide, which works
 /// out to the same rule, including when the cut lands exactly on a boundary.
-fn truncate_line(line: &[Segment], width: usize, overflow: Overflow) -> Vec<Segment> {
+fn truncate_line(line: Vec<Segment>, width: usize, overflow: Overflow) -> Vec<Segment> {
     if overflow == Overflow::Ignore {
-        return line.to_vec();
+        return line;
+    }
+    // A line that fits comes back as it is, measured without joining it: with
+    // no joiner or variation selector in it, no grapheme can span a segment
+    // boundary, so the segments' widths add up to the whole line's
+    // (docs/PORTING.md, "Performance notes").
+    if !line
+        .iter()
+        .any(|segment| segment.text.contains(['\u{200d}', '\u{fe0f}']))
+        && line.iter().map(|segment| cell_len(&segment.text)).sum::<usize>() <= width
+    {
+        return line;
     }
     // Measured and cut over the WHOLE line, exactly as upstream's `Text.truncate`
     // works on `self.plain`. Summing the segments instead is wrong wherever a
@@ -1801,7 +1812,7 @@ fn truncate_line(line: &[Segment], width: usize, overflow: Overflow) -> Vec<Segm
     // reads one cell too wide and cuts text upstream keeps.
     let plain: String = line.iter().map(|segment| segment.text.as_str()).collect();
     if cell_len(&plain) <= width {
-        return line.to_vec();
+        return line;
     }
     let ellipsis = overflow == Overflow::Ellipsis;
     // `…` occupies one cell, so the kept text must stop one cell early.
@@ -1821,7 +1832,7 @@ fn truncate_line(line: &[Segment], width: usize, overflow: Overflow) -> Vec<Segm
     // on the end of the line's bytes.
     let mut cut_style: Option<Style> = line.last().and_then(|segment| segment.style.clone());
     let mut offset = 0usize;
-    for segment in line {
+    for segment in &line {
         if offset >= kept.len() {
             cut_style = segment.style.clone();
             break;
@@ -1964,7 +1975,7 @@ fn justify_line(
         // character after it, so cutting the line hands one of its cells back —
         // and padding first computes the gap from the pre-cut measurement, which
         // is zero, and leaves the line short.
-        content = truncate_line(&content, width, overflow);
+        content = truncate_line(content, width, overflow);
     }
 
     // Whether padding may join the content's first / last run: no span
