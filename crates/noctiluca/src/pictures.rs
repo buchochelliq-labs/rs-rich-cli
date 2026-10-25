@@ -135,6 +135,11 @@ pub fn splice(
     line
 }
 
+/// What a cell of half blocks under a moving picture costs the terminal
+/// when a frame changes it: true-colour foreground and background, the
+/// character, and the painter's moves, about 25 bytes (measured).
+const UNDERLAY: u64 = 25;
+
 /// The moving pictures: a [`Player`] and a [`Pacer`] per animated picture
 /// in view, on a terminal that cannot play animations itself.
 pub struct Motion {
@@ -223,9 +228,11 @@ impl Motion {
                 let spent = picture_bytes(id).saturating_sub(moving.bytes);
                 moving.bytes = picture_bytes(id);
                 // A picture in cells costs its cells, which the painter
-                // sends: the pacer's estimate stands for them.
-                let measured =
-                    (moving.pacer.pixels() != Pixels::Cells && spent > 0).then_some(spent);
+                // sends: the pacer's estimate stands for them. In pixels,
+                // its escape, and the half blocks under it, which change
+                // with each frame too.
+                let measured = (moving.pacer.pixels() != Pixels::Cells && spent > 0)
+                    .then(|| spent + (region.cols * region.rows) as u64 * UNDERLAY);
                 moving.pacer.sent(now, measured);
                 moving.player.advance(now);
                 moving.pacer.settle(&budget, share);

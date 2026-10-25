@@ -32,10 +32,15 @@ preset = "vim"
 [media]
 # Pages' sound plays on the machine Chrome runs on. Off by default.
 audio = false
-# The frame cap for media regions.
+# The most frames a second a moving picture (a GIF, a video) shows: a
+# ceiling, not a target.
 fps = 8
 # auto, ansi (half blocks), kitty, sixel, iterm2, or none (alt text only).
 images = "auto"
+# Bytes a second moving pictures may send the terminal, shared by those in
+# view; short of it, a picture steps down Kitty, iTerm2, Sixel, then half
+# blocks. Unset: 4M on this machine, 256K over SSH.
+# bandwidth = "4M"
 
 [profile]
 # A kept profile (its cookies and storage stay between runs), opt-in. By

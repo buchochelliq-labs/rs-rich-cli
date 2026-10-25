@@ -1641,7 +1641,15 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             }
         });
         // Moving pictures in view step within the byte budget.
-        let motion = Rc::new(std::cell::RefCell::new(pictures::Motion::default()));
+        let budget = b.config.with_untracked(|c| {
+            let mut budget = c.bandwidth.map_or_else(
+                rich_art::picture::ByteBudget::guess,
+                rich_art::picture::ByteBudget::new,
+            );
+            budget.max_fps = f64::from(c.fps.max(1));
+            budget
+        });
+        let motion = Rc::new(std::cell::RefCell::new(pictures::Motion::new(budget)));
         every(MOTION, move |_| step_motion(b, &mut motion.borrow_mut()));
         // Chrome lays the page out at the terminal's size.
         watch(

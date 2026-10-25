@@ -1046,14 +1046,14 @@ impl Pacer {
     /// What one frame of `cols` x `rows` cells is likely to cost through
     /// `pixels`, before anything is measured: a PNG photo at about a third
     /// of its raw size, base64 for Kitty and iTerm2, about half a byte a
-    /// pixel for Sixel, and 30 bytes a cell for half blocks in true colour.
+    /// pixel for Sixel, and 40 bytes a cell for half blocks in true colour.
     pub fn estimate(pixels: Pixels, cols: usize, rows: usize) -> u64 {
         let (w, h) = CellPixels::DEFAULT.span(cols, rows);
         let area = u64::from(w) * u64::from(h);
         match pixels {
             Pixels::Kitty | Pixels::Iterm => area * 4 / 3,
             Pixels::Sixel => area / 2,
-            Pixels::Cells => (cols * rows) as u64 * 30,
+            Pixels::Cells => (cols * rows) as u64 * 40,
         }
     }
 
@@ -1087,7 +1087,16 @@ impl Pacer {
         }
         let allowed = budget.bytes_per_second as f64 * share.clamp(0.0, 1.0) * WINDOW.as_secs_f64();
         let used: u64 = self.sent.iter().map(|(_, b)| b).sum();
-        used as f64 + self.bytes_per_frame() <= allowed
+        used as f64 + self.next_frame() <= allowed
+    }
+
+    /// What the next frame may cost, for keeping the window under its
+    /// cap: the largest frame of the last two seconds or the average,
+    /// whichever is more, so one large frame among small ones cannot push
+    /// the window over.
+    fn next_frame(&self) -> f64 {
+        let largest = self.sent.iter().map(|(_, b)| *b).max().unwrap_or(0) as f64;
+        largest.max(self.bytes_per_frame())
     }
 
     /// A frame was sent at `now`, costing `bytes` (counted by the painter,
@@ -1276,6 +1285,34 @@ mod tests {
         count_picture_bytes(picture.id(), 10);
         count_picture_bytes(picture.id(), 5);
         assert_eq!(picture_bytes(picture.id()), 15);
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn a_large_frame_among_small_ones_keeps_the_window_under_its_cap() {
+        let budget = ByteBudget::new(100_000);
+        let mut pacer = Pacer::new(Pixels::Sixel, 20, 10);
+        let start = Instant::now();
+        let mut sent: Vec<(Instant, u64)> = Vec::new();
+        for tick in 0..1000u64 {
+            let now = start + Duration::from_millis(tick * 10);
+            if pacer.due(now, &budget, 1.0) {
+                // Every seventh frame is five times the others.
+                let bytes = if sent.len() % 7 == 6 { 40_000 } else { 8_000 };
+                pacer.sent(now, Some(bytes));
+                sent.push((now, bytes));
+            }
+        }
+        // No two-second window holds more than its cap.
+        for (at, _) in &sent {
+            let window: u64 = sent
+                .iter()
+                .filter(|(t, _)| *t >= *at && t.duration_since(*at) < WINDOW)
+                .map(|(_, b)| b)
+                .sum();
+            assert!(window <= 200_000, "{window} bytes in two seconds");
+        }
+        assert!(sent.len() > 20, "{} frames", sent.len());
     }
 
     #[cfg(feature = "frames")]
