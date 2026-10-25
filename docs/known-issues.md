@@ -4,8 +4,7 @@ What does not work yet, what was never meant to, and what works differently on
 purpose. Three different things, kept apart — a deliberate trade-off listed as a
 bug makes a considered decision look like neglect.
 
-**Applies to** the 0.0.21 release (`rs-rich-cli` 0.0.21, `rs-rich` 0.0.11,
-published 2026-10-21),
+**Applies to** the 0.0.22 release (`rs-rich-cli` 0.0.22, `rs-rich` 0.0.12),
 reviewed against Python `rich` 15.0.0. Older entries name the release they
 were found in. Each entry links to its issue or report so you can check the
 status without waiting for this page to be updated.
@@ -37,6 +36,15 @@ into the updates inside it, which did not fix macOS: its runners still kept
 test keeps its lower bound on Linux only until it is. Record games on Linux
 for now. Found in 0.0.20, still open in 0.0.22
 ([plan](plans/0.0.22.md#1-round-7s-last-items-record-intuituive)).
+
+### An ordered Markdown item holding only an empty link loses its row under `justify="full"`
+
+The differential fuzzer found it in 0.0.22: an ordered list item whose
+only content is an empty link, `2) []()`, renders no row when the
+Markdown is fully justified, where rich 15.0.0 prints the item's number.
+With the default justify the output matches. The case is kept in
+`scripts/fixtures/diff_rich_known.jsonl` until it is fixed
+([#769](https://github.com/buchochelliq-labs/rs-rich-cli/issues/769)).
 
 ---
 
@@ -232,6 +240,8 @@ fixes to `view`, stack traces and hyperlinks) are in the changelog instead. Full
 |---------|----------|
 | <a id="four-intuituive-bugs-the-demo-clones-found"></a>A `cx.focus(x)` just before `cx.modal(..)` was lost when the modal closed; a styled `layers` node let the layers below show through its children's gaps; `layout::squarify` gave the largest item no tile; a `previews_keys` container took a command line's letters (round 7's four bugs) | intuituive `0.0.6` |
 | Filtering a million rows through `view_of` was slower than a hand-written loop (15.4 s against 3.3 s unoptimised) | intuituive `0.0.6`, ext `0.0.18` |
+| Markdown the differential fuzzer and the parity work checked (tables nested in lists and quotes, tables that interrupt a paragraph, refused reference definitions, empty list items, empty link destinations) printed unlike upstream | core `0.0.12` |
+| rs-rich-embed's Chrome engine sometimes ended when DevTools refused a history request during a navigation | embed `0.0.5` |
 | <a id="a-tape-without-output-also-writes-an-apng"></a>A tape without `Output` also wrote an APNG; it is now written only when `Output` or `--format` names it | record `0.0.10`, CLI `0.0.22` |
 | A held key in a tape sent extra repeats after its release on a slow machine | record `0.0.9`, CLI `0.0.21` |
 | `rich mermaid` and `rich_mermaid::Mermaid` printed a blank line after the diagram | mermaid `0.0.4`, CLI `0.0.15` |

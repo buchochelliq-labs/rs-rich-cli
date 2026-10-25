@@ -53,23 +53,25 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 [Getting started](docs/getting-started.md) has a complete program; the
 [tutorial](docs/tutorial/index.md) builds up from there.
 
-## New in 0.0.21
+## New in 0.0.22
 
-Published on 2026-10-21 ([release notes](docs/releases/0.0.21.md)). Round
-7's fixes, and what the demo clones and a consumer asked for:
+[Release notes](docs/releases/0.0.22.md). Parity, the plugin marketplace
+and a terminal web browser:
 
-- **Widgets:** form controls (buttons, check boxes, switches, radios,
-  sliders, select fields), a log pane fed by `tracing`, text editing with
-  Emacs and Vim keys, effect presets, pie and stacked charts, QR codes,
-  Huh-style forms and `rich spin`.
-- **Diagrams:** Mermaid sequence and ER diagrams drawn as text.
-- **Leaner builds:** `Syntax` and `Markdown` without syntect (core's `code`
-  feature), a SQL highlighter with no syntect, and GitHub Markdown from any
-  renderable.
-- **Docs:** a playground (guide blocks, `rich` on WASI and whole apps in
-  the page), rs-rich's own mark, and intuiTUIve as a section of its own.
-- **Fixes:** round 7's four intuiTUIve bugs, csv's million-row filter fast
-  again, and no DevTools port on Linux and macOS.
+- **Parity with rich 15.0.0:** the widget, live display and document
+  modules ported or recorded as divergences, `scope.py` ported, a verdict
+  for every divergence, and the differential fuzzer on Markdown, trees,
+  columns, progress, Pretty and JSON.
+- **The marketplace:** the new `rs-rich-marketplace` crate (a signed index,
+  verified installs, a lockfile), `rich plugin` with `browse` and
+  `publish`, and WASM plugins on by default.
+- **intuiTUIve:** flush panel titles, a tree table, `min_size` with a node
+  of its own, labels that change in place, a three-state check box,
+  options known by key and a live action list.
+- **[Noctiluca](docs/guide/noctiluca.md)** (new): a web browser for the
+  terminal, on intuiTUIve and a headless Chrome.
+- **Recording:** a tape writes an APNG only when asked. Memo has a spot for
+  every crate.
 
 The [changelog](CHANGELOG.md) lists every change.
 

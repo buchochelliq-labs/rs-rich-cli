@@ -50,28 +50,30 @@ topic and a widget index.
 
 </div>
 
-## New in 0.0.21
+## New in 0.0.22
 
-![Memo celebrating, trunk up, with confetti cells](assets/intuituive/mascot/elephant-celebrate.svg){ .tui-mascot width="128" }
-0.0.21, published on 2026-10-21 ([release notes](releases/0.0.21.md)),
-fixes what the demo loop's seventh round found and adds what the clones and
-a consumer asked for.
+![Memo, intuiTUIve's elephant, in the cartoon look](assets/intuituive/mascot/memo-cartoon.svg){ .tui-mascot width="128" }
+0.0.22 ([release notes](releases/0.0.22.md)) checks the core against
+`rich` 15.0.0 module by module, ships the plugin marketplace end to end,
+and adds a web browser for the terminal.
 
-- **Widgets:** [form controls](guide/intuituive/controls.md) (buttons,
-  check boxes, switches, radios, sliders, select fields), a log pane fed by
-  `tracing`, [text editing](guide/intuituive/text-editing.md) with Emacs
-  and Vim keys, effect presets, pie and stacked [charts](guide/ext/charts.md),
-  QR codes, Huh-style forms and `rich spin`.
-- **Diagrams:** Mermaid sequence and ER diagrams drawn as text.
-- **Leaner builds:** `Syntax` and `Markdown` without syntect (core's `code`
-  feature), a SQL highlighter with no syntect, and
-  [Markdown for GitHub](guide/ext/markdown-export.md) from any renderable.
-- **A [playground](playground.md):** **Try it** on guide blocks, `rich` on
-  WASI for CLI examples, and whole apps in the page.
-- **Fixes:** round 7's four intuiTUIve bugs, csv's million-row filter fast
-  again, and no DevTools port on Linux and macOS.
+- **Parity:** the widget, live display and document modules ported or
+  recorded in [DIVERGENCES](DIVERGENCES.md), `scope.py` ported, a verdict
+  for every divergence, and the [differential fuzzer](parity.md) on the
+  document renderers.
+- **The marketplace:** the new `rs-rich-marketplace` crate,
+  [`rich plugin`](PLUGINS.md) with `browse` and `publish`, and WASM plugins
+  on by default.
+- **intuiTUIve:** [flush panel titles](guide/intuituive/panels.md), a
+  [tree table](guide/intuituive/tables.md), `min_size` with a node of its
+  own, and [controls](guide/intuituive/controls.md) whose labels and
+  options change while they are shown.
+- **[Noctiluca](guide/noctiluca.md)** (new): a web browser for the
+  terminal, on intuiTUIve and a headless Chrome.
+- **Recording:** a tape writes an APNG only when asked. Memo has a spot for
+  every crate.
 
-Earlier releases are under [Releases](releases/0.0.21.md) in the
+Earlier releases are under [Releases](releases/0.0.22.md) in the
 navigation; the [roadmap](ROADMAP.md) says what comes next.
 
 ### Which version are these docs for?
