@@ -1874,7 +1874,6 @@ impl Painter {
             return None;
         }
         let height = screen.height;
-        let previous = &*previous;
         // Rows compare as slices of plain cells: a pair that differs stops
         // at its first cell, so looking for where a row went is cheap.
         let same = |y: u16, source: u16| screen.row(y) == previous.row(source);

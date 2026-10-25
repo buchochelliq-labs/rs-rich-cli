@@ -279,6 +279,18 @@ callgrind on 40 frames of each heavy scene, share of all instructions:
   13%, `split_graphemes` 11%, `from_segments` 8%); the draw fell from
   1,524 to about 1,160 µs at 200x60.
 
+- **The Frame path itself** (still taken by lines with a line break
+  inside a segment or region tags, and by the graphics plan, which builds
+  a Frame of the whole screen each frame an app shows pictures):
+  `tests/frame_path.rs` builds a 200x60 screen of styled text into a
+  Frame and splits it into cells. It took about 670 µs; rich's grapheme
+  splitting per run (a `Vec` of characters each time) and its width
+  table were most of it. `Frame::cells` now writes a run whose
+  characters are each their own grapheme without splitting, and widths
+  of ASCII, Latin letters, box drawing, blocks, Braille, CJK ideographs
+  and Hangul come without the table search (a test checks them against
+  rich's): about 200 µs.
+
 So what is left of a heavy frame is mostly rich's own rendering. Those
 fixes belong upstream-first: an ASCII fast path in `cell_len` and
 `char_cell_width` (upstream measures a string of single-width
@@ -311,7 +323,29 @@ frame.
 
 #### Against ratatui
 
-RATATUI_TABLE
+`tests/versus_ratatui.rs`, release, like for like (µs a frame, bytes a
+frame); its `Feed` now hands out one key a frame, as noted above. The
+gated scenes use the default `cells`; `best` is shown where it differs.
+
+| Size | Scene | ratatui | intuiTUIve before | intuiTUIve now |
+|---|---|---:|---:|---:|
+| 80x24 | Status tick | 92 µs, 37 B | 18 µs, 18 B | 12 µs, 18 B |
+| 80x24 | Selection move | 83 µs, 184 B | 49 µs, 118 B | 33 µs, 118 B |
+| 80x24 | Log append | 95 µs, 443 B | 52 µs, 428 B | 23 µs, 325 B |
+| 200x60 | Status tick | 309 µs, 37 B | 24 µs, 18 B | 12 µs, 18 B |
+| 200x60 | Selection move | 313 µs, 280 B | 66 µs, 118 B | 35 µs, 119 B |
+| 200x60 | Log append | 342 µs, 1,480 B | 235 µs, 1,465 B | 48 µs, 1,056 B (`best`: 410 B) |
+| 80x24 | Churn, every cell | 327 µs, 62.0 kB | 1,629 µs, 65.7 kB | 788 µs, 61.4 kB |
+| 80x24 | Chart redrawn | 83 µs, 4.2 kB | 477 µs, 3.1 kB | 299 µs, 2.8 kB |
+| 200x60 | Churn, every cell | 2,037 µs, 376 kB | 10,885 µs, 399 kB | 5,499 µs, 368 kB |
+| 200x60 | Chart redrawn | 348 µs, 14.7 kB | 1,997 µs, 11.3 kB | 1,036 µs, 8.7 kB |
+
+Small updates went from about 2 to 3 times faster than ratatui to 2.5 to
+25 times, with fewer bytes everywhere. Churn is now 2.4 times ratatui's
+time (it was 5), the chart 3.6 times (it was 5.7), both with fewer bytes
+than ratatui. The research's target for churn, within 1.5 times
+ratatui's, is not reached: most of the remaining frame is the scene
+building a rich `Style` per cell and rich's own rendering (above).
 
 ### Noctiluca
 

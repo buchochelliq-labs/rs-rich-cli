@@ -524,7 +524,10 @@ names (see [Backends](running.md#backends)).
 [the benchmark](index.md#against-ratatui) has intuiTUIve ahead on a status
 tick, a selection move and a log append, because it redraws and sends only
 what changed. Where every cell changes each frame (a full-screen swatch, a
-chart redrawn whole), ratatui is ahead, as the same page shows.
+chart redrawn whole), ratatui is ahead in time though not in bytes, as the
+same page shows. For a log or a list that scrolls, try
+`App::paint_strategy(PaintStrategy::Best)` (see [paint
+strategies](running.md#paint-strategies)).
 
 **What about async runtimes?** Keep yours. Send results to the app with a
 `Proxy`, or use `spawn_future` for futures that do not need a particular
