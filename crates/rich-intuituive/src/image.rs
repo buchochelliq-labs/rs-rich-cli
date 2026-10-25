@@ -19,182 +19,40 @@
 //! which show the picture the app uploaded. Without the app's graphics
 //! source a Sixel or iTerm2 view is half blocks; [`ImageMode::Sixel`] and
 //! [`ImageMode::Auto`] draw half blocks too.
+//!
+//! The pictures themselves are rs-rich-art's [`Picture`]s: decoded once,
+//! known to the terminal by an id, uploaded once and placed by reference.
+//! [`picture_of`] is a node over a live picture, a new frame of which
+//! ([`Picture::next`]: a video, an emulator's screen) is drawn at once
+//! under the same id. An app can also draw pictures inside rows of its own
+//! with [`Picture::lines`]; [`image_graphics`] finds their cells wherever
+//! they are. [`picture_bytes`] says what a picture's escapes have cost.
 
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::path::{Path, PathBuf};
-use std::sync::{Arc, Mutex, Weak};
+use std::sync::{Arc, Mutex};
 
 use rich::segment::Segment;
-use rich::style::{Meta, MetaValue};
 use rich::Style;
-use rich_art::image::DynamicImage;
+use rich_art::picture::{count_picture_bytes, PictureTag};
+pub use rich_art::picture::{picture_bytes, ImageView, Picture, Pixels};
 pub use rich_art::{ImageAnchor, ImageFit, ImageMode};
-use rich_art::{ImageArt, ImageBackground};
 use rich_ext::frame::{Frame, Graphic, Placement, PlacementSource};
 
 use crate::node::{leaf, Node};
 use crate::reactive::{signal, watch, Signal};
 use crate::task::spawn;
 
-/// The longest side an image is kept at after decoding. Cells hold at most
-/// a few pixels each, so a photo is shrunk once, on the worker, rather than
-/// on every draw.
-const KEEP: u32 = 1536;
-
-/// How an [`image`] node draws its picture.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-#[must_use = "builder methods return a new value; it does nothing until it is used"]
-pub struct ImageView {
-    /// The cell mode: [`ImageMode::Blocks`] (half blocks) by default.
-    pub mode: ImageMode,
-    /// `None` (the default): as large as fits the rectangle, keeping the
-    /// aspect ratio, at its top left. [`ImageFit::Contain`] centres it
-    /// instead; [`ImageFit::Cover`] fills the rectangle, cropping around
-    /// [`anchor`](Self::anchor); [`ImageFit::Stretch`] fills it exactly.
-    pub fit: Option<ImageFit>,
-    /// What a cover fit keeps.
-    pub anchor: ImageAnchor,
-    /// Transparent pixels show the terminal's background (`None`, the
-    /// default), or this colour.
-    pub background: Option<[u8; 3]>,
-    /// Cells only ([`Pixels::Cells`], the default), or real pixels through
-    /// a terminal graphics protocol, which the app's [`image_graphics`]
-    /// draws.
-    pub pixels: Pixels,
-}
-
-/// How an image node reaches the terminal: [`ImageView::pixels`].
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
-pub enum Pixels {
-    /// In cells, as the view's mode draws them: any terminal.
-    #[default]
-    Cells,
-    /// Kitty's graphics protocol with Unicode placeholders (Kitty, Ghostty,
-    /// WezTerm): the cells are placeholders, shown as the picture the app
-    /// uploads ([`image_graphics`]). Without it they show nothing useful.
-    Kitty,
-    /// Sixel, drawn over the node's half blocks after each frame (foot,
-    /// WezTerm, mlterm, xterm with `-ti vt340`, Windows Terminal).
-    Sixel,
-    /// iTerm2's inline images, drawn over the half blocks (iTerm2,
-    /// WezTerm).
-    Iterm,
-}
-
-impl Pixels {
-    /// The protocol the terminal is likely to speak, from the environment:
-    /// Kitty in Kitty and Ghostty, iTerm2's in iTerm2 and WezTerm, Sixel
-    /// where rs-rich-art guesses it works, else cells.
-    pub fn detect() -> Pixels {
-        let var = |name: &str| std::env::var(name).unwrap_or_default();
-        let (term, program) = (var("TERM"), var("TERM_PROGRAM"));
-        if std::env::var_os("KITTY_WINDOW_ID").is_some()
-            || term.contains("kitty")
-            || program.eq_ignore_ascii_case("ghostty")
-            || term.contains("ghostty")
-        {
-            Pixels::Kitty
-        } else if program == "iTerm.app" || program.eq_ignore_ascii_case("WezTerm") {
-            Pixels::Iterm
-        } else if rich_art::sixel::is_probably_supported() {
-            Pixels::Sixel
-        } else {
-            Pixels::Cells
-        }
-    }
-
-    fn code(self) -> i64 {
-        match self {
-            Pixels::Cells => 0,
-            Pixels::Kitty => 1,
-            Pixels::Sixel => 2,
-            Pixels::Iterm => 3,
-        }
-    }
-
-    fn from_code(code: i64) -> Option<Pixels> {
-        Some(match code {
-            1 => Pixels::Kitty,
-            2 => Pixels::Sixel,
-            3 => Pixels::Iterm,
-            _ => return None,
-        })
-    }
-}
-
-impl Default for ImageView {
-    fn default() -> Self {
-        ImageView {
-            mode: ImageMode::Blocks,
-            fit: None,
-            anchor: ImageAnchor::Center,
-            background: None,
-            pixels: Pixels::Cells,
-        }
-    }
-}
-
-impl ImageView {
-    pub fn new() -> ImageView {
-        ImageView::default()
-    }
-
-    /// Draw in `mode`: blocks, quadrants, Braille or ASCII.
-    pub fn mode(mut self, mode: ImageMode) -> ImageView {
-        self.mode = mode;
-        self
-    }
-
-    /// Fit the rectangle so (see [`ImageView::fit`](Self#structfield.fit)).
-    pub fn fit(mut self, fit: ImageFit) -> ImageView {
-        self.fit = Some(fit);
-        self
-    }
-
-    /// What a cover fit keeps.
-    pub fn anchor(mut self, anchor: ImageAnchor) -> ImageView {
-        self.anchor = anchor;
-        self
-    }
-
-    /// Paint transparent pixels (and a contained image's margins) this
-    /// colour.
-    pub fn background(mut self, rgb: [u8; 3]) -> ImageView {
-        self.background = Some(rgb);
-        self
-    }
-
-    /// Draw real pixels through `pixels`' protocol (see [`Pixels`]); the
-    /// app draws them with [`image_graphics`].
-    pub fn pixels(mut self, pixels: Pixels) -> ImageView {
-        self.pixels = pixels;
-        self
-    }
-}
-
 /// What an image node has to draw.
-#[derive(Clone, Default)]
-enum Picture {
+#[derive(Clone, Default, PartialEq)]
+enum Decoded {
     /// No path.
     #[default]
     Empty,
     Loading,
-    Ready(Arc<DynamicImage>),
+    Ready(Picture),
     Failed(String),
-}
-
-impl PartialEq for Picture {
-    /// The same state; two pictures are the same only if they share one
-    /// decoded image.
-    fn eq(&self, other: &Self) -> bool {
-        match (self, other) {
-            (Picture::Empty, Picture::Empty) | (Picture::Loading, Picture::Loading) => true,
-            (Picture::Ready(a), Picture::Ready(b)) => Arc::ptr_eq(a, b),
-            (Picture::Failed(a), Picture::Failed(b)) => a == b,
-            _ => false,
-        }
-    }
 }
 
 /// The image file at `path`, drawn in half blocks to fit the node. Shows
@@ -228,7 +86,7 @@ pub fn image_with(path: impl AsRef<Path>, view: ImageView) -> Node {
 }
 
 /// The lines last drawn, with the picture and the size they were for.
-type Drawn = (Arc<DynamicImage>, u16, u16, Vec<Vec<Segment>>);
+type Drawn = (Picture, u16, u16, Vec<Vec<Segment>>);
 
 /// An image node following `path`, a closure that may read signals: when
 /// the path it returns changes, the new file is decoded in the background
@@ -299,23 +157,23 @@ impl PartialEq for Input {
 
 /// An image node over `input`, decoded in the background when it changes.
 fn image_from(input: impl Fn() -> Option<Input> + 'static, view: ImageView) -> Node {
-    let picture: Signal<Picture> = signal(Picture::Empty);
+    let picture: Signal<Decoded> = signal(Decoded::Empty);
     let generation = signal(0u64);
     watch(input, move |input, _| {
         generation.update(|g| *g += 1);
         let mine = generation.get_untracked();
         let Some(input) = input else {
-            picture.set(Picture::Empty);
+            picture.set(Decoded::Empty);
             return;
         };
-        picture.set(Picture::Loading);
+        picture.set(Decoded::Loading);
         spawn(
             move || decode(&input),
             move |result, _| {
                 if generation.get_untracked() == mine {
                     picture.set(match result {
-                        Ok(image) => Picture::Ready(Arc::new(image)),
-                        Err(error) => Picture::Failed(error),
+                        Ok(image) => Decoded::Ready(image),
+                        Err(error) => Decoded::Failed(error),
                     });
                 }
             },
@@ -325,35 +183,74 @@ fn image_from(input: impl Fn() -> Option<Input> + 'static, view: ImageView) -> N
     leaf(move |console, width, height| {
         let current = picture.get();
         let image = match current {
-            Picture::Empty => return Vec::new(),
-            Picture::Loading => return note("loading…", "dim"),
-            Picture::Failed(error) => return note(&format!("cannot show image: {error}"), "red"),
-            Picture::Ready(image) => image,
+            Decoded::Empty => return Vec::new(),
+            Decoded::Loading => return note("loading…", "dim"),
+            Decoded::Failed(error) => return note(&format!("cannot show image: {error}"), "red"),
+            Decoded::Ready(image) => image,
         };
-        if let Some((last, w, h, lines)) = drawn.borrow().as_ref() {
-            if Arc::ptr_eq(last, &image) && (*w, *h) == (width, height) {
-                return lines.clone();
-            }
-        }
-        let lines = draw(console, &image, view, width, height);
-        *drawn.borrow_mut() = Some((image, width, height, lines.clone()));
-        lines
+        draw_cached(&drawn, console, &image, view, width, height)
     })
     .what("image")
 }
 
-/// Decode the picture, shrunk to at most [`KEEP`] pixels a side.
-fn decode(input: &Input) -> Result<DynamicImage, String> {
-    let image = match input {
-        Input::Path(path) => rich_art::image::open(path),
-        Input::Bytes(bytes) => rich_art::image::load_from_memory(bytes),
+/// `picture` drawn at `width` x `height`, from `drawn` when it was drawn
+/// there last time.
+fn draw_cached(
+    drawn: &RefCell<Option<Drawn>>,
+    console: &rich::Console,
+    picture: &Picture,
+    view: ImageView,
+    width: u16,
+    height: u16,
+) -> Vec<Vec<Segment>> {
+    if let Some((last, w, h, lines)) = drawn.borrow().as_ref() {
+        if last == picture && (*w, *h) == (width, height) {
+            return lines.clone();
+        }
     }
-    .map_err(|e| e.to_string())?;
-    Ok(if image.width() > KEEP || image.height() > KEEP {
-        image.thumbnail(KEEP, KEEP)
-    } else {
-        image
+    let lines = picture.lines(console, view, width, height);
+    *drawn.borrow_mut() = Some((picture.clone(), width, height, lines.clone()));
+    lines
+}
+
+/// A node showing the picture `picture` returns, a closure that may read
+/// signals: each new frame (a video's, an emulator's screen) is drawn at
+/// once, with no worker and no "loading" step, and a frame of the same
+/// picture ([`Picture::next`]) keeps its id, so Kitty replaces the image
+/// it holds. `None` draws nothing.
+///
+/// ```
+/// use intuituive::prelude::*;
+/// use intuituive::{picture_of, ImageView, Picture};
+/// use rich_art::image::{DynamicImage, Rgb, RgbImage};
+///
+/// let app = App::new(|| {
+///     let frame = signal(Some(Picture::new(DynamicImage::ImageRgb8(
+///         RgbImage::from_pixel(4, 4, Rgb([255, 0, 0])),
+///     ))));
+///     picture_of(move || frame.get(), ImageView::new()).fixed(2)
+/// });
+/// let screen = app.render_with(&[], 4, 2).unwrap();
+/// assert!(screen[0].starts_with("▀▀"));
+/// ```
+pub fn picture_of(picture: impl Fn() -> Option<Picture> + 'static, view: ImageView) -> Node {
+    let drawn: RefCell<Option<Drawn>> = RefCell::new(None);
+    leaf(move |console, width, height| match picture() {
+        None => Vec::new(),
+        Some(picture) => draw_cached(&drawn, console, &picture, view, width, height),
     })
+    .what("image")
+}
+
+/// Decode the picture, shrunk to at most [`rich_art::picture::KEEP`]
+/// pixels a side.
+fn decode(input: &Input) -> Result<Picture, String> {
+    match input {
+        Input::Path(path) => rich_art::image::open(path)
+            .map_err(|e| e.to_string())
+            .map(|image| Picture::new(rich_art::picture::shrink(image))),
+        Input::Bytes(bytes) => Picture::decode(bytes),
+    }
 }
 
 /// One line of `text` in `style`.
@@ -364,193 +261,14 @@ fn note(text: &str, style: &str) -> Vec<Vec<Segment>> {
     )]]
 }
 
-/// `image` in `width` × `height` cells (a height of 0 measures: as tall as
-/// the image is at `width`).
-fn draw(
-    console: &rich::Console,
-    image: &Arc<DynamicImage>,
-    view: ImageView,
-    width: u16,
-    height: u16,
-) -> Vec<Vec<Segment>> {
-    if width == 0 {
-        return Vec::new();
-    }
-    let mode = match view.mode {
-        // Pixel protocols cannot reach the terminal through the cell screen.
-        ImageMode::Auto | ImageMode::Sixel => ImageMode::Blocks,
-        mode => mode,
-    };
-    let mut art = ImageArt::new(DynamicImage::clone(image))
-        .mode(mode)
-        .anchor(view.anchor)
-        .background_mode(match view.background {
-            Some(rgb) => ImageBackground::Color(rgb),
-            None => ImageBackground::TerminalDefault,
-        })
-        .width(usize::from(width));
-    if height > 0 {
-        art = match view.fit {
-            Some(fit) => art.fit(fit).height(usize::from(height)),
-            None => art
-                .max_width(usize::from(width))
-                .max_height(usize::from(height)),
-        };
-    }
-    let options = console.options().update_width(usize::from(width));
-    let options = if height == 0 {
-        options
-    } else {
-        options.update_height(usize::from(height))
-    };
-    let mut lines = console.render_lines(&art, &options, false);
-    if height > 0 {
-        lines.truncate(usize::from(height));
-    }
-    if view.pixels != Pixels::Cells && mode == ImageMode::Blocks {
-        lines = tag(console, image, view.pixels, lines);
-    }
-    lines
-}
-
-/// The key a cell of an image drawn in pixels carries in its style's meta:
-/// `[id, cols, rows, row, protocol]`.
-const IMAGE_META_KEY: &str = "intuituive.image";
-
-/// The pictures drawn in pixels, by id, for [`image_graphics`] to find
-/// (weakly: a picture no node holds goes).
-static PICTURES: Mutex<Vec<(u32, Weak<DynamicImage>)>> = Mutex::new(Vec::new());
-static NEXT_PICTURE: std::sync::atomic::AtomicU32 = std::sync::atomic::AtomicU32::new(1);
-
-/// `image`'s id among the pictures drawn in pixels: 1 to 2^24 - 1, as
-/// Kitty's colour-coded ids take.
-fn picture_id(image: &Arc<DynamicImage>) -> u32 {
-    let mut pictures = PICTURES.lock().unwrap_or_else(|e| e.into_inner());
-    pictures.retain(|(_, weak)| weak.strong_count() > 0);
-    if let Some((id, _)) = pictures
-        .iter()
-        .find(|(_, weak)| weak.upgrade().is_some_and(|p| Arc::ptr_eq(&p, image)))
-    {
-        return *id;
-    }
-    let id = NEXT_PICTURE
-        .fetch_add(1, std::sync::atomic::Ordering::SeqCst)
-        .wrapping_sub(1)
-        % 0x00ff_fffe
-        + 1;
-    pictures.push((id, Arc::downgrade(image)));
-    id
-}
-
-fn picture(id: u32) -> Option<Arc<DynamicImage>> {
-    let pictures = PICTURES.lock().unwrap_or_else(|e| e.into_inner());
-    pictures
-        .iter()
-        .find(|(i, _)| *i == id)
-        .and_then(|(_, weak)| weak.upgrade())
-}
-
-/// The cells of a picture drawn in pixels: tagged for [`image_graphics`],
-/// and for Kitty, its placeholders.
-fn tag(
-    console: &rich::Console,
-    image: &Arc<DynamicImage>,
-    pixels: Pixels,
-    lines: Vec<Vec<Segment>>,
-) -> Vec<Vec<Segment>> {
-    let rows = lines.len();
-    let cols = lines
-        .iter()
-        .map(|line| {
-            line.iter()
-                .map(|s| rich::cells::cell_len(&s.text))
-                .sum::<usize>()
-        })
-        .max()
-        .unwrap_or(0);
-    if rows == 0 || cols == 0 {
-        return lines;
-    }
-    let id = picture_id(image);
-    let meta = |row: usize| {
-        let mut meta = Meta::new();
-        meta.insert(
-            IMAGE_META_KEY,
-            MetaValue::List(vec![
-                MetaValue::Int(i64::from(id)),
-                MetaValue::Int(cols as i64),
-                MetaValue::Int(rows as i64),
-                MetaValue::Int(row as i64),
-                MetaValue::Int(pixels.code()),
-            ]),
-        );
-        Style::from_meta(meta)
-    };
-    if pixels == Pixels::Kitty {
-        let truecolor = console.color_system() == Some(rich::color::ColorSystem::Truecolor);
-        let Some(colour) = rich_art::kitty::id_color(id, truecolor) else {
-            return lines;
-        };
-        return (0..rows)
-            .map(|row| {
-                let cells = rich_art::kitty::placeholder_row(row, cols).unwrap_or_default();
-                let style = Style::new().with_color(colour.clone()).combine(&meta(row));
-                vec![Segment::new(cells, Some(style))]
-            })
-            .collect();
-    }
-    lines
-        .into_iter()
-        .enumerate()
-        .map(|(row, line)| {
-            let tag = meta(row);
-            line.into_iter()
-                .map(|mut segment| {
-                    segment.style = Some(segment.style.unwrap_or_default().combine(&tag));
-                    segment
-                })
-                .collect()
-        })
-        .collect()
-}
-
-/// What a tagged run of cells says: the picture, its size, which of its
-/// rows, and the protocol.
-#[derive(Clone, Copy, Debug, PartialEq, Eq)]
-struct Tag {
-    id: u32,
-    cols: usize,
-    rows: usize,
-    row: usize,
-    pixels: Pixels,
-}
-
-impl Tag {
-    fn of(style: &Style) -> Option<Tag> {
-        let MetaValue::List(items) = style.meta_ref()?.get(IMAGE_META_KEY)? else {
-            return None;
-        };
-        let int = |i: usize| match items.get(i) {
-            Some(MetaValue::Int(v)) => Some(*v),
-            _ => None,
-        };
-        Some(Tag {
-            id: u32::try_from(int(0)?).ok()?,
-            cols: usize::try_from(int(1)?).ok()?,
-            rows: usize::try_from(int(2)?).ok()?,
-            row: usize::try_from(int(3)?).ok()?,
-            pixels: Pixels::from_code(int(4)?)?,
-        })
-    }
-}
-
-/// The graphics source that draws image nodes' pixels
+/// The graphics source that draws pictures' pixels
 /// ([`ImageView::pixels`]): give it to
 /// [`App::graphics`](crate::App::graphics). After each frame's cells it
-/// finds the nodes' tagged cells and draws their pictures over them
+/// finds the pictures' tagged cells (image nodes', [`picture_of`]'s, and
+/// any drawn with [`Picture::lines`]) and draws them over the cells
 /// (Sixel, iTerm2) or uploads them for their placeholders (Kitty), only
-/// when one is new, moved or had cells written under it; the Kitty
-/// pictures are freed when the app ends.
+/// when one is new, moved, a new frame, or had cells written under it.
+/// The Kitty pictures are freed when the app ends.
 ///
 /// ```no_run
 /// use intuituive::prelude::*;
@@ -568,9 +286,9 @@ pub fn image_graphics() -> Arc<dyn PlacementSource> {
     })
 }
 
-/// A picture at a size in a protocol, and the rows of it shown: picture,
-/// columns, rows, protocol, first row shown, rows shown.
-type GraphicKey = (u32, usize, usize, Pixels, usize, usize);
+/// A picture's frame at a size in a protocol, and the rows of it shown:
+/// picture, version, columns, rows, protocol, first row shown, rows shown.
+type GraphicKey = (u32, u32, usize, usize, Pixels, usize, usize);
 
 /// [`image_graphics`]'s source.
 struct ImageGraphics {
@@ -583,12 +301,12 @@ struct ImageGraphics {
 impl PlacementSource for ImageGraphics {
     fn placements(&self, frame: &Frame) -> Vec<Placement> {
         // Each tagged run: its row, column and tag.
-        let mut found: Vec<(usize, usize, Tag)> = Vec::new();
+        let mut found: Vec<(usize, usize, PictureTag)> = Vec::new();
         for row in 0..frame.height() {
             let mut column = 0;
-            let mut open: Option<(usize, Tag)> = None;
+            let mut open: Option<(usize, PictureTag)> = None;
             for run in frame.row(row) {
-                let tag = frame.styles().get(run.style()).and_then(Tag::of);
+                let tag = frame.styles().get(run.style()).and_then(PictureTag::of);
                 match (&open, tag) {
                     (Some((_, a)), Some(b)) if *a == b => {}
                     _ => {
@@ -604,44 +322,34 @@ impl PlacementSource for ImageGraphics {
                 found.push((row, start, tag));
             }
         }
-        let has = |row: usize, column: usize, tag: &Tag, which: usize| {
-            found
-                .iter()
-                .any(|(r, c, t)| *r == row && *c == column && t.id == tag.id && t.row == which)
+        let has = |row: usize, column: usize, tag: &PictureTag, which: usize| {
+            found.iter().any(|(r, c, t)| {
+                *r == row
+                    && *c == column
+                    && (t.id, t.version) == (tag.id, tag.version)
+                    && t.row == which
+            })
         };
         let mut out = Vec::new();
         for (row, column, tag) in &found {
-            // Kitty's placeholders draw row by row: they need only the
-            // upload, placed from the picture's first row.
-            if tag.pixels == Pixels::Kitty {
-                if tag.row != 0 {
-                    continue;
-                }
-                let whole = (1..tag.rows).all(|below| has(row + below, *column, tag, below));
-                if let Some(graphic) = self.graphic(tag, 0, tag.rows) {
-                    out.push(Placement {
-                        row: *row,
-                        column: *column,
-                        cols: tag.cols,
-                        rows: if whole { tag.rows } else { 1 },
-                        graphic,
-                        frame: 0,
-                    });
-                }
-                continue;
-            }
-            // Sixel and iTerm2 draw a block of rows: from the first row of
-            // the picture shown here, the rows of it shown below, so a
-            // picture partly in view (scrolled, or under the screen's
-            // edge) draws clipped to them.
+            // Only from the first row of the picture shown here.
             if *row > 0 && tag.row > 0 && has(row - 1, *column, tag, tag.row - 1) {
                 continue;
             }
+            // Kitty's placeholders draw row by row: they need only the
+            // upload. Sixel and iTerm2 draw a block of rows: the rows of
+            // the picture shown below, so a picture partly in view
+            // (scrolled, or under the screen's edge) draws clipped to them.
             let shown = (1..tag.rows.saturating_sub(tag.row))
                 .take_while(|&below| has(row + below, *column, tag, tag.row + below))
                 .count()
                 + 1;
-            if let Some(graphic) = self.graphic(tag, tag.row, shown) {
+            let (first, rows) = if tag.pixels == Pixels::Kitty {
+                (0, tag.rows)
+            } else {
+                (tag.row, shown)
+            };
+            if let Some(graphic) = self.graphic(tag, first, rows) {
                 out.push(Placement {
                     row: *row,
                     column: *column,
@@ -659,30 +367,34 @@ impl PlacementSource for ImageGraphics {
         let _ = retained;
         let uploaded =
             std::mem::take(&mut *self.uploaded.lock().unwrap_or_else(|e| e.into_inner()));
-        uploaded.into_iter().map(rich_art::kitty::delete).collect()
+        uploaded.into_iter().map(Picture::release).collect()
     }
 }
 
 impl ImageGraphics {
-    /// The graphic of `tag`'s picture at its size, its rows `first` to
+    /// The graphic of `tag`'s frame at its size, its rows `first` to
     /// `first + shown` only, made once.
-    fn graphic(&self, tag: &Tag, first: usize, shown: usize) -> Option<Arc<dyn Graphic>> {
-        let key = (tag.id, tag.cols, tag.rows, tag.pixels, first, shown);
+    fn graphic(&self, tag: &PictureTag, first: usize, shown: usize) -> Option<Arc<dyn Graphic>> {
+        let key = (
+            tag.id,
+            tag.version,
+            tag.cols,
+            tag.rows,
+            tag.pixels,
+            first,
+            shown,
+        );
         let mut made = self.made.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(graphic) = made.get(&key) {
             return Some(graphic.clone());
         }
-        let image = picture(tag.id)?;
-        let escape = if first == 0 && shown >= tag.rows {
-            encode(&image, tag)?
-        } else {
-            encode_rows(&image, tag, first, shown)?
-        };
+        let picture = tag.picture()?;
+        let escape = picture.encode_rows(tag.pixels, tag.cols, tag.rows, first, shown)?;
         if tag.pixels == Pixels::Kitty {
-            self.uploaded
-                .lock()
-                .unwrap_or_else(|e| e.into_inner())
-                .push(tag.id);
+            let mut uploaded = self.uploaded.lock().unwrap_or_else(|e| e.into_inner());
+            if !uploaded.contains(&tag.id) {
+                uploaded.push(tag.id);
+            }
         }
         let graphic: Arc<dyn Graphic> = Arc::new(PixelGraphic {
             key: {
@@ -693,74 +405,11 @@ impl ImageGraphics {
             },
             escape,
             in_cells: tag.pixels == Pixels::Kitty,
+            id: tag.id,
         });
-        made.retain(|(id, ..), _| picture(*id).is_some());
+        made.retain(|(id, version, ..), _| Picture::find(*id, *version).is_some());
         made.insert(key, graphic.clone());
         Some(graphic)
-    }
-}
-
-/// The escape that draws `image` in `tag`'s cells.
-fn encode(image: &DynamicImage, tag: &Tag) -> Option<String> {
-    use rich_art::graphics::{encode_png, fit_to_cells, CellPixels};
-    match tag.pixels {
-        Pixels::Cells => None,
-        Pixels::Kitty => {
-            let png = encode_png(&fit_to_cells(
-                image,
-                tag.cols,
-                tag.rows,
-                CellPixels::DEFAULT,
-            ))?;
-            Some(rich_art::kitty::transmit(tag.id, &png, tag.cols, tag.rows))
-        }
-        Pixels::Sixel => {
-            let sixel = rich_art::SixelArt::new(image.clone()).encode_cells(tag.cols, tag.rows)?;
-            Some(format!("\x1b7{sixel}\x1b8"))
-        }
-        Pixels::Iterm => {
-            let png = encode_png(&fit_to_cells(
-                image,
-                tag.cols,
-                tag.rows,
-                CellPixels::DEFAULT,
-            ))?;
-            Some(format!(
-                "\x1b7{}\x1b8",
-                rich_art::iterm::inline_image(&png, tag.cols, tag.rows)
-            ))
-        }
-    }
-}
-
-/// The escape that draws rows `first` to `first + shown` of `image` in
-/// `tag`'s cells (Sixel or iTerm2): the picture fitted to all its cells,
-/// then cut to the rows shown.
-fn encode_rows(image: &DynamicImage, tag: &Tag, first: usize, shown: usize) -> Option<String> {
-    use rich_art::graphics::{encode_png, fit_to_cells, CellPixels};
-    let cell = CellPixels::DEFAULT;
-    let whole = fit_to_cells(image, tag.cols, tag.rows, cell);
-    let top = (first as u32 * cell.height).min(whole.height());
-    let height = (shown as u32 * cell.height).min(whole.height() - top);
-    if height == 0 {
-        return None;
-    }
-    let part =
-        rich_art::image::imageops::crop_imm(&whole, 0, top, whole.width(), height).to_image();
-    match tag.pixels {
-        Pixels::Sixel => {
-            let sixel = rich_art::SixelArt::new(DynamicImage::ImageRgba8(part))
-                .encode_cells(tag.cols, shown)?;
-            Some(format!("\x1b7{sixel}\x1b8"))
-        }
-        Pixels::Iterm => {
-            let png = encode_png(&part)?;
-            Some(format!(
-                "\x1b7{}\x1b8",
-                rich_art::iterm::inline_image(&png, tag.cols, shown)
-            ))
-        }
-        Pixels::Kitty | Pixels::Cells => None,
     }
 }
 
@@ -770,6 +419,8 @@ struct PixelGraphic {
     key: u64,
     escape: String,
     in_cells: bool,
+    /// The picture it draws, whose bytes it counts.
+    id: u32,
 }
 
 impl Graphic for PixelGraphic {
@@ -778,6 +429,7 @@ impl Graphic for PixelGraphic {
     }
 
     fn draw(&self, _frame: usize) -> String {
+        count_picture_bytes(self.id, self.escape.len() as u64);
         self.escape.clone()
     }
 
@@ -790,7 +442,7 @@ impl Graphic for PixelGraphic {
 mod tests {
     use super::*;
     use crate::app::App;
-    use rich_art::image::{Rgb, RgbImage, Rgba, RgbaImage};
+    use rich_art::image::{DynamicImage, Rgb, RgbImage, Rgba, RgbaImage};
 
     fn temp(name: &str) -> PathBuf {
         std::env::temp_dir().join(format!("intuituive-image-{}-{name}", std::process::id()))
@@ -1054,17 +706,163 @@ mod tests {
         std::fs::remove_file(&path).ok();
     }
 
+    /// What the driver writes over `rounds` updates, stopping once it
+    /// holds `until`.
+    fn written(driver: &mut crate::Driver, until: &str, rounds: usize) -> String {
+        let mut out = String::new();
+        for _ in 0..rounds {
+            driver.update(std::time::Duration::ZERO);
+            out.push_str(&driver.render().unwrap_or_default());
+            if out.contains(until) {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(2));
+        }
+        out
+    }
+
+    fn solid(r: u8, g: u8, b: u8) -> DynamicImage {
+        DynamicImage::ImageRgb8(RgbImage::from_pixel(8, 8, Rgb([r, g, b])))
+    }
+
+    #[test]
+    fn live_frames_keep_one_kitty_id_and_are_freed_once() {
+        let first = Picture::new(solid(255, 0, 0));
+        let id = first.id();
+        let shown = std::rc::Rc::new(std::cell::Cell::new(None));
+        let seen = shown.clone();
+        let start = first.clone();
+        let app = App::new(move || {
+            let frame = signal(Some(start.clone()));
+            seen.set(Some(frame));
+            picture_of(move || frame.get(), ImageView::new().pixels(Pixels::Kitty)).fixed(2)
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(4, 2);
+        let out = written(&mut driver, "a=T", 50);
+        assert!(out.contains(&format!("i={id},")), "{out:?}");
+        let frame = shown.get().unwrap();
+        let mut last = first;
+        for k in 0..20u8 {
+            last = last.next(solid(k * 10, 0, 255));
+            frame.set(Some(last.clone()));
+            let out = written(&mut driver, "a=T", 5);
+            // Every frame goes up under the picture's one id.
+            assert!(
+                out.contains(&format!("a=T,U=1,f=100,t=d,i={id},")),
+                "{k}: {out:?}"
+            );
+        }
+        assert!(picture_bytes(id) > 0);
+        let finished = driver.finish();
+        assert_eq!(finished.matches("a=d").count(), 1, "{finished:?}");
+    }
+
+    #[test]
+    fn sixel_frames_are_drawn_again_and_counted() {
+        let first = Picture::new(solid(0, 255, 0));
+        let id = first.id();
+        let shown = std::rc::Rc::new(std::cell::Cell::new(None));
+        let seen = shown.clone();
+        let start = first.clone();
+        let app = App::new(move || {
+            let frame = signal(Some(start.clone()));
+            seen.set(Some(frame));
+            picture_of(move || frame.get(), ImageView::new().pixels(Pixels::Sixel)).fixed(2)
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(4, 2);
+        let out = written(&mut driver, "\x1bP", 50);
+        assert!(out.contains("\x1bP"), "{out:?}");
+        let before = picture_bytes(id);
+        assert!(before > 0);
+        shown.get().unwrap().set(Some(first.next(solid(0, 0, 255))));
+        let out = written(&mut driver, "\x1bP", 5);
+        assert!(out.contains("\x1bP"), "{out:?}");
+        assert!(picture_bytes(id) > before);
+        // A frame that does not change draws nothing more.
+        let still = picture_bytes(id);
+        let out = written(&mut driver, "\x1bP", 3);
+        assert!(!out.contains("\x1bP"));
+        assert_eq!(picture_bytes(id), still);
+    }
+
+    #[test]
+    fn kitty_uploads_a_picture_whose_first_row_is_out_of_view() {
+        let picture = Picture::new(solid(9, 9, 9));
+        let id = picture.id();
+        let console = rich::Console::builder()
+            .width(4)
+            .color_system(Some(rich::color::ColorSystem::Truecolor))
+            .build();
+        let lines = picture.lines(&console, ImageView::new().pixels(Pixels::Kitty), 4, 4);
+        assert_eq!(lines.len(), 4);
+        // Only its last two rows, as a view scrolled past its top shows.
+        let shown = lines[2..].to_vec();
+        let app = App::new(move || {
+            let rows = shown.clone();
+            crate::node::leaf(move |_, _, _| rows.clone()).fixed(2)
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(4, 2);
+        let out = written(&mut driver, "a=T", 20);
+        assert!(out.contains(&format!("i={id},")), "{out:?}");
+    }
+
+    #[test]
+    fn kitty_plays_an_animation_and_a_still_stops_it() {
+        let frames: Vec<_> = [255u8, 0]
+            .iter()
+            .map(|&r| rich_art::graphics::AnimationFrame {
+                image: RgbaImage::from_pixel(8, 8, Rgba([r, 0, 0, 255])),
+                delay: std::time::Duration::from_millis(100),
+            })
+            .collect();
+        let animated = Picture::animated(frames).unwrap();
+        assert!(animated.is_animated());
+        let still = animated.still();
+        assert!(!still.is_animated());
+        assert_eq!(still.id(), animated.id());
+        let shown = std::rc::Rc::new(std::cell::Cell::new(None));
+        let seen = shown.clone();
+        let start = animated.clone();
+        let app = App::new(move || {
+            let frame = signal(Some(start.clone()));
+            seen.set(Some(frame));
+            picture_of(move || frame.get(), ImageView::new().pixels(Pixels::Kitty)).fixed(2)
+        })
+        .graphics(image_graphics());
+        let mut driver = app.driver(4, 2);
+        let out = written(&mut driver, "s=3", 50);
+        // Its frames go up once, and Kitty loops them.
+        assert!(out.contains("a=f,"), "{out:?}");
+        assert!(out.contains("s=3,v=1"), "{out:?}");
+        let id = animated.id();
+        let bytes = picture_bytes(id);
+        // Nothing more is sent while it plays.
+        let out = written(&mut driver, "a=", 5);
+        assert!(!out.contains("a=f,"), "{out:?}");
+        assert_eq!(picture_bytes(id), bytes);
+        // Frozen: the still frame replaces it, with no animation.
+        shown.get().unwrap().set(Some(still));
+        let out = written(&mut driver, "a=T", 20);
+        assert!(
+            out.contains(&format!("a=T,U=1,f=100,t=d,i={id},")),
+            "{out:?}"
+        );
+        assert!(!out.contains("s=3"), "{out:?}");
+    }
+
     #[test]
     fn tags_read_back() {
-        let image = Arc::new(DynamicImage::new_rgb8(2, 2));
+        let image = Picture::new(DynamicImage::new_rgb8(2, 2));
         let console = rich::Console::builder().width(4).build();
-        let lines = vec![vec![Segment::new("▀▀", None)]];
-        let tagged = tag(&console, &image, Pixels::Sixel, lines);
-        let tag = Tag::of(tagged[0][0].style.as_ref().unwrap()).unwrap();
+        let tagged = image.lines(&console, ImageView::new().pixels(Pixels::Sixel), 2, 1);
+        let tag = PictureTag::of(tagged[0][0].style.as_ref().unwrap()).unwrap();
         assert_eq!(
             (tag.cols, tag.rows, tag.row, tag.pixels),
             (2, 1, 0, Pixels::Sixel)
         );
-        assert!(picture(tag.id).is_some_and(|p| Arc::ptr_eq(&p, &image)));
+        assert_eq!(tag.picture(), Some(image));
     }
 }

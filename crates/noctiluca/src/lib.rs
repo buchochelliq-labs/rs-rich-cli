@@ -31,6 +31,7 @@ pub mod dump;
 pub mod engine;
 pub mod layout;
 pub mod model;
+pub mod pictures;
 pub mod tab;
 pub mod testing;
 pub mod url;

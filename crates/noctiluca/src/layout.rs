@@ -739,6 +739,25 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
     project(page, columns, cell, marks).lines
 }
 
+/// Where a media region landed in the projection: its first row and
+/// column, its size in cells, and which of [`Page::media`] it shows. A
+/// picture is drawn over these cells.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Region {
+    pub row: usize,
+    pub column: usize,
+    pub cols: usize,
+    pub rows: usize,
+    pub media: usize,
+}
+
+impl Region {
+    /// Whether it covers row `row`.
+    pub fn on(&self, row: usize) -> bool {
+        (self.row..self.row + self.rows).contains(&row)
+    }
+}
+
 /// The [`projection`], with what each row is.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Projection {
@@ -756,6 +775,8 @@ pub struct Projection {
     pub rows: HashMap<u64, usize>,
     /// Each live log's place: its node, its first row and its rows.
     pub logs: Vec<(NodeId, usize, usize)>,
+    /// The media regions, in the order they were placed.
+    pub regions: Vec<Region>,
 }
 
 impl Projection {
@@ -789,6 +810,9 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         node: crate::engine::NodeId,
         /// The live log it is.
         log: Option<NodeId>,
+        /// A media region's index and its picture's rows (the lines after
+        /// are its caption).
+        media: Option<(usize, usize)>,
     }
     let mut items: Vec<Item> = Vec::new();
     let snap = |left: f64, right: f64| -> (usize, usize) {
@@ -815,6 +839,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             lines: Vec::new(),
             node,
             log: None,
+            media: None,
         }
     };
     let adapt = marks.adapt;
@@ -891,6 +916,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             lines: vec![line],
             node: region.node,
             log: None,
+            media: None,
         });
         shrunk.push((items.len() - 1, region.rect.height));
     }
@@ -948,6 +974,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     lines: log_lines(log, x1 - x0, rows, page, marks),
                     node: log.node,
                     log: Some(log.node),
+                    media: None,
                 });
             }
             BlockKind::Media(index)
@@ -978,7 +1005,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                 let (rows, w) =
                     crate::adapt::picture_cells(media.rect, m1 - m0, ch, adapt, MAX_MEDIA_ROWS);
                 let m1 = m0 + w;
-                let lines = (0..rows)
+                let mut lines: Vec<Line> = (0..rows)
                     .map(|r| {
                         let label = if r == rows / 2 {
                             crate::clean::truncate(&media.alt, w)
@@ -994,6 +1021,16 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                         }
                     })
                     .collect();
+                // A picture the page does not caption gets its alt text
+                // under it, as the PoC showed it.
+                if media.kind == MediaKind::Image && !media.captioned && !media.alt.is_empty() {
+                    lines.extend(wrap(
+                        &[Span::new(format!("Image: {}", media.alt), "italic")],
+                        w.max(1),
+                        &[],
+                        &[],
+                    ));
+                }
                 items.push(Item {
                     top: media.rect.y,
                     bottom: media.rect.y + rows as f64 * ch,
@@ -1004,6 +1041,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     lines,
                     node: media.node,
                     log: None,
+                    media: Some((*index, rows)),
                 });
                 if rows < full {
                     shrunk.push((items.len() - 1, media.rect.height));
@@ -1052,6 +1090,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     lines,
                     node: block.node,
                     log: None,
+                    media: None,
                 });
             }
             kind => {
@@ -1141,16 +1180,26 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         ra.cmp(&rb).then(a.left.total_cmp(&b.left))
     });
     let mut logs = Vec::new();
-    let boxes: Vec<(f64, f64, usize, usize, Vec<Line>, crate::engine::NodeId)> = items
+    type Placed = (
+        f64,
+        f64,
+        usize,
+        usize,
+        Vec<Line>,
+        crate::engine::NodeId,
+        Option<(usize, usize)>,
+    );
+    let boxes: Vec<Placed> = items
         .into_iter()
         .map(|i| {
             if let Some(log) = i.log {
                 logs.push((log, i.lines.len()));
             }
-            (i.top, i.left, i.x0, i.x1, i.lines, i.node)
+            (i.top, i.left, i.x0, i.x1, i.lines, i.node, i.media)
         })
         .collect();
     let mut placed_logs = Vec::new();
+    let mut regions = Vec::new();
     // Each row's first box: its node, which of its lines, and that line's
     // place on the page.
     let mut owner: Vec<Option<(crate::engine::NodeId, usize, f64)>> = Vec::new();
@@ -1159,7 +1208,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
     // after it); an empty string is the second cell of a wide character.
     let mut grid: Vec<Vec<Option<(String, usize)>>> = Vec::new();
     let mut styles: Vec<(String, Option<usize>)> = Vec::new();
-    for (top, _, x0, x1, lines, node) in boxes {
+    for (top, _, x0, x1, lines, node, media) in boxes {
         // A page can place a block millions of pixels down: blank rows
         // past a few screens tell the reader nothing, so the gap is capped
         // and the grid grows with the content, not the coordinates.
@@ -1168,6 +1217,15 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         if let Some(at) = logs.iter().position(|(log, _)| *log == node) {
             let (log, rows) = logs.remove(at);
             placed_logs.push((log, y, rows));
+        }
+        if let Some((index, rows)) = media {
+            regions.push(Region {
+                row: y,
+                column: x0,
+                cols: x1 - x0,
+                rows,
+                media: index,
+            });
         }
         for (k, line) in lines.iter().enumerate() {
             let row = y + k;
@@ -1288,6 +1346,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         y,
         rows,
         logs: placed_logs,
+        regions,
     }
 }
 

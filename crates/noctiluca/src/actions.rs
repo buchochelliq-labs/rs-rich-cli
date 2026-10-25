@@ -149,6 +149,13 @@ pub const ACTIONS: &[Action] = &[
     ),
     action("media.volume_up", "Volume up", "media", "+", "alt+up"),
     action("media.volume_down", "Volume down", "media", "-", "alt+down"),
+    action(
+        "media.freeze",
+        "Freeze or resume moving pictures",
+        "media",
+        "f4",
+        "f4",
+    ),
     action("bookmark", "Bookmark this page", "keep", "m", "ctrl+d"),
     action("bookmarks", "Bookmarks", "keep", "M", "ctrl+b"),
     action(
