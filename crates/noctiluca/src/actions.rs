@@ -115,10 +115,19 @@ pub const ACTIONS: &[Action] = &[
     action(
         "media.play_pause",
         "Play or pause the media",
-        "view",
+        "media",
         "p",
         "alt+p",
     ),
+    action(
+        "media.mute",
+        "Mute or unmute the media",
+        "media",
+        "alt+m",
+        "alt+m",
+    ),
+    action("media.volume_up", "Volume up", "media", "+", "alt+up"),
+    action("media.volume_down", "Volume down", "media", "-", "alt+down"),
     action("bookmark", "Bookmark this page", "keep", "m", "ctrl+d"),
     action("bookmarks", "Bookmarks", "keep", "M", "ctrl+b"),
     action(

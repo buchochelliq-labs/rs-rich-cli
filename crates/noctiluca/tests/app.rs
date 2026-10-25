@@ -309,3 +309,72 @@ fn a_select_is_keyed_by_option_and_its_disabled_option_cannot_be_chosen() {
         std::thread::sleep(Duration::from_millis(10));
     }
 }
+
+/// The fake engine with the audio page's element ready to play.
+fn audio_engine() -> FakeEngine {
+    let engine = engine();
+    engine.state.lock().unwrap().media.insert(
+        3,
+        noctiluca::engine::Playback {
+            paused: true,
+            muted: false,
+            volume: 1.0,
+            time: 0.0,
+            duration: Some(2.0),
+            ended: false,
+        },
+    );
+    engine
+}
+
+#[test]
+fn media_controls_follow_the_element_and_run_from_keys_and_f1() {
+    let engine = audio_engine();
+    let state = engine.state.clone();
+    let mut driver =
+        app(Box::new(engine), options(Config::default(), "audio.html")).driver(100, 30);
+    wait_for(&mut driver, "audio: Test tone");
+    wait_for(&mut driver, "Play");
+    // Sound is off unless asked for, and the widget says so.
+    assert!(
+        screen(&driver).contains("sound is off: start with --audio"),
+        "{}",
+        screen(&driver)
+    );
+    driver.press("p");
+    wait_for(&mut driver, "Pause");
+    driver.press("alt+m");
+    wait_for(&mut driver, "Unmute");
+    driver.press("-");
+    let start = Instant::now();
+    while state.lock().unwrap().media[&3].volume > 0.95 {
+        assert!(
+            start.elapsed() < Duration::from_secs(10),
+            "no volume change"
+        );
+        driver.settle();
+        std::thread::sleep(Duration::from_millis(10));
+    }
+    let playback = state.lock().unwrap().media[&3];
+    assert!(!playback.paused && playback.muted && (playback.volume - 0.9).abs() < 1e-9);
+    // F1 says what the media actions would do now.
+    driver.press("f1");
+    driver.type_text("media");
+    wait_for(&mut driver, "Pause the media");
+    assert!(
+        screen(&driver).contains("Unmute the media"),
+        "{}",
+        screen(&driver)
+    );
+}
+
+#[test]
+fn a_site_with_audio_off_keeps_its_media_muted() {
+    let config = Config::parse("[site.\"fixture.example\"]\naudio = false\n").unwrap();
+    let engine = audio_engine();
+    let state = engine.state.clone();
+    let mut driver = app(Box::new(engine), options(config, "audio.html")).driver(100, 30);
+    wait_for(&mut driver, "audio: Test tone");
+    wait_for(&mut driver, "Unmute");
+    assert!(state.lock().unwrap().media[&3].muted);
+}

@@ -79,6 +79,30 @@ pub struct PageSnapshot {
 /// `backendNodeId`).
 pub type NodeId = i64;
 
+/// A media element's playback, read from the element itself.
+#[derive(Clone, Copy, Debug, Default, PartialEq)]
+pub struct Playback {
+    pub paused: bool,
+    pub muted: bool,
+    /// 0 to 1.
+    pub volume: f64,
+    /// Seconds.
+    pub time: f64,
+    /// Seconds; `None` while unknown, or for a live stream.
+    pub duration: Option<f64>,
+    pub ended: bool,
+}
+
+/// What to do to a media element.
+#[derive(Clone, Copy, Debug, PartialEq)]
+pub enum MediaOp {
+    Play,
+    Pause,
+    Mute(bool),
+    /// 0 to 1.
+    Volume(f64),
+}
+
 /// Something done to the page, as real input where the page can tell.
 #[derive(Clone, Debug, PartialEq)]
 pub enum PageAction {
@@ -98,6 +122,9 @@ pub enum PageAction {
     SetRange { node: NodeId, value: f64 },
     /// Scroll the page so this many CSS pixels are above the viewport.
     ScrollTo(f64),
+    /// Play, pause, mute or set the volume of a video or audio element,
+    /// as the user's own gesture.
+    Media { node: NodeId, op: MediaOp },
 }
 
 /// What happened in the engine since it was last asked.
@@ -145,6 +172,10 @@ pub trait Engine: Send {
     /// Pixels of `region`, in CSS pixels of the document.
     fn capture(&mut self, tab: TabId, region: Rect, format: Format) -> io::Result<Frame>;
     fn act(&mut self, tab: TabId, action: &PageAction) -> io::Result<()>;
+    /// A video or audio element's playback now.
+    fn playback(&mut self, _tab: TabId, _node: NodeId) -> io::Result<Playback> {
+        Err(io::Error::new(io::ErrorKind::Unsupported, "no media here"))
+    }
     /// What happened since the last call.
     fn events(&mut self) -> Vec<EngineEvent>;
 }

@@ -10,7 +10,8 @@ use rich_embed::PageState;
 use serde_json::Value;
 
 use crate::engine::{
-    Engine, EngineEvent, Format, Frame, HistoryStep, PageAction, PageSnapshot, Rect, TabId,
+    Engine, EngineEvent, Format, Frame, HistoryStep, MediaOp, PageAction, PageSnapshot, Playback,
+    Rect, TabId,
 };
 
 /// What a [`FakeEngine`] shows, shared with the test.
@@ -26,6 +27,8 @@ pub struct FakeState {
     pub actions: Vec<PageAction>,
     pub opened: Vec<String>,
     pub events: Vec<EngineEvent>,
+    /// Media elements' playback, by node; media ops change it.
+    pub media: HashMap<i64, Playback>,
 }
 
 /// What a test does when an action runs.
@@ -201,6 +204,17 @@ impl Engine for FakeEngine {
         {
             let mut state = self.lock();
             state.actions.push(action.clone());
+            if let PageAction::Media { node, op } = action {
+                if let Some(p) = state.media.get_mut(node) {
+                    match op {
+                        MediaOp::Play => p.paused = false,
+                        MediaOp::Pause => p.paused = true,
+                        MediaOp::Mute(on) => p.muted = *on,
+                        MediaOp::Volume(v) => p.volume = *v,
+                    }
+                }
+                state.events.push(EngineEvent::Changed);
+            }
             match hook.as_mut() {
                 Some(hook) => hook(action, &mut state),
                 None => follow(action, &mut state),
@@ -208,6 +222,14 @@ impl Engine for FakeEngine {
         }
         self.on_act = hook;
         Ok(())
+    }
+
+    fn playback(&mut self, _tab: TabId, node: i64) -> io::Result<Playback> {
+        self.lock()
+            .media
+            .get(&node)
+            .copied()
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no media"))
     }
 
     fn events(&mut self) -> Vec<EngineEvent> {

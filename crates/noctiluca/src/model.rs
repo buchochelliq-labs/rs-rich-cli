@@ -292,6 +292,8 @@ pub struct Media {
     pub src: String,
     /// A still of it, as image bytes (PNG), once captured.
     pub still: Option<Arc<[u8]>>,
+    /// A video's or an audio's playback, read from the element.
+    pub playback: Option<crate::engine::Playback>,
 }
 
 /// An action's binding to its target: the document, the node, and the
@@ -1057,6 +1059,7 @@ impl Walker<'_> {
             alt: truncate(&alt, 500),
             src: truncate(&src, 2000),
             still: None,
+            playback: None,
         });
         self.block(BlockKind::Media(index), i, context);
     }

@@ -22,7 +22,8 @@ use rich_embed::{ChromeEngine, DevTools, DevToolsEvent, Downloads, PageState, We
 use serde_json::{json, Value};
 
 use crate::engine::{
-    Engine, EngineEvent, Format, Frame, HistoryStep, PageAction, PageSnapshot, Rect, TabId,
+    Engine, EngineEvent, Format, Frame, HistoryStep, MediaOp, PageAction, PageSnapshot, Playback,
+    Rect, TabId,
 };
 
 /// How long one DevTools call may take.
@@ -68,7 +69,8 @@ pub const PING_SCRIPT: &str = r#"(function start(tries) {
   };
   new MutationObserver(changed).observe(document,
     { subtree: true, childList: true, attributes: true, characterData: true });
-  for (const type of ['input', 'change', 'load', 'toggle', 'play', 'pause', 'ended'])
+  for (const type of ['input', 'change', 'load', 'toggle', 'play', 'playing', 'pause', 'ended',
+                      'volumechange', 'seeked', 'loadedmetadata'])
     document.addEventListener(type, changed, true);
   let last = '';
   setInterval(() => {
@@ -238,8 +240,11 @@ impl ChromeBackend {
     ) -> io::Result<Value> {
         let result = self.call(
             "Runtime.callFunctionOn",
+            // As the user's own gesture, so a play the user asked for is
+            // not refused as autoplay; promises are awaited.
             json!({"objectId": object, "functionDeclaration": function,
-                   "arguments": arguments, "returnByValue": true}),
+                   "arguments": arguments, "returnByValue": true,
+                   "userGesture": true, "awaitPromise": true}),
         )?;
         if let Some(details) = result.get("exceptionDetails") {
             let text = details["exception"]["description"]
@@ -422,6 +427,22 @@ impl Engine for ChromeBackend {
                     vec![json!({"value": value})],
                 )
                 .map(drop),
+            PageAction::Media { node, op } => {
+                let (function, argument) = match op {
+                    MediaOp::Play => (
+                        "function() { return this.play().then(() => true); }",
+                        json!(null),
+                    ),
+                    MediaOp::Pause => ("function() { this.pause(); }", json!(null)),
+                    MediaOp::Mute(on) => ("function(on) { this.muted = on; }", json!(on)),
+                    MediaOp::Volume(v) => (
+                        "function(v) { this.volume = Math.min(1, Math.max(0, v)); }",
+                        json!(v),
+                    ),
+                };
+                self.call_on(*node, function, vec![json!({"value": argument})])
+                    .map(drop)
+            }
             PageAction::ScrollTo(y) => {
                 let context = self.world()?;
                 self.call(
@@ -432,6 +453,24 @@ impl Engine for ChromeBackend {
                 .map(drop)
             }
         }
+    }
+
+    fn playback(&mut self, _tab: TabId, node: i64) -> io::Result<Playback> {
+        let value = self.call_on(
+            node,
+            "function() { return [this.paused, this.muted, this.volume, this.currentTime, \
+               isFinite(this.duration) ? this.duration : -1, this.ended]; }",
+            vec![],
+        )?;
+        let at = |i: usize| value.get(i).cloned().unwrap_or(Value::Null);
+        Ok(Playback {
+            paused: at(0).as_bool().unwrap_or(true),
+            muted: at(1).as_bool().unwrap_or(false),
+            volume: at(2).as_f64().unwrap_or(1.0),
+            time: at(3).as_f64().unwrap_or(0.0),
+            duration: at(4).as_f64().filter(|d| *d >= 0.0),
+            ended: at(5).as_bool().unwrap_or(false),
+        })
     }
 
     fn events(&mut self) -> Vec<EngineEvent> {

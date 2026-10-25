@@ -296,6 +296,8 @@ pub enum Piece {
     },
     /// Controls drawn as widgets: one control, or a group of radios.
     Controls(Vec<usize>),
+    /// A video's or an audio's controls: an index into [`Page::media`].
+    Player(usize),
 }
 
 impl Piece {
@@ -305,6 +307,7 @@ impl Piece {
             Piece::Text(lines) => lines.len(),
             Piece::Media { rows, .. } => *rows as usize,
             Piece::Controls(controls) => controls.len().max(1),
+            Piece::Player(_) => 1,
         }
     }
 }
@@ -512,6 +515,8 @@ pub fn reader(page: &Page, width: u16, marks: &Marks) -> Vec<Piece> {
                         index: *index,
                         rows: media_rows(media.rect.height),
                     });
+                } else if matches!(media.kind, MediaKind::Video | MediaKind::Audio) {
+                    pieces.push(Piece::Player(*index));
                 }
             }
             BlockKind::Control(index) => {

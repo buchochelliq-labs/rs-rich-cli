@@ -22,7 +22,9 @@ use std::time::{Duration, Instant};
 
 use rich_embed::PageState;
 
-use crate::engine::{Engine, EngineEvent, Format, HistoryStep, NodeId, PageAction, Rect, TabId};
+use crate::engine::{
+    Engine, EngineEvent, Format, HistoryStep, MediaOp, NodeId, PageAction, Rect, TabId,
+};
 use crate::model::{build, Binding, Control, MediaKind, Page, Revisions, Role};
 
 /// How long after the first change ping the page is read again.
@@ -31,6 +33,8 @@ pub const DEBOUNCE: Duration = Duration::from_millis(100);
 const TICK: Duration = Duration::from_millis(25);
 /// At most this many stills are captured per reading.
 const STILLS_PER_READ: usize = 8;
+/// How often a playing video's or audio's time is read again.
+const PLAYBACK: Duration = Duration::from_millis(500);
 
 /// What an action does to its control.
 #[derive(Clone, Debug, PartialEq)]
@@ -70,6 +74,13 @@ pub enum Command {
     },
     /// Scroll the page so this many CSS pixels are above its viewport.
     Scroll(f64),
+    /// Play, pause, mute or set the volume of the video or audio element
+    /// `node` of the document `document`.
+    Media {
+        document: u64,
+        node: NodeId,
+        op: MediaOp,
+    },
     Resize(u16, u16),
     /// Read the page again now.
     Refresh,
@@ -254,6 +265,7 @@ impl Worker<'_> {
                 media.still = Some(still.clone());
             }
         }
+        self.probe(&mut page);
         let page = Arc::new(page);
         if self.page.as_deref() != Some(&*page) {
             (self.update)(Update::Page(page.clone()));
@@ -261,6 +273,37 @@ impl Worker<'_> {
         self.page = Some(page.clone());
         self.dirty = None;
         Some(page)
+    }
+
+    /// Read each video's and audio's playback from the element.
+    fn probe(&mut self, page: &mut Page) {
+        for media in &mut page.media {
+            if matches!(media.kind, MediaKind::Video | MediaKind::Audio) {
+                media.playback = self.engine.playback(TabId(0), media.node).ok();
+            }
+        }
+    }
+
+    /// While something plays, its time moves with no page change: read
+    /// the playback again, and publish it if it moved.
+    fn follow_playback(&mut self) {
+        let Some(page) = self.page.clone() else {
+            return;
+        };
+        if !page
+            .media
+            .iter()
+            .any(|m| m.playback.is_some_and(|p| !p.paused))
+        {
+            return;
+        }
+        let mut next = (*page).clone();
+        self.probe(&mut next);
+        if next != *page {
+            let next = Arc::new(next);
+            self.page = Some(next.clone());
+            (self.update)(Update::Page(next));
+        }
     }
 
     /// Capture the images that have no still yet, and publish the page
@@ -320,6 +363,28 @@ impl Worker<'_> {
                 self.read();
                 Ok(())
             }
+            Command::Media { document, node, op } => {
+                let page = self
+                    .read()
+                    .ok_or_else(|| Refusal::Stale("The page is not ready.".into()))?;
+                if page.document != document {
+                    return Err(Refusal::Stale(
+                        "Stale document: the tab went to another page.".into(),
+                    ));
+                }
+                if !page
+                    .media
+                    .iter()
+                    .any(|m| m.node == node && m.playback.is_some())
+                {
+                    return Err(Refusal::Stale(
+                        "That video or audio is gone from the page.".into(),
+                    ));
+                }
+                self.engine
+                    .act(TabId(0), &PageAction::Media { node, op })
+                    .map_err(failed)
+            }
             Command::Act { binding, intent } => {
                 let page = self
                     .read()
@@ -377,12 +442,16 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
     };
     // Read once at the start, then whenever something says to.
     let mut read_now = true;
+    let mut probed = Instant::now();
     loop {
         match commands.recv_timeout(TICK) {
             Ok((id, command)) => {
                 let acts = matches!(
                     command,
-                    Command::Act { .. } | Command::Activate { .. } | Command::Scroll(_)
+                    Command::Act { .. }
+                        | Command::Activate { .. }
+                        | Command::Scroll(_)
+                        | Command::Media { .. }
                 );
                 let result = worker.run_command(command);
                 update(Update::Done(id, result));
@@ -413,6 +482,10 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
             }
             worker.state = state.clone();
             update(Update::State(state));
+        }
+        if probed.elapsed() >= PLAYBACK {
+            probed = Instant::now();
+            worker.follow_playback();
         }
         let due = worker
             .dirty

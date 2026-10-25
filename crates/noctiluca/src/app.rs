@@ -14,16 +14,18 @@ use rich_embed::PageState;
 use rich_intuituive::interact::keymap::{try_keys, Keymap};
 use rich_intuituive::interact::{Key, KeyCode};
 use rich_intuituive::prelude::*;
-use rich_intuituive::{image_bytes_of, image_graphics, spawn_stream, Action, ImageView, Pixels};
+use rich_intuituive::{
+    button_of, image_bytes_of, image_graphics, slider, spawn_stream, Action, ImageView, Pixels,
+};
 
 use crate::actions::{self, keys_label, ACTIONS};
 use crate::bookmarks::{Bookmark, Bookmarks};
 use crate::cdp::CELL;
 use crate::clean::{markup, truncate};
 use crate::config::{remove_site_key, save_site_key, Config, Images, Site, Target, View};
-use crate::engine::{Engine, HistoryStep, NodeId};
+use crate::engine::{Engine, HistoryStep, MediaOp, NodeId, Playback};
 use crate::layout::{self, hint_labels, matches, to_text, Line, Marks, Piece};
-use crate::model::{Binding, Page, Role};
+use crate::model::{Binding, MediaKind, Page, Role};
 use crate::tab::{Command, Intent, Refusal, Tab, Update};
 use crate::widgets::{web_widget, WebControl};
 
@@ -222,22 +224,21 @@ pub fn availability(b: Browser, id: &str) -> Result<(), String> {
         {
             Err("Find something first.".into())
         }
-        "media.play_pause" => Err(
-            if b.page.with(|p| {
+        "media.play_pause" | "media.mute" | "media.volume_up" | "media.volume_down" => {
+            if current_media(b).is_some() {
+                Ok(())
+            } else if b.page.with(|p| {
                 p.as_ref().is_some_and(|p| {
-                    p.media.iter().any(|m| {
-                        matches!(
-                            m.kind,
-                            crate::model::MediaKind::Video | crate::model::MediaKind::Audio
-                        )
-                    })
+                    p.media
+                        .iter()
+                        .any(|m| matches!(m.kind, MediaKind::Video | MediaKind::Audio))
                 })
             }) {
-                "Video and audio controls come with the media phase.".into()
+                Err("The media is not ready yet.".into())
             } else {
-                "No video or audio on this page.".into()
-            },
-        ),
+                Err("No video or audio on this page.".into())
+            }
+        }
         "bookmark" | "reload" | "address" | "site.bind" | "site.keys" if !has_page => {
             Err("No page yet.".into())
         }
@@ -353,12 +354,162 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
             }
         }
         "bookmarks" => bookmarks_list(b, cx),
+        "media.play_pause" | "media.mute" | "media.volume_up" | "media.volume_down" => {
+            let Some((node, playback)) = current_media(b) else {
+                return;
+            };
+            let op = match id {
+                "media.play_pause" if playback.paused => MediaOp::Play,
+                "media.play_pause" => MediaOp::Pause,
+                "media.mute" => MediaOp::Mute(!playback.muted),
+                // Ten points at a time, kept in 0 to 100%; a muted element
+                // stays muted.
+                "media.volume_up" => MediaOp::Volume((playback.volume + 0.1).min(1.0)),
+                _ => MediaOp::Volume((playback.volume - 0.1).max(0.0)),
+            };
+            media_op(b, node, op);
+        }
         "site.bind" => bind_picker(b, cx),
         "site.keys" => site_keys_list(b, cx),
         "actions" => overlay(b, cx),
         "quit" => cx.quit(),
         _ => {}
     }
+}
+
+/// The video or audio the media actions work on: the one playing, else
+/// the first that is ready.
+pub fn current_media(b: Browser) -> Option<(NodeId, Playback)> {
+    b.page.with(|p| {
+        let page = p.as_ref()?;
+        let ready = || {
+            page.media
+                .iter()
+                .filter_map(|m| Some((m.node, m.playback?)))
+        };
+        ready().find(|(_, p)| !p.paused).or_else(|| ready().next())
+    })
+}
+
+/// Do `op` to the media `node` of the page now.
+fn media_op(b: Browser, node: NodeId, op: MediaOp) {
+    let Some(document) = b.page.with_untracked(|p| p.as_ref().map(|p| p.document)) else {
+        return;
+    };
+    let id = b.send(Command::Media { document, node, op });
+    b.after(id, |result, cx| {
+        if let Err(refusal) = result {
+            cx.toast(format!("[red]{}[/]", markup(&refusal.to_string())));
+        }
+    });
+}
+
+/// Seconds as `m:ss`.
+fn clock(seconds: f64) -> String {
+    let s = seconds.max(0.0).floor() as u64;
+    format!("{}:{:02}", s / 60, s % 60)
+}
+
+/// A video's or an audio's controls, from the element's real state:
+/// Play/Pause and Mute/Unmute with live labels (C1), a volume slider, and
+/// its time. Sound plays on the machine Chrome runs on.
+fn player(b: Browser, node: NodeId) -> Node {
+    let playback = move || {
+        b.page
+            .with(|p| p.as_ref()?.media.iter().find(|m| m.node == node)?.playback)
+    };
+    let volume = signal(
+        b.page
+            .with_untracked(|p| p.as_ref()?.media.iter().find(|m| m.node == node)?.playback)
+            .map_or(100.0, |p| (p.volume * 100.0).round()),
+    );
+    // The slider follows the element, and moving it sets the element.
+    watch(
+        move || playback().map(|p| (p.volume * 100.0).round() as i64),
+        move |v, _| {
+            if let Some(v) = v {
+                if volume.get_untracked() != v as f64 {
+                    volume.set(v as f64);
+                }
+            }
+        },
+    );
+    on_write(volume, move |v, _| {
+        let now = b
+            .page
+            .with_untracked(|p| p.as_ref()?.media.iter().find(|m| m.node == node)?.playback);
+        if now.is_some_and(|p| ((p.volume * 100.0).round() - v).abs() >= 1.0) {
+            media_op(b, node, MediaOp::Volume(v / 100.0));
+        }
+    });
+    let play = button_of(
+        move || {
+            if playback().is_some_and(|p| !p.paused) {
+                "Pause".into()
+            } else {
+                "Play".into()
+            }
+        },
+        move |_| {
+            if let Some(p) = playback() {
+                media_op(
+                    b,
+                    node,
+                    if p.paused {
+                        MediaOp::Play
+                    } else {
+                        MediaOp::Pause
+                    },
+                );
+            }
+        },
+    )
+    .disabled_when(move || playback().is_none())
+    .auto();
+    let mute = button_of(
+        move || {
+            if playback().is_some_and(|p| p.muted) {
+                "Unmute".into()
+            } else {
+                "Mute".into()
+            }
+        },
+        move |_| {
+            if let Some(p) = playback() {
+                media_op(b, node, MediaOp::Mute(!p.muted));
+            }
+        },
+    )
+    .disabled_when(move || playback().is_none())
+    .auto();
+    let status = text(move || {
+        let sound = if b.config.with(|c| c.audio) {
+            ""
+        } else {
+            "  [dim]sound is off: start with --audio[/]"
+        };
+        match playback() {
+            None => format!("[dim]not ready[/]{sound}"),
+            Some(p) => format!(
+                " {} / {}{}{sound}",
+                clock(p.time),
+                p.duration.map_or("live".into(), clock),
+                if p.muted { " [yellow]muted[/]" } else { "" }
+            ),
+        }
+    })
+    .auto();
+    row([
+        play,
+        label(" ").fixed(1),
+        mute,
+        label(" Volume ").auto(),
+        slider(volume, 0.0..=100.0, 10.0).fixed(16),
+        status,
+        label("").flex(1),
+    ])
+    .fixed(1)
+    .name(&format!("player-{node}"))
 }
 
 /// Run a site key's target.
@@ -638,9 +789,17 @@ pub fn overlay_actions(b: Browser) -> Vec<Action> {
             .find(|binding| binding.action == action.id)
             .map(|binding| binding.keys)
             .unwrap_or_default();
+        // The media actions say what they would do now.
+        let label = match (action.id, current_media(b)) {
+            ("media.play_pause", Some((_, p))) if p.paused => "Play the media",
+            ("media.play_pause", Some(_)) => "Pause the media",
+            ("media.mute", Some((_, p))) if p.muted => "Unmute the media",
+            ("media.mute", Some(_)) => "Mute the media",
+            _ => action.label,
+        };
         out.push(Action {
             id: action.id.to_string(),
-            label: action.label.to_string(),
+            label: label.to_string(),
             keys,
             unavailable: availability(b, action.id).err(),
         });
@@ -1008,6 +1167,22 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
                 b.find_at.set(usize::MAX);
             }
             let url = page.url.clone();
+            // A site whose config says `audio = false` keeps its media
+            // muted (sound is a switch of the browser's launch, so a site
+            // cannot turn it on for one run that started without it).
+            if b.config
+                .with_untracked(|c| c.site(&url).is_some_and(|s| s.audio == Some(false)))
+            {
+                for media in &page.media {
+                    if media.playback.is_some_and(|p| !p.muted) {
+                        b.send(Command::Media {
+                            document: page.document,
+                            node: media.node,
+                            op: MediaOp::Mute(true),
+                        });
+                    }
+                }
+            }
             b.page.set(Some(page));
             b.refresh_controls();
             if new_document {
@@ -1041,6 +1216,7 @@ enum PieceKey {
     Text(usize, u64),
     Media(NodeId, u16),
     Controls(Vec<NodeId>),
+    Player(NodeId),
 }
 
 fn piece_keys(page: &Page, pieces: &[Piece], images: Images) -> Vec<PieceKey> {
@@ -1060,6 +1236,7 @@ fn piece_keys(page: &Page, pieces: &[Piece], images: Images) -> Vec<PieceKey> {
             Piece::Controls(c) => Some(PieceKey::Controls(
                 c.iter().map(|i| page.controls[*i].node).collect(),
             )),
+            Piece::Player(i) => Some(PieceKey::Player(page.media[*i].node)),
         })
         .collect()
 }
@@ -1137,6 +1314,7 @@ fn reader_view(b: Browser) -> Node {
                 row([picture.fixed(width), label("").flex(1)]).fixed(rows)
             }
             PieceKey::Controls(nodes) => web_widget(b, nodes),
+            PieceKey::Player(node) => player(b, node),
         }
     };
     scroll_with(each(keys, build), b.scroll)

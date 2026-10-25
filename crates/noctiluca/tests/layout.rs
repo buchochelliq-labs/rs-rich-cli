@@ -18,6 +18,7 @@ fn text_of(pieces: &[Piece]) -> Vec<String> {
             Piece::Text(lines) => out.extend(lines.iter().map(Line::plain)),
             Piece::Media { index, rows } => out.push(format!("<media {index} x{rows}>")),
             Piece::Controls(c) => out.push(format!("<controls {c:?}>")),
+            Piece::Player(i) => out.push(format!("<player {i}>")),
         }
     }
     out

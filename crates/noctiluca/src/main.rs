@@ -179,6 +179,7 @@ fn browse(args: Args) -> std::io::Result<()> {
     if let Some(fps) = args.fps {
         config.fps = fps;
     }
+    config.audio |= args.audio;
     let marks = bookmarks::default_path()
         .map(|p| Bookmarks::load(&p))
         .transpose()?
