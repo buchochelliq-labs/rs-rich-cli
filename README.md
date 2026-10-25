@@ -95,25 +95,25 @@ in the release notes; the crates.io links show available packages.
 <!-- BEGIN MANIFEST VERSIONS -->
 | Package | Manifest version |
 |---|---|
-| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.12` |
-| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.6` |
-| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.6` |
-| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.19` |
-| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.22` |
-| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.15` |
-| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.8` |
-| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.6` |
-| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.10` |
-| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.10` |
-| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.8` |
-| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.5` |
-| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.6` |
-| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.7` |
-| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.7` |
-| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.5` |
-| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.5` |
-| [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.1` |
-| [`noctiluca`](https://crates.io/crates/noctiluca) | `0.0.1` |
+| [`rs-rich`](https://crates.io/crates/rs-rich) | `0.0.13` |
+| [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api) | `0.0.7` |
+| [`rs-rich-macros`](https://crates.io/crates/rs-rich-macros) | `0.0.7` |
+| [`rs-rich-ext`](https://crates.io/crates/rs-rich-ext) | `0.0.20` |
+| [`rs-rich-cli`](https://crates.io/crates/rs-rich-cli) | `0.0.23` |
+| [`rs-rich-art`](https://crates.io/crates/rs-rich-art) | `0.0.16` |
+| [`rs-rich-mermaid`](https://crates.io/crates/rs-rich-mermaid) | `0.0.9` |
+| [`rs-rich-lumis`](https://crates.io/crates/rs-rich-lumis) | `0.0.7` |
+| [`rs-rich-record`](https://crates.io/crates/rs-rich-record) | `0.0.11` |
+| [`rs-rich-interact`](https://crates.io/crates/rs-rich-interact) | `0.0.11` |
+| [`rs-rich-micro`](https://crates.io/crates/rs-rich-micro) | `0.0.9` |
+| [`rs-rich-diagram`](https://crates.io/crates/rs-rich-diagram) | `0.0.6` |
+| [`rs-rich-data`](https://crates.io/crates/rs-rich-data) | `0.0.7` |
+| [`rs-rich-ratatui`](https://crates.io/crates/rs-rich-ratatui) | `0.0.8` |
+| [`rs-rich-intuituive`](https://crates.io/crates/rs-rich-intuituive) | `0.0.8` |
+| [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.6` |
+| [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.6` |
+| [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.2` |
+| [`noctiluca`](https://crates.io/crates/noctiluca) | `0.0.2` |
 <!-- END MANIFEST VERSIONS -->
 
 | | Package | Role | Import / installed name |

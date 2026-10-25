@@ -2,7 +2,7 @@
 
 What each release delivered, and where this goes next: the
 [plan to 1.0.0](plans/1.0.0.md), after the 0.0.22 cohort (published
-2026-10-25) and with [0.0.23](plans/0.0.23.md) planned.
+2026-10-25) and with [0.0.23](plans/0.0.23.md) in progress.
 Ordered by what unblocks people, not by what is most interesting to build.
 
 Two rules constrain everything here:

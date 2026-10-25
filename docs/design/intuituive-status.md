@@ -13,7 +13,8 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   new crates, `rs-rich-marketplace` and `noctiluca`; their first versions
   went up with the environment's token.
 - **0.0.23 is started** ([plan](../plans/0.0.23.md)): what 0.0.22 handed
-  on, filled in now that 0.0.22 is tagged.
+  on, filled in now that 0.0.22 is tagged. Its versions are open (every
+  package one patch past 0.0.22).
 
 ## Where things stood (2026-10-25, morning)
 

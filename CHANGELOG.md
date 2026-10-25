@@ -9,6 +9,22 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Versions: the 0.0.23 versions are open
+
+- Every package moves one patch past the 0.0.22 cohort, as the
+  [0.0.23 plan](docs/plans/0.0.23.md#package-impact) lists: core 0.0.13,
+  macros 0.0.7, plugin API 0.0.7, art 0.0.16, diagram 0.0.6, Mermaid 0.0.9,
+  lumis 0.0.7, ext 0.0.20, micro 0.0.9, record 0.0.11, interact 0.0.11,
+  ratatui 0.0.8, intuituive 0.0.8, embed 0.0.6, web 0.0.6, data 0.0.7,
+  marketplace 0.0.2, noctiluca 0.0.2, the CLI 0.0.23 and `rs-rich` 0.0.11
+  on PyPI. Cargo's 0.0.x requirements are exact, so every crate that
+  depends on one that moves moves too. `RELEASES.toml`, the three
+  lockfiles (the root, the Python bindings' and the docs playground's), the
+  version tables, the CLI reference and the intuiTUIve app template follow.
+  The Python bindings' lockfile also gains `rs-rich-marketplace` and
+  `minisign-verify`, which the CLI needs since 0.0.22. `docs-versions.toml`
+  pins 0.0.22's docs to the commit before this one.
+
 ## 0.0.22 cohort — published 2026-10-25
 
 Published on 2026-10-25 from `6e8e82e` by one `release.yml` run (tag
