@@ -470,6 +470,92 @@ is worth porting (Linux CI only).
   the action registry, so they follow the same availability rules.
 - **The mouse** works throughout: click, wheel, and drag-select in text.
 
+### Going places: shortcuts, switches and keys
+
+Built in the reader phase.
+
+**Site shortcuts (keywords).** `noctiluca gh rs-rich`, or `gh rs-rich`
+typed in the address bar, expands a keyword's template:
+`gh = "https://github.com/search?q={}"`. The query is percent-encoded
+before it goes in. A keyword with no argument opens its home address
+(`gh` alone opens `https://github.com`). A few are built in: `rs`
+(docs.rs), `mdn`, `crates` (crates.io) and `gh` (GitHub). The config can
+override or remove each. Bookmarks can carry a keyword too.
+
+**The address bar decides in this order:** a URL (a scheme, a path to a
+local file, or something that looks like a host: `localhost:8080`,
+`example.com/x`), then a keyword, then a search. The search engine is
+configurable. Its default is DuckDuckGo's HTML search, with no tracking
+parameters added.
+
+**Config.** A TOML file at `noctiluca/config.toml` in the platform config
+directory (`$XDG_CONFIG_HOME`, else `~/.config`, on Linux; Application
+Support on macOS; `%APPDATA%` on Windows). `noctiluca --config PATH`
+reads another. Tables: `[shortcuts]`, `[search]`, `[keys]`, `[startup]`
+(home page, default view), `[media]` (audio on or off, an fps cap),
+`[profile]` and `[site."…"]`. An unknown key is a warning, not an error,
+so an old config still opens. The crate ships a documented sample,
+`crates/noctiluca/config.sample.toml`.
+
+**Command-line switches,** in the hand-written style of `rs-rich-cli`'s
+commands (`fn parse_args(&[String]) -> Result<Args, String>`; the CLI
+has no clap):
+
+```
+noctiluca [URL | KEYWORD ARGS…]
+  --reader | --projection | --raster    the first view
+  --audio                               let pages play sound
+  --profile NAME                        an opt-in kept profile
+  --chrome PATH                         the browser to run
+  --images ansi|kitty|sixel|iterm2|none how images reach the terminal
+  --fps N                               the media frame cap
+  --dump text|ax|json                   print the page's model and exit
+  --no-js                               turn the page's script off
+  --config PATH                         another config file
+```
+
+`--dump` is for scripts and CI (use cases 7 and 8). `--no-js` uses
+`Emulation.setScriptExecutionDisabled`, which Chrome supports cleanly.
+
+**Keys.** No new key system. Every action is a binding in a
+`rich_interact::keymap::Keymap` (context `noctiluca`), rebound from
+`[keys]` through that crate's `Overrides` (`Keymap::apply`), and bound on
+the app's root with intuiTUIve's `Node::bind` and `Node::bind_sequence`
+(for `g t`). Defaults: `o` open, `O` open in a new tab, `f` link hints,
+`/` find, `H` and `L` back and forward, `g t` and `g T` tabs, `F1`
+actions, `r` the reader toggle, `Ctrl+L` the address bar. `[keys] preset`
+chooses `vim` (those) or `plain` (arrows, `Alt+Left` and `Alt+Right`,
+`Ctrl+F`, `Ctrl+T`). The F1 overlay lists every binding from the same
+registry that runs it, so a rebinding shows there at once.
+
+**Per-site settings.** `[site."github.com"]` tables, matched by host. A
+pattern (`*.example.com`) or a URL prefix (`"https://example.com/docs/"`)
+also works, and the most specific match wins: a URL prefix over an exact
+host over a wildcard, a longer one over a shorter. A site table can set
+`keys` that apply only there, the `view`, `images` and `audio` on or off,
+an `fps` cap, a viewport `width` in cells, and a `keyword` that searches
+the current site. A site key binds to one of three things:
+
+1. a built-in action from the registry: `media.play_pause`, `hints`,
+   `reader`, `scroll.down`, `back`;
+2. "activate the element with this accessible role and name":
+   `{ role = "button", name = "Next page" }`, looked up in the AX tree
+   when the key is pressed;
+3. a sequence of those.
+
+There is no raw JavaScript and no CSS selector. A selector or a script in
+a config file would be page scripting by another name: a shared config
+could then read or post a page's data, and a selector breaks with every
+redesign. A role and a name are what a screen reader user would say,
+they survive restyling, and activating one is the same guarded action a
+person runs by hint, re-checked against the page when it runs.
+
+The design principle stays: the code has no per-site layout and no
+hostname logic. Per-site settings are the user's own overrides over the
+same semantic actions. Site keys show in the F1 overlay, marked with the
+site table they came from. A binding whose element is not on the page is
+listed as unavailable, with the reason.
+
 ### Security
 
 - Chrome runs as a separate process with its sandbox on. rs-rich-embed
@@ -713,6 +799,13 @@ article and a form page.
 - The binary on a PTY, read through rs-rich-record's emulator: start,
   read, quit; the terminal's modes are restored.
 - A snapshot-cost budget on the fixtures, reported (not failed) in CI.
+- [Going places](#going-places-shortcuts-switches-and-keys): keyword
+  expansion with the query escaped; the address bar's order (URL,
+  keyword, search); config parsing and its warnings; the switches; a key
+  rebound in config showing in F1; site matching, most specific first; a
+  site key overriding a global one on its site only; a role and name
+  binding activating the right element on a fixture, and a missing one
+  shown unavailable.
 
 Non-goal: a faithful layout. The first projection may be rough; reader
 mode is one key away.
