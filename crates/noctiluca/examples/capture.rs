@@ -4,6 +4,7 @@
 //! found; run as a normal user). Each page is saved as `OUT_DIR/NAME.json`,
 //! `{"dom": …, "ax": …}`. With `--cost`, prints instead what each reading
 //! costs: the median of five snapshots and five AX trees, and their sizes.
+//! `--columns N` lays the pages out N cells wide (100 by default).
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -24,6 +25,11 @@ fn main() -> std::io::Result<()> {
     if cost {
         args.remove(0);
     }
+    let mut columns = 100;
+    if args.first().is_some_and(|a| a == "--columns") {
+        args.remove(0);
+        columns = args.remove(0).parse().unwrap_or(100);
+    }
     let out = PathBuf::from(if cost {
         ".".to_string()
     } else {
@@ -31,7 +37,7 @@ fn main() -> std::io::Result<()> {
     });
     let mut engine = ChromeBackend::start(ChromeOptions {
         binary: std::env::var_os("RICH_EMBED_CHROME").map(PathBuf::from),
-        columns: 100,
+        columns,
         rows: 40,
         ..ChromeOptions::default()
     })?;

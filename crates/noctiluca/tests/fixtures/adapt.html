@@ -1,0 +1,45 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Adaptations</title>
+<!-- One page with a construct for each terminal adaptation, in ordinary
+     HTML: a navigation sidebar, decorative pictures, an icon-only button,
+     a tall picture, a grid of cards and a picture of text. Laid out at 72
+     columns (576 CSS pixels), a narrow terminal. -->
+<style>
+  body { margin: 0; font: 16px sans-serif }
+  .layout { display: flex }
+  nav { width: 144px; flex: none }
+  nav ul { list-style: none; margin: 0; padding: 0 }
+  nav li { margin: 0 0 8px }
+  main { flex: 1; min-width: 0 }
+  h1, h2, p { margin: 0 0 18px }
+  .grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(80px, 1fr)); gap: 8px }
+  .card { height: 36px }
+  button { font: inherit }
+</style>
+<div class="layout">
+  <nav aria-label="Sections">
+    <ul>
+      <li><a href="#news">News</a></li>
+      <li><a href="#sea">Sea</a></li>
+      <li><a href="#sky">Sky</a></li>
+      <li><a href="#about">About</a></li>
+    </ul>
+  </nav>
+  <main>
+    <h1><img alt="Glow report" width="320" height="36" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 320 36'%3E%3Crect width='320' height='36' fill='%23123'/%3E%3Ctext x='8' y='26' font-size='24' fill='%2335d0ff'%3EGlow report%3C/text%3E%3C/svg%3E"></h1>
+    <p>Before the pictures.<img alt="" width="40" height="40" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4'%3E%3Crect width='4' height='4' fill='%23eee'/%3E%3C/svg%3E"><img aria-hidden="true" alt="flourish" width="40" height="40" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 4 4'%3E%3Crect width='4' height='4' fill='%23ddd'/%3E%3C/svg%3E"><img alt="pixel" width="1" height="1" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 1 1'%3E%3C/svg%3E"></p>
+    <p><button aria-label="Settings"><svg width="16" height="16" viewBox="0 0 16 16"><circle cx="8" cy="8" r="6" fill="currentColor"/></svg></button> <button>Share</button></p>
+    <p><img alt="A tall lighthouse" width="160" height="540" src="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 16 54'%3E%3Crect width='16' height='54' fill='%23345'/%3E%3C/svg%3E"></p>
+    <p>Under the lighthouse.</p>
+    <div class="grid">
+      <div class="card">Card one</div>
+      <div class="card">Card two</div>
+      <div class="card">Card three</div>
+      <div class="card">Card four</div>
+      <div class="card">Card five</div>
+    </div>
+    <p>After the grid.</p>
+  </main>
+</div>

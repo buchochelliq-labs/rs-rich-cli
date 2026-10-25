@@ -11,10 +11,15 @@
 //!   and its meaning revision ([`Page::check`]); a disabled control, and a
 //!   value the page changed under a draft (a commit's base), refuse it.
 //!   Nothing is sent to the page then.
+//! - **Live logs**: a page's live logs (`role=log`, `aria-live`, a scroll
+//!   box it appends to) are followed through the live ping
+//!   ([`EngineEvent::Live`]): only their new and changed entries are read
+//!   ([`Engine::read_live`]), never the whole page, and the page is
+//!   published again with them.
 //! - **Stills**: images get a still, captured from Chrome's own pixels,
 //!   after their page is published, so text never waits for pictures.
 
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
 use std::sync::Arc;
 use std::thread;
@@ -25,7 +30,7 @@ use rich_embed::PageState;
 use crate::engine::{
     Engine, EngineEvent, Format, HistoryStep, MediaOp, Metrics, NodeId, PageAction, Rect, TabId,
 };
-use crate::model::{build, Binding, Control, MediaKind, Page, Revisions, Role};
+use crate::model::{build_with, live_runs, Binding, Control, Entry, MediaKind, Page, Revisions, Role, Run};
 
 /// How long after the first change ping the page is read again.
 pub const DEBOUNCE: Duration = Duration::from_millis(100);
@@ -262,6 +267,10 @@ struct Worker<'a> {
     /// Where Chrome's view was last seen: images near it are captured
     /// first.
     metrics: Option<Metrics>,
+    /// Each live log's entries as read, by log and entry key.
+    live: HashMap<NodeId, HashMap<u64, Vec<Run>>>,
+    /// The scroll boxes the page appends to, as the engine last said.
+    appended: HashSet<NodeId>,
 }
 
 impl Worker<'_> {
@@ -269,7 +278,14 @@ impl Worker<'_> {
     /// navigation swapping the page's process, say).
     fn read(&mut self) -> Option<Arc<Page>> {
         let snapshot = self.engine.snapshot(TabId(0)).ok()?;
-        let mut page = build(&snapshot, &mut self.revisions);
+        if let Ok(boxes) = self.engine.appended(TabId(0)) {
+            self.appended = boxes.into_iter().collect();
+        }
+        let mut page = build_with(&snapshot, &mut self.revisions, &self.appended);
+        if self.page.as_ref().map(|p| p.document) != Some(page.document) {
+            self.live.clear();
+        }
+        self.follow_logs(&mut page);
         for media in &mut page.media {
             if let Some(still) = self
                 .stills
@@ -286,6 +302,70 @@ impl Worker<'_> {
         self.page = Some(page.clone());
         self.dirty = None;
         Some(page)
+    }
+
+    /// Read the live logs' new and changed entries into `page`. An engine
+    /// that cannot read them leaves the snapshot's entries.
+    fn follow_logs(&mut self, page: &mut Page) {
+        let base = page.url.clone();
+        for log in &mut page.logs {
+            let Ok(mut read) = self.engine.read_live(TabId(0), log.node, false) else {
+                continue;
+            };
+            let cache = self.live.entry(log.node).or_default();
+            let missing = |cache: &HashMap<u64, Vec<Run>>, read: &crate::engine::LiveRead| {
+                read.order.iter().any(|k| {
+                    !cache.contains_key(k) && !read.fresh.iter().any(|(f, _)| f == k)
+                })
+            };
+            if missing(cache, &read) {
+                // Out of step (a new reading of ours, say): all of it again.
+                match self.engine.read_live(TabId(0), log.node, true) {
+                    Ok(again) => read = again,
+                    Err(_) => continue,
+                }
+            }
+            let cache = self.live.entry(log.node).or_default();
+            for (key, runs) in &read.fresh {
+                cache.insert(*key, live_runs(runs, &base));
+            }
+            let keep: HashSet<u64> = read.order.iter().copied().collect();
+            cache.retain(|k, _| keep.contains(k));
+            log.entries = read
+                .order
+                .iter()
+                .filter_map(|k| {
+                    let runs = cache.get(k)?;
+                    (!runs.is_empty()).then(|| Entry {
+                        key: *k,
+                        runs: runs.clone(),
+                    })
+                })
+                .collect();
+            if log.entries.len() > crate::model::MAX_ENTRIES {
+                log.entries
+                    .drain(..log.entries.len() - crate::model::MAX_ENTRIES);
+            }
+            log.first_shown = read.first_shown;
+        }
+    }
+
+    /// Only live logs changed: read their entries, not the page, and
+    /// publish the page with them.
+    fn read_live(&mut self) {
+        let Some(page) = self.page.clone() else {
+            return;
+        };
+        if page.logs.is_empty() {
+            return;
+        }
+        let mut next = (*page).clone();
+        self.follow_logs(&mut next);
+        if next != *page {
+            let next = Arc::new(next);
+            self.page = Some(next.clone());
+            (self.update)(Update::Page(next));
+        }
     }
 
     /// Read each video's and audio's playback from the element.
@@ -480,7 +560,10 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
         dirty: None,
         stills: HashMap::new(),
         metrics: None,
+        live: HashMap::new(),
+        appended: HashSet::new(),
     };
+    let mut live_due = false;
     // Read once at the start, then whenever something says to.
     let mut read_now = true;
     let mut probed = Instant::now();
@@ -507,6 +590,7 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
                 EngineEvent::Changed => {
                     worker.dirty.get_or_insert_with(Instant::now);
                 }
+                EngineEvent::Live => live_due = true,
                 EngineEvent::Navigated(_) | EngineEvent::Loaded => read_now = true,
                 EngineEvent::DownloadBegan { guid, name, url } => {
                     update(Update::Download { guid, name, url })
@@ -535,10 +619,15 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
             // A refused reading stays due, and is tried at the next tick.
             if worker.read().is_some() {
                 read_now = false;
+                live_due = false;
                 worker.capture_stills();
             } else {
                 worker.dirty.get_or_insert_with(Instant::now);
             }
+        } else if live_due && worker.dirty.is_none() {
+            // The isolated world debounced it already: read the logs now.
+            live_due = false;
+            worker.read_live();
         }
     }
 }

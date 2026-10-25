@@ -10,12 +10,16 @@
 //!   Chrome backend over rs-rich-embed.
 //! - [`model`]: the page model, rebuilt from each snapshot.
 //! - [`tab`]: a tab on a thread of its own: loading, the debounced change
-//!   ping, guarded actions and stills of images.
+//!   ping, live logs read incrementally, guarded actions and stills of
+//!   images.
+//! - [`adapt`]: the terminal adaptations, named generic rules the
+//!   projection applies, each of which can be switched off.
 //!
 //! Everything the page says is untrusted: control characters are stripped
 //! ([`clean`]) before any of it reaches the terminal.
 
 pub mod actions;
+pub mod adapt;
 pub mod app;
 pub mod args;
 pub mod bookmarks;
