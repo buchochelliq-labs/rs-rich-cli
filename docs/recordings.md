@@ -761,12 +761,13 @@ runs no browser. See [the design note](design/browser.md).
 ### A live log beside a stream
 
 Noctiluca (0.0.23) on `stream-with-log.html`, a local page built from
-ordinary HTML: a `role=log` chat beside the stream, its authors in their
-colours, scrolled up (it holds still) and back, the about page's terminal
-adaptations, and the faithful projection one key away. Recorded before
-the video and the chat's small pictures landed (work in progress), and
-from Chrome's saved snapshot, so the log does not move here; the live
-tests follow it in Chrome.
+ordinary HTML: the stream playing in its region, a `role=log` chat beside
+it with its authors in their colours and its badges and emotes drawn in
+their lines, scrolled up (it holds still) and back, the about page's
+terminal adaptations and codecs, and the faithful projection one key
+away. It replays what Chrome supplied (the snapshot, the page's files,
+Chrome's recorded frames of the video), so the log does not move here;
+the live tests follow it in Chrome.
 
 <div class="tape-player" data-cast="../media/tapes/stream-with-log/stream-with-log.cast" data-poster="npt:0:3">
   <img src="../media/tapes/stream-with-log/stream-with-log.gif" alt="Noctiluca showing a chat log beside a stream, scrolling the log up and back, listing its terminal adaptations and switching to the faithful projection">
@@ -777,6 +778,44 @@ tests follow it in Chrome.
 | ![A chat log beside a stream](media/tapes/stream-with-log/stream.png) | ![The log scrolled up, holding still](media/tapes/stream-with-log/paused.png) | ![The about page listing the terminal adaptations](media/tapes/stream-with-log/about.png) | ![The faithful projection](media/tapes/stream-with-log/faithful.png) |
 
 [Tape](tapes/stream-with-log.tape) · [Cast](media/tapes/stream-with-log/stream-with-log.cast) · [GIF](media/tapes/stream-with-log/stream-with-log.gif) · [Page](media/tapes/stream-with-log/stream-with-log.html)
+
+### A news page
+
+Noctiluca (0.0.23) on `news.html`, a local page with our own pictures:
+the page text as terminal text, each picture in Sixel where the page puts
+it with its caption, a video's poster with its play mark that then plays
+in its region, and further down the stories in a grid with an animated
+GIF. Drawn by Noctiluca and intuiTUIve, the pictures by rs-rich-art; the
+tape replays what Chrome supplied (the snapshot, the page's own picture
+files, Chrome's recorded frames of the video), since the tape job runs no
+browser.
+
+<div class="tape-player" data-cast="../media/tapes/news/news.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/news/news.gif" alt="Noctiluca showing a news page with its pictures and captions, playing its video in place, then the stories in a grid">
+</div>
+
+| The page | Its video playing | The stories |
+|---|---|---|
+| ![A news page with a picture, its caption and a video's poster](media/tapes/news/news.png) | ![The video playing in its region](media/tapes/news/playing.png) | ![Stories in a grid, an animated GIF among them](media/tapes/news/stories.png) |
+
+[Tape](tapes/news.tape) · [Cast](media/tapes/news/news.cast) · [GIF](media/tapes/news/news.gif) · [Page](media/tapes/news/news.html)
+
+### A video page
+
+Noctiluca (0.0.23) on `media-grid.html`: the player's poster, then the
+video playing in its region, the channel's avatar beside its name, the
+buttons as `[ labels ]`, thumbnails side by side with their titles under
+them, and a compact comment list with small avatars.
+
+<div class="tape-player" data-cast="../media/tapes/media-grid/media-grid.cast" data-poster="npt:0:3">
+  <img src="../media/tapes/media-grid/media-grid.gif" alt="Noctiluca showing a video page, playing its video in place, then its thumbnails and comments">
+</div>
+
+| The player | Playing | Up next and comments |
+|---|---|---|
+| ![The watch page with the player's poster](media/tapes/media-grid/watch.png) | ![The video playing in its region](media/tapes/media-grid/playing.png) | ![Thumbnails side by side and the comments](media/tapes/media-grid/grid.png) |
+
+[Tape](tapes/media-grid.tape) · [Cast](media/tapes/media-grid/media-grid.cast) · [GIF](media/tapes/media-grid/media-grid.gif) · [Page](media/tapes/media-grid/media-grid.html)
 
 ## Charts from data
 

@@ -85,6 +85,44 @@ on screen shows the part in view (Sixel and iTerm2 included).
 A page too long to read whole (more than 20,000 blocks) says
 "page cut" in the status line.
 
+## Pictures and video
+
+Pages read as terminal text, with their real pictures where the page puts
+them. Noctiluca draws them itself, with rs-rich-art and intuiTUIve: Kitty,
+Sixel or iTerm2 pixels when the terminal has them (`--images`, or `auto`),
+half blocks anywhere else. Chrome only lays the page out and hands over
+the files it loaded.
+
+- **Pictures** come from the page's own files (an `<img>`, a `<picture>`,
+  a CSS background on a box with no text), at their own quality, else
+  from Chrome's pixels (an SVG). Each fills the box Chrome gave it. A
+  picture with alt text and no caption of the page's gets an
+  `Image: …` line under it.
+- **Small pictures in a line** (a chat's badges and emotes, an icon) are
+  drawn in their line.
+- **Animated GIFs** move. Kitty plays them itself, for no further bytes;
+  elsewhere each frame is sent only when the terminal has room for it,
+  at most eight a second. `F4` freezes every moving picture, and their
+  bytes stop.
+- **Video** shows its poster with a play mark. `p` plays it in its region,
+  from frames Chrome paints, only while it plays; `[` and `]` seek five
+  seconds; `Alt+M` mutes. The status line says `media PLAYING 0:03 / 0:05`.
+- **Within the terminal's bandwidth.** Moving pictures share a byte budget
+  (`[media] bandwidth`, else 4 MB a second here and 256 kB over SSH), at
+  most `[media] fps` frames a second. Short of it, a picture steps down:
+  Kitty, then iTerm2, then Sixel, then half blocks. Over SSH, video starts
+  as half blocks unless `--images` names a protocol.
+
+![A news page in Noctiluca: a picture with its caption, a headline, and a video's poster](../media/tapes/news/news.png)
+
+![A video page in Noctiluca: the player, the channel's avatar and buttons, and thumbnails side by side](../media/tapes/media-grid/grid.png)
+
+Both are local test pages (`news.html`, `media-grid.html`), drawn as the
+proof of concept drew real sites: page text as terminal text, pictures
+inline with their captions, a video's poster with a play mark, the mode
+and address in the header, the media's state, the row and the keys in
+the status line. See [the recordings](../recordings.md#a-news-page).
+
 ## Live logs
 
 A chat beside a stream, a build log, a feed of events: any box the page
@@ -102,7 +140,7 @@ again.
 - A chat's input is an ordinary field: `f` and its hint, type, Enter, then
   its Send button.
 
-![A chat log beside a stream in Noctiluca's projection (recorded before the video and the chat's pictures landed)](../media/tapes/stream-with-log/stream.svg)
+![A chat log beside a playing stream in Noctiluca's projection, its badges and emotes drawn in their lines](../media/tapes/stream-with-log/stream.png)
 
 ## Terminal adaptations
 
@@ -327,15 +365,15 @@ CI.
 |---|---|---|
 | 0.1, reader | Text, links, history, first forms, images, keywords, site keys, the F1 overlay, sound, `--dump` | Done, in 0.0.1 |
 | 0.2, forms and tables | Every widget through the guarded commit, wide tables that scroll with their headers, signing in to a form | Next |
-| 0.3, layout and GIFs | Grid and columns side by side, sticky headers, animated GIFs, the raster view from Chrome's screencast | Later |
-| 0.4, video and audio | Play, pause, seek and mute video, frames under a cap, character art on a slow terminal | Later |
+| 0.3, layout and GIFs | Pictures in the projection, animated GIFs within a byte budget, grids side by side (0.0.23); sticky headers, the layout fixtures | Partly, in 0.0.23 |
+| 0.4, video and audio | Play, pause, seek and mute video in its region, frames under a byte cap, stepping down to character art on a slow terminal, the codec table (0.0.23) | Done in 0.0.23 |
 | 0.5, automation | Scripts that drive a page through the same actions a person runs | Later |
 
 Never: DRM playback, extensions, getting past bot checks, CAPTCHAs or
 sign-in walls, or sending messages for you.
 
-The first projection is rough: no fixed or sticky layer, no paint order,
-and media drawn as framed alt text. Reader mode is one key away. Watch
+The projection is still rough in places: no fixed or sticky layer and no
+paint order yet. Reader mode is one key away. Watch
 [the recording](../recordings.md#a-terminal-web-browser) for a page read,
 a link followed by its hint, and the F1 overlay.
 
