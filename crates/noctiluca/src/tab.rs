@@ -11,14 +11,16 @@
 //!   and its meaning revision ([`Page::check`]); a disabled control, and a
 //!   value the page changed under a draft (a commit's base), refuse it.
 //!   Nothing is sent to the page then.
-//! - **Stills**: images get a still, captured from Chrome's own pixels,
-//!   after their page is published, so text never waits for pictures. A
-//!   video's still is its poster, as the bytes the page loaded, else a
-//!   capture of its region.
+//! - **Pictures**: each image's bytes are read after its page is
+//!   published, so text never waits for pictures: the original file the
+//!   page loaded (`Page.getResourceContent`, or a `data:` address's own
+//!   bytes), else a still of Chrome's pixels. A decoder thread makes them
+//!   [`Picture`]s (an animated GIF keeps its frames), and the page is
+//!   published again with them.
 //! - **Frames**: while a video plays in a region the view shows, the
 //!   screencast runs and each playing region's frames are cut from it
 //!   ([`crate::video`]), at most eight a second, or as the app's pacing
-//!   asks ([`Command::Regions`]).
+//!   asks ([`Command::Regions`]). A video's still is its poster.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::mpsc::{self, Receiver, RecvTimeoutError, Sender};
@@ -33,6 +35,7 @@ use crate::engine::{
 };
 use crate::model::{build, Binding, Control, MediaKind, Page, Revisions, Role};
 use crate::video::{Frames, Region, VideoFrame};
+use rich_intuituive::Picture;
 
 /// How long after the first change ping the page is read again.
 pub const DEBOUNCE: Duration = Duration::from_millis(100);
@@ -278,12 +281,16 @@ struct Worker<'a> {
     state: PageState,
     /// When the first change ping since the last reading came.
     dirty: Option<Instant>,
-    stills: HashMap<(NodeId, String, u64, u64), Arc<[u8]>>,
+    stills: HashMap<StillKey, Arc<[u8]>>,
+    /// The pictures decoded from the stills.
+    pictures: HashMap<StillKey, Picture>,
+    /// Stills to decode, to the decoder thread.
+    decode: Sender<Job>,
+    /// Pictures decoded, from the decoder thread.
+    decoded: Receiver<(StillKey, Picture)>,
     /// Where Chrome's view was last seen: images near it are captured
     /// first.
     metrics: Option<Metrics>,
-    /// Posters by address: the bytes, or `None` when they could not be had.
-    posters: HashMap<String, Option<Arc<[u8]>>>,
     frames: Frames,
     /// The regions the view shows, and the pacing's intervals.
     on_screen: HashSet<NodeId>,
@@ -302,29 +309,11 @@ impl Worker<'_> {
         let snapshot = self.engine.snapshot(TabId(0)).ok()?;
         let mut page = build(&snapshot, &mut self.revisions);
         for media in &mut page.media {
-            if let Some(still) = self
-                .stills
-                .get(&still_key(media.node, &media.src, media.rect))
-            {
+            let key = still_key(media.node, picture_source(media), media.rect);
+            if let Some(still) = self.stills.get(&key) {
                 media.still = Some(still.clone());
             }
-            if media.kind == MediaKind::Video && !media.poster.is_empty() {
-                let poster = media.poster.clone();
-                let bytes = self
-                    .posters
-                    .entry(poster.clone())
-                    .or_insert_with(|| {
-                        self.engine
-                            .resource(TabId(0), &poster)
-                            .ok()
-                            .filter(|b| !b.is_empty())
-                            .map(Into::into)
-                    })
-                    .clone();
-                if bytes.is_some() {
-                    media.still = bytes;
-                }
-            }
+            media.picture = self.pictures.get(&key).cloned();
         }
         self.probe(&mut page);
         let page = Arc::new(page);
@@ -392,7 +381,7 @@ impl Worker<'_> {
                 break;
             }
             if self.engine.image_ready(TabId(0), m.node).unwrap_or(true) {
-                wanted.push((m.node, m.src.clone(), m.rect));
+                wanted.push((m.node, picture_source(m).to_string(), m.rect));
             }
         }
         if wanted.is_empty() {
@@ -401,16 +390,11 @@ impl Worker<'_> {
         let mut page = (*page).clone();
         let mut any = false;
         for (node, src, rect) in wanted {
-            let region = Rect::new(
-                rect.x,
-                rect.y,
-                rect.width.min(4000.0),
-                rect.height.min(4000.0),
-            );
-            if let Ok(frame) = self.engine.capture(TabId(0), region, Format::Png) {
-                let still: Arc<[u8]> = frame.bytes.into();
-                self.stills
-                    .insert(still_key(node, &src, rect), still.clone());
+            if let Some(bytes) = self.picture_bytes(&src, rect) {
+                let still: Arc<[u8]> = bytes.into();
+                let key = still_key(node, &src, rect);
+                self.stills.insert(key.clone(), still.clone());
+                let _ = self.decode.send((key, still.clone()));
                 for media in page.media.iter_mut().filter(|m| m.node == node) {
                     media.still = Some(still.clone());
                 }
@@ -421,6 +405,58 @@ impl Worker<'_> {
             let page = Arc::new(page);
             self.page = Some(page.clone());
             (self.update)(Update::Page(page));
+        }
+    }
+
+    /// An image's bytes: the original file the page loaded (from the
+    /// browser's cache, so animated GIFs keep their frames), a `data:`
+    /// address's own bytes, else a still of Chrome's pixels of `rect` (an
+    /// SVG, or a picture no longer in the cache).
+    fn picture_bytes(&mut self, src: &str, rect: Rect) -> Option<Vec<u8>> {
+        let original = if let Some(data) = src.strip_prefix("data:") {
+            data_bytes(data)
+        } else if src.is_empty() {
+            None
+        } else {
+            self.engine.resource(TabId(0), src).ok()
+        };
+        if let Some(bytes) = original.filter(|b| decodable(b)) {
+            return Some(bytes);
+        }
+        let region = Rect::new(
+            rect.x,
+            rect.y,
+            rect.width.min(4000.0),
+            rect.height.min(4000.0),
+        );
+        self.engine
+            .capture(TabId(0), region, Format::Png)
+            .ok()
+            .map(|frame| frame.bytes)
+    }
+
+    /// Put the pictures decoded since the last look on the page, and
+    /// publish it again.
+    fn take_decoded(&mut self) {
+        let mut any = false;
+        while let Ok((key, picture)) = self.decoded.try_recv() {
+            self.pictures.insert(key, picture);
+            any = true;
+        }
+        let Some(page) = self.page.clone().filter(|_| any) else {
+            return;
+        };
+        let mut next = (*page).clone();
+        for media in &mut next.media {
+            let key = still_key(media.node, picture_source(media), media.rect);
+            if let Some(picture) = self.pictures.get(&key) {
+                media.picture = Some(picture.clone());
+            }
+        }
+        if next != *page {
+            let next = Arc::new(next);
+            self.page = Some(next.clone());
+            (self.update)(Update::Page(next));
         }
     }
 
@@ -648,7 +684,55 @@ impl Worker<'_> {
     }
 }
 
-fn still_key(node: NodeId, src: &str, rect: Rect) -> (NodeId, String, u64, u64) {
+/// What a still is kept by: the node, its address and its size.
+type StillKey = (NodeId, String, u64, u64);
+/// A still for the decoder thread.
+type Job = (StillKey, Arc<[u8]>);
+
+/// Whether rs-rich-art can decode `bytes` (an SVG cannot: it gets a
+/// still of Chrome's pixels instead).
+fn decodable(bytes: &[u8]) -> bool {
+    image::guess_format(bytes).is_ok()
+}
+
+/// The bytes of a `data:` address's body (after `data:`), when it is
+/// base64; at most 16 MiB.
+fn data_bytes(data: &str) -> Option<Vec<u8>> {
+    let (head, body) = data.split_once(',')?;
+    if !head.ends_with(";base64") || body.len() > 22 << 20 {
+        return None;
+    }
+    crate::cdp::base64_decode(body)
+}
+
+/// The decoder thread: each still into a picture, an animated GIF with its
+/// frames. It ends when the tab does.
+fn decoder() -> (Sender<Job>, Receiver<(StillKey, Picture)>) {
+    let (send, jobs) = mpsc::channel::<Job>();
+    let (done, decoded) = mpsc::channel();
+    thread::spawn(move || {
+        while let Ok((key, bytes)) = jobs.recv() {
+            if let Ok(picture) = Picture::decode_animated(&bytes) {
+                if done.send((key, picture)).is_err() {
+                    return;
+                }
+            }
+        }
+    });
+    (send, decoded)
+}
+
+/// Where a media region's picture comes from: a video's poster when it has
+/// one (else what Chrome paints in its region), an image's source.
+fn picture_source(media: &crate::model::Media) -> &str {
+    if media.kind == MediaKind::Video {
+        &media.poster
+    } else {
+        &media.src
+    }
+}
+
+fn still_key(node: NodeId, src: &str, rect: Rect) -> StillKey {
     (
         node,
         src.to_string(),
@@ -658,6 +742,7 @@ fn still_key(node: NodeId, src: &str, rect: Rect) -> (NodeId, String, u64, u64) 
 }
 
 fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn Fn(Update)) {
+    let (decode, decoded) = decoder();
     let mut worker = Worker {
         engine,
         update,
@@ -666,8 +751,10 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
         state: PageState::default(),
         dirty: None,
         stills: HashMap::new(),
+        pictures: HashMap::new(),
+        decode,
+        decoded,
         metrics: None,
-        posters: HashMap::new(),
         frames: Frames::default(),
         on_screen: HashSet::new(),
         intervals: HashMap::new(),
@@ -717,6 +804,7 @@ fn run(engine: Box<dyn Engine>, commands: Receiver<(u64, Command)>, update: &dyn
             worker.state = state.clone();
             update(Update::State(state));
         }
+        worker.take_decoded();
         if probed.elapsed() >= PLAYBACK {
             probed = Instant::now();
             worker.follow_playback();

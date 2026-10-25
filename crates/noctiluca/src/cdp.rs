@@ -48,6 +48,7 @@ pub const SNAPSHOT_STYLES: &[&str] = &[
     "text-decoration-line",
     "white-space",
     "opacity",
+    "background-image",
 ];
 
 /// The script of the isolated world. It reports only that something
@@ -516,6 +517,29 @@ impl Engine for ChromeBackend {
         })
     }
 
+    fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {
+        let tree = self.call("Page.getFrameTree", json!({}))?;
+        let frame = tree["frameTree"]["frame"]["id"]
+            .as_str()
+            .ok_or_else(|| io::Error::other("no main frame"))?
+            .to_string();
+        let result = self.call(
+            "Page.getResourceContent",
+            json!({"frameId": frame, "url": url}),
+        )?;
+        let content = result["content"].as_str().unwrap_or_default();
+        let bytes = if result["base64Encoded"].as_bool() == Some(true) {
+            base64_decode(content)
+                .ok_or_else(|| io::Error::other("a resource that is not base64"))?
+        } else {
+            content.as_bytes().to_vec()
+        };
+        if bytes.is_empty() {
+            return Err(io::Error::new(ErrorKind::NotFound, "an empty resource"));
+        }
+        Ok(bytes)
+    }
+
     fn image_ready(&mut self, _tab: TabId, node: i64) -> io::Result<bool> {
         let value = self.call_on(
             node,
@@ -549,24 +573,6 @@ impl Engine for ChromeBackend {
 
     fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {
         self.engine.take_screencast()
-    }
-
-    fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {
-        // What the page loaded, as Chrome holds it: no new request.
-        let tree = self.call("Page.getFrameTree", json!({}))?;
-        let frame = tree["frameTree"]["frame"]["id"]
-            .as_str()
-            .unwrap_or_default();
-        let content = self.call(
-            "Page.getResourceContent",
-            json!({"frameId": frame, "url": url}),
-        )?;
-        let text = content["content"].as_str().unwrap_or_default();
-        if content["base64Encoded"].as_bool().unwrap_or(false) {
-            base64_decode(text).ok_or_else(|| io::Error::other("a resource that is not base64"))
-        } else {
-            Ok(text.as_bytes().to_vec())
-        }
     }
 
     fn can_play(&mut self, _tab: TabId, types: &[&str]) -> io::Result<Vec<String>> {

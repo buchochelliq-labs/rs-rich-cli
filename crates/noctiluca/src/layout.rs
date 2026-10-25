@@ -641,6 +641,25 @@ pub fn projection(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) ->
     project(page, columns, cell, marks).lines
 }
 
+/// Where a media region landed in the projection: its first row and
+/// column, its size in cells, and which of [`Page::media`] it shows. A
+/// picture is drawn over these cells.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+pub struct Region {
+    pub row: usize,
+    pub column: usize,
+    pub cols: usize,
+    pub rows: usize,
+    pub media: usize,
+}
+
+impl Region {
+    /// Whether it covers row `row`.
+    pub fn on(&self, row: usize) -> bool {
+        (self.row..self.row + self.rows).contains(&row)
+    }
+}
+
 /// The [`projection`], with what each row is.
 #[derive(Clone, Debug, Default, PartialEq)]
 pub struct Projection {
@@ -656,6 +675,8 @@ pub struct Projection {
     pub y: Vec<f64>,
     /// Each key's row.
     pub rows: HashMap<u64, usize>,
+    /// The media regions, in the order they were placed.
+    pub regions: Vec<Region>,
 }
 
 impl Projection {
@@ -687,6 +708,9 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         lines: Vec<Line>,
         /// The node it shows.
         node: crate::engine::NodeId,
+        /// A media region's index and its picture's rows (the lines after
+        /// are its caption).
+        media: Option<(usize, usize)>,
     }
     let mut items: Vec<Item> = Vec::new();
     let snap = |left: f64, right: f64| -> (usize, usize) {
@@ -712,6 +736,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             wrap: Some((spans, first)),
             lines: Vec::new(),
             node,
+            media: None,
         }
     };
     for block in &page.blocks {
@@ -772,10 +797,20 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                         }
                     })
                     .collect();
+                // A picture the page does not caption gets its alt text
+                // under it, as the PoC showed it.
                 if let Some(mark) = play_mark(media, w) {
                     if let Some(last) = lines.last_mut() {
                         *last = mark;
                     }
+                }
+                if media.kind == MediaKind::Image && !media.captioned && !media.alt.is_empty() {
+                    lines.extend(wrap(
+                        &[Span::new(format!("Image: {}", media.alt), "italic")],
+                        w.max(1),
+                        &[],
+                        &[],
+                    ));
                 }
                 items.push(Item {
                     top: media.rect.y,
@@ -786,6 +821,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     wrap: None,
                     lines,
                     node: media.node,
+                    media: Some((*index, rows)),
                 });
             }
             BlockKind::Control(index) => {
@@ -829,6 +865,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     wrap: None,
                     lines,
                     node: block.node,
+                    media: None,
                 });
             }
             kind => {
@@ -892,10 +929,20 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         let rb = (b.top / ch).round() as i64;
         ra.cmp(&rb).then(a.left.total_cmp(&b.left))
     });
-    let boxes: Vec<(f64, f64, usize, usize, Vec<Line>, crate::engine::NodeId)> = items
+    type Placed = (
+        f64,
+        f64,
+        usize,
+        usize,
+        Vec<Line>,
+        crate::engine::NodeId,
+        Option<(usize, usize)>,
+    );
+    let boxes: Vec<Placed> = items
         .into_iter()
-        .map(|i| (i.top, i.left, i.x0, i.x1, i.lines, i.node))
+        .map(|i| (i.top, i.left, i.x0, i.x1, i.lines, i.node, i.media))
         .collect();
+    let mut regions = Vec::new();
     // Each row's first box: its node, which of its lines, and that line's
     // place on the page.
     let mut owner: Vec<Option<(crate::engine::NodeId, usize, f64)>> = Vec::new();
@@ -904,12 +951,21 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
     // after it); an empty string is the second cell of a wide character.
     let mut grid: Vec<Vec<Option<(String, usize)>>> = Vec::new();
     let mut styles: Vec<(String, Option<usize>)> = Vec::new();
-    for (top, _, x0, x1, lines, node) in boxes {
+    for (top, _, x0, x1, lines, node, media) in boxes {
         // A page can place a block millions of pixels down: blank rows
         // past a few screens tell the reader nothing, so the gap is capped
         // and the grid grows with the content, not the coordinates.
         let y0 = ((top / ch).round().max(0.0) as usize).min(grid.len() + MAX_GAP_ROWS);
         let y = skyline[x0..x1].iter().copied().max().unwrap_or(0).max(y0);
+        if let Some((index, rows)) = media {
+            regions.push(Region {
+                row: y,
+                column: x0,
+                cols: x1 - x0,
+                rows,
+                media: index,
+            });
+        }
         for (k, line) in lines.iter().enumerate() {
             let row = y + k;
             while grid.len() <= row {
@@ -1028,6 +1084,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         keys,
         y,
         rows,
+        regions,
     }
 }
 

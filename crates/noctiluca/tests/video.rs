@@ -26,7 +26,12 @@ use noctiluca::video::{Pacing, VideoFrame};
 use rich_art::picture::{count_picture_bytes, picture_bytes, ByteBudget, Pixels};
 
 fn fixture(name: &str) -> String {
-    file_url(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures").join(name)).unwrap()
+    file_url(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures")
+            .join(name),
+    )
+    .unwrap()
 }
 
 fn start() -> Option<ChromeBackend> {
@@ -70,7 +75,10 @@ impl Watch {
     fn pump(&mut self, for_: Duration) {
         let end = Instant::now() + for_;
         while let Some(left) = end.checked_duration_since(Instant::now()) {
-            match self.updates.recv_timeout(left.min(Duration::from_millis(50))) {
+            match self
+                .updates
+                .recv_timeout(left.min(Duration::from_millis(50)))
+            {
                 Ok(Update::Page(p)) => self.page = Some(p),
                 Ok(Update::Frame(f)) => self.frames.push(f),
                 _ => {}
@@ -120,12 +128,15 @@ fn motion_plays_pauses_and_seeks_and_its_frames_change() {
     w.tab.send(Command::Open(url.clone()));
     w.until("the video, ready", |w| {
         w.page.as_ref().is_some_and(|p| p.url == url)
-            && w.playback().is_some_and(|p| p.ready >= 2 && p.duration.is_some())
+            && w.playback()
+                .is_some_and(|p| p.ready >= 2 && p.duration.is_some())
     });
     let video = w.video().unwrap().clone();
     assert_eq!(video.poster, fixture("glow.png"));
     // The poster is the bytes of the page's own picture.
-    w.until("the poster", |w| w.video().is_some_and(|v| v.still.is_some()));
+    w.until("the poster", |w| {
+        w.video().is_some_and(|v| v.still.is_some())
+    });
     let glow = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/glow.png"))
         .unwrap();
     assert_eq!(&*w.video().unwrap().still.clone().unwrap(), &glow[..]);
@@ -150,7 +161,10 @@ fn motion_plays_pauses_and_seeks_and_its_frames_change() {
     // The region's own size, cut from the screencast.
     assert_eq!((first.pixels.width, first.pixels.height), (320, 180));
     assert!(last.seq > first.seq);
-    assert_ne!(first.pixels.rgb, last.pixels.rgb, "the frames did not change");
+    assert_ne!(
+        first.pixels.rgb, last.pixels.rgb,
+        "the frames did not change"
+    );
     // At most eight a second.
     let count = w.frames.len();
     w.pump(Duration::from_secs(2));
@@ -171,17 +185,23 @@ fn motion_plays_pauses_and_seeks_and_its_frames_change() {
     // frame shows where it went.
     let before = w.frames.last().unwrap().clone();
     w.media(MediaOp::Seek(-100.0));
-    w.until("at the start", |w| w.playback().is_some_and(|p| p.time == 0.0));
+    w.until("at the start", |w| {
+        w.playback().is_some_and(|p| p.time == 0.0)
+    });
     w.media(MediaOp::Seek(2.5));
     w.until("at 2.5 s", |w| {
         w.playback().is_some_and(|p| (p.time - 2.5).abs() < 0.01)
     });
     assert!(w.playback().unwrap().paused);
     w.until("a frame of the seek", |w| {
-        w.frames.last().is_some_and(|f| f.pixels.rgb != before.pixels.rgb)
+        w.frames
+            .last()
+            .is_some_and(|f| f.pixels.rgb != before.pixels.rgb)
     });
     w.media(MediaOp::Seek(100.0));
-    w.until("at the end", |w| w.playback().is_some_and(|p| p.time == 5.0));
+    w.until("at the end", |w| {
+        w.playback().is_some_and(|p| p.time == 5.0)
+    });
 
     // Mute.
     w.media(MediaOp::Mute(true));

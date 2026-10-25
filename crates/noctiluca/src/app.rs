@@ -17,8 +17,8 @@ use rich_intuituive::interact::keymap::{try_keys, Keymap};
 use rich_intuituive::interact::{Key, KeyCode};
 use rich_intuituive::prelude::*;
 use rich_intuituive::{
-    button_of, image_bytes_of, image_graphics, picture_bytes, picture_of, scroll_virtual_with,
-    slider, spawn_stream, Action, ImageView, Picture, Pixels,
+    button_of, image_graphics, picture_bytes, picture_of, scroll_virtual_with, slider,
+    spawn_stream, Action, ImageView, Picture, Pixels,
 };
 
 use crate::actions::{self, ACTIONS};
@@ -29,6 +29,7 @@ use crate::config::{remove_site_key, save_site_key, Config, Images, Site, Target
 use crate::engine::{Engine, HistoryStep, MediaOp, NodeId, Playback};
 use crate::layout::{self, hint_labels, matches, to_text, Line, Marks, Piece, Projection};
 use crate::model::{Binding, MediaKind, Page, Role};
+use crate::pictures::{self, Live};
 use crate::tab::{Command, Intent, Refusal, Tab, Update};
 use crate::video::{Pacing, VideoFrame};
 use crate::widgets::{web_widget, WebControl};
@@ -88,17 +89,21 @@ pub struct Browser {
     pub images_default: Signal<Images>,
     /// The terminal's size in cells.
     pub viewport: Memo<(u16, u16)>,
-    /// Each video region's picture: its newest frame, as the pacing let
-    /// it through.
-    pub videos: Signal<HashMap<NodeId, Picture>>,
-    /// The protocol each video region is drawn in now: its pacing steps
-    /// it down when the terminal is short of bytes.
-    pub video_pixels: Signal<HashMap<NodeId, Pixels>>,
+    /// Each video region's newest frame, as its pacing let it through, and
+    /// the protocol the pacing chose: merged into [`live`](Self::live).
+    pub videos: Signal<Rc<HashMap<NodeId, Live>>>,
     /// The frames' pacing within the terminal's byte budget.
     pacing: Signal<Rc<RefCell<Pacing>>>,
     /// The regions on screen and the pacing's intervals, as last told to
     /// the tab.
     regions_sent: Signal<(Vec<NodeId>, Vec<(NodeId, Duration)>)>,
+    /// The protocol pictures are drawn with, from [`images`](Self::images).
+    pub pixels: Memo<Pixels>,
+    /// Whether moving pictures are held still (`media.freeze`).
+    pub frozen: Signal<bool>,
+    /// The frame each moving picture in view shows now, by node: an
+    /// animated GIF's, stepped within the byte budget.
+    pub live: Signal<Rc<HashMap<NodeId, Live>>>,
     tab: Signal<Tab>,
     waiting: Signal<HashMap<u64, Then>>,
     controls: Signal<HashMap<NodeId, Rc<WebControl>>>,
@@ -232,6 +237,7 @@ fn lay_out(page: &Page, view: View, width: u16, marks: &Marks) -> Projection {
                 keys,
                 y,
                 rows,
+                ..Projection::default()
             }
         }
         _ => layout::project(page, width, (CELL.0 as f64, CELL.1 as f64), marks),
@@ -270,6 +276,44 @@ fn follow_scroll(b: Browser, row: u64, cx: &mut Ctx) {
         }
     });
     b.follow.set(Some(timer));
+}
+
+/// How often moving pictures are looked at: a GIF's frame steps on the
+/// first look after its time (and its byte budget) allows.
+const MOTION: std::time::Duration = std::time::Duration::from_millis(25);
+
+/// Step the moving pictures in view, and publish their frames when one
+/// changed.
+fn step_motion(b: Browser, motion: &mut pictures::Motion) {
+    let page = b.page.get_untracked();
+    let images = b.images.get_untracked();
+    let next = match page {
+        Some(page) if images != Images::None && b.view.get_untracked() != View::Reader => {
+            let first = b.scroll.get_untracked() as usize;
+            let rows = first..first + usize::from(b.viewport.get_untracked().1);
+            b.layout.with_untracked(|l| {
+                motion.step(
+                    &page,
+                    &l.regions,
+                    rows,
+                    b.pixels.get_untracked(),
+                    b.frozen.get_untracked(),
+                    std::time::Instant::now(),
+                )
+            })
+        }
+        _ => HashMap::new(),
+    };
+    // The videos' frames, which come from the tab, with them.
+    let mut next = next;
+    b.videos.with_untracked(|v| {
+        for (node, live) in v.iter() {
+            next.insert(*node, live.clone());
+        }
+    });
+    if b.live.with_untracked(|l| **l != next) {
+        b.live.set(Rc::new(next));
+    }
 }
 
 /// How long the view rests before Chrome's scroll follows it.
@@ -369,6 +413,17 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
         "back" => drop(b.send(Command::History(HistoryStep::Back))),
         "forward" => drop(b.send(Command::History(HistoryStep::Forward))),
         "reload" => drop(b.send(Command::History(HistoryStep::Reload))),
+        "media.freeze" => {
+            let frozen = !b.frozen.get_untracked();
+            b.frozen.set(frozen);
+            // Videos too: no frames while frozen.
+            send_regions(b);
+            b.say(if frozen {
+                "[yellow]Moving pictures frozen[/] · F4 resumes"
+            } else {
+                "Moving pictures resumed"
+            });
+        }
         "find" => find_prompt(b, cx),
         "find.next" | "find.previous" => {
             let found = find_rows(b);
@@ -501,17 +556,15 @@ fn video_frame(b: Browser, frame: &VideoFrame) {
         let picture = pacing.offer(frame, cols, rows, Instant::now(), picture_bytes);
         (picture, pacing.pixels(frame.node))
     });
-    if b.video_pixels
-        .with_untracked(|v| v.get(&frame.node) != Some(&pixels))
-    {
-        b.video_pixels.update(|v| {
-            v.insert(frame.node, pixels);
-        });
-    }
     if let Some(picture) = picture {
-        b.videos.update(|v| {
-            v.insert(frame.node, picture);
-        });
+        let live = Live { picture, pixels };
+        let mut videos = (*b.videos.get_untracked()).clone();
+        videos.insert(frame.node, live.clone());
+        b.videos.set(Rc::new(videos));
+        // Shown at once, with the moving GIFs.
+        let mut shown = (*b.live.get_untracked()).clone();
+        shown.insert(frame.node, live);
+        b.live.set(Rc::new(shown));
     }
     send_regions(b);
 }
@@ -547,7 +600,12 @@ fn regions_on_screen(b: Browser) -> Vec<NodeId> {
 /// Tell the tab which video regions are on screen and how often each may
 /// have a frame, when that changed.
 fn send_regions(b: Browser) {
-    let on_screen = regions_on_screen(b);
+    // Frozen, no region gets frames: the screencast stops.
+    let on_screen = if b.frozen.get_untracked() {
+        Vec::new()
+    } else {
+        regions_on_screen(b)
+    };
     let intervals: Vec<(NodeId, Duration)> = b.pacing.with_untracked(|p| {
         p.borrow()
             .intervals()
@@ -567,34 +625,15 @@ fn send_regions(b: Browser) {
     }
 }
 
-/// A video's region: its newest frame while it has played, else its
-/// poster, in the protocol its pacing chose; with the play mark under it
-/// while it is not playing.
+/// A video's region in reader mode: its newest frame while it has played,
+/// else its poster, in the protocol its pacing chose; with the play mark
+/// under it while it is not playing.
 fn video_region(b: Browser, node: NodeId) -> Node {
-    let poster = memo(move || {
-        b.page.with(|p| {
-            p.as_ref()?
-                .media
-                .iter()
-                .find(|m| m.node == node)?
-                .still
-                .clone()
-        })
-    });
-    let poster_picture = memo(move || poster.get().and_then(|bytes| Picture::decode(&bytes).ok()));
     let picture = switch(
-        move || {
-            b.video_pixels
-                .with(|v| v.get(&node).copied())
-                .unwrap_or_else(|| b.pacing.with_untracked(|p| p.borrow().start))
-        },
+        move || shown_picture(b, node).map_or(b.pixels.get(), |(_, pixels)| pixels),
         move |pixels| {
             picture_of(
-                move || {
-                    b.videos
-                        .with(|v| v.get(&node).cloned())
-                        .or_else(|| poster_picture.get())
-                },
+                move || shown_picture(b, node).map(|(p, _)| p),
                 ImageView::new().pixels(pixels),
             )
         },
@@ -1369,8 +1408,7 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
                 b.page.with_untracked(|p| p.as_ref().map(|p| p.document)) != Some(page.document);
             if new_document {
                 b.controls.update(HashMap::clear);
-                b.videos.update(HashMap::clear);
-                b.video_pixels.update(HashMap::clear);
+                b.videos.set(Rc::new(HashMap::new()));
                 b.pacing.with_untracked(|p| p.borrow_mut().clear());
                 b.scroll.set(0);
                 b.hints.set(None);
@@ -1457,14 +1495,21 @@ fn piece_keys(page: &Page, pieces: &[Piece], images: Images) -> Vec<PieceKey> {
         .collect()
 }
 
-fn pixels(images: Images) -> Pixels {
-    match images {
-        Images::Auto => Pixels::detect(),
-        Images::Kitty => Pixels::Kitty,
-        Images::Sixel => Pixels::Sixel,
-        Images::Iterm2 => Pixels::Iterm,
-        Images::Ansi | Images::None => Pixels::Cells,
+/// The picture media region `node` shows now, and the protocol it is
+/// drawn with: a moving picture's live frame, else its decoded picture.
+fn shown_picture(b: Browser, node: NodeId) -> Option<(Picture, Pixels)> {
+    if let Some(live) = b.live.with(|l| l.get(&node).cloned()) {
+        return Some((live.picture, live.pixels));
     }
+    let picture = b.page.with(|p| {
+        p.as_ref()?
+            .media
+            .iter()
+            .find(|m| m.node == node)?
+            .picture
+            .clone()
+    })?;
+    Some((picture, b.pixels.get()))
 }
 
 fn reader_view(b: Browser) -> Node {
@@ -1529,20 +1574,8 @@ fn reader_view(b: Browser) -> Node {
                             ((m.rect.width / CELL.0 as f64).ceil() as u16).clamp(4, 120)
                         })
                 });
-                let view = ImageView::new().pixels(pixels(b.images.get_untracked()));
-                let picture = image_bytes_of(
-                    move || {
-                        b.page.with(|p| {
-                            p.as_ref()?
-                                .media
-                                .iter()
-                                .find(|m| m.node == node)?
-                                .still
-                                .clone()
-                        })
-                    },
-                    view,
-                );
+                let view = rich_intuituive::ImageView::new().pixels(b.pixels.get_untracked());
+                let picture = picture_of(move || shown_picture(b, node).map(|(p, _)| p), view);
                 row([picture.fixed(width), label("").flex(1)]).fixed(rows)
             }
             PieceKey::Controls(nodes) => web_widget(b, nodes),
@@ -1596,6 +1629,8 @@ fn load_more(b: Browser) {
 }
 
 fn projection_view(b: Browser) -> Node {
+    // The pictures' cells, made once per frame and size, shared by rows.
+    let cells = Rc::new(pictures::Cells::default());
     // One item per row of the shared layout, built only near the view and
     // keyed by the row's node, so the row in view stays when the page
     // grows above it.
@@ -1605,18 +1640,48 @@ fn projection_view(b: Browser) -> Node {
         let key = b
             .layout
             .with_untracked(|l| l.keys.get(i).copied().unwrap_or(i as u64));
-        renderable(move || {
+        let cells = cells.clone();
+        leaf(move |console, width, _| {
             let marks = Marks {
                 find: b.find.get(),
                 current: b.found.with(|f| f.get(b.find_at.get()).copied()),
                 ..Marks::default()
             };
+            let width = usize::from(width.max(1));
             b.layout.with(|l| {
                 let row = l.rows.get(&key).copied().unwrap_or(i);
-                match l.lines.get(row) {
-                    Some(line) => to_text(std::slice::from_ref(line), &marks, row),
-                    None => rich::Text::new(""),
+                let Some(line) = l.lines.get(row) else {
+                    return vec![Vec::new()];
+                };
+                let text = to_text(std::slice::from_ref(line), &marks, row);
+                let options = console.options().update_width(width);
+                let segments = console
+                    .render_lines(&text, &options, false)
+                    .into_iter()
+                    .next()
+                    .unwrap_or_default();
+                // Only a row a picture covers reads the pictures.
+                if b.images.get() == Images::None || !l.regions.iter().any(|r| r.on(row)) {
+                    return vec![segments];
                 }
+                let nodes: Vec<Option<NodeId>> = b.page.with(|p| {
+                    l.regions
+                        .iter()
+                        .map(|r| p.as_ref()?.media.get(r.media).map(|m| m.node))
+                        .collect()
+                });
+                vec![pictures::splice(
+                    console,
+                    &cells,
+                    segments,
+                    width,
+                    row,
+                    &l.regions,
+                    |region| {
+                        let at = l.regions.iter().position(|r| r == region)?;
+                        shown_picture(b, nodes.get(at).copied().flatten()?)
+                    },
+                )]
             })
         })
         .fixed(1)
@@ -1647,7 +1712,7 @@ pub const CHROME_ROWS: u16 = 4;
 fn video_pacing(config: &Config, images: Images) -> Pacing {
     let mut budget = rich_art::picture::ByteBudget::guess();
     budget.max_fps = (config.fps as f64).clamp(1.0, crate::video::MAX_FPS as f64);
-    let asked = (images != Images::Auto).then(|| pixels(images));
+    let asked = (images != Images::Auto).then(|| pictures::pixels(images));
     Pacing::new(budget, Pacing::start_for(asked, Pixels::detect()))
 }
 
@@ -1700,6 +1765,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                     .unwrap_or_default()
             }))
         });
+        let images_signal = signal(images);
         let found = memo(move || {
             let query = find.get().filter(|q| !q.is_empty());
             Rc::new(match query {
@@ -1738,14 +1804,16 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             config: signal(config),
             keymap: signal(keymap.clone()),
             bookmarks: signal(bookmarks),
-            images: signal(images),
+            images: images_signal,
             images_default: signal(images),
             viewport: port,
+            pixels: memo(move || pictures::pixels(images_signal.get())),
+            frozen: signal(false),
+            live: signal(Rc::new(HashMap::new())),
             tab: signal(tab),
             waiting: signal(HashMap::new()),
             controls: signal(HashMap::new()),
-            videos: signal(HashMap::new()),
-            video_pixels: signal(HashMap::new()),
+            videos: signal(Rc::new(HashMap::new())),
             pacing: signal(Rc::new(RefCell::new(pacing))),
             regions_sent: signal((Vec::new(), Vec::new())),
         };
@@ -1757,6 +1825,9 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                 }
             }
         });
+        // Moving pictures in view step within the byte budget.
+        let motion = Rc::new(std::cell::RefCell::new(pictures::Motion::default()));
+        every(MOTION, move |_| step_motion(b, &mut motion.borrow_mut()));
         // Chrome lays the page out at the terminal's size.
         watch(
             move || b.viewport.get(),

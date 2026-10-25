@@ -29,7 +29,6 @@ use std::collections::BTreeMap;
 #[cfg(feature = "frames")]
 use std::collections::VecDeque;
 use std::sync::{Arc, Mutex, Weak};
-#[cfg(feature = "frames")]
 use std::time::{Duration, Instant};
 
 use image::{DynamicImage, RgbaImage};
@@ -273,6 +272,35 @@ impl Picture {
     pub fn decode(bytes: &[u8]) -> Result<Picture, String> {
         let image = image::load_from_memory(bytes).map_err(|e| e.to_string())?;
         Ok(Picture::new(shrink(image)))
+    }
+
+    /// The image in `bytes`, keeping an animation: an animated GIF or APNG
+    /// of more than one frame becomes an [`animated`](Self::animated)
+    /// picture (at most [`ANIMATION_FRAMES`] frames, each shrunk to at
+    /// most [`ANIMATION_SIDE`] pixels a side, frames shorter than 20 ms
+    /// merged into the next); anything else is [`decode`](Self::decode)d.
+    pub fn decode_animated(bytes: &[u8]) -> Result<Picture, String> {
+        let animated = bytes.starts_with(b"GIF8") || bytes.starts_with(b"\x89PNG");
+        if animated {
+            let budget = crate::graphics::FrameBudget {
+                max_bytes: 256 << 20,
+                max_frames: ANIMATION_FRAMES,
+                min_delay: Duration::from_millis(20),
+            };
+            if let Ok(frames) = crate::graphics::decode_animation(bytes, budget) {
+                if frames.len() > 1 {
+                    let (w, h) = frames[0].image.dimensions();
+                    let scale = (f64::from(ANIMATION_SIDE) / f64::from(w.max(h).max(1))).min(1.0);
+                    let width = ((f64::from(w) * scale).round() as u32).max(1);
+                    let height = ((f64::from(h) * scale).round() as u32).max(1);
+                    let frames = crate::graphics::resample(&frames, width, height, budget);
+                    if let Some(picture) = Picture::animated(frames) {
+                        return Ok(picture);
+                    }
+                }
+            }
+        }
+        Picture::decode(bytes)
     }
 
     /// A frame of raw RGBA pixels, `width` x `height`, under a new id:
@@ -609,6 +637,118 @@ impl Picture {
     /// (Kitty's image data; Sixel and iTerm2 hold nothing).
     pub fn release(id: u32) -> String {
         crate::kitty::delete(id)
+    }
+}
+
+/// The most frames [`Picture::decode_animated`] keeps.
+pub const ANIMATION_FRAMES: usize = 240;
+/// The longest side of an animation's frames as
+/// [`Picture::decode_animated`] keeps them.
+pub const ANIMATION_SIDE: u32 = 640;
+
+/// An animated picture's frames stepped by the clock, for a terminal that
+/// cannot play the animation itself (Sixel, iTerm2, cells; Kitty plays
+/// [`Picture::animated`] on its own). Each frame is a [`Picture`] under
+/// the animation's id, so a painter makes each frame's escape once and
+/// draws it again each loop.
+///
+/// ```
+/// use std::time::{Duration, Instant};
+/// use rich_art::graphics::AnimationFrame;
+/// use rich_art::image::{Rgba, RgbaImage};
+/// use rich_art::picture::{Picture, Player};
+///
+/// let frames = (0..3u8)
+///     .map(|k| AnimationFrame {
+///         image: RgbaImage::from_pixel(4, 4, Rgba([k * 80, 0, 0, 255])),
+///         delay: Duration::from_millis(100),
+///     })
+///     .collect();
+/// let gif = Picture::animated(frames).unwrap();
+/// let start = Instant::now();
+/// let mut player = Player::new(&gif, start).unwrap();
+/// assert_eq!(player.index(), 0);
+/// assert!(player.advance(start + Duration::from_millis(150)));
+/// assert_eq!(player.index(), 1);
+/// assert_eq!(player.frame().id(), gif.id());
+/// ```
+#[derive(Clone, Debug)]
+pub struct Player {
+    frames: Vec<Picture>,
+    delays: Vec<Duration>,
+    at: usize,
+    since: Instant,
+}
+
+impl Player {
+    /// A player of `picture`'s animation from its first frame at `now`;
+    /// `None` for a picture that is not animated.
+    pub fn new(picture: &Picture, now: Instant) -> Option<Player> {
+        let animation = picture.frames()?;
+        let mut frames: Vec<Picture> = Vec::with_capacity(animation.len());
+        for frame in animation {
+            let image = DynamicImage::ImageRgba8(frame.image.clone());
+            let next = match frames.last() {
+                Some(last) => last.next(image),
+                None => picture.next(image),
+            };
+            frames.push(next);
+        }
+        Some(Player {
+            delays: animation.iter().map(|f| f.delay).collect(),
+            frames,
+            at: 0,
+            since: now,
+        })
+    }
+
+    /// The frame showing.
+    pub fn frame(&self) -> &Picture {
+        &self.frames[self.at]
+    }
+
+    /// Which frame shows, from 0.
+    pub fn index(&self) -> usize {
+        self.at
+    }
+
+    /// How many frames it has.
+    pub fn len(&self) -> usize {
+        self.frames.len()
+    }
+
+    /// Whether it has no frames (never: [`new`](Self::new) refuses that).
+    pub fn is_empty(&self) -> bool {
+        self.frames.is_empty()
+    }
+
+    /// Whether the frame showing has had its time by `now`.
+    pub fn due(&self, now: Instant) -> bool {
+        now.duration_since(self.since) >= self.delays[self.at]
+    }
+
+    /// How long until the frame showing has had its time.
+    pub fn wait(&self, now: Instant) -> Duration {
+        self.delays[self.at].saturating_sub(now.duration_since(self.since))
+    }
+
+    /// Move on to the frame the clock says shows at `now`, skipping those
+    /// whose time went by (a terminal too slow for every frame skips
+    /// frames rather than slowing the animation down); `true` when the
+    /// frame changed.
+    pub fn advance(&mut self, now: Instant) -> bool {
+        let start = self.at;
+        let mut skipped = 0;
+        while self.due(now) && skipped < self.frames.len() {
+            self.since += self.delays[self.at];
+            self.at = (self.at + 1) % self.frames.len();
+            skipped += 1;
+        }
+        // A long pause (frozen, off screen) starts again from now.
+        if skipped == self.frames.len() {
+            self.since = now;
+        }
+        self.at != start
     }
 }
 
@@ -959,6 +1099,44 @@ mod tests {
         let raw = Picture::from_rgba(2, 2, vec![255; 16]).unwrap();
         assert!(raw.encode(Pixels::Kitty, 4, 2).unwrap().contains("f=32"));
         assert!(Picture::from_rgba(2, 2, vec![0; 3]).is_none());
+    }
+
+    #[test]
+    fn an_animated_gif_decodes_with_its_frames_and_plays() {
+        let frames: Vec<AnimationFrame> = (0..4u8)
+            .map(|k| AnimationFrame {
+                image: RgbaImage::from_pixel(1000, 500, image::Rgba([k * 60, 0, 0, 255])),
+                delay: Duration::from_millis(100),
+            })
+            .collect();
+        let gif = crate::graphics::encode_gif(&frames).unwrap();
+        let picture = Picture::decode_animated(&gif).unwrap();
+        assert!(picture.is_animated());
+        let kept = picture.frames().unwrap();
+        assert_eq!(kept.len(), 4);
+        assert_eq!(kept[0].image.dimensions(), (640, 320));
+        // A still stays still.
+        let png = encode_png(&RgbaImage::new(2, 2)).unwrap();
+        assert!(!Picture::decode_animated(&png).unwrap().is_animated());
+        // Played: a frame each 100 ms, a slow clock skipping frames.
+        let start = Instant::now();
+        let mut player = Player::new(&picture, start).unwrap();
+        assert!(!player.advance(start + Duration::from_millis(50)));
+        assert!(player.advance(start + Duration::from_millis(100)));
+        assert_eq!(player.index(), 1);
+        assert!(player.advance(start + Duration::from_millis(350)));
+        assert_eq!(player.index(), 3);
+        assert!(player.wait(start + Duration::from_millis(350)) <= Duration::from_millis(50));
+        // Every frame keeps the picture's id, each its own version.
+        let versions: std::collections::HashSet<u32> = (0..4)
+            .map(|_| {
+                let later = player.since + Duration::from_millis(100);
+                player.advance(later);
+                assert_eq!(player.frame().id(), picture.id());
+                player.frame().version()
+            })
+            .collect();
+        assert_eq!(versions.len(), 4);
     }
 
     #[test]

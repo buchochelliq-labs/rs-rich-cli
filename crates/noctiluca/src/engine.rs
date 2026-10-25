@@ -224,6 +224,15 @@ pub trait Engine: Send {
     fn playback(&mut self, _tab: TabId, _node: NodeId) -> io::Result<Playback> {
         Err(io::Error::new(io::ErrorKind::Unsupported, "no media here"))
     }
+    /// The bytes of a resource the page loaded (an image's original file),
+    /// from the browser's cache: no new request. Fails for what the page
+    /// did not load.
+    fn resource(&mut self, _tab: TabId, _url: &str) -> io::Result<Vec<u8>> {
+        Err(io::Error::new(
+            io::ErrorKind::Unsupported,
+            "no resources here",
+        ))
+    }
     /// Whether an image element has its picture yet: a lazy image below
     /// the fold has none until the page scrolls near it. A still of one
     /// that has none would be blank.
@@ -249,14 +258,6 @@ pub trait Engine: Send {
     /// taken. Taking it lets the browser send the next.
     fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {
         None
-    }
-    /// The bytes of a resource the page loaded (a video's poster), as the
-    /// browser holds them.
-    fn resource(&mut self, _tab: TabId, _url: &str) -> io::Result<Vec<u8>> {
-        Err(io::Error::new(
-            io::ErrorKind::Unsupported,
-            "no resources here",
-        ))
     }
     /// What the browser says of each media type: `canPlayType`'s answer
     /// (`"probably"`, `"maybe"` or `""`).
