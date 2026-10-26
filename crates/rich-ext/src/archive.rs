@@ -342,7 +342,14 @@ fn zip_entries(path: &Path) -> io::Result<Vec<ArchiveEntry>> {
 
 fn zip_entry<R: Read>(file: &zip::read::ZipFile<'_, R>) -> ArchiveEntry {
     ArchiveEntry {
-        path: file.name().trim_end_matches('/').to_string(),
+        // zip 9 decodes the name on demand; a name it cannot decode is
+        // listed lossily, and `enclosed_name` refuses it on extraction.
+        path: match file.name() {
+            Ok(name) => name.trim_end_matches('/').to_string(),
+            Err(_) => String::from_utf8_lossy(file.name_raw())
+                .trim_end_matches('/')
+                .to_string(),
+        },
         size: file.size(),
         dir: file.is_dir(),
         link: file.is_symlink().then(String::new),
