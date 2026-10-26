@@ -90,84 +90,57 @@ impl LiveRender {
     /// Control codes to move the cursor to the start of the previous render,
     /// erasing each line. Port of `LiveRender.position_cursor`.
     pub fn position_cursor(&self) -> Control {
-        match self.shape.get() {
-            Some((_, height)) => {
-                let mut codes = vec![ControlType::CarriageReturn, ControlType::EraseInLine(2)];
-                for _ in 0..height.saturating_sub(1) {
-                    codes.push(ControlType::CursorUp(1));
-                    codes.push(ControlType::EraseInLine(2));
-                }
-                Control::new(&codes)
-            }
-            None => Control::new(&[]),
-        }
+        position_cursor(self.shape.get())
     }
 
     /// Control codes to clear the render and restore the cursor to where it was
     /// before it. Port of `LiveRender.restore_cursor`.
     pub fn restore_cursor(&self) -> Control {
-        match self.shape.get() {
-            Some((_, height)) => {
-                let mut codes = vec![ControlType::CarriageReturn];
-                for _ in 0..height {
-                    codes.push(ControlType::CursorUp(1));
-                    codes.push(ControlType::EraseInLine(2));
-                }
-                Control::new(&codes)
+        restore_cursor(self.shape.get())
+    }
+}
+
+/// [`LiveRender::position_cursor`] for a render of `shape`.
+pub(crate) fn position_cursor(shape: Option<(usize, usize)>) -> Control {
+    match shape {
+        Some((_, height)) => {
+            let mut codes = vec![ControlType::CarriageReturn, ControlType::EraseInLine(2)];
+            for _ in 0..height.saturating_sub(1) {
+                codes.push(ControlType::CursorUp(1));
+                codes.push(ControlType::EraseInLine(2));
             }
-            None => Control::new(&[]),
+            Control::new(&codes)
         }
+        None => Control::new(&[]),
+    }
+}
+
+/// [`LiveRender::restore_cursor`] for a render of `shape`.
+pub(crate) fn restore_cursor(shape: Option<(usize, usize)>) -> Control {
+    match shape {
+        Some((_, height)) => {
+            let mut codes = vec![ControlType::CarriageReturn];
+            for _ in 0..height {
+                codes.push(ControlType::CursorUp(1));
+                codes.push(ControlType::EraseInLine(2));
+            }
+            Control::new(&codes)
+        }
+        None => Control::new(&[]),
     }
 }
 
 impl Renderable for LiveRender {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        // Render unpadded lines (`pad=False`), applying the live style if set.
-        let mut lines = console.render_lines(self.renderable.as_ref(), options, false);
-        if let Some(style) = &self.style {
-            for line in &mut lines {
-                *line = Segment::apply_style(line, style);
-            }
-        }
-
-        // Content taller than the screen (`options.size.height`).
-        let screen_height = options.size.height;
-        if lines.len() > screen_height {
-            match self.vertical_overflow {
-                VerticalOverflow::Crop => lines.truncate(screen_height),
-                VerticalOverflow::Ellipsis => {
-                    // `lines[: height - 1]`: at height 0 that is Python's
-                    // `lines[:-1]`, every line but the last.
-                    let keep = screen_height
-                        .checked_sub(1)
-                        .unwrap_or_else(|| lines.len() - 1);
-                    lines.truncate(keep);
-                    let overflow_text = Text::styled("...", "live.ellipsis")
-                        .overflow(Overflow::Crop)
-                        .justify(Justify::Center);
-                    lines.push(console.render(&overflow_text, None));
-                }
-                VerticalOverflow::Visible => {}
-            }
-        }
-
+        let (segments, shape) = render(
+            self.renderable.as_ref(),
+            self.style.as_ref(),
+            self.vertical_overflow,
+            console,
+            options,
+        );
         // Remember the shape for the next `position_cursor`/`restore_cursor`.
-        let height = lines.len();
-        let width = lines
-            .iter()
-            .map(|line| line.iter().map(Segment::cell_length).sum::<usize>())
-            .max()
-            .unwrap_or(0);
-        self.shape.set(Some((width, height)));
-
-        let mut segments = Vec::new();
-        let last = height.saturating_sub(1);
-        for (index, line) in lines.into_iter().enumerate() {
-            segments.extend(line);
-            if index != last {
-                segments.push(Segment::line());
-            }
-        }
+        self.shape.set(Some(shape));
         segments
     }
 
@@ -177,6 +150,62 @@ impl Renderable for LiveRender {
     fn print_end_line(&self, _options: &ConsoleOptions) -> bool {
         false
     }
+}
+
+/// `LiveRender.__rich_console__` over a borrowed renderable: the segments,
+/// and the `(width, height)` shape the render leaves.
+pub(crate) fn render(
+    renderable: &dyn Renderable,
+    style: Option<&Style>,
+    vertical_overflow: VerticalOverflow,
+    console: &Console,
+    options: &ConsoleOptions,
+) -> (Vec<Segment>, (usize, usize)) {
+    // Render unpadded lines (`pad=False`), applying the live style if set.
+    let mut lines = console.render_lines(renderable, options, false);
+    if let Some(style) = style {
+        for line in &mut lines {
+            *line = Segment::apply_style(line, style);
+        }
+    }
+
+    // Content taller than the screen (`options.size.height`).
+    let screen_height = options.size.height;
+    if lines.len() > screen_height {
+        match vertical_overflow {
+            VerticalOverflow::Crop => lines.truncate(screen_height),
+            VerticalOverflow::Ellipsis => {
+                // `lines[: height - 1]`: at height 0 that is Python's
+                // `lines[:-1]`, every line but the last.
+                let keep = screen_height
+                    .checked_sub(1)
+                    .unwrap_or_else(|| lines.len() - 1);
+                lines.truncate(keep);
+                let overflow_text = Text::styled("...", "live.ellipsis")
+                    .overflow(Overflow::Crop)
+                    .justify(Justify::Center);
+                lines.push(console.render(&overflow_text, None));
+            }
+            VerticalOverflow::Visible => {}
+        }
+    }
+
+    let height = lines.len();
+    let width = lines
+        .iter()
+        .map(|line| line.iter().map(Segment::cell_length).sum::<usize>())
+        .max()
+        .unwrap_or(0);
+
+    let mut segments = Vec::new();
+    let last = height.saturating_sub(1);
+    for (index, line) in lines.into_iter().enumerate() {
+        segments.extend(line);
+        if index != last {
+            segments.push(Segment::line());
+        }
+    }
+    (segments, (width, height))
 }
 
 #[cfg(test)]
