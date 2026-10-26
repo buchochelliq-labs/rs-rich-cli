@@ -135,6 +135,9 @@
 
   ;; Whether a character stays with the one before it (see the top).
   (func $extends (param $c i32) (result i32)
+    ;; Nothing below U+0300 does: most text returns here.
+    (if (i32.lt_u (local.get $c) (i32.const 0x0300))
+      (then (return (i32.const 0))))
     (i32.or
       (i32.or
         (i32.or
@@ -157,26 +160,33 @@
     (call $within (local.get $c) (i32.const 0x1F1E6) (i32.const 0x1F1FF)))
 
   ;; Reverse the clusters of input bytes [s, e) into the same span of `out`.
+  ;; Each character is decoded once: $c and $w carry the one at $i from the
+  ;; cluster that ends there to the one it starts.
   (func $reverse_span (param $ptr i32) (param $out i32) (param $s i32) (param $e i32)
     (local $i i32)
     (local $start i32)
     (local $c i32)
+    (local $w i32)
     (local $regional i32)
     (local.set $i (local.get $s))
+    (if (i32.lt_u (local.get $i) (local.get $e))
+      (then
+        (local.set $c (call $decode (i32.add (local.get $ptr) (local.get $i))))
+        (local.set $w (global.get $width))))
     (block $done
       (loop $cluster
         (br_if $done (i32.ge_u (local.get $i) (local.get $e)))
         (local.set $start (local.get $i))
-        (local.set $regional
-          (call $is_regional (call $decode (i32.add (local.get $ptr) (local.get $i)))))
-        (local.set $i (i32.add (local.get $i) (global.get $width)))
+        (local.set $regional (call $is_regional (local.get $c)))
+        (local.set $i (i32.add (local.get $i) (local.get $w)))
         (block $end
           (loop $more
             (br_if $end (i32.ge_u (local.get $i) (local.get $e)))
             (local.set $c (call $decode (i32.add (local.get $ptr) (local.get $i))))
+            (local.set $w (global.get $width))
             (if (call $extends (local.get $c))
               (then
-                (local.set $i (i32.add (local.get $i) (global.get $width)))
+                (local.set $i (i32.add (local.get $i) (local.get $w)))
                 ;; A zero-width joiner takes the character after it too.
                 (if (i32.and
                       (i32.eq (local.get $c) (i32.const 0x200D))
@@ -188,7 +198,7 @@
             ;; The second regional indicator of a flag.
             (if (i32.and (local.get $regional) (call $is_regional (local.get $c)))
               (then
-                (local.set $i (i32.add (local.get $i) (global.get $width)))
+                (local.set $i (i32.add (local.get $i) (local.get $w)))
                 (local.set $regional (i32.const 0))
                 (br $more)))))
         ;; [start, i) goes to [s + e - i, s + e - start).

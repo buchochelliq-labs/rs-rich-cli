@@ -49,7 +49,9 @@ fn stderr(out: &std::process::Output) -> String {
 // ---------------------------------------------------------------------------
 
 /// The styles that are colours by name; a theme leaves them alone.
-const COLOUR_NAMES: [&str; 7] = ["black", "red", "green", "yellow", "magenta", "cyan", "white"];
+const COLOUR_NAMES: [&str; 7] = [
+    "black", "red", "green", "yellow", "magenta", "cyan", "white",
+];
 
 fn theme_text(id: &str) -> String {
     String::from_utf8(official::theme(id)).unwrap()
@@ -129,7 +131,8 @@ fn every_theme_covers_the_coloured_default_styles() {
         .iter()
         .filter(|(name, spec)| {
             let style = Style::parse(spec).unwrap();
-            !COLOUR_NAMES.contains(name) && (style.color().is_some() || style.bgcolor().is_some())
+            let coloured = |c: Option<&rich::Color>| c.is_some_and(|c| !c.is_default());
+            !COLOUR_NAMES.contains(name) && (coloured(style.color()) || coloured(style.bgcolor()))
         })
         .map(|(name, _)| *name)
         .collect();
@@ -145,13 +148,14 @@ fn every_theme_covers_the_coloured_default_styles() {
     }
 }
 
-/// `mono` has no colour at all, and covers every coloured default style, so
-/// with it nothing is coloured but by the colour names themselves.
+/// `mono` has no colour at all (the terminal's default colour aside), and
+/// covers every coloured default style, so with it nothing is coloured but
+/// by the colour names themselves.
 #[test]
 fn mono_has_no_colour() {
     for (name, style) in styles("mono") {
-        assert!(style.color().is_none(), "{name}");
-        assert!(style.bgcolor().is_none(), "{name}");
+        assert!(style.color().is_none_or(|c| c.is_default()), "{name}");
+        assert!(style.bgcolor().is_none_or(|c| c.is_default()), "{name}");
     }
     assert!(background("mono").is_none());
 }
@@ -217,9 +221,11 @@ fn sgr_parameters(text: &str) -> Vec<Vec<u32>> {
         .collect()
 }
 
-/// Each theme renders a Markdown sample and printed values through
-/// `--theme-file`: a heading in the theme's heading colour, numbers in its
-/// number colour, and mono with attributes only.
+/// Each theme renders through `--theme-file`: a Markdown sample, printed
+/// values (numbers in the theme's `repr.number` colour) and JSON (keys in
+/// its `json.key` colour); mono with attributes only. The Markdown is only
+/// checked to render: core's `Markdown` does not read `markdown.*` styles
+/// from the console's theme yet.
 #[test]
 fn every_theme_renders_through_theme_file() {
     let dir = tempfile::tempdir().unwrap();
@@ -228,54 +234,63 @@ fn every_theme_renders_through_theme_file() {
         "# Release notes\n\nSome **bold** text and `code`.\n\n- one\n- two\n\n> quoted\n",
     )
     .unwrap();
+    std::fs::write(
+        dir.path().join("sample.json"),
+        r#"{"name": "rich", "stars": 42, "tags": [true, null]}"#,
+    )
+    .unwrap();
     let sgr = |c: ColorTriplet| format!("38;2;{};{};{}", c.red, c.green, c.blue);
     for (id, _) in official::THEMES {
         let path = official::theme_path(id);
         let path = path.to_str().unwrap();
-        let out = rich(
-            dir.path(),
-            &["--theme-file", path, "--force-terminal", "-m", "sample.md"],
-        );
-        assert!(out.status.success(), "{id}: {}", stderr(&out));
-        let markdown = stdout(&out);
+        let mut outputs = Vec::new();
+        for args in [
+            &["-m", "sample.md"][..],
+            &["-p", "[1, 2.5, None, True, 'text']"],
+            &["--json", "sample.json"],
+        ] {
+            let mut all = vec!["--theme-file", path, "--force-terminal"];
+            all.extend_from_slice(args);
+            let out = rich(dir.path(), &all);
+            assert!(out.status.success(), "{id} {args:?}: {}", stderr(&out));
+            outputs.push(stdout(&out));
+        }
+        let [markdown, printed, json] = &outputs[..] else {
+            unreachable!()
+        };
         assert!(markdown.contains("Release notes"), "{id}: {markdown:?}");
-        let out = rich(
-            dir.path(),
-            &[
-                "--theme-file",
-                path,
-                "--force-terminal",
-                "-p",
-                "[1, 2.5, None, True, 'text']",
-            ],
-        );
-        assert!(out.status.success(), "{id}: {}", stderr(&out));
-        let printed = stdout(&out);
-        assert!(printed.contains("2.5"), "{id}: {printed:?}");
+        assert!(printed.contains("None"), "{id}: {printed:?}");
+        assert!(json.contains("stars"), "{id}: {json:?}");
 
-        let theme = theme(id);
         if id == "mono" {
-            for params in sgr_parameters(&markdown).iter().chain(&sgr_parameters(&printed)) {
-                for p in params {
+            for params in [printed, json].into_iter().flat_map(|o| sgr_parameters(o)) {
+                for p in &params {
+                    // 39 and 49 are the terminal's own colours.
                     assert!(
-                        !matches!(p, 30..=49 | 90..=107),
+                        !matches!(p, 30..=38 | 40..=48 | 90..=107),
                         "{id}: a colour code {p} in {params:?}"
                     );
                 }
             }
-            assert!(markdown.contains("\u{1b}[1"), "{id}: {markdown:?}");
+            assert!(printed.contains("\u{1b}[1"), "{id}: {printed:?}");
             continue;
         }
-        let heading = theme.get("markdown.h1").unwrap().color().unwrap();
+        let theme = theme(id);
+        let colour = |name: &str| {
+            sgr(theme
+                .get(name)
+                .unwrap()
+                .color()
+                .unwrap()
+                .get_truecolor()
+                .unwrap())
+        };
         assert!(
-            markdown.contains(&sgr(heading.get_truecolor().unwrap())),
-            "{id}: no heading colour in {markdown:?}"
+            printed.contains(&colour("repr.number")),
+            "{id}: {printed:?}"
         );
-        let number = theme.get("repr.number").unwrap().color().unwrap();
-        assert!(
-            printed.contains(&sgr(number.get_truecolor().unwrap())),
-            "{id}: no number colour in {printed:?}"
-        );
+        assert!(json.contains(&colour("json.key")), "{id}: {json:?}");
+        assert!(json.contains(&colour("json.number")), "{id}: {json:?}");
     }
 }
 
@@ -348,18 +363,13 @@ mod wasm {
             caps(&wordplay),
             ["transform rot13", "transform reverse", "transform slug"]
         );
-        assert_eq!(
-            plugin_call_error(&wordplay, 3).as_deref(),
-            Err("unknown capability")
-        );
-        assert_eq!(
-            plugin_call_error(&textcase, 7).as_deref(),
-            Err("unknown capability")
-        );
-    }
-
-    fn plugin_call_error(plugin: &RuntimePlugin, index: usize) -> Result<String, String> {
-        plugin.call(index, "x", 80)
+        // A capability number past the manifest's is the plugin's error.
+        for (plugin, index) in [(&textcase, 7), (&wordplay, 3)] {
+            assert_eq!(
+                plugin.call(index, "x", 80),
+                Err("unknown capability".to_string())
+            );
+        }
     }
 
     /// textcase 0.1.0's capabilities do in 0.2.0 what they did.
@@ -461,10 +471,7 @@ mod wasm {
                 // A flag is two regional indicators.
                 ("🇫🇷🇩🇪", "🇩🇪🇫🇷"),
                 // A ZWJ family, a skin tone, a variation selector.
-                (
-                    "a👨\u{200d}👩\u{200d}👧b",
-                    "b👨\u{200d}👩\u{200d}👧a",
-                ),
+                ("a👨\u{200d}👩\u{200d}👧b", "b👨\u{200d}👩\u{200d}👧a"),
                 ("👍🏽!", "!👍🏽"),
                 ("x❤\u{fe0f}y", "y❤\u{fe0f}x"),
             ],
@@ -524,7 +531,12 @@ mod wasm {
         }
 
         for (plugin, transform, input, expected) in [
-            (textcase, "titlecase", "the quick brown fox", "The Quick Brown Fox"),
+            (
+                textcase,
+                "titlecase",
+                "the quick brown fox",
+                "The Quick Brown Fox",
+            ),
             (textcase, "snakecase", "Hello World", "hello_world"),
             (wordplay, "rot13", "Hello, World!", "Uryyb, Jbeyq!"),
             (wordplay, "reverse", "drawer", "reward"),
