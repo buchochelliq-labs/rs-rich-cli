@@ -1,0 +1,30 @@
+❯ rich plugin search --kind theme
+┏━━━━━━━━━━━━━━━┳━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Id            ┃ Kind  ┃ Tier       ┃ Version ┃ Installed ┃ Description                               ┃
+┡━━━━━━━━━━━━━━━╇━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ dusk          │ theme │ ✓ official │ 1.0.0   │           │ A dark theme in violets and teals, for a  │
+│               │       │            │         │           │ dark terminal background                  │
+│               │       │            │         │           │ Authored by rs-rich                       │
+│ high-contrast │ theme │ ✓ official │ 1.0.0   │           │ Bright colours on black, every text       │
+│               │       │            │         │           │ colour at least 7:1 (WCAG AAA); no dim    │
+│               │       │            │         │           │ text                                      │
+│               │       │            │         │           │ Authored by rs-rich                       │
+│ mono          │ theme │ ✓ official │ 1.0.0   │           │ No colour at all, only attributes such as │
+│               │       │            │         │           │ bold, italic and underline, for any       │
+│               │       │            │         │           │ background and colour mode                │
+│               │       │            │         │           │ Authored by rs-rich                       │
+│ ocean         │ theme │ ✓ official │ 1.0.0   │           │ A dark theme in sea blues, greens and     │
+│               │       │            │         │           │ sand, for a dark terminal background      │
+│               │       │            │         │           │ Authored by rs-rich                       │
+│ paper         │ theme │ ✓ official │ 1.0.0   │           │ A light theme in inks on warm paper, for  │
+│               │       │            │         │           │ a light terminal background               │
+│               │       │            │         │           │ Authored by rs-rich                       │
+│ solarized     │ theme │ community  │ 1.2.0   │           │ Solarized colours for rich's default      │
+│               │       │            │         │           │ styles.                                   │
+│               │       │            │         │           │ Authored by example from                  │
+│               │       │            │         │           │ github.com/example/rich-solarized         │
+└───────────────┴───────┴────────────┴─────────┴───────────┴───────────────────────────────────────────┘
+❯
+
+
+

@@ -1480,8 +1480,13 @@ const MAX_AUTHORS: usize = 3;
 /// listing's own `authors` (its claim, in quotes when it names rs-rich, cut
 /// short) or the repository's owner, then the repository it comes from.
 pub(crate) fn authored_by(listing: &Listing) -> String {
+    format!("Authored by {}", authors_text(listing))
+}
+
+/// [`authored_by`] without its first words, for a row named "Authored by".
+pub(crate) fn authors_text(listing: &Listing) -> String {
     if listing.tier == Tier::Official {
-        return "Authored by rs-rich".into();
+        return "rs-rich".into();
     }
     let mut names: Vec<String> = listing
         .authors
@@ -1507,7 +1512,7 @@ pub(crate) fn authored_by(listing: &Listing) -> String {
         names.push(repository_owner(&listing.repository));
     }
     format!(
-        "Authored by {} from {}",
+        "{} from {}",
         names.join(", "),
         repository_source(&listing.repository)
     )
@@ -1725,7 +1730,7 @@ pub(crate) fn provenance(
             ),
         ),
         ("Publisher", publisher(listing)),
-        ("Author", authored_by(listing)),
+        ("Authored by", authors_text(listing)),
         ("Source", listing.repository.clone()),
     ];
     if let Some(recommended) = &listing.recommended {
@@ -1907,7 +1912,7 @@ fn info(options: &Options) -> Outcome<Done> {
             ),
         ),
         ("Publisher", publisher(&listing)),
-        ("Author", authored_by(&listing)),
+        ("Authored by", authors_text(&listing)),
     ];
     if let Some(recommended) = &listing.recommended {
         rows.push(("Recommended", recommended_text(recommended)));
@@ -1919,9 +1924,6 @@ fn info(options: &Options) -> Outcome<Done> {
     ]);
     if let Some(homepage) = &listing.homepage {
         rows.push(("Homepage", homepage.clone()));
-    }
-    if !listing.authors.is_empty() {
-        rows.push(("Authors", listing.authors.join(", ")));
     }
     match &candidate {
         Ok(version) => {

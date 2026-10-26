@@ -1,0 +1,30 @@
+❯ rich plugin browse
+? Plugins ›
+❯ dev  ✓ official  Developer icons: bug, branc │ Dev micro pack Developer icons: bug, branch, terminal,
+  dot  ✓ official  Draws Graphviz DOT graphs a │ package
+  dusk  ✓ official  A dark theme in violets an │
+  fun  ✓ official  Fun icons: heart, star, cat │ Package  dev 1.0.0 (micro-pack)
+  high-contrast  ✓ official  Bright colours on │ Name  Dev micro pack
+  lumis  ✓ official  Highlights code with lumi │ Tier  ✓ official: rs-rich's own, built from its
+  mermaid  ✓ official  Renders Mermaid flowcha │ repository
+  mono  ✓ official  No colour at all, only att │ Publisher  Official: built and published by rs-rich
+  ocean  ✓ official  A dark theme in sea blues │ Authored by  rs-rich
+  paper  ✓ official  A light theme in inks on  │ Source
+  shout  community  Upper-cases text and draws │ https://github.com/buchochelliq-labs/rs-rich-cli
+  solarized  community  Solarized colours for  │ Artifact
+  16/16 · ↑↓ move · enter pick · esc cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

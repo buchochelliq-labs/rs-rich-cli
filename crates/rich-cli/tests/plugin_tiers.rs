@@ -291,7 +291,8 @@ fn the_install_prompt_says_who_publishes_it_before_writing() {
         err.contains("Community: published by mallory, not by rs-rich"),
         "{err}"
     );
-    assert!(err.contains("Authored by \"rs-rich\""), "{err}");
+    let authored = err.lines().find(|l| l.starts_with("Authored by")).unwrap();
+    assert!(authored.contains("\"rs-rich\", Bob"), "{err}");
     assert!(err.contains("Permissions"), "{err}");
     assert!(!w.path.join("plugins/marketplace.lock.json").exists());
     let out = w.plugin(&["install", "inkwell", "--yes"]);
