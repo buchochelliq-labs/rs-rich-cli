@@ -179,6 +179,13 @@ updating the requirements used by its direct dependents (`rs-rich-plugin-api`,
 requires updating `rs-rich-cli`. Cargo does **not** force unrelated crates to
 share a version. Our coordinated-tag policy does.
 
+`cargo-semver-checks` follows the same rule: a move from `0.0.x` to anything
+else is a major one, so it accepts any change. `release.py plan
+--semver-checks` therefore refuses nothing for a 0.0.x crate whose version
+moved; CI's `public API and SemVer` job checks 0.0.x crates as if their bump
+were a minor one, and fails on a breaking change that `api/semver-breaks.toml`
+does not list (`scripts/semver_check.py`).
+
 ### Released 0.0.4 snapshot
 
 All four packages published at 0.0.4 because each changed or consumed the new
@@ -294,7 +301,7 @@ python scripts/validate_release.py --tag release-0.0.20
 ```
 
 `--tag` is required. The wrapper always ends by running
-`scripts/release.py plan <tag>`, so the local validation list proves the selected
+`scripts/release.py plan <tag> --semver-checks`, so the local validation list proves the selected
 release tag as well as build/test health. Run locally, `plan` of a release
 tag checks every crate of the release's `RELEASES.toml` (the run checks the
 unpublished ones); a crate tag checks that crate. Its Python release checks are listed
@@ -406,7 +413,10 @@ The release run (`release.yml`), from the release tag:
    every crate of the release not yet on crates.io, in `RELEASES.toml`
    order, refused when empty or when any selected crate's record tag is
    missing or elsewhere (`unreleased`); every selected manifest and internal
-   requirement agrees (`release.py plan`).
+   requirement agrees, and each version bump is at least as big as its
+   crate's change by Cargo's rules (`release.py plan --semver-checks`, with
+   `cargo-semver-checks` against the crate's last release; a 0.0.x bump
+   fits any change).
 2. **CI, once:** `ci.yml` on the validated commit.
 3. **Publish, once:** preflight, the multi-package dry run, the Trusted
    Publishing exchange (when any selected crate exists), the upload runs,
@@ -604,6 +614,8 @@ Documented discipline decays; these are the mechanisms.
 | Merging a branch cut from a stale `main` | `strict: true` on required checks | prevents |
 | A PR that says nothing useful | `pr body` CI check against the template | prevents |
 | Publishing content that isn't on `main` | tags only ever go on `main`; the ancestor assertion above | detects |
+| An API change nobody reviewed | `api/<crate>.txt` snapshots, diffed by CI's `public API and SemVer` job | detects, in the PR |
+| A version bump smaller than the change | `cargo-semver-checks` in `release.py plan --semver-checks`; for 0.0.x, every break listed in `api/semver-breaks.toml` (CI) | prevents |
 | "Is it actually merged?" | `git merge-base --is-ancestor "$(gh pr view N --json mergeCommit -q .mergeCommit.oid)" origin/main` | detects |
 
 That last one matters because the obvious tools lie: after a squash or rebase

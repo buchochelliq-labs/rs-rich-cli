@@ -81,6 +81,50 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `release-0.0.22` as the example `RS_RICH_CLI_REF` (this repository's
   tags are `release-X.Y.Z`), and says to move it with each release.
 
+- **API checks in CI** (all crates; brought forward from the plan to
+  1.0.0's Stage 3). Every published crate's public API is checked in as
+  `api/<crate>.txt`, made by `cargo public-api` 0.52.0 over a pinned
+  nightly's rustdoc JSON. CI's new `public API and SemVer` job fails when an
+  API differs from its snapshot, with the diff;
+  `python scripts/public_api.py --bless` updates them. The same job runs
+  `cargo-semver-checks` 0.51.0 against each crate's last release. Every 0.0.x
+  bump is a breaking one to Cargo, so a 0.0.x crate is checked as if its bump
+  were a minor one, and each breaking change must be listed, with its
+  reason, in `api/semver-breaks.toml`. This release lists rs-rich-ext's
+  `rst` tree and `surface::Cell`, and rs-rich-intuituive's `FrameStats`
+  fields and its `ImageView` and `Pixels` from rs-rich-art, and noctiluca's
+  added fields and variants. rs-rich's
+  `CompactString` change is not one cargo-semver-checks can see.
+  `scripts/release.py plan --semver-checks`, which `release.yml` runs,
+  refuses a version bump smaller than the change. The tools are pinned in
+  `api/tools.toml`.
+
+- **Complete type stubs for the Python package** (PyPI). `_native.pyi` now
+  matches the compiled module under mypy's `stubtest`: constructors are
+  `__new__`, classes that cannot be subclassed are `@final`, `ColorSystem`
+  and `ColorType` are `IntEnum`s, `TaskID` is a `NewType` that `Progress`
+  takes and returns, and the renderable type takes every renderable class
+  of the bindings, so `Padding` or `Align` type-check where Rich takes a
+  renderable. Classes that cannot be built no longer claim a constructor.
+  Five methods take Rich's parameter names (`Highlighter.highlight(text)`,
+  `Pager.show(content)`, `ProgressColumn.render(task)`,
+  `PromptBase.on_validate_error(value, error)`, `PagerContext.__exit__`).
+  CI checks the stubs against the built wheel, and a typed program under
+  `mypy --strict` (`scripts/check_python_stubs.py`). The package still
+  supports Python 3.9.
+
+- **Fixed: rich-py's console size follows upstream's rules** (PyPI). A
+  legacy Windows console takes a column off its width when both sides were
+  asked for, by argument, `COLUMNS` or `LINES`, or when its width comes from
+  the terminal; a dumb terminal is 80 by 25 unless both were asked for; and
+  the `width`, `height` and `size` setters apply the same rules, as rich
+  15.0.0's `Console.size` does. With `LINES` set, a legacy console was a
+  column wider than upstream's. `test_console_size_matches_rich`.
+
+- **The docs playground spike's lockfile** (`playground/spike/Cargo.lock`)
+  is regenerated with cargo for the path crates' current versions and
+  rs-rich's `compact_str`; it named versions from before 0.0.22.
+
 ### Migration notes for this release (core, ext)
 
 - **rs-rich-ext: `rst::parse` returns the document tree.** It returned

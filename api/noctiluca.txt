@@ -1,0 +1,2204 @@
+pub mod noctiluca
+pub mod noctiluca::about
+pub const noctiluca::about::ADDRESS: &str
+pub const noctiluca::about::CODECS: &[(&str, &str)]
+pub const noctiluca::about::TITLE: &str
+pub fn noctiluca::about::types() -> alloc::vec::Vec<&'static str>
+pub fn noctiluca::about::verdict(&str) -> &'static str
+pub mod noctiluca::actions
+pub struct noctiluca::actions::Action
+pub noctiluca::actions::Action::id: &'static str
+pub noctiluca::actions::Action::label: &'static str
+pub noctiluca::actions::Action::plain: &'static str
+pub noctiluca::actions::Action::section: &'static str
+pub noctiluca::actions::Action::sequence: bool
+pub noctiluca::actions::Action::vim: &'static str
+impl core::clone::Clone for noctiluca::actions::Action
+pub fn noctiluca::actions::Action::clone(&self) -> noctiluca::actions::Action
+impl core::cmp::Eq for noctiluca::actions::Action
+impl core::cmp::PartialEq for noctiluca::actions::Action
+pub fn noctiluca::actions::Action::eq(&self, &noctiluca::actions::Action) -> bool
+impl core::fmt::Debug for noctiluca::actions::Action
+pub fn noctiluca::actions::Action::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::actions::Action
+impl core::marker::StructuralPartialEq for noctiluca::actions::Action
+impl core::marker::Freeze for noctiluca::actions::Action
+impl core::marker::Send for noctiluca::actions::Action
+impl core::marker::Sync for noctiluca::actions::Action
+impl core::marker::Unpin for noctiluca::actions::Action
+impl core::marker::UnsafeUnpin for noctiluca::actions::Action
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::actions::Action
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::actions::Action
+pub const noctiluca::actions::ACTIONS: &[noctiluca::actions::Action]
+pub const noctiluca::actions::CONTEXT: &str
+pub fn noctiluca::actions::action_for(&rich_interact::keymap::Keymap, rich_interact::event::Key) -> core::option::Option<alloc::string::String>
+pub fn noctiluca::actions::get(&str) -> core::option::Option<&'static noctiluca::actions::Action>
+pub fn noctiluca::actions::keymap(noctiluca::config::Preset, &[(alloc::string::String, alloc::string::String)]) -> (rich_interact::keymap::Keymap, alloc::vec::Vec<alloc::string::String>)
+pub fn noctiluca::actions::keys_label(&rich_interact::keymap::Keymap, &str) -> alloc::string::String
+pub fn noctiluca::actions::keys_of(&rich_interact::keymap::Keymap, &str) -> core::option::Option<(alloc::string::String, bool)>
+pub mod noctiluca::adapt
+pub enum noctiluca::adapt::Background
+pub noctiluca::adapt::Background::Dark
+pub noctiluca::adapt::Background::Light
+impl core::clone::Clone for noctiluca::adapt::Background
+pub fn noctiluca::adapt::Background::clone(&self) -> noctiluca::adapt::Background
+impl core::cmp::Eq for noctiluca::adapt::Background
+impl core::cmp::PartialEq for noctiluca::adapt::Background
+pub fn noctiluca::adapt::Background::eq(&self, &noctiluca::adapt::Background) -> bool
+impl core::fmt::Debug for noctiluca::adapt::Background
+pub fn noctiluca::adapt::Background::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::adapt::Background
+impl core::marker::StructuralPartialEq for noctiluca::adapt::Background
+impl core::marker::Freeze for noctiluca::adapt::Background
+impl core::marker::Send for noctiluca::adapt::Background
+impl core::marker::Sync for noctiluca::adapt::Background
+impl core::marker::Unpin for noctiluca::adapt::Background
+impl core::marker::UnsafeUnpin for noctiluca::adapt::Background
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::adapt::Background
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::adapt::Background
+pub enum noctiluca::adapt::Rule
+pub noctiluca::adapt::Rule::Bandwidth
+pub noctiluca::adapt::Rule::CapPictures
+pub noctiluca::adapt::Rule::Captions
+pub noctiluca::adapt::Rule::CollapseNav
+pub noctiluca::adapt::Rule::DecorativeImages
+pub noctiluca::adapt::Rule::IconButtons
+pub noctiluca::adapt::Rule::InlinePictures
+pub noctiluca::adapt::Rule::LiveTail
+pub noctiluca::adapt::Rule::PageColors
+pub noctiluca::adapt::Rule::SnapGrids
+pub noctiluca::adapt::Rule::TextOverPictures
+impl noctiluca::adapt::Rule
+pub fn noctiluca::adapt::Rule::info(self) -> &'static noctiluca::adapt::RuleInfo
+pub fn noctiluca::adapt::Rule::name(self) -> &'static str
+pub fn noctiluca::adapt::Rule::parse(&str) -> core::option::Option<noctiluca::adapt::Rule>
+impl core::clone::Clone for noctiluca::adapt::Rule
+pub fn noctiluca::adapt::Rule::clone(&self) -> noctiluca::adapt::Rule
+impl core::cmp::Eq for noctiluca::adapt::Rule
+impl core::cmp::Ord for noctiluca::adapt::Rule
+pub fn noctiluca::adapt::Rule::cmp(&self, &noctiluca::adapt::Rule) -> core::cmp::Ordering
+impl core::cmp::PartialEq for noctiluca::adapt::Rule
+pub fn noctiluca::adapt::Rule::eq(&self, &noctiluca::adapt::Rule) -> bool
+impl core::cmp::PartialOrd for noctiluca::adapt::Rule
+pub fn noctiluca::adapt::Rule::partial_cmp(&self, &noctiluca::adapt::Rule) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for noctiluca::adapt::Rule
+pub fn noctiluca::adapt::Rule::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::adapt::Rule
+pub fn noctiluca::adapt::Rule::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for noctiluca::adapt::Rule
+impl core::marker::StructuralPartialEq for noctiluca::adapt::Rule
+impl core::marker::Freeze for noctiluca::adapt::Rule
+impl core::marker::Send for noctiluca::adapt::Rule
+impl core::marker::Sync for noctiluca::adapt::Rule
+impl core::marker::Unpin for noctiluca::adapt::Rule
+impl core::marker::UnsafeUnpin for noctiluca::adapt::Rule
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::adapt::Rule
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::adapt::Rule
+pub struct noctiluca::adapt::Adapt(_)
+impl noctiluca::adapt::Adapt
+pub fn noctiluca::adapt::Adapt::active(self) -> impl core::iter::traits::iterator::Iterator<Item = noctiluca::adapt::Rule>
+pub fn noctiluca::adapt::Adapt::apply(self, &str) -> core::result::Result<noctiluca::adapt::Adapt, alloc::string::String>
+pub fn noctiluca::adapt::Adapt::is_none(self) -> bool
+pub const fn noctiluca::adapt::Adapt::none() -> noctiluca::adapt::Adapt
+pub fn noctiluca::adapt::Adapt::on(self, noctiluca::adapt::Rule) -> bool
+pub fn noctiluca::adapt::Adapt::set(&mut self, noctiluca::adapt::Rule, bool)
+pub fn noctiluca::adapt::Adapt::with(self, noctiluca::adapt::Rule, bool) -> noctiluca::adapt::Adapt
+impl core::clone::Clone for noctiluca::adapt::Adapt
+pub fn noctiluca::adapt::Adapt::clone(&self) -> noctiluca::adapt::Adapt
+impl core::cmp::Eq for noctiluca::adapt::Adapt
+impl core::cmp::PartialEq for noctiluca::adapt::Adapt
+pub fn noctiluca::adapt::Adapt::eq(&self, &noctiluca::adapt::Adapt) -> bool
+impl core::default::Default for noctiluca::adapt::Adapt
+pub fn noctiluca::adapt::Adapt::default() -> Self
+impl core::fmt::Debug for noctiluca::adapt::Adapt
+pub fn noctiluca::adapt::Adapt::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::adapt::Adapt
+pub fn noctiluca::adapt::Adapt::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for noctiluca::adapt::Adapt
+impl core::marker::StructuralPartialEq for noctiluca::adapt::Adapt
+impl core::marker::Freeze for noctiluca::adapt::Adapt
+impl core::marker::Send for noctiluca::adapt::Adapt
+impl core::marker::Sync for noctiluca::adapt::Adapt
+impl core::marker::Unpin for noctiluca::adapt::Adapt
+impl core::marker::UnsafeUnpin for noctiluca::adapt::Adapt
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::adapt::Adapt
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::adapt::Adapt
+pub struct noctiluca::adapt::RuleInfo
+pub noctiluca::adapt::RuleInfo::default: bool
+pub noctiluca::adapt::RuleInfo::name: &'static str
+pub noctiluca::adapt::RuleInfo::rule: noctiluca::adapt::Rule
+pub noctiluca::adapt::RuleInfo::what: &'static str
+impl core::clone::Clone for noctiluca::adapt::RuleInfo
+pub fn noctiluca::adapt::RuleInfo::clone(&self) -> noctiluca::adapt::RuleInfo
+impl core::cmp::Eq for noctiluca::adapt::RuleInfo
+impl core::cmp::PartialEq for noctiluca::adapt::RuleInfo
+pub fn noctiluca::adapt::RuleInfo::eq(&self, &noctiluca::adapt::RuleInfo) -> bool
+impl core::fmt::Debug for noctiluca::adapt::RuleInfo
+pub fn noctiluca::adapt::RuleInfo::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::adapt::RuleInfo
+impl core::marker::StructuralPartialEq for noctiluca::adapt::RuleInfo
+impl core::marker::Freeze for noctiluca::adapt::RuleInfo
+impl core::marker::Send for noctiluca::adapt::RuleInfo
+impl core::marker::Sync for noctiluca::adapt::RuleInfo
+impl core::marker::Unpin for noctiluca::adapt::RuleInfo
+impl core::marker::UnsafeUnpin for noctiluca::adapt::RuleInfo
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::adapt::RuleInfo
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::adapt::RuleInfo
+pub const noctiluca::adapt::BANNER_RATIO: f64
+pub const noctiluca::adapt::DECORATIVE_PX: f64
+pub const noctiluca::adapt::ICON_PX: f64
+pub const noctiluca::adapt::MAX_PICTURE_ROWS: usize
+pub const noctiluca::adapt::MIN_CHROMA: f64
+pub const noctiluca::adapt::MIN_GRID_CELLS: usize
+pub const noctiluca::adapt::NARROW_COLUMNS: u16
+pub const noctiluca::adapt::RULES: &[noctiluca::adapt::RuleInfo]
+pub fn noctiluca::adapt::backdrop(noctiluca::adapt::Background) -> &'static str
+pub fn noctiluca::adapt::background() -> noctiluca::adapt::Background
+pub fn noctiluca::adapt::decorative(&noctiluca::model::Media) -> bool
+pub fn noctiluca::adapt::is_decorative(f64, f64, bool) -> bool
+pub fn noctiluca::adapt::page_color(&str, noctiluca::adapt::Background) -> core::option::Option<alloc::string::String>
+pub fn noctiluca::adapt::picture_cells(noctiluca::engine::Rect, usize, f64, noctiluca::adapt::Adapt, usize) -> (usize, usize)
+pub fn noctiluca::adapt::picture_of_text(&noctiluca::model::Media, f64) -> bool
+pub fn noctiluca::adapt::raw_color(&str, noctiluca::adapt::Background) -> core::option::Option<alloc::string::String>
+pub mod noctiluca::app
+pub struct noctiluca::app::Browser
+pub noctiluca::app::Browser::adapt: intuituive::reactive::Signal<noctiluca::adapt::Adapt>
+pub noctiluca::app::Browser::bookmarks: intuituive::reactive::Signal<noctiluca::bookmarks::Bookmarks>
+pub noctiluca::app::Browser::chrome_y: intuituive::reactive::Signal<f64>
+pub noctiluca::app::Browser::config: intuituive::reactive::Signal<noctiluca::config::Config>
+pub noctiluca::app::Browser::faithful: intuituive::reactive::Signal<bool>
+pub noctiluca::app::Browser::find: intuituive::reactive::Signal<core::option::Option<alloc::string::String>>
+pub noctiluca::app::Browser::find_at: intuituive::reactive::Signal<usize>
+pub noctiluca::app::Browser::found: intuituive::reactive::Memo<alloc::rc::Rc<alloc::vec::Vec<(usize, usize)>>>
+pub noctiluca::app::Browser::frozen: intuituive::reactive::Signal<bool>
+pub noctiluca::app::Browser::hints: intuituive::reactive::Signal<core::option::Option<noctiluca::app::Hints>>
+pub noctiluca::app::Browser::images: intuituive::reactive::Signal<noctiluca::config::Images>
+pub noctiluca::app::Browser::images_default: intuituive::reactive::Signal<noctiluca::config::Images>
+pub noctiluca::app::Browser::keymap: intuituive::reactive::Signal<rich_interact::keymap::Keymap>
+pub noctiluca::app::Browser::layout: intuituive::reactive::Memo<alloc::rc::Rc<noctiluca::layout::Projection>>
+pub noctiluca::app::Browser::live: intuituive::reactive::Signal<alloc::rc::Rc<std::collections::hash::map::HashMap<noctiluca::engine::NodeId, noctiluca::pictures::Live>>>
+pub noctiluca::app::Browser::logs: intuituive::reactive::Signal<std::collections::hash::map::HashMap<noctiluca::engine::NodeId, noctiluca::layout::LogScroll>>
+pub noctiluca::app::Browser::message: intuituive::reactive::Signal<alloc::string::String>
+pub noctiluca::app::Browser::page: intuituive::reactive::Signal<core::option::Option<alloc::sync::Arc<noctiluca::model::Page>>>
+pub noctiluca::app::Browser::pixels: intuituive::reactive::Memo<rich_art::picture::Pixels>
+pub noctiluca::app::Browser::scroll: intuituive::reactive::Signal<u64>
+pub noctiluca::app::Browser::state: intuituive::reactive::Signal<rich_embed::web::PageState>
+pub noctiluca::app::Browser::videos: intuituive::reactive::Signal<alloc::rc::Rc<std::collections::hash::map::HashMap<noctiluca::engine::NodeId, noctiluca::pictures::Live>>>
+pub noctiluca::app::Browser::view: intuituive::reactive::Signal<noctiluca::config::View>
+pub noctiluca::app::Browser::viewport: intuituive::reactive::Memo<(u16, u16)>
+impl noctiluca::app::Browser
+pub fn noctiluca::app::Browser::act(&self, noctiluca::model::Binding, noctiluca::tab::Intent, impl core::ops::function::FnOnce(core::result::Result<(), noctiluca::tab::Refusal>, &mut intuituive::app::Ctx) + 'static)
+pub fn noctiluca::app::Browser::effective_adapt(&self) -> noctiluca::adapt::Adapt
+pub fn noctiluca::app::Browser::hint_marks(&self) -> noctiluca::layout::Marks
+pub fn noctiluca::app::Browser::marks(&self) -> noctiluca::layout::Marks
+pub fn noctiluca::app::Browser::refresh_controls(&self)
+pub fn noctiluca::app::Browser::web_control(&self, &noctiluca::model::Control) -> alloc::rc::Rc<noctiluca::widgets::WebControl>
+impl core::clone::Clone for noctiluca::app::Browser
+pub fn noctiluca::app::Browser::clone(&self) -> noctiluca::app::Browser
+impl core::marker::Copy for noctiluca::app::Browser
+impl core::marker::Freeze for noctiluca::app::Browser
+impl core::marker::Send for noctiluca::app::Browser
+impl core::marker::Sync for noctiluca::app::Browser
+impl core::marker::Unpin for noctiluca::app::Browser
+impl core::marker::UnsafeUnpin for noctiluca::app::Browser
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::app::Browser
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::app::Browser
+pub struct noctiluca::app::Entry
+pub noctiluca::app::Entry::text: alloc::string::String
+pub noctiluca::app::Entry::unavailable: core::option::Option<alloc::string::String>
+impl core::clone::Clone for noctiluca::app::Entry
+pub fn noctiluca::app::Entry::clone(&self) -> noctiluca::app::Entry
+impl core::cmp::Eq for noctiluca::app::Entry
+impl core::cmp::PartialEq for noctiluca::app::Entry
+pub fn noctiluca::app::Entry::eq(&self, &noctiluca::app::Entry) -> bool
+impl core::fmt::Debug for noctiluca::app::Entry
+pub fn noctiluca::app::Entry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::app::Entry
+impl core::marker::Freeze for noctiluca::app::Entry
+impl core::marker::Send for noctiluca::app::Entry
+impl core::marker::Sync for noctiluca::app::Entry
+impl core::marker::Unpin for noctiluca::app::Entry
+impl core::marker::UnsafeUnpin for noctiluca::app::Entry
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::app::Entry
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::app::Entry
+pub struct noctiluca::app::Hints
+pub noctiluca::app::Hints::labels: alloc::vec::Vec<(alloc::string::String, usize)>
+pub noctiluca::app::Hints::typed: alloc::string::String
+impl core::clone::Clone for noctiluca::app::Hints
+pub fn noctiluca::app::Hints::clone(&self) -> noctiluca::app::Hints
+impl core::cmp::Eq for noctiluca::app::Hints
+impl core::cmp::PartialEq for noctiluca::app::Hints
+pub fn noctiluca::app::Hints::eq(&self, &noctiluca::app::Hints) -> bool
+impl core::fmt::Debug for noctiluca::app::Hints
+pub fn noctiluca::app::Hints::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::app::Hints
+impl core::marker::Freeze for noctiluca::app::Hints
+impl core::marker::Send for noctiluca::app::Hints
+impl core::marker::Sync for noctiluca::app::Hints
+impl core::marker::Unpin for noctiluca::app::Hints
+impl core::marker::UnsafeUnpin for noctiluca::app::Hints
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::app::Hints
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::app::Hints
+pub struct noctiluca::app::Options
+pub noctiluca::app::Options::bookmarks: noctiluca::bookmarks::Bookmarks
+pub noctiluca::app::Options::config: noctiluca::config::Config
+pub noctiluca::app::Options::images: core::option::Option<noctiluca::config::Images>
+pub noctiluca::app::Options::url: core::option::Option<alloc::string::String>
+pub noctiluca::app::Options::view: core::option::Option<noctiluca::config::View>
+impl core::clone::Clone for noctiluca::app::Options
+pub fn noctiluca::app::Options::clone(&self) -> noctiluca::app::Options
+impl core::fmt::Debug for noctiluca::app::Options
+pub fn noctiluca::app::Options::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for noctiluca::app::Options
+impl core::marker::Send for noctiluca::app::Options
+impl core::marker::Sync for noctiluca::app::Options
+impl core::marker::Unpin for noctiluca::app::Options
+impl core::marker::UnsafeUnpin for noctiluca::app::Options
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::app::Options
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::app::Options
+pub struct noctiluca::app::OutputRate
+impl noctiluca::app::OutputRate
+pub fn noctiluca::app::OutputRate::observe(&mut self, u64, core::time::Duration)
+pub fn noctiluca::app::OutputRate::rate(&mut self) -> core::option::Option<u64>
+impl core::default::Default for noctiluca::app::OutputRate
+pub fn noctiluca::app::OutputRate::default() -> noctiluca::app::OutputRate
+impl core::marker::Freeze for noctiluca::app::OutputRate
+impl !core::marker::Send for noctiluca::app::OutputRate
+impl !core::marker::Sync for noctiluca::app::OutputRate
+impl core::marker::Unpin for noctiluca::app::OutputRate
+impl core::marker::UnsafeUnpin for noctiluca::app::OutputRate
+impl !core::panic::unwind_safe::RefUnwindSafe for noctiluca::app::OutputRate
+impl !core::panic::unwind_safe::UnwindSafe for noctiluca::app::OutputRate
+pub const noctiluca::app::CHROME_ROWS: u16
+pub fn noctiluca::app::app(alloc::boxed::Box<dyn noctiluca::engine::Engine>, noctiluca::app::Options) -> intuituive::app::App
+pub fn noctiluca::app::availability(noctiluca::app::Browser, &str) -> core::result::Result<(), alloc::string::String>
+pub fn noctiluca::app::byte_budget(noctiluca::app::Browser) -> rich_art::picture::ByteBudget
+pub fn noctiluca::app::current_log(noctiluca::app::Browser) -> core::option::Option<(noctiluca::engine::NodeId, usize)>
+pub fn noctiluca::app::current_media(noctiluca::app::Browser) -> core::option::Option<(noctiluca::engine::NodeId, noctiluca::engine::Playback)>
+pub fn noctiluca::app::overlay_actions(noctiluca::app::Browser) -> alloc::vec::Vec<intuituive::actions::Action>
+pub fn noctiluca::app::run(noctiluca::app::Browser, &str, &mut intuituive::app::Ctx)
+pub mod noctiluca::args
+pub enum noctiluca::args::Dump
+pub noctiluca::args::Dump::Ax
+pub noctiluca::args::Dump::Json
+pub noctiluca::args::Dump::Text
+impl core::clone::Clone for noctiluca::args::Dump
+pub fn noctiluca::args::Dump::clone(&self) -> noctiluca::args::Dump
+impl core::cmp::Eq for noctiluca::args::Dump
+impl core::cmp::PartialEq for noctiluca::args::Dump
+pub fn noctiluca::args::Dump::eq(&self, &noctiluca::args::Dump) -> bool
+impl core::fmt::Debug for noctiluca::args::Dump
+pub fn noctiluca::args::Dump::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::args::Dump
+impl core::marker::StructuralPartialEq for noctiluca::args::Dump
+impl core::marker::Freeze for noctiluca::args::Dump
+impl core::marker::Send for noctiluca::args::Dump
+impl core::marker::Sync for noctiluca::args::Dump
+impl core::marker::Unpin for noctiluca::args::Dump
+impl core::marker::UnsafeUnpin for noctiluca::args::Dump
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::args::Dump
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::args::Dump
+pub enum noctiluca::args::Run
+pub noctiluca::args::Run::Browse(noctiluca::args::Args)
+pub noctiluca::args::Run::Help
+pub noctiluca::args::Run::Keys
+pub noctiluca::args::Run::Keys::config: core::option::Option<std::path::PathBuf>
+pub noctiluca::args::Run::Keys::site: core::option::Option<alloc::string::String>
+pub noctiluca::args::Run::Version
+impl core::clone::Clone for noctiluca::args::Run
+pub fn noctiluca::args::Run::clone(&self) -> noctiluca::args::Run
+impl core::cmp::Eq for noctiluca::args::Run
+impl core::cmp::PartialEq for noctiluca::args::Run
+pub fn noctiluca::args::Run::eq(&self, &noctiluca::args::Run) -> bool
+impl core::fmt::Debug for noctiluca::args::Run
+pub fn noctiluca::args::Run::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::args::Run
+impl core::marker::Freeze for noctiluca::args::Run
+impl core::marker::Send for noctiluca::args::Run
+impl core::marker::Sync for noctiluca::args::Run
+impl core::marker::Unpin for noctiluca::args::Run
+impl core::marker::UnsafeUnpin for noctiluca::args::Run
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::args::Run
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::args::Run
+pub struct noctiluca::args::Args
+pub noctiluca::args::Args::adapt: core::option::Option<alloc::string::String>
+pub noctiluca::args::Args::audio: bool
+pub noctiluca::args::Args::chrome: core::option::Option<std::path::PathBuf>
+pub noctiluca::args::Args::config: core::option::Option<std::path::PathBuf>
+pub noctiluca::args::Args::dump: core::option::Option<noctiluca::args::Dump>
+pub noctiluca::args::Args::fps: core::option::Option<u32>
+pub noctiluca::args::Args::images: core::option::Option<noctiluca::config::Images>
+pub noctiluca::args::Args::no_adapt: bool
+pub noctiluca::args::Args::no_js: bool
+pub noctiluca::args::Args::profile: core::option::Option<alloc::string::String>
+pub noctiluca::args::Args::target: alloc::vec::Vec<alloc::string::String>
+pub noctiluca::args::Args::view: core::option::Option<noctiluca::config::View>
+impl core::clone::Clone for noctiluca::args::Args
+pub fn noctiluca::args::Args::clone(&self) -> noctiluca::args::Args
+impl core::cmp::Eq for noctiluca::args::Args
+impl core::cmp::PartialEq for noctiluca::args::Args
+pub fn noctiluca::args::Args::eq(&self, &noctiluca::args::Args) -> bool
+impl core::default::Default for noctiluca::args::Args
+pub fn noctiluca::args::Args::default() -> noctiluca::args::Args
+impl core::fmt::Debug for noctiluca::args::Args
+pub fn noctiluca::args::Args::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::args::Args
+impl core::marker::Freeze for noctiluca::args::Args
+impl core::marker::Send for noctiluca::args::Args
+impl core::marker::Sync for noctiluca::args::Args
+impl core::marker::Unpin for noctiluca::args::Args
+impl core::marker::UnsafeUnpin for noctiluca::args::Args
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::args::Args
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::args::Args
+pub const noctiluca::args::USAGE: &str
+pub fn noctiluca::args::adapt_of(&noctiluca::args::Args, noctiluca::adapt::Adapt) -> core::result::Result<noctiluca::adapt::Adapt, alloc::string::String>
+pub fn noctiluca::args::parse_args(&[alloc::string::String]) -> core::result::Result<noctiluca::args::Run, alloc::string::String>
+pub mod noctiluca::bars
+pub fn noctiluca::bars::clock(f64) -> alloc::string::String
+pub fn noctiluca::bars::header(noctiluca::app::Browser) -> intuituive::node::Node
+pub fn noctiluca::bars::media_state(&noctiluca::engine::Playback) -> alloc::string::String
+pub fn noctiluca::bars::pixels_name(noctiluca::config::Images, rich_art::picture::Pixels) -> alloc::string::String
+pub fn noctiluca::bars::status(noctiluca::app::Browser) -> intuituive::node::Node
+pub mod noctiluca::bookmarks
+pub struct noctiluca::bookmarks::Bookmark
+pub noctiluca::bookmarks::Bookmark::keyword: core::option::Option<alloc::string::String>
+pub noctiluca::bookmarks::Bookmark::title: alloc::string::String
+pub noctiluca::bookmarks::Bookmark::url: alloc::string::String
+impl core::clone::Clone for noctiluca::bookmarks::Bookmark
+pub fn noctiluca::bookmarks::Bookmark::clone(&self) -> noctiluca::bookmarks::Bookmark
+impl core::cmp::Eq for noctiluca::bookmarks::Bookmark
+impl core::cmp::PartialEq for noctiluca::bookmarks::Bookmark
+pub fn noctiluca::bookmarks::Bookmark::eq(&self, &noctiluca::bookmarks::Bookmark) -> bool
+impl core::fmt::Debug for noctiluca::bookmarks::Bookmark
+pub fn noctiluca::bookmarks::Bookmark::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::bookmarks::Bookmark
+impl core::marker::Freeze for noctiluca::bookmarks::Bookmark
+impl core::marker::Send for noctiluca::bookmarks::Bookmark
+impl core::marker::Sync for noctiluca::bookmarks::Bookmark
+impl core::marker::Unpin for noctiluca::bookmarks::Bookmark
+impl core::marker::UnsafeUnpin for noctiluca::bookmarks::Bookmark
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::bookmarks::Bookmark
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::bookmarks::Bookmark
+pub struct noctiluca::bookmarks::Bookmarks
+pub noctiluca::bookmarks::Bookmarks::items: alloc::vec::Vec<noctiluca::bookmarks::Bookmark>
+pub noctiluca::bookmarks::Bookmarks::path: core::option::Option<std::path::PathBuf>
+impl noctiluca::bookmarks::Bookmarks
+pub fn noctiluca::bookmarks::Bookmarks::add(&mut self, noctiluca::bookmarks::Bookmark) -> std::io::error::Result<()>
+pub fn noctiluca::bookmarks::Bookmarks::contains(&self, &str) -> bool
+pub fn noctiluca::bookmarks::Bookmarks::load(&std::path::Path) -> std::io::error::Result<noctiluca::bookmarks::Bookmarks>
+pub fn noctiluca::bookmarks::Bookmarks::remove(&mut self, &str) -> std::io::error::Result<bool>
+impl core::clone::Clone for noctiluca::bookmarks::Bookmarks
+pub fn noctiluca::bookmarks::Bookmarks::clone(&self) -> noctiluca::bookmarks::Bookmarks
+impl core::cmp::Eq for noctiluca::bookmarks::Bookmarks
+impl core::cmp::PartialEq for noctiluca::bookmarks::Bookmarks
+pub fn noctiluca::bookmarks::Bookmarks::eq(&self, &noctiluca::bookmarks::Bookmarks) -> bool
+impl core::default::Default for noctiluca::bookmarks::Bookmarks
+pub fn noctiluca::bookmarks::Bookmarks::default() -> noctiluca::bookmarks::Bookmarks
+impl core::fmt::Debug for noctiluca::bookmarks::Bookmarks
+pub fn noctiluca::bookmarks::Bookmarks::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::bookmarks::Bookmarks
+impl core::marker::Freeze for noctiluca::bookmarks::Bookmarks
+impl core::marker::Send for noctiluca::bookmarks::Bookmarks
+impl core::marker::Sync for noctiluca::bookmarks::Bookmarks
+impl core::marker::Unpin for noctiluca::bookmarks::Bookmarks
+impl core::marker::UnsafeUnpin for noctiluca::bookmarks::Bookmarks
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::bookmarks::Bookmarks
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::bookmarks::Bookmarks
+pub fn noctiluca::bookmarks::default_path() -> core::option::Option<std::path::PathBuf>
+pub mod noctiluca::cdp
+pub struct noctiluca::cdp::ChromeBackend
+impl noctiluca::cdp::ChromeBackend
+pub fn noctiluca::cdp::ChromeBackend::devtools(&self) -> &rich_embed::chrome::DevTools
+pub fn noctiluca::cdp::ChromeBackend::start(noctiluca::cdp::ChromeOptions) -> std::io::error::Result<noctiluca::cdp::ChromeBackend>
+impl noctiluca::engine::Engine for noctiluca::cdp::ChromeBackend
+pub fn noctiluca::cdp::ChromeBackend::act(&mut self, noctiluca::engine::TabId, &noctiluca::engine::PageAction) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<i64>>
+pub fn noctiluca::cdp::ChromeBackend::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
+pub fn noctiluca::cdp::ChromeBackend::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
+pub fn noctiluca::cdp::ChromeBackend::close_tab(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::events(&mut self) -> alloc::vec::Vec<noctiluca::engine::EngineEvent>
+pub fn noctiluca::cdp::ChromeBackend::history(&mut self, noctiluca::engine::TabId, noctiluca::engine::HistoryStep) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::image_ready(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<bool>
+pub fn noctiluca::cdp::ChromeBackend::metrics(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::Metrics>
+pub fn noctiluca::cdp::ChromeBackend::new_tab(&mut self, &str) -> std::io::error::Result<noctiluca::engine::TabId>
+pub fn noctiluca::cdp::ChromeBackend::open(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::playback(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<noctiluca::engine::Playback>
+pub fn noctiluca::cdp::ChromeBackend::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
+pub fn noctiluca::cdp::ChromeBackend::read_live(&mut self, noctiluca::engine::TabId, i64, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
+pub fn noctiluca::cdp::ChromeBackend::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
+pub fn noctiluca::cdp::ChromeBackend::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
+pub fn noctiluca::cdp::ChromeBackend::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
+pub fn noctiluca::cdp::ChromeBackend::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
+impl core::marker::Freeze for noctiluca::cdp::ChromeBackend
+impl core::marker::Send for noctiluca::cdp::ChromeBackend
+impl !core::marker::Sync for noctiluca::cdp::ChromeBackend
+impl core::marker::Unpin for noctiluca::cdp::ChromeBackend
+impl core::marker::UnsafeUnpin for noctiluca::cdp::ChromeBackend
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::cdp::ChromeBackend
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::cdp::ChromeBackend
+pub struct noctiluca::cdp::ChromeOptions
+pub noctiluca::cdp::ChromeOptions::audio: bool
+pub noctiluca::cdp::ChromeOptions::binary: core::option::Option<std::path::PathBuf>
+pub noctiluca::cdp::ChromeOptions::columns: u16
+pub noctiluca::cdp::ChromeOptions::no_js: bool
+pub noctiluca::cdp::ChromeOptions::profile: core::option::Option<std::path::PathBuf>
+pub noctiluca::cdp::ChromeOptions::quarantine: core::option::Option<std::path::PathBuf>
+pub noctiluca::cdp::ChromeOptions::rows: u16
+impl core::clone::Clone for noctiluca::cdp::ChromeOptions
+pub fn noctiluca::cdp::ChromeOptions::clone(&self) -> noctiluca::cdp::ChromeOptions
+impl core::default::Default for noctiluca::cdp::ChromeOptions
+pub fn noctiluca::cdp::ChromeOptions::default() -> noctiluca::cdp::ChromeOptions
+impl core::fmt::Debug for noctiluca::cdp::ChromeOptions
+pub fn noctiluca::cdp::ChromeOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for noctiluca::cdp::ChromeOptions
+impl core::marker::Send for noctiluca::cdp::ChromeOptions
+impl core::marker::Sync for noctiluca::cdp::ChromeOptions
+impl core::marker::Unpin for noctiluca::cdp::ChromeOptions
+impl core::marker::UnsafeUnpin for noctiluca::cdp::ChromeOptions
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::cdp::ChromeOptions
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::cdp::ChromeOptions
+pub const noctiluca::cdp::BINDING: &str
+pub const noctiluca::cdp::CAN_PLAY_SCRIPT: &str
+pub const noctiluca::cdp::CELL: (u32, u32)
+pub const noctiluca::cdp::LIVE_READ: &str
+pub const noctiluca::cdp::PING_SCRIPT: &str
+pub const noctiluca::cdp::SEEK_SCRIPT: &str
+pub const noctiluca::cdp::SNAPSHOT_STYLES: &[&str]
+pub const noctiluca::cdp::WORLD: &str
+pub fn noctiluca::cdp::base64_decode(&str) -> core::option::Option<alloc::vec::Vec<u8>>
+pub fn noctiluca::cdp::find_chrome() -> core::option::Option<std::path::PathBuf>
+pub mod noctiluca::clean
+pub fn noctiluca::clean::clean(&str) -> alloc::string::String
+pub fn noctiluca::clean::clean_inline(&str) -> alloc::string::String
+pub fn noctiluca::clean::clean_pre(&str) -> alloc::string::String
+pub fn noctiluca::clean::is_unsafe(char) -> bool
+pub fn noctiluca::clean::markup(&str) -> alloc::string::String
+pub fn noctiluca::clean::truncate(&str, usize) -> alloc::string::String
+pub mod noctiluca::config
+pub enum noctiluca::config::Destination
+pub noctiluca::config::Destination::Keyword(alloc::string::String)
+pub noctiluca::config::Destination::Search(alloc::string::String)
+pub noctiluca::config::Destination::Url(alloc::string::String)
+impl noctiluca::config::Destination
+pub fn noctiluca::config::Destination::url(&self) -> &str
+impl core::clone::Clone for noctiluca::config::Destination
+pub fn noctiluca::config::Destination::clone(&self) -> noctiluca::config::Destination
+impl core::cmp::Eq for noctiluca::config::Destination
+impl core::cmp::PartialEq for noctiluca::config::Destination
+pub fn noctiluca::config::Destination::eq(&self, &noctiluca::config::Destination) -> bool
+impl core::fmt::Debug for noctiluca::config::Destination
+pub fn noctiluca::config::Destination::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::config::Destination
+impl core::marker::Freeze for noctiluca::config::Destination
+impl core::marker::Send for noctiluca::config::Destination
+impl core::marker::Sync for noctiluca::config::Destination
+impl core::marker::Unpin for noctiluca::config::Destination
+impl core::marker::UnsafeUnpin for noctiluca::config::Destination
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::Destination
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::Destination
+pub enum noctiluca::config::Images
+pub noctiluca::config::Images::Ansi
+pub noctiluca::config::Images::Auto
+pub noctiluca::config::Images::Iterm2
+pub noctiluca::config::Images::Kitty
+pub noctiluca::config::Images::None
+pub noctiluca::config::Images::Sixel
+impl noctiluca::config::Images
+pub fn noctiluca::config::Images::parse(&str) -> core::option::Option<noctiluca::config::Images>
+impl core::clone::Clone for noctiluca::config::Images
+pub fn noctiluca::config::Images::clone(&self) -> noctiluca::config::Images
+impl core::cmp::Eq for noctiluca::config::Images
+impl core::cmp::PartialEq for noctiluca::config::Images
+pub fn noctiluca::config::Images::eq(&self, &noctiluca::config::Images) -> bool
+impl core::default::Default for noctiluca::config::Images
+pub fn noctiluca::config::Images::default() -> noctiluca::config::Images
+impl core::fmt::Debug for noctiluca::config::Images
+pub fn noctiluca::config::Images::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::config::Images
+impl core::marker::StructuralPartialEq for noctiluca::config::Images
+impl core::marker::Freeze for noctiluca::config::Images
+impl core::marker::Send for noctiluca::config::Images
+impl core::marker::Sync for noctiluca::config::Images
+impl core::marker::Unpin for noctiluca::config::Images
+impl core::marker::UnsafeUnpin for noctiluca::config::Images
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::Images
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::Images
+pub enum noctiluca::config::Preset
+pub noctiluca::config::Preset::Plain
+pub noctiluca::config::Preset::Vim
+impl core::clone::Clone for noctiluca::config::Preset
+pub fn noctiluca::config::Preset::clone(&self) -> noctiluca::config::Preset
+impl core::cmp::Eq for noctiluca::config::Preset
+impl core::cmp::PartialEq for noctiluca::config::Preset
+pub fn noctiluca::config::Preset::eq(&self, &noctiluca::config::Preset) -> bool
+impl core::default::Default for noctiluca::config::Preset
+pub fn noctiluca::config::Preset::default() -> noctiluca::config::Preset
+impl core::fmt::Debug for noctiluca::config::Preset
+pub fn noctiluca::config::Preset::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::config::Preset
+impl core::marker::StructuralPartialEq for noctiluca::config::Preset
+impl core::marker::Freeze for noctiluca::config::Preset
+impl core::marker::Send for noctiluca::config::Preset
+impl core::marker::Sync for noctiluca::config::Preset
+impl core::marker::Unpin for noctiluca::config::Preset
+impl core::marker::UnsafeUnpin for noctiluca::config::Preset
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::Preset
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::Preset
+pub enum noctiluca::config::Target
+pub noctiluca::config::Target::Action(alloc::string::String)
+pub noctiluca::config::Target::Element
+pub noctiluca::config::Target::Element::name: alloc::string::String
+pub noctiluca::config::Target::Element::nth: usize
+pub noctiluca::config::Target::Element::role: alloc::string::String
+pub noctiluca::config::Target::Sequence(alloc::vec::Vec<noctiluca::config::Target>)
+impl noctiluca::config::Target
+pub fn noctiluca::config::Target::describe(&self) -> alloc::string::String
+impl core::clone::Clone for noctiluca::config::Target
+pub fn noctiluca::config::Target::clone(&self) -> noctiluca::config::Target
+impl core::cmp::Eq for noctiluca::config::Target
+impl core::cmp::PartialEq for noctiluca::config::Target
+pub fn noctiluca::config::Target::eq(&self, &noctiluca::config::Target) -> bool
+impl core::fmt::Debug for noctiluca::config::Target
+pub fn noctiluca::config::Target::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::config::Target
+impl core::marker::Freeze for noctiluca::config::Target
+impl core::marker::Send for noctiluca::config::Target
+impl core::marker::Sync for noctiluca::config::Target
+impl core::marker::Unpin for noctiluca::config::Target
+impl core::marker::UnsafeUnpin for noctiluca::config::Target
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::Target
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::Target
+pub enum noctiluca::config::View
+pub noctiluca::config::View::Projection
+pub noctiluca::config::View::Raster
+pub noctiluca::config::View::Reader
+impl noctiluca::config::View
+pub fn noctiluca::config::View::name(self) -> &'static str
+pub fn noctiluca::config::View::parse(&str) -> core::option::Option<noctiluca::config::View>
+impl core::clone::Clone for noctiluca::config::View
+pub fn noctiluca::config::View::clone(&self) -> noctiluca::config::View
+impl core::cmp::Eq for noctiluca::config::View
+impl core::cmp::PartialEq for noctiluca::config::View
+pub fn noctiluca::config::View::eq(&self, &noctiluca::config::View) -> bool
+impl core::default::Default for noctiluca::config::View
+pub fn noctiluca::config::View::default() -> noctiluca::config::View
+impl core::fmt::Debug for noctiluca::config::View
+pub fn noctiluca::config::View::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::config::View
+pub fn noctiluca::config::View::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for noctiluca::config::View
+impl core::marker::StructuralPartialEq for noctiluca::config::View
+impl core::marker::Freeze for noctiluca::config::View
+impl core::marker::Send for noctiluca::config::View
+impl core::marker::Sync for noctiluca::config::View
+impl core::marker::Unpin for noctiluca::config::View
+impl core::marker::UnsafeUnpin for noctiluca::config::View
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::View
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::View
+pub struct noctiluca::config::Config
+pub noctiluca::config::Config::adapt: noctiluca::adapt::Adapt
+pub noctiluca::config::Config::audio: bool
+pub noctiluca::config::Config::bandwidth: core::option::Option<u64>
+pub noctiluca::config::Config::fps: u32
+pub noctiluca::config::Config::home: core::option::Option<alloc::string::String>
+pub noctiluca::config::Config::images: noctiluca::config::Images
+pub noctiluca::config::Config::keys: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub noctiluca::config::Config::path: core::option::Option<std::path::PathBuf>
+pub noctiluca::config::Config::preset: noctiluca::config::Preset
+pub noctiluca::config::Config::profile: core::option::Option<alloc::string::String>
+pub noctiluca::config::Config::search: alloc::string::String
+pub noctiluca::config::Config::shortcuts: alloc::collections::btree::map::BTreeMap<alloc::string::String, noctiluca::config::Shortcut>
+pub noctiluca::config::Config::sites: alloc::vec::Vec<noctiluca::config::Site>
+pub noctiluca::config::Config::view: noctiluca::config::View
+pub noctiluca::config::Config::warnings: alloc::vec::Vec<alloc::string::String>
+impl noctiluca::config::Config
+pub fn noctiluca::config::Config::destination(&self, &str, &str, &[noctiluca::bookmarks::Bookmark]) -> noctiluca::config::Destination
+pub fn noctiluca::config::Config::load(core::option::Option<&std::path::Path>) -> std::io::error::Result<noctiluca::config::Config>
+pub fn noctiluca::config::Config::parse(&str) -> core::result::Result<noctiluca::config::Config, alloc::string::String>
+pub fn noctiluca::config::Config::site(&self, &str) -> core::option::Option<&noctiluca::config::Site>
+impl core::clone::Clone for noctiluca::config::Config
+pub fn noctiluca::config::Config::clone(&self) -> noctiluca::config::Config
+impl core::cmp::PartialEq for noctiluca::config::Config
+pub fn noctiluca::config::Config::eq(&self, &noctiluca::config::Config) -> bool
+impl core::default::Default for noctiluca::config::Config
+pub fn noctiluca::config::Config::default() -> Self
+impl core::fmt::Debug for noctiluca::config::Config
+pub fn noctiluca::config::Config::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::config::Config
+impl core::marker::Freeze for noctiluca::config::Config
+impl core::marker::Send for noctiluca::config::Config
+impl core::marker::Sync for noctiluca::config::Config
+impl core::marker::Unpin for noctiluca::config::Config
+impl core::marker::UnsafeUnpin for noctiluca::config::Config
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::Config
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::Config
+pub struct noctiluca::config::Shortcut
+pub noctiluca::config::Shortcut::home: alloc::string::String
+pub noctiluca::config::Shortcut::template: core::option::Option<alloc::string::String>
+impl core::clone::Clone for noctiluca::config::Shortcut
+pub fn noctiluca::config::Shortcut::clone(&self) -> noctiluca::config::Shortcut
+impl core::cmp::Eq for noctiluca::config::Shortcut
+impl core::cmp::PartialEq for noctiluca::config::Shortcut
+pub fn noctiluca::config::Shortcut::eq(&self, &noctiluca::config::Shortcut) -> bool
+impl core::fmt::Debug for noctiluca::config::Shortcut
+pub fn noctiluca::config::Shortcut::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::config::Shortcut
+impl core::marker::Freeze for noctiluca::config::Shortcut
+impl core::marker::Send for noctiluca::config::Shortcut
+impl core::marker::Sync for noctiluca::config::Shortcut
+impl core::marker::Unpin for noctiluca::config::Shortcut
+impl core::marker::UnsafeUnpin for noctiluca::config::Shortcut
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::Shortcut
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::Shortcut
+pub struct noctiluca::config::Site
+pub noctiluca::config::Site::audio: core::option::Option<bool>
+pub noctiluca::config::Site::fps: core::option::Option<u32>
+pub noctiluca::config::Site::images: core::option::Option<bool>
+pub noctiluca::config::Site::keys: alloc::vec::Vec<noctiluca::config::SiteKey>
+pub noctiluca::config::Site::keyword: core::option::Option<alloc::string::String>
+pub noctiluca::config::Site::pattern: alloc::string::String
+pub noctiluca::config::Site::view: core::option::Option<noctiluca::config::View>
+pub noctiluca::config::Site::width: core::option::Option<u16>
+impl core::clone::Clone for noctiluca::config::Site
+pub fn noctiluca::config::Site::clone(&self) -> noctiluca::config::Site
+impl core::cmp::Eq for noctiluca::config::Site
+impl core::cmp::PartialEq for noctiluca::config::Site
+pub fn noctiluca::config::Site::eq(&self, &noctiluca::config::Site) -> bool
+impl core::default::Default for noctiluca::config::Site
+pub fn noctiluca::config::Site::default() -> noctiluca::config::Site
+impl core::fmt::Debug for noctiluca::config::Site
+pub fn noctiluca::config::Site::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::config::Site
+impl core::marker::Freeze for noctiluca::config::Site
+impl core::marker::Send for noctiluca::config::Site
+impl core::marker::Sync for noctiluca::config::Site
+impl core::marker::Unpin for noctiluca::config::Site
+impl core::marker::UnsafeUnpin for noctiluca::config::Site
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::Site
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::Site
+pub struct noctiluca::config::SiteKey
+pub noctiluca::config::SiteKey::keys: alloc::string::String
+pub noctiluca::config::SiteKey::target: noctiluca::config::Target
+impl core::clone::Clone for noctiluca::config::SiteKey
+pub fn noctiluca::config::SiteKey::clone(&self) -> noctiluca::config::SiteKey
+impl core::cmp::Eq for noctiluca::config::SiteKey
+impl core::cmp::PartialEq for noctiluca::config::SiteKey
+pub fn noctiluca::config::SiteKey::eq(&self, &noctiluca::config::SiteKey) -> bool
+impl core::fmt::Debug for noctiluca::config::SiteKey
+pub fn noctiluca::config::SiteKey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::config::SiteKey
+impl core::marker::Freeze for noctiluca::config::SiteKey
+impl core::marker::Send for noctiluca::config::SiteKey
+impl core::marker::Sync for noctiluca::config::SiteKey
+impl core::marker::Unpin for noctiluca::config::SiteKey
+impl core::marker::UnsafeUnpin for noctiluca::config::SiteKey
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::SiteKey
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::SiteKey
+pub const noctiluca::config::DEFAULT_SEARCH: &str
+pub fn noctiluca::config::builtin_shortcuts() -> alloc::collections::btree::map::BTreeMap<alloc::string::String, noctiluca::config::Shortcut>
+pub fn noctiluca::config::config_dir() -> core::option::Option<std::path::PathBuf>
+pub fn noctiluca::config::data_dir() -> core::option::Option<std::path::PathBuf>
+pub fn noctiluca::config::default_path() -> core::option::Option<std::path::PathBuf>
+pub fn noctiluca::config::remove_site_key(&std::path::Path, &str, &str) -> std::io::error::Result<bool>
+pub fn noctiluca::config::save_site_key(&std::path::Path, &str, &str, &noctiluca::config::Target) -> std::io::error::Result<core::option::Option<alloc::string::String>>
+pub fn noctiluca::config::site_match(&str, &str) -> core::option::Option<(u8, usize)>
+pub mod noctiluca::draft
+pub enum noctiluca::draft::DraftState<T>
+pub noctiluca::draft::DraftState::Clean
+pub noctiluca::draft::DraftState::Conflict
+pub noctiluca::draft::DraftState::Conflict::remote: T
+pub noctiluca::draft::DraftState::Dirty
+pub noctiluca::draft::DraftState::Failed(alloc::string::String)
+pub noctiluca::draft::DraftState::Pending
+impl<T: core::clone::Clone> core::clone::Clone for noctiluca::draft::DraftState<T>
+pub fn noctiluca::draft::DraftState<T>::clone(&self) -> noctiluca::draft::DraftState<T>
+impl<T: core::cmp::Eq> core::cmp::Eq for noctiluca::draft::DraftState<T>
+impl<T: core::cmp::PartialEq> core::cmp::PartialEq for noctiluca::draft::DraftState<T>
+pub fn noctiluca::draft::DraftState<T>::eq(&self, &noctiluca::draft::DraftState<T>) -> bool
+impl<T: core::fmt::Debug> core::fmt::Debug for noctiluca::draft::DraftState<T>
+pub fn noctiluca::draft::DraftState<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T> core::marker::StructuralPartialEq for noctiluca::draft::DraftState<T>
+impl<T> core::marker::Freeze for noctiluca::draft::DraftState<T> where T: core::marker::Freeze
+impl<T> core::marker::Send for noctiluca::draft::DraftState<T> where T: core::marker::Send
+impl<T> core::marker::Sync for noctiluca::draft::DraftState<T> where T: core::marker::Sync
+impl<T> core::marker::Unpin for noctiluca::draft::DraftState<T> where T: core::marker::Unpin
+impl<T> core::marker::UnsafeUnpin for noctiluca::draft::DraftState<T> where T: core::marker::UnsafeUnpin
+impl<T> core::panic::unwind_safe::RefUnwindSafe for noctiluca::draft::DraftState<T> where T: core::panic::unwind_safe::RefUnwindSafe
+impl<T> core::panic::unwind_safe::UnwindSafe for noctiluca::draft::DraftState<T> where T: core::panic::unwind_safe::UnwindSafe
+pub struct noctiluca::draft::Commit<T>
+pub noctiluca::draft::Commit::base: T
+pub noctiluca::draft::Commit::revision: u32
+pub noctiluca::draft::Commit::value: T
+impl<T: core::clone::Clone> core::clone::Clone for noctiluca::draft::Commit<T>
+pub fn noctiluca::draft::Commit<T>::clone(&self) -> noctiluca::draft::Commit<T>
+impl<T: core::cmp::Eq> core::cmp::Eq for noctiluca::draft::Commit<T>
+impl<T: core::cmp::PartialEq> core::cmp::PartialEq for noctiluca::draft::Commit<T>
+pub fn noctiluca::draft::Commit<T>::eq(&self, &noctiluca::draft::Commit<T>) -> bool
+impl<T: core::fmt::Debug> core::fmt::Debug for noctiluca::draft::Commit<T>
+pub fn noctiluca::draft::Commit<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T> core::marker::StructuralPartialEq for noctiluca::draft::Commit<T>
+impl<T> core::marker::Freeze for noctiluca::draft::Commit<T> where T: core::marker::Freeze
+impl<T> core::marker::Send for noctiluca::draft::Commit<T> where T: core::marker::Send
+impl<T> core::marker::Sync for noctiluca::draft::Commit<T> where T: core::marker::Sync
+impl<T> core::marker::Unpin for noctiluca::draft::Commit<T> where T: core::marker::Unpin
+impl<T> core::marker::UnsafeUnpin for noctiluca::draft::Commit<T> where T: core::marker::UnsafeUnpin
+impl<T> core::panic::unwind_safe::RefUnwindSafe for noctiluca::draft::Commit<T> where T: core::panic::unwind_safe::RefUnwindSafe
+impl<T> core::panic::unwind_safe::UnwindSafe for noctiluca::draft::Commit<T> where T: core::panic::unwind_safe::UnwindSafe
+pub struct noctiluca::draft::DraftField<T>
+impl<T: core::clone::Clone + core::cmp::PartialEq> noctiluca::draft::DraftField<T>
+pub fn noctiluca::draft::DraftField<T>::accept(&mut self, T, u32)
+pub fn noctiluca::draft::DraftField<T>::confirmed(&self) -> &T
+pub fn noctiluca::draft::DraftField<T>::draft(&self) -> &T
+pub fn noctiluca::draft::DraftField<T>::is_dirty(&self) -> bool
+pub fn noctiluca::draft::DraftField<T>::new(T, u32) -> noctiluca::draft::DraftField<T>
+pub fn noctiluca::draft::DraftField<T>::observe(&mut self, T, u32)
+pub fn noctiluca::draft::DraftField<T>::reject(&mut self, impl core::convert::Into<alloc::string::String>, core::option::Option<T>)
+pub fn noctiluca::draft::DraftField<T>::reload(&mut self)
+pub fn noctiluca::draft::DraftField<T>::request(&mut self) -> core::result::Result<noctiluca::draft::Commit<T>, alloc::string::String>
+pub fn noctiluca::draft::DraftField<T>::set(&mut self, T) -> core::result::Result<(), alloc::string::String>
+pub fn noctiluca::draft::DraftField<T>::state(&self) -> &noctiluca::draft::DraftState<T>
+impl<T: core::clone::Clone> core::clone::Clone for noctiluca::draft::DraftField<T>
+pub fn noctiluca::draft::DraftField<T>::clone(&self) -> noctiluca::draft::DraftField<T>
+impl<T: core::cmp::Eq> core::cmp::Eq for noctiluca::draft::DraftField<T>
+impl<T: core::cmp::PartialEq> core::cmp::PartialEq for noctiluca::draft::DraftField<T>
+pub fn noctiluca::draft::DraftField<T>::eq(&self, &noctiluca::draft::DraftField<T>) -> bool
+impl<T: core::fmt::Debug> core::fmt::Debug for noctiluca::draft::DraftField<T>
+pub fn noctiluca::draft::DraftField<T>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T> core::marker::StructuralPartialEq for noctiluca::draft::DraftField<T>
+impl<T> core::marker::Freeze for noctiluca::draft::DraftField<T> where T: core::marker::Freeze
+impl<T> core::marker::Send for noctiluca::draft::DraftField<T> where T: core::marker::Send
+impl<T> core::marker::Sync for noctiluca::draft::DraftField<T> where T: core::marker::Sync
+impl<T> core::marker::Unpin for noctiluca::draft::DraftField<T> where T: core::marker::Unpin
+impl<T> core::marker::UnsafeUnpin for noctiluca::draft::DraftField<T> where T: core::marker::UnsafeUnpin
+impl<T> core::panic::unwind_safe::RefUnwindSafe for noctiluca::draft::DraftField<T> where T: core::panic::unwind_safe::RefUnwindSafe
+impl<T> core::panic::unwind_safe::UnwindSafe for noctiluca::draft::DraftField<T> where T: core::panic::unwind_safe::UnwindSafe
+pub mod noctiluca::dump
+pub fn noctiluca::dump::dump(&noctiluca::model::Page, noctiluca::args::Dump) -> alloc::string::String
+pub fn noctiluca::dump::json_of(&noctiluca::model::Page) -> serde_json::value::Value
+pub fn noctiluca::dump::read_page(alloc::boxed::Box<dyn noctiluca::engine::Engine>, &str, core::time::Duration) -> std::io::error::Result<alloc::sync::Arc<noctiluca::model::Page>>
+pub mod noctiluca::engine
+pub enum noctiluca::engine::EngineEvent
+pub noctiluca::engine::EngineEvent::Changed
+pub noctiluca::engine::EngineEvent::DownloadBegan
+pub noctiluca::engine::EngineEvent::DownloadBegan::guid: alloc::string::String
+pub noctiluca::engine::EngineEvent::DownloadBegan::name: alloc::string::String
+pub noctiluca::engine::EngineEvent::DownloadBegan::url: alloc::string::String
+pub noctiluca::engine::EngineEvent::DownloadDone
+pub noctiluca::engine::EngineEvent::DownloadDone::guid: alloc::string::String
+pub noctiluca::engine::EngineEvent::DownloadDone::path: alloc::string::String
+pub noctiluca::engine::EngineEvent::Live
+pub noctiluca::engine::EngineEvent::Loaded
+pub noctiluca::engine::EngineEvent::Navigated(alloc::string::String)
+impl core::clone::Clone for noctiluca::engine::EngineEvent
+pub fn noctiluca::engine::EngineEvent::clone(&self) -> noctiluca::engine::EngineEvent
+impl core::cmp::PartialEq for noctiluca::engine::EngineEvent
+pub fn noctiluca::engine::EngineEvent::eq(&self, &noctiluca::engine::EngineEvent) -> bool
+impl core::fmt::Debug for noctiluca::engine::EngineEvent
+pub fn noctiluca::engine::EngineEvent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::engine::EngineEvent
+impl core::marker::Freeze for noctiluca::engine::EngineEvent
+impl core::marker::Send for noctiluca::engine::EngineEvent
+impl core::marker::Sync for noctiluca::engine::EngineEvent
+impl core::marker::Unpin for noctiluca::engine::EngineEvent
+impl core::marker::UnsafeUnpin for noctiluca::engine::EngineEvent
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::EngineEvent
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::EngineEvent
+pub enum noctiluca::engine::Format
+pub noctiluca::engine::Format::Jpeg
+pub noctiluca::engine::Format::Png
+impl core::clone::Clone for noctiluca::engine::Format
+pub fn noctiluca::engine::Format::clone(&self) -> noctiluca::engine::Format
+impl core::cmp::Eq for noctiluca::engine::Format
+impl core::cmp::PartialEq for noctiluca::engine::Format
+pub fn noctiluca::engine::Format::eq(&self, &noctiluca::engine::Format) -> bool
+impl core::fmt::Debug for noctiluca::engine::Format
+pub fn noctiluca::engine::Format::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::engine::Format
+impl core::marker::StructuralPartialEq for noctiluca::engine::Format
+impl core::marker::Freeze for noctiluca::engine::Format
+impl core::marker::Send for noctiluca::engine::Format
+impl core::marker::Sync for noctiluca::engine::Format
+impl core::marker::Unpin for noctiluca::engine::Format
+impl core::marker::UnsafeUnpin for noctiluca::engine::Format
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::Format
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::Format
+pub enum noctiluca::engine::HistoryStep
+pub noctiluca::engine::HistoryStep::Back
+pub noctiluca::engine::HistoryStep::Forward
+pub noctiluca::engine::HistoryStep::Reload
+impl core::clone::Clone for noctiluca::engine::HistoryStep
+pub fn noctiluca::engine::HistoryStep::clone(&self) -> noctiluca::engine::HistoryStep
+impl core::cmp::Eq for noctiluca::engine::HistoryStep
+impl core::cmp::PartialEq for noctiluca::engine::HistoryStep
+pub fn noctiluca::engine::HistoryStep::eq(&self, &noctiluca::engine::HistoryStep) -> bool
+impl core::fmt::Debug for noctiluca::engine::HistoryStep
+pub fn noctiluca::engine::HistoryStep::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::engine::HistoryStep
+impl core::marker::StructuralPartialEq for noctiluca::engine::HistoryStep
+impl core::marker::Freeze for noctiluca::engine::HistoryStep
+impl core::marker::Send for noctiluca::engine::HistoryStep
+impl core::marker::Sync for noctiluca::engine::HistoryStep
+impl core::marker::Unpin for noctiluca::engine::HistoryStep
+impl core::marker::UnsafeUnpin for noctiluca::engine::HistoryStep
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::HistoryStep
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::HistoryStep
+pub enum noctiluca::engine::MediaOp
+pub noctiluca::engine::MediaOp::Mute(bool)
+pub noctiluca::engine::MediaOp::Pause
+pub noctiluca::engine::MediaOp::Play
+pub noctiluca::engine::MediaOp::Seek(f64)
+pub noctiluca::engine::MediaOp::Volume(f64)
+impl core::clone::Clone for noctiluca::engine::MediaOp
+pub fn noctiluca::engine::MediaOp::clone(&self) -> noctiluca::engine::MediaOp
+impl core::cmp::PartialEq for noctiluca::engine::MediaOp
+pub fn noctiluca::engine::MediaOp::eq(&self, &noctiluca::engine::MediaOp) -> bool
+impl core::fmt::Debug for noctiluca::engine::MediaOp
+pub fn noctiluca::engine::MediaOp::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::engine::MediaOp
+impl core::marker::StructuralPartialEq for noctiluca::engine::MediaOp
+impl core::marker::Freeze for noctiluca::engine::MediaOp
+impl core::marker::Send for noctiluca::engine::MediaOp
+impl core::marker::Sync for noctiluca::engine::MediaOp
+impl core::marker::Unpin for noctiluca::engine::MediaOp
+impl core::marker::UnsafeUnpin for noctiluca::engine::MediaOp
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::MediaOp
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::MediaOp
+pub enum noctiluca::engine::PageAction
+pub noctiluca::engine::PageAction::Click(noctiluca::engine::NodeId)
+pub noctiluca::engine::PageAction::Focus(noctiluca::engine::NodeId)
+pub noctiluca::engine::PageAction::InsertText(alloc::string::String)
+pub noctiluca::engine::PageAction::Media
+pub noctiluca::engine::PageAction::Media::node: noctiluca::engine::NodeId
+pub noctiluca::engine::PageAction::Media::op: noctiluca::engine::MediaOp
+pub noctiluca::engine::PageAction::ScrollTo(f64)
+pub noctiluca::engine::PageAction::SelectOption
+pub noctiluca::engine::PageAction::SelectOption::option: noctiluca::engine::NodeId
+pub noctiluca::engine::PageAction::SelectOption::select: noctiluca::engine::NodeId
+pub noctiluca::engine::PageAction::SetRange
+pub noctiluca::engine::PageAction::SetRange::node: noctiluca::engine::NodeId
+pub noctiluca::engine::PageAction::SetRange::value: f64
+pub noctiluca::engine::PageAction::SetValue
+pub noctiluca::engine::PageAction::SetValue::node: noctiluca::engine::NodeId
+pub noctiluca::engine::PageAction::SetValue::value: alloc::string::String
+pub noctiluca::engine::PageAction::Wheel(f64)
+impl core::clone::Clone for noctiluca::engine::PageAction
+pub fn noctiluca::engine::PageAction::clone(&self) -> noctiluca::engine::PageAction
+impl core::cmp::PartialEq for noctiluca::engine::PageAction
+pub fn noctiluca::engine::PageAction::eq(&self, &noctiluca::engine::PageAction) -> bool
+impl core::fmt::Debug for noctiluca::engine::PageAction
+pub fn noctiluca::engine::PageAction::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::engine::PageAction
+impl core::marker::Freeze for noctiluca::engine::PageAction
+impl core::marker::Send for noctiluca::engine::PageAction
+impl core::marker::Sync for noctiluca::engine::PageAction
+impl core::marker::Unpin for noctiluca::engine::PageAction
+impl core::marker::UnsafeUnpin for noctiluca::engine::PageAction
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::PageAction
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::PageAction
+pub struct noctiluca::engine::Frame
+pub noctiluca::engine::Frame::bytes: alloc::vec::Vec<u8>
+pub noctiluca::engine::Frame::format: noctiluca::engine::Format
+impl core::clone::Clone for noctiluca::engine::Frame
+pub fn noctiluca::engine::Frame::clone(&self) -> noctiluca::engine::Frame
+impl core::cmp::Eq for noctiluca::engine::Frame
+impl core::cmp::PartialEq for noctiluca::engine::Frame
+pub fn noctiluca::engine::Frame::eq(&self, &noctiluca::engine::Frame) -> bool
+impl core::fmt::Debug for noctiluca::engine::Frame
+pub fn noctiluca::engine::Frame::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::engine::Frame
+impl core::marker::Freeze for noctiluca::engine::Frame
+impl core::marker::Send for noctiluca::engine::Frame
+impl core::marker::Sync for noctiluca::engine::Frame
+impl core::marker::Unpin for noctiluca::engine::Frame
+impl core::marker::UnsafeUnpin for noctiluca::engine::Frame
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::Frame
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::Frame
+pub struct noctiluca::engine::LiveRead
+pub noctiluca::engine::LiveRead::first_shown: core::option::Option<u64>
+pub noctiluca::engine::LiveRead::fresh: alloc::vec::Vec<(u64, serde_json::value::Value)>
+pub noctiluca::engine::LiveRead::interactive: bool
+pub noctiluca::engine::LiveRead::order: alloc::vec::Vec<u64>
+impl core::clone::Clone for noctiluca::engine::LiveRead
+pub fn noctiluca::engine::LiveRead::clone(&self) -> noctiluca::engine::LiveRead
+impl core::cmp::PartialEq for noctiluca::engine::LiveRead
+pub fn noctiluca::engine::LiveRead::eq(&self, &noctiluca::engine::LiveRead) -> bool
+impl core::default::Default for noctiluca::engine::LiveRead
+pub fn noctiluca::engine::LiveRead::default() -> noctiluca::engine::LiveRead
+impl core::fmt::Debug for noctiluca::engine::LiveRead
+pub fn noctiluca::engine::LiveRead::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::engine::LiveRead
+impl core::marker::Freeze for noctiluca::engine::LiveRead
+impl core::marker::Send for noctiluca::engine::LiveRead
+impl core::marker::Sync for noctiluca::engine::LiveRead
+impl core::marker::Unpin for noctiluca::engine::LiveRead
+impl core::marker::UnsafeUnpin for noctiluca::engine::LiveRead
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::LiveRead
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::LiveRead
+pub struct noctiluca::engine::Metrics
+pub noctiluca::engine::Metrics::content_height: f64
+pub noctiluca::engine::Metrics::scroll_y: f64
+pub noctiluca::engine::Metrics::viewport_height: f64
+impl core::clone::Clone for noctiluca::engine::Metrics
+pub fn noctiluca::engine::Metrics::clone(&self) -> noctiluca::engine::Metrics
+impl core::cmp::PartialEq for noctiluca::engine::Metrics
+pub fn noctiluca::engine::Metrics::eq(&self, &noctiluca::engine::Metrics) -> bool
+impl core::default::Default for noctiluca::engine::Metrics
+pub fn noctiluca::engine::Metrics::default() -> noctiluca::engine::Metrics
+impl core::fmt::Debug for noctiluca::engine::Metrics
+pub fn noctiluca::engine::Metrics::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::engine::Metrics
+impl core::marker::StructuralPartialEq for noctiluca::engine::Metrics
+impl core::marker::Freeze for noctiluca::engine::Metrics
+impl core::marker::Send for noctiluca::engine::Metrics
+impl core::marker::Sync for noctiluca::engine::Metrics
+impl core::marker::Unpin for noctiluca::engine::Metrics
+impl core::marker::UnsafeUnpin for noctiluca::engine::Metrics
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::Metrics
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::Metrics
+pub struct noctiluca::engine::PageSnapshot
+pub noctiluca::engine::PageSnapshot::ax: serde_json::value::Value
+pub noctiluca::engine::PageSnapshot::dom: serde_json::value::Value
+impl core::clone::Clone for noctiluca::engine::PageSnapshot
+pub fn noctiluca::engine::PageSnapshot::clone(&self) -> noctiluca::engine::PageSnapshot
+impl core::cmp::PartialEq for noctiluca::engine::PageSnapshot
+pub fn noctiluca::engine::PageSnapshot::eq(&self, &noctiluca::engine::PageSnapshot) -> bool
+impl core::default::Default for noctiluca::engine::PageSnapshot
+pub fn noctiluca::engine::PageSnapshot::default() -> noctiluca::engine::PageSnapshot
+impl core::fmt::Debug for noctiluca::engine::PageSnapshot
+pub fn noctiluca::engine::PageSnapshot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::engine::PageSnapshot
+impl core::marker::Freeze for noctiluca::engine::PageSnapshot
+impl core::marker::Send for noctiluca::engine::PageSnapshot
+impl core::marker::Sync for noctiluca::engine::PageSnapshot
+impl core::marker::Unpin for noctiluca::engine::PageSnapshot
+impl core::marker::UnsafeUnpin for noctiluca::engine::PageSnapshot
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::PageSnapshot
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::PageSnapshot
+pub struct noctiluca::engine::Playback
+pub noctiluca::engine::Playback::duration: core::option::Option<f64>
+pub noctiluca::engine::Playback::ended: bool
+pub noctiluca::engine::Playback::failed: bool
+pub noctiluca::engine::Playback::muted: bool
+pub noctiluca::engine::Playback::paused: bool
+pub noctiluca::engine::Playback::ready: u8
+pub noctiluca::engine::Playback::time: f64
+pub noctiluca::engine::Playback::volume: f64
+impl noctiluca::engine::Playback
+pub fn noctiluca::engine::Playback::label(&self) -> &'static str
+pub fn noctiluca::engine::Playback::playing(&self) -> bool
+impl core::clone::Clone for noctiluca::engine::Playback
+pub fn noctiluca::engine::Playback::clone(&self) -> noctiluca::engine::Playback
+impl core::cmp::PartialEq for noctiluca::engine::Playback
+pub fn noctiluca::engine::Playback::eq(&self, &noctiluca::engine::Playback) -> bool
+impl core::default::Default for noctiluca::engine::Playback
+pub fn noctiluca::engine::Playback::default() -> noctiluca::engine::Playback
+impl core::fmt::Debug for noctiluca::engine::Playback
+pub fn noctiluca::engine::Playback::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::engine::Playback
+impl core::marker::StructuralPartialEq for noctiluca::engine::Playback
+impl core::marker::Freeze for noctiluca::engine::Playback
+impl core::marker::Send for noctiluca::engine::Playback
+impl core::marker::Sync for noctiluca::engine::Playback
+impl core::marker::Unpin for noctiluca::engine::Playback
+impl core::marker::UnsafeUnpin for noctiluca::engine::Playback
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::Playback
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::Playback
+pub struct noctiluca::engine::Rect
+pub noctiluca::engine::Rect::height: f64
+pub noctiluca::engine::Rect::width: f64
+pub noctiluca::engine::Rect::x: f64
+pub noctiluca::engine::Rect::y: f64
+impl noctiluca::engine::Rect
+pub fn noctiluca::engine::Rect::bottom(&self) -> f64
+pub fn noctiluca::engine::Rect::is_empty(&self) -> bool
+pub fn noctiluca::engine::Rect::new(f64, f64, f64, f64) -> noctiluca::engine::Rect
+pub fn noctiluca::engine::Rect::right(&self) -> f64
+impl core::clone::Clone for noctiluca::engine::Rect
+pub fn noctiluca::engine::Rect::clone(&self) -> noctiluca::engine::Rect
+impl core::cmp::PartialEq for noctiluca::engine::Rect
+pub fn noctiluca::engine::Rect::eq(&self, &noctiluca::engine::Rect) -> bool
+impl core::default::Default for noctiluca::engine::Rect
+pub fn noctiluca::engine::Rect::default() -> noctiluca::engine::Rect
+impl core::fmt::Debug for noctiluca::engine::Rect
+pub fn noctiluca::engine::Rect::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::engine::Rect
+impl core::marker::StructuralPartialEq for noctiluca::engine::Rect
+impl core::marker::Freeze for noctiluca::engine::Rect
+impl core::marker::Send for noctiluca::engine::Rect
+impl core::marker::Sync for noctiluca::engine::Rect
+impl core::marker::Unpin for noctiluca::engine::Rect
+impl core::marker::UnsafeUnpin for noctiluca::engine::Rect
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::Rect
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::Rect
+pub struct noctiluca::engine::TabId(pub u32)
+impl core::clone::Clone for noctiluca::engine::TabId
+pub fn noctiluca::engine::TabId::clone(&self) -> noctiluca::engine::TabId
+impl core::cmp::Eq for noctiluca::engine::TabId
+impl core::cmp::PartialEq for noctiluca::engine::TabId
+pub fn noctiluca::engine::TabId::eq(&self, &noctiluca::engine::TabId) -> bool
+impl core::default::Default for noctiluca::engine::TabId
+pub fn noctiluca::engine::TabId::default() -> noctiluca::engine::TabId
+impl core::fmt::Debug for noctiluca::engine::TabId
+pub fn noctiluca::engine::TabId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::engine::TabId
+pub fn noctiluca::engine::TabId::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for noctiluca::engine::TabId
+impl core::marker::StructuralPartialEq for noctiluca::engine::TabId
+impl core::marker::Freeze for noctiluca::engine::TabId
+impl core::marker::Send for noctiluca::engine::TabId
+impl core::marker::Sync for noctiluca::engine::TabId
+impl core::marker::Unpin for noctiluca::engine::TabId
+impl core::marker::UnsafeUnpin for noctiluca::engine::TabId
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::engine::TabId
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::engine::TabId
+pub trait noctiluca::engine::Engine: core::marker::Send
+pub fn noctiluca::engine::Engine::act(&mut self, noctiluca::engine::TabId, &noctiluca::engine::PageAction) -> std::io::error::Result<()>
+pub fn noctiluca::engine::Engine::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<noctiluca::engine::NodeId>>
+pub fn noctiluca::engine::Engine::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
+pub fn noctiluca::engine::Engine::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
+pub fn noctiluca::engine::Engine::close_tab(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<()>
+pub fn noctiluca::engine::Engine::events(&mut self) -> alloc::vec::Vec<noctiluca::engine::EngineEvent>
+pub fn noctiluca::engine::Engine::history(&mut self, noctiluca::engine::TabId, noctiluca::engine::HistoryStep) -> std::io::error::Result<()>
+pub fn noctiluca::engine::Engine::image_ready(&mut self, noctiluca::engine::TabId, noctiluca::engine::NodeId) -> std::io::error::Result<bool>
+pub fn noctiluca::engine::Engine::metrics(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::Metrics>
+pub fn noctiluca::engine::Engine::new_tab(&mut self, &str) -> std::io::error::Result<noctiluca::engine::TabId>
+pub fn noctiluca::engine::Engine::open(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<()>
+pub fn noctiluca::engine::Engine::playback(&mut self, noctiluca::engine::TabId, noctiluca::engine::NodeId) -> std::io::error::Result<noctiluca::engine::Playback>
+pub fn noctiluca::engine::Engine::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
+pub fn noctiluca::engine::Engine::read_live(&mut self, noctiluca::engine::TabId, noctiluca::engine::NodeId, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
+pub fn noctiluca::engine::Engine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn noctiluca::engine::Engine::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
+pub fn noctiluca::engine::Engine::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
+pub fn noctiluca::engine::Engine::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::engine::Engine::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
+pub fn noctiluca::engine::Engine::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
+impl noctiluca::engine::Engine for noctiluca::cdp::ChromeBackend
+pub fn noctiluca::cdp::ChromeBackend::act(&mut self, noctiluca::engine::TabId, &noctiluca::engine::PageAction) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<i64>>
+pub fn noctiluca::cdp::ChromeBackend::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
+pub fn noctiluca::cdp::ChromeBackend::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
+pub fn noctiluca::cdp::ChromeBackend::close_tab(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::events(&mut self) -> alloc::vec::Vec<noctiluca::engine::EngineEvent>
+pub fn noctiluca::cdp::ChromeBackend::history(&mut self, noctiluca::engine::TabId, noctiluca::engine::HistoryStep) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::image_ready(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<bool>
+pub fn noctiluca::cdp::ChromeBackend::metrics(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::Metrics>
+pub fn noctiluca::cdp::ChromeBackend::new_tab(&mut self, &str) -> std::io::error::Result<noctiluca::engine::TabId>
+pub fn noctiluca::cdp::ChromeBackend::open(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::playback(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<noctiluca::engine::Playback>
+pub fn noctiluca::cdp::ChromeBackend::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
+pub fn noctiluca::cdp::ChromeBackend::read_live(&mut self, noctiluca::engine::TabId, i64, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
+pub fn noctiluca::cdp::ChromeBackend::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
+pub fn noctiluca::cdp::ChromeBackend::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
+pub fn noctiluca::cdp::ChromeBackend::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
+pub fn noctiluca::cdp::ChromeBackend::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
+impl noctiluca::engine::Engine for noctiluca::testing::FakeEngine
+pub fn noctiluca::testing::FakeEngine::act(&mut self, noctiluca::engine::TabId, &noctiluca::engine::PageAction) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<noctiluca::engine::NodeId>>
+pub fn noctiluca::testing::FakeEngine::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
+pub fn noctiluca::testing::FakeEngine::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
+pub fn noctiluca::testing::FakeEngine::close_tab(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::events(&mut self) -> alloc::vec::Vec<noctiluca::engine::EngineEvent>
+pub fn noctiluca::testing::FakeEngine::history(&mut self, noctiluca::engine::TabId, noctiluca::engine::HistoryStep) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::image_ready(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<bool>
+pub fn noctiluca::testing::FakeEngine::metrics(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::Metrics>
+pub fn noctiluca::testing::FakeEngine::new_tab(&mut self, &str) -> std::io::error::Result<noctiluca::engine::TabId>
+pub fn noctiluca::testing::FakeEngine::open(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::playback(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<noctiluca::engine::Playback>
+pub fn noctiluca::testing::FakeEngine::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
+pub fn noctiluca::testing::FakeEngine::read_live(&mut self, noctiluca::engine::TabId, noctiluca::engine::NodeId, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
+pub fn noctiluca::testing::FakeEngine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
+pub fn noctiluca::testing::FakeEngine::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
+pub fn noctiluca::testing::FakeEngine::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
+pub fn noctiluca::testing::FakeEngine::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
+pub type noctiluca::engine::NodeId = i64
+pub mod noctiluca::layout
+pub enum noctiluca::layout::LogScroll
+pub noctiluca::layout::LogScroll::Follow
+pub noctiluca::layout::LogScroll::Paused(u64)
+impl core::clone::Clone for noctiluca::layout::LogScroll
+pub fn noctiluca::layout::LogScroll::clone(&self) -> noctiluca::layout::LogScroll
+impl core::cmp::Eq for noctiluca::layout::LogScroll
+impl core::cmp::PartialEq for noctiluca::layout::LogScroll
+pub fn noctiluca::layout::LogScroll::eq(&self, &noctiluca::layout::LogScroll) -> bool
+impl core::default::Default for noctiluca::layout::LogScroll
+pub fn noctiluca::layout::LogScroll::default() -> noctiluca::layout::LogScroll
+impl core::fmt::Debug for noctiluca::layout::LogScroll
+pub fn noctiluca::layout::LogScroll::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::layout::LogScroll
+pub fn noctiluca::layout::LogScroll::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for noctiluca::layout::LogScroll
+impl core::marker::StructuralPartialEq for noctiluca::layout::LogScroll
+impl core::marker::Freeze for noctiluca::layout::LogScroll
+impl core::marker::Send for noctiluca::layout::LogScroll
+impl core::marker::Sync for noctiluca::layout::LogScroll
+impl core::marker::Unpin for noctiluca::layout::LogScroll
+impl core::marker::UnsafeUnpin for noctiluca::layout::LogScroll
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::layout::LogScroll
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::layout::LogScroll
+pub enum noctiluca::layout::Piece
+pub noctiluca::layout::Piece::Controls(alloc::vec::Vec<usize>)
+pub noctiluca::layout::Piece::Media
+pub noctiluca::layout::Piece::Media::index: usize
+pub noctiluca::layout::Piece::Media::rows: u16
+pub noctiluca::layout::Piece::Player(usize)
+pub noctiluca::layout::Piece::Text(alloc::vec::Vec<noctiluca::layout::Line>)
+impl noctiluca::layout::Piece
+pub fn noctiluca::layout::Piece::rows(&self) -> usize
+impl core::clone::Clone for noctiluca::layout::Piece
+pub fn noctiluca::layout::Piece::clone(&self) -> noctiluca::layout::Piece
+impl core::cmp::PartialEq for noctiluca::layout::Piece
+pub fn noctiluca::layout::Piece::eq(&self, &noctiluca::layout::Piece) -> bool
+impl core::fmt::Debug for noctiluca::layout::Piece
+pub fn noctiluca::layout::Piece::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::layout::Piece
+impl core::marker::Freeze for noctiluca::layout::Piece
+impl core::marker::Send for noctiluca::layout::Piece
+impl core::marker::Sync for noctiluca::layout::Piece
+impl core::marker::Unpin for noctiluca::layout::Piece
+impl core::marker::UnsafeUnpin for noctiluca::layout::Piece
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::layout::Piece
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::layout::Piece
+pub struct noctiluca::layout::Line
+pub noctiluca::layout::Line::spans: alloc::vec::Vec<noctiluca::layout::Span>
+impl noctiluca::layout::Line
+pub fn noctiluca::layout::Line::plain(&self) -> alloc::string::String
+pub fn noctiluca::layout::Line::width(&self) -> usize
+impl core::clone::Clone for noctiluca::layout::Line
+pub fn noctiluca::layout::Line::clone(&self) -> noctiluca::layout::Line
+impl core::cmp::Eq for noctiluca::layout::Line
+impl core::cmp::PartialEq for noctiluca::layout::Line
+pub fn noctiluca::layout::Line::eq(&self, &noctiluca::layout::Line) -> bool
+impl core::default::Default for noctiluca::layout::Line
+pub fn noctiluca::layout::Line::default() -> noctiluca::layout::Line
+impl core::fmt::Debug for noctiluca::layout::Line
+pub fn noctiluca::layout::Line::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::layout::Line
+pub fn noctiluca::layout::Line::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for noctiluca::layout::Line
+impl core::marker::Freeze for noctiluca::layout::Line
+impl core::marker::Send for noctiluca::layout::Line
+impl core::marker::Sync for noctiluca::layout::Line
+impl core::marker::Unpin for noctiluca::layout::Line
+impl core::marker::UnsafeUnpin for noctiluca::layout::Line
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::layout::Line
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::layout::Line
+pub struct noctiluca::layout::Marks
+pub noctiluca::layout::Marks::adapt: noctiluca::adapt::Adapt
+pub noctiluca::layout::Marks::current: core::option::Option<(usize, usize)>
+pub noctiluca::layout::Marks::find: core::option::Option<alloc::string::String>
+pub noctiluca::layout::Marks::hints: std::collections::hash::map::HashMap<usize, alloc::string::String>
+pub noctiluca::layout::Marks::logs: std::collections::hash::map::HashMap<noctiluca::engine::NodeId, noctiluca::layout::LogScroll>
+impl core::clone::Clone for noctiluca::layout::Marks
+pub fn noctiluca::layout::Marks::clone(&self) -> noctiluca::layout::Marks
+impl core::default::Default for noctiluca::layout::Marks
+pub fn noctiluca::layout::Marks::default() -> noctiluca::layout::Marks
+impl core::fmt::Debug for noctiluca::layout::Marks
+pub fn noctiluca::layout::Marks::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for noctiluca::layout::Marks
+impl core::marker::Send for noctiluca::layout::Marks
+impl core::marker::Sync for noctiluca::layout::Marks
+impl core::marker::Unpin for noctiluca::layout::Marks
+impl core::marker::UnsafeUnpin for noctiluca::layout::Marks
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::layout::Marks
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::layout::Marks
+pub struct noctiluca::layout::Projection
+pub noctiluca::layout::Projection::inline: alloc::vec::Vec<(noctiluca::layout::Region, alloc::string::String)>
+pub noctiluca::layout::Projection::keys: alloc::vec::Vec<u64>
+pub noctiluca::layout::Projection::lines: alloc::vec::Vec<noctiluca::layout::Line>
+pub noctiluca::layout::Projection::logs: alloc::vec::Vec<(noctiluca::engine::NodeId, usize, usize)>
+pub noctiluca::layout::Projection::regions: alloc::vec::Vec<noctiluca::layout::Region>
+pub noctiluca::layout::Projection::rows: std::collections::hash::map::HashMap<u64, usize>
+pub noctiluca::layout::Projection::y: alloc::vec::Vec<f64>
+impl noctiluca::layout::Projection
+pub fn noctiluca::layout::Projection::y_of(&self, usize) -> f64
+impl core::clone::Clone for noctiluca::layout::Projection
+pub fn noctiluca::layout::Projection::clone(&self) -> noctiluca::layout::Projection
+impl core::cmp::PartialEq for noctiluca::layout::Projection
+pub fn noctiluca::layout::Projection::eq(&self, &noctiluca::layout::Projection) -> bool
+impl core::default::Default for noctiluca::layout::Projection
+pub fn noctiluca::layout::Projection::default() -> noctiluca::layout::Projection
+impl core::fmt::Debug for noctiluca::layout::Projection
+pub fn noctiluca::layout::Projection::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::layout::Projection
+impl core::marker::Freeze for noctiluca::layout::Projection
+impl core::marker::Send for noctiluca::layout::Projection
+impl core::marker::Sync for noctiluca::layout::Projection
+impl core::marker::Unpin for noctiluca::layout::Projection
+impl core::marker::UnsafeUnpin for noctiluca::layout::Projection
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::layout::Projection
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::layout::Projection
+pub struct noctiluca::layout::Region
+pub noctiluca::layout::Region::cols: usize
+pub noctiluca::layout::Region::column: usize
+pub noctiluca::layout::Region::media: usize
+pub noctiluca::layout::Region::row: usize
+pub noctiluca::layout::Region::rows: usize
+impl noctiluca::layout::Region
+pub fn noctiluca::layout::Region::on(&self, usize) -> bool
+impl core::clone::Clone for noctiluca::layout::Region
+pub fn noctiluca::layout::Region::clone(&self) -> noctiluca::layout::Region
+impl core::cmp::Eq for noctiluca::layout::Region
+impl core::cmp::PartialEq for noctiluca::layout::Region
+pub fn noctiluca::layout::Region::eq(&self, &noctiluca::layout::Region) -> bool
+impl core::default::Default for noctiluca::layout::Region
+pub fn noctiluca::layout::Region::default() -> noctiluca::layout::Region
+impl core::fmt::Debug for noctiluca::layout::Region
+pub fn noctiluca::layout::Region::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::layout::Region
+pub fn noctiluca::layout::Region::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for noctiluca::layout::Region
+impl core::marker::StructuralPartialEq for noctiluca::layout::Region
+impl core::marker::Freeze for noctiluca::layout::Region
+impl core::marker::Send for noctiluca::layout::Region
+impl core::marker::Sync for noctiluca::layout::Region
+impl core::marker::Unpin for noctiluca::layout::Region
+impl core::marker::UnsafeUnpin for noctiluca::layout::Region
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::layout::Region
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::layout::Region
+pub struct noctiluca::layout::Span
+pub noctiluca::layout::Span::control: core::option::Option<usize>
+pub noctiluca::layout::Span::picture: core::option::Option<alloc::string::String>
+pub noctiluca::layout::Span::style: alloc::string::String
+pub noctiluca::layout::Span::text: alloc::string::String
+impl noctiluca::layout::Span
+pub fn noctiluca::layout::Span::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> noctiluca::layout::Span
+impl core::clone::Clone for noctiluca::layout::Span
+pub fn noctiluca::layout::Span::clone(&self) -> noctiluca::layout::Span
+impl core::cmp::Eq for noctiluca::layout::Span
+impl core::cmp::PartialEq for noctiluca::layout::Span
+pub fn noctiluca::layout::Span::eq(&self, &noctiluca::layout::Span) -> bool
+impl core::default::Default for noctiluca::layout::Span
+pub fn noctiluca::layout::Span::default() -> noctiluca::layout::Span
+impl core::fmt::Debug for noctiluca::layout::Span
+pub fn noctiluca::layout::Span::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::layout::Span
+pub fn noctiluca::layout::Span::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for noctiluca::layout::Span
+impl core::marker::Freeze for noctiluca::layout::Span
+impl core::marker::Send for noctiluca::layout::Span
+impl core::marker::Sync for noctiluca::layout::Span
+impl core::marker::Unpin for noctiluca::layout::Span
+impl core::marker::UnsafeUnpin for noctiluca::layout::Span
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::layout::Span
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::layout::Span
+pub fn noctiluca::layout::face(&noctiluca::model::Control) -> alloc::string::String
+pub fn noctiluca::layout::face_in(&noctiluca::model::Control, noctiluca::adapt::Adapt, usize) -> alloc::string::String
+pub fn noctiluca::layout::hint_labels(usize) -> alloc::vec::Vec<alloc::string::String>
+pub fn noctiluca::layout::inline_cells(&str, f64) -> alloc::string::String
+pub fn noctiluca::layout::log_lines(&noctiluca::model::Log, usize, usize, &noctiluca::model::Page, &noctiluca::layout::Marks) -> alloc::vec::Vec<noctiluca::layout::Line>
+pub fn noctiluca::layout::matches(&str, &str) -> alloc::vec::Vec<(usize, usize)>
+pub fn noctiluca::layout::play_mark(&noctiluca::model::Media, usize) -> core::option::Option<noctiluca::layout::Line>
+pub fn noctiluca::layout::project(&noctiluca::model::Page, u16, (f64, f64), &noctiluca::layout::Marks) -> noctiluca::layout::Projection
+pub fn noctiluca::layout::projection(&noctiluca::model::Page, u16, (f64, f64), &noctiluca::layout::Marks) -> alloc::vec::Vec<noctiluca::layout::Line>
+pub fn noctiluca::layout::reader(&noctiluca::model::Page, u16, &noctiluca::layout::Marks) -> alloc::vec::Vec<noctiluca::layout::Piece>
+pub fn noctiluca::layout::scroll_log(&noctiluca::model::Log, noctiluca::layout::LogScroll, isize) -> noctiluca::layout::LogScroll
+pub fn noctiluca::layout::to_text(&[noctiluca::layout::Line], &noctiluca::layout::Marks, usize) -> rich::text::Text
+pub fn noctiluca::layout::wrap(&[noctiluca::layout::Span], usize, &[noctiluca::layout::Span], &[noctiluca::layout::Span]) -> alloc::vec::Vec<noctiluca::layout::Line>
+pub mod noctiluca::model
+pub enum noctiluca::model::BlockKind
+pub noctiluca::model::BlockKind::Code
+pub noctiluca::model::BlockKind::Control(usize)
+pub noctiluca::model::BlockKind::Heading(u8)
+pub noctiluca::model::BlockKind::ListItem
+pub noctiluca::model::BlockKind::ListItem::depth: u8
+pub noctiluca::model::BlockKind::ListItem::marker: alloc::string::String
+pub noctiluca::model::BlockKind::Log(usize)
+pub noctiluca::model::BlockKind::Media(usize)
+pub noctiluca::model::BlockKind::Paragraph
+pub noctiluca::model::BlockKind::Table(noctiluca::model::Table)
+impl core::clone::Clone for noctiluca::model::BlockKind
+pub fn noctiluca::model::BlockKind::clone(&self) -> noctiluca::model::BlockKind
+impl core::cmp::PartialEq for noctiluca::model::BlockKind
+pub fn noctiluca::model::BlockKind::eq(&self, &noctiluca::model::BlockKind) -> bool
+impl core::fmt::Debug for noctiluca::model::BlockKind
+pub fn noctiluca::model::BlockKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::BlockKind
+impl core::marker::Freeze for noctiluca::model::BlockKind
+impl core::marker::Send for noctiluca::model::BlockKind
+impl core::marker::Sync for noctiluca::model::BlockKind
+impl core::marker::Unpin for noctiluca::model::BlockKind
+impl core::marker::UnsafeUnpin for noctiluca::model::BlockKind
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::BlockKind
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::BlockKind
+pub enum noctiluca::model::Check
+pub noctiluca::model::Check::Mixed
+pub noctiluca::model::Check::Off
+pub noctiluca::model::Check::On
+impl core::clone::Clone for noctiluca::model::Check
+pub fn noctiluca::model::Check::clone(&self) -> noctiluca::model::Check
+impl core::cmp::Eq for noctiluca::model::Check
+impl core::cmp::PartialEq for noctiluca::model::Check
+pub fn noctiluca::model::Check::eq(&self, &noctiluca::model::Check) -> bool
+impl core::fmt::Debug for noctiluca::model::Check
+pub fn noctiluca::model::Check::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::model::Check
+pub fn noctiluca::model::Check::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for noctiluca::model::Check
+impl core::marker::StructuralPartialEq for noctiluca::model::Check
+impl core::marker::Freeze for noctiluca::model::Check
+impl core::marker::Send for noctiluca::model::Check
+impl core::marker::Sync for noctiluca::model::Check
+impl core::marker::Unpin for noctiluca::model::Check
+impl core::marker::UnsafeUnpin for noctiluca::model::Check
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Check
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Check
+pub enum noctiluca::model::LogKind
+pub noctiluca::model::LogKind::Appended
+pub noctiluca::model::LogKind::Live
+pub noctiluca::model::LogKind::Log
+impl core::clone::Clone for noctiluca::model::LogKind
+pub fn noctiluca::model::LogKind::clone(&self) -> noctiluca::model::LogKind
+impl core::cmp::Eq for noctiluca::model::LogKind
+impl core::cmp::PartialEq for noctiluca::model::LogKind
+pub fn noctiluca::model::LogKind::eq(&self, &noctiluca::model::LogKind) -> bool
+impl core::fmt::Debug for noctiluca::model::LogKind
+pub fn noctiluca::model::LogKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::model::LogKind
+impl core::marker::StructuralPartialEq for noctiluca::model::LogKind
+impl core::marker::Freeze for noctiluca::model::LogKind
+impl core::marker::Send for noctiluca::model::LogKind
+impl core::marker::Sync for noctiluca::model::LogKind
+impl core::marker::Unpin for noctiluca::model::LogKind
+impl core::marker::UnsafeUnpin for noctiluca::model::LogKind
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::LogKind
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::LogKind
+pub enum noctiluca::model::MediaKind
+pub noctiluca::model::MediaKind::Audio
+pub noctiluca::model::MediaKind::Canvas
+pub noctiluca::model::MediaKind::Frame
+pub noctiluca::model::MediaKind::Image
+pub noctiluca::model::MediaKind::Svg
+pub noctiluca::model::MediaKind::Video
+impl core::clone::Clone for noctiluca::model::MediaKind
+pub fn noctiluca::model::MediaKind::clone(&self) -> noctiluca::model::MediaKind
+impl core::cmp::Eq for noctiluca::model::MediaKind
+impl core::cmp::PartialEq for noctiluca::model::MediaKind
+pub fn noctiluca::model::MediaKind::eq(&self, &noctiluca::model::MediaKind) -> bool
+impl core::fmt::Debug for noctiluca::model::MediaKind
+pub fn noctiluca::model::MediaKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::model::MediaKind
+impl core::marker::StructuralPartialEq for noctiluca::model::MediaKind
+impl core::marker::Freeze for noctiluca::model::MediaKind
+impl core::marker::Send for noctiluca::model::MediaKind
+impl core::marker::Sync for noctiluca::model::MediaKind
+impl core::marker::Unpin for noctiluca::model::MediaKind
+impl core::marker::UnsafeUnpin for noctiluca::model::MediaKind
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::MediaKind
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::MediaKind
+pub enum noctiluca::model::RegionKind
+pub noctiluca::model::RegionKind::Complementary
+pub noctiluca::model::RegionKind::Navigation
+impl core::clone::Clone for noctiluca::model::RegionKind
+pub fn noctiluca::model::RegionKind::clone(&self) -> noctiluca::model::RegionKind
+impl core::cmp::Eq for noctiluca::model::RegionKind
+impl core::cmp::PartialEq for noctiluca::model::RegionKind
+pub fn noctiluca::model::RegionKind::eq(&self, &noctiluca::model::RegionKind) -> bool
+impl core::fmt::Debug for noctiluca::model::RegionKind
+pub fn noctiluca::model::RegionKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::model::RegionKind
+impl core::marker::StructuralPartialEq for noctiluca::model::RegionKind
+impl core::marker::Freeze for noctiluca::model::RegionKind
+impl core::marker::Send for noctiluca::model::RegionKind
+impl core::marker::Sync for noctiluca::model::RegionKind
+impl core::marker::Unpin for noctiluca::model::RegionKind
+impl core::marker::UnsafeUnpin for noctiluca::model::RegionKind
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::RegionKind
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::RegionKind
+pub enum noctiluca::model::Role
+pub noctiluca::model::Role::Button
+pub noctiluca::model::Role::CheckBox
+pub noctiluca::model::Role::ComboBox
+pub noctiluca::model::Role::Link
+pub noctiluca::model::Role::ListBox
+pub noctiluca::model::Role::MenuItem
+pub noctiluca::model::Role::Password
+pub noctiluca::model::Role::Radio
+pub noctiluca::model::Role::SearchBox
+pub noctiluca::model::Role::Slider
+pub noctiluca::model::Role::SpinButton
+pub noctiluca::model::Role::Switch
+pub noctiluca::model::Role::Tab
+pub noctiluca::model::Role::TextBox
+impl noctiluca::model::Role
+pub fn noctiluca::model::Role::from_ax(&str) -> core::option::Option<noctiluca::model::Role>
+pub fn noctiluca::model::Role::is_text(&self) -> bool
+pub fn noctiluca::model::Role::name(&self) -> &'static str
+impl core::clone::Clone for noctiluca::model::Role
+pub fn noctiluca::model::Role::clone(&self) -> noctiluca::model::Role
+impl core::cmp::Eq for noctiluca::model::Role
+impl core::cmp::PartialEq for noctiluca::model::Role
+pub fn noctiluca::model::Role::eq(&self, &noctiluca::model::Role) -> bool
+impl core::fmt::Debug for noctiluca::model::Role
+pub fn noctiluca::model::Role::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::model::Role
+pub fn noctiluca::model::Role::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for noctiluca::model::Role
+impl core::marker::Freeze for noctiluca::model::Role
+impl core::marker::Send for noctiluca::model::Role
+impl core::marker::Sync for noctiluca::model::Role
+impl core::marker::Unpin for noctiluca::model::Role
+impl core::marker::UnsafeUnpin for noctiluca::model::Role
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Role
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Role
+pub struct noctiluca::model::Binding
+pub noctiluca::model::Binding::document: u64
+pub noctiluca::model::Binding::node: noctiluca::engine::NodeId
+pub noctiluca::model::Binding::revision: u32
+impl core::clone::Clone for noctiluca::model::Binding
+pub fn noctiluca::model::Binding::clone(&self) -> noctiluca::model::Binding
+impl core::cmp::Eq for noctiluca::model::Binding
+impl core::cmp::PartialEq for noctiluca::model::Binding
+pub fn noctiluca::model::Binding::eq(&self, &noctiluca::model::Binding) -> bool
+impl core::fmt::Debug for noctiluca::model::Binding
+pub fn noctiluca::model::Binding::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::model::Binding
+pub fn noctiluca::model::Binding::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for noctiluca::model::Binding
+impl core::marker::StructuralPartialEq for noctiluca::model::Binding
+impl core::marker::Freeze for noctiluca::model::Binding
+impl core::marker::Send for noctiluca::model::Binding
+impl core::marker::Sync for noctiluca::model::Binding
+impl core::marker::Unpin for noctiluca::model::Binding
+impl core::marker::UnsafeUnpin for noctiluca::model::Binding
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Binding
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Binding
+pub struct noctiluca::model::Block
+pub noctiluca::model::Block::frame: noctiluca::engine::Rect
+pub noctiluca::model::Block::kind: noctiluca::model::BlockKind
+pub noctiluca::model::Block::node: noctiluca::engine::NodeId
+pub noctiluca::model::Block::quote: u8
+pub noctiluca::model::Block::rect: noctiluca::engine::Rect
+pub noctiluca::model::Block::region: core::option::Option<usize>
+pub noctiluca::model::Block::runs: alloc::vec::Vec<noctiluca::model::Run>
+impl noctiluca::model::Block
+pub fn noctiluca::model::Block::text(&self) -> alloc::string::String
+impl core::clone::Clone for noctiluca::model::Block
+pub fn noctiluca::model::Block::clone(&self) -> noctiluca::model::Block
+impl core::cmp::PartialEq for noctiluca::model::Block
+pub fn noctiluca::model::Block::eq(&self, &noctiluca::model::Block) -> bool
+impl core::fmt::Debug for noctiluca::model::Block
+pub fn noctiluca::model::Block::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Block
+impl core::marker::Freeze for noctiluca::model::Block
+impl core::marker::Send for noctiluca::model::Block
+impl core::marker::Sync for noctiluca::model::Block
+impl core::marker::Unpin for noctiluca::model::Block
+impl core::marker::UnsafeUnpin for noctiluca::model::Block
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Block
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Block
+pub struct noctiluca::model::Cell
+pub noctiluca::model::Cell::header: bool
+pub noctiluca::model::Cell::rect: noctiluca::engine::Rect
+pub noctiluca::model::Cell::runs: alloc::vec::Vec<noctiluca::model::Run>
+impl noctiluca::model::Cell
+pub fn noctiluca::model::Cell::text(&self) -> alloc::string::String
+impl core::clone::Clone for noctiluca::model::Cell
+pub fn noctiluca::model::Cell::clone(&self) -> noctiluca::model::Cell
+impl core::cmp::PartialEq for noctiluca::model::Cell
+pub fn noctiluca::model::Cell::eq(&self, &noctiluca::model::Cell) -> bool
+impl core::default::Default for noctiluca::model::Cell
+pub fn noctiluca::model::Cell::default() -> noctiluca::model::Cell
+impl core::fmt::Debug for noctiluca::model::Cell
+pub fn noctiluca::model::Cell::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Cell
+impl core::marker::Freeze for noctiluca::model::Cell
+impl core::marker::Send for noctiluca::model::Cell
+impl core::marker::Sync for noctiluca::model::Cell
+impl core::marker::Unpin for noctiluca::model::Cell
+impl core::marker::UnsafeUnpin for noctiluca::model::Cell
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Cell
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Cell
+pub struct noctiluca::model::Choice
+pub noctiluca::model::Choice::disabled: bool
+pub noctiluca::model::Choice::key: noctiluca::engine::NodeId
+pub noctiluca::model::Choice::label: alloc::string::String
+pub noctiluca::model::Choice::selected: bool
+impl core::clone::Clone for noctiluca::model::Choice
+pub fn noctiluca::model::Choice::clone(&self) -> noctiluca::model::Choice
+impl core::cmp::Eq for noctiluca::model::Choice
+impl core::cmp::PartialEq for noctiluca::model::Choice
+pub fn noctiluca::model::Choice::eq(&self, &noctiluca::model::Choice) -> bool
+impl core::fmt::Debug for noctiluca::model::Choice
+pub fn noctiluca::model::Choice::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::model::Choice
+pub fn noctiluca::model::Choice::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for noctiluca::model::Choice
+impl core::marker::Freeze for noctiluca::model::Choice
+impl core::marker::Send for noctiluca::model::Choice
+impl core::marker::Sync for noctiluca::model::Choice
+impl core::marker::Unpin for noctiluca::model::Choice
+impl core::marker::UnsafeUnpin for noctiluca::model::Choice
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Choice
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Choice
+pub struct noctiluca::model::Control
+pub noctiluca::model::Control::checked: core::option::Option<noctiluca::model::Check>
+pub noctiluca::model::Control::disabled: bool
+pub noctiluca::model::Control::from_ax: bool
+pub noctiluca::model::Control::group: core::option::Option<alloc::string::String>
+pub noctiluca::model::Control::href: core::option::Option<alloc::string::String>
+pub noctiluca::model::Control::icon_only: bool
+pub noctiluca::model::Control::max: core::option::Option<f64>
+pub noctiluca::model::Control::min: core::option::Option<f64>
+pub noctiluca::model::Control::name: alloc::string::String
+pub noctiluca::model::Control::node: noctiluca::engine::NodeId
+pub noctiluca::model::Control::options: alloc::vec::Vec<noctiluca::model::Choice>
+pub noctiluca::model::Control::readonly: bool
+pub noctiluca::model::Control::rect: noctiluca::engine::Rect
+pub noctiluca::model::Control::revision: u32
+pub noctiluca::model::Control::role: noctiluca::model::Role
+pub noctiluca::model::Control::state_revision: u32
+pub noctiluca::model::Control::step: core::option::Option<f64>
+pub noctiluca::model::Control::value: core::option::Option<alloc::string::String>
+impl noctiluca::model::Control
+pub fn noctiluca::model::Control::binding(&self, &noctiluca::model::Page) -> noctiluca::model::Binding
+pub fn noctiluca::model::Control::selected(&self) -> core::option::Option<&noctiluca::model::Choice>
+impl core::clone::Clone for noctiluca::model::Control
+pub fn noctiluca::model::Control::clone(&self) -> noctiluca::model::Control
+impl core::cmp::PartialEq for noctiluca::model::Control
+pub fn noctiluca::model::Control::eq(&self, &noctiluca::model::Control) -> bool
+impl core::fmt::Debug for noctiluca::model::Control
+pub fn noctiluca::model::Control::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Control
+impl core::marker::Freeze for noctiluca::model::Control
+impl core::marker::Send for noctiluca::model::Control
+impl core::marker::Sync for noctiluca::model::Control
+impl core::marker::Unpin for noctiluca::model::Control
+impl core::marker::UnsafeUnpin for noctiluca::model::Control
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Control
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Control
+pub struct noctiluca::model::Entry
+pub noctiluca::model::Entry::key: u64
+pub noctiluca::model::Entry::runs: alloc::vec::Vec<noctiluca::model::Run>
+impl noctiluca::model::Entry
+pub fn noctiluca::model::Entry::text(&self) -> alloc::string::String
+impl core::clone::Clone for noctiluca::model::Entry
+pub fn noctiluca::model::Entry::clone(&self) -> noctiluca::model::Entry
+impl core::cmp::PartialEq for noctiluca::model::Entry
+pub fn noctiluca::model::Entry::eq(&self, &noctiluca::model::Entry) -> bool
+impl core::default::Default for noctiluca::model::Entry
+pub fn noctiluca::model::Entry::default() -> noctiluca::model::Entry
+impl core::fmt::Debug for noctiluca::model::Entry
+pub fn noctiluca::model::Entry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Entry
+impl core::marker::Freeze for noctiluca::model::Entry
+impl core::marker::Send for noctiluca::model::Entry
+impl core::marker::Sync for noctiluca::model::Entry
+impl core::marker::Unpin for noctiluca::model::Entry
+impl core::marker::UnsafeUnpin for noctiluca::model::Entry
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Entry
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Entry
+pub struct noctiluca::model::Grid
+pub noctiluca::model::Grid::items: alloc::vec::Vec<noctiluca::engine::Rect>
+pub noctiluca::model::Grid::node: noctiluca::engine::NodeId
+pub noctiluca::model::Grid::rect: noctiluca::engine::Rect
+impl core::clone::Clone for noctiluca::model::Grid
+pub fn noctiluca::model::Grid::clone(&self) -> noctiluca::model::Grid
+impl core::cmp::PartialEq for noctiluca::model::Grid
+pub fn noctiluca::model::Grid::eq(&self, &noctiluca::model::Grid) -> bool
+impl core::fmt::Debug for noctiluca::model::Grid
+pub fn noctiluca::model::Grid::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Grid
+impl core::marker::Freeze for noctiluca::model::Grid
+impl core::marker::Send for noctiluca::model::Grid
+impl core::marker::Sync for noctiluca::model::Grid
+impl core::marker::Unpin for noctiluca::model::Grid
+impl core::marker::UnsafeUnpin for noctiluca::model::Grid
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Grid
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Grid
+pub struct noctiluca::model::Log
+pub noctiluca::model::Log::entries: alloc::vec::Vec<noctiluca::model::Entry>
+pub noctiluca::model::Log::first_shown: core::option::Option<u64>
+pub noctiluca::model::Log::kind: noctiluca::model::LogKind
+pub noctiluca::model::Log::label: alloc::string::String
+pub noctiluca::model::Log::node: noctiluca::engine::NodeId
+pub noctiluca::model::Log::rect: noctiluca::engine::Rect
+impl core::clone::Clone for noctiluca::model::Log
+pub fn noctiluca::model::Log::clone(&self) -> noctiluca::model::Log
+impl core::cmp::PartialEq for noctiluca::model::Log
+pub fn noctiluca::model::Log::eq(&self, &noctiluca::model::Log) -> bool
+impl core::fmt::Debug for noctiluca::model::Log
+pub fn noctiluca::model::Log::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Log
+impl core::marker::Freeze for noctiluca::model::Log
+impl core::marker::Send for noctiluca::model::Log
+impl core::marker::Sync for noctiluca::model::Log
+impl core::marker::Unpin for noctiluca::model::Log
+impl core::marker::UnsafeUnpin for noctiluca::model::Log
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Log
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Log
+pub struct noctiluca::model::Media
+pub noctiluca::model::Media::alt: alloc::string::String
+pub noctiluca::model::Media::aria_hidden: bool
+pub noctiluca::model::Media::autoplay: bool
+pub noctiluca::model::Media::captioned: bool
+pub noctiluca::model::Media::controls: bool
+pub noctiluca::model::Media::empty_alt: bool
+pub noctiluca::model::Media::in_label: bool
+pub noctiluca::model::Media::kind: noctiluca::model::MediaKind
+pub noctiluca::model::Media::node: noctiluca::engine::NodeId
+pub noctiluca::model::Media::picture: core::option::Option<rich_art::picture::Picture>
+pub noctiluca::model::Media::playback: core::option::Option<noctiluca::engine::Playback>
+pub noctiluca::model::Media::poster: alloc::string::String
+pub noctiluca::model::Media::rect: noctiluca::engine::Rect
+pub noctiluca::model::Media::src: alloc::string::String
+pub noctiluca::model::Media::still: core::option::Option<alloc::sync::Arc<[u8]>>
+impl core::clone::Clone for noctiluca::model::Media
+pub fn noctiluca::model::Media::clone(&self) -> noctiluca::model::Media
+impl core::cmp::PartialEq for noctiluca::model::Media
+pub fn noctiluca::model::Media::eq(&self, &noctiluca::model::Media) -> bool
+impl core::fmt::Debug for noctiluca::model::Media
+pub fn noctiluca::model::Media::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Media
+impl core::marker::Freeze for noctiluca::model::Media
+impl core::marker::Send for noctiluca::model::Media
+impl core::marker::Sync for noctiluca::model::Media
+impl core::marker::Unpin for noctiluca::model::Media
+impl core::marker::UnsafeUnpin for noctiluca::model::Media
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Media
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Media
+pub struct noctiluca::model::Page
+pub noctiluca::model::Page::blocks: alloc::vec::Vec<noctiluca::model::Block>
+pub noctiluca::model::Page::controls: alloc::vec::Vec<noctiluca::model::Control>
+pub noctiluca::model::Page::document: u64
+pub noctiluca::model::Page::grids: alloc::vec::Vec<noctiluca::model::Grid>
+pub noctiluca::model::Page::has_ax: bool
+pub noctiluca::model::Page::height: f64
+pub noctiluca::model::Page::inline_pictures: std::collections::hash::map::HashMap<alloc::string::String, rich_art::picture::Picture>
+pub noctiluca::model::Page::logs: alloc::vec::Vec<noctiluca::model::Log>
+pub noctiluca::model::Page::media: alloc::vec::Vec<noctiluca::model::Media>
+pub noctiluca::model::Page::regions: alloc::vec::Vec<noctiluca::model::Region>
+pub noctiluca::model::Page::title: alloc::string::String
+pub noctiluca::model::Page::truncated: bool
+pub noctiluca::model::Page::url: alloc::string::String
+pub noctiluca::model::Page::width: f64
+impl noctiluca::model::Page
+pub fn noctiluca::model::Page::check(&self, &noctiluca::model::Binding) -> core::result::Result<&noctiluca::model::Control, alloc::string::String>
+pub fn noctiluca::model::Page::control(&self, noctiluca::engine::NodeId) -> core::option::Option<&noctiluca::model::Control>
+pub fn noctiluca::model::Page::find(&self, &str, &str) -> alloc::vec::Vec<&noctiluca::model::Control>
+pub fn noctiluca::model::Page::text(&self) -> alloc::string::String
+impl core::clone::Clone for noctiluca::model::Page
+pub fn noctiluca::model::Page::clone(&self) -> noctiluca::model::Page
+impl core::cmp::PartialEq for noctiluca::model::Page
+pub fn noctiluca::model::Page::eq(&self, &noctiluca::model::Page) -> bool
+impl core::default::Default for noctiluca::model::Page
+pub fn noctiluca::model::Page::default() -> noctiluca::model::Page
+impl core::fmt::Debug for noctiluca::model::Page
+pub fn noctiluca::model::Page::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Page
+impl core::marker::Freeze for noctiluca::model::Page
+impl core::marker::Send for noctiluca::model::Page
+impl core::marker::Sync for noctiluca::model::Page
+impl core::marker::Unpin for noctiluca::model::Page
+impl core::marker::UnsafeUnpin for noctiluca::model::Page
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Page
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Page
+pub struct noctiluca::model::Picture
+pub noctiluca::model::Picture::alt: alloc::string::String
+pub noctiluca::model::Picture::decorative: bool
+pub noctiluca::model::Picture::height: f64
+pub noctiluca::model::Picture::src: alloc::string::String
+pub noctiluca::model::Picture::width: f64
+impl core::clone::Clone for noctiluca::model::Picture
+pub fn noctiluca::model::Picture::clone(&self) -> noctiluca::model::Picture
+impl core::cmp::PartialEq for noctiluca::model::Picture
+pub fn noctiluca::model::Picture::eq(&self, &noctiluca::model::Picture) -> bool
+impl core::default::Default for noctiluca::model::Picture
+pub fn noctiluca::model::Picture::default() -> noctiluca::model::Picture
+impl core::fmt::Debug for noctiluca::model::Picture
+pub fn noctiluca::model::Picture::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Picture
+impl core::marker::Freeze for noctiluca::model::Picture
+impl core::marker::Send for noctiluca::model::Picture
+impl core::marker::Sync for noctiluca::model::Picture
+impl core::marker::Unpin for noctiluca::model::Picture
+impl core::marker::UnsafeUnpin for noctiluca::model::Picture
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Picture
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Picture
+pub struct noctiluca::model::Region
+pub noctiluca::model::Region::collapsible: bool
+pub noctiluca::model::Region::kind: noctiluca::model::RegionKind
+pub noctiluca::model::Region::label: alloc::string::String
+pub noctiluca::model::Region::node: noctiluca::engine::NodeId
+pub noctiluca::model::Region::rect: noctiluca::engine::Rect
+impl core::clone::Clone for noctiluca::model::Region
+pub fn noctiluca::model::Region::clone(&self) -> noctiluca::model::Region
+impl core::cmp::PartialEq for noctiluca::model::Region
+pub fn noctiluca::model::Region::eq(&self, &noctiluca::model::Region) -> bool
+impl core::fmt::Debug for noctiluca::model::Region
+pub fn noctiluca::model::Region::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Region
+impl core::marker::Freeze for noctiluca::model::Region
+impl core::marker::Send for noctiluca::model::Region
+impl core::marker::Sync for noctiluca::model::Region
+impl core::marker::Unpin for noctiluca::model::Region
+impl core::marker::UnsafeUnpin for noctiluca::model::Region
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Region
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Region
+pub struct noctiluca::model::Revisions
+impl noctiluca::model::Revisions
+pub fn noctiluca::model::Revisions::new() -> noctiluca::model::Revisions
+impl core::clone::Clone for noctiluca::model::Revisions
+pub fn noctiluca::model::Revisions::clone(&self) -> noctiluca::model::Revisions
+impl core::default::Default for noctiluca::model::Revisions
+pub fn noctiluca::model::Revisions::default() -> noctiluca::model::Revisions
+impl core::fmt::Debug for noctiluca::model::Revisions
+pub fn noctiluca::model::Revisions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for noctiluca::model::Revisions
+impl core::marker::Send for noctiluca::model::Revisions
+impl core::marker::Sync for noctiluca::model::Revisions
+impl core::marker::Unpin for noctiluca::model::Revisions
+impl core::marker::UnsafeUnpin for noctiluca::model::Revisions
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Revisions
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Revisions
+pub struct noctiluca::model::Run
+pub noctiluca::model::Run::bold: bool
+pub noctiluca::model::Run::code: bool
+pub noctiluca::model::Run::color: core::option::Option<alloc::string::String>
+pub noctiluca::model::Run::control: core::option::Option<usize>
+pub noctiluca::model::Run::italic: bool
+pub noctiluca::model::Run::picture: core::option::Option<noctiluca::model::Picture>
+pub noctiluca::model::Run::text: alloc::string::String
+impl noctiluca::model::Run
+pub fn noctiluca::model::Run::plain(impl core::convert::Into<alloc::string::String>) -> noctiluca::model::Run
+impl core::clone::Clone for noctiluca::model::Run
+pub fn noctiluca::model::Run::clone(&self) -> noctiluca::model::Run
+impl core::cmp::PartialEq for noctiluca::model::Run
+pub fn noctiluca::model::Run::eq(&self, &noctiluca::model::Run) -> bool
+impl core::default::Default for noctiluca::model::Run
+pub fn noctiluca::model::Run::default() -> noctiluca::model::Run
+impl core::fmt::Debug for noctiluca::model::Run
+pub fn noctiluca::model::Run::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Run
+impl core::marker::Freeze for noctiluca::model::Run
+impl core::marker::Send for noctiluca::model::Run
+impl core::marker::Sync for noctiluca::model::Run
+impl core::marker::Unpin for noctiluca::model::Run
+impl core::marker::UnsafeUnpin for noctiluca::model::Run
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Run
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Run
+pub struct noctiluca::model::Table
+pub noctiluca::model::Table::caption: alloc::string::String
+pub noctiluca::model::Table::rows: alloc::vec::Vec<alloc::vec::Vec<noctiluca::model::Cell>>
+impl core::clone::Clone for noctiluca::model::Table
+pub fn noctiluca::model::Table::clone(&self) -> noctiluca::model::Table
+impl core::cmp::PartialEq for noctiluca::model::Table
+pub fn noctiluca::model::Table::eq(&self, &noctiluca::model::Table) -> bool
+impl core::default::Default for noctiluca::model::Table
+pub fn noctiluca::model::Table::default() -> noctiluca::model::Table
+impl core::fmt::Debug for noctiluca::model::Table
+pub fn noctiluca::model::Table::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::model::Table
+impl core::marker::Freeze for noctiluca::model::Table
+impl core::marker::Send for noctiluca::model::Table
+impl core::marker::Sync for noctiluca::model::Table
+impl core::marker::Unpin for noctiluca::model::Table
+impl core::marker::UnsafeUnpin for noctiluca::model::Table
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Table
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Table
+pub const noctiluca::model::MAX_BLOCKS: usize
+pub const noctiluca::model::MAX_ENTRIES: usize
+pub fn noctiluca::model::build(&noctiluca::engine::PageSnapshot, &mut noctiluca::model::Revisions) -> noctiluca::model::Page
+pub fn noctiluca::model::build_with(&noctiluca::engine::PageSnapshot, &mut noctiluca::model::Revisions, &std::collections::hash::set::HashSet<noctiluca::engine::NodeId>) -> noctiluca::model::Page
+pub fn noctiluca::model::live_runs(&serde_json::value::Value, &str) -> alloc::vec::Vec<noctiluca::model::Run>
+pub fn noctiluca::model::plain(&[noctiluca::model::Run]) -> alloc::string::String
+pub mod noctiluca::pictures
+pub struct noctiluca::pictures::Cells
+impl noctiluca::pictures::Cells
+pub fn noctiluca::pictures::Cells::of(&self, &rich::console::Console, &rich_art::picture::Picture, rich_art::picture::Pixels, usize, usize) -> alloc::rc::Rc<alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>>
+impl core::default::Default for noctiluca::pictures::Cells
+pub fn noctiluca::pictures::Cells::default() -> noctiluca::pictures::Cells
+impl !core::marker::Freeze for noctiluca::pictures::Cells
+impl !core::marker::Send for noctiluca::pictures::Cells
+impl !core::marker::Sync for noctiluca::pictures::Cells
+impl core::marker::Unpin for noctiluca::pictures::Cells
+impl core::marker::UnsafeUnpin for noctiluca::pictures::Cells
+impl !core::panic::unwind_safe::RefUnwindSafe for noctiluca::pictures::Cells
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::pictures::Cells
+pub struct noctiluca::pictures::Live
+pub noctiluca::pictures::Live::picture: rich_art::picture::Picture
+pub noctiluca::pictures::Live::pixels: rich_art::picture::Pixels
+impl core::clone::Clone for noctiluca::pictures::Live
+pub fn noctiluca::pictures::Live::clone(&self) -> noctiluca::pictures::Live
+impl core::cmp::PartialEq for noctiluca::pictures::Live
+pub fn noctiluca::pictures::Live::eq(&self, &noctiluca::pictures::Live) -> bool
+impl core::fmt::Debug for noctiluca::pictures::Live
+pub fn noctiluca::pictures::Live::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::pictures::Live
+impl core::marker::Freeze for noctiluca::pictures::Live
+impl core::marker::Send for noctiluca::pictures::Live
+impl core::marker::Sync for noctiluca::pictures::Live
+impl core::marker::Unpin for noctiluca::pictures::Live
+impl core::marker::UnsafeUnpin for noctiluca::pictures::Live
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::pictures::Live
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::pictures::Live
+pub struct noctiluca::pictures::Motion
+impl noctiluca::pictures::Motion
+pub fn noctiluca::pictures::Motion::budget(&self) -> rich_art::picture::ByteBudget
+pub fn noctiluca::pictures::Motion::moving_count(&self) -> usize
+pub fn noctiluca::pictures::Motion::new(rich_art::picture::ByteBudget) -> noctiluca::pictures::Motion
+pub fn noctiluca::pictures::Motion::share_with(&mut self, rich_art::picture::ByteBudget, usize)
+pub fn noctiluca::pictures::Motion::step(&mut self, &noctiluca::model::Page, &[noctiluca::layout::Region], core::ops::range::Range<usize>, rich_art::picture::Pixels, bool, std::time::Instant) -> std::collections::hash::map::HashMap<noctiluca::engine::NodeId, noctiluca::pictures::Live>
+impl core::default::Default for noctiluca::pictures::Motion
+pub fn noctiluca::pictures::Motion::default() -> Self
+impl core::marker::Freeze for noctiluca::pictures::Motion
+impl core::marker::Send for noctiluca::pictures::Motion
+impl core::marker::Sync for noctiluca::pictures::Motion
+impl core::marker::Unpin for noctiluca::pictures::Motion
+impl core::marker::UnsafeUnpin for noctiluca::pictures::Motion
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::pictures::Motion
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::pictures::Motion
+pub fn noctiluca::pictures::on_backdrop(alloc::vec::Vec<rich::segment::Segment>, usize, &str) -> alloc::vec::Vec<rich::segment::Segment>
+pub fn noctiluca::pictures::pixels(noctiluca::config::Images) -> rich_art::picture::Pixels
+pub fn noctiluca::pictures::splice(&rich::console::Console, &noctiluca::pictures::Cells, alloc::vec::Vec<rich::segment::Segment>, usize, usize, &[noctiluca::layout::Region], impl core::ops::function::Fn(&noctiluca::layout::Region) -> core::option::Option<(rich_art::picture::Picture, rich_art::picture::Pixels)>) -> alloc::vec::Vec<rich::segment::Segment>
+pub fn noctiluca::pictures::view(rich_art::picture::Pixels) -> rich_art::picture::ImageView
+pub mod noctiluca::tab
+pub enum noctiluca::tab::Command
+pub noctiluca::tab::Command::Act
+pub noctiluca::tab::Command::Act::binding: noctiluca::model::Binding
+pub noctiluca::tab::Command::Act::intent: noctiluca::tab::Intent
+pub noctiluca::tab::Command::Activate
+pub noctiluca::tab::Command::Activate::name: alloc::string::String
+pub noctiluca::tab::Command::Activate::nth: usize
+pub noctiluca::tab::Command::Activate::role: alloc::string::String
+pub noctiluca::tab::Command::History(noctiluca::engine::HistoryStep)
+pub noctiluca::tab::Command::LoadMore
+pub noctiluca::tab::Command::Media
+pub noctiluca::tab::Command::Media::document: u64
+pub noctiluca::tab::Command::Media::node: noctiluca::engine::NodeId
+pub noctiluca::tab::Command::Media::op: noctiluca::engine::MediaOp
+pub noctiluca::tab::Command::Open(alloc::string::String)
+pub noctiluca::tab::Command::Refresh
+pub noctiluca::tab::Command::Regions
+pub noctiluca::tab::Command::Regions::intervals: alloc::vec::Vec<(noctiluca::engine::NodeId, core::time::Duration)>
+pub noctiluca::tab::Command::Regions::on_screen: alloc::vec::Vec<noctiluca::engine::NodeId>
+pub noctiluca::tab::Command::Resize(u16, u16)
+pub noctiluca::tab::Command::Scroll(f64)
+pub noctiluca::tab::Command::Wheel(f64)
+impl core::clone::Clone for noctiluca::tab::Command
+pub fn noctiluca::tab::Command::clone(&self) -> noctiluca::tab::Command
+impl core::cmp::PartialEq for noctiluca::tab::Command
+pub fn noctiluca::tab::Command::eq(&self, &noctiluca::tab::Command) -> bool
+impl core::fmt::Debug for noctiluca::tab::Command
+pub fn noctiluca::tab::Command::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::tab::Command
+impl core::marker::Freeze for noctiluca::tab::Command
+impl core::marker::Send for noctiluca::tab::Command
+impl core::marker::Sync for noctiluca::tab::Command
+impl core::marker::Unpin for noctiluca::tab::Command
+impl core::marker::UnsafeUnpin for noctiluca::tab::Command
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::tab::Command
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::tab::Command
+pub enum noctiluca::tab::Intent
+pub noctiluca::tab::Intent::Click
+pub noctiluca::tab::Intent::Focus
+pub noctiluca::tab::Intent::Select
+pub noctiluca::tab::Intent::Select::option: noctiluca::engine::NodeId
+pub noctiluca::tab::Intent::SetRange(f64)
+pub noctiluca::tab::Intent::SetValue
+pub noctiluca::tab::Intent::SetValue::base: core::option::Option<alloc::string::String>
+pub noctiluca::tab::Intent::SetValue::value: alloc::string::String
+impl core::clone::Clone for noctiluca::tab::Intent
+pub fn noctiluca::tab::Intent::clone(&self) -> noctiluca::tab::Intent
+impl core::cmp::PartialEq for noctiluca::tab::Intent
+pub fn noctiluca::tab::Intent::eq(&self, &noctiluca::tab::Intent) -> bool
+impl core::fmt::Debug for noctiluca::tab::Intent
+pub fn noctiluca::tab::Intent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::tab::Intent
+impl core::marker::Freeze for noctiluca::tab::Intent
+impl core::marker::Send for noctiluca::tab::Intent
+impl core::marker::Sync for noctiluca::tab::Intent
+impl core::marker::Unpin for noctiluca::tab::Intent
+impl core::marker::UnsafeUnpin for noctiluca::tab::Intent
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::tab::Intent
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::tab::Intent
+pub enum noctiluca::tab::Refusal
+pub noctiluca::tab::Refusal::Conflict
+pub noctiluca::tab::Refusal::Conflict::remote: alloc::string::String
+pub noctiluca::tab::Refusal::Failed(alloc::string::String)
+pub noctiluca::tab::Refusal::Stale(alloc::string::String)
+pub noctiluca::tab::Refusal::Unavailable(alloc::string::String)
+impl core::clone::Clone for noctiluca::tab::Refusal
+pub fn noctiluca::tab::Refusal::clone(&self) -> noctiluca::tab::Refusal
+impl core::cmp::Eq for noctiluca::tab::Refusal
+impl core::cmp::PartialEq for noctiluca::tab::Refusal
+pub fn noctiluca::tab::Refusal::eq(&self, &noctiluca::tab::Refusal) -> bool
+impl core::fmt::Debug for noctiluca::tab::Refusal
+pub fn noctiluca::tab::Refusal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for noctiluca::tab::Refusal
+pub fn noctiluca::tab::Refusal::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::tab::Refusal
+impl core::marker::Freeze for noctiluca::tab::Refusal
+impl core::marker::Send for noctiluca::tab::Refusal
+impl core::marker::Sync for noctiluca::tab::Refusal
+impl core::marker::Unpin for noctiluca::tab::Refusal
+impl core::marker::UnsafeUnpin for noctiluca::tab::Refusal
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::tab::Refusal
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::tab::Refusal
+pub enum noctiluca::tab::Update
+pub noctiluca::tab::Update::About
+pub noctiluca::tab::Update::About::answers: alloc::vec::Vec<alloc::string::String>
+pub noctiluca::tab::Update::About::product: alloc::string::String
+pub noctiluca::tab::Update::Done(u64, core::result::Result<(), noctiluca::tab::Refusal>)
+pub noctiluca::tab::Update::Download
+pub noctiluca::tab::Update::Download::guid: alloc::string::String
+pub noctiluca::tab::Update::Download::name: alloc::string::String
+pub noctiluca::tab::Update::Download::url: alloc::string::String
+pub noctiluca::tab::Update::DownloadDone
+pub noctiluca::tab::Update::DownloadDone::guid: alloc::string::String
+pub noctiluca::tab::Update::DownloadDone::path: alloc::string::String
+pub noctiluca::tab::Update::Frame(alloc::sync::Arc<noctiluca::video::VideoFrame>)
+pub noctiluca::tab::Update::Metrics(noctiluca::engine::Metrics)
+pub noctiluca::tab::Update::Page(alloc::sync::Arc<noctiluca::model::Page>)
+pub noctiluca::tab::Update::State(rich_embed::web::PageState)
+pub noctiluca::tab::Update::Still(noctiluca::engine::NodeId)
+impl core::clone::Clone for noctiluca::tab::Update
+pub fn noctiluca::tab::Update::clone(&self) -> noctiluca::tab::Update
+impl core::fmt::Debug for noctiluca::tab::Update
+pub fn noctiluca::tab::Update::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for noctiluca::tab::Update
+impl core::marker::Send for noctiluca::tab::Update
+impl core::marker::Sync for noctiluca::tab::Update
+impl core::marker::Unpin for noctiluca::tab::Update
+impl core::marker::UnsafeUnpin for noctiluca::tab::Update
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::tab::Update
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::tab::Update
+pub struct noctiluca::tab::Tab
+impl noctiluca::tab::Tab
+pub fn noctiluca::tab::Tab::send(&self, noctiluca::tab::Command) -> u64
+pub fn noctiluca::tab::Tab::spawn(alloc::boxed::Box<dyn noctiluca::engine::Engine>, impl core::ops::function::Fn(noctiluca::tab::Update) + core::marker::Send + 'static) -> noctiluca::tab::Tab
+impl core::clone::Clone for noctiluca::tab::Tab
+pub fn noctiluca::tab::Tab::clone(&self) -> noctiluca::tab::Tab
+impl core::fmt::Debug for noctiluca::tab::Tab
+pub fn noctiluca::tab::Tab::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for noctiluca::tab::Tab
+impl core::marker::Send for noctiluca::tab::Tab
+impl core::marker::Sync for noctiluca::tab::Tab
+impl core::marker::Unpin for noctiluca::tab::Tab
+impl core::marker::UnsafeUnpin for noctiluca::tab::Tab
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::tab::Tab
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::tab::Tab
+pub const noctiluca::tab::DEBOUNCE: core::time::Duration
+pub fn noctiluca::tab::describe(&noctiluca::model::Control) -> alloc::string::String
+pub fn noctiluca::tab::stop_all(core::time::Duration)
+pub mod noctiluca::testing
+pub struct noctiluca::testing::FakeEngine
+pub noctiluca::testing::FakeEngine::state: alloc::sync::Arc<std::sync::poison::mutex::Mutex<noctiluca::testing::FakeState>>
+impl noctiluca::testing::FakeEngine
+pub fn noctiluca::testing::FakeEngine::from_dir(&std::path::Path) -> std::io::error::Result<noctiluca::testing::FakeEngine>
+pub fn noctiluca::testing::FakeEngine::on_act(self, impl core::ops::function::FnMut(&noctiluca::engine::PageAction, &mut noctiluca::testing::FakeState) + core::marker::Send + 'static) -> noctiluca::testing::FakeEngine
+pub fn noctiluca::testing::FakeEngine::replaying(self, &std::path::Path) -> noctiluca::testing::FakeEngine
+impl noctiluca::engine::Engine for noctiluca::testing::FakeEngine
+pub fn noctiluca::testing::FakeEngine::act(&mut self, noctiluca::engine::TabId, &noctiluca::engine::PageAction) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::appended(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<alloc::vec::Vec<noctiluca::engine::NodeId>>
+pub fn noctiluca::testing::FakeEngine::can_play(&mut self, noctiluca::engine::TabId, &[&str]) -> std::io::error::Result<alloc::vec::Vec<alloc::string::String>>
+pub fn noctiluca::testing::FakeEngine::capture(&mut self, noctiluca::engine::TabId, noctiluca::engine::Rect, noctiluca::engine::Format) -> std::io::error::Result<noctiluca::engine::Frame>
+pub fn noctiluca::testing::FakeEngine::close_tab(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::events(&mut self) -> alloc::vec::Vec<noctiluca::engine::EngineEvent>
+pub fn noctiluca::testing::FakeEngine::history(&mut self, noctiluca::engine::TabId, noctiluca::engine::HistoryStep) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::image_ready(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<bool>
+pub fn noctiluca::testing::FakeEngine::metrics(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::Metrics>
+pub fn noctiluca::testing::FakeEngine::new_tab(&mut self, &str) -> std::io::error::Result<noctiluca::engine::TabId>
+pub fn noctiluca::testing::FakeEngine::open(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::playback(&mut self, noctiluca::engine::TabId, i64) -> std::io::error::Result<noctiluca::engine::Playback>
+pub fn noctiluca::testing::FakeEngine::product(&mut self, noctiluca::engine::TabId) -> alloc::string::String
+pub fn noctiluca::testing::FakeEngine::read_live(&mut self, noctiluca::engine::TabId, noctiluca::engine::NodeId, bool) -> std::io::error::Result<noctiluca::engine::LiveRead>
+pub fn noctiluca::testing::FakeEngine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
+pub fn noctiluca::testing::FakeEngine::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
+pub fn noctiluca::testing::FakeEngine::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
+pub fn noctiluca::testing::FakeEngine::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
+impl core::marker::Freeze for noctiluca::testing::FakeEngine
+impl core::marker::Send for noctiluca::testing::FakeEngine
+impl !core::marker::Sync for noctiluca::testing::FakeEngine
+impl core::marker::Unpin for noctiluca::testing::FakeEngine
+impl core::marker::UnsafeUnpin for noctiluca::testing::FakeEngine
+impl !core::panic::unwind_safe::RefUnwindSafe for noctiluca::testing::FakeEngine
+impl !core::panic::unwind_safe::UnwindSafe for noctiluca::testing::FakeEngine
+pub struct noctiluca::testing::FakeState
+pub noctiluca::testing::FakeState::actions: alloc::vec::Vec<noctiluca::engine::PageAction>
+pub noctiluca::testing::FakeState::at: usize
+pub noctiluca::testing::FakeState::codecs: std::collections::hash::map::HashMap<alloc::string::String, alloc::string::String>
+pub noctiluca::testing::FakeState::current: core::option::Option<alloc::string::String>
+pub noctiluca::testing::FakeState::events: alloc::vec::Vec<noctiluca::engine::EngineEvent>
+pub noctiluca::testing::FakeState::frames: alloc::vec::Vec<rich_embed::chrome::ScreencastFrame>
+pub noctiluca::testing::FakeState::history: alloc::vec::Vec<alloc::string::String>
+pub noctiluca::testing::FakeState::media: std::collections::hash::map::HashMap<i64, noctiluca::engine::Playback>
+pub noctiluca::testing::FakeState::not_loaded: std::collections::hash::set::HashSet<i64>
+pub noctiluca::testing::FakeState::opened: alloc::vec::Vec<alloc::string::String>
+pub noctiluca::testing::FakeState::pages: std::collections::hash::map::HashMap<alloc::string::String, noctiluca::engine::PageSnapshot>
+pub noctiluca::testing::FakeState::recorded: core::option::Option<std::path::PathBuf>
+pub noctiluca::testing::FakeState::resource_root: core::option::Option<std::path::PathBuf>
+pub noctiluca::testing::FakeState::resources: std::collections::hash::map::HashMap<alloc::string::String, alloc::vec::Vec<u8>>
+pub noctiluca::testing::FakeState::screencast: bool
+pub noctiluca::testing::FakeState::scroll_y: f64
+pub noctiluca::testing::FakeState::viewport_height: f64
+pub noctiluca::testing::FakeState::viewport_width: f64
+impl noctiluca::testing::FakeState
+pub fn noctiluca::testing::FakeState::content_height(&self) -> f64
+impl noctiluca::testing::FakeState
+pub fn noctiluca::testing::FakeState::go(&mut self, &str)
+impl noctiluca::testing::FakeState
+pub fn noctiluca::testing::FakeState::resource(&self, &str) -> core::option::Option<alloc::vec::Vec<u8>>
+impl core::default::Default for noctiluca::testing::FakeState
+pub fn noctiluca::testing::FakeState::default() -> noctiluca::testing::FakeState
+impl core::marker::Freeze for noctiluca::testing::FakeState
+impl core::marker::Send for noctiluca::testing::FakeState
+impl core::marker::Sync for noctiluca::testing::FakeState
+impl core::marker::Unpin for noctiluca::testing::FakeState
+impl core::marker::UnsafeUnpin for noctiluca::testing::FakeState
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::testing::FakeState
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::testing::FakeState
+pub fn noctiluca::testing::feed_snapshot(&str, usize) -> noctiluca::engine::PageSnapshot
+pub fn noctiluca::testing::feed_snapshot_of(&str, i64, i64) -> noctiluca::engine::PageSnapshot
+pub fn noctiluca::testing::follow(&noctiluca::engine::PageAction, &mut noctiluca::testing::FakeState)
+pub fn noctiluca::testing::snapshot_file(&std::path::Path) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
+pub type noctiluca::testing::OnAct = alloc::boxed::Box<(dyn core::ops::function::FnMut(&noctiluca::engine::PageAction, &mut noctiluca::testing::FakeState) + core::marker::Send)>
+pub mod noctiluca::url
+pub fn noctiluca::url::complete_address(&str) -> alloc::string::String
+pub fn noctiluca::url::decode(&str) -> alloc::string::String
+pub fn noctiluca::url::encode_query(&str) -> alloc::string::String
+pub fn noctiluca::url::file_url(&std::path::Path) -> std::io::error::Result<alloc::string::String>
+pub fn noctiluca::url::host(&str) -> core::option::Option<alloc::string::String>
+pub fn noctiluca::url::looks_like_address(&str) -> bool
+pub fn noctiluca::url::resolve(&str, &str) -> alloc::string::String
+pub fn noctiluca::url::scheme(&str) -> core::option::Option<&str>
+pub mod noctiluca::video
+pub struct noctiluca::video::Frames
+pub noctiluca::video::Frames::on: bool
+impl noctiluca::video::Frames
+pub fn noctiluca::video::Frames::cut(&mut self, &[noctiluca::video::Region], core::option::Option<&rich_embed::chrome::ScreencastFrame>, std::time::Instant) -> (alloc::vec::Vec<noctiluca::video::VideoFrame>, alloc::vec::Vec<noctiluca::video::Region>)
+pub fn noctiluca::video::Frames::plan(&mut self, &[noctiluca::video::Region], std::time::Instant) -> noctiluca::video::Plan
+pub fn noctiluca::video::Frames::stamp(&mut self, noctiluca::engine::NodeId, rich_embed::pixels::Pixels, std::time::Instant) -> noctiluca::video::VideoFrame
+impl core::default::Default for noctiluca::video::Frames
+pub fn noctiluca::video::Frames::default() -> noctiluca::video::Frames
+impl core::fmt::Debug for noctiluca::video::Frames
+pub fn noctiluca::video::Frames::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for noctiluca::video::Frames
+impl core::marker::Send for noctiluca::video::Frames
+impl core::marker::Sync for noctiluca::video::Frames
+impl core::marker::Unpin for noctiluca::video::Frames
+impl core::marker::UnsafeUnpin for noctiluca::video::Frames
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::video::Frames
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::video::Frames
+pub struct noctiluca::video::Pacing
+pub noctiluca::video::Pacing::budget: rich_art::picture::ByteBudget
+pub noctiluca::video::Pacing::others: usize
+pub noctiluca::video::Pacing::start: rich_art::picture::Pixels
+impl noctiluca::video::Pacing
+pub fn noctiluca::video::Pacing::cap(&self) -> f64
+pub fn noctiluca::video::Pacing::clear(&mut self)
+pub fn noctiluca::video::Pacing::forget(&mut self, noctiluca::engine::NodeId)
+pub fn noctiluca::video::Pacing::intervals(&self) -> alloc::vec::Vec<(noctiluca::engine::NodeId, core::time::Duration)>
+pub fn noctiluca::video::Pacing::moving(&self) -> usize
+pub fn noctiluca::video::Pacing::new(rich_art::picture::ByteBudget, rich_art::picture::Pixels) -> noctiluca::video::Pacing
+pub fn noctiluca::video::Pacing::offer(&mut self, &noctiluca::video::VideoFrame, usize, usize, std::time::Instant, noctiluca::video::ByteCounter) -> core::option::Option<rich_art::picture::Picture>
+pub fn noctiluca::video::Pacing::pixels(&self, noctiluca::engine::NodeId) -> rich_art::picture::Pixels
+pub fn noctiluca::video::Pacing::recent_bytes(&self, noctiluca::engine::NodeId) -> u64
+pub fn noctiluca::video::Pacing::start_for(core::option::Option<rich_art::picture::Pixels>, rich_art::picture::Pixels) -> rich_art::picture::Pixels
+pub fn noctiluca::video::Pacing::still(&mut self, noctiluca::engine::NodeId)
+impl core::marker::Freeze for noctiluca::video::Pacing
+impl core::marker::Send for noctiluca::video::Pacing
+impl core::marker::Sync for noctiluca::video::Pacing
+impl core::marker::Unpin for noctiluca::video::Pacing
+impl core::marker::UnsafeUnpin for noctiluca::video::Pacing
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::video::Pacing
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::video::Pacing
+pub struct noctiluca::video::Plan
+pub noctiluca::video::Plan::due: bool
+pub noctiluca::video::Plan::screencast: core::option::Option<bool>
+pub noctiluca::video::Plan::stopped: alloc::vec::Vec<noctiluca::engine::NodeId>
+impl core::clone::Clone for noctiluca::video::Plan
+pub fn noctiluca::video::Plan::clone(&self) -> noctiluca::video::Plan
+impl core::cmp::PartialEq for noctiluca::video::Plan
+pub fn noctiluca::video::Plan::eq(&self, &noctiluca::video::Plan) -> bool
+impl core::default::Default for noctiluca::video::Plan
+pub fn noctiluca::video::Plan::default() -> noctiluca::video::Plan
+impl core::fmt::Debug for noctiluca::video::Plan
+pub fn noctiluca::video::Plan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::video::Plan
+impl core::marker::Freeze for noctiluca::video::Plan
+impl core::marker::Send for noctiluca::video::Plan
+impl core::marker::Sync for noctiluca::video::Plan
+impl core::marker::Unpin for noctiluca::video::Plan
+impl core::marker::UnsafeUnpin for noctiluca::video::Plan
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::video::Plan
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::video::Plan
+pub struct noctiluca::video::Region
+pub noctiluca::video::Region::interval: core::option::Option<core::time::Duration>
+pub noctiluca::video::Region::node: noctiluca::engine::NodeId
+pub noctiluca::video::Region::on_screen: bool
+pub noctiluca::video::Region::playing: bool
+pub noctiluca::video::Region::rect: noctiluca::engine::Rect
+impl noctiluca::video::Region
+pub fn noctiluca::video::Region::moving(&self) -> bool
+impl core::clone::Clone for noctiluca::video::Region
+pub fn noctiluca::video::Region::clone(&self) -> noctiluca::video::Region
+impl core::cmp::PartialEq for noctiluca::video::Region
+pub fn noctiluca::video::Region::eq(&self, &noctiluca::video::Region) -> bool
+impl core::fmt::Debug for noctiluca::video::Region
+pub fn noctiluca::video::Region::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::video::Region
+impl core::marker::StructuralPartialEq for noctiluca::video::Region
+impl core::marker::Freeze for noctiluca::video::Region
+impl core::marker::Send for noctiluca::video::Region
+impl core::marker::Sync for noctiluca::video::Region
+impl core::marker::Unpin for noctiluca::video::Region
+impl core::marker::UnsafeUnpin for noctiluca::video::Region
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::video::Region
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::video::Region
+pub struct noctiluca::video::VideoFrame
+pub noctiluca::video::VideoFrame::node: noctiluca::engine::NodeId
+pub noctiluca::video::VideoFrame::pixels: rich_embed::pixels::Pixels
+pub noctiluca::video::VideoFrame::seq: u64
+impl core::clone::Clone for noctiluca::video::VideoFrame
+pub fn noctiluca::video::VideoFrame::clone(&self) -> noctiluca::video::VideoFrame
+impl core::cmp::PartialEq for noctiluca::video::VideoFrame
+pub fn noctiluca::video::VideoFrame::eq(&self, &noctiluca::video::VideoFrame) -> bool
+impl core::fmt::Debug for noctiluca::video::VideoFrame
+pub fn noctiluca::video::VideoFrame::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::video::VideoFrame
+impl core::marker::Freeze for noctiluca::video::VideoFrame
+impl core::marker::Send for noctiluca::video::VideoFrame
+impl core::marker::Sync for noctiluca::video::VideoFrame
+impl core::marker::Unpin for noctiluca::video::VideoFrame
+impl core::marker::UnsafeUnpin for noctiluca::video::VideoFrame
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::video::VideoFrame
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::video::VideoFrame
+pub const noctiluca::video::HEADROOM: f64
+pub const noctiluca::video::MAX_FPS: u32
+pub const noctiluca::video::MIN_INTERVAL: core::time::Duration
+pub type noctiluca::video::ByteCounter = fn(u32) -> u64
+pub mod noctiluca::widgets
+pub struct noctiluca::widgets::WebControl
+pub noctiluca::widgets::WebControl::check: intuituive::reactive::Signal<intuituive::controls::CheckState>
+pub noctiluca::widgets::WebControl::draft: core::cell::RefCell<noctiluca::draft::DraftField<alloc::string::String>>
+pub noctiluca::widgets::WebControl::group: core::cell::RefCell<alloc::vec::Vec<noctiluca::engine::NodeId>>
+pub noctiluca::widgets::WebControl::key: intuituive::reactive::Signal<core::option::Option<noctiluca::engine::NodeId>>
+pub noctiluca::widgets::WebControl::node: noctiluca::engine::NodeId
+pub noctiluca::widgets::WebControl::number: intuituive::reactive::Signal<f64>
+pub noctiluca::widgets::WebControl::on: intuituive::reactive::Signal<bool>
+pub noctiluca::widgets::WebControl::pending: core::cell::Cell<bool>
+pub noctiluca::widgets::WebControl::status: intuituive::reactive::Signal<alloc::string::String>
+pub noctiluca::widgets::WebControl::text: intuituive::reactive::Signal<alloc::string::String>
+pub noctiluca::widgets::WebControl::widget: core::cell::Cell<core::option::Option<intuituive::reactive::NodeId>>
+impl noctiluca::widgets::WebControl
+pub fn noctiluca::widgets::WebControl::new(&noctiluca::model::Control) -> noctiluca::widgets::WebControl
+pub fn noctiluca::widgets::WebControl::sync(&self, &noctiluca::model::Page, &noctiluca::model::Control)
+impl !core::marker::Freeze for noctiluca::widgets::WebControl
+impl core::marker::Send for noctiluca::widgets::WebControl
+impl !core::marker::Sync for noctiluca::widgets::WebControl
+impl core::marker::Unpin for noctiluca::widgets::WebControl
+impl core::marker::UnsafeUnpin for noctiluca::widgets::WebControl
+impl !core::panic::unwind_safe::RefUnwindSafe for noctiluca::widgets::WebControl
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::widgets::WebControl
+pub fn noctiluca::widgets::name_of(&noctiluca::model::Control) -> alloc::string::String
+pub fn noctiluca::widgets::web_widget(noctiluca::app::Browser, alloc::vec::Vec<noctiluca::engine::NodeId>) -> intuituive::node::Node
+pub fn noctiluca::clean(&str) -> alloc::string::String
+pub fn noctiluca::file_url(&std::path::Path) -> std::io::error::Result<alloc::string::String>

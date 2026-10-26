@@ -1,0 +1,1623 @@
+pub mod rich_art
+pub use rich_art::image
+pub mod rich_art::ascii
+pub struct rich_art::ascii::AsciiArt
+impl rich_art::ascii::AsciiArt
+pub fn rich_art::ascii::AsciiArt::color(self, bool) -> Self
+pub fn rich_art::ascii::AsciiArt::columns(&self, usize) -> usize
+pub fn rich_art::ascii::AsciiArt::from_bytes(&[u8]) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::ascii::AsciiArt::from_path(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::ascii::AsciiArt::height(self, usize) -> Self
+pub fn rich_art::ascii::AsciiArt::invert(self, bool) -> Self
+pub fn rich_art::ascii::AsciiArt::new(image::images::dynimage::DynamicImage) -> Self
+pub fn rich_art::ascii::AsciiArt::normalize(self, bool) -> Self
+pub fn rich_art::ascii::AsciiArt::ramp(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_art::ascii::AsciiArt::to_text(&self, usize) -> alloc::string::String
+pub fn rich_art::ascii::AsciiArt::width(self, usize) -> Self
+impl rich::protocol::Renderable for rich_art::ascii::AsciiArt
+pub fn rich_art::ascii::AsciiArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::ascii::AsciiArt
+impl core::marker::Send for rich_art::ascii::AsciiArt
+impl core::marker::Sync for rich_art::ascii::AsciiArt
+impl core::marker::Unpin for rich_art::ascii::AsciiArt
+impl core::marker::UnsafeUnpin for rich_art::ascii::AsciiArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::ascii::AsciiArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::ascii::AsciiArt
+pub const rich_art::ascii::DEFAULT_RAMP: &str
+pub mod rich_art::block
+pub struct rich_art::block::BlockArt
+impl rich_art::block::BlockArt
+pub fn rich_art::block::BlockArt::from_path(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::block::BlockArt::height(self, usize) -> Self
+pub fn rich_art::block::BlockArt::new(image::images::dynimage::DynamicImage) -> Self
+pub fn rich_art::block::BlockArt::width(self, usize) -> Self
+impl rich::protocol::Renderable for rich_art::block::BlockArt
+pub fn rich_art::block::BlockArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::block::BlockArt
+impl core::marker::Send for rich_art::block::BlockArt
+impl core::marker::Sync for rich_art::block::BlockArt
+impl core::marker::Unpin for rich_art::block::BlockArt
+impl core::marker::UnsafeUnpin for rich_art::block::BlockArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::block::BlockArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::block::BlockArt
+pub mod rich_art::braille
+pub struct rich_art::braille::BrailleArt
+impl rich_art::braille::BrailleArt
+pub fn rich_art::braille::BrailleArt::height(self, usize) -> Self
+pub fn rich_art::braille::BrailleArt::new(image::images::dynimage::DynamicImage) -> Self
+pub fn rich_art::braille::BrailleArt::to_text(&self, usize) -> alloc::string::String
+pub fn rich_art::braille::BrailleArt::width(self, usize) -> Self
+impl rich::protocol::Renderable for rich_art::braille::BrailleArt
+pub fn rich_art::braille::BrailleArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::braille::BrailleArt
+impl core::marker::Send for rich_art::braille::BrailleArt
+impl core::marker::Sync for rich_art::braille::BrailleArt
+impl core::marker::Unpin for rich_art::braille::BrailleArt
+impl core::marker::UnsafeUnpin for rich_art::braille::BrailleArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::braille::BrailleArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::braille::BrailleArt
+pub mod rich_art::figlet
+pub enum rich_art::figlet::FontError
+pub rich_art::figlet::FontError::BadHeader(alloc::string::String)
+pub rich_art::figlet::FontError::BadSignature
+pub rich_art::figlet::FontError::Truncated
+impl core::clone::Clone for rich_art::figlet::FontError
+pub fn rich_art::figlet::FontError::clone(&self) -> rich_art::figlet::FontError
+impl core::cmp::Eq for rich_art::figlet::FontError
+impl core::cmp::PartialEq for rich_art::figlet::FontError
+pub fn rich_art::figlet::FontError::eq(&self, &rich_art::figlet::FontError) -> bool
+impl core::error::Error for rich_art::figlet::FontError
+impl core::fmt::Debug for rich_art::figlet::FontError
+pub fn rich_art::figlet::FontError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_art::figlet::FontError
+pub fn rich_art::figlet::FontError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_art::figlet::FontError
+impl core::marker::Freeze for rich_art::figlet::FontError
+impl core::marker::Send for rich_art::figlet::FontError
+impl core::marker::Sync for rich_art::figlet::FontError
+impl core::marker::Unpin for rich_art::figlet::FontError
+impl core::marker::UnsafeUnpin for rich_art::figlet::FontError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::figlet::FontError
+impl core::panic::unwind_safe::UnwindSafe for rich_art::figlet::FontError
+pub enum rich_art::figlet::Justify
+pub rich_art::figlet::Justify::Center
+pub rich_art::figlet::Justify::Left
+pub rich_art::figlet::Justify::Right
+impl core::clone::Clone for rich_art::figlet::Justify
+pub fn rich_art::figlet::Justify::clone(&self) -> rich_art::figlet::Justify
+impl core::cmp::Eq for rich_art::figlet::Justify
+impl core::cmp::PartialEq for rich_art::figlet::Justify
+pub fn rich_art::figlet::Justify::eq(&self, &rich_art::figlet::Justify) -> bool
+impl core::default::Default for rich_art::figlet::Justify
+pub fn rich_art::figlet::Justify::default() -> rich_art::figlet::Justify
+impl core::fmt::Debug for rich_art::figlet::Justify
+pub fn rich_art::figlet::Justify::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::figlet::Justify
+impl core::marker::StructuralPartialEq for rich_art::figlet::Justify
+impl core::marker::Freeze for rich_art::figlet::Justify
+impl core::marker::Send for rich_art::figlet::Justify
+impl core::marker::Sync for rich_art::figlet::Justify
+impl core::marker::Unpin for rich_art::figlet::Justify
+impl core::marker::UnsafeUnpin for rich_art::figlet::Justify
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::figlet::Justify
+impl core::panic::unwind_safe::UnwindSafe for rich_art::figlet::Justify
+pub struct rich_art::figlet::FigletFont
+impl rich_art::figlet::FigletFont
+pub fn rich_art::figlet::FigletFont::hard_blank(&self) -> char
+pub fn rich_art::figlet::FigletFont::height(&self) -> usize
+pub fn rich_art::figlet::FigletFont::parse(&str) -> core::result::Result<Self, rich_art::figlet::FontError>
+pub fn rich_art::figlet::FigletFont::standard() -> Self
+impl core::clone::Clone for rich_art::figlet::FigletFont
+pub fn rich_art::figlet::FigletFont::clone(&self) -> rich_art::figlet::FigletFont
+impl core::default::Default for rich_art::figlet::FigletFont
+pub fn rich_art::figlet::FigletFont::default() -> Self
+impl core::fmt::Debug for rich_art::figlet::FigletFont
+pub fn rich_art::figlet::FigletFont::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_art::figlet::FigletFont
+impl core::marker::Send for rich_art::figlet::FigletFont
+impl core::marker::Sync for rich_art::figlet::FigletFont
+impl core::marker::Unpin for rich_art::figlet::FigletFont
+impl core::marker::UnsafeUnpin for rich_art::figlet::FigletFont
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::figlet::FigletFont
+impl core::panic::unwind_safe::UnwindSafe for rich_art::figlet::FigletFont
+pub const rich_art::figlet::STANDARD_FONT: &str
+pub fn rich_art::figlet::render(&str, &rich_art::figlet::FigletFont, usize, rich_art::figlet::Justify) -> alloc::string::String
+pub mod rich_art::gif
+pub enum rich_art::gif::Repeat
+pub rich_art::gif::Repeat::Forever
+pub rich_art::gif::Repeat::Once
+pub rich_art::gif::Repeat::Times(usize)
+impl core::clone::Clone for rich_art::gif::Repeat
+pub fn rich_art::gif::Repeat::clone(&self) -> rich_art::gif::Repeat
+impl core::cmp::Eq for rich_art::gif::Repeat
+impl core::cmp::PartialEq for rich_art::gif::Repeat
+pub fn rich_art::gif::Repeat::eq(&self, &rich_art::gif::Repeat) -> bool
+impl core::default::Default for rich_art::gif::Repeat
+pub fn rich_art::gif::Repeat::default() -> rich_art::gif::Repeat
+impl core::fmt::Debug for rich_art::gif::Repeat
+pub fn rich_art::gif::Repeat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::gif::Repeat
+impl core::marker::StructuralPartialEq for rich_art::gif::Repeat
+impl core::marker::Freeze for rich_art::gif::Repeat
+impl core::marker::Send for rich_art::gif::Repeat
+impl core::marker::Sync for rich_art::gif::Repeat
+impl core::marker::Unpin for rich_art::gif::Repeat
+impl core::marker::UnsafeUnpin for rich_art::gif::Repeat
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::gif::Repeat
+impl core::panic::unwind_safe::UnwindSafe for rich_art::gif::Repeat
+pub struct rich_art::gif::AnimatedArt
+impl rich_art::gif::AnimatedArt
+pub const rich_art::gif::AnimatedArt::MAX_DECODED_BYTES: usize
+pub fn rich_art::gif::AnimatedArt::blocks(self, bool) -> Self
+pub fn rich_art::gif::AnimatedArt::color(self, bool) -> Self
+pub fn rich_art::gif::AnimatedArt::color_distance(self, rich_art::ColorDistance) -> Self
+pub fn rich_art::gif::AnimatedArt::color_mode(self, rich_art::ImageColorMode) -> Self
+pub fn rich_art::gif::AnimatedArt::dither(self, rich_art::Dither) -> Self
+pub fn rich_art::gif::AnimatedArt::duration(&self) -> core::time::Duration
+pub fn rich_art::gif::AnimatedArt::frame(&self, usize) -> core::option::Option<rich_art::ascii::AsciiArt>
+pub fn rich_art::gif::AnimatedArt::frame_count(&self) -> usize
+pub fn rich_art::gif::AnimatedArt::frame_delay(&self, usize) -> core::option::Option<core::time::Duration>
+pub fn rich_art::gif::AnimatedArt::from_bytes(&[u8]) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::gif::AnimatedArt::from_path(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::gif::AnimatedArt::height(self, usize) -> Self
+pub fn rich_art::gif::AnimatedArt::invert(self, bool) -> Self
+pub fn rich_art::gif::AnimatedArt::max_fps(self, f64) -> Self
+pub fn rich_art::gif::AnimatedArt::play<W: std::io::Write>(&self, rich::console::Console, W) -> std::io::error::Result<()>
+pub fn rich_art::gif::AnimatedArt::play_stdout(&self, rich::console::Console) -> std::io::error::Result<()>
+pub fn rich_art::gif::AnimatedArt::ramp(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_art::gif::AnimatedArt::render_frame(&self, usize) -> core::option::Option<rich_art::gif::GifFrame>
+pub fn rich_art::gif::AnimatedArt::repeat(self, rich_art::gif::Repeat) -> Self
+pub fn rich_art::gif::AnimatedArt::width(self, usize) -> Self
+impl core::clone::Clone for rich_art::gif::AnimatedArt
+pub fn rich_art::gif::AnimatedArt::clone(&self) -> rich_art::gif::AnimatedArt
+impl rich::protocol::Renderable for rich_art::gif::AnimatedArt
+pub fn rich_art::gif::AnimatedArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::gif::AnimatedArt
+impl core::marker::Send for rich_art::gif::AnimatedArt
+impl core::marker::Sync for rich_art::gif::AnimatedArt
+impl core::marker::Unpin for rich_art::gif::AnimatedArt
+impl core::marker::UnsafeUnpin for rich_art::gif::AnimatedArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::gif::AnimatedArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::gif::AnimatedArt
+pub struct rich_art::gif::GifFrame
+impl rich::protocol::Renderable for rich_art::gif::GifFrame
+pub fn rich_art::gif::GifFrame::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::gif::GifFrame
+impl core::marker::Send for rich_art::gif::GifFrame
+impl core::marker::Sync for rich_art::gif::GifFrame
+impl core::marker::Unpin for rich_art::gif::GifFrame
+impl core::marker::UnsafeUnpin for rich_art::gif::GifFrame
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::gif::GifFrame
+impl core::panic::unwind_safe::UnwindSafe for rich_art::gif::GifFrame
+pub fn rich_art::gif::show_cursor_sequence() -> alloc::string::String
+pub mod rich_art::graphics
+pub struct rich_art::graphics::AnimationFrame
+pub rich_art::graphics::AnimationFrame::delay: core::time::Duration
+pub rich_art::graphics::AnimationFrame::image: image::images::buffer::RgbaImage
+impl core::clone::Clone for rich_art::graphics::AnimationFrame
+pub fn rich_art::graphics::AnimationFrame::clone(&self) -> rich_art::graphics::AnimationFrame
+impl core::cmp::Eq for rich_art::graphics::AnimationFrame
+impl core::cmp::PartialEq for rich_art::graphics::AnimationFrame
+pub fn rich_art::graphics::AnimationFrame::eq(&self, &rich_art::graphics::AnimationFrame) -> bool
+impl core::fmt::Debug for rich_art::graphics::AnimationFrame
+pub fn rich_art::graphics::AnimationFrame::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_art::graphics::AnimationFrame
+impl core::marker::Freeze for rich_art::graphics::AnimationFrame
+impl core::marker::Send for rich_art::graphics::AnimationFrame
+impl core::marker::Sync for rich_art::graphics::AnimationFrame
+impl core::marker::Unpin for rich_art::graphics::AnimationFrame
+impl core::marker::UnsafeUnpin for rich_art::graphics::AnimationFrame
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::graphics::AnimationFrame
+impl core::panic::unwind_safe::UnwindSafe for rich_art::graphics::AnimationFrame
+pub struct rich_art::graphics::CellPixels
+pub rich_art::graphics::CellPixels::height: u32
+pub rich_art::graphics::CellPixels::width: u32
+impl rich_art::graphics::CellPixels
+pub const rich_art::graphics::CellPixels::DEFAULT: rich_art::graphics::CellPixels
+pub fn rich_art::graphics::CellPixels::new(u32, u32) -> rich_art::graphics::CellPixels
+pub fn rich_art::graphics::CellPixels::span(self, usize, usize) -> (u32, u32)
+impl core::clone::Clone for rich_art::graphics::CellPixels
+pub fn rich_art::graphics::CellPixels::clone(&self) -> rich_art::graphics::CellPixels
+impl core::cmp::Eq for rich_art::graphics::CellPixels
+impl core::cmp::PartialEq for rich_art::graphics::CellPixels
+pub fn rich_art::graphics::CellPixels::eq(&self, &rich_art::graphics::CellPixels) -> bool
+impl core::default::Default for rich_art::graphics::CellPixels
+pub fn rich_art::graphics::CellPixels::default() -> Self
+impl core::fmt::Debug for rich_art::graphics::CellPixels
+pub fn rich_art::graphics::CellPixels::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_art::graphics::CellPixels
+pub fn rich_art::graphics::CellPixels::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_art::graphics::CellPixels
+impl core::marker::StructuralPartialEq for rich_art::graphics::CellPixels
+impl core::marker::Freeze for rich_art::graphics::CellPixels
+impl core::marker::Send for rich_art::graphics::CellPixels
+impl core::marker::Sync for rich_art::graphics::CellPixels
+impl core::marker::Unpin for rich_art::graphics::CellPixels
+impl core::marker::UnsafeUnpin for rich_art::graphics::CellPixels
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::graphics::CellPixels
+impl core::panic::unwind_safe::UnwindSafe for rich_art::graphics::CellPixels
+pub struct rich_art::graphics::FrameBudget
+pub rich_art::graphics::FrameBudget::max_bytes: usize
+pub rich_art::graphics::FrameBudget::max_frames: usize
+pub rich_art::graphics::FrameBudget::min_delay: core::time::Duration
+impl core::clone::Clone for rich_art::graphics::FrameBudget
+pub fn rich_art::graphics::FrameBudget::clone(&self) -> rich_art::graphics::FrameBudget
+impl core::cmp::Eq for rich_art::graphics::FrameBudget
+impl core::cmp::PartialEq for rich_art::graphics::FrameBudget
+pub fn rich_art::graphics::FrameBudget::eq(&self, &rich_art::graphics::FrameBudget) -> bool
+impl core::default::Default for rich_art::graphics::FrameBudget
+pub fn rich_art::graphics::FrameBudget::default() -> Self
+impl core::fmt::Debug for rich_art::graphics::FrameBudget
+pub fn rich_art::graphics::FrameBudget::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::graphics::FrameBudget
+impl core::marker::StructuralPartialEq for rich_art::graphics::FrameBudget
+impl core::marker::Freeze for rich_art::graphics::FrameBudget
+impl core::marker::Send for rich_art::graphics::FrameBudget
+impl core::marker::Sync for rich_art::graphics::FrameBudget
+impl core::marker::Unpin for rich_art::graphics::FrameBudget
+impl core::marker::UnsafeUnpin for rich_art::graphics::FrameBudget
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::graphics::FrameBudget
+impl core::panic::unwind_safe::UnwindSafe for rich_art::graphics::FrameBudget
+pub const rich_art::graphics::RESTORE_CURSOR: &str
+pub const rich_art::graphics::SAVE_CURSOR: &str
+pub fn rich_art::graphics::adjust(&image::images::dynimage::DynamicImage, rich_art::ImageTransforms) -> image::images::dynimage::DynamicImage
+pub fn rich_art::graphics::base64(&[u8]) -> alloc::string::String
+pub fn rich_art::graphics::decode_animation(&[u8], rich_art::graphics::FrameBudget) -> core::result::Result<alloc::vec::Vec<rich_art::graphics::AnimationFrame>, image::error::ImageError>
+pub fn rich_art::graphics::encode_gif(&[rich_art::graphics::AnimationFrame]) -> core::option::Option<alloc::vec::Vec<u8>>
+pub fn rich_art::graphics::encode_png(&image::images::buffer::RgbaImage) -> core::option::Option<alloc::vec::Vec<u8>>
+pub fn rich_art::graphics::fill_pixels(&image::images::dynimage::DynamicImage, u32, u32, rich_art::image_art::ImageFit, rich_art::image_art::ImageAnchor) -> image::images::buffer::RgbaImage
+pub fn rich_art::graphics::fit_to_cells(&image::images::dynimage::DynamicImage, usize, usize, rich_art::graphics::CellPixels) -> image::images::buffer::RgbaImage
+pub fn rich_art::graphics::fit_to_pixels(&image::images::dynimage::DynamicImage, u32, u32) -> image::images::buffer::RgbaImage
+pub fn rich_art::graphics::overlay(&str, usize) -> (alloc::string::String, alloc::string::String)
+pub fn rich_art::graphics::play_mark(&image::images::dynimage::DynamicImage) -> image::images::dynimage::DynamicImage
+pub fn rich_art::graphics::reduce_colors(&mut image::images::buffer::RgbaImage, rich_art::ImageColorMode, rich_art::Dither, rich_art::ColorDistance)
+pub fn rich_art::graphics::resample(&[rich_art::graphics::AnimationFrame], u32, u32, rich_art::graphics::FrameBudget) -> alloc::vec::Vec<rich_art::graphics::AnimationFrame>
+pub fn rich_art::graphics::sharpen(&image::images::buffer::RgbaImage, f32, i32) -> image::images::buffer::RgbaImage
+pub fn rich_art::graphics::threshold_alpha(&mut image::images::buffer::RgbaImage, u8)
+pub mod rich_art::image_art
+pub enum rich_art::image_art::ImageAnchor
+pub rich_art::image_art::ImageAnchor::Bottom
+pub rich_art::image_art::ImageAnchor::BottomLeft
+pub rich_art::image_art::ImageAnchor::BottomRight
+pub rich_art::image_art::ImageAnchor::Center
+pub rich_art::image_art::ImageAnchor::Left
+pub rich_art::image_art::ImageAnchor::Right
+pub rich_art::image_art::ImageAnchor::Top
+pub rich_art::image_art::ImageAnchor::TopLeft
+pub rich_art::image_art::ImageAnchor::TopRight
+impl core::clone::Clone for rich_art::image_art::ImageAnchor
+pub fn rich_art::image_art::ImageAnchor::clone(&self) -> rich_art::image_art::ImageAnchor
+impl core::cmp::Eq for rich_art::image_art::ImageAnchor
+impl core::cmp::PartialEq for rich_art::image_art::ImageAnchor
+pub fn rich_art::image_art::ImageAnchor::eq(&self, &rich_art::image_art::ImageAnchor) -> bool
+impl core::default::Default for rich_art::image_art::ImageAnchor
+pub fn rich_art::image_art::ImageAnchor::default() -> rich_art::image_art::ImageAnchor
+impl core::fmt::Debug for rich_art::image_art::ImageAnchor
+pub fn rich_art::image_art::ImageAnchor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_art::image_art::ImageAnchor
+pub fn rich_art::image_art::ImageAnchor::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_art::image_art::ImageAnchor
+impl core::marker::StructuralPartialEq for rich_art::image_art::ImageAnchor
+impl core::marker::Freeze for rich_art::image_art::ImageAnchor
+impl core::marker::Send for rich_art::image_art::ImageAnchor
+impl core::marker::Sync for rich_art::image_art::ImageAnchor
+impl core::marker::Unpin for rich_art::image_art::ImageAnchor
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageAnchor
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageAnchor
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageAnchor
+pub enum rich_art::image_art::ImageArtError
+pub rich_art::image_art::ImageArtError::FeatureNotEnabled
+pub rich_art::image_art::ImageArtError::FeatureNotEnabled::feature: &'static str
+pub rich_art::image_art::ImageArtError::FeatureNotEnabled::mode: rich_art::image_art::ImageMode
+pub rich_art::image_art::ImageArtError::InvalidAdjustment
+pub rich_art::image_art::ImageArtError::InvalidFitDimensions
+pub rich_art::image_art::ImageArtError::NonTerminalDestination
+pub rich_art::image_art::ImageArtError::SixelEncodeFailed
+pub rich_art::image_art::ImageArtError::SixelNotSupported
+pub rich_art::image_art::ImageArtError::SixelTooLarge
+pub rich_art::image_art::ImageArtError::TooLarge
+pub rich_art::image_art::ImageArtError::UnsupportedColorOptions
+impl core::clone::Clone for rich_art::image_art::ImageArtError
+pub fn rich_art::image_art::ImageArtError::clone(&self) -> rich_art::image_art::ImageArtError
+impl core::cmp::Eq for rich_art::image_art::ImageArtError
+impl core::cmp::PartialEq for rich_art::image_art::ImageArtError
+pub fn rich_art::image_art::ImageArtError::eq(&self, &rich_art::image_art::ImageArtError) -> bool
+impl core::error::Error for rich_art::image_art::ImageArtError
+impl core::fmt::Debug for rich_art::image_art::ImageArtError
+pub fn rich_art::image_art::ImageArtError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_art::image_art::ImageArtError
+pub fn rich_art::image_art::ImageArtError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_art::image_art::ImageArtError
+impl core::marker::Freeze for rich_art::image_art::ImageArtError
+impl core::marker::Send for rich_art::image_art::ImageArtError
+impl core::marker::Sync for rich_art::image_art::ImageArtError
+impl core::marker::Unpin for rich_art::image_art::ImageArtError
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageArtError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageArtError
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageArtError
+pub enum rich_art::image_art::ImageBackground
+pub rich_art::image_art::ImageBackground::Checkerboard
+pub rich_art::image_art::ImageBackground::Color([u8; 3])
+pub rich_art::image_art::ImageBackground::TerminalDefault
+impl core::clone::Clone for rich_art::image_art::ImageBackground
+pub fn rich_art::image_art::ImageBackground::clone(&self) -> rich_art::image_art::ImageBackground
+impl core::cmp::Eq for rich_art::image_art::ImageBackground
+impl core::cmp::PartialEq for rich_art::image_art::ImageBackground
+pub fn rich_art::image_art::ImageBackground::eq(&self, &rich_art::image_art::ImageBackground) -> bool
+impl core::fmt::Debug for rich_art::image_art::ImageBackground
+pub fn rich_art::image_art::ImageBackground::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::image_art::ImageBackground
+impl core::marker::StructuralPartialEq for rich_art::image_art::ImageBackground
+impl core::marker::Freeze for rich_art::image_art::ImageBackground
+impl core::marker::Send for rich_art::image_art::ImageBackground
+impl core::marker::Sync for rich_art::image_art::ImageBackground
+impl core::marker::Unpin for rich_art::image_art::ImageBackground
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageBackground
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageBackground
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageBackground
+pub enum rich_art::image_art::ImageFit
+pub rich_art::image_art::ImageFit::Contain
+pub rich_art::image_art::ImageFit::Cover
+pub rich_art::image_art::ImageFit::Native
+pub rich_art::image_art::ImageFit::Stretch
+impl core::clone::Clone for rich_art::image_art::ImageFit
+pub fn rich_art::image_art::ImageFit::clone(&self) -> rich_art::image_art::ImageFit
+impl core::cmp::Eq for rich_art::image_art::ImageFit
+impl core::cmp::PartialEq for rich_art::image_art::ImageFit
+pub fn rich_art::image_art::ImageFit::eq(&self, &rich_art::image_art::ImageFit) -> bool
+impl core::fmt::Debug for rich_art::image_art::ImageFit
+pub fn rich_art::image_art::ImageFit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_art::image_art::ImageFit
+pub fn rich_art::image_art::ImageFit::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_art::image_art::ImageFit
+impl core::marker::StructuralPartialEq for rich_art::image_art::ImageFit
+impl core::marker::Freeze for rich_art::image_art::ImageFit
+impl core::marker::Send for rich_art::image_art::ImageFit
+impl core::marker::Sync for rich_art::image_art::ImageFit
+impl core::marker::Unpin for rich_art::image_art::ImageFit
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageFit
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageFit
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageFit
+pub enum rich_art::image_art::ImageMode
+pub rich_art::image_art::ImageMode::Ascii
+pub rich_art::image_art::ImageMode::Auto
+pub rich_art::image_art::ImageMode::Blocks
+pub rich_art::image_art::ImageMode::Braille
+pub rich_art::image_art::ImageMode::Quadrants
+pub rich_art::image_art::ImageMode::Sixel
+impl core::clone::Clone for rich_art::image_art::ImageMode
+pub fn rich_art::image_art::ImageMode::clone(&self) -> rich_art::image_art::ImageMode
+impl core::cmp::Eq for rich_art::image_art::ImageMode
+impl core::cmp::PartialEq for rich_art::image_art::ImageMode
+pub fn rich_art::image_art::ImageMode::eq(&self, &rich_art::image_art::ImageMode) -> bool
+impl core::default::Default for rich_art::image_art::ImageMode
+pub fn rich_art::image_art::ImageMode::default() -> rich_art::image_art::ImageMode
+impl core::fmt::Debug for rich_art::image_art::ImageMode
+pub fn rich_art::image_art::ImageMode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::image_art::ImageMode
+impl core::marker::StructuralPartialEq for rich_art::image_art::ImageMode
+impl core::marker::Freeze for rich_art::image_art::ImageMode
+impl core::marker::Send for rich_art::image_art::ImageMode
+impl core::marker::Sync for rich_art::image_art::ImageMode
+impl core::marker::Unpin for rich_art::image_art::ImageMode
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageMode
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageMode
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageMode
+pub struct rich_art::image_art::ImageArt
+impl rich_art::image_art::ImageArt
+pub fn rich_art::image_art::ImageArt::anchor(self, rich_art::image_art::ImageAnchor) -> Self
+pub fn rich_art::image_art::ImageArt::background(self, [u8; 3]) -> Self
+pub fn rich_art::image_art::ImageArt::background_mode(self, rich_art::image_art::ImageBackground) -> Self
+pub fn rich_art::image_art::ImageArt::color(self, bool) -> Self
+pub fn rich_art::image_art::ImageArt::color_distance(self, rich_art::ColorDistance) -> Self
+pub fn rich_art::image_art::ImageArt::color_mode(self, rich_art::ImageColorMode) -> Self
+pub fn rich_art::image_art::ImageArt::dither(self, rich_art::Dither) -> Self
+pub fn rich_art::image_art::ImageArt::fit(self, rich_art::image_art::ImageFit) -> Self
+pub fn rich_art::image_art::ImageArt::from_bytes(&[u8]) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::image_art::ImageArt::from_path(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::image_art::ImageArt::height(self, usize) -> Self
+pub fn rich_art::image_art::ImageArt::max_height(self, usize) -> Self
+pub fn rich_art::image_art::ImageArt::max_width(self, usize) -> Self
+pub fn rich_art::image_art::ImageArt::mode(self, rich_art::image_art::ImageMode) -> Self
+pub fn rich_art::image_art::ImageArt::new(image::images::dynimage::DynamicImage) -> Self
+pub fn rich_art::image_art::ImageArt::options(self, rich_art::image_art::ImageOptions) -> Self
+pub fn rich_art::image_art::ImageArt::render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> core::result::Result<alloc::vec::Vec<rich::segment::Segment>, rich_art::image_art::ImageArtError>
+pub fn rich_art::image_art::ImageArt::render_with_environment(&self, &rich::console::Console, &rich::console::ConsoleOptions, &dyn rich::protocol::RenderEnvironment) -> core::result::Result<alloc::vec::Vec<rich::segment::Segment>, rich_art::image_art::ImageArtError>
+pub fn rich_art::image_art::ImageArt::resolve_mode(&self, rich_art::image_art::RenderCapabilities) -> rich_art::image_art::ImageMode
+pub fn rich_art::image_art::ImageArt::transforms(self, rich_art::ImageTransforms) -> Self
+pub fn rich_art::image_art::ImageArt::width(self, usize) -> Self
+impl rich_art::image_art::ImageArt
+pub fn rich_art::image_art::ImageArt::native_grid(&self, rich_art::image_art::ImageMode, usize) -> (usize, usize)
+impl rich::protocol::Renderable for rich_art::image_art::ImageArt
+pub fn rich_art::image_art::ImageArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::image_art::ImageArt
+impl core::marker::Send for rich_art::image_art::ImageArt
+impl core::marker::Sync for rich_art::image_art::ImageArt
+impl core::marker::Unpin for rich_art::image_art::ImageArt
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageArt
+pub struct rich_art::image_art::ImageOptions
+pub rich_art::image_art::ImageOptions::color: bool
+pub rich_art::image_art::ImageOptions::height: core::option::Option<usize>
+pub rich_art::image_art::ImageOptions::mode: rich_art::image_art::ImageMode
+pub rich_art::image_art::ImageOptions::width: core::option::Option<usize>
+impl core::clone::Clone for rich_art::image_art::ImageOptions
+pub fn rich_art::image_art::ImageOptions::clone(&self) -> rich_art::image_art::ImageOptions
+impl core::cmp::Eq for rich_art::image_art::ImageOptions
+impl core::cmp::PartialEq for rich_art::image_art::ImageOptions
+pub fn rich_art::image_art::ImageOptions::eq(&self, &rich_art::image_art::ImageOptions) -> bool
+impl core::default::Default for rich_art::image_art::ImageOptions
+pub fn rich_art::image_art::ImageOptions::default() -> Self
+impl core::fmt::Debug for rich_art::image_art::ImageOptions
+pub fn rich_art::image_art::ImageOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::image_art::ImageOptions
+impl core::marker::StructuralPartialEq for rich_art::image_art::ImageOptions
+impl core::marker::Freeze for rich_art::image_art::ImageOptions
+impl core::marker::Send for rich_art::image_art::ImageOptions
+impl core::marker::Sync for rich_art::image_art::ImageOptions
+impl core::marker::Unpin for rich_art::image_art::ImageOptions
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageOptions
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageOptions
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageOptions
+pub struct rich_art::image_art::RenderCapabilities
+pub rich_art::image_art::RenderCapabilities::color: bool
+pub rich_art::image_art::RenderCapabilities::sixel_supported: bool
+impl rich_art::image_art::RenderCapabilities
+pub fn rich_art::image_art::RenderCapabilities::from_console(&rich::console::Console) -> Self
+impl core::clone::Clone for rich_art::image_art::RenderCapabilities
+pub fn rich_art::image_art::RenderCapabilities::clone(&self) -> rich_art::image_art::RenderCapabilities
+impl core::cmp::Eq for rich_art::image_art::RenderCapabilities
+impl core::cmp::PartialEq for rich_art::image_art::RenderCapabilities
+pub fn rich_art::image_art::RenderCapabilities::eq(&self, &rich_art::image_art::RenderCapabilities) -> bool
+impl core::default::Default for rich_art::image_art::RenderCapabilities
+pub fn rich_art::image_art::RenderCapabilities::default() -> rich_art::image_art::RenderCapabilities
+impl core::fmt::Debug for rich_art::image_art::RenderCapabilities
+pub fn rich_art::image_art::RenderCapabilities::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::image_art::RenderCapabilities
+impl core::marker::StructuralPartialEq for rich_art::image_art::RenderCapabilities
+impl core::marker::Freeze for rich_art::image_art::RenderCapabilities
+impl core::marker::Send for rich_art::image_art::RenderCapabilities
+impl core::marker::Sync for rich_art::image_art::RenderCapabilities
+impl core::marker::Unpin for rich_art::image_art::RenderCapabilities
+impl core::marker::UnsafeUnpin for rich_art::image_art::RenderCapabilities
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::RenderCapabilities
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::RenderCapabilities
+pub const rich_art::image_art::MAX_CELLS: usize
+pub fn rich_art::image_art::check_cell_budget(core::option::Option<usize>, core::option::Option<usize>) -> core::result::Result<(), rich_art::image_art::ImageArtError>
+pub mod rich_art::imagediff
+pub enum rich_art::imagediff::DiffError
+pub rich_art::imagediff::DiffError::SizeMismatch
+pub rich_art::imagediff::DiffError::SizeMismatch::after: (u32, u32)
+pub rich_art::imagediff::DiffError::SizeMismatch::before: (u32, u32)
+impl core::clone::Clone for rich_art::imagediff::DiffError
+pub fn rich_art::imagediff::DiffError::clone(&self) -> rich_art::imagediff::DiffError
+impl core::cmp::Eq for rich_art::imagediff::DiffError
+impl core::cmp::PartialEq for rich_art::imagediff::DiffError
+pub fn rich_art::imagediff::DiffError::eq(&self, &rich_art::imagediff::DiffError) -> bool
+impl core::error::Error for rich_art::imagediff::DiffError
+impl core::fmt::Debug for rich_art::imagediff::DiffError
+pub fn rich_art::imagediff::DiffError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_art::imagediff::DiffError
+pub fn rich_art::imagediff::DiffError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_art::imagediff::DiffError
+impl core::marker::Freeze for rich_art::imagediff::DiffError
+impl core::marker::Send for rich_art::imagediff::DiffError
+impl core::marker::Sync for rich_art::imagediff::DiffError
+impl core::marker::Unpin for rich_art::imagediff::DiffError
+impl core::marker::UnsafeUnpin for rich_art::imagediff::DiffError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::imagediff::DiffError
+impl core::panic::unwind_safe::UnwindSafe for rich_art::imagediff::DiffError
+pub struct rich_art::imagediff::DiffReport
+pub rich_art::imagediff::DiffReport::changed_fraction: f32
+pub rich_art::imagediff::DiffReport::delta_e: alloc::vec::Vec<f32>
+pub rich_art::imagediff::DiffReport::height: u32
+pub rich_art::imagediff::DiffReport::max_delta_e: f32
+pub rich_art::imagediff::DiffReport::mean_delta_e: f32
+pub rich_art::imagediff::DiffReport::naive_changed_fraction: f32
+pub rich_art::imagediff::DiffReport::regions: alloc::vec::Vec<rich_art::imagediff::Region>
+pub rich_art::imagediff::DiffReport::width: u32
+impl rich_art::imagediff::DiffReport
+pub fn rich_art::imagediff::DiffReport::heatmap(&self) -> image::images::dynimage::DynamicImage
+pub fn rich_art::imagediff::DiffReport::highlight(&self, &image::images::dynimage::DynamicImage) -> image::images::dynimage::DynamicImage
+impl core::clone::Clone for rich_art::imagediff::DiffReport
+pub fn rich_art::imagediff::DiffReport::clone(&self) -> rich_art::imagediff::DiffReport
+impl core::fmt::Debug for rich_art::imagediff::DiffReport
+pub fn rich_art::imagediff::DiffReport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_art::imagediff::DiffReport
+impl core::marker::Send for rich_art::imagediff::DiffReport
+impl core::marker::Sync for rich_art::imagediff::DiffReport
+impl core::marker::Unpin for rich_art::imagediff::DiffReport
+impl core::marker::UnsafeUnpin for rich_art::imagediff::DiffReport
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::imagediff::DiffReport
+impl core::panic::unwind_safe::UnwindSafe for rich_art::imagediff::DiffReport
+pub struct rich_art::imagediff::DiffSettings
+pub rich_art::imagediff::DiffSettings::blur: f32
+pub rich_art::imagediff::DiffSettings::min_region: u64
+pub rich_art::imagediff::DiffSettings::open_kernel: usize
+pub rich_art::imagediff::DiffSettings::threshold: f32
+pub rich_art::imagediff::DiffSettings::top: usize
+impl core::clone::Clone for rich_art::imagediff::DiffSettings
+pub fn rich_art::imagediff::DiffSettings::clone(&self) -> rich_art::imagediff::DiffSettings
+impl core::default::Default for rich_art::imagediff::DiffSettings
+pub fn rich_art::imagediff::DiffSettings::default() -> Self
+impl core::fmt::Debug for rich_art::imagediff::DiffSettings
+pub fn rich_art::imagediff::DiffSettings::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::imagediff::DiffSettings
+impl core::marker::Freeze for rich_art::imagediff::DiffSettings
+impl core::marker::Send for rich_art::imagediff::DiffSettings
+impl core::marker::Sync for rich_art::imagediff::DiffSettings
+impl core::marker::Unpin for rich_art::imagediff::DiffSettings
+impl core::marker::UnsafeUnpin for rich_art::imagediff::DiffSettings
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::imagediff::DiffSettings
+impl core::panic::unwind_safe::UnwindSafe for rich_art::imagediff::DiffSettings
+pub struct rich_art::imagediff::Region
+pub rich_art::imagediff::Region::area_px: u64
+pub rich_art::imagediff::Region::height: u32
+pub rich_art::imagediff::Region::mean_delta_e: f32
+pub rich_art::imagediff::Region::share_of_change: f32
+pub rich_art::imagediff::Region::width: u32
+pub rich_art::imagediff::Region::x: u32
+pub rich_art::imagediff::Region::y: u32
+impl core::clone::Clone for rich_art::imagediff::Region
+pub fn rich_art::imagediff::Region::clone(&self) -> rich_art::imagediff::Region
+impl core::cmp::PartialEq for rich_art::imagediff::Region
+pub fn rich_art::imagediff::Region::eq(&self, &rich_art::imagediff::Region) -> bool
+impl core::fmt::Debug for rich_art::imagediff::Region
+pub fn rich_art::imagediff::Region::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_art::imagediff::Region
+impl core::marker::Freeze for rich_art::imagediff::Region
+impl core::marker::Send for rich_art::imagediff::Region
+impl core::marker::Sync for rich_art::imagediff::Region
+impl core::marker::Unpin for rich_art::imagediff::Region
+impl core::marker::UnsafeUnpin for rich_art::imagediff::Region
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::imagediff::Region
+impl core::panic::unwind_safe::UnwindSafe for rich_art::imagediff::Region
+pub fn rich_art::imagediff::diff(&image::images::dynimage::DynamicImage, &image::images::dynimage::DynamicImage, &rich_art::imagediff::DiffSettings) -> core::result::Result<rich_art::imagediff::DiffReport, rich_art::imagediff::DiffError>
+pub mod rich_art::iterm
+pub fn rich_art::iterm::inline_image(&[u8], usize, usize) -> alloc::string::String
+pub mod rich_art::kitty
+pub enum rich_art::kitty::RawFormat
+pub rich_art::kitty::RawFormat::Rgb
+pub rich_art::kitty::RawFormat::Rgba
+impl rich_art::kitty::RawFormat
+pub fn rich_art::kitty::RawFormat::bytes_per_pixel(self) -> usize
+impl core::clone::Clone for rich_art::kitty::RawFormat
+pub fn rich_art::kitty::RawFormat::clone(&self) -> rich_art::kitty::RawFormat
+impl core::cmp::Eq for rich_art::kitty::RawFormat
+impl core::cmp::PartialEq for rich_art::kitty::RawFormat
+pub fn rich_art::kitty::RawFormat::eq(&self, &rich_art::kitty::RawFormat) -> bool
+impl core::fmt::Debug for rich_art::kitty::RawFormat
+pub fn rich_art::kitty::RawFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::kitty::RawFormat
+impl core::marker::StructuralPartialEq for rich_art::kitty::RawFormat
+impl core::marker::Freeze for rich_art::kitty::RawFormat
+impl core::marker::Send for rich_art::kitty::RawFormat
+impl core::marker::Sync for rich_art::kitty::RawFormat
+impl core::marker::Unpin for rich_art::kitty::RawFormat
+impl core::marker::UnsafeUnpin for rich_art::kitty::RawFormat
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::kitty::RawFormat
+impl core::panic::unwind_safe::UnwindSafe for rich_art::kitty::RawFormat
+pub struct rich_art::kitty::RawImage<'a>
+pub rich_art::kitty::RawImage::format: rich_art::kitty::RawFormat
+pub rich_art::kitty::RawImage::height: u32
+pub rich_art::kitty::RawImage::pixels: &'a [u8]
+pub rich_art::kitty::RawImage::width: u32
+impl<'a> rich_art::kitty::RawImage<'a>
+pub fn rich_art::kitty::RawImage<'a>::new(rich_art::kitty::RawFormat, &'a [u8], u32, u32) -> rich_art::kitty::RawImage<'a>
+impl<'a> core::clone::Clone for rich_art::kitty::RawImage<'a>
+pub fn rich_art::kitty::RawImage<'a>::clone(&self) -> rich_art::kitty::RawImage<'a>
+impl<'a> core::fmt::Debug for rich_art::kitty::RawImage<'a>
+pub fn rich_art::kitty::RawImage<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for rich_art::kitty::RawImage<'a>
+impl<'a> core::marker::Freeze for rich_art::kitty::RawImage<'a>
+impl<'a> core::marker::Send for rich_art::kitty::RawImage<'a>
+impl<'a> core::marker::Sync for rich_art::kitty::RawImage<'a>
+impl<'a> core::marker::Unpin for rich_art::kitty::RawImage<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_art::kitty::RawImage<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_art::kitty::RawImage<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rich_art::kitty::RawImage<'a>
+pub struct rich_art::kitty::Transmit
+pub rich_art::kitty::Transmit::cols: usize
+pub rich_art::kitty::Transmit::compress: bool
+pub rich_art::kitty::Transmit::id: u32
+pub rich_art::kitty::Transmit::placement: core::option::Option<u32>
+pub rich_art::kitty::Transmit::rows: usize
+impl rich_art::kitty::Transmit
+pub fn rich_art::kitty::Transmit::compress(self, bool) -> rich_art::kitty::Transmit
+pub fn rich_art::kitty::Transmit::new(u32, usize, usize) -> rich_art::kitty::Transmit
+pub fn rich_art::kitty::Transmit::placement(self, u32) -> rich_art::kitty::Transmit
+impl core::clone::Clone for rich_art::kitty::Transmit
+pub fn rich_art::kitty::Transmit::clone(&self) -> rich_art::kitty::Transmit
+impl core::cmp::Eq for rich_art::kitty::Transmit
+impl core::cmp::PartialEq for rich_art::kitty::Transmit
+pub fn rich_art::kitty::Transmit::eq(&self, &rich_art::kitty::Transmit) -> bool
+impl core::fmt::Debug for rich_art::kitty::Transmit
+pub fn rich_art::kitty::Transmit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::kitty::Transmit
+impl core::marker::StructuralPartialEq for rich_art::kitty::Transmit
+impl core::marker::Freeze for rich_art::kitty::Transmit
+impl core::marker::Send for rich_art::kitty::Transmit
+impl core::marker::Sync for rich_art::kitty::Transmit
+impl core::marker::Unpin for rich_art::kitty::Transmit
+impl core::marker::UnsafeUnpin for rich_art::kitty::Transmit
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::kitty::Transmit
+impl core::panic::unwind_safe::UnwindSafe for rich_art::kitty::Transmit
+pub const rich_art::kitty::DIACRITICS: [char; 297]
+pub const rich_art::kitty::PLACEHOLDER: char
+pub fn rich_art::kitty::delete(u32) -> alloc::string::String
+pub fn rich_art::kitty::diacritic(usize) -> core::option::Option<char>
+pub fn rich_art::kitty::id_color(u32, bool) -> core::option::Option<rich::color::Color>
+pub fn rich_art::kitty::placeholder_cell(usize, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::kitty::placeholder_row(usize, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::kitty::stop_animation(u32) -> alloc::string::String
+pub fn rich_art::kitty::transmit(u32, &[u8], usize, usize) -> alloc::string::String
+pub fn rich_art::kitty::transmit_animation(u32, &[rich_art::graphics::AnimationFrame], usize, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::kitty::transmit_raw(&rich_art::kitty::RawImage<'_>, &rich_art::kitty::Transmit) -> alloc::string::String
+pub fn rich_art::kitty::transmit_rgb(u32, &[u8], u32, u32, usize, usize) -> alloc::string::String
+pub fn rich_art::kitty::transmit_rgba(u32, &[u8], u32, u32, usize, usize) -> alloc::string::String
+pub mod rich_art::picture
+pub enum rich_art::picture::Pixels
+pub rich_art::picture::Pixels::Cells
+pub rich_art::picture::Pixels::Iterm
+pub rich_art::picture::Pixels::Kitty
+pub rich_art::picture::Pixels::Sixel
+impl rich_art::picture::Pixels
+pub fn rich_art::picture::Pixels::detect() -> rich_art::picture::Pixels
+pub fn rich_art::picture::Pixels::lower(self) -> core::option::Option<rich_art::picture::Pixels>
+pub fn rich_art::picture::Pixels::name(self) -> &'static str
+impl core::clone::Clone for rich_art::picture::Pixels
+pub fn rich_art::picture::Pixels::clone(&self) -> rich_art::picture::Pixels
+impl core::cmp::Eq for rich_art::picture::Pixels
+impl core::cmp::Ord for rich_art::picture::Pixels
+pub fn rich_art::picture::Pixels::cmp(&self, &rich_art::picture::Pixels) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_art::picture::Pixels
+pub fn rich_art::picture::Pixels::eq(&self, &rich_art::picture::Pixels) -> bool
+impl core::cmp::PartialOrd for rich_art::picture::Pixels
+pub fn rich_art::picture::Pixels::partial_cmp(&self, &rich_art::picture::Pixels) -> core::option::Option<core::cmp::Ordering>
+impl core::default::Default for rich_art::picture::Pixels
+pub fn rich_art::picture::Pixels::default() -> rich_art::picture::Pixels
+impl core::fmt::Debug for rich_art::picture::Pixels
+pub fn rich_art::picture::Pixels::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_art::picture::Pixels
+pub fn rich_art::picture::Pixels::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_art::picture::Pixels
+impl core::marker::StructuralPartialEq for rich_art::picture::Pixels
+impl core::marker::Freeze for rich_art::picture::Pixels
+impl core::marker::Send for rich_art::picture::Pixels
+impl core::marker::Sync for rich_art::picture::Pixels
+impl core::marker::Unpin for rich_art::picture::Pixels
+impl core::marker::UnsafeUnpin for rich_art::picture::Pixels
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::picture::Pixels
+impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::Pixels
+pub struct rich_art::picture::ByteBudget
+pub rich_art::picture::ByteBudget::bytes_per_second: u64
+pub rich_art::picture::ByteBudget::max_fps: f64
+pub rich_art::picture::ByteBudget::min_fps: f64
+impl rich_art::picture::ByteBudget
+pub fn rich_art::picture::ByteBudget::guess() -> rich_art::picture::ByteBudget
+pub fn rich_art::picture::ByteBudget::new(u64) -> rich_art::picture::ByteBudget
+impl core::clone::Clone for rich_art::picture::ByteBudget
+pub fn rich_art::picture::ByteBudget::clone(&self) -> rich_art::picture::ByteBudget
+impl core::cmp::PartialEq for rich_art::picture::ByteBudget
+pub fn rich_art::picture::ByteBudget::eq(&self, &rich_art::picture::ByteBudget) -> bool
+impl core::fmt::Debug for rich_art::picture::ByteBudget
+pub fn rich_art::picture::ByteBudget::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::picture::ByteBudget
+impl core::marker::StructuralPartialEq for rich_art::picture::ByteBudget
+impl core::marker::Freeze for rich_art::picture::ByteBudget
+impl core::marker::Send for rich_art::picture::ByteBudget
+impl core::marker::Sync for rich_art::picture::ByteBudget
+impl core::marker::Unpin for rich_art::picture::ByteBudget
+impl core::marker::UnsafeUnpin for rich_art::picture::ByteBudget
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::picture::ByteBudget
+impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::ByteBudget
+pub struct rich_art::picture::ImageView
+pub rich_art::picture::ImageView::anchor: rich_art::image_art::ImageAnchor
+pub rich_art::picture::ImageView::background: core::option::Option<[u8; 3]>
+pub rich_art::picture::ImageView::fit: core::option::Option<rich_art::image_art::ImageFit>
+pub rich_art::picture::ImageView::mode: rich_art::image_art::ImageMode
+pub rich_art::picture::ImageView::pixels: rich_art::picture::Pixels
+impl rich_art::picture::ImageView
+pub fn rich_art::picture::ImageView::anchor(self, rich_art::image_art::ImageAnchor) -> rich_art::picture::ImageView
+pub fn rich_art::picture::ImageView::background(self, [u8; 3]) -> rich_art::picture::ImageView
+pub fn rich_art::picture::ImageView::fit(self, rich_art::image_art::ImageFit) -> rich_art::picture::ImageView
+pub fn rich_art::picture::ImageView::mode(self, rich_art::image_art::ImageMode) -> rich_art::picture::ImageView
+pub fn rich_art::picture::ImageView::new() -> rich_art::picture::ImageView
+pub fn rich_art::picture::ImageView::pixels(self, rich_art::picture::Pixels) -> rich_art::picture::ImageView
+impl core::clone::Clone for rich_art::picture::ImageView
+pub fn rich_art::picture::ImageView::clone(&self) -> rich_art::picture::ImageView
+impl core::cmp::Eq for rich_art::picture::ImageView
+impl core::cmp::PartialEq for rich_art::picture::ImageView
+pub fn rich_art::picture::ImageView::eq(&self, &rich_art::picture::ImageView) -> bool
+impl core::default::Default for rich_art::picture::ImageView
+pub fn rich_art::picture::ImageView::default() -> Self
+impl core::fmt::Debug for rich_art::picture::ImageView
+pub fn rich_art::picture::ImageView::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::picture::ImageView
+impl core::marker::StructuralPartialEq for rich_art::picture::ImageView
+impl core::marker::Freeze for rich_art::picture::ImageView
+impl core::marker::Send for rich_art::picture::ImageView
+impl core::marker::Sync for rich_art::picture::ImageView
+impl core::marker::Unpin for rich_art::picture::ImageView
+impl core::marker::UnsafeUnpin for rich_art::picture::ImageView
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::picture::ImageView
+impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::ImageView
+pub struct rich_art::picture::Pacer
+impl rich_art::picture::Pacer
+pub fn rich_art::picture::Pacer::bytes_per_frame(&self) -> f64
+pub fn rich_art::picture::Pacer::due(&mut self, std::time::Instant, &rich_art::picture::ByteBudget, f64) -> bool
+pub fn rich_art::picture::Pacer::estimate(rich_art::picture::Pixels, usize, usize) -> u64
+pub fn rich_art::picture::Pacer::fps(&self, &rich_art::picture::ByteBudget, f64) -> f64
+pub fn rich_art::picture::Pacer::new(rich_art::picture::Pixels, usize, usize) -> rich_art::picture::Pacer
+pub fn rich_art::picture::Pacer::pixels(&self) -> rich_art::picture::Pixels
+pub fn rich_art::picture::Pacer::recent_bytes(&self) -> u64
+pub fn rich_art::picture::Pacer::resize(&mut self, usize, usize)
+pub fn rich_art::picture::Pacer::sent(&mut self, std::time::Instant, core::option::Option<u64>)
+pub fn rich_art::picture::Pacer::settle(&mut self, &rich_art::picture::ByteBudget, f64) -> bool
+impl core::clone::Clone for rich_art::picture::Pacer
+pub fn rich_art::picture::Pacer::clone(&self) -> rich_art::picture::Pacer
+impl core::fmt::Debug for rich_art::picture::Pacer
+pub fn rich_art::picture::Pacer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_art::picture::Pacer
+impl core::marker::Send for rich_art::picture::Pacer
+impl core::marker::Sync for rich_art::picture::Pacer
+impl core::marker::Unpin for rich_art::picture::Pacer
+impl core::marker::UnsafeUnpin for rich_art::picture::Pacer
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::picture::Pacer
+impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::Pacer
+pub struct rich_art::picture::Picture
+impl rich_art::picture::Picture
+pub fn rich_art::picture::Picture::animated(alloc::vec::Vec<rich_art::graphics::AnimationFrame>) -> core::option::Option<rich_art::picture::Picture>
+pub fn rich_art::picture::Picture::decode(&[u8]) -> core::result::Result<rich_art::picture::Picture, alloc::string::String>
+pub fn rich_art::picture::Picture::decode_animated(&[u8]) -> core::result::Result<rich_art::picture::Picture, alloc::string::String>
+pub fn rich_art::picture::Picture::encode(&self, rich_art::picture::Pixels, usize, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::picture::Picture::encode_rows(&self, rich_art::picture::Pixels, usize, usize, usize, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::picture::Picture::encode_tag(&self, &rich_art::picture::PictureTag, usize, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::picture::Picture::find(u32, u32) -> core::option::Option<rich_art::picture::Picture>
+pub fn rich_art::picture::Picture::frames(&self) -> core::option::Option<&[rich_art::graphics::AnimationFrame]>
+pub fn rich_art::picture::Picture::from_rgba(u32, u32, alloc::vec::Vec<u8>) -> core::option::Option<rich_art::picture::Picture>
+pub fn rich_art::picture::Picture::id(&self) -> u32
+pub fn rich_art::picture::Picture::image(&self) -> &alloc::sync::Arc<image::images::dynimage::DynamicImage>
+pub fn rich_art::picture::Picture::is_animated(&self) -> bool
+pub fn rich_art::picture::Picture::lines(&self, &rich::console::Console, rich_art::picture::ImageView, u16, u16) -> alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>
+pub fn rich_art::picture::Picture::new(image::images::dynimage::DynamicImage) -> rich_art::picture::Picture
+pub fn rich_art::picture::Picture::next(&self, image::images::dynimage::DynamicImage) -> rich_art::picture::Picture
+pub fn rich_art::picture::Picture::next_rgba(&self, u32, u32, alloc::vec::Vec<u8>) -> core::option::Option<rich_art::picture::Picture>
+pub fn rich_art::picture::Picture::release(u32) -> alloc::string::String
+pub fn rich_art::picture::Picture::still(&self) -> rich_art::picture::Picture
+pub fn rich_art::picture::Picture::version(&self) -> u32
+impl core::clone::Clone for rich_art::picture::Picture
+pub fn rich_art::picture::Picture::clone(&self) -> rich_art::picture::Picture
+impl core::cmp::Eq for rich_art::picture::Picture
+impl core::cmp::PartialEq for rich_art::picture::Picture
+pub fn rich_art::picture::Picture::eq(&self, &Self) -> bool
+impl core::fmt::Debug for rich_art::picture::Picture
+pub fn rich_art::picture::Picture::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_art::picture::Picture
+impl core::marker::Send for rich_art::picture::Picture
+impl core::marker::Sync for rich_art::picture::Picture
+impl core::marker::Unpin for rich_art::picture::Picture
+impl core::marker::UnsafeUnpin for rich_art::picture::Picture
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::picture::Picture
+impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::Picture
+pub struct rich_art::picture::PictureTag
+pub rich_art::picture::PictureTag::anchor: rich_art::image_art::ImageAnchor
+pub rich_art::picture::PictureTag::cols: usize
+pub rich_art::picture::PictureTag::fit: core::option::Option<rich_art::image_art::ImageFit>
+pub rich_art::picture::PictureTag::id: u32
+pub rich_art::picture::PictureTag::pixels: rich_art::picture::Pixels
+pub rich_art::picture::PictureTag::row: usize
+pub rich_art::picture::PictureTag::rows: usize
+pub rich_art::picture::PictureTag::version: u32
+impl rich_art::picture::PictureTag
+pub const rich_art::picture::PictureTag::META_KEY: &'static str
+pub fn rich_art::picture::PictureTag::of(&rich::style::Style) -> core::option::Option<rich_art::picture::PictureTag>
+pub fn rich_art::picture::PictureTag::picture(&self) -> core::option::Option<rich_art::picture::Picture>
+pub fn rich_art::picture::PictureTag::style(&self) -> rich::style::Style
+impl core::clone::Clone for rich_art::picture::PictureTag
+pub fn rich_art::picture::PictureTag::clone(&self) -> rich_art::picture::PictureTag
+impl core::cmp::Eq for rich_art::picture::PictureTag
+impl core::cmp::PartialEq for rich_art::picture::PictureTag
+pub fn rich_art::picture::PictureTag::eq(&self, &rich_art::picture::PictureTag) -> bool
+impl core::fmt::Debug for rich_art::picture::PictureTag
+pub fn rich_art::picture::PictureTag::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_art::picture::PictureTag
+pub fn rich_art::picture::PictureTag::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_art::picture::PictureTag
+impl core::marker::StructuralPartialEq for rich_art::picture::PictureTag
+impl core::marker::Freeze for rich_art::picture::PictureTag
+impl core::marker::Send for rich_art::picture::PictureTag
+impl core::marker::Sync for rich_art::picture::PictureTag
+impl core::marker::Unpin for rich_art::picture::PictureTag
+impl core::marker::UnsafeUnpin for rich_art::picture::PictureTag
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::picture::PictureTag
+impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::PictureTag
+pub struct rich_art::picture::Player
+impl rich_art::picture::Player
+pub fn rich_art::picture::Player::advance(&mut self, std::time::Instant) -> bool
+pub fn rich_art::picture::Player::due(&self, std::time::Instant) -> bool
+pub fn rich_art::picture::Player::frame(&self) -> &rich_art::picture::Picture
+pub fn rich_art::picture::Player::index(&self) -> usize
+pub fn rich_art::picture::Player::is_empty(&self) -> bool
+pub fn rich_art::picture::Player::len(&self) -> usize
+pub fn rich_art::picture::Player::new(&rich_art::picture::Picture, std::time::Instant) -> core::option::Option<rich_art::picture::Player>
+pub fn rich_art::picture::Player::wait(&self, std::time::Instant) -> core::time::Duration
+impl core::clone::Clone for rich_art::picture::Player
+pub fn rich_art::picture::Player::clone(&self) -> rich_art::picture::Player
+impl core::fmt::Debug for rich_art::picture::Player
+pub fn rich_art::picture::Player::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_art::picture::Player
+impl core::marker::Send for rich_art::picture::Player
+impl core::marker::Sync for rich_art::picture::Player
+impl core::marker::Unpin for rich_art::picture::Player
+impl core::marker::UnsafeUnpin for rich_art::picture::Player
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::picture::Player
+impl core::panic::unwind_safe::UnwindSafe for rich_art::picture::Player
+pub const rich_art::picture::ANIMATION_FRAMES: usize
+pub const rich_art::picture::ANIMATION_SIDE: u32
+pub const rich_art::picture::KEEP: u32
+pub fn rich_art::picture::count_picture_bytes(u32, u64)
+pub fn rich_art::picture::over_ssh() -> bool
+pub fn rich_art::picture::picture_bytes(u32) -> u64
+pub fn rich_art::picture::shrink(image::images::dynimage::DynamicImage) -> image::images::dynimage::DynamicImage
+pub mod rich_art::quadrant
+pub struct rich_art::quadrant::QuadrantArt
+impl rich_art::quadrant::QuadrantArt
+pub fn rich_art::quadrant::QuadrantArt::from_path(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::quadrant::QuadrantArt::height(self, usize) -> Self
+pub fn rich_art::quadrant::QuadrantArt::new(image::images::dynimage::DynamicImage) -> Self
+pub fn rich_art::quadrant::QuadrantArt::width(self, usize) -> Self
+impl rich::protocol::Renderable for rich_art::quadrant::QuadrantArt
+pub fn rich_art::quadrant::QuadrantArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::quadrant::QuadrantArt
+impl core::marker::Send for rich_art::quadrant::QuadrantArt
+impl core::marker::Sync for rich_art::quadrant::QuadrantArt
+impl core::marker::Unpin for rich_art::quadrant::QuadrantArt
+impl core::marker::UnsafeUnpin for rich_art::quadrant::QuadrantArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::quadrant::QuadrantArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::quadrant::QuadrantArt
+pub mod rich_art::sixel
+pub struct rich_art::sixel::SixelArt
+impl rich_art::sixel::SixelArt
+pub fn rich_art::sixel::SixelArt::cell_px(self, u32, u32) -> Self
+pub fn rich_art::sixel::SixelArt::encode(&self, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::sixel::SixelArt::encode_cells(&self, usize, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::sixel::SixelArt::from_path(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::sixel::SixelArt::height(self, usize) -> Self
+pub fn rich_art::sixel::SixelArt::max_colors(self, u16) -> Self
+pub fn rich_art::sixel::SixelArt::new(image::images::dynimage::DynamicImage) -> Self
+pub fn rich_art::sixel::SixelArt::width(self, usize) -> Self
+impl rich::protocol::Renderable for rich_art::sixel::SixelArt
+pub fn rich_art::sixel::SixelArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::sixel::SixelArt
+impl core::marker::Send for rich_art::sixel::SixelArt
+impl core::marker::Sync for rich_art::sixel::SixelArt
+impl core::marker::Unpin for rich_art::sixel::SixelArt
+impl core::marker::UnsafeUnpin for rich_art::sixel::SixelArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::sixel::SixelArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::sixel::SixelArt
+pub const rich_art::sixel::DEFAULT_CELL_PX: (u32, u32)
+pub const rich_art::sixel::MAX_PIXELS: u64
+pub fn rich_art::sixel::encode_palette(&[core::option::Option<u8>], &[[u8; 3]], usize, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::sixel::index_exact(&[[u8; 4]]) -> core::option::Option<(alloc::vec::Vec<core::option::Option<u8>>, alloc::vec::Vec<[u8; 3]>)>
+pub fn rich_art::sixel::is_probably_supported() -> bool
+pub mod rich_art::stage
+pub enum rich_art::stage::Until
+pub rich_art::stage::Until::AllFinished
+pub rich_art::stage::Until::Elapsed(core::time::Duration)
+impl core::clone::Clone for rich_art::stage::Until
+pub fn rich_art::stage::Until::clone(&self) -> rich_art::stage::Until
+impl core::cmp::Eq for rich_art::stage::Until
+impl core::cmp::PartialEq for rich_art::stage::Until
+pub fn rich_art::stage::Until::eq(&self, &rich_art::stage::Until) -> bool
+impl core::default::Default for rich_art::stage::Until
+pub fn rich_art::stage::Until::default() -> rich_art::stage::Until
+impl core::fmt::Debug for rich_art::stage::Until
+pub fn rich_art::stage::Until::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::stage::Until
+impl core::marker::StructuralPartialEq for rich_art::stage::Until
+impl core::marker::Freeze for rich_art::stage::Until
+impl core::marker::Send for rich_art::stage::Until
+impl core::marker::Sync for rich_art::stage::Until
+impl core::marker::Unpin for rich_art::stage::Until
+impl core::marker::UnsafeUnpin for rich_art::stage::Until
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::stage::Until
+impl core::panic::unwind_safe::UnwindSafe for rich_art::stage::Until
+pub struct rich_art::stage::Stage
+impl rich_art::stage::Stage
+pub fn rich_art::stage::Stage::gap(self, usize) -> Self
+pub fn rich_art::stage::Stage::is_empty(&self) -> bool
+pub fn rich_art::stage::Stage::len(&self) -> usize
+pub fn rich_art::stage::Stage::new() -> Self
+pub fn rich_art::stage::Stage::play<W: std::io::Write>(&self, rich::console::Console, W) -> std::io::error::Result<()>
+pub fn rich_art::stage::Stage::play_stdout(&self, rich::console::Console) -> std::io::error::Result<()>
+pub fn rich_art::stage::Stage::until(self, rich_art::stage::Until) -> Self
+pub fn rich_art::stage::Stage::with(self, rich_art::gif::AnimatedArt) -> Self
+impl core::default::Default for rich_art::stage::Stage
+pub fn rich_art::stage::Stage::default() -> rich_art::stage::Stage
+impl core::marker::Freeze for rich_art::stage::Stage
+impl core::marker::Send for rich_art::stage::Stage
+impl core::marker::Sync for rich_art::stage::Stage
+impl core::marker::Unpin for rich_art::stage::Stage
+impl core::marker::UnsafeUnpin for rich_art::stage::Stage
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::stage::Stage
+impl core::panic::unwind_safe::UnwindSafe for rich_art::stage::Stage
+pub enum rich_art::ColorDistance
+pub rich_art::ColorDistance::Oklab
+pub rich_art::ColorDistance::Rgb
+impl core::clone::Clone for rich_art::ColorDistance
+pub fn rich_art::ColorDistance::clone(&self) -> rich_art::ColorDistance
+impl core::cmp::Eq for rich_art::ColorDistance
+impl core::cmp::PartialEq for rich_art::ColorDistance
+pub fn rich_art::ColorDistance::eq(&self, &rich_art::ColorDistance) -> bool
+impl core::default::Default for rich_art::ColorDistance
+pub fn rich_art::ColorDistance::default() -> rich_art::ColorDistance
+impl core::fmt::Debug for rich_art::ColorDistance
+pub fn rich_art::ColorDistance::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::ColorDistance
+impl core::marker::StructuralPartialEq for rich_art::ColorDistance
+impl core::marker::Freeze for rich_art::ColorDistance
+impl core::marker::Send for rich_art::ColorDistance
+impl core::marker::Sync for rich_art::ColorDistance
+impl core::marker::Unpin for rich_art::ColorDistance
+impl core::marker::UnsafeUnpin for rich_art::ColorDistance
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::ColorDistance
+impl core::panic::unwind_safe::UnwindSafe for rich_art::ColorDistance
+pub enum rich_art::DiffError
+pub rich_art::DiffError::SizeMismatch
+pub rich_art::DiffError::SizeMismatch::after: (u32, u32)
+pub rich_art::DiffError::SizeMismatch::before: (u32, u32)
+impl core::clone::Clone for rich_art::imagediff::DiffError
+pub fn rich_art::imagediff::DiffError::clone(&self) -> rich_art::imagediff::DiffError
+impl core::cmp::Eq for rich_art::imagediff::DiffError
+impl core::cmp::PartialEq for rich_art::imagediff::DiffError
+pub fn rich_art::imagediff::DiffError::eq(&self, &rich_art::imagediff::DiffError) -> bool
+impl core::error::Error for rich_art::imagediff::DiffError
+impl core::fmt::Debug for rich_art::imagediff::DiffError
+pub fn rich_art::imagediff::DiffError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_art::imagediff::DiffError
+pub fn rich_art::imagediff::DiffError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_art::imagediff::DiffError
+impl core::marker::Freeze for rich_art::imagediff::DiffError
+impl core::marker::Send for rich_art::imagediff::DiffError
+impl core::marker::Sync for rich_art::imagediff::DiffError
+impl core::marker::Unpin for rich_art::imagediff::DiffError
+impl core::marker::UnsafeUnpin for rich_art::imagediff::DiffError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::imagediff::DiffError
+impl core::panic::unwind_safe::UnwindSafe for rich_art::imagediff::DiffError
+pub enum rich_art::Dither
+pub rich_art::Dither::Atkinson
+pub rich_art::Dither::Bayer4x4
+pub rich_art::Dither::FloydSteinberg
+pub rich_art::Dither::None
+impl core::clone::Clone for rich_art::Dither
+pub fn rich_art::Dither::clone(&self) -> rich_art::Dither
+impl core::cmp::Eq for rich_art::Dither
+impl core::cmp::PartialEq for rich_art::Dither
+pub fn rich_art::Dither::eq(&self, &rich_art::Dither) -> bool
+impl core::default::Default for rich_art::Dither
+pub fn rich_art::Dither::default() -> rich_art::Dither
+impl core::fmt::Debug for rich_art::Dither
+pub fn rich_art::Dither::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::Dither
+impl core::marker::StructuralPartialEq for rich_art::Dither
+impl core::marker::Freeze for rich_art::Dither
+impl core::marker::Send for rich_art::Dither
+impl core::marker::Sync for rich_art::Dither
+impl core::marker::Unpin for rich_art::Dither
+impl core::marker::UnsafeUnpin for rich_art::Dither
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::Dither
+impl core::panic::unwind_safe::UnwindSafe for rich_art::Dither
+pub enum rich_art::FontError
+pub rich_art::FontError::BadHeader(alloc::string::String)
+pub rich_art::FontError::BadSignature
+pub rich_art::FontError::Truncated
+impl core::clone::Clone for rich_art::figlet::FontError
+pub fn rich_art::figlet::FontError::clone(&self) -> rich_art::figlet::FontError
+impl core::cmp::Eq for rich_art::figlet::FontError
+impl core::cmp::PartialEq for rich_art::figlet::FontError
+pub fn rich_art::figlet::FontError::eq(&self, &rich_art::figlet::FontError) -> bool
+impl core::error::Error for rich_art::figlet::FontError
+impl core::fmt::Debug for rich_art::figlet::FontError
+pub fn rich_art::figlet::FontError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_art::figlet::FontError
+pub fn rich_art::figlet::FontError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_art::figlet::FontError
+impl core::marker::Freeze for rich_art::figlet::FontError
+impl core::marker::Send for rich_art::figlet::FontError
+impl core::marker::Sync for rich_art::figlet::FontError
+impl core::marker::Unpin for rich_art::figlet::FontError
+impl core::marker::UnsafeUnpin for rich_art::figlet::FontError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::figlet::FontError
+impl core::panic::unwind_safe::UnwindSafe for rich_art::figlet::FontError
+pub enum rich_art::ImageAnchor
+pub rich_art::ImageAnchor::Bottom
+pub rich_art::ImageAnchor::BottomLeft
+pub rich_art::ImageAnchor::BottomRight
+pub rich_art::ImageAnchor::Center
+pub rich_art::ImageAnchor::Left
+pub rich_art::ImageAnchor::Right
+pub rich_art::ImageAnchor::Top
+pub rich_art::ImageAnchor::TopLeft
+pub rich_art::ImageAnchor::TopRight
+impl core::clone::Clone for rich_art::image_art::ImageAnchor
+pub fn rich_art::image_art::ImageAnchor::clone(&self) -> rich_art::image_art::ImageAnchor
+impl core::cmp::Eq for rich_art::image_art::ImageAnchor
+impl core::cmp::PartialEq for rich_art::image_art::ImageAnchor
+pub fn rich_art::image_art::ImageAnchor::eq(&self, &rich_art::image_art::ImageAnchor) -> bool
+impl core::default::Default for rich_art::image_art::ImageAnchor
+pub fn rich_art::image_art::ImageAnchor::default() -> rich_art::image_art::ImageAnchor
+impl core::fmt::Debug for rich_art::image_art::ImageAnchor
+pub fn rich_art::image_art::ImageAnchor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_art::image_art::ImageAnchor
+pub fn rich_art::image_art::ImageAnchor::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_art::image_art::ImageAnchor
+impl core::marker::StructuralPartialEq for rich_art::image_art::ImageAnchor
+impl core::marker::Freeze for rich_art::image_art::ImageAnchor
+impl core::marker::Send for rich_art::image_art::ImageAnchor
+impl core::marker::Sync for rich_art::image_art::ImageAnchor
+impl core::marker::Unpin for rich_art::image_art::ImageAnchor
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageAnchor
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageAnchor
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageAnchor
+pub enum rich_art::ImageArtError
+pub rich_art::ImageArtError::FeatureNotEnabled
+pub rich_art::ImageArtError::FeatureNotEnabled::feature: &'static str
+pub rich_art::ImageArtError::FeatureNotEnabled::mode: rich_art::image_art::ImageMode
+pub rich_art::ImageArtError::InvalidAdjustment
+pub rich_art::ImageArtError::InvalidFitDimensions
+pub rich_art::ImageArtError::NonTerminalDestination
+pub rich_art::ImageArtError::SixelEncodeFailed
+pub rich_art::ImageArtError::SixelNotSupported
+pub rich_art::ImageArtError::SixelTooLarge
+pub rich_art::ImageArtError::TooLarge
+pub rich_art::ImageArtError::UnsupportedColorOptions
+impl core::clone::Clone for rich_art::image_art::ImageArtError
+pub fn rich_art::image_art::ImageArtError::clone(&self) -> rich_art::image_art::ImageArtError
+impl core::cmp::Eq for rich_art::image_art::ImageArtError
+impl core::cmp::PartialEq for rich_art::image_art::ImageArtError
+pub fn rich_art::image_art::ImageArtError::eq(&self, &rich_art::image_art::ImageArtError) -> bool
+impl core::error::Error for rich_art::image_art::ImageArtError
+impl core::fmt::Debug for rich_art::image_art::ImageArtError
+pub fn rich_art::image_art::ImageArtError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_art::image_art::ImageArtError
+pub fn rich_art::image_art::ImageArtError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_art::image_art::ImageArtError
+impl core::marker::Freeze for rich_art::image_art::ImageArtError
+impl core::marker::Send for rich_art::image_art::ImageArtError
+impl core::marker::Sync for rich_art::image_art::ImageArtError
+impl core::marker::Unpin for rich_art::image_art::ImageArtError
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageArtError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageArtError
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageArtError
+pub enum rich_art::ImageBackground
+pub rich_art::ImageBackground::Checkerboard
+pub rich_art::ImageBackground::Color([u8; 3])
+pub rich_art::ImageBackground::TerminalDefault
+impl core::clone::Clone for rich_art::image_art::ImageBackground
+pub fn rich_art::image_art::ImageBackground::clone(&self) -> rich_art::image_art::ImageBackground
+impl core::cmp::Eq for rich_art::image_art::ImageBackground
+impl core::cmp::PartialEq for rich_art::image_art::ImageBackground
+pub fn rich_art::image_art::ImageBackground::eq(&self, &rich_art::image_art::ImageBackground) -> bool
+impl core::fmt::Debug for rich_art::image_art::ImageBackground
+pub fn rich_art::image_art::ImageBackground::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::image_art::ImageBackground
+impl core::marker::StructuralPartialEq for rich_art::image_art::ImageBackground
+impl core::marker::Freeze for rich_art::image_art::ImageBackground
+impl core::marker::Send for rich_art::image_art::ImageBackground
+impl core::marker::Sync for rich_art::image_art::ImageBackground
+impl core::marker::Unpin for rich_art::image_art::ImageBackground
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageBackground
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageBackground
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageBackground
+pub enum rich_art::ImageColorMode
+pub rich_art::ImageColorMode::Ansi16
+pub rich_art::ImageColorMode::Ansi256
+pub rich_art::ImageColorMode::Grayscale
+pub rich_art::ImageColorMode::TrueColor
+impl core::clone::Clone for rich_art::ImageColorMode
+pub fn rich_art::ImageColorMode::clone(&self) -> rich_art::ImageColorMode
+impl core::cmp::Eq for rich_art::ImageColorMode
+impl core::cmp::PartialEq for rich_art::ImageColorMode
+pub fn rich_art::ImageColorMode::eq(&self, &rich_art::ImageColorMode) -> bool
+impl core::default::Default for rich_art::ImageColorMode
+pub fn rich_art::ImageColorMode::default() -> rich_art::ImageColorMode
+impl core::fmt::Debug for rich_art::ImageColorMode
+pub fn rich_art::ImageColorMode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::ImageColorMode
+impl core::marker::StructuralPartialEq for rich_art::ImageColorMode
+impl core::marker::Freeze for rich_art::ImageColorMode
+impl core::marker::Send for rich_art::ImageColorMode
+impl core::marker::Sync for rich_art::ImageColorMode
+impl core::marker::Unpin for rich_art::ImageColorMode
+impl core::marker::UnsafeUnpin for rich_art::ImageColorMode
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::ImageColorMode
+impl core::panic::unwind_safe::UnwindSafe for rich_art::ImageColorMode
+pub enum rich_art::ImageFit
+pub rich_art::ImageFit::Contain
+pub rich_art::ImageFit::Cover
+pub rich_art::ImageFit::Native
+pub rich_art::ImageFit::Stretch
+impl core::clone::Clone for rich_art::image_art::ImageFit
+pub fn rich_art::image_art::ImageFit::clone(&self) -> rich_art::image_art::ImageFit
+impl core::cmp::Eq for rich_art::image_art::ImageFit
+impl core::cmp::PartialEq for rich_art::image_art::ImageFit
+pub fn rich_art::image_art::ImageFit::eq(&self, &rich_art::image_art::ImageFit) -> bool
+impl core::fmt::Debug for rich_art::image_art::ImageFit
+pub fn rich_art::image_art::ImageFit::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_art::image_art::ImageFit
+pub fn rich_art::image_art::ImageFit::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_art::image_art::ImageFit
+impl core::marker::StructuralPartialEq for rich_art::image_art::ImageFit
+impl core::marker::Freeze for rich_art::image_art::ImageFit
+impl core::marker::Send for rich_art::image_art::ImageFit
+impl core::marker::Sync for rich_art::image_art::ImageFit
+impl core::marker::Unpin for rich_art::image_art::ImageFit
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageFit
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageFit
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageFit
+pub enum rich_art::ImageMode
+pub rich_art::ImageMode::Ascii
+pub rich_art::ImageMode::Auto
+pub rich_art::ImageMode::Blocks
+pub rich_art::ImageMode::Braille
+pub rich_art::ImageMode::Quadrants
+pub rich_art::ImageMode::Sixel
+impl core::clone::Clone for rich_art::image_art::ImageMode
+pub fn rich_art::image_art::ImageMode::clone(&self) -> rich_art::image_art::ImageMode
+impl core::cmp::Eq for rich_art::image_art::ImageMode
+impl core::cmp::PartialEq for rich_art::image_art::ImageMode
+pub fn rich_art::image_art::ImageMode::eq(&self, &rich_art::image_art::ImageMode) -> bool
+impl core::default::Default for rich_art::image_art::ImageMode
+pub fn rich_art::image_art::ImageMode::default() -> rich_art::image_art::ImageMode
+impl core::fmt::Debug for rich_art::image_art::ImageMode
+pub fn rich_art::image_art::ImageMode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::image_art::ImageMode
+impl core::marker::StructuralPartialEq for rich_art::image_art::ImageMode
+impl core::marker::Freeze for rich_art::image_art::ImageMode
+impl core::marker::Send for rich_art::image_art::ImageMode
+impl core::marker::Sync for rich_art::image_art::ImageMode
+impl core::marker::Unpin for rich_art::image_art::ImageMode
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageMode
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageMode
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageMode
+pub enum rich_art::Justify
+pub rich_art::Justify::Center
+pub rich_art::Justify::Left
+pub rich_art::Justify::Right
+impl core::clone::Clone for rich_art::figlet::Justify
+pub fn rich_art::figlet::Justify::clone(&self) -> rich_art::figlet::Justify
+impl core::cmp::Eq for rich_art::figlet::Justify
+impl core::cmp::PartialEq for rich_art::figlet::Justify
+pub fn rich_art::figlet::Justify::eq(&self, &rich_art::figlet::Justify) -> bool
+impl core::default::Default for rich_art::figlet::Justify
+pub fn rich_art::figlet::Justify::default() -> rich_art::figlet::Justify
+impl core::fmt::Debug for rich_art::figlet::Justify
+pub fn rich_art::figlet::Justify::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::figlet::Justify
+impl core::marker::StructuralPartialEq for rich_art::figlet::Justify
+impl core::marker::Freeze for rich_art::figlet::Justify
+impl core::marker::Send for rich_art::figlet::Justify
+impl core::marker::Sync for rich_art::figlet::Justify
+impl core::marker::Unpin for rich_art::figlet::Justify
+impl core::marker::UnsafeUnpin for rich_art::figlet::Justify
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::figlet::Justify
+impl core::panic::unwind_safe::UnwindSafe for rich_art::figlet::Justify
+pub enum rich_art::Repeat
+pub rich_art::Repeat::Forever
+pub rich_art::Repeat::Once
+pub rich_art::Repeat::Times(usize)
+impl core::clone::Clone for rich_art::gif::Repeat
+pub fn rich_art::gif::Repeat::clone(&self) -> rich_art::gif::Repeat
+impl core::cmp::Eq for rich_art::gif::Repeat
+impl core::cmp::PartialEq for rich_art::gif::Repeat
+pub fn rich_art::gif::Repeat::eq(&self, &rich_art::gif::Repeat) -> bool
+impl core::default::Default for rich_art::gif::Repeat
+pub fn rich_art::gif::Repeat::default() -> rich_art::gif::Repeat
+impl core::fmt::Debug for rich_art::gif::Repeat
+pub fn rich_art::gif::Repeat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::gif::Repeat
+impl core::marker::StructuralPartialEq for rich_art::gif::Repeat
+impl core::marker::Freeze for rich_art::gif::Repeat
+impl core::marker::Send for rich_art::gif::Repeat
+impl core::marker::Sync for rich_art::gif::Repeat
+impl core::marker::Unpin for rich_art::gif::Repeat
+impl core::marker::UnsafeUnpin for rich_art::gif::Repeat
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::gif::Repeat
+impl core::panic::unwind_safe::UnwindSafe for rich_art::gif::Repeat
+pub enum rich_art::Rotation
+pub rich_art::Rotation::Clockwise180
+pub rich_art::Rotation::Clockwise270
+pub rich_art::Rotation::Clockwise90
+pub rich_art::Rotation::None
+impl core::clone::Clone for rich_art::Rotation
+pub fn rich_art::Rotation::clone(&self) -> rich_art::Rotation
+impl core::cmp::Eq for rich_art::Rotation
+impl core::cmp::PartialEq for rich_art::Rotation
+pub fn rich_art::Rotation::eq(&self, &rich_art::Rotation) -> bool
+impl core::default::Default for rich_art::Rotation
+pub fn rich_art::Rotation::default() -> rich_art::Rotation
+impl core::fmt::Debug for rich_art::Rotation
+pub fn rich_art::Rotation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::Rotation
+impl core::marker::StructuralPartialEq for rich_art::Rotation
+impl core::marker::Freeze for rich_art::Rotation
+impl core::marker::Send for rich_art::Rotation
+impl core::marker::Sync for rich_art::Rotation
+impl core::marker::Unpin for rich_art::Rotation
+impl core::marker::UnsafeUnpin for rich_art::Rotation
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::Rotation
+impl core::panic::unwind_safe::UnwindSafe for rich_art::Rotation
+pub enum rich_art::Until
+pub rich_art::Until::AllFinished
+pub rich_art::Until::Elapsed(core::time::Duration)
+impl core::clone::Clone for rich_art::stage::Until
+pub fn rich_art::stage::Until::clone(&self) -> rich_art::stage::Until
+impl core::cmp::Eq for rich_art::stage::Until
+impl core::cmp::PartialEq for rich_art::stage::Until
+pub fn rich_art::stage::Until::eq(&self, &rich_art::stage::Until) -> bool
+impl core::default::Default for rich_art::stage::Until
+pub fn rich_art::stage::Until::default() -> rich_art::stage::Until
+impl core::fmt::Debug for rich_art::stage::Until
+pub fn rich_art::stage::Until::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::stage::Until
+impl core::marker::StructuralPartialEq for rich_art::stage::Until
+impl core::marker::Freeze for rich_art::stage::Until
+impl core::marker::Send for rich_art::stage::Until
+impl core::marker::Sync for rich_art::stage::Until
+impl core::marker::Unpin for rich_art::stage::Until
+impl core::marker::UnsafeUnpin for rich_art::stage::Until
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::stage::Until
+impl core::panic::unwind_safe::UnwindSafe for rich_art::stage::Until
+pub struct rich_art::AnimatedArt
+impl rich_art::gif::AnimatedArt
+pub const rich_art::gif::AnimatedArt::MAX_DECODED_BYTES: usize
+pub fn rich_art::gif::AnimatedArt::blocks(self, bool) -> Self
+pub fn rich_art::gif::AnimatedArt::color(self, bool) -> Self
+pub fn rich_art::gif::AnimatedArt::color_distance(self, rich_art::ColorDistance) -> Self
+pub fn rich_art::gif::AnimatedArt::color_mode(self, rich_art::ImageColorMode) -> Self
+pub fn rich_art::gif::AnimatedArt::dither(self, rich_art::Dither) -> Self
+pub fn rich_art::gif::AnimatedArt::duration(&self) -> core::time::Duration
+pub fn rich_art::gif::AnimatedArt::frame(&self, usize) -> core::option::Option<rich_art::ascii::AsciiArt>
+pub fn rich_art::gif::AnimatedArt::frame_count(&self) -> usize
+pub fn rich_art::gif::AnimatedArt::frame_delay(&self, usize) -> core::option::Option<core::time::Duration>
+pub fn rich_art::gif::AnimatedArt::from_bytes(&[u8]) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::gif::AnimatedArt::from_path(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::gif::AnimatedArt::height(self, usize) -> Self
+pub fn rich_art::gif::AnimatedArt::invert(self, bool) -> Self
+pub fn rich_art::gif::AnimatedArt::max_fps(self, f64) -> Self
+pub fn rich_art::gif::AnimatedArt::play<W: std::io::Write>(&self, rich::console::Console, W) -> std::io::error::Result<()>
+pub fn rich_art::gif::AnimatedArt::play_stdout(&self, rich::console::Console) -> std::io::error::Result<()>
+pub fn rich_art::gif::AnimatedArt::ramp(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_art::gif::AnimatedArt::render_frame(&self, usize) -> core::option::Option<rich_art::gif::GifFrame>
+pub fn rich_art::gif::AnimatedArt::repeat(self, rich_art::gif::Repeat) -> Self
+pub fn rich_art::gif::AnimatedArt::width(self, usize) -> Self
+impl core::clone::Clone for rich_art::gif::AnimatedArt
+pub fn rich_art::gif::AnimatedArt::clone(&self) -> rich_art::gif::AnimatedArt
+impl rich::protocol::Renderable for rich_art::gif::AnimatedArt
+pub fn rich_art::gif::AnimatedArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::gif::AnimatedArt
+impl core::marker::Send for rich_art::gif::AnimatedArt
+impl core::marker::Sync for rich_art::gif::AnimatedArt
+impl core::marker::Unpin for rich_art::gif::AnimatedArt
+impl core::marker::UnsafeUnpin for rich_art::gif::AnimatedArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::gif::AnimatedArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::gif::AnimatedArt
+pub struct rich_art::AsciiArt
+impl rich_art::ascii::AsciiArt
+pub fn rich_art::ascii::AsciiArt::color(self, bool) -> Self
+pub fn rich_art::ascii::AsciiArt::columns(&self, usize) -> usize
+pub fn rich_art::ascii::AsciiArt::from_bytes(&[u8]) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::ascii::AsciiArt::from_path(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::ascii::AsciiArt::height(self, usize) -> Self
+pub fn rich_art::ascii::AsciiArt::invert(self, bool) -> Self
+pub fn rich_art::ascii::AsciiArt::new(image::images::dynimage::DynamicImage) -> Self
+pub fn rich_art::ascii::AsciiArt::normalize(self, bool) -> Self
+pub fn rich_art::ascii::AsciiArt::ramp(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_art::ascii::AsciiArt::to_text(&self, usize) -> alloc::string::String
+pub fn rich_art::ascii::AsciiArt::width(self, usize) -> Self
+impl rich::protocol::Renderable for rich_art::ascii::AsciiArt
+pub fn rich_art::ascii::AsciiArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::ascii::AsciiArt
+impl core::marker::Send for rich_art::ascii::AsciiArt
+impl core::marker::Sync for rich_art::ascii::AsciiArt
+impl core::marker::Unpin for rich_art::ascii::AsciiArt
+impl core::marker::UnsafeUnpin for rich_art::ascii::AsciiArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::ascii::AsciiArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::ascii::AsciiArt
+pub struct rich_art::BlockArt
+impl rich_art::block::BlockArt
+pub fn rich_art::block::BlockArt::from_path(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::block::BlockArt::height(self, usize) -> Self
+pub fn rich_art::block::BlockArt::new(image::images::dynimage::DynamicImage) -> Self
+pub fn rich_art::block::BlockArt::width(self, usize) -> Self
+impl rich::protocol::Renderable for rich_art::block::BlockArt
+pub fn rich_art::block::BlockArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::block::BlockArt
+impl core::marker::Send for rich_art::block::BlockArt
+impl core::marker::Sync for rich_art::block::BlockArt
+impl core::marker::Unpin for rich_art::block::BlockArt
+impl core::marker::UnsafeUnpin for rich_art::block::BlockArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::block::BlockArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::block::BlockArt
+pub struct rich_art::BrailleArt
+impl rich_art::braille::BrailleArt
+pub fn rich_art::braille::BrailleArt::height(self, usize) -> Self
+pub fn rich_art::braille::BrailleArt::new(image::images::dynimage::DynamicImage) -> Self
+pub fn rich_art::braille::BrailleArt::to_text(&self, usize) -> alloc::string::String
+pub fn rich_art::braille::BrailleArt::width(self, usize) -> Self
+impl rich::protocol::Renderable for rich_art::braille::BrailleArt
+pub fn rich_art::braille::BrailleArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::braille::BrailleArt
+impl core::marker::Send for rich_art::braille::BrailleArt
+impl core::marker::Sync for rich_art::braille::BrailleArt
+impl core::marker::Unpin for rich_art::braille::BrailleArt
+impl core::marker::UnsafeUnpin for rich_art::braille::BrailleArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::braille::BrailleArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::braille::BrailleArt
+pub struct rich_art::DiffReport
+pub rich_art::DiffReport::changed_fraction: f32
+pub rich_art::DiffReport::delta_e: alloc::vec::Vec<f32>
+pub rich_art::DiffReport::height: u32
+pub rich_art::DiffReport::max_delta_e: f32
+pub rich_art::DiffReport::mean_delta_e: f32
+pub rich_art::DiffReport::naive_changed_fraction: f32
+pub rich_art::DiffReport::regions: alloc::vec::Vec<rich_art::imagediff::Region>
+pub rich_art::DiffReport::width: u32
+impl rich_art::imagediff::DiffReport
+pub fn rich_art::imagediff::DiffReport::heatmap(&self) -> image::images::dynimage::DynamicImage
+pub fn rich_art::imagediff::DiffReport::highlight(&self, &image::images::dynimage::DynamicImage) -> image::images::dynimage::DynamicImage
+impl core::clone::Clone for rich_art::imagediff::DiffReport
+pub fn rich_art::imagediff::DiffReport::clone(&self) -> rich_art::imagediff::DiffReport
+impl core::fmt::Debug for rich_art::imagediff::DiffReport
+pub fn rich_art::imagediff::DiffReport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_art::imagediff::DiffReport
+impl core::marker::Send for rich_art::imagediff::DiffReport
+impl core::marker::Sync for rich_art::imagediff::DiffReport
+impl core::marker::Unpin for rich_art::imagediff::DiffReport
+impl core::marker::UnsafeUnpin for rich_art::imagediff::DiffReport
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::imagediff::DiffReport
+impl core::panic::unwind_safe::UnwindSafe for rich_art::imagediff::DiffReport
+pub struct rich_art::DiffSettings
+pub rich_art::DiffSettings::blur: f32
+pub rich_art::DiffSettings::min_region: u64
+pub rich_art::DiffSettings::open_kernel: usize
+pub rich_art::DiffSettings::threshold: f32
+pub rich_art::DiffSettings::top: usize
+impl core::clone::Clone for rich_art::imagediff::DiffSettings
+pub fn rich_art::imagediff::DiffSettings::clone(&self) -> rich_art::imagediff::DiffSettings
+impl core::default::Default for rich_art::imagediff::DiffSettings
+pub fn rich_art::imagediff::DiffSettings::default() -> Self
+impl core::fmt::Debug for rich_art::imagediff::DiffSettings
+pub fn rich_art::imagediff::DiffSettings::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::imagediff::DiffSettings
+impl core::marker::Freeze for rich_art::imagediff::DiffSettings
+impl core::marker::Send for rich_art::imagediff::DiffSettings
+impl core::marker::Sync for rich_art::imagediff::DiffSettings
+impl core::marker::Unpin for rich_art::imagediff::DiffSettings
+impl core::marker::UnsafeUnpin for rich_art::imagediff::DiffSettings
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::imagediff::DiffSettings
+impl core::panic::unwind_safe::UnwindSafe for rich_art::imagediff::DiffSettings
+pub struct rich_art::Figlet
+impl rich_art::Figlet
+pub fn rich_art::Figlet::font(self, rich_art::figlet::FigletFont) -> Self
+pub fn rich_art::Figlet::justify(self, rich_art::figlet::Justify) -> Self
+pub fn rich_art::Figlet::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_art::Figlet::style(self, rich::style::Style) -> Self
+pub fn rich_art::Figlet::to_text(&self, usize) -> alloc::string::String
+pub fn rich_art::Figlet::width(self, usize) -> Self
+impl rich::protocol::Renderable for rich_art::Figlet
+pub fn rich_art::Figlet::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::Figlet
+impl core::marker::Send for rich_art::Figlet
+impl core::marker::Sync for rich_art::Figlet
+impl core::marker::Unpin for rich_art::Figlet
+impl core::marker::UnsafeUnpin for rich_art::Figlet
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::Figlet
+impl core::panic::unwind_safe::UnwindSafe for rich_art::Figlet
+pub struct rich_art::FigletFont
+impl rich_art::figlet::FigletFont
+pub fn rich_art::figlet::FigletFont::hard_blank(&self) -> char
+pub fn rich_art::figlet::FigletFont::height(&self) -> usize
+pub fn rich_art::figlet::FigletFont::parse(&str) -> core::result::Result<Self, rich_art::figlet::FontError>
+pub fn rich_art::figlet::FigletFont::standard() -> Self
+impl core::clone::Clone for rich_art::figlet::FigletFont
+pub fn rich_art::figlet::FigletFont::clone(&self) -> rich_art::figlet::FigletFont
+impl core::default::Default for rich_art::figlet::FigletFont
+pub fn rich_art::figlet::FigletFont::default() -> Self
+impl core::fmt::Debug for rich_art::figlet::FigletFont
+pub fn rich_art::figlet::FigletFont::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_art::figlet::FigletFont
+impl core::marker::Send for rich_art::figlet::FigletFont
+impl core::marker::Sync for rich_art::figlet::FigletFont
+impl core::marker::Unpin for rich_art::figlet::FigletFont
+impl core::marker::UnsafeUnpin for rich_art::figlet::FigletFont
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::figlet::FigletFont
+impl core::panic::unwind_safe::UnwindSafe for rich_art::figlet::FigletFont
+pub struct rich_art::ImageArt
+impl rich_art::image_art::ImageArt
+pub fn rich_art::image_art::ImageArt::anchor(self, rich_art::image_art::ImageAnchor) -> Self
+pub fn rich_art::image_art::ImageArt::background(self, [u8; 3]) -> Self
+pub fn rich_art::image_art::ImageArt::background_mode(self, rich_art::image_art::ImageBackground) -> Self
+pub fn rich_art::image_art::ImageArt::color(self, bool) -> Self
+pub fn rich_art::image_art::ImageArt::color_distance(self, rich_art::ColorDistance) -> Self
+pub fn rich_art::image_art::ImageArt::color_mode(self, rich_art::ImageColorMode) -> Self
+pub fn rich_art::image_art::ImageArt::dither(self, rich_art::Dither) -> Self
+pub fn rich_art::image_art::ImageArt::fit(self, rich_art::image_art::ImageFit) -> Self
+pub fn rich_art::image_art::ImageArt::from_bytes(&[u8]) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::image_art::ImageArt::from_path(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::image_art::ImageArt::height(self, usize) -> Self
+pub fn rich_art::image_art::ImageArt::max_height(self, usize) -> Self
+pub fn rich_art::image_art::ImageArt::max_width(self, usize) -> Self
+pub fn rich_art::image_art::ImageArt::mode(self, rich_art::image_art::ImageMode) -> Self
+pub fn rich_art::image_art::ImageArt::new(image::images::dynimage::DynamicImage) -> Self
+pub fn rich_art::image_art::ImageArt::options(self, rich_art::image_art::ImageOptions) -> Self
+pub fn rich_art::image_art::ImageArt::render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> core::result::Result<alloc::vec::Vec<rich::segment::Segment>, rich_art::image_art::ImageArtError>
+pub fn rich_art::image_art::ImageArt::render_with_environment(&self, &rich::console::Console, &rich::console::ConsoleOptions, &dyn rich::protocol::RenderEnvironment) -> core::result::Result<alloc::vec::Vec<rich::segment::Segment>, rich_art::image_art::ImageArtError>
+pub fn rich_art::image_art::ImageArt::resolve_mode(&self, rich_art::image_art::RenderCapabilities) -> rich_art::image_art::ImageMode
+pub fn rich_art::image_art::ImageArt::transforms(self, rich_art::ImageTransforms) -> Self
+pub fn rich_art::image_art::ImageArt::width(self, usize) -> Self
+impl rich_art::image_art::ImageArt
+pub fn rich_art::image_art::ImageArt::native_grid(&self, rich_art::image_art::ImageMode, usize) -> (usize, usize)
+impl rich::protocol::Renderable for rich_art::image_art::ImageArt
+pub fn rich_art::image_art::ImageArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::image_art::ImageArt
+impl core::marker::Send for rich_art::image_art::ImageArt
+impl core::marker::Sync for rich_art::image_art::ImageArt
+impl core::marker::Unpin for rich_art::image_art::ImageArt
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageArt
+pub struct rich_art::ImageOptions
+pub rich_art::ImageOptions::color: bool
+pub rich_art::ImageOptions::height: core::option::Option<usize>
+pub rich_art::ImageOptions::mode: rich_art::image_art::ImageMode
+pub rich_art::ImageOptions::width: core::option::Option<usize>
+impl core::clone::Clone for rich_art::image_art::ImageOptions
+pub fn rich_art::image_art::ImageOptions::clone(&self) -> rich_art::image_art::ImageOptions
+impl core::cmp::Eq for rich_art::image_art::ImageOptions
+impl core::cmp::PartialEq for rich_art::image_art::ImageOptions
+pub fn rich_art::image_art::ImageOptions::eq(&self, &rich_art::image_art::ImageOptions) -> bool
+impl core::default::Default for rich_art::image_art::ImageOptions
+pub fn rich_art::image_art::ImageOptions::default() -> Self
+impl core::fmt::Debug for rich_art::image_art::ImageOptions
+pub fn rich_art::image_art::ImageOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::image_art::ImageOptions
+impl core::marker::StructuralPartialEq for rich_art::image_art::ImageOptions
+impl core::marker::Freeze for rich_art::image_art::ImageOptions
+impl core::marker::Send for rich_art::image_art::ImageOptions
+impl core::marker::Sync for rich_art::image_art::ImageOptions
+impl core::marker::Unpin for rich_art::image_art::ImageOptions
+impl core::marker::UnsafeUnpin for rich_art::image_art::ImageOptions
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::ImageOptions
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::ImageOptions
+pub struct rich_art::ImageTransforms
+pub rich_art::ImageTransforms::brightness: f32
+pub rich_art::ImageTransforms::contrast: f32
+pub rich_art::ImageTransforms::flip_horizontal: bool
+pub rich_art::ImageTransforms::flip_vertical: bool
+pub rich_art::ImageTransforms::gamma: f32
+pub rich_art::ImageTransforms::grayscale: bool
+pub rich_art::ImageTransforms::rotation: rich_art::Rotation
+impl rich_art::ImageTransforms
+pub fn rich_art::ImageTransforms::adjustments_valid(&self) -> bool
+impl core::clone::Clone for rich_art::ImageTransforms
+pub fn rich_art::ImageTransforms::clone(&self) -> rich_art::ImageTransforms
+impl core::cmp::PartialEq for rich_art::ImageTransforms
+pub fn rich_art::ImageTransforms::eq(&self, &rich_art::ImageTransforms) -> bool
+impl core::default::Default for rich_art::ImageTransforms
+pub fn rich_art::ImageTransforms::default() -> Self
+impl core::fmt::Debug for rich_art::ImageTransforms
+pub fn rich_art::ImageTransforms::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::ImageTransforms
+impl core::marker::StructuralPartialEq for rich_art::ImageTransforms
+impl core::marker::Freeze for rich_art::ImageTransforms
+impl core::marker::Send for rich_art::ImageTransforms
+impl core::marker::Sync for rich_art::ImageTransforms
+impl core::marker::Unpin for rich_art::ImageTransforms
+impl core::marker::UnsafeUnpin for rich_art::ImageTransforms
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::ImageTransforms
+impl core::panic::unwind_safe::UnwindSafe for rich_art::ImageTransforms
+pub struct rich_art::QuadrantArt
+impl rich_art::quadrant::QuadrantArt
+pub fn rich_art::quadrant::QuadrantArt::from_path(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::quadrant::QuadrantArt::height(self, usize) -> Self
+pub fn rich_art::quadrant::QuadrantArt::new(image::images::dynimage::DynamicImage) -> Self
+pub fn rich_art::quadrant::QuadrantArt::width(self, usize) -> Self
+impl rich::protocol::Renderable for rich_art::quadrant::QuadrantArt
+pub fn rich_art::quadrant::QuadrantArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::quadrant::QuadrantArt
+impl core::marker::Send for rich_art::quadrant::QuadrantArt
+impl core::marker::Sync for rich_art::quadrant::QuadrantArt
+impl core::marker::Unpin for rich_art::quadrant::QuadrantArt
+impl core::marker::UnsafeUnpin for rich_art::quadrant::QuadrantArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::quadrant::QuadrantArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::quadrant::QuadrantArt
+pub struct rich_art::Region
+pub rich_art::Region::area_px: u64
+pub rich_art::Region::height: u32
+pub rich_art::Region::mean_delta_e: f32
+pub rich_art::Region::share_of_change: f32
+pub rich_art::Region::width: u32
+pub rich_art::Region::x: u32
+pub rich_art::Region::y: u32
+impl core::clone::Clone for rich_art::imagediff::Region
+pub fn rich_art::imagediff::Region::clone(&self) -> rich_art::imagediff::Region
+impl core::cmp::PartialEq for rich_art::imagediff::Region
+pub fn rich_art::imagediff::Region::eq(&self, &rich_art::imagediff::Region) -> bool
+impl core::fmt::Debug for rich_art::imagediff::Region
+pub fn rich_art::imagediff::Region::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_art::imagediff::Region
+impl core::marker::Freeze for rich_art::imagediff::Region
+impl core::marker::Send for rich_art::imagediff::Region
+impl core::marker::Sync for rich_art::imagediff::Region
+impl core::marker::Unpin for rich_art::imagediff::Region
+impl core::marker::UnsafeUnpin for rich_art::imagediff::Region
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::imagediff::Region
+impl core::panic::unwind_safe::UnwindSafe for rich_art::imagediff::Region
+pub struct rich_art::RenderCapabilities
+pub rich_art::RenderCapabilities::color: bool
+pub rich_art::RenderCapabilities::sixel_supported: bool
+impl rich_art::image_art::RenderCapabilities
+pub fn rich_art::image_art::RenderCapabilities::from_console(&rich::console::Console) -> Self
+impl core::clone::Clone for rich_art::image_art::RenderCapabilities
+pub fn rich_art::image_art::RenderCapabilities::clone(&self) -> rich_art::image_art::RenderCapabilities
+impl core::cmp::Eq for rich_art::image_art::RenderCapabilities
+impl core::cmp::PartialEq for rich_art::image_art::RenderCapabilities
+pub fn rich_art::image_art::RenderCapabilities::eq(&self, &rich_art::image_art::RenderCapabilities) -> bool
+impl core::default::Default for rich_art::image_art::RenderCapabilities
+pub fn rich_art::image_art::RenderCapabilities::default() -> rich_art::image_art::RenderCapabilities
+impl core::fmt::Debug for rich_art::image_art::RenderCapabilities
+pub fn rich_art::image_art::RenderCapabilities::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_art::image_art::RenderCapabilities
+impl core::marker::StructuralPartialEq for rich_art::image_art::RenderCapabilities
+impl core::marker::Freeze for rich_art::image_art::RenderCapabilities
+impl core::marker::Send for rich_art::image_art::RenderCapabilities
+impl core::marker::Sync for rich_art::image_art::RenderCapabilities
+impl core::marker::Unpin for rich_art::image_art::RenderCapabilities
+impl core::marker::UnsafeUnpin for rich_art::image_art::RenderCapabilities
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::image_art::RenderCapabilities
+impl core::panic::unwind_safe::UnwindSafe for rich_art::image_art::RenderCapabilities
+pub struct rich_art::SixelArt
+impl rich_art::sixel::SixelArt
+pub fn rich_art::sixel::SixelArt::cell_px(self, u32, u32) -> Self
+pub fn rich_art::sixel::SixelArt::encode(&self, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::sixel::SixelArt::encode_cells(&self, usize, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::sixel::SixelArt::from_path(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<Self, image::error::ImageError>
+pub fn rich_art::sixel::SixelArt::height(self, usize) -> Self
+pub fn rich_art::sixel::SixelArt::max_colors(self, u16) -> Self
+pub fn rich_art::sixel::SixelArt::new(image::images::dynimage::DynamicImage) -> Self
+pub fn rich_art::sixel::SixelArt::width(self, usize) -> Self
+impl rich::protocol::Renderable for rich_art::sixel::SixelArt
+pub fn rich_art::sixel::SixelArt::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::sixel::SixelArt
+impl core::marker::Send for rich_art::sixel::SixelArt
+impl core::marker::Sync for rich_art::sixel::SixelArt
+impl core::marker::Unpin for rich_art::sixel::SixelArt
+impl core::marker::UnsafeUnpin for rich_art::sixel::SixelArt
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::sixel::SixelArt
+impl core::panic::unwind_safe::UnwindSafe for rich_art::sixel::SixelArt
+pub struct rich_art::Stage
+impl rich_art::stage::Stage
+pub fn rich_art::stage::Stage::gap(self, usize) -> Self
+pub fn rich_art::stage::Stage::is_empty(&self) -> bool
+pub fn rich_art::stage::Stage::len(&self) -> usize
+pub fn rich_art::stage::Stage::new() -> Self
+pub fn rich_art::stage::Stage::play<W: std::io::Write>(&self, rich::console::Console, W) -> std::io::error::Result<()>
+pub fn rich_art::stage::Stage::play_stdout(&self, rich::console::Console) -> std::io::error::Result<()>
+pub fn rich_art::stage::Stage::until(self, rich_art::stage::Until) -> Self
+pub fn rich_art::stage::Stage::with(self, rich_art::gif::AnimatedArt) -> Self
+impl core::default::Default for rich_art::stage::Stage
+pub fn rich_art::stage::Stage::default() -> rich_art::stage::Stage
+impl core::marker::Freeze for rich_art::stage::Stage
+impl core::marker::Send for rich_art::stage::Stage
+impl core::marker::Sync for rich_art::stage::Stage
+impl core::marker::Unpin for rich_art::stage::Stage
+impl core::marker::UnsafeUnpin for rich_art::stage::Stage
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::stage::Stage
+impl core::panic::unwind_safe::UnwindSafe for rich_art::stage::Stage
+pub const rich_art::DEFAULT_RAMP: &str
+pub const rich_art::MAX_CELLS: usize
+pub fn rich_art::check_cell_budget(core::option::Option<usize>, core::option::Option<usize>) -> core::result::Result<(), rich_art::image_art::ImageArtError>
+pub fn rich_art::diff(&image::images::dynimage::DynamicImage, &image::images::dynimage::DynamicImage, &rich_art::imagediff::DiffSettings) -> core::result::Result<rich_art::imagediff::DiffReport, rich_art::imagediff::DiffError>

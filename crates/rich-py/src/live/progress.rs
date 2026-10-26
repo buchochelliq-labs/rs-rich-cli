@@ -660,7 +660,8 @@ impl ProgressColumn {
     }
 
     /// Return a renderable for `task` (implemented by subclasses).
-    fn render(&self, _task: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    fn render(&self, task: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let _ = task;
         Err(PyNotImplementedError::new_err(
             "ProgressColumn.render is abstract: subclass ProgressColumn and implement render(task)",
         ))
@@ -733,7 +734,8 @@ impl RenderableColumn {
         init_base(slf.as_any(), table_column, false)
     }
 
-    fn render(slf: &Bound<'_, Self>, _task: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+    fn render(slf: &Bound<'_, Self>, task: &Bound<'_, PyAny>) -> PyResult<Py<PyAny>> {
+        let _ = task;
         Ok(slf.getattr("renderable")?.unbind())
     }
 }

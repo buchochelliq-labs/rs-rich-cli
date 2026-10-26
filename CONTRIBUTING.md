@@ -84,6 +84,33 @@ cargo test
 CI runs the same three. PRs that change a module should also update its row in
 [docs/PORTING.md](docs/PORTING.md) and tick the relevant roadmap issue.
 
+### When you change a public API
+
+Every published crate's public API is checked in as a snapshot,
+`api/<crate>.txt`, made by `cargo public-api`. CI's `public API and SemVer`
+job fails when a crate's API differs from its snapshot, with the diff. If the
+change is meant, update the snapshot and commit it, so the review sees the API
+change:
+
+```bash
+python scripts/public_api.py --install         # prints the commands for the pinned tools
+python scripts/public_api.py --bless rs-rich   # or no crate: every one
+python scripts/public_api.py --check
+```
+
+The same job runs `cargo-semver-checks` against each crate's last release on
+crates.io (`python scripts/semver_check.py`). Cargo treats every 0.0.x bump as
+breaking, so a 0.0.x crate is checked as if its bump were a minor one: each
+breaking change must be listed in `api/semver-breaks.toml` under the version
+that ships it, with the reason, and a migration note in the CHANGELOG. Both
+tools and the nightly behind the snapshots are pinned in `api/tools.toml`.
+
+The Python package's type stubs are checked against the built wheel with
+mypy's `stubtest`, and a typed program (`crates/rich-py/tests/typing_usage.py`)
+under `mypy --strict`: `python scripts/check_python_stubs.py`, with `rs_rich`
+installed. A new class, function or parameter in the bindings needs its stub
+in `_native.pyi`.
+
 ## Deviations
 
 If you must deviate from upstream in core, it goes behind an off-by-default Cargo

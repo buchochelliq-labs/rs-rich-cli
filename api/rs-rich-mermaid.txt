@@ -1,0 +1,642 @@
+pub mod rich_mermaid
+pub mod rich_mermaid::er
+pub enum rich_mermaid::er::Cardinality
+pub rich_mermaid::er::Cardinality::ExactlyOne
+pub rich_mermaid::er::Cardinality::OneOrMore
+pub rich_mermaid::er::Cardinality::ZeroOrMore
+pub rich_mermaid::er::Cardinality::ZeroOrOne
+impl rich_mermaid::er::Cardinality
+pub fn rich_mermaid::er::Cardinality::notation(self) -> &'static str
+impl core::clone::Clone for rich_mermaid::er::Cardinality
+pub fn rich_mermaid::er::Cardinality::clone(&self) -> rich_mermaid::er::Cardinality
+impl core::cmp::Eq for rich_mermaid::er::Cardinality
+impl core::cmp::PartialEq for rich_mermaid::er::Cardinality
+pub fn rich_mermaid::er::Cardinality::eq(&self, &rich_mermaid::er::Cardinality) -> bool
+impl core::fmt::Debug for rich_mermaid::er::Cardinality
+pub fn rich_mermaid::er::Cardinality::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_mermaid::er::Cardinality
+pub fn rich_mermaid::er::Cardinality::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_mermaid::er::Cardinality
+impl core::marker::StructuralPartialEq for rich_mermaid::er::Cardinality
+impl core::marker::Freeze for rich_mermaid::er::Cardinality
+impl core::marker::Send for rich_mermaid::er::Cardinality
+impl core::marker::Sync for rich_mermaid::er::Cardinality
+impl core::marker::Unpin for rich_mermaid::er::Cardinality
+impl core::marker::UnsafeUnpin for rich_mermaid::er::Cardinality
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::er::Cardinality
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::er::Cardinality
+pub enum rich_mermaid::er::Key
+pub rich_mermaid::er::Key::Foreign
+pub rich_mermaid::er::Key::Primary
+pub rich_mermaid::er::Key::Unique
+impl rich_mermaid::er::Key
+pub fn rich_mermaid::er::Key::code(self) -> &'static str
+impl core::clone::Clone for rich_mermaid::er::Key
+pub fn rich_mermaid::er::Key::clone(&self) -> rich_mermaid::er::Key
+impl core::cmp::Eq for rich_mermaid::er::Key
+impl core::cmp::PartialEq for rich_mermaid::er::Key
+pub fn rich_mermaid::er::Key::eq(&self, &rich_mermaid::er::Key) -> bool
+impl core::fmt::Debug for rich_mermaid::er::Key
+pub fn rich_mermaid::er::Key::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_mermaid::er::Key
+pub fn rich_mermaid::er::Key::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_mermaid::er::Key
+impl core::marker::StructuralPartialEq for rich_mermaid::er::Key
+impl core::marker::Freeze for rich_mermaid::er::Key
+impl core::marker::Send for rich_mermaid::er::Key
+impl core::marker::Sync for rich_mermaid::er::Key
+impl core::marker::Unpin for rich_mermaid::er::Key
+impl core::marker::UnsafeUnpin for rich_mermaid::er::Key
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::er::Key
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::er::Key
+pub struct rich_mermaid::er::Attribute
+pub rich_mermaid::er::Attribute::comment: core::option::Option<alloc::string::String>
+pub rich_mermaid::er::Attribute::data_type: alloc::string::String
+pub rich_mermaid::er::Attribute::keys: alloc::vec::Vec<rich_mermaid::er::Key>
+pub rich_mermaid::er::Attribute::name: alloc::string::String
+impl core::clone::Clone for rich_mermaid::er::Attribute
+pub fn rich_mermaid::er::Attribute::clone(&self) -> rich_mermaid::er::Attribute
+impl core::cmp::Eq for rich_mermaid::er::Attribute
+impl core::cmp::PartialEq for rich_mermaid::er::Attribute
+pub fn rich_mermaid::er::Attribute::eq(&self, &rich_mermaid::er::Attribute) -> bool
+impl core::default::Default for rich_mermaid::er::Attribute
+pub fn rich_mermaid::er::Attribute::default() -> rich_mermaid::er::Attribute
+impl core::fmt::Debug for rich_mermaid::er::Attribute
+pub fn rich_mermaid::er::Attribute::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::er::Attribute
+impl core::marker::Freeze for rich_mermaid::er::Attribute
+impl core::marker::Send for rich_mermaid::er::Attribute
+impl core::marker::Sync for rich_mermaid::er::Attribute
+impl core::marker::Unpin for rich_mermaid::er::Attribute
+impl core::marker::UnsafeUnpin for rich_mermaid::er::Attribute
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::er::Attribute
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::er::Attribute
+pub struct rich_mermaid::er::Entity
+pub rich_mermaid::er::Entity::attributes: alloc::vec::Vec<rich_mermaid::er::Attribute>
+pub rich_mermaid::er::Entity::id: alloc::string::String
+pub rich_mermaid::er::Entity::label: alloc::string::String
+impl core::clone::Clone for rich_mermaid::er::Entity
+pub fn rich_mermaid::er::Entity::clone(&self) -> rich_mermaid::er::Entity
+impl core::cmp::Eq for rich_mermaid::er::Entity
+impl core::cmp::PartialEq for rich_mermaid::er::Entity
+pub fn rich_mermaid::er::Entity::eq(&self, &rich_mermaid::er::Entity) -> bool
+impl core::default::Default for rich_mermaid::er::Entity
+pub fn rich_mermaid::er::Entity::default() -> rich_mermaid::er::Entity
+impl core::fmt::Debug for rich_mermaid::er::Entity
+pub fn rich_mermaid::er::Entity::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::er::Entity
+impl core::marker::Freeze for rich_mermaid::er::Entity
+impl core::marker::Send for rich_mermaid::er::Entity
+impl core::marker::Sync for rich_mermaid::er::Entity
+impl core::marker::Unpin for rich_mermaid::er::Entity
+impl core::marker::UnsafeUnpin for rich_mermaid::er::Entity
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::er::Entity
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::er::Entity
+pub struct rich_mermaid::er::EntityDiagram
+pub rich_mermaid::er::EntityDiagram::direction: rich_diagram::graph::Direction
+pub rich_mermaid::er::EntityDiagram::entities: alloc::vec::Vec<rich_mermaid::er::Entity>
+pub rich_mermaid::er::EntityDiagram::notes: alloc::vec::Vec<alloc::string::String>
+pub rich_mermaid::er::EntityDiagram::relationships: alloc::vec::Vec<rich_mermaid::er::Relationship>
+pub rich_mermaid::er::EntityDiagram::title: core::option::Option<alloc::string::String>
+impl rich_mermaid::er::EntityDiagram
+pub fn rich_mermaid::er::EntityDiagram::to_graph(&self) -> (rich_diagram::graph::Graph, alloc::vec::Vec<alloc::string::String>)
+impl core::clone::Clone for rich_mermaid::er::EntityDiagram
+pub fn rich_mermaid::er::EntityDiagram::clone(&self) -> rich_mermaid::er::EntityDiagram
+impl core::cmp::Eq for rich_mermaid::er::EntityDiagram
+impl core::cmp::PartialEq for rich_mermaid::er::EntityDiagram
+pub fn rich_mermaid::er::EntityDiagram::eq(&self, &rich_mermaid::er::EntityDiagram) -> bool
+impl core::default::Default for rich_mermaid::er::EntityDiagram
+pub fn rich_mermaid::er::EntityDiagram::default() -> rich_mermaid::er::EntityDiagram
+impl core::fmt::Debug for rich_mermaid::er::EntityDiagram
+pub fn rich_mermaid::er::EntityDiagram::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::er::EntityDiagram
+impl core::marker::Freeze for rich_mermaid::er::EntityDiagram
+impl core::marker::Send for rich_mermaid::er::EntityDiagram
+impl core::marker::Sync for rich_mermaid::er::EntityDiagram
+impl core::marker::Unpin for rich_mermaid::er::EntityDiagram
+impl core::marker::UnsafeUnpin for rich_mermaid::er::EntityDiagram
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::er::EntityDiagram
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::er::EntityDiagram
+pub struct rich_mermaid::er::Relationship
+pub rich_mermaid::er::Relationship::from: usize
+pub rich_mermaid::er::Relationship::from_cardinality: rich_mermaid::er::Cardinality
+pub rich_mermaid::er::Relationship::identifying: bool
+pub rich_mermaid::er::Relationship::label: alloc::string::String
+pub rich_mermaid::er::Relationship::to: usize
+pub rich_mermaid::er::Relationship::to_cardinality: rich_mermaid::er::Cardinality
+impl core::clone::Clone for rich_mermaid::er::Relationship
+pub fn rich_mermaid::er::Relationship::clone(&self) -> rich_mermaid::er::Relationship
+impl core::cmp::Eq for rich_mermaid::er::Relationship
+impl core::cmp::PartialEq for rich_mermaid::er::Relationship
+pub fn rich_mermaid::er::Relationship::eq(&self, &rich_mermaid::er::Relationship) -> bool
+impl core::fmt::Debug for rich_mermaid::er::Relationship
+pub fn rich_mermaid::er::Relationship::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::er::Relationship
+impl core::marker::Freeze for rich_mermaid::er::Relationship
+impl core::marker::Send for rich_mermaid::er::Relationship
+impl core::marker::Sync for rich_mermaid::er::Relationship
+impl core::marker::Unpin for rich_mermaid::er::Relationship
+impl core::marker::UnsafeUnpin for rich_mermaid::er::Relationship
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::er::Relationship
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::er::Relationship
+pub const rich_mermaid::er::MAX_ENTITIES: usize
+pub const rich_mermaid::er::MAX_RELATIONSHIPS: usize
+pub fn rich_mermaid::er::draw(&rich_mermaid::er::EntityDiagram, bool) -> core::result::Result<rich_diagram::layout::Drawing, alloc::string::String>
+pub fn rich_mermaid::er::is_er(&str) -> bool
+pub fn rich_mermaid::er::parse(&str) -> core::result::Result<rich_mermaid::er::EntityDiagram, rich_mermaid::flowchart::ParseError>
+pub mod rich_mermaid::flowchart
+pub use rich_mermaid::flowchart::Direction
+pub use rich_mermaid::flowchart::Edge
+pub use rich_mermaid::flowchart::Head
+pub use rich_mermaid::flowchart::Node
+pub use rich_mermaid::flowchart::Shape
+pub use rich_mermaid::flowchart::Stroke
+pub enum rich_mermaid::flowchart::ParseError
+pub rich_mermaid::flowchart::ParseError::Empty
+pub rich_mermaid::flowchart::ParseError::Syntax
+pub rich_mermaid::flowchart::ParseError::Syntax::line: usize
+pub rich_mermaid::flowchart::ParseError::Syntax::message: alloc::string::String
+pub rich_mermaid::flowchart::ParseError::TooLarge(alloc::string::String)
+pub rich_mermaid::flowchart::ParseError::Unsupported(alloc::string::String)
+impl core::clone::Clone for rich_mermaid::flowchart::ParseError
+pub fn rich_mermaid::flowchart::ParseError::clone(&self) -> rich_mermaid::flowchart::ParseError
+impl core::cmp::Eq for rich_mermaid::flowchart::ParseError
+impl core::cmp::PartialEq for rich_mermaid::flowchart::ParseError
+pub fn rich_mermaid::flowchart::ParseError::eq(&self, &rich_mermaid::flowchart::ParseError) -> bool
+impl core::error::Error for rich_mermaid::flowchart::ParseError
+impl core::fmt::Debug for rich_mermaid::flowchart::ParseError
+pub fn rich_mermaid::flowchart::ParseError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_mermaid::flowchart::ParseError
+pub fn rich_mermaid::flowchart::ParseError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::flowchart::ParseError
+impl core::marker::Freeze for rich_mermaid::flowchart::ParseError
+impl core::marker::Send for rich_mermaid::flowchart::ParseError
+impl core::marker::Sync for rich_mermaid::flowchart::ParseError
+impl core::marker::Unpin for rich_mermaid::flowchart::ParseError
+impl core::marker::UnsafeUnpin for rich_mermaid::flowchart::ParseError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::flowchart::ParseError
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::flowchart::ParseError
+pub struct rich_mermaid::flowchart::Flowchart
+pub rich_mermaid::flowchart::Flowchart::direction: rich_diagram::graph::Direction
+pub rich_mermaid::flowchart::Flowchart::edges: alloc::vec::Vec<rich_diagram::graph::Edge>
+pub rich_mermaid::flowchart::Flowchart::nodes: alloc::vec::Vec<rich_diagram::graph::Node>
+pub rich_mermaid::flowchart::Flowchart::notes: alloc::vec::Vec<alloc::string::String>
+impl rich_mermaid::flowchart::Flowchart
+pub fn rich_mermaid::flowchart::Flowchart::to_graph(&self) -> rich_diagram::graph::Graph
+impl core::clone::Clone for rich_mermaid::flowchart::Flowchart
+pub fn rich_mermaid::flowchart::Flowchart::clone(&self) -> rich_mermaid::flowchart::Flowchart
+impl core::cmp::Eq for rich_mermaid::flowchart::Flowchart
+impl core::cmp::PartialEq for rich_mermaid::flowchart::Flowchart
+pub fn rich_mermaid::flowchart::Flowchart::eq(&self, &rich_mermaid::flowchart::Flowchart) -> bool
+impl core::default::Default for rich_mermaid::flowchart::Flowchart
+pub fn rich_mermaid::flowchart::Flowchart::default() -> rich_mermaid::flowchart::Flowchart
+impl core::fmt::Debug for rich_mermaid::flowchart::Flowchart
+pub fn rich_mermaid::flowchart::Flowchart::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::flowchart::Flowchart
+impl core::marker::Freeze for rich_mermaid::flowchart::Flowchart
+impl core::marker::Send for rich_mermaid::flowchart::Flowchart
+impl core::marker::Sync for rich_mermaid::flowchart::Flowchart
+impl core::marker::Unpin for rich_mermaid::flowchart::Flowchart
+impl core::marker::UnsafeUnpin for rich_mermaid::flowchart::Flowchart
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::flowchart::Flowchart
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::flowchart::Flowchart
+pub const rich_mermaid::flowchart::MAX_EDGES: usize
+pub const rich_mermaid::flowchart::MAX_LINK_LENGTH: usize
+pub const rich_mermaid::flowchart::MAX_NODES: usize
+pub const rich_mermaid::flowchart::MAX_SOURCE: usize
+pub fn rich_mermaid::flowchart::clean_label(&str) -> alloc::string::String
+pub fn rich_mermaid::flowchart::parse(&str) -> core::result::Result<rich_mermaid::flowchart::Flowchart, rich_mermaid::flowchart::ParseError>
+pub mod rich_mermaid::layout
+pub fn rich_mermaid::layout::draw(&rich_mermaid::flowchart::Flowchart, bool) -> core::result::Result<rich_mermaid::layout::Diagram, alloc::string::String>
+pub type rich_mermaid::layout::Diagram = rich_diagram::layout::Drawing
+pub mod rich_mermaid::mmdc
+pub enum rich_mermaid::mmdc::MmdcError
+pub rich_mermaid::mmdc::MmdcError::Failed(alloc::string::String)
+pub rich_mermaid::mmdc::MmdcError::Io(alloc::string::String)
+pub rich_mermaid::mmdc::MmdcError::NotFound(alloc::string::String)
+pub rich_mermaid::mmdc::MmdcError::OutputTooLarge
+pub rich_mermaid::mmdc::MmdcError::OutputTooLarge::bytes: u64
+pub rich_mermaid::mmdc::MmdcError::OutputTooLarge::limit: usize
+pub rich_mermaid::mmdc::MmdcError::Timeout(core::time::Duration)
+pub rich_mermaid::mmdc::MmdcError::TooLarge
+pub rich_mermaid::mmdc::MmdcError::TooLarge::bytes: usize
+pub rich_mermaid::mmdc::MmdcError::TooLarge::limit: usize
+impl core::clone::Clone for rich_mermaid::mmdc::MmdcError
+pub fn rich_mermaid::mmdc::MmdcError::clone(&self) -> rich_mermaid::mmdc::MmdcError
+impl core::cmp::Eq for rich_mermaid::mmdc::MmdcError
+impl core::cmp::PartialEq for rich_mermaid::mmdc::MmdcError
+pub fn rich_mermaid::mmdc::MmdcError::eq(&self, &rich_mermaid::mmdc::MmdcError) -> bool
+impl core::error::Error for rich_mermaid::mmdc::MmdcError
+impl core::fmt::Debug for rich_mermaid::mmdc::MmdcError
+pub fn rich_mermaid::mmdc::MmdcError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_mermaid::mmdc::MmdcError
+pub fn rich_mermaid::mmdc::MmdcError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::mmdc::MmdcError
+impl core::marker::Freeze for rich_mermaid::mmdc::MmdcError
+impl core::marker::Send for rich_mermaid::mmdc::MmdcError
+impl core::marker::Sync for rich_mermaid::mmdc::MmdcError
+impl core::marker::Unpin for rich_mermaid::mmdc::MmdcError
+impl core::marker::UnsafeUnpin for rich_mermaid::mmdc::MmdcError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::mmdc::MmdcError
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::mmdc::MmdcError
+pub struct rich_mermaid::mmdc::MmdcOptions
+pub rich_mermaid::mmdc::MmdcOptions::background: alloc::string::String
+pub rich_mermaid::mmdc::MmdcOptions::max_input: usize
+pub rich_mermaid::mmdc::MmdcOptions::max_output: usize
+pub rich_mermaid::mmdc::MmdcOptions::program: std::path::PathBuf
+pub rich_mermaid::mmdc::MmdcOptions::puppeteer_config: core::option::Option<std::path::PathBuf>
+pub rich_mermaid::mmdc::MmdcOptions::timeout: core::time::Duration
+impl core::clone::Clone for rich_mermaid::mmdc::MmdcOptions
+pub fn rich_mermaid::mmdc::MmdcOptions::clone(&self) -> rich_mermaid::mmdc::MmdcOptions
+impl core::cmp::Eq for rich_mermaid::mmdc::MmdcOptions
+impl core::cmp::PartialEq for rich_mermaid::mmdc::MmdcOptions
+pub fn rich_mermaid::mmdc::MmdcOptions::eq(&self, &rich_mermaid::mmdc::MmdcOptions) -> bool
+impl core::default::Default for rich_mermaid::mmdc::MmdcOptions
+pub fn rich_mermaid::mmdc::MmdcOptions::default() -> Self
+impl core::fmt::Debug for rich_mermaid::mmdc::MmdcOptions
+pub fn rich_mermaid::mmdc::MmdcOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::mmdc::MmdcOptions
+impl core::marker::Freeze for rich_mermaid::mmdc::MmdcOptions
+impl core::marker::Send for rich_mermaid::mmdc::MmdcOptions
+impl core::marker::Sync for rich_mermaid::mmdc::MmdcOptions
+impl core::marker::Unpin for rich_mermaid::mmdc::MmdcOptions
+impl core::marker::UnsafeUnpin for rich_mermaid::mmdc::MmdcOptions
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::mmdc::MmdcOptions
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::mmdc::MmdcOptions
+pub fn rich_mermaid::mmdc::render_png(&str, &rich_mermaid::mmdc::MmdcOptions) -> core::result::Result<alloc::vec::Vec<u8>, rich_mermaid::mmdc::MmdcError>
+pub mod rich_mermaid::sequence
+pub enum rich_mermaid::sequence::BlockKind
+pub rich_mermaid::sequence::BlockKind::Alt
+pub rich_mermaid::sequence::BlockKind::Break
+pub rich_mermaid::sequence::BlockKind::Critical
+pub rich_mermaid::sequence::BlockKind::Loop
+pub rich_mermaid::sequence::BlockKind::Opt
+pub rich_mermaid::sequence::BlockKind::Par
+pub rich_mermaid::sequence::BlockKind::Rect
+impl rich_mermaid::sequence::BlockKind
+pub fn rich_mermaid::sequence::BlockKind::divider(self) -> core::option::Option<&'static str>
+pub fn rich_mermaid::sequence::BlockKind::keyword(self) -> &'static str
+impl core::clone::Clone for rich_mermaid::sequence::BlockKind
+pub fn rich_mermaid::sequence::BlockKind::clone(&self) -> rich_mermaid::sequence::BlockKind
+impl core::cmp::Eq for rich_mermaid::sequence::BlockKind
+impl core::cmp::PartialEq for rich_mermaid::sequence::BlockKind
+pub fn rich_mermaid::sequence::BlockKind::eq(&self, &rich_mermaid::sequence::BlockKind) -> bool
+impl core::fmt::Debug for rich_mermaid::sequence::BlockKind
+pub fn rich_mermaid::sequence::BlockKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_mermaid::sequence::BlockKind
+pub fn rich_mermaid::sequence::BlockKind::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_mermaid::sequence::BlockKind
+impl core::marker::StructuralPartialEq for rich_mermaid::sequence::BlockKind
+impl core::marker::Freeze for rich_mermaid::sequence::BlockKind
+impl core::marker::Send for rich_mermaid::sequence::BlockKind
+impl core::marker::Sync for rich_mermaid::sequence::BlockKind
+impl core::marker::Unpin for rich_mermaid::sequence::BlockKind
+impl core::marker::UnsafeUnpin for rich_mermaid::sequence::BlockKind
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::sequence::BlockKind
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::sequence::BlockKind
+pub enum rich_mermaid::sequence::Event
+pub rich_mermaid::sequence::Event::Activate(usize)
+pub rich_mermaid::sequence::Event::Deactivate(usize)
+pub rich_mermaid::sequence::Event::Divider
+pub rich_mermaid::sequence::Event::Divider::label: alloc::string::String
+pub rich_mermaid::sequence::Event::End
+pub rich_mermaid::sequence::Event::Message(rich_mermaid::sequence::Message)
+pub rich_mermaid::sequence::Event::Note
+pub rich_mermaid::sequence::Event::Note::placement: rich_mermaid::sequence::NotePlacement
+pub rich_mermaid::sequence::Event::Note::text: alloc::string::String
+pub rich_mermaid::sequence::Event::Start
+pub rich_mermaid::sequence::Event::Start::kind: rich_mermaid::sequence::BlockKind
+pub rich_mermaid::sequence::Event::Start::label: alloc::string::String
+impl core::clone::Clone for rich_mermaid::sequence::Event
+pub fn rich_mermaid::sequence::Event::clone(&self) -> rich_mermaid::sequence::Event
+impl core::cmp::Eq for rich_mermaid::sequence::Event
+impl core::cmp::PartialEq for rich_mermaid::sequence::Event
+pub fn rich_mermaid::sequence::Event::eq(&self, &rich_mermaid::sequence::Event) -> bool
+impl core::fmt::Debug for rich_mermaid::sequence::Event
+pub fn rich_mermaid::sequence::Event::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::sequence::Event
+impl core::marker::Freeze for rich_mermaid::sequence::Event
+impl core::marker::Send for rich_mermaid::sequence::Event
+impl core::marker::Sync for rich_mermaid::sequence::Event
+impl core::marker::Unpin for rich_mermaid::sequence::Event
+impl core::marker::UnsafeUnpin for rich_mermaid::sequence::Event
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::sequence::Event
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::sequence::Event
+pub enum rich_mermaid::sequence::LineStyle
+pub rich_mermaid::sequence::LineStyle::Dotted
+pub rich_mermaid::sequence::LineStyle::Solid
+impl core::clone::Clone for rich_mermaid::sequence::LineStyle
+pub fn rich_mermaid::sequence::LineStyle::clone(&self) -> rich_mermaid::sequence::LineStyle
+impl core::cmp::Eq for rich_mermaid::sequence::LineStyle
+impl core::cmp::PartialEq for rich_mermaid::sequence::LineStyle
+pub fn rich_mermaid::sequence::LineStyle::eq(&self, &rich_mermaid::sequence::LineStyle) -> bool
+impl core::default::Default for rich_mermaid::sequence::LineStyle
+pub fn rich_mermaid::sequence::LineStyle::default() -> rich_mermaid::sequence::LineStyle
+impl core::fmt::Debug for rich_mermaid::sequence::LineStyle
+pub fn rich_mermaid::sequence::LineStyle::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_mermaid::sequence::LineStyle
+pub fn rich_mermaid::sequence::LineStyle::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_mermaid::sequence::LineStyle
+impl core::marker::StructuralPartialEq for rich_mermaid::sequence::LineStyle
+impl core::marker::Freeze for rich_mermaid::sequence::LineStyle
+impl core::marker::Send for rich_mermaid::sequence::LineStyle
+impl core::marker::Sync for rich_mermaid::sequence::LineStyle
+impl core::marker::Unpin for rich_mermaid::sequence::LineStyle
+impl core::marker::UnsafeUnpin for rich_mermaid::sequence::LineStyle
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::sequence::LineStyle
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::sequence::LineStyle
+pub enum rich_mermaid::sequence::NotePlacement
+pub rich_mermaid::sequence::NotePlacement::LeftOf(usize)
+pub rich_mermaid::sequence::NotePlacement::Over(usize, usize)
+pub rich_mermaid::sequence::NotePlacement::RightOf(usize)
+impl core::clone::Clone for rich_mermaid::sequence::NotePlacement
+pub fn rich_mermaid::sequence::NotePlacement::clone(&self) -> rich_mermaid::sequence::NotePlacement
+impl core::cmp::Eq for rich_mermaid::sequence::NotePlacement
+impl core::cmp::PartialEq for rich_mermaid::sequence::NotePlacement
+pub fn rich_mermaid::sequence::NotePlacement::eq(&self, &rich_mermaid::sequence::NotePlacement) -> bool
+impl core::fmt::Debug for rich_mermaid::sequence::NotePlacement
+pub fn rich_mermaid::sequence::NotePlacement::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_mermaid::sequence::NotePlacement
+pub fn rich_mermaid::sequence::NotePlacement::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_mermaid::sequence::NotePlacement
+impl core::marker::StructuralPartialEq for rich_mermaid::sequence::NotePlacement
+impl core::marker::Freeze for rich_mermaid::sequence::NotePlacement
+impl core::marker::Send for rich_mermaid::sequence::NotePlacement
+impl core::marker::Sync for rich_mermaid::sequence::NotePlacement
+impl core::marker::Unpin for rich_mermaid::sequence::NotePlacement
+impl core::marker::UnsafeUnpin for rich_mermaid::sequence::NotePlacement
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::sequence::NotePlacement
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::sequence::NotePlacement
+pub enum rich_mermaid::sequence::ParticipantKind
+pub rich_mermaid::sequence::ParticipantKind::Actor
+pub rich_mermaid::sequence::ParticipantKind::Participant
+impl core::clone::Clone for rich_mermaid::sequence::ParticipantKind
+pub fn rich_mermaid::sequence::ParticipantKind::clone(&self) -> rich_mermaid::sequence::ParticipantKind
+impl core::cmp::Eq for rich_mermaid::sequence::ParticipantKind
+impl core::cmp::PartialEq for rich_mermaid::sequence::ParticipantKind
+pub fn rich_mermaid::sequence::ParticipantKind::eq(&self, &rich_mermaid::sequence::ParticipantKind) -> bool
+impl core::default::Default for rich_mermaid::sequence::ParticipantKind
+pub fn rich_mermaid::sequence::ParticipantKind::default() -> rich_mermaid::sequence::ParticipantKind
+impl core::fmt::Debug for rich_mermaid::sequence::ParticipantKind
+pub fn rich_mermaid::sequence::ParticipantKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_mermaid::sequence::ParticipantKind
+pub fn rich_mermaid::sequence::ParticipantKind::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_mermaid::sequence::ParticipantKind
+impl core::marker::StructuralPartialEq for rich_mermaid::sequence::ParticipantKind
+impl core::marker::Freeze for rich_mermaid::sequence::ParticipantKind
+impl core::marker::Send for rich_mermaid::sequence::ParticipantKind
+impl core::marker::Sync for rich_mermaid::sequence::ParticipantKind
+impl core::marker::Unpin for rich_mermaid::sequence::ParticipantKind
+impl core::marker::UnsafeUnpin for rich_mermaid::sequence::ParticipantKind
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::sequence::ParticipantKind
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::sequence::ParticipantKind
+pub enum rich_mermaid::sequence::Tip
+pub rich_mermaid::sequence::Tip::Arrow
+pub rich_mermaid::sequence::Tip::Cross
+pub rich_mermaid::sequence::Tip::None
+pub rich_mermaid::sequence::Tip::Open
+impl core::clone::Clone for rich_mermaid::sequence::Tip
+pub fn rich_mermaid::sequence::Tip::clone(&self) -> rich_mermaid::sequence::Tip
+impl core::cmp::Eq for rich_mermaid::sequence::Tip
+impl core::cmp::PartialEq for rich_mermaid::sequence::Tip
+pub fn rich_mermaid::sequence::Tip::eq(&self, &rich_mermaid::sequence::Tip) -> bool
+impl core::default::Default for rich_mermaid::sequence::Tip
+pub fn rich_mermaid::sequence::Tip::default() -> rich_mermaid::sequence::Tip
+impl core::fmt::Debug for rich_mermaid::sequence::Tip
+pub fn rich_mermaid::sequence::Tip::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_mermaid::sequence::Tip
+pub fn rich_mermaid::sequence::Tip::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_mermaid::sequence::Tip
+impl core::marker::StructuralPartialEq for rich_mermaid::sequence::Tip
+impl core::marker::Freeze for rich_mermaid::sequence::Tip
+impl core::marker::Send for rich_mermaid::sequence::Tip
+impl core::marker::Sync for rich_mermaid::sequence::Tip
+impl core::marker::Unpin for rich_mermaid::sequence::Tip
+impl core::marker::UnsafeUnpin for rich_mermaid::sequence::Tip
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::sequence::Tip
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::sequence::Tip
+pub struct rich_mermaid::sequence::Message
+pub rich_mermaid::sequence::Message::end: rich_mermaid::sequence::Tip
+pub rich_mermaid::sequence::Message::from: usize
+pub rich_mermaid::sequence::Message::line: rich_mermaid::sequence::LineStyle
+pub rich_mermaid::sequence::Message::number: core::option::Option<u64>
+pub rich_mermaid::sequence::Message::start: rich_mermaid::sequence::Tip
+pub rich_mermaid::sequence::Message::text: alloc::string::String
+pub rich_mermaid::sequence::Message::to: usize
+impl core::clone::Clone for rich_mermaid::sequence::Message
+pub fn rich_mermaid::sequence::Message::clone(&self) -> rich_mermaid::sequence::Message
+impl core::cmp::Eq for rich_mermaid::sequence::Message
+impl core::cmp::PartialEq for rich_mermaid::sequence::Message
+pub fn rich_mermaid::sequence::Message::eq(&self, &rich_mermaid::sequence::Message) -> bool
+impl core::default::Default for rich_mermaid::sequence::Message
+pub fn rich_mermaid::sequence::Message::default() -> rich_mermaid::sequence::Message
+impl core::fmt::Debug for rich_mermaid::sequence::Message
+pub fn rich_mermaid::sequence::Message::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::sequence::Message
+impl core::marker::Freeze for rich_mermaid::sequence::Message
+impl core::marker::Send for rich_mermaid::sequence::Message
+impl core::marker::Sync for rich_mermaid::sequence::Message
+impl core::marker::Unpin for rich_mermaid::sequence::Message
+impl core::marker::UnsafeUnpin for rich_mermaid::sequence::Message
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::sequence::Message
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::sequence::Message
+pub struct rich_mermaid::sequence::Participant
+pub rich_mermaid::sequence::Participant::id: alloc::string::String
+pub rich_mermaid::sequence::Participant::kind: rich_mermaid::sequence::ParticipantKind
+pub rich_mermaid::sequence::Participant::label: alloc::string::String
+impl core::clone::Clone for rich_mermaid::sequence::Participant
+pub fn rich_mermaid::sequence::Participant::clone(&self) -> rich_mermaid::sequence::Participant
+impl core::cmp::Eq for rich_mermaid::sequence::Participant
+impl core::cmp::PartialEq for rich_mermaid::sequence::Participant
+pub fn rich_mermaid::sequence::Participant::eq(&self, &rich_mermaid::sequence::Participant) -> bool
+impl core::fmt::Debug for rich_mermaid::sequence::Participant
+pub fn rich_mermaid::sequence::Participant::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::sequence::Participant
+impl core::marker::Freeze for rich_mermaid::sequence::Participant
+impl core::marker::Send for rich_mermaid::sequence::Participant
+impl core::marker::Sync for rich_mermaid::sequence::Participant
+impl core::marker::Unpin for rich_mermaid::sequence::Participant
+impl core::marker::UnsafeUnpin for rich_mermaid::sequence::Participant
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::sequence::Participant
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::sequence::Participant
+pub struct rich_mermaid::sequence::Sequence
+pub rich_mermaid::sequence::Sequence::events: alloc::vec::Vec<rich_mermaid::sequence::Event>
+pub rich_mermaid::sequence::Sequence::notes: alloc::vec::Vec<alloc::string::String>
+pub rich_mermaid::sequence::Sequence::participants: alloc::vec::Vec<rich_mermaid::sequence::Participant>
+pub rich_mermaid::sequence::Sequence::title: core::option::Option<alloc::string::String>
+impl core::clone::Clone for rich_mermaid::sequence::Sequence
+pub fn rich_mermaid::sequence::Sequence::clone(&self) -> rich_mermaid::sequence::Sequence
+impl core::cmp::Eq for rich_mermaid::sequence::Sequence
+impl core::cmp::PartialEq for rich_mermaid::sequence::Sequence
+pub fn rich_mermaid::sequence::Sequence::eq(&self, &rich_mermaid::sequence::Sequence) -> bool
+impl core::default::Default for rich_mermaid::sequence::Sequence
+pub fn rich_mermaid::sequence::Sequence::default() -> rich_mermaid::sequence::Sequence
+impl core::fmt::Debug for rich_mermaid::sequence::Sequence
+pub fn rich_mermaid::sequence::Sequence::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::sequence::Sequence
+impl core::marker::Freeze for rich_mermaid::sequence::Sequence
+impl core::marker::Send for rich_mermaid::sequence::Sequence
+impl core::marker::Sync for rich_mermaid::sequence::Sequence
+impl core::marker::Unpin for rich_mermaid::sequence::Sequence
+impl core::marker::UnsafeUnpin for rich_mermaid::sequence::Sequence
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::sequence::Sequence
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::sequence::Sequence
+pub const rich_mermaid::sequence::MAX_EVENTS: usize
+pub const rich_mermaid::sequence::MAX_NESTING: usize
+pub const rich_mermaid::sequence::MAX_PARTICIPANTS: usize
+pub const rich_mermaid::sequence::MAX_SOURCE: usize
+pub fn rich_mermaid::sequence::draw(&rich_mermaid::sequence::Sequence, bool) -> core::result::Result<rich_diagram::layout::Drawing, alloc::string::String>
+pub fn rich_mermaid::sequence::is_sequence(&str) -> bool
+pub fn rich_mermaid::sequence::parse(&str) -> core::result::Result<rich_mermaid::sequence::Sequence, rich_mermaid::flowchart::ParseError>
+pub enum rich_mermaid::Backend
+pub rich_mermaid::Backend::Mmdc
+pub rich_mermaid::Backend::Text
+impl core::clone::Clone for rich_mermaid::Backend
+pub fn rich_mermaid::Backend::clone(&self) -> rich_mermaid::Backend
+impl core::cmp::Eq for rich_mermaid::Backend
+impl core::cmp::PartialEq for rich_mermaid::Backend
+pub fn rich_mermaid::Backend::eq(&self, &rich_mermaid::Backend) -> bool
+impl core::default::Default for rich_mermaid::Backend
+pub fn rich_mermaid::Backend::default() -> rich_mermaid::Backend
+impl core::fmt::Debug for rich_mermaid::Backend
+pub fn rich_mermaid::Backend::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_mermaid::Backend
+impl core::marker::StructuralPartialEq for rich_mermaid::Backend
+impl core::marker::Freeze for rich_mermaid::Backend
+impl core::marker::Send for rich_mermaid::Backend
+impl core::marker::Sync for rich_mermaid::Backend
+impl core::marker::Unpin for rich_mermaid::Backend
+impl core::marker::UnsafeUnpin for rich_mermaid::Backend
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::Backend
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::Backend
+pub enum rich_mermaid::ParseError
+pub rich_mermaid::ParseError::Empty
+pub rich_mermaid::ParseError::Syntax
+pub rich_mermaid::ParseError::Syntax::line: usize
+pub rich_mermaid::ParseError::Syntax::message: alloc::string::String
+pub rich_mermaid::ParseError::TooLarge(alloc::string::String)
+pub rich_mermaid::ParseError::Unsupported(alloc::string::String)
+impl core::clone::Clone for rich_mermaid::flowchart::ParseError
+pub fn rich_mermaid::flowchart::ParseError::clone(&self) -> rich_mermaid::flowchart::ParseError
+impl core::cmp::Eq for rich_mermaid::flowchart::ParseError
+impl core::cmp::PartialEq for rich_mermaid::flowchart::ParseError
+pub fn rich_mermaid::flowchart::ParseError::eq(&self, &rich_mermaid::flowchart::ParseError) -> bool
+impl core::error::Error for rich_mermaid::flowchart::ParseError
+impl core::fmt::Debug for rich_mermaid::flowchart::ParseError
+pub fn rich_mermaid::flowchart::ParseError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_mermaid::flowchart::ParseError
+pub fn rich_mermaid::flowchart::ParseError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::flowchart::ParseError
+impl core::marker::Freeze for rich_mermaid::flowchart::ParseError
+impl core::marker::Send for rich_mermaid::flowchart::ParseError
+impl core::marker::Sync for rich_mermaid::flowchart::ParseError
+impl core::marker::Unpin for rich_mermaid::flowchart::ParseError
+impl core::marker::UnsafeUnpin for rich_mermaid::flowchart::ParseError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::flowchart::ParseError
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::flowchart::ParseError
+pub struct rich_mermaid::Flowchart
+pub rich_mermaid::Flowchart::direction: rich_diagram::graph::Direction
+pub rich_mermaid::Flowchart::edges: alloc::vec::Vec<rich_diagram::graph::Edge>
+pub rich_mermaid::Flowchart::nodes: alloc::vec::Vec<rich_diagram::graph::Node>
+pub rich_mermaid::Flowchart::notes: alloc::vec::Vec<alloc::string::String>
+impl rich_mermaid::flowchart::Flowchart
+pub fn rich_mermaid::flowchart::Flowchart::to_graph(&self) -> rich_diagram::graph::Graph
+impl core::clone::Clone for rich_mermaid::flowchart::Flowchart
+pub fn rich_mermaid::flowchart::Flowchart::clone(&self) -> rich_mermaid::flowchart::Flowchart
+impl core::cmp::Eq for rich_mermaid::flowchart::Flowchart
+impl core::cmp::PartialEq for rich_mermaid::flowchart::Flowchart
+pub fn rich_mermaid::flowchart::Flowchart::eq(&self, &rich_mermaid::flowchart::Flowchart) -> bool
+impl core::default::Default for rich_mermaid::flowchart::Flowchart
+pub fn rich_mermaid::flowchart::Flowchart::default() -> rich_mermaid::flowchart::Flowchart
+impl core::fmt::Debug for rich_mermaid::flowchart::Flowchart
+pub fn rich_mermaid::flowchart::Flowchart::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::flowchart::Flowchart
+impl core::marker::Freeze for rich_mermaid::flowchart::Flowchart
+impl core::marker::Send for rich_mermaid::flowchart::Flowchart
+impl core::marker::Sync for rich_mermaid::flowchart::Flowchart
+impl core::marker::Unpin for rich_mermaid::flowchart::Flowchart
+impl core::marker::UnsafeUnpin for rich_mermaid::flowchart::Flowchart
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::flowchart::Flowchart
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::flowchart::Flowchart
+pub struct rich_mermaid::Mermaid
+impl rich_mermaid::Mermaid
+pub fn rich_mermaid::Mermaid::ascii(self, bool) -> Self
+pub fn rich_mermaid::Mermaid::backend(self, rich_mermaid::Backend) -> Self
+pub fn rich_mermaid::Mermaid::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_mermaid::Mermaid::options(self, rich_mermaid::MermaidOptions) -> Self
+impl core::clone::Clone for rich_mermaid::Mermaid
+pub fn rich_mermaid::Mermaid::clone(&self) -> rich_mermaid::Mermaid
+impl core::fmt::Debug for rich_mermaid::Mermaid
+pub fn rich_mermaid::Mermaid::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich::protocol::Renderable for rich_mermaid::Mermaid
+pub fn rich_mermaid::Mermaid::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_mermaid::Mermaid
+impl core::marker::Send for rich_mermaid::Mermaid
+impl core::marker::Sync for rich_mermaid::Mermaid
+impl core::marker::Unpin for rich_mermaid::Mermaid
+impl core::marker::UnsafeUnpin for rich_mermaid::Mermaid
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::Mermaid
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::Mermaid
+pub struct rich_mermaid::MermaidFences
+pub rich_mermaid::MermaidFences::options: rich_mermaid::MermaidOptions
+impl core::clone::Clone for rich_mermaid::MermaidFences
+pub fn rich_mermaid::MermaidFences::clone(&self) -> rich_mermaid::MermaidFences
+impl core::default::Default for rich_mermaid::MermaidFences
+pub fn rich_mermaid::MermaidFences::default() -> rich_mermaid::MermaidFences
+impl core::fmt::Debug for rich_mermaid::MermaidFences
+pub fn rich_mermaid::MermaidFences::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich::protocol::FenceRenderer for rich_mermaid::MermaidFences
+pub fn rich_mermaid::MermaidFences::render_fence(&self, &str, &str, &rich::console::Console, &rich::console::ConsoleOptions) -> core::option::Option<alloc::vec::Vec<rich::segment::Segment>>
+impl rich_plugin_api::SourceRenderer for rich_mermaid::MermaidFences
+pub fn rich_mermaid::MermaidFences::render(&self, &str) -> core::result::Result<alloc::boxed::Box<(dyn rich::protocol::Renderable + core::marker::Send + core::marker::Sync)>, rich_plugin_api::PluginError>
+impl core::marker::Freeze for rich_mermaid::MermaidFences
+impl core::marker::Send for rich_mermaid::MermaidFences
+impl core::marker::Sync for rich_mermaid::MermaidFences
+impl core::marker::Unpin for rich_mermaid::MermaidFences
+impl core::marker::UnsafeUnpin for rich_mermaid::MermaidFences
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::MermaidFences
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::MermaidFences
+pub struct rich_mermaid::MermaidOptions
+pub rich_mermaid::MermaidOptions::ascii: core::option::Option<bool>
+pub rich_mermaid::MermaidOptions::backend: rich_mermaid::Backend
+pub rich_mermaid::MermaidOptions::mmdc: rich_mermaid::mmdc::MmdcOptions
+impl core::clone::Clone for rich_mermaid::MermaidOptions
+pub fn rich_mermaid::MermaidOptions::clone(&self) -> rich_mermaid::MermaidOptions
+impl core::cmp::Eq for rich_mermaid::MermaidOptions
+impl core::cmp::PartialEq for rich_mermaid::MermaidOptions
+pub fn rich_mermaid::MermaidOptions::eq(&self, &rich_mermaid::MermaidOptions) -> bool
+impl core::default::Default for rich_mermaid::MermaidOptions
+pub fn rich_mermaid::MermaidOptions::default() -> rich_mermaid::MermaidOptions
+impl core::fmt::Debug for rich_mermaid::MermaidOptions
+pub fn rich_mermaid::MermaidOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_mermaid::MermaidOptions
+impl core::marker::Freeze for rich_mermaid::MermaidOptions
+impl core::marker::Send for rich_mermaid::MermaidOptions
+impl core::marker::Sync for rich_mermaid::MermaidOptions
+impl core::marker::Unpin for rich_mermaid::MermaidOptions
+impl core::marker::UnsafeUnpin for rich_mermaid::MermaidOptions
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::MermaidOptions
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::MermaidOptions
+pub struct rich_mermaid::MermaidPlugin
+pub rich_mermaid::MermaidPlugin::options: rich_mermaid::MermaidOptions
+impl rich_mermaid::MermaidPlugin
+pub fn rich_mermaid::MermaidPlugin::new(rich_mermaid::MermaidOptions) -> Self
+impl core::clone::Clone for rich_mermaid::MermaidPlugin
+pub fn rich_mermaid::MermaidPlugin::clone(&self) -> rich_mermaid::MermaidPlugin
+impl core::default::Default for rich_mermaid::MermaidPlugin
+pub fn rich_mermaid::MermaidPlugin::default() -> rich_mermaid::MermaidPlugin
+impl core::fmt::Debug for rich_mermaid::MermaidPlugin
+pub fn rich_mermaid::MermaidPlugin::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_plugin_api::Plugin for rich_mermaid::MermaidPlugin
+pub fn rich_mermaid::MermaidPlugin::metadata(&self) -> rich_plugin_api::PluginMetadata
+pub fn rich_mermaid::MermaidPlugin::register(&self, &mut dyn rich_plugin_api::PluginRegistrar) -> core::result::Result<(), rich_plugin_api::PluginError>
+impl core::marker::Freeze for rich_mermaid::MermaidPlugin
+impl core::marker::Send for rich_mermaid::MermaidPlugin
+impl core::marker::Sync for rich_mermaid::MermaidPlugin
+impl core::marker::Unpin for rich_mermaid::MermaidPlugin
+impl core::marker::UnsafeUnpin for rich_mermaid::MermaidPlugin
+impl core::panic::unwind_safe::RefUnwindSafe for rich_mermaid::MermaidPlugin
+impl core::panic::unwind_safe::UnwindSafe for rich_mermaid::MermaidPlugin
+pub fn rich_mermaid::draw(&rich_mermaid::flowchart::Flowchart, bool) -> core::result::Result<rich_mermaid::layout::Diagram, alloc::string::String>
+pub fn rich_mermaid::parse(&str) -> core::result::Result<rich_mermaid::flowchart::Flowchart, rich_mermaid::flowchart::ParseError>
+pub type rich_mermaid::Diagram = rich_diagram::layout::Drawing

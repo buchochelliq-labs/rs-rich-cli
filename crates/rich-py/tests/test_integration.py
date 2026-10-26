@@ -365,3 +365,48 @@ def panel_subtitles(m):
 
 def test_panel_text_subtitles_match_rich():
     compare(panel_subtitles)
+
+
+# ---------------------------------------------------------------------------
+# Console.size: a legacy Windows console, LINES and COLUMNS, a dumb terminal
+
+
+SIZE_CASES = [
+    # (environment, constructor options, whether the height is the terminal's)
+    ({"LINES": "20"}, {"width": 30, "legacy_windows": True}, False),
+    ({"LINES": "20"}, {"width": 30}, False),
+    ({"COLUMNS": "40", "LINES": "20"}, {"legacy_windows": True}, False),
+    ({"COLUMNS": "40"}, {"height": 10, "legacy_windows": True}, False),
+    ({}, {"width": 30, "height": 10, "legacy_windows": True}, False),
+    ({"COLUMNS": "40"}, {"legacy_windows": True}, True),
+    ({}, {"width": 30, "legacy_windows": True}, True),
+    ({"TERM": "dumb"}, {"width": 30, "force_terminal": True}, False),
+    ({"TERM": "dumb", "LINES": "20"}, {"width": 30, "force_terminal": True}, False),
+]
+
+
+@pytest.mark.parametrize("environ, options, terminal_height", SIZE_CASES)
+def test_console_size_matches_rich(monkeypatch, environ, options, terminal_height):
+    # Upstream's Console.size takes a legacy console's column off only when
+    # both sides were asked for (by argument, COLUMNS or LINES) or when the
+    # width falls back on the terminal.
+    for name in ("COLUMNS", "LINES", "TERM"):
+        monkeypatch.delenv(name, raising=False)
+    for name, value in environ.items():
+        monkeypatch.setenv(name, value)
+
+    def sizes(m):
+        console = m.console.Console(file=io.StringIO(), **options)
+        seen = [tuple(console.size)]
+        console.width = 50
+        seen.append(tuple(console.size))
+        console.size = (20, 5)
+        seen.append(tuple(console.size))
+        console.height = 7
+        seen.append(tuple(console.size))
+        if terminal_height:
+            # The height before any is set is the terminal's: compare widths.
+            seen[:2] = [(width, None) for width, _ in seen[:2]]
+        return seen
+
+    compare(sizes)

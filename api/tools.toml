@@ -1,0 +1,13 @@
+# The pinned tools behind the API checks (scripts/public_api.py and
+# scripts/semver_check.py; CI's `public API and SemVer` job installs these).
+# Moving a pin can change every snapshot's text with no API change: move it
+# in its own commit, with `python scripts/public_api.py --bless`.
+
+# rustdoc writes JSON only on nightly. This one writes format 57, the format
+# cargo-public-api 0.52 reads.
+nightly = "nightly-2026-05-20"
+cargo-public-api = "0.52.0"
+
+# cargo-semver-checks reads a stable rustdoc's JSON; 0.51 reads 1.99's.
+cargo-semver-checks = "0.51.0"
+semver-checks-toolchain = "1.99"

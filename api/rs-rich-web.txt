@@ -1,0 +1,131 @@
+pub mod rich_web
+pub extern crate rich_web::intuituive
+pub use rich_web::Command
+pub use rich_web::ExitStatus
+pub use rich_web::LocalPty
+pub use rich_web::PtyHost
+pub mod rich_web::dom
+pub struct rich_web::dom::Dom
+impl rich_web::dom::Dom
+pub fn rich_web::dom::Dom::hello(&self) -> alloc::string::String
+pub fn rich_web::dom::Dom::new() -> rich_web::dom::Dom
+pub fn rich_web::dom::Dom::update(&mut self, &intuituive::app::Driver) -> alloc::vec::Vec<alloc::string::String>
+impl core::default::Default for rich_web::dom::Dom
+pub fn rich_web::dom::Dom::default() -> rich_web::dom::Dom
+impl core::fmt::Debug for rich_web::dom::Dom
+pub fn rich_web::dom::Dom::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_web::dom::Dom
+impl core::marker::Send for rich_web::dom::Dom
+impl core::marker::Sync for rich_web::dom::Dom
+impl core::marker::Unpin for rich_web::dom::Dom
+impl core::marker::UnsafeUnpin for rich_web::dom::Dom
+impl core::panic::unwind_safe::RefUnwindSafe for rich_web::dom::Dom
+impl core::panic::unwind_safe::UnwindSafe for rich_web::dom::Dom
+pub const rich_web::dom::PROTOCOL: u32
+pub const rich_web::dom::THEME: rich::terminal_theme::TerminalTheme
+pub fn rich_web::dom::copy(u64, &str) -> alloc::string::String
+pub fn rich_web::dom::css(&rich::style::Style) -> alloc::string::String
+pub fn rich_web::dom::node(&intuituive::a11y::AccessNode) -> serde_json::value::Value
+pub fn rich_web::dom::say(&intuituive::a11y::Announcement) -> alloc::string::String
+pub fn rich_web::dom::tree(&[intuituive::a11y::AccessNode]) -> serde_json::value::Value
+pub mod rich_web::input
+pub fn rich_web::input::decode(&str) -> alloc::vec::Vec<rich_interact::event::Event>
+#[non_exhaustive] pub enum rich_web::Isolation
+pub rich_web::Isolation::Processes
+pub rich_web::Isolation::Threads
+impl core::clone::Clone for rich_web::Isolation
+pub fn rich_web::Isolation::clone(&self) -> rich_web::Isolation
+impl core::cmp::Eq for rich_web::Isolation
+impl core::cmp::PartialEq for rich_web::Isolation
+pub fn rich_web::Isolation::eq(&self, &rich_web::Isolation) -> bool
+impl core::default::Default for rich_web::Isolation
+pub fn rich_web::Isolation::default() -> rich_web::Isolation
+impl core::fmt::Debug for rich_web::Isolation
+pub fn rich_web::Isolation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_web::Isolation
+pub fn rich_web::Isolation::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_web::Isolation
+impl core::marker::StructuralPartialEq for rich_web::Isolation
+impl core::marker::Freeze for rich_web::Isolation
+impl core::marker::Send for rich_web::Isolation
+impl core::marker::Sync for rich_web::Isolation
+impl core::marker::Unpin for rich_web::Isolation
+impl core::marker::UnsafeUnpin for rich_web::Isolation
+impl core::panic::unwind_safe::RefUnwindSafe for rich_web::Isolation
+impl core::panic::unwind_safe::UnwindSafe for rich_web::Isolation
+#[non_exhaustive] pub enum rich_web::Renderer
+pub rich_web::Renderer::Dom
+pub rich_web::Renderer::Xterm
+impl rich_web::Renderer
+pub fn rich_web::Renderer::name(self) -> &'static str
+pub fn rich_web::Renderer::parse(&str) -> core::option::Option<rich_web::Renderer>
+impl core::clone::Clone for rich_web::Renderer
+pub fn rich_web::Renderer::clone(&self) -> rich_web::Renderer
+impl core::cmp::Eq for rich_web::Renderer
+impl core::cmp::PartialEq for rich_web::Renderer
+pub fn rich_web::Renderer::eq(&self, &rich_web::Renderer) -> bool
+impl core::default::Default for rich_web::Renderer
+pub fn rich_web::Renderer::default() -> rich_web::Renderer
+impl core::fmt::Debug for rich_web::Renderer
+pub fn rich_web::Renderer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_web::Renderer
+pub fn rich_web::Renderer::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_web::Renderer
+impl core::marker::StructuralPartialEq for rich_web::Renderer
+impl core::marker::Freeze for rich_web::Renderer
+impl core::marker::Send for rich_web::Renderer
+impl core::marker::Sync for rich_web::Renderer
+impl core::marker::Unpin for rich_web::Renderer
+impl core::marker::UnsafeUnpin for rich_web::Renderer
+impl core::panic::unwind_safe::RefUnwindSafe for rich_web::Renderer
+impl core::panic::unwind_safe::UnwindSafe for rich_web::Renderer
+pub struct rich_web::Handle
+impl rich_web::Handle
+pub fn rich_web::Handle::local_addr(&self) -> core::net::socket_addr::SocketAddr
+pub fn rich_web::Handle::sessions(&self) -> usize
+pub fn rich_web::Handle::stop(self)
+pub fn rich_web::Handle::url(&self) -> &str
+impl core::ops::drop::Drop for rich_web::Handle
+pub fn rich_web::Handle::drop(&mut self)
+impl core::marker::Freeze for rich_web::Handle
+impl core::marker::Send for rich_web::Handle
+impl core::marker::Sync for rich_web::Handle
+impl core::marker::Unpin for rich_web::Handle
+impl core::marker::UnsafeUnpin for rich_web::Handle
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_web::Handle
+impl !core::panic::unwind_safe::UnwindSafe for rich_web::Handle
+pub struct rich_web::Server
+impl rich_web::Server
+pub fn rich_web::Server::access_token(&self) -> &str
+pub fn rich_web::Server::allow_origin(self, impl core::convert::Into<alloc::string::String>) -> rich_web::Server
+pub fn rich_web::Server::bind<A, F>(A, F) -> std::io::error::Result<rich_web::Server> where A: std::net::socket_addr::ToSocketAddrs, F: core::ops::function::Fn() -> intuituive::app::App + core::marker::Send + core::marker::Sync + 'static
+pub fn rich_web::Server::bind_command<A>(A, impl core::convert::Into<rich_embed::host::Command>) -> std::io::error::Result<rich_web::Server> where A: std::net::socket_addr::ToSocketAddrs
+pub fn rich_web::Server::bind_host<A, F>(A, F) -> std::io::error::Result<rich_web::Server> where A: std::net::socket_addr::ToSocketAddrs, F: core::ops::function::Fn() -> alloc::boxed::Box<dyn rich_embed::host::PtyHost> + core::marker::Send + core::marker::Sync + 'static
+pub fn rich_web::Server::compress(self, core::option::Option<usize>) -> rich_web::Server
+pub fn rich_web::Server::isolation(self, rich_web::Isolation) -> rich_web::Server
+pub fn rich_web::Server::local_addr(&self) -> core::net::socket_addr::SocketAddr
+pub fn rich_web::Server::max_buffered(self, usize) -> rich_web::Server
+pub fn rich_web::Server::max_sessions(self, usize) -> rich_web::Server
+pub fn rich_web::Server::renderer(self, rich_web::Renderer) -> rich_web::Server
+pub fn rich_web::Server::run(self) -> std::io::error::Result<()>
+pub fn rich_web::Server::run_until(self, impl core::ops::function::FnOnce()) -> std::io::error::Result<()>
+pub fn rich_web::Server::session_command<P, I, S>(self, P, I) -> rich_web::Server where P: core::convert::Into<std::path::PathBuf>, I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<std::ffi::os_str::OsString>
+pub fn rich_web::Server::session_cpu(self, core::time::Duration) -> rich_web::Server
+pub fn rich_web::Server::session_memory(self, u64) -> rich_web::Server
+pub fn rich_web::Server::spawn(self) -> std::io::error::Result<rich_web::Handle>
+pub fn rich_web::Server::title(self, impl core::convert::Into<alloc::string::String>) -> rich_web::Server
+pub fn rich_web::Server::token(self, impl core::convert::Into<alloc::string::String>) -> rich_web::Server
+pub fn rich_web::Server::url(&self) -> alloc::string::String
+impl !core::marker::Freeze for rich_web::Server
+impl core::marker::Send for rich_web::Server
+impl core::marker::Sync for rich_web::Server
+impl core::marker::Unpin for rich_web::Server
+impl core::marker::UnsafeUnpin for rich_web::Server
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_web::Server
+impl !core::panic::unwind_safe::UnwindSafe for rich_web::Server
+pub const rich_web::DEFAULT_MAX_BUFFERED: usize
+pub const rich_web::DEFAULT_MAX_SESSIONS: usize
+pub const rich_web::SESSION_ENV: &str
+pub const rich_web::XTERM_VERSION: &str
+pub fn rich_web::serve<A, F>(A, F) -> std::io::error::Result<()> where A: std::net::socket_addr::ToSocketAddrs, F: core::ops::function::Fn() -> intuituive::app::App + core::marker::Send + core::marker::Sync + 'static
+pub fn rich_web::serve_command<A>(A, impl core::convert::Into<rich_embed::host::Command>) -> std::io::error::Result<()> where A: std::net::socket_addr::ToSocketAddrs

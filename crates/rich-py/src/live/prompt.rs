@@ -257,9 +257,10 @@ impl PromptBase {
     /// Show the error message of an invalid response.
     fn on_validate_error(
         slf: &Bound<'_, Self>,
-        _value: &Bound<'_, PyAny>,
+        value: &Bound<'_, PyAny>,
         error: &Bound<'_, PyAny>,
     ) -> PyResult<()> {
+        let _ = value;
         let py = slf.py();
         let kwargs = PyDict::new(py);
         kwargs.set_item("markup", true)?;

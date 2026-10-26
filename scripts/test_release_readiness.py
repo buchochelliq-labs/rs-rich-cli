@@ -206,7 +206,7 @@ class ReadinessTests(unittest.TestCase):
         )
         self.assertEqual(
             steps[-1],
-            [sys.executable, "scripts/release.py", "plan", "rs-rich-cli-v0.0.6"],
+            [sys.executable, "scripts/release.py", "plan", "rs-rich-cli-v0.0.6", "--semver-checks"],
         )
         self.assertLess(
             steps.index(["cargo", "test", "--all"]),

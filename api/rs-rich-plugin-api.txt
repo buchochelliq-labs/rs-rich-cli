@@ -1,0 +1,496 @@
+pub mod rich_plugin_api
+pub mod rich_plugin_api::abi
+pub mod rich_plugin_api::abi::wasm
+pub const rich_plugin_api::abi::wasm::ALLOC: &str
+pub const rich_plugin_api::abi::wasm::CALL: &str
+pub const rich_plugin_api::abi::wasm::ERROR_BIT: u64
+pub const rich_plugin_api::abi::wasm::MANIFEST: &str
+pub const rich_plugin_api::abi::wasm::MEMORY: &str
+pub enum rich_plugin_api::abi::AbiError
+pub rich_plugin_api::abi::AbiError::Incompatible
+pub rich_plugin_api::abi::AbiError::Incompatible::major: u32
+pub rich_plugin_api::abi::AbiError::Incompatible::minor: u32
+pub rich_plugin_api::abi::AbiError::Invalid(alloc::string::String)
+impl core::clone::Clone for rich_plugin_api::abi::AbiError
+pub fn rich_plugin_api::abi::AbiError::clone(&self) -> rich_plugin_api::abi::AbiError
+impl core::cmp::Eq for rich_plugin_api::abi::AbiError
+impl core::cmp::PartialEq for rich_plugin_api::abi::AbiError
+pub fn rich_plugin_api::abi::AbiError::eq(&self, &rich_plugin_api::abi::AbiError) -> bool
+impl core::error::Error for rich_plugin_api::abi::AbiError
+impl core::fmt::Debug for rich_plugin_api::abi::AbiError
+pub fn rich_plugin_api::abi::AbiError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_plugin_api::abi::AbiError
+pub fn rich_plugin_api::abi::AbiError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_plugin_api::abi::AbiError
+impl core::marker::Freeze for rich_plugin_api::abi::AbiError
+impl core::marker::Send for rich_plugin_api::abi::AbiError
+impl core::marker::Sync for rich_plugin_api::abi::AbiError
+impl core::marker::Unpin for rich_plugin_api::abi::AbiError
+impl core::marker::UnsafeUnpin for rich_plugin_api::abi::AbiError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::abi::AbiError
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::abi::AbiError
+#[non_exhaustive] pub enum rich_plugin_api::abi::CapabilityKind
+pub rich_plugin_api::abi::CapabilityKind::FenceAnsi
+pub rich_plugin_api::abi::CapabilityKind::FenceMarkup
+pub rich_plugin_api::abi::CapabilityKind::Highlighter
+pub rich_plugin_api::abi::CapabilityKind::Transform
+impl rich_plugin_api::abi::CapabilityKind
+pub const rich_plugin_api::abi::CapabilityKind::ALL: [rich_plugin_api::abi::CapabilityKind; 4]
+pub const fn rich_plugin_api::abi::CapabilityKind::as_str(self) -> &'static str
+pub const fn rich_plugin_api::abi::CapabilityKind::code(self) -> u32
+pub fn rich_plugin_api::abi::CapabilityKind::from_code(u32) -> core::option::Option<Self>
+pub fn rich_plugin_api::abi::CapabilityKind::parse(&str) -> core::option::Option<Self>
+pub const fn rich_plugin_api::abi::CapabilityKind::produces_ansi(self) -> bool
+impl core::clone::Clone for rich_plugin_api::abi::CapabilityKind
+pub fn rich_plugin_api::abi::CapabilityKind::clone(&self) -> rich_plugin_api::abi::CapabilityKind
+impl core::cmp::Eq for rich_plugin_api::abi::CapabilityKind
+impl core::cmp::Ord for rich_plugin_api::abi::CapabilityKind
+pub fn rich_plugin_api::abi::CapabilityKind::cmp(&self, &rich_plugin_api::abi::CapabilityKind) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_plugin_api::abi::CapabilityKind
+pub fn rich_plugin_api::abi::CapabilityKind::eq(&self, &rich_plugin_api::abi::CapabilityKind) -> bool
+impl core::cmp::PartialOrd for rich_plugin_api::abi::CapabilityKind
+pub fn rich_plugin_api::abi::CapabilityKind::partial_cmp(&self, &rich_plugin_api::abi::CapabilityKind) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for rich_plugin_api::abi::CapabilityKind
+pub fn rich_plugin_api::abi::CapabilityKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_plugin_api::abi::CapabilityKind
+pub fn rich_plugin_api::abi::CapabilityKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_plugin_api::abi::CapabilityKind
+pub fn rich_plugin_api::abi::CapabilityKind::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_plugin_api::abi::CapabilityKind
+impl core::marker::StructuralPartialEq for rich_plugin_api::abi::CapabilityKind
+impl core::marker::Freeze for rich_plugin_api::abi::CapabilityKind
+impl core::marker::Send for rich_plugin_api::abi::CapabilityKind
+impl core::marker::Sync for rich_plugin_api::abi::CapabilityKind
+impl core::marker::Unpin for rich_plugin_api::abi::CapabilityKind
+impl core::marker::UnsafeUnpin for rich_plugin_api::abi::CapabilityKind
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::abi::CapabilityKind
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::abi::CapabilityKind
+pub struct rich_plugin_api::abi::AbiCapability
+pub rich_plugin_api::abi::AbiCapability::kind: rich_plugin_api::abi::CapabilityKind
+pub rich_plugin_api::abi::AbiCapability::name: alloc::string::String
+impl core::clone::Clone for rich_plugin_api::abi::AbiCapability
+pub fn rich_plugin_api::abi::AbiCapability::clone(&self) -> rich_plugin_api::abi::AbiCapability
+impl core::cmp::Eq for rich_plugin_api::abi::AbiCapability
+impl core::cmp::PartialEq for rich_plugin_api::abi::AbiCapability
+pub fn rich_plugin_api::abi::AbiCapability::eq(&self, &rich_plugin_api::abi::AbiCapability) -> bool
+impl core::fmt::Debug for rich_plugin_api::abi::AbiCapability
+pub fn rich_plugin_api::abi::AbiCapability::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_plugin_api::abi::AbiCapability
+impl core::marker::Freeze for rich_plugin_api::abi::AbiCapability
+impl core::marker::Send for rich_plugin_api::abi::AbiCapability
+impl core::marker::Sync for rich_plugin_api::abi::AbiCapability
+impl core::marker::Unpin for rich_plugin_api::abi::AbiCapability
+impl core::marker::UnsafeUnpin for rich_plugin_api::abi::AbiCapability
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::abi::AbiCapability
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::abi::AbiCapability
+#[repr(C)] pub struct rich_plugin_api::abi::AbiCapabilityEntry
+pub rich_plugin_api::abi::AbiCapabilityEntry::kind: u32
+pub rich_plugin_api::abi::AbiCapabilityEntry::name: rich_plugin_api::abi::AbiStr
+impl core::clone::Clone for rich_plugin_api::abi::AbiCapabilityEntry
+pub fn rich_plugin_api::abi::AbiCapabilityEntry::clone(&self) -> rich_plugin_api::abi::AbiCapabilityEntry
+impl core::fmt::Debug for rich_plugin_api::abi::AbiCapabilityEntry
+pub fn rich_plugin_api::abi::AbiCapabilityEntry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_plugin_api::abi::AbiCapabilityEntry
+impl core::marker::Freeze for rich_plugin_api::abi::AbiCapabilityEntry
+impl !core::marker::Send for rich_plugin_api::abi::AbiCapabilityEntry
+impl !core::marker::Sync for rich_plugin_api::abi::AbiCapabilityEntry
+impl core::marker::Unpin for rich_plugin_api::abi::AbiCapabilityEntry
+impl core::marker::UnsafeUnpin for rich_plugin_api::abi::AbiCapabilityEntry
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::abi::AbiCapabilityEntry
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::abi::AbiCapabilityEntry
+#[repr(C)] pub struct rich_plugin_api::abi::AbiOutput
+pub rich_plugin_api::abi::AbiOutput::cap: usize
+pub rich_plugin_api::abi::AbiOutput::len: usize
+pub rich_plugin_api::abi::AbiOutput::ptr: *mut u8
+impl rich_plugin_api::abi::AbiOutput
+pub const fn rich_plugin_api::abi::AbiOutput::empty() -> Self
+pub fn rich_plugin_api::abi::AbiOutput::from_string(alloc::string::String) -> Self
+impl core::fmt::Debug for rich_plugin_api::abi::AbiOutput
+pub fn rich_plugin_api::abi::AbiOutput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_plugin_api::abi::AbiOutput
+impl !core::marker::Send for rich_plugin_api::abi::AbiOutput
+impl !core::marker::Sync for rich_plugin_api::abi::AbiOutput
+impl core::marker::Unpin for rich_plugin_api::abi::AbiOutput
+impl core::marker::UnsafeUnpin for rich_plugin_api::abi::AbiOutput
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::abi::AbiOutput
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::abi::AbiOutput
+#[repr(C)] pub struct rich_plugin_api::abi::AbiStr
+pub rich_plugin_api::abi::AbiStr::len: usize
+pub rich_plugin_api::abi::AbiStr::ptr: *const u8
+impl rich_plugin_api::abi::AbiStr
+pub unsafe fn rich_plugin_api::abi::AbiStr::as_str<'a>(self) -> core::result::Result<&'a str, rich_plugin_api::abi::AbiError>
+pub fn rich_plugin_api::abi::AbiStr::new(&str) -> Self
+impl core::clone::Clone for rich_plugin_api::abi::AbiStr
+pub fn rich_plugin_api::abi::AbiStr::clone(&self) -> rich_plugin_api::abi::AbiStr
+impl core::fmt::Debug for rich_plugin_api::abi::AbiStr
+pub fn rich_plugin_api::abi::AbiStr::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_plugin_api::abi::AbiStr
+impl core::marker::Freeze for rich_plugin_api::abi::AbiStr
+impl !core::marker::Send for rich_plugin_api::abi::AbiStr
+impl !core::marker::Sync for rich_plugin_api::abi::AbiStr
+impl core::marker::Unpin for rich_plugin_api::abi::AbiStr
+impl core::marker::UnsafeUnpin for rich_plugin_api::abi::AbiStr
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::abi::AbiStr
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::abi::AbiStr
+pub struct rich_plugin_api::abi::Exports
+impl rich_plugin_api::abi::Exports
+pub fn rich_plugin_api::abi::Exports::abi(&self) -> &rich_plugin_api::abi::PluginAbi
+pub fn rich_plugin_api::abi::Exports::capability(self, rich_plugin_api::abi::CapabilityKind, &str, rich_plugin_api::abi::ExportFn) -> Self
+pub fn rich_plugin_api::abi::Exports::description(self, &str) -> Self
+pub fn rich_plugin_api::abi::Exports::fence_ansi(self, &str, rich_plugin_api::abi::ExportFn) -> Self
+pub fn rich_plugin_api::abi::Exports::fence_markup(self, &str, rich_plugin_api::abi::ExportFn) -> Self
+pub fn rich_plugin_api::abi::Exports::highlighter(self, &str, rich_plugin_api::abi::ExportFn) -> Self
+pub fn rich_plugin_api::abi::Exports::new(&str, &str) -> Self
+pub fn rich_plugin_api::abi::Exports::transform(self, &str, rich_plugin_api::abi::ExportFn) -> Self
+impl core::marker::Freeze for rich_plugin_api::abi::Exports
+impl core::marker::Send for rich_plugin_api::abi::Exports
+impl core::marker::Sync for rich_plugin_api::abi::Exports
+impl core::marker::Unpin for rich_plugin_api::abi::Exports
+impl core::marker::UnsafeUnpin for rich_plugin_api::abi::Exports
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::abi::Exports
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::abi::Exports
+pub struct rich_plugin_api::abi::PluginAbi
+pub rich_plugin_api::abi::PluginAbi::abi_major: u32
+pub rich_plugin_api::abi::PluginAbi::abi_minor: u32
+pub rich_plugin_api::abi::PluginAbi::capabilities: alloc::vec::Vec<rich_plugin_api::abi::AbiCapability>
+pub rich_plugin_api::abi::PluginAbi::description: alloc::string::String
+pub rich_plugin_api::abi::PluginAbi::name: alloc::string::String
+pub rich_plugin_api::abi::PluginAbi::version: alloc::string::String
+impl rich_plugin_api::abi::PluginAbi
+pub fn rich_plugin_api::abi::PluginAbi::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_plugin_api::abi::PluginAbi::parse_manifest(&str) -> core::result::Result<rich_plugin_api::abi::PluginAbi, rich_plugin_api::abi::AbiError>
+pub fn rich_plugin_api::abi::PluginAbi::to_manifest(&self) -> alloc::string::String
+pub fn rich_plugin_api::abi::PluginAbi::validate(&self) -> core::result::Result<(), rich_plugin_api::abi::AbiError>
+impl core::clone::Clone for rich_plugin_api::abi::PluginAbi
+pub fn rich_plugin_api::abi::PluginAbi::clone(&self) -> rich_plugin_api::abi::PluginAbi
+impl core::cmp::Eq for rich_plugin_api::abi::PluginAbi
+impl core::cmp::PartialEq for rich_plugin_api::abi::PluginAbi
+pub fn rich_plugin_api::abi::PluginAbi::eq(&self, &rich_plugin_api::abi::PluginAbi) -> bool
+impl core::fmt::Debug for rich_plugin_api::abi::PluginAbi
+pub fn rich_plugin_api::abi::PluginAbi::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_plugin_api::abi::PluginAbi
+impl core::marker::Freeze for rich_plugin_api::abi::PluginAbi
+impl core::marker::Send for rich_plugin_api::abi::PluginAbi
+impl core::marker::Sync for rich_plugin_api::abi::PluginAbi
+impl core::marker::Unpin for rich_plugin_api::abi::PluginAbi
+impl core::marker::UnsafeUnpin for rich_plugin_api::abi::PluginAbi
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::abi::PluginAbi
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::abi::PluginAbi
+#[repr(C)] pub struct rich_plugin_api::abi::PluginDescriptor
+pub rich_plugin_api::abi::PluginDescriptor::abi_major: u32
+pub rich_plugin_api::abi::PluginDescriptor::abi_minor: u32
+pub rich_plugin_api::abi::PluginDescriptor::capabilities: *const rich_plugin_api::abi::AbiCapabilityEntry
+pub rich_plugin_api::abi::PluginDescriptor::capability_count: usize
+pub rich_plugin_api::abi::PluginDescriptor::description: rich_plugin_api::abi::AbiStr
+pub rich_plugin_api::abi::PluginDescriptor::name: rich_plugin_api::abi::AbiStr
+pub rich_plugin_api::abi::PluginDescriptor::version: rich_plugin_api::abi::AbiStr
+pub rich_plugin_api::abi::PluginDescriptor::vtable: rich_plugin_api::abi::PluginVTable
+impl core::fmt::Debug for rich_plugin_api::abi::PluginDescriptor
+pub fn rich_plugin_api::abi::PluginDescriptor::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_plugin_api::abi::PluginDescriptor
+impl !core::marker::Send for rich_plugin_api::abi::PluginDescriptor
+impl !core::marker::Sync for rich_plugin_api::abi::PluginDescriptor
+impl core::marker::Unpin for rich_plugin_api::abi::PluginDescriptor
+impl core::marker::UnsafeUnpin for rich_plugin_api::abi::PluginDescriptor
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::abi::PluginDescriptor
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::abi::PluginDescriptor
+pub struct rich_plugin_api::abi::PluginFunctions
+pub rich_plugin_api::abi::PluginFunctions::call: rich_plugin_api::abi::AbiCallFn
+pub rich_plugin_api::abi::PluginFunctions::free: rich_plugin_api::abi::AbiFreeFn
+impl core::clone::Clone for rich_plugin_api::abi::PluginFunctions
+pub fn rich_plugin_api::abi::PluginFunctions::clone(&self) -> rich_plugin_api::abi::PluginFunctions
+impl core::fmt::Debug for rich_plugin_api::abi::PluginFunctions
+pub fn rich_plugin_api::abi::PluginFunctions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_plugin_api::abi::PluginFunctions
+impl core::marker::Freeze for rich_plugin_api::abi::PluginFunctions
+impl core::marker::Send for rich_plugin_api::abi::PluginFunctions
+impl core::marker::Sync for rich_plugin_api::abi::PluginFunctions
+impl core::marker::Unpin for rich_plugin_api::abi::PluginFunctions
+impl core::marker::UnsafeUnpin for rich_plugin_api::abi::PluginFunctions
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::abi::PluginFunctions
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::abi::PluginFunctions
+#[repr(C)] pub struct rich_plugin_api::abi::PluginVTable
+pub rich_plugin_api::abi::PluginVTable::call: core::option::Option<rich_plugin_api::abi::AbiCallFn>
+pub rich_plugin_api::abi::PluginVTable::free: core::option::Option<rich_plugin_api::abi::AbiFreeFn>
+impl core::clone::Clone for rich_plugin_api::abi::PluginVTable
+pub fn rich_plugin_api::abi::PluginVTable::clone(&self) -> rich_plugin_api::abi::PluginVTable
+impl core::fmt::Debug for rich_plugin_api::abi::PluginVTable
+pub fn rich_plugin_api::abi::PluginVTable::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_plugin_api::abi::PluginVTable
+impl core::marker::Freeze for rich_plugin_api::abi::PluginVTable
+impl core::marker::Send for rich_plugin_api::abi::PluginVTable
+impl core::marker::Sync for rich_plugin_api::abi::PluginVTable
+impl core::marker::Unpin for rich_plugin_api::abi::PluginVTable
+impl core::marker::UnsafeUnpin for rich_plugin_api::abi::PluginVTable
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::abi::PluginVTable
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::abi::PluginVTable
+pub const rich_plugin_api::abi::ABI_MAJOR: u32
+pub const rich_plugin_api::abi::ABI_MINOR: u32
+pub const rich_plugin_api::abi::DYLIB_ENTRY_SYMBOL: &str
+pub const rich_plugin_api::abi::MAX_CAPABILITIES: usize
+pub const rich_plugin_api::abi::MAX_FIELD_LEN: usize
+pub const rich_plugin_api::abi::STATUS_ERROR: u32
+pub const rich_plugin_api::abi::STATUS_OK: u32
+pub unsafe c fn rich_plugin_api::abi::free_output(rich_plugin_api::abi::AbiOutput)
+pub const fn rich_plugin_api::abi::is_supported(u32, u32) -> bool
+pub unsafe fn rich_plugin_api::abi::read_descriptor(*const rich_plugin_api::abi::PluginDescriptor) -> core::result::Result<(rich_plugin_api::abi::PluginAbi, rich_plugin_api::abi::PluginFunctions), rich_plugin_api::abi::AbiError>
+pub type rich_plugin_api::abi::AbiCallFn = fn(usize, rich_plugin_api::abi::AbiStr, u32, *mut rich_plugin_api::abi::AbiOutput) -> u32
+pub type rich_plugin_api::abi::AbiFreeFn = fn(rich_plugin_api::abi::AbiOutput)
+pub type rich_plugin_api::abi::ExportFn = fn(&str, u32) -> core::result::Result<alloc::string::String, alloc::string::String>
+pub mod rich_plugin_api::component
+#[non_exhaustive] pub enum rich_plugin_api::component::ComponentEvent
+pub rich_plugin_api::component::ComponentEvent::Key(alloc::string::String)
+pub rich_plugin_api::component::ComponentEvent::Link(alloc::string::String)
+pub rich_plugin_api::component::ComponentEvent::Mouse
+pub rich_plugin_api::component::ComponentEvent::Mouse::column: u16
+pub rich_plugin_api::component::ComponentEvent::Mouse::kind: alloc::string::String
+pub rich_plugin_api::component::ComponentEvent::Mouse::row: u16
+pub rich_plugin_api::component::ComponentEvent::Paste(alloc::string::String)
+pub rich_plugin_api::component::ComponentEvent::Resize
+pub rich_plugin_api::component::ComponentEvent::Resize::columns: u16
+pub rich_plugin_api::component::ComponentEvent::Resize::rows: u16
+pub rich_plugin_api::component::ComponentEvent::Tick
+impl rich_plugin_api::component::ComponentEvent
+pub fn rich_plugin_api::component::ComponentEvent::key(&self) -> core::option::Option<&str>
+impl core::clone::Clone for rich_plugin_api::component::ComponentEvent
+pub fn rich_plugin_api::component::ComponentEvent::clone(&self) -> rich_plugin_api::component::ComponentEvent
+impl core::cmp::Eq for rich_plugin_api::component::ComponentEvent
+impl core::cmp::PartialEq for rich_plugin_api::component::ComponentEvent
+pub fn rich_plugin_api::component::ComponentEvent::eq(&self, &rich_plugin_api::component::ComponentEvent) -> bool
+impl core::fmt::Debug for rich_plugin_api::component::ComponentEvent
+pub fn rich_plugin_api::component::ComponentEvent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_plugin_api::component::ComponentEvent
+impl core::marker::Freeze for rich_plugin_api::component::ComponentEvent
+impl core::marker::Send for rich_plugin_api::component::ComponentEvent
+impl core::marker::Sync for rich_plugin_api::component::ComponentEvent
+impl core::marker::Unpin for rich_plugin_api::component::ComponentEvent
+impl core::marker::UnsafeUnpin for rich_plugin_api::component::ComponentEvent
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::component::ComponentEvent
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::component::ComponentEvent
+#[non_exhaustive] pub enum rich_plugin_api::component::ComponentFlow
+pub rich_plugin_api::component::ComponentFlow::Cancel
+pub rich_plugin_api::component::ComponentFlow::Continue
+pub rich_plugin_api::component::ComponentFlow::Done(alloc::string::String)
+pub rich_plugin_api::component::ComponentFlow::Ignored
+impl core::clone::Clone for rich_plugin_api::component::ComponentFlow
+pub fn rich_plugin_api::component::ComponentFlow::clone(&self) -> rich_plugin_api::component::ComponentFlow
+impl core::cmp::Eq for rich_plugin_api::component::ComponentFlow
+impl core::cmp::PartialEq for rich_plugin_api::component::ComponentFlow
+pub fn rich_plugin_api::component::ComponentFlow::eq(&self, &rich_plugin_api::component::ComponentFlow) -> bool
+impl core::fmt::Debug for rich_plugin_api::component::ComponentFlow
+pub fn rich_plugin_api::component::ComponentFlow::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_plugin_api::component::ComponentFlow
+impl core::marker::Freeze for rich_plugin_api::component::ComponentFlow
+impl core::marker::Send for rich_plugin_api::component::ComponentFlow
+impl core::marker::Sync for rich_plugin_api::component::ComponentFlow
+impl core::marker::Unpin for rich_plugin_api::component::ComponentFlow
+impl core::marker::UnsafeUnpin for rich_plugin_api::component::ComponentFlow
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::component::ComponentFlow
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::component::ComponentFlow
+#[non_exhaustive] pub struct rich_plugin_api::component::ComponentBinding
+pub rich_plugin_api::component::ComponentBinding::action: alloc::string::String
+pub rich_plugin_api::component::ComponentBinding::description: alloc::string::String
+pub rich_plugin_api::component::ComponentBinding::keys: alloc::vec::Vec<alloc::string::String>
+impl rich_plugin_api::component::ComponentBinding
+pub fn rich_plugin_api::component::ComponentBinding::new(impl core::convert::Into<alloc::string::String>, impl core::iter::traits::collect::IntoIterator<Item = impl core::convert::Into<alloc::string::String>>, impl core::convert::Into<alloc::string::String>) -> rich_plugin_api::component::ComponentBinding
+impl core::clone::Clone for rich_plugin_api::component::ComponentBinding
+pub fn rich_plugin_api::component::ComponentBinding::clone(&self) -> rich_plugin_api::component::ComponentBinding
+impl core::cmp::Eq for rich_plugin_api::component::ComponentBinding
+impl core::cmp::PartialEq for rich_plugin_api::component::ComponentBinding
+pub fn rich_plugin_api::component::ComponentBinding::eq(&self, &rich_plugin_api::component::ComponentBinding) -> bool
+impl core::fmt::Debug for rich_plugin_api::component::ComponentBinding
+pub fn rich_plugin_api::component::ComponentBinding::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_plugin_api::component::ComponentBinding
+impl core::marker::Freeze for rich_plugin_api::component::ComponentBinding
+impl core::marker::Send for rich_plugin_api::component::ComponentBinding
+impl core::marker::Sync for rich_plugin_api::component::ComponentBinding
+impl core::marker::Unpin for rich_plugin_api::component::ComponentBinding
+impl core::marker::UnsafeUnpin for rich_plugin_api::component::ComponentBinding
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::component::ComponentBinding
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::component::ComponentBinding
+#[non_exhaustive] pub struct rich_plugin_api::component::ComponentContext<'a>
+pub rich_plugin_api::component::ComponentContext::console: &'a rich::console::Console
+pub rich_plugin_api::component::ComponentContext::height: usize
+pub rich_plugin_api::component::ComponentContext::width: usize
+impl<'a> rich_plugin_api::component::ComponentContext<'a>
+pub fn rich_plugin_api::component::ComponentContext<'a>::lines(&self, &dyn rich::protocol::Renderable) -> alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>
+pub fn rich_plugin_api::component::ComponentContext<'a>::markup(&self, &str) -> alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>
+pub fn rich_plugin_api::component::ComponentContext<'a>::new(&'a rich::console::Console, usize, usize) -> rich_plugin_api::component::ComponentContext<'a>
+impl<'a> core::marker::Freeze for rich_plugin_api::component::ComponentContext<'a>
+impl<'a> core::marker::Send for rich_plugin_api::component::ComponentContext<'a>
+impl<'a> core::marker::Sync for rich_plugin_api::component::ComponentContext<'a>
+impl<'a> core::marker::Unpin for rich_plugin_api::component::ComponentContext<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_plugin_api::component::ComponentContext<'a>
+impl<'a> !core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::component::ComponentContext<'a>
+impl<'a> !core::panic::unwind_safe::UnwindSafe for rich_plugin_api::component::ComponentContext<'a>
+#[non_exhaustive] pub struct rich_plugin_api::component::ComponentView
+pub rich_plugin_api::component::ComponentView::cursor: core::option::Option<(usize, usize)>
+pub rich_plugin_api::component::ComponentView::lines: alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>
+impl rich_plugin_api::component::ComponentView
+pub fn rich_plugin_api::component::ComponentView::new(alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>) -> rich_plugin_api::component::ComponentView
+pub fn rich_plugin_api::component::ComponentView::with_cursor(self, usize, usize) -> rich_plugin_api::component::ComponentView
+impl core::clone::Clone for rich_plugin_api::component::ComponentView
+pub fn rich_plugin_api::component::ComponentView::clone(&self) -> rich_plugin_api::component::ComponentView
+impl core::default::Default for rich_plugin_api::component::ComponentView
+pub fn rich_plugin_api::component::ComponentView::default() -> rich_plugin_api::component::ComponentView
+impl core::fmt::Debug for rich_plugin_api::component::ComponentView
+pub fn rich_plugin_api::component::ComponentView::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_plugin_api::component::ComponentView
+impl core::marker::Send for rich_plugin_api::component::ComponentView
+impl core::marker::Sync for rich_plugin_api::component::ComponentView
+impl core::marker::Unpin for rich_plugin_api::component::ComponentView
+impl core::marker::UnsafeUnpin for rich_plugin_api::component::ComponentView
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::component::ComponentView
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::component::ComponentView
+pub trait rich_plugin_api::component::PluginComponent: core::marker::Send
+pub fn rich_plugin_api::component::PluginComponent::bindings(&self) -> alloc::vec::Vec<rich_plugin_api::component::ComponentBinding>
+pub fn rich_plugin_api::component::PluginComponent::focusable(&self) -> bool
+pub fn rich_plugin_api::component::PluginComponent::handle(&mut self, &rich_plugin_api::component::ComponentEvent, &rich_plugin_api::component::ComponentContext<'_>) -> rich_plugin_api::component::ComponentFlow
+pub fn rich_plugin_api::component::PluginComponent::mouse(&self) -> bool
+pub fn rich_plugin_api::component::PluginComponent::render(&self, &rich_plugin_api::component::ComponentContext<'_>) -> rich_plugin_api::component::ComponentView
+pub fn rich_plugin_api::component::PluginComponent::tick(&self) -> core::option::Option<core::time::Duration>
+pub type rich_plugin_api::component::ComponentFactory = alloc::sync::Arc<(dyn core::ops::function::Fn() -> alloc::boxed::Box<dyn rich_plugin_api::component::PluginComponent> + core::marker::Send + core::marker::Sync)>
+pub macro rich_plugin_api::export_dylib_plugin!
+pub macro rich_plugin_api::export_plugin!
+#[non_exhaustive] pub enum rich_plugin_api::Capability
+pub rich_plugin_api::Capability::Action(alloc::string::String)
+pub rich_plugin_api::Capability::BoxStyle(alloc::string::String)
+pub rich_plugin_api::Capability::CodeHighlighter(alloc::string::String)
+pub rich_plugin_api::Capability::Component(alloc::string::String)
+pub rich_plugin_api::Capability::FenceRenderer(alloc::string::String)
+pub rich_plugin_api::Capability::Highlighter
+pub rich_plugin_api::Capability::Renderer(alloc::string::String)
+pub rich_plugin_api::Capability::Theme(alloc::string::String)
+pub rich_plugin_api::Capability::Transform(alloc::string::String)
+impl core::clone::Clone for rich_plugin_api::Capability
+pub fn rich_plugin_api::Capability::clone(&self) -> rich_plugin_api::Capability
+impl core::cmp::Eq for rich_plugin_api::Capability
+impl core::cmp::Ord for rich_plugin_api::Capability
+pub fn rich_plugin_api::Capability::cmp(&self, &rich_plugin_api::Capability) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_plugin_api::Capability
+pub fn rich_plugin_api::Capability::eq(&self, &rich_plugin_api::Capability) -> bool
+impl core::cmp::PartialOrd for rich_plugin_api::Capability
+pub fn rich_plugin_api::Capability::partial_cmp(&self, &rich_plugin_api::Capability) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for rich_plugin_api::Capability
+pub fn rich_plugin_api::Capability::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_plugin_api::Capability
+pub fn rich_plugin_api::Capability::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_plugin_api::Capability
+pub fn rich_plugin_api::Capability::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_plugin_api::Capability
+impl core::marker::Freeze for rich_plugin_api::Capability
+impl core::marker::Send for rich_plugin_api::Capability
+impl core::marker::Sync for rich_plugin_api::Capability
+impl core::marker::Unpin for rich_plugin_api::Capability
+impl core::marker::UnsafeUnpin for rich_plugin_api::Capability
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::Capability
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::Capability
+#[non_exhaustive] pub enum rich_plugin_api::PluginError
+pub rich_plugin_api::PluginError::Conflict
+pub rich_plugin_api::PluginError::Conflict::capability: rich_plugin_api::Capability
+pub rich_plugin_api::PluginError::Conflict::existing: alloc::string::String
+pub rich_plugin_api::PluginError::Conflict::plugin: alloc::string::String
+pub rich_plugin_api::PluginError::DuplicatePlugin
+pub rich_plugin_api::PluginError::DuplicatePlugin::id: alloc::string::String
+pub rich_plugin_api::PluginError::Failed
+pub rich_plugin_api::PluginError::Failed::message: alloc::string::String
+pub rich_plugin_api::PluginError::Failed::plugin: alloc::string::String
+pub rich_plugin_api::PluginError::IncompatibleApi
+pub rich_plugin_api::PluginError::IncompatibleApi::built_for: u32
+pub rich_plugin_api::PluginError::IncompatibleApi::host: u32
+pub rich_plugin_api::PluginError::IncompatibleApi::plugin: alloc::string::String
+pub rich_plugin_api::PluginError::InvalidName
+pub rich_plugin_api::PluginError::InvalidName::name: alloc::string::String
+pub rich_plugin_api::PluginError::InvalidName::plugin: alloc::string::String
+pub rich_plugin_api::PluginError::Other(alloc::string::String)
+impl core::clone::Clone for rich_plugin_api::PluginError
+pub fn rich_plugin_api::PluginError::clone(&self) -> rich_plugin_api::PluginError
+impl core::cmp::Eq for rich_plugin_api::PluginError
+impl core::cmp::PartialEq for rich_plugin_api::PluginError
+pub fn rich_plugin_api::PluginError::eq(&self, &rich_plugin_api::PluginError) -> bool
+impl core::error::Error for rich_plugin_api::PluginError
+impl core::fmt::Debug for rich_plugin_api::PluginError
+pub fn rich_plugin_api::PluginError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_plugin_api::PluginError
+pub fn rich_plugin_api::PluginError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_plugin_api::PluginError
+impl core::marker::Freeze for rich_plugin_api::PluginError
+impl core::marker::Send for rich_plugin_api::PluginError
+impl core::marker::Sync for rich_plugin_api::PluginError
+impl core::marker::Unpin for rich_plugin_api::PluginError
+impl core::marker::UnsafeUnpin for rich_plugin_api::PluginError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::PluginError
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::PluginError
+pub struct rich_plugin_api::LinkedPlugin
+impl rich_plugin_api::LinkedPlugin
+pub fn rich_plugin_api::LinkedPlugin::module(&self) -> &'static str
+pub fn rich_plugin_api::LinkedPlugin::plugin(&self) -> alloc::boxed::Box<dyn rich_plugin_api::Plugin>
+impl inventory::Collect for rich_plugin_api::LinkedPlugin
+impl core::marker::Freeze for rich_plugin_api::LinkedPlugin
+impl core::marker::Send for rich_plugin_api::LinkedPlugin
+impl core::marker::Sync for rich_plugin_api::LinkedPlugin
+impl core::marker::Unpin for rich_plugin_api::LinkedPlugin
+impl core::marker::UnsafeUnpin for rich_plugin_api::LinkedPlugin
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::LinkedPlugin
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::LinkedPlugin
+#[non_exhaustive] pub struct rich_plugin_api::PluginMetadata
+pub rich_plugin_api::PluginMetadata::api_version: u32
+pub rich_plugin_api::PluginMetadata::description: core::option::Option<alloc::string::String>
+pub rich_plugin_api::PluginMetadata::id: alloc::string::String
+pub rich_plugin_api::PluginMetadata::name: alloc::string::String
+pub rich_plugin_api::PluginMetadata::version: alloc::string::String
+impl rich_plugin_api::PluginMetadata
+pub fn rich_plugin_api::PluginMetadata::description(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_plugin_api::PluginMetadata::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for rich_plugin_api::PluginMetadata
+pub fn rich_plugin_api::PluginMetadata::clone(&self) -> rich_plugin_api::PluginMetadata
+impl core::cmp::Eq for rich_plugin_api::PluginMetadata
+impl core::cmp::PartialEq for rich_plugin_api::PluginMetadata
+pub fn rich_plugin_api::PluginMetadata::eq(&self, &rich_plugin_api::PluginMetadata) -> bool
+impl core::fmt::Debug for rich_plugin_api::PluginMetadata
+pub fn rich_plugin_api::PluginMetadata::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_plugin_api::PluginMetadata
+impl core::marker::Freeze for rich_plugin_api::PluginMetadata
+impl core::marker::Send for rich_plugin_api::PluginMetadata
+impl core::marker::Sync for rich_plugin_api::PluginMetadata
+impl core::marker::Unpin for rich_plugin_api::PluginMetadata
+impl core::marker::UnsafeUnpin for rich_plugin_api::PluginMetadata
+impl core::panic::unwind_safe::RefUnwindSafe for rich_plugin_api::PluginMetadata
+impl core::panic::unwind_safe::UnwindSafe for rich_plugin_api::PluginMetadata
+pub const rich_plugin_api::PLUGIN_API_VERSION: u32
+pub trait rich_plugin_api::CustomAction: core::marker::Send + core::marker::Sync
+pub fn rich_plugin_api::CustomAction::applies(&self, &str, &str) -> bool
+pub fn rich_plugin_api::CustomAction::key(&self) -> core::option::Option<alloc::string::String>
+pub fn rich_plugin_api::CustomAction::label(&self) -> alloc::string::String
+pub fn rich_plugin_api::CustomAction::run(&self, &str, &str) -> core::result::Result<core::option::Option<alloc::string::String>, rich_plugin_api::PluginError>
+pub trait rich_plugin_api::Plugin: core::marker::Send + core::marker::Sync
+pub fn rich_plugin_api::Plugin::metadata(&self) -> rich_plugin_api::PluginMetadata
+pub fn rich_plugin_api::Plugin::register(&self, &mut dyn rich_plugin_api::PluginRegistrar) -> core::result::Result<(), rich_plugin_api::PluginError>
+pub trait rich_plugin_api::PluginComponent: core::marker::Send
+pub fn rich_plugin_api::PluginComponent::bindings(&self) -> alloc::vec::Vec<rich_plugin_api::component::ComponentBinding>
+pub fn rich_plugin_api::PluginComponent::focusable(&self) -> bool
+pub fn rich_plugin_api::PluginComponent::handle(&mut self, &rich_plugin_api::component::ComponentEvent, &rich_plugin_api::component::ComponentContext<'_>) -> rich_plugin_api::component::ComponentFlow
+pub fn rich_plugin_api::PluginComponent::mouse(&self) -> bool
+pub fn rich_plugin_api::PluginComponent::render(&self, &rich_plugin_api::component::ComponentContext<'_>) -> rich_plugin_api::component::ComponentView
+pub fn rich_plugin_api::PluginComponent::tick(&self) -> core::option::Option<core::time::Duration>
+pub trait rich_plugin_api::PluginRegistrar
+pub fn rich_plugin_api::PluginRegistrar::action(&mut self, &str, alloc::sync::Arc<dyn rich_plugin_api::CustomAction>)
+pub fn rich_plugin_api::PluginRegistrar::box_style(&mut self, &str, rich::box::Box)
+pub fn rich_plugin_api::PluginRegistrar::code_highlighter(&mut self, &str, alloc::sync::Arc<dyn rich::protocol::CodeHighlighter>)
+pub fn rich_plugin_api::PluginRegistrar::component(&mut self, &str, rich_plugin_api::component::ComponentFactory)
+pub fn rich_plugin_api::PluginRegistrar::fence_renderer(&mut self, &str, alloc::sync::Arc<dyn rich::protocol::FenceRenderer>)
+pub fn rich_plugin_api::PluginRegistrar::highlighter(&mut self, rich_plugin_api::HighlighterFactory)
+pub fn rich_plugin_api::PluginRegistrar::renderer(&mut self, &str, alloc::sync::Arc<dyn rich_plugin_api::SourceRenderer>)
+pub fn rich_plugin_api::PluginRegistrar::theme(&mut self, &str, rich::theme::Theme)
+pub fn rich_plugin_api::PluginRegistrar::transform(&mut self, &str, alloc::sync::Arc<dyn rich_plugin_api::TextTransform>)
+pub trait rich_plugin_api::SourceRenderer: core::marker::Send + core::marker::Sync
+pub fn rich_plugin_api::SourceRenderer::render(&self, &str) -> core::result::Result<alloc::boxed::Box<(dyn rich::protocol::Renderable + core::marker::Send + core::marker::Sync)>, rich_plugin_api::PluginError>
+pub trait rich_plugin_api::TextTransform: core::marker::Send + core::marker::Sync
+pub fn rich_plugin_api::TextTransform::transform(&self, rich::text::Text) -> core::result::Result<rich::text::Text, rich_plugin_api::PluginError>
+impl<T: rich_plugin_api::TextTransform + ?core::marker::Sized> rich_plugin_api::TextTransform for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::transform(&self, rich::text::Text) -> core::result::Result<rich::text::Text, rich_plugin_api::PluginError>
+pub const fn rich_plugin_api::is_supported_api_version(u32) -> bool
+pub fn rich_plugin_api::is_valid_name(&str) -> bool
+pub fn rich_plugin_api::linked_plugins() -> impl core::iter::traits::iterator::Iterator<Item = &'static rich_plugin_api::LinkedPlugin>
+pub type rich_plugin_api::ComponentFactory = alloc::sync::Arc<(dyn core::ops::function::Fn() -> alloc::boxed::Box<dyn rich_plugin_api::component::PluginComponent> + core::marker::Send + core::marker::Sync)>
+pub type rich_plugin_api::HighlighterFactory = alloc::boxed::Box<(dyn core::ops::function::Fn() -> alloc::boxed::Box<(dyn rich::protocol::Highlighter + core::marker::Send)> + core::marker::Send + core::marker::Sync)>
