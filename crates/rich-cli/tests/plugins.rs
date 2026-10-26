@@ -139,6 +139,7 @@ fn a_mode_flag_makes_plugins_a_resource() {
 
 /// Whether `output` sets a foreground or background colour (bold alone is
 /// not colour: `no_color` keeps it).
+#[cfg(unix)]
 fn has_colour(output: &str) -> bool {
     output.split("\u{1b}[").skip(1).any(|sequence| {
         let Some(end) = sequence.find('m') else {

@@ -29,6 +29,20 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `rich plugin publish` fills a new micro pack listing's description,
   license and author from its `pack.json` when they are not given.
 
+- **Installed themes are usable** (rs-rich-cli): `--theme NAME` falls back
+  to an installed, enabled marketplace theme whose id is NAME when the
+  config has no theme of that name. Its file must still hash to the
+  lockfile, or the run warns and does not use it. A config theme wins a
+  clash, and a disabled theme is not found. An unknown theme's error now
+  says that `rich plugin search` lists themes.
+
+- **CI lints on Windows** (rs-rich-cli's tests, rs-rich-intuituive): the
+  Windows web job now runs clippy on rs-rich, intuiTUIve with all its
+  features and the CLI's tests without default features. Three warnings
+  only Windows saw are fixed: an unused `pid` and `has_colour` in the CLI's
+  tests, and `quiet()` returning `()` off Linux, which now returns a guard
+  as it does on Linux.
+
 - **console.py fully ported** (rs-rich): the rest of upstream's `Console`.
   `quiet`; the size setters and upstream's size rules; `is_dumb_terminal`;
   `Console(soft_wrap=…, style=…)`; `color_system="auto"` and terminal

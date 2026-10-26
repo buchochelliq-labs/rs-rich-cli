@@ -169,6 +169,23 @@ class CheckArtifacts(unittest.TestCase):
         self.write("pack", listing)
         self.assertEqual(self.run_checker().errors, [])
 
+    def test_a_listings_identity_never_changes_once_versions_are_listed(self):
+        listing = crate_listing()
+        self.write("mermaid", listing)
+        self.commit()
+        renamed = crate_listing()
+        renamed["crate"]["name"] = "rs-rich-lumis"
+        self.write("mermaid", renamed)
+        errors = self.run_checker(allow_tier=True).errors
+        self.assertEqual(len(errors), 1)
+        self.assertIn("never change once a version is listed", errors[0])
+        rekinded = self.pack_listing()
+        self.write("pack", rekinded)
+        self.commit()
+        rekinded["kind"] = "theme"
+        self.write("pack", rekinded)
+        self.assertTrue(any("never change" in e for e in self.run_checker(allow_tier=True).errors))
+
     def test_a_crate_must_match_crates_io(self):
         listing = crate_listing()
         url = listing["versions"][0]["artifact"]["url"]

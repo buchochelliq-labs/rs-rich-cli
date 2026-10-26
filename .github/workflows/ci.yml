@@ -409,11 +409,12 @@ jobs:
   # rs-rich-web's process per session on Windows: each session's process in
   # a job object, which ends it and what it started when the session ends or
   # the server dies. Only these tests; the rest of the crate's run on Linux
-  # and macOS.
+  # and macOS. It also lints, on Windows, the core, intuiTUIve and the CLI's
+  # tests, whose code differs off Unix and off Linux.
   windows-web:
     name: Windows web sessions
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -429,6 +430,17 @@ jobs:
 
       - name: Clippy (rs-rich-web, Windows)
         run: cargo clippy -p rs-rich-web --all-targets --locked -- -D warnings
+
+      # bash, so each command's failure fails the step. intuiTUIve with all
+      # its features (cpal's WASAPI; the web job builds most of it already);
+      # the CLI without its default features, to keep the step short: the
+      # Unix-only code its tests gate is the same either way.
+      - name: Clippy (rs-rich, intuiTUIve, the CLI's tests; Windows)
+        shell: bash
+        run: |
+          cargo clippy -p rs-rich --all-targets --locked -- -D warnings
+          cargo clippy -p rs-rich-intuituive --all-features --all-targets --locked -- -D warnings
+          cargo clippy -p rs-rich-cli --no-default-features --all-targets --locked -- -D warnings
 
       # One command a step: in a pwsh step of several, only the last one's
       # exit code would fail it.
@@ -912,6 +924,9 @@ jobs:
             jq -e --arg p "$RICH_PLUGIN_DIR/$pack/$pack-1.0.0.richmicro" \
               '[.packs[] | select(.layer == "user" and .path == $p)] | length == 1' packs.json
           done
+          # An installed theme is what `--theme ID` selects.
+          "$rich" plugin install dusk --yes
+          "$rich" --theme dusk -p "[alert]themed[/]" | grep -q themed
           rm -f info.json refusal.txt doc.md rendered.txt loud.md packs.json
 
   # Every published crate's public API against its snapshot in api/ (an

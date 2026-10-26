@@ -752,9 +752,14 @@ fn normalize_watch(settings: &mut Settings, explicit: &Settings) -> Result<(), S
     Ok(())
 }
 
+/// The selected theme's bindings: the config's theme of that name, else an
+/// installed, enabled marketplace theme whose id is the name (its file
+/// still hashing to the lockfile). `warn` prints why an installed theme was
+/// not used.
 fn selected_theme(
     configuration: &mut Configuration,
     args: &Arguments,
+    warn: bool,
 ) -> Result<ThemeStyles, String> {
     if let Some(name) = &args.theme {
         configuration
@@ -764,11 +769,18 @@ fn selected_theme(
     let Some(name) = configuration.settings.get("theme").and_then(Value::as_str) else {
         return Ok(ThemeStyles::new());
     };
-    configuration
-        .themes
-        .get(name)
-        .cloned()
-        .ok_or_else(|| format!("unknown theme {name:?}"))
+    if let Some(styles) = configuration.themes.get(name) {
+        return Ok(styles.clone());
+    }
+    let (installed, warnings) = super::marketplace::installed_theme(name);
+    if warn {
+        for warning in warnings {
+            eprintln!("rich: warning: {}", super::controls::shown(&warning));
+        }
+    }
+    installed.ok_or_else(|| {
+        format!("unknown theme {name:?}; `rich plugin search` lists themes to install")
+    })
 }
 
 fn explicit_theme_styles(args: &[String]) -> Result<ThemeStyles, String> {
@@ -796,7 +808,7 @@ pub(crate) fn config_args(args: &[String], roots: &ConfigRoots) -> Result<Vec<St
     let json_report = super::wants_json_report(args);
     let args = arguments(args)?;
     let (mut configuration, source) = load(&args, roots)?;
-    let theme_styles = selected_theme(&mut configuration, &args)?;
+    let theme_styles = selected_theme(&mut configuration, &args, !json_report)?;
     explicit_theme_styles(&args.cleaned)?;
     let mut settings = configuration.settings;
     let overrides = overrides(&args.cleaned);
@@ -988,7 +1000,7 @@ pub(crate) fn inspect(args: &[String], roots: &ConfigRoots) -> Result<Option<Str
         }
     }
     let (mut configuration, source) = load(&args, roots)?;
-    let mut theme_styles = selected_theme(&mut configuration, &args)?;
+    let mut theme_styles = selected_theme(&mut configuration, &args, true)?;
     theme_styles.extend(explicit_theme_styles(&args.cleaned)?);
     let mut settings = configuration.settings;
     let overrides = overrides(&args.cleaned);

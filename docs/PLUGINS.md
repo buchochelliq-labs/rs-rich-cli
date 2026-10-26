@@ -339,8 +339,10 @@ rich plugin browse                # the same, in a selector with provenance
   `info` shows the same. An installed, enabled micro pack is loaded into
   micro's user layer on every run (after the user's own directory, so the
   user's own asset keeps a name both claim), once its file is checked
-  against the lockfile; `disable` stops it. An installed theme is checked
-  and recorded, but nothing selects it yet.
+  against the lockfile; `disable` stops it. An installed, enabled theme is
+  what `--theme ID` selects when the user's config has no theme of that
+  name (the config's own theme wins a clash), once its file is checked
+  against the lockfile; a changed file is not used, with a warning.
 - **The prompt.** `install` and `update` print the package's tier, source,
   revision, artifact URL, SHA-256, size, requirement, capabilities and
   permissions, then ask. Nothing is downloaded before the answer. `--yes`
