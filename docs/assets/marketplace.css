@@ -30,6 +30,9 @@
   align-items: end;
   margin: 1rem 0 0.4rem;
 }
+.md-typeset .mkt [hidden] {
+  display: none;
+}
 @media (max-width: 52rem) {
   .md-typeset .mkt-controls {
     grid-template-columns: 1fr 1fr;
@@ -96,14 +99,15 @@
   color: var(--mkt-muted);
 }
 
-.md-typeset .mkt-list {
+.md-typeset ul.mkt-list {
   list-style: none;
   margin: 0;
   padding: 0;
   display: grid;
+  grid-template-columns: minmax(0, 1fr);
   gap: 0.8rem;
 }
-.md-typeset .mkt-list > li {
+.md-typeset ul.mkt-list > li {
   margin: 0;
 }
 .md-typeset .mkt-empty {
@@ -117,6 +121,7 @@
   padding: 0.8rem 1rem 0.6rem;
   background: var(--md-default-bg-color);
   scroll-margin-top: 4.5rem;
+  min-width: 0;
 }
 .md-typeset .mkt-card--official {
   border-left: 4px solid var(--mkt-official-bg);
@@ -265,7 +270,7 @@
 }
 .md-typeset .mkt-dl {
   display: grid;
-  grid-template-columns: max-content 1fr;
+  grid-template-columns: max-content minmax(0, 1fr);
   gap: 0.25rem 1rem;
   margin: 0.6rem 0;
 }
@@ -285,7 +290,7 @@
 }
 @media (max-width: 36rem) {
   .md-typeset .mkt-dl {
-    grid-template-columns: 1fr;
+    grid-template-columns: minmax(0, 1fr);
   }
   .md-typeset .mkt-dl dd {
     margin-bottom: 0.3rem;
@@ -342,4 +347,65 @@
   .md-typeset .mkt-card {
     scroll-behavior: auto;
   }
+}
+
+/* Material draws every <details> as a collapsible admonition; these are
+   plain disclosures. */
+.md-typeset details.mkt-details {
+  border: 0;
+  border-top: 1px solid var(--mkt-border);
+  border-radius: 0;
+  box-shadow: none;
+  background: none;
+  padding: 0;
+  margin: 0.6rem 0 0;
+  font-size: 0.75rem;
+}
+.md-typeset details.mkt-details > summary {
+  background: none;
+  border: 0;
+  padding: 0.4rem 0 0.2rem 1.1rem;
+  margin: 0;
+  position: relative;
+  font-weight: 700;
+  color: var(--md-typeset-a-color);
+}
+.md-typeset details.mkt-details > summary::before {
+  display: none;
+}
+.md-typeset details.mkt-details > summary::after {
+  left: 0;
+  right: auto;
+  top: 0.5rem;
+  width: 0.9rem;
+  height: 0.9rem;
+  background-color: currentColor;
+}
+.md-typeset details.mkt-details > summary:hover {
+  text-decoration: underline;
+}
+.md-typeset details.mkt-details > :not(summary) {
+  margin-left: 0;
+  margin-right: 0;
+}
+.md-typeset table.mkt-versions {
+  border-collapse: collapse;
+}
+.md-typeset table.mkt-versions th,
+.md-typeset table.mkt-versions td {
+  padding: 0.3em 0.6em;
+  border-bottom: 1px solid var(--mkt-border);
+  text-align: left;
+  vertical-align: top;
+  white-space: nowrap;
+}
+.md-typeset table.mkt-versions td.mkt-num {
+  text-align: right;
+}
+.md-typeset table.mkt-versions td.mkt-status {
+  white-space: normal;
+  min-width: 12rem;
+}
+.md-typeset table.mkt-versions .mkt-command code {
+  overflow: visible;
 }

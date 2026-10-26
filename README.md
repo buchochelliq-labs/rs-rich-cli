@@ -238,6 +238,12 @@ python scripts/capture_golden.py
 Add your own highlighters/renderables in `rich-ext` and register them onto a
 `Console` — the core never needs to know. See [docs/PLUGINS.md](docs/PLUGINS.md).
 
+Plugins, micro packs and themes come from the plugin marketplace: search it
+with `rich plugin search` or `rich plugin browse`
+([the CLI guide](docs/cli.md#install-plugins-from-the-marketplace-0022)), or
+on the docs site's [Marketplace page](https://buchochelliq-labs.github.io/rs-rich-cli/latest/marketplace/).
+Packages marked `✓ official` are rs-rich's own.
+
 ## Contributing / maintaining
 
 The maintenance contract — the mirror/ext boundary, versioning, the parity

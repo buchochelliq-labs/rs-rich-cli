@@ -42,6 +42,7 @@ on:
       - crates/rich-intuituive/**
       - crates/rich-web/**
       - scripts/check_playground_*.mjs
+      - scripts/check_marketplace_page.mjs
       - scripts/test_build_versioned_docs.py
   pull_request:
     paths:
@@ -69,6 +70,7 @@ on:
       - crates/rich-intuituive/**
       - crates/rich-web/**
       - scripts/check_playground_*.mjs
+      - scripts/check_marketplace_page.mjs
       - scripts/test_build_versioned_docs.py
   workflow_dispatch:
 
@@ -163,6 +165,12 @@ jobs:
           npm install -g playwright@1.56.1
           npx playwright install --with-deps chromium
           node scripts/check_playground_page.mjs site
+
+      # The Marketplace page in headless Chromium, against the fixture
+      # marketplace (docs/tapes/fixtures/marketplace), and its logic under
+      # Node.
+      - name: Check the Marketplace page in a browser
+        run: node scripts/check_marketplace_page.mjs site
 
       # The Python package has its own site, published under /python/. Its
       # API reference is generated from the type stubs, so no wheel is built.

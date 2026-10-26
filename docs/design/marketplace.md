@@ -17,6 +17,9 @@ environment and signed the first index
 ([0.0.23 plan, item 17](../plans/0.0.23.md)). This note is the contract
 between the marketplace repository, the crate and the CLI. It is part of the
 1.0 promise ([the plan to 1.0.0](../plans/1.0.0.md#track-b-the-plugin-marketplace-232-463)).
+The optional `recommended` key is new in 0.0.23 ([Recommended](#recommended)),
+and the docs' [Marketplace page](../marketplace.md) lists the marketplace
+in a browser.
 
 Plugins already load three ways ([Extending](../PLUGINS.md),
 [Plugin loading](plugin-loading.md)): compiled in, as a native library from a
@@ -87,6 +90,7 @@ marked optional:
 | `repository` | string | The source repository, `https://`. |
 | `homepage` | string | Optional, `https://`. |
 | `keywords` | strings | Optional, at most 8, for search. |
+| `recommended` | object | Optional, set by a maintainer: `since` (`YYYY-MM-DD`) and `note` (at most 140 characters). See [Recommended](#recommended). |
 | `crate` | object | For a `crate` only, and required there: `name` (the crate on crates.io) and optional `features` (the Cargo features that enable the plugin). |
 | `versions` | array | Every version ever listed, **newest first** by SemVer precedence. |
 
@@ -304,7 +308,8 @@ holds listings that must be refused, each named for its fault: `bad-hash`
 library cannot be listed), `missing-abi`, `wasm-network-permission`,
 `yanked-without-reason`, `crate-without-native-code`, `http-artifact`,
 `unsorted-versions`, `ansi-without-permission`, `crate-url-mismatch`,
-`official-outside-repository` and `duplicate-version`.
+`official-outside-repository`, `duplicate-version`,
+`recommended-long-note` and `recommended-bad-day`.
 
 ## The index
 
@@ -492,6 +497,46 @@ for its own major, and says that newer versions need a newer host.
 The tier is shown wherever a package is: in search results, in `info`, and
 in the install prompt. A change that sets or raises a tier is refused by the
 marketplace's CI unless a maintainer approves it.
+
+**How the tiers are shown (0.0.23).** People see the tiers as **Official**,
+**Approved** and **Community**: `reviewed` is shown as "Approved". The
+listing format, the lockfile and the reports keep `reviewed`, since a 0.0.22
+client refuses a tier it does not know; the reports add a `tier_label`. The
+CLI marks the tier as `✓ official` (green), `approved` and `community`
+(yellow), words that read the same without colour, and the
+[Marketplace page](../marketplace.md) draws an "Official · by rs-rich"
+badge. Both say who publishes a package (rs-rich for an official one, else
+its repository's owner) and who authored it ("Authored by rs-rich", or the
+listing's own `authors`, quoted when they name rs-rich, and its
+repository). The marks come only from the `tier` and `recommended` fields:
+a listing's name, description and authors are always shown as plain text.
+
+## Recommended
+
+`recommended` is an optional listing key: a maintainer's pick, given to any
+package of any tier.
+
+```json
+"recommended": {"since": "2026-10-26", "note": "A small, sandboxed first plugin."}
+```
+
+- `since` is the day it was given, `YYYY-MM-DD`; `note` says why, in one
+  line of at most 140 characters. Both are required, and no other key is
+  allowed (the schema, `scripts/validate_marketplace.py`).
+- **Only a maintainer sets it.** The marketplace's pull request check
+  refuses a change that adds or changes `recommended` without a
+  maintainer's label. It is part of the listing, so the signed index covers
+  it, unlike the display-only `stats.json`.
+- **Shown** as `★ recommended` by `rich plugin search`, `info` (with the
+  note), `browse` and the install prompt, and as a ★ Recommended badge on
+  the [Marketplace page](../marketplace.md); `rich plugin search
+  --recommended` lists only these. rs-rich-marketplace reads it as
+  `Listing::recommended`.
+- **Status:** in the format since 0.0.23. A 0.0.22 client ignores the key
+  (a client ignores keys it does not know within a schema version). The
+  marketplace's CI validates with rs-rich-cli's validator pinned at
+  `release-0.0.22` until 0.0.23 is tagged, which refuses the key, so no
+  listing uses it before then.
 
 ## Yanking
 

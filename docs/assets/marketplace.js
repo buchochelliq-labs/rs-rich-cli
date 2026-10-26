@@ -421,7 +421,7 @@
     const controls = h(
       "form",
       { class: "mkt-controls", role: "search", "aria-label": "Search the marketplace" },
-      h("div", { class: "mkt-field mkt-field--search" }, h("label", { for: ids.search }, "Search"), search),
+      h("div", { class: "mkt-field mkt-field--search" }, h("label", { for: ids.search }, "Search packages"), search),
       h("div", { class: "mkt-field" }, h("label", { for: ids.kind }, "Kind"), kind),
       h("div", { class: "mkt-field" }, h("label", { for: ids.tier }, "Tier"), tier),
       h("div", { class: "mkt-field" }, h("label", { for: ids.sort }, "Sort by"), sortBy),
@@ -564,6 +564,8 @@
   }
 
   let hashHandler = null;
+  // The packages whose details are open, kept as the list is redrawn.
+  const openDetails = new Set();
   window.addEventListener("hashchange", () => {
     if (hashHandler && document.getElementById("mkt-app")) hashHandler();
   });
@@ -688,9 +690,11 @@
         h("td", {}, String(v.published || "")),
         h("td", {}, Logic.requiresText(v.requires)),
         h("td", { class: "mkt-num" }, Logic.count(counts[v.version])),
-        h("td", {}, v.yanked ? `Yanked: ${String(v.yank_reason || "")}` : "Listed"),
+        h("td", { class: "mkt-status" }, v.yanked ? `Yanked: ${String(v.yank_reason || "")}` : "Listed"),
         h("td", {}, v.yanked ? "—" : command(Logic.installCommand(listing, v), `Get ${listing.id} ${v.version}`, ui))))));
-    return h("details", { class: "mkt-details" }, h("summary", {}, "Details and every version"), dl(rows), h("div", { class: "mkt-table-wrap" }, table));
+    const el = h("details", { class: "mkt-details", open: openDetails.has(listing.id) }, h("summary", {}, "Details and every version"), dl(rows), h("div", { class: "mkt-table-wrap" }, table));
+    el.addEventListener("toggle", () => (el.open ? openDetails.add(listing.id) : openDetails.delete(listing.id)));
+    return el;
   }
 
   if (window.document$) {

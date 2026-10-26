@@ -323,6 +323,24 @@ rich plugin remove textcase
 rich plugin browse                # the same, in a selector with provenance
 ```
 
+The docs' [Marketplace page](marketplace.md) lists the same packages in a
+browser, with search, filters, download counts and reviews, and the
+command that installs each one. `rich plugin search` matches capabilities
+and authors too, and filters with `--kind`, `--tier` and `--recommended`
+([the CLI guide](cli.md#install-plugins-from-the-marketplace-0022)).
+
+**Which packages are rs-rich's own.** The `official` tier, shown as
+`✓ official` in the CLI and an "Official · by rs-rich" badge on the page,
+is only for packages built and published by rs-rich from its own
+repositories: the marketplace refuses `official` for any other repository,
+and only a maintainer can set a tier. `rich plugin info` and the install
+prompt say who publishes every package and who authored it, and a
+non-official package says "not by rs-rich". `reviewed` packages are shown
+as **Approved**: a maintainer read the source and rebuilt the same file.
+`community` packages were only checked by the marketplace's CI. A
+maintainer can also mark any package `★ recommended`, with a short reason
+([the format](design/marketplace.md#recommended)).
+
 - **What is listed (0.0.23).** The official marketplace,
   [`buchochelliq-labs/rs-rich-marketplace`](https://github.com/buchochelliq-labs/rs-rich-marketplace),
   goes live with 0.0.23: the Mermaid, DOT and lumis crates, `textcase` (a
