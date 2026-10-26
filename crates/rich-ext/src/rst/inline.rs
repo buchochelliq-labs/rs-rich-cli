@@ -629,17 +629,90 @@ fn phrase_reference(body: &[char], anonymous: bool) -> Vec<Inline> {
 
 /// The Sphinx roles `rich-rst` registers to render as literals.
 const SPHINX_ROLES: &[&str] = &[
-    "func", "function", "meth", "method", "class", "mod", "module", "attr", "attribute", "obj",
-    "object", "data", "const", "constant", "exc", "exception", "var", "variable", "type",
-    "py:func", "py:meth", "py:class", "py:mod", "py:attr", "py:obj", "py:data", "py:const",
-    "py:exc", "envvar", "token", "option", "term", "ref", "doc", "any", "numref", "download",
-    "mailheader", "mimetype", "newsgroup", "makevar", "regexp", "kbd", "guilabel", "manpage",
-    "py:variable", "py:type", "py:property", "py:parameter", "py:typevar", "c:func",
-    "c:function", "c:type", "c:struct", "c:union", "c:enum", "c:enumerator", "c:member", "c:var",
-    "c:macro", "c:expr", "c:texpr", "cpp:func", "cpp:function", "cpp:class", "cpp:type",
-    "cpp:member", "cpp:var", "cpp:enum", "cpp:enumerator", "cpp:concept", "cpp:expr",
-    "cpp:texpr", "cpp:alias", "js:mod", "js:module", "js:func", "js:function", "js:data",
-    "js:attr", "js:attribute", "js:class", "js:meth", "js:method",
+    "func",
+    "function",
+    "meth",
+    "method",
+    "class",
+    "mod",
+    "module",
+    "attr",
+    "attribute",
+    "obj",
+    "object",
+    "data",
+    "const",
+    "constant",
+    "exc",
+    "exception",
+    "var",
+    "variable",
+    "type",
+    "py:func",
+    "py:meth",
+    "py:class",
+    "py:mod",
+    "py:attr",
+    "py:obj",
+    "py:data",
+    "py:const",
+    "py:exc",
+    "envvar",
+    "token",
+    "option",
+    "term",
+    "ref",
+    "doc",
+    "any",
+    "numref",
+    "download",
+    "mailheader",
+    "mimetype",
+    "newsgroup",
+    "makevar",
+    "regexp",
+    "kbd",
+    "guilabel",
+    "manpage",
+    "py:variable",
+    "py:type",
+    "py:property",
+    "py:parameter",
+    "py:typevar",
+    "c:func",
+    "c:function",
+    "c:type",
+    "c:struct",
+    "c:union",
+    "c:enum",
+    "c:enumerator",
+    "c:member",
+    "c:var",
+    "c:macro",
+    "c:expr",
+    "c:texpr",
+    "cpp:func",
+    "cpp:function",
+    "cpp:class",
+    "cpp:type",
+    "cpp:member",
+    "cpp:var",
+    "cpp:enum",
+    "cpp:enumerator",
+    "cpp:concept",
+    "cpp:expr",
+    "cpp:texpr",
+    "cpp:alias",
+    "js:mod",
+    "js:module",
+    "js:func",
+    "js:function",
+    "js:data",
+    "js:attr",
+    "js:attribute",
+    "js:class",
+    "js:meth",
+    "js:method",
 ];
 
 /// `title <target>` shows its title, as the Sphinx roles do.
@@ -699,9 +772,7 @@ fn role(role: Option<String>, body: &[char], raw: &str) -> Vec<Inline> {
             None => Inline::Abbreviation(text, String::new()),
         },
         Some("menuselection") => Inline::Literal(text.replace("-->", "\u{25b6}"), Vec::new()),
-        Some("samp" | "file") => {
-            Inline::Literal(text.replace(['{', '}'], ""), Vec::new())
-        }
+        Some("samp" | "file") => Inline::Literal(text.replace(['{', '}'], ""), Vec::new()),
         Some("pep" | "pep-reference") => {
             let (number, shown, anchor) = numbered(&text);
             let uri = match number {
@@ -713,7 +784,9 @@ fn role(role: Option<String>, body: &[char], raw: &str) -> Vec<Inline> {
         Some("rfc" | "rfc-reference") => {
             let (number, shown, anchor) = numbered(&text);
             let uri = match number {
-                Some(number) => format!("https://datatracker.ietf.org/doc/html/rfc{number}{anchor}"),
+                Some(number) => {
+                    format!("https://datatracker.ietf.org/doc/html/rfc{number}{anchor}")
+                }
                 None => "https://datatracker.ietf.org/".into(),
             };
             link(format!("RFC {shown}"), uri)
@@ -734,7 +807,10 @@ fn role(role: Option<String>, body: &[char], raw: &str) -> Vec<Inline> {
         }
         Some("pypi") => {
             let project = text.trim();
-            link(project.to_string(), format!("https://pypi.org/project/{project}/"))
+            link(
+                project.to_string(),
+                format!("https://pypi.org/project/{project}/"),
+            )
         }
         Some(name) if SPHINX_ROLES.contains(&name) => {
             Inline::Literal(display_title(&text), Vec::new())
@@ -1049,7 +1125,7 @@ mod tests {
                     uri: Some("https://rust-lang.org".into()),
                     name: Some("rust".into()),
                     anonymous: false,
-                    raw: String::new(),
+                    raw: "`Rust <https://rust-lang.org>`_".into(),
                 },
                 text(" and "),
                 Inline::Reference {
@@ -1057,7 +1133,7 @@ mod tests {
                     uri: None,
                     name: Some("python".into()),
                     anonymous: false,
-                    raw: String::new(),
+                    raw: "Python_".into(),
                 },
                 text("."),
             ]

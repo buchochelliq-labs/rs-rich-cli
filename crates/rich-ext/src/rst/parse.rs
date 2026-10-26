@@ -137,9 +137,8 @@ static OPTION: LazyLock<Regex> = LazyLock::new(|| {
     let option = r"(?:--?[\w][\w-]*|/\w)(?:[ =](?:<[^>]+>|[\w][\w-]*))?";
     Regex::new(&format!(r"^({option}(?:, {option})*)(  +|$)")).unwrap()
 });
-static OPTION_PART: LazyLock<Regex> = LazyLock::new(|| {
-    Regex::new(r"^(--?[\w][\w-]*|/\w)(?:([ =])(<[^>]+>|[\w][\w-]*))?$").unwrap()
-});
+static OPTION_PART: LazyLock<Regex> =
+    LazyLock::new(|| Regex::new(r"^(--?[\w][\w-]*|/\w)(?:([ =])(<[^>]+>|[\w][\w-]*))?$").unwrap());
 static DIRECTIVE: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\.\. +([\w][\w:+.-]*[\w]|[\w])::( +|$)(.*)$").unwrap());
 static SUBSTITUTION: LazyLock<Regex> =
@@ -401,8 +400,7 @@ fn parse_body(lines: &[String], titles: bool) -> Vec<Node> {
         }
         // Overline, title, underline; or a transition.
         if let Some(c) = adornment(line) {
-            if i + 2 < lines.len() && !blank(&lines[i + 1]) && adornment(&lines[i + 2]) == Some(c)
-            {
+            if i + 2 < lines.len() && !blank(&lines[i + 1]) && adornment(&lines[i + 2]) == Some(c) {
                 let text = lines[i + 1].trim();
                 let source = lines[i..i + 3].join("\n");
                 if titles {
@@ -1358,7 +1356,10 @@ fn code_block(d: &Directive) -> Element {
     if d.has_option("linenos") {
         block = block.with("linenos", "1");
     }
-    if let Some(start) = d.option("lineno-start").or_else(|| d.option("number-lines")) {
+    if let Some(start) = d
+        .option("lineno-start")
+        .or_else(|| d.option("number-lines"))
+    {
         if start.parse::<i64>().is_ok() {
             block = block.with("start_line", start);
         }
@@ -1405,7 +1406,9 @@ fn body_directive(d: &Directive) -> Vec<Node> {
     }
     match d.name {
         "code" | "code-block" | "sourcecode" => vec![code_block(d).into()],
-        "seealso" => vec![Element::new("seealso").children(d.body_with_argument()).into()],
+        "seealso" => vec![Element::new("seealso")
+            .children(d.body_with_argument())
+            .into()],
         "versionadded" | "versionchanged" | "deprecated" => version_directive(d),
         "admonition" => {
             if d.argument.is_empty() {
@@ -1516,7 +1519,9 @@ fn body_directive(d: &Directive) -> Vec<Node> {
             .into_iter()
             .map(|node| match node {
                 Node::Element(mut table) if table.tag == "table" && !d.argument.is_empty() => {
-                    table.children.insert(0, inlines("title", &d.argument).into());
+                    table
+                        .children
+                        .insert(0, inlines("title", &d.argument).into());
                     table.into()
                 }
                 other => other,
@@ -1620,7 +1625,9 @@ fn list_table(d: &Directive) -> Option<Vec<Node>> {
     let body: Vec<Element> = rows.iter().skip(header_rows).map(make_row).collect();
     let mut table = table(&vec![0; columns], head, body);
     if !d.argument.is_empty() {
-        table.children.insert(0, inlines("title", &d.argument).into());
+        table
+            .children
+            .insert(0, inlines("title", &d.argument).into());
     }
     Some(vec![table.into()])
 }
@@ -1673,7 +1680,12 @@ fn table(columns: &[usize], head: Vec<Element>, body: Vec<Element>) -> Element {
 
 fn malformed(lines: &[String], detail: &str) -> Node {
     let source = lines.join("\n");
-    message("ERROR", &format!("Malformed table.\n{detail}"), Some(source)).into()
+    message(
+        "ERROR",
+        &format!("Malformed table.\n{detail}"),
+        Some(source),
+    )
+    .into()
 }
 
 /// The columns (`[start, end)` display cells) of a simple table's border or
@@ -1696,6 +1708,10 @@ fn runs(line: &[Option<char>], mark: char) -> Vec<(usize, usize)> {
     }
     columns
 }
+
+/// A simple table cell: the columns it spans past its own, the rows (none),
+/// and its lines.
+type RowCell = (usize, usize, Vec<String>);
 
 /// A simple table: docutils' `SimpleTableParser`.
 fn simple_table(lines: &[String], start: usize) -> Option<(Vec<Node>, usize)> {
@@ -1755,7 +1771,7 @@ fn simple_table(lines: &[String], start: usize) -> Option<(Vec<Node>, usize)> {
         .filter(|(lines, _)| !lines.is_empty())
         .collect();
     let border_end = columns.last()?.1;
-    let mut parsed: Vec<(usize, Vec<(usize, usize, Vec<String>)>)> = Vec::new();
+    let mut parsed: Vec<(usize, Vec<RowCell>)> = Vec::new();
     for (row_lines, span) in rows {
         // The columns this row uses: its span line's, else the border's.
         let mut cols = match span {

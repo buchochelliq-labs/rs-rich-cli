@@ -36,6 +36,19 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   reader mode). The page shown until now is hidden when the key changes,
   so it draws afresh when it comes back. `tests/switch_hidden_child.rs`.
 
+- **`rich --rst` follows `rich-rst` 2.2.0** (ext, CLI): the pin in
+  `UPSTREAM.toml` moved from 1.3.2 to 2.2.0. `rich_ext::rst` now builds a
+  docutils document tree and applies docutils' transforms, as 2.x does: a
+  lone top section is the document's title, sections are drawn by level,
+  tables are tables (cells that span drawn line by line), list markers keep
+  their numbering style, footnotes are numbered, references and
+  substitutions resolve, and `contents` lists the sections. New directives:
+  `seealso`, `versionadded`, `versionchanged`, `deprecated`, `figure`,
+  `parsed-literal`, `epigraph`, `list-table` and more. Breaking for
+  `rs-rich-ext`: `rst::parse` returns the tree (`rst::Element`), and
+  `Block`, `Inline` and friends are gone. Fresh goldens from rich-rst 2.2.0
+  on rich 15.0.0; DIVERGENCES §35 lists what is not ported.
+
 - **`rich serve --compress`** (CLI, `serve` feature): deflates frames of 1 KiB or more for pages that can undo it. Off by default; worth it over a slow link.
 
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)

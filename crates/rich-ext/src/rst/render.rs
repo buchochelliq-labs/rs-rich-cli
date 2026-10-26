@@ -595,7 +595,12 @@ impl<'a> Visitor<'a> {
     }
 
     /// Walk `children` of `parent` with a fresh visitor: its renderables.
-    fn render_children(&self, children: &[Node], parent: &Element, ancestors: &[Ancestor]) -> Vec<Item> {
+    fn render_children(
+        &self,
+        children: &[Node],
+        parent: &Element,
+        ancestors: &[Ancestor],
+    ) -> Vec<Item> {
         let mut sub = self.sub();
         let mut chain = ancestors.to_vec();
         chain.push(ancestor(parent));
@@ -676,8 +681,8 @@ impl<'a> Visitor<'a> {
                 };
                 self.admonition(&title, "admonition", "bold white", body, element, ancestors);
             }
-            "attention" | "caution" | "danger" | "error" | "hint" | "important" | "note" | "tip"
-            | "warning" | "seealso" => {
+            "attention" | "caution" | "danger" | "error" | "hint" | "important" | "note"
+            | "tip" | "warning" | "seealso" => {
                 let (title, default) = match element.tag {
                     "attention" => ("Attention", "bold black on yellow"),
                     "caution" => ("Caution", "red"),
@@ -690,7 +695,14 @@ impl<'a> Visitor<'a> {
                     "warning" => ("Warning", "bold yellow"),
                     _ => ("See Also", "bold white"),
                 };
-                self.admonition(title, element.tag, default, &element.children, element, ancestors);
+                self.admonition(
+                    title,
+                    element.tag,
+                    default,
+                    &element.children,
+                    element,
+                    ancestors,
+                );
             }
             "versionmodified" => {
                 let kind = element.get("type").unwrap_or("versionadded");
@@ -858,7 +870,8 @@ impl<'a> Visitor<'a> {
                     Some(label) => format!("math - {label}"),
                     None => "math".into(),
                 };
-                let mut panel = PanelSpec::new(R::Text(Text::new(math_to_unicode(&element.astext()))));
+                let mut panel =
+                    PanelSpec::new(R::Text(Text::new(math_to_unicode(&element.astext()))));
                 panel.border_style = Some(border);
                 panel.box_set = Some(SQUARE);
                 panel.title = Some(title);
@@ -866,9 +879,14 @@ impl<'a> Visitor<'a> {
             }
             "math" => {
                 let style = self.style("math", "italic");
-                self.append_inline(&math_to_unicode(&element.astext().replace('\n', " ")), style);
+                self.append_inline(
+                    &math_to_unicode(&element.astext().replace('\n', " ")),
+                    style,
+                );
             }
-            "citation" => self.citations.push(R::Left(Box::new(R::Str(labelled(element))))),
+            "citation" => self
+                .citations
+                .push(R::Left(Box::new(R::Str(labelled(element))))),
             "citation_reference" | "substitution_reference" => {
                 let style = if element.tag == "citation_reference" {
                     self.style("citation_reference", "grey74")
@@ -891,8 +909,12 @@ impl<'a> Visitor<'a> {
                     self.push_text(text_end(&text, style, ""));
                 }
             }
-            "footnote" => self.footer.push(R::Left(Box::new(R::Str(labelled(element))))),
-            "generated" => self.footer.push(R::Left(Box::new(R::Str(element.astext())))),
+            "footnote" => self
+                .footer
+                .push(R::Left(Box::new(R::Str(labelled(element))))),
+            "generated" => self
+                .footer
+                .push(R::Left(Box::new(R::Str(element.astext())))),
             "problematic" => {
                 let style = self.style("problematic", "none");
                 let text = element.astext().replace('\n', " ");
@@ -993,7 +1015,10 @@ impl<'a> Visitor<'a> {
         let border = self.style("figure_border", "blue");
         let legend_style = self.style("figure_legend", "dim");
         let body = match legend {
-            Some(legend) => R::Group(vec![R::Text(image_text), R::Text(Text::styled(legend, legend_style))]),
+            Some(legend) => R::Group(vec![
+                R::Text(image_text),
+                R::Text(Text::styled(legend, legend_style)),
+            ]),
             None => R::Text(image_text),
         };
         let mut panel = PanelSpec::new(body);
@@ -1023,7 +1048,11 @@ impl<'a> Visitor<'a> {
                     }
                     Node::Element(block) if block.tag == "literal_block" => {
                         if first {
-                            self.push_text(text_end(&format!("{indent}{marker}"), marker_style.clone(), ""));
+                            self.push_text(text_end(
+                                &format!("{indent}{marker}"),
+                                marker_style.clone(),
+                                "",
+                            ));
                             first = false;
                         }
                         self.literal_block(block);
@@ -1031,7 +1060,8 @@ impl<'a> Visitor<'a> {
                     _ => {
                         let mut items = self.render_child(child, item, &chain);
                         if first {
-                            let marker_text = text_end(&format!("{indent}{marker}"), marker_style.clone(), "");
+                            let marker_text =
+                                text_end(&format!("{indent}{marker}"), marker_style.clone(), "");
                             match items.first_mut() {
                                 Some(Item::Text(text)) => {
                                     let mut combined = marker_text;
@@ -1121,11 +1151,12 @@ impl<'a> Visitor<'a> {
 
     /// `_find_lexer`: the second class, else the format; else the default.
     fn find_lexer(&self, element: &Element) -> (String, bool) {
-        let lexer = element
-            .classes
-            .get(1)
-            .cloned()
-            .or_else(|| element.get("format").filter(|f| !f.is_empty()).map(String::from));
+        let lexer = element.classes.get(1).cloned().or_else(|| {
+            element
+                .get("format")
+                .filter(|f| !f.is_empty())
+                .map(String::from)
+        });
         match lexer {
             Some(lexer) => (lexer, true),
             None => (self.default_lexer.to_string(), false),
@@ -1198,7 +1229,9 @@ impl<'a> Visitor<'a> {
         let mut out = Text::new("");
         for child in &element.children {
             match child {
-                Node::Text(text) => append_text(&mut out, &Text::styled(text.as_str(), style.clone())),
+                Node::Text(text) => {
+                    append_text(&mut out, &Text::styled(text.as_str(), style.clone()))
+                }
                 Node::Element(child) => {
                     let piece = self.parsed_literal(child, style.clone());
                     append_text(&mut out, &piece);
@@ -1210,7 +1243,10 @@ impl<'a> Visitor<'a> {
 
     fn system_message(&mut self, element: &Element) {
         let message = element.astext().to_lowercase();
-        if ["title", "overline", "underline"].iter().any(|k| message.contains(k)) {
+        if ["title", "overline", "underline"]
+            .iter()
+            .any(|k| message.contains(k))
+        {
             return;
         }
         for child in element.elements().filter(|c| c.tag == "literal_block") {
@@ -1295,7 +1331,8 @@ impl<'a> Visitor<'a> {
                     );
                     self.push_text(header);
                     self.push_text(Text::new("\n    ").end(""));
-                    let body = self.render_children(&definition.children, definition, &with(&chain, item));
+                    let body =
+                        self.render_children(&definition.children, definition, &with(&chain, item));
                     self.items.extend(body);
                     self.push_text(Text::new("\n").end(""));
                 }
@@ -1316,8 +1353,11 @@ impl<'a> Visitor<'a> {
                             )),
                             "definition" => {
                                 self.push_text(Text::new("\n    ").end(""));
-                                let body =
-                                    self.render_children(&child.children, child, &with(&chain, item));
+                                let body = self.render_children(
+                                    &child.children,
+                                    child,
+                                    &with(&chain, item),
+                                );
                                 self.items.extend(body);
                                 self.push_text(Text::new("\n").end(""));
                             }
@@ -1332,14 +1372,20 @@ impl<'a> Visitor<'a> {
                                 &Text::styled(term.astext(), term_style.clone()),
                                 &Text::new("\n    ").end(""),
                             ),
-                            &Text::styled(definition.astext().replace('\n', " "), definitions_style.clone()),
+                            &Text::styled(
+                                definition.astext().replace('\n', " "),
+                                definitions_style.clone(),
+                            ),
                         ),
                         &Text::new("\n      ").end(""),
                     );
                     self.push_text(text);
                 }
                 [term] => {
-                    let text = concat(&Text::styled(term.astext(), term_style.clone()), &Text::new("\n").end(""));
+                    let text = concat(
+                        &Text::styled(term.astext(), term_style.clone()),
+                        &Text::new("\n").end(""),
+                    );
                     self.push_text(text);
                 }
                 _ => {}
@@ -1377,7 +1423,10 @@ impl<'a> Visitor<'a> {
             }
             if let Some(description) = description {
                 text = concat(&text, &Text::new("\n    "));
-                text = concat(&text, &Text::styled(description.astext(), description_style.clone()));
+                text = concat(
+                    &text,
+                    &Text::styled(description.astext(), description_style.clone()),
+                );
             }
             let text = concat(&text, &Text::new("\n"));
             self.push_text(text);
@@ -1537,9 +1586,13 @@ fn enum_marker(enumtype: &str, number: i64) -> String {
 /// `_make_image_text`.
 fn image_text(image: &Element, link_override: Option<&str>) -> Text {
     let raw = &image.rawsource;
-    let target = raw
-        .contains(":target:")
-        .then(|| raw.rsplit(":target:").next().unwrap_or("").trim().to_string());
+    let target = raw.contains(":target:").then(|| {
+        raw.rsplit(":target:")
+            .next()
+            .unwrap_or("")
+            .trim()
+            .to_string()
+    });
     let alt_option = raw
         .contains(":alt:")
         .then(|| raw.rsplit(":alt:").next().unwrap_or("").trim().to_string());
@@ -1547,7 +1600,11 @@ fn image_text(image: &Element, link_override: Option<&str>) -> Text {
         .filter(|l| !l.is_empty())
         .map(String::from)
         .or_else(|| image.get("target").map(String::from))
-        .unwrap_or_else(|| target.filter(|t| !t.is_empty()).unwrap_or_else(|| "Image".into()));
+        .unwrap_or_else(|| {
+            target
+                .filter(|t| !t.is_empty())
+                .unwrap_or_else(|| "Image".into())
+        });
     let alt = image
         .get("alt")
         .map(String::from)
@@ -1586,40 +1643,122 @@ fn math_to_unicode(text: &str) -> String {
 
 /// `_LATEX_TO_UNICODE`, in its order (stable-sorted by length on use).
 const LATEX: &[(&str, &str)] = &[
-    ("\\alpha", "α"), ("\\beta", "β"), ("\\gamma", "γ"), ("\\delta", "δ"),
-    ("\\epsilon", "ε"), ("\\varepsilon", "ε"), ("\\zeta", "ζ"), ("\\eta", "η"),
-    ("\\theta", "θ"), ("\\vartheta", "ϑ"), ("\\iota", "ι"), ("\\kappa", "κ"),
-    ("\\lambda", "λ"), ("\\mu", "μ"), ("\\nu", "ν"), ("\\xi", "ξ"),
-    ("\\pi", "π"), ("\\varpi", "ϖ"), ("\\rho", "ρ"), ("\\varrho", "ϱ"),
-    ("\\sigma", "σ"), ("\\varsigma", "ς"), ("\\tau", "τ"), ("\\upsilon", "υ"),
-    ("\\phi", "φ"), ("\\varphi", "φ"), ("\\chi", "χ"), ("\\psi", "ψ"),
+    ("\\alpha", "α"),
+    ("\\beta", "β"),
+    ("\\gamma", "γ"),
+    ("\\delta", "δ"),
+    ("\\epsilon", "ε"),
+    ("\\varepsilon", "ε"),
+    ("\\zeta", "ζ"),
+    ("\\eta", "η"),
+    ("\\theta", "θ"),
+    ("\\vartheta", "ϑ"),
+    ("\\iota", "ι"),
+    ("\\kappa", "κ"),
+    ("\\lambda", "λ"),
+    ("\\mu", "μ"),
+    ("\\nu", "ν"),
+    ("\\xi", "ξ"),
+    ("\\pi", "π"),
+    ("\\varpi", "ϖ"),
+    ("\\rho", "ρ"),
+    ("\\varrho", "ϱ"),
+    ("\\sigma", "σ"),
+    ("\\varsigma", "ς"),
+    ("\\tau", "τ"),
+    ("\\upsilon", "υ"),
+    ("\\phi", "φ"),
+    ("\\varphi", "φ"),
+    ("\\chi", "χ"),
+    ("\\psi", "ψ"),
     ("\\omega", "ω"),
-    ("\\Gamma", "Γ"), ("\\Delta", "Δ"), ("\\Theta", "Θ"), ("\\Lambda", "Λ"),
-    ("\\Xi", "Ξ"), ("\\Pi", "Π"), ("\\Sigma", "Σ"), ("\\Upsilon", "Υ"),
-    ("\\Phi", "Φ"), ("\\Psi", "Ψ"), ("\\Omega", "Ω"),
-    ("\\times", "×"), ("\\div", "÷"), ("\\pm", "±"), ("\\mp", "∓"),
-    ("\\cdot", "·"), ("\\ldots", "…"), ("\\cdots", "⋯"),
-    ("\\vdots", "⋮"), ("\\ddots", "⋱"),
-    ("\\leq", "≤"), ("\\le", "≤"), ("\\geq", "≥"), ("\\ge", "≥"),
-    ("\\neq", "≠"), ("\\ne", "≠"), ("\\approx", "≈"), ("\\equiv", "≡"),
-    ("\\sim", "∼"), ("\\simeq", "≃"), ("\\cong", "≅"), ("\\propto", "∝"),
-    ("\\subset", "⊂"), ("\\supset", "⊃"), ("\\subseteq", "⊆"), ("\\supseteq", "⊇"),
-    ("\\in", "∈"), ("\\notin", "∉"), ("\\cup", "∪"), ("\\cap", "∩"),
-    ("\\emptyset", "∅"), ("\\varnothing", "∅"),
-    ("\\neg", "¬"), ("\\wedge", "∧"), ("\\vee", "∨"), ("\\oplus", "⊕"),
-    ("\\forall", "∀"), ("\\exists", "∃"), ("\\nexists", "∄"),
-    ("\\to", "→"), ("\\rightarrow", "→"), ("\\leftarrow", "←"), ("\\gets", "←"),
-    ("\\leftrightarrow", "↔"), ("\\Rightarrow", "⇒"), ("\\Leftarrow", "⇐"),
-    ("\\Leftrightarrow", "⇔"), ("\\uparrow", "↑"), ("\\downarrow", "↓"),
-    ("\\updownarrow", "↕"), ("\\Uparrow", "⇑"), ("\\Downarrow", "⇓"),
+    ("\\Gamma", "Γ"),
+    ("\\Delta", "Δ"),
+    ("\\Theta", "Θ"),
+    ("\\Lambda", "Λ"),
+    ("\\Xi", "Ξ"),
+    ("\\Pi", "Π"),
+    ("\\Sigma", "Σ"),
+    ("\\Upsilon", "Υ"),
+    ("\\Phi", "Φ"),
+    ("\\Psi", "Ψ"),
+    ("\\Omega", "Ω"),
+    ("\\times", "×"),
+    ("\\div", "÷"),
+    ("\\pm", "±"),
+    ("\\mp", "∓"),
+    ("\\cdot", "·"),
+    ("\\ldots", "…"),
+    ("\\cdots", "⋯"),
+    ("\\vdots", "⋮"),
+    ("\\ddots", "⋱"),
+    ("\\leq", "≤"),
+    ("\\le", "≤"),
+    ("\\geq", "≥"),
+    ("\\ge", "≥"),
+    ("\\neq", "≠"),
+    ("\\ne", "≠"),
+    ("\\approx", "≈"),
+    ("\\equiv", "≡"),
+    ("\\sim", "∼"),
+    ("\\simeq", "≃"),
+    ("\\cong", "≅"),
+    ("\\propto", "∝"),
+    ("\\subset", "⊂"),
+    ("\\supset", "⊃"),
+    ("\\subseteq", "⊆"),
+    ("\\supseteq", "⊇"),
+    ("\\in", "∈"),
+    ("\\notin", "∉"),
+    ("\\cup", "∪"),
+    ("\\cap", "∩"),
+    ("\\emptyset", "∅"),
+    ("\\varnothing", "∅"),
+    ("\\neg", "¬"),
+    ("\\wedge", "∧"),
+    ("\\vee", "∨"),
+    ("\\oplus", "⊕"),
+    ("\\forall", "∀"),
+    ("\\exists", "∃"),
+    ("\\nexists", "∄"),
+    ("\\to", "→"),
+    ("\\rightarrow", "→"),
+    ("\\leftarrow", "←"),
+    ("\\gets", "←"),
+    ("\\leftrightarrow", "↔"),
+    ("\\Rightarrow", "⇒"),
+    ("\\Leftarrow", "⇐"),
+    ("\\Leftrightarrow", "⇔"),
+    ("\\uparrow", "↑"),
+    ("\\downarrow", "↓"),
+    ("\\updownarrow", "↕"),
+    ("\\Uparrow", "⇑"),
+    ("\\Downarrow", "⇓"),
     ("\\mapsto", "↦"),
-    ("\\infty", "∞"), ("\\partial", "∂"), ("\\nabla", "∇"),
-    ("\\sum", "∑"), ("\\prod", "∏"), ("\\int", "∫"), ("\\oint", "∮"),
-    ("\\hbar", "ℏ"), ("\\ell", "ℓ"), ("\\wp", "℘"), ("\\Re", "ℜ"), ("\\Im", "ℑ"),
-    ("\\aleph", "ℵ"), ("\\angle", "∠"), ("\\perp", "⊥"), ("\\parallel", "∥"),
-    ("\\prime", "′"), ("\\dagger", "†"), ("\\ddagger", "‡"),
-    ("\\langle", "⟨"), ("\\rangle", "⟩"),
-    ("\\quad", "  "), ("\\qquad", "    "), ("\\ ", " "),
+    ("\\infty", "∞"),
+    ("\\partial", "∂"),
+    ("\\nabla", "∇"),
+    ("\\sum", "∑"),
+    ("\\prod", "∏"),
+    ("\\int", "∫"),
+    ("\\oint", "∮"),
+    ("\\hbar", "ℏ"),
+    ("\\ell", "ℓ"),
+    ("\\wp", "℘"),
+    ("\\Re", "ℜ"),
+    ("\\Im", "ℑ"),
+    ("\\aleph", "ℵ"),
+    ("\\angle", "∠"),
+    ("\\perp", "⊥"),
+    ("\\parallel", "∥"),
+    ("\\prime", "′"),
+    ("\\dagger", "†"),
+    ("\\ddagger", "‡"),
+    ("\\langle", "⟨"),
+    ("\\rangle", "⟩"),
+    ("\\quad", "  "),
+    ("\\qquad", "    "),
+    ("\\ ", " "),
 ];
 
 /// A table cell: its content, and the columns and rows it spans past its
@@ -1708,7 +1847,10 @@ impl Visitor<'_> {
                 .and_then(|head| head.elements().next())
                 .or_else(|| tbody.elements().next());
             if let Some(row) = first_row {
-                columns = row.elements().map(|e| 1 + e.int("morecols", 0) as usize).sum();
+                columns = row
+                    .elements()
+                    .map(|e| 1 + e.int("morecols", 0) as usize)
+                    .sum();
             }
         }
         let spans = |section: &Element| {
@@ -1721,7 +1863,8 @@ impl Visitor<'_> {
         if has_spans {
             let header_rows = thead.map_or(0, |head| head.elements().count());
             let mut grid: Vec<Vec<GridCell>> = Vec::new();
-            let mut active: std::collections::BTreeMap<usize, i64> = std::collections::BTreeMap::new();
+            let mut active: std::collections::BTreeMap<usize, i64> =
+                std::collections::BTreeMap::new();
             let rows = thead
                 .into_iter()
                 .flat_map(|head| head.elements().map(move |row| (head, row)))
@@ -1787,7 +1930,8 @@ impl Visitor<'_> {
             None => headers = vec![String::new(); columns],
         }
         let mut rows: Vec<Vec<R>> = Vec::new();
-        let mut remaining: std::collections::BTreeMap<usize, i64> = std::collections::BTreeMap::new();
+        let mut remaining: std::collections::BTreeMap<usize, i64> =
+            std::collections::BTreeMap::new();
         for row in tbody.elements() {
             let occupied: Vec<usize> = remaining
                 .iter()
@@ -1906,8 +2050,9 @@ impl Visitor<'_> {
         let overflow = total(&widths) as i64 - max_total as i64;
         let shrink = |widths: &mut Vec<usize>, floors: &[usize], mut remaining: i64| -> i64 {
             while remaining > 0 {
-                let mut reducible: Vec<usize> =
-                    (0..widths.len()).filter(|&i| widths[i] > floors[i]).collect();
+                let mut reducible: Vec<usize> = (0..widths.len())
+                    .filter(|&i| widths[i] > floors[i])
+                    .collect();
                 if reducible.is_empty() {
                     break;
                 }
@@ -1991,7 +2136,13 @@ fn spanning_table(
     };
     let is_header = |r: usize| r < header_rows;
     let has_vborder = |r: usize, c: usize| origin(r, c) != origin(r, c + 1);
-    let row_style = |r: usize| if is_header(r) { header_style } else { cell_style };
+    let row_style = |r: usize| {
+        if is_header(r) {
+            header_style
+        } else {
+            cell_style
+        }
+    };
     let mut cache: std::collections::HashMap<(usize, usize), Vec<Text>> =
         std::collections::HashMap::new();
     let mut cell_lines = |r: usize, c: usize| -> Vec<Text> {
@@ -2012,7 +2163,10 @@ fn spanning_table(
         let mut lines: Vec<Text> = Vec::new();
         for line in rendered {
             let mut current = vec![Text::new("")];
-            for segment in line.iter().filter(|s| !s.is_control() && !s.text.is_empty()) {
+            for segment in line
+                .iter()
+                .filter(|s| !s.is_control() && !s.text.is_empty())
+            {
                 let parts: Vec<&str> = segment.text.split('\n').collect();
                 for (index, part) in parts.iter().enumerate() {
                     if !part.is_empty() {
@@ -2037,7 +2191,11 @@ fn spanning_table(
                 if width > available {
                     line.truncate(available, Some(rich::Overflow::Crop), false);
                 } else if width < available {
-                    append(&mut line, &" ".repeat(available - width), Some(style.clone()));
+                    append(
+                        &mut line,
+                        &" ".repeat(available - width),
+                        Some(style.clone()),
+                    );
                 }
                 line
             })
@@ -2049,7 +2207,8 @@ fn spanning_table(
         let top = above.is_none();
         let bottom = below.is_none();
         let head_sep = matches!((above, below), (Some(a), Some(b)) if a + 1 == header_rows && b == header_rows);
-        let inner_header = matches!((above, below), (Some(a), Some(b)) if is_header(a) && is_header(b));
+        let inner_header =
+            matches!((above, below), (Some(a), Some(b)) if is_header(a) && is_header(b));
         let (left, horizontal, _, right) = if top {
             ("┏", "━", "┳", "┓")
         } else if bottom {
@@ -2064,13 +2223,17 @@ fn spanning_table(
         let continues = |c: usize| above.is_some_and(|a| !top && rspan_continues(a, c));
         let v_sep = if inner_header { vh } else { vb };
         let mut s = String::new();
-        s.push_str(if continues(0) && !top && !bottom { v_sep } else { left });
-        for c in 0..columns {
+        s.push_str(if continues(0) && !top && !bottom {
+            v_sep
+        } else {
+            left
+        });
+        for (c, width) in widths.iter().enumerate() {
             let rc = continues(c);
             if rc {
-                s.push_str(&" ".repeat(widths[c] + 2));
+                s.push_str(&" ".repeat(width + 2));
             } else {
-                s.push_str(&horizontal.repeat(widths[c] + 2));
+                s.push_str(&horizontal.repeat(width + 2));
             }
             if c + 1 < columns {
                 let lrc = rc;
@@ -2124,7 +2287,8 @@ fn spanning_table(
         }
         height
     };
-    let placeholder_row = |r: usize| (0..columns).all(|c| grid[r][c].is_none() && origin(r, c).is_some());
+    let placeholder_row =
+        |r: usize| (0..columns).all(|c| grid[r][c].is_none() && origin(r, c).is_some());
     let mut lines: Vec<Text> = Vec::new();
     if let Some(title) = title.filter(|t| !t.is_empty()) {
         let total = if rows > 0 {
@@ -2134,11 +2298,17 @@ fn spanning_table(
         };
         lines.push(Text::styled(center(title, total), "italic"));
     }
+    #[allow(clippy::needless_range_loop)] // rows are read by index everywhere
     for r in 0..rows {
         let above = r.checked_sub(1);
         let placeholder = placeholder_row(r);
         let sep = separator(above, Some(r));
-        if !(placeholder && sep.plain().chars().all(|ch| ch == ' ' || ch == '│' || ch == '┃')) {
+        if !(placeholder
+            && sep
+                .plain()
+                .chars()
+                .all(|ch| ch == ' ' || ch == '│' || ch == '┃'))
+        {
             lines.push(sep);
         }
         if placeholder {
@@ -2454,4 +2624,3 @@ fn numeric_reference(value: u32) -> String {
     };
     char::from_u32(value).map(String::from).unwrap_or_default()
 }
-

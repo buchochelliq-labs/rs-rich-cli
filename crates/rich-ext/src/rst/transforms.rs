@@ -44,7 +44,10 @@ fn pre_bibliographic(node: &Node) -> bool {
 
 /// `candidate_index`: the lone section after the pre-bibliographic nodes.
 fn candidate_index(node: &Element) -> Option<usize> {
-    let index = node.children.iter().position(|child| !pre_bibliographic(child))?;
+    let index = node
+        .children
+        .iter()
+        .position(|child| !pre_bibliographic(child))?;
     (index + 1 == node.children.len() && node.children[index].is("section")).then_some(index)
 }
 
@@ -181,7 +184,11 @@ fn authors(body: &Element) -> Option<Element> {
         [Node::Element(paragraph)] if paragraph.tag == "paragraph" => {
             let text = paragraph.astext();
             let separator = if text.contains(';') { ';' } else { ',' };
-            for name in text.split(separator).map(str::trim).filter(|n| !n.is_empty()) {
+            for name in text
+                .split(separator)
+                .map(str::trim)
+                .filter(|n| !n.is_empty())
+            {
                 out.children.push(Element::text("author", name).into());
             }
         }
@@ -238,7 +245,10 @@ fn replace_substitutions(element: &mut Element, defined: &HashMap<String, Vec<No
         };
         if child.tag == "substitution_reference" {
             let name = child.astext();
-            match defined.get(&name).or_else(|| defined.get(&normalize_name(&name))) {
+            match defined
+                .get(&name)
+                .or_else(|| defined.get(&normalize_name(&name)))
+            {
                 Some(content) => out.extend(content.iter().cloned()),
                 None => out.push(Element::text("problematic", format!("|{name}|")).into()),
             }
@@ -249,10 +259,17 @@ fn replace_substitutions(element: &mut Element, defined: &HashMap<String, Vec<No
             && matches!(child.children.as_slice(), [Node::Element(s)] if s.tag == "substitution_reference")
         {
             let name = child.children[0].astext();
-            match defined.get(&name).or_else(|| defined.get(&normalize_name(&name))) {
+            match defined
+                .get(&name)
+                .or_else(|| defined.get(&normalize_name(&name)))
+            {
                 Some(content) => child.children = content.clone(),
                 None => {
-                    let end = if child.get("anonymous").is_some() { "__" } else { "_" };
+                    let end = if child.get("anonymous").is_some() {
+                        "__"
+                    } else {
+                        "_"
+                    };
                     out.push(Element::text("problematic", format!("|{name}|{end}")).into());
                     continue;
                 }
@@ -290,7 +307,10 @@ fn embedded_targets(element: &mut Element) {
     element.children = out;
 }
 
-const SYMBOLS: [&str; 10] = ["*", "\u{2020}", "\u{2021}", "\u{a7}", "\u{b6}", "#", "\u{2660}", "\u{2665}", "\u{2666}", "\u{2663}"];
+const SYMBOLS: [&str; 10] = [
+    "*", "\u{2020}", "\u{2021}", "\u{a7}", "\u{b6}", "#", "\u{2660}", "\u{2665}", "\u{2666}",
+    "\u{2663}",
+];
 
 /// `Footnotes`: auto-numbered footnotes get the numbers not taken, their
 /// references the same, and auto-symbol footnotes their symbols.
@@ -332,7 +352,9 @@ fn footnotes(document: &mut Element) {
             Some("*") => {
                 let symbol = SYMBOLS[symbols % SYMBOLS.len()].repeat(symbols / SYMBOLS.len() + 1);
                 symbols += 1;
-                element.children.insert(0, Element::text("label", symbol).into());
+                element
+                    .children
+                    .insert(0, Element::text("label", symbol).into());
             }
             _ => {}
         }
@@ -345,32 +367,30 @@ fn footnotes(document: &mut Element) {
     });
     let mut next_label = labels.into_iter();
     let mut symbol_refs = 0;
-    resolve_footnote_references(document, &mut |reference| {
-        match reference.get("auto") {
-            Some("1") => {
-                let label = match reference.get("refname") {
-                    Some(name) => named.get(name).cloned(),
-                    None => next_label.next(),
-                };
-                label.map(|label| {
-                    reference.attrs.remove("refname");
-                    reference.children = vec![Node::Text(label)];
-                })
-            }
-            Some("*") => {
-                let symbol =
-                    SYMBOLS[symbol_refs % SYMBOLS.len()].repeat(symbol_refs / SYMBOLS.len() + 1);
-                symbol_refs += 1;
-                (symbol_refs <= symbols).then(|| {
-                    reference.children = vec![Node::Text(symbol)];
-                })
-            }
-            _ => {
-                let name = reference.get("refname").unwrap_or_default().to_string();
-                footnote_names.contains(&name).then(|| {
-                    reference.attrs.remove("refname");
-                })
-            }
+    resolve_footnote_references(document, &mut |reference| match reference.get("auto") {
+        Some("1") => {
+            let label = match reference.get("refname") {
+                Some(name) => named.get(name).cloned(),
+                None => next_label.next(),
+            };
+            label.map(|label| {
+                reference.attrs.remove("refname");
+                reference.children = vec![Node::Text(label)];
+            })
+        }
+        Some("*") => {
+            let symbol =
+                SYMBOLS[symbol_refs % SYMBOLS.len()].repeat(symbol_refs / SYMBOLS.len() + 1);
+            symbol_refs += 1;
+            (symbol_refs <= symbols).then(|| {
+                reference.children = vec![Node::Text(symbol)];
+            })
+        }
+        _ => {
+            let name = reference.get("refname").unwrap_or_default().to_string();
+            footnote_names.contains(&name).then(|| {
+                reference.attrs.remove("refname");
+            })
         }
     });
 }
@@ -446,30 +466,28 @@ fn hyperlinks(document: &mut Element) {
     let mut named: HashMap<String, Destination> = HashMap::new();
     let mut anonymous: Vec<Destination> = Vec::new();
     let mut anonymous_refs = 0;
-    document.walk(&mut |element| {
-        match element.tag {
-            "target" => {
-                let destination = match (element.get("refuri"), element.get("refname")) {
-                    (Some(uri), _) => Destination::Uri(uri.to_string()),
-                    (None, Some(name)) => Destination::Name(name.to_string()),
-                    (None, None) => Destination::Internal,
-                };
-                if element.get("anonymous").is_some() {
-                    anonymous.push(destination);
-                } else {
-                    for name in &element.names {
-                        named.entry(name.clone()).or_insert(destination.clone());
-                    }
-                }
-            }
-            "section" | "footnote" | "citation" => {
+    document.walk(&mut |element| match element.tag {
+        "target" => {
+            let destination = match (element.get("refuri"), element.get("refname")) {
+                (Some(uri), _) => Destination::Uri(uri.to_string()),
+                (None, Some(name)) => Destination::Name(name.to_string()),
+                (None, None) => Destination::Internal,
+            };
+            if element.get("anonymous").is_some() {
+                anonymous.push(destination);
+            } else {
                 for name in &element.names {
-                    named.entry(name.clone()).or_insert(Destination::Internal);
+                    named.entry(name.clone()).or_insert(destination.clone());
                 }
             }
-            "reference" if element.get("anonymous").is_some() => anonymous_refs += 1,
-            _ => {}
         }
+        "section" | "footnote" | "citation" => {
+            for name in &element.names {
+                named.entry(name.clone()).or_insert(Destination::Internal);
+            }
+        }
+        "reference" if element.get("anonymous").is_some() => anonymous_refs += 1,
+        _ => {}
     });
     let resolve = |name: &str| -> Option<Destination> {
         let mut name = name.to_string();
@@ -618,7 +636,11 @@ fn transitions(element: &mut Element) {
         let moved = match &mut element.children[index] {
             Node::Element(section) if section.tag == "section" => {
                 // A section that ends with a transition gives it up.
-                if section.children.last().is_some_and(|last| last.is("transition")) {
+                if section
+                    .children
+                    .last()
+                    .is_some_and(|last| last.is("transition"))
+                {
                     section.children.pop()
                 } else {
                     None

@@ -262,8 +262,17 @@ impl Element {
             line.push_str(&format!(" classes={}", json_list(&self.classes)));
         }
         for (key, value) in &self.attrs {
-            if matches!(*key, "delimiter" | "bullet" | "name" | "cols" | "colwidth" | "style" | "source" | "version")
-                || key.starts_with("__")
+            if matches!(
+                *key,
+                "delimiter"
+                    | "bullet"
+                    | "name"
+                    | "cols"
+                    | "colwidth"
+                    | "style"
+                    | "source"
+                    | "version"
+            ) || key.starts_with("__")
                 || value.is_empty()
                 || value == "0"
             {
