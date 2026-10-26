@@ -116,6 +116,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   quiet the console, so `rich … | head -c1` still exits 0. The
   maintainer's call on 2026-10-26. `tests/console_contract.rs`.
 
+- **The marketplace's official keys are compiled in** (rs-rich-marketplace,
+  CLI). Generation 1 of the maintainer's main and backup minisign keys
+  (`crates/rich-marketplace/keys/keys-1.json`, the same file as the
+  marketplace repository's `keys/keys-1.json`) is `KeySet::official`, so
+  `rich plugin` trusts the official marketplace with no
+  `--marketplace-keys` or `RICH_MARKETPLACE_KEYS`.
 - **Marketplace repository template**: step 5 of its README now gives
   `release-0.0.22` as the example `RS_RICH_CLI_REF` (this repository's
   tags are `release-X.Y.Z`), and says to move it with each release.
