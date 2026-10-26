@@ -194,7 +194,10 @@ impl Snapshot {
         let mut console = CoreConsole::builder()
             .force_terminal(s.is_terminal)
             .color_system(s.color_system)
-            .width(s.width)
+            // `s.width` is already the console's size. The core takes one
+            // column off a legacy Windows console when given both width and
+            // height (upstream's `Console.size`), so give it that column.
+            .width(s.width + usize::from(s.legacy_windows))
             .height(s.height)
             .no_color(s.no_color)
             .emoji(emoji)
