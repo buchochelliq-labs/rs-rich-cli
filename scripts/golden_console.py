@@ -13,11 +13,16 @@ injection point, `Console(_environ=…)`, so no case reads the real environment.
 
 from __future__ import annotations
 
+import io
 import json
 import pathlib
+import re
 import sys
+import tempfile
 
 from rich.console import Console
+from rich.control import Control
+from rich.terminal_theme import MONOKAI, NIGHT_OWLISH
 from rich.panel import Panel
 from rich.rule import Rule
 from rich.text import Text
@@ -240,6 +245,109 @@ def _console_begin_end_capture() -> str:
     return _lines(repr(first), repr(inner), repr(outer), repr(control), repr(hushed))
 
 
+# --- group 3: record=, export_* and save_* -------------------------------
+
+
+def _recording(width: int = 20, **overrides) -> Console:
+    """A recording console that writes to a throwaway file, so a capture run
+    stays quiet. The Rust side writes to stdout, which the record ignores."""
+    return _console(width, record=True, file=io.StringIO(), **overrides)
+
+
+def _record_session(console: Console, control: bool = True) -> None:
+    console.print("[bold red]hi[/] there", "[link=https://x.io/?a=1&b=2]<&>[/]")
+    console.print(Panel("boxed", expand=False))
+    # Upstream's `Segment.simplify` merges a control code into the text after
+    # it, so its HTML shows the raw escape; the port keeps them apart
+    # (DIVERGENCES §44). The HTML sessions leave control codes out.
+    if control:
+        console.show_cursor(False)
+    console.print("open", end="")
+    console.print()
+    # Neither a capture nor a quiet console is recorded.
+    with console.capture():
+        console.print("captured")
+    console.quiet = True
+    console.print("hushed")
+    console.quiet = False
+    console.print("[on blue]last[/]", style="italic")
+
+
+def _no_link_id(text: str) -> str:
+    """Drop the random `id=` upstream puts in hyperlinks (DIVERGENCES §20)."""
+    return re.sub(r"\x1b\]8;id=\d+;", "\x1b]8;;", text)
+
+
+def _console_record_text() -> str:
+    console = _recording()
+    _record_session(console)
+    out = [
+        repr(console.export_text(clear=False)),
+        repr(_no_link_id(console.export_text(clear=False, styles=True))),
+        repr(console.export_text()),
+        repr(console.export_text()),
+    ]
+    # Off a terminal, control codes are still recorded: kept with styles.
+    plain = _recording(force_terminal=False)
+    plain.control(Control.bell())
+    plain.print("x")
+    out.append(repr(plain.export_text(clear=False)))
+    out.append(repr(plain.export_text(styles=True)))
+    try:
+        Console(file=io.StringIO()).export_text()
+    except AssertionError as error:
+        out.append(str(error))
+    return _lines(*out)
+
+
+def _console_record_html() -> str:
+    console = _recording()
+    _record_session(console, control=False)
+    return "\n".join(
+        [
+            console.export_html(clear=False),
+            console.export_html(theme=MONOKAI, inline_styles=True, clear=False),
+            console.export_html(code_format="{foreground}|{background}|{stylesheet}|{code}"),
+            console.export_html(),
+        ]
+    )
+
+
+_SVG_FORMAT = (
+    "{unique_id}|{char_width}|{char_height}|{line_height}|{terminal_width}|{terminal_height}|"
+    "{width}|{height}|{terminal_x}|{terminal_y}|{{lit}}\n{styles}\n{matrix}\n{backgrounds}\n{lines}\n{chrome}"
+)
+
+
+def _console_record_svg() -> str:
+    console = _recording()
+    _record_session(console)
+    return "\n".join(
+        [
+            console.export_svg(unique_id="u", clear=False),
+            console.export_svg(title="T", theme=NIGHT_OWLISH, unique_id="v", clear=False),
+            console.export_svg(code_format=_SVG_FORMAT, font_aspect_ratio=0.5, unique_id="w"),
+            console.export_svg(unique_id="x"),
+        ]
+    )
+
+
+def _console_record_save() -> str:
+    console = _recording()
+    _record_session(console, control=False)
+    with tempfile.TemporaryDirectory() as directory:
+        root = pathlib.Path(directory)
+        console.save_text(root / "a.txt", clear=False)
+        console.save_text(root / "b.txt", styles=True, clear=False)
+        console.save_html(root / "c.html", inline_styles=True, clear=False)
+        console.save_svg(root / "d.svg", title="S", unique_id="s")
+        console.save_text(root / "e.txt")
+        return "\n".join(
+            _no_link_id((root / name).read_text(encoding="utf-8"))
+            for name in ["a.txt", "b.txt", "c.html", "d.svg", "e.txt"]
+        )
+
+
 CONSOLE_CASES = [
     ("console_quiet", _console_quiet),
     ("console_size_setters", _console_size_setters),
@@ -252,6 +360,10 @@ CONSOLE_CASES = [
     ("console_style", _console_style),
     ("console_style_soft_wrap", _console_style_soft_wrap),
     ("console_begin_end_capture", _console_begin_end_capture),
+    ("console_record_text", _console_record_text),
+    ("console_record_html", _console_record_html),
+    ("console_record_svg", _console_record_svg),
+    ("console_record_save", _console_record_save),
 ]
 
 

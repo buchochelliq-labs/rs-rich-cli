@@ -7,7 +7,11 @@
 
 use rich::align::HorizontalAlign;
 use rich::console::{Environ, PrintObject as O, PrintOptions};
-use rich::{ColorSystem, Console, Justify, Panel, Renderable, Rule, Text, Theme};
+use rich::terminal_theme::{MONOKAI, NIGHT_OWLISH};
+use rich::{
+    ColorSystem, Console, Control, ExportHtmlOptions, ExportSvgOptions, Justify, Panel, Renderable,
+    Rule, Text, Theme,
+};
 
 /// `_console`: truecolor, no highlighting.
 fn builder(width: usize) -> rich::console::ConsoleBuilder {
@@ -448,6 +452,188 @@ fn console_begin_end_capture() -> String {
     ])
 }
 
+// --- group 3 ------------------------------------------------------------
+
+/// A recording console. Unlike the Python side, which writes to a throwaway
+/// file, it writes to the test's stdout; the record is the same.
+fn recording(width: usize) -> Console {
+    builder(width).record(true).build()
+}
+
+fn record_session(console: &Console, control: bool) {
+    let panel = Panel::new(Box::new(String::from("boxed"))).expand(false);
+    let print = |objects: &[O<'_>], options: PrintOptions<'_>| {
+        console.print_objects(objects, &options).unwrap();
+    };
+    print(
+        &[
+            O::Str("[bold red]hi[/] there"),
+            O::Str("[link=https://x.io/?a=1&b=2]<&>[/]"),
+        ],
+        PrintOptions::default(),
+    );
+    print(&[O::Renderable(&panel)], PrintOptions::default());
+    if control {
+        console.show_cursor(false);
+    }
+    print(
+        &[O::Str("open")],
+        PrintOptions {
+            end: "",
+            ..Default::default()
+        },
+    );
+    print(&[], PrintOptions::default());
+    let _ = console.capture(|c| c.print_str("captured"));
+    console.set_quiet(true);
+    console.print_str("hushed");
+    console.set_quiet(false);
+    print(
+        &[O::Str("[on blue]last[/]")],
+        PrintOptions {
+            style: Some("italic".into()),
+            ..Default::default()
+        },
+    );
+}
+
+fn console_record_text() -> String {
+    let console = recording(20);
+    record_session(&console, true);
+    let mut out = vec![
+        py_repr(&console.export_text_recorded(false, false).unwrap()),
+        py_repr(&console.export_text_recorded(false, true).unwrap()),
+        py_repr(&console.export_text_recorded(true, false).unwrap()),
+        py_repr(&console.export_text_recorded(true, false).unwrap()),
+    ];
+    let plain = builder(20).force_terminal(false).record(true).build();
+    plain.control(&Control::bell());
+    plain.print_str("x");
+    out.push(py_repr(&plain.export_text_recorded(false, false).unwrap()));
+    out.push(py_repr(&plain.export_text_recorded(true, true).unwrap()));
+    out.push(
+        Console::builder()
+            .build()
+            .export_text_recorded(true, false)
+            .unwrap_err()
+            .message()
+            .to_string(),
+    );
+    lines(&out)
+}
+
+fn console_record_html() -> String {
+    let console = recording(20);
+    record_session(&console, false);
+    let keep = ExportHtmlOptions {
+        clear: false,
+        ..Default::default()
+    };
+    [
+        console.export_html_recorded(&keep).unwrap(),
+        console
+            .export_html_recorded(&ExportHtmlOptions {
+                theme: Some(&MONOKAI),
+                inline_styles: true,
+                ..keep
+            })
+            .unwrap(),
+        console
+            .export_html_recorded(&ExportHtmlOptions {
+                code_format: Some("{foreground}|{background}|{stylesheet}|{code}"),
+                ..Default::default()
+            })
+            .unwrap(),
+        console
+            .export_html_recorded(&ExportHtmlOptions::default())
+            .unwrap(),
+    ]
+    .join("\n")
+}
+
+const SVG_FORMAT: &str = "{unique_id}|{char_width}|{char_height}|{line_height}|{terminal_width}|{terminal_height}|{width}|{height}|{terminal_x}|{terminal_y}|{{lit}}\n{styles}\n{matrix}\n{backgrounds}\n{lines}\n{chrome}";
+
+fn console_record_svg() -> String {
+    let console = recording(20);
+    record_session(&console, true);
+    [
+        console
+            .export_svg_recorded(&ExportSvgOptions {
+                unique_id: "u",
+                clear: false,
+                ..Default::default()
+            })
+            .unwrap(),
+        console
+            .export_svg_recorded(&ExportSvgOptions {
+                title: "T",
+                theme: Some(&NIGHT_OWLISH),
+                unique_id: "v",
+                clear: false,
+                ..Default::default()
+            })
+            .unwrap(),
+        console
+            .export_svg_recorded(&ExportSvgOptions {
+                code_format: Some(SVG_FORMAT),
+                font_aspect_ratio: 0.5,
+                unique_id: "w",
+                ..Default::default()
+            })
+            .unwrap(),
+        console
+            .export_svg_recorded(&ExportSvgOptions {
+                unique_id: "x",
+                ..Default::default()
+            })
+            .unwrap(),
+    ]
+    .join("\n")
+}
+
+fn console_record_save() -> String {
+    let console = recording(20);
+    record_session(&console, false);
+    let root = std::env::temp_dir().join(format!("rs-rich-console-save-{}", std::process::id()));
+    std::fs::create_dir_all(&root).unwrap();
+    console
+        .save_text_recorded(root.join("a.txt"), false, false)
+        .unwrap();
+    console
+        .save_text_recorded(root.join("b.txt"), false, true)
+        .unwrap();
+    console
+        .save_html_recorded(
+            root.join("c.html"),
+            &ExportHtmlOptions {
+                inline_styles: true,
+                clear: false,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    console
+        .save_svg_recorded(
+            root.join("d.svg"),
+            &ExportSvgOptions {
+                title: "S",
+                unique_id: "s",
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    console
+        .save_text_recorded(root.join("e.txt"), true, false)
+        .unwrap();
+    let out = ["a.txt", "b.txt", "c.html", "d.svg", "e.txt"]
+        .iter()
+        .map(|name| std::fs::read_to_string(root.join(name)).unwrap())
+        .collect::<Vec<_>>()
+        .join("\n");
+    std::fs::remove_dir_all(&root).unwrap();
+    out
+}
+
 fn build(name: &str) -> String {
     match name {
         "console_quiet" => console_quiet(),
@@ -461,11 +647,15 @@ fn build(name: &str) -> String {
         "console_style" => console_style(),
         "console_style_soft_wrap" => console_style_soft_wrap(),
         "console_begin_end_capture" => console_begin_end_capture(),
+        "console_record_text" => console_record_text(),
+        "console_record_html" => console_record_html(),
+        "console_record_svg" => console_record_svg(),
+        "console_record_save" => console_record_save(),
         other => panic!("no builder for console case {other:?}"),
     }
 }
 
-const CASES: usize = 11;
+const CASES: usize = 15;
 
 #[test]
 fn console_parity() {

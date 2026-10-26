@@ -299,6 +299,12 @@ pub struct Console {
     /// Upstream's `Console._is_alt_screen`: set by
     /// [`set_alt_screen`](Console::set_alt_screen).
     is_alt_screen: std::sync::atomic::AtomicBool,
+    /// Upstream's `Console.record`: keep what is written for the
+    /// `export_*_recorded` methods.
+    record: std::sync::atomic::AtomicBool,
+    /// Upstream's `Console._record_buffer`: every segment written while
+    /// recording (not what a capture takes, nor what a quiet console drops).
+    record_buffer: std::sync::Mutex<Vec<Segment>>,
 }
 
 /// A `Send`-only highlighter behind a lock, so it can be shared by a `Sync`
@@ -385,6 +391,8 @@ impl Clone for Console {
             tab_size: self.tab_size,
             captures: std::sync::Mutex::new(CaptureStacks::new()),
             is_alt_screen: std::sync::atomic::AtomicBool::new(false),
+            record: std::sync::atomic::AtomicBool::new(self.record()),
+            record_buffer: std::sync::Mutex::new(Vec::new()),
         }
     }
 }
@@ -878,6 +886,14 @@ impl Console {
             }
             segments
         };
+        // `_write_buffer`: what is written is recorded first.
+        if self.record() {
+            let mut recorded = self.lock_record_buffer();
+            recorded.extend(segments.iter().cloned());
+            if newline {
+                recorded.push(Segment::line());
+            }
+        }
         let mut output = self.segments_to_string(&segments);
         if newline {
             output.push('\n');
@@ -1044,25 +1060,12 @@ impl Console {
     /// Port of `Console.control`. Control codes are only written when output is
     /// a real terminal (they are meaningless when redirected to a file).
     pub fn control(&self, control: &crate::control::Control) {
-        if !self.is_terminal {
-            return;
-        }
-        let text = control.as_str();
-        if self.quiet() {
-            return;
-        }
         // Upstream buffers control codes with everything else, so a capture
-        // records them.
-        if let Some(buffer) = current_capture(&mut self.lock_captures()) {
-            if !text.is_empty() {
-                buffer.push(Segment::control(text));
-            }
-            return;
-        }
+        // or a recording keeps them; only a terminal is sent them
+        // (`_render_buffer` drops them otherwise).
+        let text = control.as_str();
         if !text.is_empty() {
-            let stdout = std::io::stdout();
-            let mut lock = stdout.lock();
-            let _ = write!(lock, "{text}");
+            self.emit_end(vec![Segment::control(text)], false);
         }
     }
 
@@ -1161,7 +1164,7 @@ impl Console {
     /// [`begin_capture`](Self::begin_capture) and
     /// [`end_capture`](Self::end_capture) behave that way.
     pub fn capture(&self, f: impl FnOnce(&Console)) -> String {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
         self.segments_to_string(&segments)
     }
 
@@ -1203,7 +1206,7 @@ impl Console {
     /// Like [`capture`](Self::capture) but with all styles stripped, returning
     /// plain text. Port of `Console.export_text(styles=False)`.
     pub fn export_text(&self, f: impl FnOnce(&Console)) -> String {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
         segments_to_plain(&segments)
     }
 
@@ -1212,14 +1215,8 @@ impl Console {
     /// colour system (upstream's style keeps the codes printing rendered),
     /// or in truecolor, `Style.render`'s default, without one.
     pub fn export_text_styled(&self, f: impl FnOnce(&Console)) -> String {
-        let system = self.color_system().unwrap_or(ColorSystem::Truecolor);
-        self.record(f)
-            .iter()
-            .map(|segment| match &segment.style {
-                Some(style) => style.render(&segment.text, Some(system)),
-                None => segment.text.to_string(),
-            })
-            .collect()
+        let segments = self.capture_segments(f);
+        self.segments_to_styled_text(&segments)
     }
 
     /// Write what `f` prints to `path` as text, with escape codes when
@@ -1294,7 +1291,7 @@ impl Console {
         links: bool,
         f: impl FnOnce(&Console),
     ) -> std::io::Result<()> {
-        let mut segments = self.record(f);
+        let mut segments = self.capture_segments(f);
         let content = if !styles {
             segments_to_plain(&segments)
         } else {
@@ -1329,7 +1326,7 @@ impl Console {
         theme: &crate::terminal_theme::TerminalTheme,
         f: impl FnOnce(&Console),
     ) -> String {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
         crate::export::export_html_inline(&segments, theme)
     }
 
@@ -1347,7 +1344,7 @@ impl Console {
         theme: &crate::terminal_theme::TerminalTheme,
         f: impl FnOnce(&Console),
     ) -> String {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
         crate::export::export_html_classes(&segments, theme)
     }
 
@@ -1379,7 +1376,7 @@ impl Console {
         unique_id: &str,
         f: impl FnOnce(&Console),
     ) -> String {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
         crate::svg::export_svg(&segments, theme, title, unique_id, self.width())
     }
 
@@ -1394,7 +1391,7 @@ impl Console {
         inline_styles: bool,
         f: impl FnOnce(&Console),
     ) -> Result<String, crate::export::ExportFormatError> {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
         crate::export::export_html_with(&segments, theme, code_format, inline_styles)
     }
 
@@ -1413,7 +1410,7 @@ impl Console {
         font_aspect_ratio: f64,
         f: impl FnOnce(&Console),
     ) -> Result<String, crate::export::ExportFormatError> {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
         crate::svg::export_svg_with(
             &segments,
             theme,
@@ -1442,14 +1439,14 @@ impl Console {
     /// Rendering twice instead would be wrong, not merely wasteful: a renderable
     /// reading standard input only yields its content once.
     pub fn record_output(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
-        self.record(f)
+        self.capture_segments(f)
     }
 
     /// Run `f` with this thread's output recorded to a fresh buffer, returning
     /// the captured segments. Captures nest (each pushes its own buffer), are
     /// per thread (upstream's `ConsoleThreadLocals`), and end even if `f`
     /// panics (upstream's `Capture.__exit__` always runs).
-    fn record(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
+    fn capture_segments(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
         /// Pops this thread's capture buffer on drop, so an unwinding `f`
         /// does not leave the console capturing.
         struct CaptureGuard<'a>(&'a Console);
@@ -1481,6 +1478,181 @@ impl Console {
         let captured = guard.pop();
         std::mem::forget(guard);
         captured
+    }
+
+    /// Whether what is written is recorded. Port of `Console.record`.
+    pub fn record(&self) -> bool {
+        self.record.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Start (or stop) recording. Upstream's `Console.record` is a plain
+    /// attribute.
+    pub fn set_record(&self, record: bool) {
+        self.record
+            .store(record, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// The recorded segments, cleared when `clear`; an error when the
+    /// console is not recording (upstream's assertion).
+    fn take_recorded(&self, clear: bool) -> crate::errors::Result<Vec<Segment>> {
+        if !self.record() {
+            return Err(crate::errors::RichError::Console(
+                "To export console contents set record=True in the constructor or instance"
+                    .to_string(),
+            ));
+        }
+        let mut recorded = self.lock_record_buffer();
+        Ok(if clear {
+            std::mem::take(&mut *recorded)
+        } else {
+            recorded.clone()
+        })
+    }
+
+    /// The recorded output as text, with escape codes when `styles`, the
+    /// record cleared when `clear`. Port of `Console.export_text(clear=…,
+    /// styles=…)` for a console built with
+    /// [`record`](ConsoleBuilder::record); upstream's default is
+    /// `clear=True, styles=False`. Without plain text, control codes are
+    /// left out; with styles they stay, as upstream's.
+    ///
+    /// The styled form renders each style in the console's colour system,
+    /// truecolor without one, as [`export_text_styled`](Self::export_text_styled).
+    ///
+    /// # Errors
+    ///
+    /// [`RichError::Console`](crate::errors::RichError::Console) when the
+    /// console is not recording (upstream asserts).
+    pub fn export_text_recorded(&self, clear: bool, styles: bool) -> crate::errors::Result<String> {
+        let segments = self.take_recorded(clear)?;
+        Ok(if styles {
+            self.segments_to_styled_text(&segments)
+        } else {
+            segments_to_plain(&segments)
+        })
+    }
+
+    /// Write [`export_text_recorded`](Self::export_text_recorded) to `path`.
+    /// Port of `Console.save_text(path, clear=…, styles=…)`.
+    pub fn save_text_recorded(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        clear: bool,
+        styles: bool,
+    ) -> std::io::Result<()> {
+        let text = self
+            .export_text_recorded(clear, styles)
+            .map_err(std::io::Error::other)?;
+        std::fs::write(path, text)
+    }
+
+    /// The recorded output as an HTML document. Port of
+    /// `Console.export_html(theme=…, clear=…, code_format=…,
+    /// inline_styles=…)` for a console built with
+    /// [`record`](ConsoleBuilder::record).
+    ///
+    /// # Errors
+    ///
+    /// [`RichError::Console`](crate::errors::RichError::Console) when the
+    /// console is not recording, or when `code_format` is not a template
+    /// this port can fill (see [`export::export_html_with`](crate::export::export_html_with)).
+    pub fn export_html_recorded(
+        &self,
+        options: &ExportHtmlOptions<'_>,
+    ) -> crate::errors::Result<String> {
+        let segments = self.take_recorded(options.clear)?;
+        let theme = options
+            .theme
+            .unwrap_or(&crate::terminal_theme::DEFAULT_TERMINAL_THEME);
+        crate::export::export_html_with(
+            &segments,
+            theme,
+            options.code_format,
+            options.inline_styles,
+        )
+        .map_err(|error| crate::errors::RichError::Console(error.to_string()))
+    }
+
+    /// Write [`export_html_recorded`](Self::export_html_recorded) to `path`.
+    /// Port of `Console.save_html`.
+    pub fn save_html_recorded(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        options: &ExportHtmlOptions<'_>,
+    ) -> std::io::Result<()> {
+        let html = self
+            .export_html_recorded(options)
+            .map_err(std::io::Error::other)?;
+        std::fs::write(path, html)
+    }
+
+    /// The recorded output as an SVG image of a terminal window. Port of
+    /// `Console.export_svg(title=…, theme=…, clear=…, code_format=…,
+    /// font_aspect_ratio=…, unique_id=…)` for a console built with
+    /// [`record`](ConsoleBuilder::record). Control codes are left out, and
+    /// the image is as wide as the console is now.
+    ///
+    /// # Errors
+    ///
+    /// As for [`export_html_recorded`](Self::export_html_recorded).
+    pub fn export_svg_recorded(
+        &self,
+        options: &ExportSvgOptions<'_>,
+    ) -> crate::errors::Result<String> {
+        let segments: Vec<Segment> = self
+            .take_recorded(options.clear)?
+            .into_iter()
+            .filter(|segment| !segment.control)
+            .collect();
+        let theme = options
+            .theme
+            .unwrap_or(&crate::terminal_theme::SVG_EXPORT_THEME);
+        crate::svg::export_svg_with(
+            &segments,
+            theme,
+            options.title,
+            options.unique_id,
+            self.width(),
+            options
+                .code_format
+                .unwrap_or(crate::svg::CONSOLE_SVG_FORMAT),
+            options.font_aspect_ratio,
+        )
+        .map_err(|error| crate::errors::RichError::Console(error.to_string()))
+    }
+
+    /// Write [`export_svg_recorded`](Self::export_svg_recorded) to `path`.
+    /// Port of `Console.save_svg`.
+    pub fn save_svg_recorded(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        options: &ExportSvgOptions<'_>,
+    ) -> std::io::Result<()> {
+        let svg = self
+            .export_svg_recorded(options)
+            .map_err(std::io::Error::other)?;
+        std::fs::write(path, svg)
+    }
+
+    /// The record buffer, recovering it if a panicking print poisoned the
+    /// lock.
+    fn lock_record_buffer(&self) -> std::sync::MutexGuard<'_, Vec<Segment>> {
+        self.record_buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Segments as text with each style's escape codes, in the console's
+    /// colour system (truecolor without one); control codes kept.
+    fn segments_to_styled_text(&self, segments: &[Segment]) -> String {
+        let system = self.color_system().unwrap_or(ColorSystem::Truecolor);
+        segments
+            .iter()
+            .map(|segment| match &segment.style {
+                Some(style) => style.render(&segment.text, Some(system)),
+                None => segment.text.to_string(),
+            })
+            .collect()
     }
 
     /// The per-thread capture stacks, recovering them if a panicking print
@@ -1928,6 +2100,71 @@ impl Renderable for Text {
     }
 }
 
+/// The keyword arguments of upstream's `Console.export_html` and
+/// `save_html`, for [`Console::export_html_recorded`].
+#[derive(Clone, Copy)]
+pub struct ExportHtmlOptions<'a> {
+    /// `theme=`: the palette, or `None` for
+    /// [`DEFAULT_TERMINAL_THEME`](crate::terminal_theme::DEFAULT_TERMINAL_THEME).
+    pub theme: Option<&'a crate::terminal_theme::TerminalTheme>,
+    /// `clear=`: empty the record afterwards (default `true`).
+    pub clear: bool,
+    /// `code_format=`: the page template, or `None` for
+    /// [`CONSOLE_HTML_FORMAT`](crate::export::CONSOLE_HTML_FORMAT).
+    pub code_format: Option<&'a str>,
+    /// `inline_styles=`: styles on each span rather than in a stylesheet
+    /// (default `false`).
+    pub inline_styles: bool,
+}
+
+impl Default for ExportHtmlOptions<'_> {
+    fn default() -> Self {
+        ExportHtmlOptions {
+            theme: None,
+            clear: true,
+            code_format: None,
+            inline_styles: false,
+        }
+    }
+}
+
+/// The keyword arguments of upstream's `Console.export_svg` and `save_svg`,
+/// for [`Console::export_svg_recorded`].
+#[derive(Clone, Copy)]
+pub struct ExportSvgOptions<'a> {
+    /// `title=`: the window title (default `"Rich"`).
+    pub title: &'a str,
+    /// `theme=`: the palette, or `None` for
+    /// [`SVG_EXPORT_THEME`](crate::terminal_theme::SVG_EXPORT_THEME).
+    pub theme: Option<&'a crate::terminal_theme::TerminalTheme>,
+    /// `clear=`: empty the record afterwards (default `true`).
+    pub clear: bool,
+    /// `code_format=`: the image template, or `None` for
+    /// [`CONSOLE_SVG_FORMAT`](crate::svg::CONSOLE_SVG_FORMAT).
+    pub code_format: Option<&'a str>,
+    /// `font_aspect_ratio=`: the font's width to height (default 0.61).
+    pub font_aspect_ratio: f64,
+    /// `unique_id=`: the prefix of the image's ids and classes. Upstream's
+    /// default hashes Python's `repr()` of the segments, which Rust cannot
+    /// reproduce ([DIVERGENCES §15]); the default here is `"terminal"`.
+    ///
+    /// [DIVERGENCES §15]: https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/DIVERGENCES.md#15-exports-done-html-both-forms--svg-svg-needs-an-explicit-unique_id
+    pub unique_id: &'a str,
+}
+
+impl Default for ExportSvgOptions<'_> {
+    fn default() -> Self {
+        ExportSvgOptions {
+            title: "Rich",
+            theme: None,
+            clear: true,
+            code_format: None,
+            font_aspect_ratio: 0.61,
+            unique_id: "terminal",
+        }
+    }
+}
+
 /// Builder for [`Console`], allowing detection to be overridden.
 pub struct ConsoleBuilder {
     force_terminal: Option<bool>,
@@ -1951,6 +2188,7 @@ pub struct ConsoleBuilder {
     soft_wrap: bool,
     style: Option<crate::style::StyleType>,
     on_broken_pipe: Option<BrokenPipeHandler>,
+    record: bool,
 }
 
 impl ConsoleBuilder {
@@ -1977,7 +2215,16 @@ impl ConsoleBuilder {
             soft_wrap: false,
             style: None,
             on_broken_pipe: None,
+            record: false,
         }
+    }
+
+    /// Record what is written (default off), for
+    /// [`Console::export_text_recorded`], [`Console::export_html_recorded`]
+    /// and [`Console::export_svg_recorded`]. Port of `Console(record=…)`.
+    pub fn record(mut self, value: bool) -> Self {
+        self.record = value;
+        self
     }
 
     /// Detect the terminal from `environ` instead of the process
@@ -2180,6 +2427,8 @@ impl ConsoleBuilder {
             tab_size: self.tab_size.unwrap_or(crate::text::DEFAULT_TAB_SIZE),
             captures: std::sync::Mutex::new(CaptureStacks::new()),
             is_alt_screen: std::sync::atomic::AtomicBool::new(false),
+            record: std::sync::atomic::AtomicBool::new(self.record),
+            record_buffer: std::sync::Mutex::new(Vec::new()),
         }
     }
 }
