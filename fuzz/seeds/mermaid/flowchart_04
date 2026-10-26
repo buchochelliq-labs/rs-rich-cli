@@ -1,0 +1,10 @@
+žgraph LR
+  A --> B
+  A ==> C
+  A -.-> D
+  A --- E
+  A <--> F
+  A --o G
+  A --x H
+  A ~~~ I
+  A -.->|dotted| J

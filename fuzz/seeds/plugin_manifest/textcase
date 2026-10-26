@@ -1,0 +1,7 @@
+rich-plugin 1.0
+name textcase
+version 0.1.0
+capability transform upcase
+capability transform downcase
+capability fence-ansi loud
+future-key ignored

@@ -1,0 +1,148 @@
+name: nightly fuzzing
+
+# cargo-fuzz targets for every parser that takes outside input (fuzz/,
+# docs/design/fuzzing.md). Each target runs for a fixed time, from its seeds
+# and the corpus earlier runs kept. A crash, a timeout or an out-of-memory
+# input fails the target's job and uploads the input as an artifact. The 1.0
+# exit criterion (docs/plans/1.0.0.md) counts nights of this workflow.
+#
+# Not run on pull requests: CI's `check` job only builds the targets.
+on:
+  schedule:
+    - cron: "43 1 * * *"
+  workflow_dispatch:
+    inputs:
+      seconds:
+        description: Seconds to fuzz each target
+        required: false
+        default: "600"
+
+permissions:
+  contents: read
+
+concurrency:
+  group: nightly-fuzz
+  cancel-in-progress: false
+
+env:
+  CARGO_TERM_COLOR: always
+  # Pinned together: cargo-fuzz's sanitizer flags follow the nightly's.
+  FUZZ_TOOLCHAIN: nightly-2026-05-20
+  CARGO_FUZZ_VERSION: 0.13.2
+
+jobs:
+  targets:
+    name: list the targets
+    runs-on: ubuntu-latest
+    outputs:
+      targets: ${{ steps.list.outputs.targets }}
+    steps:
+      - uses: actions/checkout@v7
+
+      # Every `[[bin]]` in fuzz/Cargo.toml, so a new target is fuzzed
+      # without editing this file.
+      - name: Read the targets from fuzz/Cargo.toml
+        id: list
+        run: |
+          python3 - <<'EOF' >> "$GITHUB_OUTPUT"
+          import json, tomllib
+          with open("fuzz/Cargo.toml", "rb") as f:
+              targets = [b["name"] for b in tomllib.load(f)["bin"]]
+          print("targets=" + json.dumps(targets))
+          EOF
+
+  fuzz:
+    name: fuzz ${{ matrix.target }}
+    needs: targets
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    strategy:
+      fail-fast: false
+      matrix:
+        target: ${{ fromJSON(needs.targets.outputs.targets) }}
+    steps:
+      - uses: actions/checkout@v7
+
+      - name: Install the pinned nightly
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ env.FUZZ_TOOLCHAIN }}
+
+      - name: Cache cargo-fuzz
+        id: cargo-fuzz
+        uses: actions/cache@v6
+        with:
+          path: ~/.cargo/bin/cargo-fuzz
+          key: cargo-fuzz-${{ runner.os }}-${{ env.CARGO_FUZZ_VERSION }}
+
+      - name: Install cargo-fuzz
+        if: steps.cargo-fuzz.outputs.cache-hit != 'true'
+        run: cargo install --locked cargo-fuzz --version "$CARGO_FUZZ_VERSION"
+
+      # The sanitizer build of the dependencies, shared by every target;
+      # one job writes it, so the matrix does not race to save it.
+      - name: Cache the build
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: fuzz
+          shared-key: fuzz-${{ env.FUZZ_TOOLCHAIN }}
+          save-if: ${{ matrix.target == 'markup' }}
+
+      - name: Restore the corpus
+        uses: actions/cache/restore@v6
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+          restore-keys: fuzz-corpus-${{ matrix.target }}-
+
+      - name: Build the target
+        run: cargo +"$FUZZ_TOOLCHAIN" fuzz build "${{ matrix.target }}"
+
+      - name: Fuzz
+        env:
+          SECONDS_PER_TARGET: ${{ inputs.seconds || '600' }}
+        run: |
+          mkdir -p "fuzz/corpus/${{ matrix.target }}"
+          cargo +"$FUZZ_TOOLCHAIN" fuzz run "${{ matrix.target }}" \
+            "fuzz/corpus/${{ matrix.target }}" "fuzz/seeds/${{ matrix.target }}" -- \
+            -max_total_time="$SECONDS_PER_TARGET" -timeout=10 -rss_limit_mb=2048 \
+            -print_final_stats=1
+
+      # Keep the corpus small: only inputs that add coverage.
+      - name: Minimise the corpus
+        if: success()
+        run: cargo +"$FUZZ_TOOLCHAIN" fuzz cmin "${{ matrix.target }}" "fuzz/corpus/${{ matrix.target }}"
+
+      # Saved even when the target failed, so tomorrow starts from what
+      # tonight found.
+      - name: Save the corpus
+        if: always()
+        uses: actions/cache/save@v6
+        with:
+          path: fuzz/corpus/${{ matrix.target }}
+          key: fuzz-corpus-${{ matrix.target }}-${{ github.run_id }}
+
+      - name: Upload the failing input
+        if: failure()
+        uses: actions/upload-artifact@v7
+        with:
+          name: fuzz-artifacts-${{ matrix.target }}
+          path: fuzz/artifacts/${{ matrix.target }}
+          if-no-files-found: ignore
+          retention-days: 30
+
+      - name: Report the finding
+        if: failure()
+        run: |
+          {
+            echo "## Fuzz finding: \`${{ matrix.target }}\`"
+            echo
+            echo "The failing input is the \`fuzz-artifacts-${{ matrix.target }}\` artifact."
+            echo "Reproduce it with:"
+            echo
+            echo '```bash'
+            echo "cargo +$FUZZ_TOOLCHAIN fuzz run ${{ matrix.target }} fuzz/artifacts/${{ matrix.target }}/<file>"
+            echo '```'
+            echo
+            echo "Triage: docs/design/fuzzing.md#triaging-a-finding"
+          } >> "$GITHUB_STEP_SUMMARY"

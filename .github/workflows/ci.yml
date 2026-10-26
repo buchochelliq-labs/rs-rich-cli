@@ -120,6 +120,16 @@ jobs:
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
 
+      # The fuzz targets (fuzz/, a workspace of their own) are formatted,
+      # still build against the crates' APIs, and their lockfile is current.
+      # Fuzzing itself runs nightly (fuzz.yml); a check needs no nightly.
+      - name: The fuzz targets build
+        env:
+          CARGO_TARGET_DIR: target
+        run: |
+          cargo fmt --manifest-path fuzz/Cargo.toml --check
+          cargo check --locked --manifest-path fuzz/Cargo.toml --bins
+
       # The run's output is kept: a failure in an early test target ends up
       # far above the end of the log, so the next step prints each failing
       # test's output at the end and in the job summary.

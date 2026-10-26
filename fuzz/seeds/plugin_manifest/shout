@@ -1,0 +1,6 @@
+rich-plugin 1.0
+name shout
+version 0.1.0
+description Upper-cases text
+capability transform upper
+capability fence-markup shout

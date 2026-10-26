@@ -6,3 +6,6 @@
 *.png binary
 *.ico binary
 *.sixel binary
+
+# Fuzz seeds are exact input bytes (CR, NUL, escapes).
+fuzz/seeds/** binary

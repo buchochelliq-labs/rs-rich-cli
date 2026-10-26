@@ -134,6 +134,12 @@ interpreter's speed is enough. The sandbox:
   takes host memory outside the linear memory.
   `wasmi`'s strict limits bound the module's own size and structure, and the
   file may be 16 MiB.
+- **Validated before `wasmi` reads it,** by wasmparser, so a malformed module
+  is refused rather than reaching a parser bug (wasmi 2.0.0 divides by zero
+  on one malformed code section).
+- **No tail-call dispatch.** `wasmi` runs with its portable (loop) dispatch:
+  its tail-call dispatch could overflow the host's stack in an optimised
+  build. Both were found by the [fuzz targets](fuzzing.md).
 - **A fresh instance per call,** so no state or leaked memory carries over,
   and calls cannot interfere with each other.
 

@@ -3111,6 +3111,7 @@ dependencies = [
  "unicode-width",
  "vt100",
  "wasmi",
+ "wasmparser 0.228.0",
  "wat",
  "windows-sys 0.61.2",
  "zip",
