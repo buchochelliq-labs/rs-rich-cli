@@ -11,14 +11,12 @@ purpose runs `--bless` and commits the snapshot, so the review sees it.
     python scripts/public_api.py --check            # every crate
     python scripts/public_api.py --bless rs-rich    # rewrite one snapshot
 
-Both need the pinned tools (`--install` prints the commands):
-
-- the nightly toolchain NIGHTLY, for rustdoc's JSON output (no stable
-  rustdoc writes it). Only the docs are built with it; nothing else changes;
-- `cargo-public-api` TOOL_VERSION, which reads that nightly's JSON format.
-
-Moving either pin can change every snapshot's text without any API change,
-so a pin moves in its own commit, with the snapshots re-blessed.
+Both need the tools pinned in `api/tools.toml` (`--install` prints the
+commands): a nightly toolchain, for rustdoc's JSON output (no stable rustdoc
+writes it; only the docs are built with it), and the `cargo-public-api` that
+reads that nightly's JSON format. Moving either pin can change every
+snapshot's text without any API change, so a pin moves in its own commit,
+with the snapshots re-blessed.
 
 The snapshots are made on Linux. An item behind `cfg(windows)` or another
 platform is not in them; one behind a Cargo feature is, for the features
@@ -32,12 +30,13 @@ import os
 from pathlib import Path
 import subprocess
 import sys
+import tomllib
 
 ROOT = Path(__file__).resolve().parent.parent
 SNAPSHOTS = ROOT / "api"
-# A nightly whose rustdoc writes JSON format 57, the one TOOL_VERSION reads.
-NIGHTLY = "nightly-2026-05-20"
-TOOL_VERSION = "0.52.0"
+TOOLS = tomllib.loads((SNAPSHOTS / "tools.toml").read_text(encoding="utf-8"))
+NIGHTLY = TOOLS["nightly"]
+TOOL_VERSION = TOOLS["cargo-public-api"]
 # The features each crate's snapshot covers: all of them, except where that
 # only adds code, not API (the CLI's commands and tree-sitter languages), or
 # needs a C toolchain the API does not depend on.
@@ -113,11 +112,15 @@ def main(argv=None):
     mode.add_argument("--check", action="store_true", help="fail when a snapshot differs from the API")
     mode.add_argument("--bless", action="store_true", help="rewrite the snapshots from the API")
     mode.add_argument("--install", action="store_true", help="print the commands that install the tools")
+    mode.add_argument("--nightly", action="store_true", help="print the pinned nightly toolchain")
     parser.add_argument("crates", nargs="*", help="limit to these crates (default: every published crate)")
     parser.add_argument("--target-dir", help="Cargo's target directory (default: CARGO_TARGET_DIR or target)")
     args = parser.parse_args(argv)
     if args.install:
         print(install_commands(), end="")
+        return 0
+    if args.nightly:
+        print(NIGHTLY)
         return 0
     metadata = json.loads(run(["cargo", "metadata", "--no-deps", "--format-version", "1", "--locked"],
                               capture_output=True, text=True, encoding="utf-8").stdout)

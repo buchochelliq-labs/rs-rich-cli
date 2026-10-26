@@ -121,6 +121,18 @@ def select(tag, metadata, root, wanted=None, releases=None):
     return planned
 
 
+def semver_gate(selection, gate=None):
+    """Refuse a version bump smaller than the change, by Cargo's rules, with
+    cargo-semver-checks against each crate's newest release on crates.io. A
+    0.0.x bump is a breaking one, so it fits any change (Stage 3 of the plan
+    to 1.0.0; scripts/semver_check.py has the details)."""
+    if gate is None:
+        from semver_check import gate
+    refusals = gate(selection)
+    if refusals:
+        raise ValueError("The version bump is smaller than the change:\n" + "\n".join(refusals))
+
+
 def registry_status(name, version):
     request = Request(f"https://crates.io/api/v1/crates/{name}/{version}",
                       headers={"User-Agent": "rs-rich-release"})
@@ -273,6 +285,8 @@ def main():
                                help="check a tag's selection (RELEASE_SELECTION, for a release tag) "
                                     "against the manifests and export it")
     plan.add_argument("tag")
+    plan.add_argument("--semver-checks", action="store_true",
+                      help="also refuse a version bump smaller than the change (scripts/semver_check.py)")
     commands.add_parser("preflight")
     upload = commands.add_parser("publish")
     upload.add_argument("--dry-run", action="store_true")
@@ -293,6 +307,8 @@ def main():
         releases = Path("RELEASES.toml")
         selection = select(args.tag, metadata, root, json.loads(wanted) if wanted else None,
                            releases.read_text(encoding="utf-8") if releases.exists() else None)
+        if args.semver_checks:
+            semver_gate(selection)
         encoded = json.dumps(selection, separators=(",", ":"))
         print(encoded)
         if output := os.environ.get("GITHUB_OUTPUT"):

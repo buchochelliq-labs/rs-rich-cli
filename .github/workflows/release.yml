@@ -97,11 +97,47 @@ jobs:
         if: ${{ inputs.verify_only == true }}
         run: python3 scripts/release_cohort.py published "$RELEASE_TAG"
 
+      # cargo-semver-checks, for the plan's SemVer gate (Stage 3 of the plan
+      # to 1.0.0): pinned in api/tools.toml, cached as CI's `api` job caches it.
+      - name: Read the pinned SemVer tools
+        id: tools
+        if: ${{ inputs.verify_only != true }}
+        run: |
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import tomllib
+          tools = tomllib.load(open("api/tools.toml", "rb"))
+          for key, value in tools.items():
+              print(f"{key.replace('-', '_')}={value}")
+          PY
+
+      - name: Install the toolchain cargo-semver-checks reads
+        if: ${{ inputs.verify_only != true }}
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.tools.outputs.semver_checks_toolchain }}
+
+      - name: Cache cargo-semver-checks
+        id: semver-tool
+        if: ${{ inputs.verify_only != true }}
+        uses: actions/cache@v6
+        with:
+          path: ~/.cargo/bin/cargo-semver-checks
+          key: semver-checks-${{ runner.os }}-${{ hashFiles('api/tools.toml') }}
+
+      - name: Install cargo-semver-checks
+        if: ${{ inputs.verify_only != true && steps.semver-tool.outputs.cache-hit != 'true' }}
+        run: cargo install --locked cargo-semver-checks --version "${{ steps.tools.outputs.cargo_semver_checks }}"
+
+      # With --semver-checks the plan also refuses a version bump smaller than
+      # the change, by Cargo's rules, against each crate's last release. A
+      # 0.0.x bump is a breaking one and fits any change; CI's `api` job holds
+      # 0.0.x breaks to api/semver-breaks.toml instead.
       - name: Selected manifests and internal requirements must agree
         id: plan
         env:
           RELEASE_SELECTION: ${{ steps.due.outputs.selection || steps.done.outputs.selection }}
-        run: python3 scripts/release.py plan "$RELEASE_TAG"
+          SEMVER_CHECKS: ${{ inputs.verify_only != true && '--semver-checks' || '' }}
+        run: python3 scripts/release.py plan "$RELEASE_TAG" $SEMVER_CHECKS
 
   # The same gate every PR passes, re-run on the exact tagged tree. `cargo
   # publish`'s own verification does NOT compile test targets for these crates

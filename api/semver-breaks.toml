@@ -1,0 +1,84 @@
+# Breaking changes accepted for the release in preparation, per crate and per
+# the version that ships them. scripts/semver_check.py (CI's `public API and
+# SemVer` job) checks every 0.0.x crate against its last release as if the
+# bump were a minor one, and fails on a breaking change not listed here.
+#
+# An entry names the cargo-semver-checks lint, the items as its report names
+# them (without their file locations), and why. Once the version is on
+# crates.io the entries are spent: the script says so, and they are removed.
+
+# 0.0.23 plan, item 2: `rich --rst` follows rich-rst 2.2.0. `rst::parse`
+# returns the document tree (`rst::Element`); the old block model is gone.
+# The maintainer accepted the break on 2026-10-26.
+[[break]]
+crate = "rs-rich-ext"
+version = "0.0.20"
+lint = "enum_missing"
+items = ["enum rich_ext::rst::Inline", "enum rich_ext::rst::Block"]
+why = "rst::parse returns the document tree (0.0.23 plan, item 2)"
+
+[[break]]
+crate = "rs-rich-ext"
+version = "0.0.20"
+lint = "struct_missing"
+items = ["struct rich_ext::rst::Field", "struct rich_ext::rst::DefinitionItem", "struct rich_ext::rst::OptionItem"]
+why = "rst::parse returns the document tree (0.0.23 plan, item 2)"
+
+[[break]]
+crate = "rs-rich-ext"
+version = "0.0.20"
+lint = "inherent_method_missing"
+items = ["RestructuredText::blocks"]
+why = "rst::parse returns the document tree (0.0.23 plan, item 2)"
+
+# 0.0.23 plan, item 5: the faster painter. A surface cell is 12 bytes and
+# `Copy`, with no heap string; its text is read with `Cell::text()`.
+[[break]]
+crate = "rs-rich-ext"
+version = "0.0.20"
+lint = "struct_pub_field_missing"
+items = ["field text of struct Cell"]
+why = "surface cells are 12 bytes and Copy; read the text with Cell::text() (0.0.23 plan, item 5)"
+
+[[break]]
+crate = "rs-rich-ext"
+version = "0.0.20"
+lint = "constructible_struct_adds_private_field"
+items = ["field Cell.bytes", "field Cell.len"]
+why = "surface cells are 12 bytes and Copy; read the text with Cell::text() (0.0.23 plan, item 5)"
+
+[[break]]
+crate = "rs-rich-ext"
+version = "0.0.20"
+lint = "copy_impl_added"
+items = ["rich_ext::surface::Cell"]
+why = "surface cells are 12 bytes and Copy (0.0.23 plan, item 5)"
+
+# rs-rich-doom's gap 6 (0.0.23 plan, item 1): draw timings in `FrameStats`.
+# Code that builds a `FrameStats` field by field must name the new fields.
+[[break]]
+crate = "rs-rich-intuituive"
+version = "0.0.8"
+lint = "constructible_struct_adds_field"
+items = ["field FrameStats.draw", "field FrameStats.paint", "field FrameStats.write", "field FrameStats.painted",
+         "field FrameStats.total_bytes", "field FrameStats.total_draw", "field FrameStats.total_paint",
+         "field FrameStats.total_write"]
+why = "FrameStats gains each frame's timings and counts (Doom's gap 6)"
+
+# 0.0.23 plan, item 4: picture handling is rs-rich-art's. `intuituive::ImageView`
+# and `intuituive::Pixels` are still there, re-exported from rs-rich-art's
+# `picture`, which cargo-semver-checks does not follow into another crate;
+# `ImageView` lost `aspect`, `cell_px` and `keep_last_row` (gaps doc, gap 1).
+[[break]]
+crate = "rs-rich-intuituive"
+version = "0.0.8"
+lint = "struct_missing"
+items = ["struct intuituive::ImageView"]
+why = "ImageView is rs-rich-art's, re-exported; aspect, cell_px and keep_last_row are gone"
+
+[[break]]
+crate = "rs-rich-intuituive"
+version = "0.0.8"
+lint = "enum_missing"
+items = ["enum intuituive::Pixels"]
+why = "Pixels is rs-rich-art's, re-exported"

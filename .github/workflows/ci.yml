@@ -54,6 +54,9 @@ jobs:
       - name: Test the failing-test report
         run: python3 -m unittest discover -s scripts -p 'test_test_failures.py' -v
 
+      - name: Test the public API and SemVer checks
+        run: python3 -m unittest discover -s scripts -p 'test_api_checks.py' -v
+
       # The listing format (docs/design/marketplace.md): the examples against
       # the schema, with jsonschema as well as the script's own evaluator.
       - name: Marketplace listings validate, and the bad examples do not
@@ -882,9 +885,76 @@ jobs:
           grep -qE '^hello there *$' rendered.txt
           rm -f info.json refusal.txt doc.md rendered.txt
 
+  # Every published crate's public API against its snapshot in api/ (an
+  # API change shows in review as a snapshot change), and cargo-semver-checks
+  # against each crate's last release: Cargo's rule for the version bump,
+  # and every 0.0.x breaking change listed in api/semver-breaks.toml. The
+  # tools are pinned in api/tools.toml and cached once built.
+  api:
+    name: public API and SemVer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Read the pinned tools
+        id: tools
+        run: |
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import tomllib
+          tools = tomllib.load(open("api/tools.toml", "rb"))
+          for key, value in tools.items():
+              print(f"{key.replace('-', '_')}={value}")
+          PY
+
+      - name: Install the nightly that writes rustdoc JSON
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.tools.outputs.nightly }}
+
+      - name: Install the toolchain cargo-semver-checks reads
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.tools.outputs.semver_checks_toolchain }}
+
+      - name: Cache the API tools
+        id: api-tools
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/bin/cargo-public-api
+            ~/.cargo/bin/cargo-semver-checks
+          key: api-tools-${{ runner.os }}-${{ hashFiles('api/tools.toml') }}
+
+      - name: Install the API tools
+        if: steps.api-tools.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked cargo-public-api --version "${{ steps.tools.outputs.cargo_public_api }}"
+          cargo install --locked cargo-semver-checks --version "${{ steps.tools.outputs.cargo_semver_checks }}"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: api
+
+      # All features: intuiTUIve's `audio` needs ALSA's headers.
+      - name: Install ALSA headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - name: Public API snapshots match (python scripts/public_api.py --bless to update)
+        run: python3 scripts/public_api.py --check
+
+      - name: SemVer against each crate's last release
+        run: python3 scripts/semver_check.py
+
   ci-ok:
     name: ci-ok
-    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, paint-bench, wasm, plugin-compatibility, browser]
+    needs: [check, features, macos, msrv, parity, release-tests, api, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, paint-bench, wasm, plugin-compatibility, browser]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()
