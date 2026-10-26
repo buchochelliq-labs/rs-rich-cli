@@ -29,6 +29,5 @@ minisign -S -s main.key -m index.json -t "rs-rich-marketplace index serial=N"
 rm main.key main.pub backup.key backup.pub
 ```
 
-
 `python3 scripts/validate_marketplace.py --index docs/tapes/fixtures/marketplace/index.json`
 checks it.
