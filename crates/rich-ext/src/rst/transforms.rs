@@ -156,6 +156,8 @@ fn docinfo(document: &mut Element) {
             );
             continue;
         }
+        let mut field = field;
+        field.classes.push(super::parse::make_id(&name));
         info.children.push(field.into());
     }
     let at = document
@@ -572,7 +574,8 @@ fn contents(document: &mut Element) {
     }
     fn walk(element: &mut Element, top: bool) {
         let snapshot = element.clone();
-        for child in &mut element.children {
+        let mut empty = Vec::new();
+        for (index, child) in element.children.iter_mut().enumerate() {
             let Node::Element(child) = child else {
                 continue;
             };
@@ -581,16 +584,22 @@ fn contents(document: &mut Element) {
                     .attrs
                     .remove("__depth")
                     .and_then(|depth| depth.parse::<usize>().ok());
-                let local = child.attrs.remove("__local").is_some();
-                // The whole document's sections, or the enclosing one's.
-                let scope = if local || !top { &snapshot } else { &snapshot };
-                if let Some(list) = entries(scope, depth, 1) {
-                    child.children.push(list.into());
+                child.attrs.remove("__local");
+                // The sections of what holds it: the document's, or (local)
+                // its section's.
+                match entries(&snapshot, depth, 1) {
+                    Some(list) => child.children.push(list.into()),
+                    // No sections: the topic goes.
+                    None => empty.push(index),
                 }
                 continue;
             }
             walk(child, false);
         }
+        for index in empty.into_iter().rev() {
+            element.children.remove(index);
+        }
+        let _ = top;
     }
     walk(document, true);
 }

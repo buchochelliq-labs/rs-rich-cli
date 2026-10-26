@@ -2285,12 +2285,10 @@ impl Renderable for RestructuredText {
 }
 
 /// `rich_rst.strip_tags`: the data an `html.parser.HTMLParser` with
-/// `convert_charrefs` reports, fed `html` and never closed. Tags, comments,
+/// `convert_charrefs` reports, fed `html` and closed. Tags, comments,
 /// declarations and processing instructions go; character references are
 /// decoded as `html.unescape` decodes them; `script` and `style` bodies are
-/// kept as written. Like the parser, it holds back (and so drops) text it
-/// cannot finish: an unclosed tag, or a trailing `&` that may start a
-/// reference.
+/// kept as written. An unclosed tag at the end is dropped.
 fn strip_tags(html: &str) -> String {
     let mut out = String::new();
     let n = html.len();
@@ -2299,18 +2297,9 @@ fn strip_tags(html: &str) -> String {
         let rest = &html[i..];
         let j = match rest.find('<') {
             Some(offset) => i + offset,
-            None => {
-                // A reference may be cut off at the end of the input.
-                let from = i.max(n.saturating_sub(34));
-                let from = (from..=n).find(|&k| html.is_char_boundary(k)).unwrap_or(n);
-                if let Some(amp) = html[from..].rfind('&') {
-                    let after = &html[from + amp..];
-                    if !after.contains(|c: char| c.is_whitespace() || c == ';') {
-                        break;
-                    }
-                }
-                n
-            }
+            // `close()` hands over the text held back for a reference
+            // that might go on.
+            None => n,
         };
         out.push_str(&unescape_html(&html[i..j]));
         i = j;

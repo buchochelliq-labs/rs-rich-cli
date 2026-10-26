@@ -668,6 +668,8 @@ fn link(text: String, uri: String) -> Inline {
 /// Interpreted text under `role` (the default, `title-reference`, when none).
 fn role(role: Option<String>, body: &[char], raw: &str) -> Vec<Inline> {
     let text = unescape(body);
+    // `math` and `code` keep their backslashes.
+    let verbatim = restore(body);
     let role = role.map(|role| role.to_lowercase());
     // The PEP and RFC roles take a number and an optional `#anchor`.
     let numbered = |text: &str| {
@@ -683,10 +685,10 @@ fn role(role: Option<String>, body: &[char], raw: &str) -> Vec<Inline> {
         Some("strong") => Inline::Strong(text),
         Some("command" | "program") => Inline::Strong(display_title(&text)),
         Some("literal") => Inline::Literal(text, Vec::new()),
-        Some("code") => Inline::Literal(text, vec!["code".into()]),
+        Some("code") => Inline::Literal(verbatim, vec!["code".into()]),
         Some("subscript" | "sub") => Inline::Subscript(text),
         Some("superscript" | "sup") => Inline::Superscript(text),
-        Some("math") => Inline::Math(text),
+        Some("math") => Inline::Math(verbatim),
         Some("abbreviation" | "ab") => Inline::Abbreviation(text, String::new()),
         Some("acronym" | "ac") => Inline::Acronym(text),
         Some("abbr") => match text.rfind('(').filter(|_| text.ends_with(')')) {

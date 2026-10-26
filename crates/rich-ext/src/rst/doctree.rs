@@ -252,6 +252,10 @@ impl Element {
     }
 
     fn dump_into(&self, depth: usize, out: &mut Vec<String>) {
+        // Messages show only their source, so only those that have one.
+        if self.tag == "system_message" && self.find("literal_block").is_none() {
+            return;
+        }
         let pad = "  ".repeat(depth);
         let mut line = format!("{pad}<{}", self.tag);
         if !self.classes.is_empty() {
@@ -284,7 +288,15 @@ impl Element {
     }
 }
 
-const INT_ATTRS: &[&str] = &["morecols", "morerows", "start", "start_line", "auto", "anonymous"];
+const INT_ATTRS: &[&str] = &[
+    "morecols",
+    "morerows",
+    "start",
+    "start_line",
+    "auto",
+    "anonymous",
+    "linenos",
+];
 
 fn json_value(key: &str, value: &str) -> String {
     if INT_ATTRS.contains(&key) && value.parse::<i64>().is_ok() {

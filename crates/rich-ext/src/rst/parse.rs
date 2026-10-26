@@ -163,10 +163,10 @@ fn captures(regex: &Regex, line: &str) -> Option<Vec<String>> {
 }
 
 /// How deep body elements may nest: lists in lists, quotes in quotes. docutils
-/// itself fails with a `RecursionError` well before this (about 170 nested
-/// lists), so the cap changes nothing upstream renders; past it the rest of
-/// the text is one plain paragraph, so no document can exhaust the stack.
-const MAX_DEPTH: usize = 200;
+/// itself fails with a `RecursionError` at about 170 nested lists; past this
+/// cap the rest of the text is one plain paragraph, so no document can
+/// exhaust the stack (a test thread's 2 MiB included, in a debug build).
+const MAX_DEPTH: usize = 100;
 
 /// Each level of nesting re-reads the indented lines it holds, so a deeply
 /// nested document costs its depth times its size. Past [`CHARGED_DEPTH`]
@@ -1004,6 +1004,22 @@ fn definition_list(lines: &[String], start: usize) -> (Element, usize) {
     (list, i)
 }
 
+/// A name with its backslash escapes removed.
+fn unbackslash(name: &str) -> String {
+    let mut out = String::new();
+    let mut chars = name.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(next) = chars.next() {
+                out.push(next);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
 /// Link names compare lowercased with whitespace collapsed.
 pub(super) fn normalize(name: &str) -> String {
     super::inline::normalize_name(name)
@@ -1015,7 +1031,16 @@ fn explicit_markup(lines: &[String], start: usize) -> (Vec<Node>, usize) {
     let line = &lines[start];
     if let Some(found) = captures(&SUBSTITUTION, line) {
         let name = found[1].clone();
-        let (nodes, next) = directive(lines, start, &found[2].to_lowercase(), &found[4], true);
+        let (mut nodes, next) = directive(lines, start, &found[2].to_lowercase(), &found[4], true);
+        // The directive's own text starts at its name.
+        let prefix = line.find(&format!("{}::", found[2])).unwrap_or(0);
+        for node in &mut nodes {
+            if let Node::Element(image) = node {
+                if image.tag == "image" {
+                    image.rawsource = image.rawsource.get(prefix..).unwrap_or("").to_string();
+                }
+            }
+        }
         let mut definition = Element::new("substitution_definition");
         definition.names = vec![normalize(&name)];
         definition.attrs.insert("name", name.clone());
@@ -1048,7 +1073,7 @@ fn explicit_markup(lines: &[String], start: usize) -> (Vec<Node>, usize) {
     }
     if let Some(found) = captures(&TARGET, line) {
         let (block, next) = item_block(lines, start, &found[3]);
-        let name = found[1].trim_matches('`').replace("\\:", ":");
+        let name = unbackslash(found[1].trim_matches('`'));
         let uri: String = block.iter().map(|line| line.trim()).collect();
         let mut target = Element::new("target");
         target.names = vec![normalize(&name)];
@@ -1091,8 +1116,13 @@ fn explicit_markup(lines: &[String], start: usize) -> (Vec<Node>, usize) {
         return (vec![node.into()], next);
     }
     // A comment: the rest of the line and the indented block after it.
-    let (_, next) = item_block(lines, start, "");
-    (vec![Element::new("comment").into()], next)
+    let (block, next) = item_block(lines, start, line.get(3..).unwrap_or(""));
+    let text: Vec<String> = block.into_iter().skip_while(|line| blank(line)).collect();
+    let mut comment = Element::new("comment");
+    if !text.is_empty() {
+        comment = comment.child(Node::Text(text.join("\n")));
+    }
+    (vec![comment.into()], next)
 }
 
 /// A directive's options (`:name: value` lines first) and its content.
@@ -1181,9 +1211,7 @@ impl Directive<'_> {
     }
 
     fn error(&self, text: &str) -> Vec<Node> {
-        let mut source = self.raw.clone();
-        source.push('\n');
-        vec![message("ERROR", text, Some(source)).into()]
+        vec![message("ERROR", text, Some(self.raw.clone())).into()]
     }
 
     fn missing_argument(&self) -> Vec<Node> {
@@ -1241,7 +1269,13 @@ fn directive(
         .chain(lines[start + 1..next].iter().map(String::as_str))
         .collect::<Vec<_>>()
         .join("\n");
-    let raw = raw.trim_end().to_string();
+    // docutils' `block_text`: the directive's lines, and a blank line
+    // after them when one follows.
+    let raw = if raw.ends_with('\n') {
+        format!("{}\n", raw.trim_end())
+    } else {
+        raw
+    };
     let directive = Directive {
         name,
         argument: argument_text.replace('\n', " "),
@@ -1495,7 +1529,9 @@ fn body_directive(d: &Directive) -> Vec<Node> {
         name => {
             let mut nodes: Vec<Node> = vec![message(
                 "INFO",
-                &format!("No directive entry for \"{name}\"."),
+                &format!(
+                    "No directive entry for \"{name}\" in module \"rich_rst._vendor.docutils.parsers.rst.languages.en\".\nTrying \"{name}\" as canonical directive name."
+                ),
                 None,
             )
             .into()];
@@ -1636,8 +1672,7 @@ fn table(columns: &[usize], head: Vec<Element>, body: Vec<Element>) -> Element {
 }
 
 fn malformed(lines: &[String], detail: &str) -> Node {
-    let mut source = lines.join("\n");
-    source.push('\n');
+    let source = lines.join("\n");
     message("ERROR", &format!("Malformed table.\n{detail}"), Some(source)).into()
 }
 
