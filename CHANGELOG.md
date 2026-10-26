@@ -39,6 +39,33 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   fixtures: `stream-with-log.html`, `log-ul.html`, `log-div.html`,
   `adapt.html`.
 
+- **A real-site checklist for Noctiluca** (docs): five kinds of site to
+  open by hand before a release (news, a video watch page, a live stream
+  with chat, docs, a forum), what to look at on each, and the expected
+  limits, on [its status page](docs/guide/noctiluca/status.md#checking-on-real-sites);
+  docs/BRANCHING.md's release steps name it. A broken anchor in the 0.0.20
+  notes is fixed.
+
+- **Fixed: a page `switch` keeps hidden misses no update** (intuituive).
+  A page that held a scroll box kept its offscreen copy while hidden, so
+  when shown again it drew what it showed last, not what its signals said
+  (Noctiluca's page area, after a page was opened from the address bar in
+  reader mode). The page shown until now is hidden when the key changes,
+  so it draws afresh when it comes back. `tests/switch_hidden_child.rs`.
+
+- **`rich --rst` follows `rich-rst` 2.2.0** (ext, CLI): the pin in
+  `UPSTREAM.toml` moved from 1.3.2 to 2.2.0. `rich_ext::rst` now builds a
+  docutils document tree and applies docutils' transforms, as 2.x does: a
+  lone top section is the document's title, sections are drawn by level,
+  tables are tables (cells that span drawn line by line), list markers keep
+  their numbering style, footnotes are numbered, references and
+  substitutions resolve, and `contents` lists the sections. New directives:
+  `seealso`, `versionadded`, `versionchanged`, `deprecated`, `figure`,
+  `parsed-literal`, `epigraph`, `list-table`, `csv-table` and more. Breaking for
+  `rs-rich-ext`: `rst::parse` returns the tree (`rst::Element`), and
+  `Block`, `Inline` and friends are gone. Fresh goldens from rich-rst 2.2.0
+  on rich 15.0.0; DIVERGENCES §35 lists what is not ported.
+
 - **`rich serve --compress`** (CLI, `serve` feature): deflates frames of 1 KiB or more for pages that can undo it. Off by default; worth it over a slow link.
 
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
@@ -211,15 +238,20 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `-timedemo` does; `timedemo::script_from_tape` reads a rich-record
   tape's input. `examples/timedemo.rs` runs it on the dashboard.
   `rich record` records a shell, not an app, so it has no `--timedemo`.
-- **Paint strategies.** `App::paint_strategy` and `RICH_PAINT_STRATEGY`
-  choose `cells` (the default), `rows`, `full`, `scroll` or `best`.
+- **Paint strategies, with `best` the default.** `App::paint_strategy`
+  and `RICH_PAINT_STRATEGY` choose `best` (the default), `cells`, `rows`,
+  `full` or `scroll`.
   `scroll` moves rows that moved together with the terminal's scrolling
   (SU, SD, DECSTBM), so a log line or a list scrolled one row sends about
   one row's bytes: 147 bytes a frame for the log at 80x24, down from
-  4,013. `best` scrolls when rows moved and otherwise paints cells. It is opt-in for this
-  release. Scrolling is off on Windows, under tmux, inline and over a
-  picture; `App::terminal_scroll` turns it on or off wherever the app
-  runs.
+  4,013. `best` scrolls when rows moved and otherwise paints cells. It is
+  within 5% of the best fixed strategy on every scene of the release
+  benchmark, so an app paints with it unless it chooses; `cells` is the
+  0.0.22 behaviour, and `PaintStrategy::default()` is `Best`. A bare
+  rs-rich-ext `Painter` still starts on `cells`, since only its caller
+  knows where pictures sit. Scrolling is off on Windows, under tmux,
+  inline and over a picture; `App::terminal_scroll` turns it on or off
+  wherever the app runs.
 - **A faster painter.** Cells are 12 bytes and `Copy`, with no heap
   string (read a cell's text with `Cell::text()`; the `text` field is
   gone). Lines are written straight into cells without building a

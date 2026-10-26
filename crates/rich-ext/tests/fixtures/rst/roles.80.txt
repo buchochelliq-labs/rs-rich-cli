@@ -1,0 +1,30 @@
+A paragraph with an unclosed emphasis and **strong* text, interpreted, literal 
+with *stars*, a Ctrl+C, name.txt, File ▶ Open, ls, PEP 8, RFC 2616, 
+CVE-2024-1234, rich, term, ˣ and y.
+
+Email someone@example.org or visit <https://example.com/x>. A footnote [1] and 
+again [1]. [*]
+
+Nested emphasis with ``literal`` inside and *escaped* and trailing\.
+
+A line with a trailing double colon:
+┌────────────────────────────── python (default) ──────────────────────────────┐
+│ indented by two                                                              │
+└──────────────────────────────────────────────────────────────────────────────┘
+Paragraph targeted by an internal link, see internal.
+┌────────────────────────────── python — example ──────────────────────────────┐
+│ print(1)                                                                     │
+└──────────────────────────────────────────────────────────────────────────────┘
+╭────────────────────────────────── My Title ──────────────────────────────────╮
+│ Body with bold.                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭────────────────────────────────── Warning ───────────────────────────────────╮
+│ Short.                                                                       │
+╰──────────────────────────────────────────────────────────────────────────────╯
+╭───────────────────────────────── Attention ──────────────────────────────────╮
+│ Long text in an attention that goes on and on to wrap at forty columns.      │
+╰──────────────────────────────────────────────────────────────────────────────╯
+┌─────────────────────────────────── Footer ───────────────────────────────────┐
+│ 1: Named auto footnote.                                                      │
+│ *: Symbol.                                                                   │
+└──────────────────────────────────────────────────────────────────────────────┘

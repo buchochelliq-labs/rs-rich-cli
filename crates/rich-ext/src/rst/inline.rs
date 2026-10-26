@@ -10,7 +10,153 @@
 
 use std::collections::HashMap;
 
-use super::parse::{normalize_name, Inline};
+use super::doctree::{Element, Node};
+
+/// Inline markup as the inliner finds it, before it becomes nodes.
+#[derive(Clone, Debug, PartialEq, Eq)]
+pub enum Inline {
+    Text(String),
+    Emphasis(String),
+    Strong(String),
+    /// A literal, with its classes (`:code:` adds `code`).
+    Literal(String, Vec<String>),
+    TitleReference(String),
+    Subscript(String),
+    Superscript(String),
+    Math(String),
+    /// An abbreviation and its explanation.
+    Abbreviation(String, String),
+    Acronym(String),
+    /// A hyperlink: `` `text <uri>`_ ``, a standalone URI, or `name_` (a
+    /// `refname` until the transforms resolve it).
+    Reference {
+        text: String,
+        uri: Option<String>,
+        name: Option<String>,
+        anonymous: bool,
+        /// Its source, shown when it resolves to nothing.
+        raw: String,
+    },
+    /// `[1]_` (a label), `[#]_` or `[#name]_` (auto-numbered) and `[*]_`.
+    FootnoteReference {
+        label: Option<String>,
+        auto: Option<String>,
+        name: Option<String>,
+    },
+    CitationReference(String),
+    /// `|name|`, and `|name|_` (a reference around it) or `|name|__`.
+    SubstitutionReference {
+        name: String,
+        refend: usize,
+    },
+    /// `` _`text` ``: an inline target, whose text the visitor skips.
+    Target(String),
+    /// Markup docutils cannot read, shown as its source.
+    Problematic(String),
+}
+
+/// Link names compare lowercased with whitespace collapsed.
+pub(super) fn normalize_name(name: &str) -> String {
+    name.split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ")
+        .to_lowercase()
+}
+
+/// The inline markup as document nodes.
+pub(super) fn inline_nodes(inlines: Vec<Inline>) -> Vec<Node> {
+    inlines.into_iter().map(inline_node).collect()
+}
+
+fn inline_node(inline: Inline) -> Node {
+    let text = |tag: &'static str, text: String| Element::text(tag, text).into();
+    match inline {
+        Inline::Text(text) => Node::Text(text),
+        Inline::Emphasis(t) => text("emphasis", t),
+        Inline::Strong(t) => text("strong", t),
+        Inline::Literal(t, classes) => {
+            let mut literal = Element::text("literal", t);
+            literal.classes = classes;
+            literal.into()
+        }
+        Inline::TitleReference(t) => text("title_reference", t),
+        Inline::Subscript(t) => text("subscript", t),
+        Inline::Superscript(t) => text("superscript", t),
+        Inline::Math(t) => text("math", t),
+        Inline::Abbreviation(t, explanation) => {
+            let mut node = Element::text("abbreviation", t);
+            if !explanation.is_empty() {
+                node = node.with("explanation", explanation);
+            }
+            node.into()
+        }
+        Inline::Acronym(t) => text("acronym", t),
+        Inline::Reference {
+            text,
+            uri,
+            name,
+            anonymous,
+            raw,
+        } => {
+            let mut reference = Element::text("reference", text.clone()).with("name", text);
+            match (uri, name) {
+                (Some(uri), name) => {
+                    reference = reference.with("refuri", uri);
+                    // A named embedded URI is also a target for its name.
+                    if let Some(name) = name {
+                        reference = reference.with("__target", name);
+                    }
+                }
+                (None, Some(name)) => reference = reference.with("refname", name),
+                (None, None) => {}
+            }
+            if anonymous && reference.get("refuri").is_none() {
+                reference = reference.with("anonymous", "1");
+            }
+            if !raw.is_empty() {
+                reference = reference.with("__raw", raw);
+            }
+            reference.into()
+        }
+        Inline::FootnoteReference { label, auto, name } => {
+            let mut node = Element::new("footnote_reference");
+            if let Some(label) = label {
+                node = node.with("refname", label.clone()).child(Node::Text(label));
+            }
+            if let Some(auto) = auto {
+                node = node.with("auto", auto);
+            }
+            if let Some(name) = name {
+                node = node.with("refname", name);
+            }
+            node.into()
+        }
+        Inline::CitationReference(label) => Element::text("citation_reference", label.clone())
+            .with("refname", normalize_name(&label))
+            .into(),
+        Inline::SubstitutionReference { name, refend } => {
+            let reference = Element::text("substitution_reference", name.clone())
+                .with("refname", normalize_name(&name));
+            match refend {
+                0 => reference.into(),
+                1 => Element::new("reference")
+                    .with("refname", normalize_name(&name))
+                    .child(reference)
+                    .into(),
+                _ => Element::new("reference")
+                    .with("anonymous", "1")
+                    .child(reference)
+                    .into(),
+            }
+        }
+        Inline::Target(t) => {
+            let mut target = Element::text("target", t.clone());
+            target.names = vec![normalize_name(&t)];
+            target.into()
+        }
+        Inline::Problematic(t) => text("problematic", t),
+    }
+}
 
 /// Stands in for an escaping backslash, as docutils' `escape2null` does.
 const ESCAPE: char = '\0';
@@ -166,7 +312,7 @@ pub(super) fn parse_inline(text: &str) -> Vec<Inline> {
             // node: its own text node, which nothing inside starts again.
             if let Some(len) = problematic(&chars, i, &mut misses) {
                 implicit(&chars[plain_start..i], &mut inlines);
-                inlines.push(Inline::Text(unescape(&chars[i..i + len])));
+                inlines.push(Inline::Problematic(unescape(&chars[i..i + len])));
                 i += len;
                 plain_start = i;
                 continue;
@@ -321,7 +467,10 @@ fn markup_at(chars: &[char], i: usize, misses: &mut Misses) -> Option<(Vec<Inlin
                 return None;
             }
             let end = misses.search("``", i + 3, || find_end(chars, i + 3, "``", true))?;
-            Some((vec![Inline::Literal(restore(&chars[i + 2..end]))], end + 2))
+            Some((
+                vec![Inline::Literal(restore(&chars[i + 2..end]), Vec::new())],
+                end + 2,
+            ))
         }
         '`' => interpreted(chars, i, i + 1, None, misses),
         '_' if at(1) == Some('`') => {
@@ -380,12 +529,18 @@ fn interpreted(
     let raw = restore(&chars[start..k]);
     let nodes = if refend > 0 {
         if prefix_role.is_some() || suffix_role.is_some() {
-            vec![Inline::Text(raw)]
+            vec![Inline::Problematic(raw)]
         } else {
-            phrase_reference(body, refend == 2)
+            let mut nodes = phrase_reference(body, refend == 2);
+            for node in &mut nodes {
+                if let Inline::Reference { raw: source, .. } = node {
+                    source.clone_from(&raw);
+                }
+            }
+            nodes
         }
     } else if prefix_role.is_some() && suffix_role.is_some() {
-        vec![Inline::Text(raw)]
+        vec![Inline::Problematic(raw)]
     } else {
         role(prefix_role.or(suffix_role), body, &raw)
     };
@@ -443,6 +598,8 @@ fn phrase_reference(body: &[char], anonymous: bool) -> Vec<Inline> {
                         text: text_or(name),
                         uri: None,
                         name: Some(normalize_name(name)),
+                        anonymous,
+                        raw: String::new(),
                     }];
                 }
                 let uri: String = target.split_whitespace().collect();
@@ -453,6 +610,8 @@ fn phrase_reference(body: &[char], anonymous: bool) -> Vec<Inline> {
                     text,
                     uri: Some(uri),
                     name,
+                    anonymous,
+                    raw: String::new(),
                 }];
             }
         }
@@ -463,10 +622,12 @@ fn phrase_reference(body: &[char], anonymous: bool) -> Vec<Inline> {
         text,
         uri: None,
         name,
+        anonymous,
+        raw: String::new(),
     }]
 }
 
-/// Sphinx's cross-reference roles, which `rich-rst` renders as literals.
+/// The Sphinx roles `rich-rst` registers to render as literals.
 const SPHINX_ROLES: &[&str] = &[
     "func",
     "function",
@@ -496,50 +657,166 @@ const SPHINX_ROLES: &[&str] = &[
     "py:data",
     "py:const",
     "py:exc",
+    "envvar",
+    "token",
+    "option",
+    "term",
+    "ref",
+    "doc",
+    "any",
+    "numref",
+    "download",
+    "mailheader",
+    "mimetype",
+    "newsgroup",
+    "makevar",
+    "regexp",
+    "kbd",
+    "guilabel",
+    "manpage",
+    "py:variable",
+    "py:type",
+    "py:property",
+    "py:parameter",
+    "py:typevar",
+    "c:func",
+    "c:function",
+    "c:type",
+    "c:struct",
+    "c:union",
+    "c:enum",
+    "c:enumerator",
+    "c:member",
+    "c:var",
+    "c:macro",
+    "c:expr",
+    "c:texpr",
+    "cpp:func",
+    "cpp:function",
+    "cpp:class",
+    "cpp:type",
+    "cpp:member",
+    "cpp:var",
+    "cpp:enum",
+    "cpp:enumerator",
+    "cpp:concept",
+    "cpp:expr",
+    "cpp:texpr",
+    "cpp:alias",
+    "js:mod",
+    "js:module",
+    "js:func",
+    "js:function",
+    "js:data",
+    "js:attr",
+    "js:attribute",
+    "js:class",
+    "js:meth",
+    "js:method",
 ];
+
+/// `title <target>` shows its title, as the Sphinx roles do.
+fn display_title(text: &str) -> String {
+    if text.contains('<') && text.ends_with('>') {
+        let open = text.rfind('<').unwrap_or(0);
+        let title = text[..open].trim();
+        if !title.is_empty() {
+            return title.to_string();
+        }
+    }
+    text.to_string()
+}
+
+/// A reference with a URI.
+fn link(text: String, uri: String) -> Inline {
+    Inline::Reference {
+        text,
+        uri: Some(uri),
+        name: None,
+        anonymous: false,
+        raw: String::new(),
+    }
+}
 
 /// Interpreted text under `role` (the default, `title-reference`, when none).
 fn role(role: Option<String>, body: &[char], raw: &str) -> Vec<Inline> {
     let text = unescape(body);
+    // `math` and `code` keep their backslashes.
+    let verbatim = restore(body);
     let role = role.map(|role| role.to_lowercase());
+    // The PEP and RFC roles take a number and an optional `#anchor`.
+    let numbered = |text: &str| {
+        let (number, anchor) = match text.split_once('#') {
+            Some((number, anchor)) => (number.trim().to_string(), format!("#{anchor}")),
+            None => (text.trim().to_string(), String::new()),
+        };
+        (number.parse::<u32>().ok(), number, anchor)
+    };
     let node = match role.as_deref() {
-        None | Some("title-reference" | "title" | "t") => Inline::Text(text),
-        Some("emphasis") => Inline::Emphasis(text),
+        None | Some("title-reference" | "title" | "t") => Inline::TitleReference(text),
+        Some("emphasis" | "dfn") => Inline::Emphasis(text),
         Some("strong") => Inline::Strong(text),
-        Some("literal" | "code") => Inline::Literal(text),
+        Some("command" | "program") => Inline::Strong(display_title(&text)),
+        Some("literal") => Inline::Literal(text, Vec::new()),
+        Some("code") => Inline::Literal(verbatim, vec!["code".into()]),
         Some("subscript" | "sub") => Inline::Subscript(text),
         Some("superscript" | "sup") => Inline::Superscript(text),
-        Some("math" | "abbreviation" | "ab" | "acronym" | "ac") => Inline::Text(text),
-        Some("pep-reference" | "pep") => match text.trim().parse::<u32>() {
-            Ok(number) => Inline::Reference {
-                text: format!("PEP {text}"),
-                uri: Some(format!("https://peps.python.org/pep-{number:04}")),
-                name: None,
-            },
-            Err(_) => Inline::Text(raw.to_string()),
+        Some("math") => Inline::Math(verbatim),
+        Some("abbreviation" | "ab") => Inline::Abbreviation(text, String::new()),
+        Some("acronym" | "ac") => Inline::Acronym(text),
+        Some("abbr") => match text.rfind('(').filter(|_| text.ends_with(')')) {
+            Some(open) => Inline::Abbreviation(
+                text[..open].trim().to_string(),
+                text[open + 1..text.len() - 1].to_string(),
+            ),
+            None => Inline::Abbreviation(text, String::new()),
         },
-        Some("rfc-reference" | "rfc") => match text.trim().parse::<u32>() {
-            Ok(number) => Inline::Reference {
-                text: format!("RFC {text}"),
-                uri: Some(format!("https://tools.ietf.org/html/rfc{number}.html")),
-                name: None,
-            },
-            Err(_) => Inline::Text(raw.to_string()),
-        },
-        Some(name) if SPHINX_ROLES.contains(&name) => {
-            // `title <target>` shows its title.
-            let mut display = text.clone();
-            if text.contains('<') && text.ends_with('>') {
-                let open = text.rfind('<').unwrap_or(0);
-                let title = text[..open].trim();
-                if !title.is_empty() {
-                    display = title.to_string();
+        Some("menuselection") => Inline::Literal(text.replace("-->", "\u{25b6}"), Vec::new()),
+        Some("samp" | "file") => Inline::Literal(text.replace(['{', '}'], ""), Vec::new()),
+        Some("pep" | "pep-reference") => {
+            let (number, shown, anchor) = numbered(&text);
+            let uri = match number {
+                Some(number) => format!("https://peps.python.org/pep-{number:04}/{anchor}"),
+                None => "https://peps.python.org/".into(),
+            };
+            link(format!("PEP {shown}"), uri)
+        }
+        Some("rfc" | "rfc-reference") => {
+            let (number, shown, anchor) = numbered(&text);
+            let uri = match number {
+                Some(number) => {
+                    format!("https://datatracker.ietf.org/doc/html/rfc{number}{anchor}")
                 }
-            }
-            Inline::Literal(display)
+                None => "https://datatracker.ietf.org/".into(),
+            };
+            link(format!("RFC {shown}"), uri)
+        }
+        Some("cve") => {
+            let id = text.trim().trim_start_matches(['C', 'V', 'E', '-']);
+            link(
+                format!("CVE-{id}"),
+                format!("https://www.cve.org/CVERecord?id=CVE-{id}"),
+            )
+        }
+        Some("cwe") => {
+            let number = text.trim();
+            link(
+                format!("CWE-{number}"),
+                format!("https://cwe.mitre.org/data/definitions/{number}.html"),
+            )
+        }
+        Some("pypi") => {
+            let project = text.trim();
+            link(
+                project.to_string(),
+                format!("https://pypi.org/project/{project}/"),
+            )
+        }
+        Some(name) if SPHINX_ROLES.contains(&name) => {
+            Inline::Literal(display_title(&text), Vec::new())
         }
         // An unknown role is an error, shown as its source.
-        Some(_) => Inline::Text(raw.to_string()),
+        Some(_) => Inline::Problematic(raw.to_string()),
     };
     vec![node]
 }
@@ -556,21 +833,8 @@ fn substitution(chars: &[char], start: usize) -> Option<(Vec<Inline>, usize)> {
                 k += 1;
             }
             if end_suffix(chars.get(k).copied()) {
-                let text = unescape(&chars[start + 1..j]);
-                let node = match refend {
-                    0 => Inline::Text(text),
-                    1 => Inline::Reference {
-                        name: Some(normalize_name(&text)),
-                        text,
-                        uri: None,
-                    },
-                    _ => Inline::Reference {
-                        text,
-                        uri: None,
-                        name: None,
-                    },
-                };
-                return Some((vec![node], k));
+                let name = unescape(&chars[start + 1..j]);
+                return Some((vec![Inline::SubstitutionReference { name, refend }], k));
             }
         }
         j += 1;
@@ -590,17 +854,27 @@ fn footnote_reference(
     }
     let label: String = chars[start + 1..close].iter().collect();
     let node = if !label.is_empty() && label.chars().all(|c| c.is_ascii_digit()) {
-        Inline::Text(label)
+        Inline::FootnoteReference {
+            label: Some(label),
+            auto: None,
+            name: None,
+        }
     } else if label == "*" {
-        // Auto-numbered and auto-symbol references get their text from a
-        // transform, so without one they show nothing.
-        Inline::Text(String::new())
+        Inline::FootnoteReference {
+            label: None,
+            auto: Some("*".into()),
+            name: None,
+        }
     } else if let Some(name) = label.strip_prefix('#') {
         let label_chars: Vec<char> = label.chars().collect();
         if !name.is_empty() && simplename(&label_chars, 1) != Some(label_chars.len()) {
             return None;
         }
-        Inline::Text(String::new())
+        Inline::FootnoteReference {
+            label: None,
+            auto: Some("1".into()),
+            name: (!name.is_empty()).then(|| normalize_name(name)),
+        }
     } else {
         let label_chars: Vec<char> = label.chars().collect();
         if simplename(&label_chars, 0) != Some(label_chars.len()) {
@@ -634,6 +908,8 @@ fn reference_name(
             text,
             uri: None,
             name,
+            anonymous: refend == 2,
+            raw: unescape(&chars[start..k]),
         }],
         k,
     ))
@@ -773,6 +1049,8 @@ fn uri_at(chars: &[char], start: usize, runs: &mut Runs) -> Option<(Inline, usiz
             uri: Some(text.clone()),
             text,
             name: None,
+            anonymous: false,
+            raw: String::new(),
         },
         end,
     ))
@@ -798,6 +1076,8 @@ fn email_at(chars: &[char], start: usize, runs: &mut Runs) -> Option<(Inline, us
             uri: Some(format!("mailto:{text}")),
             text,
             name: None,
+            anonymous: false,
+            raw: String::new(),
         },
         end,
     ))
@@ -821,7 +1101,7 @@ mod tests {
                 text(" "),
                 Inline::Strong("c".into()),
                 text(" "),
-                Inline::Literal("d\\e".into()),
+                Inline::Literal("d\\e".into(), Vec::new()),
             ]
         );
     }
@@ -844,24 +1124,16 @@ mod tests {
                     text: "Rust".into(),
                     uri: Some("https://rust-lang.org".into()),
                     name: Some("rust".into()),
+                    anonymous: false,
+                    raw: "`Rust <https://rust-lang.org>`_".into(),
                 },
                 text(" and "),
                 Inline::Reference {
                     text: "Python".into(),
                     uri: None,
                     name: Some("python".into()),
-                },
-                text("."),
-            ]
-        );
-        assert_eq!(
-            parse_inline("at https://example.com/a."),
-            [
-                text("at "),
-                Inline::Reference {
-                    text: "https://example.com/a".into(),
-                    uri: Some("https://example.com/a".into()),
-                    name: None,
+                    anonymous: false,
+                    raw: "Python_".into(),
                 },
                 text("."),
             ]
@@ -871,17 +1143,15 @@ mod tests {
     #[test]
     fn roles_and_footnotes() {
         assert_eq!(
-            parse_inline(":sub:`2` :func:`f` [1]_ [CIT]_ :bogus:`x`"),
+            parse_inline(":sub:`2` :func:`f` [CIT]_ :bogus:`x`"),
             [
                 Inline::Subscript("2".into()),
                 text(" "),
-                Inline::Literal("f".into()),
-                text(" "),
-                text("1"),
+                Inline::Literal("f".into(), Vec::new()),
                 text(" "),
                 Inline::CitationReference("CIT".into()),
                 text(" "),
-                text(":bogus:`x`"),
+                Inline::Problematic(":bogus:`x`".into()),
             ]
         );
     }
