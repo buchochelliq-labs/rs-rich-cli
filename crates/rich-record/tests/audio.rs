@@ -84,8 +84,10 @@ fn read_wav(bytes: &[u8]) -> (u32, u16, Vec<f32>) {
     let rate = u32::from_le_bytes(bytes[24..28].try_into().unwrap());
     assert_eq!(&bytes[36..40], b"data");
     let samples = bytes[44..]
-        .chunks_exact(2)
-        .map(|b| f32::from(i16::from_le_bytes([b[0], b[1]])) / 32767.0)
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|b| f32::from(i16::from_le_bytes(*b)) / 32767.0)
         .collect();
     (rate, channels, samples)
 }
@@ -214,8 +216,10 @@ fn a_program_that_plays_sound_gives_a_wav_and_an_mp4_with_its_track() {
     assert!(status.success());
     let samples: Vec<f32> = std::fs::read(&decoded)
         .unwrap()
-        .chunks_exact(2)
-        .map(|b| f32::from(i16::from_le_bytes([b[0], b[1]])) / 32767.0)
+        .as_chunks::<2>()
+        .0
+        .iter()
+        .map(|b| f32::from(i16::from_le_bytes(*b)) / 32767.0)
         .collect();
     let onset = samples
         .iter()

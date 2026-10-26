@@ -38,8 +38,10 @@ fn an_output_under_the_recorder_writes_its_sound_there_timed() {
     let started = u64::from_le_bytes(bytes[16..24].try_into().unwrap());
     assert!(nanos(before) <= started && started <= nanos(after));
     let samples: Vec<f32> = bytes[24..]
-        .chunks_exact(4)
-        .map(|b| f32::from_le_bytes(b.try_into().unwrap()))
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|b| f32::from_le_bytes(*b))
         .collect();
     // Silence for the first tenth of a second, then the sound written.
     let first = samples.iter().position(|s| *s != 0.0).expect("the sound");

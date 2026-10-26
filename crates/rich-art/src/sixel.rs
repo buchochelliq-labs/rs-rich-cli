@@ -238,8 +238,10 @@ pub fn encode_rgba(rgba: &[u8], width: usize, height: usize, max_colors: u16) ->
     let max_colors = max_colors.clamp(2, 256);
     // The adaptive encoder's rule: under half opacity is transparent.
     let pixels: Vec<[u8; 4]> = rgba
-        .chunks_exact(4)
-        .map(|p| [p[0], p[1], p[2], if p[3] < 128 { 0 } else { 255 }])
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|&[r, g, b, a]| [r, g, b, if a < 128 { 0 } else { 255 }])
         .collect();
     if let Some((indices, palette)) = index_exact(&pixels) {
         if palette.len() <= usize::from(max_colors) {
