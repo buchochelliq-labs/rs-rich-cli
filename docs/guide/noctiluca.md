@@ -83,6 +83,9 @@ More in [Reading and moving around](noctiluca/reading.md).
 
 - **Lost? Press F1.** Everything Noctiluca can do is in that list, with
   its key, and the reason when it cannot run now.
+- **A feed that stops loading?** Keep going down: each time you near the
+  end, Noctiluca asks the page for more. A feed that loads only on a
+  button needs the button pressed (`f` and its hint).
 - **A busy page?** Press `r`. Reader mode drops the layout and keeps the
   words.
 - **Blocky pictures?** By default Noctiluca picks what your terminal

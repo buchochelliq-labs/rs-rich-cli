@@ -303,6 +303,9 @@ impl Keymap {
     /// The keys set for `binding`'s action, and where they come from:
     /// 2 rebound on this keymap, 1 installed, 0 declared.
     fn source(&self, binding: &Binding) -> (u8, Vec<Key>) {
+        if self.plain() {
+            return (0, binding.keys.clone());
+        }
         let id = binding.id();
         if let Some(keys) = self.rebound.get(&id) {
             return (2, keys.clone());
@@ -313,10 +316,20 @@ impl Keymap {
         (0, binding.keys.clone())
     }
 
+    /// Nothing rebound here and nothing installed: each binding's keys are
+    /// the ones it declared.
+    fn plain(&self) -> bool {
+        self.rebound.is_empty() && !any_installed()
+    }
+
     /// The keys that do `binding`'s action now: what was set for it, less
     /// any key a closer level gave another action in the same context (a
     /// key rebound onto `down` is no longer the declared `next`'s).
     fn effective(&self, binding: &Binding) -> Vec<Key> {
+        if self.plain() {
+            // Nothing rebound or installed: every key is the declared one.
+            return binding.keys.clone();
+        }
         let (level, mut keys) = self.source(binding);
         if level < 2 {
             for other in &self.bindings {
@@ -342,6 +355,12 @@ impl Keymap {
     }
 
     fn find_by(&self, fires: impl Fn(&[Key]) -> bool) -> Option<usize> {
+        if self.plain() {
+            // Every binding at the declared level: the first that fires,
+            // with no key list built (a key press looks every binding up).
+            return (self.bindings.iter())
+                .position(|binding| !binding.sequence && fires(&binding.keys));
+        }
         let mut found: Option<(u8, usize)> = None;
         for (index, binding) in self.bindings.iter().enumerate() {
             if binding.sequence {
@@ -563,6 +582,12 @@ pub fn installed() -> Overrides {
         .unwrap_or_else(|e| e.into_inner())
         .clone()
         .unwrap_or_default()
+}
+
+/// Whether any keys are installed for any binding.
+fn any_installed() -> bool {
+    let installed = INSTALLED.read().unwrap_or_else(|e| e.into_inner());
+    installed.as_ref().is_some_and(|keys| !keys.is_empty())
 }
 
 fn installed_keys(id: &str) -> Option<Vec<Key>> {

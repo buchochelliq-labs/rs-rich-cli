@@ -47,7 +47,7 @@ use crate::node::{with_node, Axis, FrameState, Node};
 use crate::notify::{Corner, Level, Note};
 use crate::place::{Offset, Origin};
 use crate::reactive::{signal, Memo, NodeId, Proxy, Runtime, Signal};
-use crate::screen::{Painter, Rect, Screen};
+use crate::screen::{PaintStats, PaintStrategy, Painter, Rect, Screen};
 use crate::widget::{Used, WidgetEvent};
 
 /// The theme style a pop-up's title is drawn in: the palette's, the
@@ -1723,13 +1723,38 @@ pub fn rate<T: 'static>(source: Signal<T>) -> Signal<u32> {
     shown
 }
 
-/// Counters from the last frame, for tests and benchmarks.
+/// Counters from the last frame, for tests, benchmarks and a performance
+/// overlay: what drew, how long each stage took, and what the painter
+/// wrote, counted as notcurses counts a render. The `total_` fields run
+/// across every frame since the app started.
+///
+/// The times are measured on the real clock (natively; on wasm32 they
+/// read zero). [`write`](Self::write) is the time the terminal took the
+/// frame's bytes, which only [`App::run`] and [`App::run_on`] see: a
+/// [`Driver`] hands its bytes back and leaves it at zero.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
 pub struct FrameStats {
     /// Nodes that drew.
     pub drawn: usize,
     /// Bytes written to the terminal.
     pub bytes: usize,
+    /// Time the widgets took to draw into the screen: the frame's build.
+    pub draw: Duration,
+    /// Time the painter took to turn what changed into bytes: the encode.
+    pub paint: Duration,
+    /// Time writing the frame to the terminal took.
+    pub write: Duration,
+    /// What the painter did: cells compared, written and elided, and its
+    /// bytes by kind (moves, styles, text, other).
+    pub painted: PaintStats,
+    /// Bytes written over every frame.
+    pub total_bytes: u64,
+    /// [`draw`](Self::draw) over every frame.
+    pub total_draw: Duration,
+    /// [`paint`](Self::paint) over every frame.
+    pub total_paint: Duration,
+    /// [`write`](Self::write) over every frame.
+    pub total_write: Duration,
     /// Frames drawn since the app started, this one included: ratatui's
     /// `Frame::count`.
     pub frames: u64,
@@ -1870,6 +1895,14 @@ pub struct App {
     /// The console the last frame used, for components handling events.
     last_console: Option<Console>,
     stats: StatsHandle,
+    /// The bytes the frame before sent: [`Driver::render`] starts this
+    /// frame's count at zero before it draws, and the inspector shows
+    /// the last one.
+    bytes_before: usize,
+    /// How frames become bytes; `None` takes `RICH_PAINT_STRATEGY`, or
+    /// the default.
+    paint_strategy: Option<PaintStrategy>,
+    terminal_scroll: Option<bool>,
     /// The shortest time between two frames [`run_on`](Self::run_on)
     /// draws ([`max_fps`](Self::max_fps)).
     frame_time: Option<Duration>,
@@ -2211,6 +2244,9 @@ impl App {
             console: None,
             last_console: None,
             stats: StatsHandle::default(),
+            bytes_before: 0,
+            paint_strategy: None,
+            terminal_scroll: None,
             frame_time: None,
             text_frames: true,
             caret_shown: false,
@@ -2684,6 +2720,47 @@ impl App {
     #[must_use]
     pub fn max_fps(mut self, fps: u32) -> App {
         self.frame_time = (fps > 0).then(|| Duration::from_secs(1) / fps);
+        self
+    }
+
+    /// How each frame's changes become bytes (see [`PaintStrategy`]):
+    /// [`Cells`](PaintStrategy::Cells) by default, or what the
+    /// `RICH_PAINT_STRATEGY` environment variable names (`cells`, `rows`,
+    /// `full`, `scroll` or `best`) when the app does not choose. Every
+    /// strategy shows the same screen; [`FrameStats::painted`] says which
+    /// one each frame used and what it wrote.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::PaintStrategy;
+    ///
+    /// let app = App::new(|| label("hello")).paint_strategy(PaintStrategy::Best);
+    /// let mut driver = app.driver(10, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "hello");
+    /// ```
+    #[must_use]
+    pub fn paint_strategy(mut self, strategy: PaintStrategy) -> App {
+        self.paint_strategy = Some(strategy);
+        self
+    }
+
+    /// Whether [`PaintStrategy::Scroll`] and [`PaintStrategy::Best`] may
+    /// move rows with the terminal's own scrolling. Unset, it is on, but
+    /// off on Windows (whose consoles have been seen to scroll the wrong
+    /// rows) and under tmux; set, it holds wherever the app runs.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| label("hello")).terminal_scroll(false);
+    /// let mut driver = app.driver(10, 1);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "hello");
+    /// ```
+    #[must_use]
+    pub fn terminal_scroll(mut self, on: bool) -> App {
+        self.terminal_scroll = Some(on);
         self
     }
 
@@ -3258,7 +3335,13 @@ impl App {
                     driver.app.stats.update(|stats| stats.skipped += 1);
                 } else if let Some(out) = driver.render() {
                     last_frame = Some(now);
+                    let started = crate::clock::Instant::now();
                     put(backend, linear, &out)?;
+                    let took = started.elapsed();
+                    driver.app.stats.update(|stats| {
+                        stats.write += took;
+                        stats.total_write += took;
+                    });
                     if text_frames {
                         backend.painted(&driver.screen().plain().join("\n"));
                     }
@@ -3360,6 +3443,19 @@ impl App {
         if self.inline.is_some() {
             painter = painter.inline();
         }
+        painter.set_strategy(
+            self.paint_strategy
+                .or_else(PaintStrategy::from_env)
+                .unwrap_or_default(),
+        );
+        // tmux redraws a scrolled region itself, so moving rows there saves
+        // little; until the benchmark says otherwise, it paints instead.
+        if std::env::var_os("TMUX").is_some() {
+            painter.set_scroll(false);
+        }
+        if let Some(on) = self.terminal_scroll {
+            painter.set_scroll(on);
+        }
         // Accessible: no colour, so no meaning rests on it.
         painter.set_color_system(if self.text_mode() {
             None
@@ -3386,6 +3482,7 @@ impl App {
             done: false,
             written: Vec::new(),
             written_focus: None,
+            damage_log: std::collections::VecDeque::new(),
         }
     }
 
@@ -4146,7 +4243,10 @@ impl App {
                 focus: all.last().and_then(|layer| layer.focus),
                 focus_path: &focus_path,
                 hover: &hover,
-                stats: self.stats.get(),
+                stats: FrameStats {
+                    bytes: self.bytes_before,
+                    ..self.stats.get()
+                },
                 frame: inspector.frames,
                 theme,
                 viewport,
@@ -6216,7 +6316,13 @@ pub struct Driver {
     /// screen on the stack, and what had the focus.
     written: Vec<HashMap<NodeId, String>>,
     written_focus: Option<NodeId>,
+    /// The last frames' damage, by frame number: [`Driver::damage_since`].
+    damage_log: std::collections::VecDeque<(u64, Vec<Rect>)>,
 }
+
+/// How many frames' damage a [`Driver`] keeps for
+/// [`damage_since`](Driver::damage_since).
+const DAMAGE_FRAMES: usize = 64;
 
 /// How many frames in a row a node may leave itself dirty before its own
 /// writes stop drawing it again.
@@ -6397,6 +6503,17 @@ impl Driver {
     /// tasks they start finish, and what they change is drawn too: the
     /// frame returned is settled, and the next event finds it so.
     pub fn render(&mut self) -> Option<String> {
+        // The frame's counters start again; the rounds below add to them.
+        if !self.done && self.needs_render() {
+            self.app.bytes_before = self.app.stats.get().bytes;
+            self.app.stats.update(|stats| {
+                stats.bytes = 0;
+                stats.draw = Duration::ZERO;
+                stats.paint = Duration::ZERO;
+                stats.write = Duration::ZERO;
+                stats.painted = PaintStats::default();
+            });
+        }
         let mut out = self.render_once();
         // A few rounds: a watch's result may lay out anew, and set off
         // another.
@@ -6408,6 +6525,15 @@ impl Driver {
             if let Some(more) = self.render_once() {
                 out.get_or_insert_with(String::new).push_str(&more);
             }
+        }
+        if let Some(out) = &out {
+            self.app.stats.update(|stats| {
+                stats.bytes = out.len();
+                stats.total_bytes += out.len() as u64;
+                // What was written besides the cells: the cursor, graphics,
+                // lines printed above an inline region.
+                stats.painted.other_bytes += out.len().saturating_sub(stats.painted.bytes());
+            });
         }
         out
     }
@@ -7003,6 +7129,48 @@ impl Driver {
         self.app.stats.get()
     }
 
+    /// The cells the frames after frame `frame` (a
+    /// [`stats`](Self::stats)`().frames` read earlier) may have changed,
+    /// as rectangles of the [screen](Self::screen); `None` when the driver
+    /// no longer remembers back that far (it keeps the last 64 frames),
+    /// and a caller compares everything. A renderer that draws the screen
+    /// itself, such as a browser's DOM, looks only there.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     column([label("still"), text!("{n}").on_key("+", move |_| n.update(|n| *n += 1))])
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// driver.settle();
+    /// let seen = driver.stats().frames;
+    /// driver.press("+");
+    /// let damage = driver.damage_since(seen).unwrap();
+    /// assert!(damage.iter().all(|rect| rect.y == 1));
+    /// ```
+    pub fn damage_since(&self, frame: u64) -> Option<Vec<Rect>> {
+        // Linear mode writes lines, not cells.
+        if self.app.linear {
+            return None;
+        }
+        if frame >= self.app.stats.get().frames {
+            return Some(Vec::new());
+        }
+        let oldest = self.damage_log.front().map_or(u64::MAX, |(n, _)| *n);
+        if frame + 1 < oldest {
+            return None;
+        }
+        Some(
+            self.damage_log
+                .iter()
+                .filter(|(n, _)| *n > frame)
+                .flat_map(|(_, rects)| rects.iter().copied())
+                .collect(),
+        )
+    }
+
     /// The node selected in the [inspector](crate::inspect), if any.
     pub fn inspector_selected(&self) -> Option<NodeId> {
         self.app.inspector.as_ref().and_then(|i| i.selected)
@@ -7326,12 +7494,18 @@ impl Driver {
                 full = true;
             }
         }
+        let started = crate::clock::Instant::now();
         let mut damage = app.frame(&self.console, screen, full);
+        let drew = started.elapsed();
+        app.stats.update(|stats| {
+            stats.draw += drew;
+            stats.total_draw += drew;
+        });
         if app.linear {
             let out = self.lines();
-            self.app.stats.update(|stats| stats.bytes = out.len());
             return out;
         }
+        let started = crate::clock::Instant::now();
         if let Some((start, end)) = app.selection {
             let style = Style::parse("reverse").expect("a built-in style parses");
             for (x, y) in selected_cells(screen.area(), start, end) {
@@ -7339,16 +7513,31 @@ impl Driver {
             }
             damage.push(screen.area());
         }
-        let painted = self.painter.paint(screen, &damage);
+        // No scroll may move a picture: the terminal would move it, and the
+        // pictures' plan would not know.
+        let fixed: Vec<Rect> = app
+            .placements
+            .iter()
+            .map(|p| Rect::new(p.column as u16, p.row as u16, p.cols as u16, p.rows as u16))
+            .collect();
+        self.painter.set_fixed(&fixed);
+        // Kept for a renderer that draws the screen itself.
+        let frame = app.stats.get().frames;
+        if self.damage_log.len() == DAMAGE_FRAMES {
+            self.damage_log.pop_front();
+        }
+        self.damage_log.push_back((frame, damage.clone()));
         let mut out = String::new();
+        self.painter.paint_into(screen, &damage, &mut out);
+        screen.forget_scrolls();
+        let counts = self.painter.stats();
         // Accessible: the cursor is hidden while the frame is written, so a
         // screen reader following it reads none of the cells it passes, and
         // shown again once parked on the focus.
-        if app.accessible && app.caret_shown && !painted.is_empty() {
-            out.push_str("\x1b[?25l");
+        if app.accessible && app.caret_shown && !out.is_empty() {
+            out.insert_str(0, "\x1b[?25l");
             app.caret_shown = false;
         }
-        out.push_str(&painted);
         if let Some(source) = app.graphics.clone() {
             out.push_str(&draw_graphics(
                 &*source,
@@ -7364,10 +7553,16 @@ impl Driver {
             app.motion.1 = true;
         }
         out.push_str(&app.caret(&mut self.painter));
-        app.stats.update(|stats| stats.bytes = out.len());
         // Styles no cell uses any more go, once they pile up: a picture
         // whose colours change every frame keeps a frame's worth.
         self.painter.compact(&mut self.screen);
+        let took = started.elapsed();
+        let app = &mut self.app;
+        app.stats.update(|stats| {
+            stats.paint += took;
+            stats.total_paint += took;
+            stats.painted.add(&counts);
+        });
         out
     }
 
@@ -7448,7 +7643,7 @@ fn selected_text(screen: &Screen, start: (u16, u16), end: (u16, u16)) -> String 
         }
         let cell = screen.cell(x, y);
         if !cell.is_continuation() {
-            rows.last_mut().expect("a row").push_str(&cell.text);
+            rows.last_mut().expect("a row").push_str(cell.text());
         }
     }
     rows.iter()

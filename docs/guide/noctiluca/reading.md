@@ -67,10 +67,19 @@ blocks. It is for debugging, has its own address bar, and quits with
 | `g g` | To the top |
 | `G` | To the bottom |
 
-Noctiluca scrolls its own copy of the page; Chrome's page does not
-scroll. So a page that loads more as you scroll down (infinite scroll,
-images loaded lazily) does not load more yet. Following Chrome's scroll
-is planned for 0.0.23 (see [what's next](status.md)).
+Both text views build only the rows near the screen, so a long page
+scrolls as fast as a short one, with no row limit. Chrome's own scroll
+follows yours: a few rows move it by a turn of the wheel, a jump (`G`,
+`g g`, find) by a scroll to the place. So a page's lazy images load and
+an infinite feed keeps loading. Near the end of what was read, Noctiluca
+scrolls Chrome to its bottom and reads the page again once it changes.
+When the page grows above what you are reading, your place stays put.
+
+Pictures load as you reach them, as in a browser, and a picture partly
+on screen shows the part in view (Sixel and iTerm2 included).
+
+A page too long to read whole (more than 20,000 blocks) says
+"page cut" in the status line.
 
 ## Link hints
 

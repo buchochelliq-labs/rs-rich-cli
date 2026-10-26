@@ -79,11 +79,8 @@ fn table_for(requested: &str) -> &'static [(u32, u32, u8)] {
 
 /// The number of terminal cells `text` occupies. Port of `cell_len`.
 pub fn cell_len(text: &str) -> usize {
-    // Fast path, matching upstream's: without a zero-width joiner or a
-    // variation selector nothing can change a character's measured width, so
-    // the sum of the per-character widths is the answer.
-    if !text.contains(ZERO_WIDTH_JOINER) && !text.contains(VARIATION_SELECTOR_16) {
-        return text.chars().map(char_cell_width).sum();
+    if let Some(width) = unjoined_cell_len(text) {
+        return width;
     }
 
     // Port of upstream `cells._cell_len`'s cluster pass. Two rules matter:
@@ -114,6 +111,33 @@ pub fn cell_len(text: &str) -> usize {
         index += 1;
     }
     total
+}
+
+/// [`cell_len`] of text with no zero-width joiner or variation selector
+/// 16, which is the sum of its characters' widths; `None` when it has
+/// either, so only the cluster pass can measure it. Upstream's own fast
+/// path, taken in one pass: it measures as it looks for the two
+/// characters, rather than searching for each and then measuring
+/// (docs/PORTING.md, "Performance notes").
+///
+/// ASCII text is one cell for each printable character, none for the
+/// controls (NUL and DEL included), in every table. Upstream's shortcut is
+/// `_is_single_cell_widths`, `len(text)` for text of single-cell
+/// characters; this one also counts past controls without the table
+/// (pinned by `ascii_cell_len_matches_the_table`).
+#[inline]
+pub(crate) fn unjoined_cell_len(text: &str) -> Option<usize> {
+    if text.is_ascii() {
+        return Some(text.bytes().filter(|b| (b' '..=b'~').contains(b)).count());
+    }
+    let mut total = 0;
+    for c in text.chars() {
+        if c == ZERO_WIDTH_JOINER || c == VARIATION_SELECTOR_16 {
+            return None;
+        }
+        total += char_cell_width(c);
+    }
+    Some(total)
 }
 
 /// Zero-width joiner: binds emoji into a single cluster.
@@ -163,56 +187,51 @@ fn is_single_cell_widths(text: &str) -> bool {
 /// U+FE0F promotes the preceding narrow character to two cells without starting
 /// a new grapheme. Zero-width characters attach to the grapheme before them.
 pub fn split_graphemes(text: &str) -> (Vec<(usize, usize, usize)>, usize) {
-    let chars: Vec<(usize, char)> = text.char_indices().collect();
-    let count = chars.len();
-    // The byte offset of code point `index`, with `count` meaning "the end".
-    let byte_at = |index: usize| chars.get(index).map_or(text.len(), |(offset, _)| *offset);
-
+    // One pass over the characters, each span's end taken from the character
+    // that ends it, rather than collecting the characters first
+    // (docs/PORTING.md, "Performance notes"). A test,
+    // `split_graphemes_matches_the_indexed_scan`, holds it to the first port.
     let mut spans: Vec<(usize, usize, usize)> = Vec::new();
     let mut total_width = 0usize;
     let mut last_measured: Option<char> = None;
-    let mut index = 0usize;
+    let mut chars = text.char_indices();
 
-    while index < count {
-        let character = chars[index].1;
+    while let Some((start, character)) = chars.next() {
+        let end = start + character.len_utf8();
         if character == ZERO_WIDTH_JOINER || character == VARIATION_SELECTOR_16 {
             let Some(last) = spans.last_mut() else {
                 // A joiner or selector opening the string joins nothing. It is
                 // nonsense, but upstream handles it, so we must too.
-                let start = byte_at(index);
-                index += 1;
-                spans.push((start, byte_at(index), 0));
+                spans.push((start, end, 0));
                 continue;
             };
             if character == ZERO_WIDTH_JOINER {
                 // Consume the joiner *and* whatever it joins — unless it is the
                 // last character, with nothing left to join.
-                index += if index < count - 1 { 2 } else { 1 };
-                last.1 = byte_at(index);
+                last.1 = chars
+                    .next()
+                    .map_or(end, |(joined, c)| joined + c.len_utf8());
             } else {
-                index += 1;
                 if last_measured.is_some_and(|previous| NARROW_TO_WIDE.contains(&previous)) {
                     last_measured = None;
                     last.2 += 1;
                     total_width += 1;
                 }
-                last.1 = byte_at(index);
+                last.1 = end;
             }
             continue;
         }
 
-        let start = byte_at(index);
         let width = char_cell_width(character);
-        index += 1;
         if width > 0 {
             last_measured = Some(character);
             total_width += width;
-            spans.push((start, byte_at(index), width));
+            spans.push((start, end, width));
         } else if let Some(last) = spans.last_mut() {
             // Zero-width characters belong to the grapheme before them.
-            last.1 = byte_at(index);
+            last.1 = end;
         } else {
-            spans.push((start, byte_at(index), 0));
+            spans.push((start, end, 0));
         }
     }
 
@@ -294,8 +313,36 @@ fn char_boundary(text: &str, index: usize) -> usize {
 /// disagree on 348 code points (spacing marks, format characters, modifier
 /// symbols), and every disagreement misaligns a table, panel or wrap point.
 /// Port of `cells.get_character_cell_size`.
+#[inline]
 pub fn char_cell_width(c: char) -> usize {
+    if let Some(width) = common_width(c) {
+        return width;
+    }
     width_in(cell_table(), c)
+}
+
+/// The width of the characters most text is made of, which every table
+/// upstream ships agrees on, without the table search: printable ASCII,
+/// Latin-1, Latin Extended, IPA, Greek and Cyrillic letters, box drawing,
+/// blocks and Braille (one cell), CJK ideographs and Hangul syllables
+/// (two). `None` for anything
+/// else, which [`width_in`] looks up. A fast path beside
+/// `get_character_cell_size`'s lookup (docs/PORTING.md, "Performance
+/// notes"); `common_widths_match_every_table` checks every character it
+/// answers against all 21 tables.
+#[inline]
+fn common_width(c: char) -> Option<usize> {
+    match c {
+        ' '..='~'
+        | '\u{a0}'..='\u{2ff}'
+        | '\u{370}'..='\u{482}'
+        | '\u{2500}'..='\u{259f}'
+        | '\u{2800}'..='\u{28ff}' => Some(1),
+        // Unicode 4.1 ends the ideographs at U+9FBB; later ones are wide
+        // only in the newer tables.
+        '\u{4e00}'..='\u{9fbb}' | '\u{ac00}'..='\u{d7a3}' => Some(2),
+        _ => None,
+    }
 }
 
 /// [`char_cell_width`] against an explicitly chosen table, so the version
@@ -420,6 +467,123 @@ pub fn set_cell_size(text: &str, total: usize) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// The one-pass `split_graphemes` splits as the first port, which
+    /// indexed a collected list of characters, does.
+    #[test]
+    fn split_graphemes_matches_the_indexed_scan() {
+        fn reference(text: &str) -> (Vec<(usize, usize, usize)>, usize) {
+            let chars: Vec<(usize, char)> = text.char_indices().collect();
+            let count = chars.len();
+            // The byte offset of code point `index`, with `count` meaning "the end".
+            let byte_at = |index: usize| chars.get(index).map_or(text.len(), |(offset, _)| *offset);
+
+            let mut spans: Vec<(usize, usize, usize)> = Vec::new();
+            let mut total_width = 0usize;
+            let mut last_measured: Option<char> = None;
+            let mut index = 0usize;
+
+            while index < count {
+                let character = chars[index].1;
+                if character == ZERO_WIDTH_JOINER || character == VARIATION_SELECTOR_16 {
+                    let Some(last) = spans.last_mut() else {
+                        // A joiner or selector opening the string joins nothing. It is
+                        // nonsense, but upstream handles it, so we must too.
+                        let start = byte_at(index);
+                        index += 1;
+                        spans.push((start, byte_at(index), 0));
+                        continue;
+                    };
+                    if character == ZERO_WIDTH_JOINER {
+                        // Consume the joiner *and* whatever it joins — unless it is the
+                        // last character, with nothing left to join.
+                        index += if index < count - 1 { 2 } else { 1 };
+                        last.1 = byte_at(index);
+                    } else {
+                        index += 1;
+                        if last_measured.is_some_and(|previous| NARROW_TO_WIDE.contains(&previous))
+                        {
+                            last_measured = None;
+                            last.2 += 1;
+                            total_width += 1;
+                        }
+                        last.1 = byte_at(index);
+                    }
+                    continue;
+                }
+
+                let start = byte_at(index);
+                let width = char_cell_width(character);
+                index += 1;
+                if width > 0 {
+                    last_measured = Some(character);
+                    total_width += width;
+                    spans.push((start, byte_at(index), width));
+                } else if let Some(last) = spans.last_mut() {
+                    // Zero-width characters belong to the grapheme before them.
+                    last.1 = byte_at(index);
+                } else {
+                    spans.push((start, byte_at(index), 0));
+                }
+            }
+
+            (spans, total_width)
+        }
+        const ALPHABET: [char; 10] = [
+            'a',
+            '\u{200d}',
+            '\u{fe0f}',
+            '\u{301}',
+            '界',
+            '\u{2764}',
+            '\u{1f468}',
+            ' ',
+            '\t',
+            'é',
+        ];
+        let mut texts = vec![String::new()];
+        for _ in 0..5 {
+            texts = texts
+                .iter()
+                .flat_map(|text| ALPHABET.iter().map(move |c| format!("{text}{c}")))
+                .collect();
+            for text in &texts {
+                assert_eq!(split_graphemes(text), reference(text), "{text:?}");
+            }
+        }
+    }
+
+    /// The fast path answers every character it covers as every shipped
+    /// table does, so it holds whatever `UNICODE_VERSION` picks.
+    #[test]
+    fn common_widths_match_every_table() {
+        let mut covered = 0;
+        for c in (0..=0x10ffffu32).filter_map(char::from_u32) {
+            if let Some(width) = common_width(c) {
+                covered += 1;
+                for (table, version) in TABLES.iter().zip(VERSIONS) {
+                    assert_eq!(width, width_in(table, c), "{c:?} in Unicode {version}");
+                }
+            }
+        }
+        assert!(covered > 30_000, "{covered}");
+    }
+
+    /// ASCII text measures as the sum of its characters' table widths,
+    /// controls included, in every table.
+    #[test]
+    fn ascii_cell_len_matches_the_table() {
+        for table in TABLES {
+            for byte in 0..=0x7fu8 {
+                let c = char::from(byte);
+                let expected = width_in(table, c);
+                assert_eq!(cell_len(&c.to_string()), expected, "{c:?}");
+            }
+        }
+        let text = "a\tb\u{0}c\u{7f} d\ne\u{1b}[1m";
+        let expected: usize = text.chars().map(|c| width_in(cell_table(), c)).sum();
+        assert_eq!(cell_len(text), expected);
+    }
 
     #[test]
     fn ascii_len() {

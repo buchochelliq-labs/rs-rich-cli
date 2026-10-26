@@ -23,7 +23,7 @@ fn rms(bytes: &[u8]) -> f64 {
         .as_chunks::<2>()
         .0
         .iter()
-        .map(|b| i16::from_le_bytes(*b) as f64 / 32768.0)
+        .map(|&b| i16::from_le_bytes(b) as f64 / 32768.0)
         .collect();
     if samples.is_empty() {
         return 0.0;

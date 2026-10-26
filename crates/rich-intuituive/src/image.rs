@@ -568,8 +568,9 @@ pub fn image_graphics() -> Arc<dyn PlacementSource> {
     })
 }
 
-/// A picture at a size in a protocol: picture, columns, rows, protocol.
-type GraphicKey = (u32, usize, usize, Pixels);
+/// A picture at a size in a protocol, and the rows of it shown: picture,
+/// columns, rows, protocol, first row shown, rows shown.
+type GraphicKey = (u32, usize, usize, Pixels, usize, usize);
 
 /// [`image_graphics`]'s source.
 struct ImageGraphics {
@@ -610,19 +611,42 @@ impl PlacementSource for ImageGraphics {
         };
         let mut out = Vec::new();
         for (row, column, tag) in &found {
-            // From a picture's first row, all its rows there (Kitty's
-            // placeholders need only the upload).
-            let whole =
-                tag.row == 0 && (1..tag.rows).all(|below| has(row + below, *column, tag, below));
-            if !whole && !(tag.pixels == Pixels::Kitty && tag.row == 0) {
+            // Kitty's placeholders draw row by row: they need only the
+            // upload, placed from the picture's first row.
+            if tag.pixels == Pixels::Kitty {
+                if tag.row != 0 {
+                    continue;
+                }
+                let whole = (1..tag.rows).all(|below| has(row + below, *column, tag, below));
+                if let Some(graphic) = self.graphic(tag, 0, tag.rows) {
+                    out.push(Placement {
+                        row: *row,
+                        column: *column,
+                        cols: tag.cols,
+                        rows: if whole { tag.rows } else { 1 },
+                        graphic,
+                        frame: 0,
+                    });
+                }
                 continue;
             }
-            if let Some(graphic) = self.graphic(tag) {
+            // Sixel and iTerm2 draw a block of rows: from the first row of
+            // the picture shown here, the rows of it shown below, so a
+            // picture partly in view (scrolled, or under the screen's
+            // edge) draws clipped to them.
+            if *row > 0 && tag.row > 0 && has(row - 1, *column, tag, tag.row - 1) {
+                continue;
+            }
+            let shown = (1..tag.rows.saturating_sub(tag.row))
+                .take_while(|&below| has(row + below, *column, tag, tag.row + below))
+                .count()
+                + 1;
+            if let Some(graphic) = self.graphic(tag, tag.row, shown) {
                 out.push(Placement {
                     row: *row,
                     column: *column,
                     cols: tag.cols,
-                    rows: if whole { tag.rows } else { 1 },
+                    rows: shown,
                     graphic,
                     frame: 0,
                 });
@@ -640,15 +664,20 @@ impl PlacementSource for ImageGraphics {
 }
 
 impl ImageGraphics {
-    /// The graphic of `tag`'s picture at its size, made once.
-    fn graphic(&self, tag: &Tag) -> Option<Arc<dyn Graphic>> {
-        let key = (tag.id, tag.cols, tag.rows, tag.pixels);
+    /// The graphic of `tag`'s picture at its size, its rows `first` to
+    /// `first + shown` only, made once.
+    fn graphic(&self, tag: &Tag, first: usize, shown: usize) -> Option<Arc<dyn Graphic>> {
+        let key = (tag.id, tag.cols, tag.rows, tag.pixels, first, shown);
         let mut made = self.made.lock().unwrap_or_else(|e| e.into_inner());
         if let Some(graphic) = made.get(&key) {
             return Some(graphic.clone());
         }
         let image = picture(tag.id)?;
-        let escape = encode(&image, tag)?;
+        let escape = if first == 0 && shown >= tag.rows {
+            encode(&image, tag)?
+        } else {
+            encode_rows(&image, tag, first, shown)?
+        };
         if tag.pixels == Pixels::Kitty {
             self.uploaded
                 .lock()
@@ -701,6 +730,37 @@ fn encode(image: &DynamicImage, tag: &Tag) -> Option<String> {
                 rich_art::iterm::inline_image(&png, tag.cols, tag.rows)
             ))
         }
+    }
+}
+
+/// The escape that draws rows `first` to `first + shown` of `image` in
+/// `tag`'s cells (Sixel or iTerm2): the picture fitted to all its cells,
+/// then cut to the rows shown.
+fn encode_rows(image: &DynamicImage, tag: &Tag, first: usize, shown: usize) -> Option<String> {
+    use rich_art::graphics::{encode_png, fit_to_cells, CellPixels};
+    let cell = CellPixels::DEFAULT;
+    let whole = fit_to_cells(image, tag.cols, tag.rows, cell);
+    let top = (first as u32 * cell.height).min(whole.height());
+    let height = (shown as u32 * cell.height).min(whole.height() - top);
+    if height == 0 {
+        return None;
+    }
+    let part =
+        rich_art::image::imageops::crop_imm(&whole, 0, top, whole.width(), height).to_image();
+    match tag.pixels {
+        Pixels::Sixel => {
+            let sixel = rich_art::SixelArt::new(DynamicImage::ImageRgba8(part))
+                .encode_cells(tag.cols, shown)?;
+            Some(format!("\x1b7{sixel}\x1b8"))
+        }
+        Pixels::Iterm => {
+            let png = encode_png(&part)?;
+            Some(format!(
+                "\x1b7{}\x1b8",
+                rich_art::iterm::inline_image(&png, tag.cols, shown)
+            ))
+        }
+        Pixels::Kitty | Pixels::Cells => None,
     }
 }
 
@@ -936,6 +996,43 @@ mod tests {
             assert!(driver.screen().plain()[0].starts_with("▀▀"));
             std::fs::remove_file(&path).ok();
         }
+    }
+
+    #[test]
+    fn a_picture_partly_in_view_is_drawn_clipped_to_its_rows() {
+        let path = temp("partly.png");
+        save(&path, 8, 16);
+        let shown = path.clone();
+        let offset = std::rc::Rc::new(std::cell::Cell::new(None));
+        let seen = offset.clone();
+        let app = App::new(move || {
+            let at = crate::reactive::signal(0u16);
+            seen.set(Some(at));
+            crate::node::scroll_with(
+                image_with(&shown, ImageView::new().pixels(Pixels::Iterm)).fixed(4),
+                at,
+            )
+        })
+        .wait_for_tasks(true)
+        .graphics(image_graphics());
+        let mut driver = app.driver(4, 2);
+        let mut out = String::new();
+        for _ in 0..400 {
+            driver.update(std::time::Duration::ZERO);
+            out.push_str(&driver.render().unwrap_or_default());
+            if out.contains("\x1b]1337;") {
+                break;
+            }
+            std::thread::sleep(std::time::Duration::from_millis(5));
+        }
+        // Its top two rows of four, then its middle two once scrolled.
+        assert!(out.contains("height=2;"), "{out:?}");
+        assert!(!out.contains("height=4;"), "{out:?}");
+        offset.get().unwrap().set(1);
+        driver.update(std::time::Duration::ZERO);
+        let scrolled = driver.render().unwrap_or_default();
+        assert!(scrolled.contains("height=2;"), "{scrolled:?}");
+        std::fs::remove_file(&path).ok();
     }
 
     #[test]

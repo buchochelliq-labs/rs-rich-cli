@@ -36,10 +36,9 @@ it, or to get past bot checks, CAPTCHAs or sign-in walls. See
 sticky layer and no paint order, so sticky headers and overlapping boxes
 can read oddly. Press `r` for reader mode.
 
-**The page stops where it should load more.** Noctiluca scrolls its own
-copy of the page, so pages that load more as you scroll (infinite scroll,
-lazy images) do not load more yet. Following Chrome's scroll is planned
-for 0.0.23.
+**The page stops where it should load more.** Keep going down: each time
+you near the end, Noctiluca asks the page for more. A feed that loads
+only on a button needs the button pressed (`f` and its hint).
 
 **Keys type into a field.** A focused text field takes every key you
 type. Esc does not leave it: press `Tab` to move to the next widget.

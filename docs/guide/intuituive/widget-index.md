@@ -15,6 +15,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/grid.svg){ .tui-icon width="20" } | [grid](layout.md#grids) | `grid` | Children placed on row and column tracks |
 | ![](../../assets/intuituive/widgets/layers.svg){ .tui-icon width="20" } | [layers](layout.md#layers) | `layers` | Children drawn over each other |
 | ![](../../assets/intuituive/widgets/scroll.svg){ .tui-icon width="20" } | [scroll](tables.md#tables-tabs-and-scrolling) | `scroll`, `scroll_x`, `scroll_both` | A viewport onto a child laid out at its full size |
+| ![](../../assets/intuituive/widgets/scroll.svg){ .tui-icon width="20" } | [scroll_virtual](tables.md#long-and-endless-content-scroll_virtual) | `scroll_virtual`, `scroll_virtual_with` | A scroll view over items that builds only those near the view; loads more near the end |
 | ![](../../assets/intuituive/widgets/split.svg){ .tui-icon width="20" } | [split](lists.md#trees-split-panes-and-virtual-lists) | `hsplit`, `vsplit`, `split` | Two panes with a divider you can drag |
 | ![](../../assets/intuituive/widgets/treemap.svg){ .tui-icon width="20" } | [treemap](layout.md#treemaps) | `treemap` | Rectangles sized by weight |
 | ![](../../assets/intuituive/widgets/switch.svg){ .tui-icon width="20" } | [switch](layout.md#nodes) | `switch`, `keyed` | One child at a time, chosen by a key; the others are kept |

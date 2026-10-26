@@ -596,6 +596,24 @@ fn half_cell(top: Pixel, bottom: Pixel, styles: &[Option<Style>]) -> (char, Opti
     }
 }
 
+impl crate::surface::Draw for PieChart {
+    fn draw(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        screen: &mut crate::surface::Screen,
+        rect: crate::surface::Rect,
+    ) {
+        super::draw_lines(
+            self.render_lines(console, options),
+            options.max_width,
+            options,
+            screen,
+            rect,
+        );
+    }
+}
+
 impl Renderable for PieChart {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         lines_to_segments(self.render_lines(console, options), options.max_width)

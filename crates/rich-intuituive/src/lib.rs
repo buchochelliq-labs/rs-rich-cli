@@ -140,6 +140,7 @@ pub mod reactive;
 mod reorder;
 mod rule;
 pub mod screen;
+mod scroll_virtual;
 mod scrollbar;
 pub mod select;
 mod select_field;
@@ -160,6 +161,7 @@ pub mod task;
 pub mod testing;
 mod text_area;
 pub mod text_edit;
+pub mod timedemo;
 pub mod transport;
 mod tree;
 mod tree_table;
@@ -226,12 +228,12 @@ pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use list::list_optional;
 pub use log::Log;
 pub use miller::{miller_in, miller_of, MillerSource};
-pub use node::described;
 pub use node::{
     column, component, each, fit_text, grid, keyed, label, layers, leaf, list, renderable,
     repeating, row, scroll, scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text,
     Node,
 };
+pub use node::{described, drawn, drawn_described};
 pub use notify::{Corner, Level};
 pub use place::{Offset, Origin, RectHandle};
 pub use preview::{preview_of, preview_of_with, PreviewOfOptions};
@@ -239,6 +241,8 @@ pub use reactive::{memo, on_write, on_write_ref, signal, viewport, watch, Memo, 
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;
 pub use rule::rule;
+pub use screen::{PaintStats, PaintStrategy};
+pub use scroll_virtual::{scroll_virtual, scroll_virtual_with};
 pub use select::{list_search, multi_select, ListSearch, Mark, MultiSelect};
 pub use select_field::{select_field, select_field_keyed, SelectOption};
 pub use sheet::{SheetError, Stylesheet};
@@ -273,15 +277,16 @@ pub use widgets::text_area;
 /// Everything an app usually needs.
 pub mod prelude {
     // `text` is both the function and the `text!` macro.
-    pub use crate::described;
     pub use crate::{
         after, column, component, each, effect, every, fill, fixed_step, grid, input, keyed, label,
         latest, latest_every, layers, leaf, list, list_optional, memo, number_input, on_write,
         on_write_ref, rate, renderable, repeating, resource, resource_for, row, scroll,
-        scroll_both, scroll_with, scroll_x, signal, spawn, switch, text, text_area, viewport,
-        watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow,
-        Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Timer, Widget,
+        scroll_both, scroll_virtual, scroll_with, scroll_x, signal, spawn, switch, text, text_area,
+        viewport, watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node,
+        Overflow, Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Timer,
+        Widget,
     };
+    pub use crate::{described, drawn, drawn_described};
 }
 
 /// Console markup with `format!` arguments, read again whenever a signal it

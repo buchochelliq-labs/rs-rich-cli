@@ -414,7 +414,7 @@ fn neutralise(segments: &[Segment]) -> Vec<Segment> {
                 .chars()
                 .any(|c| c.is_control() && c != '\n' && c != '\t')
             {
-                segment.text = crate::sanitize_terminal_controls(&segment.text);
+                segment.text = crate::sanitize_terminal_controls(&segment.text).into();
             }
             if let Some(style) = &segment.style {
                 if let Some(link) = style

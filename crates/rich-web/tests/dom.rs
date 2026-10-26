@@ -163,6 +163,47 @@ fn changes_send_only_what_changed() {
     assert_eq!(frame["cols"], 24);
 }
 
+/// Rows are compared only where frames drew, and frames drawn between two
+/// updates all count: a page that missed some still gets every change,
+/// and one that missed more than the driver remembers gets every row
+/// compared.
+#[test]
+fn frames_between_updates_all_reach_the_page() {
+    let mut driver = app().driver(20, 6);
+    let mut dom = Dom::new();
+    step(&mut driver, &mut dom);
+    let row = |messages: &[Value], y: u64| -> Option<String> {
+        find(messages, "frame")?["lines"]
+            .as_array()?
+            .iter()
+            .find(|line| line[0] == y)
+            .map(|line| line_text(&line[1]))
+    };
+    // Two frames, one update: the selection moved twice; the heading's
+    // row did not change and is not sent.
+    for _ in 0..2 {
+        driver.event(Event::Key(Key::parse("down").unwrap()));
+        driver.update(Duration::ZERO);
+        let _ = driver.render();
+    }
+    let messages = step(&mut driver, &mut dom);
+    let tree = find(&messages, "tree").expect("a tree");
+    assert_eq!(node_named(tree, "list")["item"]["text"], "c.txt");
+    assert!(row(&messages, 0).is_none(), "{messages:?}");
+    // A hundred frames: more than the driver keeps; still right.
+    for k in 0..100 {
+        driver.event(Event::Key(
+            Key::parse(if k % 2 == 0 { "up" } else { "down" }).unwrap(),
+        ));
+        driver.update(Duration::ZERO);
+        let _ = driver.render();
+    }
+    driver.event(Event::Key(Key::parse("up").unwrap()));
+    let messages = step(&mut driver, &mut dom);
+    let tree = find(&messages, "tree").expect("a tree");
+    assert_eq!(node_named(tree, "list")["item"]["text"], "b.txt");
+}
+
 #[test]
 fn announcements_and_copies_become_messages() {
     let mut driver = app().driver(20, 6);
@@ -303,4 +344,60 @@ fn a_dom_session_runs_end_to_end() {
     socket.send(Message::text("d\x03")).unwrap();
     let last = read_close(&mut socket);
     assert!(!last.contains("\x1b["), "{last:?}");
+}
+
+/// A server that compresses sends a page that asks (`z=1`) its large
+/// messages deflated, marked `1`, and its small ones as text; a page that
+/// does not ask gets text only.
+#[test]
+fn large_messages_are_deflated_for_a_page_that_asks() {
+    use std::io::Read;
+    let server = Server::bind("127.0.0.1:0", app)
+        .unwrap()
+        .isolation(Isolation::Threads)
+        .token(TOKEN)
+        .compress(Some(256))
+        .spawn()
+        .unwrap();
+    let read = |socket: &mut tungstenite::WebSocket<std::net::TcpStream>| {
+        let mut texts = Vec::new();
+        let mut inflated = Vec::new();
+        let deadline = std::time::Instant::now() + Duration::from_secs(5);
+        while std::time::Instant::now() < deadline
+            && !texts
+                .iter()
+                .chain(&inflated)
+                .any(|m: &String| m.contains(r#""t":"tree""#))
+        {
+            match socket.read() {
+                Ok(Message::Text(text)) => texts.push(text.to_string()),
+                Ok(Message::Binary(bytes)) => {
+                    assert_eq!(bytes[0], 1, "a deflated message");
+                    let mut out = String::new();
+                    flate2::read::DeflateDecoder::new(&bytes[1..])
+                        .read_to_string(&mut out)
+                        .unwrap();
+                    inflated.push(out);
+                }
+                _ => {}
+            }
+        }
+        (texts, inflated)
+    };
+    let mut socket = connect_with(server.local_addr(), 20, 6, "&renderer=dom&z=1");
+    let (texts, inflated) = read(&mut socket);
+    assert!(texts.iter().all(|t| t.len() < 256), "{texts:?}");
+    assert!(texts[0].starts_with(r#"{"t":"hello""#), "{texts:?}");
+    let frame: Value = serde_json::from_str(
+        inflated
+            .iter()
+            .find(|m| m.contains(r#""t":"frame""#))
+            .expect("a deflated frame"),
+    )
+    .unwrap();
+    assert_eq!(frame["cols"], 20);
+    // Without `z=1`, nothing is compressed.
+    let mut plain = connect_with(server.local_addr(), 20, 6, "&renderer=dom");
+    let (texts, inflated) = read(&mut plain);
+    assert!(inflated.is_empty() && texts.iter().any(|t| t.contains(r#""t":"frame""#)));
 }

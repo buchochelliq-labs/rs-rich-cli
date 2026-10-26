@@ -39,7 +39,9 @@ column([
   signal for the content. [Lists, trees and tabs](lists.md#how-a-tab-strip-looks)
   has its options, and a model of a tab set.
 - **`scroll(child)`** is a viewport onto a child laid out at its full
-  height (up to 4000 rows).
+  height (up to 4000 rows). It is for content of a modest size: rows past
+  the 4000th are cut off, and a debug build says so once on stderr. For
+  long or endless content, use `scroll_virtual` below.
   - The arrow keys, PgUp/PgDn, Home/End and the wheel scroll it, and a
     scrollbar appears when the child does not fit.
   - The focus moving to a node inside scrolls that node into view.
@@ -52,6 +54,51 @@ column([
   with a bar along the bottom too. ←/→, Shift+wheel and Shift+PgUp/PgDn
   move across. `scroll_both_with(child, x, y, across, down)` puts both
   offsets in signals.
+
+### Long and endless content: `scroll_virtual`
+
+**`scroll_virtual(len, height_of, row)`** is a scroll view over `len()`
+items that builds only those near the view: a feed, a chat, a log, search
+results, a file of a million lines.
+
+```rust
+use intuituive::prelude::*;
+
+let app = App::new(|| {
+    let posts = signal(50usize);
+    scroll_virtual(move || posts.get(), |_| 1, |i| label(format!("post {i}")))
+        // Within ten rows of the end: fetch the next page.
+        .on_near_end(10, move |_| posts.update(|n| *n += 50))
+});
+```
+
+- **Only what is near the view is built.** Item `i` is `row(i)`. The
+  items in view and one screen either side are built, kept by key while
+  they stay near, and dropped when they leave. A million items cost a
+  screenful.
+- **Heights are estimated, then measured.** `height_of(i)` is a guess (at
+  least one row). Once an item is drawn, its real height (its fixed size,
+  else its content's) replaces the guess.
+- **No row cap.** The offset is a `u64` of rows. The scrollbar is
+  computed from the heights. ↑/↓, PgUp/PgDn, Home/End, the wheel and the
+  bar scroll it. `scroll_virtual_with(len, height_of, row, offset)` puts
+  the first row in view in a `Signal<u64>`; set it to `u64::MAX` for the
+  end.
+- **`.item_key(|i| key)`** gives items stable keys. An item then keeps its
+  node and its measured height when items are inserted or removed around
+  it, and the top item in view keeps its row: content arriving above does
+  not push the reader down. A kept node can sit at another index than the
+  one it was built for, so what it draws should follow its key.
+- **`.on_near_end(threshold, load)`** calls `load` once the view comes
+  within `threshold` rows of the end, and not again until `len` grows. One
+  load is in flight at a time.
+- **`.stand_in(|i| node)`** (new in 0.0.23, opt-in) draws a cheap stand-in for items not built yet
+  while the view scrolls fast (two screens or more before it rests for
+  100 ms); full items replace them at rest. Measured on a held PageDown
+  over cards (a panel of styled text), it cut frame time about five times
+  (debug build: 25 ms to 5 ms a frame). Over one-line labels it gains
+  nothing, so use it only for items that are costly to build.
+- **`.scrollbar(Scrollbar)`** sets the bar's look, as on the other views.
 
 ### Sorting, resizing and a cell cursor
 

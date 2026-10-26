@@ -15,7 +15,8 @@ use rich_intuituive::interact::keymap::{try_keys, Keymap};
 use rich_intuituive::interact::{Key, KeyCode};
 use rich_intuituive::prelude::*;
 use rich_intuituive::{
-    button_of, image_bytes_of, image_graphics, slider, spawn_stream, Action, ImageView, Pixels,
+    button_of, image_bytes_of, image_graphics, scroll_virtual_with, slider, spawn_stream, Action,
+    ImageView, Pixels,
 };
 
 use crate::actions::{self, keys_label, ACTIONS};
@@ -24,7 +25,7 @@ use crate::cdp::CELL;
 use crate::clean::{markup, truncate};
 use crate::config::{remove_site_key, save_site_key, Config, Images, Site, Target, View};
 use crate::engine::{Engine, HistoryStep, MediaOp, NodeId, Playback};
-use crate::layout::{self, hint_labels, matches, to_text, Line, Marks, Piece};
+use crate::layout::{self, hint_labels, matches, to_text, Line, Marks, Piece, Projection};
 use crate::model::{Binding, MediaKind, Page, Role};
 use crate::tab::{Command, Intent, Refusal, Tab, Update};
 use crate::widgets::{web_widget, WebControl};
@@ -62,7 +63,19 @@ pub struct Browser {
     pub hints: Signal<Option<Hints>>,
     pub find: Signal<Option<String>>,
     pub find_at: Signal<usize>,
-    pub scroll: Signal<u16>,
+    /// The first row in view.
+    pub scroll: Signal<u64>,
+    /// The current view's rows, laid out once per reading, width, view
+    /// and hints: what is drawn, what find searches and what the scroll
+    /// keys measure. Not laid out again per key or per draw.
+    pub layout: Memo<Rc<Projection>>,
+    /// Where find's matches are in [`layout`](Self::layout): (row, nth on
+    /// the row).
+    pub found: Memo<Rc<Vec<(usize, usize)>>>,
+    /// Where Chrome's own scroll is, in CSS pixels, as last sent or read.
+    pub chrome_y: Signal<f64>,
+    /// The pending send of our scroll to Chrome.
+    follow: Signal<Option<Timer>>,
     pub message: Signal<String>,
     pub config: Signal<Config>,
     pub keymap: Signal<Keymap>,
@@ -142,6 +155,22 @@ impl Browser {
         self.config.with(|c| c.site(&url).cloned())
     }
 
+    /// What the views lay out with: hint labels only (find marks are drawn
+    /// over the layout, not part of it).
+    pub fn hint_marks(&self) -> Marks {
+        let hints = self
+            .hints
+            .with(|h| {
+                h.as_ref()
+                    .map(|h| h.labels.iter().map(|(l, c)| (*c, l.clone())).collect())
+            })
+            .unwrap_or_default();
+        Marks {
+            hints,
+            ..Marks::default()
+        }
+    }
+
     /// What the views mark: hint labels and find.
     pub fn marks(&self) -> Marks {
         let hints = self
@@ -165,40 +194,72 @@ impl Browser {
 
 /// The page's lines in the current view at `width`, as find counts rows:
 /// every piece of reader mode in turn (a media region or a control as its
-/// rows of nothing), or the projection.
-fn view_lines(b: Browser, width: u16) -> Vec<Line> {
-    let marks = Marks::default();
-    b.page.with_untracked(|p| {
-        let Some(page) = p.as_ref() else {
-            return Vec::new();
-        };
-        match b.view.get_untracked() {
-            View::Reader => {
-                let mut out = Vec::new();
-                for piece in layout::reader(page, width.saturating_sub(2), &marks) {
-                    match piece {
-                        Piece::Text(lines) => out.extend(lines),
-                        other => out.extend(std::iter::repeat_n(Line::default(), other.rows())),
-                    }
+/// rows of nothing), or the projection, with each row's key and place on
+/// the page.
+fn lay_out(page: &Page, view: View, width: u16, marks: &Marks) -> Projection {
+    match view {
+        View::Reader => {
+            let mut lines = Vec::new();
+            for piece in layout::reader(page, width.saturating_sub(2), marks) {
+                match piece {
+                    Piece::Text(text) => lines.extend(text),
+                    other => lines.extend(std::iter::repeat_n(Line::default(), other.rows())),
                 }
-                out
             }
-            _ => layout::projection(page, width, (CELL.0 as f64, CELL.1 as f64), &marks),
+            // Reader rows stand for the page's height in proportion.
+            let rows = lines.len().max(1) as f64;
+            let y = (0..lines.len())
+                .map(|r| r as f64 / rows * page.height)
+                .collect();
+            let keys: Vec<u64> = (0..lines.len() as u64).collect();
+            let rows = keys.iter().map(|&k| (k, k as usize)).collect();
+            Projection {
+                lines,
+                keys,
+                y,
+                rows,
+            }
         }
-    })
+        _ => layout::project(page, width, (CELL.0 as f64, CELL.1 as f64), marks),
+    }
 }
 
 /// Where find's matches are: (row, nth on the row).
-fn find_rows(b: Browser, width: u16) -> Vec<(usize, usize)> {
-    let Some(query) = b.find.get_untracked().filter(|q| !q.is_empty()) else {
-        return Vec::new();
-    };
-    view_lines(b, width)
-        .iter()
-        .enumerate()
-        .flat_map(|(row, line)| (0..matches(&line.plain(), &query).len()).map(move |k| (row, k)))
-        .collect()
+fn find_rows(b: Browser) -> Rc<Vec<(usize, usize)>> {
+    b.found.get_untracked()
 }
+
+/// Our first row in view as Chrome's scroll: a wheel turn for a move of a
+/// few screens, a jump for more, sent once the view rests.
+fn follow_scroll(b: Browser, row: u64, cx: &mut Ctx) {
+    if let Some(timer) = b.follow.get_untracked() {
+        timer.cancel();
+    }
+    let timer = cx.after(FOLLOW, move |_| {
+        b.follow.set(None);
+        // The first row is the page's top, whatever its margin.
+        let to = match row {
+            0 => 0.0,
+            _ => b.layout.with_untracked(|l| l.y_of(row as usize)),
+        };
+        let from = b.chrome_y.get_untracked();
+        let screen = b.viewport.get_untracked().1 as f64 * CELL.1 as f64;
+        let delta = to - from;
+        if delta.abs() < 1.0 {
+            return;
+        }
+        b.chrome_y.set(to);
+        if delta.abs() > 3.0 * screen.max(1.0) {
+            b.send(Command::Scroll(to));
+        } else {
+            b.send(Command::Wheel(delta));
+        }
+    });
+    b.follow.set(Some(timer));
+}
+
+/// How long the view rests before Chrome's scroll follows it.
+const FOLLOW: std::time::Duration = std::time::Duration::from_millis(120);
 
 /// Whether action `id` can run now, or why not. Reads signals, so the
 /// overlay that calls it follows them.
@@ -285,9 +346,7 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
         cx.toast(format!("[yellow]{}[/]", markup(&why)));
         return;
     }
-    let rows = b.viewport.get_untracked().1.saturating_sub(4).max(1);
-    let width = b.viewport.get_untracked().0;
-    let total = || view_lines(b, width).len() as u16;
+    let rows = b.viewport.get_untracked().1.saturating_sub(4).max(1) as u64;
     match id {
         "open" => open_prompt(b, String::new(), cx),
         "address" => open_prompt(b, b.url(), cx),
@@ -297,7 +356,7 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
         "reload" => drop(b.send(Command::History(HistoryStep::Reload))),
         "find" => find_prompt(b, cx),
         "find.next" | "find.previous" => {
-            let found = find_rows(b, width);
+            let found = find_rows(b);
             if found.is_empty() {
                 cx.toast("[yellow]No matches.[/]");
                 return;
@@ -310,19 +369,16 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
                 (_, at) => (at % found.len() + found.len() - 1) % found.len(),
             };
             b.find_at.set(next);
-            b.scroll.set((found[next].0 as u16).saturating_sub(3));
+            b.scroll.set((found[next].0 as u64).saturating_sub(3));
             b.say(format!("match {} of {}", next + 1, found.len()));
         }
-        "scroll.down" => b
-            .scroll
-            .update(|s| *s = (*s + 1).min(total().saturating_sub(1))),
+        // The view keeps the offset within the page.
+        "scroll.down" => b.scroll.update(|s| *s = s.saturating_add(1)),
         "scroll.up" => b.scroll.update(|s| *s = s.saturating_sub(1)),
-        "page.down" => b
-            .scroll
-            .update(|s| *s = (*s + rows).min(total().saturating_sub(1))),
+        "page.down" => b.scroll.update(|s| *s = s.saturating_add(rows)),
         "page.up" => b.scroll.update(|s| *s = s.saturating_sub(rows)),
         "top" => b.scroll.set(0),
-        "bottom" => b.scroll.set(total().saturating_sub(rows)),
+        "bottom" => b.scroll.set(u64::MAX),
         "reader" => {
             b.view.update(|v| {
                 *v = if *v == View::Reader {
@@ -1190,6 +1246,7 @@ fn apply(b: Browser, update: Update, cx: &mut Ctx) {
             }
         }
         Update::State(state) => b.state.set(state),
+        Update::Metrics(metrics) => b.chrome_y.set(metrics.scroll_y),
         Update::Done(id, result) => {
             let mut then = None;
             b.waiting.update(|w| then = w.remove(&id));
@@ -1252,35 +1309,33 @@ fn pixels(images: Images) -> Pixels {
 }
 
 fn reader_view(b: Browser) -> Node {
-    let doc = memo(move || {
+    // The pieces and their keys, made together so they always agree.
+    let reading = memo(move || {
         let width = b.viewport.get().0;
-        let marks = b.marks();
+        let marks = b.hint_marks();
+        let images = b.images.get();
         b.page.with(|p| {
             p.as_ref()
-                .map(|p| layout::reader(p, width.saturating_sub(2), &marks))
+                .map(|p| {
+                    let pieces = layout::reader(p, width.saturating_sub(2), &marks);
+                    let keys = piece_keys(p, &pieces, images);
+                    (pieces, keys)
+                })
                 .unwrap_or_default()
         })
     });
-    let keys = move || {
-        b.page.with(|p| {
-            p.as_ref()
-                .map(|p| doc.with(|d| piece_keys(p, d, b.images.get())))
-                .unwrap_or_default()
-        })
-    };
     let build = move |key: PieceKey| -> Node {
         match key {
             PieceKey::Text(i, _) => {
-                let rows = doc.with_untracked(|d| d.get(i).map_or(1, Piece::rows)) as u16;
+                let rows = reading.with_untracked(|(d, _)| d.get(i).map_or(1, Piece::rows)) as u16;
                 renderable(move || {
                     let mut marks = Marks {
                         find: b.find.get(),
                         ..Marks::default()
                     };
-                    doc.with(|d| {
+                    reading.with(|(d, _)| {
                         let start: usize = d.iter().take(i).map(Piece::rows).sum();
-                        let found = find_rows(b, b.viewport.get_untracked().0);
-                        marks.current = found.get(b.find_at.get()).copied();
+                        marks.current = b.found.with(|f| f.get(b.find_at.get()).copied());
                         match d.get(i) {
                             Some(Piece::Text(lines)) => to_text(lines, &marks, start),
                             _ => rich::Text::new(""),
@@ -1317,31 +1372,91 @@ fn reader_view(b: Browser) -> Node {
             PieceKey::Player(node) => player(b, node),
         }
     };
-    scroll_with(each(keys, build), b.scroll)
-        .autofocus()
-        .name("page")
+    // Each piece an item, built only near the view, keyed by what it
+    // shows: a piece that stays keeps its node across readings.
+    let key_of = |key: &PieceKey| {
+        use std::hash::{Hash, Hasher};
+        let mut h = std::collections::hash_map::DefaultHasher::new();
+        key.hash(&mut h);
+        h.finish()
+    };
+    // A piece's rows: text and media are as tall as they say; controls
+    // and players are measured once drawn.
+    let rows_of = move |i: usize| -> u16 {
+        reading.with_untracked(|(d, k)| match k.get(i) {
+            Some(PieceKey::Text(at, _)) => d.get(*at).map_or(1, Piece::rows) as u16,
+            Some(PieceKey::Media(_, rows)) => *rows,
+            _ => 1,
+        })
+    };
+    scroll_virtual_with(
+        move || reading.with(|(_, k)| k.len()),
+        rows_of,
+        move |i| match reading.with_untracked(|(_, k)| k.get(i).cloned()) {
+            Some(key) => build(key),
+            None => label(""),
+        },
+        b.scroll,
+    )
+    .item_key(move |i| reading.with_untracked(|(_, k)| k.get(i).map_or(i as u64, key_of)))
+    .on_near_end(near_end(b), move |_| load_more(b))
+    .autofocus()
+    .name("page")
+}
+
+/// How near the end, in rows, the view asks the page for more: a screen.
+fn near_end(b: Browser) -> u64 {
+    b.viewport.get_untracked().1.max(1) as u64
+}
+
+/// Near the end of what was read: scroll Chrome to its bottom, so an
+/// infinite feed loads more. The page is read again on its change ping;
+/// the view asks again only once it has more rows.
+fn load_more(b: Browser) {
+    if b.page.with_untracked(Option::is_some) {
+        b.send(Command::LoadMore);
+    }
 }
 
 fn projection_view(b: Browser) -> Node {
-    let lines = memo(move || {
-        let width = b.viewport.get().0;
-        let marks = b.marks();
-        b.page.with(|p| {
-            p.as_ref()
-                .map(|p| layout::projection(p, width, (CELL.0 as f64, CELL.1 as f64), &marks))
-                .unwrap_or_default()
+    // One item per row of the shared layout, built only near the view and
+    // keyed by the row's node, so the row in view stays when the page
+    // grows above it.
+    let line = move |i: usize| {
+        // The row this item is: by its key, as rows move when the page
+        // grows above them.
+        let key = b
+            .layout
+            .with_untracked(|l| l.keys.get(i).copied().unwrap_or(i as u64));
+        renderable(move || {
+            let marks = Marks {
+                find: b.find.get(),
+                current: b.found.with(|f| f.get(b.find_at.get()).copied()),
+                ..Marks::default()
+            };
+            b.layout.with(|l| {
+                let row = l.rows.get(&key).copied().unwrap_or(i);
+                match l.lines.get(row) {
+                    Some(line) => to_text(std::slice::from_ref(line), &marks, row),
+                    None => rich::Text::new(""),
+                }
+            })
         })
-    });
-    let canvas = renderable(move || {
-        let found = find_rows(b, b.viewport.get_untracked().0);
-        let marks = Marks {
-            find: b.find.get(),
-            current: found.get(b.find_at.get()).copied(),
-            ..Marks::default()
-        };
-        lines.with(|l| to_text(l, &marks, 0))
-    });
-    scroll_with(canvas, b.scroll).autofocus().name("page")
+        .fixed(1)
+    };
+    scroll_virtual_with(
+        move || b.layout.with(|l| l.lines.len()),
+        |_| 1,
+        line,
+        b.scroll,
+    )
+    .item_key(move |i| {
+        b.layout
+            .with_untracked(|l| l.keys.get(i).copied().unwrap_or(i as u64))
+    })
+    .on_near_end(near_end(b), move |_| load_more(b))
+    .autofocus()
+    .name("page")
 }
 
 /// The browser app over `engine`.
@@ -1366,18 +1481,60 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         let tab = Tab::spawn(engine, move |update| {
             let _ = send.send(update);
         });
+        let page: Signal<Option<Arc<Page>>> = signal(None);
+        let view: Signal<View> = signal(if first_view == View::Raster {
+            View::Projection
+        } else {
+            first_view
+        });
+        let hints: Signal<Option<Hints>> = signal(None);
+        let find: Signal<Option<String>> = signal(None);
+        let port = viewport();
+        let layout = memo(move || {
+            let width = port.get().0;
+            let marks = Marks {
+                hints: hints
+                    .with(|h| {
+                        h.as_ref()
+                            .map(|h| h.labels.iter().map(|(l, c)| (*c, l.clone())).collect())
+                    })
+                    .unwrap_or_default(),
+                ..Marks::default()
+            };
+            let view = view.get();
+            Rc::new(page.with(|p| {
+                p.as_ref()
+                    .map(|p| lay_out(p, view, width, &marks))
+                    .unwrap_or_default()
+            }))
+        });
+        let found = memo(move || {
+            let query = find.get().filter(|q| !q.is_empty());
+            Rc::new(match query {
+                Some(query) => layout.with(|l| {
+                    l.lines
+                        .iter()
+                        .enumerate()
+                        .flat_map(|(row, line)| {
+                            (0..matches(&line.plain(), &query).len()).map(move |k| (row, k))
+                        })
+                        .collect()
+                }),
+                None => Vec::new(),
+            })
+        });
         let b = Browser {
-            page: signal(None),
+            page,
             state: signal(PageState::default()),
-            view: signal(if first_view == View::Raster {
-                View::Projection
-            } else {
-                first_view
-            }),
-            hints: signal(None),
-            find: signal(None),
+            view,
+            hints,
+            find,
             find_at: signal(usize::MAX),
             scroll: signal(0),
+            layout,
+            found,
+            chrome_y: signal(0.0),
+            follow: signal(None),
             message: signal(
                 warnings
                     .iter()
@@ -1390,7 +1547,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             bookmarks: signal(bookmarks),
             images: signal(images),
             images_default: signal(images),
-            viewport: viewport(),
+            viewport: port,
             tab: signal(tab),
             waiting: signal(HashMap::new()),
             controls: signal(HashMap::new()),
@@ -1411,6 +1568,12 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             },
         );
         b.send(Command::Open(start.clone()));
+        // Chrome's scroll follows ours, so the page's lazy loading and
+        // infinite feeds see the reader scroll.
+        watch(
+            move || b.scroll.get(),
+            move |row, cx| follow_scroll(b, row, cx),
+        );
 
         let address = text(move || {
             let state = b.state.get();
@@ -1460,8 +1623,14 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                     markup(&keys_for("find.previous"))
                 );
             }
+            // A page with more than the model reads says so.
+            let cut = if b.page.with(|p| p.as_ref().is_some_and(|p| p.truncated)) {
+                "[yellow]page cut: too long to read whole[/] · "
+            } else {
+                ""
+            };
             format!(
-                "[dim]{} actions · {} hints · {} open · {} reader · {} quit[/]",
+                "{cut}[dim]{} actions · {} hints · {} open · {} reader · {} quit[/]",
                 markup(&keys_for("actions")),
                 markup(&keys_for("hints")),
                 markup(&keys_for("open")),

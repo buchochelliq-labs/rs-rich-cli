@@ -124,13 +124,15 @@ pub(crate) struct Spec {
     renderer: Renderer,
     memory: Option<u64>,
     cpu: Option<u64>,
+    /// Compress frames from this size.
+    compress: Option<u64>,
 }
 
 impl Spec {
     fn encode(&self) -> String {
         let limit = |n: Option<u64>| n.map_or("-".to_string(), |n| n.to_string());
         format!(
-            "2 {} {} {} {} {} {} {} {} {} {}",
+            "3 {} {} {} {} {} {} {} {} {} {} {}",
             self.port,
             self.parent,
             self.secret,
@@ -140,13 +142,14 @@ impl Spec {
             self.rows,
             self.renderer.name(),
             limit(self.memory),
-            limit(self.cpu)
+            limit(self.cpu),
+            limit(self.compress)
         )
     }
 
     fn decode(text: &str) -> Option<Spec> {
         let mut parts = text.split(' ');
-        if parts.next()? != "2" {
+        if parts.next()? != "3" {
             return None;
         }
         let mut next = || parts.next();
@@ -165,6 +168,7 @@ impl Spec {
             renderer: Renderer::parse(next()?)?,
             memory: limit(next()?)?,
             cpu: limit(next()?)?,
+            compress: limit(next()?)?,
         };
         next().is_none().then_some(spec)
     }
@@ -268,6 +272,7 @@ pub(crate) fn run_child(spec: Spec, app: impl FnOnce() -> App) -> i32 {
         spec.rows,
         &stopping,
         spec.renderer,
+        session::Compress(spec.compress.map(|n| n as usize)),
     ) {
         Ok(()) => 0,
         Err(_) => 1,
@@ -373,6 +378,7 @@ pub(crate) struct Session<'a> {
     pub columns: u16,
     pub rows: u16,
     pub renderer: Renderer,
+    pub compress: Option<usize>,
     pub stopping: &'a AtomicBool,
     pub running: &'a AtomicUsize,
 }
@@ -395,7 +401,8 @@ pub(crate) fn run_parent(browser: TcpStream, session: Session<'_>) {
         }
     };
     let (mut child, tree, listener, secrets) = started;
-    let child_stream = match connected(&listener, &secrets, &mut child, session.stopping) {
+    let memory = session.spawn.memory;
+    let child_stream = match connected(&listener, &secrets, &mut child, memory, session.stopping) {
         Ok(stream) => stream,
         Err(why) => {
             end(&mut child, tree);
@@ -448,6 +455,7 @@ fn start(session: &Session<'_>) -> io::Result<(Child, Tree, TcpListener, Secrets
         renderer: session.renderer,
         memory: session.spawn.memory,
         cpu: session.spawn.cpu.map(|cpu| cpu.as_secs().max(1)),
+        compress: session.compress.map(|n| n as u64),
     };
     let (program, args) = match &session.spawn.command {
         Some((program, args)) => (program.clone(), args.clone()),
@@ -568,10 +576,16 @@ fn within_memory(pid: u32, memory: Option<u64>) -> io::Result<()> {
 /// the reply. Anything else that connects meanwhile is turned away; every
 /// connection is read at once, each for at most [`HELLO_TIMEOUT`], so none
 /// holds up the process or the server stopping.
+///
+/// Its peak memory is checked again before the answer: an allocation the
+/// process began before `prlimit` can still be under way when the server
+/// first looks, and is only counted once it completes. By the time the
+/// process connects, its startup is over.
 fn connected(
     listener: &TcpListener,
     secrets: &Secrets,
     child: &mut Child,
+    memory: Option<u64>,
     stopping: &AtomicBool,
 ) -> Result<TcpStream, String> {
     let until = Instant::now() + CONNECT_TIMEOUT;
@@ -610,6 +624,14 @@ fn connected(
             }
         });
         if let Some(mut stream) = found {
+            #[cfg(not(target_os = "linux"))]
+            let _ = memory;
+            #[cfg(target_os = "linux")]
+            if let Err(error) = within_memory(child.id(), memory) {
+                return Err(format!(
+                    "The session's process could not start: its limits could not be set: {error}."
+                ));
+            }
             let answered = stream
                 .set_nonblocking(false)
                 .and_then(|()| stream.write_all(format!("{}\n", secrets.reply).as_bytes()));
@@ -921,13 +943,14 @@ mod tests {
             renderer: Renderer::Dom,
             memory: Some(1 << 28),
             cpu: None,
+            compress: Some(1024),
         };
         assert_eq!(Spec::decode(&spec.encode()), Some(spec));
         // 0.0.19's first form, without the parent and the reply.
         assert_eq!(Spec::decode("1 1 a 0 80 24 xterm - -"), None);
         assert_eq!(Spec::decode("3 1 9 a b 0 80 24 xterm - -"), None);
-        assert_eq!(Spec::decode("2 1 9 a b 0 80 24 xterm -"), None);
-        assert_eq!(Spec::decode("2 1 9 a b 0 80 24 canvas - -"), None);
+        assert_eq!(Spec::decode("2 1 9 a b 0 80 24 xterm - -"), None);
+        assert_eq!(Spec::decode("3 1 9 a b 0 80 24 canvas - - -"), None);
     }
 
     #[test]

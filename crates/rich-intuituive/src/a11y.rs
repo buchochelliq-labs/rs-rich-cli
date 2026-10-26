@@ -349,7 +349,7 @@ pub(crate) fn screen_text(screen: &Screen, rect: Rect, hidden: &[Rect]) -> Strin
             .filter(|&x| !hidden.iter().any(|h| h.contains(x, row)))
             .map(|x| screen.cell(x, row))
             .filter(|cell| !cell.is_continuation())
-            .map(|cell| cell.text.as_str())
+            .map(|cell| cell.text())
             .collect();
         let text = text.trim();
         if !text.is_empty() {

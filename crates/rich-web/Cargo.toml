@@ -41,7 +41,7 @@ default = ["server", "syntax"]
 # decoder) and `dom` (the DOM renderer's messages) only, with neither
 # networking nor PTYs, so it builds for wasm32-unknown-unknown: the docs
 # playground decodes xterm.js's input with it in the page.
-server = ["dep:rich-embed", "dep:tungstenite", "dep:httparse", "dep:data-encoding", "dep:getrandom", "dep:rustix", "dep:win32job"]
+server = ["dep:rich-embed", "dep:tungstenite", "dep:httparse", "dep:data-encoding", "dep:getrandom", "dep:flate2", "dep:rustix", "dep:win32job"]
 # intuiTUIve's syntax highlighting (syntect). Off in the playground's lean
 # build.
 syntax = ["rich-intuituive/syntax"]
@@ -101,6 +101,9 @@ tungstenite = { version = "0.30", default-features = false, features = ["handsha
 # default): its upgraded connection is one boxed blocking stream with no read
 # timeout, so a session could not both wait for keys and draw on a timer.
 httparse = { version = "1", optional = true }
+# Deflate for compressed frames (`Server::compress`, opt-in): pure Rust, as
+# rs-rich-ext's and rs-rich-marketplace's.
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"], optional = true }
 # Base64 for OSC 52 clipboard copies. Already in the tree through tungstenite.
 data-encoding = { version = "2", optional = true }
 # The URL's token, from the operating system's random source.

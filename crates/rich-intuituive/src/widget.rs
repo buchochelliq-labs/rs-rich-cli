@@ -985,6 +985,42 @@ impl Canvas<'_> {
         self.rect.height
     }
 
+    /// Draw `drawable` over the whole canvas through rs-rich-ext's fast
+    /// path ([`Draw`](rich_ext::surface::Draw)): the cells rendering it
+    /// and writing the lines with [`lines`](Self::lines) would give,
+    /// without building rich segments. What it leaves is cleared.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::widget::{widget, Canvas, DrawCx, Widget};
+    /// use rich_ext::chart::{Chart, Dataset};
+    ///
+    /// struct Plot;
+    ///
+    /// impl Widget for Plot {
+    ///     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
+    ///         let chart = Chart::new([Dataset::new([(0.0, 0.0), (1.0, 1.0)])]);
+    ///         canvas.draw(cx.console(), &chart);
+    ///     }
+    /// }
+    ///
+    /// let mut driver = App::new(|| widget(Plot)).driver(10, 4);
+    /// driver.settle();
+    /// assert!(driver.screen().plain().iter().any(|row| row.trim() != ""));
+    /// ```
+    pub fn draw(&mut self, console: &Console, drawable: &dyn rich_ext::surface::Draw) {
+        let options = console
+            .options()
+            .update_width(self.rect.width.max(1) as usize);
+        let options = if self.rect.height == 0 {
+            options
+        } else {
+            options.update_height(self.rect.height as usize)
+        };
+        drawable.draw(console, &options, self.screen, self.rect);
+        self.written.push(self.rect);
+    }
+
     /// Write rendered `lines` over the whole canvas; what they leave is
     /// cleared.
     pub fn lines(&mut self, lines: &[Vec<Segment>]) {
@@ -1150,7 +1186,7 @@ impl Canvas<'_> {
         }
         let cell = self.screen.get(self.rect.x + x, self.rect.y + y)?;
         Some(CellView {
-            symbol: &cell.text,
+            symbol: cell.text(),
             style: self.screen.style(cell.style),
             width: cell.width,
         })

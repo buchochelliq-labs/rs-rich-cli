@@ -108,6 +108,65 @@ signal all end it. Headless, `Headless::synchronized_output` wraps the
 recorded writes, so a test can assert them. [The interact
 guide](../interact/index.md#synchronized-output) has the details.
 
+## Paint strategies
+
+Each frame, the painter turns the cells that changed into bytes. How it
+does that is `App::paint_strategy` (or the `RICH_PAINT_STRATEGY`
+environment variable, when the app does not choose):
+
+| Strategy | What it sends |
+|---|---|
+| `cells` (the default) | The cells that changed, with the shortest cursor moves, colour changes sent as changes, and runs of blanks erased |
+| `rows` | Each changed row, from its first change to its last |
+| `full` | Everything, every frame |
+| `scroll` | Rows that moved together (a log's new line, a list scrolled) moved with the terminal's own scrolling, then the cells that still differ |
+| `best` | Per frame: `scroll` when rows moved, else `cells` |
+
+```rust
+use intuituive::prelude::*;
+use intuituive::PaintStrategy;
+
+let app = App::new(|| label("hello")).paint_strategy(PaintStrategy::Best);
+```
+
+Every strategy shows the same screen; the benchmark replays each one's
+bytes through a terminal emulator to check it. `best` is opt-in for this
+release, and becomes the default once it has been used for a while. A log
+or a list scrolled one row sends about one row's bytes under `scroll` and
+`best` instead of the whole pane. Scrolling is off on Windows, under tmux
+(which redraws a scroll region itself), in an inline app, and over a
+picture.
+
+## Frame stats and the timedemo
+
+`Driver::stats()` (or `App::stats_handle()` for an app that runs its own
+loop) has each frame's numbers: the time the widgets took to draw
+(`draw`), the painter to encode (`paint`) and the terminal to take the
+bytes (`write`), running totals of each, and the painter's counts
+(`painted`): cells compared, written and elided, and bytes of moves,
+styles and text, as notcurses counts a render, with the strategy used.
+
+`App::timedemo` replays input against an app as fast as it can draw, as
+Doom's `-timedemo` does: a `Script` of keys and waits runs on the
+driver's virtual clock, so a minute of timers takes no minute, and each
+frame's times, bytes and counts come back. `timedemo::script_from_tape`
+reads the keys, typing, sleeps and resizes of a rich-record tape.
+
+```rust
+use intuituive::interact::headless::Script;
+use intuituive::prelude::*;
+
+let app = App::new(|| {
+    let n = signal(0);
+    text!("count {n}").on_key("+", move |_| n.update(|n| *n += 1))
+});
+let demo = app.timedemo(Script::new().keys("+ + +"), 20, 1);
+println!("{demo}"); // 4 frames in … ms (… fps); mean … µs, …
+```
+
+`cargo run --release -p rs-rich-intuituive --example timedemo [tape]`
+runs it on the dashboard example.
+
 ## Owning the loop
 
 `App::run` owns the loop: it reads the terminal, runs timers and draws.

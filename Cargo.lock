@@ -2986,6 +2986,7 @@ name = "rs-rich"
 version = "0.0.13"
 dependencies = [
  "anstyle-query",
+ "compact_str",
  "fancy-regex 0.19.2",
  "pulldown-cmark",
  "serde_json",
@@ -3263,6 +3264,7 @@ name = "rs-rich-web"
 version = "0.0.6"
 dependencies = [
  "data-encoding",
+ "flate2",
  "getrandom 0.4.3",
  "httparse",
  "rs-rich-embed",

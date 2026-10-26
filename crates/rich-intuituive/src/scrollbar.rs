@@ -633,7 +633,8 @@ impl Widget for Standalone {
 impl Node {
     /// Give this widget a scrollbar drawn as `bar` says: a [`scroll`],
     /// [`scroll_x`] or [`scroll_both`] (a bar on the left or right is the
-    /// one down, on the top or bottom the one across), a [`list`], a table
+    /// one down, on the top or bottom the one across), a
+    /// [`scroll_virtual`](crate::scroll_virtual) (always on the right), a [`list`], a table
     /// or [`virtual_list`], a [`tree`], a [`text_area`] or a [`Log`]'s
     /// view. The bar keeps a column (or row) of the widget while it shows.
     /// Call it on the widget itself, before `.panel(..)` or anything else
@@ -661,6 +662,9 @@ impl Node {
                 .is_some()
             || self
                 .widget_mut(|area: &mut crate::text_area::TextArea| set(&mut area.bar))
+                .is_some()
+            || self
+                .widget_mut(|view: &mut crate::scroll_virtual::VirtualScroll| set(&mut view.bar))
                 .is_some();
         if !done {
             self.widget_mut(|log: &mut crate::log::LogView| set(&mut log.bar));

@@ -135,6 +135,8 @@ struct Shared {
     max_sessions: usize,
     max_buffered: usize,
     renderer: Renderer,
+    /// Compress frames from this size, for pages that ask.
+    compress: Option<usize>,
     origins: Vec<String>,
     title: String,
     /// The `Host` values the server answers to (`None`: any).
@@ -220,6 +222,7 @@ impl Server {
                 max_sessions: DEFAULT_MAX_SESSIONS,
                 max_buffered: DEFAULT_MAX_BUFFERED,
                 renderer: Renderer::Xterm,
+                compress: None,
                 origins: Vec::new(),
                 title,
                 hosts,
@@ -302,6 +305,19 @@ impl Server {
     #[must_use]
     pub fn max_buffered(mut self, bytes: usize) -> Server {
         self.shared.max_buffered = bytes.max(2);
+        self
+    }
+
+    /// Compress frames of `from` bytes or more with deflate, for pages
+    /// that can undo it (they have `DecompressionStream`, and ask with
+    /// `z=1`): an app's frames, the DOM renderer's messages and a
+    /// program's output. Off (`None`) by default. Worth it over a slow
+    /// link: measured on a few scenes, frames shrink to 5 to 30% of their
+    /// size for 15 to 60 µs each (level 1). On a local machine it only
+    /// adds work. 1024 is a fair threshold.
+    #[must_use]
+    pub fn compress(mut self, from: Option<usize>) -> Server {
+        self.shared.compress = from;
         self
     }
 
@@ -753,6 +769,9 @@ fn websocket(mut stream: TcpStream, head: &Head, shared: &Arc<Shared>, pending: 
             .unwrap_or(default)
     };
     let (columns, rows) = (size("cols", 80), size("rows", 24));
+    // Framed when the page can undo compression, compressed only when the
+    // server allows it too.
+    let z = session::Compress::negotiate(shared.compress, head.param("z") == Some("1"));
     if let (Mode::App(_), Isolation::Processes) = (&shared.mode, shared.isolation) {
         let session = isolate::Session {
             spawn: &shared.spawn,
@@ -760,6 +779,7 @@ fn websocket(mut stream: TcpStream, head: &Head, shared: &Arc<Shared>, pending: 
             columns,
             rows,
             renderer: renderer_for(head, shared),
+            compress: z.0,
             stopping: &shared.stopping,
             running: &shared.programs,
         };
@@ -774,18 +794,34 @@ fn websocket(mut stream: TcpStream, head: &Head, shared: &Arc<Shared>, pending: 
     let _ = match &shared.mode {
         Mode::App(app) => {
             let renderer = renderer_for(head, shared);
-            session::run(&mut socket, app(), columns, rows, stopping, renderer)
+            session::run(&mut socket, app(), columns, rows, stopping, renderer, z)
         }
         Mode::Command(command) => {
             let (window, held) = pty::split(shared.max_buffered);
             let host = LocalPty::new(command.clone()).backpressure(held);
             let host = Box::new(host);
-            pty::run(&mut socket, host, columns, rows, stopping, programs, window)
+            pty::run(
+                &mut socket,
+                host,
+                (columns, rows),
+                stopping,
+                programs,
+                window,
+                z,
+            )
         }
         Mode::Host(host) => {
             let (window, _) = pty::split(shared.max_buffered);
             let host = host();
-            pty::run(&mut socket, host, columns, rows, stopping, programs, window)
+            pty::run(
+                &mut socket,
+                host,
+                (columns, rows),
+                stopping,
+                programs,
+                window,
+                z,
+            )
         }
     };
 }

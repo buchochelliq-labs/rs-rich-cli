@@ -13,7 +13,9 @@ use crate::style::Style;
 /// A span of text with an optional style. Mirrors `rich.segment.Segment`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Segment {
-    pub text: String,
+    /// The text: a [`CompactString`](crate::CompactString), kept inline up
+    /// to 24 bytes, so a short run allocates nothing. It reads as a `&str`.
+    pub text: crate::CompactString,
     pub style: Option<Style>,
     /// Whether this segment carries terminal control codes rather than content.
     pub control: bool,
@@ -21,7 +23,7 @@ pub struct Segment {
 
 impl Segment {
     /// A plain content segment.
-    pub fn new(text: impl Into<String>, style: Option<Style>) -> Self {
+    pub fn new(text: impl Into<crate::CompactString>, style: Option<Style>) -> Self {
         Segment {
             text: text.into(),
             style,
@@ -32,14 +34,14 @@ impl Segment {
     /// A newline segment (`Segment.line()` upstream).
     pub fn line() -> Self {
         Segment {
-            text: "\n".to_string(),
+            text: crate::CompactString::const_new("\n"),
             style: None,
             control: false,
         }
     }
 
     /// A control segment (carries no visible width).
-    pub fn control(text: impl Into<String>) -> Self {
+    pub fn control(text: impl Into<crate::CompactString>) -> Self {
         Segment {
             text: text.into(),
             style: None,
@@ -141,6 +143,40 @@ impl Segment {
                 }
                 if parts.peek().is_some() {
                     // The break between parts closes the current line.
+                    lines.push(std::mem::take(&mut current));
+                }
+            }
+        }
+        if !current.is_empty() || empty_last_line {
+            lines.push(current);
+        }
+        lines
+    }
+
+    /// [`split_lines`](Self::split_lines) of segments the caller is done
+    /// with: each is moved into its line rather than cloned, which a render
+    /// does once for every segment it makes (docs/PORTING.md, "Performance
+    /// notes"). `split_lines_owned_matches_split_lines` holds the two together.
+    pub(crate) fn split_lines_owned(segments: Vec<Segment>) -> Vec<Vec<Segment>> {
+        let mut lines: Vec<Vec<Segment>> = Vec::new();
+        let mut current: Vec<Segment> = Vec::new();
+        let mut empty_last_line = false;
+        for segment in segments {
+            if segment.control || !segment.text.contains('\n') {
+                if !segment.text.is_empty() {
+                    current.push(segment);
+                } else if !segment.control && current.is_empty() && !lines.is_empty() {
+                    empty_last_line = true;
+                }
+                continue;
+            }
+            empty_last_line = false;
+            let mut parts = segment.text.split('\n').peekable();
+            while let Some(part) = parts.next() {
+                if !part.is_empty() {
+                    current.push(Segment::new(part, segment.style.clone()));
+                }
+                if parts.peek().is_some() {
                     lines.push(std::mem::take(&mut current));
                 }
             }
@@ -401,7 +437,7 @@ impl Segment {
     /// `Segment.split_cells`.
     pub fn split_cells(&self, cut: usize) -> (Segment, Segment) {
         let with_text = |text: String| Segment {
-            text,
+            text: text.into(),
             style: self.style.clone(),
             control: self.control,
         };
@@ -851,6 +887,42 @@ impl crate::protocol::Renderable for SegmentLines {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    /// Moving the segments splits them as cloning them does, on every
+    /// sequence of up to five segments drawn from the kinds that matter.
+    #[test]
+    fn split_lines_owned_matches_split_lines() {
+        let bold = Style::parse("bold").unwrap();
+        let kinds = [
+            Segment::new("ab", None),
+            Segment::new("", None),
+            Segment::new("\n", Some(bold.clone())),
+            Segment::new("x\ny\n", Some(bold)),
+            Segment::new("\n\nz", None),
+            Segment::line(),
+            Segment::control("\x1b[2J"),
+        ];
+        let mut sequences: Vec<Vec<Segment>> = vec![Vec::new()];
+        for _ in 0..5 {
+            sequences = sequences
+                .iter()
+                .flat_map(|sequence| {
+                    kinds.iter().map(move |kind| {
+                        let mut next = sequence.clone();
+                        next.push(kind.clone());
+                        next
+                    })
+                })
+                .collect();
+            for sequence in &sequences {
+                assert_eq!(
+                    Segment::split_lines_owned(sequence.clone()),
+                    Segment::split_lines(sequence),
+                    "{sequence:?}"
+                );
+            }
+        }
+    }
 
     /// Cropping is per line, leaves short lines alone, and keeps zero-width
     /// control segments so cursor moves survive.

@@ -300,6 +300,24 @@ struct GaugeStyles {
     label_on_rest: Style,
 }
 
+impl crate::surface::Draw for FillGauge {
+    fn draw(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        screen: &mut crate::surface::Screen,
+        rect: crate::surface::Rect,
+    ) {
+        super::draw_lines(
+            self.lines(console, options),
+            options.max_width,
+            options,
+            screen,
+            rect,
+        );
+    }
+}
+
 impl Renderable for FillGauge {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         lines_to_segments(self.lines(console, options), options.max_width)
@@ -490,6 +508,24 @@ impl LineGauge {
     }
 }
 
+impl crate::surface::Draw for LineGauge {
+    fn draw(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        screen: &mut crate::surface::Screen,
+        rect: crate::surface::Rect,
+    ) {
+        super::draw_lines(
+            vec![self.line_of(console, options)],
+            options.max_width,
+            options,
+            screen,
+            rect,
+        );
+    }
+}
+
 impl Renderable for LineGauge {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         lines_to_segments(vec![self.line_of(console, options)], options.max_width)
@@ -627,7 +663,7 @@ mod tests {
             for s in &lines[0] {
                 let n = cells(&s.text);
                 if col < seen + n {
-                    return (s.text.clone(), s.style.clone());
+                    return (s.text.to_string(), s.style.clone());
                 }
                 seen += n;
             }
@@ -698,7 +734,7 @@ mod tests {
         let lines = console.render_lines(&gauge, &console.options(), false);
         let runs: Vec<(String, Option<Style>)> = lines[0]
             .iter()
-            .map(|s| (s.text.clone(), s.style.clone()))
+            .map(|s| (s.text.to_string(), s.style.clone()))
             .collect();
         assert_eq!(
             runs,

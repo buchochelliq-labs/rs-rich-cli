@@ -24,7 +24,7 @@ use std::time::{Duration, Instant};
 use rich_embed::PageState;
 
 use crate::engine::{
-    Engine, EngineEvent, Format, HistoryStep, MediaOp, NodeId, PageAction, Rect, TabId,
+    Engine, EngineEvent, Format, HistoryStep, MediaOp, Metrics, NodeId, PageAction, Rect, TabId,
 };
 use crate::model::{build, Binding, Control, MediaKind, Page, Revisions, Role};
 
@@ -73,8 +73,16 @@ pub enum Command {
         name: String,
         nth: usize,
     },
-    /// Scroll the page so this many CSS pixels are above its viewport.
+    /// Scroll the page so this many CSS pixels are above its viewport: a
+    /// jump. `f64::MAX` is the bottom.
     Scroll(f64),
+    /// Turn the wheel by this many CSS pixels: the page sees the user
+    /// scroll, so its lazy loading and infinite feeds go on.
+    Wheel(f64),
+    /// The reader is near the end of what was read: scroll the page to its
+    /// bottom, so an infinite feed loads more. The page is read again on
+    /// its change ping, as always.
+    LoadMore,
     /// Play, pause, mute or set the volume of the video or audio element
     /// `node` of the document `document`.
     Media {
@@ -124,6 +132,8 @@ pub enum Update {
     State(PageState),
     /// The command with this id finished.
     Done(u64, Result<(), Refusal>),
+    /// Where the page is scrolled and how tall it is, read after a scroll.
+    Metrics(Metrics),
     /// A download began, and waits in the quarantine.
     Download {
         guid: String,
@@ -300,6 +310,9 @@ struct Worker<'a> {
     /// When the first change ping since the last reading came.
     dirty: Option<Instant>,
     stills: HashMap<(NodeId, String, u64, u64), Arc<[u8]>>,
+    /// Where Chrome's view was last seen: images near it are captured
+    /// first.
+    metrics: Option<Metrics>,
 }
 
 impl Worker<'_> {
@@ -363,14 +376,26 @@ impl Worker<'_> {
         let Some(page) = self.page.clone() else {
             return;
         };
-        let wanted: Vec<_> = page
+        // Nearest Chrome's view first; an image with no picture yet (a lazy
+        // one far from the view) waits: its load pings, and it is captured
+        // at the reading after.
+        let view = self.metrics.map_or(0.0, |m| m.scroll_y);
+        let mut candidates: Vec<_> = page
             .media
             .iter()
             .filter(|m| m.kind == MediaKind::Image && m.still.is_none())
             .filter(|m| m.rect.width >= 4.0 && m.rect.height >= 4.0)
-            .take(STILLS_PER_READ)
-            .map(|m| (m.node, m.src.clone(), m.rect))
             .collect();
+        candidates.sort_by(|a, b| (a.rect.y - view).abs().total_cmp(&(b.rect.y - view).abs()));
+        let mut wanted = Vec::new();
+        for m in candidates {
+            if wanted.len() == STILLS_PER_READ {
+                break;
+            }
+            if self.engine.image_ready(TabId(0), m.node).unwrap_or(true) {
+                wanted.push((m.node, m.src.clone(), m.rect));
+            }
+        }
         if wanted.is_empty() {
             return;
         }
@@ -400,16 +425,31 @@ impl Worker<'_> {
         }
     }
 
+    /// Scroll the page, then say where it is. A document taller than the
+    /// one read (a feed that loaded more without a ping yet) is read again
+    /// soon.
+    fn scroll(&mut self, action: PageAction) -> std::io::Result<()> {
+        self.engine.act(TabId(0), &action)?;
+        if let Ok(metrics) = self.engine.metrics(TabId(0)) {
+            let read = self.page.as_ref().map_or(0.0, |p| p.height);
+            if metrics.content_height > read + 1.0 {
+                self.dirty.get_or_insert_with(Instant::now);
+            }
+            self.metrics = Some(metrics);
+            (self.update)(Update::Metrics(metrics));
+        }
+        Ok(())
+    }
+
     fn run_command(&mut self, command: Command) -> Result<(), Refusal> {
         let failed = |e: std::io::Error| Refusal::Failed(crate::clean::clean(&e.to_string()));
         match command {
             Command::Open(url) => self.engine.open(TabId(0), &url).map_err(failed),
             Command::History(step) => self.engine.history(TabId(0), step).map_err(failed),
             Command::Resize(columns, rows) => self.engine.resize(columns, rows).map_err(failed),
-            Command::Scroll(y) => self
-                .engine
-                .act(TabId(0), &PageAction::ScrollTo(y))
-                .map_err(failed),
+            Command::Scroll(y) => self.scroll(PageAction::ScrollTo(y)).map_err(failed),
+            Command::Wheel(delta) => self.scroll(PageAction::Wheel(delta)).map_err(failed),
+            Command::LoadMore => self.scroll(PageAction::ScrollTo(f64::MAX)).map_err(failed),
             Command::Refresh => {
                 self.read();
                 Ok(())
@@ -495,6 +535,7 @@ fn run(
         state: PageState::default(),
         dirty: None,
         stills: HashMap::new(),
+        metrics: None,
     };
     // Read once at the start, then whenever something says to.
     let mut read_now = true;

@@ -69,8 +69,9 @@ text never waits for pictures. A picture keeps about its size on the page
 (8 by 18 CSS pixels a cell), under its alt text.
 
 In **the projection**, an image is a placeholder box with its alt text.
-Pictures in the projection, pictures partly in view, animated GIFs and
-images that load as you scroll are planned for 0.0.23. Until then, an
+Images that load lazily load as you scroll, as in a browser, and a
+picture partly in view shows the part on screen. Pictures in the
+projection and animated GIFs are planned for 0.0.23. Until then, an
 animated GIF shows as one still frame in reader mode.
 
 A canvas, an SVG drawing and a frame (an `iframe`, an `embed`) show as

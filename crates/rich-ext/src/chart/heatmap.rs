@@ -335,6 +335,24 @@ impl Heatmap {
     }
 }
 
+impl crate::surface::Draw for Heatmap {
+    fn draw(
+        &self,
+        console: &Console,
+        options: &ConsoleOptions,
+        screen: &mut crate::surface::Screen,
+        rect: crate::surface::Rect,
+    ) {
+        super::draw_lines(
+            self.lines(console, options),
+            options.max_width,
+            options,
+            screen,
+            rect,
+        );
+    }
+}
+
 impl Renderable for Heatmap {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         lines_to_segments(self.lines(console, options), options.max_width)

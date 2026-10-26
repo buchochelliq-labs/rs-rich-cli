@@ -18,7 +18,7 @@ use rich_ext::chart::{
 use rich_ext::dsp::Reading;
 
 use crate::digits::digits;
-use crate::node::{column, described, leaf, text, Axis, Node};
+use crate::node::{column, described, drawn_described, leaf, text, Axis, Node};
 use crate::screen::Rect;
 use crate::widget::{widget, Canvas, DrawCx, MeasureCx, Widget};
 
@@ -140,7 +140,7 @@ pub fn sparkline_with(
     values: impl Fn() -> Vec<f64> + 'static,
     configure: impl Fn(Sparkline) -> Sparkline + 'static,
 ) -> Node {
-    described(move || configure(Sparkline::new(values())))
+    drawn_described(move || configure(Sparkline::new(values())))
 }
 
 /// A spectrogram (a waterfall) of `spectra`, a closure that may read
@@ -190,7 +190,7 @@ pub fn spectrogram_with<I>(
 where
     I: IntoIterator<Item = Vec<f64>>,
 {
-    described(move || {
+    drawn_described(move || {
         let rows: Vec<Vec<f64>> = spectra().into_iter().collect();
         let mut waterfall = Spectrogram::new(rows.len());
         for row in rows {
@@ -231,7 +231,7 @@ pub fn bar_spectrum_with(
     bands: impl Fn() -> Vec<f64> + 'static,
     configure: impl Fn(BarSpectrum) -> BarSpectrum + 'static,
 ) -> Node {
-    described(move || configure(BarSpectrum::new(bands())))
+    drawn_described(move || configure(BarSpectrum::new(bands())))
 }
 
 /// A trace's last frames drawn together, each older one fainter, as an
@@ -278,7 +278,7 @@ pub fn persistence_with<I>(
 where
     I: IntoIterator<Item = Vec<(f64, f64)>>,
 {
-    described(move || {
+    drawn_described(move || {
         let frames: Vec<Vec<(f64, f64)>> = frames().into_iter().collect();
         let (x, y) = spans(&frames);
         let datasets = trace(Persistence::new(frames)).datasets();

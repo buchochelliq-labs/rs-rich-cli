@@ -72,7 +72,29 @@
 
   var scheme = window.location.protocol === "https:" ? "wss:" : "ws:";
   var url = scheme + "//" + window.location.host + "/ws?token=" + encodeURIComponent(token) +
-    "&cols=" + term.cols + "&rows=" + term.rows + "&renderer=xterm";
+    "&cols=" + term.cols + "&rows=" + term.rows + "&renderer=xterm" +
+    (typeof DecompressionStream === "function" ? "&z=1" : "");
+  // Compressed frames, when the server compresses (`Server::compress`):
+  // each binary message starts with 0 (as it is) or 1 (deflate-raw). The
+  // page asks for them only where the browser can undo them. Messages are
+  // handled one after another, in order, as decompressing is async.
+  var compressed = typeof DecompressionStream === "function";
+  var queue = Promise.resolve();
+  function unpack(data) {
+    if (typeof data === "string" || !compressed) {
+      return Promise.resolve(typeof data === "string" ? data : new Uint8Array(data));
+    }
+    var bytes = new Uint8Array(data);
+    if (bytes[0] !== 1) {
+      return Promise.resolve(bytes.subarray(1));
+    }
+    var stream = new Blob([bytes.subarray(1)]).stream()
+      .pipeThrough(new DecompressionStream("deflate-raw"));
+    return new Response(stream).arrayBuffer().then(function (out) {
+      return new Uint8Array(out);
+    });
+  }
+
   var socket = new WebSocket(url);
   socket.binaryType = "arraybuffer";
   var open = false;
@@ -91,16 +113,21 @@
     term.focus();
   };
   socket.onmessage = function (event) {
-    if (typeof event.data === "string") {
-      term.write(event.data);
-    } else {
-      // A program's output: say once it is drawn, so the server sends more
-      // only as fast as the page keeps up.
-      var bytes = new Uint8Array(event.data);
-      term.write(bytes, function () {
-        send("a" + bytes.length);
-      });
-    }
+    queue = queue.then(function () {
+      return unpack(event.data);
+    }).then(function (data) {
+      if (typeof data === "string") {
+        term.write(data);
+      } else {
+        // A program's output: say once it is drawn, so the server sends
+        // more only as fast as the page keeps up.
+        term.write(data, function () {
+          send("a" + data.length);
+        });
+      }
+    }, function () {
+      // A frame that does not decompress is dropped.
+    });
   };
   socket.onclose = function (event) {
     var was = open;

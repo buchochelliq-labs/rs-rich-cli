@@ -104,8 +104,11 @@ pub struct Dom {
     lines: Vec<Value>,
     size: (u16, u16),
     cursor: Option<(u16, u16)>,
-    /// The tree as last sent.
-    tree: Option<Value>,
+    /// The tree as last sent, as the driver gave it.
+    tree: Option<Vec<AccessNode>>,
+    /// The driver's frame count when the page was last brought up to it:
+    /// rows the frames since damaged are compared, and only they.
+    frame: Option<u64>,
 }
 
 impl Dom {
@@ -123,13 +126,17 @@ impl Dom {
     /// accessibility tree did.
     pub fn update(&mut self, driver: &Driver) -> Vec<String> {
         let mut out = Vec::new();
+        let frames = driver.stats().frames;
         if let Some(frame) = self.frame(driver) {
             out.push(frame.to_string());
         }
-        let tree = tree(&driver.accessibility());
-        if self.tree.as_ref() != Some(&tree) {
-            out.push(tree.to_string());
-            self.tree = Some(tree);
+        self.frame = Some(frames);
+        // The tree's JSON is made only when the tree changed (the focus can
+        // move with no frame drawn).
+        let nodes = driver.accessibility();
+        if self.tree.as_ref() != Some(&nodes) {
+            out.push(tree(&nodes).to_string());
+            self.tree = Some(nodes);
         }
         out
     }
@@ -142,11 +149,26 @@ impl Dom {
             self.size = size;
             self.lines.clear();
         }
+        // The rows to compare: those the frames since the last update
+        // damaged; every row the first time, after a resize, or when the
+        // driver no longer remembers that far back.
+        let mut rows = vec![self.lines.len() < area.height as usize; area.height as usize];
+        match self.frame.and_then(|frame| driver.damage_since(frame)) {
+            Some(damage) => {
+                for rect in damage {
+                    let rect = rect.intersection(area);
+                    for y in rect.y..rect.bottom() {
+                        rows[y as usize] = true;
+                    }
+                }
+            }
+            None => rows.iter_mut().for_each(|row| *row = true),
+        }
         let mut new_styles = Vec::new();
         // Each screen style's number, for this frame.
         let mut known = HashMap::new();
         let mut changed = Vec::new();
-        for y in 0..area.height {
+        for y in (0..area.height).filter(|&y| rows[y as usize]) {
             let mut runs: Vec<Value> = Vec::new();
             let mut run = String::new();
             let mut current = 0;
@@ -163,14 +185,14 @@ impl Dom {
                     if !run.is_empty() {
                         runs.push(json!([std::mem::take(&mut run), current]));
                     }
-                    runs.push(json!([cell.text, id, 2]));
+                    runs.push(json!([cell.text(), id, 2]));
                     continue;
                 }
                 if id != current && !run.is_empty() {
                     runs.push(json!([std::mem::take(&mut run), current]));
                 }
                 current = id;
-                run.push_str(&cell.text);
+                run.push_str(cell.text());
             }
             if !run.is_empty() {
                 runs.push(json!([run, current]));

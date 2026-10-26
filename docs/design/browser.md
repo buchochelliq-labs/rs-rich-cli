@@ -28,9 +28,16 @@ gets only generic pieces from this work (see
   right into free cells. Two-column and flex layouts stay side by side.
   No fixed or sticky layer, no paint order, media as framed alt text:
   0.3's work.
+- **Scrolling (0.0.23, branch `023-scroll`)**: both text views run on
+  intuiTUIve's `scroll_virtual`, so only rows near the view are built and
+  there is no row cap. Chrome's scroll follows ours, near the end Chrome
+  is scrolled to its bottom so feeds load more, the row in view keeps its
+  place across readings (anchored by node), the layout is cached, a cut
+  page says so, and the screencast is off. See
+  [rendering performance](render-performance.md#what-landed).
 - **Next**: 0.2, forms and tables (a login form, a dashboard and a
-  settings page as fixtures); rs-rich-embed's faster loop, screencast on
-  demand and several pages (tabs).
+  settings page as fixtures); rs-rich-embed's faster loop and several
+  pages (tabs).
 
 This note started from a proof of concept the user supplied: a Node and
 Playwright browser (`src/`), a metadata-driven widget experiment
@@ -356,9 +363,14 @@ to one row. The algorithm:
   an opaque one (a caption over a hero image) is drawn over the region's
   cells with a background.
 - **The whole document** is projected, not only the viewport, since the
-  snapshot covers every layout box. Scrolling is ours, in rows; Chrome's
-  scroll position follows, so lazy loading and infinite scroll still
-  fire.
+  snapshot covers every layout box. Scrolling is ours, in rows. Chrome's
+  scroll position follows once the view rests (120 ms): a move of up to
+  three screens as a turn of the wheel (`Input.dispatchMouseEvent`,
+  `mouseWheel`), a longer one as `window.scrollTo`, each row placed at
+  its box's top on the page. `Page.getLayoutMetrics` is read after each
+  scroll. So lazy loading and infinite scroll fire, and near the end of
+  the projection Chrome is scrolled to its bottom and the page read again
+  on its change ping.
 
 A test can check the invariants on every fixture page: no two text runs
 share a cell, reading order is kept within a column band, and every
@@ -685,8 +697,9 @@ browser:
    of after the 15 ms read poll (one channel for both), and decode
    screencast frames off that thread, dropping stale ones. Both were
    measured above.
-4. **Screencast on demand**: start and stop it, since a reader does not
-   need it.
+4. **Screencast on demand** (done on `023-scroll`):
+   `ChromeEngine::screencast(false)` and `set_screencast`. Noctiluca turns
+   it off; a raster view would turn it on.
 5. **Region capture**: `capture(rect, format)` over
    `Page.captureScreenshot` with `clip`.
 6. **Several pages**: one browser, many targets.
