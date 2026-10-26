@@ -245,7 +245,7 @@ pub fn compose(streams: &[Stream], spans: &[Span], zero: f64) -> Option<Audio> {
         .fold(f64::INFINITY, f64::min)
         .max(0.0);
     let end = placed.iter().map(|p| p.3).fold(f64::NEG_INFINITY, f64::max);
-    if !(end > start) {
+    if placed.is_empty() || end <= start {
         return None;
     }
     let frames = ((end - start) * f64::from(rate)).ceil() as usize;
