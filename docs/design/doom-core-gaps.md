@@ -97,9 +97,10 @@ short or past `MAX_PIXELS` refused) and
 `exact_indexing_keeps_up_to_256_colours`. Not done: `Picture`'s Sixel path
 still quantizes; using `encode_palette` there for frames of 256 colours or
 fewer would change the Sixel bytes of pictures already in tapes. The
-maintainer deferred that palette Sixel path to
-[0.0.24](../plans/0.0.24.md) on 2026-10-26, because it changes tape
-bytes.
+maintainer first deferred that palette Sixel path to 0.0.24, because it
+changes tape bytes, then brought it into 0.0.23 the same day
+([0.0.23's item 14](../plans/0.0.23.md#14-palette-sixel-for-pictures-of-256-colours-or-fewer-art)):
+in progress on its own branch.
 
 - **What Doom needed:** encode a frame that already has at most 256 colours
   with exactly those colours, quickly: no quantizing, no resampling.
@@ -423,7 +424,8 @@ and `the_average_filter_blends_what_each_pixel_covers`, and
 
 ### 13. Sound in recordings (rs-rich-record)
 
-**Status: decided on 2026-10-26, for [0.0.24](../plans/0.0.24.md).** The
+**Status: decided on 2026-10-26, in progress on its own branch for
+0.0.23 ([its item 13](../plans/0.0.23.md#13-sound-in-tapes-record-intuituive-cli)).** The
 maintainer chose option (a) below, an environment contract: the recorder
 sets `RICH_RECORD_AUDIO=<path>`, and intuiTUIve's `output()` opens a null
 output tapped to that file. The tape side is `Set Audio on` or
