@@ -20,7 +20,7 @@ readme = "README.md"
 documentation = "https://docs.rs/rs-rich-marketplace"
 keywords = ["plugin", "marketplace", "minisign", "rich"]
 categories = ["command-line-interface", "cryptography"]
-include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+include = ["src/**/*", "keys/*.json", "README.md", "LICENSE", "Cargo.toml"]
 
 [package.metadata.docs.rs]
 all-features = true

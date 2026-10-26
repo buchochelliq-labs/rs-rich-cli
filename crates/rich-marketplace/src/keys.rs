@@ -40,11 +40,10 @@ pub const KEYS_COMMENT_PREFIX: &str = "rs-rich-marketplace keys generation=";
 /// The official generation compiled into this release: the public halves of
 /// the maintainer's main and backup keys, as a `keys-N.json` document.
 ///
-/// `None` until the maintainer has made the pairs with `minisign -G` and
-/// recorded them (0.0.22 plan, decision 1). Until then
-/// [`KeySet::official`] refuses, and only a client built with explicit keys
-/// (a test) verifies anything.
-const OFFICIAL_KEYS: Option<&str> = None;
+/// Generation 1, recorded by the maintainer on 2026-10-26: the same file as
+/// `keys/keys-1.json` in the marketplace repository. A later generation is
+/// reached from here by [`KeySet::rotate`], so a release need not carry it.
+const OFFICIAL_KEYS: Option<&str> = Some(include_str!("../keys/keys-1.json"));
 
 /// A minisign key id: the 8-byte key number in every key and signature.
 #[derive(Clone, Copy, PartialEq, Eq, Hash, PartialOrd, Ord)]
@@ -268,7 +267,7 @@ impl KeySet {
 
     /// The generation compiled into this release.
     ///
-    /// Until the maintainer's public keys are recorded, this refuses with
+    /// A build without official keys refuses with
     /// [`KeyChainError::NoTrustRoot`]; a test builds its own with
     /// [`KeySet::new`] or [`KeySet::from_json`].
     pub fn official() -> Result<Self, KeyChainError> {
@@ -472,11 +471,14 @@ mod tests {
     }
 
     #[test]
-    fn no_official_keys_until_recorded() {
-        assert!(matches!(
-            KeySet::official(),
-            Err(KeyChainError::NoTrustRoot)
-        ));
+    fn the_official_keys_are_generation_one() {
+        let set = KeySet::official().unwrap();
+        assert_eq!(set.generation, 1);
+        assert_eq!(set.main.id.to_string(), "D22F9156C0C4E262");
+        assert_eq!(set.backup.id.to_string(), "DEC3A1455D4868F6");
+        assert!(set.revoked.is_empty());
+        // The compiled file round-trips, so a client stores it unchanged.
+        assert_eq!(KeySet::from_json(set.to_json().as_bytes()).unwrap(), set);
     }
 
     #[test]

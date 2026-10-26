@@ -49,9 +49,9 @@ by hand.
    ```
 
    The same file is compiled into rs-rich-marketplace
-   (`KeySet::official`, `OFFICIAL_KEYS` in `crates/rich-marketplace/src/keys.rs`);
-   until a release carries it, `rich plugin` needs `--marketplace-keys
-   keys-1.json` to trust the marketplace.
+   (`KeySet::official`, from `crates/rich-marketplace/keys/keys-1.json`)
+   since 0.0.23, so `rich plugin` trusts the official marketplace with no
+   setting. Generation 1 is the maintainer's pair of 2026-10-26.
 
 3. **Create the protected environment.** In the marketplace repository,
    Settings, Environments, New environment, named `marketplace-signing`:

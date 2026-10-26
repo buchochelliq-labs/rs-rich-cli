@@ -3,7 +3,7 @@
 **Status:** the format, its schemas and its validator are in 0.0.21 (plugin
 API 0.0.5). The `rs-rich-marketplace` crate (0.0.1) that verifies, resolves
 and installs from them is in 0.0.22 ([Extending](../PLUGINS.md#the-marketplace-client-0022));
-its official keys are compiled in once the maintainer has made them. The
+its official keys (generation 1) are compiled in since 0.0.23. The
 `rich plugin` commands that use it are in 0.0.22 too
 ([Extending](../PLUGINS.md#rich-plugin-installing-from-the-marketplace-0022)),
 with the marketplace repository's signing workflow kept to hand over in

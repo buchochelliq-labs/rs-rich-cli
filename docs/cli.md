@@ -2360,8 +2360,9 @@ as it was installed, and reports a version yanked since with its reason
 A marketplace location is an `https://` URL, or a directory (a path or a
 `file://` URL) laid out as the marketplace repository is. A local one
 serves each artifact from its own `artifacts/HOST/PATH`, never the
-network. Until the official keys are compiled in, pass the `keys-N.json`
-you trust with `--marketplace-keys`.
+network. The official keys (generation 1) are compiled in since 0.0.23;
+pass another `keys-N.json` with `--marketplace-keys` to trust a different
+marketplace.
 
 `rich plugin publish FILE --url URL` checks a package you made and writes
 its listing to `packages/ID.json`, for a pull request to the marketplace

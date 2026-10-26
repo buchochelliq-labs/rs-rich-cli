@@ -575,15 +575,20 @@ fn a_bad_signature_and_a_rollback_are_refused() {
         "{}",
         text(&out.stderr)
     );
-    // No trust root at all: the official keys are not compiled in yet.
+    // No keys named: the official ones are trusted, and this test
+    // marketplace's own key is not one of them.
     let out = w.rich(&[
         "plugin",
         "search",
         "--marketplace",
         w.market.dir.to_str().unwrap(),
     ]);
-    assert_code(&out, 2);
-    assert!(text(&out.stderr).contains("--marketplace-keys"));
+    assert_code(&out, 4);
+    assert!(
+        text(&out.stderr).contains("signed by key"),
+        "{}",
+        text(&out.stderr)
+    );
 }
 
 #[test]

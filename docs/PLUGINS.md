@@ -300,8 +300,9 @@ live:
   and no index are needed, so an expired index never stops what is
   installed.
 
-The official public keys are not compiled in yet: `KeySet::official`
-refuses until the maintainer has made the pairs. The crate's tests sign a
+The official public keys (generation 1, the same file as the marketplace
+repository's `keys/keys-1.json`) are compiled in since 0.0.23, as
+`crates/rich-marketplace/keys/keys-1.json`. The crate's tests sign a
 fixture marketplace with test keys checked into
 `crates/rich-marketplace/tests/fixtures/keys`, trusted only by those tests.
 
@@ -361,9 +362,8 @@ rich plugin browse                # the same, in a selector with provenance
   `https://HOST/PATH` from its own `artifacts/HOST/PATH`, never from the
   network: that is how the tests and CI's compatibility job run offline.
 - **Which keys.** `--marketplace-keys FILE` (a `keys-N.json`), else
-  `RICH_MARKETPLACE_KEYS`, else the keys compiled into the crate. Until the
-  official keys are compiled in, a marketplace is trusted only through one
-  of the first two. Later key generations are fetched from the
+  `RICH_MARKETPLACE_KEYS`, else the official keys compiled into the crate
+  (since 0.0.23). Later key generations are fetched from the
   marketplace's `keys/` and accepted one at a time.
 - **Errors** use the CLI's exit classes: 2 usage (an unknown id, a crate, a
   version not listed, no trust root), 3 input (a file or download that
