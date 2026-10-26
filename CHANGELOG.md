@@ -26,6 +26,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `print_exception` and `log_locals` stay out (DIVERGENCES §43); the new
   differences in form are §47 to §49.
 
+- **`Progress.log`** (rs-rich): `LiveProgress::log` logs above the tasks
+  as upstream's `Progress.log` (its console's `log`) does, with the time and
+  the caller from `#[track_caller]`; `log_at` names the caller. `Live`,
+  `AutoLive` and `LiveHandle` have `log` too, as `Live::print` stands in for
+  `console.print`. New golden cases `progress_log` and `progress_log_file`
+  in `console.tsv`.
+
 - **Noctiluca's live logs and terminal adaptations** (noctiluca): a
   `role=log`, `aria-live` or appended scroll box is followed through a
   live-only change ping and read incrementally, with no new snapshot. It

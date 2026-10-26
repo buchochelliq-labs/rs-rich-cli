@@ -15,7 +15,8 @@
 //! output sink. Its stdout/stderr redirect is [`Live::stdout`] and
 //! [`Live::stderr`], writers that print through the display as upstream's
 //! `FileProxy` does (see [`file_proxy`](crate::file_proxy) for why the
-//! process's own stdout is not replaced).
+//! process's own stdout is not replaced). `console.log` during a display is
+//! [`Live::log`].
 
 use std::any::Any;
 use std::cell::Cell;
@@ -366,6 +367,37 @@ impl<W: Write> Live<W> {
     pub fn print_str(&mut self, content: &str) {
         let rendered = self.console.capture(|console| console.print_str(content));
         self.emit(&rendered);
+    }
+
+    /// Log `objects` above the display, as `console.log` does while
+    /// upstream's Live is running (through its render hook). Port of the
+    /// `log` upstream's `Progress` binds to its console: the time, the
+    /// message and the caller found with `#[track_caller]` (DIVERGENCES §47).
+    #[track_caller]
+    pub fn log(
+        &mut self,
+        objects: &[crate::console::LogObject<'_>],
+        options: &crate::console::LogOptions<'_>,
+    ) -> crate::errors::Result<()> {
+        let caller = std::panic::Location::caller();
+        self.log_at(objects, options, caller.file(), caller.line())
+    }
+
+    /// [`log`](Self::log) with the caller's `file` and `line` given
+    /// ([`Console::log_at`]).
+    pub fn log_at(
+        &mut self,
+        objects: &[crate::console::LogObject<'_>],
+        options: &crate::console::LogOptions<'_>,
+        file: &str,
+        line: u32,
+    ) -> crate::errors::Result<()> {
+        let mut result = Ok(());
+        let rendered = self.console.capture(|console| {
+            result = console.log_at(objects, options, file, line);
+        });
+        self.emit(&rendered);
+        result
     }
 
     /// Write `rendered` (what `console.print` made of its renderables) as
@@ -772,6 +804,42 @@ impl<W: Write + Send + 'static> LiveHandle<W> {
         self.run(move |live| live.print_str(&content));
     }
 
+    /// [`Live::log`] on the refresh thread. A log queued from the thread
+    /// holding the renderable's lock (see [`run`](Self::run)) reports no
+    /// error.
+    #[track_caller]
+    pub fn log(
+        &self,
+        objects: &[crate::console::LogObject<'_>],
+        options: &crate::console::LogOptions<'_>,
+    ) -> crate::errors::Result<()> {
+        let caller = std::panic::Location::caller();
+        self.log_at(objects, options, caller.file(), caller.line())
+    }
+
+    /// [`log`](Self::log) with the caller's `file` and `line` given.
+    pub fn log_at(
+        &self,
+        objects: &[crate::console::LogObject<'_>],
+        options: &crate::console::LogOptions<'_>,
+        file: &str,
+        line: u32,
+    ) -> crate::errors::Result<()> {
+        let call = crate::console::OwnedLog::new(objects, options, file, line);
+        let result = Arc::new(Mutex::new(Ok(())));
+        let slot = result.clone();
+        self.run(move |live| {
+            let mut outcome = Ok(());
+            let rendered = live.console.capture(|console| outcome = call.log(console));
+            live.emit(&rendered);
+            *slot.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = outcome;
+        });
+        let mut result = result
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        std::mem::replace(&mut *result, Ok(()))
+    }
+
     fn redirecting(&self, stream: ProxyStream) -> bool {
         match stream {
             ProxyStream::Stdout => self.redirect_stdout,
@@ -862,6 +930,18 @@ impl<W: Write + Send + 'static> AutoLive<W> {
     /// ([`Live::print_str`]), on the thread.
     pub fn print_str(&self, content: impl Into<String>) {
         self.handle.print_str(content);
+    }
+
+    /// Log above the display ([`Live::log`]), on the thread.
+    #[track_caller]
+    pub fn log(
+        &self,
+        objects: &[crate::console::LogObject<'_>],
+        options: &crate::console::LogOptions<'_>,
+    ) -> crate::errors::Result<()> {
+        let caller = std::panic::Location::caller();
+        self.handle
+            .log_at(objects, options, caller.file(), caller.line())
     }
 
     /// A cloneable handle to the thread, for proxies and prints from other

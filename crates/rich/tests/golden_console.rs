@@ -1019,6 +1019,97 @@ fn console_status() -> String {
     String::from_utf8(live.stop()).unwrap()
 }
 
+// --- group 6 ------------------------------------------------------------
+
+/// The progress of `_progress_log`: a description and a ten-cell bar.
+fn copying_progress() -> rich::Progress {
+    rich::Progress::new()
+        .columns(vec![
+            rich::ProgressColumn::TextFormat(rich::TextColumn::new("{task.description}")),
+            rich::ProgressColumn::BarWith(rich::BarColumn::new().bar_width(Some(10))),
+        ])
+        .clock(|| 0.0)
+}
+
+fn progress_log() -> String {
+    let second = utc((2024, 1, 2), (3, 4, 6), 0);
+    let console = logging(40, vec![utc((2024, 1, 2), (3, 4, 5), 0), second]).build();
+    let live = copying_progress().start(console.clone(), Vec::<u8>::new(), 1e-9);
+    let task = live.add_task("Copying", 4.0, 0.0);
+    let (file, line) = APP;
+    live.log_at(
+        &[LogObject::Str("starting [bold]copy[/]")],
+        &LogOptions::default(),
+        file,
+        line,
+    )
+    .unwrap();
+    live.advance(task, 2.0);
+    live.refresh();
+    live.log_at(
+        &[
+            LogObject::Str("halfway"),
+            LogObject::Renderable(log_table()),
+        ],
+        &LogOptions::default(),
+        file,
+        line,
+    )
+    .unwrap();
+    let italic = LogOptions {
+        style: Some("italic".into()),
+        ..LogOptions::default()
+    };
+    live.log_at(&[LogObject::Str("same second")], &italic, file, line)
+        .unwrap();
+    live.advance(task, 2.0);
+    let (_, mut out) = live.stop();
+    // A disabled progress logs straight to the console. Upstream's shares
+    // the console, and its last time; the port's display owns a copy, so
+    // this one is logged at a time it has already shown.
+    let off =
+        rich::Progress::new()
+            .disable(true)
+            .start(console_after(second), Vec::<u8>::new(), 10.0);
+    off.log_at(
+        &[LogObject::Str("disabled")],
+        &LogOptions::default(),
+        file,
+        line,
+    )
+    .unwrap();
+    out.extend(off.stop().1);
+    String::from_utf8(out).unwrap()
+}
+
+/// A `_logging(40)` console that has already logged at `time`, so that the
+/// next log at that time leaves its time column blank.
+fn console_after(time: SystemTime) -> Console {
+    let console = logging(40, vec![time]).build();
+    console.capture(|c| {
+        c.log_at(&[LogObject::Str("")], &LogOptions::default(), APP.0, APP.1)
+            .unwrap();
+    });
+    console
+}
+
+fn progress_log_file() -> String {
+    let console = logging(40, vec![utc((2024, 1, 2), (3, 4, 5), 0)])
+        .force_terminal(false)
+        .color_system(None)
+        .build();
+    let live = copying_progress().start(console, Vec::<u8>::new(), 1e-9);
+    live.add_task("Copying", 4.0, 1.0);
+    live.log_at(
+        &[LogObject::Str("into a file")],
+        &LogOptions::default(),
+        APP.0,
+        APP.1,
+    )
+    .unwrap();
+    String::from_utf8(live.stop().1).unwrap()
+}
+
 fn build(name: &str) -> String {
     match name {
         "console_quiet" => console_quiet(),
@@ -1043,11 +1134,13 @@ fn build(name: &str) -> String {
         "console_live_stack" => console_live_stack(),
         "console_screen" => console_screen(),
         "console_status" => console_status(),
+        "progress_log" => progress_log(),
+        "progress_log_file" => progress_log_file(),
         other => panic!("no builder for console case {other:?}"),
     }
 }
 
-const CASES: usize = 22;
+const CASES: usize = 24;
 
 #[test]
 fn console_parity() {
@@ -1146,4 +1239,45 @@ fn log_names_its_caller() {
             .ends_with(&format!("golden_console.rs:{line}")),
         "{out:?}"
     );
+}
+
+/// `Progress.log` and `Live::log` name the code that called them, as
+/// `Console::log` does.
+#[test]
+fn progress_and_live_log_name_their_caller() {
+    let console = || {
+        builder(100)
+            .force_terminal(false)
+            .color_system(None)
+            .log_time(false)
+            .build()
+    };
+    let (objects, options) = ([LogObject::Str("from progress")], LogOptions::default());
+    let progress = rich::Progress::new().start(console(), Vec::<u8>::new(), 1e-9);
+    let line = line!() + 1;
+    progress.log(&objects, &options).unwrap();
+    let out = String::from_utf8(progress.stop().1).unwrap();
+    assert!(
+        out.contains(&format!("golden_console.rs:{line}")),
+        "{out:?}"
+    );
+
+    let mut live = rich::Live::new(Box::new(Text::new("")), console(), Vec::<u8>::new());
+    live.start();
+    let line = line!() + 1;
+    live.log(&[LogObject::Str("from live")], &LogOptions::default())
+        .unwrap();
+    live.stop();
+    let out = String::from_utf8(live.into_writer()).unwrap();
+    assert!(
+        out.contains(&format!("golden_console.rs:{line}")),
+        "{out:?}"
+    );
+
+    // Malformed markup is an error, from the refresh thread too.
+    let progress = rich::Progress::new().start(console(), Vec::<u8>::new(), 1e-9);
+    assert!(progress
+        .log(&[LogObject::Str("[/bold]")], &LogOptions::default())
+        .is_err());
+    progress.stop();
 }

@@ -538,6 +538,61 @@ def _console_status() -> str:
     return buffer.getvalue()
 
 
+# --- group 6: Progress.log (0.0.23) ---------------------------------------
+
+
+def _progress_log() -> str:
+    """`Progress.log` is `console.log`: through the live display's render
+    hook, above the tasks, with the time repeated only when it changes."""
+    from rich.progress import BarColumn, Progress, TextColumn
+
+    buffer = io.StringIO()
+    second = datetime(2024, 1, 2, 3, 4, 6)
+    console = _logging(40, times=[datetime(2024, 1, 2, 3, 4, 5)] + [second] * 4, file=buffer)
+    progress = Progress(
+        TextColumn("{task.description}"),
+        BarColumn(bar_width=10),
+        console=console,
+        auto_refresh=False,
+        get_time=lambda: 0.0,
+    )
+    progress.start()
+    task = progress.add_task("Copying", total=4)
+    progress.log("starting [bold]copy[/]")
+    progress.advance(task, 2)
+    progress.refresh()
+    progress.log("halfway", _log_table())
+    progress.log("same second", style="italic")
+    progress.advance(task, 2)
+    progress.stop()
+    # A disabled progress logs straight to the console.
+    off = Progress(console=console, disable=True)
+    off.start()
+    off.log("disabled")
+    off.stop()
+    return _no_link_id(buffer.getvalue())
+
+
+def _progress_log_file() -> str:
+    """Not a terminal: the log is written as it is, the tasks at the end."""
+    from rich.progress import BarColumn, Progress, TextColumn
+
+    buffer = io.StringIO()
+    console = _logging(40, file=buffer, force_terminal=False, color_system=None)
+    progress = Progress(
+        TextColumn("{task.description}"),
+        BarColumn(bar_width=10),
+        console=console,
+        auto_refresh=False,
+        get_time=lambda: 0.0,
+    )
+    progress.start()
+    progress.add_task("Copying", total=4, completed=1)
+    progress.log("into a file")
+    progress.stop()
+    return _no_link_id(buffer.getvalue())
+
+
 CONSOLE_CASES = [
     ("console_quiet", _console_quiet),
     ("console_size_setters", _console_size_setters),
@@ -561,6 +616,8 @@ CONSOLE_CASES = [
     ("console_live_stack", _console_live_stack),
     ("console_screen", _console_screen),
     ("console_status", _console_status),
+    ("progress_log", _progress_log),
+    ("progress_log_file", _progress_log_file),
 ]
 
 

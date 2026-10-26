@@ -825,6 +825,8 @@ open ones are **permanent**, each for the reason in its entry:
   the compiler recorded (relative to the workspace for a local crate), and
   the link is that path made absolute against the working directory, as
   `os.path.abspath` does. `Console::log_at` takes the file and line.
+  `Progress.log` (`LiveProgress::log`, 0.0.23) and `Live::log` find
+  their caller the same way, and have `log_at` forms too.
 - **Why:** local time needs a time zone database or platform calls
   (`unsafe` in a core that denies it, or a new dependency); Rust has no
   stack frames to inspect.

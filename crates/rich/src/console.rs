@@ -3005,6 +3005,82 @@ impl Default for LogOptions<'_> {
     }
 }
 
+/// A [`Console::log`] call that owns its arguments, so that it can be sent
+/// to the thread that owns the console (a live display's refresh thread).
+pub(crate) struct OwnedLog {
+    objects: Vec<OwnedLogObject>,
+    sep: String,
+    end: String,
+    style: Option<crate::style::StyleType>,
+    justify: Option<Justify>,
+    emoji: Option<bool>,
+    markup: Option<bool>,
+    highlight: Option<bool>,
+    file: String,
+    line: u32,
+}
+
+enum OwnedLogObject {
+    Str(String),
+    Text(Text),
+    Renderable(std::sync::Arc<dyn Renderable + Send + Sync>),
+}
+
+impl OwnedLog {
+    /// Copy `objects` and `options`, logged as from `file` and `line`.
+    pub(crate) fn new(
+        objects: &[LogObject<'_>],
+        options: &LogOptions<'_>,
+        file: &str,
+        line: u32,
+    ) -> Self {
+        OwnedLog {
+            objects: objects
+                .iter()
+                .map(|object| match object {
+                    LogObject::Str(content) => OwnedLogObject::Str((*content).to_string()),
+                    LogObject::Text(text) => OwnedLogObject::Text((*text).clone()),
+                    LogObject::Renderable(renderable) => {
+                        OwnedLogObject::Renderable(renderable.clone())
+                    }
+                })
+                .collect(),
+            sep: options.sep.to_string(),
+            end: options.end.to_string(),
+            style: options.style.clone(),
+            justify: options.justify,
+            emoji: options.emoji,
+            markup: options.markup,
+            highlight: options.highlight,
+            file: file.to_string(),
+            line,
+        }
+    }
+
+    /// [`Console::log_at`] on `console`.
+    pub(crate) fn log(&self, console: &Console) -> crate::errors::Result<()> {
+        let objects: Vec<LogObject<'_>> = self
+            .objects
+            .iter()
+            .map(|object| match object {
+                OwnedLogObject::Str(content) => LogObject::Str(content),
+                OwnedLogObject::Text(text) => LogObject::Text(text),
+                OwnedLogObject::Renderable(renderable) => LogObject::Renderable(renderable.clone()),
+            })
+            .collect();
+        let options = LogOptions {
+            sep: &self.sep,
+            end: &self.end,
+            style: self.style.clone(),
+            justify: self.justify,
+            emoji: self.emoji,
+            markup: self.markup,
+            highlight: self.highlight,
+        };
+        console.log_at(&objects, &options, &self.file, self.line)
+    }
+}
+
 /// One renderable `_collect_renderables` hands [`Console::log`], with the
 /// wrappers upstream puts round it: `Align` for `justify`, `Styled` for the
 /// console's style and then for the call's. A joined text carries its `end`.
