@@ -82,6 +82,17 @@ Other settings:
   is redrawn when the cells under it are repainted.
 - **`console(console)`** sets the colour system, theme and highlighting
   renderables are rendered with.
+- **`paint_strategy(strategy)`** sets how changes become bytes. The
+  default is `best`, as for an intuiTUIve app: rows that moved together
+  (a log, a list scrolled by a line) move with the terminal's own
+  scrolling, and anything else is painted cell by cell. `cells`, `rows`,
+  `full` and `scroll` are the fixed choices, and the `RICH_PAINT_STRATEGY`
+  environment variable names one when the program does not. Every
+  strategy shows the same screen.
+- **`terminal_scroll(on)`** says whether `best` and `scroll` may use the
+  terminal's scrolling. Unset, they do, except on Windows and under tmux.
+  An inline surface never scrolls, and no scroll moves rows through a
+  graphic.
 
 ## What a frame sends
 

@@ -40,6 +40,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   raises no `LiveError` here, and neither does the port. New golden cases
   `live_set_live` and `live_nested` (DIVERGENCES §17, §49).
 
+- **`Surface` paints with `best`** (rs-rich-ext): a `Surface` now paints
+  as an intuiTUIve app does, with `PaintStrategy::Best` unless
+  `Surface::paint_strategy` or `RICH_PAINT_STRATEGY` chooses another. Its
+  guards are the app's: no terminal scrolling on Windows, under tmux,
+  inline, or through a graphic on screen, and `Surface::terminal_scroll`
+  overrides the first two. `Painter::new` still starts on `cells`. Tests
+  replay `best` through vt100 against a full repaint.
+
 - **Noctiluca's live logs and terminal adaptations** (noctiluca): a
   `role=log`, `aria-live` or appended scroll box is followed through a
   live-only change ping and read incrementally, with no new snapshot. It
