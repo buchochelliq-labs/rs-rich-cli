@@ -3,9 +3,12 @@
 //!
 //! A binary-boundary convenience (docs/PORTING.md): the crate verifies,
 //! resolves and installs; this module prompts, prints and decides. Nothing
-//! here changes how a render behaves, apart from one rule: an installed,
-//! enabled WASM plugin loads on every run without `--plugin`, after its file
-//! is checked against the lockfile ([`installed_plugins`]).
+//! here changes how a render behaves, apart from what is installed and
+//! enabled being used, each after its file is checked against the lockfile:
+//! a WASM plugin loads on every run without `--plugin`
+//! ([`installed_plugins`]), a micro pack loads into micro's user layer
+//! ([`installed_micro_packs`]), and `--theme NAME` falls back to a theme
+//! ([`installed_theme`]).
 //!
 //! - **The install directory** is `--plugin-dir DIR`, else `RICH_PLUGIN_DIR`,
 //!   else `$XDG_DATA_HOME/rich/plugins` (`~/.local/share/rich/plugins`;
@@ -1294,6 +1297,52 @@ pub(crate) fn installed_micro_packs() -> (Vec<(String, PathBuf)>, Vec<String>) {
         }
     }
     (packs, warnings)
+}
+
+/// The installed, enabled theme `id`, as `name -> style` bindings, for
+/// `--theme NAME` when the config has no theme of that name. The file is
+/// read once and checked against the lockfile, and the bytes checked are
+/// parsed: one that changed on disk, or no longer parses, is not used and
+/// is named in a warning. `None` when no such theme is installed and
+/// enabled.
+pub(crate) fn installed_theme(id: &str) -> (Option<BTreeMap<String, String>>, Vec<String>) {
+    let (found, mut warnings) = installed_entries(Kind::Theme, "themes");
+    let Some((dir, wanted)) = found else {
+        return (None, warnings);
+    };
+    let Some(entry) = wanted.iter().find(|e| e.id == id) else {
+        return (None, warnings);
+    };
+    let styles = entry
+        .verify(&dir)
+        .map_err(|error| error.to_string())
+        .and_then(|bytes| theme_bindings(&bytes));
+    match styles {
+        Ok(styles) => (Some(styles), warnings),
+        Err(error) => {
+            warnings.push(format!(
+                "theme {id} is not loaded: {error}; `rich plugin verify` checks every installed \
+                 file"
+            ));
+            (None, warnings)
+        }
+    }
+}
+
+/// A `[styles]` theme file's bindings, each one `--theme-style` accepts.
+fn theme_bindings(bytes: &[u8]) -> Result<BTreeMap<String, String>, String> {
+    let text = std::str::from_utf8(bytes).map_err(|_| "not UTF-8".to_string())?;
+    let theme = rich::Theme::from_file(text, false).map_err(|error| error.to_string())?;
+    let mut styles = BTreeMap::new();
+    for name in theme.names() {
+        let Some(style) = theme.get(name) else {
+            continue;
+        };
+        let definition = style.definition();
+        super::config::validate_theme_binding(name, &definition)?;
+        styles.insert(name.to_owned(), definition);
+    }
+    Ok(styles)
 }
 
 #[cfg(feature = "wasm-plugins")]

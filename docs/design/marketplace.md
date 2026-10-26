@@ -456,6 +456,13 @@ Only a `wasm-plugin`, a `micro-pack` and a `theme` install from the
 marketplace. They are sandboxed code or data, so the install prompt can say
 what they will do (their capabilities, permissions and tier) and mean it.
 
+Once installed and enabled, each is used with no other step, after its file
+is checked again against the lockfile (a changed file is not used, with a
+warning): a WASM plugin loads on every run, a micro pack loads into micro's
+user layer, and a **theme** is what `--theme ID` selects when the user's
+config has no theme of that name. The config's own theme wins a clash, and a
+disabled theme is not found.
+
 A **`crate`** is listed only: it is native code that runs with the user's
 rights, and it is built into a program rather than added to one. `rich
 plugin install mermaid` refuses and prints what to do instead:

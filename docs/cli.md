@@ -2042,8 +2042,10 @@ rich --config rich.toml --theme night --theme-style 'notice=bold green' --print 
 ```
 
 Defaults, the selected profile's `theme`, then `--theme NAME` determine the
-selected theme. Repeated `--theme-style NAME=STYLE` bindings override configured
-bindings. Theme and style names start with an ASCII letter, digit or underscore;
+selected theme. When the config has no theme named by `--theme NAME`, an
+installed, enabled marketplace theme whose id is NAME is used (`rich plugin
+install`, below). Repeated
+`--theme-style NAME=STYLE` bindings override configured bindings. Theme and style names start with an ASCII letter, digit or underscore;
 subsequent characters may also be dots or hyphens. All definitions and references
 are validated, including inactive profiles and themes. `rich config show` exposes
 the selected theme. Batch workers receive the resolved bindings so parallel
@@ -2070,7 +2072,8 @@ The styles layer onto the built-in theme, and later layers override earlier ones
 
 1. The built-in default theme.
 2. `--theme-file`, or `theme_file` in the config.
-3. The selected config theme (`theme`, `--profile`, `--theme NAME`).
+3. The selected config theme (`theme`, `--profile`, `--theme NAME`), or the
+   installed theme `--theme NAME` falls back to.
 4. `--theme-style NAME=STYLE` bindings.
 
 A `theme_file` in a config file is relative to that config file, so the config
@@ -2354,8 +2357,11 @@ warns and goes on. An installed, enabled micro pack loads the same way,
 into the user layer after your own `~/.config/rich/micro/` (so your own
 asset keeps a name both have): its `:micro:` names expand on the next run,
 and `rich micro packs` lists it. `rich plugin disable` stops either
-loading. An installed theme is checked and recorded, but nothing selects it
-yet. A crate (Mermaid, DOT, lumis) is listed, never
+loading. An installed, enabled theme is what `--theme ID` selects when your
+config has no theme of that name (a config theme wins a clash). Its file is
+checked against the lockfile when it is selected: a file that changed is not
+used, and the run warns and reports the theme unknown. A disabled theme is
+not found. A crate (Mermaid, DOT, lumis) is listed, never
 installed: `rich plugin install mermaid` exits 2 and prints the `cargo add`
 line to use instead.
 

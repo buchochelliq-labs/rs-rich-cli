@@ -912,6 +912,9 @@ jobs:
             jq -e --arg p "$RICH_PLUGIN_DIR/$pack/$pack-1.0.0.richmicro" \
               '[.packs[] | select(.layer == "user" and .path == $p)] | length == 1' packs.json
           done
+          # An installed theme is what `--theme ID` selects.
+          "$rich" plugin install dusk --yes
+          "$rich" --theme dusk -p "[alert]themed[/]" | grep -q themed
           rm -f info.json refusal.txt doc.md rendered.txt loud.md packs.json
 
   # Every published crate's public API against its snapshot in api/ (an

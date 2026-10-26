@@ -295,7 +295,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--config <PATH>` | Read versioned TOML defaults from PATH. |
 | `--profile <NAME>` | Select a config profile. Default: `default`. |
 | `--no-config` | Disable config discovery. |
-| `--theme <NAME>` | Select a named theme from config. Config: `theme`. |
+| `--theme <NAME>` | Select a named theme from config; --theme also finds installed themes. Config: `theme`. |
 | `--theme-style <NAME=STYLE>...` | Override a theme binding; repeatable and worker-safe. |
 | `--theme-file <PATH>` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it. Config: `theme_file`. |
 | `--plugin <PATH>...` | Load a runtime plugin: a WASM module (.wasm, sandboxed; the default wasm-plugins feature) or a native library (.so, .dylib, .dll, which runs its own code; a build with the dylib-plugins feature); repeatable. `rich plugins list` shows what is loaded. Config: `plugins`. |
@@ -2861,7 +2861,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `continue_on_error` | bool | | | `--continue-on-error` | Process all planned inputs and aggregate failures |
 | `overwrite` | bool | | | `--overwrite` | Allow existing batch export destinations |
 | `collision` | enum: `error`, `overwrite`, `suffix` | `error` | | `--collision` | Batch policy for existing destinations |
-| `theme` | string | | | `--theme` | Select a named theme from config |
+| `theme` | string | | | `--theme` | Select a named theme from config; --theme also finds installed themes |
 | `theme_file` | string | | | `--theme-file` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it |
 | `plugins` | list of paths | | | `--plugin` | Load a runtime plugin: a WASM module (.wasm, sandboxed; the default wasm-plugins feature) or a native library (.so, .dylib, .dll, which runs its own code; a build with the dylib-plugins feature); repeatable. `rich plugins list` shows what is loaded |
 | `micro_project` | bool | | | `--micro-project` | Load micro assets from the project's .rich/micro/ (off by default: a project's assets load only when you trust it; ./rich.toml cannot turn this on) |

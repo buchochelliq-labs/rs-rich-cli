@@ -1435,7 +1435,13 @@ fn config_options() -> Vec<ArgSpec> {
         .value(ValueHint::File),
         option("profile", "NAME", CONFIG, "Select a config profile").default_value("default"),
         flag("no-config", CONFIG, "Disable config discovery"),
-        option("theme", "NAME", CONFIG, "Select a named theme from config").config_key("theme"),
+        option(
+            "theme",
+            "NAME",
+            CONFIG,
+            "Select a named theme from config; --theme also finds installed themes",
+        )
+        .config_key("theme"),
         option(
             "theme-style",
             "NAME=STYLE",
