@@ -21,7 +21,7 @@ import re
 import sys
 import tempfile
 
-from rich.console import Console
+from rich.console import Console, RenderHook
 from rich.control import Control
 from rich.terminal_theme import MONOKAI, NIGHT_OWLISH
 from rich.panel import Panel
@@ -438,6 +438,106 @@ def _console_log_time_format() -> str:
     return "".join(out)
 
 
+# --- group 5: render hooks, live stack, screen(), status() ----------------
+
+
+class _Around(RenderHook):
+    """Adds a text before and after what is printed."""
+
+    def __init__(self, before: str, after: str) -> None:
+        self.before, self.after = before, after
+
+    def process_renderables(self, renderables):
+        return [Text(self.before), *renderables, Text(self.after)]
+
+
+class _Drop(RenderHook):
+    def process_renderables(self, renderables):
+        return []
+
+
+class _Bell(RenderHook):
+    """Adds a control code, as upstream's live display adds a cursor move."""
+
+    def process_renderables(self, renderables):
+        return [Control.bell(), *renderables]
+
+
+def _console_render_hooks() -> str:
+    console = _logging(16)
+    out = [_print(console, "plain")]
+    console.push_render_hook(_Around("<<", ">>"))
+    out.append(_print(console, "hooked"))
+    out.append(_print(console, "a", "b", Panel("p", expand=False), "c"))
+    out.append(_print(console, "styled", style="bold"))
+    out.append(_print(console, "open", end=""))
+    out.append(_print(console))
+    with console.capture() as capture:
+        console.out("out", "put")
+    out.append(capture.get())
+    out.append(_log(console, "logged"))
+    console.push_render_hook(_Bell())
+    out.append(_print(console, "two hooks"))
+    console.pop_render_hook()
+    console.pop_render_hook()
+    out.append(_print(console, "popped"))
+    console.push_render_hook(_Drop())
+    out.append(_print(console, "dropped"))
+    console.pop_render_hook()
+    soft = _console(16, soft_wrap=True, style="italic")
+    soft.push_render_hook(_Around("[", "]"))
+    out.append(_print(soft, "soft wrapped and styled"))
+    return "".join(repr(piece) + "\n" for piece in out)
+
+
+def _console_live_stack() -> str:
+    console = _console()
+    out = [console.set_live(object()), console.set_live(object())]
+    console.clear_live()
+    out.append(console.set_live(object()))
+    console.clear_live()
+    console.clear_live()
+    out.append(console.set_live(object()))
+    return _lines(*out)
+
+
+def _console_screen() -> str:
+    console = _console(6, height=3)
+    out = []
+    with console.capture() as capture:
+        with console.screen(style="on blue") as screen:
+            screen.update(Text("hi"))
+            screen.update(style="on red")
+            screen.update("a", "b")
+    out.append(capture.get())
+    with console.capture() as capture:
+        with console.screen(hide_cursor=False) as screen:
+            screen.update("x")
+    out.append(capture.get())
+    plain = _console(6, height=2, force_terminal=False, color_system=None)
+    with plain.capture() as capture:
+        with plain.screen() as screen:
+            screen.update("not a terminal")
+    out.append(capture.get())
+    return "".join(repr(piece) + "\n" for piece in out)
+
+
+def _console_status() -> str:
+    now = [0.0]
+    buffer = io.StringIO()
+    console = _console(30, file=buffer, get_time=lambda: now[0])
+    status = console.status("Working", spinner="line", spinner_style="green", speed=2.0)
+    status._live.auto_refresh = False
+    status.start()
+    status._live.refresh()
+    now[0] = 0.13
+    status._live.refresh()
+    status.update("Next", spinner="dots")
+    status._live.refresh()
+    status.stop()
+    return buffer.getvalue()
+
+
 CONSOLE_CASES = [
     ("console_quiet", _console_quiet),
     ("console_size_setters", _console_size_setters),
@@ -457,6 +557,10 @@ CONSOLE_CASES = [
     ("console_log", _console_log),
     ("console_log_options", _console_log_options),
     ("console_log_time_format", _console_log_time_format),
+    ("console_render_hooks", _console_render_hooks),
+    ("console_live_stack", _console_live_stack),
+    ("console_screen", _console_screen),
+    ("console_status", _console_status),
 ]
 
 

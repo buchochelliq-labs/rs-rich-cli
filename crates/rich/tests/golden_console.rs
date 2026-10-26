@@ -6,15 +6,17 @@
 //! case depends on the machine running it.
 
 use std::collections::VecDeque;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use rich::align::HorizontalAlign;
 use rich::console::{Environ, PrintObject as O, PrintOptions};
+use rich::status::Status;
 use rich::terminal_theme::{MONOKAI, NIGHT_OWLISH};
 use rich::{
     ColorSystem, Console, Control, ExportHtmlOptions, ExportSvgOptions, Justify, LogObject,
-    LogOptions, Panel, Renderable, Rule, Table, Text, Theme,
+    LogOptions, Panel, RenderHook, Renderable, Rule, Table, Text, Theme,
 };
 
 /// `_console`: truecolor, no highlighting.
@@ -865,6 +867,158 @@ fn console_log_time_format() -> String {
     out.concat()
 }
 
+// --- group 5 ------------------------------------------------------------
+
+/// `_Around`: a text before and after what is printed.
+struct Around(&'static str, &'static str);
+
+impl RenderHook for Around {
+    fn process_renderables(
+        &self,
+        renderables: Vec<Box<dyn Renderable>>,
+    ) -> Vec<Box<dyn Renderable>> {
+        let mut out: Vec<Box<dyn Renderable>> = vec![Box::new(Text::new(self.0))];
+        out.extend(renderables);
+        out.push(Box::new(Text::new(self.1)));
+        out
+    }
+}
+
+/// `_Drop`: nothing is printed.
+struct DropAll;
+
+impl RenderHook for DropAll {
+    fn process_renderables(
+        &self,
+        _renderables: Vec<Box<dyn Renderable>>,
+    ) -> Vec<Box<dyn Renderable>> {
+        Vec::new()
+    }
+}
+
+/// `_Bell`: a control code first, as a live display's cursor move.
+struct Bell;
+
+impl RenderHook for Bell {
+    fn process_renderables(
+        &self,
+        renderables: Vec<Box<dyn Renderable>>,
+    ) -> Vec<Box<dyn Renderable>> {
+        let mut out: Vec<Box<dyn Renderable>> = vec![Box::new(Control::bell())];
+        out.extend(renderables);
+        out
+    }
+}
+
+fn console_render_hooks() -> String {
+    let console = logging(16, vec![first_time()]).build();
+    let panel = Panel::new(Box::new(String::from("p"))).expand(false);
+    let mut out = vec![print_str(&console, "plain")];
+    console.push_render_hook(Arc::new(Around("<<", ">>")));
+    out.push(print_str(&console, "hooked"));
+    out.push(print(
+        &console,
+        &[O::Str("a"), O::Str("b"), O::Renderable(&panel), O::Str("c")],
+        PrintOptions::default(),
+    ));
+    out.push(print(
+        &console,
+        &[O::Str("styled")],
+        PrintOptions {
+            style: Some("bold".into()),
+            ..Default::default()
+        },
+    ));
+    out.push(print(
+        &console,
+        &[O::Str("open")],
+        PrintOptions {
+            end: "",
+            ..Default::default()
+        },
+    ));
+    out.push(print(&console, &[], PrintOptions::default()));
+    out.push(console.capture(|c| c.out(&["out", "put"], " ", "\n", None, None).unwrap()));
+    out.push(log_str(&console, "logged"));
+    console.push_render_hook(Arc::new(Bell));
+    out.push(print_str(&console, "two hooks"));
+    console.pop_render_hook();
+    console.pop_render_hook();
+    out.push(print_str(&console, "popped"));
+    console.push_render_hook(Arc::new(DropAll));
+    out.push(print_str(&console, "dropped"));
+    console.pop_render_hook();
+    let soft = builder(16).soft_wrap(true).style("italic").build();
+    soft.push_render_hook(Arc::new(Around("[", "]")));
+    out.push(print_str(&soft, "soft wrapped and styled"));
+    out.iter()
+        .map(|piece| format!("{}\n", py_repr(piece)))
+        .collect()
+}
+
+fn console_live_stack() -> String {
+    let console = console(20);
+    let live = || Arc::new(()) as Arc<dyn std::any::Any + Send + Sync>;
+    let mut out = vec![console.set_live(live()), console.set_live(live())];
+    console.clear_live();
+    out.push(console.set_live(live()));
+    console.clear_live();
+    console.clear_live();
+    out.push(console.set_live(live()));
+    lines(&out.into_iter().map(py_bool).collect::<Vec<_>>())
+}
+
+fn console_screen() -> String {
+    let console = builder(6).height(3).build();
+    let mut out = vec![console.capture(|c| {
+        let mut screen = c.screen(true, Some("on blue".into()));
+        screen.update(vec![Box::new(Text::new("hi"))], None);
+        screen.update(Vec::new(), Some("on red".into()));
+        screen.update(
+            vec![Box::new(String::from("a")), Box::new(String::from("b"))],
+            None,
+        );
+    })];
+    out.push(console.capture(|c| {
+        let mut screen = c.screen(false, None);
+        screen.update(vec![Box::new(String::from("x"))], None);
+    }));
+    let plain = builder(6)
+        .height(2)
+        .force_terminal(false)
+        .color_system(None)
+        .build();
+    out.push(plain.capture(|c| {
+        let mut screen = c.screen(true, None);
+        screen.update(vec![Box::new(String::from("not a terminal"))], None);
+    }));
+    out.iter()
+        .map(|piece| format!("{}\n", py_repr(piece)))
+        .collect()
+}
+
+fn console_status() -> String {
+    let now = Arc::new(AtomicU64::new(0f64.to_bits()));
+    let clock = now.clone();
+    let console = builder(30)
+        .get_time(move || f64::from_bits(clock.load(Ordering::SeqCst)))
+        .build();
+    let live = console.status_to(
+        Status::new("Working")
+            .spinner("line")
+            .spinner_style("green")
+            .speed(2.0)
+            .refresh_per_second(1e-9),
+        Vec::<u8>::new(),
+    );
+    live.refresh();
+    now.store(0.13f64.to_bits(), Ordering::SeqCst);
+    live.refresh();
+    live.update(Some("Next"), Some("dots"), None, None);
+    live.refresh();
+    String::from_utf8(live.stop()).unwrap()
+}
+
 fn build(name: &str) -> String {
     match name {
         "console_quiet" => console_quiet(),
@@ -885,11 +1039,15 @@ fn build(name: &str) -> String {
         "console_log" => console_log(),
         "console_log_options" => console_log_options(),
         "console_log_time_format" => console_log_time_format(),
+        "console_render_hooks" => console_render_hooks(),
+        "console_live_stack" => console_live_stack(),
+        "console_screen" => console_screen(),
+        "console_status" => console_status(),
         other => panic!("no builder for console case {other:?}"),
     }
 }
 
-const CASES: usize = 18;
+const CASES: usize = 22;
 
 #[test]
 fn console_parity() {

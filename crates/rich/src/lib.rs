@@ -117,7 +117,8 @@ pub use crate::color::{Color, ColorSystem, ColorTriplet};
 pub use crate::columns::Columns;
 pub use crate::console::{
     Console, ConsoleDimensions, ConsoleOptions, ExportHtmlOptions, ExportSvgOptions, Justify,
-    LogObject, LogOptions, Overflow, RenderStrOptions, ScreenUpdate, ThemeContext,
+    LogObject, LogOptions, Overflow, RenderHook, RenderStrOptions, ScreenContext, ScreenUpdate,
+    ThemeContext,
 };
 pub use crate::constrain::Constrain;
 pub use crate::control::{Control, ControlType};

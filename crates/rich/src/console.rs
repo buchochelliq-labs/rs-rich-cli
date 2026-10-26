@@ -238,6 +238,56 @@ fn env_int(environ: Option<&Environ>, key: &str) -> Option<usize> {
     value.parse().ok()
 }
 
+/// Hooks in to the render process. Port of `rich.console.RenderHook`: a
+/// hook pushed with [`Console::push_render_hook`] is handed what each
+/// `print` and `log` is about to write, and returns what to write instead
+/// (upstream's live display adds a cursor move before the output and
+/// itself after it).
+///
+/// Upstream hands the hook the renderables themselves, rendered afterwards
+/// at the print's options. Here each one is already rendered at those
+/// options when the hook sees it, so that it can be kept beyond the call:
+/// putting one in another renderable (a panel, say) shows the same lines,
+/// where upstream's would render again at the new width. What the hook adds
+/// is rendered at the print's options, its last line ended unless it says
+/// otherwise ([`Renderable::print_end_line`]).
+pub trait RenderHook: Send + Sync {
+    /// Return the renderables to write in place of `renderables`. Port of
+    /// `RenderHook.process_renderables`.
+    fn process_renderables(
+        &self,
+        renderables: Vec<Box<dyn Renderable>>,
+    ) -> Vec<Box<dyn Renderable>>;
+}
+
+/// One printed renderable, already rendered at the print's options (its last
+/// line ended): what a [`RenderHook`] is handed.
+struct Rendered(Vec<Segment>);
+
+impl Renderable for Rendered {
+    fn rich_render(&self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment> {
+        self.0.clone()
+    }
+
+    fn measure(
+        &self,
+        _console: &Console,
+        _options: &ConsoleOptions,
+    ) -> crate::measure::Measurement {
+        let widest = Segment::split_lines(&self.0)
+            .iter()
+            .map(|line| Segment::get_line_length(line))
+            .max()
+            .unwrap_or(0);
+        crate::measure::Measurement::new(widest, widest)
+    }
+
+    /// The line break is already among the segments.
+    fn print_end_line(&self, _options: &ConsoleOptions) -> bool {
+        false
+    }
+}
+
 /// Per-thread capture buffer stacks (innermost capture last).
 type CaptureStacks = std::collections::HashMap<std::thread::ThreadId, Vec<Vec<Segment>>>;
 
@@ -327,6 +377,10 @@ pub struct Console {
     log_time_format: LogTimeFormat,
     /// Upstream's `Console.get_datetime` (default `datetime.now`).
     get_datetime: GetDateTime,
+    /// Upstream's `Console._render_hooks`.
+    render_hooks: std::sync::Mutex<Vec<std::sync::Arc<dyn RenderHook>>>,
+    /// Upstream's `Console._live_stack`.
+    live_stack: std::sync::Mutex<Vec<std::sync::Arc<dyn std::any::Any + Send + Sync>>>,
 }
 
 /// A `Send`-only highlighter behind a lock, so it can be shared by a `Sync`
@@ -415,6 +469,8 @@ impl Clone for Console {
             is_alt_screen: std::sync::atomic::AtomicBool::new(false),
             record: std::sync::atomic::AtomicBool::new(self.record()),
             record_buffer: std::sync::Mutex::new(Vec::new()),
+            render_hooks: std::sync::Mutex::new(Vec::new()),
+            live_stack: std::sync::Mutex::new(Vec::new()),
             log_render: std::sync::Mutex::new(new_log_render(self.log_time, self.log_path)),
             log_time: self.log_time,
             log_path: self.log_path,
@@ -450,6 +506,67 @@ impl Drop for ThemeContext<'_> {
         // caller already popped back down to the base through the guard.
         let _ = self.console.pop_theme();
     }
+}
+
+/// The alternate screen in use on a [`Console`] until this guard drops.
+/// Returned by [`Console::screen`]; upstream's `ScreenContext`.
+pub struct ScreenContext<'a> {
+    console: &'a Console,
+    hide_cursor: bool,
+    changed: bool,
+    /// Always `Some`; taken only while it is rebuilt.
+    screen: Option<crate::screen::Screen>,
+    style: crate::style::StyleType,
+}
+
+impl ScreenContext<'_> {
+    /// Print the screen, after replacing what it shows when `renderables`
+    /// are given (one after another, upstream's `Group`) and its style when
+    /// `style` is. Port of `ScreenContext.update(*renderables, style=…)`.
+    pub fn update(
+        &mut self,
+        renderables: Vec<Box<dyn Renderable>>,
+        style: Option<crate::style::StyleType>,
+    ) {
+        if let Some(style) = style {
+            self.style = style;
+        }
+        let screen = if renderables.is_empty() {
+            self.screen
+                .take()
+                .unwrap_or_else(crate::screen::Screen::empty)
+        } else {
+            crate::screen::Screen::from_renderables(renderables)
+        };
+        let screen = screen.style(self.style.clone());
+        // `console.print(self.screen, end="")`.
+        self.console.print(&screen);
+        self.screen = Some(screen);
+    }
+
+    /// The console the screen is on.
+    pub fn console(&self) -> &Console {
+        self.console
+    }
+}
+
+impl Drop for ScreenContext<'_> {
+    fn drop(&mut self) {
+        // Upstream's `__exit__`.
+        if self.changed {
+            self.console.set_alt_screen(false);
+            if self.hide_cursor {
+                self.console.show_cursor(true);
+            }
+        }
+    }
+}
+
+/// Lock `mutex`, recovering it if a panicking holder poisoned it.
+fn lock_or_recover<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl Default for Console {
@@ -832,16 +949,19 @@ impl Console {
             Some(align) => crate::align::Align::render_child(renderable, align, self, &options),
             None => renderable.rich_render(self, &options),
         };
-        if segments.is_empty() {
-            return segments;
+        if !segments.is_empty() {
+            if ends_line {
+                segments.push(Segment::line());
+            }
+            if let Some(style) = self.console_style() {
+                segments = Segment::apply_style_with(&segments, Some(&style), None);
+            }
         }
-        if ends_line {
-            segments.push(Segment::line());
+        // A print (not a render to a string) goes through the render hooks.
+        if end_line {
+            segments = self.process_render_hooks(vec![segments], &options).concat();
         }
-        if let Some(style) = self.console_style() {
-            segments = Segment::apply_style_with(&segments, Some(&style), None);
-        }
-        if !crop {
+        if segments.is_empty() || !crop {
             return segments;
         }
         // `Console.print(crop=True)`: the final backstop against a line running
@@ -1094,6 +1214,121 @@ impl Console {
         if !text.is_empty() {
             self.emit_end(vec![Segment::control(text)], false);
         }
+    }
+
+    /// Add a render hook to the stack. Port of `Console.push_render_hook`.
+    pub fn push_render_hook(&self, hook: std::sync::Arc<dyn RenderHook>) {
+        lock_or_recover(&self.render_hooks).push(hook);
+    }
+
+    /// Remove the last render hook pushed. Port of
+    /// `Console.pop_render_hook`; with none left, nothing happens (upstream
+    /// raises `IndexError`).
+    pub fn pop_render_hook(&self) {
+        lock_or_recover(&self.render_hooks).pop();
+    }
+
+    /// Hand what a print is about to write to the render hooks, in the order
+    /// they were pushed, and render what they return. Each item is one
+    /// renderable already rendered, its last line ended.
+    fn process_render_hooks(
+        &self,
+        items: Vec<Vec<Segment>>,
+        options: &ConsoleOptions,
+    ) -> Vec<Vec<Segment>> {
+        let hooks = lock_or_recover(&self.render_hooks).clone();
+        if hooks.is_empty() {
+            return items;
+        }
+        let mut renderables: Vec<Box<dyn Renderable>> = items
+            .into_iter()
+            .map(|segments| Box::new(Rendered(segments)) as Box<dyn Renderable>)
+            .collect();
+        for hook in &hooks {
+            renderables = hook.process_renderables(renderables);
+        }
+        renderables
+            .iter()
+            .map(|renderable| {
+                let mut segments = self.render(renderable.as_ref(), Some(options));
+                if !segments.is_empty() && renderable.print_end_line(options) {
+                    segments.push(Segment::line());
+                }
+                segments
+            })
+            .collect()
+    }
+
+    /// Push a live display on to this console's stack, returning whether it
+    /// is the only one (the display that draws). Port of `Console.set_live`,
+    /// which upstream's `Live` calls when it starts.
+    ///
+    /// The port's [`Live`](crate::live::Live) owns its console and does not
+    /// share it with another display ([DIVERGENCES §17]), so it has no stack
+    /// to join; the stack is here for a display that shares a console.
+    ///
+    /// [DIVERGENCES §17]: https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/DIVERGENCES.md#17-live-owns-its-console-and-sink-redirect-through-proxy-writers-settled-in-0022
+    pub fn set_live(&self, live: std::sync::Arc<dyn std::any::Any + Send + Sync>) -> bool {
+        let mut stack = lock_or_recover(&self.live_stack);
+        stack.push(live);
+        stack.len() == 1
+    }
+
+    /// Pop the last live display pushed by [`set_live`](Self::set_live).
+    /// Port of `Console.clear_live`; with none left, nothing happens
+    /// (upstream raises `IndexError`).
+    pub fn clear_live(&self) {
+        lock_or_recover(&self.live_stack).pop();
+    }
+
+    /// Use the alternate screen until the returned guard drops. Port of
+    /// `Console.screen(hide_cursor=…, style=…)`, Python's context manager as
+    /// an RAII guard: the alternate screen is switched on (and the cursor
+    /// hidden, when `hide_cursor`), and switched back when the guard drops,
+    /// if it was switched at all (only a terminal is). Print a full-screen
+    /// renderable with [`ScreenContext::update`].
+    pub fn screen(
+        &self,
+        hide_cursor: bool,
+        style: Option<crate::style::StyleType>,
+    ) -> ScreenContext<'_> {
+        let changed = self.set_alt_screen(true);
+        if changed && hide_cursor {
+            self.show_cursor(false);
+        }
+        // `Screen(style=style or "")`.
+        let style = style.unwrap_or_else(|| "".into());
+        ScreenContext {
+            console: self,
+            hide_cursor,
+            changed,
+            screen: Some(crate::screen::Screen::empty().style(style.clone())),
+            style,
+        }
+    }
+
+    /// Display a status and spinner until it is stopped. Port of
+    /// `Console.status`: `status` carries the message and upstream's
+    /// keyword arguments (`spinner`, `spinner_style`, `speed`,
+    /// `refresh_per_second`), and the display starts at once on a copy of
+    /// this console, writing to standard output, as `with
+    /// console.status(…):` does; [`LiveStatus::stop`](crate::status::LiveStatus::stop)
+    /// ends it.
+    pub fn status(
+        &self,
+        status: crate::status::Status,
+    ) -> crate::status::LiveStatus<std::io::Stdout> {
+        self.status_to(status, std::io::stdout())
+    }
+
+    /// [`status`](Self::status), writing to `writer` instead of standard
+    /// output (upstream's console `file`).
+    pub fn status_to<W: Write + Send + 'static>(
+        &self,
+        status: crate::status::Status,
+        writer: W,
+    ) -> crate::status::LiveStatus<W> {
+        status.start(self.clone(), writer)
     }
 
     /// Whether the alternate screen is enabled. Port of
@@ -2509,6 +2744,8 @@ impl ConsoleBuilder {
             is_alt_screen: std::sync::atomic::AtomicBool::new(false),
             record: std::sync::atomic::AtomicBool::new(self.record),
             record_buffer: std::sync::Mutex::new(Vec::new()),
+            render_hooks: std::sync::Mutex::new(Vec::new()),
+            live_stack: std::sync::Mutex::new(Vec::new()),
             log_render: std::sync::Mutex::new(new_log_render(self.log_time, self.log_path)),
             log_time: self.log_time,
             log_path: self.log_path,
@@ -2934,10 +3171,12 @@ impl Console {
                 link_path.as_deref(),
             );
         let mut segments = self.render(&table, None);
-        if segments.is_empty() {
-            return Ok(());
+        if !segments.is_empty() {
+            segments.push(Segment::line());
         }
-        segments.push(Segment::line());
+        let segments = self
+            .process_render_hooks(vec![segments], &self.options())
+            .concat();
         let segments = Segment::split_and_crop_lines(&segments, self.width(), None, false, true)
             .into_iter()
             .flatten()
@@ -3009,7 +3248,8 @@ impl Console {
             None => None,
         };
 
-        let mut segments: Vec<Segment> = Vec::new();
+        // Each renderable `_collect_renderables` gives, rendered with its end.
+        let mut items: Vec<Vec<Segment>> = Vec::new();
         let mut emit = |renderable: &dyn Renderable, end: Option<&str>| {
             let mut rendered = if render_options.max_width < 1 {
                 Vec::new()
@@ -3039,18 +3279,7 @@ impl Console {
             if let Some(console_style) = &console_style {
                 rendered = Segment::apply_style_with(&rendered, Some(console_style), None);
             }
-            // The style goes on each line, never on the newlines.
-            if let Some(style) = &style {
-                let mut styled = Vec::with_capacity(rendered.len());
-                for (line, terminated) in Segment::split_lines_terminator(&rendered) {
-                    styled.extend(Segment::apply_style_with(&line, Some(style), None));
-                    if terminated {
-                        styled.push(Segment::line());
-                    }
-                }
-                rendered = styled;
-            }
-            segments.extend(rendered);
+            items.push(rendered);
         };
 
         // An empty print is a new line (`NewLine()`); with another `end`, an
@@ -3092,6 +3321,22 @@ impl Console {
             }
         }
         flush(&mut texts, &mut emit);
+
+        let mut segments: Vec<Segment> = Vec::new();
+        for mut rendered in self.process_render_hooks(items, &render_options) {
+            // The style goes on each line, never on the newlines.
+            if let Some(style) = &style {
+                let mut styled = Vec::with_capacity(rendered.len());
+                for (line, terminated) in Segment::split_lines_terminator(&rendered) {
+                    styled.extend(Segment::apply_style_with(&line, Some(style), None));
+                    if terminated {
+                        styled.push(Segment::line());
+                    }
+                }
+                rendered = styled;
+            }
+            segments.extend(rendered);
+        }
 
         if options.new_line_start {
             let plain: String = segments
