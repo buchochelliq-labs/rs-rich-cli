@@ -1,0 +1,6 @@
+# cargo fuzz's build output, working corpora and findings: only the seeds
+# under `seeds/` are committed (docs/design/fuzzing.md).
+/target/
+/corpus/
+/artifacts/
+/coverage/

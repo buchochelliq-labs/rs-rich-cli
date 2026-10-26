@@ -1,0 +1,180 @@
+# Fuzz targets for every parser that takes outside input (docs/design/fuzzing.md).
+#
+# Not a workspace member and never published: `cargo fuzz` needs a nightly
+# toolchain and builds with sanitizers, so this crate has its own workspace
+# and lockfile, as `cargo fuzz init` makes. Run one target with
+# `cargo +nightly fuzz run <target>` from the repository root.
+[package]
+name = "rs-rich-fuzz"
+version = "0.0.0"
+edition = "2021"
+publish = false
+
+[package.metadata]
+cargo-fuzz = true
+
+# Its own workspace, so it never joins the repo's.
+[workspace]
+
+[lib]
+name = "rich_fuzz"
+path = "src/lib.rs"
+
+[dependencies]
+libfuzzer-sys = "0.4"
+# Core without syntect: a Markdown code block renders as plain code, which
+# is the same layout, without loading syntect's grammars on every input.
+rich = { package = "rs-rich", path = "../crates/rich", default-features = false, features = ["markdown"] }
+rich-diagram = { package = "rs-rich-diagram", path = "../crates/rich-diagram" }
+rich-mermaid = { package = "rs-rich-mermaid", path = "../crates/rich-mermaid" }
+rich-data = { package = "rs-rich-data", path = "../crates/rich-data" }
+intuituive = { package = "rs-rich-intuituive", path = "../crates/rich-intuituive", default-features = false }
+rich-record = { package = "rs-rich-record", path = "../crates/rich-record" }
+# Only the input decoder: no server, so no PTYs or sockets.
+rich-web = { package = "rs-rich-web", path = "../crates/rich-web", default-features = false }
+rich-marketplace = { package = "rs-rich-marketplace", path = "../crates/rich-marketplace", default-features = false }
+rich-plugin-api = { package = "rs-rich-plugin-api", path = "../crates/rich-plugin-api" }
+# The WASM loader (wasmi) and nothing else of rs-rich-ext's own.
+rich-ext = { package = "rs-rich-ext", path = "../crates/rich-ext", default-features = false, features = ["wasm-plugins"] }
+# The WebSocket reader rs-rich-web's server uses, at its version and features.
+tungstenite = { version = "0.30", default-features = false, features = ["handshake"] }
+# Signs fuzzed bytes with rs-rich-marketplace's test keys, so the parsers
+# behind a signature check are reached.
+minisign = "0.10"
+
+# Debug info in the sanitizer build, for readable crash backtraces.
+[profile.release]
+debug = 1
+
+[[bin]]
+name = "markup"
+path = "fuzz_targets/markup.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "ansi"
+path = "fuzz_targets/ansi.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "markdown"
+path = "fuzz_targets/markdown.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "json"
+path = "fuzz_targets/json.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "dot"
+path = "fuzz_targets/dot.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "mermaid"
+path = "fuzz_targets/mermaid.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "csv"
+path = "fuzz_targets/csv.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "jsonl"
+path = "fuzz_targets/jsonl.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "stylesheet"
+path = "fuzz_targets/stylesheet.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "vt"
+path = "fuzz_targets/vt.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "tape"
+path = "fuzz_targets/tape.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "web_input"
+path = "fuzz_targets/web_input.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "web_frames"
+path = "fuzz_targets/web_frames.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "marketplace_documents"
+path = "fuzz_targets/marketplace_documents.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "marketplace_signature"
+path = "fuzz_targets/marketplace_signature.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "marketplace_signed"
+path = "fuzz_targets/marketplace_signed.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "marketplace_artifact"
+path = "fuzz_targets/marketplace_artifact.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "plugin_manifest"
+path = "fuzz_targets/plugin_manifest.rs"
+test = false
+doc = false
+bench = false
+
+[[bin]]
+name = "plugin_wasm"
+path = "fuzz_targets/plugin_wasm.rs"
+test = false
+doc = false
+bench = false
