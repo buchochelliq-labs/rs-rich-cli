@@ -24,6 +24,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 - **`rich serve --compress`** (CLI, `serve` feature): deflates frames of 1 KiB or more for pages that can undo it. Off by default; worth it over a slow link.
 
+### rs-rich-doom's core gaps (rich-art, intuituive, rich-record)
+
+What rs-rich-doom built for itself, made generic
+([doom-core-gaps](docs/design/doom-core-gaps.md)).
+
+- **Raw Kitty frames** (rich-art, `kitty`): `kitty::transmit_rgb`
+  (`f=24`) beside `transmit_rgba`, and `kitty::transmit_raw` with a
+  placement id and zlib compression (`o=z`). rs-rich-record's emulator
+  decodes them to the pixels sent.
+
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
 
 - **Pictures where the page puts them.** Noctiluca decodes each picture

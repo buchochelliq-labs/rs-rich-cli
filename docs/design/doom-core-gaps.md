@@ -13,6 +13,7 @@ crates (rs-rich 0.0.11, rs-rich-ext 0.0.18, rs-rich-art 0.0.14,
 rs-rich-interact 0.0.9, rs-rich-intuituive 0.0.6). The integration branch
 `claude/next-priority-items-3c5p8e-wip-integ3` (2135f4b) was checked too:
 rs-rich-doom builds and passes on it, and none of these gaps is closed there.
+Each gap below now opens with its status in 0.0.23.
 
 Each entry follows rs-rich's rule that core holds generic pieces only. Each
 proposal names a second, non-Doom use, and nothing Doom-specific (WAD, DMX,
@@ -34,6 +35,22 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
 ## Gaps
 
 ### 1. A live frame image node (intuiTUIve, `art` plugin)
+
+**Status: closed in 0.0.23** (wave 1, `ad84120f`). intuiTUIve `art`'s
+`picture_of(picture: impl Fn() -> Option<Picture>, view: ImageView)` draws
+each new frame at once, with no worker and no "loading". rs-rich-art's
+`Picture::from_rgba` and `Picture::next_rgba` make a frame from raw RGBA,
+and a frame of the same picture keeps its id: Kitty gets it again under
+that id (raw pixels, `f=32`), and `image_graphics` frees it once. The
+pictures are fitted to the cells as the cells were drawn. Not taken
+from the proposal: `ImageView::aspect` (a picture shown at a ratio other
+than its pixels'; gap 12's `PixelBuf::draw_fitted` does it for pixel
+cells, and an app can resample a frame before handing it over),
+`ImageView::cell_px` and `keep_last_row`. Tests: `image.rs`'s
+`live_frames_keep_one_kitty_id_and_are_freed_once`,
+`sixel_frames_are_drawn_again_and_counted` and
+`an_overlay_picture_partly_covered_is_not_drawn_over_what_covers_it`, and
+`picture_of`'s doc-test (half blocks, no worker).
 
 - **What Doom needed:** show a new in-memory RGBA frame 35 times a second as
   real pixels (Kitty, Sixel, iTerm2), fitted to the node and kept to an aspect
@@ -86,6 +103,17 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
 
 ### 3. Kitty raw-pixel transmission and placement ids (rs-rich-art)
 
+**Status: closed in 0.0.23.** Wave 1 added `kitty::transmit_rgba`
+(`f=32`, chunked), which `Picture` uses for raw frames. This gap's work
+added the rest: `kitty::transmit_rgb` (`f=24`) and
+`kitty::transmit_raw(&RawImage, &Transmit)`, where `Transmit` carries the
+image id, a placement id (`p`), the cells and zlib compression (`o=z`,
+through flate2, which png already brings). Tests: rs-rich-art's
+`raw_pixels_are_chunked_and_round_trip_compressed_or_not` (keys, chunks
+of at most 4096 bytes, payloads read back, compressed or not), and
+rs-rich-record's `tests/kitty_raw.rs`, where the emulator decodes RGB and
+RGBA, compressed or not, to the pixels sent.
+
 - **What Doom needed:** send a new frame each tic without a PNG encode.
 - **Workaround:** PNG through `graphics::encode_png` each frame, about 180 kB
   a frame and the main cost of Kitty mode.
@@ -100,6 +128,9 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
   round-trips.
 
 ### 4. Made-up releases with a first-press hold and a repeat hold (intuiTUIve)
+
+**Status: closed in 0.0.22** (`e7651f81`): `App::synthesize_releases_with(Holds::new(first, repeat))`.
+Tests: `tests/input_timing.rs`, with `Holds::new(400 ms, 120 ms)`.
 
 - **What Doom needed:** on terminals without release reports, hold a key
   across the keyboard's repeat delay after the first press, but let it go
@@ -148,6 +179,13 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
   catch up later.
 
 ### 6. Frame timings in `FrameStats` (intuiTUIve)
+
+**Status: closed in 0.0.23** (wave 1, `7d285128`). `FrameStats` has
+`draw`, `paint`, `write`, `painted`, and the totals `total_bytes`,
+`total_draw`, `total_paint`, `total_write`, `frames` and `skipped`;
+`App::timedemo` runs a script at full speed and reports each frame.
+Tests: `tests/timedemo.rs` (a widget that sleeps 5 ms shows `draw` of
+5 ms or more; `total_bytes` is the sum of each render's bytes).
 
 - **What Doom needed:** `--fps` and `--stats` used to show the time a draw
   took and the bytes over a run.

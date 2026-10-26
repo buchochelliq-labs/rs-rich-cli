@@ -48,3 +48,8 @@ color_quant = "2"
 # Kitty's zlib-compressed image data, and images kept compressed in a
 # recording; png already depends on it.
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
+
+[dev-dependencies]
+# rs-rich-art's Kitty encoder, decoded by the emulator (tests/kitty_raw.rs).
+# Path only, so `cargo publish` drops it.
+rich-art = { package = "rs-rich-art", path = "../rich-art", features = ["kitty"] }
