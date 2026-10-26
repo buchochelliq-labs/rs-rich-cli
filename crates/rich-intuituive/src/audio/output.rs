@@ -1,10 +1,13 @@
 //! Playing sound through a sound card, through cpal: [`output`] opens a
 //! device and gives an [`Output`] to write samples to.
+//! [`OutputOptions::null`] opens no device at all, but takes the samples
+//! at its rate on a clock, and [`Output::tap`] records what an output
+//! takes: sound tested, and captured, on a machine with no sound card.
 
 use std::collections::VecDeque;
-use std::sync::atomic::{AtomicBool, AtomicU32, Ordering};
-use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard};
-use std::time::Duration;
+use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
+use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard, Weak};
+use std::time::{Duration, Instant};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
@@ -21,6 +24,7 @@ pub struct OutputOptions {
     rate: Option<u32>,
     channels: Option<u16>,
     queue: Duration,
+    null: bool,
 }
 
 impl Default for OutputOptions {
@@ -39,6 +43,31 @@ impl OutputOptions {
             rate: None,
             channels: None,
             queue: Duration::from_millis(250),
+            null: false,
+        }
+    }
+
+    /// No device: an output that takes samples at its rate on the real
+    /// clock (44,100 a second in two channels unless [`rate`](Self::rate)
+    /// and [`channels`](Self::channels) say otherwise) and drops them,
+    /// never more than its queue ahead of a writer. What a test of sound
+    /// opens on a machine with no sound card, with a [`tap`](Output::tap)
+    /// to see what it took.
+    ///
+    /// ```
+    /// use intuituive::audio::{output, OutputOptions};
+    /// use std::time::Duration;
+    ///
+    /// let null = output(OutputOptions::null().rate(8000).channels(1)).unwrap();
+    /// let tap = null.tap(Duration::from_secs(1));
+    /// null.write(&[0.5; 400]);
+    /// std::thread::sleep(Duration::from_millis(200));
+    /// assert!(tap.samples().contains(&0.5));
+    /// ```
+    pub fn null() -> Self {
+        OutputOptions {
+            null: true,
+            ..OutputOptions::new()
         }
     }
 
@@ -150,7 +179,17 @@ struct Shared {
     stop: AtomicBool,
     /// Why the stream broke, once it has.
     failed: Mutex<Option<String>>,
+    /// What renders the samples, for an output made with a renderer
+    /// ([`output_with`]), instead of the queue.
+    render: Mutex<Option<Render>>,
+    /// The samples of a callback, before they become the device's format.
+    scratch: Mutex<Vec<f32>>,
+    /// The taps recording what the device takes.
+    taps: Mutex<Vec<Weak<TapShared>>>,
 }
+
+/// A renderer: fills interleaved samples for the channels given.
+type Render = Box<dyn FnMut(&mut [f32], u16) + Send>;
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex.lock().unwrap_or_else(|e| e.into_inner())
@@ -162,22 +201,175 @@ impl Shared {
         self.room.notify_all();
     }
 
-    /// The callback: fill `out` from the queue (silence while paused or
-    /// short), at the volume.
+    fn new(
+        device: String,
+        rate: u32,
+        channels: u16,
+        queue: Duration,
+        render: Option<Render>,
+    ) -> Shared {
+        let capacity = (queue.as_secs_f64() * f64::from(rate)) as usize * usize::from(channels);
+        Shared {
+            device,
+            rate,
+            channels,
+            queue: Mutex::new(VecDeque::with_capacity(capacity)),
+            room: Condvar::new(),
+            capacity: capacity.max(usize::from(channels)),
+            paused: AtomicBool::new(false),
+            volume: AtomicU32::new(1.0f32.to_bits()),
+            stop: AtomicBool::new(false),
+            failed: Mutex::new(None),
+            render: Mutex::new(render),
+            scratch: Mutex::new(Vec::new()),
+            taps: Mutex::new(Vec::new()),
+        }
+    }
+
+    /// The callback: fill `out` from the queue or the renderer (silence
+    /// while paused or short), at the volume.
     fn play<T: SizedSample + FromSample<f32>>(&self, out: &mut [T]) {
+        let mut scratch = lock(&self.scratch);
+        scratch.clear();
+        scratch.resize(out.len(), 0.0);
+        self.fill(&mut scratch);
+        for (slot, &sample) in out.iter_mut().zip(scratch.iter()) {
+            *slot = T::from_sample(sample);
+        }
+    }
+
+    /// Fill `out`, interleaved, with what plays next, at the volume, and
+    /// hand it to the taps.
+    fn fill(&self, out: &mut [f32]) {
         let volume = f32::from_bits(self.volume.load(Ordering::Relaxed));
         let paused = self.paused.load(Ordering::Relaxed);
-        let mut queue = lock(&self.queue);
-        for slot in out.iter_mut() {
-            let sample = if paused {
-                0.0
+        out.fill(0.0);
+        let mut render = lock(&self.render);
+        if !paused {
+            if let Some(renderer) = render.as_mut() {
+                let channels = self.channels;
+                let rendered = std::panic::catch_unwind(std::panic::AssertUnwindSafe(|| {
+                    renderer(out, channels)
+                }));
+                if rendered.is_err() {
+                    *render = None;
+                    out.fill(0.0);
+                    lock(&self.failed).get_or_insert_with(|| "the renderer panicked".to_string());
+                    self.halt();
+                }
             } else {
-                queue.pop_front().unwrap_or(0.0)
-            };
-            *slot = T::from_sample(sample * volume);
+                let mut queue = lock(&self.queue);
+                for slot in out.iter_mut() {
+                    *slot = queue.pop_front().unwrap_or(0.0);
+                }
+            }
         }
-        drop(queue);
+        drop(render);
+        if volume != 1.0 {
+            out.iter_mut().for_each(|s| *s *= volume);
+        }
+        let mut taps = lock(&self.taps);
+        taps.retain(|tap| match tap.upgrade() {
+            Some(tap) => {
+                tap.take(out, self.channels);
+                true
+            }
+            None => false,
+        });
+        drop(taps);
         self.room.notify_all();
+    }
+}
+
+/// What a [`Tap`] and its output share.
+struct TapShared {
+    rate: u32,
+    channels: u16,
+    /// The newest samples taken, interleaved, at most `keep`.
+    samples: Mutex<VecDeque<f32>>,
+    keep: usize,
+    /// Frames taken since the tap was made.
+    frames: AtomicU64,
+}
+
+impl TapShared {
+    fn take(&self, out: &[f32], channels: u16) {
+        let mut samples = lock(&self.samples);
+        let skip = out.len().saturating_sub(self.keep);
+        samples.extend(&out[skip..]);
+        let over = samples.len().saturating_sub(self.keep);
+        samples.drain(..over);
+        drop(samples);
+        let frames = out.len() / usize::from(channels.max(1));
+        self.frames.fetch_add(frames as u64, Ordering::Relaxed);
+    }
+}
+
+/// What an output's device took, from when the tap was made
+/// ([`Output::tap`]): the newest samples, up to the length it keeps, and
+/// how many frames in all. Sound tested without a sound card (with
+/// [`OutputOptions::null`]), or an app's sound recorded for a demo or a
+/// bug report. It stops recording when dropped.
+#[derive(Clone)]
+pub struct Tap {
+    shared: Arc<TapShared>,
+}
+
+impl std::fmt::Debug for Tap {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Tap")
+            .field("rate", &self.shared.rate)
+            .field("channels", &self.shared.channels)
+            .field("frames", &self.frames())
+            .finish()
+    }
+}
+
+impl Tap {
+    /// Samples a second.
+    pub fn rate(&self) -> u32 {
+        self.shared.rate
+    }
+
+    /// Channels a frame has.
+    pub fn channels(&self) -> u16 {
+        self.shared.channels
+    }
+
+    /// The samples kept, interleaved, oldest first, after the volume.
+    pub fn samples(&self) -> Vec<f32> {
+        lock(&self.shared.samples).iter().copied().collect()
+    }
+
+    /// The frames the device has taken since the tap was made, kept or
+    /// not.
+    pub fn frames(&self) -> u64 {
+        self.shared.frames.load(Ordering::Relaxed)
+    }
+
+    /// Drop the samples kept (the count of frames goes on).
+    pub fn clear(&self) {
+        lock(&self.shared.samples).clear();
+    }
+
+    /// Write the samples kept to a WAV file, 32-bit float, at the tap's
+    /// rate and channels.
+    ///
+    /// # Errors
+    /// The file cannot be written.
+    #[cfg(feature = "wav")]
+    pub fn to_wav(&self, path: impl AsRef<std::path::Path>) -> Result<(), AudioError> {
+        let spec = hound::WavSpec {
+            channels: self.shared.channels,
+            sample_rate: self.shared.rate,
+            bits_per_sample: 32,
+            sample_format: hound::SampleFormat::Float,
+        };
+        let mut writer = hound::WavWriter::create(path, spec).map_err(error)?;
+        for sample in self.samples() {
+            writer.write_sample(sample).map_err(error)?;
+        }
+        writer.finalize().map_err(error)
     }
 }
 
@@ -201,12 +393,20 @@ impl Shared {
 /// No such host or device, no output at the rate, or the stream would not
 /// start.
 pub fn output(options: OutputOptions) -> Result<Output, AudioError> {
+    open_output(options, None)
+}
+
+/// Open an output that plays `render` or its queue.
+fn open_output(options: OutputOptions, render: Option<Render>) -> Result<Output, AudioError> {
+    if options.null {
+        return Ok(null_output(&options, render));
+    }
     let (opened, result) = mpsc::channel();
     std::thread::Builder::new()
         .name("intuituive-audio-out".into())
         .spawn(move || {
             let _quiet = quiet();
-            let (stream, shared) = match start(&options) {
+            let (stream, shared) = match start(&options, render) {
                 Ok(started) => started,
                 Err(e) => {
                     let _ = opened.send(Err(e));
@@ -229,8 +429,50 @@ pub fn output(options: OutputOptions) -> Result<Output, AudioError> {
     })
 }
 
+/// An output with no device: a thread takes its samples at its rate.
+fn null_output(options: &OutputOptions, render: Option<Render>) -> Output {
+    let rate = options.rate.unwrap_or(44_100);
+    let channels = options.channels.unwrap_or(2);
+    let shared = Arc::new(Shared::new(
+        "null".into(),
+        rate,
+        channels,
+        options.queue,
+        render,
+    ));
+    let taker = shared.clone();
+    let spawned = std::thread::Builder::new()
+        .name("intuituive-audio-null".into())
+        .spawn(move || {
+            let start = Instant::now();
+            let mut taken = 0u64;
+            let mut buffer = Vec::new();
+            while !taker.stop.load(Ordering::SeqCst) {
+                std::thread::sleep(Duration::from_millis(2));
+                let due = (start.elapsed().as_secs_f64() * f64::from(rate)) as u64;
+                if due > taken {
+                    buffer.clear();
+                    buffer.resize((due - taken) as usize * usize::from(channels), 0.0);
+                    taker.fill(&mut buffer);
+                    taken = due;
+                }
+            }
+        });
+    if let Err(e) = spawned {
+        lock(&shared.failed).get_or_insert(e.to_string());
+        shared.halt();
+    }
+    Output {
+        _handle: Arc::new(Handle(shared.clone())),
+        shared,
+    }
+}
+
 /// Open and start the stream of a new output.
-fn start(options: &OutputOptions) -> Result<(cpal::Stream, Arc<Shared>), AudioError> {
+fn start(
+    options: &OutputOptions,
+    render: Option<Render>,
+) -> Result<(cpal::Stream, Arc<Shared>), AudioError> {
     let host = options.host.open()?;
     let device = match &options.device {
         None => host
@@ -284,19 +526,7 @@ fn start(options: &OutputOptions) -> Result<(cpal::Stream, Arc<Shared>), AudioEr
         sample_rate: rate,
         buffer_size: cpal::BufferSize::Default,
     };
-    let capacity = (options.queue.as_secs_f64() * f64::from(rate)) as usize * usize::from(channels);
-    let shared = Arc::new(Shared {
-        device: label,
-        rate,
-        channels,
-        queue: Mutex::new(VecDeque::with_capacity(capacity)),
-        room: Condvar::new(),
-        capacity: capacity.max(usize::from(channels)),
-        paused: AtomicBool::new(false),
-        volume: AtomicU32::new(1.0f32.to_bits()),
-        stop: AtomicBool::new(false),
-        failed: Mutex::new(None),
-    });
+    let shared = Arc::new(Shared::new(label, rate, channels, options.queue, render));
     let stream = match format {
         SampleFormat::F32 => build::<f32>(&device, &config, &shared),
         SampleFormat::I16 => build::<i16>(&device, &config, &shared),
@@ -455,6 +685,22 @@ impl Output {
     /// Why the stream broke, if it has.
     pub fn failed(&self) -> Option<String> {
         lock(&self.shared.failed).clone()
+    }
+
+    /// Record what the device takes from now on, the newest `keep` of it
+    /// (see [`Tap`]).
+    pub fn tap(&self, keep: Duration) -> Tap {
+        let keep = (keep.as_secs_f64() * f64::from(self.shared.rate)).round() as usize
+            * usize::from(self.shared.channels);
+        let tap = Arc::new(TapShared {
+            rate: self.shared.rate,
+            channels: self.shared.channels,
+            samples: Mutex::new(VecDeque::with_capacity(keep.min(1 << 22))),
+            keep,
+            frames: AtomicU64::new(0),
+        });
+        lock(&self.shared.taps).push(Arc::downgrade(&tap));
+        Tap { shared: tap }
     }
 
     /// Stop playing, for good.

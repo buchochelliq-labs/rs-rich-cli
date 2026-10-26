@@ -95,7 +95,7 @@ pub use capture::{
 };
 pub use live::Capture;
 #[cfg(feature = "audio")]
-pub use output::{output, output_devices, Output, OutputOptions};
+pub use output::{output, output_devices, Output, OutputOptions, Tap};
 pub use pcm::{deinterleave, pcm, play, Format, Pcm};
 #[cfg(feature = "audio")]
 pub use picker::picker;

@@ -268,6 +268,18 @@ Tests: `tests/timedemo.rs` (a widget that sleeps 5 ms shows `draw` of
 
 ### 9. A paced test sink and capture for audio output (intuiTUIve, `audio`)
 
+**Status: closed in 0.0.23.** `OutputOptions::null()` opens an `Output`
+with no device (44,100 Hz in two channels unless set) that takes samples
+at its rate on the real clock, never more than its queue ahead.
+`Output::tap(keep: Duration) -> Tap` records what any output's device
+takes, after the volume: the newest `keep` of it (`Tap::samples`), the
+frames in all (`Tap::frames`), and `Tap::to_wav(path)` (32-bit float)
+with `wav`. The null output runs on the real clock only, not the app's:
+under the driver a test waits real time for it. Tests:
+`tests/audio_null.rs` (44,100 frames a second within 2%, a writer held to
+the queue; volume 0 taps only zeros; a 1 s tap keeps 1 s; hound reads the
+WAV back the same), and `OutputOptions::null`'s doc-test.
+
 - **What Doom needed:** prove that sound reaches the device (sample counts,
   silence on mute, volume) on a machine with no sound card, and record the
   game's sound for a video.

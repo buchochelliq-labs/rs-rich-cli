@@ -51,6 +51,11 @@ What rs-rich-doom built for itself, made generic
   `stepped_worker` runs a simulation on its own thread (an emulator core,
   a script VM, a replay) and hands it the ticks the app's clock gives,
   waiting for it to finish them, so it is exact under the driver.
+- **Sound without a sound card** (intuituive, `audio`):
+  `OutputOptions::null()` is an output that takes samples at its rate and
+  drops them, and `Output::tap` records what any output plays (with
+  `Tap::to_wav` under `wav`). Tests of sound run on CI, and an app's sound
+  can be saved for a demo.
 
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
 
