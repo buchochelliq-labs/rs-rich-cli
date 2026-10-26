@@ -168,7 +168,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 - **The docs playground spike's lockfile** (`playground/spike/Cargo.lock`)
   is regenerated with cargo for the path crates' current versions and
-  rs-rich's `compact_str`; it named versions from before 0.0.22.
+  rs-rich's `compact_str`; it named versions from before 0.0.22. CI's
+  release workflow regressions job now checks it with `cargo metadata
+  --locked`, so it cannot go stale unseen again.
 
 ### Migration notes for this release (core, ext)
 

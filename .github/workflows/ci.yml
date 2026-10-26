@@ -48,6 +48,12 @@ jobs:
       - name: RELEASES.toml matches the manifests and the dependency order
         run: python3 scripts/release_cohort.py check
 
+      # The docs playground spike has a workspace and a lockfile of its own,
+      # which no other job builds: a version bump that leaves it stale shows
+      # here (0.0.23 plan, item 15).
+      - name: The playground spike's lockfile is current
+        run: cargo metadata --locked --format-version 1 --manifest-path playground/spike/Cargo.toml > /dev/null
+
       - name: Test release selection and registry verification
         run: python3 -m unittest discover -s scripts -p 'test_release*.py' -v
 
