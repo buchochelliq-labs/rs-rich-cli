@@ -199,7 +199,12 @@ fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
 
 impl Shared {
     fn halt(&self) {
+        // Under the taps' lock, so that once this returns no tap records
+        // anything more: a fill under way has finished tapping, and the
+        // next one sees the stop.
+        let taps = lock(&self.taps);
         self.stop.store(true, Ordering::SeqCst);
+        drop(taps);
         self.room.notify_all();
     }
 
@@ -272,6 +277,10 @@ impl Shared {
             out.iter_mut().for_each(|s| *s *= volume);
         }
         let mut taps = lock(&self.taps);
+        if self.stop.load(Ordering::SeqCst) {
+            // Stopped: the device takes nothing more.
+            taps.clear();
+        }
         taps.retain(|tap| match tap.upgrade() {
             Some(tap) => {
                 tap.take(out, self.channels);
