@@ -105,13 +105,15 @@ Never weaken a target to make a finding go away.
 The [1.0 exit criteria](../plans/1.0.0.md#exit-criteria-for-100) ask that the
 fuzz targets have "run in nightly CI for at least four weeks without an open
 finding". The clock starts with the first scheduled run of `fuzz.yml` on
-`main` after this lands, expected the night of the merge (the schedule is
-01:43 UTC). Record that date here when it happens:
+`main` after the pull request that brings it in merges, expected the night
+of the merge (the schedule is 01:43 UTC). Record that date here when it
+happens:
 
 - **Before it landed** (2026-10-26, locally, nightly-2026-05-20 and
   cargo-fuzz 0.13.2): every target ran 60 seconds, which found the three
   bugs below, then 120 seconds each after the fixes, clean.
-- **First nightly run:** not yet (the workflow is on the 0.0.23 branch).
+- **First nightly run:** not yet: the first scheduled run of `fuzz.yml`
+  on `main` after the 0.0.23 extras pull request merges.
 - **Earliest the criterion can be met:** four weeks after that date, with
   no open finding below. A new finding restarts the clock once it is fixed.
 
