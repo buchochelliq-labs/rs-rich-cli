@@ -92,7 +92,8 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   were a minor one, and each breaking change must be listed, with its
   reason, in `api/semver-breaks.toml`. This release lists rs-rich-ext's
   `rst` tree and `surface::Cell`, and rs-rich-intuituive's `FrameStats`
-  fields and its `ImageView` and `Pixels` from rs-rich-art. rs-rich's
+  fields and its `ImageView` and `Pixels` from rs-rich-art, and noctiluca's
+  added fields and variants. rs-rich's
   `CompactString` change is not one cargo-semver-checks can see.
   `scripts/release.py plan --semver-checks`, which `release.yml` runs,
   refuses a version bump smaller than the change. The tools are pinned in

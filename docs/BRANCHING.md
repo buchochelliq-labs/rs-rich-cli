@@ -301,7 +301,7 @@ python scripts/validate_release.py --tag release-0.0.20
 ```
 
 `--tag` is required. The wrapper always ends by running
-`scripts/release.py plan <tag>`, so the local validation list proves the selected
+`scripts/release.py plan <tag> --semver-checks`, so the local validation list proves the selected
 release tag as well as build/test health. Run locally, `plan` of a release
 tag checks every crate of the release's `RELEASES.toml` (the run checks the
 unpublished ones); a crate tag checks that crate. Its Python release checks are listed
