@@ -82,6 +82,21 @@ cells, and an app can resample a frame before handing it over),
 
 ### 2. A public Sixel encoder for indices and a palette (rs-rich-art)
 
+**Status: closed in 0.0.23.** `rich_art::sixel::encode_palette(indices,
+palette, width, height) -> Option<String>` and
+`rich_art::sixel::index_exact(rgba) -> Option<(indices, palette)>`, behind
+`sixel`. The crate's own fixed-ANSI encoder is now `encode_palette` over
+the 256-colour palette, byte for byte as before. Its bytes match
+rs-rich-doom's encoder but for P1, which the raster attributes override
+(9 here, as in every encoder in the crate; 0 there). Tests:
+`a_palette_of_ones_own_encodes_exactly_and_validates` (rs-rich-doom's
+bytes for a 3x7 image, `icy_sixel` decodes the size and `#123456` within
+Sixel's precision, `None` left unset, a long run split, past the palette,
+short or past `MAX_PIXELS` refused) and
+`exact_indexing_keeps_up_to_256_colours`. Not done: `Picture`'s Sixel path
+still quantizes; using `encode_palette` there for frames of 256 colours or
+fewer would change the Sixel bytes of pictures already in tapes.
+
 - **What Doom needed:** encode a frame that already has at most 256 colours
   with exactly those colours, quickly: no quantizing, no resampling.
 - **Workaround:** `graphics::sixel_indexed` (about 90 lines), with a fallback

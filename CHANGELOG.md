@@ -33,6 +33,10 @@ What rs-rich-doom built for itself, made generic
   (`f=24`) beside `transmit_rgba`, and `kitty::transmit_raw` with a
   placement id and zlib compression (`o=z`). rs-rich-record's emulator
   decodes them to the pixels sent.
+- **Sixel in a palette of one's own** (rich-art, `sixel`):
+  `sixel::encode_palette` encodes indices into a palette of up to 256
+  colours exactly, with no quantizing or resampling, and
+  `sixel::index_exact` makes the indices and palette from RGBA.
 
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
 
