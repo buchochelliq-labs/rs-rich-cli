@@ -139,7 +139,8 @@ What rs-rich-doom built for itself, made generic
   `OutputOptions::null()` is an output that takes samples at its rate and
   drops them, and `Output::tap` records what any output plays (with
   `Tap::to_wav` under `wav`). Tests of sound run on CI, and an app's sound
-  can be saved for a demo.
+  can be saved for a demo. Once `Output::stop` returns, a tap records
+  nothing more.
 - **A voice mixer for sound effects** (intuituive, `pcm`/`audio`):
   `audio::Mixer` plays clips on numbered channels, each at its own rate,
   gain and pan, changed or stopped while playing, with streams under them.
