@@ -1,8 +1,9 @@
 //! The official marketplace artifacts built here (tests/support/official.rs):
-//! the `textcase` WASM plugin and the built-in micro packs. Their bytes are
-//! pinned, so a rebuild is checked to be the file the marketplace serves;
-//! the plugin runs against this host and the packs read back as micro's
-//! built-in set.
+//! the WASM plugins `textcase` and `wordplay`, the built-in micro packs and
+//! the official themes. Their bytes are pinned, so a rebuild is checked to be
+//! the file the marketplace serves; textcase 0.1.0 runs against this host and
+//! the packs read back as micro's built-in set. `official_packages.rs` checks
+//! what the 0.0.23 plugins and themes do.
 //!
 //! `write_official_artifacts` (ignored) writes them out, laid out as the
 //! marketplace repository's `artifacts/`:
@@ -36,13 +37,13 @@ fn pins() -> Vec<(String, String, usize)> {
         .collect()
 }
 
-/// A rebuild is byte for byte what was pinned (and listed): a change to
-/// textcase.wat, to a built-in pack or to the `wat` or `zip` crate shows
-/// here, and needs a new version in the marketplace, never a new hash for
-/// an old one.
+/// A rebuild is byte for byte what was pinned (and listed): a change to a
+/// plugin's `.wat`, a built-in pack, a theme, or the `wat` or `zip` crate
+/// shows here, and needs a new version in the marketplace, never a new hash
+/// for an old one.
 #[test]
 fn every_official_artifact_rebuilds_to_its_pinned_hash() {
-    let built: Vec<(String, String, usize)> = official::artifacts()
+    let built: Vec<(String, String, usize)> = official::all_artifacts()
         .into_iter()
         .map(|(path, bytes)| (path, official::sha256(&bytes), bytes.len()))
         .collect();
@@ -190,7 +191,7 @@ fn write_official_artifacts() {
         std::env::var_os("RICH_OFFICIAL_ARTIFACTS")
             .expect("set RICH_OFFICIAL_ARTIFACTS to the marketplace's artifacts directory"),
     );
-    for (path, bytes) in official::artifacts() {
+    for (path, bytes) in official::all_artifacts() {
         let file = dir.join(&path);
         std::fs::create_dir_all(file.parent().unwrap()).unwrap();
         std::fs::write(&file, &bytes).unwrap();
