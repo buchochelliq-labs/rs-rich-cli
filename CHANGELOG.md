@@ -208,15 +208,20 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `-timedemo` does; `timedemo::script_from_tape` reads a rich-record
   tape's input. `examples/timedemo.rs` runs it on the dashboard.
   `rich record` records a shell, not an app, so it has no `--timedemo`.
-- **Paint strategies.** `App::paint_strategy` and `RICH_PAINT_STRATEGY`
-  choose `cells` (the default), `rows`, `full`, `scroll` or `best`.
+- **Paint strategies, with `best` the default.** `App::paint_strategy`
+  and `RICH_PAINT_STRATEGY` choose `best` (the default), `cells`, `rows`,
+  `full` or `scroll`.
   `scroll` moves rows that moved together with the terminal's scrolling
   (SU, SD, DECSTBM), so a log line or a list scrolled one row sends about
   one row's bytes: 147 bytes a frame for the log at 80x24, down from
-  4,013. `best` scrolls when rows moved and otherwise paints cells. It is opt-in for this
-  release. Scrolling is off on Windows, under tmux, inline and over a
-  picture; `App::terminal_scroll` turns it on or off wherever the app
-  runs.
+  4,013. `best` scrolls when rows moved and otherwise paints cells. It is
+  within 5% of the best fixed strategy on every scene of the release
+  benchmark, so an app paints with it unless it chooses; `cells` is the
+  0.0.22 behaviour, and `PaintStrategy::default()` is `Best`. A bare
+  rs-rich-ext `Painter` still starts on `cells`, since only its caller
+  knows where pictures sit. Scrolling is off on Windows, under tmux,
+  inline and over a picture; `App::terminal_scroll` turns it on or off
+  wherever the app runs.
 - **A faster painter.** Cells are 12 bytes and `Copy`, with no heap
   string (read a cell's text with `Cell::text()`; the `text` field is
   gone). Lines are written straight into cells without building a

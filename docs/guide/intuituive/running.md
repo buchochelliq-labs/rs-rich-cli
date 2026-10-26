@@ -116,26 +116,28 @@ environment variable, when the app does not choose):
 
 | Strategy | What it sends |
 |---|---|
-| `cells` (the default) | The cells that changed, with the shortest cursor moves, colour changes sent as changes, and runs of blanks erased |
+| `best` (the default) | Per frame: `scroll` when rows moved, else `cells` |
+| `cells` | The cells that changed, with the shortest cursor moves, colour changes sent as changes, and runs of blanks erased |
 | `rows` | Each changed row, from its first change to its last |
 | `full` | Everything, every frame |
 | `scroll` | Rows that moved together (a log's new line, a list scrolled) moved with the terminal's own scrolling, then the cells that still differ |
-| `best` | Per frame: `scroll` when rows moved, else `cells` |
 
 ```rust
 use intuituive::prelude::*;
 use intuituive::PaintStrategy;
 
-let app = App::new(|| label("hello")).paint_strategy(PaintStrategy::Best);
+let app = App::new(|| label("hello")).paint_strategy(PaintStrategy::Cells);
 ```
 
 Every strategy shows the same screen; the benchmark replays each one's
-bytes through a terminal emulator to check it. `best` is opt-in for this
-release, and becomes the default once it has been used for a while. A log
+bytes through a terminal emulator to check it. `best` is the default
+since 0.0.23: on every scene of the benchmark it is within 5% of the best
+fixed strategy, in bytes and in time. `cells` is what 0.0.22 sent. A log
 or a list scrolled one row sends about one row's bytes under `scroll` and
 `best` instead of the whole pane. Scrolling is off on Windows, under tmux
 (which redraws a scroll region itself), in an inline app, and over a
-picture.
+picture; there `best` paints cells. `App::terminal_scroll(true)` or
+`(false)` overrides that wherever the app runs.
 
 ## Frame stats and the timedemo
 
