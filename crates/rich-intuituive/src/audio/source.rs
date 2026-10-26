@@ -54,8 +54,8 @@ pub fn clip(rate: u32, samples: Matrix) -> Clip {
 /// Samples in memory: see [`clip`].
 #[derive(Clone, Debug, PartialEq)]
 pub struct Clip {
-    rate: u32,
-    samples: Matrix,
+    pub(super) rate: u32,
+    pub(super) samples: Matrix,
     at: usize,
 }
 
@@ -63,7 +63,7 @@ pub struct Clip {
 const CLIP_BUFFER: usize = 1024;
 
 impl Clip {
-    fn len(&self) -> usize {
+    pub(super) fn len(&self) -> usize {
         self.samples.iter().map(Vec::len).max().unwrap_or(0)
     }
 }

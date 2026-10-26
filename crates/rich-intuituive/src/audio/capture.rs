@@ -330,8 +330,22 @@ pub fn input(
     Ok(open(options)?.samples())
 }
 
-/// ALSA's messages that a listing or a capture kept off the screen, oldest
-/// first (the last 200). Empty off Linux.
+/// ALSA's messages that a listing, a capture or an output kept off the
+/// screen, oldest first (the last 200). Empty off Linux. A stream's
+/// messages are kept for as long as it runs (an underrun, a write that
+/// failed), not only while it opens.
+///
+/// ```no_run
+/// use intuituive::audio::{messages, output, OutputOptions};
+///
+/// let speaker = output(OutputOptions::new())?;
+/// speaker.write(&[0.0; 4800]);
+/// // Whatever ALSA said meanwhile, here and not on the screen.
+/// for line in messages() {
+///     eprintln!("{line}");
+/// }
+/// # Ok::<(), intuituive::audio::AudioError>(())
+/// ```
 pub fn messages() -> Vec<String> {
     #[cfg(target_os = "linux")]
     return super::alsa::messages();
@@ -347,6 +361,14 @@ pub(super) fn quiet() -> super::alsa::Quiet {
 
 #[cfg(not(target_os = "linux"))]
 pub(super) fn quiet() {}
+
+/// Keep ALSA's messages on this thread off stderr for the thread's life:
+/// called from a stream's callbacks, on the stream's own thread.
+#[inline]
+pub(super) fn quiet_stream_thread() {
+    #[cfg(target_os = "linux")]
+    super::alsa::quiet_thread();
+}
 
 /// Keep `stream` until the capture stops (or its app ends), passing
 /// ALSA's messages on a few times a second.
@@ -534,6 +556,7 @@ where
         .build_input_stream::<T, _, _>(
             *config,
             move |samples: &[T], _| {
+                quiet_stream_thread();
                 scratch.clear();
                 scratch.extend(samples.iter().map(|s| f64::from_sample_(*s)));
                 if let Some(matrix) = framer.push(&scratch) {
@@ -542,11 +565,14 @@ where
             },
             // A glitch or a reroute goes on; anything else ends the
             // samples, and the signal keeps the last buffer.
-            move |e| match e.kind() {
-                cpal::ErrorKind::Xrun
-                | cpal::ErrorKind::DeviceChanged
-                | cpal::ErrorKind::RealtimeDenied => {}
-                _ => errors.fail(e.to_string()),
+            move |e| {
+                quiet_stream_thread();
+                match e.kind() {
+                    cpal::ErrorKind::Xrun
+                    | cpal::ErrorKind::DeviceChanged
+                    | cpal::ErrorKind::RealtimeDenied => {}
+                    _ => errors.fail(e.to_string()),
+                }
             },
             None,
         )

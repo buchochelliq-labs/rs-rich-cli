@@ -51,6 +51,51 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 - **`rich serve --compress`** (CLI, `serve` feature): deflates frames of 1 KiB or more for pages that can undo it. Off by default; worth it over a slow link.
 
+### rs-rich-doom's core gaps (rich-art, intuituive, rich-record)
+
+What rs-rich-doom built for itself, made generic
+([doom-core-gaps](docs/design/doom-core-gaps.md)).
+
+- **Raw Kitty frames** (rich-art, `kitty`): `kitty::transmit_rgb`
+  (`f=24`) beside `transmit_rgba`, and `kitty::transmit_raw` with a
+  placement id and zlib compression (`o=z`). rs-rich-record's emulator
+  decodes them to the pixels sent.
+- **Sixel in a palette of one's own** (rich-art, `sixel`):
+  `sixel::encode_palette` encodes indices into a palette of up to 256
+  colours exactly, with no quantizing or resampling, and
+  `sixel::index_exact` makes the indices and palette from RGBA.
+- **Pixel cells in their own colours** (intuituive):
+  `Node::pixel_colors(PixelColors::Nearest)` colours each quadrant or
+  Braille cell's two sides with the pixel nearest each side's average,
+  never a blend, so a palette stays a palette. `Average` stays the
+  default.
+- **A picture fitted in a pixel buffer** (intuituive):
+  `PixelBuf::draw_fitted` shows a picture at a ratio of its own (an
+  emulator's 4:3 or 8:7) from the cells' real shape, in whole cells,
+  centred, the margins clear, with nearest or averaged pixels. It returns
+  the cells used.
+- **A worker in lockstep with the app's clock** (intuituive):
+  `stepped_worker` runs a simulation on its own thread (an emulator core,
+  a script VM, a replay) and hands it the ticks the app's clock gives,
+  waiting for it to finish them, so it is exact under the driver.
+- **Sound without a sound card** (intuituive, `audio`):
+  `OutputOptions::null()` is an output that takes samples at its rate and
+  drops them, and `Output::tap` records what any output plays (with
+  `Tap::to_wav` under `wav`). Tests of sound run on CI, and an app's sound
+  can be saved for a demo.
+- **A voice mixer for sound effects** (intuituive, `pcm`/`audio`):
+  `audio::Mixer` plays clips on numbered channels, each at its own rate,
+  gain and pan, changed or stopped while playing, with streams under them.
+  `Mixer::new` mixes into an output on its own thread.
+- **An output that calls a renderer** (intuituive, `audio`):
+  `audio::output_with` has the device's callback ask a synthesizer for
+  each block, with no queue between them. Volume, taps and `failed` work
+  as for `output`, and a renderer that panics is reported, not fatal.
+- **ALSA kept off the screen while sound plays** (intuituive, `audio`):
+  an output's or a capture's stream thread keeps ALSA's messages (an
+  underrun, a failed write) for the stream's life, for `audio::messages`,
+  not only while the device opens.
+
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
 
 - **Pictures where the page puts them.** Noctiluca decodes each picture

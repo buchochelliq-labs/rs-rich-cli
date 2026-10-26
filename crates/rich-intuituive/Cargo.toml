@@ -135,6 +135,8 @@ tracing-subscriber = { version = "0.3", default-features = false, features = ["r
 alsa-sys = { version = "0.4", optional = true }
 
 [dev-dependencies]
+# A tap's WAV read back (tests/audio_null.rs).
+hound = "3.5"
 # The Yazi example (examples/files.rs) shows times in the local time zone
 # with rs-rich-ext's `fs::local_time`, behind its `local-time` feature.
 rich-ext = { workspace = true, features = ["local-time", "testing"] }
@@ -220,3 +222,23 @@ required-features = ["art"]
 [[test]]
 name = "raycast"
 required-features = ["art"]
+
+# The null output and its tap (and its WAV), with no sound card.
+[[test]]
+name = "audio_null"
+required-features = ["audio", "wav"]
+
+# The voice mixer, mixed by hand and into a null output.
+[[test]]
+name = "audio_mixer"
+required-features = ["audio"]
+
+# An output whose device calls a renderer, on the null output.
+[[test]]
+name = "audio_render"
+required-features = ["audio"]
+
+# ALSA's messages kept off stderr for an output's life (Linux).
+[[test]]
+name = "audio_alsa_quiet"
+required-features = ["audio"]

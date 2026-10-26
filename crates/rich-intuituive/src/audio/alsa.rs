@@ -4,7 +4,9 @@
 //! listed or opened, a handler of our own takes them instead, on that
 //! thread only (`snd_lib_error_set_local`, so nothing else that uses ALSA
 //! in the process is changed), and keeps them for
-//! [`messages`](super::messages).
+//! [`messages`](super::messages). A stream's own thread (cpal's, where an
+//! underrun or a failed write is reported) is given the handler by the
+//! stream's first callback, for the thread's life: the stream's life.
 //!
 //! The one module of the crate with `unsafe`: three calls into alsa-lib
 //! and the C library, each with its contract stated where it is made.
@@ -117,6 +119,25 @@ impl Quiet {
         let before = unsafe { snd_lib_error_set_local(Some(keep)) };
         Quiet { before }
     }
+}
+
+std::thread_local! {
+    /// The handler is in force on this thread for its life.
+    static KEPT_HERE: std::cell::Cell<bool> = const { std::cell::Cell::new(false) };
+}
+
+/// Keep ALSA's messages on this thread from now on, for the thread's
+/// life: what a stream's callbacks call, on the thread that runs the
+/// stream. Cheap after the first call.
+pub(super) fn quiet_thread() {
+    KEPT_HERE.with(|kept| {
+        if !kept.get() {
+            // SAFETY: sets this thread's handler; the thread keeps it
+            // until it ends.
+            unsafe { snd_lib_error_set_local(Some(keep)) };
+            kept.set(true);
+        }
+    });
 }
 
 impl Drop for Quiet {

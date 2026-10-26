@@ -35,6 +35,7 @@ use rich::color::Color;
 use rich::{Segment, Style};
 
 use crate::node::{Axis, Node};
+use crate::screen::Rect;
 use crate::sprite::Timing;
 use crate::widget::{Canvas, DrawCx, MeasureCx, Widget};
 
@@ -198,6 +199,106 @@ impl PixelBuf {
                 y += sy;
             }
         }
+    }
+
+    /// Draw `src`, a `width` x `height` picture, to fill this buffer as
+    /// `how` says: at a ratio of its own ([`Fitted::aspect`], Doom's
+    /// 320x200 shown at 4:3, an emulator's 8:7) from the cells' real shape
+    /// ([`Fitted::cell_aspect`]), fitted in whole cells and centred, the
+    /// margins [`CLEAR`]. Returns the cells the picture covers (in the
+    /// buffer's cells, [`Fitted::mode`]'s); an empty rectangle, and a
+    /// clear buffer, when `src` is not `width * height` pixels long.
+    ///
+    /// ```
+    /// use intuituive::pixels::{Fitted, PixelBuf, PixelMode};
+    ///
+    /// // 80x24 cells of half blocks; cells twice as tall as wide.
+    /// let mut buf = PixelBuf::new(80, 48);
+    /// let frame = vec![[200, 0, 0, 255]; 320 * 200];
+    /// let used = buf.draw_fitted(&frame, 320, 200, &Fitted::new(PixelMode::HalfBlocks).aspect(4.0 / 3.0));
+    /// assert_eq!((used.x, used.y, used.width, used.height), (8, 0, 64, 24));
+    /// assert_eq!(buf.get(7, 0), Some([0, 0, 0, 0]));
+    /// assert_eq!(buf.get(8, 0), Some([200, 0, 0, 255]));
+    /// ```
+    pub fn draw_fitted(&mut self, src: &[Rgba], width: u16, height: u16, how: &Fitted) -> Rect {
+        self.clear(CLEAR);
+        let (sw, sh) = (usize::from(width), usize::from(height));
+        let (pw, ph) = how.mode.cell();
+        let (cols, rows) = (self.width / pw, self.height / ph);
+        if src.len() != sw * sh || sw == 0 || sh == 0 || cols == 0 || rows == 0 {
+            return Rect::default();
+        }
+        // The picture's place in cells, before clipping: whole cells for
+        // a contained one, the picture's own size for a covering one.
+        let (c, r) = (f64::from(cols), f64::from(rows));
+        let cell_aspect = if how.cell_aspect > 0.0 {
+            how.cell_aspect
+        } else {
+            0.5
+        };
+        let (x0, y0, w, h) = match (how.aspect, how.fit) {
+            (None, _) | (_, PixelFit::Stretch) => (0.0, 0.0, c, r),
+            (Some(aspect), fit) => {
+                // Wider than the picture, in the cells' real shape.
+                let wide = c * cell_aspect / r > aspect;
+                let contain = fit == PixelFit::Contain;
+                let (w, h) = if wide == contain {
+                    (r * aspect / cell_aspect, r)
+                } else {
+                    (c, c * cell_aspect / aspect)
+                };
+                if contain {
+                    let (w, h) = (w.round().clamp(1.0, c), h.round().clamp(1.0, r));
+                    (((c - w) / 2.0).floor(), ((r - h) / 2.0).floor(), w, h)
+                } else {
+                    ((c - w) / 2.0, (r - h) / 2.0, w, h)
+                }
+            }
+        };
+        // In pixels.
+        let (fx, fy) = (x0 * f64::from(pw), y0 * f64::from(ph));
+        let (fw, fh) = (w * f64::from(pw), h * f64::from(ph));
+        let left = fx.max(0.0) as u16;
+        let top = fy.max(0.0) as u16;
+        let right = ((fx + fw).min(f64::from(cols * pw))).round() as u16;
+        let bottom = ((fy + fh).min(f64::from(rows * ph))).round() as u16;
+        let (sx, sy) = (sw as f64 / fw, sh as f64 / fh);
+        // The source columns each buffer column takes, as a range.
+        let span = |b: u16, f: f64, scale: f64, n: usize| {
+            let start = ((f64::from(b) - f) * scale).max(0.0);
+            let end = ((f64::from(b) + 1.0 - f) * scale).min(n as f64);
+            let first = (start as usize).min(n - 1);
+            let last = (end.ceil() as usize).clamp(first + 1, n);
+            let middle = (((f64::from(b) + 0.5 - f) * scale).max(0.0) as usize).min(n - 1);
+            (first, last, middle)
+        };
+        let columns: Vec<_> = (left..right).map(|b| span(b, fx, sx, sw)).collect();
+        for by in top..bottom {
+            let (y_first, y_last, y_mid) = span(by, fy, sy, sh);
+            let row = usize::from(by) * usize::from(self.width);
+            for (bx, &(x_first, x_last, x_mid)) in (left..right).zip(&columns) {
+                let pixel = match how.filter {
+                    Filter::Nearest => src[y_mid * sw + x_mid],
+                    Filter::Average => {
+                        let mut sum = [0u32; 4];
+                        for y in y_first..y_last {
+                            for p in &src[y * sw + x_first..y * sw + x_last] {
+                                (0..4).for_each(|i| sum[i] += u32::from(p[i]));
+                            }
+                        }
+                        let n = ((y_last - y_first) * (x_last - x_first)) as u32;
+                        sum.map(|v| ((v + n / 2) / n) as u8)
+                    }
+                };
+                self.data[row + usize::from(bx)] = pixel;
+            }
+        }
+        Rect::new(
+            left / pw,
+            top / ph,
+            right.div_ceil(pw) - left / pw,
+            bottom.div_ceil(ph) - top / ph,
+        )
     }
 
     /// Draw `sprite`'s first frame with its top left at `x`, `y`, `scale`
@@ -430,6 +531,112 @@ impl PixelMode {
     }
 }
 
+/// How [`PixelBuf::draw_fitted`] fits a picture kept to a ratio.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum PixelFit {
+    /// All of it, as large as fits in whole cells, centred; the margins
+    /// clear.
+    #[default]
+    Contain,
+    /// The whole buffer, the picture's middle cropped to it.
+    Cover,
+    /// The whole buffer, the ratio let go.
+    Stretch,
+}
+
+/// How [`PixelBuf::draw_fitted`] takes a picture's pixels into fewer or
+/// more of the buffer's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Filter {
+    /// The source pixel at each buffer pixel's middle: the source's own
+    /// colours, exactly (a palette stays one).
+    #[default]
+    Nearest,
+    /// The source pixels each buffer pixel covers, averaged: smoother when
+    /// shrinking.
+    Average,
+}
+
+/// What [`PixelBuf::draw_fitted`] fits a picture to: the cells' pixels
+/// ([`mode`](Self::mode)) and shape ([`cell_aspect`](Self::cell_aspect)),
+/// the ratio to show it at, the fit and the filter.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
+pub struct Fitted {
+    /// The cell mode the buffer is shown in: its pixels a cell.
+    pub mode: PixelMode,
+    /// The ratio, width over height, to show the picture at; `None` fills
+    /// the buffer.
+    pub aspect: Option<f64>,
+    /// A cell's width over its height on the screen: 0.5 (the default)
+    /// for cells twice as tall as wide. A terminal's measured cell size
+    /// gives the real one.
+    pub cell_aspect: f64,
+    pub fit: PixelFit,
+    pub filter: Filter,
+}
+
+impl Fitted {
+    /// Fill a buffer shown in `mode`: no ratio kept, cells of 1:2,
+    /// contained, nearest pixels.
+    pub fn new(mode: PixelMode) -> Fitted {
+        Fitted {
+            mode,
+            aspect: None,
+            cell_aspect: 0.5,
+            fit: PixelFit::Contain,
+            filter: Filter::Nearest,
+        }
+    }
+
+    /// Show the picture at `aspect`, width over height (4:3 is `4.0 / 3.0`).
+    pub fn aspect(mut self, aspect: f64) -> Fitted {
+        self.aspect = (aspect.is_finite() && aspect > 0.0).then_some(aspect);
+        self
+    }
+
+    /// A cell's width over its height on the screen.
+    pub fn cell_aspect(mut self, cell_aspect: f64) -> Fitted {
+        self.cell_aspect = cell_aspect;
+        self
+    }
+
+    /// Read the buffer in `mode`'s cells.
+    pub fn mode(mut self, mode: PixelMode) -> Fitted {
+        self.mode = mode;
+        self
+    }
+
+    pub fn fit(mut self, fit: PixelFit) -> Fitted {
+        self.fit = fit;
+        self
+    }
+
+    pub fn filter(mut self, filter: Filter) -> Fitted {
+        self.filter = filter;
+        self
+    }
+}
+
+/// How a [`pixels`] node colours a quadrant or Braille cell, whose pixels
+/// get two colours between them ([`Node::pixel_colors`]). Half blocks show
+/// every pixel's own colour either way.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum PixelColors {
+    /// Each side's pixels averaged: the smoothest picture, in colours the
+    /// pixels may not have.
+    #[default]
+    Average,
+    /// Each side's colour is the one of its pixels nearest that side's
+    /// average: only colours the cell has, so pixel art and an emulator's
+    /// or a 16- or 256-colour picture keep their palette, and fewer
+    /// distinct styles reach the screen.
+    Nearest,
+}
+
 /// Alpha at or above this is opaque when pixels become cells.
 const OPAQUE: u8 = 128;
 
@@ -463,8 +670,8 @@ const QUADRANTS: [char; 16] = [
 /// (`mask`'s bits in the order given), the lit colour and the unlit one
 /// (`None` where the unlit pixels are transparent). Lit are the opaque
 /// pixels at least as bright as their mean; with transparent pixels, every
-/// opaque one.
-fn two_colors(pixels: &[Rgba]) -> Option<(u32, Rgb, Option<Rgb>)> {
+/// opaque one. Each colour is as `colors` says.
+fn two_colors(pixels: &[Rgba], colors: PixelColors) -> Option<(u32, Rgb, Option<Rgb>)> {
     let luma = |p: &Rgba| 299 * p[0] as u32 + 587 * p[1] as u32 + 114 * p[2] as u32;
     let solid: Vec<(usize, &Rgba)> = pixels
         .iter()
@@ -494,7 +701,19 @@ fn two_colors(pixels: &[Rgba]) -> Option<(u32, Rgb, Option<Rgb>)> {
         }
         let n = chosen.len() as u32;
         let sum = |c: usize| (chosen.iter().map(|p| p[c] as u32).sum::<u32>() / n) as u8;
-        Some([sum(0), sum(1), sum(2)])
+        let mean = [sum(0), sum(1), sum(2)];
+        if colors == PixelColors::Average {
+            return Some(mean);
+        }
+        let distance = |p: &&&Rgba| {
+            (0..3)
+                .map(|c| (i32::from(p[c]) - i32::from(mean[c])).pow(2))
+                .sum::<i32>()
+        };
+        chosen
+            .iter()
+            .min_by_key(distance)
+            .map(|p| [p[0], p[1], p[2]])
     };
     Some((lit, average(true)?, average(false)))
 }
@@ -505,7 +724,7 @@ fn two_colors(pixels: &[Rgba]) -> Option<(u32, Rgb, Option<Rgb>)> {
 #[inline]
 fn cell_at(
     buf: &PixelBuf,
-    mode: PixelMode,
+    (mode, colors): (PixelMode, PixelColors),
     column: i32,
     row: i32,
     scratch: &mut Vec<Rgba>,
@@ -518,7 +737,7 @@ fn cell_at(
         PixelMode::Quadrants => {
             scratch.clear();
             scratch.extend([px(x, y), px(x + 1, y), px(x, y + 1), px(x + 1, y + 1)]);
-            match two_colors(scratch) {
+            match two_colors(scratch, colors) {
                 None => (' ', None, None),
                 Some((mask, fg, bg)) => (QUADRANTS[mask as usize], Some(fg), bg),
             }
@@ -536,7 +755,7 @@ fn cell_at(
                 px(x, y + 3),
                 px(x + 1, y + 3),
             ]);
-            match two_colors(scratch) {
+            match two_colors(scratch, colors) {
                 None => (' ', None, None),
                 Some((mask, fg, bg)) => {
                     let glyph = char::from_u32(0x2800 + mask).unwrap_or(' ');
@@ -554,7 +773,7 @@ fn cell_at(
 
 /// Draw `buf` on `canvas` in `mode`, a cell at a time with plain colours
 /// ([`Canvas::put_rgb`]); the cells past the buffer are cleared.
-fn draw_cells(buf: &PixelBuf, mode: PixelMode, canvas: &mut Canvas) {
+fn draw_cells(buf: &PixelBuf, (mode, colors): (PixelMode, PixelColors), canvas: &mut Canvas) {
     let (pw, ph) = mode.cell();
     let (width, height) = (canvas.width(), canvas.height());
     let columns = width.min(buf.width.div_ceil(pw));
@@ -562,7 +781,8 @@ fn draw_cells(buf: &PixelBuf, mode: PixelMode, canvas: &mut Canvas) {
     let mut scratch = Vec::with_capacity(8);
     for row in 0..rows {
         for column in 0..columns {
-            let (glyph, fg, bg) = cell_at(buf, mode, column as i32, row as i32, &mut scratch);
+            let (glyph, fg, bg) =
+                cell_at(buf, (mode, colors), column as i32, row as i32, &mut scratch);
             canvas.put_rgb(column, row, glyph, fg, bg);
         }
     }
@@ -594,7 +814,8 @@ fn render_lines(buf: &PixelBuf, mode: PixelMode, columns: u16, rows: u16) -> Vec
             let mut run = String::new();
             let mut run_key = (None, None);
             for column in 0..columns as i32 {
-                let (glyph, fg, bg) = cell_at(buf, mode, column, row, &mut scratch);
+                let (glyph, fg, bg) =
+                    cell_at(buf, (mode, PixelColors::Average), column, row, &mut scratch);
                 if (fg, bg) != run_key && !run.is_empty() {
                     line.push(Segment::new(std::mem::take(&mut run), style(run_key)));
                 }
@@ -616,6 +837,7 @@ struct Pixels {
     /// The buffer's size, or `None` to follow the node's.
     size: Option<(u16, u16)>,
     mode: PixelMode,
+    colors: PixelColors,
     buf: PixelBuf,
     draw: Draw,
 }
@@ -652,7 +874,7 @@ impl Widget for Pixels {
             self.buf.resize(width, height);
         }
         (self.draw)(&mut self.buf);
-        draw_cells(&self.buf, self.mode, canvas);
+        draw_cells(&self.buf, (self.mode, self.colors), canvas);
     }
 }
 
@@ -669,6 +891,7 @@ pub fn pixels(width: u16, height: u16, draw: impl FnMut(&mut PixelBuf) + 'static
         Box::new(Pixels {
             size: Some((width, height)),
             mode: PixelMode::HalfBlocks,
+            colors: PixelColors::Average,
             buf: PixelBuf::new(width, height),
             draw: Box::new(draw),
         }),
@@ -702,6 +925,7 @@ pub fn pixels_fit(draw: impl FnMut(&mut PixelBuf) + 'static) -> Node {
         Box::new(Pixels {
             size: None,
             mode: PixelMode::HalfBlocks,
+            colors: PixelColors::Average,
             buf: PixelBuf::new(0, 0),
             draw: Box::new(draw),
         }),
@@ -727,6 +951,39 @@ impl Node {
     /// ```
     pub fn pixel_mode(self, mode: PixelMode) -> Node {
         self.widget_mut(|pixels: &mut Pixels| pixels.mode = mode);
+        self
+    }
+
+    /// For a [`pixels`] node in quadrants or Braille: colour each cell's
+    /// two sides as `colors` says. [`PixelColors::Nearest`] keeps to the
+    /// colours the pixels have (a palette's); [`PixelColors::Average`],
+    /// the default, blends them.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::pixels::{pixels, PixelColors, PixelMode};
+    ///
+    /// let app = App::new(|| {
+    ///     pixels(2, 4, |buf| {
+    ///         buf.clear([0, 0, 0, 255]);
+    ///         buf.fill_rect(0, 0, 2, 1, [255, 0, 0, 255]);
+    ///         buf.fill_rect(0, 1, 2, 1, [200, 0, 0, 255]);
+    ///     })
+    ///     .pixel_mode(PixelMode::Braille)
+    ///     .pixel_colors(PixelColors::Nearest)
+    /// });
+    /// let mut driver = app.driver(1, 1);
+    /// driver.settle();
+    /// let screen = driver.screen();
+    /// let cell = screen.cell(0, 0);
+    /// // The lit dots in red (the nearer of red and dark red to their
+    /// // mean), the rest in black: no blend.
+    /// assert_eq!(cell.text(), "⠛");
+    /// let style = screen.style(cell.style).unwrap();
+    /// assert_eq!(style.color(), Some(&rich::color::Color::from_rgb(200, 0, 0)));
+    /// ```
+    pub fn pixel_colors(self, colors: PixelColors) -> Node {
+        self.widget_mut(|pixels: &mut Pixels| pixels.colors = colors);
         self
     }
 }
@@ -762,6 +1019,123 @@ mod tests {
             }
         }
         buf
+    }
+
+    #[test]
+    fn a_picture_is_fitted_at_its_ratio_in_whole_cells() {
+        // 320x200 in a palette of 7 colours, at 4:3, into 80x24 cells of
+        // half blocks twice as tall as wide: 64x24 at column 8.
+        let colours: Vec<Rgba> = (0..7u8).map(|i| [i * 30, 255 - i * 30, i, 255]).collect();
+        let src: Vec<Rgba> = (0..320 * 200)
+            .map(|i| colours[(i * 7 / 13 + i / 320) % 7])
+            .collect();
+        let mut buf = PixelBuf::new(80, 48);
+        let how = Fitted::new(PixelMode::HalfBlocks).aspect(4.0 / 3.0);
+        assert_eq!(
+            buf.draw_fitted(&src, 320, 200, &how),
+            Rect::new(8, 0, 64, 24)
+        );
+        for y in 0..48 {
+            for x in 0..80 {
+                let p = buf.get(x, y).unwrap();
+                if (8..72).contains(&x) {
+                    assert!(colours.contains(&p), "({x}, {y}) {p:?}");
+                } else {
+                    assert_eq!(p, CLEAR, "margin ({x}, {y})");
+                }
+            }
+        }
+        // With no ratio, the buffer is filled.
+        let mut buf = PixelBuf::new(80, 48);
+        let used = buf.draw_fitted(&src, 320, 200, &Fitted::new(PixelMode::HalfBlocks));
+        assert_eq!(used, Rect::new(0, 0, 80, 24));
+        assert!(buf.pixels().iter().all(|p| colours.contains(p)));
+        // A tall area letterboxes the rows instead; Braille's cells.
+        let mut buf = PixelBuf::new(40, 80);
+        let how = Fitted::new(PixelMode::Braille).aspect(4.0 / 3.0);
+        assert_eq!(
+            buf.draw_fitted(&src, 320, 200, &how),
+            Rect::new(0, 6, 20, 8)
+        );
+        // Covering fills the area; the picture's middle is kept.
+        let mut buf = PixelBuf::new(80, 48);
+        let how = how.mode(PixelMode::HalfBlocks).fit(PixelFit::Cover);
+        assert_eq!(
+            buf.draw_fitted(&src, 320, 200, &how),
+            Rect::new(0, 0, 80, 24)
+        );
+        assert!(buf.pixels().iter().all(|p| colours.contains(p)));
+        // A short source draws nothing.
+        assert_eq!(buf.draw_fitted(&src[1..], 320, 200, &how), Rect::default());
+        assert!(buf.pixels().iter().all(|p| *p == CLEAR));
+    }
+
+    #[test]
+    fn the_average_filter_blends_what_each_pixel_covers() {
+        // 4x2 of black and white columns into 2x2 (half blocks, 2x1 cells).
+        let (b, w) = ([0, 0, 0, 255], [255, 255, 255, 255]);
+        let src = [b, w, b, w, b, w, b, w];
+        let mut buf = PixelBuf::new(2, 2);
+        let how = Fitted::new(PixelMode::HalfBlocks).filter(Filter::Average);
+        buf.draw_fitted(&src, 4, 2, &how);
+        assert_eq!(buf.get(0, 0), Some([128, 128, 128, 255]));
+        buf.draw_fitted(&src, 4, 2, &how.filter(Filter::Nearest));
+        assert_eq!(buf.get(0, 0), Some(w));
+    }
+
+    #[test]
+    fn nearest_colours_keep_to_the_cells_own() {
+        // 2x4: red, dark red and black, in every Braille cell's dots.
+        let (red, dark, black) = ([255, 0, 0, 255], [200, 0, 0, 255], [0, 0, 0, 255]);
+        let mut buf = PixelBuf::new(2, 4);
+        for (i, p) in [red, dark, red, black, dark, black, red, black]
+            .into_iter()
+            .enumerate()
+        {
+            buf.set(i as i32 % 2, i as i32 / 2, p);
+        }
+        let own: Vec<Rgb> = [red, dark, black].map(|p| [p[0], p[1], p[2]]).to_vec();
+        let mut scratch = Vec::new();
+        for mode in [PixelMode::Braille, PixelMode::Quadrants] {
+            let (_, fg, bg) = cell_at(&buf, (mode, PixelColors::Nearest), 0, 0, &mut scratch);
+            assert!(own.contains(&fg.unwrap()), "{mode:?} {fg:?}");
+            assert!(own.contains(&bg.unwrap()), "{mode:?} {bg:?}");
+            // Averaged, the lit side is a blend of red and dark red.
+            let (_, fg, _) = cell_at(&buf, (mode, PixelColors::Average), 0, 0, &mut scratch);
+            assert!(!own.contains(&fg.unwrap()), "{mode:?} {fg:?}");
+        }
+    }
+
+    #[test]
+    fn averaged_colours_are_the_default() {
+        for mode in [PixelMode::Quadrants, PixelMode::Braille] {
+            let screens: Vec<Vec<String>> = [None, Some(PixelColors::Average)]
+                .into_iter()
+                .map(|colors| {
+                    let buf = sample(13, 11);
+                    let app = App::new(move || {
+                        let buf = buf.clone();
+                        let node = pixels(13, 11, move |b| *b = buf.clone()).pixel_mode(mode);
+                        match colors {
+                            Some(colors) => node.pixel_colors(colors),
+                            None => node,
+                        }
+                    });
+                    let mut driver = app.driver(9, 5);
+                    driver.settle();
+                    let screen = driver.screen();
+                    let mut cells = Vec::new();
+                    for y in 0..5 {
+                        for x in 0..9 {
+                            let cell = screen.cell(x, y);
+                            cells.push(format!("{}{:?}", cell.text(), screen.style(cell.style)));
+                        }
+                    }
+                    cells
+                })
+                .collect();
+            assert_eq!(screens[0], screens[1], "{mode:?}");
+        }
     }
 
     #[test]
