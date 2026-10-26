@@ -2319,17 +2319,25 @@ another plugin already provides, a build without the loader). See the
 marketplace: WASM plugins, micro packs and themes. Every file is checked by
 SHA-256 against a signed index.
 
+The official marketplace,
+[`buchochelliq-labs/rs-rich-marketplace`](https://github.com/buchochelliq-labs/rs-rich-marketplace),
+goes live with 0.0.23. It lists the official plugins (Mermaid, DOT and
+lumis as crates, and `textcase`, a WASM plugin with the `upcase` and
+`downcase` transforms and a `loud` fence) and the built-in micro packs
+(`status`, `dev`, `fun`). Until the maintainer signs its first index,
+`rich plugin search` says there is no `index.json` and exits 3.
+
 ```bash
 rich plugin search                 # every package: kind, tier, version
-rich plugin info shout             # its tier, source, versions and permissions
-rich plugin install shout          # shows what it is and asks first
-rich plugin install shout --yes    # in a script
-rich -m README.md                  # shout loads without --plugin
+rich plugin info textcase          # its tier, source, versions and permissions
+rich plugin install textcase       # shows what it is and asks first
+rich plugin install textcase --yes # in a script
+rich -m README.md                  # textcase loads without --plugin
 rich plugin list                   # what is installed, with no network
-rich plugin disable shout          # keep it, stop loading it
+rich plugin disable textcase       # keep it, stop loading it
 rich plugin update                 # the newest version this host loads
 rich plugin verify                 # files against the lockfile, versions against the index
-rich plugin remove shout
+rich plugin remove textcase
 rich plugin browse                 # all of it in a selector, provenance beside the list
 ```
 
@@ -2342,7 +2350,9 @@ manifest matches its listing.
 
 An installed, enabled WASM plugin loads on every run. Its file is checked
 against the lockfile first: a file that changed is not loaded, and the run
-warns and goes on. A crate (Mermaid, DOT, lumis) is listed, never
+warns and goes on. A micro pack or theme is installed, checked and
+recorded in the lockfile, but `rich` does not load it yet: add a pack to
+your micro layer with `rich micro install FILE`. A crate (Mermaid, DOT, lumis) is listed, never
 installed: `rich plugin install mermaid` exits 2 and prints the `cargo add`
 line to use instead.
 

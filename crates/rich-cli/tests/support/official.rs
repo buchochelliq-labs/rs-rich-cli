@@ -21,6 +21,8 @@ pub const ARTIFACT_BASE: &str =
 
 /// The official WASM plugin's id and version (its manifest's).
 pub const TEXTCASE: (&str, &str) = ("textcase", "0.1.0");
+/// The rs-rich-cli commit textcase 0.1.0's listing names as its source.
+pub const TEXTCASE_SOURCE_REVISION: &str = "124ea70593df1b0b4af65f0c1e9df1e11072ce12";
 
 /// The built-in micro packs (`rich_micro::builtin::PACKS`) and the version
 /// each `pack.json` names.

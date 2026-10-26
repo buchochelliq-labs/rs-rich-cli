@@ -1297,7 +1297,7 @@ fn escape(text: &str) -> String {
 
 pub(crate) fn tier_meaning(tier: Tier) -> &'static str {
     match tier {
-        Tier::Official => "built by rs-rich's own release workflow",
+        Tier::Official => "rs-rich's own, built from its repository",
         Tier::Reviewed => "a maintainer read the source and rebuilt the same artifact",
         _ => "checked by the marketplace's CI only, not reviewed",
     }

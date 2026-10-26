@@ -21,6 +21,9 @@ use std::process::{Command, Output, Stdio};
 
 use serde_json::{json, Value};
 
+#[path = "support/official.rs"]
+mod official;
+
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
@@ -130,7 +133,28 @@ fn listing(id: &str, kind: &str, tier: &str, repository: &str, versions: Vec<Val
     })
 }
 
+/// An official crate's listing as the marketplace has it (its capabilities,
+/// permissions and features), at `version`.
 fn crate_listing(id: &str, name: &str, version: &str, features: &[&str]) -> Value {
+    let (capabilities, permissions) = match id {
+        "mermaid" => (
+            json!([{"kind": "fence-renderer", "name": "mermaid"}, {"kind": "renderer", "name": "mermaid"}]),
+            json!([
+                "native-code",
+                "filesystem-read",
+                "filesystem-write",
+                "process"
+            ]),
+        ),
+        "dot" => (
+            json!([{"kind": "fence-renderer", "name": "dot"}, {"kind": "fence-renderer", "name": "graphviz"}, {"kind": "renderer", "name": "dot"}]),
+            json!(["native-code"]),
+        ),
+        _ => (
+            json!([{"kind": "code-highlighter", "name": id}]),
+            json!(["native-code"]),
+        ),
+    };
     let mut value = listing(
         id,
         "crate",
@@ -144,12 +168,70 @@ fn crate_listing(id: &str, name: &str, version: &str, features: &[&str]) -> Valu
                 "sha256": "6ca5b3f974d2ead0191b462b81164c750a3e03c6629f9a5783fb819d43a0e9ac",
                 "size": 98304
             },
-            "capabilities": [{"kind": "fence-renderer", "name": id}],
-            "permissions": ["native-code"],
+            "capabilities": capabilities,
+            "permissions": permissions,
         })],
     );
     value["crate"] = json!({"name": name, "features": features});
     value
+}
+
+/// The official artifacts (tests/support/official.rs), served from the
+/// marketplace's own `artifacts/` as the real one serves them, and their
+/// listings as the marketplace repository has them: `textcase` and the
+/// built-in micro packs.
+fn official_listings(dir: &Path) -> Vec<(String, Value)> {
+    let mirror = dir.join(
+        "artifacts/raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/main/artifacts",
+    );
+    let official_version = |path: &str, body: &[u8], number: &str, requires: Value| {
+        let file = mirror.join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, body).unwrap();
+        json!({
+            "version": number, "published": "2026-10-26", "requires": requires,
+            "artifact": {"url": official::url(path), "sha256": sha256(body), "size": body.len()},
+        })
+    };
+    let repository = "https://github.com/buchochelliq-labs/rs-rich-cli";
+    let mut out = Vec::new();
+    for (path, body) in official::artifacts() {
+        let id = path.split('/').next().unwrap().to_string();
+        let value = if id == official::TEXTCASE.0 {
+            let mut v = official_version(&path, &body, official::TEXTCASE.1, json!({"abi": "1.0"}));
+            v["source_revision"] = json!(official::TEXTCASE_SOURCE_REVISION);
+            v["capabilities"] = json!([
+                {"kind": "transform", "name": "upcase"},
+                {"kind": "transform", "name": "downcase"},
+                {"kind": "fence-ansi", "name": "loud"},
+            ]);
+            v["permissions"] = json!(["ansi-output"]);
+            listing(&id, "wasm-plugin", "official", repository, vec![v])
+        } else {
+            let (_, number) = official::PACKS.iter().find(|(n, _)| *n == id).unwrap();
+            let pack: Value = serde_json::from_slice(
+                &std::fs::read(
+                    manifest_dir()
+                        .join("../rich-micro/builtin")
+                        .join(&id)
+                        .join("pack.json"),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let mut v = official_version(&path, &body, number, json!({"micro_schema": 1}));
+            v["capabilities"] = json!(pack["packages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| json!({"kind": "asset", "name": format!("{id}/{}", p.as_str().unwrap())}))
+                .collect::<Vec<_>>());
+            v["permissions"] = json!([]);
+            listing(&id, "micro-pack", "official", repository, vec![v])
+        };
+        out.push((id, value));
+    }
+    out
 }
 
 /// A workspace crate's version, from its manifest.
@@ -163,7 +245,8 @@ fn workspace_version(dir: &str) -> String {
 impl Market {
     /// `shout` (0.1.0 good, 0.0.9 yanked), `future` (a WASM plugin for ABI
     /// 2 only), `solarized` (a theme), `broken` (a theme whose file does not
-    /// match its hash), and the official crates, listed only.
+    /// match its hash), the official crates, listed only, and the official
+    /// `textcase` plugin and micro packs, as the marketplace lists them.
     fn write(dir: &Path) -> Market {
         let artifacts = dir.join("artifacts/example.test/releases");
         std::fs::create_dir_all(&artifacts).unwrap();
@@ -277,6 +360,8 @@ impl Market {
                 ),
             ),
         ];
+        let mut listings = listings;
+        listings.extend(official_listings(dir));
         std::fs::create_dir_all(dir.join("keys")).unwrap();
         std::fs::write(dir.join("keys/keys-1.json"), keys_json()).unwrap();
         let mut market = Market {
@@ -835,6 +920,31 @@ mod wasm {
         assert_code(&w.plugin(&["verify"]), 4);
     }
 
+    /// The official WASM plugin installs as listed and runs on the next
+    /// run without --plugin: its transforms and its `loud` fence.
+    #[test]
+    fn the_official_textcase_plugin_installs_and_runs() {
+        let w = world();
+        let out = w.plugin(&["install", "textcase", "--yes"]);
+        assert_code(&out, 0);
+        assert!(
+            text(&out.stdout).contains("official"),
+            "{}",
+            text(&out.stdout)
+        );
+        let out = w.rich(&["--transform", "upcase", "-p", "from the marketplace"]);
+        assert_code(&out, 0);
+        assert!(text(&out.stdout).contains("FROM THE MARKETPLACE"));
+        std::fs::write(w.root.join("loud.md"), "```loud\nhello there\n```\n").unwrap();
+        let out = w.rich(&["-m", "loud.md"]);
+        assert_code(&out, 0);
+        assert!(
+            text(&out.stdout).contains("HELLO THERE"),
+            "{}",
+            text(&out.stdout)
+        );
+    }
+
     #[test]
     fn the_sandbox_checks_the_manifest_against_the_listing() {
         let mut w = world();
@@ -903,6 +1013,26 @@ mod wasm {
         ]);
         assert_code(&out, 2);
     }
+}
+
+/// The official micro packs install from the marketplace as listed, and
+/// the installed archive is a pack micro reads.
+#[cfg(feature = "art")]
+#[test]
+fn the_official_micro_packs_install_and_load_in_micro() {
+    let w = world();
+    for (name, version) in official::PACKS {
+        let out = w.plugin(&["install", name, "--yes"]);
+        assert_code(&out, 0);
+        let file = w.plugins.join(format!("{name}/{name}-{version}.richmicro"));
+        let out = w.rich(&["micro", "install", file.to_str().unwrap()]);
+        assert_code(&out, 0);
+    }
+    let out = w.plugin(&["verify"]);
+    assert_code(&out, 0);
+    let out = w.rich(&["micro", "packs"]);
+    assert_code(&out, 0);
+    assert!(text(&out.stdout).contains("fun"), "{}", text(&out.stdout));
 }
 
 /// Write the fixture marketplace to `$RICH_TEST_MARKETPLACE`, for the CI
