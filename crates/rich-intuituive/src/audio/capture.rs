@@ -359,8 +359,15 @@ pub(super) fn quiet() -> super::alsa::Quiet {
     super::alsa::Quiet::new()
 }
 
+/// Off Linux there is no ALSA to quiet: a guard that does nothing, so both
+/// platforms hold `quiet()`'s result the same way.
 #[cfg(not(target_os = "linux"))]
-pub(super) fn quiet() {}
+pub(super) struct Quiet;
+
+#[cfg(not(target_os = "linux"))]
+pub(super) fn quiet() -> Quiet {
+    Quiet
+}
 
 /// Keep ALSA's messages on this thread off stderr for the thread's life:
 /// called from a stream's callbacks, on the stream's own thread.

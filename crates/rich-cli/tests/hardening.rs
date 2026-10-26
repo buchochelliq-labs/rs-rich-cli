@@ -41,6 +41,7 @@ fn run_with(
     std::thread::spawn(move || {
         let _ = input.write_all(&stdin);
     });
+    #[cfg(unix)]
     let pid = child.id();
     let (sender, receiver) = std::sync::mpsc::channel();
     std::thread::spawn(move || {

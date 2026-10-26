@@ -36,6 +36,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   clash, and a disabled theme is not found. An unknown theme's error now
   says that `rich plugin search` lists themes.
 
+- **CI lints on Windows** (rs-rich-cli's tests, rs-rich-intuituive): the
+  Windows web job now runs clippy on rs-rich, intuiTUIve with all its
+  features and the CLI's tests without default features. Three warnings
+  only Windows saw are fixed: an unused `pid` and `has_colour` in the CLI's
+  tests, and `quiet()` returning `()` off Linux, which now returns a guard
+  as it does on Linux.
+
 - **console.py fully ported** (rs-rich): the rest of upstream's `Console`.
   `quiet`; the size setters and upstream's size rules; `is_dumb_terminal`;
   `Console(soft_wrap=…, style=…)`; `color_system="auto"` and terminal
