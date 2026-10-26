@@ -408,13 +408,21 @@ impl Worker<'_> {
     }
 
     /// Read the live logs' new and changed entries into `page`. An engine
-    /// that cannot read them leaves the snapshot's entries.
-    fn follow_logs(&mut self, page: &mut Page) {
+    /// that cannot read them, or a log with controls, leaves the
+    /// snapshot's entries, whose controls are bound. Whether a log with
+    /// controls was seen: then only a snapshot reads it right.
+    fn follow_logs(&mut self, page: &mut Page) -> bool {
         let base = page.url.clone();
+        let mut controls = false;
         for log in &mut page.logs {
             let Ok(mut read) = self.engine.read_live(TabId(0), log.node, false) else {
                 continue;
             };
+            if read.interactive {
+                self.live.remove(&log.node);
+                controls = true;
+                continue;
+            }
             let cache = self.live.entry(log.node).or_default();
             let missing = |cache: &HashMap<u64, Vec<Run>>, read: &crate::engine::LiveRead| {
                 read.order
@@ -451,6 +459,7 @@ impl Worker<'_> {
             }
             log.first_shown = read.first_shown;
         }
+        controls
     }
 
     /// Only live logs changed: read their entries, not the page, and
@@ -463,7 +472,11 @@ impl Worker<'_> {
             return;
         }
         let mut next = (*page).clone();
-        self.follow_logs(&mut next);
+        if self.follow_logs(&mut next) {
+            // A log with controls changed: a snapshot binds them.
+            self.read();
+            return;
+        }
         self.dress_inline(&mut next);
         if next != *page {
             let next = Arc::new(next);

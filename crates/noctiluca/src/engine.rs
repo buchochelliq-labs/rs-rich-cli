@@ -189,6 +189,10 @@ pub struct LiveRead {
     pub fresh: Vec<(u64, Value)>,
     /// The first entry Chrome shows in the box, at its own scroll.
     pub first_shown: Option<u64>,
+    /// Whether the log holds controls (links, buttons, fields). A live
+    /// read has no bindings for them, so such a log is read from
+    /// snapshots.
+    pub interactive: bool,
 }
 
 /// What happened in the engine since it was last asked.

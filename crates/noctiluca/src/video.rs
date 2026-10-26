@@ -74,8 +74,12 @@ impl Region {
 pub struct Frames {
     /// Whether the screencast is on.
     pub on: bool,
-    /// Each moving region's last frame: when, and its count.
+    /// Each moving region's last frame: when, and its number.
     last: Vec<(NodeId, Instant, u64)>,
+    /// The last frame's number, over every region and every stop, so a
+    /// region that moves again goes on from where it stopped: its painter
+    /// side keeps the number it last drew.
+    seq: u64,
 }
 
 /// What [`Frames::plan`] asks the tab to do.
@@ -147,17 +151,12 @@ impl Frames {
 
     /// A frame of `node` taken some other way (a capture of its region).
     pub fn stamp(&mut self, node: NodeId, pixels: rich_embed::Pixels, now: Instant) -> VideoFrame {
-        let seq = match self.last.iter_mut().find(|(n, ..)| *n == node) {
-            Some(entry) => {
-                entry.1 = now;
-                entry.2 += 1;
-                entry.2
-            }
-            None => {
-                self.last.push((node, now, 1));
-                1
-            }
-        };
+        self.seq += 1;
+        let seq = self.seq;
+        match self.last.iter_mut().find(|(n, ..)| *n == node) {
+            Some(entry) => *entry = (node, now, seq),
+            None => self.last.push((node, now, seq)),
+        }
         VideoFrame { node, pixels, seq }
     }
 }
@@ -456,5 +455,25 @@ mod tests {
         let (cut, missing) = frames.cut(&regions[..1], Some(&frame(20.0)), now);
         assert!(cut.is_empty());
         assert_eq!(missing.len(), 1);
+    }
+
+    #[test]
+    fn a_region_that_moves_again_goes_on_numbering() {
+        let mut frames = Frames::default();
+        let now = Instant::now();
+        let playing = [region(1, 10.0, true, true)];
+        let paused = [region(1, 10.0, false, true)];
+        let mut last = 0;
+        for _ in 0..3 {
+            frames.plan(&playing, now);
+            let (cut, _) = frames.cut(&playing, Some(&frame(0.0)), now);
+            last = cut[0].seq;
+            frames.plan(&paused, now);
+        }
+        // Paused and played again: the numbers go on, so the painter side,
+        // which keeps the last it drew, takes the next frame.
+        frames.plan(&playing, now);
+        let (cut, _) = frames.cut(&playing, Some(&frame(0.0)), now);
+        assert!(cut[0].seq > last, "{} after {last}", cut[0].seq);
     }
 }

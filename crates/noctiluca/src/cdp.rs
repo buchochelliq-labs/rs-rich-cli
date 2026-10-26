@@ -64,7 +64,9 @@ pub const SNAPSHOT_STYLES: &[&str] = &[
 /// appends element children to. Their entries are kept by node, never by
 /// text, with a revision that a change inside an entry moves; a read
 /// sends only the entries whose revision the tab has not seen. A field's
-/// value inside an entry is never read.
+/// value inside an entry is never read, and a log with controls (a link,
+/// a button, a field) says so: the tab reads it from snapshots instead,
+/// which bind its controls.
 pub const PING_SCRIPT: &str = r#"(function start(tries) {
   const ping = globalThis.__noctilucaChanged;
   if (globalThis.__noctilucaWatching) return;
@@ -156,6 +158,10 @@ pub const PING_SCRIPT: &str = r#"(function start(tries) {
     walk(entry);
     return out;
   };
+  // A link, a button or a field anywhere in the log: it has controls, which
+  // only a snapshot reads with their bindings.
+  const CONTROLS = 'a[href],button,input,select,textarea,summary,[role=button],[role=link],' +
+                   '[role=menuitem],[role=checkbox],[role=switch],[tabindex]:not([tabindex="-1"])';
   // Every entry's key in order, and the runs of those the tab has not seen.
   live.read = (box, full) => {
     live.known.add(box);
@@ -173,7 +179,7 @@ pub const PING_SCRIPT: &str = r#"(function start(tries) {
       if (first === null && el.getBoundingClientRect().bottom > top + 1) first = id;
     }
     live.sent.set(box, keep);
-    return { order, fresh, first };
+    return { order, fresh, first, interactive: !!live.root(box).querySelector(CONTROLS) };
   };
   live.boxes = () => [...live.appended].filter(el => el.isConnected);
   // Whether every change is inside a live log the tab has read; entries
@@ -747,6 +753,7 @@ impl Engine for ChromeBackend {
                 })
                 .unwrap_or_default(),
             first_shown: key(&value["first"]),
+            interactive: value["interactive"].as_bool().unwrap_or(false),
         })
     }
 

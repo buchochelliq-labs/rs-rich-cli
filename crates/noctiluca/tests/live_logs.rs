@@ -340,3 +340,25 @@ fn a_scroll_box_the_page_appends_to_is_a_log_too() {
     });
     assert_eq!(live.snapshots.load(Ordering::SeqCst), before);
 }
+
+#[test]
+fn a_link_added_to_a_log_is_bound_like_any_control() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    live.open("log-div.html");
+    live.page_script(
+        "const row = document.createElement('div'); \
+         const a = document.createElement('a'); a.href = '#later'; a.textContent = 'read later'; \
+         row.append('cy: ', a); document.getElementById('log').append(row)",
+    );
+    // A log with controls is read from a snapshot, so the link is a
+    // control with its binding, and its run says which.
+    let page = live.wait("the bound link", |p| {
+        p.logs[0].entries.iter().any(|e| {
+            e.runs
+                .iter()
+                .any(|r| r.text.contains("read later") && r.control.is_some())
+        })
+    });
+    assert!(page.controls.iter().any(|c| c.name == "read later"));
+}
