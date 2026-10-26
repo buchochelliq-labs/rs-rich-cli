@@ -1,4 +1,73 @@
 pub mod rich_record
+pub mod rich_record::audio
+pub struct rich_record::audio::Audio
+pub rich_record::audio::Audio::channels: u16
+pub rich_record::audio::Audio::offset: f64
+pub rich_record::audio::Audio::rate: u32
+pub rich_record::audio::Audio::samples: alloc::vec::Vec<f32>
+impl rich_record::audio::Audio
+pub fn rich_record::audio::Audio::duration(&self) -> f64
+pub fn rich_record::audio::Audio::wav(&self, bool) -> alloc::vec::Vec<u8>
+impl core::clone::Clone for rich_record::audio::Audio
+pub fn rich_record::audio::Audio::clone(&self) -> rich_record::audio::Audio
+impl core::cmp::PartialEq for rich_record::audio::Audio
+pub fn rich_record::audio::Audio::eq(&self, &rich_record::audio::Audio) -> bool
+impl core::fmt::Debug for rich_record::audio::Audio
+pub fn rich_record::audio::Audio::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::audio::Audio
+impl core::marker::Freeze for rich_record::audio::Audio
+impl core::marker::Send for rich_record::audio::Audio
+impl core::marker::Sync for rich_record::audio::Audio
+impl core::marker::Unpin for rich_record::audio::Audio
+impl core::marker::UnsafeUnpin for rich_record::audio::Audio
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::audio::Audio
+impl core::panic::unwind_safe::UnwindSafe for rich_record::audio::Audio
+pub struct rich_record::audio::Span
+pub rich_record::audio::Span::at: f64
+pub rich_record::audio::Span::length: f64
+pub rich_record::audio::Span::wall: std::time::SystemTime
+impl core::clone::Clone for rich_record::audio::Span
+pub fn rich_record::audio::Span::clone(&self) -> rich_record::audio::Span
+impl core::cmp::PartialEq for rich_record::audio::Span
+pub fn rich_record::audio::Span::eq(&self, &rich_record::audio::Span) -> bool
+impl core::fmt::Debug for rich_record::audio::Span
+pub fn rich_record::audio::Span::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_record::audio::Span
+impl core::marker::StructuralPartialEq for rich_record::audio::Span
+impl core::marker::Freeze for rich_record::audio::Span
+impl core::marker::Send for rich_record::audio::Span
+impl core::marker::Sync for rich_record::audio::Span
+impl core::marker::Unpin for rich_record::audio::Span
+impl core::marker::UnsafeUnpin for rich_record::audio::Span
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::audio::Span
+impl core::panic::unwind_safe::UnwindSafe for rich_record::audio::Span
+pub struct rich_record::audio::Stream
+pub rich_record::audio::Stream::channels: u16
+pub rich_record::audio::Stream::rate: u32
+pub rich_record::audio::Stream::samples: alloc::vec::Vec<f32>
+pub rich_record::audio::Stream::start: std::time::SystemTime
+impl rich_record::audio::Stream
+pub fn rich_record::audio::Stream::parse(&[u8]) -> core::option::Option<rich_record::audio::Stream>
+pub fn rich_record::audio::Stream::to_bytes(&self) -> alloc::vec::Vec<u8>
+impl core::clone::Clone for rich_record::audio::Stream
+pub fn rich_record::audio::Stream::clone(&self) -> rich_record::audio::Stream
+impl core::cmp::PartialEq for rich_record::audio::Stream
+pub fn rich_record::audio::Stream::eq(&self, &rich_record::audio::Stream) -> bool
+impl core::fmt::Debug for rich_record::audio::Stream
+pub fn rich_record::audio::Stream::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::audio::Stream
+impl core::marker::Freeze for rich_record::audio::Stream
+impl core::marker::Send for rich_record::audio::Stream
+impl core::marker::Sync for rich_record::audio::Stream
+impl core::marker::Unpin for rich_record::audio::Stream
+impl core::marker::UnsafeUnpin for rich_record::audio::Stream
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::audio::Stream
+impl core::panic::unwind_safe::UnwindSafe for rich_record::audio::Stream
+pub const rich_record::audio::ENV: &str
+pub const rich_record::audio::HEADER: usize
+pub const rich_record::audio::MAGIC: &[u8; 8]
+pub fn rich_record::audio::compose(&[rich_record::audio::Stream], &[rich_record::audio::Span], f64) -> core::option::Option<rich_record::audio::Audio>
+pub fn rich_record::audio::read_dir(&std::path::Path) -> alloc::vec::Vec<rich_record::audio::Stream>
 pub mod rich_record::graphics
 pub struct rich_record::graphics::Image
 impl rich_record::graphics::Image
@@ -154,6 +223,7 @@ impl core::marker::UnsafeUnpin for rich_record::record::Formats
 impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Formats
 impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Formats
 pub struct rich_record::record::Options
+pub rich_record::record::Options::audio: bool
 pub rich_record::record::Options::bin_dir: core::option::Option<std::path::PathBuf>
 pub rich_record::record::Options::frame_rate: core::option::Option<f64>
 pub rich_record::record::Options::repo: core::option::Option<std::path::PathBuf>
@@ -194,6 +264,7 @@ impl core::marker::UnsafeUnpin for rich_record::record::Presentation
 impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Presentation
 impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Presentation
 pub struct rich_record::record::Recording
+pub rich_record::record::Recording::audio: core::option::Option<rich_record::audio::Audio>
 pub rich_record::record::Recording::columns: u16
 pub rich_record::record::Recording::frame_rate: f64
 pub rich_record::record::Recording::masks: alloc::vec::Vec<(fancy_regex::Regex, alloc::string::String)>
@@ -266,6 +337,7 @@ pub fn rich_record::record::orphans(&rich_record::record::Recording, &std::path:
 pub fn rich_record::record::record(&rich_record::tape::Tape, &str, &rich_record::record::Options) -> core::result::Result<rich_record::record::Recording, rich_record::tape::TapeError>
 pub fn rich_record::record::stem_allowed(&str) -> bool
 pub fn rich_record::record::warnings(&rich_record::tape::Tape) -> alloc::vec::Vec<alloc::string::String>
+pub fn rich_record::record::wav_path(&rich_record::record::Recording, &str, rich_record::record::Formats, bool) -> core::option::Option<alloc::string::String>
 pub fn rich_record::record::write(&rich_record::record::Recording, &std::path::Path, &str, rich_record::record::Formats, &rich_record::render::raster::Fonts, &rich_record::screen::Theme, core::option::Option<(&std::path::Path, &[u8])>) -> std::io::error::Result<alloc::vec::Vec<std::path::PathBuf>>
 pub fn rich_record::record::write_selected(&rich_record::record::Recording, &std::path::Path, &str, rich_record::record::Formats, &rich_record::render::raster::Fonts, &rich_record::screen::Theme, core::option::Option<(&std::path::Path, &[u8])>) -> std::io::error::Result<rich_record::record::Written>
 pub mod rich_record::render
@@ -450,6 +522,7 @@ impl rich_record::render::video::Mp4
 pub fn rich_record::render::video::Mp4::finish(self) -> std::io::error::Result<()>
 pub fn rich_record::render::video::Mp4::start(&std::path::Path, usize, usize) -> std::io::error::Result<rich_record::render::video::Mp4>
 pub fn rich_record::render::video::Mp4::start_at(&std::path::Path, usize, usize, f64) -> std::io::error::Result<rich_record::render::video::Mp4>
+pub fn rich_record::render::video::Mp4::start_with_sound(&std::path::Path, usize, usize, f64, core::option::Option<(&std::path::Path, f64)>) -> std::io::error::Result<rich_record::render::video::Mp4>
 pub fn rich_record::render::video::Mp4::write(&mut self, &rich_record::render::raster::Canvas, f64) -> std::io::error::Result<()>
 impl core::ops::drop::Drop for rich_record::render::video::Mp4
 pub fn rich_record::render::video::Mp4::drop(&mut self)
@@ -681,6 +754,7 @@ pub fn rich_record::session::Session::set_frame_rate(&self, f64)
 pub fn rich_record::session::Session::set_kitty_keyboard(&self, bool)
 pub fn rich_record::session::Session::show(&self)
 pub fn rich_record::session::Session::snapshot(&self) -> rich_record::screen::Snapshot
+pub fn rich_record::session::Session::spans(&self) -> alloc::vec::Vec<rich_record::audio::Span>
 pub fn rich_record::session::Session::start(&[alloc::string::String], &std::path::Path, u16, u16, &[(alloc::string::String, alloc::string::String)], rich_record::screen::Theme) -> std::io::error::Result<rich_record::session::Session>
 impl core::ops::drop::Drop for rich_record::session::Session
 pub fn rich_record::session::Session::drop(&mut self)
@@ -985,6 +1059,7 @@ impl core::marker::UnsafeUnpin for rich_record::tape::Output
 impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Output
 impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Output
 pub struct rich_record::tape::Tape
+pub rich_record::tape::Tape::audio: bool
 pub rich_record::tape::Tape::caption: core::option::Option<alloc::string::String>
 pub rich_record::tape::Tape::columns: u16
 pub rich_record::tape::Tape::env: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
@@ -1166,6 +1241,7 @@ impl core::marker::UnsafeUnpin for rich_record::record::Formats
 impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Formats
 impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Formats
 pub struct rich_record::Options
+pub rich_record::Options::audio: bool
 pub rich_record::Options::bin_dir: core::option::Option<std::path::PathBuf>
 pub rich_record::Options::frame_rate: core::option::Option<f64>
 pub rich_record::Options::repo: core::option::Option<std::path::PathBuf>
@@ -1255,6 +1331,7 @@ impl core::marker::UnsafeUnpin for rich_record::record::Presentation
 impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Presentation
 impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Presentation
 pub struct rich_record::Recording
+pub rich_record::Recording::audio: core::option::Option<rich_record::audio::Audio>
 pub rich_record::Recording::columns: u16
 pub rich_record::Recording::frame_rate: f64
 pub rich_record::Recording::masks: alloc::vec::Vec<(fancy_regex::Regex, alloc::string::String)>
@@ -1333,6 +1410,7 @@ impl core::marker::UnsafeUnpin for rich_record::screen::Snapshot
 impl core::panic::unwind_safe::RefUnwindSafe for rich_record::screen::Snapshot
 impl core::panic::unwind_safe::UnwindSafe for rich_record::screen::Snapshot
 pub struct rich_record::Tape
+pub rich_record::Tape::audio: bool
 pub rich_record::Tape::caption: core::option::Option<alloc::string::String>
 pub rich_record::Tape::columns: u16
 pub rich_record::Tape::env: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>

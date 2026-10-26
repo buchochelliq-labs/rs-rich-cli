@@ -1430,6 +1430,7 @@ pub struct rich::live::AutoLive<W: std::io::Write + core::marker::Send + 'static
 impl<W: std::io::Write + core::marker::Send + 'static> rich::live::AutoLive<W>
 pub fn rich::live::AutoLive<W>::file_proxy<F: std::io::Write>(&self, rich::file_proxy::ProxyStream, F) -> rich::file_proxy::FileProxy<rich::live::LiveHandle<W>, F>
 pub fn rich::live::AutoLive<W>::handle(&self) -> rich::live::LiveHandle<W>
+pub fn rich::live::AutoLive<W>::log(&self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>) -> rich::errors::Result<()>
 pub fn rich::live::AutoLive<W>::print(&self, alloc::boxed::Box<(dyn rich::protocol::Renderable + core::marker::Send)>)
 pub fn rich::live::AutoLive<W>::print_str(&self, impl core::convert::Into<alloc::string::String>)
 pub fn rich::live::AutoLive<W>::refresh(&self)
@@ -1460,6 +1461,8 @@ pub fn rich::live::Live<W>::file_proxy<F: std::io::Write>(&mut self, rich::file_
 pub fn rich::live::Live<W>::get_renderable(self, impl core::ops::function::Fn() -> alloc::boxed::Box<dyn rich::protocol::Renderable> + 'static) -> Self
 pub fn rich::live::Live<W>::into_writer(self) -> W
 pub fn rich::live::Live<W>::is_started(&self) -> bool
+pub fn rich::live::Live<W>::log(&mut self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>) -> rich::errors::Result<()>
+pub fn rich::live::Live<W>::log_at(&mut self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>, &str, u32) -> rich::errors::Result<()>
 pub fn rich::live::Live<W>::new(alloc::boxed::Box<dyn rich::protocol::Renderable>, rich::console::Console, W) -> Self
 pub fn rich::live::Live<W>::options(self, &rich::live::LiveOptions) -> Self
 pub fn rich::live::Live<W>::print(&mut self, &dyn rich::protocol::Renderable)
@@ -1491,6 +1494,8 @@ impl<W> !core::panic::unwind_safe::UnwindSafe for rich::live::Live<W>
 pub struct rich::live::LiveHandle<W: std::io::Write>
 impl<W: std::io::Write + core::marker::Send + 'static> rich::live::LiveHandle<W>
 pub fn rich::live::LiveHandle<W>::file_proxy<F: std::io::Write>(&self, rich::file_proxy::ProxyStream, F) -> rich::file_proxy::FileProxy<Self, F>
+pub fn rich::live::LiveHandle<W>::log(&self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>) -> rich::errors::Result<()>
+pub fn rich::live::LiveHandle<W>::log_at(&self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>, &str, u32) -> rich::errors::Result<()>
 pub fn rich::live::LiveHandle<W>::print(&self, alloc::boxed::Box<(dyn rich::protocol::Renderable + core::marker::Send)>)
 pub fn rich::live::LiveHandle<W>::print_str(&self, impl core::convert::Into<alloc::string::String>)
 impl<W: std::io::Write + core::marker::Send + 'static> rich::file_proxy::ProxyTarget for rich::live::LiveHandle<W>
@@ -1569,6 +1574,7 @@ impl rich::live_render::LiveRender
 pub fn rich::live_render::LiveRender::last_render_height(&self) -> usize
 pub fn rich::live_render::LiveRender::new(alloc::boxed::Box<dyn rich::protocol::Renderable>) -> Self
 pub fn rich::live_render::LiveRender::position_cursor(&self) -> rich::control::Control
+pub fn rich::live_render::LiveRender::renderable(&self) -> &dyn rich::protocol::Renderable
 pub fn rich::live_render::LiveRender::restore_cursor(&self) -> rich::control::Control
 pub fn rich::live_render::LiveRender::set_renderable(&mut self, alloc::boxed::Box<dyn rich::protocol::Renderable>)
 pub fn rich::live_render::LiveRender::set_vertical_overflow(&mut self, rich::live_render::VerticalOverflow)
@@ -2054,6 +2060,8 @@ impl<W: std::io::Write + core::marker::Send + 'static> rich::progress::LiveProgr
 pub fn rich::progress::LiveProgress<W>::add_task(&self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<core::option::Option<f64>>, f64) -> rich::progress::TaskId
 pub fn rich::progress::LiveProgress<W>::advance(&self, rich::progress::TaskId, f64)
 pub fn rich::progress::LiveProgress<W>::file_proxy<F: std::io::Write>(&self, rich::file_proxy::ProxyStream, F) -> rich::file_proxy::FileProxy<rich::live::LiveHandle<W>, F>
+pub fn rich::progress::LiveProgress<W>::log(&self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>) -> rich::errors::Result<()>
+pub fn rich::progress::LiveProgress<W>::log_at(&self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>, &str, u32) -> rich::errors::Result<()>
 pub fn rich::progress::LiveProgress<W>::open(&self, impl core::convert::AsRef<std::path::Path>, core::option::Option<u64>, core::option::Option<rich::progress::TaskId>, impl core::convert::Into<alloc::string::String>) -> std::io::error::Result<rich::progress::ProgressReader<'_, std::fs::File, W>>
 pub fn rich::progress::LiveProgress<W>::print(&self, alloc::boxed::Box<(dyn rich::protocol::Renderable + core::marker::Send)>)
 pub fn rich::progress::LiveProgress<W>::print_str(&self, impl core::convert::Into<alloc::string::String>)
@@ -4509,6 +4517,7 @@ pub struct rich::AutoLive<W: std::io::Write + core::marker::Send + 'static>
 impl<W: std::io::Write + core::marker::Send + 'static> rich::live::AutoLive<W>
 pub fn rich::live::AutoLive<W>::file_proxy<F: std::io::Write>(&self, rich::file_proxy::ProxyStream, F) -> rich::file_proxy::FileProxy<rich::live::LiveHandle<W>, F>
 pub fn rich::live::AutoLive<W>::handle(&self) -> rich::live::LiveHandle<W>
+pub fn rich::live::AutoLive<W>::log(&self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>) -> rich::errors::Result<()>
 pub fn rich::live::AutoLive<W>::print(&self, alloc::boxed::Box<(dyn rich::protocol::Renderable + core::marker::Send)>)
 pub fn rich::live::AutoLive<W>::print_str(&self, impl core::convert::Into<alloc::string::String>)
 pub fn rich::live::AutoLive<W>::refresh(&self)
@@ -5194,6 +5203,8 @@ pub fn rich::live::Live<W>::file_proxy<F: std::io::Write>(&mut self, rich::file_
 pub fn rich::live::Live<W>::get_renderable(self, impl core::ops::function::Fn() -> alloc::boxed::Box<dyn rich::protocol::Renderable> + 'static) -> Self
 pub fn rich::live::Live<W>::into_writer(self) -> W
 pub fn rich::live::Live<W>::is_started(&self) -> bool
+pub fn rich::live::Live<W>::log(&mut self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>) -> rich::errors::Result<()>
+pub fn rich::live::Live<W>::log_at(&mut self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>, &str, u32) -> rich::errors::Result<()>
 pub fn rich::live::Live<W>::new(alloc::boxed::Box<dyn rich::protocol::Renderable>, rich::console::Console, W) -> Self
 pub fn rich::live::Live<W>::options(self, &rich::live::LiveOptions) -> Self
 pub fn rich::live::Live<W>::print(&mut self, &dyn rich::protocol::Renderable)
@@ -5225,6 +5236,8 @@ impl<W> !core::panic::unwind_safe::UnwindSafe for rich::live::Live<W>
 pub struct rich::LiveHandle<W: std::io::Write>
 impl<W: std::io::Write + core::marker::Send + 'static> rich::live::LiveHandle<W>
 pub fn rich::live::LiveHandle<W>::file_proxy<F: std::io::Write>(&self, rich::file_proxy::ProxyStream, F) -> rich::file_proxy::FileProxy<Self, F>
+pub fn rich::live::LiveHandle<W>::log(&self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>) -> rich::errors::Result<()>
+pub fn rich::live::LiveHandle<W>::log_at(&self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>, &str, u32) -> rich::errors::Result<()>
 pub fn rich::live::LiveHandle<W>::print(&self, alloc::boxed::Box<(dyn rich::protocol::Renderable + core::marker::Send)>)
 pub fn rich::live::LiveHandle<W>::print_str(&self, impl core::convert::Into<alloc::string::String>)
 impl<W: std::io::Write + core::marker::Send + 'static> rich::file_proxy::ProxyTarget for rich::live::LiveHandle<W>
@@ -5280,6 +5293,8 @@ impl<W: std::io::Write + core::marker::Send + 'static> rich::progress::LiveProgr
 pub fn rich::progress::LiveProgress<W>::add_task(&self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<core::option::Option<f64>>, f64) -> rich::progress::TaskId
 pub fn rich::progress::LiveProgress<W>::advance(&self, rich::progress::TaskId, f64)
 pub fn rich::progress::LiveProgress<W>::file_proxy<F: std::io::Write>(&self, rich::file_proxy::ProxyStream, F) -> rich::file_proxy::FileProxy<rich::live::LiveHandle<W>, F>
+pub fn rich::progress::LiveProgress<W>::log(&self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>) -> rich::errors::Result<()>
+pub fn rich::progress::LiveProgress<W>::log_at(&self, &[rich::console::LogObject<'_>], &rich::console::LogOptions<'_>, &str, u32) -> rich::errors::Result<()>
 pub fn rich::progress::LiveProgress<W>::open(&self, impl core::convert::AsRef<std::path::Path>, core::option::Option<u64>, core::option::Option<rich::progress::TaskId>, impl core::convert::Into<alloc::string::String>) -> std::io::error::Result<rich::progress::ProgressReader<'_, std::fs::File, W>>
 pub fn rich::progress::LiveProgress<W>::print(&self, alloc::boxed::Box<(dyn rich::protocol::Renderable + core::marker::Send)>)
 pub fn rich::progress::LiveProgress<W>::print_str(&self, impl core::convert::Into<alloc::string::String>)
@@ -5305,6 +5320,7 @@ impl rich::live_render::LiveRender
 pub fn rich::live_render::LiveRender::last_render_height(&self) -> usize
 pub fn rich::live_render::LiveRender::new(alloc::boxed::Box<dyn rich::protocol::Renderable>) -> Self
 pub fn rich::live_render::LiveRender::position_cursor(&self) -> rich::control::Control
+pub fn rich::live_render::LiveRender::renderable(&self) -> &dyn rich::protocol::Renderable
 pub fn rich::live_render::LiveRender::restore_cursor(&self) -> rich::control::Control
 pub fn rich::live_render::LiveRender::set_renderable(&mut self, alloc::boxed::Box<dyn rich::protocol::Renderable>)
 pub fn rich::live_render::LiveRender::set_vertical_overflow(&mut self, rich::live_render::VerticalOverflow)

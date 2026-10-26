@@ -108,3 +108,13 @@ version = "0.0.2"
 lint = "enum_variant_added"
 items = ["*"]
 why = "Noctiluca's updates, commands and events grow with its features"
+
+# 0.0.23 plan, item 13: sound in recordings (`Set Audio on`,
+# `rich record --audio`). The tape, the recording and the options each
+# gain an `audio` field, so a struct literal of them must name it.
+[[break]]
+crate = "rs-rich-record"
+version = "0.0.11"
+lint = "constructible_struct_adds_field"
+items = ["field Tape.audio", "field Recording.audio", "field Options.audio"]
+why = "sound in recordings adds an audio field to Tape, Recording and Options (0.0.23 plan, item 13)"

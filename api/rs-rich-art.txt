@@ -900,6 +900,7 @@ impl core::panic::unwind_safe::UnwindSafe for rich_art::sixel::SixelArt
 pub const rich_art::sixel::DEFAULT_CELL_PX: (u32, u32)
 pub const rich_art::sixel::MAX_PIXELS: u64
 pub fn rich_art::sixel::encode_palette(&[core::option::Option<u8>], &[[u8; 3]], usize, usize) -> core::option::Option<alloc::string::String>
+pub fn rich_art::sixel::encode_rgba(&[u8], usize, usize, u16) -> core::option::Option<alloc::string::String>
 pub fn rich_art::sixel::index_exact(&[[u8; 4]]) -> core::option::Option<(alloc::vec::Vec<core::option::Option<u8>>, alloc::vec::Vec<[u8; 3]>)>
 pub fn rich_art::sixel::is_probably_supported() -> bool
 pub mod rich_art::stage

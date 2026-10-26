@@ -1004,6 +1004,7 @@ impl core::marker::Unpin for intuituive::audio::WavWriter
 impl core::marker::UnsafeUnpin for intuituive::audio::WavWriter
 impl core::panic::unwind_safe::RefUnwindSafe for intuituive::audio::WavWriter
 impl core::panic::unwind_safe::UnwindSafe for intuituive::audio::WavWriter
+pub const intuituive::audio::RECORD_AUDIO_ENV: &str
 pub trait intuituive::audio::Source: core::marker::Send
 pub fn intuituive::audio::Source::channels(&self) -> u16
 pub fn intuituive::audio::Source::duration(&self) -> core::option::Option<core::time::Duration>

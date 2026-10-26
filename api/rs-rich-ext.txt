@@ -15214,9 +15214,11 @@ pub fn rich_ext::surface::Surface<W>::draw(&mut self, impl core::ops::function::
 pub fn rich_ext::surface::Surface<W>::finish(&mut self) -> std::io::error::Result<()>
 pub fn rich_ext::surface::Surface<W>::graphics(self, core::option::Option<alloc::sync::Arc<dyn rich_ext::frame::graphics::PlacementSource>>) -> rich_ext::surface::Surface<W>
 pub fn rich_ext::surface::Surface<W>::new(W, u16, u16) -> rich_ext::surface::Surface<W>
+pub fn rich_ext::surface::Surface<W>::paint_strategy(self, rich_ext::surface::PaintStrategy) -> rich_ext::surface::Surface<W>
 pub fn rich_ext::surface::Surface<W>::resize(&mut self, u16, u16)
 pub fn rich_ext::surface::Surface<W>::screen(&self) -> &rich_ext::surface::Screen
 pub fn rich_ext::surface::Surface<W>::synchronized(self, bool) -> rich_ext::surface::Surface<W>
+pub fn rich_ext::surface::Surface<W>::terminal_scroll(self, bool) -> rich_ext::surface::Surface<W>
 pub fn rich_ext::surface::Surface<W>::viewport(self, rich_ext::surface::Viewport) -> rich_ext::surface::Surface<W>
 pub fn rich_ext::surface::Surface<W>::writer(&self) -> &W
 pub fn rich_ext::surface::Surface<W>::writer_mut(&mut self) -> &mut W
