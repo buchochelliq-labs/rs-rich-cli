@@ -58,6 +58,27 @@ fn documents_print_as_rich_rst_prints_them() {
     assert!(checked >= 20, "only {checked} fixtures checked");
 }
 
+/// For a parity session: `RST_FILE=doc.rst cargo test -p rs-rich-ext --test
+/// rst -- --ignored --nocapture print_a_document` prints the document's tree
+/// (as `scripts/rst_tree.py` prints docutils') and its rendering, at
+/// `RST_WIDTH` columns (default 40).
+#[test]
+#[ignore = "a tool: prints RST_FILE's tree and rendering"]
+fn print_a_document() {
+    let Ok(path) = std::env::var("RST_FILE") else {
+        return;
+    };
+    let source = fs::read_to_string(path).expect("RST_FILE");
+    let width = std::env::var("RST_WIDTH")
+        .ok()
+        .and_then(|width| width.parse().ok())
+        .unwrap_or(40);
+    println!("{}", rich_ext::rst::parse(&source).dump());
+    for line in render(&source, width, false).split('\n') {
+        println!("{line}");
+    }
+}
+
 #[test]
 fn the_default_lexer_titles_unlabelled_code() {
     let console = Console::builder().width(30).color_system(None).build();
