@@ -199,6 +199,31 @@ pub struct RenderStrOptions<'a> {
     pub highlighter: Option<&'a dyn Highlighter>,
 }
 
+/// An environment to detect the terminal from, in place of the process's:
+/// upstream's `Console(_environ=…)`. See [`ConsoleBuilder::environ`].
+pub type Environ = std::collections::HashMap<String, String>;
+
+/// A replacement for [`Console::on_broken_pipe`]'s default.
+type BrokenPipeHandler = std::sync::Arc<dyn Fn(&Console) + Send + Sync>;
+
+/// Read `key` from `environ`, or from the process environment without one.
+fn environ_get(environ: Option<&Environ>, key: &str) -> Option<String> {
+    match environ {
+        Some(environ) => environ.get(key).cloned(),
+        None => std::env::var_os(key).map(|value| value.to_string_lossy().into_owned()),
+    }
+}
+
+/// Python's `str.isdigit()` then `int(…)`, for `COLUMNS` and `LINES`: only
+/// a non-empty run of digits counts.
+fn env_int(environ: Option<&Environ>, key: &str) -> Option<usize> {
+    let value = environ_get(environ, key)?;
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    value.parse().ok()
+}
+
 /// Per-thread capture buffer stacks (innermost capture last).
 type CaptureStacks = std::collections::HashMap<std::thread::ThreadId, Vec<Vec<Segment>>>;
 
@@ -218,10 +243,30 @@ pub struct Console {
     /// The default code highlighter (see `ConsoleCodeHighlighting`).
     code_highlighting: Option<crate::protocol::CodeHighlighting>,
     color_system: Option<ColorSystem>,
-    width: usize,
-    height: usize,
+    /// Upstream's `Console._width`: the width given, or read from `COLUMNS`
+    /// when the console was built. `None` falls back to `terminal_size`.
+    width: Option<usize>,
+    /// Upstream's `Console._height`, as `width` (`LINES`).
+    height: Option<usize>,
+    /// The terminal's size when the console was built (80x25 when it has
+    /// none), the width already less one on a legacy Windows console. Upstream
+    /// asks `os.get_terminal_size` on each `size` read; this port asks once.
+    terminal_size: ConsoleDimensions,
+    /// Upstream's `Console._environ`: the environment detection reads, or
+    /// `None` for the process environment.
+    environ: Option<std::sync::Arc<Environ>>,
     is_terminal: bool,
     no_color: bool,
+    /// Upstream's `Console.quiet`: suppress all output. Atomic because
+    /// [`on_broken_pipe`](Console::on_broken_pipe) sets it through `&self`.
+    quiet: std::sync::atomic::AtomicBool,
+    /// Upstream's `Console.soft_wrap`: the default of `print(soft_wrap=…)`.
+    soft_wrap: bool,
+    /// Upstream's `Console.style`: a style applied to all output.
+    style: Option<crate::style::StyleType>,
+    /// What a write to a closed pipe calls: upstream's overridable
+    /// `Console.on_broken_pipe`. `None` runs upstream's default.
+    on_broken_pipe: Option<BrokenPipeHandler>,
     /// Upstream's `Console.get_time`: the clock animations read.
     get_time: GetTime,
     emoji: bool,
@@ -318,8 +363,14 @@ impl Clone for Console {
             color_system: self.color_system,
             width: self.width,
             height: self.height,
+            terminal_size: self.terminal_size,
+            environ: self.environ.clone(),
             is_terminal: self.is_terminal,
             no_color: self.no_color,
+            quiet: std::sync::atomic::AtomicBool::new(self.quiet()),
+            soft_wrap: self.soft_wrap,
+            style: self.style.clone(),
+            on_broken_pipe: self.on_broken_pipe.clone(),
             get_time: self.get_time.clone(),
             emoji: self.emoji,
             highlight: self.highlight,
@@ -407,15 +458,90 @@ impl Console {
         (self.get_time)()
     }
 
-    /// The detected (or configured) width in cells.
+    /// The width in cells. Port of the `Console.width` property: the
+    /// width of [`size`](Self::size).
     pub fn width(&self) -> usize {
-        self.width
+        self.size().width
     }
 
-    /// The detected (or configured) height in rows. Used by height-aware
-    /// renderables such as [`Layout`](crate::layout::Layout).
+    /// The height in rows. Port of the `Console.height` property: the
+    /// height of [`size`](Self::size). Used by height-aware renderables such
+    /// as [`Layout`](crate::layout::Layout).
     pub fn height(&self) -> usize {
-        self.height
+        self.size().height
+    }
+
+    /// Set the width. Port of the `Console.width` setter.
+    pub fn set_width(&mut self, width: usize) {
+        self.width = Some(width);
+    }
+
+    /// Set the height. Port of the `Console.height` setter.
+    pub fn set_height(&mut self, height: usize) {
+        self.height = Some(height);
+    }
+
+    /// Set the width and height. Port of the `Console.size` setter.
+    pub fn set_size(&mut self, width: usize, height: usize) {
+        self.width = Some(width);
+        self.height = Some(height);
+    }
+
+    /// Whether all output is suppressed. Port of `Console.quiet`.
+    pub fn quiet(&self) -> bool {
+        self.quiet.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Suppress (or restore) all output. Upstream's `Console.quiet` is a
+    /// plain attribute; [`on_broken_pipe`](Self::on_broken_pipe) sets it.
+    pub fn set_quiet(&self, quiet: bool) {
+        self.quiet.store(quiet, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// The default of `print(soft_wrap=…)`. Port of `Console.soft_wrap`.
+    pub fn soft_wrap(&self) -> bool {
+        self.soft_wrap
+    }
+
+    /// Change the soft wrap default. Upstream's `Console.soft_wrap` is a
+    /// plain attribute.
+    pub fn set_soft_wrap(&mut self, soft_wrap: bool) {
+        self.soft_wrap = soft_wrap;
+    }
+
+    /// The style applied to all output, if any. Port of `Console.style`.
+    pub fn style(&self) -> Option<&crate::style::StyleType> {
+        self.style.as_ref()
+    }
+
+    /// Change the style applied to all output. Upstream's `Console.style`
+    /// is a plain attribute.
+    pub fn set_style(&mut self, style: Option<crate::style::StyleType>) {
+        self.style = style;
+    }
+
+    /// Whether the console writes to a terminal that cannot render styles:
+    /// `TERM` is `dumb` or `unknown`. Port of `Console.is_dumb_terminal`.
+    pub fn is_dumb_terminal(&self) -> bool {
+        self.is_terminal && term_is_dumb(self.environ.as_deref())
+    }
+
+    /// Called when a write fails because the reader closed the pipe. Port of
+    /// `Console.on_broken_pipe`: by default the console goes
+    /// [quiet](Self::quiet) and the process exits with status 1 (upstream
+    /// raises `SystemExit(1)`). Upstream lets a subclass override it; here
+    /// [`ConsoleBuilder::on_broken_pipe`] gives the replacement.
+    ///
+    /// Upstream also points standard output at `os.devnull` so that the
+    /// interpreter's flush at exit does not fail again. A Rust process does
+    /// not flush at exit, so nothing is redirected.
+    pub fn on_broken_pipe(&self) {
+        if let Some(handler) = &self.on_broken_pipe {
+            handler(self);
+            return;
+        }
+        self.set_quiet(true);
+        std::process::exit(1);
     }
 
     /// Whether output is going to a real terminal.
@@ -526,28 +652,45 @@ impl Console {
 
     /// The default render options for this console (full width, no height).
     pub fn options(&self) -> ConsoleOptions {
+        let size = self.size();
         ConsoleOptions {
             min_width: 1,
-            max_width: self.width,
+            max_width: size.width,
             height: None,
             justify: Justify::Default,
             overflow: None,
             no_wrap: None,
             highlight: None,
             markup: None,
-            max_height: self.height,
+            max_height: size.height,
             encoding: self.encoding().to_string(),
             is_terminal: self.is_terminal,
             legacy_windows: self.legacy_windows,
-            size: self.size(),
+            size,
         }
     }
 
-    /// The size of the console. Port of the `Console.size` property.
+    /// The size of the console. Port of the `Console.size` property: the
+    /// width and height given (the width one less on a legacy Windows
+    /// console, as upstream subtracts it when both are set), else 80x25 on
+    /// a [dumb terminal](Self::is_dumb_terminal), else the terminal's size
+    /// for whichever was not given.
     pub fn size(&self) -> ConsoleDimensions {
+        if let (Some(width), Some(height)) = (self.width, self.height) {
+            return ConsoleDimensions {
+                width: width.saturating_sub(usize::from(self.legacy_windows)),
+                height,
+            };
+        }
+        if self.is_dumb_terminal() {
+            return ConsoleDimensions {
+                width: DEFAULT_WIDTH,
+                height: DEFAULT_HEIGHT,
+            };
+        }
         ConsoleDimensions {
-            width: self.width,
-            height: self.height,
+            width: self.width.unwrap_or(self.terminal_size.width),
+            height: self.height.unwrap_or(self.terminal_size.height),
         }
     }
 
@@ -593,7 +736,30 @@ impl Console {
         renderable: &dyn Renderable,
         options: &ConsoleOptions,
     ) -> Vec<Segment> {
+        self.print_segments(renderable, options, false)
+    }
+
+    /// The segments `print` writes for `renderable`: those of
+    /// [`render_segments_with`](Self::render_segments_with), followed, when
+    /// `end_line` and the renderable ends its last line, by the line break.
+    ///
+    /// The console's [`soft_wrap`](Self::soft_wrap) applies as upstream's
+    /// `print(soft_wrap=None)` takes it (no wrapping, `overflow="ignore"`,
+    /// nothing cropped), and its [`style`](Self::style) goes under all of
+    /// the output (`_collect_renderables` wraps each renderable in `Styled`).
+    fn print_segments(
+        &self,
+        renderable: &dyn Renderable,
+        options: &ConsoleOptions,
+        end_line: bool,
+    ) -> Vec<Segment> {
         let mut options = options.clone();
+        let crop = !self.soft_wrap;
+        if self.soft_wrap {
+            options.no_wrap = options.no_wrap.or(Some(true));
+            options.overflow = options.overflow.or(Some(Overflow::Ignore));
+        }
+        let ends_line = end_line && Self::print_ends_line(renderable, &options);
         let joined;
         let joined_text = renderable.printed_text();
         let renderable = match joined_text.clone() {
@@ -625,17 +791,37 @@ impl Console {
             let measurement = renderable.measure(self, &options);
             options.max_width = measurement.maximum.min(options.max_width).max(1);
         }
-        let segments = match align {
+        let mut segments = match align {
             // `Console.render` yields nothing when there is no width.
             _ if options.max_width < 1 => Vec::new(),
             Some(align) => crate::align::Align::render_child(renderable, align, self, &options),
             None => renderable.rich_render(self, &options),
         };
+        if segments.is_empty() {
+            return segments;
+        }
+        if ends_line {
+            segments.push(Segment::line());
+        }
+        if let Some(style) = self.console_style() {
+            segments = Segment::apply_style_with(&segments, Some(&style), None);
+        }
+        if !crop {
+            return segments;
+        }
         // `Console.print(crop=True)`: the final backstop against a line running
         // off the side of the terminal. Renderables that fit are untouched; this
         // is what gives `Overflow::Ignore` its "wrap nothing, but still don't
-        // corrupt the display" behaviour.
-        Segment::crop_lines(&segments, self.width)
+        // corrupt the display" behaviour. The line breaks come out plain, as
+        // upstream's `split_and_crop_lines` writes them.
+        Segment::crop_lines(&segments, self.width())
+    }
+
+    /// The console's [`style`](Self::style), resolved against its theme
+    /// (an unknown name is no style on this lenient print path).
+    fn console_style(&self) -> Option<Style> {
+        let style = self.style.as_ref()?;
+        self.get_style(style).ok().filter(|style| !style.is_null())
     }
 
     /// Render a renderable to segments. Port of `Console.render`: `options`
@@ -677,7 +863,8 @@ impl Console {
     /// `print(…, end="")` when `newline` is false. Output written straight to
     /// stdout is flushed in that case, so a prompt shows before input is read.
     fn emit_end(&self, segments: Vec<Segment>, newline: bool) {
-        if segments.is_empty() {
+        // `_check_buffer`: a quiet console drops its output, captured or not.
+        if segments.is_empty() || self.quiet() {
             return;
         }
         let segments = {
@@ -697,9 +884,15 @@ impl Console {
         }
         let stdout = std::io::stdout();
         let mut lock = stdout.lock();
-        let _ = write!(lock, "{output}");
-        if !newline {
-            let _ = lock.flush();
+        let mut written = lock.write_all(output.as_bytes());
+        if written.is_ok() && !newline {
+            written = lock.flush();
+        }
+        drop(lock);
+        // `except BrokenPipeError: self.on_broken_pipe()`. Other write
+        // errors are ignored, as this port has always done.
+        if written.is_err_and(|error| error.kind() == std::io::ErrorKind::BrokenPipe) {
+            self.on_broken_pipe();
         }
     }
 
@@ -831,8 +1024,8 @@ impl Console {
     /// printed `Text` defers to these options, because upstream's `Text.join`
     /// drops the text's own `justify`, `overflow` and `no_wrap`.
     pub fn print_with(&self, renderable: &dyn Renderable, options: &ConsoleOptions) {
-        let segments = self.render_segments_with(renderable, options);
-        self.emit_end(segments, Self::print_ends_line(renderable, options));
+        let segments = self.print_segments(renderable, options, true);
+        self.emit_end(segments, false);
     }
 
     /// Like [`render_export`](Self::render_export), with explicit render
@@ -842,12 +1035,8 @@ impl Console {
         renderable: &dyn Renderable,
         options: &ConsoleOptions,
     ) -> String {
-        let segments = self.render_segments_with(renderable, options);
-        let mut out = self.segments_to_string(&segments);
-        if !segments.is_empty() && Self::print_ends_line(renderable, options) {
-            out.push('\n');
-        }
-        out
+        let segments = self.print_segments(renderable, options, true);
+        self.segments_to_string(&segments)
     }
 
     /// Write a terminal control sequence to stdout.
@@ -859,6 +1048,9 @@ impl Console {
             return;
         }
         let text = control.as_str();
+        if self.quiet() {
+            return;
+        }
         // Upstream buffers control codes with everything else, so a capture
         // records them.
         if let Some(buffer) = current_capture(&mut self.lock_captures()) {
@@ -910,7 +1102,7 @@ impl Console {
                 let height = render_options
                     .height
                     .filter(|&height| height > 0)
-                    .unwrap_or(self.height);
+                    .unwrap_or(self.height());
                 let width = render_options.max_width;
                 (0, 0, render_options.update_dimensions(width, height))
             }
@@ -1713,6 +1905,11 @@ pub struct ConsoleBuilder {
     markup: Option<bool>,
     emoji_variant: Option<crate::emoji::EmojiVariant>,
     tab_size: Option<usize>,
+    environ: Option<Environ>,
+    quiet: bool,
+    soft_wrap: bool,
+    style: Option<crate::style::StyleType>,
+    on_broken_pipe: Option<BrokenPipeHandler>,
 }
 
 impl ConsoleBuilder {
@@ -1734,7 +1931,49 @@ impl ConsoleBuilder {
             markup: None,
             emoji_variant: None,
             tab_size: None,
+            environ: None,
+            quiet: false,
+            soft_wrap: false,
+            style: None,
+            on_broken_pipe: None,
         }
+    }
+
+    /// Detect the terminal from `environ` instead of the process
+    /// environment: `NO_COLOR`, `COLUMNS`, `LINES`, `TERM`, `COLORTERM`,
+    /// `TTY_COMPATIBLE` and `FORCE_COLOR`. Port of `Console(_environ=…)`,
+    /// which upstream provides for tests.
+    pub fn environ(mut self, environ: Environ) -> Self {
+        self.environ = Some(environ);
+        self
+    }
+
+    /// Suppress all output (default off). Port of `Console(quiet=…)`.
+    pub fn quiet(mut self, value: bool) -> Self {
+        self.quiet = value;
+        self
+    }
+
+    /// The default of `print(soft_wrap=…)` (default off): no wrapping and
+    /// no cropping. Port of `Console(soft_wrap=…)`.
+    pub fn soft_wrap(mut self, value: bool) -> Self {
+        self.soft_wrap = value;
+        self
+    }
+
+    /// A style applied to all output (default none). Port of
+    /// `Console(style=…)`.
+    pub fn style(mut self, style: impl Into<crate::style::StyleType>) -> Self {
+        self.style = Some(style.into());
+        self
+    }
+
+    /// Call `handler` in place of [`Console::on_broken_pipe`]'s default
+    /// (quiet, then exit with status 1) when a write finds the pipe closed.
+    /// Upstream overrides `Console.on_broken_pipe` in a subclass.
+    pub fn on_broken_pipe(mut self, handler: impl Fn(&Console) + Send + Sync + 'static) -> Self {
+        self.on_broken_pipe = Some(std::sync::Arc::new(handler));
+        self
     }
 
     /// Enable/disable console markup in printed strings (default enabled).
@@ -1834,25 +2073,36 @@ impl ConsoleBuilder {
     }
 
     pub fn build(self) -> Console {
+        let environ = self.environ.map(std::sync::Arc::new);
+        let env = environ.as_deref();
+        let legacy_windows = self.legacy_windows.unwrap_or(false);
         let is_terminal = self
             .force_terminal
-            .unwrap_or_else(|| std::io::stdout().is_terminal());
+            .unwrap_or_else(|| detect_is_terminal(env));
         // Upstream's rule is `environ.get("NO_COLOR", "") != ""`, so an EMPTY
         // NO_COLOR does not disable colour — only a non-empty value does. That
         // matters because a shell that exports `NO_COLOR=` (a common way to
         // clear it) would otherwise still be treated as opting out.
         let no_color = self
             .no_color
-            .unwrap_or_else(|| std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()));
+            .unwrap_or_else(|| environ_get(env, "NO_COLOR").is_some_and(|value| !value.is_empty()));
+        // `color_system="auto"` (the default) detects; an explicit system,
+        // or `None`, is taken as given.
         let color_system = if self.color_system_set {
             self.color_system
-        } else if is_terminal && !is_dumb_terminal() {
-            Some(detect_color_system())
+        } else if is_terminal && !term_is_dumb(env) {
+            Some(detect_color_system(env))
         } else {
             None
         };
-        let width = self.width.unwrap_or_else(detect_width);
-        let height = self.height.unwrap_or_else(detect_height);
+        // `width = int(columns) - self.legacy_windows`: `COLUMNS` and
+        // `LINES` become the console's own width and height.
+        let width = self.width.or_else(|| {
+            env_int(env, "COLUMNS")
+                .map(|columns| columns.saturating_sub(usize::from(legacy_windows)))
+        });
+        let height = self.height.or_else(|| env_int(env, "LINES"));
+        let terminal_size = detect_terminal_size(legacy_windows);
         Console {
             render_environment: None,
             region_sink: None,
@@ -1860,8 +2110,14 @@ impl ConsoleBuilder {
             color_system,
             width,
             height,
+            terminal_size,
+            environ,
             is_terminal,
             no_color,
+            quiet: std::sync::atomic::AtomicBool::new(self.quiet),
+            soft_wrap: self.soft_wrap,
+            style: self.style,
+            on_broken_pipe: self.on_broken_pipe,
             get_time: self
                 .get_time
                 .unwrap_or_else(|| std::sync::Arc::new(monotonic)),
@@ -1871,7 +2127,7 @@ impl ConsoleBuilder {
             // highlight=False) but is the first thing a user sees: numbers,
             // paths, booleans and URLs come out plain instead of coloured.
             highlight: self.highlight.unwrap_or(true),
-            legacy_windows: self.legacy_windows.unwrap_or(false),
+            legacy_windows,
             safe_box: self.safe_box.unwrap_or(true),
             ascii_only: self.ascii_only.unwrap_or(false),
             theme_stack: vec![self.theme.unwrap_or_else(Theme::default_theme)],
@@ -1887,17 +2143,40 @@ impl ConsoleBuilder {
     }
 }
 
-/// Whether `TERM` names a terminal that cannot render styles. Port of
-/// `Console.is_dumb_terminal` (the caller supplies the `is_terminal` half):
-/// `_detect_color_system` returns no colour system for one, so its output is
-/// plain even though it is a terminal.
-pub(crate) fn is_dumb_terminal() -> bool {
-    std::env::var("TERM")
-        .map(|term| matches!(term.to_lowercase().as_str(), "dumb" | "unknown"))
-        .unwrap_or(false)
+/// Whether `TERM` names a terminal that cannot render styles (`dumb` or
+/// `unknown`, any case). The environment half of `Console.is_dumb_terminal`.
+fn term_is_dumb(environ: Option<&Environ>) -> bool {
+    environ_get(environ, "TERM")
+        .is_some_and(|term| matches!(term.to_lowercase().as_str(), "dumb" | "unknown"))
 }
 
-/// Detect the terminal color system.
+/// Whether standard output is a terminal. Port of the `Console.is_terminal`
+/// property without `force_terminal`: `TTY_COMPATIBLE=0` or `1` decides,
+/// then a set `FORCE_COLOR` (a terminal unless empty), then `isatty`.
+fn detect_is_terminal(environ: Option<&Environ>) -> bool {
+    match environ_get(environ, "TTY_COMPATIBLE").as_deref() {
+        Some("0") => return false,
+        Some("1") => return true,
+        _ => {}
+    }
+    if let Some(force_color) = environ_get(environ, "FORCE_COLOR") {
+        return !force_color.is_empty();
+    }
+    std::io::stdout().is_terminal()
+}
+
+/// Upstream's `_TERM_COLORS`: the colour system named by the last
+/// hyphenated part of `TERM`.
+fn term_colors(colors: &str) -> Option<ColorSystem> {
+    match colors {
+        "kitty" | "256color" => Some(ColorSystem::EightBit),
+        "16color" => Some(ColorSystem::Standard),
+        _ => None,
+    }
+}
+
+/// Detect the terminal color system. Port of `Console._detect_color_system`
+/// for a terminal that is not dumb (the caller checks).
 ///
 /// `COLORTERM`/`TERM` are the portable signals, but **Windows sets neither**.
 /// Detecting from them alone meant every Windows console fell back to
@@ -1908,14 +2187,8 @@ pub(crate) fn is_dumb_terminal() -> bool {
 /// Upstream `rich` special-cases Windows for the same reason. It reaches the
 /// platform APIs directly; we ask `anstyle-query`, which avoids hand-written
 /// `unsafe` FFI for a console handle (see `docs/DIVERGENCES.md`).
-fn detect_color_system() -> ColorSystem {
-    if let Some(colorterm) = std::env::var_os("COLORTERM") {
-        let colorterm = colorterm.to_string_lossy().to_ascii_lowercase();
-        if colorterm.contains("truecolor") || colorterm.contains("24bit") {
-            return ColorSystem::Truecolor;
-        }
-    }
-
+#[cfg_attr(windows, allow(unused_variables))]
+fn detect_color_system(environ: Option<&Environ>) -> ColorSystem {
     // Windows. This function is only reached when stdout is a terminal (see
     // ConsoleBuilder::build), and every modern Windows console that can be a
     // terminal speaks 24-bit color, so report truecolor.
@@ -1937,47 +2210,37 @@ fn detect_color_system() -> ColorSystem {
     // gating this keeps either platform free of unreachable code.
     #[cfg(not(windows))]
     {
-        if let Some(term) = std::env::var_os("TERM") {
-            if term.to_string_lossy().contains("256") {
-                return ColorSystem::EightBit;
-            }
+        let color_term = environ_get(environ, "COLORTERM")
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase();
+        if matches!(color_term.as_str(), "truecolor" | "24bit") {
+            return ColorSystem::Truecolor;
         }
-        ColorSystem::Standard
+        let term = environ_get(environ, "TERM")
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase();
+        // `term.rpartition("-")[2]`: the whole name when it has no hyphen.
+        let colors = term.rsplit('-').next().unwrap_or("");
+        term_colors(colors).unwrap_or(ColorSystem::Standard)
     }
 }
 
-/// Detect the terminal width: `COLUMNS`, then the real terminal, then a default.
-fn detect_width() -> usize {
-    if let Some(columns) = std::env::var_os("COLUMNS") {
-        if let Ok(value) = columns.to_string_lossy().trim().parse::<usize>() {
-            if value > 0 {
-                return value;
-            }
-        }
+/// The terminal's size, 80x25 where it reports none (or zero), the width
+/// one less on a legacy Windows console. The `os.get_terminal_size` half of
+/// upstream's `Console.size`.
+fn detect_terminal_size(legacy_windows: bool) -> ConsoleDimensions {
+    let (width, height) = match terminal_size::terminal_size() {
+        Some((terminal_size::Width(w), terminal_size::Height(h))) => (w as usize, h as usize),
+        None => (0, 0),
+    };
+    let width = if width == 0 { DEFAULT_WIDTH } else { width };
+    let height = if height == 0 { DEFAULT_HEIGHT } else { height };
+    ConsoleDimensions {
+        width: width - usize::from(legacy_windows),
+        height,
     }
-    if let Some((terminal_size::Width(w), _)) = terminal_size::terminal_size() {
-        if w > 0 {
-            return w as usize;
-        }
-    }
-    DEFAULT_WIDTH
-}
-
-/// Detect the terminal height: `LINES`, then the real terminal, then a default.
-fn detect_height() -> usize {
-    if let Some(lines) = std::env::var_os("LINES") {
-        if let Ok(value) = lines.to_string_lossy().trim().parse::<usize>() {
-            if value > 0 {
-                return value;
-            }
-        }
-    }
-    if let Some((_, terminal_size::Height(h))) = terminal_size::terminal_size() {
-        if h > 0 {
-            return h as usize;
-        }
-    }
-    DEFAULT_HEIGHT
 }
 
 impl crate::protocol::ConsoleCodeHighlighting for Console {
@@ -2089,8 +2352,9 @@ impl Console {
     ) -> crate::errors::Result<Vec<Segment>> {
         let (mut no_wrap, mut overflow, mut crop) =
             (options.no_wrap, options.overflow, options.crop);
-        // `soft_wrap=True`: no wrapping, nothing cropped.
-        if options.soft_wrap.unwrap_or(false) {
+        // `soft_wrap=True`: no wrapping, nothing cropped. `None` takes the
+        // console's default.
+        if options.soft_wrap.unwrap_or(self.soft_wrap) {
             no_wrap = no_wrap.or(Some(true));
             overflow = overflow.or(Some(Overflow::Ignore));
             crop = false;
@@ -2110,13 +2374,19 @@ impl Console {
         render_options.markup = options.markup;
         render_options.highlight = options.highlight;
         if let Some(width) = options.width {
-            render_options = render_options.update_width(width.min(self.width));
+            render_options = render_options.update_width(width.min(self.width()));
         }
         if options.height.is_some() {
             render_options.height = options.height;
         }
         let style = match &options.style {
             Some(style) => Some(self.get_style(style)?),
+            None => None,
+        };
+        // `Console(style=…)`: `_collect_renderables` wraps every renderable
+        // in `Styled`, its line ends included.
+        let console_style = match &self.style {
+            Some(style) => Some(self.get_style(style)?).filter(|style| !style.is_null()),
             None => None,
         };
 
@@ -2146,6 +2416,9 @@ impl Console {
                     rendered.push(Segment::line())
                 }
                 None => {}
+            }
+            if let Some(console_style) = &console_style {
+                rendered = Segment::apply_style_with(&rendered, Some(console_style), None);
             }
             // The style goes on each line, never on the newlines.
             if let Some(style) = &style {
@@ -2211,7 +2484,7 @@ impl Console {
             }
         }
         if crop {
-            segments = Segment::split_and_crop_lines(&segments, self.width, None, false, true)
+            segments = Segment::split_and_crop_lines(&segments, self.width(), None, false, true)
                 .into_iter()
                 .flatten()
                 .collect();

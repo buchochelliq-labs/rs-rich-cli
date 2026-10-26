@@ -1,0 +1,11 @@
+# name	json(expected output) — see scripts/golden_console.py
+console_quiet	"True\n\n\u001b[1mshown\u001b[0m\n\n"
+console_size_setters	"30x10\n12x10\n12x4\n16x3\n\u001b[92m────── \u001b[0mx\u001b[92m ───────\u001b[0m\n\n"
+console_size_environ	"29x10\n50x7\n48x7\n48x9\n33x7\n80x25\n50x9\n80x25\n"
+console_dumb_terminal	"True None\nTrue None\nTrue None\nFalse standard\nFalse standard\nFalse standard\nFalse None\n"
+console_color_detection	"256\n256\nstandard\n256\n256\nstandard\nstandard\ntruecolor\ntruecolor\ntruecolor\nstandard\n256\nNone\nstandard\n256\nNone\nNone\n"
+console_terminal_detection	"True standard\nFalse None\nTrue standard\nFalse None\nTrue standard\nTrue 256\nFalse None\n"
+console_no_color_environ	"True 'r \\x1b[1mb\\x1b[0m\\n'\nFalse '\\x1b[31mr\\x1b[0m \\x1b[1mb\\x1b[0m\\n'\nFalse '\\x1b[31mr\\x1b[0m \\x1b[1mb\\x1b[0m\\n'\nFalse\n"
+console_soft_wrap	"True\naaaa bbbb cccc dddd eeee ffff gggg\naaaa bbbb \ncccc dddd \neeee ffff \ngggg\n╭──────────╮\n│ hi there │\n╰──────────╯\naaaa bbbb cccc dddd eeee ffff gggg\n"
+console_style	"\u001b[1mhi\u001b[0m\n\u001b[1m╭───╮\u001b[0m\n\u001b[1m│\u001b[0m\u001b[1m \u001b[0m\u001b[1mx\u001b[0m\u001b[1m \u001b[0m\u001b[1m│\u001b[0m\n\u001b[1m╰───╯\u001b[0m\n\u001b[1ma-b\u001b[0m\u001b[1m!\u001b[0m\n\u001b[1maaaa bbbb \u001b[0m\n\u001b[1mcccc dddd \u001b[0m\n\u001b[1meeee ffff \u001b[0m\n\u001b[1mgggg\u001b[0m\n\u001b[1;3mc\u001b[0m\n\u001b[1m    \u001b[0m\u001b[1mmid\u001b[0m\u001b[1m     \u001b[0m\n\u001b[1;31mtx\u001b[0m\n\u001b[31;47mw\u001b[0m\n"
+console_style_soft_wrap	"\u001b[1mhi\u001b[0m\u001b[1m\n\u001b[0m\u001b[1maaaa bbbb cccc dddd eeee ffff gggg\u001b[0m\u001b[1m\n\u001b[0m\u001b[1m╭───╮\u001b[0m\u001b[1m\n\u001b[0m\u001b[1m│\u001b[0m\u001b[1m \u001b[0m\u001b[1mx\u001b[0m\u001b[1m \u001b[0m\u001b[1m│\u001b[0m\u001b[1m\n\u001b[0m\u001b[1m╰───╯\u001b[0m\u001b[1m\n\u001b[0m"

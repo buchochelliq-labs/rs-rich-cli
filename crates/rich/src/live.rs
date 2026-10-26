@@ -255,12 +255,12 @@ impl<W: Write> Live<W> {
 
     /// Upstream's `Console.is_dumb_terminal`.
     fn is_dumb_terminal(&self) -> bool {
-        self.console.is_terminal() && crate::console::is_dumb_terminal()
+        self.console.is_dumb_terminal()
     }
 
     /// Upstream's `Console.is_interactive`: a terminal that is not dumb.
     fn is_interactive(&self) -> bool {
-        self.console.is_terminal() && !crate::console::is_dumb_terminal()
+        self.console.is_terminal() && !self.console.is_dumb_terminal()
     }
 
     fn write_str(&mut self, text: &str) {

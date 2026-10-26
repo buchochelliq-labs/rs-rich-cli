@@ -1209,7 +1209,7 @@ impl Progress {
             ..crate::live::LiveOptions::default()
         };
         // `Console.is_interactive`: a terminal that is not dumb.
-        let interactive = console.is_terminal() && !crate::console::is_dumb_terminal();
+        let interactive = console.is_terminal() && !console.is_dumb_terminal();
         let shared = Arc::new(std::sync::Mutex::new(self));
         let view = shared.clone();
         let live = crate::live::Live::spawn_get_renderable(
