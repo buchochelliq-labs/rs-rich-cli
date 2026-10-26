@@ -110,7 +110,7 @@ fn inline_node(inline: Inline) -> Node {
                 (None, Some(name)) => reference = reference.with("refname", name),
                 (None, None) => {}
             }
-            if anonymous {
+            if anonymous && reference.get("refuri").is_none() {
                 reference = reference.with("anonymous", "1");
             }
             if !raw.is_empty() {

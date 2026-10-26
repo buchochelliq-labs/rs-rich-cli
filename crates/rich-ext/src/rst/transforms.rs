@@ -486,7 +486,9 @@ fn hyperlinks(document: &mut Element) {
                 named.entry(name.clone()).or_insert(Destination::Internal);
             }
         }
-        "reference" if element.get("anonymous").is_some() => anonymous_refs += 1,
+        "reference" if element.get("anonymous").is_some() && element.get("refuri").is_none() => {
+            anonymous_refs += 1;
+        }
         _ => {}
     });
     let resolve = |name: &str| -> Option<Destination> {
@@ -522,15 +524,15 @@ fn hyperlinks(document: &mut Element) {
                 walk(reference, resolve, anonymous, matched);
                 continue;
             }
-            let destination = if reference.get("anonymous").is_some() {
+            let destination = if reference.get("refuri").is_some() {
+                walk(reference, resolve, anonymous, matched);
+                continue;
+            } else if reference.get("anonymous").is_some() {
                 if matched {
                     anonymous.next().flatten()
                 } else {
                     None
                 }
-            } else if reference.get("refuri").is_some() {
-                walk(reference, resolve, anonymous, matched);
-                continue;
             } else if let Some(name) = reference.get("refname") {
                 resolve(name)
             } else {
@@ -590,8 +592,16 @@ fn contents(document: &mut Element) {
         }
         (!list.children.is_empty()).then_some(list)
     }
-    fn walk(element: &mut Element, top: bool) {
-        let snapshot = element.clone();
+    fn walk(element: &mut Element, root: &Element) {
+        // Only what holds a `contents` topic needs a copy of its sections.
+        let holds = element
+            .elements()
+            .any(|child| child.get("__contents").is_some());
+        let snapshot = if holds {
+            element.clone()
+        } else {
+            Element::new("none")
+        };
         let mut empty = Vec::new();
         for (index, child) in element.children.iter_mut().enumerate() {
             let Node::Element(child) = child else {
@@ -602,24 +612,28 @@ fn contents(document: &mut Element) {
                     .attrs
                     .remove("__depth")
                     .and_then(|depth| depth.parse::<usize>().ok());
-                child.attrs.remove("__local");
-                // The sections of what holds it: the document's, or (local)
-                // its section's.
-                match entries(&snapshot, depth, 1) {
+                let local = child.attrs.remove("__local").is_some();
+                // The document's sections, or (local) those of its section.
+                let scope = if local { &snapshot } else { root };
+                match entries(scope, depth, 1) {
                     Some(list) => child.children.push(list.into()),
                     // No sections: the topic goes.
                     None => empty.push(index),
                 }
                 continue;
             }
-            walk(child, false);
+            walk(child, root);
         }
         for index in empty.into_iter().rev() {
             element.children.remove(index);
         }
-        let _ = top;
     }
-    walk(document, true);
+    let mut any = false;
+    document.walk(&mut |element| any |= element.get("__contents").is_some());
+    if any {
+        let root = document.clone();
+        walk(document, &root);
+    }
 }
 
 /// `Transitions`: one ending a section moves after the section.

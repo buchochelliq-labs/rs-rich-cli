@@ -102,6 +102,37 @@ fn item_block(lines: &[String], start: usize, first: &str) -> (Vec<String>, usiz
     (block, end)
 }
 
+/// A list item's lines: docutils' `list_item`. With text after the marker,
+/// the item is the lines indented at least as far as that text, each
+/// dedented by exactly that much (`get_known_indented`); with none, the
+/// indented lines that follow, by their own indent.
+fn list_item_block(
+    lines: &[String],
+    start: usize,
+    first: &str,
+    width: usize,
+) -> (Vec<String>, usize) {
+    if first.trim().is_empty() {
+        return item_block(lines, start, first);
+    }
+    let mut block = vec![first.to_string()];
+    let mut end = start + 1;
+    while end < lines.len() {
+        let line = &lines[end];
+        if !line.is_empty()
+            && (!line.starts_with(' ') || !line[..width.min(line.len())].trim().is_empty())
+        {
+            break;
+        }
+        block.push(line.get(width..).unwrap_or("").to_string());
+        end += 1;
+    }
+    while block.last().is_some_and(|line| blank(line)) {
+        block.pop();
+    }
+    (block, end)
+}
+
 const PUNCTUATION: &str = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 
 /// The character a line of section adornment repeats.
@@ -851,7 +882,8 @@ fn parse_list(lines: &[String], start: usize) -> Option<(Element, usize)> {
     let mut i = start;
     let mut marker = first;
     loop {
-        let (block, next) = item_block(lines, i, &marker.rest);
+        let width = lines[i].len() - marker.rest.len();
+        let (block, next) = list_item_block(lines, i, &marker.rest, width);
         list = list.child(Element::new("list_item").children(parse_body(&block, false)));
         i = next;
         let mut peek = i;
@@ -1030,13 +1062,21 @@ fn explicit_markup(lines: &[String], start: usize) -> (Vec<Node>, usize) {
     if let Some(found) = captures(&SUBSTITUTION, line) {
         let name = found[1].clone();
         let (mut nodes, next) = directive(lines, start, &found[2].to_lowercase(), &found[4], true);
-        // The directive's own text starts at its name.
+        // The directive's own text starts at its name, and has no blank
+        // line after it.
         let prefix = line.find(&format!("{}::", found[2])).unwrap_or(0);
         for node in &mut nodes {
-            if let Node::Element(image) = node {
-                if image.tag == "image" {
-                    image.rawsource = image.rawsource.get(prefix..).unwrap_or("").to_string();
-                }
+            if let Node::Element(element) = node {
+                element.walk_mut(&mut |image| {
+                    if image.tag == "image" {
+                        let raw = image.rawsource.get(prefix..).unwrap_or("");
+                        image.rawsource = raw.trim_end_matches('\n').to_string();
+                        // Its alt text defaults to the substitution's name.
+                        if image.get("alt").is_none() {
+                            image.attrs.insert("alt", name.clone());
+                        }
+                    }
+                });
             }
         }
         let mut definition = Element::new("substitution_definition");
@@ -1044,11 +1084,7 @@ fn explicit_markup(lines: &[String], start: usize) -> (Vec<Node>, usize) {
         definition.attrs.insert("name", name.clone());
         for node in nodes {
             match node {
-                // An image's alt text defaults to the substitution's name.
-                Node::Element(mut image) if image.tag == "image" => {
-                    if image.get("alt").is_none() {
-                        image.attrs.insert("alt", name.clone());
-                    }
+                Node::Element(image) if image.tag == "image" => {
                     definition.children.push(Node::Element(image));
                 }
                 Node::Element(paragraph) if paragraph.tag == "paragraph" => {
@@ -1156,14 +1192,12 @@ const UNPORTED: &[&str] = &[
     "footer",
     "target-notes",
     "meta",
-    "include",
     "unicode",
     "class",
     "role",
     "default-role",
     "title",
     "date",
-    "csv-table",
     "highlight",
     "index",
     "tabularcolumns",
@@ -1304,6 +1338,31 @@ fn substitution_directive(d: &Directive) -> Vec<Node> {
         "unicode" | "date" => Vec::new(),
         name => d.error(&format!("Unknown directive type \"{name}\".")),
     }
+}
+
+/// Python's `repr` of a string.
+fn python_repr(text: &str) -> String {
+    let quote = if text.contains('\'') && !text.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    let mut out = String::from(quote);
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            c if c == quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            c => out.push(c),
+        }
+    }
+    out.push(quote);
+    out
 }
 
 /// docutils' `make_id`: lowercase, runs of other characters to one hyphen.
@@ -1472,8 +1531,11 @@ fn body_directive(d: &Directive) -> Vec<Node> {
             vec![sidebar.children(d.content_body()).into()]
         }
         "raw" => {
-            if d.argument.is_empty() || d.content.is_empty() {
+            if d.argument.is_empty() {
                 return d.missing_argument();
+            }
+            if d.content.is_empty() {
+                return d.error("Content block expected for the \"raw\" directive; none found.");
             }
             let format = d
                 .argument
@@ -1514,6 +1576,19 @@ fn body_directive(d: &Directive) -> Vec<Node> {
             vec![container.children(d.content_body()).into()]
         }
         "compound" => vec![Element::new("compound").children(d.content_body()).into()],
+        // rich-rst reads no files unless asked; it says so instead.
+        "include" => {
+            if d.argument.is_empty() {
+                return d.missing_argument();
+            }
+            let text = format!(
+                "File access is disabled; not including {} (see allow_file_access)",
+                python_repr(&d.argument)
+            );
+            vec![Element::new("warning")
+                .child(Element::text("paragraph", text))
+                .into()]
+        }
         "table" => d
             .content_body()
             .into_iter()
@@ -1527,6 +1602,8 @@ fn body_directive(d: &Directive) -> Vec<Node> {
                 other => other,
             })
             .collect(),
+        "csv-table" => csv_table(d)
+            .unwrap_or_else(|| d.error("Error with CSV data in \"csv-table\" directive.")),
         "list-table" => list_table(d).unwrap_or_else(|| {
             d.error("Error parsing content block for the \"list-table\" directive.")
         }),
@@ -1623,6 +1700,107 @@ fn list_table(d: &Directive) -> Option<Vec<Node>> {
     };
     let head: Vec<Element> = rows.iter().take(header_rows).map(make_row).collect();
     let body: Vec<Element> = rows.iter().skip(header_rows).map(make_row).collect();
+    let mut table = table(&vec![0; columns], head, body);
+    if !d.argument.is_empty() {
+        table
+            .children
+            .insert(0, inlines("title", &d.argument).into());
+    }
+    Some(vec![table.into()])
+}
+
+/// CSV rows as docutils' `csv-table` reads them: `,` between fields,
+/// spaces after it skipped, `"` quoting with `""` for a quote.
+fn csv_rows(text: &str) -> Option<Vec<Vec<String>>> {
+    let mut rows = Vec::new();
+    let mut row: Vec<String> = Vec::new();
+    let mut field = String::new();
+    let mut chars = text.chars().peekable();
+    let mut quoted = false;
+    let mut at_start = true;
+    let mut was_quoted = false;
+    while let Some(c) = chars.next() {
+        if quoted {
+            if c == '"' {
+                if chars.peek() == Some(&'"') {
+                    chars.next();
+                    field.push('"');
+                } else {
+                    quoted = false;
+                }
+            } else {
+                field.push(c);
+            }
+            continue;
+        }
+        match c {
+            ' ' if at_start => {}
+            '"' if at_start => {
+                quoted = true;
+                was_quoted = true;
+                at_start = false;
+            }
+            ',' => {
+                row.push(std::mem::take(&mut field));
+                at_start = true;
+                was_quoted = false;
+            }
+            '\n' => {
+                row.push(std::mem::take(&mut field));
+                rows.push(std::mem::take(&mut row));
+                at_start = true;
+                was_quoted = false;
+            }
+            // Text after a closing quote is an error in a strict dialect.
+            _ if was_quoted => return None,
+            c => {
+                field.push(c);
+                at_start = false;
+            }
+        }
+    }
+    if quoted {
+        return None;
+    }
+    if !field.is_empty() || !row.is_empty() {
+        row.push(field);
+        rows.push(row);
+    }
+    Some(rows)
+}
+
+/// `csv-table` with its data inline (rich-rst reads no files).
+fn csv_table(d: &Directive) -> Option<Vec<Node>> {
+    if d.option("file").is_some() || d.option("url").is_some() || d.content.is_empty() {
+        return None;
+    }
+    let mut head: Vec<Vec<String>> = match d.option("header") {
+        Some(header) => csv_rows(&header)?,
+        None => Vec::new(),
+    };
+    let mut body = csv_rows(&d.content.join("\n"))?;
+    let header_rows: usize = d
+        .option("header-rows")
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0);
+    let taken = header_rows.min(body.len());
+    head.extend(body.drain(..taken));
+    let columns = head.iter().chain(&body).map(Vec::len).max().unwrap_or(0);
+    if columns == 0 {
+        return None;
+    }
+    let row = |cells: &Vec<String>| {
+        let mut cells = cells.clone();
+        cells.resize(columns, String::new());
+        Element::new("row").children(cells.iter().map(|cell| {
+            let lines: Vec<String> = cell.lines().map(String::from).collect();
+            Element::new("entry")
+                .children(parse_body(&lines, false))
+                .into()
+        }))
+    };
+    let head: Vec<Element> = head.iter().map(row).collect();
+    let body: Vec<Element> = body.iter().map(row).collect();
     let mut table = table(&vec![0; columns], head, body);
     if !d.argument.is_empty() {
         table

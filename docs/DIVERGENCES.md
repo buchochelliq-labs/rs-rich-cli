@@ -623,9 +623,11 @@ open ones are **permanent**, each for the reason in its entry:
   (`code-block`, `sourcecode`), admonition, `seealso`, `versionadded`,
   `versionchanged`, `deprecated`, `image`, `figure`, `contents`, `topic`,
   `rubric`, `math`, `sidebar`, `raw`, `container`, `compound`,
-  `line-block`, `epigraph`, `highlights`, `pull-quote`, `table` and
-  `list-table` directives. Other directives docutils or `rich-rst`'s Sphinx
-  registry knows (`csv-table`, `include`, `unicode`, `date`, `sectnum`,
+  `line-block`, `epigraph`, `highlights`, `pull-quote`, `table`,
+  `list-table` and `csv-table` (its data inline) directives, and `include`,
+  which says file access is off, as `rich-rst` does by default. Other
+  directives docutils or `rich-rst`'s Sphinx registry knows (`unicode`,
+  `date`, `sectnum`,
   `header`, `footer`, `class`, `role`, `toctree`, `literalinclude`,
   `glossary`, `hlist`, `only`, `centered`, the domain directives and a few
   more) render nothing here; an unknown directive shows its source, as
@@ -640,7 +642,7 @@ open ones are **permanent**, each for the reason in its entry:
   `RecursionError` at about 170 levels, where `rich-rst` raises.
 - **Same:** everything the subset covers prints byte for byte what
   `rich-rst` 2.2.0 prints on rich 15.0.0, quirks included
-  (`crates/rich-ext/tests/rst.rs`: 15 documents at two widths, 10 of them
+  (`crates/rich-ext/tests/rst.rs`: 19 documents at two widths, 10 of them
   in colour too, from `scripts/capture_rst_golden.py`). As everywhere,
   code blocks are highlighted by syntect (§18) and OSC 8 links carry no
   `id=`.

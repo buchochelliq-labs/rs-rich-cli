@@ -44,7 +44,7 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   their numbering style, footnotes are numbered, references and
   substitutions resolve, and `contents` lists the sections. New directives:
   `seealso`, `versionadded`, `versionchanged`, `deprecated`, `figure`,
-  `parsed-literal`, `epigraph`, `list-table` and more. Breaking for
+  `parsed-literal`, `epigraph`, `list-table`, `csv-table` and more. Breaking for
   `rs-rich-ext`: `rst::parse` returns the tree (`rst::Element`), and
   `Block`, `Inline` and friends are gone. Fresh goldens from rich-rst 2.2.0
   on rich 15.0.0; DIVERGENCES §35 lists what is not ported.
