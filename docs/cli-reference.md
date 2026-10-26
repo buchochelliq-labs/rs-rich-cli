@@ -2471,7 +2471,7 @@ rich plugin COMMAND [ARGS] [--marketplace LOCATION] [--marketplace-keys FILE] [-
 
 | Command | Description |
 | --- | --- |
-| `search` | List the marketplace's packages, or those whose id, name, description or keywords contain QUERY |
+| `search` | List the marketplace's packages, or those with every word of QUERY in their id, name, description, keywords, authors or capabilities; the tier shows as `✓ official`, `reviewed` or `community`, and who authored each |
 | `info` | One package: its tier, source, versions, what loads here, and for a crate the `cargo add` line |
 | `install` | Show the tier, permissions and capabilities, ask, then download, check (size, SHA-256, the WASM manifest in the sandbox) and install; a crate is refused with its `cargo add` line |
 | `update` | Move installed packages (or those named) to the newest version this host loads, asking first; a yanked version is replaced |
@@ -2491,18 +2491,20 @@ rich plugin COMMAND [ARGS] [--marketplace LOCATION] [--marketplace-keys FILE] [-
 
 #### rich plugin search
 
-List the marketplace's packages, or those whose id, name, description or keywords contain QUERY
+List the marketplace's packages, or those with every word of QUERY in their id, name, description, keywords, authors or capabilities; the tier shows as `✓ official`, `reviewed` or `community`, and who authored each
 
 ##### Usage
 
 ```text
-rich plugin search [QUERY]
+rich plugin search [QUERY] [--kind KIND] [--tier TIER]
 ```
 
 ##### Options
 
 | Option | Description |
 | --- | --- |
+| `--kind <KIND>` | Only this kind: crate, wasm-plugin, micro-pack or theme. |
+| `--tier <TIER>` | Only this tier: official (rs-rich's own), reviewed or community. |
 | `--marketplace <LOCATION>` | The marketplace: an https:// base URL, or a directory or file:// URL laid out as the marketplace repository is (artifacts from its artifacts/HOST/PATH mirror, never the network); else RICH_MARKETPLACE, else the official one. |
 | `--marketplace-keys <FILE>` | Trust this keys-N.json instead of the keys compiled in; else RICH_MARKETPLACE_KEYS. |
 | `--plugin-dir <DIR>` | Install into DIR; else RICH_PLUGIN_DIR, else $XDG_DATA_HOME/rich/plugins (~/.local/share/rich/plugins) |
@@ -2512,7 +2514,21 @@ rich plugin search [QUERY]
 
 | Argument | Description |
 | --- | --- |
-| `[QUERY]` | Text to look for, in any case. |
+| `[QUERY]` | Words to look for, in any case. |
+
+##### Examples
+
+Packages with a rot13 capability, say
+
+```sh
+rich plugin search rot13
+```
+
+rs-rich's own themes
+
+```sh
+rich plugin search --kind theme --tier official
+```
 
 #### rich plugin info
 
