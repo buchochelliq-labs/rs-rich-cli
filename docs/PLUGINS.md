@@ -325,14 +325,40 @@ rich plugin browse                # the same, in a selector with provenance
 
 - **What is listed (0.0.23).** The official marketplace,
   [`buchochelliq-labs/rs-rich-marketplace`](https://github.com/buchochelliq-labs/rs-rich-marketplace),
-  goes live with 0.0.23: the Mermaid, DOT and lumis crates, `textcase` (a
-  WASM plugin built from
-  `crates/rich-plugin-api/examples/wasm/textcase.wat`: the `upcase` and
-  `downcase` transforms and a `loud` fence) and the built-in micro packs
-  `status`, `dev` and `fun` as `.richmicro` archives. The WASM plugin and
-  the packs are built reproducibly, and `crates/rich-cli/tests/official_artifacts.rs`
-  checks each rebuild against its pinned hash. The marketplace serves them
-  from its own `artifacts/`. Until the maintainer signs the first index,
+  goes live with 0.0.23. It lists:
+  - the Mermaid, DOT and lumis crates;
+  - `textcase`, a WASM plugin. 0.1.0 is
+    `crates/rich-plugin-api/examples/wasm/textcase.wat`: the `upcase` and
+    `downcase` transforms and a `loud` fence. 0.2.0
+    (`crates/rich-cli/official/wasm/textcase-0.2.0.wat`) adds the
+    `titlecase`, `snakecase`, `kebabcase` and `camelcase` transforms;
+  - `wordplay` 0.1.0, a WASM plugin
+    (`crates/rich-cli/official/wasm/wordplay-0.1.0.wat`): the `rot13`,
+    `reverse` and `slug` transforms;
+  - the built-in micro packs `status`, `dev` and `fun`, as `.richmicro`
+    archives;
+  - five themes, from `crates/rich-cli/official/themes/`: `dusk` and
+    `ocean` (dark), `paper` (light), `high-contrast` (every text colour at
+    least 7:1 against black, WCAG AAA) and `mono` (no colour, attributes
+    only). Each is an upstream `[styles]` file that sets every style of
+    rich's default theme that has a colour (but the colour names, such as
+    `red`); the coloured ones meet WCAG AA
+    (4.5:1) against the background each file names.
+
+  The case transforms, `rot13` and `slug` change ASCII letters only, and
+  pass every byte of a non-ASCII character through as part of a word, so
+  their output is UTF-8. The identifier cases and `slug` work line by line.
+  `reverse` reverses each line by character cluster: a character with its
+  combining marks, variation selectors, skin tones and ZWJ sequences, and a
+  flag's two regional indicators, move as one. It needs no Unicode tables,
+  so it is not full UAX #29 (conjoining Hangul jamo and Indic spacing marks
+  are split). Each transform takes at least 256 KiB in one call within the
+  default fuel. A listed version never changes, so each WASM version has
+  its own source file. The plugins, packs and themes are built
+  reproducibly, and `crates/rich-cli/tests/official_artifacts.rs` checks
+  each rebuild against its pinned hash (`official_packages.rs` checks what
+  the plugins and themes do). The marketplace serves them from its own
+  `artifacts/`. Until the maintainer signs the first index,
   `search` says the marketplace has no `index.json` and exits 3.
 - **What installs.** A WASM plugin, a micro pack or a theme. A crate is
   listed only: `install` refuses it and prints its `cargo add` line, and

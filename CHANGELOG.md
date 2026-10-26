@@ -22,6 +22,20 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and a weekly job installs from the live marketplace once it is signed.
   The `official` tier now reads "rs-rich's own, built from its repository".
 
+- **More official marketplace packages** (rs-rich-cli, its tests and
+  `official/` sources): five themes, `dusk`, `paper`, `ocean`,
+  `high-contrast` and `mono`, each an upstream `[styles]` file that sets
+  every coloured style of rich's default theme (but the colour names). The
+  coloured ones meet WCAG
+  AA against the background each names, and `high-contrast` meets AAA.
+  `textcase` 0.2.0 adds the `titlecase`, `snakecase`, `kebabcase` and
+  `camelcase` transforms. A second WASM plugin, `wordplay` 0.1.0, has
+  `rot13`, `reverse` (by character cluster, line by line) and `slug`. All
+  are UTF-8 safe: the ASCII-only transforms leave non-ASCII characters
+  alone. Each WASM version builds from its own file in
+  `crates/rich-cli/official/wasm/`, and `tests/official_artifacts.rs` pins
+  every hash; `tests/official_packages.rs` checks what they do.
+
 - **Installed micro packs load** (rs-rich-cli): a micro pack installed with
   `rich plugin install` loads on every run, into micro's user layer after
   the user's own directory, once its file still hashes to what the lockfile

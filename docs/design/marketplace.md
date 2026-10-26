@@ -10,8 +10,10 @@ with the marketplace repository's signing workflow kept to hand over in
 [`docs/marketplace-repo/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/docs/marketplace-repo).
 **The marketplace goes live with 0.0.23** (the maintainer's call on
 2026-10-26): the marketplace repository lists every official plugin
-(Mermaid, DOT and lumis as crates, the `textcase` WASM plugin) and the
-built-in micro packs (`status`, `dev`, `fun`), and checks every listing
+(Mermaid, DOT and lumis as crates, the `textcase` and `wordplay` WASM
+plugins), the built-in micro packs (`status`, `dev`, `fun`) and the
+official themes (`dusk`, `paper`, `ocean`, `high-contrast`, `mono`), and
+checks every listing
 pull request; it is live once the maintainer has set up the signing
 environment and signed the first index
 ([0.0.23 plan, item 17](../plans/0.0.23.md)). This note is the contract
@@ -485,7 +487,7 @@ for its own major, and says that newer versions need a newer host.
 
 | Tier | Meaning | Who sets it |
 |---|---|---|
-| `official` | This repository's own packages: the Mermaid, DOT and lumis crates, the `textcase` WASM plugin and the built-in micro packs, built from this repository (the crates by its release workflow, the others reproducibly by `tests/official_artifacts.rs`, which pins their hashes). The repository must be under `buchochelliq-labs`. | The maintainer. |
+| `official` | This repository's own packages: the Mermaid, DOT and lumis crates, the `textcase` and `wordplay` WASM plugins, the built-in micro packs and the official themes, built from this repository (the crates by its release workflow, the others reproducibly by `tests/official_artifacts.rs`, which pins their hashes). The repository must be under `buchochelliq-labs`. | The maintainer. |
 | `reviewed` | A maintainer has read the source at `source_revision`, rebuilt the artifact and got the same hash. | The maintainer, per version. |
 | `community` | The marketplace's CI checked the listing, the hash and (for a WASM plugin) that it loads in the sandbox against the current host. Nothing more. | The default. |
 

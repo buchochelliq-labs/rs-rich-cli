@@ -2321,11 +2321,42 @@ SHA-256 against a signed index.
 
 The official marketplace,
 [`buchochelliq-labs/rs-rich-marketplace`](https://github.com/buchochelliq-labs/rs-rich-marketplace),
-goes live with 0.0.23. It lists the official plugins (Mermaid, DOT and
-lumis as crates, and `textcase`, a WASM plugin with the `upcase` and
-`downcase` transforms and a `loud` fence) and the built-in micro packs
-(`status`, `dev`, `fun`). Until the maintainer signs its first index,
-`rich plugin search` says there is no `index.json` and exits 3.
+goes live with 0.0.23. It lists the official packages:
+
+- Mermaid, DOT and lumis, as crates;
+- `textcase`, a WASM plugin: the `upcase`, `downcase`, `titlecase`,
+  `snakecase`, `kebabcase` and `camelcase` transforms (the last four from
+  0.2.0) and a `loud` fence;
+- `wordplay`, a WASM plugin: the `rot13`, `reverse` and `slug` transforms;
+- the built-in micro packs `status`, `dev` and `fun`;
+- the themes `dusk`, `ocean` (both dark), `paper` (light), `high-contrast`
+  (for a black background, every text colour at least 7:1) and `mono` (no
+  colour).
+
+Until the maintainer signs its first index, `rich plugin search` says
+there is no `index.json` and exits 3.
+
+The transforms run on `--print`, text and `--syntax`, in the order given:
+
+```bash
+rich plugin install textcase --yes
+rich --transform titlecase -p "the quick brown fox"   # The Quick Brown Fox
+rich --transform snakecase -p "parseHTTP2Header"      # parse_http2_header
+rich plugin install wordplay --yes
+rich --transform rot13 -p "Hello, World!"             # Uryyb, Jbeyq!
+rich --transform reverse -p "drawer"                  # reward
+rich --transform slug -p "Crème Brûlée, 2nd try!"     # crème-brûlée-2nd-try
+```
+
+Only ASCII letters change case (and only they rotate in `rot13`); a
+non-ASCII character passes through whole, as part of its word. The
+identifier cases and `slug` work line by line. `reverse` keeps each line
+in place and reverses its characters, moving an accent, emoji sequence or
+flag as one.
+
+A theme file is upstream rich's `[styles]` format, so the source files in
+`crates/rich-cli/official/themes/` also work directly:
+`rich --theme-file crates/rich-cli/official/themes/dusk.ini -p "[1, None]"`.
 
 ```bash
 rich plugin search                 # every package: kind, tier, version
