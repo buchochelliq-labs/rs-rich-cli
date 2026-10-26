@@ -1,0 +1,78 @@
+name: live marketplace
+
+# The official plugin marketplace (docs/design/marketplace.md) against this
+# host, with the official keys compiled in and no override: the signed index
+# verifies, every official package is listed and suits this host, and the
+# WASM plugin and a micro pack install, verify and load.
+#
+# It runs weekly and by hand, from main. Until the maintainer has signed the
+# marketplace's first index there is nothing to check: the job says so and
+# passes, so it never fails before the marketplace is live.
+on:
+  schedule:
+    - cron: "41 4 * * 2"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: marketplace-live
+  cancel-in-progress: false
+
+env:
+  MARKETPLACE: https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/main/
+
+jobs:
+  live:
+    name: install from the live marketplace
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - name: Is the marketplace signed yet?
+        id: signed
+        run: |
+          if curl -fsSIL -A rs-rich-ci "${MARKETPLACE}index.json.minisig" > /dev/null; then
+            echo "live=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "::notice::the marketplace has no signed index yet; nothing to check"
+          fi
+
+      - uses: actions/checkout@v7
+        if: steps.signed.outputs.live == 'true'
+
+      - name: Install Rust toolchain
+        if: steps.signed.outputs.live == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        if: steps.signed.outputs.live == 'true'
+        uses: Swatinem/rust-cache@v2
+
+      - name: Build rich
+        if: steps.signed.outputs.live == 'true'
+        run: cargo build -p rs-rich-cli --locked
+
+      - name: Search, install and verify with the official keys
+        if: steps.signed.outputs.live == 'true'
+        env:
+          NO_COLOR: "1"
+        run: |
+          set -euo pipefail
+          unset RICH_MARKETPLACE RICH_MARKETPLACE_KEYS
+          export RICH_PLUGIN_DIR="$RUNNER_TEMP/plugins"
+          export HOME="$RUNNER_TEMP/home"
+          mkdir -p "$HOME"
+          rich="$PWD/target/debug/rich"
+          "$rich" plugin search
+          for id in mermaid dot lumis textcase status dev fun; do
+            "$rich" plugin info "$id" --report json 2> info.json
+            jq -e '.ok and .result.candidate != null' info.json
+          done
+          "$rich" plugin install textcase --yes
+          "$rich" plugin install status --yes
+          "$rich" plugin verify
+          "$rich" --transform upcase -p "live" > out.txt
+          grep -q LIVE out.txt
+          rm -f info.json out.txt

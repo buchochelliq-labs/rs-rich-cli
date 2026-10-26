@@ -9,6 +9,26 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **The plugin marketplace goes live** (rs-rich-cli, rs-rich-plugin-api's
+  examples): rs-rich-marketplace lists the Mermaid, DOT and lumis crates,
+  `textcase` (a new official WASM plugin: the `upcase` and `downcase`
+  transforms and a `loud` fence) and the built-in micro packs `status`,
+  `dev` and `fun`. The WASM plugin and the packs are built reproducibly,
+  and `tests/official_artifacts.rs` pins their hashes. The marketplace
+  checks each listing pull request (validation, artifact hashes, crates.io
+  checksums, an install with `rich`) and signs its index with a deploy key
+  to push it; `docs/marketplace-repo/` keeps a copy of its workflows and
+  scripts. CI's compatibility job installs the official plugins and packs,
+  and a weekly job installs from the live marketplace once it is signed.
+  The `official` tier now reads "rs-rich's own, built from its repository".
+
+- **Installed micro packs load** (rs-rich-cli): a micro pack installed with
+  `rich plugin install` loads on every run, into micro's user layer after
+  the user's own directory, once its file still hashes to what the lockfile
+  records; `rich plugin disable` stops it and `rich micro packs` lists it.
+  `rich plugin publish` fills a new micro pack listing's description,
+  license and author from its `pack.json` when they are not given.
+
 - **console.py fully ported** (rs-rich): the rest of upstream's `Console`.
   `quiet`; the size setters and upstream's size rules; `is_dumb_terminal`;
   `Console(soft_wrap=…, style=…)`; `color_system="auto"` and terminal

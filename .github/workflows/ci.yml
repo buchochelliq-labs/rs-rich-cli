@@ -836,11 +836,15 @@ jobs:
   # The plugin marketplace against this host (docs/design/marketplace.md):
   # a test marketplace written from crates/rich-cli/tests/plugin_marketplace.rs,
   # signed with rs-rich-marketplace's test key, listing the official plugins
-  # (Mermaid, DOT, lumis) at this workspace's versions and a fixture WASM
-  # plugin. The built binary installs from it with no network: each crate
-  # resolves for this host's plugin API and is refused with its `cargo add`
-  # line, and the WASM plugin installs (its manifest checked in the
-  # sandbox), verifies and loads on the next run without --plugin.
+  # (Mermaid, DOT, lumis) at this workspace's versions, a fixture WASM
+  # plugin, and the official `textcase` WASM plugin and built-in micro packs
+  # as the marketplace repository lists them (tests/support/official.rs
+  # rebuilds them; tests/official_artifacts.rs pins their hashes). The built
+  # binary installs from it with no network: each crate resolves for this
+  # host's plugin API and is refused with its `cargo add` line, each WASM
+  # plugin installs (its manifest checked in the sandbox), verifies and loads
+  # on the next run without --plugin, and each micro pack installs and loads
+  # into micro's user layer.
   plugin-compatibility:
     name: plugin marketplace compatibility
     runs-on: ubuntu-latest
@@ -864,6 +868,9 @@ jobs:
           RICH_TEST_MARKETPLACE="$RUNNER_TEMP/marketplace"
           cargo test -p rs-rich-cli --locked --test plugin_marketplace
           -- --ignored --exact write_test_marketplace
+
+      - name: The official artifacts rebuild to their pinned hashes
+        run: cargo test -p rs-rich-cli --locked --test official_artifacts
 
       - name: Install the official plugins and the fixture plugin
         env:
@@ -889,7 +896,23 @@ jobs:
           printf '# Doc\n\n```shout\nhello there\n```\n' > doc.md
           "$rich" -m doc.md | tee rendered.txt
           grep -qE '^hello there *$' rendered.txt
-          rm -f info.json refusal.txt doc.md rendered.txt
+          "$rich" plugin install textcase --yes
+          "$rich" --transform upcase -p "official" > rendered.txt
+          grep -q OFFICIAL rendered.txt
+          printf '```loud\nhello there\n```\n' > loud.md
+          "$rich" -m loud.md > rendered.txt
+          grep -q "HELLO THERE" rendered.txt
+          for pack in status dev fun; do
+            "$rich" plugin install "$pack" --yes
+          done
+          "$rich" plugin verify
+          # Installed packs load into micro's user layer with no other step.
+          "$rich" micro packs --report json > packs.json
+          for pack in status dev fun; do
+            jq -e --arg p "$RICH_PLUGIN_DIR/$pack/$pack-1.0.0.richmicro" \
+              '[.packs[] | select(.layer == "user" and .path == $p)] | length == 1' packs.json
+          done
+          rm -f info.json refusal.txt doc.md rendered.txt loud.md packs.json
 
   # Every published crate's public API against its snapshot in api/ (an
   # API change shows in review as a snapshot change), and cargo-semver-checks
