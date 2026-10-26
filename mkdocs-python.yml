@@ -12,6 +12,11 @@ site_dir: site/python
 
 theme:
   name: material
+  # No request leaves the site: the main site's fonts (this site is
+  # published inside it, at python/), and the repository link without
+  # Material's call to the GitHub API (scripts/docs_overrides).
+  font: false
+  custom_dir: scripts/docs_overrides
   # rs-rich's mark and favicon, copied from docs/assets/rs-rich/ by
   # scripts/gen_rs_rich_hero.py (this site is built from docs/python alone).
   logo: assets/mark.svg
@@ -47,6 +52,9 @@ theme:
 
 # rs-rich's gold accent and the home page's hero banner.
 extra_css:
+  # The main site's, one level up: this site is always published at its
+  # python/. Built alone, it falls back to the system's fonts.
+  - ../assets/fonts.css
   - assets/extra.css
 
 plugins:

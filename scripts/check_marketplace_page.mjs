@@ -30,8 +30,16 @@
 //   - before the first index (a 404) it says the index is being signed,
 //     and an unreachable marketplace offers to try again;
 //   - the page's requests go only to the marketplace, without credentials
-//     or a referrer (the theme's web font and repository facts, on every
-//     page, are refused and not counted); nothing logs an error.
+//     or a referrer; nothing logs an error.
+//
+// Last, the whole site loads nothing from outside it (theme.font is false
+// and the fonts are served with it; the repository link makes no GitHub
+// API call): every built page's <img>, <script>, <link>, <iframe>,
+// <source>, <video>, <audio>, <object> and <embed> are local, and the
+// home page, a guide page, the playground, the marketplace page (apart
+// from its own fetches to the marketplace) and the Python site's home page
+// (when SITE/python is built) request nothing from another host in
+// Chromium.
 //
 // --screenshots DIR saves the page in light and dark there.
 //
@@ -51,7 +59,6 @@ const ROOT = path.resolve(path.dirname(fileURLToPath(import.meta.url)), "..");
 const FIXTURE = path.join(ROOT, "docs", "tapes", "fixtures", "marketplace");
 const MAIN = "https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/main/";
 const STATS = "https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/stats/stats.json";
-const THEME_REQUESTS = ["https://fonts.googleapis.com/", "https://api.github.com/repos/buchochelliq-labs/rs-rich-cli"];
 
 const args = process.argv.slice(2);
 const UNIT_ONLY = args.includes("--unit");
@@ -269,9 +276,7 @@ async function browser() {
           if (files[rel]) return route.fulfill({ status: 200, body: files[rel], headers: { "access-control-allow-origin": "*", "content-type": "text/plain" } });
           return route.fulfill({ status: 404, body: "404: Not Found", headers: { "access-control-allow-origin": "*" } });
         }
-        // The theme's own (every page's): its web font and the repository
-        // facts in the header. Not the Marketplace page's; refused here.
-        if (!THEME_REQUESTS.some((prefix) => url.startsWith(prefix))) outside.push(url);
+        outside.push(url);
         return route.abort();
       });
       const page = await context.newPage();
@@ -442,6 +447,47 @@ async function browser() {
     same(outside, [], "the page asks nothing of anywhere but the marketplace");
     check(sent.length > 0 && sent.every((r) => !r.headers.referer && !r.headers.cookie && !r.headers.authorization), "requests carry no referrer or credentials");
     same(errors, [], "nothing logs an error");
+
+    // The whole site: nothing from outside.
+    const external = [];
+    const walk = (dir) => {
+      for (const name of readdirSync(dir)) {
+        const file = path.join(dir, name);
+        if (statSync(file).isDirectory()) walk(file);
+        else if (name.endsWith(".html")) {
+          const html = readFileSync(file, "utf8");
+          for (const tag of html.match(/<(img|script|link|iframe|source|video|audio|object|embed)\b[^>]*>/gi) || []) {
+            if (/^<link\b/i.test(tag) && /rel="?(canonical|alternate)/i.test(tag)) continue;
+            const url = (tag.match(/\b(?:src|href|data|poster)\s*=\s*"([^"]*)"/i) || [])[1] || "";
+            if (/^(https?:)?\/\//i.test(url)) external.push(`${path.relative(SITE, file)}: ${url}`);
+          }
+        }
+      }
+    };
+    walk(SITE);
+    same(external.slice(0, 10), [], "no built page embeds anything from another site");
+    const pages = ["", "guide/core/text-and-style/", "playground/", "marketplace/"];
+    if (existsSync(path.join(SITE, "python", "index.html"))) pages.push("python/");
+    for (const at of pages) {
+      const context = await chrome.newContext();
+      const asked = [];
+      await context.route((url) => !url.href.startsWith(base), (route) => {
+        const url = route.request().url();
+        const allowed = at === "marketplace/" && (url.startsWith(MAIN) || url === STATS);
+        if (!allowed) asked.push(url);
+        return route.abort();
+      });
+      const page = await context.newPage();
+      await page.goto(`${base}${at}`, { waitUntil: "networkidle" });
+      await page.evaluate(() => document.fonts.ready);
+      if (at === "") {
+        const fonts = await page.evaluate(() => [...document.fonts].filter((f) => f.status === "loaded").map((f) => f.family.replace(/"/g, "")));
+        check(fonts.includes("Roboto"), "the site's own Roboto loads");
+        check(await page.locator(".md-source").count() > 0, "the header still links to the repository");
+      }
+      same(asked, [], `/${at} asks nothing of another site`);
+      await context.close();
+    }
   } finally {
     await chrome.close();
     server.close();

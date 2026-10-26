@@ -9,6 +9,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **The docs site loads nothing from other sites** (docs). Roboto and
+  Roboto Mono are served with the site (`docs/assets/fonts/`, from
+  fontsource 5.3.0, OFL-1.1) instead of Google Fonts (`theme.font: false`
+  in both MkDocs configs), the header's repository link no longer asks the
+  GitHub API for stars and forks (`scripts/docs_overrides/partials/source.html`),
+  and the home page's shields.io and CI badges are plain links. The
+  Marketplace page's check now also fails when a built page embeds, or a
+  page in Chromium requests, anything from another host.
+
 - **Search the plugin marketplace on the web and in the terminal**
   (docs, rs-rich-cli, rs-rich-marketplace, the listing format). The docs
   site gains a [Marketplace page](docs/marketplace.md): it reads the signed

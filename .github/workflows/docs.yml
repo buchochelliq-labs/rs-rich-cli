@@ -166,12 +166,6 @@ jobs:
           npx playwright install --with-deps chromium
           node scripts/check_playground_page.mjs site
 
-      # The Marketplace page in headless Chromium, against the fixture
-      # marketplace (docs/tapes/fixtures/marketplace), and its logic under
-      # Node.
-      - name: Check the Marketplace page in a browser
-        run: node scripts/check_marketplace_page.mjs site
-
       # The Python package has its own site, published under /python/. Its
       # API reference is generated from the type stubs, so no wheel is built.
       - name: Check the Python API pages are current
@@ -179,6 +173,13 @@ jobs:
 
       - name: Build the Python site
         run: mkdocs build --strict -f mkdocs-python.yml
+
+      # The Marketplace page in headless Chromium, against the fixture
+      # marketplace (docs/tapes/fixtures/marketplace), and its logic under
+      # Node; then that no page of either site loads anything from another
+      # site (the fonts are served with it, and no GitHub API call).
+      - name: Check the Marketplace page, and that the site loads nothing from outside
+        run: node scripts/check_marketplace_page.mjs site
 
       - name: Check every referenced image exists
         run: |
