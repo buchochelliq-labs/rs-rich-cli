@@ -27,6 +27,7 @@ on:
       - "crates/rich-py/**"
       - "docs/python/**"
       - "scripts/capture_python_docs.py"
+      - "scripts/check_python_stubs.py"
       - ".github/workflows/python.yml"
       - ".github/workflows/pypi-release.yml"
   push:
@@ -52,6 +53,7 @@ on:
       - "crates/rich-py/**"
       - "docs/python/**"
       - "scripts/capture_python_docs.py"
+      - "scripts/check_python_stubs.py"
       - ".github/workflows/python.yml"
       - ".github/workflows/pypi-release.yml"
 
@@ -106,6 +108,14 @@ jobs:
         run: python -m pip install ./crates/rich-py "rich==15.0.0" pytest pillow
       - name: Compatibility and API tests
         run: python -m pytest -q crates/rich-py/tests
+      # The stubs against the installed wheel (mypy's stubtest), and a typed
+      # program under mypy --strict: scripts/check_python_stubs.py. Once, on
+      # the newest Python.
+      - name: Type stubs match the wheel
+        if: matrix.python == '3.13'
+        run: |
+          python -m pip install "mypy==2.4.0"
+          python scripts/check_python_stubs.py
 
   wheels:
     name: wheel (${{ matrix.name }})

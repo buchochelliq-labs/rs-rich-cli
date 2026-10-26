@@ -1,0 +1,951 @@
+pub mod rich_marketplace
+pub use rich_marketplace::semver
+#[non_exhaustive] pub enum rich_marketplace::CheckError
+pub rich_marketplace::CheckError::Host(alloc::string::String)
+pub rich_marketplace::CheckError::ManifestMismatch
+pub rich_marketplace::CheckError::ManifestMismatch::expected: alloc::string::String
+pub rich_marketplace::CheckError::ManifestMismatch::field: &'static str
+pub rich_marketplace::CheckError::ManifestMismatch::found: alloc::string::String
+pub rich_marketplace::CheckError::NotWasm
+pub rich_marketplace::CheckError::Pack(alloc::string::String)
+pub rich_marketplace::CheckError::Theme(alloc::string::String)
+impl core::clone::Clone for rich_marketplace::CheckError
+pub fn rich_marketplace::CheckError::clone(&self) -> rich_marketplace::CheckError
+impl core::cmp::Eq for rich_marketplace::CheckError
+impl core::cmp::PartialEq for rich_marketplace::CheckError
+pub fn rich_marketplace::CheckError::eq(&self, &rich_marketplace::CheckError) -> bool
+impl core::convert::From<rich_marketplace::CheckError> for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::from(rich_marketplace::CheckError) -> Self
+impl core::error::Error for rich_marketplace::CheckError
+impl core::fmt::Debug for rich_marketplace::CheckError
+pub fn rich_marketplace::CheckError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::CheckError
+pub fn rich_marketplace::CheckError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::CheckError
+impl core::marker::Freeze for rich_marketplace::CheckError
+impl core::marker::Send for rich_marketplace::CheckError
+impl core::marker::Sync for rich_marketplace::CheckError
+impl core::marker::Unpin for rich_marketplace::CheckError
+impl core::marker::UnsafeUnpin for rich_marketplace::CheckError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::CheckError
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::CheckError
+#[non_exhaustive] pub enum rich_marketplace::FetchError
+pub rich_marketplace::FetchError::NotFound
+pub rich_marketplace::FetchError::NotFound::url: alloc::string::String
+pub rich_marketplace::FetchError::NotHttps
+pub rich_marketplace::FetchError::NotHttps::url: alloc::string::String
+pub rich_marketplace::FetchError::Status
+pub rich_marketplace::FetchError::Status::status: u16
+pub rich_marketplace::FetchError::Status::url: alloc::string::String
+pub rich_marketplace::FetchError::TooLarge
+pub rich_marketplace::FetchError::TooLarge::limit: u64
+pub rich_marketplace::FetchError::TooLarge::url: alloc::string::String
+pub rich_marketplace::FetchError::Transport
+pub rich_marketplace::FetchError::Transport::message: alloc::string::String
+pub rich_marketplace::FetchError::Transport::url: alloc::string::String
+impl core::clone::Clone for rich_marketplace::FetchError
+pub fn rich_marketplace::FetchError::clone(&self) -> rich_marketplace::FetchError
+impl core::cmp::Eq for rich_marketplace::FetchError
+impl core::cmp::PartialEq for rich_marketplace::FetchError
+pub fn rich_marketplace::FetchError::eq(&self, &rich_marketplace::FetchError) -> bool
+impl core::convert::From<rich_marketplace::FetchError> for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::from(rich_marketplace::FetchError) -> Self
+impl core::error::Error for rich_marketplace::FetchError
+impl core::fmt::Debug for rich_marketplace::FetchError
+pub fn rich_marketplace::FetchError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::FetchError
+pub fn rich_marketplace::FetchError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::FetchError
+impl core::marker::Freeze for rich_marketplace::FetchError
+impl core::marker::Send for rich_marketplace::FetchError
+impl core::marker::Sync for rich_marketplace::FetchError
+impl core::marker::Unpin for rich_marketplace::FetchError
+impl core::marker::UnsafeUnpin for rich_marketplace::FetchError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::FetchError
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::FetchError
+#[non_exhaustive] pub enum rich_marketplace::Incompatibility
+pub rich_marketplace::Incompatibility::Abi
+pub rich_marketplace::Incompatibility::Abi::host: (u32, u32)
+pub rich_marketplace::Incompatibility::Abi::required: (u32, u32)
+pub rich_marketplace::Incompatibility::MicroSchema
+pub rich_marketplace::Incompatibility::MicroSchema::host: u64
+pub rich_marketplace::Incompatibility::MicroSchema::required: u64
+pub rich_marketplace::Incompatibility::PluginApi
+pub rich_marketplace::Incompatibility::PluginApi::host: u32
+pub rich_marketplace::Incompatibility::PluginApi::required: u64
+pub rich_marketplace::Incompatibility::ThemeFormat
+pub rich_marketplace::Incompatibility::ThemeFormat::host: u64
+pub rich_marketplace::Incompatibility::ThemeFormat::required: u64
+pub rich_marketplace::Incompatibility::UnknownCapability
+pub rich_marketplace::Incompatibility::UnknownCapability::kind: alloc::string::String
+impl rich_marketplace::Incompatibility
+pub fn rich_marketplace::Incompatibility::needs_newer_host(&self) -> bool
+impl core::clone::Clone for rich_marketplace::Incompatibility
+pub fn rich_marketplace::Incompatibility::clone(&self) -> rich_marketplace::Incompatibility
+impl core::cmp::Eq for rich_marketplace::Incompatibility
+impl core::cmp::PartialEq for rich_marketplace::Incompatibility
+pub fn rich_marketplace::Incompatibility::eq(&self, &rich_marketplace::Incompatibility) -> bool
+impl core::error::Error for rich_marketplace::Incompatibility
+impl core::fmt::Debug for rich_marketplace::Incompatibility
+pub fn rich_marketplace::Incompatibility::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::Incompatibility
+pub fn rich_marketplace::Incompatibility::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::Incompatibility
+impl core::marker::Freeze for rich_marketplace::Incompatibility
+impl core::marker::Send for rich_marketplace::Incompatibility
+impl core::marker::Sync for rich_marketplace::Incompatibility
+impl core::marker::Unpin for rich_marketplace::Incompatibility
+impl core::marker::UnsafeUnpin for rich_marketplace::Incompatibility
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::Incompatibility
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::Incompatibility
+#[non_exhaustive] pub enum rich_marketplace::IndexError
+pub rich_marketplace::IndexError::Expired
+pub rich_marketplace::IndexError::Expired::expires: alloc::string::String
+pub rich_marketplace::IndexError::Invalid(alloc::string::String)
+pub rich_marketplace::IndexError::Rollback
+pub rich_marketplace::IndexError::Rollback::last: u64
+pub rich_marketplace::IndexError::Rollback::serial: u64
+pub rich_marketplace::IndexError::SerialMismatch
+pub rich_marketplace::IndexError::SerialMismatch::index: u64
+pub rich_marketplace::IndexError::SerialMismatch::signed: u64
+pub rich_marketplace::IndexError::SerialReused
+pub rich_marketplace::IndexError::SerialReused::serial: u64
+pub rich_marketplace::IndexError::Signature(rich_marketplace::SignatureError)
+pub rich_marketplace::IndexError::TrustedComment(alloc::string::String)
+pub rich_marketplace::IndexError::UnsupportedSchema(u64)
+impl core::clone::Clone for rich_marketplace::IndexError
+pub fn rich_marketplace::IndexError::clone(&self) -> rich_marketplace::IndexError
+impl core::cmp::Eq for rich_marketplace::IndexError
+impl core::cmp::PartialEq for rich_marketplace::IndexError
+pub fn rich_marketplace::IndexError::eq(&self, &rich_marketplace::IndexError) -> bool
+impl core::convert::From<rich_marketplace::IndexError> for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::from(rich_marketplace::IndexError) -> Self
+impl core::error::Error for rich_marketplace::IndexError
+pub fn rich_marketplace::IndexError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for rich_marketplace::IndexError
+pub fn rich_marketplace::IndexError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::IndexError
+pub fn rich_marketplace::IndexError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::IndexError
+impl core::marker::Freeze for rich_marketplace::IndexError
+impl core::marker::Send for rich_marketplace::IndexError
+impl core::marker::Sync for rich_marketplace::IndexError
+impl core::marker::Unpin for rich_marketplace::IndexError
+impl core::marker::UnsafeUnpin for rich_marketplace::IndexError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::IndexError
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::IndexError
+#[non_exhaustive] pub enum rich_marketplace::InstallError
+pub rich_marketplace::InstallError::Check(rich_marketplace::CheckError)
+pub rich_marketplace::InstallError::Fetch(rich_marketplace::FetchError)
+pub rich_marketplace::InstallError::HashMismatch
+pub rich_marketplace::InstallError::HashMismatch::actual: alloc::string::String
+pub rich_marketplace::InstallError::HashMismatch::expected: alloc::string::String
+pub rich_marketplace::InstallError::Index(rich_marketplace::IndexError)
+pub rich_marketplace::InstallError::Listing(rich_marketplace::ListingError)
+pub rich_marketplace::InstallError::Lockfile(rich_marketplace::LockfileError)
+pub rich_marketplace::InstallError::NotInstallable
+pub rich_marketplace::InstallError::NotInstallable::id: alloc::string::String
+pub rich_marketplace::InstallError::NotInstallable::kind: &'static str
+pub rich_marketplace::InstallError::Resolve(rich_marketplace::ResolveError)
+pub rich_marketplace::InstallError::SizeMismatch
+pub rich_marketplace::InstallError::SizeMismatch::actual: u64
+pub rich_marketplace::InstallError::SizeMismatch::expected: u64
+impl core::convert::From<rich_marketplace::CheckError> for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::from(rich_marketplace::CheckError) -> Self
+impl core::convert::From<rich_marketplace::FetchError> for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::from(rich_marketplace::FetchError) -> Self
+impl core::convert::From<rich_marketplace::IndexError> for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::from(rich_marketplace::IndexError) -> Self
+impl core::convert::From<rich_marketplace::ListingError> for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::from(rich_marketplace::ListingError) -> Self
+impl core::convert::From<rich_marketplace::LockfileError> for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::from(rich_marketplace::LockfileError) -> Self
+impl core::convert::From<rich_marketplace::ResolveError> for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::from(rich_marketplace::ResolveError) -> Self
+impl core::error::Error for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_marketplace::InstallError
+impl core::marker::Send for rich_marketplace::InstallError
+impl core::marker::Sync for rich_marketplace::InstallError
+impl core::marker::Unpin for rich_marketplace::InstallError
+impl core::marker::UnsafeUnpin for rich_marketplace::InstallError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::InstallError
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::InstallError
+#[non_exhaustive] pub enum rich_marketplace::KeyChainError
+pub rich_marketplace::KeyChainError::BackupReplacedWithoutMain
+pub rich_marketplace::KeyChainError::BackupReplacedWithoutMain::generation: u64
+pub rich_marketplace::KeyChainError::BadKey(alloc::string::String)
+pub rich_marketplace::KeyChainError::BadKeysFile(alloc::string::String)
+pub rich_marketplace::KeyChainError::GenerationOrder
+pub rich_marketplace::KeyChainError::GenerationOrder::expected: u64
+pub rich_marketplace::KeyChainError::GenerationOrder::found: u64
+pub rich_marketplace::KeyChainError::MainSignatureRequired
+pub rich_marketplace::KeyChainError::MainSignatureRequired::generation: u64
+pub rich_marketplace::KeyChainError::NoTrustRoot
+pub rich_marketplace::KeyChainError::RevokedKey(rich_marketplace::KeyId)
+pub rich_marketplace::KeyChainError::Signature
+pub rich_marketplace::KeyChainError::Signature::generation: u64
+pub rich_marketplace::KeyChainError::Signature::source: rich_marketplace::SignatureError
+pub rich_marketplace::KeyChainError::Signature::which: &'static str
+pub rich_marketplace::KeyChainError::UnsupportedSchema(u64)
+impl core::clone::Clone for rich_marketplace::KeyChainError
+pub fn rich_marketplace::KeyChainError::clone(&self) -> rich_marketplace::KeyChainError
+impl core::cmp::Eq for rich_marketplace::KeyChainError
+impl core::cmp::PartialEq for rich_marketplace::KeyChainError
+pub fn rich_marketplace::KeyChainError::eq(&self, &rich_marketplace::KeyChainError) -> bool
+impl core::error::Error for rich_marketplace::KeyChainError
+pub fn rich_marketplace::KeyChainError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for rich_marketplace::KeyChainError
+pub fn rich_marketplace::KeyChainError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::KeyChainError
+pub fn rich_marketplace::KeyChainError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::KeyChainError
+impl core::marker::Freeze for rich_marketplace::KeyChainError
+impl core::marker::Send for rich_marketplace::KeyChainError
+impl core::marker::Sync for rich_marketplace::KeyChainError
+impl core::marker::Unpin for rich_marketplace::KeyChainError
+impl core::marker::UnsafeUnpin for rich_marketplace::KeyChainError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::KeyChainError
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::KeyChainError
+#[non_exhaustive] pub enum rich_marketplace::Kind
+pub rich_marketplace::Kind::Crate
+pub rich_marketplace::Kind::MicroPack
+pub rich_marketplace::Kind::Theme
+pub rich_marketplace::Kind::WasmPlugin
+impl rich_marketplace::Kind
+pub const fn rich_marketplace::Kind::as_str(self) -> &'static str
+pub const fn rich_marketplace::Kind::is_installable(self) -> bool
+pub const fn rich_marketplace::Kind::max_artifact_bytes(self) -> core::option::Option<u64>
+pub fn rich_marketplace::Kind::parse(&str) -> core::option::Option<Self>
+pub const fn rich_marketplace::Kind::requires_key(self) -> &'static str
+impl core::clone::Clone for rich_marketplace::Kind
+pub fn rich_marketplace::Kind::clone(&self) -> rich_marketplace::Kind
+impl core::cmp::Eq for rich_marketplace::Kind
+impl core::cmp::PartialEq for rich_marketplace::Kind
+pub fn rich_marketplace::Kind::eq(&self, &rich_marketplace::Kind) -> bool
+impl core::fmt::Debug for rich_marketplace::Kind
+pub fn rich_marketplace::Kind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::Kind
+pub fn rich_marketplace::Kind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_marketplace::Kind
+pub fn rich_marketplace::Kind::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_marketplace::Kind
+impl core::marker::StructuralPartialEq for rich_marketplace::Kind
+impl core::marker::Freeze for rich_marketplace::Kind
+impl core::marker::Send for rich_marketplace::Kind
+impl core::marker::Sync for rich_marketplace::Kind
+impl core::marker::Unpin for rich_marketplace::Kind
+impl core::marker::UnsafeUnpin for rich_marketplace::Kind
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::Kind
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::Kind
+#[non_exhaustive] pub enum rich_marketplace::ListingError
+pub rich_marketplace::ListingError::HashMismatch
+pub rich_marketplace::ListingError::HashMismatch::actual: alloc::string::String
+pub rich_marketplace::ListingError::HashMismatch::expected: alloc::string::String
+pub rich_marketplace::ListingError::HashMismatch::id: alloc::string::String
+pub rich_marketplace::ListingError::IdMismatch
+pub rich_marketplace::ListingError::IdMismatch::filed: alloc::string::String
+pub rich_marketplace::ListingError::IdMismatch::found: alloc::string::String
+pub rich_marketplace::ListingError::Invalid
+pub rich_marketplace::ListingError::Invalid::at: alloc::string::String
+pub rich_marketplace::ListingError::Invalid::message: alloc::string::String
+pub rich_marketplace::ListingError::Json(alloc::string::String)
+pub rich_marketplace::ListingError::NotInIndex(alloc::string::String)
+pub rich_marketplace::ListingError::UnknownKind(alloc::string::String)
+pub rich_marketplace::ListingError::UnsupportedSchema(u64)
+impl core::clone::Clone for rich_marketplace::ListingError
+pub fn rich_marketplace::ListingError::clone(&self) -> rich_marketplace::ListingError
+impl core::cmp::Eq for rich_marketplace::ListingError
+impl core::cmp::PartialEq for rich_marketplace::ListingError
+pub fn rich_marketplace::ListingError::eq(&self, &rich_marketplace::ListingError) -> bool
+impl core::convert::From<rich_marketplace::ListingError> for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::from(rich_marketplace::ListingError) -> Self
+impl core::error::Error for rich_marketplace::ListingError
+impl core::fmt::Debug for rich_marketplace::ListingError
+pub fn rich_marketplace::ListingError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::ListingError
+pub fn rich_marketplace::ListingError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::ListingError
+impl core::marker::Freeze for rich_marketplace::ListingError
+impl core::marker::Send for rich_marketplace::ListingError
+impl core::marker::Sync for rich_marketplace::ListingError
+impl core::marker::Unpin for rich_marketplace::ListingError
+impl core::marker::UnsafeUnpin for rich_marketplace::ListingError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::ListingError
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::ListingError
+#[non_exhaustive] pub enum rich_marketplace::LockfileError
+pub rich_marketplace::LockfileError::Invalid(alloc::string::String)
+pub rich_marketplace::LockfileError::Io
+pub rich_marketplace::LockfileError::Io::message: alloc::string::String
+pub rich_marketplace::LockfileError::Io::path: alloc::string::String
+pub rich_marketplace::LockfileError::Mismatch
+pub rich_marketplace::LockfileError::Mismatch::actual: alloc::string::String
+pub rich_marketplace::LockfileError::Mismatch::expected: alloc::string::String
+pub rich_marketplace::LockfileError::Mismatch::id: alloc::string::String
+pub rich_marketplace::LockfileError::Missing
+pub rich_marketplace::LockfileError::Missing::id: alloc::string::String
+pub rich_marketplace::LockfileError::Missing::path: alloc::string::String
+pub rich_marketplace::LockfileError::NotInstalled(alloc::string::String)
+pub rich_marketplace::LockfileError::UnsupportedSchema(u64)
+impl core::clone::Clone for rich_marketplace::LockfileError
+pub fn rich_marketplace::LockfileError::clone(&self) -> rich_marketplace::LockfileError
+impl core::cmp::Eq for rich_marketplace::LockfileError
+impl core::cmp::PartialEq for rich_marketplace::LockfileError
+pub fn rich_marketplace::LockfileError::eq(&self, &rich_marketplace::LockfileError) -> bool
+impl core::convert::From<rich_marketplace::LockfileError> for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::from(rich_marketplace::LockfileError) -> Self
+impl core::error::Error for rich_marketplace::LockfileError
+impl core::fmt::Debug for rich_marketplace::LockfileError
+pub fn rich_marketplace::LockfileError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::LockfileError
+pub fn rich_marketplace::LockfileError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::LockfileError
+impl core::marker::Freeze for rich_marketplace::LockfileError
+impl core::marker::Send for rich_marketplace::LockfileError
+impl core::marker::Sync for rich_marketplace::LockfileError
+impl core::marker::Unpin for rich_marketplace::LockfileError
+impl core::marker::UnsafeUnpin for rich_marketplace::LockfileError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::LockfileError
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::LockfileError
+#[non_exhaustive] pub enum rich_marketplace::Request
+pub rich_marketplace::Request::Exact(semver::Version)
+pub rich_marketplace::Request::Newest
+impl core::clone::Clone for rich_marketplace::Request
+pub fn rich_marketplace::Request::clone(&self) -> rich_marketplace::Request
+impl core::cmp::Eq for rich_marketplace::Request
+impl core::cmp::PartialEq for rich_marketplace::Request
+pub fn rich_marketplace::Request::eq(&self, &rich_marketplace::Request) -> bool
+impl core::fmt::Debug for rich_marketplace::Request
+pub fn rich_marketplace::Request::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::Request
+impl core::marker::Freeze for rich_marketplace::Request
+impl core::marker::Send for rich_marketplace::Request
+impl core::marker::Sync for rich_marketplace::Request
+impl core::marker::Unpin for rich_marketplace::Request
+impl core::marker::UnsafeUnpin for rich_marketplace::Request
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::Request
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::Request
+#[non_exhaustive] pub enum rich_marketplace::Requires
+pub rich_marketplace::Requires::Abi
+pub rich_marketplace::Requires::Abi::major: u32
+pub rich_marketplace::Requires::Abi::minor: u32
+pub rich_marketplace::Requires::MicroSchema(u64)
+pub rich_marketplace::Requires::PluginApi(u64)
+pub rich_marketplace::Requires::ThemeFormat(u64)
+impl core::clone::Clone for rich_marketplace::Requires
+pub fn rich_marketplace::Requires::clone(&self) -> rich_marketplace::Requires
+impl core::cmp::Eq for rich_marketplace::Requires
+impl core::cmp::PartialEq for rich_marketplace::Requires
+pub fn rich_marketplace::Requires::eq(&self, &rich_marketplace::Requires) -> bool
+impl core::fmt::Debug for rich_marketplace::Requires
+pub fn rich_marketplace::Requires::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_marketplace::Requires
+impl core::marker::StructuralPartialEq for rich_marketplace::Requires
+impl core::marker::Freeze for rich_marketplace::Requires
+impl core::marker::Send for rich_marketplace::Requires
+impl core::marker::Sync for rich_marketplace::Requires
+impl core::marker::Unpin for rich_marketplace::Requires
+impl core::marker::UnsafeUnpin for rich_marketplace::Requires
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::Requires
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::Requires
+#[non_exhaustive] pub enum rich_marketplace::ResolveError
+pub rich_marketplace::ResolveError::Incompatible
+pub rich_marketplace::ResolveError::Incompatible::id: alloc::string::String
+pub rich_marketplace::ResolveError::Incompatible::reason: rich_marketplace::Incompatibility
+pub rich_marketplace::ResolveError::Incompatible::version: alloc::string::String
+pub rich_marketplace::ResolveError::NoCandidate
+pub rich_marketplace::ResolveError::NoCandidate::id: alloc::string::String
+pub rich_marketplace::ResolveError::NoCandidate::newer_host_needed: core::option::Option<alloc::string::String>
+pub rich_marketplace::ResolveError::NoSuchVersion
+pub rich_marketplace::ResolveError::NoSuchVersion::id: alloc::string::String
+pub rich_marketplace::ResolveError::NoSuchVersion::version: alloc::string::String
+pub rich_marketplace::ResolveError::Yanked
+pub rich_marketplace::ResolveError::Yanked::id: alloc::string::String
+pub rich_marketplace::ResolveError::Yanked::reason: alloc::string::String
+pub rich_marketplace::ResolveError::Yanked::version: alloc::string::String
+impl core::clone::Clone for rich_marketplace::ResolveError
+pub fn rich_marketplace::ResolveError::clone(&self) -> rich_marketplace::ResolveError
+impl core::cmp::Eq for rich_marketplace::ResolveError
+impl core::cmp::PartialEq for rich_marketplace::ResolveError
+pub fn rich_marketplace::ResolveError::eq(&self, &rich_marketplace::ResolveError) -> bool
+impl core::convert::From<rich_marketplace::ResolveError> for rich_marketplace::InstallError
+pub fn rich_marketplace::InstallError::from(rich_marketplace::ResolveError) -> Self
+impl core::error::Error for rich_marketplace::ResolveError
+pub fn rich_marketplace::ResolveError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for rich_marketplace::ResolveError
+pub fn rich_marketplace::ResolveError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::ResolveError
+pub fn rich_marketplace::ResolveError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::ResolveError
+impl core::marker::Freeze for rich_marketplace::ResolveError
+impl core::marker::Send for rich_marketplace::ResolveError
+impl core::marker::Sync for rich_marketplace::ResolveError
+impl core::marker::Unpin for rich_marketplace::ResolveError
+impl core::marker::UnsafeUnpin for rich_marketplace::ResolveError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::ResolveError
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::ResolveError
+#[non_exhaustive] pub enum rich_marketplace::RotationKind
+pub rich_marketplace::RotationKind::MainKeyReplaced
+pub rich_marketplace::RotationKind::MainKeyReplaced::revoked: rich_marketplace::KeyId
+pub rich_marketplace::RotationKind::Planned
+impl core::clone::Clone for rich_marketplace::RotationKind
+pub fn rich_marketplace::RotationKind::clone(&self) -> rich_marketplace::RotationKind
+impl core::cmp::Eq for rich_marketplace::RotationKind
+impl core::cmp::PartialEq for rich_marketplace::RotationKind
+pub fn rich_marketplace::RotationKind::eq(&self, &rich_marketplace::RotationKind) -> bool
+impl core::fmt::Debug for rich_marketplace::RotationKind
+pub fn rich_marketplace::RotationKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::RotationKind
+impl core::marker::Freeze for rich_marketplace::RotationKind
+impl core::marker::Send for rich_marketplace::RotationKind
+impl core::marker::Sync for rich_marketplace::RotationKind
+impl core::marker::Unpin for rich_marketplace::RotationKind
+impl core::marker::UnsafeUnpin for rich_marketplace::RotationKind
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::RotationKind
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::RotationKind
+#[non_exhaustive] pub enum rich_marketplace::SignatureError
+pub rich_marketplace::SignatureError::Invalid
+pub rich_marketplace::SignatureError::LegacyAlgorithm
+pub rich_marketplace::SignatureError::Malformed
+pub rich_marketplace::SignatureError::TrustedComment
+pub rich_marketplace::SignatureError::TrustedComment::expected: alloc::string::String
+pub rich_marketplace::SignatureError::TrustedComment::found: alloc::string::String
+pub rich_marketplace::SignatureError::UnsupportedAlgorithm
+pub rich_marketplace::SignatureError::WrongKeyId
+pub rich_marketplace::SignatureError::WrongKeyId::expected: rich_marketplace::KeyId
+pub rich_marketplace::SignatureError::WrongKeyId::found: rich_marketplace::KeyId
+impl core::clone::Clone for rich_marketplace::SignatureError
+pub fn rich_marketplace::SignatureError::clone(&self) -> rich_marketplace::SignatureError
+impl core::cmp::Eq for rich_marketplace::SignatureError
+impl core::cmp::PartialEq for rich_marketplace::SignatureError
+pub fn rich_marketplace::SignatureError::eq(&self, &rich_marketplace::SignatureError) -> bool
+impl core::error::Error for rich_marketplace::SignatureError
+impl core::fmt::Debug for rich_marketplace::SignatureError
+pub fn rich_marketplace::SignatureError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::SignatureError
+pub fn rich_marketplace::SignatureError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::SignatureError
+impl core::marker::Freeze for rich_marketplace::SignatureError
+impl core::marker::Send for rich_marketplace::SignatureError
+impl core::marker::Sync for rich_marketplace::SignatureError
+impl core::marker::Unpin for rich_marketplace::SignatureError
+impl core::marker::UnsafeUnpin for rich_marketplace::SignatureError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::SignatureError
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::SignatureError
+#[non_exhaustive] pub enum rich_marketplace::Tier
+pub rich_marketplace::Tier::Community
+pub rich_marketplace::Tier::Official
+pub rich_marketplace::Tier::Reviewed
+impl rich_marketplace::Tier
+pub const fn rich_marketplace::Tier::as_str(self) -> &'static str
+pub fn rich_marketplace::Tier::parse(&str) -> core::option::Option<Self>
+impl core::clone::Clone for rich_marketplace::Tier
+pub fn rich_marketplace::Tier::clone(&self) -> rich_marketplace::Tier
+impl core::cmp::Eq for rich_marketplace::Tier
+impl core::cmp::PartialEq for rich_marketplace::Tier
+pub fn rich_marketplace::Tier::eq(&self, &rich_marketplace::Tier) -> bool
+impl core::fmt::Debug for rich_marketplace::Tier
+pub fn rich_marketplace::Tier::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::Tier
+pub fn rich_marketplace::Tier::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_marketplace::Tier
+pub fn rich_marketplace::Tier::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_marketplace::Tier
+impl core::marker::StructuralPartialEq for rich_marketplace::Tier
+impl core::marker::Freeze for rich_marketplace::Tier
+impl core::marker::Send for rich_marketplace::Tier
+impl core::marker::Sync for rich_marketplace::Tier
+impl core::marker::Unpin for rich_marketplace::Tier
+impl core::marker::UnsafeUnpin for rich_marketplace::Tier
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::Tier
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::Tier
+pub struct rich_marketplace::AcceptedIndex
+pub rich_marketplace::AcceptedIndex::serial: u64
+pub rich_marketplace::AcceptedIndex::sha256: alloc::string::String
+impl core::clone::Clone for rich_marketplace::AcceptedIndex
+pub fn rich_marketplace::AcceptedIndex::clone(&self) -> rich_marketplace::AcceptedIndex
+impl core::cmp::Eq for rich_marketplace::AcceptedIndex
+impl core::cmp::PartialEq for rich_marketplace::AcceptedIndex
+pub fn rich_marketplace::AcceptedIndex::eq(&self, &rich_marketplace::AcceptedIndex) -> bool
+impl core::fmt::Debug for rich_marketplace::AcceptedIndex
+pub fn rich_marketplace::AcceptedIndex::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_marketplace::AcceptedIndex
+pub fn rich_marketplace::AcceptedIndex::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_marketplace::AcceptedIndex
+impl core::marker::Freeze for rich_marketplace::AcceptedIndex
+impl core::marker::Send for rich_marketplace::AcceptedIndex
+impl core::marker::Sync for rich_marketplace::AcceptedIndex
+impl core::marker::Unpin for rich_marketplace::AcceptedIndex
+impl core::marker::UnsafeUnpin for rich_marketplace::AcceptedIndex
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::AcceptedIndex
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::AcceptedIndex
+#[non_exhaustive] pub struct rich_marketplace::Artifact
+pub rich_marketplace::Artifact::sha256: alloc::string::String
+pub rich_marketplace::Artifact::size: u64
+pub rich_marketplace::Artifact::url: alloc::string::String
+impl core::clone::Clone for rich_marketplace::Artifact
+pub fn rich_marketplace::Artifact::clone(&self) -> rich_marketplace::Artifact
+impl core::cmp::Eq for rich_marketplace::Artifact
+impl core::cmp::PartialEq for rich_marketplace::Artifact
+pub fn rich_marketplace::Artifact::eq(&self, &rich_marketplace::Artifact) -> bool
+impl core::fmt::Debug for rich_marketplace::Artifact
+pub fn rich_marketplace::Artifact::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::Artifact
+impl core::marker::Freeze for rich_marketplace::Artifact
+impl core::marker::Send for rich_marketplace::Artifact
+impl core::marker::Sync for rich_marketplace::Artifact
+impl core::marker::Unpin for rich_marketplace::Artifact
+impl core::marker::UnsafeUnpin for rich_marketplace::Artifact
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::Artifact
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::Artifact
+pub struct rich_marketplace::BuiltinChecks
+impl core::clone::Clone for rich_marketplace::BuiltinChecks
+pub fn rich_marketplace::BuiltinChecks::clone(&self) -> rich_marketplace::BuiltinChecks
+impl core::default::Default for rich_marketplace::BuiltinChecks
+pub fn rich_marketplace::BuiltinChecks::default() -> rich_marketplace::BuiltinChecks
+impl core::fmt::Debug for rich_marketplace::BuiltinChecks
+pub fn rich_marketplace::BuiltinChecks::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_marketplace::BuiltinChecks
+impl rich_marketplace::ArtifactChecker for rich_marketplace::BuiltinChecks
+pub fn rich_marketplace::BuiltinChecks::check_micro_pack(&self, &[u8], &str, &str) -> core::result::Result<(), rich_marketplace::CheckError>
+pub fn rich_marketplace::BuiltinChecks::check_theme(&self, &[u8]) -> core::result::Result<(), rich_marketplace::CheckError>
+pub fn rich_marketplace::BuiltinChecks::check_wasm(&self, &[u8], &rich_marketplace::WasmExpectation<'_>) -> core::result::Result<(), rich_marketplace::CheckError>
+impl core::marker::Freeze for rich_marketplace::BuiltinChecks
+impl core::marker::Send for rich_marketplace::BuiltinChecks
+impl core::marker::Sync for rich_marketplace::BuiltinChecks
+impl core::marker::Unpin for rich_marketplace::BuiltinChecks
+impl core::marker::UnsafeUnpin for rich_marketplace::BuiltinChecks
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::BuiltinChecks
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::BuiltinChecks
+#[non_exhaustive] pub struct rich_marketplace::Capability
+pub rich_marketplace::Capability::kind: alloc::string::String
+pub rich_marketplace::Capability::name: alloc::string::String
+impl core::clone::Clone for rich_marketplace::Capability
+pub fn rich_marketplace::Capability::clone(&self) -> rich_marketplace::Capability
+impl core::cmp::Eq for rich_marketplace::Capability
+impl core::cmp::PartialEq for rich_marketplace::Capability
+pub fn rich_marketplace::Capability::eq(&self, &rich_marketplace::Capability) -> bool
+impl core::fmt::Debug for rich_marketplace::Capability
+pub fn rich_marketplace::Capability::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_marketplace::Capability
+pub fn rich_marketplace::Capability::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_marketplace::Capability
+impl core::marker::Freeze for rich_marketplace::Capability
+impl core::marker::Send for rich_marketplace::Capability
+impl core::marker::Sync for rich_marketplace::Capability
+impl core::marker::Unpin for rich_marketplace::Capability
+impl core::marker::UnsafeUnpin for rich_marketplace::Capability
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::Capability
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::Capability
+#[non_exhaustive] pub struct rich_marketplace::CrateInfo
+pub rich_marketplace::CrateInfo::features: alloc::vec::Vec<alloc::string::String>
+pub rich_marketplace::CrateInfo::name: alloc::string::String
+impl core::clone::Clone for rich_marketplace::CrateInfo
+pub fn rich_marketplace::CrateInfo::clone(&self) -> rich_marketplace::CrateInfo
+impl core::cmp::Eq for rich_marketplace::CrateInfo
+impl core::cmp::PartialEq for rich_marketplace::CrateInfo
+pub fn rich_marketplace::CrateInfo::eq(&self, &rich_marketplace::CrateInfo) -> bool
+impl core::fmt::Debug for rich_marketplace::CrateInfo
+pub fn rich_marketplace::CrateInfo::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::CrateInfo
+impl core::marker::Freeze for rich_marketplace::CrateInfo
+impl core::marker::Send for rich_marketplace::CrateInfo
+impl core::marker::Sync for rich_marketplace::CrateInfo
+impl core::marker::Unpin for rich_marketplace::CrateInfo
+impl core::marker::UnsafeUnpin for rich_marketplace::CrateInfo
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::CrateInfo
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::CrateInfo
+#[non_exhaustive] pub struct rich_marketplace::Host
+pub rich_marketplace::Host::abi_major: u32
+pub rich_marketplace::Host::abi_minor: u32
+pub rich_marketplace::Host::micro_schema: u64
+pub rich_marketplace::Host::plugin_api: u32
+pub rich_marketplace::Host::theme_format: u64
+impl rich_marketplace::Host
+pub fn rich_marketplace::Host::check(&self, rich_marketplace::Kind, &rich_marketplace::ListedVersion) -> core::result::Result<(), rich_marketplace::Incompatibility>
+pub const fn rich_marketplace::Host::current() -> Self
+impl core::clone::Clone for rich_marketplace::Host
+pub fn rich_marketplace::Host::clone(&self) -> rich_marketplace::Host
+impl core::cmp::Eq for rich_marketplace::Host
+impl core::cmp::PartialEq for rich_marketplace::Host
+pub fn rich_marketplace::Host::eq(&self, &rich_marketplace::Host) -> bool
+impl core::default::Default for rich_marketplace::Host
+pub fn rich_marketplace::Host::default() -> Self
+impl core::fmt::Debug for rich_marketplace::Host
+pub fn rich_marketplace::Host::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_marketplace::Host
+impl core::marker::StructuralPartialEq for rich_marketplace::Host
+impl core::marker::Freeze for rich_marketplace::Host
+impl core::marker::Send for rich_marketplace::Host
+impl core::marker::Sync for rich_marketplace::Host
+impl core::marker::Unpin for rich_marketplace::Host
+impl core::marker::UnsafeUnpin for rich_marketplace::Host
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::Host
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::Host
+pub struct rich_marketplace::HttpsTransport
+impl rich_marketplace::HttpsTransport
+pub fn rich_marketplace::HttpsTransport::new() -> Self
+impl core::default::Default for rich_marketplace::HttpsTransport
+pub fn rich_marketplace::HttpsTransport::default() -> Self
+impl core::fmt::Debug for rich_marketplace::HttpsTransport
+pub fn rich_marketplace::HttpsTransport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_marketplace::Transport for rich_marketplace::HttpsTransport
+pub fn rich_marketplace::HttpsTransport::get(&self, &str, u64) -> core::result::Result<alloc::vec::Vec<u8>, rich_marketplace::FetchError>
+impl core::marker::Freeze for rich_marketplace::HttpsTransport
+impl core::marker::Send for rich_marketplace::HttpsTransport
+impl core::marker::Sync for rich_marketplace::HttpsTransport
+impl core::marker::Unpin for rich_marketplace::HttpsTransport
+impl core::marker::UnsafeUnpin for rich_marketplace::HttpsTransport
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::HttpsTransport
+impl !core::panic::unwind_safe::UnwindSafe for rich_marketplace::HttpsTransport
+#[non_exhaustive] pub struct rich_marketplace::IndexEntry
+pub rich_marketplace::IndexEntry::path: alloc::string::String
+pub rich_marketplace::IndexEntry::sha256: alloc::string::String
+impl core::clone::Clone for rich_marketplace::IndexEntry
+pub fn rich_marketplace::IndexEntry::clone(&self) -> rich_marketplace::IndexEntry
+impl core::cmp::Eq for rich_marketplace::IndexEntry
+impl core::cmp::PartialEq for rich_marketplace::IndexEntry
+pub fn rich_marketplace::IndexEntry::eq(&self, &rich_marketplace::IndexEntry) -> bool
+impl core::fmt::Debug for rich_marketplace::IndexEntry
+pub fn rich_marketplace::IndexEntry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::IndexEntry
+impl core::marker::Freeze for rich_marketplace::IndexEntry
+impl core::marker::Send for rich_marketplace::IndexEntry
+impl core::marker::Sync for rich_marketplace::IndexEntry
+impl core::marker::Unpin for rich_marketplace::IndexEntry
+impl core::marker::UnsafeUnpin for rich_marketplace::IndexEntry
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::IndexEntry
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::IndexEntry
+pub struct rich_marketplace::Installer<T, C>
+impl<T: rich_marketplace::Transport, C: rich_marketplace::ArtifactChecker> rich_marketplace::Installer<T, C>
+pub fn rich_marketplace::Installer<T, C>::install(&self, &rich_marketplace::VerifiedIndex, &rich_marketplace::Listing, &rich_marketplace::ListedVersion, std::time::SystemTime) -> core::result::Result<rich_marketplace::LockEntry, rich_marketplace::InstallError>
+pub fn rich_marketplace::Installer<T, C>::load(&self, &str) -> core::result::Result<alloc::vec::Vec<u8>, rich_marketplace::LockfileError>
+pub fn rich_marketplace::Installer<T, C>::lockfile(&self) -> core::result::Result<rich_marketplace::Lockfile, rich_marketplace::LockfileError>
+pub fn rich_marketplace::Installer<T, C>::lockfile_path(&self) -> std::path::PathBuf
+pub fn rich_marketplace::Installer<T, C>::remove(&self, &str) -> core::result::Result<rich_marketplace::LockEntry, rich_marketplace::LockfileError>
+pub fn rich_marketplace::Installer<T, C>::root(&self) -> &std::path::Path
+pub fn rich_marketplace::Installer<T, C>::with_checker<D: rich_marketplace::ArtifactChecker>(self, D) -> rich_marketplace::Installer<T, D>
+pub fn rich_marketplace::Installer<T, C>::with_host(self, rich_marketplace::Host) -> Self
+impl<T: rich_marketplace::Transport> rich_marketplace::Installer<T, rich_marketplace::BuiltinChecks>
+pub fn rich_marketplace::Installer<T, rich_marketplace::BuiltinChecks>::new(impl core::convert::Into<std::path::PathBuf>, T) -> Self
+impl<T: core::fmt::Debug, C: core::fmt::Debug> core::fmt::Debug for rich_marketplace::Installer<T, C>
+pub fn rich_marketplace::Installer<T, C>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T, C> core::marker::Freeze for rich_marketplace::Installer<T, C> where T: core::marker::Freeze, C: core::marker::Freeze
+impl<T, C> core::marker::Send for rich_marketplace::Installer<T, C> where T: core::marker::Send, C: core::marker::Send
+impl<T, C> core::marker::Sync for rich_marketplace::Installer<T, C> where T: core::marker::Sync, C: core::marker::Sync
+impl<T, C> core::marker::Unpin for rich_marketplace::Installer<T, C> where T: core::marker::Unpin, C: core::marker::Unpin
+impl<T, C> core::marker::UnsafeUnpin for rich_marketplace::Installer<T, C> where T: core::marker::UnsafeUnpin, C: core::marker::UnsafeUnpin
+impl<T, C> core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::Installer<T, C> where T: core::panic::unwind_safe::RefUnwindSafe, C: core::panic::unwind_safe::RefUnwindSafe
+impl<T, C> core::panic::unwind_safe::UnwindSafe for rich_marketplace::Installer<T, C> where T: core::panic::unwind_safe::UnwindSafe, C: core::panic::unwind_safe::UnwindSafe
+pub struct rich_marketplace::KeyId(_)
+impl rich_marketplace::KeyId
+pub const fn rich_marketplace::KeyId::as_bytes(&self) -> &[u8; 8]
+pub const fn rich_marketplace::KeyId::from_bytes([u8; 8]) -> Self
+pub fn rich_marketplace::KeyId::parse(&str) -> core::option::Option<Self>
+impl core::clone::Clone for rich_marketplace::KeyId
+pub fn rich_marketplace::KeyId::clone(&self) -> rich_marketplace::KeyId
+impl core::cmp::Eq for rich_marketplace::KeyId
+impl core::cmp::Ord for rich_marketplace::KeyId
+pub fn rich_marketplace::KeyId::cmp(&self, &rich_marketplace::KeyId) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_marketplace::KeyId
+pub fn rich_marketplace::KeyId::eq(&self, &rich_marketplace::KeyId) -> bool
+impl core::cmp::PartialOrd for rich_marketplace::KeyId
+pub fn rich_marketplace::KeyId::partial_cmp(&self, &rich_marketplace::KeyId) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for rich_marketplace::KeyId
+pub fn rich_marketplace::KeyId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::KeyId
+pub fn rich_marketplace::KeyId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_marketplace::KeyId
+pub fn rich_marketplace::KeyId::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_marketplace::KeyId
+impl core::marker::StructuralPartialEq for rich_marketplace::KeyId
+impl core::marker::Freeze for rich_marketplace::KeyId
+impl core::marker::Send for rich_marketplace::KeyId
+impl core::marker::Sync for rich_marketplace::KeyId
+impl core::marker::Unpin for rich_marketplace::KeyId
+impl core::marker::UnsafeUnpin for rich_marketplace::KeyId
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::KeyId
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::KeyId
+pub struct rich_marketplace::KeySet
+impl rich_marketplace::KeySet
+pub fn rich_marketplace::KeySet::backup(&self) -> &rich_marketplace::TrustedKey
+pub fn rich_marketplace::KeySet::from_json(&[u8]) -> core::result::Result<Self, rich_marketplace::KeyChainError>
+pub fn rich_marketplace::KeySet::generation(&self) -> u64
+pub fn rich_marketplace::KeySet::main(&self) -> &rich_marketplace::TrustedKey
+pub fn rich_marketplace::KeySet::new(u64, rich_marketplace::TrustedKey, rich_marketplace::TrustedKey) -> core::result::Result<Self, rich_marketplace::KeyChainError>
+pub fn rich_marketplace::KeySet::official() -> core::result::Result<Self, rich_marketplace::KeyChainError>
+pub fn rich_marketplace::KeySet::revoked(&self) -> &[rich_marketplace::KeyId]
+pub fn rich_marketplace::KeySet::rotate(&self, rich_marketplace::Rotation<'_>) -> core::result::Result<(rich_marketplace::KeySet, rich_marketplace::RotationKind), rich_marketplace::KeyChainError>
+pub fn rich_marketplace::KeySet::to_json(&self) -> alloc::string::String
+pub fn rich_marketplace::KeySet::walk<'a>(&self, impl core::iter::traits::collect::IntoIterator<Item = rich_marketplace::Rotation<'a>>) -> core::result::Result<(rich_marketplace::KeySet, alloc::vec::Vec<rich_marketplace::RotationKind>), rich_marketplace::KeyChainError>
+pub fn rich_marketplace::KeySet::with_revoked(self, impl core::iter::traits::collect::IntoIterator<Item = rich_marketplace::KeyId>) -> Self
+impl core::clone::Clone for rich_marketplace::KeySet
+pub fn rich_marketplace::KeySet::clone(&self) -> rich_marketplace::KeySet
+impl core::cmp::Eq for rich_marketplace::KeySet
+impl core::cmp::PartialEq for rich_marketplace::KeySet
+pub fn rich_marketplace::KeySet::eq(&self, &rich_marketplace::KeySet) -> bool
+impl core::fmt::Debug for rich_marketplace::KeySet
+pub fn rich_marketplace::KeySet::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::KeySet
+impl core::marker::Freeze for rich_marketplace::KeySet
+impl core::marker::Send for rich_marketplace::KeySet
+impl core::marker::Sync for rich_marketplace::KeySet
+impl core::marker::Unpin for rich_marketplace::KeySet
+impl core::marker::UnsafeUnpin for rich_marketplace::KeySet
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::KeySet
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::KeySet
+#[non_exhaustive] pub struct rich_marketplace::ListedVersion
+pub rich_marketplace::ListedVersion::artifact: rich_marketplace::Artifact
+pub rich_marketplace::ListedVersion::capabilities: alloc::vec::Vec<rich_marketplace::Capability>
+pub rich_marketplace::ListedVersion::permissions: alloc::vec::Vec<alloc::string::String>
+pub rich_marketplace::ListedVersion::published: alloc::string::String
+pub rich_marketplace::ListedVersion::requires: rich_marketplace::Requires
+pub rich_marketplace::ListedVersion::source_revision: core::option::Option<alloc::string::String>
+pub rich_marketplace::ListedVersion::version: semver::Version
+pub rich_marketplace::ListedVersion::yanked: core::option::Option<alloc::string::String>
+impl rich_marketplace::ListedVersion
+pub fn rich_marketplace::ListedVersion::is_yanked(&self) -> bool
+impl core::clone::Clone for rich_marketplace::ListedVersion
+pub fn rich_marketplace::ListedVersion::clone(&self) -> rich_marketplace::ListedVersion
+impl core::cmp::Eq for rich_marketplace::ListedVersion
+impl core::cmp::PartialEq for rich_marketplace::ListedVersion
+pub fn rich_marketplace::ListedVersion::eq(&self, &rich_marketplace::ListedVersion) -> bool
+impl core::fmt::Debug for rich_marketplace::ListedVersion
+pub fn rich_marketplace::ListedVersion::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::ListedVersion
+impl core::marker::Freeze for rich_marketplace::ListedVersion
+impl core::marker::Send for rich_marketplace::ListedVersion
+impl core::marker::Sync for rich_marketplace::ListedVersion
+impl core::marker::Unpin for rich_marketplace::ListedVersion
+impl core::marker::UnsafeUnpin for rich_marketplace::ListedVersion
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::ListedVersion
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::ListedVersion
+#[non_exhaustive] pub struct rich_marketplace::Listing
+pub rich_marketplace::Listing::authors: alloc::vec::Vec<alloc::string::String>
+pub rich_marketplace::Listing::crate_info: core::option::Option<rich_marketplace::CrateInfo>
+pub rich_marketplace::Listing::description: alloc::string::String
+pub rich_marketplace::Listing::homepage: core::option::Option<alloc::string::String>
+pub rich_marketplace::Listing::id: alloc::string::String
+pub rich_marketplace::Listing::keywords: alloc::vec::Vec<alloc::string::String>
+pub rich_marketplace::Listing::kind: rich_marketplace::Kind
+pub rich_marketplace::Listing::license: alloc::string::String
+pub rich_marketplace::Listing::name: alloc::string::String
+pub rich_marketplace::Listing::repository: alloc::string::String
+pub rich_marketplace::Listing::tier: rich_marketplace::Tier
+pub rich_marketplace::Listing::versions: alloc::vec::Vec<rich_marketplace::ListedVersion>
+impl rich_marketplace::Listing
+pub fn rich_marketplace::Listing::parse(&[u8]) -> core::result::Result<rich_marketplace::Listing, rich_marketplace::ListingError>
+pub fn rich_marketplace::Listing::version(&self, &semver::Version) -> core::option::Option<&rich_marketplace::ListedVersion>
+impl core::clone::Clone for rich_marketplace::Listing
+pub fn rich_marketplace::Listing::clone(&self) -> rich_marketplace::Listing
+impl core::cmp::Eq for rich_marketplace::Listing
+impl core::cmp::PartialEq for rich_marketplace::Listing
+pub fn rich_marketplace::Listing::eq(&self, &rich_marketplace::Listing) -> bool
+impl core::fmt::Debug for rich_marketplace::Listing
+pub fn rich_marketplace::Listing::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::Listing
+impl core::marker::Freeze for rich_marketplace::Listing
+impl core::marker::Send for rich_marketplace::Listing
+impl core::marker::Sync for rich_marketplace::Listing
+impl core::marker::Unpin for rich_marketplace::Listing
+impl core::marker::UnsafeUnpin for rich_marketplace::Listing
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::Listing
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::Listing
+#[non_exhaustive] pub struct rich_marketplace::LockEntry
+pub rich_marketplace::LockEntry::id: alloc::string::String
+pub rich_marketplace::LockEntry::index_serial: u64
+pub rich_marketplace::LockEntry::kind: rich_marketplace::Kind
+pub rich_marketplace::LockEntry::path: alloc::string::String
+pub rich_marketplace::LockEntry::sha256: alloc::string::String
+pub rich_marketplace::LockEntry::size: u64
+pub rich_marketplace::LockEntry::tier: rich_marketplace::Tier
+pub rich_marketplace::LockEntry::url: alloc::string::String
+pub rich_marketplace::LockEntry::version: alloc::string::String
+impl rich_marketplace::LockEntry
+pub fn rich_marketplace::LockEntry::file(&self, &std::path::Path) -> std::path::PathBuf
+pub fn rich_marketplace::LockEntry::verify(&self, &std::path::Path) -> core::result::Result<alloc::vec::Vec<u8>, rich_marketplace::LockfileError>
+impl core::clone::Clone for rich_marketplace::LockEntry
+pub fn rich_marketplace::LockEntry::clone(&self) -> rich_marketplace::LockEntry
+impl core::cmp::Eq for rich_marketplace::LockEntry
+impl core::cmp::PartialEq for rich_marketplace::LockEntry
+pub fn rich_marketplace::LockEntry::eq(&self, &rich_marketplace::LockEntry) -> bool
+impl core::fmt::Debug for rich_marketplace::LockEntry
+pub fn rich_marketplace::LockEntry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::LockEntry
+impl core::marker::Freeze for rich_marketplace::LockEntry
+impl core::marker::Send for rich_marketplace::LockEntry
+impl core::marker::Sync for rich_marketplace::LockEntry
+impl core::marker::Unpin for rich_marketplace::LockEntry
+impl core::marker::UnsafeUnpin for rich_marketplace::LockEntry
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::LockEntry
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::LockEntry
+pub struct rich_marketplace::Lockfile
+impl rich_marketplace::Lockfile
+pub fn rich_marketplace::Lockfile::entries(&self) -> impl core::iter::traits::iterator::Iterator<Item = &rich_marketplace::LockEntry>
+pub fn rich_marketplace::Lockfile::get(&self, &str) -> core::option::Option<&rich_marketplace::LockEntry>
+pub fn rich_marketplace::Lockfile::insert(&mut self, rich_marketplace::LockEntry) -> core::option::Option<rich_marketplace::LockEntry>
+pub fn rich_marketplace::Lockfile::load(&std::path::Path) -> core::result::Result<Self, rich_marketplace::LockfileError>
+pub fn rich_marketplace::Lockfile::new() -> Self
+pub fn rich_marketplace::Lockfile::parse(&[u8]) -> core::result::Result<Self, rich_marketplace::LockfileError>
+pub fn rich_marketplace::Lockfile::remove(&mut self, &str) -> core::option::Option<rich_marketplace::LockEntry>
+pub fn rich_marketplace::Lockfile::save(&self, &std::path::Path) -> core::result::Result<(), rich_marketplace::LockfileError>
+pub fn rich_marketplace::Lockfile::to_json(&self) -> alloc::string::String
+pub fn rich_marketplace::Lockfile::verify(&self, &std::path::Path, &str) -> core::result::Result<alloc::vec::Vec<u8>, rich_marketplace::LockfileError>
+pub fn rich_marketplace::Lockfile::verify_all(&self, &std::path::Path) -> alloc::vec::Vec<(alloc::string::String, core::result::Result<(), rich_marketplace::LockfileError>)>
+impl core::clone::Clone for rich_marketplace::Lockfile
+pub fn rich_marketplace::Lockfile::clone(&self) -> rich_marketplace::Lockfile
+impl core::cmp::Eq for rich_marketplace::Lockfile
+impl core::cmp::PartialEq for rich_marketplace::Lockfile
+pub fn rich_marketplace::Lockfile::eq(&self, &rich_marketplace::Lockfile) -> bool
+impl core::default::Default for rich_marketplace::Lockfile
+pub fn rich_marketplace::Lockfile::default() -> rich_marketplace::Lockfile
+impl core::fmt::Debug for rich_marketplace::Lockfile
+pub fn rich_marketplace::Lockfile::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::Lockfile
+impl core::marker::Freeze for rich_marketplace::Lockfile
+impl core::marker::Send for rich_marketplace::Lockfile
+impl core::marker::Sync for rich_marketplace::Lockfile
+impl core::marker::Unpin for rich_marketplace::Lockfile
+impl core::marker::UnsafeUnpin for rich_marketplace::Lockfile
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::Lockfile
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::Lockfile
+pub struct rich_marketplace::MemoryTransport
+impl rich_marketplace::MemoryTransport
+pub fn rich_marketplace::MemoryTransport::insert(&mut self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::vec::Vec<u8>>)
+pub fn rich_marketplace::MemoryTransport::new() -> Self
+pub fn rich_marketplace::MemoryTransport::with(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::vec::Vec<u8>>) -> Self
+impl core::clone::Clone for rich_marketplace::MemoryTransport
+pub fn rich_marketplace::MemoryTransport::clone(&self) -> rich_marketplace::MemoryTransport
+impl core::default::Default for rich_marketplace::MemoryTransport
+pub fn rich_marketplace::MemoryTransport::default() -> rich_marketplace::MemoryTransport
+impl core::fmt::Debug for rich_marketplace::MemoryTransport
+pub fn rich_marketplace::MemoryTransport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_marketplace::Transport for rich_marketplace::MemoryTransport
+pub fn rich_marketplace::MemoryTransport::get(&self, &str, u64) -> core::result::Result<alloc::vec::Vec<u8>, rich_marketplace::FetchError>
+impl core::marker::Freeze for rich_marketplace::MemoryTransport
+impl core::marker::Send for rich_marketplace::MemoryTransport
+impl core::marker::Sync for rich_marketplace::MemoryTransport
+impl core::marker::Unpin for rich_marketplace::MemoryTransport
+impl core::marker::UnsafeUnpin for rich_marketplace::MemoryTransport
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::MemoryTransport
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::MemoryTransport
+pub struct rich_marketplace::Rotation<'a>
+pub rich_marketplace::Rotation::backup_signature: &'a str
+pub rich_marketplace::Rotation::keys_json: &'a [u8]
+pub rich_marketplace::Rotation::main_signature: core::option::Option<&'a str>
+impl<'a> core::clone::Clone for rich_marketplace::Rotation<'a>
+pub fn rich_marketplace::Rotation<'a>::clone(&self) -> rich_marketplace::Rotation<'a>
+impl<'a> core::fmt::Debug for rich_marketplace::Rotation<'a>
+pub fn rich_marketplace::Rotation<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for rich_marketplace::Rotation<'a>
+impl<'a> core::marker::Freeze for rich_marketplace::Rotation<'a>
+impl<'a> core::marker::Send for rich_marketplace::Rotation<'a>
+impl<'a> core::marker::Sync for rich_marketplace::Rotation<'a>
+impl<'a> core::marker::Unpin for rich_marketplace::Rotation<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_marketplace::Rotation<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::Rotation<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rich_marketplace::Rotation<'a>
+pub struct rich_marketplace::TrustedKey
+impl rich_marketplace::TrustedKey
+pub fn rich_marketplace::TrustedKey::from_base64(&str) -> core::result::Result<Self, rich_marketplace::KeyChainError>
+pub fn rich_marketplace::TrustedKey::from_minisign_pub(&str) -> core::result::Result<Self, rich_marketplace::KeyChainError>
+pub fn rich_marketplace::TrustedKey::id(&self) -> rich_marketplace::KeyId
+pub fn rich_marketplace::TrustedKey::to_base64(&self) -> &str
+impl core::clone::Clone for rich_marketplace::TrustedKey
+pub fn rich_marketplace::TrustedKey::clone(&self) -> rich_marketplace::TrustedKey
+impl core::cmp::Eq for rich_marketplace::TrustedKey
+impl core::cmp::PartialEq for rich_marketplace::TrustedKey
+pub fn rich_marketplace::TrustedKey::eq(&self, &rich_marketplace::TrustedKey) -> bool
+impl core::fmt::Debug for rich_marketplace::TrustedKey
+pub fn rich_marketplace::TrustedKey::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_marketplace::TrustedKey
+impl core::marker::Freeze for rich_marketplace::TrustedKey
+impl core::marker::Send for rich_marketplace::TrustedKey
+impl core::marker::Sync for rich_marketplace::TrustedKey
+impl core::marker::Unpin for rich_marketplace::TrustedKey
+impl core::marker::UnsafeUnpin for rich_marketplace::TrustedKey
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::TrustedKey
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::TrustedKey
+pub struct rich_marketplace::VerifiedIndex
+impl rich_marketplace::VerifiedIndex
+pub fn rich_marketplace::VerifiedIndex::accepted(&self) -> rich_marketplace::AcceptedIndex
+pub fn rich_marketplace::VerifiedIndex::check_fresh(&self, std::time::SystemTime) -> core::result::Result<(), rich_marketplace::IndexError>
+pub fn rich_marketplace::VerifiedIndex::entry(&self, &str) -> core::option::Option<&rich_marketplace::IndexEntry>
+pub fn rich_marketplace::VerifiedIndex::expires(&self) -> &str
+pub fn rich_marketplace::VerifiedIndex::generated(&self) -> &str
+pub fn rich_marketplace::VerifiedIndex::key_id(&self) -> rich_marketplace::KeyId
+pub fn rich_marketplace::VerifiedIndex::listings(&self) -> &alloc::collections::btree::map::BTreeMap<alloc::string::String, rich_marketplace::IndexEntry>
+pub fn rich_marketplace::VerifiedIndex::read_listing(&self, &str, &[u8]) -> core::result::Result<rich_marketplace::Listing, rich_marketplace::ListingError>
+pub fn rich_marketplace::VerifiedIndex::serial(&self) -> u64
+pub fn rich_marketplace::VerifiedIndex::sha256(&self) -> &str
+impl core::clone::Clone for rich_marketplace::VerifiedIndex
+pub fn rich_marketplace::VerifiedIndex::clone(&self) -> rich_marketplace::VerifiedIndex
+impl core::fmt::Debug for rich_marketplace::VerifiedIndex
+pub fn rich_marketplace::VerifiedIndex::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_marketplace::VerifiedIndex
+impl core::marker::Send for rich_marketplace::VerifiedIndex
+impl core::marker::Sync for rich_marketplace::VerifiedIndex
+impl core::marker::Unpin for rich_marketplace::VerifiedIndex
+impl core::marker::UnsafeUnpin for rich_marketplace::VerifiedIndex
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::VerifiedIndex
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::VerifiedIndex
+#[non_exhaustive] pub struct rich_marketplace::WasmExpectation<'a>
+pub rich_marketplace::WasmExpectation::abi: (u32, u32)
+pub rich_marketplace::WasmExpectation::capabilities: &'a [rich_marketplace::Capability]
+pub rich_marketplace::WasmExpectation::id: &'a str
+pub rich_marketplace::WasmExpectation::version: &'a str
+impl<'a> core::clone::Clone for rich_marketplace::WasmExpectation<'a>
+pub fn rich_marketplace::WasmExpectation<'a>::clone(&self) -> rich_marketplace::WasmExpectation<'a>
+impl<'a> core::fmt::Debug for rich_marketplace::WasmExpectation<'a>
+pub fn rich_marketplace::WasmExpectation<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for rich_marketplace::WasmExpectation<'a>
+impl<'a> core::marker::Freeze for rich_marketplace::WasmExpectation<'a>
+impl<'a> core::marker::Send for rich_marketplace::WasmExpectation<'a>
+impl<'a> core::marker::Sync for rich_marketplace::WasmExpectation<'a>
+impl<'a> core::marker::Unpin for rich_marketplace::WasmExpectation<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_marketplace::WasmExpectation<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::WasmExpectation<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rich_marketplace::WasmExpectation<'a>
+pub const rich_marketplace::INDEX_COMMENT_PREFIX: &str
+pub const rich_marketplace::INDEX_SCHEMA_VERSION: u64
+pub const rich_marketplace::KEYS_COMMENT_PREFIX: &str
+pub const rich_marketplace::KEYS_SCHEMA_VERSION: u64
+pub const rich_marketplace::LISTING_SCHEMA_VERSION: u64
+pub const rich_marketplace::LOCKFILE_NAME: &str
+pub const rich_marketplace::LOCKFILE_SCHEMA_VERSION: u64
+pub const rich_marketplace::MICRO_SCHEMA_VERSION: u64
+pub const rich_marketplace::OFFICIAL_PREFIX: &str
+pub const rich_marketplace::THEME_FORMAT: u64
+pub trait rich_marketplace::ArtifactChecker
+pub fn rich_marketplace::ArtifactChecker::check_micro_pack(&self, &[u8], &str, &str) -> core::result::Result<(), rich_marketplace::CheckError>
+pub fn rich_marketplace::ArtifactChecker::check_theme(&self, &[u8]) -> core::result::Result<(), rich_marketplace::CheckError>
+pub fn rich_marketplace::ArtifactChecker::check_wasm(&self, &[u8], &rich_marketplace::WasmExpectation<'_>) -> core::result::Result<(), rich_marketplace::CheckError>
+impl rich_marketplace::ArtifactChecker for rich_marketplace::BuiltinChecks
+pub fn rich_marketplace::BuiltinChecks::check_micro_pack(&self, &[u8], &str, &str) -> core::result::Result<(), rich_marketplace::CheckError>
+pub fn rich_marketplace::BuiltinChecks::check_theme(&self, &[u8]) -> core::result::Result<(), rich_marketplace::CheckError>
+pub fn rich_marketplace::BuiltinChecks::check_wasm(&self, &[u8], &rich_marketplace::WasmExpectation<'_>) -> core::result::Result<(), rich_marketplace::CheckError>
+impl<C: rich_marketplace::ArtifactChecker + ?core::marker::Sized> rich_marketplace::ArtifactChecker for &C
+pub fn &C::check_micro_pack(&self, &[u8], &str, &str) -> core::result::Result<(), rich_marketplace::CheckError>
+pub fn &C::check_theme(&self, &[u8]) -> core::result::Result<(), rich_marketplace::CheckError>
+pub fn &C::check_wasm(&self, &[u8], &rich_marketplace::WasmExpectation<'_>) -> core::result::Result<(), rich_marketplace::CheckError>
+pub trait rich_marketplace::Transport
+pub fn rich_marketplace::Transport::get(&self, &str, u64) -> core::result::Result<alloc::vec::Vec<u8>, rich_marketplace::FetchError>
+impl rich_marketplace::Transport for rich_marketplace::HttpsTransport
+pub fn rich_marketplace::HttpsTransport::get(&self, &str, u64) -> core::result::Result<alloc::vec::Vec<u8>, rich_marketplace::FetchError>
+impl rich_marketplace::Transport for rich_marketplace::MemoryTransport
+pub fn rich_marketplace::MemoryTransport::get(&self, &str, u64) -> core::result::Result<alloc::vec::Vec<u8>, rich_marketplace::FetchError>
+impl<T: rich_marketplace::Transport + ?core::marker::Sized> rich_marketplace::Transport for &T
+pub fn &T::get(&self, &str, u64) -> core::result::Result<alloc::vec::Vec<u8>, rich_marketplace::FetchError>
+impl<T: rich_marketplace::Transport + ?core::marker::Sized> rich_marketplace::Transport for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::get(&self, &str, u64) -> core::result::Result<alloc::vec::Vec<u8>, rich_marketplace::FetchError>
+pub fn rich_marketplace::check_pack_json(&[u8], &str, &str) -> core::result::Result<(), rich_marketplace::CheckError>
+pub fn rich_marketplace::check_theme(&[u8]) -> core::result::Result<(), rich_marketplace::CheckError>
+pub fn rich_marketplace::check_wasm_header(&[u8]) -> core::result::Result<(), rich_marketplace::CheckError>
+pub fn rich_marketplace::compare_wasm_manifest(&rich_plugin_api::abi::PluginAbi, &rich_marketplace::WasmExpectation<'_>) -> core::result::Result<(), rich_marketplace::CheckError>
+pub fn rich_marketplace::require_https(&str) -> core::result::Result<(), rich_marketplace::FetchError>
+pub fn rich_marketplace::resolve<'a>(&'a rich_marketplace::Listing, &rich_marketplace::Host, &rich_marketplace::Request) -> core::result::Result<&'a rich_marketplace::ListedVersion, rich_marketplace::ResolveError>
+pub fn rich_marketplace::verify_index(&rich_marketplace::KeySet, &[u8], &str, core::option::Option<&rich_marketplace::AcceptedIndex>, std::time::SystemTime) -> core::result::Result<rich_marketplace::VerifiedIndex, rich_marketplace::IndexError>

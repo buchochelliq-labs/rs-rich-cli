@@ -119,6 +119,10 @@ jobs:
         run: python -m pip install dist/rs_rich-*.whl "rich==15.0.0" pytest pillow
       - name: Compatibility and API tests
         run: python -m pytest -q crates/rich-py/tests
+      - name: Type stubs match the wheel
+        run: |
+          python -m pip install "mypy==2.4.0"
+          python scripts/check_python_stubs.py
 
   publish:
     name: publish to PyPI

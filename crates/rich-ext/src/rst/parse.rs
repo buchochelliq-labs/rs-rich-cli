@@ -1,225 +1,33 @@
-//! The block structure of reStructuredText: docutils' `Body` state, for the
-//! constructs `rich-rst` renders, into the nodes its visitor sees.
+//! The block structure of reStructuredText: docutils' `Body` state machine,
+//! for the constructs `rich-rst` renders, into a document tree
+//! ([`Element`]) as docutils builds it before its transforms.
 
 use std::sync::LazyLock;
 
 use fancy_regex::Regex;
 
-use super::inline::parse_inline;
+use super::doctree::{Element, Node};
+use super::inline::{inline_nodes, parse_inline};
 
-/// Inline markup: the leaves of a paragraph, a title or a list item.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Inline {
-    /// Plain text, and markup whose text the visitor shows plainly: title
-    /// references, footnote references, substitution references, math and
-    /// markup docutils cannot read.
-    Text(String),
-    Emphasis(String),
-    Strong(String),
-    Literal(String),
-    Subscript(String),
-    Superscript(String),
-    /// A hyperlink: `` `text <uri>`_ ``, a standalone URI, or `name_` (which
-    /// has no URI until its target, later in the document, styles it).
-    Reference {
-        text: String,
-        uri: Option<String>,
-        name: Option<String>,
-    },
-    CitationReference(String),
-    /// `` _`text` ``: an inline target, whose text the visitor skips.
-    Target(String),
+/// Parse a reStructuredText document into its tree, with the transforms
+/// `docutils.core.publish_doctree` applies.
+pub fn parse(source: &str) -> Element {
+    let mut document = parse_untransformed(source);
+    super::transforms::apply(&mut document);
+    document
 }
 
-impl Inline {
-    fn text(&self) -> &str {
-        match self {
-            Inline::Text(text)
-            | Inline::Emphasis(text)
-            | Inline::Strong(text)
-            | Inline::Literal(text)
-            | Inline::Subscript(text)
-            | Inline::Superscript(text)
-            | Inline::CitationReference(text)
-            | Inline::Target(text) => text,
-            Inline::Reference { text, .. } => text,
-        }
-    }
-}
-
-/// A term of a definition list.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct DefinitionItem {
-    pub term: String,
-    pub classifiers: Vec<String>,
-    pub definition: Vec<Block>,
-}
-
-/// A field of a field list: `:name: body`.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct Field {
-    pub name: String,
-    pub body: Vec<Block>,
-}
-
-/// An item of an option list: its options, each with an optional argument,
-/// and the description.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub struct OptionItem {
-    pub options: Vec<(String, Option<String>)>,
-    pub description: Vec<Block>,
-}
-
-/// A body element, as docutils builds it.
-#[derive(Clone, Debug, PartialEq, Eq)]
-pub enum Block {
-    /// A section title, a `contents` topic's title or a `rubric`.
-    Title(String),
-    Paragraph(Vec<Inline>),
-    BulletList(Vec<Vec<Block>>),
-    EnumeratedList(Vec<Vec<Block>>),
-    DefinitionList(Vec<DefinitionItem>),
-    FieldList(Vec<Field>),
-    OptionList(Vec<OptionItem>),
-    /// A literal block (`::`) or a `code` directive with its language.
-    LiteralBlock {
-        text: String,
-        language: Option<String>,
-    },
-    DoctestBlock(String),
-    BlockQuote(Vec<Block>),
-    Attribution(Vec<Inline>),
-    LineBlock(Vec<String>),
-    /// `note`, `warning`, … or the generic `admonition` (with a title).
-    Admonition {
-        kind: String,
-        body: Vec<Block>,
-    },
-    Transition,
-    Image {
-        uri: String,
-        alt: Option<String>,
-        /// The directive's raw text, which `rich-rst` reads options from.
-        raw: String,
-        /// A `:target:` makes docutils wrap the image in a reference.
-        wrapped: bool,
-    },
-    Footnote {
-        label: String,
-        body: Vec<Block>,
-    },
-    Citation {
-        label: String,
-        body: Vec<Block>,
-    },
-    MathBlock(String),
-    Sidebar {
-        title: String,
-        subtitle: Option<String>,
-        body: Vec<Block>,
-    },
-    Raw {
-        format: String,
-        text: String,
-    },
-    /// An explicit hyperlink target, `.. _name: uri`.
-    Target {
-        names: Vec<String>,
-        uri: String,
-    },
-    /// Elements the visitor has no method for, so it visits their children:
-    /// tables (cell by cell), topics, containers.
-    Container(Vec<Block>),
-    /// Inline markup outside a paragraph: a substitution definition's text,
-    /// which the visitor shows where the definition stands.
-    Inlines(Vec<Inline>),
-}
-
-impl Block {
-    /// docutils' `Node.astext()`: text elements join their inline text; other
-    /// elements join their children with a blank line.
-    pub fn astext(&self) -> String {
-        match self {
-            Block::Title(text)
-            | Block::DoctestBlock(text)
-            | Block::MathBlock(text)
-            | Block::LiteralBlock { text, .. }
-            | Block::Raw { text, .. } => text.clone(),
-            Block::Paragraph(inlines) | Block::Attribution(inlines) | Block::Inlines(inlines) => {
-                inline_text(inlines)
-            }
-            Block::BulletList(items) | Block::EnumeratedList(items) => {
-                join(items.iter().map(|item| blocks_text(item)))
-            }
-            Block::DefinitionList(items) => join(items.iter().map(|item| {
-                join(
-                    std::iter::once(item.term.clone())
-                        .chain(item.classifiers.iter().cloned())
-                        .chain(std::iter::once(blocks_text(&item.definition))),
-                )
-            })),
-            Block::FieldList(fields) => join(
-                fields
-                    .iter()
-                    .map(|field| join([field.name.clone(), blocks_text(&field.body)])),
-            ),
-            Block::OptionList(items) => join(items.iter().map(|item| {
-                let options = item
-                    .options
-                    .iter()
-                    .map(|(option, argument)| {
-                        format!("{option}{}", argument.as_deref().unwrap_or(""))
-                    })
-                    .collect::<Vec<_>>()
-                    .join(", ");
-                join([options, blocks_text(&item.description)])
-            })),
-            Block::BlockQuote(children)
-            | Block::Container(children)
-            | Block::Admonition { body: children, .. } => blocks_text(children),
-            Block::LineBlock(lines) => lines.join("\n\n"),
-            Block::Transition | Block::Target { .. } | Block::Image { .. } => String::new(),
-            // An auto-numbered footnote has no label until a transform
-            // numbers it.
-            Block::Footnote { label, body } if label.is_empty() => blocks_text(body),
-            Block::Footnote { label, body } | Block::Citation { label, body } => {
-                join([label.clone(), blocks_text(body)])
-            }
-            Block::Sidebar {
-                title,
-                subtitle,
-                body,
-            } => join(
-                std::iter::once(title.clone())
-                    .chain(subtitle.clone())
-                    .chain(std::iter::once(blocks_text(body))),
-            ),
-        }
-    }
-}
-
-/// The text of inline markup, as `TextElement.astext()`.
-pub(super) fn inline_text(inlines: &[Inline]) -> String {
-    inlines.iter().map(Inline::text).collect()
-}
-
-/// `Element.astext()` over body elements: joined with a blank line.
-pub(super) fn blocks_text(blocks: &[Block]) -> String {
-    join(blocks.iter().map(Block::astext))
-}
-
-fn join(parts: impl IntoIterator<Item = String>) -> String {
-    parts.into_iter().collect::<Vec<_>>().join("\n\n")
-}
-
-/// Parse a reStructuredText document into its body elements.
-pub fn parse(source: &str) -> Vec<Block> {
+/// The document as the parser leaves it, before the transforms.
+pub(super) fn parse_untransformed(source: &str) -> Element {
     let lines: Vec<String> = source
         .lines()
         .map(|line| expand_tabs(line.trim_end()))
         .collect();
     Nesting::reset(source.len());
-    parse_blocks(&lines)
+    let body = parse_body(&lines, true);
+    let mut document = Element::new("document");
+    document.children = sections(body);
+    document
 }
 
 fn expand_tabs(line: &str) -> String {
@@ -294,6 +102,37 @@ fn item_block(lines: &[String], start: usize, first: &str) -> (Vec<String>, usiz
     (block, end)
 }
 
+/// A list item's lines: docutils' `list_item`. With text after the marker,
+/// the item is the lines indented at least as far as that text, each
+/// dedented by exactly that much (`get_known_indented`); with none, the
+/// indented lines that follow, by their own indent.
+fn list_item_block(
+    lines: &[String],
+    start: usize,
+    first: &str,
+    width: usize,
+) -> (Vec<String>, usize) {
+    if first.trim().is_empty() {
+        return item_block(lines, start, first);
+    }
+    let mut block = vec![first.to_string()];
+    let mut end = start + 1;
+    while end < lines.len() {
+        let line = &lines[end];
+        if !line.is_empty()
+            && (!line.starts_with(' ') || !line[..width.min(line.len())].trim().is_empty())
+        {
+            break;
+        }
+        block.push(line.get(width..).unwrap_or("").to_string());
+        end += 1;
+    }
+    while block.last().is_some_and(|line| blank(line)) {
+        block.pop();
+    }
+    (block, end)
+}
+
 const PUNCTUATION: &str = "!\"#$%&'()*+,-./:;<=>?@[\\]^_`{|}~";
 
 /// The character a line of section adornment repeats.
@@ -330,9 +169,9 @@ static OPTION: LazyLock<Regex> = LazyLock::new(|| {
     Regex::new(&format!(r"^({option}(?:, {option})*)(  +|$)")).unwrap()
 });
 static OPTION_PART: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^(--?[\w][\w-]*|/\w)([ =](?:<[^>]+>|[\w][\w-]*))?$").unwrap());
+    LazyLock::new(|| Regex::new(r"^(--?[\w][\w-]*|/\w)(?:([ =])(<[^>]+>|[\w][\w-]*))?$").unwrap());
 static DIRECTIVE: LazyLock<Regex> =
-    LazyLock::new(|| Regex::new(r"^\.\. +([\w][\w:+.-]*[\w])::( +|$)(.*)$").unwrap());
+    LazyLock::new(|| Regex::new(r"^\.\. +([\w][\w:+.-]*[\w]|[\w])::( +|$)(.*)$").unwrap());
 static SUBSTITUTION: LazyLock<Regex> =
     LazyLock::new(|| Regex::new(r"^\.\. +\|([^|]+)\| +([\w][\w:+.-]*)::( +|$)(.*)$").unwrap());
 static TARGET: LazyLock<Regex> =
@@ -354,10 +193,10 @@ fn captures(regex: &Regex, line: &str) -> Option<Vec<String>> {
 }
 
 /// How deep body elements may nest: lists in lists, quotes in quotes. docutils
-/// itself fails with a `RecursionError` well before this (about 170 nested
-/// lists), so the cap changes nothing upstream renders; past it the rest of
-/// the text is one plain paragraph, so no document can exhaust the stack.
-const MAX_DEPTH: usize = 200;
+/// itself fails with a `RecursionError` at about 170 nested lists; past this
+/// cap the rest of the text is one plain paragraph, so no document can
+/// exhaust the stack (a test thread's 2 MiB included, in a debug build).
+const MAX_DEPTH: usize = 100;
 
 /// Each level of nesting re-reads the indented lines it holds, so a deeply
 /// nested document costs its depth times its size. Past [`CHARGED_DEPTH`]
@@ -376,7 +215,7 @@ thread_local! {
         const { std::cell::Cell::new((0, 0, 0)) };
 }
 
-/// One level of [`parse_blocks`] nesting, released on drop.
+/// One level of [`parse_body`] nesting, released on drop.
 struct Nesting;
 
 impl Nesting {
@@ -409,8 +248,97 @@ impl Drop for Nesting {
     }
 }
 
-/// The body elements of `lines`, which start at column 0.
-fn parse_blocks(lines: &[String]) -> Vec<Block> {
+fn inlines(tag: &'static str, text: &str) -> Element {
+    Element::new(tag).children(inline_nodes(parse_inline(text)))
+}
+
+fn paragraph(text: &str) -> Element {
+    inlines("paragraph", text)
+}
+
+/// A system message. The visitor shows its literal block (the offending
+/// source) unless the message is about a title.
+fn message(kind: &str, text: &str, source: Option<String>) -> Element {
+    let mut message = Element::new("system_message")
+        .with("type", kind)
+        .child(Element::text("paragraph", text));
+    if let Some(source) = source {
+        message = message.child(Element::text("literal_block", source));
+    }
+    message
+}
+
+/// A section title found in the body, nested into sections at the top.
+fn title_marker(style: String, text: &str, source: String) -> Element {
+    Element::new("__title")
+        .with("style", style)
+        .with("source", source)
+        .child(inlines("title", text))
+}
+
+/// The body elements of the top level into sections, by title style:
+/// docutils' `check_subsection`.
+fn sections(body: Vec<Node>) -> Vec<Node> {
+    fn add(stack: &mut [Element], root: &mut Vec<Node>, node: Node) {
+        match stack.last_mut() {
+            Some(section) => section.children.push(node),
+            None => root.push(node),
+        }
+    }
+    fn close(stack: &mut Vec<Element>, root: &mut Vec<Node>) {
+        let section = stack.pop().expect("an open section");
+        add(stack, root, Node::Element(section));
+    }
+    let mut styles: Vec<String> = Vec::new();
+    // The open sections, outermost first, and the document's children.
+    let mut stack: Vec<Element> = Vec::new();
+    let mut root: Vec<Node> = Vec::new();
+    for node in body {
+        let Node::Element(mut element) = node else {
+            add(&mut stack, &mut root, node);
+            continue;
+        };
+        if element.tag != "__title" {
+            add(&mut stack, &mut root, Node::Element(element));
+            continue;
+        }
+        let style = element.get("style").unwrap_or("").to_string();
+        let source = element.get("source").unwrap_or("").to_string();
+        let old = stack.len();
+        let new = styles
+            .iter()
+            .position(|s| *s == style)
+            .map_or(styles.len() + 1, |i| i + 1);
+        if new > old + 1 {
+            let error = message(
+                "ERROR",
+                &format!("Inconsistent title style: skip from level {old} to {new}."),
+                Some(source),
+            );
+            add(&mut stack, &mut root, Node::Element(error));
+            continue;
+        }
+        while stack.len() >= new {
+            close(&mut stack, &mut root);
+        }
+        if new > styles.len() {
+            styles.push(style);
+        }
+        let title = element.children.remove(0);
+        let mut section = Element::new("section");
+        section.names = vec![normalize(&title.astext())];
+        stack.push(section.child(title));
+    }
+    while !stack.is_empty() {
+        close(&mut stack, &mut root);
+    }
+    root
+}
+
+/// The body elements of `lines`, which start at column 0. `titles`: section
+/// titles may stand here (the document's top level); elsewhere one is an
+/// error, which shows nothing.
+fn parse_body(lines: &[String], titles: bool) -> Vec<Node> {
     let Some(_nesting) = Nesting::enter(lines) else {
         let text = lines
             .iter()
@@ -418,9 +346,9 @@ fn parse_blocks(lines: &[String]) -> Vec<Block> {
             .filter(|line| !line.is_empty())
             .collect::<Vec<_>>()
             .join("\n");
-        return vec![Block::Paragraph(vec![Inline::Text(text)])];
+        return vec![Element::text("paragraph", text).into()];
     };
-    let mut blocks = Vec::new();
+    let mut out: Vec<Node> = Vec::new();
     let mut i = 0;
     while i < lines.len() {
         let line = &lines[i];
@@ -430,104 +358,117 @@ fn parse_blocks(lines: &[String]) -> Vec<Block> {
         }
         if indent(line) > 0 {
             let (block, next) = indented_block(lines, i);
-            blocks.extend(block_quotes(block));
+            out.extend(block_quotes(block).into_iter().map(Node::from));
             i = next;
             continue;
         }
-        // Overline and underline.
-        if let Some(c) = adornment(line) {
-            if i + 2 < lines.len() && !blank(&lines[i + 1]) && adornment(&lines[i + 2]) == Some(c) {
-                blocks.push(Block::Title(inline_text(&parse_inline(
-                    lines[i + 1].trim(),
-                ))));
-                i += 3;
-                continue;
-            }
-            if line.len() >= 4 && (i + 1 == lines.len() || blank(&lines[i + 1])) {
-                blocks.push(Block::Transition);
-                i += 1;
-                continue;
-            }
-        }
-        if let Some(parsed) = parse_list(lines, i) {
-            let (block, next) = parsed;
-            blocks.push(block);
+        if let Some((list, next)) = parse_list(lines, i) {
+            out.push(list.into());
             i = next;
             continue;
         }
         if captures(&FIELD, line).is_some() {
             let (block, next) = field_list(lines, i);
-            blocks.push(block);
+            out.push(block.into());
             i = next;
             continue;
         }
         if captures(&OPTION, line).is_some() {
             let (block, next) = option_list(lines, i);
-            blocks.push(block);
+            out.push(block.into());
             i = next;
             continue;
         }
-        if line.starts_with(">>>") {
+        if line.starts_with(">>>") && (line.len() == 3 || line[3..].starts_with(' ')) {
             let mut end = i;
             while end < lines.len() && !blank(&lines[end]) {
                 end += 1;
             }
-            blocks.push(Block::DoctestBlock(lines[i..end].join("\n")));
+            out.push(Element::text("doctest_block", lines[i..end].join("\n")).into());
             i = end;
             continue;
         }
         if line == "|" || line.starts_with("| ") {
-            let mut end = i;
-            let mut out = Vec::new();
-            while end < lines.len() && (lines[end] == "|" || lines[end].starts_with("| ")) {
-                let line = lines[end].get(2..).unwrap_or("");
-                // An empty line takes the indent of the line before it.
-                let depth = if line.trim().is_empty() {
-                    out.last().map_or(0, |(depth, _)| *depth)
-                } else {
-                    indent(line)
-                };
-                out.push((depth, inline_text(&parse_inline(line.trim_start()))));
-                end += 1;
+            let (block, next, finished) = line_block(lines, i);
+            out.push(block.into());
+            if !finished {
+                out.push(message("WARNING", "Line block ends without a blank line.", None).into());
             }
-            blocks.push(Block::LineBlock(line_block(&out)));
-            i = end;
-            continue;
-        }
-        if line == ".." || line.starts_with(".. ") {
-            let (block, next) = explicit_markup(lines, i);
-            blocks.extend(block);
-            i = next;
-            continue;
-        }
-        if line.starts_with("__ ") {
-            // An anonymous target: it names nothing, so it styles nothing.
-            let (_, next) = item_block(lines, i, "");
             i = next;
             continue;
         }
         if is_grid_border(line) {
-            let (block, next) = grid_table(lines, i);
-            blocks.push(block);
+            let (nodes, next) = grid_table(lines, i);
+            out.extend(nodes);
             i = next;
             continue;
         }
         if is_simple_table_border(line) {
-            if let Some((block, next)) = simple_table(lines, i) {
-                blocks.push(block);
+            if let Some((nodes, next)) = simple_table(lines, i) {
+                out.extend(nodes);
                 i = next;
+                continue;
+            }
+        }
+        if line == ".." || line.starts_with(".. ") {
+            let (nodes, next) = explicit_markup(lines, i);
+            out.extend(nodes);
+            i = next;
+            continue;
+        }
+        if line == "__" || line.starts_with("__ ") {
+            let (block, next) = item_block(lines, i, line.get(3..).unwrap_or(""));
+            let uri: String = block.iter().map(|line| line.trim()).collect();
+            let mut target = Element::new("target").with("anonymous", "1");
+            if uri.ends_with('_') && !uri.ends_with("\\_") {
+                target = target.with("refname", normalize(&uri[..uri.len() - 1]));
+            } else {
+                target = target.with("refuri", uri);
+            }
+            out.push(target.into());
+            i = next;
+            continue;
+        }
+        // Overline, title, underline; or a transition.
+        if let Some(c) = adornment(line) {
+            if i + 2 < lines.len() && !blank(&lines[i + 1]) && adornment(&lines[i + 2]) == Some(c) {
+                let text = lines[i + 1].trim();
+                let source = lines[i..i + 3].join("\n");
+                if titles {
+                    if lines[i].len() < width(text) {
+                        out.push(
+                            message("WARNING", "Title overline too short.", Some(source.clone()))
+                                .into(),
+                        );
+                    }
+                    out.push(title_marker(format!("{c}{c}"), text, source).into());
+                } else {
+                    out.push(message("SEVERE", "Unexpected section title.", Some(source)).into());
+                }
+                i += 3;
+                continue;
+            }
+            if line.len() >= 4 && (i + 1 == lines.len() || blank(&lines[i + 1])) {
+                out.push(Element::new("transition").into());
+                i += 1;
                 continue;
             }
         }
         // Text: a title, a definition list or a paragraph.
         if i + 1 < lines.len() && underlines(line, &lines[i + 1]) {
-            blocks.push(Block::Title(inline_text(&parse_inline(line.trim()))));
+            let source = lines[i..i + 2].join("\n");
+            let c = adornment(&lines[i + 1]).unwrap_or('=');
+            if titles {
+                out.push(title_marker(c.to_string(), line.trim(), source).into());
+            } else {
+                out.push(message("SEVERE", "Unexpected section title.", Some(source)).into());
+            }
             i += 2;
             continue;
         }
         if i + 1 < lines.len() && !blank(&lines[i + 1]) && indent(&lines[i + 1]) > 0 {
             let (block, next) = definition_list(lines, i);
-            blocks.push(block);
+            out.push(block.into());
             i = next;
             continue;
         }
@@ -539,7 +480,7 @@ fn parse_blocks(lines: &[String]) -> Vec<Block> {
         i = end;
         let (text, literal) = literal_marker(&text);
         if !text.is_empty() {
-            blocks.push(Block::Paragraph(parse_inline(&text)));
+            out.push(paragraph(&text).into());
         }
         if literal {
             let mut start = i;
@@ -552,38 +493,72 @@ fn parse_blocks(lines: &[String]) -> Vec<Block> {
                     end += 1;
                 }
                 let block = &lines[start..end];
-                blocks.push(Block::LiteralBlock {
-                    text: dedent(block, min_indent(block)).join("\n"),
-                    language: None,
-                });
+                out.push(
+                    Element::text("literal_block", dedent(block, min_indent(block)).join("\n"))
+                        .into(),
+                );
                 i = end;
             }
         }
     }
-    blocks
+    out
 }
 
-/// A line block's children: each line at the shallowest indent, and each
-/// run of deeper lines as one nested block, whose text joins its lines with
-/// a blank line (`Element.astext()`).
-fn line_block(lines: &[(usize, String)]) -> Vec<String> {
-    let base = lines.iter().map(|(depth, _)| *depth).min().unwrap_or(0);
-    let mut children: Vec<String> = Vec::new();
-    let mut nested: Option<Vec<&str>> = None;
-    for (depth, line) in lines {
-        if *depth == base {
-            if let Some(run) = nested.take() {
-                children.push(run.join("\n\n"));
-            }
-            children.push(line.clone());
+/// A line block from `start`: its lines, nested by indent, the next line's
+/// index, and whether a blank line (or the end) closed it.
+fn line_block(lines: &[String], start: usize) -> (Element, usize, bool) {
+    // Each line: its indent (None for an empty one) and its text, with the
+    // indented lines that continue it.
+    let mut items: Vec<(Option<usize>, Element)> = Vec::new();
+    let mut i = start;
+    while i < lines.len() && (lines[i] == "|" || lines[i].starts_with("| ")) {
+        let after = &lines[i][1..];
+        let spaces = after.len() - after.trim_start_matches(' ').len();
+        let mut text = vec![after.trim_start().to_string()];
+        let mut j = i + 1;
+        while j < lines.len() && !blank(&lines[j]) && indent(&lines[j]) > 0 {
+            text.push(lines[j].trim_start().to_string());
+            j += 1;
+        }
+        let empty = lines[i].trim_end() == "|";
+        let line = inlines("line", &text.join("\n"));
+        items.push(((!empty).then(|| spaces.saturating_sub(1)), line));
+        i = j;
+    }
+    let finished = i >= lines.len() || blank(&lines[i]);
+    // `nest_line_block_lines`: an empty line takes the indent before it.
+    let mut last = 0;
+    let items: Vec<(usize, Element)> = items
+        .into_iter()
+        .map(|(indent, line)| {
+            let indent = indent.unwrap_or(last);
+            last = indent;
+            (indent, line)
+        })
+        .collect();
+    (nest_line_block(items), i, finished)
+}
+
+/// `nest_line_block_segment`: lines deeper than the least indented go into
+/// a nested line block.
+fn nest_line_block(items: Vec<(usize, Element)>) -> Element {
+    let least = items.iter().map(|(indent, _)| *indent).min().unwrap_or(0);
+    let mut block = Element::new("line_block");
+    let mut deeper: Vec<(usize, Element)> = Vec::new();
+    for (indent, line) in items {
+        if indent > least {
+            deeper.push((indent, line));
         } else {
-            nested.get_or_insert_with(Vec::new).push(line);
+            if !deeper.is_empty() {
+                block = block.child(nest_line_block(std::mem::take(&mut deeper)));
+            }
+            block = block.child(line);
         }
     }
-    if let Some(run) = nested {
-        children.push(run.join("\n\n"));
+    if !deeper.is_empty() {
+        block = block.child(nest_line_block(deeper));
     }
-    children
+    block
 }
 
 /// A paragraph that ends in `::` introduces a literal block: `::` alone
@@ -605,15 +580,15 @@ fn literal_marker(text: &str) -> (String, bool) {
 /// An indented block as docutils' `block_quote` splits it: a quote, its
 /// attribution (`-- Author` after a blank line), and a new quote for
 /// whatever follows the attribution, parsed as it stands.
-fn block_quotes(mut lines: Vec<String>) -> Vec<Block> {
+fn block_quotes(mut lines: Vec<String>) -> Vec<Element> {
     let mut quotes = Vec::new();
     while !lines.is_empty() {
         let (quote, attribution, rest) = split_attribution(&lines);
-        let mut children = parse_blocks(quote);
+        let mut quote_node = Element::new("block_quote").children(parse_body(quote, false));
         if let Some(attribution) = attribution {
-            children.push(Block::Attribution(parse_inline(&attribution)));
+            quote_node = quote_node.child(inlines("attribution", &attribution));
         }
-        quotes.push(Block::BlockQuote(children));
+        quotes.push(quote_node);
         let mut rest = rest.to_vec();
         let leading = rest.iter().take_while(|line| blank(line)).count();
         rest.drain(..leading);
@@ -655,7 +630,7 @@ fn split_attribution(lines: &[String]) -> (&[String], Option<String>, &[String])
     (lines, None, &[])
 }
 
-/// docutils' `attribution_pattern`, `(---?(?!-)|\u2014) *(?=[^ \n])`: where
+/// docutils' `attribution_pattern`, `(---?(?!-)|—) *(?=[^ \n])`: where
 /// the attribution's text starts.
 fn attribution_marker(line: &str) -> Option<usize> {
     let dashes = if let Some(rest) = line.strip_prefix("---") {
@@ -686,13 +661,158 @@ fn attribution_shape(lines: &[String], start: usize) -> Option<(usize, usize)> {
     Some((end, indent.unwrap_or(0)))
 }
 
-/// The kind of a list marker: the same kind continues the list.
-fn list_marker(line: &str) -> Option<(String, String)> {
+/// A list marker: its kind (the same kind continues the list), its text,
+/// the text after it, and for an enumerator its sequence and ordinal.
+#[derive(Clone, Debug, PartialEq)]
+struct Marker {
+    kind: String,
+    text: String,
+    rest: String,
+    sequence: Option<String>,
+    ordinal: Option<i64>,
+    prefix: String,
+    suffix: String,
+}
+
+/// docutils' `parse_enumerator`: the sequence of an enumerator's text,
+/// trying `expected` first.
+fn sequence_of(text: &str, expected: Option<&str>) -> Option<String> {
+    if text == "#" {
+        return Some("#".into());
+    }
+    let matches = |sequence: &str| match sequence {
+        "arabic" => text.chars().all(|c| c.is_ascii_digit()),
+        "loweralpha" => text.len() == 1 && text.chars().all(|c| c.is_ascii_lowercase()),
+        "upperalpha" => text.len() == 1 && text.chars().all(|c| c.is_ascii_uppercase()),
+        "lowerroman" => text.chars().all(|c| "ivxlcdm".contains(c)),
+        "upperroman" => text.chars().all(|c| "IVXLCDM".contains(c)),
+        _ => false,
+    };
+    if let Some(expected) = expected {
+        if matches(expected) {
+            return Some(expected.to_string());
+        }
+    } else if text == "i" {
+        return Some("lowerroman".into());
+    } else if text == "I" {
+        return Some("upperroman".into());
+    }
+    [
+        "arabic",
+        "loweralpha",
+        "upperalpha",
+        "lowerroman",
+        "upperroman",
+    ]
+    .into_iter()
+    .find(|sequence| matches(sequence))
+    .map(String::from)
+}
+
+fn roman_value(text: &str) -> Option<i64> {
+    let upper = text.to_uppercase();
+    let value = |c: char| match c {
+        'I' => 1,
+        'V' => 5,
+        'X' => 10,
+        'L' => 50,
+        'C' => 100,
+        'D' => 500,
+        'M' => 1000,
+        _ => 0,
+    };
+    let chars: Vec<i64> = upper.chars().map(value).collect();
+    let mut total = 0;
+    for (i, &v) in chars.iter().enumerate() {
+        if chars.get(i + 1).is_some_and(|&next| next > v) {
+            total -= v;
+        } else {
+            total += v;
+        }
+    }
+    // Only canonical numerals are valid.
+    (total > 0 && total < 4000 && roman(total) == upper).then_some(total)
+}
+
+/// An upper-case Roman numeral.
+pub(super) fn roman(mut n: i64) -> String {
+    const TABLE: [(i64, &str); 13] = [
+        (1000, "M"),
+        (900, "CM"),
+        (500, "D"),
+        (400, "CD"),
+        (100, "C"),
+        (90, "XC"),
+        (50, "L"),
+        (40, "XL"),
+        (10, "X"),
+        (9, "IX"),
+        (5, "V"),
+        (4, "IV"),
+        (1, "I"),
+    ];
+    let mut out = String::new();
+    for (value, numeral) in TABLE {
+        while n >= value {
+            out.push_str(numeral);
+            n -= value;
+        }
+    }
+    out
+}
+
+fn ordinal_of(sequence: &str, text: &str) -> Option<i64> {
+    match sequence {
+        "#" => Some(1),
+        "arabic" => text.parse().ok(),
+        "loweralpha" | "upperalpha" => {
+            Some(i64::from(text.to_ascii_lowercase().as_bytes()[0] - b'a') + 1)
+        }
+        _ => roman_value(text),
+    }
+}
+
+/// `make_enumerator`: the marker of `ordinal` in `sequence`.
+fn enumerator_text(sequence: &str, ordinal: i64) -> Option<String> {
+    Some(match sequence {
+        "#" => "#".into(),
+        "arabic" => ordinal.to_string(),
+        "loweralpha" | "upperalpha" => {
+            if !(1..=26).contains(&ordinal) {
+                return None;
+            }
+            let c = char::from(b'a' + u8::try_from(ordinal - 1).ok()?);
+            if sequence == "upperalpha" {
+                c.to_ascii_uppercase().to_string()
+            } else {
+                c.to_string()
+            }
+        }
+        _ => {
+            if !(1..4000).contains(&ordinal) {
+                return None;
+            }
+            let numeral = roman(ordinal);
+            if sequence == "lowerroman" {
+                numeral.to_lowercase()
+            } else {
+                numeral
+            }
+        }
+    })
+}
+
+fn list_marker(line: &str, expected: Option<&str>) -> Option<Marker> {
     if let Some(found) = captures(&BULLET, line) {
-        return Some((
-            format!("bullet{}", found[1]),
-            line[found[0].len()..].to_string(),
-        ));
+        return Some(Marker {
+            kind: "bullet".into(),
+            text: found[1].clone(),
+            rest: line[found[0].len()..].to_string(),
+            sequence: None,
+            ordinal: None,
+            prefix: String::new(),
+            suffix: String::new(),
+        });
     }
     let found = captures(&ENUMERATOR, line)?;
     let (open, value, close) = (&found[1], &found[2], &found[3]);
@@ -700,69 +820,124 @@ fn list_marker(line: &str) -> Option<(String, String)> {
     if !open.is_empty() && close != ")" {
         return None;
     }
-    let kind = if value.chars().all(|c| c.is_ascii_digit()) || value == "#" {
-        "number"
-    } else if value.chars().all(|c| c.is_ascii_lowercase()) {
-        "lower"
-    } else {
-        "upper"
-    };
-    Some((
-        format!("enum{open}{kind}{close}"),
-        line[found[0].len()..].to_string(),
-    ))
+    let sequence = sequence_of(value, expected)?;
+    let ordinal = ordinal_of(&sequence, value);
+    Some(Marker {
+        kind: format!("enum{open}{close}"),
+        text: value.clone(),
+        rest: line[found[0].len()..].to_string(),
+        sequence: Some(sequence),
+        ordinal,
+        prefix: open.clone(),
+        suffix: close.clone(),
+    })
 }
 
-fn parse_list(lines: &[String], start: usize) -> Option<(Block, usize)> {
-    let (kind, _) = list_marker(&lines[start])?;
-    // A lone letter or word followed by text on the next line is a
-    // paragraph, not a list: docutils needs a blank line or an indent there.
-    if kind.starts_with("enum")
-        && start + 1 < lines.len()
-        && !blank(&lines[start + 1])
-        && indent(&lines[start + 1]) == 0
-        && list_marker(&lines[start + 1]).is_none_or(|(next, _)| next != kind)
-    {
+/// `is_enumerated_list_item`: the ordinal is valid and the next line is
+/// blank, indented, or the next enumerator.
+fn is_enumerated_item(lines: &[String], i: usize, marker: &Marker) -> bool {
+    let (Some(sequence), Some(ordinal)) = (&marker.sequence, marker.ordinal) else {
+        return false;
+    };
+    let Some(next) = lines.get(i + 1) else {
+        return true;
+    };
+    if next.chars().next().is_none_or(char::is_whitespace) {
+        return true;
+    }
+    let Some(following) = enumerator_text(sequence, ordinal + 1) else {
+        return false;
+    };
+    let (open, close) = (&marker.prefix, &marker.suffix);
+    next.starts_with(&format!("{open}{following}{close}"))
+        || next.starts_with(&format!("{open}#{close}"))
+}
+
+fn parse_list(lines: &[String], start: usize) -> Option<(Element, usize)> {
+    let first = list_marker(&lines[start], None)?;
+    if first.sequence.is_some() && !is_enumerated_item(lines, start, &first) {
         return None;
     }
-    let mut items = Vec::new();
+    let mut list = match &first.sequence {
+        None => Element::new("bullet_list").with("bullet", first.text.clone()),
+        Some(sequence) => {
+            let enumtype = if sequence == "#" {
+                "arabic"
+            } else {
+                sequence.as_str()
+            };
+            let mut list = Element::new("enumerated_list")
+                .with("enumtype", enumtype)
+                .with("prefix", first.prefix.clone())
+                .with("suffix", first.suffix.clone());
+            if let Some(ordinal) = first.ordinal.filter(|&o| o != 1) {
+                list = list.with("start", ordinal.to_string());
+            }
+            list
+        }
+    };
+    let enumtype = list.get("enumtype").map(String::from);
+    let mut auto = first.sequence.as_deref() == Some("#");
+    let mut last = first.ordinal.unwrap_or(0);
     let mut i = start;
-    while let Some((_, first)) = list_marker(&lines[i]).filter(|(this, _)| *this == kind) {
-        let (block, next) = item_block(lines, i, &first);
-        items.push(parse_blocks(&block));
+    let mut marker = first;
+    loop {
+        let width = lines[i].len() - marker.rest.len();
+        let (block, next) = list_item_block(lines, i, &marker.rest, width);
+        list = list.child(Element::new("list_item").children(parse_body(&block, false)));
         i = next;
         let mut peek = i;
         while peek < lines.len() && blank(&lines[peek]) {
             peek += 1;
         }
-        if peek < lines.len() && list_marker(&lines[peek]).is_some_and(|(next, _)| next == kind) {
-            i = peek;
-        } else {
+        if peek >= lines.len() || indent(&lines[peek]) > 0 {
             break;
         }
+        let Some(next_marker) = list_marker(&lines[peek], enumtype.as_deref()) else {
+            break;
+        };
+        if next_marker.kind != marker.kind {
+            break;
+        }
+        match &next_marker.sequence {
+            Some(sequence) => {
+                let continues = sequence == "#"
+                    || (Some(sequence.as_str()) == enumtype.as_deref()
+                        && !auto
+                        && next_marker.ordinal == Some(last + 1));
+                if !continues || !is_enumerated_item(lines, peek, &next_marker) {
+                    break;
+                }
+                if sequence == "#" {
+                    auto = true;
+                }
+                last = next_marker.ordinal.unwrap_or(last + 1);
+            }
+            None if next_marker.text != marker.text => break,
+            None => {}
+        }
+        marker = next_marker;
+        i = peek;
     }
-    let block = if kind.starts_with("bullet") {
-        Block::BulletList(items)
-    } else {
-        Block::EnumeratedList(items)
-    };
-    Some((block, i))
+    Some((list, i))
 }
 
-fn field_list(lines: &[String], start: usize) -> (Block, usize) {
-    let mut fields = Vec::new();
+fn field_list(lines: &[String], start: usize) -> (Element, usize) {
+    let mut list = Element::new("field_list");
     let mut i = start;
     while i < lines.len() {
         let Some(found) = captures(&FIELD, &lines[i]) else {
             break;
         };
-        let name = found[1].replace("\\:", ":");
+        let name = found[1].clone();
         let first = lines[i][found[0].len()..].to_string();
         let (block, next) = item_block(lines, i, &first);
-        fields.push(Field {
-            name: inline_text(&parse_inline(&name)),
-            body: parse_blocks(&block),
-        });
+        let block: Vec<String> = block.into_iter().skip_while(|line| blank(line)).collect();
+        list = list.child(
+            Element::new("field")
+                .child(inlines("field_name", &name))
+                .child(Element::new("field_body").children(parse_body(&block, false))),
+        );
         i = next;
         let mut peek = i;
         while peek < lines.len() && blank(&lines[peek]) {
@@ -774,31 +949,39 @@ fn field_list(lines: &[String], start: usize) -> (Block, usize) {
             break;
         }
     }
-    (Block::FieldList(fields), i)
+    (list, i)
 }
 
-fn option_list(lines: &[String], start: usize) -> (Block, usize) {
-    let mut items = Vec::new();
+fn option_list(lines: &[String], start: usize) -> (Element, usize) {
+    let mut list = Element::new("option_list");
     let mut i = start;
     while i < lines.len() {
         let Some(found) = captures(&OPTION, &lines[i]) else {
             break;
         };
-        let options = found[1]
-            .split(", ")
-            .filter_map(|part| {
-                let parts = captures(&OPTION_PART, part)?;
-                // `option_argument.astext()` keeps its delimiter.
-                let argument = Some(parts[2].clone()).filter(|argument| !argument.is_empty());
-                Some((parts[1].clone(), argument))
-            })
-            .collect();
+        let mut group = Element::new("option_group");
+        for part in found[1].split(", ") {
+            let Some(parts) = captures(&OPTION_PART, part) else {
+                continue;
+            };
+            let mut option =
+                Element::new("option").child(Element::text("option_string", parts[1].clone()));
+            if !parts[3].is_empty() {
+                option = option.child(
+                    Element::text("option_argument", parts[3].clone())
+                        .with("delimiter", parts[2].clone()),
+                );
+            }
+            group = group.child(option);
+        }
         let first = lines[i][found[0].len()..].to_string();
         let (block, next) = item_block(lines, i, &first);
-        items.push(OptionItem {
-            options,
-            description: parse_blocks(&block),
-        });
+        let block: Vec<String> = block.into_iter().skip_while(|line| blank(line)).collect();
+        list = list.child(
+            Element::new("option_list_item")
+                .child(group)
+                .child(Element::new("description").children(parse_body(&block, false))),
+        );
         i = next;
         let mut peek = i;
         while peek < lines.len() && blank(&lines[peek]) {
@@ -810,11 +993,11 @@ fn option_list(lines: &[String], start: usize) -> (Block, usize) {
             break;
         }
     }
-    (Block::OptionList(items), i)
+    (list, i)
 }
 
-fn definition_list(lines: &[String], start: usize) -> (Block, usize) {
-    let mut items = Vec::new();
+fn definition_list(lines: &[String], start: usize) -> (Element, usize) {
+    let mut list = Element::new("definition_list");
     let mut i = start;
     while i + 1 < lines.len()
         && !blank(&lines[i])
@@ -822,17 +1005,15 @@ fn definition_list(lines: &[String], start: usize) -> (Block, usize) {
         && !blank(&lines[i + 1])
         && indent(&lines[i + 1]) > 0
     {
-        let mut parts = lines[i].split(" : ");
-        let term = inline_text(&parse_inline(parts.next().unwrap_or("")));
-        let classifiers = parts
-            .map(|part| inline_text(&parse_inline(part.trim())))
-            .collect();
         let (block, next) = indented_block(lines, i + 1);
-        items.push(DefinitionItem {
-            term,
-            classifiers,
-            definition: parse_blocks(&block),
-        });
+        let mut item = Element::new("definition_list_item");
+        let mut parts = lines[i].split(" : ");
+        item = item.child(inlines("term", parts.next().unwrap_or("")));
+        for part in parts {
+            item = item.child(inlines("classifier", part.trim()));
+        }
+        item = item.child(Element::new("definition").children(parse_body(&block, false)));
+        list = list.child(item);
         i = next;
         let mut peek = i;
         while peek < lines.len() && blank(&lines[peek]) {
@@ -842,7 +1023,7 @@ fn definition_list(lines: &[String], start: usize) -> (Block, usize) {
             && indent(&lines[peek]) == 0
             && !blank(&lines[peek + 1])
             && indent(&lines[peek + 1]) > 0
-            && list_marker(&lines[peek]).is_none()
+            && list_marker(&lines[peek], None).is_none()
             && !lines[peek].starts_with("..")
         {
             i = peek;
@@ -850,85 +1031,132 @@ fn definition_list(lines: &[String], start: usize) -> (Block, usize) {
             break;
         }
     }
-    (Block::DefinitionList(items), i)
+    (list, i)
+}
+
+/// A name with its backslash escapes removed.
+fn unbackslash(name: &str) -> String {
+    let mut out = String::new();
+    let mut chars = name.chars();
+    while let Some(c) = chars.next() {
+        if c == '\\' {
+            if let Some(next) = chars.next() {
+                out.push(next);
+            }
+        } else {
+            out.push(c);
+        }
+    }
+    out
+}
+
+/// Link names compare lowercased with whitespace collapsed.
+pub(super) fn normalize(name: &str) -> String {
+    super::inline::normalize_name(name)
 }
 
 /// `.. ` explicit markup: a directive, a hyperlink target, a footnote or
 /// citation, a substitution definition, or a comment.
-fn explicit_markup(lines: &[String], start: usize) -> (Vec<Block>, usize) {
+fn explicit_markup(lines: &[String], start: usize) -> (Vec<Node>, usize) {
     let line = &lines[start];
     if let Some(found) = captures(&SUBSTITUTION, line) {
-        let (block, next) = item_block(lines, start, &found[4]);
-        // Without transforms the definition stays in the tree, and the
-        // visitor, which has no method for it, shows its text there.
-        let blocks = match found[2].to_lowercase().as_str() {
-            "replace" => vec![Block::Inlines(parse_inline(&block.join("\n")))],
-            "image" => {
-                let (body, _) = directive_parts(&block[1..]);
-                let option = |key: &str| {
-                    body.iter()
-                        .find(|(name, _)| name == key)
-                        .map(|(_, value)| value.clone())
-                };
-                vec![Block::Image {
-                    uri: block[0].trim().to_string(),
-                    alt: option("alt").or_else(|| Some(found[1].clone())),
-                    raw: lines[start..next].join("\n"),
-                    wrapped: option("target").is_some(),
-                }]
+        let name = found[1].clone();
+        let (mut nodes, next) = directive(lines, start, &found[2].to_lowercase(), &found[4], true);
+        // The directive's own text starts at its name, and has no blank
+        // line after it.
+        let prefix = line.find(&format!("{}::", found[2])).unwrap_or(0);
+        for node in &mut nodes {
+            if let Node::Element(element) = node {
+                element.walk_mut(&mut |image| {
+                    if image.tag == "image" {
+                        let raw = image.rawsource.get(prefix..).unwrap_or("");
+                        image.rawsource = raw.trim_end_matches('\n').to_string();
+                        // Its alt text defaults to the substitution's name.
+                        if image.get("alt").is_none() {
+                            image.attrs.insert("alt", name.clone());
+                        }
+                    }
+                });
             }
-            _ => Vec::new(),
-        };
-        return (blocks, next);
+        }
+        let mut definition = Element::new("substitution_definition");
+        definition.names = vec![normalize(&name)];
+        definition.attrs.insert("name", name.clone());
+        for node in nodes {
+            match node {
+                Node::Element(image) if image.tag == "image" => {
+                    definition.children.push(Node::Element(image));
+                }
+                Node::Element(paragraph) if paragraph.tag == "paragraph" => {
+                    definition.children.extend(paragraph.children);
+                }
+                Node::Element(reference) if reference.tag == "reference" => {
+                    definition.children.push(Node::Element(reference));
+                }
+                // An error in the definition stands after it.
+                Node::Element(error) if error.tag == "system_message" => {
+                    return (vec![definition.into(), error.into()], next);
+                }
+                _ => {}
+            }
+        }
+        return (vec![definition.into()], next);
     }
     if let Some(found) = captures(&DIRECTIVE, line) {
-        return directive(lines, start, &found[1].to_lowercase(), &found[3]);
+        return directive(lines, start, &found[1].to_lowercase(), &found[3], false);
     }
     if let Some(found) = captures(&TARGET, line) {
         let (block, next) = item_block(lines, start, &found[3]);
-        let name = found[1].trim_matches('`').replace("\\:", ":");
+        let name = unbackslash(found[1].trim_matches('`'));
         let uri: String = block.iter().map(|line| line.trim()).collect();
-        // An indirect target (`name_`) points at another name, not a URI.
-        let blocks = if uri.is_empty() || uri.ends_with('_') {
-            Vec::new()
-        } else {
-            vec![Block::Target {
-                names: vec![normalize_name(&name)],
-                uri,
-            }]
-        };
-        return (blocks, next);
+        let mut target = Element::new("target");
+        target.names = vec![normalize(&name)];
+        if uri.ends_with('_') && !uri.ends_with("\\_") {
+            // An indirect target: another name.
+            let other = uri[..uri.len() - 1].trim_matches('`');
+            target = target.with("refname", normalize(other));
+        } else if !uri.is_empty() {
+            target = target.with("refuri", uri);
+        }
+        return (vec![target.into()], next);
     }
     if let Some(found) = captures(&FOOTNOTE, line) {
         let (block, next) = item_block(lines, start, &found[3]);
+        let block: Vec<String> = block.into_iter().skip_while(|line| blank(line)).collect();
         let label = found[1].clone();
-        let body = parse_blocks(&block);
+        let body = parse_body(&block, false);
         let footnote =
             label.chars().all(|c| c.is_ascii_digit()) || label.starts_with('#') || label == "*";
-        let block = if footnote {
-            // Auto-numbered footnotes are numbered by a transform.
-            let label = if label.starts_with('#') || label == "*" {
-                String::new()
+        let node = if footnote {
+            let mut note = Element::new("footnote");
+            if label == "*" {
+                note = note.with("auto", "*");
+            } else if let Some(name) = label.strip_prefix('#') {
+                note = note.with("auto", "1");
+                if !name.is_empty() {
+                    note.names = vec![normalize(name)];
+                }
             } else {
-                label
-            };
-            Block::Footnote { label, body }
+                note.names = vec![label.clone()];
+                note = note.child(Element::text("label", label));
+            }
+            note.children(body)
         } else {
-            Block::Citation { label, body }
+            let mut citation =
+                Element::new("citation").child(Element::text("label", label.clone()));
+            citation.names = vec![normalize(&label)];
+            citation.children(body)
         };
-        return (vec![block], next);
+        return (vec![node.into()], next);
     }
     // A comment: the rest of the line and the indented block after it.
-    let (_, next) = item_block(lines, start, "");
-    (Vec::new(), next)
-}
-
-/// Link names compare lowercased with whitespace collapsed.
-pub(super) fn normalize_name(name: &str) -> String {
-    name.split_whitespace()
-        .collect::<Vec<_>>()
-        .join(" ")
-        .to_lowercase()
+    let (block, next) = item_block(lines, start, line.get(3..).unwrap_or(""));
+    let text: Vec<String> = block.into_iter().skip_while(|line| blank(line)).collect();
+    let mut comment = Element::new("comment");
+    if !text.is_empty() {
+        comment = comment.child(Node::Text(text.join("\n")));
+    }
+    (vec![comment.into()], next)
 }
 
 /// A directive's options (`:name: value` lines first) and its content.
@@ -939,10 +1167,14 @@ fn directive_parts(block: &[String]) -> (Vec<(String, String)>, Vec<String>) {
         let Some(found) = captures(&FIELD, &block[i]) else {
             break;
         };
-        options.push((
-            found[1].to_lowercase(),
-            block[i][found[0].len()..].trim().to_string(),
-        ));
+        let mut value = block[i][found[0].len()..].trim().to_string();
+        // An option's value may continue on more indented lines.
+        while i + 1 < block.len() && !blank(&block[i + 1]) && indent(&block[i + 1]) > 0 {
+            i += 1;
+            value.push(' ');
+            value.push_str(block[i].trim());
+        }
+        options.push((found[1].to_lowercase(), value.trim().to_string()));
         i += 1;
     }
     while i < block.len() && blank(&block[i]) {
@@ -951,7 +1183,101 @@ fn directive_parts(block: &[String]) -> (Vec<(String, String)>, Vec<String>) {
     (options, block[i..].to_vec())
 }
 
-fn directive(lines: &[String], start: usize, name: &str, argument: &str) -> (Vec<Block>, usize) {
+/// Directives docutils (or rich-rst's Sphinx registry) knows but this port
+/// does not build; they render nothing rather than an error.
+const UNPORTED: &[&str] = &[
+    "sectnum",
+    "section-numbering",
+    "header",
+    "footer",
+    "target-notes",
+    "meta",
+    "unicode",
+    "class",
+    "role",
+    "default-role",
+    "title",
+    "date",
+    "highlight",
+    "index",
+    "tabularcolumns",
+    "currentmodule",
+    "py:currentmodule",
+    "hlist",
+    "toctree",
+    "literalinclude",
+    "productionlist",
+    "glossary",
+    "flat-table",
+    "impl-detail",
+    "availability",
+    "soft-deprecated",
+    "deprecated-removed",
+    "centered",
+    "only",
+];
+
+/// The parts of a directive block, for building its nodes.
+struct Directive<'a> {
+    name: &'a str,
+    /// The argument as written, its lines joined with newlines.
+    argument_text: String,
+    /// The argument on one line.
+    argument: String,
+    options: Vec<(String, String)>,
+    content: Vec<String>,
+    /// The directive's source, for errors and images.
+    raw: String,
+}
+
+impl Directive<'_> {
+    fn option(&self, key: &str) -> Option<String> {
+        self.options
+            .iter()
+            .find(|(name, _)| name == key)
+            .map(|(_, value)| value.clone())
+    }
+
+    fn has_option(&self, key: &str) -> bool {
+        self.options.iter().any(|(name, _)| name == key)
+    }
+
+    fn error(&self, text: &str) -> Vec<Node> {
+        vec![message("ERROR", text, Some(self.raw.clone())).into()]
+    }
+
+    fn missing_argument(&self) -> Vec<Node> {
+        self.error(&format!(
+            "Error in \"{}\" directive:\n1 argument(s) required, 0 supplied.",
+            self.name
+        ))
+    }
+
+    /// The argument's lines then the content: an admonition's body.
+    fn body_with_argument(&self) -> Vec<Node> {
+        let mut lines = Vec::new();
+        if !self.argument_text.is_empty() {
+            lines.extend(self.argument_text.lines().map(String::from));
+            if !self.content.is_empty() {
+                lines.push(String::new());
+            }
+        }
+        lines.extend(self.content.iter().cloned());
+        parse_body(&lines, false)
+    }
+
+    fn content_body(&self) -> Vec<Node> {
+        parse_body(&self.content, false)
+    }
+}
+
+fn directive(
+    lines: &[String],
+    start: usize,
+    name: &str,
+    argument: &str,
+    substitution: bool,
+) -> (Vec<Node>, usize) {
     // The argument and options may continue on indented lines; the content
     // follows a blank line.
     let (rest, next) = indented_block(lines, start + 1);
@@ -964,93 +1290,524 @@ fn directive(lines: &[String], start: usize, name: &str, argument: &str) -> (Vec
         argument_lines.push(rest[body_start].trim().to_string());
         body_start += 1;
     }
-    let argument = argument_lines
-        .into_iter()
+    let argument_text = argument_lines
+        .iter()
         .filter(|line| !line.is_empty())
+        .cloned()
         .collect::<Vec<_>>()
-        .join(" ");
+        .join("\n");
     let (options, content) = directive_parts(&rest[body_start..]);
     let raw = std::iter::once(lines[start].as_str())
         .chain(lines[start + 1..next].iter().map(String::as_str))
         .collect::<Vec<_>>()
         .join("\n");
-    let option = |key: &str| {
-        options
-            .iter()
-            .find(|(name, _)| name == key)
-            .map(|(_, value)| value.clone())
+    // docutils' `block_text`: the directive's lines, and a blank line
+    // after them when one follows.
+    let raw = if raw.ends_with('\n') {
+        format!("{}\n", raw.trim_end())
+    } else {
+        raw
     };
-    let blocks = match name {
-        "code" | "code-block" | "sourcecode" => vec![Block::LiteralBlock {
-            text: content.join("\n"),
-            language: Some(argument.clone()).filter(|language| !language.is_empty()),
-        }],
-        "note" | "warning" | "tip" | "hint" | "important" | "caution" | "danger" | "error"
-        | "attention" => {
-            // The argument is the first line of the body.
-            let mut body_lines = Vec::new();
-            if !argument.is_empty() {
-                body_lines.push(argument.clone());
-                if !content.is_empty() {
-                    body_lines.push(String::new());
-                }
+    let directive = Directive {
+        name,
+        argument: argument_text.replace('\n', " "),
+        argument_text,
+        options,
+        content,
+        raw,
+    };
+    let nodes = if substitution {
+        substitution_directive(&directive)
+    } else {
+        body_directive(&directive)
+    };
+    (nodes, next)
+}
+
+fn substitution_directive(d: &Directive) -> Vec<Node> {
+    match d.name {
+        "replace" => {
+            let mut lines: Vec<String> = Vec::new();
+            if !d.argument_text.is_empty() {
+                lines.extend(d.argument_text.lines().map(String::from));
             }
-            body_lines.extend(content);
-            vec![Block::Admonition {
-                kind: name.to_string(),
-                body: parse_blocks(&body_lines),
-            }]
+            lines.extend(d.content.iter().cloned());
+            parse_body(&lines, false)
         }
+        "image" => vec![image(d).into()],
+        "unicode" | "date" => Vec::new(),
+        name => d.error(&format!("Unknown directive type \"{name}\".")),
+    }
+}
+
+/// Python's `repr` of a string.
+fn python_repr(text: &str) -> String {
+    let quote = if text.contains('\'') && !text.contains('"') {
+        '"'
+    } else {
+        '\''
+    };
+    let mut out = String::from(quote);
+    for c in text.chars() {
+        match c {
+            '\\' => out.push_str("\\\\"),
+            '\n' => out.push_str("\\n"),
+            '\t' => out.push_str("\\t"),
+            '\r' => out.push_str("\\r"),
+            c if c == quote => {
+                out.push('\\');
+                out.push(c);
+            }
+            c => out.push(c),
+        }
+    }
+    out.push(quote);
+    out
+}
+
+/// docutils' `make_id`: lowercase, runs of other characters to one hyphen.
+pub(super) fn make_id(text: &str) -> String {
+    let mut out = String::new();
+    let mut hyphen = false;
+    for c in text.to_lowercase().chars() {
+        if c.is_ascii_alphanumeric() {
+            if hyphen && !out.is_empty() {
+                out.push('-');
+            }
+            hyphen = false;
+            out.push(c);
+        } else {
+            hyphen = true;
+        }
+    }
+    out
+}
+
+fn image(d: &Directive) -> Element {
+    let uri: String = d.argument.split_whitespace().collect();
+    let mut image = Element::new("image").with("uri", uri);
+    image.rawsource.clone_from(&d.raw);
+    if let Some(alt) = d.option("alt") {
+        image = image.with("alt", alt);
+    }
+    match d.option("target") {
+        Some(target) => {
+            let target: String = target.split_whitespace().collect();
+            let reference = if target.ends_with('_') && !target.ends_with("\\_") {
+                Element::new("reference").with("refname", normalize(&target[..target.len() - 1]))
+            } else {
+                Element::new("reference").with("refuri", target)
+            };
+            reference.child(image)
+        }
+        None => image,
+    }
+}
+
+fn code_block(d: &Directive) -> Element {
+    let mut block = Element::text("literal_block", d.content.join("\n")).class("code");
+    if !d.argument.is_empty() {
+        block = block.class(d.argument.clone());
+    }
+    if let Some(name) = d.option("name") {
+        block = block.with("name", name);
+    }
+    if d.has_option("linenos") {
+        block = block.with("linenos", "1");
+    }
+    if let Some(start) = d
+        .option("lineno-start")
+        .or_else(|| d.option("number-lines"))
+    {
+        if start.parse::<i64>().is_ok() {
+            block = block.with("start_line", start);
+        }
+    }
+    if let Some(lines) = d.option("emphasize-lines") {
+        let mut highlight: Vec<i64> = Vec::new();
+        for part in lines.split(',').map(str::trim).filter(|p| !p.is_empty()) {
+            if let Some((a, b)) = part.split_once('-') {
+                if let (Ok(a), Ok(b)) = (a.trim().parse::<i64>(), b.trim().parse::<i64>()) {
+                    highlight.extend(a..=b);
+                }
+            } else if let Ok(n) = part.parse::<i64>() {
+                highlight.push(n);
+            }
+        }
+        highlight.sort_unstable();
+        highlight.dedup();
+        if !highlight.is_empty() {
+            let list: Vec<String> = highlight.iter().map(i64::to_string).collect();
+            block = block.with("highlight_lines", list.join(","));
+        }
+    }
+    block
+}
+
+fn admonition_tag(name: &str) -> Option<&'static str> {
+    Some(match name {
+        "note" => "note",
+        "warning" => "warning",
+        "tip" => "tip",
+        "hint" => "hint",
+        "important" => "important",
+        "caution" => "caution",
+        "danger" => "danger",
+        "error" => "error",
+        "attention" => "attention",
+        _ => return None,
+    })
+}
+
+fn body_directive(d: &Directive) -> Vec<Node> {
+    if let Some(tag) = admonition_tag(d.name) {
+        return vec![Element::new(tag).children(d.body_with_argument()).into()];
+    }
+    match d.name {
+        "code" | "code-block" | "sourcecode" => vec![code_block(d).into()],
+        "seealso" => vec![Element::new("seealso")
+            .children(d.body_with_argument())
+            .into()],
+        "versionadded" | "versionchanged" | "deprecated" => version_directive(d),
         "admonition" => {
-            let mut body = vec![Block::Title(inline_text(&parse_inline(&argument)))];
-            body.extend(parse_blocks(&content));
-            vec![Block::Admonition {
-                kind: name.to_string(),
-                body,
-            }]
+            if d.argument.is_empty() {
+                return d.missing_argument();
+            }
+            let class = format!("admonition-{}", make_id(&d.argument));
+            vec![Element::new("admonition")
+                .class(class)
+                .child(inlines("title", &d.argument))
+                .children(d.content_body())
+                .into()]
         }
-        "image" | "figure" => vec![Block::Image {
-            uri: argument.clone(),
-            alt: option("alt"),
-            raw,
-            wrapped: option("target").is_some(),
-        }],
-        "contents" | "topic" => {
-            let title = if argument.is_empty() && name == "contents" {
+        "image" => vec![image(d).into()],
+        "figure" => vec![figure(d).into()],
+        "contents" => {
+            let title = if d.argument.is_empty() {
                 "Contents".to_string()
             } else {
-                argument.clone()
+                d.argument.clone()
             };
-            let mut blocks = vec![Block::Title(title)];
-            if name == "topic" {
-                blocks.extend(parse_blocks(&content));
+            let mut topic = Element::new("topic")
+                .class("contents")
+                .child(inlines("title", &title))
+                .with("__contents", "1");
+            if let Some(depth) = d.option("depth") {
+                topic = topic.with("__depth", depth);
             }
-            vec![Block::Container(blocks)]
+            if d.has_option("local") {
+                topic = topic.with("__local", "1");
+            }
+            vec![topic.into()]
         }
-        "rubric" => vec![Block::Title(inline_text(&parse_inline(&argument)))],
+        "topic" => {
+            if d.argument.is_empty() {
+                return d.missing_argument();
+            }
+            vec![Element::new("topic")
+                .child(inlines("title", &d.argument))
+                .children(d.content_body())
+                .into()]
+        }
+        "rubric" => vec![inlines("rubric", &d.argument).into()],
         "math" => {
-            let mut text = vec![argument.clone()];
-            text.extend(content);
-            vec![Block::MathBlock(
-                text.into_iter()
-                    .filter(|line| !line.is_empty())
-                    .collect::<Vec<_>>()
-                    .join("\n"),
-            )]
+            let mut text = vec![d.argument_text.clone()];
+            text.extend(d.content.iter().cloned());
+            let text: Vec<String> = text.into_iter().filter(|line| !line.is_empty()).collect();
+            let mut block = Element::text("math_block", text.join("\n"));
+            if let Some(label) = d.option("label").or_else(|| d.option("name")) {
+                block = block.with("label", label);
+            }
+            vec![block.into()]
         }
-        "sidebar" => vec![Block::Sidebar {
-            title: argument.clone(),
-            subtitle: option("subtitle"),
-            body: parse_blocks(&content),
-        }],
-        "raw" => vec![Block::Raw {
-            format: argument.clone(),
-            text: content.join("\n"),
-        }],
-        "container" | "compound" => vec![Block::Container(parse_blocks(&content))],
-        _ => Vec::new(),
+        "sidebar" => {
+            let mut sidebar = Element::new("sidebar");
+            if !d.argument.is_empty() {
+                sidebar = sidebar.child(inlines("title", &d.argument));
+            }
+            if let Some(subtitle) = d.option("subtitle") {
+                sidebar = sidebar.child(inlines("subtitle", &subtitle));
+            }
+            vec![sidebar.children(d.content_body()).into()]
+        }
+        "raw" => {
+            if d.argument.is_empty() {
+                return d.missing_argument();
+            }
+            if d.content.is_empty() {
+                return d.error("Content block expected for the \"raw\" directive; none found.");
+            }
+            let format = d
+                .argument
+                .split_whitespace()
+                .collect::<Vec<_>>()
+                .join(" ")
+                .to_lowercase();
+            vec![Element::text("raw", d.content.join("\n"))
+                .with("format", format)
+                .into()]
+        }
+        "parsed-literal" => {
+            let mut block = Element::new("literal_block")
+                .class("parsed-literal")
+                .children(inline_nodes(parse_inline(&d.content.join("\n"))));
+            if let Some(name) = d.option("name") {
+                block = block.with("name", name);
+            }
+            vec![block.into()]
+        }
+        "line-block" => {
+            let items = d
+                .content
+                .iter()
+                .map(|line| (indent(line), inlines("line", line.trim())))
+                .collect();
+            vec![nest_line_block(items).into()]
+        }
+        "epigraph" | "highlights" | "pull-quote" => block_quotes(d.content.clone())
+            .into_iter()
+            .map(|quote| quote.class(d.name).into())
+            .collect(),
+        "container" => {
+            let mut container = Element::new("container");
+            for class in d.argument.split_whitespace() {
+                container = container.class(class);
+            }
+            vec![container.children(d.content_body()).into()]
+        }
+        "compound" => vec![Element::new("compound").children(d.content_body()).into()],
+        // rich-rst reads no files unless asked; it says so instead.
+        "include" => {
+            if d.argument.is_empty() {
+                return d.missing_argument();
+            }
+            let text = format!(
+                "File access is disabled; not including {} (see allow_file_access)",
+                python_repr(&d.argument)
+            );
+            vec![Element::new("warning")
+                .child(Element::text("paragraph", text))
+                .into()]
+        }
+        "table" => d
+            .content_body()
+            .into_iter()
+            .map(|node| match node {
+                Node::Element(mut table) if table.tag == "table" && !d.argument.is_empty() => {
+                    table
+                        .children
+                        .insert(0, inlines("title", &d.argument).into());
+                    table.into()
+                }
+                other => other,
+            })
+            .collect(),
+        "csv-table" => csv_table(d)
+            .unwrap_or_else(|| d.error("Error with CSV data in \"csv-table\" directive.")),
+        "list-table" => list_table(d).unwrap_or_else(|| {
+            d.error("Error parsing content block for the \"list-table\" directive.")
+        }),
+        name if UNPORTED.contains(&name) => Vec::new(),
+        name => {
+            let mut nodes: Vec<Node> = vec![message(
+                "INFO",
+                &format!(
+                    "No directive entry for \"{name}\" in module \"rich_rst._vendor.docutils.parsers.rst.languages.en\".\nTrying \"{name}\" as canonical directive name."
+                ),
+                None,
+            )
+            .into()];
+            nodes.extend(d.error(&format!("Unknown directive type \"{name}\".")));
+            nodes
+        }
+    }
+}
+
+fn version_directive(d: &Directive) -> Vec<Node> {
+    let (version, explanation) = match d.argument_text.split_once(char::is_whitespace) {
+        Some((version, explanation)) => (version.to_string(), explanation.trim().to_string()),
+        None => (d.argument_text.clone(), String::new()),
     };
-    (blocks, next)
+    if version.is_empty() {
+        return d.missing_argument();
+    }
+    let mut node = Element::new("versionmodified")
+        .with("type", d.name)
+        .with("version", version);
+    if !explanation.is_empty() {
+        node = node.child(paragraph(&explanation));
+    }
+    vec![node.children(d.content_body()).into()]
+}
+
+fn figure(d: &Directive) -> Element {
+    let mut figure = Element::new("figure").child(image(d));
+    let caption: Vec<String> = d
+        .content
+        .iter()
+        .take_while(|line| !blank(line))
+        .cloned()
+        .collect();
+    if !caption.is_empty() {
+        figure = figure.child(inlines("caption", &caption.join("\n")));
+    }
+    let legend: Vec<String> = d
+        .content
+        .iter()
+        .skip_while(|line| !blank(line))
+        .skip_while(|line| blank(line))
+        .cloned()
+        .collect();
+    if !legend.is_empty() {
+        figure = figure.child(Element::new("legend").children(parse_body(&legend, false)));
+    }
+    figure
+}
+
+/// `list-table`: a two-level bullet list as a table.
+fn list_table(d: &Directive) -> Option<Vec<Node>> {
+    let body = d.content_body();
+    let [Node::Element(list)] = body.as_slice() else {
+        return None;
+    };
+    if list.tag != "bullet_list" {
+        return None;
+    }
+    let mut rows: Vec<Vec<Vec<Node>>> = Vec::new();
+    for item in list.elements() {
+        let [Node::Element(row)] = item.children.as_slice() else {
+            return None;
+        };
+        if row.tag != "bullet_list" {
+            return None;
+        }
+        rows.push(row.elements().map(|cell| cell.children.clone()).collect());
+    }
+    let columns = rows.first()?.len();
+    if columns == 0 || rows.iter().any(|row| row.len() != columns) {
+        return None;
+    }
+    let header_rows: usize = d
+        .option("header-rows")
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0);
+    let make_row = |cells: &Vec<Vec<Node>>| {
+        Element::new("row").children(
+            cells
+                .iter()
+                .map(|cell| Element::new("entry").children(cell.clone()).into()),
+        )
+    };
+    let head: Vec<Element> = rows.iter().take(header_rows).map(make_row).collect();
+    let body: Vec<Element> = rows.iter().skip(header_rows).map(make_row).collect();
+    let mut table = table(&vec![0; columns], head, body);
+    if !d.argument.is_empty() {
+        table
+            .children
+            .insert(0, inlines("title", &d.argument).into());
+    }
+    Some(vec![table.into()])
+}
+
+/// CSV rows as docutils' `csv-table` reads them: `,` between fields,
+/// spaces after it skipped, `"` quoting with `""` for a quote.
+fn csv_rows(text: &str) -> Option<Vec<Vec<String>>> {
+    let mut rows = Vec::new();
+    let mut row: Vec<String> = Vec::new();
+    let mut field = String::new();
+    let mut chars = text.chars().peekable();
+    let mut quoted = false;
+    let mut at_start = true;
+    let mut was_quoted = false;
+    while let Some(c) = chars.next() {
+        if quoted {
+            if c == '"' {
+                if chars.peek() == Some(&'"') {
+                    chars.next();
+                    field.push('"');
+                } else {
+                    quoted = false;
+                }
+            } else {
+                field.push(c);
+            }
+            continue;
+        }
+        match c {
+            ' ' if at_start => {}
+            '"' if at_start => {
+                quoted = true;
+                was_quoted = true;
+                at_start = false;
+            }
+            ',' => {
+                row.push(std::mem::take(&mut field));
+                at_start = true;
+                was_quoted = false;
+            }
+            '\n' => {
+                row.push(std::mem::take(&mut field));
+                rows.push(std::mem::take(&mut row));
+                at_start = true;
+                was_quoted = false;
+            }
+            // Text after a closing quote is an error in a strict dialect.
+            _ if was_quoted => return None,
+            c => {
+                field.push(c);
+                at_start = false;
+            }
+        }
+    }
+    if quoted {
+        return None;
+    }
+    if !field.is_empty() || !row.is_empty() {
+        row.push(field);
+        rows.push(row);
+    }
+    Some(rows)
+}
+
+/// `csv-table` with its data inline (rich-rst reads no files).
+fn csv_table(d: &Directive) -> Option<Vec<Node>> {
+    if d.option("file").is_some() || d.option("url").is_some() || d.content.is_empty() {
+        return None;
+    }
+    let mut head: Vec<Vec<String>> = match d.option("header") {
+        Some(header) => csv_rows(&header)?,
+        None => Vec::new(),
+    };
+    let mut body = csv_rows(&d.content.join("\n"))?;
+    let header_rows: usize = d
+        .option("header-rows")
+        .and_then(|n| n.parse().ok())
+        .unwrap_or(0);
+    let taken = header_rows.min(body.len());
+    head.extend(body.drain(..taken));
+    let columns = head.iter().chain(&body).map(Vec::len).max().unwrap_or(0);
+    if columns == 0 {
+        return None;
+    }
+    let row = |cells: &Vec<String>| {
+        let mut cells = cells.clone();
+        cells.resize(columns, String::new());
+        Element::new("row").children(cells.iter().map(|cell| {
+            let lines: Vec<String> = cell.lines().map(String::from).collect();
+            Element::new("entry")
+                .children(parse_body(&lines, false))
+                .into()
+        }))
+    };
+    let head: Vec<Element> = head.iter().map(row).collect();
+    let body: Vec<Element> = body.iter().map(row).collect();
+    let mut table = table(&vec![0; columns], head, body);
+    if !d.argument.is_empty() {
+        table
+            .children
+            .insert(0, inlines("title", &d.argument).into());
+    }
+    Some(vec![table.into()])
 }
 
 /// A table row by display cell: a wide character takes its cell and a
@@ -1070,67 +1827,215 @@ fn is_simple_table_border(line: &str) -> bool {
     line.starts_with('=') && line.contains(' ') && line.chars().all(|c| c == '=' || c == ' ')
 }
 
-/// A simple table: its cells, each a paragraph, in row order.
-fn simple_table(lines: &[String], start: usize) -> Option<(Block, usize)> {
-    // Columns are display cells, as docutils' `pad_double_width` makes them.
-    let border = &lines[start];
+/// One table cell: its lines, parsed as body elements.
+fn entry(lines: &[String], morerows: usize, morecols: usize) -> Element {
+    let block = dedent(lines, min_indent(lines));
+    let mut entry = Element::new("entry");
+    if morerows > 0 {
+        entry = entry.with("morerows", morerows.to_string());
+    }
+    if morecols > 0 {
+        entry = entry.with("morecols", morecols.to_string());
+    }
+    if block.iter().any(|line| !blank(line)) {
+        entry = entry.children(parse_body(&block, false));
+    }
+    entry
+}
+
+/// docutils' `build_table`.
+fn table(columns: &[usize], head: Vec<Element>, body: Vec<Element>) -> Element {
+    let mut tgroup = Element::new("tgroup").with("cols", columns.len().to_string());
+    for width in columns {
+        tgroup = tgroup.child(Element::new("colspec").with("colwidth", width.to_string()));
+    }
+    if !head.is_empty() {
+        tgroup = tgroup.child(Element::new("thead").children(head.into_iter().map(Node::from)));
+    }
+    tgroup = tgroup.child(Element::new("tbody").children(body.into_iter().map(Node::from)));
+    Element::new("table").child(tgroup)
+}
+
+fn malformed(lines: &[String], detail: &str) -> Node {
+    let source = lines.join("\n");
+    message(
+        "ERROR",
+        &format!("Malformed table.\n{detail}"),
+        Some(source),
+    )
+    .into()
+}
+
+/// The columns (`[start, end)` display cells) of a simple table's border or
+/// span line, whose runs are `mark`.
+fn runs(line: &[Option<char>], mark: char) -> Vec<(usize, usize)> {
     let mut columns = Vec::new();
-    let mut in_column = None;
-    for (index, c) in border.chars().enumerate() {
-        match (c, in_column) {
-            ('=', None) => in_column = Some(index),
-            (' ', Some(from)) => {
-                columns.push((from, index));
-                in_column = None;
+    let mut from = None;
+    for (index, c) in line.iter().enumerate() {
+        match (*c == Some(mark), from) {
+            (true, None) => from = Some(index),
+            (false, Some(start)) if *c == Some(' ') => {
+                columns.push((start, index));
+                from = None;
             }
             _ => {}
         }
     }
-    if let Some(from) = in_column {
-        columns.push((from, usize::MAX));
+    if let Some(start) = from {
+        columns.push((start, line.len()));
     }
-    let mut borders = 0;
-    let mut i = start;
-    let mut cells = Vec::new();
-    let mut malformed = false;
-    while i < lines.len() {
-        let line = &lines[i];
+    columns
+}
+
+/// A simple table cell: the columns it spans past its own, the rows (none),
+/// and its lines.
+type RowCell = (usize, usize, Vec<String>);
+
+/// A simple table: docutils' `SimpleTableParser`.
+fn simple_table(lines: &[String], start: usize) -> Option<(Vec<Node>, usize)> {
+    // `isolate_simple_table`: up to the border a blank line (or the end)
+    // follows.
+    let mut borders = Vec::new();
+    let mut end = None;
+    for (i, line) in lines.iter().enumerate().skip(start) {
         if is_simple_table_border(line) {
-            borders += 1;
-            i += 1;
-            let closes = borders >= 2 && (i >= lines.len() || blank(&lines[i]));
-            if closes {
-                // Text in a column margin is docutils' "Malformed table"
-                // error, which renders nothing.
-                let cells = if malformed { Vec::new() } else { cells };
-                return Some((Block::Container(cells), i));
-            }
-            continue;
-        }
-        if blank(line) {
-            i += 1;
-            continue;
-        }
-        let chars = display_columns(line);
-        malformed |= columns.windows(2).any(|pair| {
-            let margin = &chars[pair[0].1.min(chars.len())..pair[1].0.min(chars.len())];
-            margin.iter().flatten().any(|c| !c.is_whitespace())
-        });
-        for (column, &(from, to)) in columns.iter().enumerate() {
-            let end = if column + 1 == columns.len() {
-                chars.len()
-            } else {
-                to.min(chars.len())
-            };
-            let cell: String = chars[from.min(end)..end].iter().flatten().collect();
-            let cell = cell.trim();
-            if !cell.is_empty() {
-                cells.push(Block::Paragraph(parse_inline(cell)));
+            borders.push(i - start);
+            if borders.len() >= 2 && lines.get(i + 1).is_none_or(|next| blank(next)) {
+                end = Some(i + 1);
+                break;
             }
         }
-        i += 1;
     }
-    None
+    let end = end?;
+    let source = &lines[start..end];
+    let block: Vec<Vec<Option<char>>> = source.iter().map(|l| display_columns(l)).collect();
+    let text = |row: &[Option<char>], from: usize, to: usize| -> String {
+        let to = to.min(row.len());
+        row[from.min(to)..to].iter().flatten().collect()
+    };
+    let mut columns = runs(&block[0], '=');
+    let head_sep = (borders.len() >= 3).then(|| borders[1]);
+    // Rows: a line whose first column has text starts one; a span line or
+    // a border ends one.
+    let span_line = |row: &[Option<char>]| {
+        let line: String = row.iter().flatten().collect();
+        !line.is_empty()
+            && (line.starts_with('=') || line.starts_with('-'))
+            && line.chars().all(|c| c == '=' || c == '-' || c == ' ')
+    };
+    // (the row's lines, the span line ending it)
+    let mut rows: Vec<(Vec<usize>, Option<usize>)> = Vec::new();
+    let mut current: Vec<usize> = Vec::new();
+    let mut text_found = false;
+    let (first_start, first_end) = columns[0];
+    for (offset, row) in block.iter().enumerate().skip(1) {
+        if span_line(row) {
+            if !current.is_empty() || borders.contains(&offset) {
+                rows.push((std::mem::take(&mut current), Some(offset)));
+            }
+            text_found = false;
+        } else if !text(row, first_start, first_end).trim().is_empty() {
+            if text_found && !current.is_empty() {
+                rows.push((std::mem::take(&mut current), None));
+            }
+            current = vec![offset];
+            text_found = true;
+        } else if text_found {
+            current.push(offset);
+        }
+    }
+    let rows: Vec<(Vec<usize>, Option<usize>)> = rows
+        .into_iter()
+        .filter(|(lines, _)| !lines.is_empty())
+        .collect();
+    let border_end = columns.last()?.1;
+    let mut parsed: Vec<(usize, Vec<RowCell>)> = Vec::new();
+    for (row_lines, span) in rows {
+        // The columns this row uses: its span line's, else the border's.
+        let mut cols = match span {
+            Some(span) if !borders.contains(&span) => {
+                let mut cols = runs(&block[span], '-');
+                if cols.last().map(|c| c.1) != Some(border_end) {
+                    let detail = format!("Column span incomplete in table line {}.", span + 1);
+                    return Some((vec![malformed(source, &detail)], end));
+                }
+                if let Some(last) = cols.last_mut() {
+                    last.1 = columns.last().map_or(last.1, |c| c.1);
+                }
+                cols
+            }
+            _ => columns.clone(),
+        };
+        // `check_columns`: text in a margin is an error; text past the last
+        // column widens it.
+        let last = cols.len() - 1;
+        for &line in &row_lines {
+            let row = &block[line];
+            for index in 0..cols.len() {
+                let (from, to) = cols[index];
+                if index == last {
+                    if !text(row, to, usize::MAX).trim().is_empty() {
+                        let rest = text(row, from, usize::MAX);
+                        let new_end = from + width(rest.trim_end());
+                        cols[index].1 = cols[index].1.max(new_end);
+                        if let Some(main) = columns.last_mut() {
+                            main.1 = main.1.max(new_end);
+                        }
+                    }
+                } else if !text(row, to, cols[index + 1].0).trim().is_empty() {
+                    let detail = format!("Text in column margin in table line {}.", line + 1);
+                    return Some((vec![malformed(source, &detail)], end));
+                }
+            }
+        }
+        // `init_row`: how many border columns each cell spans.
+        let mut cells = Vec::new();
+        let mut at = 0;
+        for &(from, to) in &cols {
+            if columns.get(at).map(|c| c.0) != Some(from) {
+                let detail = format!(
+                    "Column span alignment problem in table line {}.",
+                    row_lines[0] + 1
+                );
+                return Some((vec![malformed(source, &detail)], end));
+            }
+            let mut morecols = 0;
+            while columns.get(at).is_some_and(|c| c.1 != to) {
+                at += 1;
+                morecols += 1;
+            }
+            if at >= columns.len() {
+                let detail = format!(
+                    "Column span alignment problem in table line {}.",
+                    row_lines[0] + 1
+                );
+                return Some((vec![malformed(source, &detail)], end));
+            }
+            at += 1;
+            let cell_lines: Vec<String> = row_lines
+                .iter()
+                .map(|&line| text(&block[line], from, to).trim_end().to_string())
+                .collect();
+            cells.push((morecols, 0, cell_lines));
+        }
+        parsed.push((row_lines[0], cells));
+    }
+    let mut head = Vec::new();
+    let mut body = Vec::new();
+    for (first, cells) in parsed {
+        let row = Element::new("row").children(
+            cells
+                .into_iter()
+                .map(|(morecols, morerows, lines)| entry(&lines, morerows, morecols).into()),
+        );
+        if head_sep.is_some_and(|sep| first < sep) {
+            head.push(row);
+        } else {
+            body.push(row);
+        }
+    }
+    let widths: Vec<usize> = columns.iter().map(|(from, to)| to - from).collect();
+    Some((vec![table(&widths, head, body).into()], end))
 }
 
 /// docutils' `grid_table_top_pat`, `\+-[-+]+-\+ *$`.
@@ -1160,16 +2065,14 @@ fn grid_cells(line: &str) -> Vec<String> {
     cells
 }
 
-/// A grid table: its cells, each parsed as body elements, in row order. A
-/// table docutils cannot trace is an error, which renders nothing.
-fn grid_table(lines: &[String], start: usize) -> (Block, usize) {
+/// A grid table. A table docutils cannot trace is an error.
+fn grid_table(lines: &[String], start: usize) -> (Vec<Node>, usize) {
     // `isolate_grid_table`: the lines that start with `+` or `|`, up to the
     // last border.
     let mut end = start;
     while end < lines.len() && (lines[end].starts_with('+') || lines[end].starts_with('|')) {
         end += 1;
     }
-    let malformed = |next: usize| (Block::Container(Vec::new()), next);
     let mut rows = end - start;
     let mut next = end;
     if !is_grid_border(&lines[end - 1]) {
@@ -1177,27 +2080,34 @@ fn grid_table(lines: &[String], start: usize) -> (Block, usize) {
             .rev()
             .find(|&i| is_grid_border(&lines[start + i]))
         else {
-            return malformed(end);
+            return (
+                vec![malformed(
+                    &lines[start..end],
+                    "Bottom border missing or corrupt.",
+                )],
+                end,
+            );
         };
         rows = bottom + 1;
         // docutils steps back one line too many here, so the row before the
         // bottom border is read again after the table.
         next = start + bottom - 1;
     }
-    let grid: Vec<Vec<String>> = lines[start..start + rows]
-        .iter()
-        .map(|line| grid_cells(line))
-        .collect();
+    let source = &lines[start..start + rows];
+    let grid: Vec<Vec<String>> = source.iter().map(|line| grid_cells(line)).collect();
     let right_edge = grid[0].len();
     if grid
         .iter()
         .any(|row| row.len() != right_edge || !row.last().is_some_and(|c| c == "+" || c == "|"))
     {
-        return malformed(next);
+        return (
+            vec![malformed(source, "Right border not aligned or missing.")],
+            next,
+        );
     }
     match GridTable::parse(grid) {
-        Some(cells) => (Block::Container(cells), next),
-        None => malformed(next),
+        Some(table) => (vec![table.into()], next),
+        None => (vec![malformed(source, "Malformed table.")], next),
     }
 }
 
@@ -1212,7 +2122,7 @@ struct GridTable {
 }
 
 impl GridTable {
-    fn parse(mut grid: Vec<Vec<String>>) -> Option<Vec<Block>> {
+    fn parse(mut grid: Vec<Vec<String>>) -> Option<Element> {
         // The head/body separator reads as a row border; there may be one,
         // neither first nor last.
         let separators: Vec<usize> = grid
@@ -1227,72 +2137,96 @@ impl GridTable {
             })
             .map(|(i, _)| i)
             .collect();
-        match separators.as_slice() {
-            [] => {}
+        let head_sep = match separators.as_slice() {
+            [] => None,
             [i] if *i != 0 && *i != grid.len() - 1 => {
-                for cell in grid[*i].iter_mut() {
+                for cell in &mut grid[*i] {
                     if cell == "=" {
                         *cell = "-".into();
                     }
                 }
+                Some(*i)
             }
             _ => return None,
-        }
+        };
         let bottom = grid.len() - 1;
         let right = grid[0].len() - 1;
         if bottom == 0 {
-            // A lone border: a table of no rows.
-            return Some(Vec::new());
+            return None;
         }
-        let mut table = GridTable {
+        let mut tracer = GridTable {
             grid,
             bottom,
             right,
             done: vec![None; right + 1],
         };
         let mut found = Vec::new();
+        let mut rowseps = std::collections::BTreeSet::from([0usize]);
+        let mut colseps = std::collections::BTreeSet::from([0usize]);
         let mut corners = vec![(0, 0)];
         while !corners.is_empty() {
             let (top, left) = corners.remove(0);
-            if top == table.bottom
-                || left == table.right
-                || table.done[left].is_some_and(|done| top <= done)
+            if top == tracer.bottom
+                || left == tracer.right
+                || tracer.done[left].is_some_and(|done| top <= done)
             {
                 continue;
             }
-            let Some((bottom, right)) = table.scan_right(top, left) else {
+            let Some((bottom, right)) = tracer.scan_right(top, left) else {
                 continue;
             };
             for col in left..right {
-                table.done[col] = Some(bottom - 1);
+                tracer.done[col] = Some(bottom - 1);
             }
+            rowseps.insert(bottom);
+            colseps.insert(right);
             found.push((top, left, bottom, right));
             corners.push((top, right));
             corners.push((bottom, left));
             corners.sort_unstable();
         }
         // Each text column must be seen to the bottom.
-        if table.done[..table.right]
+        if tracer.done[..tracer.right]
             .iter()
-            .any(|&done| done != Some(table.bottom - 1))
+            .any(|&done| done != Some(tracer.bottom - 1))
         {
             return None;
         }
+        let rowseps: Vec<usize> = rowseps.into_iter().collect();
+        let colseps: Vec<usize> = colseps.into_iter().collect();
+        let widths: Vec<usize> = colseps.windows(2).map(|w| w[1] - w[0] - 1).collect();
+        let mut rows: Vec<Vec<Option<Element>>> =
+            vec![vec![None; colseps.len() - 1]; rowseps.len() - 1];
         found.sort_unstable();
-        let mut cells = Vec::new();
         for (top, left, bottom, right) in found {
+            let row = rowseps.iter().position(|&r| r == top)?;
+            let col = colseps.iter().position(|&c| c == left)?;
+            let morerows = rowseps.iter().position(|&r| r == bottom)? - row - 1;
+            let morecols = colseps.iter().position(|&c| c == right)? - col - 1;
             // `get_2D_block`: the cell's text, each line stripped on the
             // right, then dedented by the smallest indent.
-            let block: Vec<String> = table.grid[top + 1..bottom]
+            let block: Vec<String> = tracer.grid[top + 1..bottom]
                 .iter()
-                .map(|row| row[left + 1..right].concat().trim_end().to_string())
+                .map(|line| line[left + 1..right].concat().trim_end().to_string())
                 .collect();
-            let block = dedent(&block, min_indent(&block));
-            if block.iter().any(|line| !blank(line)) {
-                cells.extend(parse_blocks(&block));
+            rows[row][col] = Some(entry(&block, morerows, morecols));
+        }
+        let head_rows = head_sep
+            .and_then(|sep| rowseps.iter().position(|&r| r == sep))
+            .unwrap_or(0);
+        let make = |cells: Vec<Option<Element>>| {
+            Element::new("row").children(cells.into_iter().flatten().map(Node::from))
+        };
+        let mut head = Vec::new();
+        let mut body = Vec::new();
+        for (index, cells) in rows.into_iter().enumerate() {
+            if index < head_rows {
+                head.push(make(cells));
+            } else {
+                body.push(make(cells));
             }
         }
-        Some(cells)
+        Some(table(&widths, head, body))
     }
 
     fn at(&self, row: usize, col: usize) -> &str {

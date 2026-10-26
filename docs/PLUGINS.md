@@ -300,8 +300,9 @@ live:
   and no index are needed, so an expired index never stops what is
   installed.
 
-The official public keys are not compiled in yet: `KeySet::official`
-refuses until the maintainer has made the pairs. The crate's tests sign a
+The official public keys (generation 1, the same file as the marketplace
+repository's `keys/keys-1.json`) are compiled in since 0.0.23, as
+`crates/rich-marketplace/keys/keys-1.json`. The crate's tests sign a
 fixture marketplace with test keys checked into
 `crates/rich-marketplace/tests/fixtures/keys`, trusted only by those tests.
 
@@ -311,20 +312,35 @@ fixture marketplace with test keys checked into
 
 ```bash
 rich plugin search diagram        # id, kind, tier, the version this host loads
-rich plugin info shout            # tier, source, versions, what loads here
-rich plugin install shout         # shows tier, permissions, capabilities; asks
-rich plugin install shout@0.2.0 --yes
+rich plugin info textcase         # tier, source, versions, what loads here
+rich plugin install textcase      # shows tier, permissions, capabilities; asks
+rich plugin install textcase@0.1.0 --yes
 rich plugin list                  # what is installed; no network
-rich plugin disable shout         # keep it, do not load it
+rich plugin disable textcase      # keep it, do not load it
 rich plugin update                # newest for this host, asking first
 rich plugin verify                # every file, and every version against the index
-rich plugin remove shout
+rich plugin remove textcase
 rich plugin browse                # the same, in a selector with provenance
 ```
 
+- **What is listed (0.0.23).** The official marketplace,
+  [`buchochelliq-labs/rs-rich-marketplace`](https://github.com/buchochelliq-labs/rs-rich-marketplace),
+  goes live with 0.0.23: the Mermaid, DOT and lumis crates, `textcase` (a
+  WASM plugin built from
+  `crates/rich-plugin-api/examples/wasm/textcase.wat`: the `upcase` and
+  `downcase` transforms and a `loud` fence) and the built-in micro packs
+  `status`, `dev` and `fun` as `.richmicro` archives. The WASM plugin and
+  the packs are built reproducibly, and `crates/rich-cli/tests/official_artifacts.rs`
+  checks each rebuild against its pinned hash. The marketplace serves them
+  from its own `artifacts/`. Until the maintainer signs the first index,
+  `search` says the marketplace has no `index.json` and exits 3.
 - **What installs.** A WASM plugin, a micro pack or a theme. A crate is
   listed only: `install` refuses it and prints its `cargo add` line, and
-  `info` shows the same.
+  `info` shows the same. An installed, enabled micro pack is loaded into
+  micro's user layer on every run (after the user's own directory, so the
+  user's own asset keeps a name both claim), once its file is checked
+  against the lockfile; `disable` stops it. An installed theme is checked
+  and recorded, but nothing selects it yet.
 - **The prompt.** `install` and `update` print the package's tier, source,
   revision, artifact URL, SHA-256, size, requirement, capabilities and
   permissions, then ask. Nothing is downloaded before the answer. `--yes`
@@ -361,9 +377,8 @@ rich plugin browse                # the same, in a selector with provenance
   `https://HOST/PATH` from its own `artifacts/HOST/PATH`, never from the
   network: that is how the tests and CI's compatibility job run offline.
 - **Which keys.** `--marketplace-keys FILE` (a `keys-N.json`), else
-  `RICH_MARKETPLACE_KEYS`, else the keys compiled into the crate. Until the
-  official keys are compiled in, a marketplace is trusted only through one
-  of the first two. Later key generations are fetched from the
+  `RICH_MARKETPLACE_KEYS`, else the official keys compiled into the crate
+  (since 0.0.23). Later key generations are fetched from the
   marketplace's `keys/` and accepted one at a time.
 - **Errors** use the CLI's exit classes: 2 usage (an unknown id, a crate, a
   version not listed, no trust root), 3 input (a file or download that
@@ -391,10 +406,16 @@ rich plugin publish shout.wasm \
   --license MIT --repository https://github.com/me/shout
 ```
 
+**Checking** a listing pull request happens in the marketplace repository
+too: its `check-listings` workflow validates every listing, checks each new
+version's artifact (size, SHA-256, a crate's crates.io checksum) and
+installs each new WASM plugin, micro pack and theme with `rich` from a copy
+of the marketplace signed with a throwaway key, with no secrets.
+
 **Signing** happens in the marketplace repository, not here: when a listing
 pull request merges, its workflow rebuilds `index.json`, bumps the serial
 and signs it with the main key, held in the protected
-`marketplace-signing` environment. The workflow and its setup are kept in
+`marketplace-signing` environment, and pushes it with a deploy key. The workflow and its setup are kept in
 [`docs/marketplace-repo/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/docs/marketplace-repo)
 to hand over.
 
@@ -448,10 +469,13 @@ its way:
    API version above.
 3. **Done — third-party loading (0.0.13).** Linked plugins, native and WASM
    runtime plugins, and `rich plugins list/info`, as above.
-4. **In progress — the marketplace (#232).** A Git-backed, signed index of
+4. **Live with 0.0.23 — the marketplace (#232).** A Git-backed, signed index of
    packages ([the listing format](design/marketplace.md), 0.0.21), the
-   `rs-rich-marketplace` crate (0.0.22, [below](#the-marketplace-client-0022))
-   and `rich plugin install` (0.0.22).
+   `rs-rich-marketplace` crate (0.0.22, [below](#the-marketplace-client-0022)),
+   `rich plugin install` (0.0.22), and the marketplace repository with every
+   official plugin and the built-in micro packs listed and its pull request
+   checks (0.0.23). It serves its first signed index once the maintainer has
+   signed it.
 
 Whatever we add, the invariant holds: **the core never learns about a specific
 extension.**

@@ -7,15 +7,13 @@ a^2, :bogus:`thing`, PEP 8, RFC 2822.
 References: Python, Rust lang, inline, 
 anonymous, 
 https://example.com/path?q=1., mail 
-me@example.com, see 1 and  and CIT2002. 
-Substitution name and ref here. Target  
-here.
-
-replaced text╭────────────── citation ──
-│ CIT2002                              │
-│                                      │
-│ A citation.                          │
-╰──────────────────────────────────────╯
+me@example.com, see [1] and [2] and 
+CIT2002. Substitution replaced text and 
+|ref|_ here. Target  here.
+┌────────────── citation ──────────────┐
+│ CIT2002: A citation.                 │
+└──────────────────────────────────────┘
 ┌─────────────── Footer ───────────────┐
-│            Auto footnote.            │
+│ 1: First footnote.                   │
+│ 2: Auto footnote.                    │
 └──────────────────────────────────────┘

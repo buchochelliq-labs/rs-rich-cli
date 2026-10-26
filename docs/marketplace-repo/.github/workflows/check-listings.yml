@@ -1,0 +1,182 @@
+# Check a listing pull request before a maintainer merges it.
+#
+# This workflow belongs to the rs-rich-marketplace repository; rs-rich-cli
+# keeps a copy in docs/marketplace-repo/ (see the README there). The
+# contract is rs-rich-cli's docs/design/marketplace.md.
+#
+# It runs on pull requests only (never on a push, so the signer's commit to
+# main does not start it), needs no secrets, and reads nothing but the
+# repository: `pull_request`, not `pull_request_target`, so a pull request
+# from a fork runs with a read-only token and no secrets. The checks run
+# from the base branch's scripts where it has them, so a pull request cannot
+# weaken its own checks.
+#
+# 1. Every listing validates with rs-rich-cli's scripts/validate_marketplace.py
+#    at `vars.RS_RICH_CLI_REF`, as the signing workflow does.
+# 2. Each new or changed version's artifact is downloaded (or, for this
+#    repository's own artifacts/, read from the pull request) and its size
+#    and SHA-256 checked; a crate's hash must be crates.io's index checksum.
+#    A listed version never changes, and setting or raising a tier needs a
+#    maintainer's `tier-approved` label.
+# 3. Each new WASM plugin, micro pack and theme version is installed with
+#    `rich`, built from rs-rich-cli at the same ref, from a local copy of
+#    this marketplace signed with a throwaway key made in the run: the
+#    install loads a WASM module in the sandbox and checks its manifest's
+#    name, version, ABI and capabilities against the listing.
+name: Check listings
+
+on:
+  pull_request:
+    types: [opened, synchronize, reopened, labeled, unlabeled]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: check-listings-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+env:
+  RS_RICH_CLI_REF: ${{ vars.RS_RICH_CLI_REF || 'main' }}
+
+jobs:
+  check:
+    name: listings, artifacts and installs
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - name: Fetch rs-rich-cli's validator and schemas
+        uses: actions/checkout@v7
+        with:
+          repository: buchochelliq-labs/rs-rich-cli
+          ref: ${{ env.RS_RICH_CLI_REF }}
+          path: .rs-rich-cli
+          persist-credentials: false
+          sparse-checkout: |
+            scripts/validate_marketplace.py
+            schemas/marketplace
+          sparse-checkout-cone-mode: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Use the base branch's scripts
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+        run: |
+          set -euo pipefail
+          mkdir -p "$RUNNER_TEMP/tools"
+          for script in marketplace_common.py check_artifacts.py build_index.py; do
+            if [ -n "$BASE" ] && git cat-file -e "$BASE:scripts/$script" 2>/dev/null; then
+              git show "$BASE:scripts/$script" > "$RUNNER_TEMP/tools/$script"
+            else
+              echo "::notice::scripts/$script is new in this pull request; running its own copy"
+              cp "scripts/$script" "$RUNNER_TEMP/tools/$script"
+            fi
+          done
+
+      - name: Every listing is valid
+        run: |
+          python3 -m pip install jsonschema
+          python3 .rs-rich-cli/scripts/validate_marketplace.py --jsonschema require packages/*.json
+
+      - name: The scripts' tests pass
+        run: python3 -m unittest discover -s scripts -p 'test_*.py' -v
+
+      - name: New and changed versions' artifacts match their listings
+        id: artifacts
+        env:
+          BASE: ${{ github.event.pull_request.base.sha }}
+          TIER_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'tier-approved') }}
+        run: |
+          set -euo pipefail
+          args=(--root "$PWD" --mirror "$RUNNER_TEMP/mirror" --installs "$RUNNER_TEMP/installs.txt")
+          if [ -n "$BASE" ]; then args+=(--base "$BASE"); else args+=(--all); fi
+          if [ "$TIER_APPROVED" = "true" ]; then args+=(--allow-tier); fi
+          python3 "$RUNNER_TEMP/tools/check_artifacts.py" "${args[@]}"
+          if [ -s "$RUNNER_TEMP/installs.txt" ]; then
+            echo "install=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Fetch rs-rich-cli to build rich
+        if: steps.artifacts.outputs.install == 'true'
+        uses: actions/checkout@v7
+        with:
+          repository: buchochelliq-labs/rs-rich-cli
+          ref: ${{ env.RS_RICH_CLI_REF }}
+          path: .rs-rich-cli-src
+          persist-credentials: false
+
+      - name: Install Rust
+        if: steps.artifacts.outputs.install == 'true'
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        if: steps.artifacts.outputs.install == 'true'
+        uses: Swatinem/rust-cache@v2
+        with:
+          workspaces: .rs-rich-cli-src
+
+      - name: Build rich (WASM plugins and micro packs are default features)
+        if: steps.artifacts.outputs.install == 'true'
+        working-directory: .rs-rich-cli-src
+        run: cargo build -p rs-rich-cli --locked
+
+      - name: Write a local copy of this marketplace, signed with a throwaway key
+        if: steps.artifacts.outputs.install == 'true'
+        run: |
+          set -euo pipefail
+          sudo apt-get update
+          sudo apt-get install -y minisign
+          market="$RUNNER_TEMP/market"
+          mkdir -p "$market/keys"
+          cp -r packages "$market/packages"
+          cp -r "$RUNNER_TEMP/mirror" "$market/artifacts"
+          cd "$RUNNER_TEMP"
+          # Two unencrypted pairs that live only in this run: the client
+          # needs a main and a backup key; only the main key signs.
+          minisign -G -W -p main.pub -s main.key
+          minisign -G -W -p backup.pub -s backup.key
+          python3 - "$market/keys/keys-1.json" <<'EOF'
+          import json, sys
+          def pair(name):
+              comment, key = open(f"{name}.pub").read().splitlines()[:2]
+              return {"id": comment.split()[-1], "public_key": key.strip()}
+          json.dump({"schema_version": 1, "generation": 1, "main": pair("main"),
+                     "backup": pair("backup")}, open(sys.argv[1], "w"), indent=2)
+          EOF
+          serial="$(python3 "$RUNNER_TEMP/tools/build_index.py" --root "$market")"
+          python3 "$GITHUB_WORKSPACE/.rs-rich-cli/scripts/validate_marketplace.py" --jsonschema require --index "$market/index.json"
+          minisign -S -s main.key -m "$market/index.json" -x "$market/index.json.minisig" \
+            -t "rs-rich-marketplace index serial=$serial"
+          rm -f main.key backup.key
+
+      - name: Install each new version against the host
+        if: steps.artifacts.outputs.install == 'true'
+        env:
+          NO_COLOR: "1"
+        run: |
+          set -euo pipefail
+          rich="$PWD/.rs-rich-cli-src/target/debug/rich"
+          export RICH_MARKETPLACE="$RUNNER_TEMP/market"
+          export RICH_MARKETPLACE_KEYS="$RUNNER_TEMP/market/keys/keys-1.json"
+          "$rich" --version
+          while read -r spec; do
+            [ -n "$spec" ] || continue
+            id="${spec%@*}"
+            # A fresh install directory each, so one package never hides another.
+            export RICH_PLUGIN_DIR="$RUNNER_TEMP/plugins/$id"
+            echo "::group::$spec"
+            "$rich" plugin info "$id"
+            "$rich" plugin install "$spec" --yes
+            "$rich" plugin verify
+            "$rich" plugin list
+            echo "::endgroup::"
+          done < "$RUNNER_TEMP/installs.txt"

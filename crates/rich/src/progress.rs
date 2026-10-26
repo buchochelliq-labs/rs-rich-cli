@@ -1209,7 +1209,7 @@ impl Progress {
             ..crate::live::LiveOptions::default()
         };
         // `Console.is_interactive`: a terminal that is not dumb.
-        let interactive = console.is_terminal() && !crate::console::is_dumb_terminal();
+        let interactive = console.is_terminal() && !console.is_dumb_terminal();
         let shared = Arc::new(std::sync::Mutex::new(self));
         let view = shared.clone();
         let live = crate::live::Live::spawn_get_renderable(
@@ -1382,6 +1382,38 @@ impl<W: std::io::Write + Send + 'static> LiveProgress<W> {
             let content = content.into();
             self.print_disabled(|console| console.print_str(&content));
         }
+    }
+
+    /// Log `objects` above the display with the time and the caller. Port
+    /// of `Progress.log`, which upstream binds to `console.log`: the log goes
+    /// through the live display's render hook, so it lands above the tasks.
+    /// The caller is found with `#[track_caller]` (DIVERGENCES §47); a
+    /// disabled display logs straight to its sink.
+    #[track_caller]
+    pub fn log(
+        &self,
+        objects: &[crate::console::LogObject<'_>],
+        options: &crate::console::LogOptions<'_>,
+    ) -> crate::errors::Result<()> {
+        let caller = std::panic::Location::caller();
+        self.log_at(objects, options, caller.file(), caller.line())
+    }
+
+    /// [`log`](Self::log) with the caller's `file` and `line` given
+    /// ([`Console::log_at`]).
+    pub fn log_at(
+        &self,
+        objects: &[crate::console::LogObject<'_>],
+        options: &crate::console::LogOptions<'_>,
+        file: &str,
+        line: u32,
+    ) -> crate::errors::Result<()> {
+        if self.live.is_some() {
+            return self.handle.log_at(objects, options, file, line);
+        }
+        let mut result = Ok(());
+        self.print_disabled(|console| result = console.log_at(objects, options, file, line));
+        result
     }
 
     /// A writer standing in for stdout while the display runs: whole lines

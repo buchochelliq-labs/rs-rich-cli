@@ -21,6 +21,9 @@ use std::process::{Command, Output, Stdio};
 
 use serde_json::{json, Value};
 
+#[path = "support/official.rs"]
+mod official;
+
 fn manifest_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR"))
 }
@@ -103,6 +106,41 @@ fn shout(version: &str) -> Vec<u8> {
     wat::parse_str(SHOUT_WAT.replace("version 0.1.0", &format!("version {version}"))).unwrap()
 }
 
+/// `team` 1.0.0, a micro pack of one asset, `team/flag` (emoji 🚩), a
+/// name no built-in pack has, so `:micro:team/flag:` shows whether the
+/// installed pack is loaded.
+fn team_pack() -> Vec<u8> {
+    use std::io::Write;
+    let png = std::fs::read(manifest_dir().join("../rich-micro/builtin/status/success/static.png"))
+        .unwrap();
+    let pack = json!({
+        "schema_version": 1, "name": "team", "version": "1.0.0",
+        "description": "The team's flag", "license": "CC0-1.0",
+        "author": "The Team", "packages": ["flag"],
+    });
+    let manifest = json!({
+        "schema_version": 1, "name": "team/flag", "alt": "a red flag", "size": "2x1",
+        "fallback": {"emoji": "🚩", "text": "F"}, "static": "static.png",
+        "version": "1.0.0", "license": "CC0-1.0",
+    });
+    let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored)
+        .last_modified_time(zip::DateTime::default());
+    for (name, bytes) in [
+        ("pack.json", serde_json::to_vec_pretty(&pack).unwrap()),
+        (
+            "flag/manifest.json",
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        ),
+        ("flag/static.png", png),
+    ] {
+        writer.start_file(name, options).unwrap();
+        writer.write_all(&bytes).unwrap();
+    }
+    writer.finish().unwrap().into_inner()
+}
+
 /// The fixture marketplace, written to a directory.
 struct Market {
     dir: PathBuf,
@@ -130,7 +168,28 @@ fn listing(id: &str, kind: &str, tier: &str, repository: &str, versions: Vec<Val
     })
 }
 
+/// An official crate's listing as the marketplace has it (its capabilities,
+/// permissions and features), at `version`.
 fn crate_listing(id: &str, name: &str, version: &str, features: &[&str]) -> Value {
+    let (capabilities, permissions) = match id {
+        "mermaid" => (
+            json!([{"kind": "fence-renderer", "name": "mermaid"}, {"kind": "renderer", "name": "mermaid"}]),
+            json!([
+                "native-code",
+                "filesystem-read",
+                "filesystem-write",
+                "process"
+            ]),
+        ),
+        "dot" => (
+            json!([{"kind": "fence-renderer", "name": "dot"}, {"kind": "fence-renderer", "name": "graphviz"}, {"kind": "renderer", "name": "dot"}]),
+            json!(["native-code"]),
+        ),
+        _ => (
+            json!([{"kind": "code-highlighter", "name": id}]),
+            json!(["native-code"]),
+        ),
+    };
     let mut value = listing(
         id,
         "crate",
@@ -144,12 +203,70 @@ fn crate_listing(id: &str, name: &str, version: &str, features: &[&str]) -> Valu
                 "sha256": "6ca5b3f974d2ead0191b462b81164c750a3e03c6629f9a5783fb819d43a0e9ac",
                 "size": 98304
             },
-            "capabilities": [{"kind": "fence-renderer", "name": id}],
-            "permissions": ["native-code"],
+            "capabilities": capabilities,
+            "permissions": permissions,
         })],
     );
     value["crate"] = json!({"name": name, "features": features});
     value
+}
+
+/// The official artifacts (tests/support/official.rs), served from the
+/// marketplace's own `artifacts/` as the real one serves them, and their
+/// listings as the marketplace repository has them: `textcase` and the
+/// built-in micro packs.
+fn official_listings(dir: &Path) -> Vec<(String, Value)> {
+    let mirror = dir.join(
+        "artifacts/raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/main/artifacts",
+    );
+    let official_version = |path: &str, body: &[u8], number: &str, requires: Value| {
+        let file = mirror.join(path);
+        std::fs::create_dir_all(file.parent().unwrap()).unwrap();
+        std::fs::write(&file, body).unwrap();
+        json!({
+            "version": number, "published": "2026-10-26", "requires": requires,
+            "artifact": {"url": official::url(path), "sha256": sha256(body), "size": body.len()},
+        })
+    };
+    let repository = "https://github.com/buchochelliq-labs/rs-rich-cli";
+    let mut out = Vec::new();
+    for (path, body) in official::artifacts() {
+        let id = path.split('/').next().unwrap().to_string();
+        let value = if id == official::TEXTCASE.0 {
+            let mut v = official_version(&path, &body, official::TEXTCASE.1, json!({"abi": "1.0"}));
+            v["source_revision"] = json!(official::TEXTCASE_SOURCE_REVISION);
+            v["capabilities"] = json!([
+                {"kind": "transform", "name": "upcase"},
+                {"kind": "transform", "name": "downcase"},
+                {"kind": "fence-ansi", "name": "loud"},
+            ]);
+            v["permissions"] = json!(["ansi-output"]);
+            listing(&id, "wasm-plugin", "official", repository, vec![v])
+        } else {
+            let (_, number) = official::PACKS.iter().find(|(n, _)| *n == id).unwrap();
+            let pack: Value = serde_json::from_slice(
+                &std::fs::read(
+                    manifest_dir()
+                        .join("../rich-micro/builtin")
+                        .join(&id)
+                        .join("pack.json"),
+                )
+                .unwrap(),
+            )
+            .unwrap();
+            let mut v = official_version(&path, &body, number, json!({"micro_schema": 1}));
+            v["capabilities"] = json!(pack["packages"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .map(|p| json!({"kind": "asset", "name": format!("{id}/{}", p.as_str().unwrap())}))
+                .collect::<Vec<_>>());
+            v["permissions"] = json!([]);
+            listing(&id, "micro-pack", "official", repository, vec![v])
+        };
+        out.push((id, value));
+    }
+    out
 }
 
 /// A workspace crate's version, from its manifest.
@@ -163,7 +280,8 @@ fn workspace_version(dir: &str) -> String {
 impl Market {
     /// `shout` (0.1.0 good, 0.0.9 yanked), `future` (a WASM plugin for ABI
     /// 2 only), `solarized` (a theme), `broken` (a theme whose file does not
-    /// match its hash), and the official crates, listed only.
+    /// match its hash), the official crates, listed only, and the official
+    /// `textcase` plugin and micro packs, as the marketplace lists them.
     fn write(dir: &Path) -> Market {
         let artifacts = dir.join("artifacts/example.test/releases");
         std::fs::create_dir_all(&artifacts).unwrap();
@@ -244,7 +362,24 @@ impl Market {
             )],
         );
 
+        let team = team_pack();
+        put("team-1.0.0.richmicro", &team);
+        let team = listing(
+            "team",
+            "micro-pack",
+            "community",
+            "https://github.com/example/team-icons",
+            vec![version(
+                "1.0.0",
+                json!({"micro_schema": 1}),
+                "team-1.0.0.richmicro",
+                &team,
+                json!([{"kind": "asset", "name": "team/flag"}]),
+            )],
+        );
+
         let listings = vec![
+            ("team".to_string(), team),
             ("shout".to_string(), shout_listing),
             ("future".to_string(), future),
             ("solarized".to_string(), solarized),
@@ -277,6 +412,8 @@ impl Market {
                 ),
             ),
         ];
+        let mut listings = listings;
+        listings.extend(official_listings(dir));
         std::fs::create_dir_all(dir.join("keys")).unwrap();
         std::fs::write(dir.join("keys/keys-1.json"), keys_json()).unwrap();
         let mut market = Market {
@@ -575,15 +712,20 @@ fn a_bad_signature_and_a_rollback_are_refused() {
         "{}",
         text(&out.stderr)
     );
-    // No trust root at all: the official keys are not compiled in yet.
+    // No keys named: the official ones are trusted, and this test
+    // marketplace's own key is not one of them.
     let out = w.rich(&[
         "plugin",
         "search",
         "--marketplace",
         w.market.dir.to_str().unwrap(),
     ]);
-    assert_code(&out, 2);
-    assert!(text(&out.stderr).contains("--marketplace-keys"));
+    assert_code(&out, 4);
+    assert!(
+        text(&out.stderr).contains("signed by key"),
+        "{}",
+        text(&out.stderr)
+    );
 }
 
 #[test]
@@ -830,6 +972,31 @@ mod wasm {
         assert_code(&w.plugin(&["verify"]), 4);
     }
 
+    /// The official WASM plugin installs as listed and runs on the next
+    /// run without --plugin: its transforms and its `loud` fence.
+    #[test]
+    fn the_official_textcase_plugin_installs_and_runs() {
+        let w = world();
+        let out = w.plugin(&["install", "textcase", "--yes"]);
+        assert_code(&out, 0);
+        assert!(
+            text(&out.stdout).contains("official"),
+            "{}",
+            text(&out.stdout)
+        );
+        let out = w.rich(&["--transform", "upcase", "-p", "from the marketplace"]);
+        assert_code(&out, 0);
+        assert!(text(&out.stdout).contains("FROM THE MARKETPLACE"));
+        std::fs::write(w.root.join("loud.md"), "```loud\nhello there\n```\n").unwrap();
+        let out = w.rich(&["-m", "loud.md"]);
+        assert_code(&out, 0);
+        assert!(
+            text(&out.stdout).contains("HELLO THERE"),
+            "{}",
+            text(&out.stdout)
+        );
+    }
+
     #[test]
     fn the_sandbox_checks_the_manifest_against_the_listing() {
         let mut w = world();
@@ -898,6 +1065,122 @@ mod wasm {
         ]);
         assert_code(&out, 2);
     }
+}
+
+/// The official micro packs install from the marketplace as listed, and
+/// load into micro's user layer from the install directory.
+#[cfg(feature = "art")]
+#[test]
+fn the_official_micro_packs_install_and_load_in_micro() {
+    let w = world();
+    for (name, _) in official::PACKS {
+        assert_code(&w.plugin(&["install", name, "--yes"]), 0);
+    }
+    assert_code(&w.plugin(&["verify"]), 0);
+    let out = w.rich(&["micro", "packs", "--report", "json"]);
+    assert_code(&out, 0);
+    let report: Value = serde_json::from_slice(&out.stdout).unwrap();
+    for (name, version) in official::PACKS {
+        let file = w.plugins.join(format!("{name}/{name}-{version}.richmicro"));
+        assert!(
+            report["packs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|p| p["layer"] == "user"
+                    && p["name"] == name
+                    && p["path"] == file.to_str().unwrap()),
+            "{name}: {report}"
+        );
+    }
+}
+
+/// A micro pack installed from the marketplace is loaded on the next run
+/// with no other step: its `:micro:` names expand. Disabled, or changed on
+/// disk since it was installed, it is not loaded.
+#[cfg(feature = "art")]
+#[test]
+fn an_installed_micro_pack_loads_until_disabled_or_changed() {
+    let w = world();
+    let flag = |w: &World| {
+        let out = w.rich(&["-p", "--emoji", "a :micro:team/flag: b"]);
+        assert_code(&out, 0);
+        (text(&out.stdout), text(&out.stderr))
+    };
+    assert_eq!(flag(&w).0, "a :micro:team/flag: b\n");
+    assert_code(&w.plugin(&["install", "team", "--yes"]), 0);
+    assert_eq!(flag(&w).0, "a 🚩 b\n");
+    let out = w.rich(&["micro", "packs"]);
+    assert!(text(&out.stdout).contains("team"), "{}", text(&out.stdout));
+
+    assert_code(&w.plugin(&["disable", "team"]), 0);
+    assert_eq!(flag(&w).0, "a :micro:team/flag: b\n");
+    assert_code(&w.plugin(&["enable", "team"]), 0);
+    assert_eq!(flag(&w).0, "a 🚩 b\n");
+
+    let file = w.plugins.join("team/team-1.0.0.richmicro");
+    let mut bytes = std::fs::read(&file).unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 1;
+    std::fs::write(&file, bytes).unwrap();
+    let (stdout, stderr) = flag(&w);
+    assert_eq!(stdout, "a :micro:team/flag: b\n");
+    assert!(stderr.contains("micro pack team is not loaded"), "{stderr}");
+}
+
+/// `publish` takes a new micro pack listing's description, license and
+/// author from its `pack.json` when the command line gives none.
+#[cfg(feature = "art")]
+#[test]
+fn publish_fills_a_micro_packs_listing_from_its_pack_json() {
+    let w = world();
+    let file = w.root.join("team-1.0.0.richmicro");
+    std::fs::write(&file, team_pack()).unwrap();
+    let output = w.root.join("team.json");
+    let out = w.rich(&[
+        "plugin",
+        "publish",
+        file.to_str().unwrap(),
+        "--url",
+        "https://github.com/example/team-icons/releases/download/v1.0.0/team-1.0.0.richmicro",
+        "--repository",
+        "https://github.com/example/team-icons",
+        "--output",
+        output.to_str().unwrap(),
+    ]);
+    assert_code(&out, 0);
+    let listing: Value = serde_json::from_slice(&std::fs::read(&output).unwrap()).unwrap();
+    assert_eq!(listing["description"], "The team's flag");
+    assert_eq!(listing["license"], "CC0-1.0");
+    assert_eq!(listing["authors"], json!(["The Team"]));
+    assert_eq!(
+        listing["versions"][0]["capabilities"],
+        json!([{"kind": "asset", "name": "team/flag"}])
+    );
+
+    // The command line still wins.
+    let out = w.rich(&[
+        "plugin",
+        "publish",
+        file.to_str().unwrap(),
+        "--url",
+        "https://github.com/example/team-icons/releases/download/v1.0.0/team-1.0.0.richmicro",
+        "--repository",
+        "https://github.com/example/team-icons",
+        "--description",
+        "Flags",
+        "--license",
+        "MIT",
+        "--author",
+        "Someone",
+        "--output",
+        output.to_str().unwrap(),
+    ]);
+    assert_code(&out, 0);
+    let listing: Value = serde_json::from_slice(&std::fs::read(&output).unwrap()).unwrap();
+    assert_eq!(listing["description"], "Flags");
+    assert_eq!(listing["license"], "MIT");
+    assert_eq!(listing["authors"], json!(["Someone"]));
 }
 
 /// Write the fixture marketplace to `$RICH_TEST_MARKETPLACE`, for the CI

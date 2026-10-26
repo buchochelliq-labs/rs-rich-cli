@@ -1,0 +1,29 @@
+[39mPara first.[0m
+
+┏━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃[1m [0m[1mField Name[0m[1m [0m┃[1m [0m[1mField Value            [0m[1m [0m┃
+┡━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ [1mparam x   [0m │ [39mthe input              [0m │
+├────────────┼─────────────────────────┤
+│ [1mtype x    [0m │ [39mint                    [0m │
+├────────────┼─────────────────────────┤
+│ [1mreturns   [0m │ [39mthe output, over two   [0m │
+│            │ [39mlines                  [0m │
+└────────────┴─────────────────────────┘
+[1;33m • [0m[39ma list item with [0m[38;5;251;48;5;233mcode[0m
+[39mcontinued paragraph[0m
+[1;33m   1.[0m [39mnested enumerated[0m
+[1;33m   2.[0m [39msecond[0m
+
+[1;33m 1.[0m [39mauto[0m
+[1;33m 2.[0m [39mnumbered[0m
+
+[1;33m 3.[0m [39mthree[0m
+[1;33m 4.[0m [39mfour[0m
+
+[1;33m A.[0m [39mupper[0m
+[1;33m B.[0m [39malpha[0m
+
+Term : [36mclassifier one[0m[36m : classifier two[0m
+
+    [39mIts definition.[0m

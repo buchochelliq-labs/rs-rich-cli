@@ -1,25 +1,26 @@
  • item one
- • item two  second paragraph of two
-   ∘ item three
-   ∘ nested a  nested b
-     ▪ nested a
-     ▪ nested b
- • nested b
+ • item two
+second paragraph of two
+ • item three
+   ∘ nested a
+   ∘ nested b
 
  • star list
  • another
 
- 1 first
- 2 second
- 3 third
- 4 auto
- 5 auto two
+ 1. first
+ 2. second
+ 3. third
+ 4. auto
+ 5. auto two
 
- 1 letter
- 2 letters
+ a) letter
+ b) letters
 
- 1 roman
- 2 roman two
+ (i) roman
+ (ii) roman two
 
- • outer  inner enum  inner enum b
+ • outer
+   1. inner enum
+   2. inner enum b
  • outer two

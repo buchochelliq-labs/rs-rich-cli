@@ -52,7 +52,9 @@ python scripts/validate_release.py --tag release-0.0.20
 ```
 
 `--tag` is required because the wrapper always includes
-`scripts/release.py plan <tag>` as the final release-plan audit. If you run the
+`scripts/release.py plan <tag> --semver-checks` as the final release-plan audit
+(for a crate past 0.0.x it runs `cargo-semver-checks`, pinned in
+`api/tools.toml`). If you run the
 steps manually, keep them in the wrapper's order and run both explicit Python
 release test modules: `test_release.py` and `test_release_readiness.py`.
 
@@ -80,7 +82,17 @@ tag locally:
 ```bash
 python3 scripts/release.py plan release-0.0.20     # every crate of the release
 # or: python3 scripts/release.py plan rs-rich-cli-v0.0.20
+python3 scripts/release.py plan release-0.0.20 --semver-checks   # as release.yml runs it
 ```
+
+`--semver-checks` also refuses a version bump smaller than the change, by
+Cargo's rules, with `cargo-semver-checks` (pinned in `api/tools.toml`) against
+each crate's last release. Every 0.0.x bump counts as breaking, so it fits any
+change; from 0.1.0 a breaking change needs a new minor version. Before the
+release PR, check that CI's `public API and SemVer` job is green: the API
+snapshots in `api/` match, and every 0.0.x break is listed in
+`api/semver-breaks.toml` and has a migration note. After the release, the
+entries for the published versions are spent: remove them.
 
 These commands plan only; they do not create a tag or publish. Confirm the JSON
 selection, then regenerate version docs and CLI help. Move only the selected

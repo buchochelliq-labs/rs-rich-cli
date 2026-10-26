@@ -1353,15 +1353,14 @@ struct Shift {
 /// use rich_ext::surface::PaintStrategy;
 ///
 /// assert_eq!("best".parse::<PaintStrategy>(), Ok(PaintStrategy::Best));
-/// assert_eq!(PaintStrategy::default(), PaintStrategy::Cells);
+/// assert_eq!(PaintStrategy::default(), PaintStrategy::Best);
 /// assert_eq!(PaintStrategy::Scroll.name(), "scroll");
 /// assert!("fastest".parse::<PaintStrategy>().is_err());
 /// ```
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
 pub enum PaintStrategy {
     /// Compare each cell inside the damage with what was sent, and write
-    /// the cells that changed. The default.
-    #[default]
+    /// the cells that changed. A bare [`Painter`]'s strategy.
     Cells,
     /// Compare whole rows, and rewrite each
     /// changed row from its first change to its last.
@@ -1374,7 +1373,10 @@ pub enum PaintStrategy {
     /// Windows console, an inline region, an image in the moved rows).
     Scroll,
     /// Each frame, encode the strategies that apply and send the shortest,
-    /// within a bound so choosing never costs more than it saves.
+    /// within a bound so choosing never costs more than it saves. The
+    /// default, and an intuiTUIve app's unless it chooses: within 5% of
+    /// the best fixed strategy on every scene of the benchmark.
+    #[default]
     Best,
 }
 
@@ -1446,7 +1448,7 @@ impl std::str::FromStr for PaintStrategy {
 /// assert_eq!(stats.text_bytes, 2);
 /// assert_eq!(stats.bytes(), out.len());
 /// ```
-#[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub struct PaintStats {
     /// Cells compared with what was sent (every cell, on a full repaint).
     pub compared: usize,
@@ -1465,6 +1467,23 @@ pub struct PaintStats {
     /// The strategy the paint used (never [`PaintStrategy::Best`], which
     /// picks one of the others).
     pub strategy: PaintStrategy,
+}
+
+impl Default for PaintStats {
+    /// Nothing counted, under [`PaintStrategy::Cells`] (`strategy` is never
+    /// `Best`).
+    fn default() -> PaintStats {
+        PaintStats {
+            compared: 0,
+            written: 0,
+            elided: 0,
+            move_bytes: 0,
+            style_bytes: 0,
+            text_bytes: 0,
+            other_bytes: 0,
+            strategy: PaintStrategy::Cells,
+        }
+    }
 }
 
 impl PaintStats {
@@ -1694,6 +1713,10 @@ impl Sgr {
 }
 
 impl Painter {
+    /// A painter for `system`, under [`PaintStrategy::Cells`] until
+    /// [`set_strategy`](Self::set_strategy): it moves no rows until the
+    /// caller, who knows where pictures sit and whether tmux is in the way,
+    /// asks it to. An intuiTUIve app paints with `best`.
     pub fn new(system: Option<ColorSystem>) -> Painter {
         Painter {
             previous: None,
@@ -1708,7 +1731,10 @@ impl Painter {
             force: false,
             written: Vec::new(),
             stats: PaintStats::default(),
-            strategy: PaintStrategy::default(),
+            // A bare painter knows nothing of pictures or tmux (an app
+            // tells it, through `set_fixed` and `set_scroll`), so it moves
+            // no rows unless asked.
+            strategy: PaintStrategy::Cells,
             erase: true,
             // Windows consoles have been seen to scroll the wrong rows.
             scroll: !cfg!(windows),

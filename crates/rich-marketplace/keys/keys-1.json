@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "generation": 1,
+  "main": {
+    "id": "D22F9156C0C4E262",
+    "public_key": "RWRi4sTAVpEv0mYA2DGr929/wLmjiOnIlijxmbHYlGagKOflzIJw/2nx"
+  },
+  "backup": {
+    "id": "DEC3A1455D4868F6",
+    "public_key": "RWT2aEhdRaHD3tbQWU3MRQy9hqHUfpALJrUG+T4YBMdDthVnY+SM592R"
+  },
+  "revoked": []
+}

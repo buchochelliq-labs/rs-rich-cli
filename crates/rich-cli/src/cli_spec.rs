@@ -1947,13 +1947,13 @@ pub(crate) fn spec() -> CommandSpec {
                  screen text, take screenshots) in a real terminal and write PNG, SVG and text \
                  screenshots, an asciinema cast, a GIF, an animated PNG (when asked), an MP4 (with \
                  FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame \
-                 rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with \
-                 committed ones instead",
+                 rate, and Kitty, Sixel and iTerm2 images; --audio records the program's sound too; \
+                 --check compares screenshots with committed ones instead",
             )
             .usage(
                 "record [--check] [--output DIR] [--bin-dir DIR] \
                  [--format png,svg,cast,gif,apng,mp4,html] [--no-video] [--fps N] [--font FILE] \
-                 [--window-frame on|off] [--caption TEXT] [--key-overlay on|off] TAPE...",
+                 [--window-frame on|off] [--caption TEXT] [--key-overlay on|off] [--audio] TAPE...",
             )
             .section(
                 "Tapes",
@@ -1967,7 +1967,10 @@ pub(crate) fn spec() -> CommandSpec {
                  - Output gif png: write only these formats; without an Output line, every \
                  format but the APNG\n\
                  - Output apng (or --format apng, or all): an animated PNG beside (or instead \
-                 of) the GIF; it is written only when asked",
+                 of) the GIF; it is written only when asked\n\
+                 - Set Audio on (or --audio): record the program's sound, which it writes to \
+                 the directory in RICH_RECORD_AUDIO (intuiTUIve's audio outputs do); an MP4 \
+                 carries it as AAC, the other outputs get a WAV beside them (off)",
             ),
     )
     .subcommand(
@@ -2117,7 +2120,7 @@ pub(crate) fn known_config_keys() -> Vec<String> {
 /// A console for stdout: colour only on a terminal, and never with
 /// `no_color`.
 pub(crate) fn console(no_color: bool) -> Console {
-    Console::builder().no_color(no_color).build()
+    crate::console_builder().no_color(no_color).build()
 }
 
 /// Render through a stdout console to a string (no trailing newline).

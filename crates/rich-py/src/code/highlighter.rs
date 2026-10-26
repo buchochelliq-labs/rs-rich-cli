@@ -107,7 +107,8 @@ impl Highlighter {
     }
 
     /// Apply highlighting in place to `text`; subclasses implement it.
-    fn highlight(&self, _text: &Bound<'_, PyAny>) -> PyResult<()> {
+    fn highlight(&self, text: &Bound<'_, PyAny>) -> PyResult<()> {
+        let _ = text;
         Err(PyNotImplementedError::new_err(
             "Highlighter is abstract: subclasses implement highlight(text)",
         ))
@@ -129,7 +130,9 @@ impl NullHighlighter {
         PyClassInitializer::from(Highlighter).add_subclass(NullHighlighter)
     }
 
-    fn highlight(&self, _text: &Bound<'_, PyAny>) {}
+    fn highlight(&self, text: &Bound<'_, PyAny>) {
+        let _ = text;
+    }
 }
 
 /// Which core highlighter an instance's patterns are, when they are still

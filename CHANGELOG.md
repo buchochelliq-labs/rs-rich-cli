@@ -9,6 +9,82 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **The plugin marketplace goes live** (rs-rich-cli, rs-rich-plugin-api's
+  examples): rs-rich-marketplace lists the Mermaid, DOT and lumis crates,
+  `textcase` (a new official WASM plugin: the `upcase` and `downcase`
+  transforms and a `loud` fence) and the built-in micro packs `status`,
+  `dev` and `fun`. The WASM plugin and the packs are built reproducibly,
+  and `tests/official_artifacts.rs` pins their hashes. The marketplace
+  checks each listing pull request (validation, artifact hashes, crates.io
+  checksums, an install with `rich`) and signs its index with a deploy key
+  to push it; `docs/marketplace-repo/` keeps a copy of its workflows and
+  scripts. CI's compatibility job installs the official plugins and packs,
+  and a weekly job installs from the live marketplace once it is signed.
+  The `official` tier now reads "rs-rich's own, built from its repository".
+
+- **Installed micro packs load** (rs-rich-cli): a micro pack installed with
+  `rich plugin install` loads on every run, into micro's user layer after
+  the user's own directory, once its file still hashes to what the lockfile
+  records; `rich plugin disable` stops it and `rich micro packs` lists it.
+  `rich plugin publish` fills a new micro pack listing's description,
+  license and author from its `pack.json` when they are not given.
+
+- **console.py fully ported** (rs-rich): the rest of upstream's `Console`.
+  `quiet`; the size setters and upstream's size rules; `is_dumb_terminal`;
+  `Console(soft_wrap=…, style=…)`; `color_system="auto"` and terminal
+  detection from the environment as rich 15.0.0 does it (`COLORTERM`,
+  `TERM`, `TTY_COMPATIBLE`, `FORCE_COLOR`), with `ConsoleBuilder::environ`
+  standing in for upstream's `_environ`; `on_broken_pipe`;
+  `begin_capture`/`end_capture`; `record=` with the text, HTML and SVG
+  exports and saves (`export_*_recorded`, `save_*_recorded`, since the
+  closure forms already hold upstream's names); `log` with `log_time`,
+  `log_path`, `log_time_format` and `get_datetime`; render hooks;
+  `set_live`/`clear_live`; `screen()`; and `status()`. A printed `Control`
+  no longer ends its line, and `Console::control` records and captures
+  control codes as upstream does. New golden fixture `console.tsv` (22
+  cases, `scripts/golden_console.py`). File objects, Jupyter,
+  `print_exception` and `log_locals` stay out (DIVERGENCES §43); the new
+  differences in form are §47 to §49.
+
+- **`Progress.log`** (rs-rich): `LiveProgress::log` logs above the tasks
+  as upstream's `Progress.log` (its console's `log`) does, with the time and
+  the caller from `#[track_caller]`; `log_at` names the caller. `Live`,
+  `AutoLive` and `LiveHandle` have `log` too, as `Live::print` stands in for
+  `console.print`. New golden cases `progress_log` and `progress_log_file`
+  in `console.tsv`.
+
+- **`Live` uses its console's live stack** (rs-rich): `start` calls
+  `set_live` and `stop` calls `clear_live`, as upstream's do. A display
+  started while the stack holds another is nested: it draws nothing and
+  prints its renderable when it stops, unless it is transient. rich 15.0.0
+  raises no `LiveError` here, and neither does the port. New golden cases
+  `live_set_live` and `live_nested` (DIVERGENCES §17, §49).
+
+- **A nested `Live` draws inside the first display** (rs-rich): as rich
+  15.0.0 does, the first display on a console's live stack draws every
+  display on it, one after another, and a nested display's refresh redraws
+  the first. The live stack is now shared by a console and its clones, so
+  displays given clones of one console nest. `Live`, `AutoLive`,
+  `LiveProgress` and `LiveStatus` take part, from any thread. New golden
+  cases `live_nested_draw`, `live_nested_transient`,
+  `live_nested_stop_order`, `live_nested_file` and `live_nested_screen` in
+  `console.tsv`. What still differs is in DIVERGENCES §17.
+
+- **The CLI tour shows the new console features** (rs-rich-cli): `rich
+  --demo`'s core sections now run `console.log` and `progress.log` (a
+  fixed clock and a pseudo-file keep them the same on every run), a live
+  `console.status` while the section pauses on a terminal, and a
+  `record=True` console's text, HTML and SVG exports. The tour tape takes
+  two more screenshots, `log` and `record`.
+
+- **`Surface` paints with `best`** (rs-rich-ext): a `Surface` now paints
+  as an intuiTUIve app does, with `PaintStrategy::Best` unless
+  `Surface::paint_strategy` or `RICH_PAINT_STRATEGY` chooses another. Its
+  guards are the app's: no terminal scrolling on Windows, under tmux,
+  inline, or through a graphic on screen, and `Surface::terminal_scroll`
+  overrides the first two. `Painter::new` still starts on `cells`. Tests
+  replay `best` through vt100 against a full repaint.
+
 - **Noctiluca's live logs and terminal adaptations** (noctiluca): a
   `role=log`, `aria-live` or appended scroll box is followed through a
   live-only change ping and read incrementally, with no new snapshot. It
@@ -22,7 +98,189 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   fixtures: `stream-with-log.html`, `log-ul.html`, `log-div.html`,
   `adapt.html`.
 
+- **A real-site checklist for Noctiluca** (docs): five kinds of site to
+  open by hand before a release (news, a video watch page, a live stream
+  with chat, docs, a forum), what to look at on each, and the expected
+  limits, on [its status page](docs/guide/noctiluca/status.md#checking-on-real-sites);
+  docs/BRANCHING.md's release steps name it. A broken anchor in the 0.0.20
+  notes is fixed.
+
+- **Fixed: a page `switch` keeps hidden misses no update** (intuituive).
+  A page that held a scroll box kept its offscreen copy while hidden, so
+  when shown again it drew what it showed last, not what its signals said
+  (Noctiluca's page area, after a page was opened from the address bar in
+  reader mode). The page shown until now is hidden when the key changes,
+  so it draws afresh when it comes back. `tests/switch_hidden_child.rs`.
+
+- **`rich --rst` follows `rich-rst` 2.2.0** (ext, CLI): the pin in
+  `UPSTREAM.toml` moved from 1.3.2 to 2.2.0. `rich_ext::rst` now builds a
+  docutils document tree and applies docutils' transforms, as 2.x does: a
+  lone top section is the document's title, sections are drawn by level,
+  tables are tables (cells that span drawn line by line), list markers keep
+  their numbering style, footnotes are numbered, references and
+  substitutions resolve, and `contents` lists the sections. New directives:
+  `seealso`, `versionadded`, `versionchanged`, `deprecated`, `figure`,
+  `parsed-literal`, `epigraph`, `list-table`, `csv-table` and more. Breaking for
+  `rs-rich-ext`: `rst::parse` returns the tree (`rst::Element`), and
+  `Block`, `Inline` and friends are gone. Fresh goldens from rich-rst 2.2.0
+  on rich 15.0.0; DIVERGENCES §35 lists what is not ported.
+
 - **`rich serve --compress`** (CLI, `serve` feature): deflates frames of 1 KiB or more for pages that can undo it. Off by default; worth it over a slow link.
+
+- **The `rich` binary keeps its console contract** (CLI). The core console
+  now reads `FORCE_COLOR` and `TTY_COMPATIBLE`, and exits with status 1 on
+  a broken pipe, as rich 15.0.0 does. The binary does neither, as
+  documented: every console it prints through starts from one builder
+  that decides terminal-ness from standard output alone, so redirected
+  output stays plain under `FORCE_COLOR=1`, and that makes a closed pipe
+  quiet the console, so `rich … | head -c1` still exits 0. The
+  maintainer's call on 2026-10-26. `tests/console_contract.rs`.
+
+- **The marketplace's official keys are compiled in** (rs-rich-marketplace,
+  CLI). Generation 1 of the maintainer's main and backup minisign keys
+  (`crates/rich-marketplace/keys/keys-1.json`, the same file as the
+  marketplace repository's `keys/keys-1.json`) is `KeySet::official`, so
+  `rich plugin` trusts the official marketplace with no
+  `--marketplace-keys` or `RICH_MARKETPLACE_KEYS`.
+- **Marketplace repository template**: step 5 of its README now gives
+  `release-0.0.22` as the example `RS_RICH_CLI_REF` (this repository's
+  tags are `release-X.Y.Z`), and says to move it with each release.
+
+- **API checks in CI** (all crates; brought forward from the plan to
+  1.0.0's Stage 3). Every published crate's public API is checked in as
+  `api/<crate>.txt`, made by `cargo public-api` 0.52.0 over a pinned
+  nightly's rustdoc JSON. CI's new `public API and SemVer` job fails when an
+  API differs from its snapshot, with the diff;
+  `python scripts/public_api.py --bless` updates them. The same job runs
+  `cargo-semver-checks` 0.51.0 against each crate's last release. Every 0.0.x
+  bump is a breaking one to Cargo, so a 0.0.x crate is checked as if its bump
+  were a minor one, and each breaking change must be listed, with its
+  reason, in `api/semver-breaks.toml`. This release lists rs-rich-ext's
+  `rst` tree and `surface::Cell`, and rs-rich-intuituive's `FrameStats`
+  fields and its `ImageView` and `Pixels` from rs-rich-art, and noctiluca's
+  added fields and variants. rs-rich's
+  `CompactString` change is not one cargo-semver-checks can see.
+  `scripts/release.py plan --semver-checks`, which `release.yml` runs,
+  refuses a version bump smaller than the change. The tools are pinned in
+  `api/tools.toml`.
+
+- **Complete type stubs for the Python package** (PyPI). `_native.pyi` now
+  matches the compiled module under mypy's `stubtest`: constructors are
+  `__new__`, classes that cannot be subclassed are `@final`, `ColorSystem`
+  and `ColorType` are `IntEnum`s, `TaskID` is a `NewType` that `Progress`
+  takes and returns, and the renderable type takes every renderable class
+  of the bindings, so `Padding` or `Align` type-check where Rich takes a
+  renderable. Classes that cannot be built no longer claim a constructor.
+  Five methods take Rich's parameter names (`Highlighter.highlight(text)`,
+  `Pager.show(content)`, `ProgressColumn.render(task)`,
+  `PromptBase.on_validate_error(value, error)`, `PagerContext.__exit__`).
+  CI checks the stubs against the built wheel, and a typed program under
+  `mypy --strict` (`scripts/check_python_stubs.py`). The package still
+  supports Python 3.9.
+
+- **Fixed: rich-py's console size follows upstream's rules** (PyPI). A
+  legacy Windows console takes a column off its width when both sides were
+  asked for, by argument, `COLUMNS` or `LINES`, or when its width comes from
+  the terminal; a dumb terminal is 80 by 25 unless both were asked for; and
+  the `width`, `height` and `size` setters apply the same rules, as rich
+  15.0.0's `Console.size` does. With `LINES` set, a legacy console was a
+  column wider than upstream's. `test_console_size_matches_rich`.
+
+- **The docs playground spike's lockfile** (`playground/spike/Cargo.lock`)
+  is regenerated with cargo for the path crates' current versions and
+  rs-rich's `compact_str`; it named versions from before 0.0.22. CI's
+  release workflow regressions job now checks it with `cargo metadata
+  --locked`, so it cannot go stale unseen again.
+
+### Migration notes for this release (core, ext)
+
+- **rs-rich-ext: `rst::parse` returns the document tree.** It returned
+  `Vec<rst::Block>`; it now returns an `rst::Element`, the root of a
+  docutils document tree (`tag`, `attrs`, `classes`, `names`,
+  `children` of `rst::Node::Text` or `rst::Node::Element`), with the
+  transforms applied. `Block`, `Inline`, `DefinitionItem`, `Field` and
+  `OptionItem` are gone. Walk the tree with `Element::elements`,
+  `find`, `walk` and `astext` where you matched on blocks; match on
+  `element.tag` (`"section"`, `"paragraph"`, `"bullet_list"`, …, docutils'
+  names). Rendering is unchanged in use: `RestructuredText::new(source)`.
+  The maintainer accepted the break on 2026-10-26.
+- **rs-rich: the console reads `FORCE_COLOR` and `TTY_COMPATIBLE`.** A
+  `Console` built without `force_terminal` now treats standard output as a
+  terminal when `TTY_COMPATIBLE=1` or `FORCE_COLOR` is set and not empty,
+  and as not one when `TTY_COMPATIBLE=0`, as rich 15.0.0 does. A program
+  that wants the old
+  `isatty`-only rule builds with
+  `.force_terminal(std::io::stdout().is_terminal())`; tests can pass
+  `ConsoleBuilder::environ` to detect from a map instead.
+- **rs-rich: a broken pipe ends the process with status 1.** When a print
+  finds the reader gone, the console goes quiet and calls
+  `std::process::exit(1)`, as upstream raises `SystemExit(1)`. Before, the
+  error was ignored and the program carried on. To keep going (or exit
+  0), give `ConsoleBuilder::on_broken_pipe` a handler, for example
+  `.on_broken_pipe(|console| console.set_quiet(true))`.
+
+### rs-rich-doom's core gaps (rich-art, intuituive, rich-record)
+
+What rs-rich-doom built for itself, made generic
+([doom-core-gaps](docs/design/doom-core-gaps.md)).
+
+- **Raw Kitty frames** (rich-art, `kitty`): `kitty::transmit_rgb`
+  (`f=24`) beside `transmit_rgba`, and `kitty::transmit_raw` with a
+  placement id and zlib compression (`o=z`). rs-rich-record's emulator
+  decodes them to the pixels sent.
+- **Sixel in a palette of one's own** (rich-art, `sixel`):
+  `sixel::encode_palette` encodes indices into a palette of up to 256
+  colours exactly, with no quantizing or resampling, and
+  `sixel::index_exact` makes the indices and palette from RGBA.
+- **Sixel pictures keep their colours** (rich-art, `sixel`): a picture of
+  256 colours or fewer (no more than `max_colors`) is encoded with its
+  exact palette, by `SixelArt::encode`, `encode_cells` and so pictures in
+  intuiTUIve and Noctiluca. Past that the adaptive encoder quantizes, as
+  before. The new `sixel::encode_rgba` makes that choice for any RGBA
+  raster.
+- **Sound in recordings** (rich-record, intuituive, CLI): `Set Audio on`
+  in a tape, or `rich record --audio`, records the program's sound. The
+  recorder names a directory in `RICH_RECORD_AUDIO`, and the program
+  writes timed PCM streams there. intuiTUIve's audio outputs do it by
+  themselves: they play on the sound card as usual and copy what it plays
+  into the stream, timed by the card's callbacks (latency counted,
+  underruns kept as silence); with no sound card they play to the stream
+  alone, on the real clock. An MP4 gets an AAC track, placed with
+  `-itsoffset`; a GIF, an APNG, the page and the cast get a WAV beside
+  them. Off by default. `Recording` has a new `audio` field and
+  `Options` a new `audio` switch.
+- **Pixel cells in their own colours** (intuituive):
+  `Node::pixel_colors(PixelColors::Nearest)` colours each quadrant or
+  Braille cell's two sides with the pixel nearest each side's average,
+  never a blend, so a palette stays a palette. `Average` stays the
+  default.
+- **A picture fitted in a pixel buffer** (intuituive):
+  `PixelBuf::draw_fitted` shows a picture at a ratio of its own (an
+  emulator's 4:3 or 8:7) from the cells' real shape, in whole cells,
+  centred, the margins clear, with nearest or averaged pixels. It returns
+  the cells used.
+- **A worker in lockstep with the app's clock** (intuituive):
+  `stepped_worker` runs a simulation on its own thread (an emulator core,
+  a script VM, a replay) and hands it the ticks the app's clock gives,
+  waiting for it to finish them, so it is exact under the driver.
+- **Sound without a sound card** (intuituive, `audio`):
+  `OutputOptions::null()` is an output that takes samples at its rate and
+  drops them, and `Output::tap` records what any output plays (with
+  `Tap::to_wav` under `wav`). Tests of sound run on CI, and an app's sound
+  can be saved for a demo. Once `Output::stop` returns, a tap records
+  nothing more.
+- **A voice mixer for sound effects** (intuituive, `pcm`/`audio`):
+  `audio::Mixer` plays clips on numbered channels, each at its own rate,
+  gain and pan, changed or stopped while playing, with streams under them.
+  `Mixer::new` mixes into an output on its own thread.
+- **An output that calls a renderer** (intuituive, `audio`):
+  `audio::output_with` has the device's callback ask a synthesizer for
+  each block, with no queue between them. Volume, taps and `failed` work
+  as for `output`, and a renderer that panics is reported, not fatal.
+- **ALSA kept off the screen while sound plays** (intuituive, `audio`):
+  an output's or a capture's stream thread keeps ALSA's messages (an
+  underrun, a failed write) for the stream's life, for `audio::messages`,
+  not only while the device opens.
 
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
 
@@ -194,15 +452,20 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `-timedemo` does; `timedemo::script_from_tape` reads a rich-record
   tape's input. `examples/timedemo.rs` runs it on the dashboard.
   `rich record` records a shell, not an app, so it has no `--timedemo`.
-- **Paint strategies.** `App::paint_strategy` and `RICH_PAINT_STRATEGY`
-  choose `cells` (the default), `rows`, `full`, `scroll` or `best`.
+- **Paint strategies, with `best` the default.** `App::paint_strategy`
+  and `RICH_PAINT_STRATEGY` choose `best` (the default), `cells`, `rows`,
+  `full` or `scroll`.
   `scroll` moves rows that moved together with the terminal's scrolling
   (SU, SD, DECSTBM), so a log line or a list scrolled one row sends about
   one row's bytes: 147 bytes a frame for the log at 80x24, down from
-  4,013. `best` scrolls when rows moved and otherwise paints cells. It is opt-in for this
-  release. Scrolling is off on Windows, under tmux, inline and over a
-  picture; `App::terminal_scroll` turns it on or off wherever the app
-  runs.
+  4,013. `best` scrolls when rows moved and otherwise paints cells. It is
+  within 5% of the best fixed strategy on every scene of the release
+  benchmark, so an app paints with it unless it chooses; `cells` is the
+  0.0.22 behaviour, and `PaintStrategy::default()` is `Best`. A bare
+  rs-rich-ext `Painter` still starts on `cells`, since only its caller
+  knows where pictures sit. Scrolling is off on Windows, under tmux,
+  inline and over a picture; `App::terminal_scroll` turns it on or off
+  wherever the app runs.
 - **A faster painter.** Cells are 12 bytes and `Copy`, with no heap
   string (read a cell's text with `Cell::text()`; the `text` field is
   gone). Lines are written straight into cells without building a

@@ -2724,9 +2724,12 @@ impl App {
     }
 
     /// How each frame's changes become bytes (see [`PaintStrategy`]):
-    /// [`Cells`](PaintStrategy::Cells) by default, or what the
+    /// [`Best`](PaintStrategy::Best) by default, or what the
     /// `RICH_PAINT_STRATEGY` environment variable names (`cells`, `rows`,
-    /// `full`, `scroll` or `best`) when the app does not choose. Every
+    /// `full`, `scroll` or `best`) when the app does not choose. `best`
+    /// scrolls rows that moved and otherwise paints cells; scrolling is off
+    /// on Windows, under tmux, inline and over a picture, and
+    /// [`terminal_scroll`](App::terminal_scroll) overrides it. Every
     /// strategy shows the same screen; [`FrameStats::painted`] says which
     /// one each frame used and what it wrote.
     ///
@@ -2734,7 +2737,7 @@ impl App {
     /// use intuituive::prelude::*;
     /// use intuituive::PaintStrategy;
     ///
-    /// let app = App::new(|| label("hello")).paint_strategy(PaintStrategy::Best);
+    /// let app = App::new(|| label("hello")).paint_strategy(PaintStrategy::Cells);
     /// let mut driver = app.driver(10, 1);
     /// driver.settle();
     /// assert_eq!(driver.screen().plain()[0].trim_end(), "hello");

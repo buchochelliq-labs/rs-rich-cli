@@ -1,13 +1,19 @@
-[39;49mSome paragraph first.[0m
+[39mSome paragraph first.[0m
 
-[36mterm 1[0m
+term 1
     Definition 1.
       
-    term 2 : [36mclassifier[0m
-      Definition 2, which is long enough
-to wrap onto another line when narrow.
+term 2 : [36mclassifier[0m
+    [39mDefinition 2, which is long enough t[0m
+[39mwrap onto another line when narrow.[0m
 
-[36mmulti[0m
+
+term 3 : [36mone[0m[36m : two[0m
+
+    [39mHidden.[0m
+
+
+multi
     Paragraph one.  Paragraph two.
       
 -a
@@ -22,14 +28,14 @@ to wrap onto another line when narrow.
     Two options.
 /V
     DOS option.
-┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┓
-┃[1m [0m[1mField Name [0m[1m [0m┃[1m [0m[1mField Value   [0m[1m [0m┃
-┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━┩
-│ [1mField      [0m │ value          │
-├─────────────┼────────────────┤
-│ [1mOther field[0m │ another value  │
-│             │ continued here │
-├─────────────┼────────────────┤
-│ [1mEmpty      [0m │                │
-└─────────────┴────────────────┘
-[39;49mAfter fields.[0m
+┏━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃[1m [0m[1mField Name [0m[1m [0m┃[1m [0m[1mField Value           [0m[1m [0m┃
+┡━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ [1mField      [0m │ [39mvalue                 [0m │
+├─────────────┼────────────────────────┤
+│ [1mOther field[0m │ [39manother value         [0m │
+│             │ [39mcontinued here        [0m │
+├─────────────┼────────────────────────┤
+│ [1mEmpty      [0m │                        │
+└─────────────┴────────────────────────┘
+[39mAfter fields.[0m

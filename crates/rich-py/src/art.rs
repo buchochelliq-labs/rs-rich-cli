@@ -169,13 +169,17 @@ pub(crate) fn core_console(console: &Bound<'_, PyAny>) -> PyResult<CoreConsole> 
             }
         }),
     };
+    let legacy_windows: bool = console.getattr("legacy_windows")?.extract()?;
+    let width: usize = console.getattr("width")?.extract()?;
     Ok(CoreConsole::builder()
         .force_terminal(console.getattr("is_terminal")?.extract()?)
         .color_system(color_system)
-        .width(console.getattr("width")?.extract()?)
+        // `width` is already the console's size; the core takes one column
+        // off a legacy Windows console given both width and height.
+        .width(width + usize::from(legacy_windows))
         .height(console.getattr("height")?.extract()?)
         .no_color(console.getattr("no_color")?.extract()?)
-        .legacy_windows(console.getattr("legacy_windows")?.extract()?)
+        .legacy_windows(legacy_windows)
         .safe_box(console.getattr("safe_box")?.extract()?)
         .build())
 }

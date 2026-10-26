@@ -191,11 +191,7 @@ impl SixelArt {
                 .collect();
             return encode_indexed(&pixels, w as usize, h as usize);
         }
-        let opts = icy_sixel::EncodeOptions {
-            max_colors: self.max_colors,
-            ..Default::default()
-        };
-        icy_sixel::sixel_encode(scaled.as_raw(), w as usize, h as usize, &opts).ok()
+        encode_rgba(scaled.as_raw(), w as usize, h as usize, self.max_colors)
     }
 
     /// The Sixel escape for this image fitted to exactly `cols × rows` cells
@@ -211,34 +207,112 @@ impl SixelArt {
         if u64::from(w) * u64::from(h) > MAX_PIXELS {
             return None;
         }
-        let opts = icy_sixel::EncodeOptions {
-            max_colors: self.max_colors,
-            ..Default::default()
-        };
-        icy_sixel::sixel_encode(fitted.as_raw(), w as usize, h as usize, &opts).ok()
+        encode_rgba(fitted.as_raw(), w as usize, h as usize, self.max_colors)
     }
+}
+
+/// Encode `rgba`, a `width` x `height` raster of RGBA bytes, as Sixel in
+/// up to `max_colors` colours (2 to 256). A picture of that many colours
+/// or fewer (pixel art, a plot, an emulator's screen, a picture scaled
+/// with nearest-neighbour sampling) keeps its exact colours: its palette
+/// is its own colours, through [`encode_palette`]. One of more is
+/// quantized by the adaptive encoder. Pixels under half opacity are
+/// transparent either way. What [`SixelArt::encode`] and
+/// [`SixelArt::encode_cells`] use. `None` when `rgba` is not
+/// `width * height * 4` bytes, the raster is past [`MAX_PIXELS`], or the
+/// encoder fails.
+///
+/// ```
+/// use rich_art::sixel::encode_rgba;
+///
+/// // Two colours: drawn with exactly those two registers.
+/// let rgba = [18, 52, 86, 255, 250, 128, 0, 255];
+/// let sixel = encode_rgba(&rgba, 2, 1, 256).unwrap();
+/// assert!(sixel.contains("#0;2;7;20;34#1;2;98;50;0"));
+/// ```
+pub fn encode_rgba(rgba: &[u8], width: usize, height: usize, max_colors: u16) -> Option<String> {
+    let area = width.checked_mul(height)?;
+    if area.checked_mul(4)? != rgba.len() || area as u64 > MAX_PIXELS {
+        return None;
+    }
+    let max_colors = max_colors.clamp(2, 256);
+    // The adaptive encoder's rule: under half opacity is transparent.
+    let pixels: Vec<[u8; 4]> = rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|&[r, g, b, a]| [r, g, b, if a < 128 { 0 } else { 255 }])
+        .collect();
+    if let Some((indices, palette)) = index_exact(&pixels) {
+        if palette.len() <= usize::from(max_colors) {
+            return encode_palette(&indices, &palette, width, height);
+        }
+    }
+    let opts = icy_sixel::EncodeOptions {
+        max_colors,
+        ..Default::default()
+    };
+    icy_sixel::sixel_encode(rgba, width, height, &opts).ok()
 }
 
 /// Encode a raster of fixed-palette indices (`None` = transparent) as Sixel,
 /// or `None` when `pixels` is not `width * height` long or the raster exceeds
-/// [`MAX_PIXELS`].
-///
-/// Each register is the ANSI palette index itself, defined once with its RGB
-/// in whole percent, so the colours are exact up to Sixel's own precision.
-/// The header matches the adaptive encoder's: square pixels, a transparent
-/// background, and raster attributes for terminals that drop the DCS
-/// parameters.
+/// [`MAX_PIXELS`]: [`encode_palette`] over the 256-colour ANSI palette.
 pub(crate) fn encode_indexed(pixels: &[Option<u8>], width: usize, height: usize) -> Option<String> {
+    let ansi: Vec<[u8; 3]> = (0..=255).map(palette_rgb).collect();
+    encode_palette(pixels, &ansi, width, height)
+}
+
+/// Encode `indices`, a `width` x `height` raster of indices into `palette`
+/// (`None` is transparent), as Sixel with exactly those colours: no
+/// quantizing, no resampling. A frame that has 256 colours or fewer
+/// already (pixel art, an emulator's screen, an indexed PNG or GIF frame,
+/// a plot in a few colours) is drawn as it is, quickly.
+///
+/// Each register is the index itself, defined once with its colour in
+/// whole percent (Sixel's precision). Pixels left `None` are never set,
+/// so they show what was there (`P2=1`); the raster attributes give the
+/// size and square pixels. Runs longer than a decoder's repeat maximum
+/// are split. `None` when `indices` is not `width * height` long, the
+/// raster is past [`MAX_PIXELS`], or an index is past the palette's end.
+///
+/// ```
+/// use rich_art::sixel::encode_palette;
+///
+/// let palette = [[0x12, 0x34, 0x56], [255, 255, 255]];
+/// let indices = [Some(0), Some(1), None, Some(0)];
+/// let sixel = encode_palette(&indices, &palette, 2, 2).unwrap();
+/// assert!(sixel.starts_with("\x1bP9;1;0q\"1;1;2;2#0;2;7;20;34#1;2;100;100;100"));
+/// assert!(encode_palette(&[Some(2)], &palette, 1, 1).is_none());
+/// ```
+pub fn encode_palette(
+    indices: &[Option<u8>],
+    palette: &[[u8; 3]],
+    width: usize,
+    height: usize,
+) -> Option<String> {
     use std::fmt::Write;
+    let pixels = indices;
     let area = width.checked_mul(height)?;
     if area != pixels.len() || area as u64 > MAX_PIXELS {
         return None;
     }
-    let used: std::collections::BTreeSet<u8> = pixels.iter().flatten().copied().collect();
+    let mut seen = [false; 256];
+    pixels
+        .iter()
+        .flatten()
+        .for_each(|&i| seen[usize::from(i)] = true);
+    let used: Vec<u8> = (0..=255u8).filter(|&i| seen[usize::from(i)]).collect();
+    if used
+        .last()
+        .is_some_and(|&i| usize::from(i) >= palette.len())
+    {
+        return None;
+    }
     let mut out = format!("\x1bP9;1;0q\"1;1;{width};{height}");
     let percent = |v: u8| (u32::from(v) * 100 + 127) / 255;
     for &index in &used {
-        let [r, g, b] = palette_rgb(index);
+        let [r, g, b] = palette[usize::from(index)];
         let _ = write!(
             out,
             "#{index};2;{};{};{}",
@@ -329,6 +403,48 @@ pub(crate) fn encode_indexed(pixels: &[Option<u8>], width: usize, height: usize)
     }
     out.push_str("\x1b\\");
     Some(out)
+}
+
+/// The colours of `rgba` as indices into a palette of them, in the order
+/// first seen, for [`encode_palette`]: `None` when it has more than 256
+/// colours. A pixel with alpha 0 is `None` (transparent); any other alpha
+/// is opaque.
+///
+/// ```
+/// use rich_art::sixel::index_exact;
+///
+/// let (indices, palette) = index_exact(&[[9, 9, 9, 255], [0, 0, 0, 0], [9, 9, 9, 255]]).unwrap();
+/// assert_eq!(indices, [Some(0), None, Some(0)]);
+/// assert_eq!(palette, [[9, 9, 9]]);
+/// ```
+#[allow(clippy::type_complexity)]
+pub fn index_exact(rgba: &[[u8; 4]]) -> Option<(Vec<Option<u8>>, Vec<[u8; 3]>)> {
+    let mut palette: Vec<[u8; 3]> = Vec::new();
+    let mut index_of: std::collections::HashMap<[u8; 3], u8> = std::collections::HashMap::new();
+    let mut indices = Vec::with_capacity(rgba.len());
+    let mut last: Option<([u8; 3], u8)> = None;
+    for &[r, g, b, a] in rgba {
+        if a == 0 {
+            indices.push(None);
+            continue;
+        }
+        let colour = [r, g, b];
+        let index = match last {
+            Some((c, i)) if c == colour => i,
+            _ => match index_of.get(&colour) {
+                Some(&i) => i,
+                None => {
+                    let i = u8::try_from(palette.len()).ok()?;
+                    palette.push(colour);
+                    index_of.insert(colour, i);
+                    i
+                }
+            },
+        };
+        last = Some((colour, index));
+        indices.push(Some(index));
+    }
+    Some((indices, palette))
 }
 
 impl Renderable for SixelArt {
@@ -499,6 +615,102 @@ mod tests {
         }
     }
 
+    /// The colour a Sixel decoder shows for `v`, stored in whole percent.
+    fn through_percent(v: u8) -> u8 {
+        let percent = (u32::from(v) * 100 + 127) / 255;
+        ((percent * 255 + 50) / 100) as u8
+    }
+
+    /// The colour registers a Sixel sequence defines (`#n;2;r;g;b`).
+    fn registers(sixel: &str) -> usize {
+        sixel
+            .split('#')
+            .skip(1)
+            .filter(|part| {
+                let digits = part.chars().take_while(char::is_ascii_digit).count();
+                digits > 0 && part[digits..].starts_with(";2;")
+            })
+            .count()
+    }
+
+    #[test]
+    fn a_picture_of_few_colours_keeps_its_exact_palette() {
+        // 200 colours, none of them ANSI's, at its own size (5 columns of
+        // 8 px is 40 px), so nothing is resampled.
+        let picture = RgbImage::from_fn(40, 24, |x, y| {
+            let i = (y * 40 + x) % 200;
+            Rgb([(i * 7 % 256) as u8 | 1, (i * 13 % 256) as u8, 255 - i as u8])
+        });
+        let art = SixelArt::new(DynamicImage::ImageRgb8(picture.clone())).width(5);
+        let sixel = art.encode(5).expect("encodes");
+        let rgba = DynamicImage::ImageRgb8(picture.clone()).to_rgba8();
+        assert_eq!(Some(sixel.clone()), encode_rgba(rgba.as_raw(), 40, 24, 256));
+        assert_eq!(registers(&sixel), 200, "one register a colour");
+        let image = decode(&sixel);
+        assert_eq!((image.width, image.height), (40, 24));
+        for (i, pixel) in picture.pixels().enumerate() {
+            let want = pixel.0.map(through_percent);
+            assert_eq!(image.pixels[i * 4..i * 4 + 3], want, "pixel {i}");
+            assert_eq!(image.pixels[i * 4 + 3], 255);
+        }
+        // In cells too, its margins transparent.
+        let cells = SixelArt::new(DynamicImage::ImageRgb8(picture))
+            .cell_px(8, 12)
+            .encode_cells(5, 3)
+            .expect("encodes");
+        let image = decode(&cells);
+        assert_eq!((image.width, image.height), (40, 36));
+        assert_eq!(image.pixels[3], 0, "the top margin is transparent");
+        assert_eq!(
+            image.pixels[(6 * 40) * 4..(6 * 40) * 4 + 3],
+            [1, 0, 255].map(through_percent)
+        );
+    }
+
+    #[test]
+    fn transparency_is_kept_by_the_exact_palette() {
+        let rgba = [9, 9, 9, 255, 0, 0, 0, 0, 200, 0, 0, 127, 1, 2, 3, 128];
+        let sixel = encode_rgba(&rgba, 4, 1, 256).expect("encodes");
+        assert_eq!(registers(&sixel), 2, "under half opacity is clear");
+        let image = decode(&sixel);
+        let alpha: Vec<u8> = image.pixels.chunks(4).take(4).map(|p| p[3]).collect();
+        assert_eq!(alpha, [255, 0, 0, 255]);
+        assert!(encode_rgba(&rgba[..12], 4, 1, 256).is_none(), "short");
+    }
+
+    #[test]
+    fn more_colours_than_the_palette_fall_back_to_the_adaptive_encoder() {
+        // 960 colours: past Sixel's 256 registers.
+        let gradient = RgbImage::from_fn(40, 24, |x, y| Rgb([(x * 6) as u8, (y * 10) as u8, 128]));
+        let rgba = DynamicImage::ImageRgb8(gradient).to_rgba8();
+        let adaptive = icy_sixel::sixel_encode(
+            rgba.as_raw(),
+            40,
+            24,
+            &icy_sixel::EncodeOptions {
+                max_colors: 256,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(encode_rgba(rgba.as_raw(), 40, 24, 256), Some(adaptive));
+        // Fewer colours than the picture has, but more than `max_colors`
+        // allows: adaptive too.
+        let few = &rgba.as_raw()[..40 * 4 * 3];
+        let sixteen = icy_sixel::sixel_encode(
+            few,
+            40,
+            3,
+            &icy_sixel::EncodeOptions {
+                max_colors: 16,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(encode_rgba(few, 40, 3, 16), Some(sixteen));
+        assert_ne!(encode_rgba(few, 40, 3, 256), encode_rgba(few, 40, 3, 16));
+    }
+
     #[test]
     fn truecolor_keeps_the_adaptive_encoder_byte_for_byte() {
         let art = SixelArt::new(solid(16, 16)).width(2);
@@ -661,6 +873,61 @@ mod tests {
                 "{w}x{h}"
             );
         }
+    }
+
+    #[test]
+    fn a_palette_of_ones_own_encodes_exactly_and_validates() {
+        // 3x7 in two colours, one not in the ANSI palette.
+        let palette = [[0x12, 0x34, 0x56], [250, 128, 0]];
+        let (w, h) = (3, 7);
+        let indices: Vec<Option<u8>> = (0..w * h).map(|i| Some(u8::from(i % 2 == 1))).collect();
+        let sixel = encode_palette(&indices, &palette, w, h).expect("valid");
+        // The bytes rs-rich-doom's own encoder made (its `sixel_indexed`),
+        // but for P1, which the raster attributes override: 9 here as in
+        // every encoder in this crate, 0 there.
+        assert_eq!(
+            sixel,
+            "\x1bP9;1;0q\"1;1;3;7#0;2;7;20;34#1;2;98;50;0\
+             #0TiT$#1iTi-#0@?@$#1?@\x1b\\"
+        );
+        let image = decode(&sixel);
+        assert_eq!((image.width, image.height), (w, h.div_ceil(6) * 6));
+        let near = |got: u8, want: u8| (i16::from(got) - i16::from(want)).abs() <= 3;
+        for (i, index) in indices.iter().enumerate() {
+            let [r, g, b] = palette[usize::from(index.unwrap())];
+            let p = &image.pixels[i * 4..i * 4 + 4];
+            assert!(
+                near(p[0], r) && near(p[1], g) && near(p[2], b) && p[3] == 255,
+                "{i}: {p:?}"
+            );
+        }
+        // Unset pixels stay unset.
+        let holes = encode_palette(&[None, Some(1), None, Some(0)], &palette, 2, 2).unwrap();
+        assert!(holes.starts_with("\x1bP9;1;0q"), "P2=1");
+        assert_eq!(decode(&holes).pixels[3], 0);
+        // An index past the palette, a short raster, past the cap.
+        assert!(encode_palette(&[Some(2)], &palette, 1, 1).is_none());
+        assert!(encode_palette(&[Some(0); 5], &palette, 3, 2).is_none());
+        assert!(encode_palette(&[], &palette, 4097, 4096).is_none());
+        // A long run is split.
+        let long = encode_palette(&vec![Some(1); 70_000 * 6], &palette, 70_000, 6).unwrap();
+        assert!(long.contains("!65535~!4465~"), "split runs");
+    }
+
+    #[test]
+    fn exact_indexing_keeps_up_to_256_colours() {
+        let rgba: Vec<[u8; 4]> = (0..256u32)
+            .map(|i| [i as u8, 0, 7, 255])
+            .chain([[0, 0, 0, 0], [3, 0, 7, 255]])
+            .collect();
+        let (indices, palette) = index_exact(&rgba).expect("256 colours");
+        assert_eq!(palette.len(), 256);
+        assert_eq!(indices[256], None);
+        assert_eq!(indices[257], Some(3));
+        assert_eq!(palette[3], [3, 0, 7]);
+        let mut more = rgba.clone();
+        more.push([0, 1, 0, 255]);
+        assert!(index_exact(&more).is_none());
     }
 
     #[test]

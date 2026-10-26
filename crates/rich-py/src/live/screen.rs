@@ -318,7 +318,8 @@ impl Pager {
     }
 
     /// Show `content` in the pager.
-    fn show(&self, _content: &str) -> PyResult<()> {
+    fn show(&self, content: &str) -> PyResult<()> {
+        let _ = content;
         Err(PyNotImplementedError::new_err(
             "Pager.show is abstract: subclass Pager and implement show(content)",
         ))
@@ -441,14 +442,16 @@ impl PagerContext {
         Ok(slf)
     }
 
-    #[pyo3(signature = (exc_type=None, _exc_value=None, _traceback=None))]
+    // Upstream's parameter names, so the stub and `help()` agree with Rich.
+    #[pyo3(signature = (exc_type=None, exc_val=None, exc_tb=None))]
     fn __exit__(
         &self,
         py: Python<'_>,
         exc_type: Option<&Bound<'_, PyAny>>,
-        _exc_value: Option<&Bound<'_, PyAny>>,
-        _traceback: Option<&Bound<'_, PyAny>>,
+        exc_val: Option<&Bound<'_, PyAny>>,
+        exc_tb: Option<&Bound<'_, PyAny>>,
     ) -> PyResult<()> {
+        let _ = (exc_val, exc_tb);
         let content: String = self
             .console
             .bind(py)

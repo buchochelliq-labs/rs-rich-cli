@@ -46,7 +46,8 @@ gif = ["image"]
 # `sixel` renders real pixels via the Sixel graphics protocol.
 sixel = ["image", "dep:icy_sixel"]
 # `kitty` encodes the Kitty graphics protocol with Unicode placeholders.
-kitty = ["image"]
+# flate2 compresses raw pixels (`o=z`); png already depends on it.
+kitty = ["image", "dep:flate2"]
 # `iterm` encodes iTerm2's inline images (also WezTerm's).
 iterm = ["image"]
 # `picture`: pictures with an id the terminal knows them by (uploaded once,
@@ -102,6 +103,7 @@ workspace = true
 rich.workspace = true
 image = { workspace = true, optional = true }
 icy_sixel = { version = "0.7.0", optional = true }
+flate2 = { version = "1.1", default-features = false, features = ["rust_backend"], optional = true }
 
 # The user-guide examples: each snippet on docs/guide/art/*.md is compiled
 # from these, and `-- --svg docs/media/guide` regenerates the screenshots.

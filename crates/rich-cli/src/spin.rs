@@ -288,7 +288,7 @@ fn run(
     if !crate::in_host() {
         let _ = crate::host::on_interrupt(|| {});
     }
-    let console = rich::Console::builder()
+    let console = crate::console_builder()
         .force_terminal(true)
         .no_color(no_color)
         .build();

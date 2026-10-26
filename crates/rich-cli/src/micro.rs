@@ -460,7 +460,7 @@ impl Context {
     }
 
     fn registry(&self) -> (MicroRegistry, rich_micro::LoadReport) {
-        let (registry, report) = MicroRegistry::load(&self.roots(), &Limits::default());
+        let (registry, report) = load_registry(&self.roots(), !self.json);
         if !self.json {
             warn(&report);
         }
@@ -542,6 +542,44 @@ pub(crate) fn rows(text: Text) -> Box<dyn Renderable> {
 }
 
 /// Loading problems, as warnings on standard error.
+/// micro's layers, then the micro packs installed from the marketplace
+/// (`rich plugin install`, enabled, and still hashing to what the lockfile
+/// records), into the user layer after the user's own directory: within a
+/// layer the first claim keeps a name, so the user's own assets win.
+fn load_registry(roots: &MicroRoots, notes: bool) -> (MicroRegistry, rich_micro::LoadReport) {
+    let limits = Limits::default();
+    let (mut registry, mut report) = MicroRegistry::load(roots, &limits);
+    let (installed, warnings) = crate::marketplace::installed_micro_packs();
+    if notes {
+        for warning in warnings {
+            note(&format!("rich: warning: {warning}"));
+        }
+    }
+    for (_, path) in installed {
+        let rejected = |package, error| rich_micro::Rejected {
+            layer: Layer::User,
+            path: path.clone(),
+            package,
+            error,
+        };
+        match micro_package::load_pack(&path, Layer::User, &limits) {
+            Ok(pack) => {
+                for asset in pack.assets {
+                    match registry.add(Layer::User, asset) {
+                        Ok(collisions) => report.collisions.extend(collisions),
+                        Err(error) => report.rejected.push(rejected(None, error)),
+                    }
+                }
+                for (package, error) in pack.rejected {
+                    report.rejected.push(rejected(Some(package), error));
+                }
+            }
+            Err(error) => report.rejected.push(rejected(None, error)),
+        }
+    }
+    (registry, report)
+}
+
 fn warn(report: &rich_micro::LoadReport) {
     for rejected in &report.rejected {
         let package = rejected
@@ -1389,6 +1427,17 @@ fn packs(context: &Context) -> Result<(), Failure> {
     if context.trusted {
         layers.push((Layer::Project, project.clone()));
     }
+    for (_, path) in crate::marketplace::installed_micro_packs().0 {
+        if let Ok(pack) = micro_package::load_pack(&path, Layer::User, &Limits::default()) {
+            rows.push((
+                Layer::User,
+                pack.name.clone(),
+                pack.version.clone(),
+                path.display().to_string(),
+                pack.assets.iter().map(|a| a.name().to_string()).collect(),
+            ));
+        }
+    }
     for (layer, dir) in layers {
         for (path, pack) in installed(layer, &dir) {
             rows.push((
@@ -1520,7 +1569,7 @@ fn markup_registry(trusted: bool) -> Arc<MicroRegistry> {
         no_color: false,
         json: true,
     };
-    let (registry, report) = MicroRegistry::load(&context.roots(), &Limits::default());
+    let (registry, report) = load_registry(&context.roots(), true);
     warn(&report);
     let registry = Arc::new(registry);
     *loaded = Some((trusted, Arc::clone(&registry)));

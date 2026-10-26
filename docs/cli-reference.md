@@ -384,7 +384,7 @@ Self-contained examples; ignores config; accepts --no-color.
 | `banner` | Draw TEXT as a FIGlet banner: a font, a style or colour gradient, alignment and width fitting. Built with the `art` feature |
 | `shell` | Shell integration: `init` prints a script with completions, OSC 133 prompt marks, OSC 7 and a status line after each command; `status` and `link` are its helpers |
 | `spin` | Run a command with a spinner and a title until it exits, and exit with its status (like gum spin); without a terminal it just runs the command |
-| `record` | Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG (when asked), an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with committed ones instead |
+| `record` | Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG (when asked), an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --audio records the program's sound too; --check compares screenshots with committed ones instead |
 | `plugins` | List the plugins this build has — built in, linked, and any --plugin PATH loads — with their source, version, ABI and capabilities |
 | `plugin` | Find, install, update and check plugins and asset packs from the plugin marketplace: a signed index, every file checked by SHA-256; an installed, enabled WASM plugin loads on every run without --plugin, after its file is checked against the lockfile |
 | `doctor` | Read-only build, terminal, config and pager diagnostics; --report json writes diagnostic data to stdout |
@@ -2395,12 +2395,12 @@ rich spin --spinner moon --show-output -- curl -sS https://example.com
 
 ### rich record
 
-Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG (when asked), an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --check compares screenshots with committed ones instead
+Run tapes (scripted terminal sessions: type, press and hold keys, wait for screen text, take screenshots) in a real terminal and write PNG, SVG and text screenshots, an asciinema cast, a GIF, an animated PNG (when asked), an MP4 (with FFmpeg) and an HTML page with a player; video has every screen update at the tape's frame rate, and Kitty, Sixel and iTerm2 images; --audio records the program's sound too; --check compares screenshots with committed ones instead
 
 #### Usage
 
 ```text
-rich record [--check] [--output DIR] [--bin-dir DIR] [--format png,svg,cast,gif,apng,mp4,html] [--no-video] [--fps N] [--font FILE] [--window-frame on|off] [--caption TEXT] [--key-overlay on|off] TAPE...
+rich record [--check] [--output DIR] [--bin-dir DIR] [--format png,svg,cast,gif,apng,mp4,html] [--no-video] [--fps N] [--font FILE] [--window-frame on|off] [--caption TEXT] [--key-overlay on|off] [--audio] TAPE...
 ```
 
 #### Tapes
@@ -2412,6 +2412,7 @@ rich record [--check] [--output DIR] [--bin-dir DIR] [--format png,svg,cast,gif,
 - Set KittyKeyboard on: report the kitty keyboard protocol, so a program can turn it on and hear releases
 - Output gif png: write only these formats; without an Output line, every format but the APNG
 - Output apng (or --format apng, or all): an animated PNG beside (or instead of) the GIF; it is written only when asked
+- Set Audio on (or --audio): record the program's sound, which it writes to the directory in RICH_RECORD_AUDIO (intuiTUIve's audio outputs do); an MP4 carries it as AAC, the other outputs get a WAV beside them (off)
 
 ### rich plugins
 
@@ -2757,9 +2758,9 @@ rich plugin publish FILE --url URL [--listing FILE | --license SPDX --repository
 | `--id <ID>` | A theme's id (default: the file name); for a plugin or pack, checked against its manifest. |
 | `--version <VERSION>` | A theme's version; for a plugin or pack, checked against its manifest. |
 | `--name <TEXT>` | The human-readable name (default: the id) |
-| `--description <TEXT>` | One line on what it adds (default: a WASM plugin's own) |
+| `--description <TEXT>` | One line on what it adds (default: a WASM plugin's or micro pack's own) |
 | `--tier <TIER>` | community (the default), reviewed or official; raising it needs a maintainer. |
-| `--license <SPDX>` | The SPDX license expression. |
+| `--license <SPDX>` | The SPDX license expression (default: a micro pack's pack.json license) |
 | `--repository <URL>` | The source repository, https://. |
 | `--homepage <URL>` | A homepage, https://. |
 | `--author <NAME>` | An author; repeatable. |

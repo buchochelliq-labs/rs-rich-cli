@@ -3,11 +3,18 @@
 **Status:** the format, its schemas and its validator are in 0.0.21 (plugin
 API 0.0.5). The `rs-rich-marketplace` crate (0.0.1) that verifies, resolves
 and installs from them is in 0.0.22 ([Extending](../PLUGINS.md#the-marketplace-client-0022));
-its official keys are compiled in once the maintainer has made them. The
+its official keys (generation 1) are compiled in since 0.0.23. The
 `rich plugin` commands that use it are in 0.0.22 too
 ([Extending](../PLUGINS.md#rich-plugin-installing-from-the-marketplace-0022)),
 with the marketplace repository's signing workflow kept to hand over in
-[`docs/marketplace-repo/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/docs/marketplace-repo). This note is the contract
+[`docs/marketplace-repo/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/docs/marketplace-repo).
+**The marketplace goes live with 0.0.23** (the maintainer's call on
+2026-10-26): the marketplace repository lists every official plugin
+(Mermaid, DOT and lumis as crates, the `textcase` WASM plugin) and the
+built-in micro packs (`status`, `dev`, `fun`), and checks every listing
+pull request; it is live once the maintainer has set up the signing
+environment and signed the first index
+([0.0.23 plan, item 17](../plans/0.0.23.md)). This note is the contract
 between the marketplace repository, the crate and the CLI. It is part of the
 1.0 promise ([the plan to 1.0.0](../plans/1.0.0.md#track-b-the-plugin-marketplace-232-463)).
 
@@ -16,7 +23,10 @@ Plugins already load three ways ([Extending](../PLUGINS.md),
 path, or as a WASM module from a path. The marketplace adds a way to *find,
 trust, install and update* a package. It stores where each artifact is and
 what it hashes to, never the artifact: crates stay on crates.io, and WASM
-modules and asset packs on their authors' release pages.
+modules and asset packs on their authors' release pages. The one exception
+is the official WASM plugin and micro packs, which the marketplace
+repository serves itself from its `artifacts/` (by
+`raw.githubusercontent.com` URLs on `main`), pinned by hash like any other.
 
 ## Summary
 
@@ -352,6 +362,9 @@ index's serial, so a signature cannot be moved to another index.
   maintainer approves the run. When a listing pull request merges, the
   workflow rebuilds `index.json`, bumps the serial and signs it:
   `minisign -S -s main.key -m index.json -t "rs-rich-marketplace index serial=42"`.
+  It commits the signed index to `main` with a deploy key, a secret of the
+  same environment that main's ruleset lets bypass it; the workflow's own
+  token only reads.
 - **The backup key** signs nothing but key rotations. It never enters
   GitHub: it stays offline, apart from the main key, so a leaked main key
   can be rotated out (below).
@@ -472,7 +485,7 @@ for its own major, and says that newer versions need a newer host.
 
 | Tier | Meaning | Who sets it |
 |---|---|---|
-| `official` | This repository's plugins (Mermaid, DOT, lumis and the fixtures), built by its release workflow. The repository must be under `buchochelliq-labs`. | The maintainer. |
+| `official` | This repository's own packages: the Mermaid, DOT and lumis crates, the `textcase` WASM plugin and the built-in micro packs, built from this repository (the crates by its release workflow, the others reproducibly by `tests/official_artifacts.rs`, which pins their hashes). The repository must be under `buchochelliq-labs`. | The maintainer. |
 | `reviewed` | A maintainer has read the source at `source_revision`, rebuilt the artifact and got the same hash. | The maintainer, per version. |
 | `community` | The marketplace's CI checked the listing, the hash and (for a WASM plugin) that it loads in the sandbox against the current host. Nothing more. | The default. |
 

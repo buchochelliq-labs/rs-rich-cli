@@ -1742,6 +1742,13 @@ impl<K: Clone + Eq + Hash + 'static, F: Fn(K) -> Node> Switch<K, F> {
             let node = Runtime::current().untracked(|| (self.build)(key.clone()));
             self.built.insert(key.clone(), node);
         }
+        // The page shown until now is hidden, so it draws afresh when it
+        // comes back: while hidden it is not drawn, and what changed for it
+        // meanwhile would otherwise be lost (a scroll box would show its
+        // offscreen copy of the old content).
+        if let Some(old) = self.shown() {
+            old.hide();
+        }
         self.recent.retain(|k| *k != key);
         self.recent.push(key.clone());
         self.current = Some(key);

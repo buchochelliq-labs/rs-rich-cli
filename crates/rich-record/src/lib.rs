@@ -49,6 +49,10 @@
 //! ([`keyboard`]), so a tape can hold keys down (`KeyDown`, `KeyUp`,
 //! `Hold`) and a game be recorded as it plays.
 //!
+//! With `Set Audio on` (or [`record::Options::audio`]) the program's sound
+//! is recorded too, through an environment contract ([`audio`]): an MP4
+//! carries it as AAC, and the other outputs get a WAV beside them.
+//!
 //! Linux and macOS are supported. Windows builds through ConPTY but needs
 //! `bash` on `PATH` and is experimental.
 
@@ -56,6 +60,7 @@
 // result drops the value (CONTRIBUTING.md, "API conventions").
 #![warn(clippy::return_self_not_must_use)]
 
+pub mod audio;
 pub mod graphics;
 pub mod keyboard;
 pub mod record;

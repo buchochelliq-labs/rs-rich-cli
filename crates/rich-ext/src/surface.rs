@@ -175,6 +175,12 @@ pub struct Surface<W: Write> {
     full: bool,
     graphics: Option<Arc<dyn PlacementSource>>,
     placements: Vec<Placement>,
+    /// [`paint_strategy`](Surface::paint_strategy), when chosen.
+    strategy: Option<PaintStrategy>,
+    /// [`terminal_scroll`](Surface::terminal_scroll), when chosen.
+    terminal_scroll: Option<bool>,
+    /// `TMUX` was set when the surface was made.
+    under_tmux: bool,
 }
 
 impl Surface<io::Stdout> {
@@ -198,7 +204,9 @@ impl Surface<io::Stdout> {
 impl<W: Write> Surface<W> {
     /// A full-screen surface of `width` by `height` cells writing to
     /// `writer`, in truecolor. [`console`](Self::console) sets the colours
-    /// and how renderables are rendered.
+    /// and how renderables are rendered. It paints with
+    /// [`PaintStrategy::Best`] unless [`paint_strategy`](Self::paint_strategy)
+    /// or `RICH_PAINT_STRATEGY` says otherwise.
     pub fn new(writer: W, width: u16, height: u16) -> Surface<W> {
         let console = Console::builder()
             .width(width.max(1) as usize)
@@ -220,7 +228,66 @@ impl<W: Write> Surface<W> {
             full: true,
             graphics: None,
             placements: Vec::new(),
+            strategy: None,
+            terminal_scroll: None,
+            under_tmux: std::env::var_os("TMUX").is_some(),
         }
+        .configured()
+    }
+
+    /// The painter set up as the surface asks: its strategy, and whether it
+    /// may scroll (not on Windows, nor under tmux, unless
+    /// [`terminal_scroll`](Self::terminal_scroll) says so; an inline
+    /// painter never does).
+    fn configured(mut self) -> Surface<W> {
+        self.painter.set_strategy(
+            self.strategy
+                .or_else(PaintStrategy::from_env)
+                .unwrap_or_default(),
+        );
+        // tmux redraws a scrolled region itself, so moving rows there saves
+        // little; as intuiTUIve's apps, the surface paints there instead.
+        let scroll = self
+            .terminal_scroll
+            .unwrap_or(!cfg!(windows) && !self.under_tmux);
+        self.painter.set_scroll(scroll);
+        self
+    }
+
+    /// How each frame's changes become bytes (see [`PaintStrategy`]):
+    /// [`Best`](PaintStrategy::Best) by default, or what the
+    /// `RICH_PAINT_STRATEGY` environment variable names (`cells`, `rows`,
+    /// `full`, `scroll` or `best`) when the surface does not choose. `best`
+    /// scrolls rows that moved and otherwise paints cells. Scrolling is off
+    /// on Windows, under tmux, inline and over graphics, and
+    /// [`terminal_scroll`](Self::terminal_scroll) overrides it. Every
+    /// strategy shows the same screen.
+    ///
+    /// ```
+    /// use rich::Text;
+    /// use rich_ext::surface::{PaintStrategy, Rect, Surface};
+    ///
+    /// let mut surface = Surface::new(Vec::new(), 10, 1).paint_strategy(PaintStrategy::Full);
+    /// surface
+    ///     .draw(|s| s.render(Rect::new(0, 0, 10, 1), &Text::new("hello")))
+    ///     .unwrap();
+    /// assert_eq!(surface.screen().plain()[0].trim_end(), "hello");
+    /// ```
+    #[must_use]
+    pub fn paint_strategy(mut self, strategy: PaintStrategy) -> Surface<W> {
+        self.strategy = Some(strategy);
+        self.configured()
+    }
+
+    /// Whether [`PaintStrategy::Scroll`] and [`PaintStrategy::Best`] may
+    /// move rows with the terminal's own scrolling. Unset, it is on, but
+    /// off on Windows (whose consoles have been seen to scroll the wrong
+    /// rows) and under tmux; set, it holds wherever the surface runs. An
+    /// inline surface never scrolls.
+    #[must_use]
+    pub fn terminal_scroll(mut self, on: bool) -> Surface<W> {
+        self.terminal_scroll = Some(on);
+        self.configured()
     }
 
     /// Draw inline or full screen. An inline viewport's row count replaces
@@ -240,7 +307,7 @@ impl<W: Write> Surface<W> {
             Viewport::Inline(_) => Painter::new(system).inline(),
         };
         self.full = true;
-        self
+        self.configured()
     }
 
     /// Render with `console`: its colour system is the one written (`None`
@@ -350,6 +417,14 @@ impl<W: Write> Surface<W> {
         } else {
             damage
         };
+        // No scroll may move a graphic on screen: the terminal would move
+        // it, and the graphics' plan would not know.
+        let fixed: Vec<Rect> = self
+            .placements
+            .iter()
+            .map(|p| Rect::new(p.column as u16, p.row as u16, p.cols as u16, p.rows as u16))
+            .collect();
+        self.painter.set_fixed(&fixed);
         let painted = self.painter.paint(&self.screen, &damage);
         let written = self.painter.written().to_vec();
         if self.cursor_shown && !painted.is_empty() {
@@ -577,6 +652,196 @@ mod tests {
 
     fn output(surface: &mut Surface<Vec<u8>>) -> String {
         String::from_utf8(std::mem::take(surface.writer_mut())).unwrap()
+    }
+
+    /// A surface painting with `strategy`, as if `TMUX` were set or not
+    /// (whatever the environment running the tests says).
+    fn painting(strategy: PaintStrategy, tmux: bool, width: u16, height: u16) -> Surface<Vec<u8>> {
+        let mut surface = Surface::new(Vec::new(), width, height);
+        surface.under_tmux = tmux;
+        surface.paint_strategy(strategy)
+    }
+
+    /// Whether `out` moves rows with the terminal's scrolling: SU or SD,
+    /// or DECSTBM margins.
+    fn scrolls(out: &str) -> bool {
+        let bytes = out.as_bytes();
+        bytes.iter().enumerate().any(|(i, &b)| {
+            if b != 0x1b || bytes.get(i + 1) != Some(&b'[') {
+                return false;
+            }
+            let rest = &bytes[i + 2..];
+            let digits = rest
+                .iter()
+                .take_while(|c| c.is_ascii_digit() || **c == b';')
+                .count();
+            matches!(rest.get(digits), Some(b'S' | b'T' | b'r'))
+        })
+    }
+
+    /// Where two vt100 screens differ, cell by cell: text, colours and
+    /// attributes.
+    fn differences(a: &vt100::Screen, b: &vt100::Screen, width: u16, height: u16) -> Vec<String> {
+        let mut found = Vec::new();
+        for row in 0..height {
+            for col in 0..width {
+                let (Some(x), Some(y)) = (a.cell(row, col), b.cell(row, col)) else {
+                    continue;
+                };
+                let look = |c: &vt100::Cell| {
+                    (
+                        // An erased cell and a written space look the same.
+                        match c.contents() {
+                            "" => " ".to_string(),
+                            text => text.to_string(),
+                        },
+                        c.fgcolor(),
+                        c.bgcolor(),
+                        c.bold(),
+                        c.italic(),
+                        c.underline(),
+                        c.inverse(),
+                    )
+                };
+                if look(x) != look(y) {
+                    found.push(format!("({col}, {row}): {:?} != {:?}", look(x), look(y)));
+                }
+            }
+        }
+        found
+    }
+
+    /// Draw each of `frames` with `best` and with `full`, replay both
+    /// through vt100 after every frame, and require the same screen.
+    /// Returns `best`'s bytes after the first frame.
+    fn best_matches_full(frames: &[Vec<String>], width: u16, height: u16, tmux: bool) -> String {
+        let mut best = painting(PaintStrategy::Best, tmux, width, height);
+        let mut full = painting(PaintStrategy::Full, tmux, width, height);
+        let mut best_term = vt100::Parser::new(height, width, 0);
+        let mut full_term = vt100::Parser::new(height, width, 0);
+        let mut later = String::new();
+        for (n, lines) in frames.iter().enumerate() {
+            for (is_best, surface, term) in [
+                (true, &mut best, &mut best_term),
+                (false, &mut full, &mut full_term),
+            ] {
+                surface
+                    .draw(|s| {
+                        for (y, line) in lines.iter().enumerate() {
+                            let text = Text::from_markup(line).unwrap();
+                            s.render(Rect::new(0, y as u16, width, 1), &text);
+                        }
+                    })
+                    .unwrap();
+                term.process(surface.writer());
+                if n > 0 && is_best {
+                    later.push_str(std::str::from_utf8(surface.writer()).unwrap());
+                }
+                surface.writer_mut().clear();
+            }
+            let wrong = differences(best_term.screen(), full_term.screen(), width, height);
+            assert!(wrong.is_empty(), "frame {n}: {wrong:?}");
+        }
+        later
+    }
+
+    /// A log that scrolls: each frame shows the rows one further on, in
+    /// colours that move with them.
+    fn scrolling_log(frames: usize, rows: usize) -> Vec<Vec<String>> {
+        const STYLES: [&str; 4] = ["red", "bold green", "italic", "on blue"];
+        (0..frames)
+            .map(|frame| {
+                (frame..frame + rows)
+                    .map(|i| format!("[{}]entry {i}[/] of the log", STYLES[i % STYLES.len()]))
+                    .collect()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn surfaces_paint_with_best_by_default() {
+        if PaintStrategy::from_env().is_none() {
+            let surface = Surface::new(Vec::new(), 4, 1);
+            assert_eq!(surface.painter.strategy(), PaintStrategy::Best);
+        }
+        let surface = Surface::new(Vec::new(), 4, 1).paint_strategy(PaintStrategy::Rows);
+        assert_eq!(surface.painter.strategy(), PaintStrategy::Rows);
+        // A new viewport keeps the strategy chosen.
+        let surface = surface.viewport(Viewport::Inline(1));
+        assert_eq!(surface.painter.strategy(), PaintStrategy::Rows);
+    }
+
+    #[test]
+    fn best_replayed_equals_a_full_repaint_when_rows_scroll() {
+        let later = best_matches_full(&scrolling_log(8, 6), 30, 6, false);
+        if cfg!(windows) {
+            assert!(!scrolls(&later), "{later:?}");
+        } else {
+            assert!(scrolls(&later), "best should have scrolled: {later:?}");
+        }
+    }
+
+    #[test]
+    fn best_replayed_equals_a_full_repaint_when_nothing_scrolls() {
+        let frames: Vec<Vec<String>> = (0..6)
+            .map(|t| {
+                vec![
+                    "[bold]a clock[/]".to_string(),
+                    format!("tick [cyan]{t}[/] of [red]{}[/]", 10 - t),
+                    "#".repeat(t + 1),
+                ]
+            })
+            .collect();
+        let later = best_matches_full(&frames, 20, 3, false);
+        assert!(!scrolls(&later), "{later:?}");
+    }
+
+    #[test]
+    fn under_tmux_best_does_not_scroll() {
+        let later = best_matches_full(&scrolling_log(8, 6), 30, 6, true);
+        assert!(!scrolls(&later), "{later:?}");
+        // Unless the surface says it may.
+        let mut surface =
+            painting(PaintStrategy::Best, true, 30, 6).terminal_scroll(!cfg!(windows));
+        let mut out = String::new();
+        for (n, lines) in scrolling_log(4, 6).iter().enumerate() {
+            surface
+                .draw(|s| {
+                    for (y, line) in lines.iter().enumerate() {
+                        let text = Text::from_markup(line).unwrap();
+                        s.render(Rect::new(0, y as u16, 30, 1), &text);
+                    }
+                })
+                .unwrap();
+            let frame = output(&mut surface);
+            if n > 0 {
+                out.push_str(&frame);
+            }
+        }
+        assert_eq!(scrolls(&out), !cfg!(windows), "{out:?}");
+    }
+
+    #[test]
+    fn an_inline_surface_does_not_scroll() {
+        let mut surface = painting(PaintStrategy::Best, false, 30, 6)
+            .viewport(Viewport::Inline(6))
+            .terminal_scroll(true);
+        let mut out = String::new();
+        for (n, lines) in scrolling_log(4, 6).iter().enumerate() {
+            surface
+                .draw(|s| {
+                    for (y, line) in lines.iter().enumerate() {
+                        let text = Text::from_markup(line).unwrap();
+                        s.render(Rect::new(0, y as u16, 30, 1), &text);
+                    }
+                })
+                .unwrap();
+            let frame = output(&mut surface);
+            if n > 0 {
+                out.push_str(&frame);
+            }
+        }
+        assert!(!scrolls(&out), "{out:?}");
     }
 
     #[test]

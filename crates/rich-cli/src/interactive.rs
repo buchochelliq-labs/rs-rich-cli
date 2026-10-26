@@ -1442,7 +1442,7 @@ fn explore(args: &Args) -> Answer {
     let options = run_options(Fallback::Default, args.no_color);
     if options.policy.detect_for(options.session.output).is_err() {
         // No terminal to explore on: the whole tree, as --inspect draws it.
-        let console = Console::builder().no_color(args.no_color).build();
+        let console = crate::console_builder().no_color(args.no_color).build();
         console.print(&rich_ext::data::Explorer::new(&document).root_label(name));
         return Ok(ExitCode::SUCCESS);
     }

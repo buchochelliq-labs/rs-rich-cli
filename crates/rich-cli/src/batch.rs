@@ -471,7 +471,7 @@ fn spawn(
     worker_terminal(
         &mut command,
         std::io::stdout().is_terminal(),
-        Console::new().width(),
+        crate::console_builder().build().width(),
     );
     command.args(&cli.worker_args).args(["--report", "json"]);
     let staging = tempfile::tempdir()?;

@@ -1,0 +1,1148 @@
+pub mod rich_data
+pub use rich_data::DataType
+pub use rich_data::Field
+pub use rich_data::Schema
+pub use rich_data::Value
+pub mod rich_data::arrow
+pub struct rich_data::arrow::BatchSource<I>
+impl<I: core::iter::traits::iterator::Iterator<Item = arrow_array::record_batch::RecordBatch>> rich_data::arrow::BatchSource<I>
+pub fn rich_data::arrow::BatchSource<I>::new(impl core::iter::traits::collect::IntoIterator<IntoIter = I>) -> core::option::Option<Self>
+impl<I: core::fmt::Debug> core::fmt::Debug for rich_data::arrow::BatchSource<I>
+pub fn rich_data::arrow::BatchSource<I>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<I: core::iter::traits::iterator::Iterator<Item = arrow_array::record_batch::RecordBatch>> rich_data::RowSource for rich_data::arrow::BatchSource<I>
+pub fn rich_data::arrow::BatchSource<I>::collect_rows(self) -> core::result::Result<rich_data::Rows, rich_data::DataError> where Self: core::marker::Sized
+pub fn rich_data::arrow::BatchSource<I>::columns(&self) -> &[alloc::string::String]
+pub fn rich_data::arrow::BatchSource<I>::next_row(&mut self) -> core::option::Option<core::result::Result<rich_data::Row, rich_data::DataError>>
+pub fn rich_data::arrow::BatchSource<I>::schema(&self) -> core::option::Option<&rich_ext::schema::model::Schema>
+impl<I> core::marker::Freeze for rich_data::arrow::BatchSource<I> where I: core::marker::Freeze
+impl<I> core::marker::Send for rich_data::arrow::BatchSource<I> where I: core::marker::Send
+impl<I> core::marker::Sync for rich_data::arrow::BatchSource<I> where I: core::marker::Sync
+impl<I> core::marker::Unpin for rich_data::arrow::BatchSource<I> where I: core::marker::Unpin
+impl<I> core::marker::UnsafeUnpin for rich_data::arrow::BatchSource<I> where I: core::marker::UnsafeUnpin
+impl<I> !core::panic::unwind_safe::RefUnwindSafe for rich_data::arrow::BatchSource<I>
+impl<I> !core::panic::unwind_safe::UnwindSafe for rich_data::arrow::BatchSource<I>
+pub fn rich_data::arrow::cell(&dyn arrow_array::array::Array, usize) -> rich_ext::table::Value
+pub fn rich_data::arrow::data_type(&arrow_schema::datatype::DataType, usize) -> rich_ext::schema::model::DataType
+pub fn rich_data::arrow::diff(&arrow_schema::schema::Schema, &arrow_schema::schema::Schema) -> rich_ext::schema::SchemaDiff
+pub fn rich_data::arrow::field(&arrow_schema::field::Field, usize) -> rich_ext::schema::model::Field
+pub fn rich_data::arrow::native_type(&arrow_schema::datatype::DataType) -> alloc::string::String
+pub fn rich_data::arrow::read_schema<R: std::io::Read + std::io::Seek>(R) -> core::result::Result<arrow_schema::schema::Schema, rich_data::DataError>
+pub fn rich_data::arrow::rows(&arrow_array::record_batch::RecordBatch) -> rich_data::Rows
+pub fn rich_data::arrow::schema(&arrow_schema::schema::Schema) -> rich_ext::schema::model::Schema
+pub fn rich_data::arrow::tree(&arrow_schema::schema::Schema) -> rich_ext::schema::SchemaTree
+pub mod rich_data::csv
+pub enum rich_data::csv::Header
+pub rich_data::csv::Header::No
+pub rich_data::csv::Header::Sniff
+pub rich_data::csv::Header::UnlessNumeric
+pub rich_data::csv::Header::Yes
+impl core::clone::Clone for rich_data::csv::Header
+pub fn rich_data::csv::Header::clone(&self) -> rich_data::csv::Header
+impl core::cmp::Eq for rich_data::csv::Header
+impl core::cmp::PartialEq for rich_data::csv::Header
+pub fn rich_data::csv::Header::eq(&self, &rich_data::csv::Header) -> bool
+impl core::default::Default for rich_data::csv::Header
+pub fn rich_data::csv::Header::default() -> rich_data::csv::Header
+impl core::fmt::Debug for rich_data::csv::Header
+pub fn rich_data::csv::Header::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_data::csv::Header
+impl core::marker::StructuralPartialEq for rich_data::csv::Header
+impl core::marker::Freeze for rich_data::csv::Header
+impl core::marker::Send for rich_data::csv::Header
+impl core::marker::Sync for rich_data::csv::Header
+impl core::marker::Unpin for rich_data::csv::Header
+impl core::marker::UnsafeUnpin for rich_data::csv::Header
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::csv::Header
+impl core::panic::unwind_safe::UnwindSafe for rich_data::csv::Header
+pub struct rich_data::csv::CsvReader
+impl rich_data::csv::CsvReader
+pub fn rich_data::csv::CsvReader::delimiter(self, char) -> Self
+pub fn rich_data::csv::CsvReader::detect(&self, &str) -> core::option::Option<(rich_data::csv::Dialect, bool)>
+pub fn rich_data::csv::CsvReader::dialect(self, rich_data::csv::Dialect) -> Self
+pub fn rich_data::csv::CsvReader::fallback(self, char) -> Self
+pub fn rich_data::csv::CsvReader::header(self, bool) -> Self
+pub fn rich_data::csv::CsvReader::header_mode(self, rich_data::csv::Header) -> Self
+pub fn rich_data::csv::CsvReader::new() -> Self
+pub fn rich_data::csv::CsvReader::read(&self, &str) -> core::result::Result<rich_data::Rows, rich_data::DataError>
+pub fn rich_data::csv::CsvReader::tsv() -> Self
+impl rich_data::csv::CsvReader
+pub fn rich_data::csv::CsvReader::source<R: std::io::BufRead>(&self, R) -> core::result::Result<rich_data::csv::CsvSource<R>, rich_data::DataError>
+impl core::clone::Clone for rich_data::csv::CsvReader
+pub fn rich_data::csv::CsvReader::clone(&self) -> rich_data::csv::CsvReader
+impl core::default::Default for rich_data::csv::CsvReader
+pub fn rich_data::csv::CsvReader::default() -> rich_data::csv::CsvReader
+impl core::fmt::Debug for rich_data::csv::CsvReader
+pub fn rich_data::csv::CsvReader::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_data::csv::CsvReader
+impl core::marker::Freeze for rich_data::csv::CsvReader
+impl core::marker::Send for rich_data::csv::CsvReader
+impl core::marker::Sync for rich_data::csv::CsvReader
+impl core::marker::Unpin for rich_data::csv::CsvReader
+impl core::marker::UnsafeUnpin for rich_data::csv::CsvReader
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::csv::CsvReader
+impl core::panic::unwind_safe::UnwindSafe for rich_data::csv::CsvReader
+pub struct rich_data::csv::CsvSource<R>
+impl<R: std::io::BufRead> rich_data::csv::CsvSource<R>
+pub fn rich_data::csv::CsvSource<R>::dialect(&self) -> rich_data::csv::Dialect
+pub fn rich_data::csv::CsvSource<R>::longer_rows(&self) -> usize
+impl<R: core::fmt::Debug> core::fmt::Debug for rich_data::csv::CsvSource<R>
+pub fn rich_data::csv::CsvSource<R>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<R: std::io::BufRead> rich_data::RowSource for rich_data::csv::CsvSource<R>
+pub fn rich_data::csv::CsvSource<R>::collect_rows(self) -> core::result::Result<rich_data::Rows, rich_data::DataError> where Self: core::marker::Sized
+pub fn rich_data::csv::CsvSource<R>::columns(&self) -> &[alloc::string::String]
+pub fn rich_data::csv::CsvSource<R>::next_row(&mut self) -> core::option::Option<core::result::Result<rich_data::Row, rich_data::DataError>>
+pub fn rich_data::csv::CsvSource<R>::schema(&self) -> core::option::Option<&rich_ext::schema::model::Schema>
+impl<R> core::marker::Freeze for rich_data::csv::CsvSource<R> where R: core::marker::Freeze
+impl<R> core::marker::Send for rich_data::csv::CsvSource<R> where R: core::marker::Send
+impl<R> core::marker::Sync for rich_data::csv::CsvSource<R> where R: core::marker::Sync
+impl<R> core::marker::Unpin for rich_data::csv::CsvSource<R> where R: core::marker::Unpin
+impl<R> core::marker::UnsafeUnpin for rich_data::csv::CsvSource<R> where R: core::marker::UnsafeUnpin
+impl<R> core::panic::unwind_safe::RefUnwindSafe for rich_data::csv::CsvSource<R> where R: core::panic::unwind_safe::RefUnwindSafe
+impl<R> core::panic::unwind_safe::UnwindSafe for rich_data::csv::CsvSource<R> where R: core::panic::unwind_safe::UnwindSafe
+pub struct rich_data::csv::Dialect
+pub rich_data::csv::Dialect::delimiter: char
+pub rich_data::csv::Dialect::doublequote: bool
+pub rich_data::csv::Dialect::quotechar: char
+pub rich_data::csv::Dialect::skipinitialspace: bool
+impl rich_data::csv::Dialect
+pub fn rich_data::csv::Dialect::excel(char) -> Self
+impl core::clone::Clone for rich_data::csv::Dialect
+pub fn rich_data::csv::Dialect::clone(&self) -> rich_data::csv::Dialect
+impl core::cmp::Eq for rich_data::csv::Dialect
+impl core::cmp::PartialEq for rich_data::csv::Dialect
+pub fn rich_data::csv::Dialect::eq(&self, &rich_data::csv::Dialect) -> bool
+impl core::fmt::Debug for rich_data::csv::Dialect
+pub fn rich_data::csv::Dialect::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_data::csv::Dialect
+impl core::marker::StructuralPartialEq for rich_data::csv::Dialect
+impl core::marker::Freeze for rich_data::csv::Dialect
+impl core::marker::Send for rich_data::csv::Dialect
+impl core::marker::Sync for rich_data::csv::Dialect
+impl core::marker::Unpin for rich_data::csv::Dialect
+impl core::marker::UnsafeUnpin for rich_data::csv::Dialect
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::csv::Dialect
+impl core::panic::unwind_safe::UnwindSafe for rich_data::csv::Dialect
+pub const rich_data::csv::DELIMITERS: [char; 4]
+pub const rich_data::csv::MAX_RECORD: usize
+pub const rich_data::csv::SAMPLE_CHARS: usize
+pub fn rich_data::csv::has_header(&str) -> core::option::Option<bool>
+pub fn rich_data::csv::read_rows(&str, &rich_data::csv::Dialect) -> alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
+pub fn rich_data::csv::sniff(&str, core::option::Option<&[char]>) -> core::option::Option<rich_data::csv::Dialect>
+pub mod rich_data::er
+pub fn rich_data::er::from_sql(&str) -> core::result::Result<(rich_diagram::er::ErDiagram, alloc::vec::Vec<rich_ext::schema::sql::Note>), rich_ext::schema::sql::SqlError>
+pub fn rich_data::er::model(&rich_ext::schema::model::Schema) -> rich_diagram::er::ErModel
+pub mod rich_data::infer
+pub enum rich_data::infer::InferredType
+pub rich_data::infer::InferredType::Boolean
+pub rich_data::infer::InferredType::Date
+pub rich_data::infer::InferredType::Float
+pub rich_data::infer::InferredType::Integer
+pub rich_data::infer::InferredType::Null
+pub rich_data::infer::InferredType::Text
+pub rich_data::infer::InferredType::Timestamp
+impl rich_data::infer::InferredType
+pub fn rich_data::infer::InferredType::data_type(self) -> rich_ext::schema::model::DataType
+pub fn rich_data::infer::InferredType::name(self) -> &'static str
+impl core::clone::Clone for rich_data::infer::InferredType
+pub fn rich_data::infer::InferredType::clone(&self) -> rich_data::infer::InferredType
+impl core::cmp::Eq for rich_data::infer::InferredType
+impl core::cmp::PartialEq for rich_data::infer::InferredType
+pub fn rich_data::infer::InferredType::eq(&self, &rich_data::infer::InferredType) -> bool
+impl core::fmt::Debug for rich_data::infer::InferredType
+pub fn rich_data::infer::InferredType::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_data::infer::InferredType
+pub fn rich_data::infer::InferredType::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_data::infer::InferredType
+pub fn rich_data::infer::InferredType::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_data::infer::InferredType
+impl core::marker::StructuralPartialEq for rich_data::infer::InferredType
+impl core::marker::Freeze for rich_data::infer::InferredType
+impl core::marker::Send for rich_data::infer::InferredType
+impl core::marker::Sync for rich_data::infer::InferredType
+impl core::marker::Unpin for rich_data::infer::InferredType
+impl core::marker::UnsafeUnpin for rich_data::infer::InferredType
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::infer::InferredType
+impl core::panic::unwind_safe::UnwindSafe for rich_data::infer::InferredType
+pub struct rich_data::infer::ColumnInference
+impl rich_data::infer::ColumnInference
+pub fn rich_data::infer::ColumnInference::data_type(&self) -> rich_data::infer::InferredType
+pub fn rich_data::infer::ColumnInference::evidence(&self) -> &rich_data::infer::Evidence
+pub fn rich_data::infer::ColumnInference::is_overridden(&self) -> bool
+pub fn rich_data::infer::ColumnInference::name(&self) -> &str
+pub fn rich_data::infer::ColumnInference::summary(&self) -> alloc::string::String
+impl core::clone::Clone for rich_data::infer::ColumnInference
+pub fn rich_data::infer::ColumnInference::clone(&self) -> rich_data::infer::ColumnInference
+impl core::cmp::Eq for rich_data::infer::ColumnInference
+impl core::cmp::PartialEq for rich_data::infer::ColumnInference
+pub fn rich_data::infer::ColumnInference::eq(&self, &rich_data::infer::ColumnInference) -> bool
+impl core::fmt::Debug for rich_data::infer::ColumnInference
+pub fn rich_data::infer::ColumnInference::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::infer::ColumnInference
+impl core::marker::Freeze for rich_data::infer::ColumnInference
+impl core::marker::Send for rich_data::infer::ColumnInference
+impl core::marker::Sync for rich_data::infer::ColumnInference
+impl core::marker::Unpin for rich_data::infer::ColumnInference
+impl core::marker::UnsafeUnpin for rich_data::infer::ColumnInference
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::infer::ColumnInference
+impl core::panic::unwind_safe::UnwindSafe for rich_data::infer::ColumnInference
+pub struct rich_data::infer::Evidence
+pub rich_data::infer::Evidence::booleans: usize
+pub rich_data::infer::Evidence::cells: usize
+pub rich_data::infer::Evidence::dates: usize
+pub rich_data::infer::Evidence::floats: usize
+pub rich_data::infer::Evidence::integers: usize
+pub rich_data::infer::Evidence::nulls: usize
+pub rich_data::infer::Evidence::timestamps: usize
+impl rich_data::infer::Evidence
+pub fn rich_data::infer::Evidence::best(&self) -> rich_data::infer::InferredType
+pub fn rich_data::infer::Evidence::closest(&self) -> core::option::Option<(rich_data::infer::InferredType, usize)>
+pub fn rich_data::infer::Evidence::parsed(&self, rich_data::infer::InferredType) -> usize
+pub fn rich_data::infer::Evidence::values(&self) -> usize
+impl core::clone::Clone for rich_data::infer::Evidence
+pub fn rich_data::infer::Evidence::clone(&self) -> rich_data::infer::Evidence
+impl core::cmp::Eq for rich_data::infer::Evidence
+impl core::cmp::PartialEq for rich_data::infer::Evidence
+pub fn rich_data::infer::Evidence::eq(&self, &rich_data::infer::Evidence) -> bool
+impl core::default::Default for rich_data::infer::Evidence
+pub fn rich_data::infer::Evidence::default() -> rich_data::infer::Evidence
+impl core::fmt::Debug for rich_data::infer::Evidence
+pub fn rich_data::infer::Evidence::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_data::infer::Evidence
+impl core::marker::StructuralPartialEq for rich_data::infer::Evidence
+impl core::marker::Freeze for rich_data::infer::Evidence
+impl core::marker::Send for rich_data::infer::Evidence
+impl core::marker::Sync for rich_data::infer::Evidence
+impl core::marker::Unpin for rich_data::infer::Evidence
+impl core::marker::UnsafeUnpin for rich_data::infer::Evidence
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::infer::Evidence
+impl core::panic::unwind_safe::UnwindSafe for rich_data::infer::Evidence
+pub struct rich_data::infer::Inference
+impl rich_data::infer::Inference
+pub fn rich_data::infer::Inference::apply(&self, &mut rich_data::Rows)
+pub fn rich_data::infer::Inference::columns(&self) -> &[rich_data::infer::ColumnInference]
+pub fn rich_data::infer::Inference::schema(&self) -> rich_ext::schema::model::Schema
+impl rich_data::infer::Inference
+pub fn rich_data::infer::Inference::to_table(&self) -> rich::table::Table
+impl core::clone::Clone for rich_data::infer::Inference
+pub fn rich_data::infer::Inference::clone(&self) -> rich_data::infer::Inference
+impl core::cmp::Eq for rich_data::infer::Inference
+impl core::cmp::PartialEq for rich_data::infer::Inference
+pub fn rich_data::infer::Inference::eq(&self, &rich_data::infer::Inference) -> bool
+impl core::fmt::Debug for rich_data::infer::Inference
+pub fn rich_data::infer::Inference::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::infer::Inference
+impl rich::protocol::Renderable for rich_data::infer::Inference
+pub fn rich_data::infer::Inference::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_data::infer::Inference::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_data::infer::Inference
+impl core::marker::Send for rich_data::infer::Inference
+impl core::marker::Sync for rich_data::infer::Inference
+impl core::marker::Unpin for rich_data::infer::Inference
+impl core::marker::UnsafeUnpin for rich_data::infer::Inference
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::infer::Inference
+impl core::panic::unwind_safe::UnwindSafe for rich_data::infer::Inference
+pub struct rich_data::infer::Inferrer
+impl rich_data::infer::Inferrer
+pub fn rich_data::infer::Inferrer::infer(&self, &rich_data::Rows) -> rich_data::infer::Inference
+pub fn rich_data::infer::Inferrer::new() -> Self
+pub fn rich_data::infer::Inferrer::null_tokens(self, impl core::iter::traits::collect::IntoIterator<Item = impl core::convert::Into<alloc::string::String>>) -> Self
+pub fn rich_data::infer::Inferrer::override_type(self, impl core::convert::Into<alloc::string::String>, rich_data::infer::InferredType) -> Self
+impl core::clone::Clone for rich_data::infer::Inferrer
+pub fn rich_data::infer::Inferrer::clone(&self) -> rich_data::infer::Inferrer
+impl core::default::Default for rich_data::infer::Inferrer
+pub fn rich_data::infer::Inferrer::default() -> Self
+impl core::fmt::Debug for rich_data::infer::Inferrer
+pub fn rich_data::infer::Inferrer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_data::infer::Inferrer
+impl core::marker::Send for rich_data::infer::Inferrer
+impl core::marker::Sync for rich_data::infer::Inferrer
+impl core::marker::Unpin for rich_data::infer::Inferrer
+impl core::marker::UnsafeUnpin for rich_data::infer::Inferrer
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::infer::Inferrer
+impl core::panic::unwind_safe::UnwindSafe for rich_data::infer::Inferrer
+pub const rich_data::infer::DEFAULT_NULL_TOKENS: [&str; 5]
+pub fn rich_data::infer::is_date(&str) -> bool
+pub fn rich_data::infer::is_timestamp(&str) -> bool
+pub fn rich_data::infer::parse_bool(&str) -> core::option::Option<bool>
+pub fn rich_data::infer::parse_float(&str) -> core::option::Option<f64>
+pub fn rich_data::infer::parse_int(&str) -> core::option::Option<i64>
+pub mod rich_data::jsonl
+pub struct rich_data::jsonl::Lines<R>
+impl<R: std::io::BufRead> rich_data::jsonl::Lines<R>
+pub fn rich_data::jsonl::Lines<R>::new(R) -> Self
+pub fn rich_data::jsonl::Lines<R>::stopped(&self) -> bool
+impl<R: core::fmt::Debug> core::fmt::Debug for rich_data::jsonl::Lines<R>
+pub fn rich_data::jsonl::Lines<R>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<R: std::io::BufRead> core::iter::traits::iterator::Iterator for rich_data::jsonl::Lines<R>
+pub type rich_data::jsonl::Lines<R>::Item = core::result::Result<serde_json::value::Value, rich_data::DataError>
+pub fn rich_data::jsonl::Lines<R>::next(&mut self) -> core::option::Option<Self::Item>
+impl<R> core::marker::Freeze for rich_data::jsonl::Lines<R> where R: core::marker::Freeze
+impl<R> core::marker::Send for rich_data::jsonl::Lines<R> where R: core::marker::Send
+impl<R> core::marker::Sync for rich_data::jsonl::Lines<R> where R: core::marker::Sync
+impl<R> core::marker::Unpin for rich_data::jsonl::Lines<R> where R: core::marker::Unpin
+impl<R> core::marker::UnsafeUnpin for rich_data::jsonl::Lines<R> where R: core::marker::UnsafeUnpin
+impl<R> core::panic::unwind_safe::RefUnwindSafe for rich_data::jsonl::Lines<R> where R: core::panic::unwind_safe::RefUnwindSafe
+impl<R> core::panic::unwind_safe::UnwindSafe for rich_data::jsonl::Lines<R> where R: core::panic::unwind_safe::UnwindSafe
+pub const rich_data::jsonl::DEFAULT_SAMPLE: usize
+pub const rich_data::jsonl::MAX_DEPTH: usize
+pub const rich_data::jsonl::MAX_LINE: usize
+pub const rich_data::jsonl::MAX_UNKNOWN_KEYS: usize
+pub fn rich_data::jsonl::read(&str) -> core::result::Result<rich_data::Rows, rich_data::DataError>
+pub fn rich_data::jsonl::source<R: std::io::BufRead>(R) -> core::result::Result<rich_data::jsonl::JsonlSource<R>, rich_data::DataError>
+pub fn rich_data::jsonl::source_with_sample<R: std::io::BufRead>(R, usize) -> core::result::Result<rich_data::jsonl::JsonlSource<R>, rich_data::DataError>
+pub type rich_data::jsonl::JsonlSource<R> = rich_data::RecordSource<rich_data::jsonl::Lines<R>>
+pub mod rich_data::profile
+pub mod rich_data::profile::nested
+pub struct rich_data::profile::nested::JsonProfiler
+impl rich_data::profile::nested::JsonProfiler
+pub fn rich_data::profile::nested::JsonProfiler::finish(self) -> core::result::Result<rich_data::profile::Profile, rich_data::DataError>
+pub fn rich_data::profile::nested::JsonProfiler::new(rich_data::profile::ProfileOptions) -> Self
+pub fn rich_data::profile::nested::JsonProfiler::push(&mut self, &serde_json::value::Value)
+pub fn rich_data::profile::nested::JsonProfiler::skip_malformed(&mut self, usize, impl core::convert::Into<alloc::string::String>)
+impl core::clone::Clone for rich_data::profile::nested::JsonProfiler
+pub fn rich_data::profile::nested::JsonProfiler::clone(&self) -> rich_data::profile::nested::JsonProfiler
+impl core::fmt::Debug for rich_data::profile::nested::JsonProfiler
+pub fn rich_data::profile::nested::JsonProfiler::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_data::profile::nested::JsonProfiler
+impl core::marker::Send for rich_data::profile::nested::JsonProfiler
+impl core::marker::Sync for rich_data::profile::nested::JsonProfiler
+impl core::marker::Unpin for rich_data::profile::nested::JsonProfiler
+impl core::marker::UnsafeUnpin for rich_data::profile::nested::JsonProfiler
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::nested::JsonProfiler
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::nested::JsonProfiler
+pub struct rich_data::profile::nested::PathSummary
+pub rich_data::profile::nested::PathSummary::capped: bool
+pub rich_data::profile::nested::PathSummary::depth: usize
+pub rich_data::profile::nested::PathSummary::dropped: alloc::vec::Vec<alloc::string::String>
+pub rich_data::profile::nested::PathSummary::max_paths: usize
+pub rich_data::profile::nested::PathSummary::more_dropped: bool
+pub rich_data::profile::nested::PathSummary::sampled: bool
+impl core::clone::Clone for rich_data::profile::nested::PathSummary
+pub fn rich_data::profile::nested::PathSummary::clone(&self) -> rich_data::profile::nested::PathSummary
+impl core::cmp::PartialEq for rich_data::profile::nested::PathSummary
+pub fn rich_data::profile::nested::PathSummary::eq(&self, &rich_data::profile::nested::PathSummary) -> bool
+impl core::fmt::Debug for rich_data::profile::nested::PathSummary
+pub fn rich_data::profile::nested::PathSummary::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::profile::nested::PathSummary
+impl serde_core::ser::Serialize for rich_data::profile::nested::PathSummary
+pub fn rich_data::profile::nested::PathSummary::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::profile::nested::PathSummary
+pub fn rich_data::profile::nested::PathSummary::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::profile::nested::PathSummary
+impl core::marker::Send for rich_data::profile::nested::PathSummary
+impl core::marker::Sync for rich_data::profile::nested::PathSummary
+impl core::marker::Unpin for rich_data::profile::nested::PathSummary
+impl core::marker::UnsafeUnpin for rich_data::profile::nested::PathSummary
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::nested::PathSummary
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::nested::PathSummary
+pub struct rich_data::profile::nested::TypeCounts
+pub rich_data::profile::nested::TypeCounts::array: u64
+pub rich_data::profile::nested::TypeCounts::boolean: u64
+pub rich_data::profile::nested::TypeCounts::null: u64
+pub rich_data::profile::nested::TypeCounts::number: u64
+pub rich_data::profile::nested::TypeCounts::object: u64
+pub rich_data::profile::nested::TypeCounts::string: u64
+impl rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::add(&mut self, &serde_json::value::Value)
+pub fn rich_data::profile::nested::TypeCounts::counts(&self) -> [(&'static str, &'static str, u64); 6]
+pub fn rich_data::profile::nested::TypeCounts::kinds(&self) -> usize
+pub fn rich_data::profile::nested::TypeCounts::mix(&self) -> alloc::string::String
+pub fn rich_data::profile::nested::TypeCounts::mixed(&self) -> bool
+pub fn rich_data::profile::nested::TypeCounts::total(&self) -> u64
+impl core::clone::Clone for rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::clone(&self) -> rich_data::profile::nested::TypeCounts
+impl core::cmp::Eq for rich_data::profile::nested::TypeCounts
+impl core::cmp::PartialEq for rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::eq(&self, &rich_data::profile::nested::TypeCounts) -> bool
+impl core::default::Default for rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::default() -> rich_data::profile::nested::TypeCounts
+impl core::fmt::Debug for rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_data::profile::nested::TypeCounts
+impl core::marker::StructuralPartialEq for rich_data::profile::nested::TypeCounts
+impl serde_core::ser::Serialize for rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::profile::nested::TypeCounts
+impl core::marker::Send for rich_data::profile::nested::TypeCounts
+impl core::marker::Sync for rich_data::profile::nested::TypeCounts
+impl core::marker::Unpin for rich_data::profile::nested::TypeCounts
+impl core::marker::UnsafeUnpin for rich_data::profile::nested::TypeCounts
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::nested::TypeCounts
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::nested::TypeCounts
+pub const rich_data::profile::nested::DEFAULT_DEPTH: usize
+pub const rich_data::profile::nested::DEFAULT_MAX_PATHS: usize
+pub const rich_data::profile::nested::MAX_MALFORMED_LINES: usize
+pub fn rich_data::profile::nested::path_key(&str) -> alloc::borrow::Cow<'_, str>
+pub enum rich_data::profile::Distribution
+pub rich_data::profile::Distribution::Empty
+pub rich_data::profile::Distribution::Histogram
+pub rich_data::profile::Distribution::Histogram::bins: alloc::vec::Vec<rich_data::profile::Bin>
+pub rich_data::profile::Distribution::Top
+pub rich_data::profile::Distribution::Top::other: usize
+pub rich_data::profile::Distribution::Top::values: alloc::vec::Vec<rich_data::profile::TopValue>
+impl core::clone::Clone for rich_data::profile::Distribution
+pub fn rich_data::profile::Distribution::clone(&self) -> rich_data::profile::Distribution
+impl core::cmp::PartialEq for rich_data::profile::Distribution
+pub fn rich_data::profile::Distribution::eq(&self, &rich_data::profile::Distribution) -> bool
+impl core::fmt::Debug for rich_data::profile::Distribution
+pub fn rich_data::profile::Distribution::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::profile::Distribution
+impl serde_core::ser::Serialize for rich_data::profile::Distribution
+pub fn rich_data::profile::Distribution::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::profile::Distribution
+pub fn rich_data::profile::Distribution::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::profile::Distribution
+impl core::marker::Send for rich_data::profile::Distribution
+impl core::marker::Sync for rich_data::profile::Distribution
+impl core::marker::Unpin for rich_data::profile::Distribution
+impl core::marker::UnsafeUnpin for rich_data::profile::Distribution
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::Distribution
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::Distribution
+pub struct rich_data::profile::Bin
+pub rich_data::profile::Bin::count: usize
+pub rich_data::profile::Bin::high: f64
+pub rich_data::profile::Bin::label: alloc::string::String
+pub rich_data::profile::Bin::low: f64
+impl core::clone::Clone for rich_data::profile::Bin
+pub fn rich_data::profile::Bin::clone(&self) -> rich_data::profile::Bin
+impl core::cmp::PartialEq for rich_data::profile::Bin
+pub fn rich_data::profile::Bin::eq(&self, &rich_data::profile::Bin) -> bool
+impl core::fmt::Debug for rich_data::profile::Bin
+pub fn rich_data::profile::Bin::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::profile::Bin
+impl serde_core::ser::Serialize for rich_data::profile::Bin
+pub fn rich_data::profile::Bin::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::profile::Bin
+pub fn rich_data::profile::Bin::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::profile::Bin
+impl core::marker::Send for rich_data::profile::Bin
+impl core::marker::Sync for rich_data::profile::Bin
+impl core::marker::Unpin for rich_data::profile::Bin
+impl core::marker::UnsafeUnpin for rich_data::profile::Bin
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::Bin
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::Bin
+pub struct rich_data::profile::ColumnProfile
+pub rich_data::profile::ColumnProfile::absent: core::option::Option<u64>
+pub rich_data::profile::ColumnProfile::count: usize
+pub rich_data::profile::ColumnProfile::data_type: alloc::string::String
+pub rich_data::profile::ColumnProfile::distinct: usize
+pub rich_data::profile::ColumnProfile::distribution: rich_data::profile::Distribution
+pub rich_data::profile::ColumnProfile::max: core::option::Option<alloc::string::String>
+pub rich_data::profile::ColumnProfile::mean: core::option::Option<f64>
+pub rich_data::profile::ColumnProfile::median: core::option::Option<f64>
+pub rich_data::profile::ColumnProfile::min: core::option::Option<alloc::string::String>
+pub rich_data::profile::ColumnProfile::mixed: core::option::Option<bool>
+pub rich_data::profile::ColumnProfile::name: alloc::string::String
+pub rich_data::profile::ColumnProfile::null_rate: f64
+pub rich_data::profile::ColumnProfile::nulls: u64
+pub rich_data::profile::ColumnProfile::p25: core::option::Option<f64>
+pub rich_data::profile::ColumnProfile::p75: core::option::Option<f64>
+pub rich_data::profile::ColumnProfile::present: core::option::Option<u64>
+pub rich_data::profile::ColumnProfile::types: core::option::Option<rich_data::profile::nested::TypeCounts>
+pub rich_data::profile::ColumnProfile::values: core::option::Option<u64>
+impl rich_data::profile::ColumnProfile
+pub fn rich_data::profile::ColumnProfile::absent_rate(&self, u64) -> core::option::Option<f64>
+impl core::clone::Clone for rich_data::profile::ColumnProfile
+pub fn rich_data::profile::ColumnProfile::clone(&self) -> rich_data::profile::ColumnProfile
+impl core::cmp::PartialEq for rich_data::profile::ColumnProfile
+pub fn rich_data::profile::ColumnProfile::eq(&self, &rich_data::profile::ColumnProfile) -> bool
+impl core::fmt::Debug for rich_data::profile::ColumnProfile
+pub fn rich_data::profile::ColumnProfile::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::profile::ColumnProfile
+impl serde_core::ser::Serialize for rich_data::profile::ColumnProfile
+pub fn rich_data::profile::ColumnProfile::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::profile::ColumnProfile
+pub fn rich_data::profile::ColumnProfile::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::profile::ColumnProfile
+impl core::marker::Send for rich_data::profile::ColumnProfile
+impl core::marker::Sync for rich_data::profile::ColumnProfile
+impl core::marker::Unpin for rich_data::profile::ColumnProfile
+impl core::marker::UnsafeUnpin for rich_data::profile::ColumnProfile
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::ColumnProfile
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::ColumnProfile
+pub struct rich_data::profile::JsonProfiler
+impl rich_data::profile::nested::JsonProfiler
+pub fn rich_data::profile::nested::JsonProfiler::finish(self) -> core::result::Result<rich_data::profile::Profile, rich_data::DataError>
+pub fn rich_data::profile::nested::JsonProfiler::new(rich_data::profile::ProfileOptions) -> Self
+pub fn rich_data::profile::nested::JsonProfiler::push(&mut self, &serde_json::value::Value)
+pub fn rich_data::profile::nested::JsonProfiler::skip_malformed(&mut self, usize, impl core::convert::Into<alloc::string::String>)
+impl core::clone::Clone for rich_data::profile::nested::JsonProfiler
+pub fn rich_data::profile::nested::JsonProfiler::clone(&self) -> rich_data::profile::nested::JsonProfiler
+impl core::fmt::Debug for rich_data::profile::nested::JsonProfiler
+pub fn rich_data::profile::nested::JsonProfiler::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_data::profile::nested::JsonProfiler
+impl core::marker::Send for rich_data::profile::nested::JsonProfiler
+impl core::marker::Sync for rich_data::profile::nested::JsonProfiler
+impl core::marker::Unpin for rich_data::profile::nested::JsonProfiler
+impl core::marker::UnsafeUnpin for rich_data::profile::nested::JsonProfiler
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::nested::JsonProfiler
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::nested::JsonProfiler
+pub struct rich_data::profile::MissingBucket
+pub rich_data::profile::MissingBucket::first: u64
+pub rich_data::profile::MissingBucket::nulls: alloc::vec::Vec<u64>
+pub rich_data::profile::MissingBucket::rows: u64
+impl core::clone::Clone for rich_data::profile::MissingBucket
+pub fn rich_data::profile::MissingBucket::clone(&self) -> rich_data::profile::MissingBucket
+impl core::cmp::PartialEq for rich_data::profile::MissingBucket
+pub fn rich_data::profile::MissingBucket::eq(&self, &rich_data::profile::MissingBucket) -> bool
+impl core::fmt::Debug for rich_data::profile::MissingBucket
+pub fn rich_data::profile::MissingBucket::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::profile::MissingBucket
+impl serde_core::ser::Serialize for rich_data::profile::MissingBucket
+pub fn rich_data::profile::MissingBucket::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::profile::MissingBucket
+pub fn rich_data::profile::MissingBucket::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::profile::MissingBucket
+impl core::marker::Send for rich_data::profile::MissingBucket
+impl core::marker::Sync for rich_data::profile::MissingBucket
+impl core::marker::Unpin for rich_data::profile::MissingBucket
+impl core::marker::UnsafeUnpin for rich_data::profile::MissingBucket
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::MissingBucket
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::MissingBucket
+pub struct rich_data::profile::MissingMap
+pub rich_data::profile::MissingMap::bucket_rows: u64
+pub rich_data::profile::MissingMap::buckets: alloc::vec::Vec<rich_data::profile::MissingBucket>
+impl core::clone::Clone for rich_data::profile::MissingMap
+pub fn rich_data::profile::MissingMap::clone(&self) -> rich_data::profile::MissingMap
+impl core::cmp::PartialEq for rich_data::profile::MissingMap
+pub fn rich_data::profile::MissingMap::eq(&self, &rich_data::profile::MissingMap) -> bool
+impl core::default::Default for rich_data::profile::MissingMap
+pub fn rich_data::profile::MissingMap::default() -> rich_data::profile::MissingMap
+impl core::fmt::Debug for rich_data::profile::MissingMap
+pub fn rich_data::profile::MissingMap::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::profile::MissingMap
+impl serde_core::ser::Serialize for rich_data::profile::MissingMap
+pub fn rich_data::profile::MissingMap::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::profile::MissingMap
+pub fn rich_data::profile::MissingMap::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::profile::MissingMap
+impl core::marker::Send for rich_data::profile::MissingMap
+impl core::marker::Sync for rich_data::profile::MissingMap
+impl core::marker::Unpin for rich_data::profile::MissingMap
+impl core::marker::UnsafeUnpin for rich_data::profile::MissingMap
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::MissingMap
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::MissingMap
+pub struct rich_data::profile::PathSummary
+pub rich_data::profile::PathSummary::capped: bool
+pub rich_data::profile::PathSummary::depth: usize
+pub rich_data::profile::PathSummary::dropped: alloc::vec::Vec<alloc::string::String>
+pub rich_data::profile::PathSummary::max_paths: usize
+pub rich_data::profile::PathSummary::more_dropped: bool
+pub rich_data::profile::PathSummary::sampled: bool
+impl core::clone::Clone for rich_data::profile::nested::PathSummary
+pub fn rich_data::profile::nested::PathSummary::clone(&self) -> rich_data::profile::nested::PathSummary
+impl core::cmp::PartialEq for rich_data::profile::nested::PathSummary
+pub fn rich_data::profile::nested::PathSummary::eq(&self, &rich_data::profile::nested::PathSummary) -> bool
+impl core::fmt::Debug for rich_data::profile::nested::PathSummary
+pub fn rich_data::profile::nested::PathSummary::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::profile::nested::PathSummary
+impl serde_core::ser::Serialize for rich_data::profile::nested::PathSummary
+pub fn rich_data::profile::nested::PathSummary::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::profile::nested::PathSummary
+pub fn rich_data::profile::nested::PathSummary::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::profile::nested::PathSummary
+impl core::marker::Send for rich_data::profile::nested::PathSummary
+impl core::marker::Sync for rich_data::profile::nested::PathSummary
+impl core::marker::Unpin for rich_data::profile::nested::PathSummary
+impl core::marker::UnsafeUnpin for rich_data::profile::nested::PathSummary
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::nested::PathSummary
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::nested::PathSummary
+pub struct rich_data::profile::Profile
+pub rich_data::profile::Profile::name: core::option::Option<alloc::string::String>
+impl rich_data::profile::Profile
+pub fn rich_data::profile::Profile::column(&self, &str) -> core::option::Option<&rich_data::profile::ColumnProfile>
+pub fn rich_data::profile::Profile::columns(&self) -> &[rich_data::profile::ColumnProfile]
+pub fn rich_data::profile::Profile::from_source(impl rich_data::RowSource, rich_data::profile::ProfileOptions) -> core::result::Result<Self, rich_data::DataError>
+pub fn rich_data::profile::Profile::heading(&self) -> alloc::string::String
+pub fn rich_data::profile::Profile::is_nested(&self) -> bool
+pub fn rich_data::profile::Profile::malformed(&self) -> u64
+pub fn rich_data::profile::Profile::malformed_lines(&self) -> &[usize]
+pub fn rich_data::profile::Profile::missing(&self) -> &rich_data::profile::MissingMap
+pub fn rich_data::profile::Profile::missing_heatmap(&self) -> core::option::Option<rich_ext::chart::heatmap::Heatmap>
+pub fn rich_data::profile::Profile::note(&mut self, impl core::convert::Into<alloc::string::String>)
+pub fn rich_data::profile::Profile::notes(&self) -> &[alloc::string::String]
+pub fn rich_data::profile::Profile::of(&rich_data::Rows) -> Self
+pub fn rich_data::profile::Profile::paths(&self) -> core::option::Option<&rich_data::profile::nested::PathSummary>
+pub fn rich_data::profile::Profile::rows(&self) -> u64
+pub fn rich_data::profile::Profile::rules(&self) -> &rich_ext::table::rules::StyleRules
+pub fn rich_data::profile::Profile::sample_size(&self) -> usize
+pub fn rich_data::profile::Profile::sampled(&self) -> bool
+pub fn rich_data::profile::Profile::style_rules(self, rich_ext::table::rules::StyleRules) -> Self
+pub fn rich_data::profile::Profile::table_headers(&self) -> &'static [&'static str]
+pub fn rich_data::profile::Profile::to_json(&self) -> serde_json::value::Value
+pub fn rich_data::profile::Profile::to_table(&self) -> rich::table::Table
+pub fn rich_data::profile::Profile::with_name(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl rich_data::profile::Profile
+pub fn rich_data::profile::Profile::from_json_lines(impl std::io::BufRead, rich_data::profile::ProfileOptions) -> core::result::Result<Self, rich_data::DataError>
+impl core::clone::Clone for rich_data::profile::Profile
+pub fn rich_data::profile::Profile::clone(&self) -> rich_data::profile::Profile
+impl core::cmp::PartialEq for rich_data::profile::Profile
+pub fn rich_data::profile::Profile::eq(&self, &rich_data::profile::Profile) -> bool
+impl core::fmt::Debug for rich_data::profile::Profile
+pub fn rich_data::profile::Profile::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::profile::Profile
+impl rich::protocol::Renderable for rich_data::profile::Profile
+pub fn rich_data::profile::Profile::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_data::profile::Profile::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl serde_core::ser::Serialize for rich_data::profile::Profile
+pub fn rich_data::profile::Profile::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::profile::Profile
+pub fn rich_data::profile::Profile::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::profile::Profile
+impl core::marker::Send for rich_data::profile::Profile
+impl core::marker::Sync for rich_data::profile::Profile
+impl core::marker::Unpin for rich_data::profile::Profile
+impl core::marker::UnsafeUnpin for rich_data::profile::Profile
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::Profile
+impl !core::panic::unwind_safe::UnwindSafe for rich_data::profile::Profile
+pub struct rich_data::profile::ProfileOptions
+pub rich_data::profile::ProfileOptions::bins: usize
+pub rich_data::profile::ProfileOptions::buckets: usize
+pub rich_data::profile::ProfileOptions::columns: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub rich_data::profile::ProfileOptions::depth: usize
+pub rich_data::profile::ProfileOptions::max_paths: usize
+pub rich_data::profile::ProfileOptions::nulls: alloc::vec::Vec<alloc::string::String>
+pub rich_data::profile::ProfileOptions::sample: usize
+pub rich_data::profile::ProfileOptions::top: usize
+impl core::clone::Clone for rich_data::profile::ProfileOptions
+pub fn rich_data::profile::ProfileOptions::clone(&self) -> rich_data::profile::ProfileOptions
+impl core::cmp::PartialEq for rich_data::profile::ProfileOptions
+pub fn rich_data::profile::ProfileOptions::eq(&self, &rich_data::profile::ProfileOptions) -> bool
+impl core::default::Default for rich_data::profile::ProfileOptions
+pub fn rich_data::profile::ProfileOptions::default() -> Self
+impl core::fmt::Debug for rich_data::profile::ProfileOptions
+pub fn rich_data::profile::ProfileOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::profile::ProfileOptions
+impl core::marker::Freeze for rich_data::profile::ProfileOptions
+impl core::marker::Send for rich_data::profile::ProfileOptions
+impl core::marker::Sync for rich_data::profile::ProfileOptions
+impl core::marker::Unpin for rich_data::profile::ProfileOptions
+impl core::marker::UnsafeUnpin for rich_data::profile::ProfileOptions
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::ProfileOptions
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::ProfileOptions
+pub struct rich_data::profile::Profiler
+impl rich_data::profile::Profiler
+pub fn rich_data::profile::Profiler::finish(self) -> rich_data::profile::Profile
+pub fn rich_data::profile::Profiler::new(&[alloc::string::String], rich_data::profile::ProfileOptions) -> core::result::Result<Self, rich_data::DataError>
+pub fn rich_data::profile::Profiler::push(&mut self, rich_data::Row)
+impl core::clone::Clone for rich_data::profile::Profiler
+pub fn rich_data::profile::Profiler::clone(&self) -> rich_data::profile::Profiler
+impl core::fmt::Debug for rich_data::profile::Profiler
+pub fn rich_data::profile::Profiler::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_data::profile::Profiler
+impl core::marker::Send for rich_data::profile::Profiler
+impl core::marker::Sync for rich_data::profile::Profiler
+impl core::marker::Unpin for rich_data::profile::Profiler
+impl core::marker::UnsafeUnpin for rich_data::profile::Profiler
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::Profiler
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::Profiler
+pub struct rich_data::profile::TopValue
+pub rich_data::profile::TopValue::count: usize
+pub rich_data::profile::TopValue::value: alloc::string::String
+impl core::clone::Clone for rich_data::profile::TopValue
+pub fn rich_data::profile::TopValue::clone(&self) -> rich_data::profile::TopValue
+impl core::cmp::PartialEq for rich_data::profile::TopValue
+pub fn rich_data::profile::TopValue::eq(&self, &rich_data::profile::TopValue) -> bool
+impl core::fmt::Debug for rich_data::profile::TopValue
+pub fn rich_data::profile::TopValue::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::profile::TopValue
+impl serde_core::ser::Serialize for rich_data::profile::TopValue
+pub fn rich_data::profile::TopValue::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::profile::TopValue
+pub fn rich_data::profile::TopValue::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::profile::TopValue
+impl core::marker::Send for rich_data::profile::TopValue
+impl core::marker::Sync for rich_data::profile::TopValue
+impl core::marker::Unpin for rich_data::profile::TopValue
+impl core::marker::UnsafeUnpin for rich_data::profile::TopValue
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::TopValue
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::TopValue
+pub struct rich_data::profile::TypeCounts
+pub rich_data::profile::TypeCounts::array: u64
+pub rich_data::profile::TypeCounts::boolean: u64
+pub rich_data::profile::TypeCounts::null: u64
+pub rich_data::profile::TypeCounts::number: u64
+pub rich_data::profile::TypeCounts::object: u64
+pub rich_data::profile::TypeCounts::string: u64
+impl rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::add(&mut self, &serde_json::value::Value)
+pub fn rich_data::profile::nested::TypeCounts::counts(&self) -> [(&'static str, &'static str, u64); 6]
+pub fn rich_data::profile::nested::TypeCounts::kinds(&self) -> usize
+pub fn rich_data::profile::nested::TypeCounts::mix(&self) -> alloc::string::String
+pub fn rich_data::profile::nested::TypeCounts::mixed(&self) -> bool
+pub fn rich_data::profile::nested::TypeCounts::total(&self) -> u64
+impl core::clone::Clone for rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::clone(&self) -> rich_data::profile::nested::TypeCounts
+impl core::cmp::Eq for rich_data::profile::nested::TypeCounts
+impl core::cmp::PartialEq for rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::eq(&self, &rich_data::profile::nested::TypeCounts) -> bool
+impl core::default::Default for rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::default() -> rich_data::profile::nested::TypeCounts
+impl core::fmt::Debug for rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_data::profile::nested::TypeCounts
+impl core::marker::StructuralPartialEq for rich_data::profile::nested::TypeCounts
+impl serde_core::ser::Serialize for rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::profile::nested::TypeCounts
+pub fn rich_data::profile::nested::TypeCounts::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::profile::nested::TypeCounts
+impl core::marker::Send for rich_data::profile::nested::TypeCounts
+impl core::marker::Sync for rich_data::profile::nested::TypeCounts
+impl core::marker::Unpin for rich_data::profile::nested::TypeCounts
+impl core::marker::UnsafeUnpin for rich_data::profile::nested::TypeCounts
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::profile::nested::TypeCounts
+impl core::panic::unwind_safe::UnwindSafe for rich_data::profile::nested::TypeCounts
+pub const rich_data::profile::DEFAULT_BINS: usize
+pub const rich_data::profile::DEFAULT_BUCKETS: usize
+pub const rich_data::profile::DEFAULT_DEPTH: usize
+pub const rich_data::profile::DEFAULT_MAX_PATHS: usize
+pub const rich_data::profile::DEFAULT_SAMPLE: usize
+pub const rich_data::profile::DEFAULT_TOP: usize
+pub const rich_data::profile::MAX_MALFORMED_LINES: usize
+pub const rich_data::profile::STYLES: &[(&str, &str)]
+pub fn rich_data::profile::path_key(&str) -> alloc::borrow::Cow<'_, str>
+pub mod rich_data::quality
+pub enum rich_data::quality::Status
+pub rich_data::quality::Status::Error
+pub rich_data::quality::Status::Fail
+pub rich_data::quality::Status::Pass
+pub rich_data::quality::Status::Warn
+impl rich_data::quality::Status
+pub fn rich_data::quality::Status::key(self) -> &'static str
+pub fn rich_data::quality::Status::label(self) -> &'static str
+impl core::clone::Clone for rich_data::quality::Status
+pub fn rich_data::quality::Status::clone(&self) -> rich_data::quality::Status
+impl core::cmp::Eq for rich_data::quality::Status
+impl core::cmp::PartialEq for rich_data::quality::Status
+pub fn rich_data::quality::Status::eq(&self, &rich_data::quality::Status) -> bool
+impl core::fmt::Debug for rich_data::quality::Status
+pub fn rich_data::quality::Status::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_data::quality::Status
+pub fn rich_data::quality::Status::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_data::quality::Status
+impl core::marker::StructuralPartialEq for rich_data::quality::Status
+impl serde_core::ser::Serialize for rich_data::quality::Status
+pub fn rich_data::quality::Status::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::quality::Status
+pub fn rich_data::quality::Status::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::quality::Status
+impl core::marker::Send for rich_data::quality::Status
+impl core::marker::Sync for rich_data::quality::Status
+impl core::marker::Unpin for rich_data::quality::Status
+impl core::marker::UnsafeUnpin for rich_data::quality::Status
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::quality::Status
+impl core::panic::unwind_safe::UnwindSafe for rich_data::quality::Status
+pub struct rich_data::quality::CheckResult
+pub rich_data::quality::CheckResult::check: alloc::string::String
+pub rich_data::quality::CheckResult::column: core::option::Option<alloc::string::String>
+pub rich_data::quality::CheckResult::expected: core::option::Option<alloc::string::String>
+pub rich_data::quality::CheckResult::failing_rows: core::option::Option<rich_data::quality::FailingRows>
+pub rich_data::quality::CheckResult::message: core::option::Option<alloc::string::String>
+pub rich_data::quality::CheckResult::observed: core::option::Option<alloc::string::String>
+pub rich_data::quality::CheckResult::status: rich_data::quality::Status
+impl rich_data::quality::CheckResult
+pub fn rich_data::quality::CheckResult::column(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_data::quality::CheckResult::expected(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_data::quality::CheckResult::failing_rows(self, rich_data::quality::FailingRows) -> Self
+pub fn rich_data::quality::CheckResult::message(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_data::quality::CheckResult::new(impl core::convert::Into<alloc::string::String>, rich_data::quality::Status) -> Self
+pub fn rich_data::quality::CheckResult::observed(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_data::quality::CheckResult::title(&self) -> alloc::string::String
+impl core::clone::Clone for rich_data::quality::CheckResult
+pub fn rich_data::quality::CheckResult::clone(&self) -> rich_data::quality::CheckResult
+impl core::cmp::PartialEq for rich_data::quality::CheckResult
+pub fn rich_data::quality::CheckResult::eq(&self, &rich_data::quality::CheckResult) -> bool
+impl core::fmt::Debug for rich_data::quality::CheckResult
+pub fn rich_data::quality::CheckResult::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::quality::CheckResult
+impl serde_core::ser::Serialize for rich_data::quality::CheckResult
+pub fn rich_data::quality::CheckResult::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::quality::CheckResult
+pub fn rich_data::quality::CheckResult::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::quality::CheckResult
+impl core::marker::Send for rich_data::quality::CheckResult
+impl core::marker::Sync for rich_data::quality::CheckResult
+impl core::marker::Unpin for rich_data::quality::CheckResult
+impl core::marker::UnsafeUnpin for rich_data::quality::CheckResult
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::quality::CheckResult
+impl core::panic::unwind_safe::UnwindSafe for rich_data::quality::CheckResult
+pub struct rich_data::quality::FailingRows
+pub rich_data::quality::FailingRows::columns: alloc::vec::Vec<alloc::string::String>
+pub rich_data::quality::FailingRows::rows: alloc::vec::Vec<alloc::vec::Vec<alloc::string::String>>
+pub rich_data::quality::FailingRows::total: core::option::Option<u64>
+impl core::clone::Clone for rich_data::quality::FailingRows
+pub fn rich_data::quality::FailingRows::clone(&self) -> rich_data::quality::FailingRows
+impl core::cmp::PartialEq for rich_data::quality::FailingRows
+pub fn rich_data::quality::FailingRows::eq(&self, &rich_data::quality::FailingRows) -> bool
+impl core::default::Default for rich_data::quality::FailingRows
+pub fn rich_data::quality::FailingRows::default() -> rich_data::quality::FailingRows
+impl core::fmt::Debug for rich_data::quality::FailingRows
+pub fn rich_data::quality::FailingRows::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::quality::FailingRows
+impl serde_core::ser::Serialize for rich_data::quality::FailingRows
+pub fn rich_data::quality::FailingRows::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::quality::FailingRows
+pub fn rich_data::quality::FailingRows::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::quality::FailingRows
+impl core::marker::Send for rich_data::quality::FailingRows
+impl core::marker::Sync for rich_data::quality::FailingRows
+impl core::marker::Unpin for rich_data::quality::FailingRows
+impl core::marker::UnsafeUnpin for rich_data::quality::FailingRows
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::quality::FailingRows
+impl core::panic::unwind_safe::UnwindSafe for rich_data::quality::FailingRows
+pub struct rich_data::quality::QualityReport
+impl rich_data::quality::QualityReport
+pub fn rich_data::quality::QualityReport::is_success(&self) -> bool
+pub fn rich_data::quality::QualityReport::new(impl core::iter::traits::collect::IntoIterator<Item = rich_data::quality::CheckResult>) -> Self
+pub fn rich_data::quality::QualityReport::push(&mut self, rich_data::quality::CheckResult) -> &mut Self
+pub fn rich_data::quality::QualityReport::results(&self) -> &[rich_data::quality::CheckResult]
+pub fn rich_data::quality::QualityReport::show_rows(self, usize) -> Self
+pub fn rich_data::quality::QualityReport::summary(&self) -> alloc::string::String
+pub fn rich_data::quality::QualityReport::to_json(&self) -> serde_json::value::Value
+pub fn rich_data::quality::QualityReport::to_table(&self, &rich::console::Console) -> rich::table::Table
+pub fn rich_data::quality::QualityReport::totals(&self) -> rich_data::quality::Totals
+impl core::clone::Clone for rich_data::quality::QualityReport
+pub fn rich_data::quality::QualityReport::clone(&self) -> rich_data::quality::QualityReport
+impl core::cmp::PartialEq for rich_data::quality::QualityReport
+pub fn rich_data::quality::QualityReport::eq(&self, &rich_data::quality::QualityReport) -> bool
+impl core::fmt::Debug for rich_data::quality::QualityReport
+pub fn rich_data::quality::QualityReport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::quality::QualityReport
+impl rich::protocol::Renderable for rich_data::quality::QualityReport
+pub fn rich_data::quality::QualityReport::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_data::quality::QualityReport::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_data::quality::QualityReport
+impl core::marker::Send for rich_data::quality::QualityReport
+impl core::marker::Sync for rich_data::quality::QualityReport
+impl core::marker::Unpin for rich_data::quality::QualityReport
+impl core::marker::UnsafeUnpin for rich_data::quality::QualityReport
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::quality::QualityReport
+impl core::panic::unwind_safe::UnwindSafe for rich_data::quality::QualityReport
+pub struct rich_data::quality::Totals
+pub rich_data::quality::Totals::errored: usize
+pub rich_data::quality::Totals::failed: usize
+pub rich_data::quality::Totals::passed: usize
+pub rich_data::quality::Totals::warned: usize
+impl core::clone::Clone for rich_data::quality::Totals
+pub fn rich_data::quality::Totals::clone(&self) -> rich_data::quality::Totals
+impl core::cmp::Eq for rich_data::quality::Totals
+impl core::cmp::PartialEq for rich_data::quality::Totals
+pub fn rich_data::quality::Totals::eq(&self, &rich_data::quality::Totals) -> bool
+impl core::default::Default for rich_data::quality::Totals
+pub fn rich_data::quality::Totals::default() -> rich_data::quality::Totals
+impl core::fmt::Debug for rich_data::quality::Totals
+pub fn rich_data::quality::Totals::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_data::quality::Totals
+impl core::marker::StructuralPartialEq for rich_data::quality::Totals
+impl serde_core::ser::Serialize for rich_data::quality::Totals
+pub fn rich_data::quality::Totals::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_data::quality::Totals
+pub fn rich_data::quality::Totals::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_data::quality::Totals
+impl core::marker::Send for rich_data::quality::Totals
+impl core::marker::Sync for rich_data::quality::Totals
+impl core::marker::Unpin for rich_data::quality::Totals
+impl core::marker::UnsafeUnpin for rich_data::quality::Totals
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::quality::Totals
+impl core::panic::unwind_safe::UnwindSafe for rich_data::quality::Totals
+pub const rich_data::quality::FAILING_ROWS: usize
+pub const rich_data::quality::STYLES: &[(&str, &str)]
+pub fn rich_data::quality::not_null(&rich_data::Rows, &str) -> core::result::Result<rich_data::quality::CheckResult, rich_data::DataError>
+pub fn rich_data::quality::unique(&rich_data::Rows, &str) -> core::result::Result<rich_data::quality::CheckResult, rich_data::DataError>
+pub mod rich_data::serialize
+pub struct rich_data::serialize::Records<I>
+impl<I> rich_data::serialize::Records<I>
+pub fn rich_data::serialize::Records<I>::new(I) -> Self
+impl<I: core::fmt::Debug> core::fmt::Debug for rich_data::serialize::Records<I>
+pub fn rich_data::serialize::Records<I>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<T: serde_core::ser::Serialize, I: core::iter::traits::iterator::Iterator<Item = T>> core::iter::traits::iterator::Iterator for rich_data::serialize::Records<I>
+pub type rich_data::serialize::Records<I>::Item = core::result::Result<serde_json::value::Value, rich_data::DataError>
+pub fn rich_data::serialize::Records<I>::next(&mut self) -> core::option::Option<Self::Item>
+impl<I> core::marker::Freeze for rich_data::serialize::Records<I> where I: core::marker::Freeze
+impl<I> core::marker::Send for rich_data::serialize::Records<I> where I: core::marker::Send
+impl<I> core::marker::Sync for rich_data::serialize::Records<I> where I: core::marker::Sync
+impl<I> core::marker::Unpin for rich_data::serialize::Records<I> where I: core::marker::Unpin
+impl<I> core::marker::UnsafeUnpin for rich_data::serialize::Records<I> where I: core::marker::UnsafeUnpin
+impl<I> core::panic::unwind_safe::RefUnwindSafe for rich_data::serialize::Records<I> where I: core::panic::unwind_safe::RefUnwindSafe
+impl<I> core::panic::unwind_safe::UnwindSafe for rich_data::serialize::Records<I> where I: core::panic::unwind_safe::UnwindSafe
+pub const rich_data::serialize::DEFAULT_SAMPLE: usize
+pub fn rich_data::serialize::read<T: serde_core::ser::Serialize>(impl core::iter::traits::collect::IntoIterator<Item = T>) -> core::result::Result<rich_data::Rows, rich_data::DataError>
+pub fn rich_data::serialize::source<T, I>(I) -> core::result::Result<rich_data::serialize::SerializeSource<<I as core::iter::traits::collect::IntoIterator>::IntoIter>, rich_data::DataError> where T: serde_core::ser::Serialize, I: core::iter::traits::collect::IntoIterator<Item = T>
+pub fn rich_data::serialize::source_with_sample<T, I>(I, usize) -> core::result::Result<rich_data::serialize::SerializeSource<<I as core::iter::traits::collect::IntoIterator>::IntoIter>, rich_data::DataError> where T: serde_core::ser::Serialize, I: core::iter::traits::collect::IntoIterator<Item = T>
+pub type rich_data::serialize::SerializeSource<I> = rich_data::RecordSource<rich_data::serialize::Records<I>>
+pub mod rich_data::sql
+pub struct rich_data::sql::ResultSet<S>
+impl rich_data::sql::ResultSet<rich_data::Rows>
+pub fn rich_data::sql::ResultSet<rich_data::Rows>::new(rich_data::Rows) -> Self
+impl rich_data::sql::ResultSet<rich_data::window::RowWindow>
+pub fn rich_data::sql::ResultSet<rich_data::window::RowWindow>::read(impl rich_data::RowSource, usize, usize) -> core::result::Result<Self, rich_data::DataError>
+pub fn rich_data::sql::ResultSet<rich_data::window::RowWindow>::window(rich_data::window::RowWindow) -> Self
+impl<S: rich_ext::table::virtualized::VirtualRows> rich_data::sql::ResultSet<S>
+pub fn rich_data::sql::ResultSet<S>::columns(&self) -> &[alloc::string::String]
+pub fn rich_data::sql::ResultSet<S>::elapsed(self, core::time::Duration) -> Self
+pub fn rich_data::sql::ResultSet<S>::footer(&self, bool) -> alloc::string::String
+pub fn rich_data::sql::ResultSet<S>::from_parts(impl core::iter::traits::collect::IntoIterator<Item = impl core::convert::Into<alloc::string::String>>, core::option::Option<rich_ext::schema::model::Schema>, S) -> Self
+pub fn rich_data::sql::ResultSet<S>::is_windowed(&self) -> bool
+pub fn rich_data::sql::ResultSet<S>::limit(self, usize) -> Self
+pub fn rich_data::sql::ResultSet<S>::null_marker(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_data::sql::ResultSet<S>::offset(self, usize) -> Self
+pub fn rich_data::sql::ResultSet<S>::row_count(&self) -> core::option::Option<usize>
+pub fn rich_data::sql::ResultSet<S>::schema(&self) -> core::option::Option<&rich_ext::schema::model::Schema>
+pub fn rich_data::sql::ResultSet<S>::source(&self) -> &S
+pub fn rich_data::sql::ResultSet<S>::title(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_data::sql::ResultSet<S>::to_virtual_table(&self) -> rich_ext::table::virtualized::VirtualTable<&S>
+impl<S: core::clone::Clone> core::clone::Clone for rich_data::sql::ResultSet<S>
+pub fn rich_data::sql::ResultSet<S>::clone(&self) -> rich_data::sql::ResultSet<S>
+impl<S: core::fmt::Debug> core::fmt::Debug for rich_data::sql::ResultSet<S>
+pub fn rich_data::sql::ResultSet<S>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<S: rich_ext::table::virtualized::VirtualRows> rich::protocol::Renderable for rich_data::sql::ResultSet<S>
+pub fn rich_data::sql::ResultSet<S>::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_data::sql::ResultSet<S>::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl<S> core::marker::Freeze for rich_data::sql::ResultSet<S> where S: core::marker::Freeze
+impl<S> core::marker::Send for rich_data::sql::ResultSet<S> where S: core::marker::Send
+impl<S> core::marker::Sync for rich_data::sql::ResultSet<S> where S: core::marker::Sync
+impl<S> core::marker::Unpin for rich_data::sql::ResultSet<S> where S: core::marker::Unpin
+impl<S> core::marker::UnsafeUnpin for rich_data::sql::ResultSet<S> where S: core::marker::UnsafeUnpin
+impl<S> core::panic::unwind_safe::RefUnwindSafe for rich_data::sql::ResultSet<S> where S: core::panic::unwind_safe::RefUnwindSafe
+impl<S> core::panic::unwind_safe::UnwindSafe for rich_data::sql::ResultSet<S> where S: core::panic::unwind_safe::UnwindSafe
+pub const rich_data::sql::DEFAULT_LIMIT: usize
+pub fn rich_data::sql::alignment(&rich_ext::schema::model::DataType) -> rich::console::Justify
+pub fn rich_data::sql::typed_columns(&[alloc::string::String], core::option::Option<&rich_ext::schema::model::Schema>, &[rich_data::Row]) -> alloc::vec::Vec<rich_ext::table::Column>
+pub mod rich_data::stats
+pub struct rich_data::stats::ColumnStats
+pub rich_data::stats::ColumnStats::count: usize
+pub rich_data::stats::ColumnStats::distinct: usize
+pub rich_data::stats::ColumnStats::max: core::option::Option<alloc::string::String>
+pub rich_data::stats::ColumnStats::mean: core::option::Option<f64>
+pub rich_data::stats::ColumnStats::median: core::option::Option<f64>
+pub rich_data::stats::ColumnStats::min: core::option::Option<alloc::string::String>
+pub rich_data::stats::ColumnStats::name: alloc::string::String
+pub rich_data::stats::ColumnStats::nulls: usize
+pub rich_data::stats::ColumnStats::numeric: bool
+pub rich_data::stats::ColumnStats::quantiles: alloc::vec::Vec<(f64, f64)>
+pub rich_data::stats::ColumnStats::top: alloc::vec::Vec<(alloc::string::String, usize)>
+impl rich_data::stats::ColumnStats
+pub fn rich_data::stats::ColumnStats::summary(&self) -> alloc::string::String
+impl core::clone::Clone for rich_data::stats::ColumnStats
+pub fn rich_data::stats::ColumnStats::clone(&self) -> rich_data::stats::ColumnStats
+impl core::cmp::PartialEq for rich_data::stats::ColumnStats
+pub fn rich_data::stats::ColumnStats::eq(&self, &rich_data::stats::ColumnStats) -> bool
+impl core::fmt::Debug for rich_data::stats::ColumnStats
+pub fn rich_data::stats::ColumnStats::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::stats::ColumnStats
+impl core::marker::Freeze for rich_data::stats::ColumnStats
+impl core::marker::Send for rich_data::stats::ColumnStats
+impl core::marker::Sync for rich_data::stats::ColumnStats
+impl core::marker::Unpin for rich_data::stats::ColumnStats
+impl core::marker::UnsafeUnpin for rich_data::stats::ColumnStats
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::stats::ColumnStats
+impl core::panic::unwind_safe::UnwindSafe for rich_data::stats::ColumnStats
+pub struct rich_data::stats::Stats
+impl rich_data::stats::Stats
+pub fn rich_data::stats::Stats::columns(&self) -> &[rich_data::stats::ColumnStats]
+pub fn rich_data::stats::Stats::headers(&self) -> alloc::vec::Vec<alloc::string::String>
+pub fn rich_data::stats::Stats::of(&rich_data::Rows) -> Self
+pub fn rich_data::stats::Stats::to_table(&self) -> rich::table::Table
+pub fn rich_data::stats::Stats::with_options(&rich_data::Rows, &rich_data::stats::StatsOptions) -> Self
+impl core::clone::Clone for rich_data::stats::Stats
+pub fn rich_data::stats::Stats::clone(&self) -> rich_data::stats::Stats
+impl core::cmp::PartialEq for rich_data::stats::Stats
+pub fn rich_data::stats::Stats::eq(&self, &rich_data::stats::Stats) -> bool
+impl core::fmt::Debug for rich_data::stats::Stats
+pub fn rich_data::stats::Stats::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::stats::Stats
+impl rich::protocol::Renderable for rich_data::stats::Stats
+pub fn rich_data::stats::Stats::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_data::stats::Stats::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_data::stats::Stats
+impl core::marker::Send for rich_data::stats::Stats
+impl core::marker::Sync for rich_data::stats::Stats
+impl core::marker::Unpin for rich_data::stats::Stats
+impl core::marker::UnsafeUnpin for rich_data::stats::Stats
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::stats::Stats
+impl core::panic::unwind_safe::UnwindSafe for rich_data::stats::Stats
+pub struct rich_data::stats::StatsOptions
+pub rich_data::stats::StatsOptions::quantiles: alloc::vec::Vec<f64>
+pub rich_data::stats::StatsOptions::top: usize
+impl core::clone::Clone for rich_data::stats::StatsOptions
+pub fn rich_data::stats::StatsOptions::clone(&self) -> rich_data::stats::StatsOptions
+impl core::cmp::PartialEq for rich_data::stats::StatsOptions
+pub fn rich_data::stats::StatsOptions::eq(&self, &rich_data::stats::StatsOptions) -> bool
+impl core::default::Default for rich_data::stats::StatsOptions
+pub fn rich_data::stats::StatsOptions::default() -> Self
+impl core::fmt::Debug for rich_data::stats::StatsOptions
+pub fn rich_data::stats::StatsOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::stats::StatsOptions
+impl core::marker::Freeze for rich_data::stats::StatsOptions
+impl core::marker::Send for rich_data::stats::StatsOptions
+impl core::marker::Sync for rich_data::stats::StatsOptions
+impl core::marker::Unpin for rich_data::stats::StatsOptions
+impl core::marker::UnsafeUnpin for rich_data::stats::StatsOptions
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::stats::StatsOptions
+impl core::panic::unwind_safe::UnwindSafe for rich_data::stats::StatsOptions
+pub fn rich_data::stats::number(f64) -> alloc::string::String
+pub mod rich_data::window
+pub struct rich_data::window::RowWindow
+impl rich_data::window::RowWindow
+pub fn rich_data::window::RowWindow::columns(&self) -> &[alloc::string::String]
+pub fn rich_data::window::RowWindow::read(impl rich_data::RowSource, usize, usize) -> core::result::Result<Self, rich_data::DataError>
+pub fn rich_data::window::RowWindow::reader() -> rich_data::window::WindowReader
+pub fn rich_data::window::RowWindow::rows(&self) -> &[rich_data::Row]
+pub fn rich_data::window::RowWindow::schema(&self) -> core::option::Option<&rich_ext::schema::model::Schema>
+pub fn rich_data::window::RowWindow::start(&self) -> usize
+pub fn rich_data::window::RowWindow::to_virtual_table(&self) -> rich_ext::table::virtualized::VirtualTable<&rich_data::window::RowWindow>
+pub fn rich_data::window::RowWindow::total(&self) -> core::option::Option<usize>
+impl core::clone::Clone for rich_data::window::RowWindow
+pub fn rich_data::window::RowWindow::clone(&self) -> rich_data::window::RowWindow
+impl core::fmt::Debug for rich_data::window::RowWindow
+pub fn rich_data::window::RowWindow::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_ext::table::virtualized::VirtualRows for rich_data::window::RowWindow
+pub fn rich_data::window::RowWindow::row(&self, usize) -> core::option::Option<alloc::vec::Vec<rich_ext::table::Value>>
+pub fn rich_data::window::RowWindow::row_count(&self) -> core::option::Option<usize>
+impl core::marker::Freeze for rich_data::window::RowWindow
+impl core::marker::Send for rich_data::window::RowWindow
+impl core::marker::Sync for rich_data::window::RowWindow
+impl core::marker::Unpin for rich_data::window::RowWindow
+impl core::marker::UnsafeUnpin for rich_data::window::RowWindow
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::window::RowWindow
+impl core::panic::unwind_safe::UnwindSafe for rich_data::window::RowWindow
+pub struct rich_data::window::WindowReader
+impl rich_data::window::WindowReader
+pub fn rich_data::window::WindowReader::count(self, bool) -> Self
+pub fn rich_data::window::WindowReader::len(self, usize) -> Self
+pub fn rich_data::window::WindowReader::offset(self, usize) -> Self
+pub fn rich_data::window::WindowReader::read(&self, impl rich_data::RowSource) -> core::result::Result<rich_data::window::RowWindow, rich_data::DataError>
+pub fn rich_data::window::WindowReader::sample(self, usize) -> Self
+impl core::clone::Clone for rich_data::window::WindowReader
+pub fn rich_data::window::WindowReader::clone(&self) -> rich_data::window::WindowReader
+impl core::default::Default for rich_data::window::WindowReader
+pub fn rich_data::window::WindowReader::default() -> Self
+impl core::fmt::Debug for rich_data::window::WindowReader
+pub fn rich_data::window::WindowReader::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_data::window::WindowReader
+impl core::marker::Send for rich_data::window::WindowReader
+impl core::marker::Sync for rich_data::window::WindowReader
+impl core::marker::Unpin for rich_data::window::WindowReader
+impl core::marker::UnsafeUnpin for rich_data::window::WindowReader
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::window::WindowReader
+impl core::panic::unwind_safe::UnwindSafe for rich_data::window::WindowReader
+pub struct rich_data::DataError
+impl rich_data::DataError
+pub fn rich_data::DataError::at(usize, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_data::DataError::line(&self) -> core::option::Option<usize>
+pub fn rich_data::DataError::message(&self) -> &str
+pub fn rich_data::DataError::new(impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for rich_data::DataError
+pub fn rich_data::DataError::clone(&self) -> rich_data::DataError
+impl core::cmp::Eq for rich_data::DataError
+impl core::cmp::PartialEq for rich_data::DataError
+pub fn rich_data::DataError::eq(&self, &rich_data::DataError) -> bool
+impl core::error::Error for rich_data::DataError
+impl core::fmt::Debug for rich_data::DataError
+pub fn rich_data::DataError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_data::DataError
+pub fn rich_data::DataError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_data::DataError
+impl core::marker::Freeze for rich_data::DataError
+impl core::marker::Send for rich_data::DataError
+impl core::marker::Sync for rich_data::DataError
+impl core::marker::Unpin for rich_data::DataError
+impl core::marker::UnsafeUnpin for rich_data::DataError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::DataError
+impl core::panic::unwind_safe::UnwindSafe for rich_data::DataError
+pub struct rich_data::RecordSource<I>
+impl<I> rich_data::RecordSource<I> where I: core::iter::traits::iterator::Iterator<Item = core::result::Result<serde_json::value::Value, rich_data::DataError>>
+pub fn rich_data::RecordSource<I>::more_unknown_keys(&self) -> bool
+pub fn rich_data::RecordSource<I>::unknown_keys(&self) -> impl core::iter::traits::iterator::Iterator<Item = &str>
+impl<I: core::fmt::Debug> core::fmt::Debug for rich_data::RecordSource<I>
+pub fn rich_data::RecordSource<I>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<I> rich_data::RowSource for rich_data::RecordSource<I> where I: core::iter::traits::iterator::Iterator<Item = core::result::Result<serde_json::value::Value, rich_data::DataError>>
+pub fn rich_data::RecordSource<I>::collect_rows(self) -> core::result::Result<rich_data::Rows, rich_data::DataError> where Self: core::marker::Sized
+pub fn rich_data::RecordSource<I>::columns(&self) -> &[alloc::string::String]
+pub fn rich_data::RecordSource<I>::next_row(&mut self) -> core::option::Option<core::result::Result<rich_data::Row, rich_data::DataError>>
+pub fn rich_data::RecordSource<I>::schema(&self) -> core::option::Option<&rich_ext::schema::model::Schema>
+impl<I> core::marker::Freeze for rich_data::RecordSource<I> where I: core::marker::Freeze
+impl<I> core::marker::Send for rich_data::RecordSource<I> where I: core::marker::Send
+impl<I> core::marker::Sync for rich_data::RecordSource<I> where I: core::marker::Sync
+impl<I> core::marker::Unpin for rich_data::RecordSource<I> where I: core::marker::Unpin
+impl<I> core::marker::UnsafeUnpin for rich_data::RecordSource<I> where I: core::marker::UnsafeUnpin
+impl<I> core::panic::unwind_safe::RefUnwindSafe for rich_data::RecordSource<I> where I: core::panic::unwind_safe::RefUnwindSafe
+impl<I> core::panic::unwind_safe::UnwindSafe for rich_data::RecordSource<I> where I: core::panic::unwind_safe::UnwindSafe
+pub struct rich_data::Rows
+impl rich_data::Rows
+pub fn rich_data::Rows::column(&self, usize) -> impl core::iter::traits::iterator::Iterator<Item = &rich_ext::table::Value>
+pub fn rich_data::Rows::column_index(&self, &str) -> core::option::Option<usize>
+pub fn rich_data::Rows::columns(&self) -> &[alloc::string::String]
+pub fn rich_data::Rows::into_parts(self) -> (alloc::vec::Vec<alloc::string::String>, core::option::Option<rich_ext::schema::model::Schema>, alloc::vec::Vec<rich_data::Row>)
+pub fn rich_data::Rows::into_source(self) -> rich_data::RowsSource
+pub fn rich_data::Rows::is_empty(&self) -> bool
+pub fn rich_data::Rows::len(&self) -> usize
+pub fn rich_data::Rows::new(impl core::iter::traits::collect::IntoIterator<Item = impl core::convert::Into<alloc::string::String>>) -> Self
+pub fn rich_data::Rows::push(&mut self, impl core::iter::traits::collect::IntoIterator<Item = rich_ext::table::Value>) -> &mut Self
+pub fn rich_data::Rows::rows(&self) -> &[rich_data::Row]
+pub fn rich_data::Rows::rows_mut(&mut self) -> &mut [rich_data::Row]
+pub fn rich_data::Rows::schema(&self) -> core::option::Option<&rich_ext::schema::model::Schema>
+pub fn rich_data::Rows::set_schema(&mut self, core::option::Option<rich_ext::schema::model::Schema>)
+pub fn rich_data::Rows::to_table_data(&self) -> rich_ext::table::data::TableData
+pub fn rich_data::Rows::with_schema(self, rich_ext::schema::model::Schema) -> Self
+impl core::clone::Clone for rich_data::Rows
+pub fn rich_data::Rows::clone(&self) -> rich_data::Rows
+impl core::default::Default for rich_data::Rows
+pub fn rich_data::Rows::default() -> rich_data::Rows
+impl core::fmt::Debug for rich_data::Rows
+pub fn rich_data::Rows::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_ext::table::virtualized::VirtualRows for rich_data::Rows
+pub fn rich_data::Rows::row(&self, usize) -> core::option::Option<alloc::vec::Vec<rich_ext::table::Value>>
+pub fn rich_data::Rows::row_count(&self) -> core::option::Option<usize>
+pub fn rich_data::Rows::rows(&self, usize, usize) -> alloc::vec::Vec<alloc::vec::Vec<rich_ext::table::Value>>
+impl core::marker::Freeze for rich_data::Rows
+impl core::marker::Send for rich_data::Rows
+impl core::marker::Sync for rich_data::Rows
+impl core::marker::Unpin for rich_data::Rows
+impl core::marker::UnsafeUnpin for rich_data::Rows
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::Rows
+impl core::panic::unwind_safe::UnwindSafe for rich_data::Rows
+pub struct rich_data::RowsSource
+impl core::fmt::Debug for rich_data::RowsSource
+pub fn rich_data::RowsSource::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_data::RowSource for rich_data::RowsSource
+pub fn rich_data::RowsSource::collect_rows(self) -> core::result::Result<rich_data::Rows, rich_data::DataError> where Self: core::marker::Sized
+pub fn rich_data::RowsSource::columns(&self) -> &[alloc::string::String]
+pub fn rich_data::RowsSource::next_row(&mut self) -> core::option::Option<core::result::Result<rich_data::Row, rich_data::DataError>>
+pub fn rich_data::RowsSource::schema(&self) -> core::option::Option<&rich_ext::schema::model::Schema>
+impl core::marker::Freeze for rich_data::RowsSource
+impl core::marker::Send for rich_data::RowsSource
+impl core::marker::Sync for rich_data::RowsSource
+impl core::marker::Unpin for rich_data::RowsSource
+impl core::marker::UnsafeUnpin for rich_data::RowsSource
+impl core::panic::unwind_safe::RefUnwindSafe for rich_data::RowsSource
+impl core::panic::unwind_safe::UnwindSafe for rich_data::RowsSource
+pub trait rich_data::RowSource
+pub fn rich_data::RowSource::collect_rows(self) -> core::result::Result<rich_data::Rows, rich_data::DataError> where Self: core::marker::Sized
+pub fn rich_data::RowSource::columns(&self) -> &[alloc::string::String]
+pub fn rich_data::RowSource::next_row(&mut self) -> core::option::Option<core::result::Result<rich_data::Row, rich_data::DataError>>
+pub fn rich_data::RowSource::schema(&self) -> core::option::Option<&rich_ext::schema::model::Schema>
+impl rich_data::RowSource for rich_data::RowsSource
+pub fn rich_data::RowsSource::collect_rows(self) -> core::result::Result<rich_data::Rows, rich_data::DataError> where Self: core::marker::Sized
+pub fn rich_data::RowsSource::columns(&self) -> &[alloc::string::String]
+pub fn rich_data::RowsSource::next_row(&mut self) -> core::option::Option<core::result::Result<rich_data::Row, rich_data::DataError>>
+pub fn rich_data::RowsSource::schema(&self) -> core::option::Option<&rich_ext::schema::model::Schema>
+impl<I: core::iter::traits::iterator::Iterator<Item = arrow_array::record_batch::RecordBatch>> rich_data::RowSource for rich_data::arrow::BatchSource<I>
+pub fn rich_data::arrow::BatchSource<I>::collect_rows(self) -> core::result::Result<rich_data::Rows, rich_data::DataError> where Self: core::marker::Sized
+pub fn rich_data::arrow::BatchSource<I>::columns(&self) -> &[alloc::string::String]
+pub fn rich_data::arrow::BatchSource<I>::next_row(&mut self) -> core::option::Option<core::result::Result<rich_data::Row, rich_data::DataError>>
+pub fn rich_data::arrow::BatchSource<I>::schema(&self) -> core::option::Option<&rich_ext::schema::model::Schema>
+impl<I> rich_data::RowSource for rich_data::RecordSource<I> where I: core::iter::traits::iterator::Iterator<Item = core::result::Result<serde_json::value::Value, rich_data::DataError>>
+pub fn rich_data::RecordSource<I>::collect_rows(self) -> core::result::Result<rich_data::Rows, rich_data::DataError> where Self: core::marker::Sized
+pub fn rich_data::RecordSource<I>::columns(&self) -> &[alloc::string::String]
+pub fn rich_data::RecordSource<I>::next_row(&mut self) -> core::option::Option<core::result::Result<rich_data::Row, rich_data::DataError>>
+pub fn rich_data::RecordSource<I>::schema(&self) -> core::option::Option<&rich_ext::schema::model::Schema>
+impl<R: std::io::BufRead> rich_data::RowSource for rich_data::csv::CsvSource<R>
+pub fn rich_data::csv::CsvSource<R>::collect_rows(self) -> core::result::Result<rich_data::Rows, rich_data::DataError> where Self: core::marker::Sized
+pub fn rich_data::csv::CsvSource<R>::columns(&self) -> &[alloc::string::String]
+pub fn rich_data::csv::CsvSource<R>::next_row(&mut self) -> core::option::Option<core::result::Result<rich_data::Row, rich_data::DataError>>
+pub fn rich_data::csv::CsvSource<R>::schema(&self) -> core::option::Option<&rich_ext::schema::model::Schema>
+pub type rich_data::Row = alloc::vec::Vec<rich_ext::table::Value>

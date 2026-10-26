@@ -47,6 +47,12 @@ def test_the_stubs_describe_exactly_the_compiled_module():
             stubbed.add(node.name)
         elif isinstance(node, ast.AnnAssign) and isinstance(node.target, ast.Name):
             stubbed.add(node.target.id)
+        elif isinstance(node, ast.Assign) and isinstance(node.value, ast.Call):
+            # `TaskID = NewType("TaskID", int)`
+            stubbed.update(target.id for target in node.targets if isinstance(target, ast.Name))
+    # Private helpers are stubbed too (the Python modules import them);
+    # scripts/check_python_stubs.py checks them with stubtest.
+    stubbed = {name for name in stubbed if not name.startswith("_")} | {"__version__"}
     aliases = {
         "JustifyMethod",
         "OverflowMethod",

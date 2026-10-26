@@ -1,0 +1,3 @@
+pub mod rich_cli
+pub fn rich_cli::run(alloc::vec::Vec<std::ffi::os_str::OsString>) -> std::process::ExitCode
+pub fn rich_cli::run_embedded(alloc::vec::Vec<std::ffi::os_str::OsString>, alloc::vec::Vec<std::ffi::os_str::OsString>) -> std::process::ExitCode

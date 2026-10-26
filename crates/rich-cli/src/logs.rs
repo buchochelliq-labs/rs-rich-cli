@@ -1123,7 +1123,7 @@ impl<'a> Stream<'a> {
                 // Standard output is the records: the summary goes to
                 // standard error, as plain text.
                 self.out.flush()?;
-                let console = Console::builder().no_color(true).build();
+                let console = crate::console_builder().no_color(true).build();
                 eprint!("{}", console.render_export(&summary));
             } else {
                 self.out.write_all(b"\n")?;

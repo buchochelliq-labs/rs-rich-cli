@@ -1,9 +1,10 @@
 //! The Console — the high-level rendering entry point.
 //!
-//! Port of upstream `rich/console.py` (core subset): terminal / color-system /
-//! width detection, markup + highlighter application, and writing styled output.
-//! Layout options, capture, export, and paging land in the Console-completeness
-//! issue.
+//! Port of upstream `rich/console.py`: terminal, colour-system and size
+//! detection, markup and highlighting, printing and logging, capture,
+//! recording and export, render hooks, the alternate screen and paging.
+//! What reads Python objects (file objects, Jupyter, `print_exception`,
+//! `log_locals`) is not ported (docs/DIVERGENCES.md §43).
 
 use std::io::{IsTerminal, Write};
 
@@ -199,6 +200,95 @@ pub struct RenderStrOptions<'a> {
     pub highlighter: Option<&'a dyn Highlighter>,
 }
 
+/// An environment to detect the terminal from, in place of the process's:
+/// upstream's `Console(_environ=…)`. See [`ConsoleBuilder::environ`].
+pub type Environ = std::collections::HashMap<String, String>;
+
+/// A replacement for [`Console::on_broken_pipe`]'s default.
+type BrokenPipeHandler = std::sync::Arc<dyn Fn(&Console) + Send + Sync>;
+
+/// Upstream's `get_datetime`: the clock [`Console::log`] reads.
+type GetDateTime = std::sync::Arc<dyn Fn() -> std::time::SystemTime + Send + Sync>;
+
+/// Upstream's `FormatTimeCallable`: formats the time column of
+/// [`Console::log`].
+type FormatTime = std::sync::Arc<dyn Fn(std::time::SystemTime) -> Text + Send + Sync>;
+
+/// Upstream's `log_time_format`: a `strftime` format or a callable.
+#[derive(Clone)]
+enum LogTimeFormat {
+    Strftime(String),
+    Callable(FormatTime),
+}
+
+/// Read `key` from `environ`, or from the process environment without one.
+fn environ_get(environ: Option<&Environ>, key: &str) -> Option<String> {
+    match environ {
+        Some(environ) => environ.get(key).cloned(),
+        None => std::env::var_os(key).map(|value| value.to_string_lossy().into_owned()),
+    }
+}
+
+/// Python's `str.isdigit()` then `int(…)`, for `COLUMNS` and `LINES`: only
+/// a non-empty run of digits counts.
+fn env_int(environ: Option<&Environ>, key: &str) -> Option<usize> {
+    let value = environ_get(environ, key)?;
+    if value.is_empty() || !value.bytes().all(|byte| byte.is_ascii_digit()) {
+        return None;
+    }
+    value.parse().ok()
+}
+
+/// Hooks in to the render process. Port of `rich.console.RenderHook`: a
+/// hook pushed with [`Console::push_render_hook`] is handed what each
+/// `print` and `log` is about to write, and returns what to write instead
+/// (upstream's live display adds a cursor move before the output and
+/// itself after it).
+///
+/// Upstream hands the hook the renderables themselves, rendered afterwards
+/// at the print's options. Here each one is already rendered at those
+/// options when the hook sees it, so that it can be kept beyond the call:
+/// putting one in another renderable (a panel, say) shows the same lines,
+/// where upstream's would render again at the new width. What the hook adds
+/// is rendered at the print's options, its last line ended unless it says
+/// otherwise ([`Renderable::print_end_line`]).
+pub trait RenderHook: Send + Sync {
+    /// Return the renderables to write in place of `renderables`. Port of
+    /// `RenderHook.process_renderables`.
+    fn process_renderables(
+        &self,
+        renderables: Vec<Box<dyn Renderable>>,
+    ) -> Vec<Box<dyn Renderable>>;
+}
+
+/// One printed renderable, already rendered at the print's options (its last
+/// line ended): what a [`RenderHook`] is handed.
+struct Rendered(Vec<Segment>);
+
+impl Renderable for Rendered {
+    fn rich_render(&self, _console: &Console, _options: &ConsoleOptions) -> Vec<Segment> {
+        self.0.clone()
+    }
+
+    fn measure(
+        &self,
+        _console: &Console,
+        _options: &ConsoleOptions,
+    ) -> crate::measure::Measurement {
+        let widest = Segment::split_lines(&self.0)
+            .iter()
+            .map(|line| Segment::get_line_length(line))
+            .max()
+            .unwrap_or(0);
+        crate::measure::Measurement::new(widest, widest)
+    }
+
+    /// The line break is already among the segments.
+    fn print_end_line(&self, _options: &ConsoleOptions) -> bool {
+        false
+    }
+}
+
 /// Per-thread capture buffer stacks (innermost capture last).
 type CaptureStacks = std::collections::HashMap<std::thread::ThreadId, Vec<Vec<Segment>>>;
 
@@ -218,10 +308,30 @@ pub struct Console {
     /// The default code highlighter (see `ConsoleCodeHighlighting`).
     code_highlighting: Option<crate::protocol::CodeHighlighting>,
     color_system: Option<ColorSystem>,
-    width: usize,
-    height: usize,
+    /// Upstream's `Console._width`: the width given, or read from `COLUMNS`
+    /// when the console was built. `None` falls back to `terminal_size`.
+    width: Option<usize>,
+    /// Upstream's `Console._height`, as `width` (`LINES`).
+    height: Option<usize>,
+    /// The terminal's size when the console was built (80x25 when it has
+    /// none), the width already less one on a legacy Windows console. Upstream
+    /// asks `os.get_terminal_size` on each `size` read; this port asks once.
+    terminal_size: ConsoleDimensions,
+    /// Upstream's `Console._environ`: the environment detection reads, or
+    /// `None` for the process environment.
+    environ: Option<std::sync::Arc<Environ>>,
     is_terminal: bool,
     no_color: bool,
+    /// Upstream's `Console.quiet`: suppress all output. Atomic because
+    /// [`on_broken_pipe`](Console::on_broken_pipe) sets it through `&self`.
+    quiet: std::sync::atomic::AtomicBool,
+    /// Upstream's `Console.soft_wrap`: the default of `print(soft_wrap=…)`.
+    soft_wrap: bool,
+    /// Upstream's `Console.style`: a style applied to all output.
+    style: Option<crate::style::StyleType>,
+    /// What a write to a closed pipe calls: upstream's overridable
+    /// `Console.on_broken_pipe`. `None` runs upstream's default.
+    on_broken_pipe: Option<BrokenPipeHandler>,
     /// Upstream's `Console.get_time`: the clock animations read.
     get_time: GetTime,
     emoji: bool,
@@ -254,7 +364,31 @@ pub struct Console {
     /// Upstream's `Console._is_alt_screen`: set by
     /// [`set_alt_screen`](Console::set_alt_screen).
     is_alt_screen: std::sync::atomic::AtomicBool,
+    /// Upstream's `Console.record`: keep what is written for the
+    /// `export_*_recorded` methods.
+    record: std::sync::atomic::AtomicBool,
+    /// Upstream's `Console._record_buffer`: every segment written while
+    /// recording (not what a capture takes, nor what a quiet console drops).
+    record_buffer: std::sync::Mutex<Vec<Segment>>,
+    /// Upstream's `Console._log_render`, built from `log_time` and
+    /// `log_path`; it remembers the last time shown.
+    log_render: std::sync::Mutex<crate::log_render::LogRender>,
+    log_time: bool,
+    log_path: bool,
+    log_time_format: LogTimeFormat,
+    /// Upstream's `Console.get_datetime` (default `datetime.now`).
+    get_datetime: GetDateTime,
+    /// Upstream's `Console._render_hooks`.
+    render_hooks: std::sync::Mutex<Vec<std::sync::Arc<dyn RenderHook>>>,
+    /// Upstream's `Console._live_stack`. Shared with every clone: a `Live`
+    /// owns its console, so displays meant for one console get clones of
+    /// it, and nest as upstream's displays on one console object do.
+    live_stack: LiveStack,
 }
+
+/// A console's live stack, shared by its clones.
+type LiveStack =
+    std::sync::Arc<std::sync::Mutex<Vec<std::sync::Arc<dyn std::any::Any + Send + Sync>>>>;
 
 /// A `Send`-only highlighter behind a lock, so it can be shared by a `Sync`
 /// console.
@@ -310,6 +444,12 @@ impl Clone for Console {
     /// An independent console with the same configuration, theme stack and
     /// highlighters (shared). The clone starts with an empty capture buffer
     /// and is not capturing, whatever the original is doing.
+    ///
+    /// The live stack ([`set_live`](Console::set_live)) is the one thing the
+    /// clone shares with the original: each [`Live`](crate::live::Live)
+    /// owns a console, so displays on one terminal are given clones of one
+    /// console, and a display started on a clone while another runs nests
+    /// inside it, as upstream's displays on a single console do.
     fn clone(&self) -> Self {
         Console {
             render_environment: self.render_environment.clone(),
@@ -318,8 +458,14 @@ impl Clone for Console {
             color_system: self.color_system,
             width: self.width,
             height: self.height,
+            terminal_size: self.terminal_size,
+            environ: self.environ.clone(),
             is_terminal: self.is_terminal,
             no_color: self.no_color,
+            quiet: std::sync::atomic::AtomicBool::new(self.quiet()),
+            soft_wrap: self.soft_wrap,
+            style: self.style.clone(),
+            on_broken_pipe: self.on_broken_pipe.clone(),
             get_time: self.get_time.clone(),
             emoji: self.emoji,
             highlight: self.highlight,
@@ -334,6 +480,15 @@ impl Clone for Console {
             tab_size: self.tab_size,
             captures: std::sync::Mutex::new(CaptureStacks::new()),
             is_alt_screen: std::sync::atomic::AtomicBool::new(false),
+            record: std::sync::atomic::AtomicBool::new(self.record()),
+            record_buffer: std::sync::Mutex::new(Vec::new()),
+            render_hooks: std::sync::Mutex::new(Vec::new()),
+            live_stack: self.live_stack.clone(),
+            log_render: std::sync::Mutex::new(new_log_render(self.log_time, self.log_path)),
+            log_time: self.log_time,
+            log_path: self.log_path,
+            log_time_format: self.log_time_format.clone(),
+            get_datetime: self.get_datetime.clone(),
         }
     }
 }
@@ -364,6 +519,67 @@ impl Drop for ThemeContext<'_> {
         // caller already popped back down to the base through the guard.
         let _ = self.console.pop_theme();
     }
+}
+
+/// The alternate screen in use on a [`Console`] until this guard drops.
+/// Returned by [`Console::screen`]; upstream's `ScreenContext`.
+pub struct ScreenContext<'a> {
+    console: &'a Console,
+    hide_cursor: bool,
+    changed: bool,
+    /// Always `Some`; taken only while it is rebuilt.
+    screen: Option<crate::screen::Screen>,
+    style: crate::style::StyleType,
+}
+
+impl ScreenContext<'_> {
+    /// Print the screen, after replacing what it shows when `renderables`
+    /// are given (one after another, upstream's `Group`) and its style when
+    /// `style` is. Port of `ScreenContext.update(*renderables, style=…)`.
+    pub fn update(
+        &mut self,
+        renderables: Vec<Box<dyn Renderable>>,
+        style: Option<crate::style::StyleType>,
+    ) {
+        if let Some(style) = style {
+            self.style = style;
+        }
+        let screen = if renderables.is_empty() {
+            self.screen
+                .take()
+                .unwrap_or_else(crate::screen::Screen::empty)
+        } else {
+            crate::screen::Screen::from_renderables(renderables)
+        };
+        let screen = screen.style(self.style.clone());
+        // `console.print(self.screen, end="")`.
+        self.console.print(&screen);
+        self.screen = Some(screen);
+    }
+
+    /// The console the screen is on.
+    pub fn console(&self) -> &Console {
+        self.console
+    }
+}
+
+impl Drop for ScreenContext<'_> {
+    fn drop(&mut self) {
+        // Upstream's `__exit__`.
+        if self.changed {
+            self.console.set_alt_screen(false);
+            if self.hide_cursor {
+                self.console.show_cursor(true);
+            }
+        }
+    }
+}
+
+/// Lock `mutex`, recovering it if a panicking holder poisoned it.
+fn lock_or_recover<T>(mutex: &std::sync::Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
 }
 
 impl Default for Console {
@@ -407,15 +623,90 @@ impl Console {
         (self.get_time)()
     }
 
-    /// The detected (or configured) width in cells.
+    /// The width in cells. Port of the `Console.width` property: the
+    /// width of [`size`](Self::size).
     pub fn width(&self) -> usize {
-        self.width
+        self.size().width
     }
 
-    /// The detected (or configured) height in rows. Used by height-aware
-    /// renderables such as [`Layout`](crate::layout::Layout).
+    /// The height in rows. Port of the `Console.height` property: the
+    /// height of [`size`](Self::size). Used by height-aware renderables such
+    /// as [`Layout`](crate::layout::Layout).
     pub fn height(&self) -> usize {
-        self.height
+        self.size().height
+    }
+
+    /// Set the width. Port of the `Console.width` setter.
+    pub fn set_width(&mut self, width: usize) {
+        self.width = Some(width);
+    }
+
+    /// Set the height. Port of the `Console.height` setter.
+    pub fn set_height(&mut self, height: usize) {
+        self.height = Some(height);
+    }
+
+    /// Set the width and height. Port of the `Console.size` setter.
+    pub fn set_size(&mut self, width: usize, height: usize) {
+        self.width = Some(width);
+        self.height = Some(height);
+    }
+
+    /// Whether all output is suppressed. Port of `Console.quiet`.
+    pub fn quiet(&self) -> bool {
+        self.quiet.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Suppress (or restore) all output. Upstream's `Console.quiet` is a
+    /// plain attribute; [`on_broken_pipe`](Self::on_broken_pipe) sets it.
+    pub fn set_quiet(&self, quiet: bool) {
+        self.quiet.store(quiet, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// The default of `print(soft_wrap=…)`. Port of `Console.soft_wrap`.
+    pub fn soft_wrap(&self) -> bool {
+        self.soft_wrap
+    }
+
+    /// Change the soft wrap default. Upstream's `Console.soft_wrap` is a
+    /// plain attribute.
+    pub fn set_soft_wrap(&mut self, soft_wrap: bool) {
+        self.soft_wrap = soft_wrap;
+    }
+
+    /// The style applied to all output, if any. Port of `Console.style`.
+    pub fn style(&self) -> Option<&crate::style::StyleType> {
+        self.style.as_ref()
+    }
+
+    /// Change the style applied to all output. Upstream's `Console.style`
+    /// is a plain attribute.
+    pub fn set_style(&mut self, style: Option<crate::style::StyleType>) {
+        self.style = style;
+    }
+
+    /// Whether the console writes to a terminal that cannot render styles:
+    /// `TERM` is `dumb` or `unknown`. Port of `Console.is_dumb_terminal`.
+    pub fn is_dumb_terminal(&self) -> bool {
+        self.is_terminal && term_is_dumb(self.environ.as_deref())
+    }
+
+    /// Called when a write fails because the reader closed the pipe. Port of
+    /// `Console.on_broken_pipe`: by default the console goes
+    /// [quiet](Self::quiet) and the process exits with status 1 (upstream
+    /// raises `SystemExit(1)`). Upstream lets a subclass override it; here
+    /// [`ConsoleBuilder::on_broken_pipe`] gives the replacement.
+    ///
+    /// Upstream also points standard output at `os.devnull` so that the
+    /// interpreter's flush at exit does not fail again. A Rust process does
+    /// not flush at exit, so nothing is redirected.
+    pub fn on_broken_pipe(&self) {
+        if let Some(handler) = &self.on_broken_pipe {
+            handler(self);
+            return;
+        }
+        self.set_quiet(true);
+        std::process::exit(1);
     }
 
     /// Whether output is going to a real terminal.
@@ -526,28 +817,45 @@ impl Console {
 
     /// The default render options for this console (full width, no height).
     pub fn options(&self) -> ConsoleOptions {
+        let size = self.size();
         ConsoleOptions {
             min_width: 1,
-            max_width: self.width,
+            max_width: size.width,
             height: None,
             justify: Justify::Default,
             overflow: None,
             no_wrap: None,
             highlight: None,
             markup: None,
-            max_height: self.height,
+            max_height: size.height,
             encoding: self.encoding().to_string(),
             is_terminal: self.is_terminal,
             legacy_windows: self.legacy_windows,
-            size: self.size(),
+            size,
         }
     }
 
-    /// The size of the console. Port of the `Console.size` property.
+    /// The size of the console. Port of the `Console.size` property: the
+    /// width and height given (the width one less on a legacy Windows
+    /// console, as upstream subtracts it when both are set), else 80x25 on
+    /// a [dumb terminal](Self::is_dumb_terminal), else the terminal's size
+    /// for whichever was not given.
     pub fn size(&self) -> ConsoleDimensions {
+        if let (Some(width), Some(height)) = (self.width, self.height) {
+            return ConsoleDimensions {
+                width: width.saturating_sub(usize::from(self.legacy_windows)),
+                height,
+            };
+        }
+        if self.is_dumb_terminal() {
+            return ConsoleDimensions {
+                width: DEFAULT_WIDTH,
+                height: DEFAULT_HEIGHT,
+            };
+        }
         ConsoleDimensions {
-            width: self.width,
-            height: self.height,
+            width: self.width.unwrap_or(self.terminal_size.width),
+            height: self.height.unwrap_or(self.terminal_size.height),
         }
     }
 
@@ -593,7 +901,30 @@ impl Console {
         renderable: &dyn Renderable,
         options: &ConsoleOptions,
     ) -> Vec<Segment> {
+        self.print_segments(renderable, options, false)
+    }
+
+    /// The segments `print` writes for `renderable`: those of
+    /// [`render_segments_with`](Self::render_segments_with), followed, when
+    /// `end_line` and the renderable ends its last line, by the line break.
+    ///
+    /// The console's [`soft_wrap`](Self::soft_wrap) applies as upstream's
+    /// `print(soft_wrap=None)` takes it (no wrapping, `overflow="ignore"`,
+    /// nothing cropped), and its [`style`](Self::style) goes under all of
+    /// the output (`_collect_renderables` wraps each renderable in `Styled`).
+    fn print_segments(
+        &self,
+        renderable: &dyn Renderable,
+        options: &ConsoleOptions,
+        end_line: bool,
+    ) -> Vec<Segment> {
         let mut options = options.clone();
+        let crop = !self.soft_wrap;
+        if self.soft_wrap {
+            options.no_wrap = options.no_wrap.or(Some(true));
+            options.overflow = options.overflow.or(Some(Overflow::Ignore));
+        }
+        let ends_line = end_line && Self::print_ends_line(renderable, &options);
         let joined;
         let joined_text = renderable.printed_text();
         let renderable = match joined_text.clone() {
@@ -625,17 +956,40 @@ impl Console {
             let measurement = renderable.measure(self, &options);
             options.max_width = measurement.maximum.min(options.max_width).max(1);
         }
-        let segments = match align {
+        let mut segments = match align {
             // `Console.render` yields nothing when there is no width.
             _ if options.max_width < 1 => Vec::new(),
             Some(align) => crate::align::Align::render_child(renderable, align, self, &options),
             None => renderable.rich_render(self, &options),
         };
+        if !segments.is_empty() {
+            if ends_line {
+                segments.push(Segment::line());
+            }
+            if let Some(style) = self.console_style() {
+                segments = Segment::apply_style_with(&segments, Some(&style), None);
+            }
+        }
+        // A print (not a render to a string) goes through the render hooks.
+        if end_line {
+            segments = self.process_render_hooks(vec![segments], &options).concat();
+        }
+        if segments.is_empty() || !crop {
+            return segments;
+        }
         // `Console.print(crop=True)`: the final backstop against a line running
         // off the side of the terminal. Renderables that fit are untouched; this
         // is what gives `Overflow::Ignore` its "wrap nothing, but still don't
-        // corrupt the display" behaviour.
-        Segment::crop_lines(&segments, self.width)
+        // corrupt the display" behaviour. The line breaks come out plain, as
+        // upstream's `split_and_crop_lines` writes them.
+        Segment::crop_lines(&segments, self.width())
+    }
+
+    /// The console's [`style`](Self::style), resolved against its theme
+    /// (an unknown name is no style on this lenient print path).
+    fn console_style(&self) -> Option<Style> {
+        let style = self.style.as_ref()?;
+        self.get_style(style).ok().filter(|style| !style.is_null())
     }
 
     /// Render a renderable to segments. Port of `Console.render`: `options`
@@ -677,7 +1031,8 @@ impl Console {
     /// `print(…, end="")` when `newline` is false. Output written straight to
     /// stdout is flushed in that case, so a prompt shows before input is read.
     fn emit_end(&self, segments: Vec<Segment>, newline: bool) {
-        if segments.is_empty() {
+        // `_check_buffer`: a quiet console drops its output, captured or not.
+        if segments.is_empty() || self.quiet() {
             return;
         }
         let segments = {
@@ -691,15 +1046,29 @@ impl Console {
             }
             segments
         };
+        // `_write_buffer`: what is written is recorded first.
+        if self.record() {
+            let mut recorded = self.lock_record_buffer();
+            recorded.extend(segments.iter().cloned());
+            if newline {
+                recorded.push(Segment::line());
+            }
+        }
         let mut output = self.segments_to_string(&segments);
         if newline {
             output.push('\n');
         }
         let stdout = std::io::stdout();
         let mut lock = stdout.lock();
-        let _ = write!(lock, "{output}");
-        if !newline {
-            let _ = lock.flush();
+        let mut written = lock.write_all(output.as_bytes());
+        if written.is_ok() && !newline {
+            written = lock.flush();
+        }
+        drop(lock);
+        // `except BrokenPipeError: self.on_broken_pipe()`. Other write
+        // errors are ignored, as this port has always done.
+        if written.is_err_and(|error| error.kind() == std::io::ErrorKind::BrokenPipe) {
+            self.on_broken_pipe();
         }
     }
 
@@ -831,8 +1200,8 @@ impl Console {
     /// printed `Text` defers to these options, because upstream's `Text.join`
     /// drops the text's own `justify`, `overflow` and `no_wrap`.
     pub fn print_with(&self, renderable: &dyn Renderable, options: &ConsoleOptions) {
-        let segments = self.render_segments_with(renderable, options);
-        self.emit_end(segments, Self::print_ends_line(renderable, options));
+        let segments = self.print_segments(renderable, options, true);
+        self.emit_end(segments, false);
     }
 
     /// Like [`render_export`](Self::render_export), with explicit render
@@ -842,12 +1211,8 @@ impl Console {
         renderable: &dyn Renderable,
         options: &ConsoleOptions,
     ) -> String {
-        let segments = self.render_segments_with(renderable, options);
-        let mut out = self.segments_to_string(&segments);
-        if !segments.is_empty() && Self::print_ends_line(renderable, options) {
-            out.push('\n');
-        }
-        out
+        let segments = self.print_segments(renderable, options, true);
+        self.segments_to_string(&segments)
     }
 
     /// Write a terminal control sequence to stdout.
@@ -855,23 +1220,135 @@ impl Console {
     /// Port of `Console.control`. Control codes are only written when output is
     /// a real terminal (they are meaningless when redirected to a file).
     pub fn control(&self, control: &crate::control::Control) {
-        if !self.is_terminal {
-            return;
-        }
-        let text = control.as_str();
         // Upstream buffers control codes with everything else, so a capture
-        // records them.
-        if let Some(buffer) = current_capture(&mut self.lock_captures()) {
-            if !text.is_empty() {
-                buffer.push(Segment::control(text));
-            }
-            return;
-        }
+        // or a recording keeps them; only a terminal is sent them
+        // (`_render_buffer` drops them otherwise).
+        let text = control.as_str();
         if !text.is_empty() {
-            let stdout = std::io::stdout();
-            let mut lock = stdout.lock();
-            let _ = write!(lock, "{text}");
+            self.emit_end(vec![Segment::control(text)], false);
         }
+    }
+
+    /// Add a render hook to the stack. Port of `Console.push_render_hook`.
+    pub fn push_render_hook(&self, hook: std::sync::Arc<dyn RenderHook>) {
+        lock_or_recover(&self.render_hooks).push(hook);
+    }
+
+    /// Remove the last render hook pushed. Port of
+    /// `Console.pop_render_hook`; with none left, nothing happens (upstream
+    /// raises `IndexError`).
+    pub fn pop_render_hook(&self) {
+        lock_or_recover(&self.render_hooks).pop();
+    }
+
+    /// Hand what a print is about to write to the render hooks, in the order
+    /// they were pushed, and render what they return. Each item is one
+    /// renderable already rendered, its last line ended.
+    fn process_render_hooks(
+        &self,
+        items: Vec<Vec<Segment>>,
+        options: &ConsoleOptions,
+    ) -> Vec<Vec<Segment>> {
+        let hooks = lock_or_recover(&self.render_hooks).clone();
+        if hooks.is_empty() {
+            return items;
+        }
+        let mut renderables: Vec<Box<dyn Renderable>> = items
+            .into_iter()
+            .map(|segments| Box::new(Rendered(segments)) as Box<dyn Renderable>)
+            .collect();
+        for hook in &hooks {
+            renderables = hook.process_renderables(renderables);
+        }
+        renderables
+            .iter()
+            .map(|renderable| {
+                let mut segments = self.render(renderable.as_ref(), Some(options));
+                if !segments.is_empty() && renderable.print_end_line(options) {
+                    segments.push(Segment::line());
+                }
+                segments
+            })
+            .collect()
+    }
+
+    /// Push a live display on to this console's stack, returning whether it
+    /// is the only one (the display that draws). Port of `Console.set_live`,
+    /// which upstream's `Live` calls when it starts.
+    ///
+    /// The stack is shared by the console's clones. A
+    /// [`Live`](crate::live::Live) pushes itself here when it starts and
+    /// pops the stack when it stops; one started while the stack is not
+    /// empty is nested, and the first display draws it below its own
+    /// renderable. Anything else pushed here takes a place on the stack and
+    /// draws nothing.
+    pub fn set_live(&self, live: std::sync::Arc<dyn std::any::Any + Send + Sync>) -> bool {
+        let mut stack = lock_or_recover(&self.live_stack);
+        stack.push(live);
+        stack.len() == 1
+    }
+
+    /// Pop the last live display pushed by [`set_live`](Self::set_live).
+    /// Port of `Console.clear_live`; with none left, nothing happens
+    /// (upstream raises `IndexError`).
+    pub fn clear_live(&self) {
+        lock_or_recover(&self.live_stack).pop();
+    }
+
+    /// What the live stack holds now, first pushed first (upstream's
+    /// `Console._live_stack`).
+    pub(crate) fn live_stack(&self) -> Vec<std::sync::Arc<dyn std::any::Any + Send + Sync>> {
+        lock_or_recover(&self.live_stack).clone()
+    }
+
+    /// Use the alternate screen until the returned guard drops. Port of
+    /// `Console.screen(hide_cursor=…, style=…)`, Python's context manager as
+    /// an RAII guard: the alternate screen is switched on (and the cursor
+    /// hidden, when `hide_cursor`), and switched back when the guard drops,
+    /// if it was switched at all (only a terminal is). Print a full-screen
+    /// renderable with [`ScreenContext::update`].
+    pub fn screen(
+        &self,
+        hide_cursor: bool,
+        style: Option<crate::style::StyleType>,
+    ) -> ScreenContext<'_> {
+        let changed = self.set_alt_screen(true);
+        if changed && hide_cursor {
+            self.show_cursor(false);
+        }
+        // `Screen(style=style or "")`.
+        let style = style.unwrap_or_else(|| "".into());
+        ScreenContext {
+            console: self,
+            hide_cursor,
+            changed,
+            screen: Some(crate::screen::Screen::empty().style(style.clone())),
+            style,
+        }
+    }
+
+    /// Display a status and spinner until it is stopped. Port of
+    /// `Console.status`: `status` carries the message and upstream's
+    /// keyword arguments (`spinner`, `spinner_style`, `speed`,
+    /// `refresh_per_second`), and the display starts at once on a copy of
+    /// this console, writing to standard output, as `with
+    /// console.status(…):` does; [`LiveStatus::stop`](crate::status::LiveStatus::stop)
+    /// ends it.
+    pub fn status(
+        &self,
+        status: crate::status::Status,
+    ) -> crate::status::LiveStatus<std::io::Stdout> {
+        self.status_to(status, std::io::stdout())
+    }
+
+    /// [`status`](Self::status), writing to `writer` instead of standard
+    /// output (upstream's console `file`).
+    pub fn status_to<W: Write + Send + 'static>(
+        &self,
+        status: crate::status::Status,
+        writer: W,
+    ) -> crate::status::LiveStatus<W> {
+        status.start(self.clone(), writer)
     }
 
     /// Whether the alternate screen is enabled. Port of
@@ -910,7 +1387,7 @@ impl Console {
                 let height = render_options
                     .height
                     .filter(|&height| height > 0)
-                    .unwrap_or(self.height);
+                    .unwrap_or(self.height());
                 let width = render_options.max_width;
                 (0, 0, render_options.update_dimensions(width, height))
             }
@@ -962,15 +1439,56 @@ impl Console {
     /// The Rust analogue of upstream's `with console.capture() as capture:` —
     /// the closure receives the same console, and captures nest correctly.
     /// Equivalent to what would have been written to the terminal.
+    ///
+    /// Each closure capture holds only what was printed inside it. Upstream's
+    /// nested `capture()` contexts share one buffer, so the inner one takes
+    /// everything printed since the outer one began;
+    /// [`begin_capture`](Self::begin_capture) and
+    /// [`end_capture`](Self::end_capture) behave that way.
     pub fn capture(&self, f: impl FnOnce(&Console)) -> String {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
+        self.segments_to_string(&segments)
+    }
+
+    /// Begin capturing this thread's output: what is printed is held until
+    /// [`end_capture`](Self::end_capture) instead of written. Port of
+    /// `Console.begin_capture`.
+    pub fn begin_capture(&self) {
+        self.lock_captures()
+            .entry(std::thread::current().id())
+            .or_default()
+            .push(Vec::new());
+    }
+
+    /// End the innermost capture begun with
+    /// [`begin_capture`](Self::begin_capture) on this thread, returning what
+    /// was printed as a terminal string. Port of `Console.end_capture`.
+    ///
+    /// As upstream, which holds one buffer per thread, everything captured
+    /// on the thread so far is returned, including what outer captures hold,
+    /// and those are left empty. Without a capture to end, the result is
+    /// empty (upstream's console would stop writing altogether).
+    pub fn end_capture(&self) -> String {
+        let id = std::thread::current().id();
+        let segments: Vec<Segment> = {
+            let mut captures = self.lock_captures();
+            let Some(stack) = captures.get_mut(&id) else {
+                return String::new();
+            };
+            let segments = stack.iter_mut().flat_map(std::mem::take).collect();
+            stack.pop();
+            if stack.is_empty() {
+                captures.remove(&id);
+            }
+            segments
+        };
         self.segments_to_string(&segments)
     }
 
     /// Like [`capture`](Self::capture) but with all styles stripped, returning
     /// plain text. Port of `Console.export_text(styles=False)`.
     pub fn export_text(&self, f: impl FnOnce(&Console)) -> String {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
         segments_to_plain(&segments)
     }
 
@@ -979,14 +1497,8 @@ impl Console {
     /// colour system (upstream's style keeps the codes printing rendered),
     /// or in truecolor, `Style.render`'s default, without one.
     pub fn export_text_styled(&self, f: impl FnOnce(&Console)) -> String {
-        let system = self.color_system().unwrap_or(ColorSystem::Truecolor);
-        self.record(f)
-            .iter()
-            .map(|segment| match &segment.style {
-                Some(style) => style.render(&segment.text, Some(system)),
-                None => segment.text.to_string(),
-            })
-            .collect()
+        let segments = self.capture_segments(f);
+        self.segments_to_styled_text(&segments)
     }
 
     /// Write what `f` prints to `path` as text, with escape codes when
@@ -1061,7 +1573,7 @@ impl Console {
         links: bool,
         f: impl FnOnce(&Console),
     ) -> std::io::Result<()> {
-        let mut segments = self.record(f);
+        let mut segments = self.capture_segments(f);
         let content = if !styles {
             segments_to_plain(&segments)
         } else {
@@ -1096,7 +1608,7 @@ impl Console {
         theme: &crate::terminal_theme::TerminalTheme,
         f: impl FnOnce(&Console),
     ) -> String {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
         crate::export::export_html_inline(&segments, theme)
     }
 
@@ -1114,7 +1626,7 @@ impl Console {
         theme: &crate::terminal_theme::TerminalTheme,
         f: impl FnOnce(&Console),
     ) -> String {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
         crate::export::export_html_classes(&segments, theme)
     }
 
@@ -1146,7 +1658,7 @@ impl Console {
         unique_id: &str,
         f: impl FnOnce(&Console),
     ) -> String {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
         crate::svg::export_svg(&segments, theme, title, unique_id, self.width())
     }
 
@@ -1161,7 +1673,7 @@ impl Console {
         inline_styles: bool,
         f: impl FnOnce(&Console),
     ) -> Result<String, crate::export::ExportFormatError> {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
         crate::export::export_html_with(&segments, theme, code_format, inline_styles)
     }
 
@@ -1180,7 +1692,7 @@ impl Console {
         font_aspect_ratio: f64,
         f: impl FnOnce(&Console),
     ) -> Result<String, crate::export::ExportFormatError> {
-        let segments = self.record(f);
+        let segments = self.capture_segments(f);
         crate::svg::export_svg_with(
             &segments,
             theme,
@@ -1209,14 +1721,14 @@ impl Console {
     /// Rendering twice instead would be wrong, not merely wasteful: a renderable
     /// reading standard input only yields its content once.
     pub fn record_output(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
-        self.record(f)
+        self.capture_segments(f)
     }
 
     /// Run `f` with this thread's output recorded to a fresh buffer, returning
     /// the captured segments. Captures nest (each pushes its own buffer), are
     /// per thread (upstream's `ConsoleThreadLocals`), and end even if `f`
     /// panics (upstream's `Capture.__exit__` always runs).
-    fn record(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
+    fn capture_segments(&self, f: impl FnOnce(&Console)) -> Vec<Segment> {
         /// Pops this thread's capture buffer on drop, so an unwinding `f`
         /// does not leave the console capturing.
         struct CaptureGuard<'a>(&'a Console);
@@ -1248,6 +1760,181 @@ impl Console {
         let captured = guard.pop();
         std::mem::forget(guard);
         captured
+    }
+
+    /// Whether what is written is recorded. Port of `Console.record`.
+    pub fn record(&self) -> bool {
+        self.record.load(std::sync::atomic::Ordering::SeqCst)
+    }
+
+    /// Start (or stop) recording. Upstream's `Console.record` is a plain
+    /// attribute.
+    pub fn set_record(&self, record: bool) {
+        self.record
+            .store(record, std::sync::atomic::Ordering::SeqCst);
+    }
+
+    /// The recorded segments, cleared when `clear`; an error when the
+    /// console is not recording (upstream's assertion).
+    fn take_recorded(&self, clear: bool) -> crate::errors::Result<Vec<Segment>> {
+        if !self.record() {
+            return Err(crate::errors::RichError::Console(
+                "To export console contents set record=True in the constructor or instance"
+                    .to_string(),
+            ));
+        }
+        let mut recorded = self.lock_record_buffer();
+        Ok(if clear {
+            std::mem::take(&mut *recorded)
+        } else {
+            recorded.clone()
+        })
+    }
+
+    /// The recorded output as text, with escape codes when `styles`, the
+    /// record cleared when `clear`. Port of `Console.export_text(clear=…,
+    /// styles=…)` for a console built with
+    /// [`record`](ConsoleBuilder::record); upstream's default is
+    /// `clear=True, styles=False`. Without plain text, control codes are
+    /// left out; with styles they stay, as upstream's.
+    ///
+    /// The styled form renders each style in the console's colour system,
+    /// truecolor without one, as [`export_text_styled`](Self::export_text_styled).
+    ///
+    /// # Errors
+    ///
+    /// [`RichError::Console`](crate::errors::RichError::Console) when the
+    /// console is not recording (upstream asserts).
+    pub fn export_text_recorded(&self, clear: bool, styles: bool) -> crate::errors::Result<String> {
+        let segments = self.take_recorded(clear)?;
+        Ok(if styles {
+            self.segments_to_styled_text(&segments)
+        } else {
+            segments_to_plain(&segments)
+        })
+    }
+
+    /// Write [`export_text_recorded`](Self::export_text_recorded) to `path`.
+    /// Port of `Console.save_text(path, clear=…, styles=…)`.
+    pub fn save_text_recorded(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        clear: bool,
+        styles: bool,
+    ) -> std::io::Result<()> {
+        let text = self
+            .export_text_recorded(clear, styles)
+            .map_err(std::io::Error::other)?;
+        std::fs::write(path, text)
+    }
+
+    /// The recorded output as an HTML document. Port of
+    /// `Console.export_html(theme=…, clear=…, code_format=…,
+    /// inline_styles=…)` for a console built with
+    /// [`record`](ConsoleBuilder::record).
+    ///
+    /// # Errors
+    ///
+    /// [`RichError::Console`](crate::errors::RichError::Console) when the
+    /// console is not recording, or when `code_format` is not a template
+    /// this port can fill (see [`export::export_html_with`](crate::export::export_html_with)).
+    pub fn export_html_recorded(
+        &self,
+        options: &ExportHtmlOptions<'_>,
+    ) -> crate::errors::Result<String> {
+        let segments = self.take_recorded(options.clear)?;
+        let theme = options
+            .theme
+            .unwrap_or(&crate::terminal_theme::DEFAULT_TERMINAL_THEME);
+        crate::export::export_html_with(
+            &segments,
+            theme,
+            options.code_format,
+            options.inline_styles,
+        )
+        .map_err(|error| crate::errors::RichError::Console(error.to_string()))
+    }
+
+    /// Write [`export_html_recorded`](Self::export_html_recorded) to `path`.
+    /// Port of `Console.save_html`.
+    pub fn save_html_recorded(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        options: &ExportHtmlOptions<'_>,
+    ) -> std::io::Result<()> {
+        let html = self
+            .export_html_recorded(options)
+            .map_err(std::io::Error::other)?;
+        std::fs::write(path, html)
+    }
+
+    /// The recorded output as an SVG image of a terminal window. Port of
+    /// `Console.export_svg(title=…, theme=…, clear=…, code_format=…,
+    /// font_aspect_ratio=…, unique_id=…)` for a console built with
+    /// [`record`](ConsoleBuilder::record). Control codes are left out, and
+    /// the image is as wide as the console is now.
+    ///
+    /// # Errors
+    ///
+    /// As for [`export_html_recorded`](Self::export_html_recorded).
+    pub fn export_svg_recorded(
+        &self,
+        options: &ExportSvgOptions<'_>,
+    ) -> crate::errors::Result<String> {
+        let segments: Vec<Segment> = self
+            .take_recorded(options.clear)?
+            .into_iter()
+            .filter(|segment| !segment.control)
+            .collect();
+        let theme = options
+            .theme
+            .unwrap_or(&crate::terminal_theme::SVG_EXPORT_THEME);
+        crate::svg::export_svg_with(
+            &segments,
+            theme,
+            options.title,
+            options.unique_id,
+            self.width(),
+            options
+                .code_format
+                .unwrap_or(crate::svg::CONSOLE_SVG_FORMAT),
+            options.font_aspect_ratio,
+        )
+        .map_err(|error| crate::errors::RichError::Console(error.to_string()))
+    }
+
+    /// Write [`export_svg_recorded`](Self::export_svg_recorded) to `path`.
+    /// Port of `Console.save_svg`.
+    pub fn save_svg_recorded(
+        &self,
+        path: impl AsRef<std::path::Path>,
+        options: &ExportSvgOptions<'_>,
+    ) -> std::io::Result<()> {
+        let svg = self
+            .export_svg_recorded(options)
+            .map_err(std::io::Error::other)?;
+        std::fs::write(path, svg)
+    }
+
+    /// The record buffer, recovering it if a panicking print poisoned the
+    /// lock.
+    fn lock_record_buffer(&self) -> std::sync::MutexGuard<'_, Vec<Segment>> {
+        self.record_buffer
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+    }
+
+    /// Segments as text with each style's escape codes, in the console's
+    /// colour system (truecolor without one); control codes kept.
+    fn segments_to_styled_text(&self, segments: &[Segment]) -> String {
+        let system = self.color_system().unwrap_or(ColorSystem::Truecolor);
+        segments
+            .iter()
+            .map(|segment| match &segment.style {
+                Some(style) => style.render(&segment.text, Some(system)),
+                None => segment.text.to_string(),
+            })
+            .collect()
     }
 
     /// The per-thread capture stacks, recovering them if a panicking print
@@ -1695,6 +2382,71 @@ impl Renderable for Text {
     }
 }
 
+/// The keyword arguments of upstream's `Console.export_html` and
+/// `save_html`, for [`Console::export_html_recorded`].
+#[derive(Clone, Copy)]
+pub struct ExportHtmlOptions<'a> {
+    /// `theme=`: the palette, or `None` for
+    /// [`DEFAULT_TERMINAL_THEME`](crate::terminal_theme::DEFAULT_TERMINAL_THEME).
+    pub theme: Option<&'a crate::terminal_theme::TerminalTheme>,
+    /// `clear=`: empty the record afterwards (default `true`).
+    pub clear: bool,
+    /// `code_format=`: the page template, or `None` for
+    /// [`CONSOLE_HTML_FORMAT`](crate::export::CONSOLE_HTML_FORMAT).
+    pub code_format: Option<&'a str>,
+    /// `inline_styles=`: styles on each span rather than in a stylesheet
+    /// (default `false`).
+    pub inline_styles: bool,
+}
+
+impl Default for ExportHtmlOptions<'_> {
+    fn default() -> Self {
+        ExportHtmlOptions {
+            theme: None,
+            clear: true,
+            code_format: None,
+            inline_styles: false,
+        }
+    }
+}
+
+/// The keyword arguments of upstream's `Console.export_svg` and `save_svg`,
+/// for [`Console::export_svg_recorded`].
+#[derive(Clone, Copy)]
+pub struct ExportSvgOptions<'a> {
+    /// `title=`: the window title (default `"Rich"`).
+    pub title: &'a str,
+    /// `theme=`: the palette, or `None` for
+    /// [`SVG_EXPORT_THEME`](crate::terminal_theme::SVG_EXPORT_THEME).
+    pub theme: Option<&'a crate::terminal_theme::TerminalTheme>,
+    /// `clear=`: empty the record afterwards (default `true`).
+    pub clear: bool,
+    /// `code_format=`: the image template, or `None` for
+    /// [`CONSOLE_SVG_FORMAT`](crate::svg::CONSOLE_SVG_FORMAT).
+    pub code_format: Option<&'a str>,
+    /// `font_aspect_ratio=`: the font's width to height (default 0.61).
+    pub font_aspect_ratio: f64,
+    /// `unique_id=`: the prefix of the image's ids and classes. Upstream's
+    /// default hashes Python's `repr()` of the segments, which Rust cannot
+    /// reproduce ([DIVERGENCES §15]); the default here is `"terminal"`.
+    ///
+    /// [DIVERGENCES §15]: https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/DIVERGENCES.md#15-exports-done-html-both-forms--svg-svg-needs-an-explicit-unique_id
+    pub unique_id: &'a str,
+}
+
+impl Default for ExportSvgOptions<'_> {
+    fn default() -> Self {
+        ExportSvgOptions {
+            title: "Rich",
+            theme: None,
+            clear: true,
+            code_format: None,
+            font_aspect_ratio: 0.61,
+            unique_id: "terminal",
+        }
+    }
+}
+
 /// Builder for [`Console`], allowing detection to be overridden.
 pub struct ConsoleBuilder {
     force_terminal: Option<bool>,
@@ -1713,6 +2465,16 @@ pub struct ConsoleBuilder {
     markup: Option<bool>,
     emoji_variant: Option<crate::emoji::EmojiVariant>,
     tab_size: Option<usize>,
+    environ: Option<Environ>,
+    quiet: bool,
+    soft_wrap: bool,
+    style: Option<crate::style::StyleType>,
+    on_broken_pipe: Option<BrokenPipeHandler>,
+    record: bool,
+    log_time: bool,
+    log_path: bool,
+    log_time_format: Option<LogTimeFormat>,
+    get_datetime: Option<GetDateTime>,
 }
 
 impl ConsoleBuilder {
@@ -1734,7 +2496,107 @@ impl ConsoleBuilder {
             markup: None,
             emoji_variant: None,
             tab_size: None,
+            environ: None,
+            quiet: false,
+            soft_wrap: false,
+            style: None,
+            on_broken_pipe: None,
+            record: false,
+            log_time: true,
+            log_path: true,
+            log_time_format: None,
+            get_datetime: None,
         }
+    }
+
+    /// Show the time column in [`Console::log`] (default on). Port of
+    /// `Console(log_time=…)`.
+    pub fn log_time(mut self, value: bool) -> Self {
+        self.log_time = value;
+        self
+    }
+
+    /// Show the caller's file and line in [`Console::log`] (default on).
+    /// Port of `Console(log_path=…)`.
+    pub fn log_path(mut self, value: bool) -> Self {
+        self.log_path = value;
+        self
+    }
+
+    /// The `strftime` format of the time column in [`Console::log`]
+    /// (default `"[%X]"`). Port of `Console(log_time_format="…")`; the time
+    /// is formatted in UTC (see [`get_datetime`](Self::get_datetime)).
+    pub fn log_time_format(mut self, format: impl Into<String>) -> Self {
+        self.log_time_format = Some(LogTimeFormat::Strftime(format.into()));
+        self
+    }
+
+    /// Format the time column of [`Console::log`] with `format`. Port of
+    /// `Console(log_time_format=callable)`.
+    pub fn log_time_formatter(
+        mut self,
+        format: impl Fn(std::time::SystemTime) -> Text + Send + Sync + 'static,
+    ) -> Self {
+        self.log_time_format = Some(LogTimeFormat::Callable(std::sync::Arc::new(format)));
+        self
+    }
+
+    /// Read the time [`Console::log`] shows from `clock` (default
+    /// [`SystemTime::now`](std::time::SystemTime::now)). Port of
+    /// `Console(get_datetime=…)`. Upstream's `datetime.now()` is local
+    /// time; core has no time zone data, so its `strftime` formats the UTC
+    /// wall-clock time, and a clock that wants local time adds the offset.
+    pub fn get_datetime(
+        mut self,
+        clock: impl Fn() -> std::time::SystemTime + Send + Sync + 'static,
+    ) -> Self {
+        self.get_datetime = Some(std::sync::Arc::new(clock));
+        self
+    }
+
+    /// Record what is written (default off), for
+    /// [`Console::export_text_recorded`], [`Console::export_html_recorded`]
+    /// and [`Console::export_svg_recorded`]. Port of `Console(record=…)`.
+    pub fn record(mut self, value: bool) -> Self {
+        self.record = value;
+        self
+    }
+
+    /// Detect the terminal from `environ` instead of the process
+    /// environment: `NO_COLOR`, `COLUMNS`, `LINES`, `TERM`, `COLORTERM`,
+    /// `TTY_COMPATIBLE` and `FORCE_COLOR`. Port of `Console(_environ=…)`,
+    /// which upstream provides for tests.
+    pub fn environ(mut self, environ: Environ) -> Self {
+        self.environ = Some(environ);
+        self
+    }
+
+    /// Suppress all output (default off). Port of `Console(quiet=…)`.
+    pub fn quiet(mut self, value: bool) -> Self {
+        self.quiet = value;
+        self
+    }
+
+    /// The default of `print(soft_wrap=…)` (default off): no wrapping and
+    /// no cropping. Port of `Console(soft_wrap=…)`.
+    pub fn soft_wrap(mut self, value: bool) -> Self {
+        self.soft_wrap = value;
+        self
+    }
+
+    /// A style applied to all output (default none). Port of
+    /// `Console(style=…)`.
+    pub fn style(mut self, style: impl Into<crate::style::StyleType>) -> Self {
+        self.style = Some(style.into());
+        self
+    }
+
+    /// Call `handler` in place of [`Console::on_broken_pipe`]'s default
+    /// (quiet, then exit with status 1) when a write finds the pipe closed.
+    /// Upstream overrides `Console.on_broken_pipe` in a subclass.
+    pub fn on_broken_pipe(mut self, handler: impl Fn(&Console) + Send + Sync + 'static) -> Self {
+        self.on_broken_pipe = Some(std::sync::Arc::new(handler));
+        self
     }
 
     /// Enable/disable console markup in printed strings (default enabled).
@@ -1834,25 +2696,36 @@ impl ConsoleBuilder {
     }
 
     pub fn build(self) -> Console {
+        let environ = self.environ.map(std::sync::Arc::new);
+        let env = environ.as_deref();
+        let legacy_windows = self.legacy_windows.unwrap_or(false);
         let is_terminal = self
             .force_terminal
-            .unwrap_or_else(|| std::io::stdout().is_terminal());
+            .unwrap_or_else(|| detect_is_terminal(env));
         // Upstream's rule is `environ.get("NO_COLOR", "") != ""`, so an EMPTY
         // NO_COLOR does not disable colour — only a non-empty value does. That
         // matters because a shell that exports `NO_COLOR=` (a common way to
         // clear it) would otherwise still be treated as opting out.
         let no_color = self
             .no_color
-            .unwrap_or_else(|| std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()));
+            .unwrap_or_else(|| environ_get(env, "NO_COLOR").is_some_and(|value| !value.is_empty()));
+        // `color_system="auto"` (the default) detects; an explicit system,
+        // or `None`, is taken as given.
         let color_system = if self.color_system_set {
             self.color_system
-        } else if is_terminal && !is_dumb_terminal() {
-            Some(detect_color_system())
+        } else if is_terminal && !term_is_dumb(env) {
+            Some(detect_color_system(env))
         } else {
             None
         };
-        let width = self.width.unwrap_or_else(detect_width);
-        let height = self.height.unwrap_or_else(detect_height);
+        // `width = int(columns) - self.legacy_windows`: `COLUMNS` and
+        // `LINES` become the console's own width and height.
+        let width = self.width.or_else(|| {
+            env_int(env, "COLUMNS")
+                .map(|columns| columns.saturating_sub(usize::from(legacy_windows)))
+        });
+        let height = self.height.or_else(|| env_int(env, "LINES"));
+        let terminal_size = detect_terminal_size(legacy_windows);
         Console {
             render_environment: None,
             region_sink: None,
@@ -1860,8 +2733,14 @@ impl ConsoleBuilder {
             color_system,
             width,
             height,
+            terminal_size,
+            environ,
             is_terminal,
             no_color,
+            quiet: std::sync::atomic::AtomicBool::new(self.quiet),
+            soft_wrap: self.soft_wrap,
+            style: self.style,
+            on_broken_pipe: self.on_broken_pipe,
             get_time: self
                 .get_time
                 .unwrap_or_else(|| std::sync::Arc::new(monotonic)),
@@ -1871,7 +2750,7 @@ impl ConsoleBuilder {
             // highlight=False) but is the first thing a user sees: numbers,
             // paths, booleans and URLs come out plain instead of coloured.
             highlight: self.highlight.unwrap_or(true),
-            legacy_windows: self.legacy_windows.unwrap_or(false),
+            legacy_windows,
             safe_box: self.safe_box.unwrap_or(true),
             ascii_only: self.ascii_only.unwrap_or(false),
             theme_stack: vec![self.theme.unwrap_or_else(Theme::default_theme)],
@@ -1883,21 +2762,77 @@ impl ConsoleBuilder {
             tab_size: self.tab_size.unwrap_or(crate::text::DEFAULT_TAB_SIZE),
             captures: std::sync::Mutex::new(CaptureStacks::new()),
             is_alt_screen: std::sync::atomic::AtomicBool::new(false),
+            record: std::sync::atomic::AtomicBool::new(self.record),
+            record_buffer: std::sync::Mutex::new(Vec::new()),
+            render_hooks: std::sync::Mutex::new(Vec::new()),
+            live_stack: LiveStack::default(),
+            log_render: std::sync::Mutex::new(new_log_render(self.log_time, self.log_path)),
+            log_time: self.log_time,
+            log_path: self.log_path,
+            log_time_format: self
+                .log_time_format
+                .unwrap_or_else(|| LogTimeFormat::Strftime("[%X]".to_string())),
+            get_datetime: self
+                .get_datetime
+                .unwrap_or_else(|| std::sync::Arc::new(std::time::SystemTime::now)),
         }
     }
 }
 
-/// Whether `TERM` names a terminal that cannot render styles. Port of
-/// `Console.is_dumb_terminal` (the caller supplies the `is_terminal` half):
-/// `_detect_color_system` returns no colour system for one, so its output is
-/// plain even though it is a terminal.
-pub(crate) fn is_dumb_terminal() -> bool {
-    std::env::var("TERM")
-        .map(|term| matches!(term.to_lowercase().as_str(), "dumb" | "unknown"))
-        .unwrap_or(false)
+/// Python's `os.path.abspath`: `path` joined to the working directory
+/// when it is relative.
+fn absolute_path(path: &str) -> String {
+    let path = std::path::Path::new(path);
+    if path.is_absolute() {
+        return path.to_string_lossy().into_owned();
+    }
+    std::env::current_dir()
+        .map(|directory| directory.join(path).to_string_lossy().into_owned())
+        .unwrap_or_else(|_| path.to_string_lossy().into_owned())
 }
 
-/// Detect the terminal color system.
+/// Upstream's `LogRender(show_time=log_time, show_path=log_path)`.
+fn new_log_render(log_time: bool, log_path: bool) -> crate::log_render::LogRender {
+    crate::log_render::LogRender::new()
+        .show_time(log_time)
+        .show_path(log_path)
+}
+
+/// Whether `TERM` names a terminal that cannot render styles (`dumb` or
+/// `unknown`, any case). The environment half of `Console.is_dumb_terminal`.
+fn term_is_dumb(environ: Option<&Environ>) -> bool {
+    environ_get(environ, "TERM")
+        .is_some_and(|term| matches!(term.to_lowercase().as_str(), "dumb" | "unknown"))
+}
+
+/// Whether standard output is a terminal. Port of the `Console.is_terminal`
+/// property without `force_terminal`: `TTY_COMPATIBLE=0` or `1` decides,
+/// then a set `FORCE_COLOR` (a terminal unless empty), then `isatty`.
+fn detect_is_terminal(environ: Option<&Environ>) -> bool {
+    match environ_get(environ, "TTY_COMPATIBLE").as_deref() {
+        Some("0") => return false,
+        Some("1") => return true,
+        _ => {}
+    }
+    if let Some(force_color) = environ_get(environ, "FORCE_COLOR") {
+        return !force_color.is_empty();
+    }
+    std::io::stdout().is_terminal()
+}
+
+/// Upstream's `_TERM_COLORS`: the colour system named by the last
+/// hyphenated part of `TERM`. Not on Windows, where `TERM` is not read.
+#[cfg(not(windows))]
+fn term_colors(colors: &str) -> Option<ColorSystem> {
+    match colors {
+        "kitty" | "256color" => Some(ColorSystem::EightBit),
+        "16color" => Some(ColorSystem::Standard),
+        _ => None,
+    }
+}
+
+/// Detect the terminal color system. Port of `Console._detect_color_system`
+/// for a terminal that is not dumb (the caller checks).
 ///
 /// `COLORTERM`/`TERM` are the portable signals, but **Windows sets neither**.
 /// Detecting from them alone meant every Windows console fell back to
@@ -1908,14 +2843,8 @@ pub(crate) fn is_dumb_terminal() -> bool {
 /// Upstream `rich` special-cases Windows for the same reason. It reaches the
 /// platform APIs directly; we ask `anstyle-query`, which avoids hand-written
 /// `unsafe` FFI for a console handle (see `docs/DIVERGENCES.md`).
-fn detect_color_system() -> ColorSystem {
-    if let Some(colorterm) = std::env::var_os("COLORTERM") {
-        let colorterm = colorterm.to_string_lossy().to_ascii_lowercase();
-        if colorterm.contains("truecolor") || colorterm.contains("24bit") {
-            return ColorSystem::Truecolor;
-        }
-    }
-
+#[cfg_attr(windows, allow(unused_variables))]
+fn detect_color_system(environ: Option<&Environ>) -> ColorSystem {
     // Windows. This function is only reached when stdout is a terminal (see
     // ConsoleBuilder::build), and every modern Windows console that can be a
     // terminal speaks 24-bit color, so report truecolor.
@@ -1937,47 +2866,37 @@ fn detect_color_system() -> ColorSystem {
     // gating this keeps either platform free of unreachable code.
     #[cfg(not(windows))]
     {
-        if let Some(term) = std::env::var_os("TERM") {
-            if term.to_string_lossy().contains("256") {
-                return ColorSystem::EightBit;
-            }
+        let color_term = environ_get(environ, "COLORTERM")
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase();
+        if matches!(color_term.as_str(), "truecolor" | "24bit") {
+            return ColorSystem::Truecolor;
         }
-        ColorSystem::Standard
+        let term = environ_get(environ, "TERM")
+            .unwrap_or_default()
+            .trim()
+            .to_lowercase();
+        // `term.rpartition("-")[2]`: the whole name when it has no hyphen.
+        let colors = term.rsplit('-').next().unwrap_or("");
+        term_colors(colors).unwrap_or(ColorSystem::Standard)
     }
 }
 
-/// Detect the terminal width: `COLUMNS`, then the real terminal, then a default.
-fn detect_width() -> usize {
-    if let Some(columns) = std::env::var_os("COLUMNS") {
-        if let Ok(value) = columns.to_string_lossy().trim().parse::<usize>() {
-            if value > 0 {
-                return value;
-            }
-        }
+/// The terminal's size, 80x25 where it reports none (or zero), the width
+/// one less on a legacy Windows console. The `os.get_terminal_size` half of
+/// upstream's `Console.size`.
+fn detect_terminal_size(legacy_windows: bool) -> ConsoleDimensions {
+    let (width, height) = match terminal_size::terminal_size() {
+        Some((terminal_size::Width(w), terminal_size::Height(h))) => (w as usize, h as usize),
+        None => (0, 0),
+    };
+    let width = if width == 0 { DEFAULT_WIDTH } else { width };
+    let height = if height == 0 { DEFAULT_HEIGHT } else { height };
+    ConsoleDimensions {
+        width: width - usize::from(legacy_windows),
+        height,
     }
-    if let Some((terminal_size::Width(w), _)) = terminal_size::terminal_size() {
-        if w > 0 {
-            return w as usize;
-        }
-    }
-    DEFAULT_WIDTH
-}
-
-/// Detect the terminal height: `LINES`, then the real terminal, then a default.
-fn detect_height() -> usize {
-    if let Some(lines) = std::env::var_os("LINES") {
-        if let Ok(value) = lines.to_string_lossy().trim().parse::<usize>() {
-            if value > 0 {
-                return value;
-            }
-        }
-    }
-    if let Some((_, terminal_size::Height(h))) = terminal_size::terminal_size() {
-        if h > 0 {
-            return h as usize;
-        }
-    }
-    DEFAULT_HEIGHT
 }
 
 impl crate::protocol::ConsoleCodeHighlighting for Console {
@@ -2062,8 +2981,307 @@ impl Default for PrintOptions<'_> {
     }
 }
 
+/// One object passed to [`Console::log`]: a string (rendered as console
+/// markup), a `Text`, or any other renderable. A log keeps its renderables
+/// in the message column of a table, so they are shared rather than
+/// borrowed.
+#[derive(Clone)]
+pub enum LogObject<'a> {
+    /// A string, through `render_str` with the call's `emoji`, `markup` and
+    /// `highlight`.
+    Str(&'a str),
+    /// A `Text`, joined with the strings around it.
+    Text(&'a Text),
+    /// Any other renderable, which stands alone.
+    Renderable(std::sync::Arc<dyn Renderable + Send + Sync>),
+}
+
+/// The keyword arguments of upstream's `Console.log`, after defaults.
+/// `log_locals` is not ported ([DIVERGENCES §43]).
+///
+/// [DIVERGENCES §43]: https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/DIVERGENCES.md#43-console-features-tied-to-python-objects-or-jupyter
+#[derive(Clone)]
+pub struct LogOptions<'a> {
+    pub sep: &'a str,
+    pub end: &'a str,
+    pub style: Option<crate::style::StyleType>,
+    pub justify: Option<Justify>,
+    pub emoji: Option<bool>,
+    pub markup: Option<bool>,
+    pub highlight: Option<bool>,
+}
+
+impl Default for LogOptions<'_> {
+    fn default() -> Self {
+        LogOptions {
+            sep: " ",
+            end: "\n",
+            style: None,
+            justify: None,
+            emoji: None,
+            markup: None,
+            highlight: None,
+        }
+    }
+}
+
+/// A [`Console::log`] call that owns its arguments, so that it can be sent
+/// to the thread that owns the console (a live display's refresh thread).
+pub(crate) struct OwnedLog {
+    objects: Vec<OwnedLogObject>,
+    sep: String,
+    end: String,
+    style: Option<crate::style::StyleType>,
+    justify: Option<Justify>,
+    emoji: Option<bool>,
+    markup: Option<bool>,
+    highlight: Option<bool>,
+    file: String,
+    line: u32,
+}
+
+enum OwnedLogObject {
+    Str(String),
+    Text(Text),
+    Renderable(std::sync::Arc<dyn Renderable + Send + Sync>),
+}
+
+impl OwnedLog {
+    /// Copy `objects` and `options`, logged as from `file` and `line`.
+    pub(crate) fn new(
+        objects: &[LogObject<'_>],
+        options: &LogOptions<'_>,
+        file: &str,
+        line: u32,
+    ) -> Self {
+        OwnedLog {
+            objects: objects
+                .iter()
+                .map(|object| match object {
+                    LogObject::Str(content) => OwnedLogObject::Str((*content).to_string()),
+                    LogObject::Text(text) => OwnedLogObject::Text((*text).clone()),
+                    LogObject::Renderable(renderable) => {
+                        OwnedLogObject::Renderable(renderable.clone())
+                    }
+                })
+                .collect(),
+            sep: options.sep.to_string(),
+            end: options.end.to_string(),
+            style: options.style.clone(),
+            justify: options.justify,
+            emoji: options.emoji,
+            markup: options.markup,
+            highlight: options.highlight,
+            file: file.to_string(),
+            line,
+        }
+    }
+
+    /// [`Console::log_at`] on `console`.
+    pub(crate) fn log(&self, console: &Console) -> crate::errors::Result<()> {
+        let objects: Vec<LogObject<'_>> = self
+            .objects
+            .iter()
+            .map(|object| match object {
+                OwnedLogObject::Str(content) => LogObject::Str(content),
+                OwnedLogObject::Text(text) => LogObject::Text(text),
+                OwnedLogObject::Renderable(renderable) => LogObject::Renderable(renderable.clone()),
+            })
+            .collect();
+        let options = LogOptions {
+            sep: &self.sep,
+            end: &self.end,
+            style: self.style.clone(),
+            justify: self.justify,
+            emoji: self.emoji,
+            markup: self.markup,
+            highlight: self.highlight,
+        };
+        console.log_at(&objects, &options, &self.file, self.line)
+    }
+}
+
+/// One renderable `_collect_renderables` hands [`Console::log`], with the
+/// wrappers upstream puts round it: `Align` for `justify`, `Styled` for the
+/// console's style and then for the call's. A joined text carries its `end`.
+struct LogItem {
+    renderable: std::sync::Arc<dyn Renderable + Send + Sync>,
+    align: Option<crate::align::HorizontalAlign>,
+    /// The text's `end` after its lines, less the trailing line break this
+    /// port's lines do not end with. What runs past the column's width is
+    /// cropped, as upstream's.
+    end: Option<String>,
+    styles: Vec<Style>,
+}
+
+impl Renderable for LogItem {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        let mut segments = match self.align {
+            Some(align) => {
+                crate::align::Align::render_child(&*self.renderable, align, console, options)
+            }
+            None => self.renderable.rich_render(console, options),
+        };
+        if let Some(end) = self.end.as_deref().filter(|end| !end.is_empty()) {
+            segments.push(Segment::new(end, None));
+            if end.ends_with('\n') {
+                // A line break ending the text still ends a (blank) line.
+                segments.push(Segment::new("", None));
+            }
+        }
+        for style in &self.styles {
+            segments = Segment::apply_style_with(&segments, Some(style), None);
+        }
+        segments
+    }
+
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> crate::measure::Measurement {
+        crate::measure::Measurement::get(console, options, &*self.renderable)
+    }
+}
+
 /// The upstream `Console` methods built on its print pipeline.
 impl Console {
+    /// Log `objects` with the time and the caller's file and line. Port of
+    /// `Console.log(*objects, sep=…, end=…, style=…, justify=…, emoji=…,
+    /// markup=…, highlight=…)`: the objects are joined as for `print` and
+    /// laid out by upstream's `LogRender` table, with the time (blank when
+    /// it repeats the last one) and `file:line` linked to the file.
+    ///
+    /// The caller is the code calling `log`, found with `#[track_caller]`
+    /// (upstream inspects the stack). [`log_at`](Self::log_at) names it.
+    #[track_caller]
+    pub fn log(
+        &self,
+        objects: &[LogObject<'_>],
+        options: &LogOptions<'_>,
+    ) -> crate::errors::Result<()> {
+        let caller = std::panic::Location::caller();
+        self.log_at(objects, options, caller.file(), caller.line())
+    }
+
+    /// [`log`](Self::log) with the caller's `file` and `line` given:
+    /// upstream's `_caller_frame_info`. The path column shows the file's
+    /// name, linked to its absolute path unless it starts with `<`.
+    pub fn log_at(
+        &self,
+        objects: &[LogObject<'_>],
+        options: &LogOptions<'_>,
+        file: &str,
+        line: u32,
+    ) -> crate::errors::Result<()> {
+        let mut styles = Vec::new();
+        if let Some(style) = &self.style {
+            styles.push(self.get_style(style)?);
+        }
+        if let Some(style) = &options.style {
+            styles.push(self.get_style(style)?);
+        }
+        styles.retain(|style| !style.is_null());
+        let align = match options.justify {
+            Some(Justify::Left) => Some(crate::align::HorizontalAlign::Left),
+            Some(Justify::Center) => Some(crate::align::HorizontalAlign::Center),
+            Some(Justify::Right) => Some(crate::align::HorizontalAlign::Right),
+            _ => None,
+        };
+        let item = |renderable: std::sync::Arc<dyn Renderable + Send + Sync>,
+                    end: Option<String>|
+         -> std::sync::Arc<dyn Renderable + Send + Sync> {
+            std::sync::Arc::new(LogItem {
+                renderable,
+                align,
+                end,
+                styles: styles.clone(),
+            })
+        };
+        // Upstream's lines end with a break where this port's are joined by
+        // one (`Renderables`), so the end loses one trailing break.
+        let end = options
+            .end
+            .strip_suffix('\n')
+            .unwrap_or(options.end)
+            .to_string();
+        let mut renderables: Vec<std::sync::Arc<dyn Renderable + Send + Sync>> = Vec::new();
+        if objects.is_empty() {
+            // `objects = (NewLine(),)`: one blank line.
+            renderables.push(item(std::sync::Arc::new(Text::new("")), None));
+        }
+        let mut texts: Vec<Text> = Vec::new();
+        let flush =
+            |texts: &mut Vec<Text>,
+             renderables: &mut Vec<std::sync::Arc<dyn Renderable + Send + Sync>>| {
+                if !texts.is_empty() {
+                    let mut separator = Text::new(options.sep);
+                    separator.set_justify_option(options.justify);
+                    let joined = separator.join(texts);
+                    renderables.push(item(std::sync::Arc::new(joined), Some(end.clone())));
+                    texts.clear();
+                }
+            };
+        for object in objects {
+            match object {
+                LogObject::Str(content) => {
+                    let render_str = RenderStrOptions {
+                        emoji: options.emoji,
+                        markup: options.markup,
+                        highlight: options.highlight,
+                        ..Default::default()
+                    };
+                    texts.push(self.render_str_with(content, &render_str)?);
+                }
+                LogObject::Text(text) => texts.push((*text).clone()),
+                LogObject::Renderable(renderable) => {
+                    flush(&mut texts, &mut renderables);
+                    renderables.push(item(renderable.clone(), None));
+                }
+            }
+        }
+        flush(&mut texts, &mut renderables);
+
+        let time = self.log_time.then(|| {
+            let now = (self.get_datetime)();
+            match &self.log_time_format {
+                LogTimeFormat::Strftime(format) => {
+                    Text::new(crate::log_render::strftime(now, format))
+                }
+                LogTimeFormat::Callable(format) => format(now),
+            }
+        });
+        // `path = filename.rpartition(os.sep)[-1]`, and the link is the
+        // absolute path unless the name is a pseudo-file such as `<stdin>`.
+        let path = file
+            .rsplit(std::path::MAIN_SEPARATOR)
+            .next()
+            .unwrap_or(file);
+        let link_path = (!file.starts_with('<')).then(|| absolute_path(file));
+        let table = self
+            .log_render
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .render_renderables(
+                self,
+                renderables,
+                time,
+                Text::new(""),
+                Some(path),
+                Some(line),
+                link_path.as_deref(),
+            );
+        let mut segments = self.render(&table, None);
+        if !segments.is_empty() {
+            segments.push(Segment::line());
+        }
+        let segments = self
+            .process_render_hooks(vec![segments], &self.options())
+            .concat();
+        let segments = Segment::split_and_crop_lines(&segments, self.width(), None, false, true)
+            .into_iter()
+            .flatten()
+            .collect();
+        self.emit_end(segments, false);
+        Ok(())
+    }
+
     /// Print `objects` as upstream's `Console.print(*objects, sep=…, end=…,
     /// style=…, justify=…, overflow=…, no_wrap=…, emoji=…, markup=…,
     /// highlight=…, width=…, height=…, crop=…, soft_wrap=…,
@@ -2089,8 +3307,9 @@ impl Console {
     ) -> crate::errors::Result<Vec<Segment>> {
         let (mut no_wrap, mut overflow, mut crop) =
             (options.no_wrap, options.overflow, options.crop);
-        // `soft_wrap=True`: no wrapping, nothing cropped.
-        if options.soft_wrap.unwrap_or(false) {
+        // `soft_wrap=True`: no wrapping, nothing cropped. `None` takes the
+        // console's default.
+        if options.soft_wrap.unwrap_or(self.soft_wrap) {
             no_wrap = no_wrap.or(Some(true));
             overflow = overflow.or(Some(Overflow::Ignore));
             crop = false;
@@ -2110,7 +3329,7 @@ impl Console {
         render_options.markup = options.markup;
         render_options.highlight = options.highlight;
         if let Some(width) = options.width {
-            render_options = render_options.update_width(width.min(self.width));
+            render_options = render_options.update_width(width.min(self.width()));
         }
         if options.height.is_some() {
             render_options.height = options.height;
@@ -2119,8 +3338,15 @@ impl Console {
             Some(style) => Some(self.get_style(style)?),
             None => None,
         };
+        // `Console(style=…)`: `_collect_renderables` wraps every renderable
+        // in `Styled`, its line ends included.
+        let console_style = match &self.style {
+            Some(style) => Some(self.get_style(style)?).filter(|style| !style.is_null()),
+            None => None,
+        };
 
-        let mut segments: Vec<Segment> = Vec::new();
+        // Each renderable `_collect_renderables` gives, rendered with its end.
+        let mut items: Vec<Vec<Segment>> = Vec::new();
         let mut emit = |renderable: &dyn Renderable, end: Option<&str>| {
             let mut rendered = if render_options.max_width < 1 {
                 Vec::new()
@@ -2147,18 +3373,10 @@ impl Console {
                 }
                 None => {}
             }
-            // The style goes on each line, never on the newlines.
-            if let Some(style) = &style {
-                let mut styled = Vec::with_capacity(rendered.len());
-                for (line, terminated) in Segment::split_lines_terminator(&rendered) {
-                    styled.extend(Segment::apply_style_with(&line, Some(style), None));
-                    if terminated {
-                        styled.push(Segment::line());
-                    }
-                }
-                rendered = styled;
+            if let Some(console_style) = &console_style {
+                rendered = Segment::apply_style_with(&rendered, Some(console_style), None);
             }
-            segments.extend(rendered);
+            items.push(rendered);
         };
 
         // An empty print is a new line (`NewLine()`); with another `end`, an
@@ -2201,6 +3419,22 @@ impl Console {
         }
         flush(&mut texts, &mut emit);
 
+        let mut segments: Vec<Segment> = Vec::new();
+        for mut rendered in self.process_render_hooks(items, &render_options) {
+            // The style goes on each line, never on the newlines.
+            if let Some(style) = &style {
+                let mut styled = Vec::with_capacity(rendered.len());
+                for (line, terminated) in Segment::split_lines_terminator(&rendered) {
+                    styled.extend(Segment::apply_style_with(&line, Some(style), None));
+                    if terminated {
+                        styled.push(Segment::line());
+                    }
+                }
+                rendered = styled;
+            }
+            segments.extend(rendered);
+        }
+
         if options.new_line_start {
             let plain: String = segments
                 .iter()
@@ -2211,7 +3445,7 @@ impl Console {
             }
         }
         if crop {
-            segments = Segment::split_and_crop_lines(&segments, self.width, None, false, true)
+            segments = Segment::split_and_crop_lines(&segments, self.width(), None, false, true)
                 .into_iter()
                 .flatten()
                 .collect();

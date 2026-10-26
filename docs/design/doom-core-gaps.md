@@ -13,6 +13,7 @@ crates (rs-rich 0.0.11, rs-rich-ext 0.0.18, rs-rich-art 0.0.14,
 rs-rich-interact 0.0.9, rs-rich-intuituive 0.0.6). The integration branch
 `claude/next-priority-items-3c5p8e-wip-integ3` (2135f4b) was checked too:
 rs-rich-doom builds and passes on it, and none of these gaps is closed there.
+Each gap below now opens with its status in 0.0.23.
 
 Each entry follows rs-rich's rule that core holds generic pieces only. Each
 proposal names a second, non-Doom use, and nothing Doom-specific (WAD, DMX,
@@ -34,6 +35,23 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
 ## Gaps
 
 ### 1. A live frame image node (intuiTUIve, `art` plugin)
+
+**Status: closed in 0.0.23** (wave 1, `ad84120f`). intuiTUIve `art`'s
+`picture_of(picture: impl Fn() -> Option<Picture>, view: ImageView)` draws
+each new frame at once, with no worker and no "loading". rs-rich-art's
+`Picture::from_rgba` and `Picture::next_rgba` make a frame from raw RGBA,
+and a frame of the same picture keeps its id: Kitty gets it again under
+that id (raw pixels, `f=32`), and `image_graphics` frees it once. The
+pictures are fitted to the cells as the cells were drawn. Not taken
+from the proposal: `ImageView::aspect` (a picture shown at a ratio other
+than its pixels'; gap 12's `PixelBuf::draw_fitted` does it for pixel
+cells, and an app can resample a frame before handing it over),
+`ImageView::cell_px` and `keep_last_row`. The maintainer dropped those
+three on 2026-10-26: they are not coming. Tests: `image.rs`'s
+`live_frames_keep_one_kitty_id_and_are_freed_once`,
+`sixel_frames_are_drawn_again_and_counted` and
+`an_overlay_picture_partly_covered_is_not_drawn_over_what_covers_it`, and
+`picture_of`'s doc-test (half blocks, no worker).
 
 - **What Doom needed:** show a new in-memory RGBA frame 35 times a second as
   real pixels (Kitty, Sixel, iTerm2), fitted to the node and kept to an aspect
@@ -65,6 +83,25 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
 
 ### 2. A public Sixel encoder for indices and a palette (rs-rich-art)
 
+**Status: closed in 0.0.23.** `rich_art::sixel::encode_palette(indices,
+palette, width, height) -> Option<String>` and
+`rich_art::sixel::index_exact(rgba) -> Option<(indices, palette)>`, behind
+`sixel`. The crate's own fixed-ANSI encoder is now `encode_palette` over
+the 256-colour palette, byte for byte as before. Its bytes match
+rs-rich-doom's encoder but for P1, which the raster attributes override
+(9 here, as in every encoder in the crate; 0 there). Tests:
+`a_palette_of_ones_own_encodes_exactly_and_validates` (rs-rich-doom's
+bytes for a 3x7 image, `icy_sixel` decodes the size and `#123456` within
+Sixel's precision, `None` left unset, a long run split, past the palette,
+short or past `MAX_PIXELS` refused) and
+`exact_indexing_keeps_up_to_256_colours`. Since `023-avmedia`,
+`SixelArt::encode` and `encode_cells` (so `Picture`'s Sixel path too) go
+through `sixel::encode_rgba`, which uses `encode_palette` for a raster of
+no more colours than `max_colors` (256 by default) and the adaptive
+encoder past that. Tests: `a_picture_of_few_colours_keeps_its_exact_palette`,
+`transparency_is_kept_by_the_exact_palette` and
+`more_colours_than_the_palette_fall_back_to_the_adaptive_encoder`.
+
 - **What Doom needed:** encode a frame that already has at most 256 colours
   with exactly those colours, quickly: no quantizing, no resampling.
 - **Workaround:** `graphics::sixel_indexed` (about 90 lines), with a fallback
@@ -86,6 +123,17 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
 
 ### 3. Kitty raw-pixel transmission and placement ids (rs-rich-art)
 
+**Status: closed in 0.0.23.** Wave 1 added `kitty::transmit_rgba`
+(`f=32`, chunked), which `Picture` uses for raw frames. This gap's work
+added the rest: `kitty::transmit_rgb` (`f=24`) and
+`kitty::transmit_raw(&RawImage, &Transmit)`, where `Transmit` carries the
+image id, a placement id (`p`), the cells and zlib compression (`o=z`,
+through flate2, which png already brings). Tests: rs-rich-art's
+`raw_pixels_are_chunked_and_round_trip_compressed_or_not` (keys, chunks
+of at most 4096 bytes, payloads read back, compressed or not), and
+rs-rich-record's `tests/kitty_raw.rs`, where the emulator decodes RGB and
+RGBA, compressed or not, to the pixels sent.
+
 - **What Doom needed:** send a new frame each tic without a PNG encode.
 - **Workaround:** PNG through `graphics::encode_png` each frame, about 180 kB
   a frame and the main cost of Kitty mode.
@@ -100,6 +148,9 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
   round-trips.
 
 ### 4. Made-up releases with a first-press hold and a repeat hold (intuiTUIve)
+
+**Status: closed in 0.0.22** (`e7651f81`): `App::synthesize_releases_with(Holds::new(first, repeat))`.
+Tests: `tests/input_timing.rs`, with `Holds::new(400 ms, 120 ms)`.
 
 - **What Doom needed:** on terminals without release reports, hold a key
   across the keyboard's repeat delay after the first press, but let it go
@@ -122,6 +173,17 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
   is released at 630 ms. A key whose release is reported never times out.
 
 ### 5. A worker on the app's clock, in lockstep (intuiTUIve)
+
+**Status: closed in 0.0.23.** `stepped_worker(period, max_catch_up, |steps:
+Steps<T>| ...) -> Signal<Option<T>>`, and `stepped_worker_with(Lockstep,
+work) -> (Signal<Option<T>>, Timer)` for the timeout (250 ms by default)
+and the timer. `Steps::wait() -> Option<u64>` blocks for ticks and returns
+`None` once the app has gone; `Steps::publish(T)` hands output over. It is
+a `fixed_step` underneath. Tests: `tests/lockstep.rs` (a second at 35 a
+second is 35 ticks and tick 35's output; a 300 ms stall hands over
+`max_catch_up`; a worker that ends makes each step return at once and the
+app quits; a worker asleep for a second times out and catches up), and
+`stepped_worker`'s doc-test.
 
 - **What Doom needed:** run a simulation that must live on its own thread
   (the C engine is global and blocking) so that it advances exactly as the
@@ -149,6 +211,13 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
 
 ### 6. Frame timings in `FrameStats` (intuiTUIve)
 
+**Status: closed in 0.0.23** (wave 1, `7d285128`). `FrameStats` has
+`draw`, `paint`, `write`, `painted`, and the totals `total_bytes`,
+`total_draw`, `total_paint`, `total_write`, `frames` and `skipped`;
+`App::timedemo` runs a script at full speed and reports each frame.
+Tests: `tests/timedemo.rs` (a widget that sleeps 5 ms shows `draw` of
+5 ms or more; `total_bytes` is the sum of each render's bytes).
+
 - **What Doom needed:** `--fps` and `--stats` used to show the time a draw
   took and the bytes over a run.
 - **Workaround:** dropped. `--stats` reports frames, tics, the newest engine
@@ -164,6 +233,22 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
   Durations are zero under a fake clock if the driver says so.
 
 ### 7. A voice mixer for sound effects (intuiTUIve, `pcm`/`audio`)
+
+**Status: closed in 0.0.23.** `audio::Mixer` (with `pcm`):
+`play(channel, clip: Arc<Clip>, gain, pan) -> Voice` (a sound on a
+channel stops the one there), `Voice::set(gain, pan)`, `stop`,
+`is_playing`, `Mixer::source(Box<dyn Source>)` for a stream, and
+`stop_all`. Clips and streams at any rate are resampled linearly. The pan
+is a balance: 0 plays the sound at its gain on both sides, -1 the left
+only; Doom's own pan law stays in Doom. `Mixer::new(&Output)` (with
+`audio`) mixes 256-frame blocks into the output on its own thread;
+`Mixer::detached(rate, channels)` and `Mixer::mix(&mut [f32])` mix by
+hand, from a renderer (gap 8) or a test. Tests: `tests/audio_mixer.rs`
+(two clips sum sample for sample; 11,025 Hz into 44,100 Hz lasts four
+times as many frames; pan -1 is left only; `stop` silences the next
+block; `is_playing` ends within a block of the clip's end; a stream under
+the voices; the thread into a null output, read through a tap), and
+`Mixer`'s doc-test.
 
 - **What Doom needed:** play many short sounds at once on numbered channels,
   each at its own sample rate, gain and pan, stopped or changed while
@@ -186,6 +271,17 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
 
 ### 8. A render callback output for synthesizers (intuiTUIve, `audio`)
 
+**Status: closed in 0.0.23.** `audio::output_with(options, render: impl
+FnMut(&mut [f32], u16) + Send + 'static) -> Result<Output, AudioError>`:
+the device's callback (or the null output's clock) calls `render` for each
+block. Volume, pause, `tap` and `failed` work as for `output`; `write` is
+refused. A panicking renderer stops the output and `failed()` says
+"the renderer panicked"; the app goes on (Rust's panic hook still prints
+the message to stderr). A `Mixer::detached` can be mixed from it. Tests:
+`tests/audio_render.rs` (a 440 Hz sine makes 440 rising crossings in a
+second; volume 0 is silence while the renderer goes on; a panicking
+renderer is reported), and `output_with`'s doc-test.
+
 - **What Doom needed:** the OPL synthesizer produces samples on demand, and
   its song timing runs off the samples it makes.
 - **Workaround:** the mixer thread pulls music into each block and writes it
@@ -203,6 +299,19 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
   down the app.
 
 ### 9. A paced test sink and capture for audio output (intuiTUIve, `audio`)
+
+**Status: closed in 0.0.23.** `OutputOptions::null()` opens an `Output`
+with no device (44,100 Hz in two channels unless set) that takes samples
+at its rate on the real clock, never more than its queue ahead.
+`Output::tap(keep: Duration) -> Tap` records what any output's device
+takes, after the volume: the newest `keep` of it (`Tap::samples`), the
+frames in all (`Tap::frames`), and `Tap::to_wav(path)` (32-bit float)
+with `wav`. The null output runs on the real clock only, not the app's:
+under the driver a test waits real time for it. The maintainer kept it
+that way on 2026-10-26. Tests:
+`tests/audio_null.rs` (44,100 frames a second within 2%, a writer held to
+the queue; volume 0 taps only zeros; a 1 s tap keeps 1 s; hound reads the
+WAV back the same), and `OutputOptions::null`'s doc-test.
 
 - **What Doom needed:** prove that sound reaches the device (sample counts,
   silence on mute, volume) on a machine with no sound card, and record the
@@ -226,6 +335,20 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
 
 ### 10. ALSA's messages kept off the screen for the stream's life (intuiTUIve, `audio`)
 
+**Status: closed in 0.0.23, another way.** Each output's and capture's
+stream callbacks put intuiTUIve's keeping handler on the thread that runs
+the stream (cpal's), the first time they run, for that thread's life,
+which is the stream's. It stays thread-local (`snd_lib_error_set_local`),
+so nothing else in the process that uses ALSA is changed, and no C is
+needed: the process-wide handler (`snd_lib_error_set_handler`) is a
+variadic C function, which stable Rust cannot define, and alsa-lib gives
+no way to read the handler before it to put back. `audio::messages()`
+returns the lines as before. Test: `tests/audio_alsa_quiet.rs`, a child
+process (`HOME` with an `.asoundrc` whose default is ALSA's `file` plugin
+onto a path it cannot write) writes nothing to stderr, and its
+`messages()` holds `pcm_file.c`'s line; without the change the test fails
+with the lines on stderr. `messages`' doc-test.
+
 - **What Doom needed:** ALSA's complaints (an underrun) must never land on
   the game's screen.
 - **Workaround:** `csrc/sound.c`'s `rs_doom_quiet_alsa` installs a
@@ -242,6 +365,15 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
   written to stderr and `messages()` holds the line.
 
 ### 11. A palette-keeping two-colour rule for Braille and quadrants (intuiTUIve, `pixels`)
+
+**Status: closed in 0.0.23.** `Node::pixel_colors(PixelColors::Average |
+PixelColors::Nearest)` for `pixels` and `pixels_fit` nodes, `Average` the
+default. With `Nearest`, each side's colour is the one of its pixels
+nearest the side's average. Tests: `pixels.rs`'s
+`nearest_colours_keep_to_the_cells_own` (a 2x4 cell of red, dark red and
+black, in Braille and quadrants), `averaged_colours_are_the_default` and
+`cells_written_directly_match_the_segments_they_replaced` (unchanged), and
+`pixel_colors`'s doc-test.
 
 - **What Doom needed:** Braille cells in the frame's own colours. Before,
   rs-rich-doom chose each side's colour as the member pixel nearest that
@@ -261,6 +393,20 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
 
 ### 12. An aspect-fitted pixel buffer (intuiTUIve, `pixels`)
 
+**Status: closed in 0.0.23.** `PixelBuf::draw_fitted(src, width, height,
+&Fitted) -> Rect`, where `Fitted::new(mode)` takes `.aspect(f64)`,
+`.cell_aspect(f64)` (default 0.5), `.fit(PixelFit::Contain | Cover |
+Stretch)` and `.filter(Filter::Nearest | Average)`; it returns the cells
+used. One change from the proposal: the fit is intuiTUIve's own
+`PixelFit`, not rs-rich-art's `ImageFit`, because `pixels` is core and
+rs-rich-art is behind the `art` plugin; and `Fitted` names the cell mode,
+which says how many pixels a cell holds. Tests:
+`a_picture_is_fitted_at_its_ratio_in_whole_cells` (320x200 at 4:3 into
+80x24 cells of 1:2 is 64x24 at column 8; `aspect` unset fills the buffer;
+`Nearest` keeps the source's colours; margins stay `CLEAR`; Braille; cover)
+and `the_average_filter_blends_what_each_pixel_covers`, and
+`draw_fitted`'s doc-test.
+
 - **What Doom needed:** a 320x200 frame shown at 4:3 in whatever cells the
   node has, from the cell's real aspect ratio, centred, the margins
   transparent.
@@ -277,6 +423,46 @@ What already landed and is used here: pixel cells (`Canvas::put_rgb` and the
   source's colours exactly; margins stay `CLEAR`.
 
 ### 13. Sound in recordings (rs-rich-record)
+
+**Status: built (branch `023-avmedia`), with option (a) below, the
+maintainer's choice.** `Set Audio on` in a tape, or `rich record
+--audio`, off by default. The recorder makes a directory and names it in
+the program's environment as `RICH_RECORD_AUDIO`; a program writes what
+it plays there, one timed stream a file (a header with the rate, the
+channels and the wall-clock time of the first sample, then `f32`
+samples; `rich_record::audio` documents it). intuiTUIve's `output()` and
+`output_with()` do it by themselves (`audio::RECORD_AUDIO_ENV`): under
+the recorder they play on the device as usual and tee every block it
+plays into the stream, timed by the device's callbacks (latency counted,
+an underrun kept as silence); with no device they fall back to a null
+output paced on the real clock, named "rich record", whose sound goes to
+the stream alone (the maintainer's call: on the device as well, not
+instead of it). The recorder puts the streams on the
+recording's clock, cuts what played while hidden, and mixes them: an MP4
+gets an AAC track placed with `-itsoffset`, and a GIF, APNG, page or cast
+a WAV beside it (`rich_record::audio::Audio::wav`). The acceptance test
+(`crates/rich-record/tests/audio.rs`) records a program playing a 1 s
+440 Hz tone and checks that the WAV's tone, and the MP4's decoded, start
+within one frame of the frame that announces it and last 1 s.
+
+The options as they were laid out:
+
+- **How the program's sound reaches the recorder.** rs-rich-record does
+  not depend on intuiTUIve, so either (a) a contract through the
+  environment: the recorder sets, say, `RICH_RECORD_AUDIO=<path>` and
+  intuiTUIve's `output()` opens a null output tapped to that file, with
+  its start time on the recording's clock; (b) an ALSA device the
+  recorder provides (`HOME` with an `.asoundrc` onto a paced FIFO, as
+  rs-rich-doom's video script does), which covers any program but is
+  Linux-only and needs the recorder to pace the reads; or (c) a
+  PulseAudio null sink and its monitor, which needs a running server.
+- **The tape syntax and the format.** `Set Audio on` in a tape, or
+  `rich record --audio`, and what happens to outputs other than MP4 (GIF,
+  APNG and the HTML player have no sound; a WAV beside them?).
+- **Sync.** The recorder's frame timestamps are its own clock's; the
+  sound's start must be put on that clock (`-itsoffset` for ffmpeg), and
+  ffmpeg must have an AAC encoder (the built-in `aac` is enough).
+
 
 - **What Doom needed:** a video of the game with its sound.
 - **Workaround:** `docs/media/play/record.sh`: xterm on Xvfb captured by

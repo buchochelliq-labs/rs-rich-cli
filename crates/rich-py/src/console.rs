@@ -65,8 +65,16 @@ struct Settings {
     force_terminal: Option<bool>,
     is_terminal: bool,
     no_color: bool,
+    /// The size upstream's `Console.size` gives, from the fields below.
     width: usize,
     height: usize,
+    /// Upstream's `_width` and `_height`: the size asked for, by argument,
+    /// setter or `COLUMNS` (less a legacy console's column) and `LINES`.
+    requested_width: Option<usize>,
+    requested_height: Option<usize>,
+    /// The terminal's size, `COLUMNS` and `LINES` over it, or 80 by 25:
+    /// what upstream's `Console.size` falls back on, read once at build.
+    fallback_size: (usize, usize),
     emoji: bool,
     highlight: bool,
     markup: bool,
@@ -159,6 +167,24 @@ fn color_system_name(system: Option<ColorSystem>) -> Option<&'static str> {
     })
 }
 
+impl Settings {
+    /// Set `width` and `height` as upstream's `Console.size` does. A legacy
+    /// Windows console loses a column when both sides were asked for, or
+    /// when its width falls back on the terminal; a dumb terminal is 80 by
+    /// 25 unless both were asked for.
+    fn resolve_size(&mut self) {
+        let legacy = usize::from(self.legacy_windows);
+        (self.width, self.height) = match (self.requested_width, self.requested_height) {
+            (Some(width), Some(height)) => (width.saturating_sub(legacy), height),
+            _ if self.is_terminal && is_dumb_term() => (80, 25),
+            (width, height) => (
+                width.unwrap_or(self.fallback_size.0.saturating_sub(legacy)),
+                height.unwrap_or(self.fallback_size.1),
+            ),
+        };
+    }
+}
+
 fn check_width(width: usize) -> PyResult<usize> {
     if width > MAX_CONSOLE_WIDTH {
         return Err(PyValueError::new_err(format!(
@@ -194,7 +220,10 @@ impl Snapshot {
         let mut console = CoreConsole::builder()
             .force_terminal(s.is_terminal)
             .color_system(s.color_system)
-            .width(s.width)
+            // `s.width` is already the console's size. The core takes one
+            // column off a legacy Windows console when given both width and
+            // height (upstream's `Console.size`), so give it that column.
+            .width(s.width + usize::from(s.legacy_windows))
             .height(s.height)
             .no_color(s.no_color)
             .emoji(emoji)
@@ -1260,32 +1289,40 @@ impl Console {
             } else {
                 (None, None)
             };
-        let width = match width {
-            Some(width) => width,
-            None => env_size("COLUMNS")?
-                .filter(|w| *w <= MAX_CONSOLE_WIDTH)
+        // Upstream's `__init__`: `_width` is the argument, or `COLUMNS` less
+        // a legacy console's column; `_height` the argument, or `LINES`.
+        let legacy = usize::from(legacy_windows.unwrap_or(false));
+        let columns = env_size("COLUMNS")?.filter(|w| *w <= MAX_CONSOLE_WIDTH);
+        let lines = env_size("LINES")?.filter(|h| *h <= MAX_CONSOLE_HEIGHT);
+        let requested_width = width.or(columns.map(|w| w.saturating_sub(legacy)));
+        let requested_height = match height {
+            Some(height) => Some(check_size("height", height, MAX_CONSOLE_HEIGHT)?),
+            None => lines,
+        };
+        let fallback_size = (
+            columns
                 .or(terminal_width.filter(|w: &usize| *w > 0))
                 .unwrap_or(80)
                 .min(MAX_CONSOLE_WIDTH),
-        };
-        builder = builder.width(width);
-        let height = match height {
-            Some(height) => check_size("height", height, MAX_CONSOLE_HEIGHT)?,
-            None => env_size("LINES")?
-                .filter(|h| *h <= MAX_CONSOLE_HEIGHT)
+            lines
                 .or(terminal_height.filter(|h: &usize| *h > 0))
                 .unwrap_or(25)
                 .min(MAX_CONSOLE_HEIGHT),
-        };
-        builder = builder.height(height);
+        );
+        builder = builder
+            .width(requested_width.unwrap_or(fallback_size.0))
+            .height(requested_height.unwrap_or(fallback_size.1));
         let detected = builder.build();
-        let settings = Settings {
+        let mut settings = Settings {
             color_system: detected.color_system(),
             force_terminal,
             is_terminal,
             no_color: detected.no_color(),
-            width: detected.width().min(MAX_CONSOLE_WIDTH),
-            height: detected.height(),
+            width: 0,
+            height: 0,
+            requested_width,
+            requested_height,
+            fallback_size,
             emoji,
             highlight,
             markup,
@@ -1301,6 +1338,7 @@ impl Console {
             log_time,
             emoji_variant,
         };
+        settings.resolve_size();
         Ok(Console {
             state: Mutex::new(ConsoleState {
                 settings,
@@ -1425,7 +1463,10 @@ impl Console {
 
     #[setter]
     fn set_width(&self, width: usize) -> PyResult<()> {
-        self.state().settings.width = check_width(width)?;
+        let mut state = self.state();
+        let settings = &mut state.settings;
+        settings.requested_width = Some(check_width(width)?);
+        settings.resolve_size();
         Ok(())
     }
 
@@ -1436,7 +1477,10 @@ impl Console {
 
     #[setter]
     fn set_height(&self, height: usize) -> PyResult<()> {
-        self.state().settings.height = check_size("height", height, MAX_CONSOLE_HEIGHT)?;
+        let mut state = self.state();
+        let settings = &mut state.settings;
+        settings.requested_height = Some(check_size("height", height, MAX_CONSOLE_HEIGHT)?);
+        settings.resolve_size();
         Ok(())
     }
 
@@ -1455,8 +1499,10 @@ impl Console {
         let width = check_width(size.0)?;
         check_size("height", size.1, MAX_CONSOLE_HEIGHT)?;
         let mut state = self.state();
-        state.settings.width = width;
-        state.settings.height = size.1;
+        let settings = &mut state.settings;
+        settings.requested_width = Some(width);
+        settings.requested_height = Some(size.1);
+        settings.resolve_size();
         Ok(())
     }
 

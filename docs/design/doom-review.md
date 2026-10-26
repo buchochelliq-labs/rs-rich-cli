@@ -111,7 +111,10 @@ Sources: [standard image widget](https://github.com/buchochelliq-labs/rs-rich-cl
 
 ### Custom palette Sixel API
 
-**Status: confirmed missing public API at the pinned rich revision.**
+**Status: confirmed missing public API at the pinned rich revision; since
+built (0.0.23): `sixel::encode_palette` and `index_exact` (doom gap 2), and
+`sixel::encode_rgba`, which `SixelArt` now uses, keeping the exact colours
+of a picture of 256 colours or fewer.**
 
 Doom supplies a local `sixel_indexed` encoder to preserve the frame's existing colours. This was checked against upstream rather than assuming an equivalent public API did not exist:
 

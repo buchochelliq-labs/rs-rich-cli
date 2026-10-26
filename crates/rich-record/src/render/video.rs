@@ -231,9 +231,23 @@ impl Mp4 {
         height: usize,
         fps: f64,
     ) -> std::io::Result<Mp4> {
+        Mp4::start_with_sound(path, width, height, fps, None)
+    }
+
+    /// [`Mp4::start_at`] with a sound track: `sound` is a WAV file and
+    /// where it starts on the video's clock, in seconds (FFmpeg's
+    /// `-itsoffset`). It is encoded as AAC (FFmpeg's own `aac` encoder).
+    pub fn start_with_sound(
+        path: &std::path::Path,
+        width: usize,
+        height: usize,
+        fps: f64,
+        sound: Option<(&std::path::Path, f64)>,
+    ) -> std::io::Result<Mp4> {
         let (width, height) = (width.max(2), height.max(2));
         let (width, height) = (width + width % 2, height + height % 2);
-        let child = Command::new("ffmpeg")
+        let mut command = Command::new("ffmpeg");
+        command
             .args([
                 "-y",
                 "-loglevel",
@@ -244,7 +258,14 @@ impl Mp4 {
                 "rgb24",
             ])
             .args(["-s", &format!("{width}x{height}")])
-            .args(["-r", &fps.to_string(), "-i", "-"])
+            .args(["-r", &fps.to_string(), "-i", "-"]);
+        if let Some((wav, offset)) = sound {
+            command
+                .args(["-itsoffset", &format!("{:.6}", offset.max(0.0)), "-i"])
+                .arg(wav)
+                .args(["-map", "0:v", "-map", "1:a", "-c:a", "aac", "-b:a", "160k"]);
+        }
+        let child = command
             .args(["-pix_fmt", "yuv420p", "-movflags", "+faststart"])
             .arg(path)
             .stdin(Stdio::piped())

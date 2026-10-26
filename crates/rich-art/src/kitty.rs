@@ -9,7 +9,9 @@
 //! overwritten like any other cell, and costs nothing to show again.
 //!
 //! - [`transmit`] sends a PNG and makes its virtual placement;
-//!   [`transmit_rgba`] sends raw RGBA pixels, with no PNG encode;
+//!   [`transmit_rgba`] and [`transmit_rgb`] send raw pixels, with no PNG
+//!   encode, and [`transmit_raw`] does so with a placement id and zlib
+//!   compression as asked;
 //!   [`transmit_animation`] adds frames and starts Kitty's own playback.
 //! - [`placeholder_row`] is the text of one row of cells, and
 //!   [`id_color`] the colour those cells must be printed in.
@@ -166,6 +168,157 @@ pub fn transmit_rgba(
     )
 }
 
+/// Transmit raw RGB pixels, `width` x `height`, as image `id` (`f=24`):
+/// [`transmit_rgba`] for a frame with no alpha, a quarter fewer bytes.
+pub fn transmit_rgb(
+    id: u32,
+    rgb: &[u8],
+    width: u32,
+    height: u32,
+    cols: usize,
+    rows: usize,
+) -> String {
+    transmit_raw(
+        &RawImage::new(RawFormat::Rgb, rgb, width, height),
+        &Transmit::new(id, cols, rows),
+    )
+}
+
+/// How raw pixels are laid out: three bytes a pixel or four.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RawFormat {
+    /// Red, green, blue (`f=24`).
+    Rgb,
+    /// Red, green, blue, alpha (`f=32`).
+    Rgba,
+}
+
+impl RawFormat {
+    /// Bytes a pixel.
+    pub fn bytes_per_pixel(self) -> usize {
+        match self {
+            RawFormat::Rgb => 3,
+            RawFormat::Rgba => 4,
+        }
+    }
+
+    fn key(self) -> u8 {
+        match self {
+            RawFormat::Rgb => 24,
+            RawFormat::Rgba => 32,
+        }
+    }
+}
+
+/// Raw pixels to transmit: their layout, the bytes, and the size.
+#[derive(Clone, Copy, Debug)]
+pub struct RawImage<'a> {
+    pub format: RawFormat,
+    pub pixels: &'a [u8],
+    pub width: u32,
+    pub height: u32,
+}
+
+impl<'a> RawImage<'a> {
+    pub fn new(format: RawFormat, pixels: &'a [u8], width: u32, height: u32) -> RawImage<'a> {
+        RawImage {
+            format,
+            pixels,
+            width,
+            height,
+        }
+    }
+}
+
+/// Where and how [`transmit_raw`] sends an image: its id, an optional
+/// placement id (`p`), the cells of its virtual placement, and whether
+/// the pixels are zlib-compressed (`o=z`).
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
+pub struct Transmit {
+    pub id: u32,
+    pub placement: Option<u32>,
+    pub cols: usize,
+    pub rows: usize,
+    pub compress: bool,
+}
+
+impl Transmit {
+    /// Image `id` in `cols` x `rows` cells, no placement id, uncompressed.
+    pub fn new(id: u32, cols: usize, rows: usize) -> Transmit {
+        Transmit {
+            id,
+            placement: None,
+            cols,
+            rows,
+            compress: false,
+        }
+    }
+
+    /// Give the virtual placement this id (`p`), so it can be replaced or
+    /// deleted on its own.
+    pub fn placement(mut self, placement: u32) -> Transmit {
+        self.placement = Some(placement);
+        self
+    }
+
+    /// Compress the pixels with zlib (`o=z`): fewer bytes for flat
+    /// pictures (an emulator's, a plot's), more CPU.
+    pub fn compress(mut self, compress: bool) -> Transmit {
+        self.compress = compress;
+        self
+    }
+}
+
+/// Transmit raw pixels as `how` says, with a virtual placement for
+/// placeholder cells, in chunks of at most 4096 base64 bytes (`m=1`).
+/// Sending again under the same id replaces the image: a live frame sent
+/// many times a second (video, an emulator's screen, a live plot).
+///
+/// ```
+/// use rich_art::kitty::{transmit_raw, RawFormat, RawImage, Transmit};
+///
+/// let rgba = vec![255u8; 2 * 2 * 4];
+/// let out = transmit_raw(
+///     &RawImage::new(RawFormat::Rgba, &rgba, 2, 2),
+///     &Transmit::new(7, 2, 1).placement(3).compress(true),
+/// );
+/// assert!(out.starts_with("\x1b_Ga=T,U=1,f=32,s=2,v=2,o=z,t=d,i=7,p=3,c=2,r=1,q=2,m=0;"));
+/// ```
+pub fn transmit_raw(image: &RawImage<'_>, how: &Transmit) -> String {
+    let mut keys = format!(
+        "a=T,U=1,f={},s={},v={}",
+        image.format.key(),
+        image.width,
+        image.height
+    );
+    if how.compress {
+        keys.push_str(",o=z");
+    }
+    keys.push_str(&format!(",t=d,i={}", how.id));
+    if let Some(placement) = how.placement {
+        keys.push_str(&format!(",p={placement}"));
+    }
+    keys.push_str(&format!(",c={},r={},q=2", how.cols, how.rows));
+    if how.compress {
+        command(&keys, &zlib(image.pixels))
+    } else {
+        command(&keys, image.pixels)
+    }
+}
+
+/// `bytes` compressed with zlib, fast.
+fn zlib(bytes: &[u8]) -> Vec<u8> {
+    use std::io::Write;
+    let mut encoder = flate2::write::ZlibEncoder::new(
+        Vec::with_capacity(bytes.len() / 4),
+        flate2::Compression::fast(),
+    );
+    // Writing to a Vec cannot fail.
+    let _ = encoder.write_all(bytes);
+    encoder.finish().unwrap_or_default()
+}
+
 /// Transmit `frames` as image `id` (the first is the image, the rest its
 /// animation frames), give it a virtual placement of `cols × rows` cells,
 /// and start Kitty's playback, looping forever. With one frame this is
@@ -245,6 +398,63 @@ mod tests {
         assert_eq!(out.matches("\x1b_G").count(), 2);
         assert!(out.contains("\x1b\\\x1b_Gm=0;"));
         assert_eq!(delete(7), "\x1b_Ga=d,d=I,i=7,q=2\x1b\\");
+    }
+
+    /// The payload of a chunked command, base64-decoded.
+    fn payload(out: &str) -> Vec<u8> {
+        let mut data = String::new();
+        for command in out.split("\x1b_G").skip(1) {
+            let body = command.strip_suffix("\x1b\\").expect("terminated");
+            let (_, chunk) = body.split_once(';').expect("payload");
+            assert!(chunk.len() <= 4096, "chunk of {}", chunk.len());
+            data.push_str(chunk);
+        }
+        let value = |c: u8| match c {
+            b'A'..=b'Z' => c - b'A',
+            b'a'..=b'z' => c - b'a' + 26,
+            b'0'..=b'9' => c - b'0' + 52,
+            b'+' => 62,
+            _ => 63,
+        };
+        let digits: Vec<u8> = data.bytes().filter(|&c| c != b'=').map(value).collect();
+        digits
+            .chunks(4)
+            .flat_map(|c| {
+                let n = c
+                    .iter()
+                    .enumerate()
+                    .fold(0u32, |n, (i, &d)| n | u32::from(d) << (18 - 6 * i));
+                let bytes = [(n >> 16) as u8, (n >> 8) as u8, n as u8];
+                bytes[..c.len() - 1].to_vec()
+            })
+            .collect()
+    }
+
+    #[test]
+    fn raw_pixels_are_chunked_and_round_trip_compressed_or_not() {
+        use std::io::Read;
+        // 40x30 RGBA: 4800 bytes, 6400 base64 characters, two chunks.
+        let rgba: Vec<u8> = (0..40 * 30 * 4).map(|i| (i % 251) as u8).collect();
+        let image = RawImage::new(RawFormat::Rgba, &rgba, 40, 30);
+        let plain = transmit_raw(&image, &Transmit::new(5, 10, 4));
+        assert!(plain.starts_with("\x1b_Ga=T,U=1,f=32,s=40,v=30,t=d,i=5,c=10,r=4,q=2,m=1;"));
+        assert_eq!(plain.matches("\x1b_G").count(), 2);
+        assert!(plain.contains("\x1b_Gm=0;"));
+        assert_eq!(payload(&plain), rgba);
+        assert_eq!(plain, transmit_rgba(5, &rgba, 40, 30, 10, 4));
+
+        let packed = transmit_raw(&image, &Transmit::new(5, 10, 4).placement(9).compress(true));
+        assert!(packed.starts_with("\x1b_Ga=T,U=1,f=32,s=40,v=30,o=z,t=d,i=5,p=9,c=10,r=4,q=2,"));
+        let mut back = Vec::new();
+        flate2::read::ZlibDecoder::new(payload(&packed).as_slice())
+            .read_to_end(&mut back)
+            .unwrap();
+        assert_eq!(back, rgba);
+
+        let rgb = vec![7u8; 3 * 3 * 3];
+        let out = transmit_rgb(2, &rgb, 3, 3, 1, 1);
+        assert!(out.starts_with("\x1b_Ga=T,U=1,f=24,s=3,v=3,t=d,i=2,c=1,r=1,q=2,m=0;"));
+        assert_eq!(payload(&out), rgb);
     }
 
     #[test]

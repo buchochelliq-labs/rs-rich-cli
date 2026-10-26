@@ -425,7 +425,7 @@ pub(crate) fn bench_dispatch(args: &[String]) -> Result<bool, String> {
     }
     let mut comparison = compare(&baseline, &candidate, &options);
     flag_changes_from_zero(&mut comparison, &options);
-    let mut console = Console::builder().no_color(no_color);
+    let mut console = crate::console_builder().no_color(no_color);
     if let Some(width) = width {
         console = console.width(width);
     }

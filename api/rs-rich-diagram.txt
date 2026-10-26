@@ -1,0 +1,1128 @@
+pub mod rich_diagram
+pub mod rich_diagram::diagram
+pub struct rich_diagram::diagram::Diagram
+impl rich_diagram::diagram::Diagram
+pub fn rich_diagram::diagram::Diagram::ascii(self, bool) -> Self
+pub fn rich_diagram::diagram::Diagram::drawing(&self, bool) -> core::result::Result<&rich_diagram::layout::Drawing, &rich_diagram::layout::DrawError>
+pub fn rich_diagram::diagram::Diagram::graph(&self) -> &rich_diagram::graph::Graph
+pub fn rich_diagram::diagram::Diagram::new(rich_diagram::graph::Graph) -> Self
+impl core::clone::Clone for rich_diagram::diagram::Diagram
+pub fn rich_diagram::diagram::Diagram::clone(&self) -> rich_diagram::diagram::Diagram
+impl core::convert::From<rich_diagram::graph::Graph> for rich_diagram::diagram::Diagram
+pub fn rich_diagram::diagram::Diagram::from(rich_diagram::graph::Graph) -> Self
+impl core::fmt::Debug for rich_diagram::diagram::Diagram
+pub fn rich_diagram::diagram::Diagram::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich::protocol::Renderable for rich_diagram::diagram::Diagram
+pub fn rich_diagram::diagram::Diagram::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_diagram::diagram::Diagram::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl !core::marker::Freeze for rich_diagram::diagram::Diagram
+impl core::marker::Send for rich_diagram::diagram::Diagram
+impl core::marker::Sync for rich_diagram::diagram::Diagram
+impl core::marker::Unpin for rich_diagram::diagram::Diagram
+impl core::marker::UnsafeUnpin for rich_diagram::diagram::Diagram
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::diagram::Diagram
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::diagram::Diagram
+pub mod rich_diagram::dot
+pub struct rich_diagram::dot::Cluster
+pub rich_diagram::dot::Cluster::id: alloc::string::String
+pub rich_diagram::dot::Cluster::label: core::option::Option<alloc::string::String>
+pub rich_diagram::dot::Cluster::nodes: alloc::vec::Vec<usize>
+pub rich_diagram::dot::Cluster::parent: core::option::Option<usize>
+impl rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::label(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::graph::Cluster::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::graph::Cluster::nodes(self, impl core::iter::traits::collect::IntoIterator<Item = usize>) -> Self
+pub fn rich_diagram::graph::Cluster::parent(self, usize) -> Self
+impl core::clone::Clone for rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::clone(&self) -> rich_diagram::graph::Cluster
+impl core::cmp::Eq for rich_diagram::graph::Cluster
+impl core::cmp::PartialEq for rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::eq(&self, &rich_diagram::graph::Cluster) -> bool
+impl core::default::Default for rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::default() -> rich_diagram::graph::Cluster
+impl core::fmt::Debug for rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Cluster
+impl core::marker::Freeze for rich_diagram::graph::Cluster
+impl core::marker::Send for rich_diagram::graph::Cluster
+impl core::marker::Sync for rich_diagram::graph::Cluster
+impl core::marker::Unpin for rich_diagram::graph::Cluster
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Cluster
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Cluster
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Cluster
+pub struct rich_diagram::dot::Dot
+impl rich_diagram::dot::Dot
+pub fn rich_diagram::dot::Dot::ascii(self, bool) -> Self
+pub fn rich_diagram::dot::Dot::ascii_option(self, core::option::Option<bool>) -> Self
+pub fn rich_diagram::dot::Dot::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::dot::Dot::parsed(&self) -> core::result::Result<&rich_diagram::dot::DotGraph, &rich_diagram::dot::DotError>
+pub fn rich_diagram::dot::Dot::source(&self) -> &str
+impl core::clone::Clone for rich_diagram::dot::Dot
+pub fn rich_diagram::dot::Dot::clone(&self) -> rich_diagram::dot::Dot
+impl core::fmt::Debug for rich_diagram::dot::Dot
+pub fn rich_diagram::dot::Dot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich::protocol::Renderable for rich_diagram::dot::Dot
+pub fn rich_diagram::dot::Dot::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_diagram::dot::Dot::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl !core::marker::Freeze for rich_diagram::dot::Dot
+impl core::marker::Send for rich_diagram::dot::Dot
+impl core::marker::Sync for rich_diagram::dot::Dot
+impl core::marker::Unpin for rich_diagram::dot::Dot
+impl core::marker::UnsafeUnpin for rich_diagram::dot::Dot
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::dot::Dot
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::dot::Dot
+pub struct rich_diagram::dot::DotError
+pub rich_diagram::dot::DotError::construct: core::option::Option<alloc::string::String>
+pub rich_diagram::dot::DotError::line: usize
+impl rich_diagram::dot::DotError
+pub fn rich_diagram::dot::DotError::message(&self) -> &str
+impl core::clone::Clone for rich_diagram::dot::DotError
+pub fn rich_diagram::dot::DotError::clone(&self) -> rich_diagram::dot::DotError
+impl core::cmp::Eq for rich_diagram::dot::DotError
+impl core::cmp::PartialEq for rich_diagram::dot::DotError
+pub fn rich_diagram::dot::DotError::eq(&self, &rich_diagram::dot::DotError) -> bool
+impl core::error::Error for rich_diagram::dot::DotError
+impl core::fmt::Debug for rich_diagram::dot::DotError
+pub fn rich_diagram::dot::DotError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_diagram::dot::DotError
+pub fn rich_diagram::dot::DotError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::dot::DotError
+impl core::marker::Freeze for rich_diagram::dot::DotError
+impl core::marker::Send for rich_diagram::dot::DotError
+impl core::marker::Sync for rich_diagram::dot::DotError
+impl core::marker::Unpin for rich_diagram::dot::DotError
+impl core::marker::UnsafeUnpin for rich_diagram::dot::DotError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::dot::DotError
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::dot::DotError
+pub struct rich_diagram::dot::DotGraph
+pub rich_diagram::dot::DotGraph::clusters: alloc::vec::Vec<rich_diagram::graph::Cluster>
+pub rich_diagram::dot::DotGraph::directed: bool
+pub rich_diagram::dot::DotGraph::graph: rich_diagram::graph::Graph
+pub rich_diagram::dot::DotGraph::label: core::option::Option<alloc::string::String>
+pub rich_diagram::dot::DotGraph::name: core::option::Option<alloc::string::String>
+pub rich_diagram::dot::DotGraph::notes: alloc::vec::Vec<alloc::string::String>
+pub rich_diagram::dot::DotGraph::strict: bool
+impl core::clone::Clone for rich_diagram::dot::DotGraph
+pub fn rich_diagram::dot::DotGraph::clone(&self) -> rich_diagram::dot::DotGraph
+impl core::cmp::Eq for rich_diagram::dot::DotGraph
+impl core::cmp::PartialEq for rich_diagram::dot::DotGraph
+pub fn rich_diagram::dot::DotGraph::eq(&self, &rich_diagram::dot::DotGraph) -> bool
+impl core::fmt::Debug for rich_diagram::dot::DotGraph
+pub fn rich_diagram::dot::DotGraph::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::dot::DotGraph
+impl core::marker::Freeze for rich_diagram::dot::DotGraph
+impl core::marker::Send for rich_diagram::dot::DotGraph
+impl core::marker::Sync for rich_diagram::dot::DotGraph
+impl core::marker::Unpin for rich_diagram::dot::DotGraph
+impl core::marker::UnsafeUnpin for rich_diagram::dot::DotGraph
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::dot::DotGraph
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::dot::DotGraph
+pub const rich_diagram::dot::MAX_EDGES: usize
+pub const rich_diagram::dot::MAX_NESTING: usize
+pub const rich_diagram::dot::MAX_NODES: usize
+pub const rich_diagram::dot::MAX_SOURCE: usize
+pub fn rich_diagram::dot::parse(&str) -> core::result::Result<rich_diagram::dot::DotGraph, rich_diagram::dot::DotError>
+pub mod rich_diagram::er
+pub enum rich_diagram::er::Cardinality
+pub rich_diagram::er::Cardinality::ManyToMany
+pub rich_diagram::er::Cardinality::ManyToOne
+pub rich_diagram::er::Cardinality::OneToMany
+pub rich_diagram::er::Cardinality::OneToOne
+impl rich_diagram::er::Cardinality
+pub fn rich_diagram::er::Cardinality::notation(self) -> &'static str
+impl core::clone::Clone for rich_diagram::er::Cardinality
+pub fn rich_diagram::er::Cardinality::clone(&self) -> rich_diagram::er::Cardinality
+impl core::cmp::Eq for rich_diagram::er::Cardinality
+impl core::cmp::PartialEq for rich_diagram::er::Cardinality
+pub fn rich_diagram::er::Cardinality::eq(&self, &rich_diagram::er::Cardinality) -> bool
+impl core::fmt::Debug for rich_diagram::er::Cardinality
+pub fn rich_diagram::er::Cardinality::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_diagram::er::Cardinality
+pub fn rich_diagram::er::Cardinality::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_diagram::er::Cardinality
+impl core::marker::StructuralPartialEq for rich_diagram::er::Cardinality
+impl core::marker::Freeze for rich_diagram::er::Cardinality
+impl core::marker::Send for rich_diagram::er::Cardinality
+impl core::marker::Sync for rich_diagram::er::Cardinality
+impl core::marker::Unpin for rich_diagram::er::Cardinality
+impl core::marker::UnsafeUnpin for rich_diagram::er::Cardinality
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::er::Cardinality
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::er::Cardinality
+pub struct rich_diagram::er::Column
+pub rich_diagram::er::Column::data_type: core::option::Option<alloc::string::String>
+pub rich_diagram::er::Column::foreign_key: bool
+pub rich_diagram::er::Column::name: alloc::string::String
+pub rich_diagram::er::Column::nullable: bool
+pub rich_diagram::er::Column::primary_key: bool
+pub rich_diagram::er::Column::unique: bool
+impl rich_diagram::er::Column
+pub fn rich_diagram::er::Column::data_type(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::er::Column::foreign_key(self) -> Self
+pub fn rich_diagram::er::Column::markers(&self) -> alloc::string::String
+pub fn rich_diagram::er::Column::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::er::Column::nullable(self) -> Self
+pub fn rich_diagram::er::Column::primary_key(self) -> Self
+pub fn rich_diagram::er::Column::unique(self) -> Self
+impl core::clone::Clone for rich_diagram::er::Column
+pub fn rich_diagram::er::Column::clone(&self) -> rich_diagram::er::Column
+impl core::cmp::Eq for rich_diagram::er::Column
+impl core::cmp::PartialEq for rich_diagram::er::Column
+pub fn rich_diagram::er::Column::eq(&self, &rich_diagram::er::Column) -> bool
+impl core::default::Default for rich_diagram::er::Column
+pub fn rich_diagram::er::Column::default() -> rich_diagram::er::Column
+impl core::fmt::Debug for rich_diagram::er::Column
+pub fn rich_diagram::er::Column::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::er::Column
+impl core::marker::Freeze for rich_diagram::er::Column
+impl core::marker::Send for rich_diagram::er::Column
+impl core::marker::Sync for rich_diagram::er::Column
+impl core::marker::Unpin for rich_diagram::er::Column
+impl core::marker::UnsafeUnpin for rich_diagram::er::Column
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::er::Column
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::er::Column
+pub struct rich_diagram::er::Entity
+pub rich_diagram::er::Entity::columns: alloc::vec::Vec<rich_diagram::er::Column>
+pub rich_diagram::er::Entity::name: alloc::string::String
+impl rich_diagram::er::Entity
+pub fn rich_diagram::er::Entity::column(self, rich_diagram::er::Column) -> Self
+pub fn rich_diagram::er::Entity::columns(self, impl core::iter::traits::collect::IntoIterator<Item = rich_diagram::er::Column>) -> Self
+pub fn rich_diagram::er::Entity::new(impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for rich_diagram::er::Entity
+pub fn rich_diagram::er::Entity::clone(&self) -> rich_diagram::er::Entity
+impl core::cmp::Eq for rich_diagram::er::Entity
+impl core::cmp::PartialEq for rich_diagram::er::Entity
+pub fn rich_diagram::er::Entity::eq(&self, &rich_diagram::er::Entity) -> bool
+impl core::default::Default for rich_diagram::er::Entity
+pub fn rich_diagram::er::Entity::default() -> rich_diagram::er::Entity
+impl core::fmt::Debug for rich_diagram::er::Entity
+pub fn rich_diagram::er::Entity::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::er::Entity
+impl core::marker::Freeze for rich_diagram::er::Entity
+impl core::marker::Send for rich_diagram::er::Entity
+impl core::marker::Sync for rich_diagram::er::Entity
+impl core::marker::Unpin for rich_diagram::er::Entity
+impl core::marker::UnsafeUnpin for rich_diagram::er::Entity
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::er::Entity
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::er::Entity
+pub struct rich_diagram::er::ErDiagram
+impl rich_diagram::er::ErDiagram
+pub fn rich_diagram::er::ErDiagram::ascii(self, bool) -> Self
+pub fn rich_diagram::er::ErDiagram::direction(self, rich_diagram::graph::Direction) -> Self
+pub fn rich_diagram::er::ErDiagram::drawing(&self, bool) -> core::result::Result<&rich_diagram::layout::Drawing, &rich_diagram::layout::DrawError>
+pub fn rich_diagram::er::ErDiagram::model(&self) -> &rich_diagram::er::ErModel
+pub fn rich_diagram::er::ErDiagram::new(rich_diagram::er::ErModel) -> Self
+impl core::clone::Clone for rich_diagram::er::ErDiagram
+pub fn rich_diagram::er::ErDiagram::clone(&self) -> rich_diagram::er::ErDiagram
+impl core::convert::From<rich_diagram::er::ErModel> for rich_diagram::er::ErDiagram
+pub fn rich_diagram::er::ErDiagram::from(rich_diagram::er::ErModel) -> Self
+impl core::fmt::Debug for rich_diagram::er::ErDiagram
+pub fn rich_diagram::er::ErDiagram::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich::protocol::Renderable for rich_diagram::er::ErDiagram
+pub fn rich_diagram::er::ErDiagram::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_diagram::er::ErDiagram::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl !core::marker::Freeze for rich_diagram::er::ErDiagram
+impl core::marker::Send for rich_diagram::er::ErDiagram
+impl core::marker::Sync for rich_diagram::er::ErDiagram
+impl core::marker::Unpin for rich_diagram::er::ErDiagram
+impl core::marker::UnsafeUnpin for rich_diagram::er::ErDiagram
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::er::ErDiagram
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::er::ErDiagram
+pub struct rich_diagram::er::ErModel
+pub rich_diagram::er::ErModel::entities: alloc::vec::Vec<rich_diagram::er::Entity>
+pub rich_diagram::er::ErModel::groups: alloc::vec::Vec<rich_diagram::er::Group>
+pub rich_diagram::er::ErModel::relationships: alloc::vec::Vec<rich_diagram::er::Relationship>
+impl rich_diagram::er::ErModel
+pub fn rich_diagram::er::ErModel::entity(self, rich_diagram::er::Entity) -> Self
+pub fn rich_diagram::er::ErModel::group(self, rich_diagram::er::Group) -> Self
+pub fn rich_diagram::er::ErModel::new() -> Self
+pub fn rich_diagram::er::ErModel::relationship(self, rich_diagram::er::Relationship) -> Self
+pub fn rich_diagram::er::ErModel::to_graph(&self, rich_diagram::graph::Direction, bool) -> (rich_diagram::graph::Graph, alloc::vec::Vec<alloc::string::String>)
+impl core::clone::Clone for rich_diagram::er::ErModel
+pub fn rich_diagram::er::ErModel::clone(&self) -> rich_diagram::er::ErModel
+impl core::cmp::Eq for rich_diagram::er::ErModel
+impl core::cmp::PartialEq for rich_diagram::er::ErModel
+pub fn rich_diagram::er::ErModel::eq(&self, &rich_diagram::er::ErModel) -> bool
+impl core::convert::From<rich_diagram::er::ErModel> for rich_diagram::er::ErDiagram
+pub fn rich_diagram::er::ErDiagram::from(rich_diagram::er::ErModel) -> Self
+impl core::default::Default for rich_diagram::er::ErModel
+pub fn rich_diagram::er::ErModel::default() -> rich_diagram::er::ErModel
+impl core::fmt::Debug for rich_diagram::er::ErModel
+pub fn rich_diagram::er::ErModel::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::er::ErModel
+impl core::marker::Freeze for rich_diagram::er::ErModel
+impl core::marker::Send for rich_diagram::er::ErModel
+impl core::marker::Sync for rich_diagram::er::ErModel
+impl core::marker::Unpin for rich_diagram::er::ErModel
+impl core::marker::UnsafeUnpin for rich_diagram::er::ErModel
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::er::ErModel
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::er::ErModel
+pub struct rich_diagram::er::Group
+pub rich_diagram::er::Group::entities: alloc::vec::Vec<alloc::string::String>
+pub rich_diagram::er::Group::label: alloc::string::String
+impl rich_diagram::er::Group
+pub fn rich_diagram::er::Group::new<I, S>(impl core::convert::Into<alloc::string::String>, I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>
+impl core::clone::Clone for rich_diagram::er::Group
+pub fn rich_diagram::er::Group::clone(&self) -> rich_diagram::er::Group
+impl core::cmp::Eq for rich_diagram::er::Group
+impl core::cmp::PartialEq for rich_diagram::er::Group
+pub fn rich_diagram::er::Group::eq(&self, &rich_diagram::er::Group) -> bool
+impl core::default::Default for rich_diagram::er::Group
+pub fn rich_diagram::er::Group::default() -> rich_diagram::er::Group
+impl core::fmt::Debug for rich_diagram::er::Group
+pub fn rich_diagram::er::Group::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::er::Group
+impl core::marker::Freeze for rich_diagram::er::Group
+impl core::marker::Send for rich_diagram::er::Group
+impl core::marker::Sync for rich_diagram::er::Group
+impl core::marker::Unpin for rich_diagram::er::Group
+impl core::marker::UnsafeUnpin for rich_diagram::er::Group
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::er::Group
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::er::Group
+pub struct rich_diagram::er::Relationship
+pub rich_diagram::er::Relationship::cardinality: core::option::Option<rich_diagram::er::Cardinality>
+pub rich_diagram::er::Relationship::from: alloc::string::String
+pub rich_diagram::er::Relationship::from_columns: alloc::vec::Vec<alloc::string::String>
+pub rich_diagram::er::Relationship::label: core::option::Option<alloc::string::String>
+pub rich_diagram::er::Relationship::to: alloc::string::String
+pub rich_diagram::er::Relationship::to_columns: alloc::vec::Vec<alloc::string::String>
+impl rich_diagram::er::Relationship
+pub fn rich_diagram::er::Relationship::cardinality(self, rich_diagram::er::Cardinality) -> Self
+pub fn rich_diagram::er::Relationship::columns<F, T>(self, F, T) -> Self where F: core::iter::traits::collect::IntoIterator, <F as core::iter::traits::collect::IntoIterator>::Item: core::convert::Into<alloc::string::String>, T: core::iter::traits::collect::IntoIterator, <T as core::iter::traits::collect::IntoIterator>::Item: core::convert::Into<alloc::string::String>
+pub fn rich_diagram::er::Relationship::label(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::er::Relationship::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for rich_diagram::er::Relationship
+pub fn rich_diagram::er::Relationship::clone(&self) -> rich_diagram::er::Relationship
+impl core::cmp::Eq for rich_diagram::er::Relationship
+impl core::cmp::PartialEq for rich_diagram::er::Relationship
+pub fn rich_diagram::er::Relationship::eq(&self, &rich_diagram::er::Relationship) -> bool
+impl core::default::Default for rich_diagram::er::Relationship
+pub fn rich_diagram::er::Relationship::default() -> rich_diagram::er::Relationship
+impl core::fmt::Debug for rich_diagram::er::Relationship
+pub fn rich_diagram::er::Relationship::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::er::Relationship
+impl core::marker::Freeze for rich_diagram::er::Relationship
+impl core::marker::Send for rich_diagram::er::Relationship
+impl core::marker::Sync for rich_diagram::er::Relationship
+impl core::marker::Unpin for rich_diagram::er::Relationship
+impl core::marker::UnsafeUnpin for rich_diagram::er::Relationship
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::er::Relationship
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::er::Relationship
+pub mod rich_diagram::graph
+pub enum rich_diagram::graph::Direction
+pub rich_diagram::graph::Direction::BottomUp
+pub rich_diagram::graph::Direction::LeftRight
+pub rich_diagram::graph::Direction::RightLeft
+pub rich_diagram::graph::Direction::TopDown
+impl rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Direction::is_horizontal(self) -> bool
+impl core::clone::Clone for rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Direction::clone(&self) -> rich_diagram::graph::Direction
+impl core::cmp::Eq for rich_diagram::graph::Direction
+impl core::cmp::PartialEq for rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Direction::eq(&self, &rich_diagram::graph::Direction) -> bool
+impl core::default::Default for rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Direction::default() -> rich_diagram::graph::Direction
+impl core::fmt::Debug for rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Direction::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Direction::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_diagram::graph::Direction
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Direction
+impl core::marker::Freeze for rich_diagram::graph::Direction
+impl core::marker::Send for rich_diagram::graph::Direction
+impl core::marker::Sync for rich_diagram::graph::Direction
+impl core::marker::Unpin for rich_diagram::graph::Direction
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Direction
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Direction
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Direction
+pub enum rich_diagram::graph::Head
+pub rich_diagram::graph::Head::Arrow
+pub rich_diagram::graph::Head::Circle
+pub rich_diagram::graph::Head::Cross
+pub rich_diagram::graph::Head::None
+impl core::clone::Clone for rich_diagram::graph::Head
+pub fn rich_diagram::graph::Head::clone(&self) -> rich_diagram::graph::Head
+impl core::cmp::Eq for rich_diagram::graph::Head
+impl core::cmp::PartialEq for rich_diagram::graph::Head
+pub fn rich_diagram::graph::Head::eq(&self, &rich_diagram::graph::Head) -> bool
+impl core::default::Default for rich_diagram::graph::Head
+pub fn rich_diagram::graph::Head::default() -> rich_diagram::graph::Head
+impl core::fmt::Debug for rich_diagram::graph::Head
+pub fn rich_diagram::graph::Head::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_diagram::graph::Head
+pub fn rich_diagram::graph::Head::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_diagram::graph::Head
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Head
+impl core::marker::Freeze for rich_diagram::graph::Head
+impl core::marker::Send for rich_diagram::graph::Head
+impl core::marker::Sync for rich_diagram::graph::Head
+impl core::marker::Unpin for rich_diagram::graph::Head
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Head
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Head
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Head
+pub enum rich_diagram::graph::Shape
+pub rich_diagram::graph::Shape::Asymmetric
+pub rich_diagram::graph::Shape::Circle
+pub rich_diagram::graph::Shape::Cylinder
+pub rich_diagram::graph::Shape::DoubleCircle
+pub rich_diagram::graph::Shape::Hexagon
+pub rich_diagram::graph::Shape::Parallelogram
+pub rich_diagram::graph::Shape::ParallelogramAlt
+pub rich_diagram::graph::Shape::Rect
+pub rich_diagram::graph::Shape::Rhombus
+pub rich_diagram::graph::Shape::Round
+pub rich_diagram::graph::Shape::Stadium
+pub rich_diagram::graph::Shape::Subroutine
+pub rich_diagram::graph::Shape::Table
+pub rich_diagram::graph::Shape::Trapezoid
+pub rich_diagram::graph::Shape::TrapezoidAlt
+impl core::clone::Clone for rich_diagram::graph::Shape
+pub fn rich_diagram::graph::Shape::clone(&self) -> rich_diagram::graph::Shape
+impl core::cmp::Eq for rich_diagram::graph::Shape
+impl core::cmp::PartialEq for rich_diagram::graph::Shape
+pub fn rich_diagram::graph::Shape::eq(&self, &rich_diagram::graph::Shape) -> bool
+impl core::default::Default for rich_diagram::graph::Shape
+pub fn rich_diagram::graph::Shape::default() -> rich_diagram::graph::Shape
+impl core::fmt::Debug for rich_diagram::graph::Shape
+pub fn rich_diagram::graph::Shape::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_diagram::graph::Shape
+pub fn rich_diagram::graph::Shape::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_diagram::graph::Shape
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Shape
+impl core::marker::Freeze for rich_diagram::graph::Shape
+impl core::marker::Send for rich_diagram::graph::Shape
+impl core::marker::Sync for rich_diagram::graph::Shape
+impl core::marker::Unpin for rich_diagram::graph::Shape
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Shape
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Shape
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Shape
+pub enum rich_diagram::graph::Stroke
+pub rich_diagram::graph::Stroke::Dotted
+pub rich_diagram::graph::Stroke::Invisible
+pub rich_diagram::graph::Stroke::Solid
+pub rich_diagram::graph::Stroke::Thick
+impl core::clone::Clone for rich_diagram::graph::Stroke
+pub fn rich_diagram::graph::Stroke::clone(&self) -> rich_diagram::graph::Stroke
+impl core::cmp::Eq for rich_diagram::graph::Stroke
+impl core::cmp::PartialEq for rich_diagram::graph::Stroke
+pub fn rich_diagram::graph::Stroke::eq(&self, &rich_diagram::graph::Stroke) -> bool
+impl core::default::Default for rich_diagram::graph::Stroke
+pub fn rich_diagram::graph::Stroke::default() -> rich_diagram::graph::Stroke
+impl core::fmt::Debug for rich_diagram::graph::Stroke
+pub fn rich_diagram::graph::Stroke::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_diagram::graph::Stroke
+pub fn rich_diagram::graph::Stroke::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_diagram::graph::Stroke
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Stroke
+impl core::marker::Freeze for rich_diagram::graph::Stroke
+impl core::marker::Send for rich_diagram::graph::Stroke
+impl core::marker::Sync for rich_diagram::graph::Stroke
+impl core::marker::Unpin for rich_diagram::graph::Stroke
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Stroke
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Stroke
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Stroke
+pub struct rich_diagram::graph::Cluster
+pub rich_diagram::graph::Cluster::id: alloc::string::String
+pub rich_diagram::graph::Cluster::label: core::option::Option<alloc::string::String>
+pub rich_diagram::graph::Cluster::nodes: alloc::vec::Vec<usize>
+pub rich_diagram::graph::Cluster::parent: core::option::Option<usize>
+impl rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::label(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::graph::Cluster::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::graph::Cluster::nodes(self, impl core::iter::traits::collect::IntoIterator<Item = usize>) -> Self
+pub fn rich_diagram::graph::Cluster::parent(self, usize) -> Self
+impl core::clone::Clone for rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::clone(&self) -> rich_diagram::graph::Cluster
+impl core::cmp::Eq for rich_diagram::graph::Cluster
+impl core::cmp::PartialEq for rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::eq(&self, &rich_diagram::graph::Cluster) -> bool
+impl core::default::Default for rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::default() -> rich_diagram::graph::Cluster
+impl core::fmt::Debug for rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Cluster
+impl core::marker::Freeze for rich_diagram::graph::Cluster
+impl core::marker::Send for rich_diagram::graph::Cluster
+impl core::marker::Sync for rich_diagram::graph::Cluster
+impl core::marker::Unpin for rich_diagram::graph::Cluster
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Cluster
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Cluster
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Cluster
+pub struct rich_diagram::graph::Edge
+pub rich_diagram::graph::Edge::end: rich_diagram::graph::Head
+pub rich_diagram::graph::Edge::end_label: core::option::Option<alloc::string::String>
+pub rich_diagram::graph::Edge::from: usize
+pub rich_diagram::graph::Edge::label: core::option::Option<alloc::string::String>
+pub rich_diagram::graph::Edge::length: usize
+pub rich_diagram::graph::Edge::start: rich_diagram::graph::Head
+pub rich_diagram::graph::Edge::start_label: core::option::Option<alloc::string::String>
+pub rich_diagram::graph::Edge::stroke: rich_diagram::graph::Stroke
+pub rich_diagram::graph::Edge::to: usize
+impl rich_diagram::graph::Edge
+pub fn rich_diagram::graph::Edge::new(usize, usize) -> Self
+impl core::clone::Clone for rich_diagram::graph::Edge
+pub fn rich_diagram::graph::Edge::clone(&self) -> rich_diagram::graph::Edge
+impl core::cmp::Eq for rich_diagram::graph::Edge
+impl core::cmp::PartialEq for rich_diagram::graph::Edge
+pub fn rich_diagram::graph::Edge::eq(&self, &rich_diagram::graph::Edge) -> bool
+impl core::fmt::Debug for rich_diagram::graph::Edge
+pub fn rich_diagram::graph::Edge::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Edge
+impl core::marker::Freeze for rich_diagram::graph::Edge
+impl core::marker::Send for rich_diagram::graph::Edge
+impl core::marker::Sync for rich_diagram::graph::Edge
+impl core::marker::Unpin for rich_diagram::graph::Edge
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Edge
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Edge
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Edge
+pub struct rich_diagram::graph::Graph
+impl rich_diagram::graph::Graph
+pub fn rich_diagram::graph::Graph::add_cluster(&mut self, rich_diagram::graph::Cluster) -> usize
+pub fn rich_diagram::graph::Graph::add_edge(&mut self, rich_diagram::graph::Edge) -> usize
+pub fn rich_diagram::graph::Graph::add_node(&mut self, rich_diagram::graph::Node) -> usize
+pub fn rich_diagram::graph::Graph::add_same_rank(&mut self, impl core::iter::traits::collect::IntoIterator<Item = usize>)
+pub fn rich_diagram::graph::Graph::cluster<I, S>(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
+pub fn rich_diagram::graph::Graph::clusters(&self) -> &[rich_diagram::graph::Cluster]
+pub fn rich_diagram::graph::Graph::direction(&self) -> rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Graph::edge(self, impl core::convert::AsRef<str>, impl core::convert::AsRef<str>) -> Self
+pub fn rich_diagram::graph::Graph::edges(&self) -> &[rich_diagram::graph::Edge]
+pub fn rich_diagram::graph::Graph::end_labels(self, core::option::Option<&str>, core::option::Option<&str>) -> Self
+pub fn rich_diagram::graph::Graph::from_parts(rich_diagram::graph::Direction, alloc::vec::Vec<rich_diagram::graph::Node>, alloc::vec::Vec<rich_diagram::graph::Edge>) -> Self
+pub fn rich_diagram::graph::Graph::heads(self, rich_diagram::graph::Head, rich_diagram::graph::Head) -> Self
+pub fn rich_diagram::graph::Graph::is_empty(&self) -> bool
+pub fn rich_diagram::graph::Graph::label(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::graph::Graph::link(self, impl core::convert::AsRef<str>, impl core::convert::AsRef<str>) -> Self
+pub fn rich_diagram::graph::Graph::min_length(self, usize) -> Self
+pub fn rich_diagram::graph::Graph::new(rich_diagram::graph::Direction) -> Self
+pub fn rich_diagram::graph::Graph::node(self, impl core::convert::AsRef<str>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::graph::Graph::node_index(&self, &str) -> core::option::Option<usize>
+pub fn rich_diagram::graph::Graph::nodes(&self) -> &[rich_diagram::graph::Node]
+pub fn rich_diagram::graph::Graph::same_rank<I, S>(self, I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
+pub fn rich_diagram::graph::Graph::same_rank_groups(&self) -> &[alloc::vec::Vec<usize>]
+pub fn rich_diagram::graph::Graph::set_direction(&mut self, rich_diagram::graph::Direction)
+pub fn rich_diagram::graph::Graph::shape(self, rich_diagram::graph::Shape) -> Self
+pub fn rich_diagram::graph::Graph::stroke(self, rich_diagram::graph::Stroke) -> Self
+impl core::clone::Clone for rich_diagram::graph::Graph
+pub fn rich_diagram::graph::Graph::clone(&self) -> rich_diagram::graph::Graph
+impl core::cmp::Eq for rich_diagram::graph::Graph
+impl core::cmp::PartialEq for rich_diagram::graph::Graph
+pub fn rich_diagram::graph::Graph::eq(&self, &Self) -> bool
+impl core::convert::From<rich_diagram::graph::Graph> for rich_diagram::diagram::Diagram
+pub fn rich_diagram::diagram::Diagram::from(rich_diagram::graph::Graph) -> Self
+impl core::default::Default for rich_diagram::graph::Graph
+pub fn rich_diagram::graph::Graph::default() -> rich_diagram::graph::Graph
+impl core::fmt::Debug for rich_diagram::graph::Graph
+pub fn rich_diagram::graph::Graph::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_diagram::graph::Graph
+impl core::marker::Send for rich_diagram::graph::Graph
+impl core::marker::Sync for rich_diagram::graph::Graph
+impl core::marker::Unpin for rich_diagram::graph::Graph
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Graph
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Graph
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Graph
+pub struct rich_diagram::graph::Node
+pub rich_diagram::graph::Node::id: alloc::string::String
+pub rich_diagram::graph::Node::label: alloc::string::String
+pub rich_diagram::graph::Node::shape: rich_diagram::graph::Shape
+impl rich_diagram::graph::Node
+pub fn rich_diagram::graph::Node::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::graph::Node::shape(self, rich_diagram::graph::Shape) -> Self
+impl core::clone::Clone for rich_diagram::graph::Node
+pub fn rich_diagram::graph::Node::clone(&self) -> rich_diagram::graph::Node
+impl core::cmp::Eq for rich_diagram::graph::Node
+impl core::cmp::PartialEq for rich_diagram::graph::Node
+pub fn rich_diagram::graph::Node::eq(&self, &rich_diagram::graph::Node) -> bool
+impl core::fmt::Debug for rich_diagram::graph::Node
+pub fn rich_diagram::graph::Node::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Node
+impl core::marker::Freeze for rich_diagram::graph::Node
+impl core::marker::Send for rich_diagram::graph::Node
+impl core::marker::Sync for rich_diagram::graph::Node
+impl core::marker::Unpin for rich_diagram::graph::Node
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Node
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Node
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Node
+pub const rich_diagram::graph::MAX_EDGES: usize
+pub const rich_diagram::graph::MAX_EDGE_LENGTH: usize
+pub const rich_diagram::graph::MAX_NODES: usize
+pub const rich_diagram::graph::MAX_SOURCE: usize
+pub mod rich_diagram::graphviz
+pub enum rich_diagram::graphviz::GraphvizError
+pub rich_diagram::graphviz::GraphvizError::Failed(alloc::string::String)
+pub rich_diagram::graphviz::GraphvizError::Io(alloc::string::String)
+pub rich_diagram::graphviz::GraphvizError::NotFound(alloc::string::String)
+pub rich_diagram::graphviz::GraphvizError::OutputTooLarge
+pub rich_diagram::graphviz::GraphvizError::OutputTooLarge::limit: usize
+pub rich_diagram::graphviz::GraphvizError::Timeout(core::time::Duration)
+pub rich_diagram::graphviz::GraphvizError::TooLarge
+pub rich_diagram::graphviz::GraphvizError::TooLarge::bytes: usize
+pub rich_diagram::graphviz::GraphvizError::TooLarge::limit: usize
+impl core::clone::Clone for rich_diagram::graphviz::GraphvizError
+pub fn rich_diagram::graphviz::GraphvizError::clone(&self) -> rich_diagram::graphviz::GraphvizError
+impl core::cmp::Eq for rich_diagram::graphviz::GraphvizError
+impl core::cmp::PartialEq for rich_diagram::graphviz::GraphvizError
+pub fn rich_diagram::graphviz::GraphvizError::eq(&self, &rich_diagram::graphviz::GraphvizError) -> bool
+impl core::error::Error for rich_diagram::graphviz::GraphvizError
+impl core::fmt::Debug for rich_diagram::graphviz::GraphvizError
+pub fn rich_diagram::graphviz::GraphvizError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_diagram::graphviz::GraphvizError
+pub fn rich_diagram::graphviz::GraphvizError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::graphviz::GraphvizError
+impl core::marker::Freeze for rich_diagram::graphviz::GraphvizError
+impl core::marker::Send for rich_diagram::graphviz::GraphvizError
+impl core::marker::Sync for rich_diagram::graphviz::GraphvizError
+impl core::marker::Unpin for rich_diagram::graphviz::GraphvizError
+impl core::marker::UnsafeUnpin for rich_diagram::graphviz::GraphvizError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graphviz::GraphvizError
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graphviz::GraphvizError
+pub struct rich_diagram::graphviz::GraphvizOptions
+pub rich_diagram::graphviz::GraphvizOptions::max_input: usize
+pub rich_diagram::graphviz::GraphvizOptions::max_output: usize
+pub rich_diagram::graphviz::GraphvizOptions::program: std::path::PathBuf
+pub rich_diagram::graphviz::GraphvizOptions::timeout: core::time::Duration
+impl core::clone::Clone for rich_diagram::graphviz::GraphvizOptions
+pub fn rich_diagram::graphviz::GraphvizOptions::clone(&self) -> rich_diagram::graphviz::GraphvizOptions
+impl core::cmp::Eq for rich_diagram::graphviz::GraphvizOptions
+impl core::cmp::PartialEq for rich_diagram::graphviz::GraphvizOptions
+pub fn rich_diagram::graphviz::GraphvizOptions::eq(&self, &rich_diagram::graphviz::GraphvizOptions) -> bool
+impl core::default::Default for rich_diagram::graphviz::GraphvizOptions
+pub fn rich_diagram::graphviz::GraphvizOptions::default() -> Self
+impl core::fmt::Debug for rich_diagram::graphviz::GraphvizOptions
+pub fn rich_diagram::graphviz::GraphvizOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::graphviz::GraphvizOptions
+impl core::marker::Freeze for rich_diagram::graphviz::GraphvizOptions
+impl core::marker::Send for rich_diagram::graphviz::GraphvizOptions
+impl core::marker::Sync for rich_diagram::graphviz::GraphvizOptions
+impl core::marker::Unpin for rich_diagram::graphviz::GraphvizOptions
+impl core::marker::UnsafeUnpin for rich_diagram::graphviz::GraphvizOptions
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graphviz::GraphvizOptions
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graphviz::GraphvizOptions
+pub fn rich_diagram::graphviz::render_svg(&str, &rich_diagram::graphviz::GraphvizOptions) -> core::result::Result<alloc::string::String, rich_diagram::graphviz::GraphvizError>
+pub mod rich_diagram::layout
+pub struct rich_diagram::layout::DrawError
+impl core::clone::Clone for rich_diagram::layout::DrawError
+pub fn rich_diagram::layout::DrawError::clone(&self) -> rich_diagram::layout::DrawError
+impl core::cmp::Eq for rich_diagram::layout::DrawError
+impl core::cmp::PartialEq for rich_diagram::layout::DrawError
+pub fn rich_diagram::layout::DrawError::eq(&self, &rich_diagram::layout::DrawError) -> bool
+impl core::error::Error for rich_diagram::layout::DrawError
+impl core::fmt::Debug for rich_diagram::layout::DrawError
+pub fn rich_diagram::layout::DrawError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_diagram::layout::DrawError
+pub fn rich_diagram::layout::DrawError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::layout::DrawError
+impl core::marker::Freeze for rich_diagram::layout::DrawError
+impl core::marker::Send for rich_diagram::layout::DrawError
+impl core::marker::Sync for rich_diagram::layout::DrawError
+impl core::marker::Unpin for rich_diagram::layout::DrawError
+impl core::marker::UnsafeUnpin for rich_diagram::layout::DrawError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::layout::DrawError
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::layout::DrawError
+pub struct rich_diagram::layout::Drawing
+pub rich_diagram::layout::Drawing::lines: alloc::vec::Vec<alloc::string::String>
+pub rich_diagram::layout::Drawing::notes: alloc::vec::Vec<alloc::string::String>
+pub rich_diagram::layout::Drawing::width: usize
+impl rich_diagram::layout::Drawing
+pub fn rich_diagram::layout::Drawing::cropped(&self, usize) -> alloc::vec::Vec<alloc::string::String>
+impl core::clone::Clone for rich_diagram::layout::Drawing
+pub fn rich_diagram::layout::Drawing::clone(&self) -> rich_diagram::layout::Drawing
+impl core::cmp::Eq for rich_diagram::layout::Drawing
+impl core::cmp::PartialEq for rich_diagram::layout::Drawing
+pub fn rich_diagram::layout::Drawing::eq(&self, &rich_diagram::layout::Drawing) -> bool
+impl core::default::Default for rich_diagram::layout::Drawing
+pub fn rich_diagram::layout::Drawing::default() -> rich_diagram::layout::Drawing
+impl core::fmt::Debug for rich_diagram::layout::Drawing
+pub fn rich_diagram::layout::Drawing::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::layout::Drawing
+impl core::marker::Freeze for rich_diagram::layout::Drawing
+impl core::marker::Send for rich_diagram::layout::Drawing
+impl core::marker::Sync for rich_diagram::layout::Drawing
+impl core::marker::Unpin for rich_diagram::layout::Drawing
+impl core::marker::UnsafeUnpin for rich_diagram::layout::Drawing
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::layout::Drawing
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::layout::Drawing
+pub const rich_diagram::layout::MAX_CELLS: i64
+pub const rich_diagram::layout::MAX_VERTICES: usize
+pub fn rich_diagram::layout::draw(&rich_diagram::graph::Graph, bool) -> core::result::Result<rich_diagram::layout::Drawing, rich_diagram::layout::DrawError>
+pub mod rich_diagram::plugin
+pub struct rich_diagram::plugin::DotFences
+pub rich_diagram::plugin::DotFences::options: rich_diagram::plugin::DotOptions
+impl core::clone::Clone for rich_diagram::plugin::DotFences
+pub fn rich_diagram::plugin::DotFences::clone(&self) -> rich_diagram::plugin::DotFences
+impl core::default::Default for rich_diagram::plugin::DotFences
+pub fn rich_diagram::plugin::DotFences::default() -> rich_diagram::plugin::DotFences
+impl core::fmt::Debug for rich_diagram::plugin::DotFences
+pub fn rich_diagram::plugin::DotFences::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich::protocol::FenceRenderer for rich_diagram::plugin::DotFences
+pub fn rich_diagram::plugin::DotFences::render_fence(&self, &str, &str, &rich::console::Console, &rich::console::ConsoleOptions) -> core::option::Option<alloc::vec::Vec<rich::segment::Segment>>
+impl rich_plugin_api::SourceRenderer for rich_diagram::plugin::DotFences
+pub fn rich_diagram::plugin::DotFences::render(&self, &str) -> core::result::Result<alloc::boxed::Box<(dyn rich::protocol::Renderable + core::marker::Send + core::marker::Sync)>, rich_plugin_api::PluginError>
+impl core::marker::Freeze for rich_diagram::plugin::DotFences
+impl core::marker::Send for rich_diagram::plugin::DotFences
+impl core::marker::Sync for rich_diagram::plugin::DotFences
+impl core::marker::Unpin for rich_diagram::plugin::DotFences
+impl core::marker::UnsafeUnpin for rich_diagram::plugin::DotFences
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::plugin::DotFences
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::plugin::DotFences
+pub struct rich_diagram::plugin::DotOptions
+pub rich_diagram::plugin::DotOptions::ascii: core::option::Option<bool>
+impl core::clone::Clone for rich_diagram::plugin::DotOptions
+pub fn rich_diagram::plugin::DotOptions::clone(&self) -> rich_diagram::plugin::DotOptions
+impl core::cmp::Eq for rich_diagram::plugin::DotOptions
+impl core::cmp::PartialEq for rich_diagram::plugin::DotOptions
+pub fn rich_diagram::plugin::DotOptions::eq(&self, &rich_diagram::plugin::DotOptions) -> bool
+impl core::default::Default for rich_diagram::plugin::DotOptions
+pub fn rich_diagram::plugin::DotOptions::default() -> rich_diagram::plugin::DotOptions
+impl core::fmt::Debug for rich_diagram::plugin::DotOptions
+pub fn rich_diagram::plugin::DotOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::plugin::DotOptions
+impl core::marker::Freeze for rich_diagram::plugin::DotOptions
+impl core::marker::Send for rich_diagram::plugin::DotOptions
+impl core::marker::Sync for rich_diagram::plugin::DotOptions
+impl core::marker::Unpin for rich_diagram::plugin::DotOptions
+impl core::marker::UnsafeUnpin for rich_diagram::plugin::DotOptions
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::plugin::DotOptions
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::plugin::DotOptions
+pub struct rich_diagram::plugin::DotPlugin
+pub rich_diagram::plugin::DotPlugin::options: rich_diagram::plugin::DotOptions
+impl rich_diagram::plugin::DotPlugin
+pub fn rich_diagram::plugin::DotPlugin::new(rich_diagram::plugin::DotOptions) -> Self
+impl core::clone::Clone for rich_diagram::plugin::DotPlugin
+pub fn rich_diagram::plugin::DotPlugin::clone(&self) -> rich_diagram::plugin::DotPlugin
+impl core::default::Default for rich_diagram::plugin::DotPlugin
+pub fn rich_diagram::plugin::DotPlugin::default() -> rich_diagram::plugin::DotPlugin
+impl core::fmt::Debug for rich_diagram::plugin::DotPlugin
+pub fn rich_diagram::plugin::DotPlugin::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_plugin_api::Plugin for rich_diagram::plugin::DotPlugin
+pub fn rich_diagram::plugin::DotPlugin::metadata(&self) -> rich_plugin_api::PluginMetadata
+pub fn rich_diagram::plugin::DotPlugin::register(&self, &mut dyn rich_plugin_api::PluginRegistrar) -> core::result::Result<(), rich_plugin_api::PluginError>
+impl core::marker::Freeze for rich_diagram::plugin::DotPlugin
+impl core::marker::Send for rich_diagram::plugin::DotPlugin
+impl core::marker::Sync for rich_diagram::plugin::DotPlugin
+impl core::marker::Unpin for rich_diagram::plugin::DotPlugin
+impl core::marker::UnsafeUnpin for rich_diagram::plugin::DotPlugin
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::plugin::DotPlugin
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::plugin::DotPlugin
+pub const rich_diagram::plugin::FENCE_LANGUAGES: [&str; 2]
+pub enum rich_diagram::Direction
+pub rich_diagram::Direction::BottomUp
+pub rich_diagram::Direction::LeftRight
+pub rich_diagram::Direction::RightLeft
+pub rich_diagram::Direction::TopDown
+impl rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Direction::is_horizontal(self) -> bool
+impl core::clone::Clone for rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Direction::clone(&self) -> rich_diagram::graph::Direction
+impl core::cmp::Eq for rich_diagram::graph::Direction
+impl core::cmp::PartialEq for rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Direction::eq(&self, &rich_diagram::graph::Direction) -> bool
+impl core::default::Default for rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Direction::default() -> rich_diagram::graph::Direction
+impl core::fmt::Debug for rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Direction::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Direction::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_diagram::graph::Direction
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Direction
+impl core::marker::Freeze for rich_diagram::graph::Direction
+impl core::marker::Send for rich_diagram::graph::Direction
+impl core::marker::Sync for rich_diagram::graph::Direction
+impl core::marker::Unpin for rich_diagram::graph::Direction
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Direction
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Direction
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Direction
+pub enum rich_diagram::Head
+pub rich_diagram::Head::Arrow
+pub rich_diagram::Head::Circle
+pub rich_diagram::Head::Cross
+pub rich_diagram::Head::None
+impl core::clone::Clone for rich_diagram::graph::Head
+pub fn rich_diagram::graph::Head::clone(&self) -> rich_diagram::graph::Head
+impl core::cmp::Eq for rich_diagram::graph::Head
+impl core::cmp::PartialEq for rich_diagram::graph::Head
+pub fn rich_diagram::graph::Head::eq(&self, &rich_diagram::graph::Head) -> bool
+impl core::default::Default for rich_diagram::graph::Head
+pub fn rich_diagram::graph::Head::default() -> rich_diagram::graph::Head
+impl core::fmt::Debug for rich_diagram::graph::Head
+pub fn rich_diagram::graph::Head::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_diagram::graph::Head
+pub fn rich_diagram::graph::Head::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_diagram::graph::Head
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Head
+impl core::marker::Freeze for rich_diagram::graph::Head
+impl core::marker::Send for rich_diagram::graph::Head
+impl core::marker::Sync for rich_diagram::graph::Head
+impl core::marker::Unpin for rich_diagram::graph::Head
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Head
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Head
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Head
+pub enum rich_diagram::Shape
+pub rich_diagram::Shape::Asymmetric
+pub rich_diagram::Shape::Circle
+pub rich_diagram::Shape::Cylinder
+pub rich_diagram::Shape::DoubleCircle
+pub rich_diagram::Shape::Hexagon
+pub rich_diagram::Shape::Parallelogram
+pub rich_diagram::Shape::ParallelogramAlt
+pub rich_diagram::Shape::Rect
+pub rich_diagram::Shape::Rhombus
+pub rich_diagram::Shape::Round
+pub rich_diagram::Shape::Stadium
+pub rich_diagram::Shape::Subroutine
+pub rich_diagram::Shape::Table
+pub rich_diagram::Shape::Trapezoid
+pub rich_diagram::Shape::TrapezoidAlt
+impl core::clone::Clone for rich_diagram::graph::Shape
+pub fn rich_diagram::graph::Shape::clone(&self) -> rich_diagram::graph::Shape
+impl core::cmp::Eq for rich_diagram::graph::Shape
+impl core::cmp::PartialEq for rich_diagram::graph::Shape
+pub fn rich_diagram::graph::Shape::eq(&self, &rich_diagram::graph::Shape) -> bool
+impl core::default::Default for rich_diagram::graph::Shape
+pub fn rich_diagram::graph::Shape::default() -> rich_diagram::graph::Shape
+impl core::fmt::Debug for rich_diagram::graph::Shape
+pub fn rich_diagram::graph::Shape::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_diagram::graph::Shape
+pub fn rich_diagram::graph::Shape::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_diagram::graph::Shape
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Shape
+impl core::marker::Freeze for rich_diagram::graph::Shape
+impl core::marker::Send for rich_diagram::graph::Shape
+impl core::marker::Sync for rich_diagram::graph::Shape
+impl core::marker::Unpin for rich_diagram::graph::Shape
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Shape
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Shape
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Shape
+pub enum rich_diagram::Stroke
+pub rich_diagram::Stroke::Dotted
+pub rich_diagram::Stroke::Invisible
+pub rich_diagram::Stroke::Solid
+pub rich_diagram::Stroke::Thick
+impl core::clone::Clone for rich_diagram::graph::Stroke
+pub fn rich_diagram::graph::Stroke::clone(&self) -> rich_diagram::graph::Stroke
+impl core::cmp::Eq for rich_diagram::graph::Stroke
+impl core::cmp::PartialEq for rich_diagram::graph::Stroke
+pub fn rich_diagram::graph::Stroke::eq(&self, &rich_diagram::graph::Stroke) -> bool
+impl core::default::Default for rich_diagram::graph::Stroke
+pub fn rich_diagram::graph::Stroke::default() -> rich_diagram::graph::Stroke
+impl core::fmt::Debug for rich_diagram::graph::Stroke
+pub fn rich_diagram::graph::Stroke::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_diagram::graph::Stroke
+pub fn rich_diagram::graph::Stroke::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_diagram::graph::Stroke
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Stroke
+impl core::marker::Freeze for rich_diagram::graph::Stroke
+impl core::marker::Send for rich_diagram::graph::Stroke
+impl core::marker::Sync for rich_diagram::graph::Stroke
+impl core::marker::Unpin for rich_diagram::graph::Stroke
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Stroke
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Stroke
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Stroke
+pub struct rich_diagram::Cluster
+pub rich_diagram::Cluster::id: alloc::string::String
+pub rich_diagram::Cluster::label: core::option::Option<alloc::string::String>
+pub rich_diagram::Cluster::nodes: alloc::vec::Vec<usize>
+pub rich_diagram::Cluster::parent: core::option::Option<usize>
+impl rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::label(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::graph::Cluster::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::graph::Cluster::nodes(self, impl core::iter::traits::collect::IntoIterator<Item = usize>) -> Self
+pub fn rich_diagram::graph::Cluster::parent(self, usize) -> Self
+impl core::clone::Clone for rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::clone(&self) -> rich_diagram::graph::Cluster
+impl core::cmp::Eq for rich_diagram::graph::Cluster
+impl core::cmp::PartialEq for rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::eq(&self, &rich_diagram::graph::Cluster) -> bool
+impl core::default::Default for rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::default() -> rich_diagram::graph::Cluster
+impl core::fmt::Debug for rich_diagram::graph::Cluster
+pub fn rich_diagram::graph::Cluster::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Cluster
+impl core::marker::Freeze for rich_diagram::graph::Cluster
+impl core::marker::Send for rich_diagram::graph::Cluster
+impl core::marker::Sync for rich_diagram::graph::Cluster
+impl core::marker::Unpin for rich_diagram::graph::Cluster
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Cluster
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Cluster
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Cluster
+pub struct rich_diagram::Diagram
+impl rich_diagram::diagram::Diagram
+pub fn rich_diagram::diagram::Diagram::ascii(self, bool) -> Self
+pub fn rich_diagram::diagram::Diagram::drawing(&self, bool) -> core::result::Result<&rich_diagram::layout::Drawing, &rich_diagram::layout::DrawError>
+pub fn rich_diagram::diagram::Diagram::graph(&self) -> &rich_diagram::graph::Graph
+pub fn rich_diagram::diagram::Diagram::new(rich_diagram::graph::Graph) -> Self
+impl core::clone::Clone for rich_diagram::diagram::Diagram
+pub fn rich_diagram::diagram::Diagram::clone(&self) -> rich_diagram::diagram::Diagram
+impl core::convert::From<rich_diagram::graph::Graph> for rich_diagram::diagram::Diagram
+pub fn rich_diagram::diagram::Diagram::from(rich_diagram::graph::Graph) -> Self
+impl core::fmt::Debug for rich_diagram::diagram::Diagram
+pub fn rich_diagram::diagram::Diagram::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich::protocol::Renderable for rich_diagram::diagram::Diagram
+pub fn rich_diagram::diagram::Diagram::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_diagram::diagram::Diagram::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl !core::marker::Freeze for rich_diagram::diagram::Diagram
+impl core::marker::Send for rich_diagram::diagram::Diagram
+impl core::marker::Sync for rich_diagram::diagram::Diagram
+impl core::marker::Unpin for rich_diagram::diagram::Diagram
+impl core::marker::UnsafeUnpin for rich_diagram::diagram::Diagram
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::diagram::Diagram
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::diagram::Diagram
+pub struct rich_diagram::Dot
+impl rich_diagram::dot::Dot
+pub fn rich_diagram::dot::Dot::ascii(self, bool) -> Self
+pub fn rich_diagram::dot::Dot::ascii_option(self, core::option::Option<bool>) -> Self
+pub fn rich_diagram::dot::Dot::new(impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::dot::Dot::parsed(&self) -> core::result::Result<&rich_diagram::dot::DotGraph, &rich_diagram::dot::DotError>
+pub fn rich_diagram::dot::Dot::source(&self) -> &str
+impl core::clone::Clone for rich_diagram::dot::Dot
+pub fn rich_diagram::dot::Dot::clone(&self) -> rich_diagram::dot::Dot
+impl core::fmt::Debug for rich_diagram::dot::Dot
+pub fn rich_diagram::dot::Dot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich::protocol::Renderable for rich_diagram::dot::Dot
+pub fn rich_diagram::dot::Dot::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_diagram::dot::Dot::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl !core::marker::Freeze for rich_diagram::dot::Dot
+impl core::marker::Send for rich_diagram::dot::Dot
+impl core::marker::Sync for rich_diagram::dot::Dot
+impl core::marker::Unpin for rich_diagram::dot::Dot
+impl core::marker::UnsafeUnpin for rich_diagram::dot::Dot
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::dot::Dot
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::dot::Dot
+pub struct rich_diagram::DotError
+pub rich_diagram::DotError::construct: core::option::Option<alloc::string::String>
+pub rich_diagram::DotError::line: usize
+impl rich_diagram::dot::DotError
+pub fn rich_diagram::dot::DotError::message(&self) -> &str
+impl core::clone::Clone for rich_diagram::dot::DotError
+pub fn rich_diagram::dot::DotError::clone(&self) -> rich_diagram::dot::DotError
+impl core::cmp::Eq for rich_diagram::dot::DotError
+impl core::cmp::PartialEq for rich_diagram::dot::DotError
+pub fn rich_diagram::dot::DotError::eq(&self, &rich_diagram::dot::DotError) -> bool
+impl core::error::Error for rich_diagram::dot::DotError
+impl core::fmt::Debug for rich_diagram::dot::DotError
+pub fn rich_diagram::dot::DotError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_diagram::dot::DotError
+pub fn rich_diagram::dot::DotError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::dot::DotError
+impl core::marker::Freeze for rich_diagram::dot::DotError
+impl core::marker::Send for rich_diagram::dot::DotError
+impl core::marker::Sync for rich_diagram::dot::DotError
+impl core::marker::Unpin for rich_diagram::dot::DotError
+impl core::marker::UnsafeUnpin for rich_diagram::dot::DotError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::dot::DotError
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::dot::DotError
+pub struct rich_diagram::DotGraph
+pub rich_diagram::DotGraph::clusters: alloc::vec::Vec<rich_diagram::graph::Cluster>
+pub rich_diagram::DotGraph::directed: bool
+pub rich_diagram::DotGraph::graph: rich_diagram::graph::Graph
+pub rich_diagram::DotGraph::label: core::option::Option<alloc::string::String>
+pub rich_diagram::DotGraph::name: core::option::Option<alloc::string::String>
+pub rich_diagram::DotGraph::notes: alloc::vec::Vec<alloc::string::String>
+pub rich_diagram::DotGraph::strict: bool
+impl core::clone::Clone for rich_diagram::dot::DotGraph
+pub fn rich_diagram::dot::DotGraph::clone(&self) -> rich_diagram::dot::DotGraph
+impl core::cmp::Eq for rich_diagram::dot::DotGraph
+impl core::cmp::PartialEq for rich_diagram::dot::DotGraph
+pub fn rich_diagram::dot::DotGraph::eq(&self, &rich_diagram::dot::DotGraph) -> bool
+impl core::fmt::Debug for rich_diagram::dot::DotGraph
+pub fn rich_diagram::dot::DotGraph::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::dot::DotGraph
+impl core::marker::Freeze for rich_diagram::dot::DotGraph
+impl core::marker::Send for rich_diagram::dot::DotGraph
+impl core::marker::Sync for rich_diagram::dot::DotGraph
+impl core::marker::Unpin for rich_diagram::dot::DotGraph
+impl core::marker::UnsafeUnpin for rich_diagram::dot::DotGraph
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::dot::DotGraph
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::dot::DotGraph
+pub struct rich_diagram::DrawError
+impl core::clone::Clone for rich_diagram::layout::DrawError
+pub fn rich_diagram::layout::DrawError::clone(&self) -> rich_diagram::layout::DrawError
+impl core::cmp::Eq for rich_diagram::layout::DrawError
+impl core::cmp::PartialEq for rich_diagram::layout::DrawError
+pub fn rich_diagram::layout::DrawError::eq(&self, &rich_diagram::layout::DrawError) -> bool
+impl core::error::Error for rich_diagram::layout::DrawError
+impl core::fmt::Debug for rich_diagram::layout::DrawError
+pub fn rich_diagram::layout::DrawError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_diagram::layout::DrawError
+pub fn rich_diagram::layout::DrawError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::layout::DrawError
+impl core::marker::Freeze for rich_diagram::layout::DrawError
+impl core::marker::Send for rich_diagram::layout::DrawError
+impl core::marker::Sync for rich_diagram::layout::DrawError
+impl core::marker::Unpin for rich_diagram::layout::DrawError
+impl core::marker::UnsafeUnpin for rich_diagram::layout::DrawError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::layout::DrawError
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::layout::DrawError
+pub struct rich_diagram::Drawing
+pub rich_diagram::Drawing::lines: alloc::vec::Vec<alloc::string::String>
+pub rich_diagram::Drawing::notes: alloc::vec::Vec<alloc::string::String>
+pub rich_diagram::Drawing::width: usize
+impl rich_diagram::layout::Drawing
+pub fn rich_diagram::layout::Drawing::cropped(&self, usize) -> alloc::vec::Vec<alloc::string::String>
+impl core::clone::Clone for rich_diagram::layout::Drawing
+pub fn rich_diagram::layout::Drawing::clone(&self) -> rich_diagram::layout::Drawing
+impl core::cmp::Eq for rich_diagram::layout::Drawing
+impl core::cmp::PartialEq for rich_diagram::layout::Drawing
+pub fn rich_diagram::layout::Drawing::eq(&self, &rich_diagram::layout::Drawing) -> bool
+impl core::default::Default for rich_diagram::layout::Drawing
+pub fn rich_diagram::layout::Drawing::default() -> rich_diagram::layout::Drawing
+impl core::fmt::Debug for rich_diagram::layout::Drawing
+pub fn rich_diagram::layout::Drawing::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::layout::Drawing
+impl core::marker::Freeze for rich_diagram::layout::Drawing
+impl core::marker::Send for rich_diagram::layout::Drawing
+impl core::marker::Sync for rich_diagram::layout::Drawing
+impl core::marker::Unpin for rich_diagram::layout::Drawing
+impl core::marker::UnsafeUnpin for rich_diagram::layout::Drawing
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::layout::Drawing
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::layout::Drawing
+pub struct rich_diagram::Edge
+pub rich_diagram::Edge::end: rich_diagram::graph::Head
+pub rich_diagram::Edge::end_label: core::option::Option<alloc::string::String>
+pub rich_diagram::Edge::from: usize
+pub rich_diagram::Edge::label: core::option::Option<alloc::string::String>
+pub rich_diagram::Edge::length: usize
+pub rich_diagram::Edge::start: rich_diagram::graph::Head
+pub rich_diagram::Edge::start_label: core::option::Option<alloc::string::String>
+pub rich_diagram::Edge::stroke: rich_diagram::graph::Stroke
+pub rich_diagram::Edge::to: usize
+impl rich_diagram::graph::Edge
+pub fn rich_diagram::graph::Edge::new(usize, usize) -> Self
+impl core::clone::Clone for rich_diagram::graph::Edge
+pub fn rich_diagram::graph::Edge::clone(&self) -> rich_diagram::graph::Edge
+impl core::cmp::Eq for rich_diagram::graph::Edge
+impl core::cmp::PartialEq for rich_diagram::graph::Edge
+pub fn rich_diagram::graph::Edge::eq(&self, &rich_diagram::graph::Edge) -> bool
+impl core::fmt::Debug for rich_diagram::graph::Edge
+pub fn rich_diagram::graph::Edge::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Edge
+impl core::marker::Freeze for rich_diagram::graph::Edge
+impl core::marker::Send for rich_diagram::graph::Edge
+impl core::marker::Sync for rich_diagram::graph::Edge
+impl core::marker::Unpin for rich_diagram::graph::Edge
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Edge
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Edge
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Edge
+pub struct rich_diagram::ErDiagram
+impl rich_diagram::er::ErDiagram
+pub fn rich_diagram::er::ErDiagram::ascii(self, bool) -> Self
+pub fn rich_diagram::er::ErDiagram::direction(self, rich_diagram::graph::Direction) -> Self
+pub fn rich_diagram::er::ErDiagram::drawing(&self, bool) -> core::result::Result<&rich_diagram::layout::Drawing, &rich_diagram::layout::DrawError>
+pub fn rich_diagram::er::ErDiagram::model(&self) -> &rich_diagram::er::ErModel
+pub fn rich_diagram::er::ErDiagram::new(rich_diagram::er::ErModel) -> Self
+impl core::clone::Clone for rich_diagram::er::ErDiagram
+pub fn rich_diagram::er::ErDiagram::clone(&self) -> rich_diagram::er::ErDiagram
+impl core::convert::From<rich_diagram::er::ErModel> for rich_diagram::er::ErDiagram
+pub fn rich_diagram::er::ErDiagram::from(rich_diagram::er::ErModel) -> Self
+impl core::fmt::Debug for rich_diagram::er::ErDiagram
+pub fn rich_diagram::er::ErDiagram::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich::protocol::Renderable for rich_diagram::er::ErDiagram
+pub fn rich_diagram::er::ErDiagram::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_diagram::er::ErDiagram::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl !core::marker::Freeze for rich_diagram::er::ErDiagram
+impl core::marker::Send for rich_diagram::er::ErDiagram
+impl core::marker::Sync for rich_diagram::er::ErDiagram
+impl core::marker::Unpin for rich_diagram::er::ErDiagram
+impl core::marker::UnsafeUnpin for rich_diagram::er::ErDiagram
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::er::ErDiagram
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::er::ErDiagram
+pub struct rich_diagram::ErModel
+pub rich_diagram::ErModel::entities: alloc::vec::Vec<rich_diagram::er::Entity>
+pub rich_diagram::ErModel::groups: alloc::vec::Vec<rich_diagram::er::Group>
+pub rich_diagram::ErModel::relationships: alloc::vec::Vec<rich_diagram::er::Relationship>
+impl rich_diagram::er::ErModel
+pub fn rich_diagram::er::ErModel::entity(self, rich_diagram::er::Entity) -> Self
+pub fn rich_diagram::er::ErModel::group(self, rich_diagram::er::Group) -> Self
+pub fn rich_diagram::er::ErModel::new() -> Self
+pub fn rich_diagram::er::ErModel::relationship(self, rich_diagram::er::Relationship) -> Self
+pub fn rich_diagram::er::ErModel::to_graph(&self, rich_diagram::graph::Direction, bool) -> (rich_diagram::graph::Graph, alloc::vec::Vec<alloc::string::String>)
+impl core::clone::Clone for rich_diagram::er::ErModel
+pub fn rich_diagram::er::ErModel::clone(&self) -> rich_diagram::er::ErModel
+impl core::cmp::Eq for rich_diagram::er::ErModel
+impl core::cmp::PartialEq for rich_diagram::er::ErModel
+pub fn rich_diagram::er::ErModel::eq(&self, &rich_diagram::er::ErModel) -> bool
+impl core::convert::From<rich_diagram::er::ErModel> for rich_diagram::er::ErDiagram
+pub fn rich_diagram::er::ErDiagram::from(rich_diagram::er::ErModel) -> Self
+impl core::default::Default for rich_diagram::er::ErModel
+pub fn rich_diagram::er::ErModel::default() -> rich_diagram::er::ErModel
+impl core::fmt::Debug for rich_diagram::er::ErModel
+pub fn rich_diagram::er::ErModel::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::er::ErModel
+impl core::marker::Freeze for rich_diagram::er::ErModel
+impl core::marker::Send for rich_diagram::er::ErModel
+impl core::marker::Sync for rich_diagram::er::ErModel
+impl core::marker::Unpin for rich_diagram::er::ErModel
+impl core::marker::UnsafeUnpin for rich_diagram::er::ErModel
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::er::ErModel
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::er::ErModel
+pub struct rich_diagram::Graph
+impl rich_diagram::graph::Graph
+pub fn rich_diagram::graph::Graph::add_cluster(&mut self, rich_diagram::graph::Cluster) -> usize
+pub fn rich_diagram::graph::Graph::add_edge(&mut self, rich_diagram::graph::Edge) -> usize
+pub fn rich_diagram::graph::Graph::add_node(&mut self, rich_diagram::graph::Node) -> usize
+pub fn rich_diagram::graph::Graph::add_same_rank(&mut self, impl core::iter::traits::collect::IntoIterator<Item = usize>)
+pub fn rich_diagram::graph::Graph::cluster<I, S>(self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
+pub fn rich_diagram::graph::Graph::clusters(&self) -> &[rich_diagram::graph::Cluster]
+pub fn rich_diagram::graph::Graph::direction(&self) -> rich_diagram::graph::Direction
+pub fn rich_diagram::graph::Graph::edge(self, impl core::convert::AsRef<str>, impl core::convert::AsRef<str>) -> Self
+pub fn rich_diagram::graph::Graph::edges(&self) -> &[rich_diagram::graph::Edge]
+pub fn rich_diagram::graph::Graph::end_labels(self, core::option::Option<&str>, core::option::Option<&str>) -> Self
+pub fn rich_diagram::graph::Graph::from_parts(rich_diagram::graph::Direction, alloc::vec::Vec<rich_diagram::graph::Node>, alloc::vec::Vec<rich_diagram::graph::Edge>) -> Self
+pub fn rich_diagram::graph::Graph::heads(self, rich_diagram::graph::Head, rich_diagram::graph::Head) -> Self
+pub fn rich_diagram::graph::Graph::is_empty(&self) -> bool
+pub fn rich_diagram::graph::Graph::label(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::graph::Graph::link(self, impl core::convert::AsRef<str>, impl core::convert::AsRef<str>) -> Self
+pub fn rich_diagram::graph::Graph::min_length(self, usize) -> Self
+pub fn rich_diagram::graph::Graph::new(rich_diagram::graph::Direction) -> Self
+pub fn rich_diagram::graph::Graph::node(self, impl core::convert::AsRef<str>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::graph::Graph::node_index(&self, &str) -> core::option::Option<usize>
+pub fn rich_diagram::graph::Graph::nodes(&self) -> &[rich_diagram::graph::Node]
+pub fn rich_diagram::graph::Graph::same_rank<I, S>(self, I) -> Self where I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::AsRef<str>
+pub fn rich_diagram::graph::Graph::same_rank_groups(&self) -> &[alloc::vec::Vec<usize>]
+pub fn rich_diagram::graph::Graph::set_direction(&mut self, rich_diagram::graph::Direction)
+pub fn rich_diagram::graph::Graph::shape(self, rich_diagram::graph::Shape) -> Self
+pub fn rich_diagram::graph::Graph::stroke(self, rich_diagram::graph::Stroke) -> Self
+impl core::clone::Clone for rich_diagram::graph::Graph
+pub fn rich_diagram::graph::Graph::clone(&self) -> rich_diagram::graph::Graph
+impl core::cmp::Eq for rich_diagram::graph::Graph
+impl core::cmp::PartialEq for rich_diagram::graph::Graph
+pub fn rich_diagram::graph::Graph::eq(&self, &Self) -> bool
+impl core::convert::From<rich_diagram::graph::Graph> for rich_diagram::diagram::Diagram
+pub fn rich_diagram::diagram::Diagram::from(rich_diagram::graph::Graph) -> Self
+impl core::default::Default for rich_diagram::graph::Graph
+pub fn rich_diagram::graph::Graph::default() -> rich_diagram::graph::Graph
+impl core::fmt::Debug for rich_diagram::graph::Graph
+pub fn rich_diagram::graph::Graph::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_diagram::graph::Graph
+impl core::marker::Send for rich_diagram::graph::Graph
+impl core::marker::Sync for rich_diagram::graph::Graph
+impl core::marker::Unpin for rich_diagram::graph::Graph
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Graph
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Graph
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Graph
+pub struct rich_diagram::Node
+pub rich_diagram::Node::id: alloc::string::String
+pub rich_diagram::Node::label: alloc::string::String
+pub rich_diagram::Node::shape: rich_diagram::graph::Shape
+impl rich_diagram::graph::Node
+pub fn rich_diagram::graph::Node::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_diagram::graph::Node::shape(self, rich_diagram::graph::Shape) -> Self
+impl core::clone::Clone for rich_diagram::graph::Node
+pub fn rich_diagram::graph::Node::clone(&self) -> rich_diagram::graph::Node
+impl core::cmp::Eq for rich_diagram::graph::Node
+impl core::cmp::PartialEq for rich_diagram::graph::Node
+pub fn rich_diagram::graph::Node::eq(&self, &rich_diagram::graph::Node) -> bool
+impl core::fmt::Debug for rich_diagram::graph::Node
+pub fn rich_diagram::graph::Node::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_diagram::graph::Node
+impl core::marker::Freeze for rich_diagram::graph::Node
+impl core::marker::Send for rich_diagram::graph::Node
+impl core::marker::Sync for rich_diagram::graph::Node
+impl core::marker::Unpin for rich_diagram::graph::Node
+impl core::marker::UnsafeUnpin for rich_diagram::graph::Node
+impl core::panic::unwind_safe::RefUnwindSafe for rich_diagram::graph::Node
+impl core::panic::unwind_safe::UnwindSafe for rich_diagram::graph::Node
+pub const rich_diagram::MAX_EDGES: usize
+pub const rich_diagram::MAX_EDGE_LENGTH: usize
+pub const rich_diagram::MAX_NODES: usize
+pub const rich_diagram::MAX_SOURCE: usize
+pub fn rich_diagram::draw(&rich_diagram::graph::Graph, bool) -> core::result::Result<rich_diagram::layout::Drawing, rich_diagram::layout::DrawError>

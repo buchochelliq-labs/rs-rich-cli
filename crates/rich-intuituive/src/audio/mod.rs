@@ -12,6 +12,9 @@
 //!   silence (on the core's [`latest_iter`](crate::latest_iter)).
 //! - [`Frame`] is a buffer with its number, the shape a capture's signal
 //!   holds.
+//! - [`Mixer`] mixes clips on numbered channels (each at its own rate,
+//!   gain and pan, changed or stopped while playing) and streams; with
+//!   `audio` it mixes into an `Output` on a thread of its own.
 //! - [`Capture::simulated`] is a capture with no sound card: buffers a
 //!   period apart, which a test can [`stall`](Capture::stall) and
 //!   [`fail`](Capture::fail), so what an app does on a stall or a failure
@@ -79,6 +82,7 @@ mod alsa;
 #[cfg(feature = "audio")]
 mod capture;
 mod live;
+mod mixer;
 #[cfg(feature = "audio")]
 mod output;
 mod pcm;
@@ -94,8 +98,11 @@ pub use capture::{
     devices, devices_on, input, messages, open, AudioOptions, Device, DeviceConfig, Host,
 };
 pub use live::Capture;
+pub use mixer::{Mixer, Voice};
 #[cfg(feature = "audio")]
-pub use output::{output, output_devices, Output, OutputOptions};
+pub use output::{
+    output, output_devices, output_with, Output, OutputOptions, Tap, RECORD_AUDIO_ENV,
+};
 pub use pcm::{deinterleave, pcm, play, Format, Pcm};
 #[cfg(feature = "audio")]
 pub use picker::picker;

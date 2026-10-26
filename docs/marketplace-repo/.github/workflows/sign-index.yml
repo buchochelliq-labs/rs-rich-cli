@@ -14,6 +14,14 @@
 # `marketplace-signing` environment: it runs only from main, and only after
 # a required reviewer (the maintainer) approves the run. The backup key
 # never enters GitHub.
+#
+# The signed index is pushed to main over SSH with a deploy key (the
+# environment's MARKETPLACE_DEPLOY_KEY), which main's ruleset lets bypass
+# it; the workflow's own token only reads. A push by a deploy key starts
+# workflows, unlike one by GITHUB_TOKEN, but the signer's commit changes
+# only index.json and index.json.minisig: this workflow's push trigger is
+# limited to packages/** and keys/**, and check-listings.yml runs on pull
+# requests only, so the commit starts neither.
 name: Sign the index
 
 on:
@@ -74,11 +82,15 @@ jobs:
     runs-on: ubuntu-latest
     environment: marketplace-signing
     permissions:
-      contents: write
+      contents: read
     steps:
+      # The deploy key, not the workflow's token, pushes the signed index:
+      # main's ruleset lets the key bypass it. persist-credentials stays at
+      # its default (true) here so the final `git push` uses the key.
       - uses: actions/checkout@v7
         with:
           ref: main
+          ssh-key: ${{ secrets.MARKETPLACE_DEPLOY_KEY }}
 
       - name: Fetch rs-rich-cli's validator and schemas
         uses: actions/checkout@v7
@@ -112,11 +124,16 @@ jobs:
         env:
           MINISIGN_KEY: ${{ secrets.MARKETPLACE_MINISIGN_KEY }}
           MINISIGN_PASSWORD: ${{ secrets.MARKETPLACE_MINISIGN_PASSWORD }}
+          HAS_DEPLOY_KEY: ${{ secrets.MARKETPLACE_DEPLOY_KEY != '' }}
           SERIAL: ${{ steps.index.outputs.serial }}
         run: |
           set -euo pipefail
-          if [ -z "$MINISIGN_KEY" ] || [ -z "$MINISIGN_PASSWORD" ]; then
-            echo "::error::the marketplace-signing environment has no MARKETPLACE_MINISIGN_KEY or MARKETPLACE_MINISIGN_PASSWORD"
+          missing=""
+          [ -n "$MINISIGN_KEY" ] || missing="$missing MARKETPLACE_MINISIGN_KEY"
+          [ -n "$MINISIGN_PASSWORD" ] || missing="$missing MARKETPLACE_MINISIGN_PASSWORD"
+          [ "$HAS_DEPLOY_KEY" = "true" ] || missing="$missing MARKETPLACE_DEPLOY_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::the marketplace-signing environment has no$missing"
             exit 1
           fi
           umask 077

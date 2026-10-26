@@ -1,0 +1,8 @@
+# The official marketplace artifacts built by tests/support/official.rs:
+# SHA-256, size in bytes, path under the marketplace's artifacts/.
+# Each is listed in rs-rich-marketplace's packages/ with this hash; a listed
+# version never changes, so a new hash goes with a new version.
+76fe3c63d718de80b84f05506bad39edb480d84c719a4cc17c1b4a356be495c7  875  textcase/textcase-0.1.0.wasm
+a22c3fec6e0c58cf29ae7d632d5e441c7c4c488201024500507a974707a2a292  7645  status/status-1.0.0.richmicro
+a5b914f10314a2e469fd68e45ecfc63bbd122c1121e65248f1bcbb93cd407059  4597  dev/dev-1.0.0.richmicro
+dc0b203a1fbd1ead46bc61b9ab552de6d280869ed5def8f8fa3fb326eb22589c  15655  fun/fun-1.0.0.richmicro

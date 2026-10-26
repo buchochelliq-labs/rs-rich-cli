@@ -487,7 +487,7 @@ fn run_status(args: &StatusArgs, no_color: bool) -> String {
     }
     // Wide enough that the header is never wrapped: it is one line, and the
     // terminal folds it if it must.
-    let console = Console::builder()
+    let console = crate::console_builder()
         .no_color(no_color)
         .theme(rich_ext::extended_theme())
         .width(PLACEHOLDER.len() + 200)
@@ -622,7 +622,7 @@ fn run_link(args: &LinkArgs, no_color: bool) -> String {
     } else {
         args.paths.clone()
     };
-    let mut builder = Console::builder().no_color(no_color);
+    let mut builder = crate::console_builder().no_color(no_color);
     if args.links == Links::Always {
         builder = builder.force_terminal(true);
     }

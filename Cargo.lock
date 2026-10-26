@@ -2999,6 +2999,7 @@ dependencies = [
 name = "rs-rich-art"
 version = "0.0.16"
 dependencies = [
+ "flate2",
  "icy_sixel",
  "image",
  "rs-rich",
@@ -3039,6 +3040,7 @@ dependencies = [
  "vt100",
  "wat",
  "windows-sys 0.61.2",
+ "zip",
 ]
 
 [[package]]
@@ -3107,6 +3109,7 @@ dependencies = [
  "tracing-subscriber",
  "trybuild",
  "unicode-width",
+ "vt100",
  "wasmi",
  "wat",
  "windows-sys 0.61.2",
@@ -3253,6 +3256,7 @@ dependencies = [
  "png",
  "portable-pty",
  "rs-rich",
+ "rs-rich-art",
  "rs-rich-ext",
  "serde_json",
  "ttf-parser",

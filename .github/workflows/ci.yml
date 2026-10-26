@@ -48,11 +48,20 @@ jobs:
       - name: RELEASES.toml matches the manifests and the dependency order
         run: python3 scripts/release_cohort.py check
 
+      # The docs playground spike has a workspace and a lockfile of its own,
+      # which no other job builds: a version bump that leaves it stale shows
+      # here (0.0.23 plan, item 15).
+      - name: The playground spike's lockfile is current
+        run: cargo metadata --locked --format-version 1 --manifest-path playground/spike/Cargo.toml > /dev/null
+
       - name: Test release selection and registry verification
         run: python3 -m unittest discover -s scripts -p 'test_release*.py' -v
 
       - name: Test the failing-test report
         run: python3 -m unittest discover -s scripts -p 'test_test_failures.py' -v
+
+      - name: Test the public API and SemVer checks
+        run: python3 -m unittest discover -s scripts -p 'test_api_checks.py' -v
 
       # The listing format (docs/design/marketplace.md): the examples against
       # the schema, with jsonschema as well as the script's own evaluator.
@@ -827,11 +836,15 @@ jobs:
   # The plugin marketplace against this host (docs/design/marketplace.md):
   # a test marketplace written from crates/rich-cli/tests/plugin_marketplace.rs,
   # signed with rs-rich-marketplace's test key, listing the official plugins
-  # (Mermaid, DOT, lumis) at this workspace's versions and a fixture WASM
-  # plugin. The built binary installs from it with no network: each crate
-  # resolves for this host's plugin API and is refused with its `cargo add`
-  # line, and the WASM plugin installs (its manifest checked in the
-  # sandbox), verifies and loads on the next run without --plugin.
+  # (Mermaid, DOT, lumis) at this workspace's versions, a fixture WASM
+  # plugin, and the official `textcase` WASM plugin and built-in micro packs
+  # as the marketplace repository lists them (tests/support/official.rs
+  # rebuilds them; tests/official_artifacts.rs pins their hashes). The built
+  # binary installs from it with no network: each crate resolves for this
+  # host's plugin API and is refused with its `cargo add` line, each WASM
+  # plugin installs (its manifest checked in the sandbox), verifies and loads
+  # on the next run without --plugin, and each micro pack installs and loads
+  # into micro's user layer.
   plugin-compatibility:
     name: plugin marketplace compatibility
     runs-on: ubuntu-latest
@@ -855,6 +868,9 @@ jobs:
           RICH_TEST_MARKETPLACE="$RUNNER_TEMP/marketplace"
           cargo test -p rs-rich-cli --locked --test plugin_marketplace
           -- --ignored --exact write_test_marketplace
+
+      - name: The official artifacts rebuild to their pinned hashes
+        run: cargo test -p rs-rich-cli --locked --test official_artifacts
 
       - name: Install the official plugins and the fixture plugin
         env:
@@ -880,11 +896,94 @@ jobs:
           printf '# Doc\n\n```shout\nhello there\n```\n' > doc.md
           "$rich" -m doc.md | tee rendered.txt
           grep -qE '^hello there *$' rendered.txt
-          rm -f info.json refusal.txt doc.md rendered.txt
+          "$rich" plugin install textcase --yes
+          "$rich" --transform upcase -p "official" > rendered.txt
+          grep -q OFFICIAL rendered.txt
+          printf '```loud\nhello there\n```\n' > loud.md
+          "$rich" -m loud.md > rendered.txt
+          grep -q "HELLO THERE" rendered.txt
+          for pack in status dev fun; do
+            "$rich" plugin install "$pack" --yes
+          done
+          "$rich" plugin verify
+          # Installed packs load into micro's user layer with no other step.
+          "$rich" micro packs --report json > packs.json
+          for pack in status dev fun; do
+            jq -e --arg p "$RICH_PLUGIN_DIR/$pack/$pack-1.0.0.richmicro" \
+              '[.packs[] | select(.layer == "user" and .path == $p)] | length == 1' packs.json
+          done
+          rm -f info.json refusal.txt doc.md rendered.txt loud.md packs.json
+
+  # Every published crate's public API against its snapshot in api/ (an
+  # API change shows in review as a snapshot change), and cargo-semver-checks
+  # against each crate's last release: Cargo's rule for the version bump,
+  # and every 0.0.x breaking change listed in api/semver-breaks.toml. The
+  # tools are pinned in api/tools.toml and cached once built.
+  api:
+    name: public API and SemVer
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Read the pinned tools
+        id: tools
+        run: |
+          python3 - >> "$GITHUB_OUTPUT" <<'PY'
+          import tomllib
+          tools = tomllib.load(open("api/tools.toml", "rb"))
+          for key, value in tools.items():
+              print(f"{key.replace('-', '_')}={value}")
+          PY
+
+      - name: Install the nightly that writes rustdoc JSON
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.tools.outputs.nightly }}
+
+      - name: Install the toolchain cargo-semver-checks reads
+        uses: dtolnay/rust-toolchain@master
+        with:
+          toolchain: ${{ steps.tools.outputs.semver_checks_toolchain }}
+
+      - name: Cache the API tools
+        id: api-tools
+        uses: actions/cache@v6
+        with:
+          path: |
+            ~/.cargo/bin/cargo-public-api
+            ~/.cargo/bin/cargo-semver-checks
+          key: api-tools-${{ runner.os }}-${{ hashFiles('api/tools.toml') }}
+
+      - name: Install the API tools
+        if: steps.api-tools.outputs.cache-hit != 'true'
+        run: |
+          cargo install --locked cargo-public-api --version "${{ steps.tools.outputs.cargo_public_api }}"
+          cargo install --locked cargo-semver-checks --version "${{ steps.tools.outputs.cargo_semver_checks }}"
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+        with:
+          key: api
+
+      # All features: intuiTUIve's `audio` needs ALSA's headers.
+      - name: Install ALSA headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+
+      - name: Public API snapshots match (python scripts/public_api.py --bless to update)
+        run: python3 scripts/public_api.py --check
+
+      - name: SemVer against each crate's last release
+        run: python3 scripts/semver_check.py
 
   ci-ok:
     name: ci-ok
-    needs: [check, features, macos, msrv, parity, release-tests, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, paint-bench, wasm, plugin-compatibility, browser]
+    needs: [check, features, macos, msrv, parity, release-tests, api, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, paint-bench, wasm, plugin-compatibility, browser]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()
