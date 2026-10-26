@@ -26,6 +26,7 @@
 //   - a listing that claims to be rs-rich's, or holds HTML, shows as text,
 //     with no badge it was not given;
 //   - stats show as counts, "—" where null; the page works without them;
+//     a review link outside the marketplace's discussions is dropped;
 //   - before the first index (a 404) it says the index is being signed,
 //     and an unreachable marketplace offers to try again;
 //   - the page's requests go only to the marketplace, without credentials
@@ -154,6 +155,21 @@ function unit() {
   });
   same([bad.packages.a.total, bad.packages.a.versions["1.0.0"], bad.packages.a.reviews.url, bad.packages.b.reviews.url], [null, null, null, null], "bad counts and links are dropped");
   same(Object.keys(bad.packages), ["a", "b"], "an invalid id is dropped");
+  const D = "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/";
+  for (const [link, ok] of [
+    [`${D}3`, true],
+    ["https://github.com/mallory/phish/discussions/3", false],
+    ["https://github.com/buchochelliq-labs/rs-rich-marketplace-evil/discussions/3", false],
+    ["https://github.com/buchochelliq-labs/rs-rich-marketplace/issues/3", false],
+    [`${D}../../../../mallory/phish`, false],
+    [`${D}%2e%2e/%2e%2e/x`, false],
+    [`${D}3?redirect=https://evil.test`, false],
+    ["http://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/3", false],
+    ["https://github.com@evil.test/buchochelliq-labs/rs-rich-marketplace/discussions/3", false],
+  ]) {
+    const read = L.readStats({ schema_version: 1, packages: { a: { downloads: { total: 1, versions: {} }, reviews: { url: link, up: 1, down: 0, comments: 0 } } } });
+    same(read.packages.a.reviews.url, ok ? link : null, `a review link ${ok ? "in" : "outside"} the marketplace's discussions: ${link}`);
+  }
   same(L.readStats({ schema_version: 2, packages: {} }), null, "another schema version is ignored");
 }
 
@@ -239,7 +255,12 @@ async function browser() {
         if (url.startsWith("https://raw.githubusercontent.com/")) sent.push({ url, headers: route.request().headers() });
         if (url === STATS) {
           if (mode === "no-stats") return route.fulfill({ status: 404, body: "404: Not Found", headers: { "access-control-allow-origin": "*" } });
-          return route.fulfill({ status: 200, body: readFileSync(path.join(FIXTURE, "stats.json")), headers: { "access-control-allow-origin": "*", "content-type": "text/plain" } });
+          const body = JSON.parse(readFileSync(path.join(FIXTURE, "stats.json"), "utf8"));
+          if (mode === "hostile") {
+            // A hostile stats branch: a review link to somewhere else.
+            body.packages.imposter = { downloads: { total: 5, versions: {} }, reviews: { url: "https://github.com/mallory/phish/discussions/1", up: 99, down: 0, comments: 9 } };
+          }
+          return route.fulfill({ status: 200, body: JSON.stringify(body), headers: { "access-control-allow-origin": "*", "content-type": "text/plain" } });
         }
         if (url.startsWith(MAIN)) {
           if (mode === "down") return route.abort("connectionrefused");
@@ -391,6 +412,8 @@ async function browser() {
     check((await page.locator("#imposter .mkt-title").textContent()).includes("<img"), "and shows as written");
     same(await page.locator("#imposter .mkt-author").textContent(), 'Authored by "rs-rich" from github.com/mallory/imposter', "its claim is quoted");
     same(await page.evaluate(() => window.__pwned), undefined, "nothing ran");
+    same(await page.locator("#imposter .mkt-stats a").count(), 0, "a review link outside the marketplace's discussions is not shown");
+    check((await page.locator("#imposter .mkt-stats").textContent()).includes("99"), "its counts still are");
     await context.close();
 
     // Without stats.

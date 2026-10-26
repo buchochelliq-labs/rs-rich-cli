@@ -31,6 +31,8 @@
   const ID = /^[a-z0-9][a-z0-9._-]{0,63}$/;
   const MAX_AUTHORS = 3;
   const MAX_AUTHOR_CHARS = 40;
+  // Where every package's reviews are: its discussion in the marketplace.
+  const REVIEWS = "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/";
 
   function isValidId(id) {
     return typeof id === "string" && ID.test(id);
@@ -244,7 +246,9 @@
   }
 
   // stats.json, version 1, as {id: {total, versions, reviews}}; anything
-  // else in it is dropped. A review link must be on https://github.com/.
+  // else in it is dropped. A review link must be one of the marketplace's
+  // own discussions: the stats branch is unprotected, so a link anywhere
+  // else is dropped.
   function readStats(json) {
     if (!json || typeof json !== "object" || json.schema_version !== 1 || !json.packages || typeof json.packages !== "object") return null;
     const out = {};
@@ -261,7 +265,8 @@
         let url = null;
         try {
           const parsed = new URL(r.url);
-          if (parsed.protocol === "https:" && parsed.hostname === "github.com" && String(r.url).startsWith("https://github.com/")) url = parsed.href;
+          // Checked after the URL is normalised, so `..` cannot leave it.
+          if (String(r.url).startsWith(REVIEWS) && parsed.href.startsWith(REVIEWS) && parsed.search === "" && parsed.hash === "") url = parsed.href;
         } catch (e) {
           url = null;
         }
