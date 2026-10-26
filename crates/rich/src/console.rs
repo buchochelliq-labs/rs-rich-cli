@@ -1,9 +1,10 @@
 //! The Console — the high-level rendering entry point.
 //!
-//! Port of upstream `rich/console.py` (core subset): terminal / color-system /
-//! width detection, markup + highlighter application, and writing styled output.
-//! Layout options, capture, export, and paging land in the Console-completeness
-//! issue.
+//! Port of upstream `rich/console.py`: terminal, colour-system and size
+//! detection, markup and highlighting, printing and logging, capture,
+//! recording and export, render hooks, the alternate screen and paging.
+//! What reads Python objects (file objects, Jupyter, `print_exception`,
+//! `log_locals`) is not ported (docs/DIVERGENCES.md §43).
 
 use std::io::{IsTerminal, Write};
 

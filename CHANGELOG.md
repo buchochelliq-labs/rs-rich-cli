@@ -9,6 +9,23 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **console.py fully ported** (rs-rich): the rest of upstream's `Console`.
+  `quiet`; the size setters and upstream's size rules; `is_dumb_terminal`;
+  `Console(soft_wrap=…, style=…)`; `color_system="auto"` and terminal
+  detection from the environment as rich 15.0.0 does it (`COLORTERM`,
+  `TERM`, `TTY_COMPATIBLE`, `FORCE_COLOR`), with `ConsoleBuilder::environ`
+  standing in for upstream's `_environ`; `on_broken_pipe`;
+  `begin_capture`/`end_capture`; `record=` with the text, HTML and SVG
+  exports and saves (`export_*_recorded`, `save_*_recorded`, since the
+  closure forms already hold upstream's names); `log` with `log_time`,
+  `log_path`, `log_time_format` and `get_datetime`; render hooks;
+  `set_live`/`clear_live`; `screen()`; and `status()`. A printed `Control`
+  no longer ends its line, and `Console::control` records and captures
+  control codes as upstream does. New golden fixture `console.tsv` (22
+  cases, `scripts/golden_console.py`). File objects, Jupyter,
+  `print_exception` and `log_locals` stay out (DIVERGENCES §43); the new
+  differences in form are §47 to §49.
+
 - **Noctiluca's live logs and terminal adaptations** (noctiluca): a
   `role=log`, `aria-live` or appended scroll box is followed through a
   live-only change ping and read incrementally, with no new snapshot. It

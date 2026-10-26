@@ -16,9 +16,9 @@ open ones are **permanent**, each for the reason in its entry:
 |---|---|
 | Resolved in 0.0.22 | §5's residual, §7, §12, §24, §28, §29, §33 (one list-marker edge stays, see the entry) |
 | Resolved earlier | §1 (table), §8, §10, §11, §13, §14 (stack), §27 |
-| Permanent: the language or platform | §1 (`UNICODE_VERSION`), §3, §3a, §6, §14 (per console), §14a, §15, §19 (reflection), §20, §25, §30, §38, §41, §42, §43, §44, §45 |
+| Permanent: the language or platform | §1 (`UNICODE_VERSION`), §3, §3a, §6, §14 (per console), §14a, §15, §19 (reflection), §20, §25, §30, §38, §41, §42, §43, §44, §45, §47 |
 | Permanent: another engine | §9 and §18 (syntect, not Pygments), §21 (pulldown-cmark's emphasis) |
-| Permanent: an API or CLI choice | §2, §16 (`f64` counts, byte reads), §17 (a `Live` owns its console; proxy writers, not the process's stdout; no nested displays), §31, §32, §34, §40, §46 |
+| Permanent: an API or CLI choice | §2, §16 (`f64` counts, byte reads), §17 (a `Live` owns its console; proxy writers, not the process's stdout; no nested displays), §31, §32, §34, §40, §46, §48, §49 |
 | Permanent: ours, opt-in or additive | §22, §23, §26, §35, §36, §37, §39 |
 
 ## Current divergences
@@ -252,6 +252,8 @@ open ones are **permanent**, each for the reason in its entry:
   of each `Segment`, which Rust can't reproduce — so `Console::export_svg` takes an
   **explicit `unique_id`**, and output is byte-parity with
   `export_svg(title=…, unique_id=…)`. Same shape as the OSC8 `id=` deviation (#20).
+- The `record=True` form (`Console::export_svg_recorded`, 0.0.23) takes the
+  id in `ExportSvgOptions::unique_id`, whose default is `"terminal"`.
 - **Why:** the default id is non-deterministic (breaks golden tests) and only
   namespaces the CSS classes / element ids within one document.
 - **Remove:** add an `adler32`-of-`repr` default id only if a caller needs the
@@ -762,12 +764,14 @@ open ones are **permanent**, each for the reason in its entry:
 
 ### 43. `Console` features tied to Python objects or Jupyter
 
-- **Differs:** the port's `Console` writes to standard output, and callers
-  capture output with closures (`capture`, `export_*`, `page`), not by
+- **Differs:** the port's `Console` writes to standard output. Callers
+  collect output with `record=` (`export_*_recorded`), `begin_capture`/
+  `end_capture` or the closure forms (`capture`, `export_*`, `page`), not by
   passing a Python file object (`file=`, `stderr=`, `Console.file`). There
   is no Jupyter mode (`force_jupyter`, `is_jupyter`, `_repr_mimebundle_`),
-  no `print_exception` (Python tracebacks, §19), and no `log_locals` or
-  caller frame lookup (`_caller_frame_info`).
+  no `print_exception` (Python tracebacks, §19), and no `log_locals` (the
+  caller's local variables). `Console.log` finds its caller with
+  `#[track_caller]` rather than a stack frame (§47).
 - **Why:** these read Python objects at run time. The Python bindings
   (`crates/rich-py`) provide them on top of the core.
 - **Remove:** inherent to the language difference; not removable.
@@ -781,6 +785,9 @@ open ones are **permanent**, each for the reason in its entry:
   `export_text` show the escape codes).
 - **Why:** nothing in the port reads the codes back out of a segment; the
   merge is an upstream accident.
+- The same holds for a recording console (0.0.23): its HTML export shows no
+  control code where upstream's shows the raw escape, so
+  `golden_console.rs` records its HTML sessions without one.
 - **Remove:** not planned.
 
 ### 45. Markup handler tags evaluate a subset of Python literals
@@ -794,6 +801,75 @@ open ones are **permanent**, each for the reason in its entry:
   without the AST node and memory address upstream's `ValueError` names.
 - **Why:** there is no Python parser in Rust, and the address is different
   on every run.
+- **Remove:** not planned.
+
+### 47. `Console.log`: UTC times, and the caller from `#[track_caller]`
+
+- **Differs:** upstream's default `get_datetime` is `datetime.now()`, local
+  time, formatted by the C library's `strftime`. Core has no time zone
+  data, so the port's default clock is `SystemTime::now()` and its
+  `strftime` (the C-locale directives, in `log_render.rs`) formats the UTC
+  wall-clock time. A console built with `get_datetime` or
+  `log_time_formatter` shows what it is given, so a program can add its
+  offset. The caller is the code that called `Console::log`, found with
+  `#[track_caller]` where upstream walks the stack; its file is the path
+  the compiler recorded (relative to the workspace for a local crate), and
+  the link is that path made absolute against the working directory, as
+  `os.path.abspath` does. `Console::log_at` takes the file and line.
+- **Why:** local time needs a time zone database or platform calls
+  (`unsafe` in a core that denies it, or a new dependency); Rust has no
+  stack frames to inspect.
+- **Remove:** if core takes a time zone dependency (a decision for the
+  maintainer). Golden `console.tsv` (`console_log*`) fixes the clock and
+  the caller on both sides.
+
+### 48. Render hooks are handed rendered output
+
+- **Differs:** upstream's `RenderHook.process_renderables` receives the
+  renderables a print collected and they are rendered afterwards, at the
+  print's options. The port's hook receives each one already rendered at
+  those options (an opaque `Box<dyn Renderable>` that writes the same
+  lines). A hook that puts one inside another renderable (a panel, say)
+  shows the lines rendered at the print's width, where upstream renders
+  it again at the panel's.
+- **Why:** a print borrows its renderables, and a hook must be able to
+  keep what it is handed in a `'static` box, as the port's containers
+  require. Hooks that add output before or after (as upstream's live
+  display does) see no difference. Golden `console.tsv`
+  (`console_render_hooks`).
+- **Remove:** not planned.
+
+### 49. `Console` API forms for upstream's Python ones
+
+- **Differs:**
+  - `export_text`, `export_html`, `export_svg`, `save_text`, `save_html`
+    and `save_svg` were ported first as closure forms (they record what
+    the closure prints). The `record=True` forms are named
+    `export_*_recorded` and `save_*_recorded`, with upstream's keyword
+    arguments in `ExportHtmlOptions` and `ExportSvgOptions`. Exporting
+    from a console that is not recording is `RichError::Console` with
+    upstream's assertion message, and an unusable `code_format` is
+    `RichError::Console` too (upstream raises Python's `KeyError`).
+  - Nested closure captures (`Console::capture`) each return what was
+    printed inside them. Upstream's nested `capture()` contexts share one
+    buffer per thread, so the inner one takes everything. `begin_capture`
+    and `end_capture` follow upstream.
+  - `on_broken_pipe` is replaced through `ConsoleBuilder::on_broken_pipe`,
+    upstream overrides it in a subclass. The default makes the console
+    quiet and exits with status 1, as upstream; it does not point standard
+    output at `os.devnull` (a Rust process does not flush at exit).
+  - The terminal's size is read once, when the console is built; upstream
+    asks for it on each `size` read. `COLUMNS` and `LINES` are read at
+    construction in both.
+  - `set_live`/`clear_live` keep a stack of `Arc<dyn Any>`; the port's
+    `Live` owns its console and does not use it (§17).
+  - A `LogObject::Renderable` is shared (`Arc<dyn Renderable + Send +
+    Sync>`), as a `Table` cell is, because a log lays its message out in
+    a table.
+  - `pop_render_hook` and `clear_live` with nothing to pop do nothing;
+    upstream raises `IndexError`.
+- **Why:** additive public API (the closure forms keep their names), and
+  the Rust form of a subclass override, a context manager or a list.
 - **Remove:** not planned.
 
 ## Feature-flagged divergences

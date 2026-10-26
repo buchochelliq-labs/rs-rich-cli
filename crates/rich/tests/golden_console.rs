@@ -1068,10 +1068,17 @@ fn console_parity() {
                 .zip(expected.chars())
                 .find(|((_, a), b)| a != b)
                 .map_or(got.len().min(expected.len()), |((at, _), _)| at);
-            let from = got.floor_char_boundary(at.saturating_sub(120));
+            // The nearest character boundary at or before `index`.
+            let boundary = |text: &str, index: usize| {
+                let mut index = index.min(text.len());
+                while !text.is_char_boundary(index) {
+                    index -= 1;
+                }
+                index
+            };
             let window = |text: &str| {
-                let from = text.floor_char_boundary(from);
-                let to = text.floor_char_boundary((at + 120).min(text.len()));
+                let from = boundary(text, at.saturating_sub(120));
+                let to = boundary(text, at + 120);
                 text[from..to].to_string()
             };
             failures.push(format!(
