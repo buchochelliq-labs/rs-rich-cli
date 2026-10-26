@@ -32,7 +32,7 @@ bounds are in `fuzz/src/lib.rs`.
 | `csv` | rs-rich-data | the sniffer, `CsvReader::read` and `source` (CSV and TSV), then type inference |
 | `jsonl` | rs-rich-data | `jsonl::read` and `jsonl::source`, then type inference |
 | `stylesheet` | rs-rich-intuituive | `Stylesheet::parse` |
-| `vt` | rs-rich-record | the VT emulator (`Terminal::process`, in chunks), then the screen's text and snapshot |
+| `vt` | rs-rich-record | the VT emulator (`Terminal::process`, in chunks, at a size a tape may ask for), then the screen's text and snapshot |
 | `tape` | rs-rich-record | the tape parser |
 | `web_input` | rs-rich-web | the input decoder (`input::decode`) |
 | `web_frames` | rs-rich-web | WebSocket frames read as the server reads them (tungstenite, the server's limits), each message's input decoded |
@@ -114,9 +114,33 @@ finding". The clock starts with the first scheduled run of `fuzz.yml` on
 
 ## Known findings
 
-None open. Fixed while the targets were written (0.0.23):
+None open. Fixed while the targets were written (0.0.23), each with a
+regression test in its crate:
 
 - `ansi`: `AnsiDecoder` panicked on a multi-byte character after a
   charset-select escape (`ESC (`), slicing inside the character. It now
   skips one character, as upstream does (rs-rich, `ansi.rs`, with a test
   captured from rich 15.0.0).
+- `plugin_wasm`: a plugin that loops over `memory.grow` with a register
+  operand overflowed the host's stack and aborted the process, in an
+  optimised build only. wasmi 2.0.0's tail-call dispatch grew the stack on
+  every instruction there. rs-rich-ext now builds wasmi with its portable
+  (loop) dispatch, which is slower but cannot do that. The test fails
+  without the fix only under `cargo test --release`: a debug build always
+  used the portable dispatch.
+- `plugin_wasm`: wasmi 2.0.0 divided by zero (a panic) on a code section
+  that declares no functions but holds bytes. rs-rich-ext now validates a
+  module with wasmparser (the parser wasmi uses, at its version) first,
+  which refuses that section.
+
+Recorded, not a finding of our code:
+
+- vt100 0.16 panics on a wide character in a one-column screen, and on a
+  resize that cuts a wide character at the right edge. rs-rich-record
+  catches the panic and reports it as an error (tested by
+  `a_vt100_panic_is_an_error`), rs-rich-embed starts a blank screen, and a
+  tape cannot ask for fewer than `tape::MIN_COLUMNS` (2) columns. The `vt`
+  target therefore uses tape sizes and does not resize. Lifting either
+  limit needs a fixed vt100.
+
+The two wasmi bugs are worth reporting upstream; neither is reported yet.

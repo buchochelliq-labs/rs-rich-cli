@@ -14,10 +14,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   ANSI, Markdown, JSON, DOT, Mermaid, CSV/TSV and JSONL, stylesheets, the
   VT emulator and tapes, web input and WebSocket frames, the marketplace's
   documents and signatures, plugin manifests and WASM modules), and
-  `fuzz.yml` runs each for ten minutes every night. They found one bug,
-  fixed: `AnsiDecoder` panicked on a multi-byte character after `ESC (`;
-  it now skips one character, as rich 15.0.0 does. See
-  `docs/design/fuzzing.md`.
+  `fuzz.yml` runs each for ten minutes every night. See
+  `docs/design/fuzzing.md`. Three bugs they found are fixed:
+  - rs-rich: `AnsiDecoder` panicked on a multi-byte character after
+    `ESC (`. It now skips one character, as rich 15.0.0 does.
+  - rs-rich-ext: a WASM plugin looping over `memory.grow` could overflow
+    the host's stack and abort it in an optimised build. wasmi now runs
+    with its portable dispatch, which is slower but safe.
+  - rs-rich-ext: a WASM module whose code section declares no functions
+    but holds bytes made wasmi divide by zero. Modules are now validated with
+    wasmparser before wasmi reads them.
 
 - **The plugin marketplace goes live** (rs-rich-cli, rs-rich-plugin-api's
   examples): rs-rich-marketplace lists the Mermaid, DOT and lumis crates,
