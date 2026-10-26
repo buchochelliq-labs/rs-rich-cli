@@ -1,4 +1,7 @@
 # Managed centrally; mirrors the monorepo's .github/dependabot.yml.
+# Local to this repository as of 0.0.23: the `groups` blocks, so each ecosystem
+# opens one pull request a week for minor and patch updates (majors still
+# arrive one by one). A central sync would drop them; keep them.
 # Ecosystems below are only those whose manifests actually exist in this repo.
 version: 2
 
@@ -13,6 +16,10 @@ updates:
     labels:
       - "dependencies"
       - "rust"
+    groups:
+      cargo-dependencies:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
 
   - package-ecosystem: "github-actions"
     directory: "/"
@@ -24,3 +31,7 @@ updates:
     labels:
       - "dependencies"
       - "github-actions"
+    groups:
+      github-actions:
+        patterns: ["*"]
+        update-types: ["minor", "patch"]
