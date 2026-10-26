@@ -16,6 +16,7 @@ import os
 from pathlib import Path
 import re
 import subprocess
+import sys
 import tempfile
 import time
 import tomllib
@@ -127,7 +128,10 @@ def semver_gate(selection, gate=None):
     0.0.x bump is a breaking one, so it fits any change (Stage 3 of the plan
     to 1.0.0; scripts/semver_check.py has the details)."""
     if gate is None:
-        from semver_check import gate
+        import semver_check
+
+        def gate(selection):
+            return semver_check.gate(selection, out=sys.stderr)
     refusals = gate(selection)
     if refusals:
         raise ValueError("The version bump is smaller than the change:\n" + "\n".join(refusals))

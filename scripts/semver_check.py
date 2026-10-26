@@ -15,6 +15,8 @@ change anything, so the rule is met without building it.
 adds): a 0.0.x crate is checked as if its bump were a minor one, so every
 breaking change shows. Each must be listed in `api/semver-breaks.toml`
 under the version that ships it, with the reason; an unlisted one fails.
+An entry's items may be `["*"]`: every item of that lint, for a crate whose
+API is still the application's own.
 Entries for a version already on crates.io are spent, and reported.
 
     python scripts/semver_check.py                  # every published crate
@@ -137,12 +139,14 @@ def known_breaks(text):
 def unexplained(failures, accepted):
     """The failing (lint, item) pairs api/semver-breaks.toml does not list."""
     return [(lint, item) for lint, items in sorted(failures.items()) for item in items
-            if item not in accepted.get(lint, set())]
+            if not {item, "*"} & accepted.get(lint, set())]
 
 
-def gate(selection, published=published_version, run=subprocess.run, out=sys.stdout):
+def gate(selection, published=published_version, run=subprocess.run, out=sys.stdout, libraries=None):
     """Cargo's rule for {crate: version}: refuse a bump smaller than the
-    change. Returns the refusals as messages."""
+    change. Returns the refusals as messages. A proc-macro crate has no
+    library for cargo-semver-checks to read; its snapshot in api/ shows its
+    changes."""
     refusals = []
     for name, version in selection.items():
         baseline = published(name)
@@ -154,6 +158,8 @@ def gate(selection, published=published_version, run=subprocess.run, out=sys.std
             refusals.append(f"{name}: {version} is older than {baseline} on crates.io")
         elif kind == "major":
             print(f"{name} {baseline} -> {version}: a breaking bump under Cargo's rules; any change fits", file=out)
+        elif name not in (libraries if libraries is not None else library_crates()):
+            print(f"{name} {baseline} -> {version}: not a library cargo-semver-checks reads", file=out)
         else:
             failures, _ = semver_checks(name, baseline, strict=False, run=run)
             if failures:
@@ -180,7 +186,7 @@ def check(crates, accepted, published=published_version, run=subprocess.run, out
             print(f"{name}: not on crates.io yet", file=out)
             continue
         if version_tuple(version)[:2] != (0, 0):
-            problems += gate({name: version}, published=lambda _: baseline, run=run, out=out)
+            problems += gate({name: version}, published=lambda _: baseline, run=run, out=out, libraries=crates)
             continue
         failures, output = semver_checks(name, baseline, strict=True, run=run)
         listed = accepted.get((name, version), {})

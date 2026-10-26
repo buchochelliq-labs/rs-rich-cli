@@ -65,6 +65,11 @@ class Reports(unittest.TestCase):
         self.assertEqual(semver_check.unexplained(failures, accepted),
                          [("copy_impl_added", "rich_ext::surface::Cell")])
 
+    def test_a_wildcard_takes_every_item_of_its_lint(self):
+        failures = semver_check.parse_failures(REPORT)
+        accepted = {"enum_missing": {"*"}, "copy_impl_added": {"*"}}
+        self.assertEqual(semver_check.unexplained(failures, accepted), [])
+
     def test_the_checked_in_known_breaks_parse(self):
         text = (ROOT / "api/semver-breaks.toml").read_text(encoding="utf-8")
         breaks = semver_check.known_breaks(text)
@@ -85,17 +90,23 @@ class Gate(unittest.TestCase):
 
     def test_a_patch_bump_of_a_0_y_crate_with_a_break_is_refused(self):
         refusals = semver_check.gate({"rs-rich": "0.1.1"}, published=lambda _: "0.1.0",
-                                     run=runner(REPORT, 1), out=io.StringIO())
+                                     run=runner(REPORT, 1), out=io.StringIO(), libraries={"rs-rich": "0.1.1"})
         self.assertEqual(len(refusals), 1)
         self.assertIn("too small", refusals[0])
 
     def test_a_patch_bump_with_no_break_passes(self):
         calls = []
         refusals = semver_check.gate({"rs-rich": "1.0.1"}, published=lambda _: "1.0.0",
-                                     run=runner("", 0, calls), out=io.StringIO())
+                                     run=runner("", 0, calls), out=io.StringIO(), libraries={"rs-rich": "1.0.1"})
         self.assertEqual(refusals, [])
         self.assertNotIn("--release-type", calls[0])
         self.assertEqual(calls[0][calls[0].index("--baseline-version") + 1], "1.0.0")
+
+    def test_a_proc_macro_crate_is_not_built(self):
+        calls = []
+        refusals = semver_check.gate({"rs-rich-macros": "0.1.1"}, published=lambda _: "0.1.0",
+                                     run=runner(REPORT, 1, calls), out=io.StringIO(), libraries={})
+        self.assertEqual((refusals, calls), ([], []))
 
     def test_a_crate_not_yet_published_has_nothing_to_compare(self):
         refusals = semver_check.gate({"rs-rich-new": "0.0.1"}, published=lambda _: None,
@@ -110,7 +121,7 @@ class Gate(unittest.TestCase):
     def test_a_tool_failure_is_not_a_pass(self):
         with self.assertRaises(RuntimeError):
             semver_check.gate({"rs-rich": "1.0.1"}, published=lambda _: "1.0.0",
-                              run=runner("", 101), out=io.StringIO())
+                              run=runner("", 101), out=io.StringIO(), libraries={"rs-rich": "1.0.1"})
 
     def test_release_plan_raises_on_a_refusal(self):
         with self.assertRaisesRegex(ValueError, "smaller than the change"):
