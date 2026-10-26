@@ -49,7 +49,7 @@ impl Pixels {
     /// take RGBA.
     pub fn to_rgba(&self) -> Vec<u8> {
         let mut out = Vec::with_capacity(self.rgb.len() / 3 * 4);
-        for pixel in self.rgb.chunks_exact(3) {
+        for pixel in self.rgb.as_chunks::<3>().0 {
             out.extend_from_slice(pixel);
             out.push(255);
         }
