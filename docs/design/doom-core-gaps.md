@@ -296,6 +296,15 @@ Tests: `tests/timedemo.rs` (a widget that sleeps 5 ms shows `draw` of
 
 ### 11. A palette-keeping two-colour rule for Braille and quadrants (intuiTUIve, `pixels`)
 
+**Status: closed in 0.0.23.** `Node::pixel_colors(PixelColors::Average |
+PixelColors::Nearest)` for `pixels` and `pixels_fit` nodes, `Average` the
+default. With `Nearest`, each side's colour is the one of its pixels
+nearest the side's average. Tests: `pixels.rs`'s
+`nearest_colours_keep_to_the_cells_own` (a 2x4 cell of red, dark red and
+black, in Braille and quadrants), `averaged_colours_are_the_default` and
+`cells_written_directly_match_the_segments_they_replaced` (unchanged), and
+`pixel_colors`'s doc-test.
+
 - **What Doom needed:** Braille cells in the frame's own colours. Before,
   rs-rich-doom chose each side's colour as the member pixel nearest that
   side's mean, never a blend.

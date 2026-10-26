@@ -430,6 +430,23 @@ impl PixelMode {
     }
 }
 
+/// How a [`pixels`] node colours a quadrant or Braille cell, whose pixels
+/// get two colours between them ([`Node::pixel_colors`]). Half blocks show
+/// every pixel's own colour either way.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum PixelColors {
+    /// Each side's pixels averaged: the smoothest picture, in colours the
+    /// pixels may not have.
+    #[default]
+    Average,
+    /// Each side's colour is the one of its pixels nearest that side's
+    /// average: only colours the cell has, so pixel art and an emulator's
+    /// or a 16- or 256-colour picture keep their palette, and fewer
+    /// distinct styles reach the screen.
+    Nearest,
+}
+
 /// Alpha at or above this is opaque when pixels become cells.
 const OPAQUE: u8 = 128;
 
@@ -463,8 +480,8 @@ const QUADRANTS: [char; 16] = [
 /// (`mask`'s bits in the order given), the lit colour and the unlit one
 /// (`None` where the unlit pixels are transparent). Lit are the opaque
 /// pixels at least as bright as their mean; with transparent pixels, every
-/// opaque one.
-fn two_colors(pixels: &[Rgba]) -> Option<(u32, Rgb, Option<Rgb>)> {
+/// opaque one. Each colour is as `colors` says.
+fn two_colors(pixels: &[Rgba], colors: PixelColors) -> Option<(u32, Rgb, Option<Rgb>)> {
     let luma = |p: &Rgba| 299 * p[0] as u32 + 587 * p[1] as u32 + 114 * p[2] as u32;
     let solid: Vec<(usize, &Rgba)> = pixels
         .iter()
@@ -494,7 +511,19 @@ fn two_colors(pixels: &[Rgba]) -> Option<(u32, Rgb, Option<Rgb>)> {
         }
         let n = chosen.len() as u32;
         let sum = |c: usize| (chosen.iter().map(|p| p[c] as u32).sum::<u32>() / n) as u8;
-        Some([sum(0), sum(1), sum(2)])
+        let mean = [sum(0), sum(1), sum(2)];
+        if colors == PixelColors::Average {
+            return Some(mean);
+        }
+        let distance = |p: &&&Rgba| {
+            (0..3)
+                .map(|c| (i32::from(p[c]) - i32::from(mean[c])).pow(2))
+                .sum::<i32>()
+        };
+        chosen
+            .iter()
+            .min_by_key(distance)
+            .map(|p| [p[0], p[1], p[2]])
     };
     Some((lit, average(true)?, average(false)))
 }
@@ -505,7 +534,7 @@ fn two_colors(pixels: &[Rgba]) -> Option<(u32, Rgb, Option<Rgb>)> {
 #[inline]
 fn cell_at(
     buf: &PixelBuf,
-    mode: PixelMode,
+    (mode, colors): (PixelMode, PixelColors),
     column: i32,
     row: i32,
     scratch: &mut Vec<Rgba>,
@@ -518,7 +547,7 @@ fn cell_at(
         PixelMode::Quadrants => {
             scratch.clear();
             scratch.extend([px(x, y), px(x + 1, y), px(x, y + 1), px(x + 1, y + 1)]);
-            match two_colors(scratch) {
+            match two_colors(scratch, colors) {
                 None => (' ', None, None),
                 Some((mask, fg, bg)) => (QUADRANTS[mask as usize], Some(fg), bg),
             }
@@ -536,7 +565,7 @@ fn cell_at(
                 px(x, y + 3),
                 px(x + 1, y + 3),
             ]);
-            match two_colors(scratch) {
+            match two_colors(scratch, colors) {
                 None => (' ', None, None),
                 Some((mask, fg, bg)) => {
                     let glyph = char::from_u32(0x2800 + mask).unwrap_or(' ');
@@ -554,7 +583,7 @@ fn cell_at(
 
 /// Draw `buf` on `canvas` in `mode`, a cell at a time with plain colours
 /// ([`Canvas::put_rgb`]); the cells past the buffer are cleared.
-fn draw_cells(buf: &PixelBuf, mode: PixelMode, canvas: &mut Canvas) {
+fn draw_cells(buf: &PixelBuf, (mode, colors): (PixelMode, PixelColors), canvas: &mut Canvas) {
     let (pw, ph) = mode.cell();
     let (width, height) = (canvas.width(), canvas.height());
     let columns = width.min(buf.width.div_ceil(pw));
@@ -562,7 +591,8 @@ fn draw_cells(buf: &PixelBuf, mode: PixelMode, canvas: &mut Canvas) {
     let mut scratch = Vec::with_capacity(8);
     for row in 0..rows {
         for column in 0..columns {
-            let (glyph, fg, bg) = cell_at(buf, mode, column as i32, row as i32, &mut scratch);
+            let (glyph, fg, bg) =
+                cell_at(buf, (mode, colors), column as i32, row as i32, &mut scratch);
             canvas.put_rgb(column, row, glyph, fg, bg);
         }
     }
@@ -594,7 +624,8 @@ fn render_lines(buf: &PixelBuf, mode: PixelMode, columns: u16, rows: u16) -> Vec
             let mut run = String::new();
             let mut run_key = (None, None);
             for column in 0..columns as i32 {
-                let (glyph, fg, bg) = cell_at(buf, mode, column, row, &mut scratch);
+                let (glyph, fg, bg) =
+                    cell_at(buf, (mode, PixelColors::Average), column, row, &mut scratch);
                 if (fg, bg) != run_key && !run.is_empty() {
                     line.push(Segment::new(std::mem::take(&mut run), style(run_key)));
                 }
@@ -616,6 +647,7 @@ struct Pixels {
     /// The buffer's size, or `None` to follow the node's.
     size: Option<(u16, u16)>,
     mode: PixelMode,
+    colors: PixelColors,
     buf: PixelBuf,
     draw: Draw,
 }
@@ -652,7 +684,7 @@ impl Widget for Pixels {
             self.buf.resize(width, height);
         }
         (self.draw)(&mut self.buf);
-        draw_cells(&self.buf, self.mode, canvas);
+        draw_cells(&self.buf, (self.mode, self.colors), canvas);
     }
 }
 
@@ -669,6 +701,7 @@ pub fn pixels(width: u16, height: u16, draw: impl FnMut(&mut PixelBuf) + 'static
         Box::new(Pixels {
             size: Some((width, height)),
             mode: PixelMode::HalfBlocks,
+            colors: PixelColors::Average,
             buf: PixelBuf::new(width, height),
             draw: Box::new(draw),
         }),
@@ -702,6 +735,7 @@ pub fn pixels_fit(draw: impl FnMut(&mut PixelBuf) + 'static) -> Node {
         Box::new(Pixels {
             size: None,
             mode: PixelMode::HalfBlocks,
+            colors: PixelColors::Average,
             buf: PixelBuf::new(0, 0),
             draw: Box::new(draw),
         }),
@@ -727,6 +761,39 @@ impl Node {
     /// ```
     pub fn pixel_mode(self, mode: PixelMode) -> Node {
         self.widget_mut(|pixels: &mut Pixels| pixels.mode = mode);
+        self
+    }
+
+    /// For a [`pixels`] node in quadrants or Braille: colour each cell's
+    /// two sides as `colors` says. [`PixelColors::Nearest`] keeps to the
+    /// colours the pixels have (a palette's); [`PixelColors::Average`],
+    /// the default, blends them.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::pixels::{pixels, PixelColors, PixelMode};
+    ///
+    /// let app = App::new(|| {
+    ///     pixels(2, 4, |buf| {
+    ///         buf.clear([0, 0, 0, 255]);
+    ///         buf.fill_rect(0, 0, 2, 1, [255, 0, 0, 255]);
+    ///         buf.fill_rect(0, 1, 2, 1, [200, 0, 0, 255]);
+    ///     })
+    ///     .pixel_mode(PixelMode::Braille)
+    ///     .pixel_colors(PixelColors::Nearest)
+    /// });
+    /// let mut driver = app.driver(1, 1);
+    /// driver.settle();
+    /// let screen = driver.screen();
+    /// let cell = screen.cell(0, 0);
+    /// // The lit dots in red (the nearer of red and dark red to their
+    /// // mean), the rest in black: no blend.
+    /// assert_eq!(cell.text(), "⠛");
+    /// let style = screen.style(cell.style).unwrap();
+    /// assert_eq!(style.color(), Some(&rich::color::Color::from_rgb(200, 0, 0)));
+    /// ```
+    pub fn pixel_colors(self, colors: PixelColors) -> Node {
+        self.widget_mut(|pixels: &mut Pixels| pixels.colors = colors);
         self
     }
 }
@@ -762,6 +829,61 @@ mod tests {
             }
         }
         buf
+    }
+
+    #[test]
+    fn nearest_colours_keep_to_the_cells_own() {
+        // 2x4: red, dark red and black, in every Braille cell's dots.
+        let (red, dark, black) = ([255, 0, 0, 255], [200, 0, 0, 255], [0, 0, 0, 255]);
+        let mut buf = PixelBuf::new(2, 4);
+        for (i, p) in [red, dark, red, black, dark, black, red, black]
+            .into_iter()
+            .enumerate()
+        {
+            buf.set(i as i32 % 2, i as i32 / 2, p);
+        }
+        let own: Vec<Rgb> = [red, dark, black].map(|p| [p[0], p[1], p[2]]).to_vec();
+        let mut scratch = Vec::new();
+        for mode in [PixelMode::Braille, PixelMode::Quadrants] {
+            let (_, fg, bg) = cell_at(&buf, (mode, PixelColors::Nearest), 0, 0, &mut scratch);
+            assert!(own.contains(&fg.unwrap()), "{mode:?} {fg:?}");
+            assert!(own.contains(&bg.unwrap()), "{mode:?} {bg:?}");
+            // Averaged, the lit side is a blend of red and dark red.
+            let (_, fg, _) = cell_at(&buf, (mode, PixelColors::Average), 0, 0, &mut scratch);
+            assert!(!own.contains(&fg.unwrap()), "{mode:?} {fg:?}");
+        }
+    }
+
+    #[test]
+    fn averaged_colours_are_the_default() {
+        for mode in [PixelMode::Quadrants, PixelMode::Braille] {
+            let screens: Vec<Vec<String>> = [None, Some(PixelColors::Average)]
+                .into_iter()
+                .map(|colors| {
+                    let buf = sample(13, 11);
+                    let app = App::new(move || {
+                        let buf = buf.clone();
+                        let node = pixels(13, 11, move |b| *b = buf.clone()).pixel_mode(mode);
+                        match colors {
+                            Some(colors) => node.pixel_colors(colors),
+                            None => node,
+                        }
+                    });
+                    let mut driver = app.driver(9, 5);
+                    driver.settle();
+                    let screen = driver.screen();
+                    let mut cells = Vec::new();
+                    for y in 0..5 {
+                        for x in 0..9 {
+                            let cell = screen.cell(x, y);
+                            cells.push(format!("{}{:?}", cell.text(), screen.style(cell.style)));
+                        }
+                    }
+                    cells
+                })
+                .collect();
+            assert_eq!(screens[0], screens[1], "{mode:?}");
+        }
     }
 
     #[test]

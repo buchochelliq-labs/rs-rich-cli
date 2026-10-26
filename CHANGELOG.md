@@ -37,6 +37,11 @@ What rs-rich-doom built for itself, made generic
   `sixel::encode_palette` encodes indices into a palette of up to 256
   colours exactly, with no quantizing or resampling, and
   `sixel::index_exact` makes the indices and palette from RGBA.
+- **Pixel cells in their own colours** (intuituive):
+  `Node::pixel_colors(PixelColors::Nearest)` colours each quadrant or
+  Braille cell's two sides with the pixel nearest each side's average,
+  never a blend, so a palette stays a palette. `Average` stays the
+  default.
 
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
 
