@@ -116,7 +116,8 @@ pub use crate::bar::Bar;
 pub use crate::color::{Color, ColorSystem, ColorTriplet};
 pub use crate::columns::Columns;
 pub use crate::console::{
-    Console, ConsoleDimensions, ConsoleOptions, Justify, Overflow, RenderStrOptions, ScreenUpdate,
+    Console, ConsoleDimensions, ConsoleOptions, ExportHtmlOptions, ExportSvgOptions, Justify,
+    LogObject, LogOptions, Overflow, RenderHook, RenderStrOptions, ScreenContext, ScreenUpdate,
     ThemeContext,
 };
 pub use crate::constrain::Constrain;

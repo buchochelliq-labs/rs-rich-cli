@@ -193,6 +193,13 @@ impl Renderable for Control {
             vec![self.segment.clone()]
         }
     }
+
+    /// Upstream's `Control` yields its one segment and no line break, so a
+    /// printed control (as a live display's render hook prints one) leaves
+    /// the line open.
+    fn print_end_line(&self, _options: &ConsoleOptions) -> bool {
+        false
+    }
 }
 
 #[cfg(test)]
