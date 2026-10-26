@@ -218,6 +218,13 @@ pub fn load_wasm_bytes(
         )));
     }
 
+    // wasmparser's validation first: wasmi 2.0.0 panics (it divides by
+    // zero) on a code section that declares no functions but holds bytes,
+    // before it reads that section through. The validator refuses it.
+    wasmparser::Validator::new()
+        .validate_all(bytes)
+        .map_err(|e| not_a_plugin(format!("invalid WASM: {e}")))?;
+
     let mut config = Config::default();
     config
         .consume_fuel(true)

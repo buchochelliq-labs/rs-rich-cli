@@ -68,6 +68,11 @@ clap = { version = "4.5", default-features = false, features = ["std", "help", "
 # plugin cannot take the host down.
 libloading = { version = "0.9", optional = true }
 wasmi = { version = "2", default-features = false, features = ["std", "validate", "stable", "portable-dispatch"], optional = true }
+# A module is validated by wasmparser (the parser wasmi itself uses, at its
+# version) before wasmi reads it: wasmi 2.0.0 divides by zero on a code
+# section that declares no functions but holds bytes (found by the
+# `plugin_wasm` fuzz target), and the validator refuses that section first.
+wasmparser = { version = "0.228", default-features = false, features = ["std", "validate", "features"], optional = true }
 # `fs::local_time`: the local time zone (chrono's `clock`, through
 # iana-time-zone). Already in the tree through arrow; off by default.
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"], optional = true }
@@ -142,7 +147,7 @@ clap = ["dep:clap"]
 # `rich_plugin_api::abi`. They run arbitrary native code: trust-only.
 dylib-plugins = ["dep:libloading"]
 # Load sandboxed WASM plugins: no imports, a fuel limit and a memory cap.
-wasm-plugins = ["dep:wasmi"]
+wasm-plugins = ["dep:wasmi", "dep:wasmparser"]
 # `fs::local_time` and `fs::short_local_time`: times in the local time zone,
 # through chrono.
 local-time = ["dep:chrono"]
