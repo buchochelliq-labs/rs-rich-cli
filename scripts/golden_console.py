@@ -211,6 +211,35 @@ def _console_style_soft_wrap() -> str:
     return "".join([_print(console, "hi"), _print(console, _LONG), _print(console, Panel("x", expand=False))])
 
 
+# --- group 2: begin_capture / end_capture ---------------------------------
+
+
+def _console_begin_end_capture() -> str:
+    console = _console(20)
+    console.begin_capture()
+    console.print("[bold]a[/]")
+    console.rule("r")
+    first = console.end_capture()
+    # Nested: upstream keeps one buffer per thread, so the inner end takes
+    # everything and the outer one finds nothing left.
+    console.begin_capture()
+    console.print("a")
+    console.begin_capture()
+    console.print("b")
+    inner = console.end_capture()
+    outer = console.end_capture()
+    # Control codes are captured (a terminal), and `end=""` leaves the line open.
+    console.begin_capture()
+    console.show_cursor(False)
+    console.print("z", end="")
+    control = console.end_capture()
+    quiet = _console(20, quiet=True)
+    quiet.begin_capture()
+    quiet.print("q")
+    hushed = quiet.end_capture()
+    return _lines(repr(first), repr(inner), repr(outer), repr(control), repr(hushed))
+
+
 CONSOLE_CASES = [
     ("console_quiet", _console_quiet),
     ("console_size_setters", _console_size_setters),
@@ -222,6 +251,7 @@ CONSOLE_CASES = [
     ("console_soft_wrap", _console_soft_wrap),
     ("console_style", _console_style),
     ("console_style_soft_wrap", _console_style_soft_wrap),
+    ("console_begin_end_capture", _console_begin_end_capture),
 ]
 
 

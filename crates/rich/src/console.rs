@@ -1154,8 +1154,49 @@ impl Console {
     /// The Rust analogue of upstream's `with console.capture() as capture:` —
     /// the closure receives the same console, and captures nest correctly.
     /// Equivalent to what would have been written to the terminal.
+    ///
+    /// Each closure capture holds only what was printed inside it. Upstream's
+    /// nested `capture()` contexts share one buffer, so the inner one takes
+    /// everything printed since the outer one began;
+    /// [`begin_capture`](Self::begin_capture) and
+    /// [`end_capture`](Self::end_capture) behave that way.
     pub fn capture(&self, f: impl FnOnce(&Console)) -> String {
         let segments = self.record(f);
+        self.segments_to_string(&segments)
+    }
+
+    /// Begin capturing this thread's output: what is printed is held until
+    /// [`end_capture`](Self::end_capture) instead of written. Port of
+    /// `Console.begin_capture`.
+    pub fn begin_capture(&self) {
+        self.lock_captures()
+            .entry(std::thread::current().id())
+            .or_default()
+            .push(Vec::new());
+    }
+
+    /// End the innermost capture begun with
+    /// [`begin_capture`](Self::begin_capture) on this thread, returning what
+    /// was printed as a terminal string. Port of `Console.end_capture`.
+    ///
+    /// As upstream, which holds one buffer per thread, everything captured
+    /// on the thread so far is returned, including what outer captures hold,
+    /// and those are left empty. Without a capture to end, the result is
+    /// empty (upstream's console would stop writing altogether).
+    pub fn end_capture(&self) -> String {
+        let id = std::thread::current().id();
+        let segments: Vec<Segment> = {
+            let mut captures = self.lock_captures();
+            let Some(stack) = captures.get_mut(&id) else {
+                return String::new();
+            };
+            let segments = stack.iter_mut().flat_map(std::mem::take).collect();
+            stack.pop();
+            if stack.is_empty() {
+                captures.remove(&id);
+            }
+            segments
+        };
         self.segments_to_string(&segments)
     }
 

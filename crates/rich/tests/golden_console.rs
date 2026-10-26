@@ -5,6 +5,7 @@
 //! environment (`ConsoleBuilder::environ`, upstream's `_environ`), so no
 //! case depends on the machine running it.
 
+use rich::align::HorizontalAlign;
 use rich::console::{Environ, PrintObject as O, PrintOptions};
 use rich::{ColorSystem, Console, Justify, Panel, Renderable, Rule, Text, Theme};
 
@@ -408,6 +409,45 @@ fn console_style_soft_wrap() -> String {
     .concat()
 }
 
+// --- group 2 ------------------------------------------------------------
+
+fn console_begin_end_capture() -> String {
+    let console = console(20);
+    console.begin_capture();
+    console.print_str("[bold]a[/]");
+    console.rule("r", "─", "rule.line", HorizontalAlign::Center);
+    let first = console.end_capture();
+    console.begin_capture();
+    console.print_str("a");
+    console.begin_capture();
+    console.print_str("b");
+    let inner = console.end_capture();
+    let outer = console.end_capture();
+    console.begin_capture();
+    console.show_cursor(false);
+    console
+        .print_objects(
+            &[O::Str("z")],
+            &PrintOptions {
+                end: "",
+                ..Default::default()
+            },
+        )
+        .unwrap();
+    let control = console.end_capture();
+    let quiet = builder(20).quiet(true).build();
+    quiet.begin_capture();
+    quiet.print_str("q");
+    let hushed = quiet.end_capture();
+    lines(&[
+        py_repr(&first),
+        py_repr(&inner),
+        py_repr(&outer),
+        py_repr(&control),
+        py_repr(&hushed),
+    ])
+}
+
 fn build(name: &str) -> String {
     match name {
         "console_quiet" => console_quiet(),
@@ -420,11 +460,12 @@ fn build(name: &str) -> String {
         "console_soft_wrap" => console_soft_wrap(),
         "console_style" => console_style(),
         "console_style_soft_wrap" => console_style_soft_wrap(),
+        "console_begin_end_capture" => console_begin_end_capture(),
         other => panic!("no builder for console case {other:?}"),
     }
 }
 
-const CASES: usize = 10;
+const CASES: usize = 11;
 
 #[test]
 fn console_parity() {
