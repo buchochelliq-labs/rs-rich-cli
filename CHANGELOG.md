@@ -26,6 +26,45 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `print_exception` and `log_locals` stay out (DIVERGENCES §43); the new
   differences in form are §47 to §49.
 
+- **`Progress.log`** (rs-rich): `LiveProgress::log` logs above the tasks
+  as upstream's `Progress.log` (its console's `log`) does, with the time and
+  the caller from `#[track_caller]`; `log_at` names the caller. `Live`,
+  `AutoLive` and `LiveHandle` have `log` too, as `Live::print` stands in for
+  `console.print`. New golden cases `progress_log` and `progress_log_file`
+  in `console.tsv`.
+
+- **`Live` uses its console's live stack** (rs-rich): `start` calls
+  `set_live` and `stop` calls `clear_live`, as upstream's do. A display
+  started while the stack holds another is nested: it draws nothing and
+  prints its renderable when it stops, unless it is transient. rich 15.0.0
+  raises no `LiveError` here, and neither does the port. New golden cases
+  `live_set_live` and `live_nested` (DIVERGENCES §17, §49).
+
+- **A nested `Live` draws inside the first display** (rs-rich): as rich
+  15.0.0 does, the first display on a console's live stack draws every
+  display on it, one after another, and a nested display's refresh redraws
+  the first. The live stack is now shared by a console and its clones, so
+  displays given clones of one console nest. `Live`, `AutoLive`,
+  `LiveProgress` and `LiveStatus` take part, from any thread. New golden
+  cases `live_nested_draw`, `live_nested_transient`,
+  `live_nested_stop_order`, `live_nested_file` and `live_nested_screen` in
+  `console.tsv`. What still differs is in DIVERGENCES §17.
+
+- **The CLI tour shows the new console features** (rs-rich-cli): `rich
+  --demo`'s core sections now run `console.log` and `progress.log` (a
+  fixed clock and a pseudo-file keep them the same on every run), a live
+  `console.status` while the section pauses on a terminal, and a
+  `record=True` console's text, HTML and SVG exports. The tour tape takes
+  two more screenshots, `log` and `record`.
+
+- **`Surface` paints with `best`** (rs-rich-ext): a `Surface` now paints
+  as an intuiTUIve app does, with `PaintStrategy::Best` unless
+  `Surface::paint_strategy` or `RICH_PAINT_STRATEGY` chooses another. Its
+  guards are the app's: no terminal scrolling on Windows, under tmux,
+  inline, or through a graphic on screen, and `Surface::terminal_scroll`
+  overrides the first two. `Painter::new` still starts on `cells`. Tests
+  replay `best` through vt100 against a full repaint.
+
 - **Noctiluca's live logs and terminal adaptations** (noctiluca): a
   `role=log`, `aria-live` or appended scroll box is followed through a
   live-only change ping and read incrementally, with no new snapshot. It

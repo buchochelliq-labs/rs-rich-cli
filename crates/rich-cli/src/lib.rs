@@ -6712,12 +6712,19 @@ fn print_help(no_color: bool) {
 }
 
 fn build_demo_console(no_color: bool) -> Console {
+    let mut console = demo_console_builder(no_color).build();
+    console.install_extensions();
+    console
+}
+
+/// [`build_demo_console`]'s settings, before it is built.
+fn demo_console_builder(no_color: bool) -> rich::console::ConsoleBuilder {
     // Force truecolor so the demo looks the same regardless of TERM — but only
     // when it is actually going to a terminal. Forcing it unconditionally wrote
     // escape sequences into a pipe, and made `--no-color` a no-op on this path
     // alone while every other mode honoured it.
     let to_terminal = std::io::stdout().is_terminal() && !no_color;
-    let mut console = crate::console_builder()
+    crate::console_builder()
         .force_terminal(to_terminal)
         .no_color(no_color)
         .color_system(if to_terminal {
@@ -6728,9 +6735,6 @@ fn build_demo_console(no_color: bool) -> Console {
         // `[error]`/`[warning]`/`[info]` are rich-ext's additions, not upstream
         // styles — the core theme is a faithful 154-entry port.
         .theme(rich_ext::extended_theme())
-        .build();
-    console.install_extensions();
-    console
 }
 
 fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
@@ -7007,6 +7011,55 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
             None,
         ));
     }
+    // Console.log fills the same grid in: the time, the message and the
+    // caller. A fixed clock and a pseudo-file (`<demo>`, which links
+    // nowhere) keep the tour the same on every run.
+    let logging = || {
+        let mut logger = demo_console_builder(no_color)
+            .get_datetime(|| std::time::UNIX_EPOCH + std::time::Duration::from_secs(12 * 3600))
+            .build();
+        logger.install_extensions();
+        logger
+    };
+    let logger = logging();
+    for (line, message) in [
+        (
+            7,
+            "[bold]console.log[/]: the time, the message and the caller",
+        ),
+        (8, "a log in the same second leaves the time blank"),
+    ] {
+        let _ = logger.log_at(
+            &[rich::LogObject::Str(message)],
+            &rich::LogOptions::default(),
+            "<demo>",
+            line,
+        );
+    }
+    // Progress.log: logs land above a running progress display.
+    let live = Progress::new()
+        .clock(|| 0.0)
+        .columns(vec![
+            ProgressColumn::Description,
+            ProgressColumn::Bar,
+            ProgressColumn::MofN,
+        ])
+        .start(logging(), std::io::stdout(), 10.0);
+    let deploy = live.add_task("Deploying", 3.0, 0.0);
+    for (line, step) in [(12, "built"), (13, "tested"), (14, "shipped")] {
+        if !delay.is_zero() {
+            std::thread::sleep(delay / 3);
+        }
+        let message = format!("progress.log: [green]{step}[/]");
+        let _ = live.log_at(
+            &[rich::LogObject::Str(&message)],
+            &rich::LogOptions::default(),
+            "<demo>",
+            line,
+        );
+        live.advance(deploy, 1.0);
+    }
+    let _ = live.stop();
 
     // Traceback — render an error + its source chain (Rust-native rich.traceback).
     demo::section(&console, delay, "traceback");
@@ -7100,6 +7153,46 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
     console.print(&Text::new(format!(
         "  export_html: [bold red] → <span style=\"{html_rule}\">"
     )));
+    // record=True keeps everything printed, for the recorded exports.
+    let recorder = demo_console_builder(no_color)
+        .record(true)
+        .width(40)
+        .build();
+    recorder.print_str("[bold magenta]recorded[/] by a [green]record=True[/] console");
+    let plain = recorder
+        .export_text_recorded(false, false)
+        .unwrap_or_default();
+    let html = recorder
+        .export_html_recorded(&rich::ExportHtmlOptions {
+            clear: false,
+            inline_styles: true,
+            ..Default::default()
+        })
+        .unwrap_or_default();
+    let svg = recorder
+        .export_svg_recorded(&rich::ExportSvgOptions {
+            title: "demo",
+            ..Default::default()
+        })
+        .unwrap_or_default();
+    console.print(&Text::new(format!(
+        "  export_text_recorded: {:?}",
+        plain.trim_end()
+    )));
+    // The first styled span, or the size when nothing was styled.
+    let span = html
+        .lines()
+        .find_map(|line| line.find("<span").map(|at| &line[at..]))
+        .and_then(|span| span.split("</span>").next())
+        .map_or_else(
+            || format!("{} bytes of HTML", html.len()),
+            |span| format!("{span}</span>"),
+        );
+    console.print(&Text::new(format!("  export_html_recorded: {span}")));
+    console.print(&Text::new(format!(
+        "  export_svg_recorded:  {} bytes of SVG",
+        svg.len()
+    )));
 
     // Layout — split a region into ratioed rows/columns; Panel leaves expand
     // to fill their region (rendered here at a fixed size).
@@ -7144,6 +7237,15 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
     // Status — a spinner + message (green frame; animation needs a Live loop).
     let status = Status::new("Loading…").renderable().render(0.0);
     console.print(&Text::new("       status: ").append_text(&status));
+    // Console.status runs that loop: a transient display, so only a
+    // terminal sees it, and only while the work runs.
+    if to_terminal && !delay.is_zero() {
+        let _ = std::io::stdout().flush();
+        let running = console.status(Status::new("console.status: working…"));
+        std::thread::sleep(delay);
+        running.stop();
+    }
+    console.print_str("  console.status: a spinner on a live display while work runs");
 
     // CSV rendered as a table (blue border, numeric columns bold-green + right).
     demo::section(&console, delay, "csv");

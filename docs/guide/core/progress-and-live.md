@@ -165,6 +165,16 @@ console and the writer move to the thread, so they must be `Send`.
     while it runs — including from another thread — lands in the middle of its
     redraws.
 
+!!! note "Nested displays"
+
+    Displays given clones of one console share its live stack, as upstream's
+    displays on one console do. A display started while another runs is
+    nested: the first display draws it below its own renderable, a refresh of
+    the nested display redraws the first, and when the nested display stops
+    it prints its renderable above the first, unless it is transient. This
+    works for `Live`, `AutoLive`, `LiveProgress` and `LiveStatus`, from any
+    thread. Give nested displays writers to the same terminal.
+
 !!! note "When stdout is not a terminal"
 
     `Live` draws nothing while running, and `stop` writes the final frame once,
@@ -226,15 +236,18 @@ is the bar on its own — for a table cell, a panel, or your own renderable.
 `.style`, `.complete_style`, `.finished_style`, `.pulse_style`, `.pulse(true)`
 and `ProgressBar::indeterminate()`; `.animation_time(t)` picks the pulse frame.
 
-## Not yet ported
+## Differences from upstream
 
-- `Console.status()` / `with console.status(...)`: create a `Status` and drive
-  it with `Live` as shown above.
-- `Live`: `screen=True` (alternate screen), `redirect_stdout`/`redirect_stderr`
-  and `get_renderable` callbacks. (`vertical_overflow` is ported:
-  `Live::vertical_overflow(VerticalOverflow::Visible)`.)
-- `Progress`: `console.print` through the display (`progress.console`), and
-  `redirect_stdout`.
+- `Console::status(status)` is `with console.status(...)`: the display starts
+  at once, on a copy of the console, and `LiveStatus::stop` ends it.
+- A `Live` owns its console, so what upstream prints through the console
+  while a display runs goes through the display here: `Live::print` for
+  `console.print`, `Live::log` for `console.log`, and on a running progress
+  `LiveProgress::print` and `LiveProgress::log` for `progress.print` and
+  `progress.log`. A log names the code that called it, with its time.
+- The stdout and stderr redirect is a writer (`Live::stdout`,
+  `LiveProgress::stdout`), not the process's own stdout. See
+  [DIVERGENCES §17](../../DIVERGENCES.md#17-live-owns-its-console-and-sink-redirect-through-proxy-writers-settled-in-0022).
 
 ## See also
 

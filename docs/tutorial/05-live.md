@@ -115,6 +115,8 @@ the automatic-refresh mode and `Progress` on top of it.
     `Live` owns the cursor while it runs. Printing to the same console from
     elsewhere — including from another thread — will interleave with its
     redraws and corrupt the display.
+    A second display started on a clone of the same console is nested
+    instead, and drawn inside the first one, as in Python rich.
 
 ## Status
 

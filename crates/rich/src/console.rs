@@ -380,9 +380,15 @@ pub struct Console {
     get_datetime: GetDateTime,
     /// Upstream's `Console._render_hooks`.
     render_hooks: std::sync::Mutex<Vec<std::sync::Arc<dyn RenderHook>>>,
-    /// Upstream's `Console._live_stack`.
-    live_stack: std::sync::Mutex<Vec<std::sync::Arc<dyn std::any::Any + Send + Sync>>>,
+    /// Upstream's `Console._live_stack`. Shared with every clone: a `Live`
+    /// owns its console, so displays meant for one console get clones of
+    /// it, and nest as upstream's displays on one console object do.
+    live_stack: LiveStack,
 }
+
+/// A console's live stack, shared by its clones.
+type LiveStack =
+    std::sync::Arc<std::sync::Mutex<Vec<std::sync::Arc<dyn std::any::Any + Send + Sync>>>>;
 
 /// A `Send`-only highlighter behind a lock, so it can be shared by a `Sync`
 /// console.
@@ -438,6 +444,12 @@ impl Clone for Console {
     /// An independent console with the same configuration, theme stack and
     /// highlighters (shared). The clone starts with an empty capture buffer
     /// and is not capturing, whatever the original is doing.
+    ///
+    /// The live stack ([`set_live`](Console::set_live)) is the one thing the
+    /// clone shares with the original: each [`Live`](crate::live::Live)
+    /// owns a console, so displays on one terminal are given clones of one
+    /// console, and a display started on a clone while another runs nests
+    /// inside it, as upstream's displays on a single console do.
     fn clone(&self) -> Self {
         Console {
             render_environment: self.render_environment.clone(),
@@ -471,7 +483,7 @@ impl Clone for Console {
             record: std::sync::atomic::AtomicBool::new(self.record()),
             record_buffer: std::sync::Mutex::new(Vec::new()),
             render_hooks: std::sync::Mutex::new(Vec::new()),
-            live_stack: std::sync::Mutex::new(Vec::new()),
+            live_stack: self.live_stack.clone(),
             log_render: std::sync::Mutex::new(new_log_render(self.log_time, self.log_path)),
             log_time: self.log_time,
             log_path: self.log_path,
@@ -1264,11 +1276,12 @@ impl Console {
     /// is the only one (the display that draws). Port of `Console.set_live`,
     /// which upstream's `Live` calls when it starts.
     ///
-    /// The port's [`Live`](crate::live::Live) owns its console and does not
-    /// share it with another display ([DIVERGENCES §17]), so it has no stack
-    /// to join; the stack is here for a display that shares a console.
-    ///
-    /// [DIVERGENCES §17]: https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/DIVERGENCES.md#17-live-owns-its-console-and-sink-redirect-through-proxy-writers-settled-in-0022
+    /// The stack is shared by the console's clones. A
+    /// [`Live`](crate::live::Live) pushes itself here when it starts and
+    /// pops the stack when it stops; one started while the stack is not
+    /// empty is nested, and the first display draws it below its own
+    /// renderable. Anything else pushed here takes a place on the stack and
+    /// draws nothing.
     pub fn set_live(&self, live: std::sync::Arc<dyn std::any::Any + Send + Sync>) -> bool {
         let mut stack = lock_or_recover(&self.live_stack);
         stack.push(live);
@@ -1280,6 +1293,12 @@ impl Console {
     /// (upstream raises `IndexError`).
     pub fn clear_live(&self) {
         lock_or_recover(&self.live_stack).pop();
+    }
+
+    /// What the live stack holds now, first pushed first (upstream's
+    /// `Console._live_stack`).
+    pub(crate) fn live_stack(&self) -> Vec<std::sync::Arc<dyn std::any::Any + Send + Sync>> {
+        lock_or_recover(&self.live_stack).clone()
     }
 
     /// Use the alternate screen until the returned guard drops. Port of
@@ -2746,7 +2765,7 @@ impl ConsoleBuilder {
             record: std::sync::atomic::AtomicBool::new(self.record),
             record_buffer: std::sync::Mutex::new(Vec::new()),
             render_hooks: std::sync::Mutex::new(Vec::new()),
-            live_stack: std::sync::Mutex::new(Vec::new()),
+            live_stack: LiveStack::default(),
             log_render: std::sync::Mutex::new(new_log_render(self.log_time, self.log_path)),
             log_time: self.log_time,
             log_path: self.log_path,
@@ -3002,6 +3021,82 @@ impl Default for LogOptions<'_> {
             markup: None,
             highlight: None,
         }
+    }
+}
+
+/// A [`Console::log`] call that owns its arguments, so that it can be sent
+/// to the thread that owns the console (a live display's refresh thread).
+pub(crate) struct OwnedLog {
+    objects: Vec<OwnedLogObject>,
+    sep: String,
+    end: String,
+    style: Option<crate::style::StyleType>,
+    justify: Option<Justify>,
+    emoji: Option<bool>,
+    markup: Option<bool>,
+    highlight: Option<bool>,
+    file: String,
+    line: u32,
+}
+
+enum OwnedLogObject {
+    Str(String),
+    Text(Text),
+    Renderable(std::sync::Arc<dyn Renderable + Send + Sync>),
+}
+
+impl OwnedLog {
+    /// Copy `objects` and `options`, logged as from `file` and `line`.
+    pub(crate) fn new(
+        objects: &[LogObject<'_>],
+        options: &LogOptions<'_>,
+        file: &str,
+        line: u32,
+    ) -> Self {
+        OwnedLog {
+            objects: objects
+                .iter()
+                .map(|object| match object {
+                    LogObject::Str(content) => OwnedLogObject::Str((*content).to_string()),
+                    LogObject::Text(text) => OwnedLogObject::Text((*text).clone()),
+                    LogObject::Renderable(renderable) => {
+                        OwnedLogObject::Renderable(renderable.clone())
+                    }
+                })
+                .collect(),
+            sep: options.sep.to_string(),
+            end: options.end.to_string(),
+            style: options.style.clone(),
+            justify: options.justify,
+            emoji: options.emoji,
+            markup: options.markup,
+            highlight: options.highlight,
+            file: file.to_string(),
+            line,
+        }
+    }
+
+    /// [`Console::log_at`] on `console`.
+    pub(crate) fn log(&self, console: &Console) -> crate::errors::Result<()> {
+        let objects: Vec<LogObject<'_>> = self
+            .objects
+            .iter()
+            .map(|object| match object {
+                OwnedLogObject::Str(content) => LogObject::Str(content),
+                OwnedLogObject::Text(text) => LogObject::Text(text),
+                OwnedLogObject::Renderable(renderable) => LogObject::Renderable(renderable.clone()),
+            })
+            .collect();
+        let options = LogOptions {
+            sep: &self.sep,
+            end: &self.end,
+            style: self.style.clone(),
+            justify: self.justify,
+            emoji: self.emoji,
+            markup: self.markup,
+            highlight: self.highlight,
+        };
+        console.log_at(&objects, &options, &self.file, self.line)
     }
 }
 

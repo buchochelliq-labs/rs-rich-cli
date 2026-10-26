@@ -15,13 +15,20 @@
 //! output sink. Its stdout/stderr redirect is [`Live::stdout`] and
 //! [`Live::stderr`], writers that print through the display as upstream's
 //! `FileProxy` does (see [`file_proxy`](crate::file_proxy) for why the
-//! process's own stdout is not replaced).
+//! process's own stdout is not replaced). `console.log` during a display is
+//! [`Live::log`].
+//!
+//! As upstream's, `start` pushes the display on its console's live stack
+//! ([`Console::set_live`], shared by the console's clones) and `stop` pops
+//! it. A display started while the stack holds another is nested: the first
+//! display draws every display on the stack, one after another, and a
+//! nested display's refresh redraws the first. A nested display prints its
+//! renderable once, when it stops, unless it is transient.
 
 use std::any::Any;
-use std::cell::Cell;
+use std::cell::{Cell, RefCell};
 use std::io::Write;
 use std::panic::{self, AssertUnwindSafe};
-use std::rc::Rc;
 use std::sync::mpsc::{self, RecvTimeoutError};
 use std::sync::{Arc, Mutex};
 use std::thread::{self, JoinHandle};
@@ -30,8 +37,7 @@ use std::time::Duration;
 use crate::console::{Console, ConsoleOptions};
 use crate::control::Control;
 use crate::file_proxy::{FileProxy, ProxyBuffer, ProxyStream, ProxyTarget};
-use crate::live_render::{LiveRender, VerticalOverflow};
-use crate::measure::Measurement;
+use crate::live_render::VerticalOverflow;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 
@@ -71,65 +77,308 @@ impl Default for LiveOptions {
     }
 }
 
-/// The renderable a [`Live`] shows: its own, or upstream's
-/// `Screen(renderable)` while the alternate screen is on.
-struct LiveContent {
-    renderable: Box<dyn Renderable>,
-    alt_screen: Rc<Cell<bool>>,
+/// A display's renderable as rendered for a frame: the segments the first
+/// display draws for it.
+type Snapshot = Arc<Vec<Segment>>;
+
+/// What a [`Live`] pushes on its console's live stack ([`Console::set_live`]).
+/// Upstream pushes the display itself, and the first display renders every
+/// display on the stack. A `Live` is not `Send` (its renderable need not
+/// be), so the stack holds what the other displays need of it instead: its
+/// renderable as last rendered, and its frame.
+///
+/// Locks are taken in one order: a frame, then the console's live stack or
+/// an entry's content. Nothing takes a frame while holding the stack or a
+/// content lock, one frame is held at a time, and no renderable is rendered
+/// while a frame is held, except as segments already rendered. A renderable
+/// may lock state of its own (a progress's tasks) that a thread waiting on
+/// another display holds, so it is rendered before the frame is locked.
+struct LiveEntry {
+    /// The renderable as last rendered, for the first display to draw
+    /// (upstream's `live.get_renderable()` in `Live.renderable`).
+    content: Mutex<Option<Snapshot>>,
+    /// The display's frame: what its live render shows and the shape it
+    /// left on the screen. A nested display redraws the first display's
+    /// frame, as upstream's `refresh` calls `live_stack[0].refresh()`.
+    frame: Mutex<Frame>,
 }
 
-impl Renderable for LiveContent {
+/// One renderable of a frame's `Group`.
+#[derive(Clone)]
+enum Slot {
+    /// The display's own renderable.
+    Own,
+    /// Another display's, as rendered when the frame was refreshed.
+    Other(Snapshot),
+}
+
+/// The state of a display's live render, shared with the displays nested
+/// in it.
+struct Frame {
+    /// `LiveRender._shape`.
+    shape: Option<(usize, usize)>,
+    vertical_overflow: VerticalOverflow,
+    /// `LiveRender.renderable`, set at each refresh: the display's own, or,
+    /// with other displays on the stack, a `Group` of every display's.
+    slots: Vec<Slot>,
+    /// Counts the changes of `slots`.
+    generation: u64,
+    /// A nested display has refreshed this one since it last refreshed
+    /// itself; upstream's refresh took the display's renderable.
+    stale: bool,
+    /// Upstream's render hook is pushed.
+    hooked: bool,
+    started: bool,
+    transient: bool,
+    alt_screen: bool,
+    /// The console's `is_interactive`.
+    interactive: bool,
+}
+
+/// Lock `mutex`, recovering it if a panicking holder poisoned it.
+fn lock<T>(mutex: &Mutex<T>) -> std::sync::MutexGuard<'_, T> {
+    mutex
+        .lock()
+        .unwrap_or_else(std::sync::PoisonError::into_inner)
+}
+
+impl LiveEntry {
+    fn new(interactive: bool) -> Self {
+        LiveEntry {
+            content: Mutex::new(None),
+            frame: Mutex::new(Frame {
+                shape: None,
+                vertical_overflow: VerticalOverflow::Ellipsis,
+                slots: vec![Slot::Own],
+                generation: 0,
+                stale: false,
+                hooked: false,
+                started: false,
+                transient: false,
+                alt_screen: false,
+                interactive,
+            }),
+        }
+    }
+
+    fn frame(&self) -> std::sync::MutexGuard<'_, Frame> {
+        lock(&self.frame)
+    }
+
+    fn content(&self) -> Option<Snapshot> {
+        lock(&self.content).clone()
+    }
+
+    fn set_content(&self, content: Snapshot) {
+        *lock(&self.content) = Some(content);
+    }
+}
+
+/// The live display entry `item` on a console's stack, if it is one.
+fn entry_of(item: &Arc<dyn Any + Send + Sync>) -> Option<Arc<LiveEntry>> {
+    item.clone().downcast::<LiveEntry>().ok()
+}
+
+/// The `Group` upstream's first display shows, the stack's displays in
+/// order: `Own` for `first`, the last rendering of each other.
+fn group_slots(stack: &[Arc<dyn Any + Send + Sync>], first: &Arc<LiveEntry>) -> Vec<Slot> {
+    stack
+        .iter()
+        .filter_map(entry_of)
+        .filter_map(|entry| {
+            if Arc::ptr_eq(&entry, first) {
+                Some(Slot::Own)
+            } else {
+                entry.content().map(Slot::Other)
+            }
+        })
+        .collect()
+}
+
+impl Frame {
+    fn set_slots(&mut self, slots: Vec<Slot>) {
+        self.slots = slots;
+        self.generation += 1;
+    }
+
+    /// Whether a print draws the display below it (upstream's
+    /// `process_renderables`).
+    fn draws(&self) -> bool {
+        self.hooked && (self.interactive || (!self.started && !self.transient))
+    }
+
+    /// `reset` + `rendered` + the frame drawn as `live` with `shape`, as
+    /// upstream's `process_renderables` arranges a print.
+    fn arrange(&mut self, rendered: &str, live: &str, shape: (usize, usize)) -> String {
+        let reset = if !self.interactive {
+            String::new()
+        } else if self.alt_screen {
+            Control::home().as_str().to_string()
+        } else {
+            crate::live_render::position_cursor(self.shape)
+                .as_str()
+                .to_string()
+        };
+        self.shape = Some(shape);
+        format!("{reset}{rendered}{live}")
+    }
+
+    /// `console.print(...)` through this display's render hook, from a
+    /// display that does not own it: `rendered` is what was printed, and
+    /// `own` stands for this display's renderable.
+    fn draw(&mut self, console: &Console, own: &Own<'_>, rendered: &str) -> String {
+        if !self.draws() {
+            return rendered.to_string();
+        }
+        let (live, shape, _) = render_frame(
+            console,
+            own,
+            &self.slots,
+            self.alt_screen,
+            self.vertical_overflow,
+        );
+        self.arrange(rendered, &live, shape)
+    }
+}
+
+/// A display's own renderable, in its frame.
+enum Own<'a> {
+    /// Rendered now, by the display that owns it.
+    Render(&'a dyn Renderable),
+    /// As it was last rendered, for another display drawing the frame.
+    Snapshot(Option<Snapshot>),
+}
+
+/// What a display's live render shows: the slots one after another
+/// (upstream's `Group`), in upstream's `Screen` on the alternate screen.
+/// Rendering the display's own renderable keeps its segments in `stash`.
+struct FrameContent<'a> {
+    own: &'a Own<'a>,
+    slots: &'a [Slot],
+    alt_screen: bool,
+    stash: RefCell<Option<Snapshot>>,
+}
+
+/// [`FrameContent`] without the `Screen`.
+struct FrameGroup<'a, 'b>(&'b FrameContent<'a>);
+
+impl Renderable for FrameGroup<'_, '_> {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
-        if self.alt_screen.get() {
-            crate::screen::render_screen(Some(self.renderable.as_ref()), None, console, options)
+        let content = self.0;
+        let mut segments = Vec::new();
+        let mut first = true;
+        for slot in content.slots {
+            let rendered = match (slot, content.own) {
+                (Slot::Own, Own::Render(renderable)) => {
+                    let rendered = console.render(*renderable, Some(options));
+                    *content.stash.borrow_mut() = Some(Arc::new(rendered.clone()));
+                    rendered
+                }
+                (Slot::Own, Own::Snapshot(snapshot)) => {
+                    snapshot.as_deref().cloned().unwrap_or_default()
+                }
+                (Slot::Other(snapshot), _) => snapshot.as_ref().clone(),
+            };
+            // `Group`: each renderable's lines after the last's.
+            if rendered.is_empty() {
+                continue;
+            }
+            if !first {
+                segments.push(Segment::line());
+            }
+            first = false;
+            segments.extend(rendered);
+        }
+        segments
+    }
+}
+
+impl Renderable for FrameContent<'_> {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        if self.alt_screen {
+            crate::screen::render_screen(Some(&FrameGroup(self)), None, console, options)
         } else {
-            self.renderable.rich_render(console, options)
+            FrameGroup(self).rich_render(console, options)
         }
     }
+}
 
-    fn measure(&self, console: &Console, options: &ConsoleOptions) -> Measurement {
-        if self.alt_screen.get() {
-            crate::screen::Screen::empty().measure(console, options)
-        } else {
-            self.renderable.measure(console, options)
-        }
+/// [`FrameContent`] in a live render: upstream's `LiveRender`.
+struct FrameRender<'a> {
+    content: FrameContent<'a>,
+    vertical_overflow: VerticalOverflow,
+    shape: Cell<(usize, usize)>,
+}
+
+impl Renderable for FrameRender<'_> {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        let (segments, shape) = crate::live_render::render(
+            &self.content,
+            None,
+            self.vertical_overflow,
+            console,
+            options,
+        );
+        self.shape.set(shape);
+        segments
     }
 
-    fn fit_to_measurement(&self) -> bool {
-        !self.alt_screen.get() && self.renderable.fit_to_measurement()
+    fn print_end_line(&self, _options: &ConsoleOptions) -> bool {
+        false
     }
+}
 
-    fn printed_text(&self) -> Option<crate::text::Text> {
-        if self.alt_screen.get() {
-            None
-        } else {
-            self.renderable.printed_text()
-        }
-    }
-
-    fn vertical(&self) -> Option<crate::align::VerticalAlign> {
-        if self.alt_screen.get() {
-            None
-        } else {
-            self.renderable.vertical()
-        }
-    }
+/// Render a frame as a print renders a live render: the output, the shape
+/// it leaves, and the display's own renderable as rendered for it.
+fn render_frame(
+    console: &Console,
+    own: &Own<'_>,
+    slots: &[Slot],
+    alt_screen: bool,
+    vertical_overflow: VerticalOverflow,
+) -> (String, (usize, usize), Option<Snapshot>) {
+    let render = FrameRender {
+        content: FrameContent {
+            own,
+            slots,
+            alt_screen,
+            stash: RefCell::new(None),
+        },
+        vertical_overflow,
+        shape: Cell::new((0, 0)),
+    };
+    let live = console.render_to_string(&render);
+    let shape = render.shape.get();
+    (live, shape, render.content.stash.into_inner())
 }
 
 /// An in-place updating display over a renderable. Mirrors `rich.live.Live`.
 /// Output is written to a generic sink `W`, so it can target stdout or, in
 /// tests, a byte buffer.
+///
+/// A display started while another runs on its console or a clone of it is
+/// nested, as upstream's: it draws nothing itself, and the first display
+/// draws its renderable below its own. A refresh of a nested display draws
+/// the first display's frame to the nested display's sink, so displays that
+/// nest should write to one terminal.
 pub struct Live<W: Write> {
-    live_render: LiveRender,
     console: Console,
     writer: W,
+    /// Upstream's `_renderable` as the last refresh took it.
+    content: Box<dyn Renderable>,
+    /// This display on its console's live stack, shared with the displays
+    /// nested in it.
+    entry: Arc<LiveEntry>,
     started: bool,
     /// Upstream's render hook is pushed: from `start` to the end of `stop`.
     hooked: bool,
+    /// Upstream's `_nested`: the console's live stack held another display
+    /// when this one started, so this one draws nothing itself.
+    nested: bool,
     transient: bool,
     screen: bool,
     /// Upstream's `_alt_screen`: the alternate screen is on.
-    alt_screen: Rc<Cell<bool>>,
+    alt_screen: bool,
     redirect_stdout: bool,
     redirect_stderr: bool,
     vertical_overflow: VerticalOverflow,
@@ -150,19 +399,18 @@ impl<W: Write> Live<W> {
     /// Create a live display for `renderable`, rendering with `console` and
     /// writing control/output bytes to `writer`.
     pub fn new(renderable: Box<dyn Renderable>, console: Console, writer: W) -> Self {
-        let alt_screen = Rc::new(Cell::new(false));
+        let interactive = console.is_terminal() && !console.is_dumb_terminal();
         Live {
-            live_render: LiveRender::new(Box::new(LiveContent {
-                renderable,
-                alt_screen: alt_screen.clone(),
-            })),
             console,
             writer,
+            content: renderable,
+            entry: Arc::new(LiveEntry::new(interactive)),
             started: false,
             hooked: false,
+            nested: false,
             transient: false,
             screen: false,
-            alt_screen,
+            alt_screen: false,
             redirect_stdout: true,
             redirect_stderr: true,
             vertical_overflow: VerticalOverflow::Ellipsis,
@@ -178,16 +426,9 @@ impl<W: Write> Live<W> {
     /// each frame. What a print draws below itself is the renderable of the
     /// last refresh, as upstream.
     pub fn get_renderable(mut self, get: impl Fn() -> Box<dyn Renderable> + 'static) -> Self {
-        self.set_content(get());
+        self.content = get();
         self.get_renderable = Some(Box::new(get));
         self
-    }
-
-    fn set_content(&mut self, renderable: Box<dyn Renderable>) {
-        self.live_render.set_renderable(Box::new(LiveContent {
-            renderable,
-            alt_screen: self.alt_screen.clone(),
-        }));
     }
 
     /// Apply every option but [`LiveOptions::refresh_on_start`].
@@ -203,6 +444,7 @@ impl<W: Write> Live<W> {
     /// frame is drawn, then erased and the cursor put back where it started.
     pub fn transient(mut self, transient: bool) -> Self {
         self.transient = transient;
+        self.entry.frame().transient = self.is_transient();
         self
     }
 
@@ -211,6 +453,7 @@ impl<W: Write> Live<W> {
     /// always transient, and it needs a terminal.
     pub fn screen(mut self, screen: bool) -> Self {
         self.screen = screen;
+        self.entry.frame().transient = self.is_transient();
         self
     }
 
@@ -233,7 +476,7 @@ impl<W: Write> Live<W> {
     /// frame drawn by [`stop`](Self::stop) is always shown in full.
     pub fn vertical_overflow(mut self, vertical_overflow: VerticalOverflow) -> Self {
         self.vertical_overflow = vertical_overflow;
-        self.live_render.set_vertical_overflow(vertical_overflow);
+        self.entry.frame().vertical_overflow = vertical_overflow;
         self
     }
 
@@ -292,6 +535,14 @@ impl<W: Write> Live<W> {
         false
     }
 
+    /// The first display on the console's live stack, when it is another
+    /// display's.
+    fn first(&self) -> Option<Arc<LiveEntry>> {
+        let stack = self.console.live_stack();
+        let first = entry_of(stack.first()?)?;
+        (!Arc::ptr_eq(&first, &self.entry)).then_some(first)
+    }
+
     /// Begin the live display: hide the cursor and draw the first frame.
     /// Upstream's `start(refresh=True)`, as `with Live(renderable):` does.
     pub fn start(&mut self) {
@@ -306,14 +557,27 @@ impl<W: Write> Live<W> {
             return;
         }
         self.started = true;
+        self.entry.frame().started = true;
+        // `if not self.console.set_live(self)`: another display is on the
+        // console's stack, and this one is nested. The first display draws
+        // it from here on.
+        if !self.console.set_live(self.entry.clone()) {
+            self.nested = true;
+            self.publish();
+            return;
+        }
         if self.screen {
-            let enabled = self.set_alt_screen(true);
-            self.alt_screen.set(enabled);
+            self.alt_screen = self.set_alt_screen(true);
         }
         self.show_cursor(false);
         self.stdout_buffer = ProxyBuffer::default();
         self.stderr_buffer = ProxyBuffer::default();
         self.hooked = true;
+        {
+            let mut frame = self.entry.frame();
+            frame.hooked = true;
+            frame.alt_screen = self.alt_screen;
+        }
         if refresh {
             self.refresh();
         }
@@ -333,24 +597,103 @@ impl<W: Write> Live<W> {
         self.pending = Some(renderable);
         if refresh {
             self.refresh();
+        } else if self.started && (self.nested || self.console.live_stack().len() > 1) {
+            // The first display's next refresh draws the new renderable.
+            self.publish();
+        }
+    }
+
+    /// Upstream's `get_renderable()` as a refresh takes it.
+    fn take_content(&mut self) {
+        if let Some(get) = &self.get_renderable {
+            self.content = get();
+        } else if let Some(renderable) = self.pending.take() {
+            self.content = renderable;
+        }
+    }
+
+    /// Render this display's renderable (the one its next refresh takes)
+    /// for the first display to draw.
+    fn publish(&mut self) {
+        let alt_screen = match self.first() {
+            Some(first) => first.frame().alt_screen,
+            None => self.alt_screen,
+        };
+        let renderable = self.pending.as_deref().unwrap_or(self.content.as_ref());
+        let (_, _, stash) = render_frame(
+            &self.console,
+            &Own::Render(renderable),
+            &[Slot::Own],
+            alt_screen,
+            self.vertical_overflow,
+        );
+        if let Some(stash) = stash {
+            self.entry.set_content(stash);
         }
     }
 
     /// Redraw the current renderable in place. Port of `Live.refresh`: on an
     /// interactive terminal the cursor goes back over the last frame (or
     /// home, on the alternate screen) and the frame is drawn; elsewhere only
-    /// the final frame of a stopped, non-transient display is written.
+    /// the final frame of a stopped, non-transient display is written. The
+    /// first display on the console's stack draws every display's renderable
+    /// (upstream's `Live.renderable`), and a nested display redraws it.
     pub fn refresh(&mut self) {
         // Upstream's `self._live_render.set_renderable(self.renderable)`.
-        if let Some(get) = &self.get_renderable {
-            let renderable = get();
-            self.set_content(renderable);
-        } else if let Some(renderable) = self.pending.take() {
-            self.set_content(renderable);
+        self.take_content();
+        if self.nested {
+            // `self.console._live_stack[0].refresh()`.
+            self.publish();
+            self.refresh_first();
+            return;
         }
+        let stack = self.console.live_stack();
+        let slots = match stack.first().and_then(entry_of) {
+            Some(first) if Arc::ptr_eq(&first, &self.entry) => group_slots(&stack, &self.entry),
+            _ => vec![Slot::Own],
+        };
         if self.is_interactive() || (!self.started && !self.is_transient()) {
-            self.emit("");
+            self.emit_with("", Some(slots));
+        } else {
+            let mut frame = self.entry.frame();
+            frame.set_slots(slots);
+            frame.stale = false;
         }
+    }
+
+    /// A timer tick of an auto-refreshing display. Upstream's nested display
+    /// has no refresh thread: the first display's ticks draw it. Here a
+    /// nested display's ticks render its renderable for them to draw.
+    fn tick(&mut self) {
+        if self.nested {
+            self.take_content();
+            self.publish();
+        } else {
+            self.refresh();
+        }
+    }
+
+    /// Refresh the first display on the stack, from this nested one: its
+    /// frame is drawn to this display's sink.
+    fn refresh_first(&mut self) {
+        let stack = self.console.live_stack();
+        // Anything else first on the stack is asked to refresh, and draws
+        // nothing.
+        let Some(first) = stack.first().and_then(entry_of) else {
+            return;
+        };
+        if Arc::ptr_eq(&first, &self.entry) {
+            return;
+        }
+        let slots = group_slots(&stack, &first);
+        let own = Own::Snapshot(first.content());
+        let output = {
+            let mut frame = first.frame();
+            frame.set_slots(slots);
+            frame.stale = true;
+            frame.draw(&self.console, &own, "")
+        };
+        self.write_str(&output);
     }
 
     /// Print `renderable` above the display, as `console.print` does while
@@ -368,29 +711,109 @@ impl<W: Write> Live<W> {
         self.emit(&rendered);
     }
 
+    /// Log `objects` above the display, as `console.log` does while
+    /// upstream's Live is running (through its render hook). Port of the
+    /// `log` upstream's `Progress` binds to its console: the time, the
+    /// message and the caller found with `#[track_caller]` (DIVERGENCES §47).
+    #[track_caller]
+    pub fn log(
+        &mut self,
+        objects: &[crate::console::LogObject<'_>],
+        options: &crate::console::LogOptions<'_>,
+    ) -> crate::errors::Result<()> {
+        let caller = std::panic::Location::caller();
+        self.log_at(objects, options, caller.file(), caller.line())
+    }
+
+    /// [`log`](Self::log) with the caller's `file` and `line` given
+    /// ([`Console::log_at`]).
+    pub fn log_at(
+        &mut self,
+        objects: &[crate::console::LogObject<'_>],
+        options: &crate::console::LogOptions<'_>,
+        file: &str,
+        line: u32,
+    ) -> crate::errors::Result<()> {
+        let mut result = Ok(());
+        let rendered = self.console.capture(|console| {
+            result = console.log_at(objects, options, file, line);
+        });
+        self.emit(&rendered);
+        result
+    }
+
     /// Write `rendered` (what `console.print` made of its renderables) as
     /// upstream's `process_renderables` hook arranges it.
     fn emit(&mut self, rendered: &str) {
+        self.emit_with(rendered, None);
+    }
+
+    /// [`emit`](Self::emit), first setting the frame's slots when `slots`
+    /// is given (a refresh).
+    fn emit_with(&mut self, rendered: &str, slots: Option<Vec<Slot>>) {
+        let entry = self.entry.clone();
         if !self.hooked {
+            if let Some(slots) = slots {
+                entry.frame().set_slots(slots);
+            }
+            self.emit_through_first(rendered);
+            return;
+        }
+        let (slots, generation, draws, stale) = {
+            let mut frame = entry.frame();
+            if let Some(slots) = slots {
+                frame.set_slots(slots);
+                frame.stale = false;
+            }
+            let stale = std::mem::take(&mut frame.stale);
+            (frame.slots.clone(), frame.generation, frame.draws(), stale)
+        };
+        if stale {
+            // A nested display refreshed this one, which took its renderable.
+            self.take_content();
+        }
+        if !draws {
             self.write_str(rendered);
             return;
         }
-        if self.is_interactive() {
-            let reset = if self.alt_screen.get() {
-                Control::home()
-            } else {
-                self.live_render.position_cursor()
-            };
-            let live = self.console.render_to_string(&self.live_render);
-            let output = format!("{}{rendered}{live}", reset.as_str());
-            self.write_str(&output);
-        } else if !self.started && !self.is_transient() {
-            let live = self.console.render_to_string(&self.live_render);
-            let output = format!("{rendered}{live}");
-            self.write_str(&output);
-        } else {
-            self.write_str(rendered);
+        // The renderable is rendered before the frame is locked (see
+        // `LiveEntry`).
+        let (live, shape, stash) = render_frame(
+            &self.console,
+            &Own::Render(self.content.as_ref()),
+            &slots,
+            self.alt_screen,
+            self.vertical_overflow,
+        );
+        if let (Some(stash), None) = (&stash, &self.pending) {
+            entry.set_content(stash.clone());
         }
+        let mut frame = entry.frame();
+        let output = if frame.generation == generation {
+            frame.arrange(rendered, &live, shape)
+        } else {
+            // A nested display set the frame meanwhile: draw what it set,
+            // with this display's renderable as just rendered.
+            let own = Own::Snapshot(stash.or_else(|| entry.content()));
+            frame.draw(&self.console, &own, rendered)
+        };
+        if !output.is_empty() {
+            let _ = self.writer.write_all(output.as_bytes());
+        }
+    }
+
+    /// `console.print` of a display that does not draw: through the first
+    /// display's render hook when another display draws, else as it is.
+    fn emit_through_first(&mut self, rendered: &str) {
+        let output = match self.first() {
+            Some(first) => {
+                let own = Own::Snapshot(first.content());
+                let mut frame = first.frame();
+                frame.draw(&self.console, &own, rendered)
+            }
+            None => rendered.to_string(),
+        };
+        self.write_str(&output);
     }
 
     /// Commit the final frame (with a trailing newline) and show the cursor.
@@ -401,11 +824,25 @@ impl<W: Write> Live<W> {
             return;
         }
         self.started = false;
+        self.entry.frame().started = false;
+        self.console.clear_live();
+        if self.nested {
+            // A nested display prints its renderable once, at the end,
+            // through the first display's render hook.
+            self.nested = false;
+            if !self.is_transient() {
+                self.take_content();
+                let content = self.content.as_ref();
+                let rendered = self.console.capture(|console| console.print(content));
+                self.emit_through_first(&rendered);
+            }
+            let _ = self.writer.flush();
+            return;
+        }
         // "allow it to fully render on the last even if overflow".
         self.vertical_overflow = VerticalOverflow::Visible;
-        self.live_render
-            .set_vertical_overflow(VerticalOverflow::Visible);
-        let alt_screen = self.alt_screen.get();
+        self.entry.frame().vertical_overflow = VerticalOverflow::Visible;
+        let alt_screen = self.alt_screen;
         if !alt_screen {
             self.refresh();
         }
@@ -418,9 +855,13 @@ impl<W: Write> Live<W> {
             }
         }
         self.hooked = false;
+        let entry = self.entry.clone();
+        let mut frame = entry.frame();
+        frame.hooked = false;
         // Upstream ends the display with `console.line()` only when the last
         // render drew something (`_live_render.last_render_height`).
-        if !alt_screen && self.console.is_terminal() && self.live_render.last_render_height() > 0 {
+        let height = frame.shape.map_or(0, |(_, height)| height);
+        if !alt_screen && self.console.is_terminal() && height > 0 {
             self.write_str("\n");
         }
         self.show_cursor(true);
@@ -428,11 +869,13 @@ impl<W: Write> Live<W> {
             self.set_alt_screen(false);
         }
         if self.is_transient() && !alt_screen {
-            let restore = self.live_render.restore_cursor();
+            let restore = crate::live_render::restore_cursor(frame.shape);
             self.control(&restore);
         }
         // A later `start` decides the alternate screen afresh.
-        self.alt_screen.set(false);
+        self.alt_screen = false;
+        frame.alt_screen = false;
+        drop(frame);
         let _ = self.writer.flush();
     }
 
@@ -446,16 +889,30 @@ impl<W: Write> Live<W> {
         if !self.started && !self.hooked {
             return;
         }
+        if self.started {
+            // `stop()` pops the live stack before its final refresh.
+            self.console.clear_live();
+        }
         self.started = false;
+        {
+            let mut frame = self.entry.frame();
+            frame.started = false;
+            frame.hooked = false;
+        }
+        if std::mem::take(&mut self.nested) {
+            // A nested display drew nothing to restore.
+            return;
+        }
         self.hooked = false;
         if self.console.is_terminal() {
             let _ = write!(self.writer, "\n{}", Control::show_cursor(true).as_str());
-            if self.alt_screen.get() {
+            if self.alt_screen {
                 let _ = write!(self.writer, "{}", Control::alt_screen(false).as_str());
             }
             let _ = self.writer.flush();
         }
-        self.alt_screen.set(false);
+        self.alt_screen = false;
+        self.entry.frame().alt_screen = false;
     }
 
     /// Whether writes to the proxy for `stream` print through the display:
@@ -652,7 +1109,8 @@ impl<W: Write + Send + 'static> Live<W> {
                 loop {
                     match receiver.recv_timeout(interval) {
                         Ok(LiveMessage::Update(renderable)) => live.update(renderable),
-                        Ok(LiveMessage::Refresh) | Err(RecvTimeoutError::Timeout) => live.refresh(),
+                        Ok(LiveMessage::Refresh) => live.refresh(),
+                        Err(RecvTimeoutError::Timeout) => live.tick(),
                         Ok(LiveMessage::Run(job)) => job(&mut live),
                         // Stop, or the handle was dropped: finalize and exit.
                         Ok(LiveMessage::Stop) | Err(RecvTimeoutError::Disconnected) => {
@@ -772,6 +1230,42 @@ impl<W: Write + Send + 'static> LiveHandle<W> {
         self.run(move |live| live.print_str(&content));
     }
 
+    /// [`Live::log`] on the refresh thread. A log queued from the thread
+    /// holding the renderable's lock (see [`run`](Self::run)) reports no
+    /// error.
+    #[track_caller]
+    pub fn log(
+        &self,
+        objects: &[crate::console::LogObject<'_>],
+        options: &crate::console::LogOptions<'_>,
+    ) -> crate::errors::Result<()> {
+        let caller = std::panic::Location::caller();
+        self.log_at(objects, options, caller.file(), caller.line())
+    }
+
+    /// [`log`](Self::log) with the caller's `file` and `line` given.
+    pub fn log_at(
+        &self,
+        objects: &[crate::console::LogObject<'_>],
+        options: &crate::console::LogOptions<'_>,
+        file: &str,
+        line: u32,
+    ) -> crate::errors::Result<()> {
+        let call = crate::console::OwnedLog::new(objects, options, file, line);
+        let result = Arc::new(Mutex::new(Ok(())));
+        let slot = result.clone();
+        self.run(move |live| {
+            let mut outcome = Ok(());
+            let rendered = live.console.capture(|console| outcome = call.log(console));
+            live.emit(&rendered);
+            *slot.lock().unwrap_or_else(|poisoned| poisoned.into_inner()) = outcome;
+        });
+        let mut result = result
+            .lock()
+            .unwrap_or_else(|poisoned| poisoned.into_inner());
+        std::mem::replace(&mut *result, Ok(()))
+    }
+
     fn redirecting(&self, stream: ProxyStream) -> bool {
         match stream {
             ProxyStream::Stdout => self.redirect_stdout,
@@ -862,6 +1356,18 @@ impl<W: Write + Send + 'static> AutoLive<W> {
     /// ([`Live::print_str`]), on the thread.
     pub fn print_str(&self, content: impl Into<String>) {
         self.handle.print_str(content);
+    }
+
+    /// Log above the display ([`Live::log`]), on the thread.
+    #[track_caller]
+    pub fn log(
+        &self,
+        objects: &[crate::console::LogObject<'_>],
+        options: &crate::console::LogOptions<'_>,
+    ) -> crate::errors::Result<()> {
+        let caller = std::panic::Location::caller();
+        self.handle
+            .log_at(objects, options, caller.file(), caller.line())
     }
 
     /// A cloneable handle to the thread, for proxies and prints from other
@@ -1118,5 +1624,159 @@ mod tests {
                     // If Drop didn't join the thread, this test would still pass
                     // but leak the thread; the assertion is simply that drop
                     // returns without panicking / deadlocking.
+    }
+    /// One sink shared across threads, as nested displays share a terminal.
+    #[derive(Clone, Default)]
+    struct SharedSink(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for SharedSink {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl SharedSink {
+        fn output(&self) -> String {
+            String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+        }
+    }
+
+    /// Run `scenario` on a thread, failing if it has not finished in time
+    /// (a deadlock between displays).
+    fn within_time(scenario: impl FnOnce() + Send + 'static) {
+        let (done, wait) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            scenario();
+            let _ = done.send(());
+        });
+        match wait.recv_timeout(Duration::from_secs(30)) {
+            Ok(()) => worker.join().unwrap(),
+            Err(RecvTimeoutError::Disconnected) => {
+                if let Err(payload) = worker.join() {
+                    panic::resume_unwind(payload);
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => panic!("nested displays deadlocked"),
+        }
+    }
+
+    fn spawn_text(console: &Console, sink: &SharedSink, content: &str) -> AutoLive<SharedSink> {
+        Live::spawn(
+            Box::new(Text::new(content)),
+            console.clone(),
+            sink.clone(),
+            500.0,
+        )
+    }
+
+    #[test]
+    fn a_nested_display_is_drawn_inside_the_first() {
+        let console = console();
+        let sink = SharedSink::default();
+        let mut outer = Live::new(Box::new(Text::new("outer")), console.clone(), sink.clone());
+        outer.start();
+        let mut inner = Live::new(Box::new(Text::new("inner")), console.clone(), sink.clone());
+        inner.start();
+        inner.refresh();
+        assert!(
+            sink.output().ends_with("outer\ninner"),
+            "{:?}",
+            sink.output()
+        );
+        inner.stop();
+        outer.stop();
+        // A clone shares the stack, so a display on it nests; an
+        // independent console does not.
+        assert!(console.clone().set_live(Arc::new(())));
+        console.clear_live();
+    }
+
+    #[test]
+    fn threaded_displays_start_and_stop_in_either_order() {
+        for inner_first in [true, false] {
+            within_time(move || {
+                let console = console();
+                let sink = SharedSink::default();
+                let outer = spawn_text(&console, &sink, "outer");
+                let inner = spawn_text(&console, &sink, "inner");
+                for step in 0..50 {
+                    inner.update(Box::new(Text::new(format!("inner {step}"))));
+                    outer.refresh();
+                    inner.refresh_wait();
+                    inner.print_str("printed");
+                }
+                if inner_first {
+                    inner.stop();
+                    outer.stop();
+                } else {
+                    outer.stop();
+                    inner.stop();
+                }
+                let output = sink.output();
+                assert!(output.contains("outer\ninner 49"), "{output:?}");
+                assert!(output.ends_with("\x1b[?25h") || output.ends_with('\n'));
+            });
+        }
+    }
+
+    #[test]
+    fn a_nested_display_stops_while_the_first_refreshes() {
+        within_time(|| {
+            let console = console();
+            let sink = SharedSink::default();
+            let outer = spawn_text(&console, &sink, "outer");
+            for round in 0..200 {
+                let mut inner = Live::new(
+                    Box::new(Text::new(format!("inner {round}"))),
+                    console.clone(),
+                    sink.clone(),
+                );
+                inner.start();
+                inner.refresh();
+                let nested = spawn_text(&console, &sink, "nested");
+                nested.refresh_wait();
+                drop(nested);
+                inner.stop();
+            }
+            outer.stop();
+            // Every display is off the stack again.
+            assert!(console.set_live(Arc::new(())));
+            console.clear_live();
+        });
+    }
+
+    #[test]
+    fn nested_progress_refreshes_from_inside_the_first_progress() {
+        // The first progress's refresh thread renders its table under the
+        // progress's lock, which `with` holds here while the nested
+        // progress redraws the first display.
+        within_time(|| {
+            let console = console();
+            let sink = SharedSink::default();
+            let first =
+                crate::progress::Progress::new().start(console.clone(), sink.clone(), 500.0);
+            let task = first.add_task("first", 10.0, 0.0);
+            let nested =
+                crate::progress::Progress::new().start(console.clone(), sink.clone(), 500.0);
+            let inner_task = nested.add_task("nested", 10.0, 0.0);
+            for _ in 0..20 {
+                first.with(|progress| {
+                    progress.advance(task, 0.5);
+                    nested.advance(inner_task, 0.5);
+                    nested.refresh();
+                });
+                thread::sleep(Duration::from_millis(1));
+            }
+            nested.stop();
+            first.stop();
+            let output = sink.output();
+            assert!(output.contains("first"), "{output:?}");
+            assert!(output.contains("nested"), "{output:?}");
+        });
     }
 }

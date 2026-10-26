@@ -3108,6 +3108,7 @@ dependencies = [
  "tracing-subscriber",
  "trybuild",
  "unicode-width",
+ "vt100",
  "wasmi",
  "wat",
  "windows-sys 0.61.2",

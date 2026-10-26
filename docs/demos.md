@@ -28,6 +28,10 @@ than the default three-second pace. It is a [tape](recordings.md#how-it-works)
 recorded by `rich record`, so it is replayed from the build in this repository
 and CI checks its screenshots on every change:
 
+| Console log | Recorded exports |
+|---|---|
+| ![console.log and progress.log lines, each with its time and caller, above a finished progress bar](media/tapes/tour/log.png) | ![A recording console's text, HTML and SVG exports](media/tapes/tour/record.png) |
+
 | Inspect | Diff | Mermaid | Filter and highlight |
 |---|---|---|---|
 | ![Structured data as a tree](media/tapes/tour/inspect.png) | ![A text diff](media/tapes/tour/diff.png) | ![A Mermaid flowchart as text](media/tapes/tour/mermaid.png) | ![Filtered and highlighted log lines](media/tapes/tour/filter.png) |

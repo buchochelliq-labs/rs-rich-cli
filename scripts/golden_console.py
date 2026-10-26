@@ -538,6 +538,235 @@ def _console_status() -> str:
     return buffer.getvalue()
 
 
+# --- group 6: Progress.log, Live on the console's live stack (0.0.23) -----
+
+
+def _progress_log() -> str:
+    """`Progress.log` is `console.log`: through the live display's render
+    hook, above the tasks, with the time repeated only when it changes."""
+    from rich.progress import BarColumn, Progress, TextColumn
+
+    buffer = io.StringIO()
+    second = datetime(2024, 1, 2, 3, 4, 6)
+    console = _logging(40, times=[datetime(2024, 1, 2, 3, 4, 5)] + [second] * 4, file=buffer)
+    progress = Progress(
+        TextColumn("{task.description}"),
+        BarColumn(bar_width=10),
+        console=console,
+        auto_refresh=False,
+        get_time=lambda: 0.0,
+    )
+    progress.start()
+    task = progress.add_task("Copying", total=4)
+    progress.log("starting [bold]copy[/]")
+    progress.advance(task, 2)
+    progress.refresh()
+    progress.log("halfway", _log_table())
+    progress.log("same second", style="italic")
+    progress.advance(task, 2)
+    progress.stop()
+    # A disabled progress logs straight to the console.
+    off = Progress(console=console, disable=True)
+    off.start()
+    off.log("disabled")
+    off.stop()
+    return _no_link_id(buffer.getvalue())
+
+
+def _progress_log_file() -> str:
+    """Not a terminal: the log is written as it is, the tasks at the end."""
+    from rich.progress import BarColumn, Progress, TextColumn
+
+    buffer = io.StringIO()
+    console = _logging(40, file=buffer, force_terminal=False, color_system=None)
+    progress = Progress(
+        TextColumn("{task.description}"),
+        BarColumn(bar_width=10),
+        console=console,
+        auto_refresh=False,
+        get_time=lambda: 0.0,
+    )
+    progress.start()
+    progress.add_task("Copying", total=4, completed=1)
+    progress.log("into a file")
+    progress.stop()
+    return _no_link_id(buffer.getvalue())
+
+
+class _Outer:
+    """Stands in for a first live display on the stack: a nested one asks it
+    to refresh."""
+
+    def refresh(self) -> None:
+        pass
+
+
+def _live_set_live() -> str:
+    """`Live.start` pushes the display on its console's live stack and `stop`
+    pops it. A second display on the same console is not an error (rich 15
+    raises no `LiveError`): `set_live` answers that it is not the first."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer)
+    live = Live(Text("outer"), console=console, auto_refresh=False)
+    out = [console.set_live(object())]
+    console.clear_live()
+    live.start(refresh=True)
+    out.append(console.set_live(object()))
+    console.clear_live()
+    live.stop()
+    out.append(console.set_live(object()))
+    console.clear_live()
+    return _lines(*out) + buffer.getvalue()
+
+
+def _live_nested() -> str:
+    """A display started while another is on the console's stack is nested:
+    it draws nothing itself, and prints its renderable when it stops, unless
+    it is transient."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer)
+    console.set_live(_Outer())
+    inner = Live(Text("inner"), console=console, auto_refresh=False)
+    inner.start(refresh=True)
+    inner.update(Text("updated"), refresh=True)
+    inner.stop()
+    gone = Live(Text("gone"), console=console, auto_refresh=False, transient=True)
+    gone.start(refresh=True)
+    gone.stop()
+    console.clear_live()
+    first = Live(Text("first"), console=console, auto_refresh=False, transient=True)
+    first.start(refresh=True)
+    first.stop()
+    return buffer.getvalue()
+
+
+def _live_nested_draw() -> str:
+    """A nested display draws inside the first: its refresh redraws the
+    first display, which shows every display on the stack one after
+    another. A print goes above them all, and a nested display that stops
+    prints its renderable there."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer)
+    outer = Live(Text("outer"), console=console, auto_refresh=False)
+    outer.start(refresh=True)
+    inner = Live(Text("inner"), console=console, auto_refresh=False)
+    inner.start(refresh=True)
+    inner.refresh()
+    inner.update(Text("inner\ntwo"), refresh=True)
+    outer.update(Text("outer two"), refresh=True)
+    console.print("printed")
+    outer.update(Text("pending"))
+    inner.refresh()
+    console.print("again")
+    inner.stop()
+    console.print("after")
+    outer.stop()
+    return buffer.getvalue()
+
+
+def _live_nested_transient() -> str:
+    """Transient displays nested and nesting: the first draws the nested one
+    as soon as it refreshes itself, and a transient nested display prints
+    nothing when it stops."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer)
+    outer = Live(Text("outer"), console=console, auto_refresh=False, transient=True)
+    outer.start(refresh=True)
+    inner = Live(Text("inner"), console=console, auto_refresh=False, transient=True)
+    inner.start(refresh=True)
+    outer.refresh()
+    inner.stop()
+    outer.refresh()
+    outer.stop()
+    kept = Live(Text("kept"), console=console, auto_refresh=False)
+    kept.start(refresh=True)
+    gone = Live(Text("gone"), console=console, auto_refresh=False, transient=True)
+    gone.start(refresh=True)
+    gone.refresh()
+    gone.stop()
+    kept.stop()
+    return buffer.getvalue()
+
+
+def _live_nested_stop_order() -> str:
+    """The first display stopping before the nested one: `clear_live` pops
+    the top of the stack, whichever display stops, so the first draws
+    itself alone, and the nested display then prints with no display
+    running. Three displays stop out of order the same way."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer)
+    outer = Live(Text("outer"), console=console, auto_refresh=False)
+    outer.start(refresh=True)
+    inner = Live(Text("inner"), console=console, auto_refresh=False)
+    inner.start(refresh=True)
+    inner.refresh()
+    outer.stop()
+    inner.refresh()
+    inner.stop()
+    first = Live(Text("one"), console=console, auto_refresh=False)
+    first.start(refresh=True)
+    second = Live(Text("two"), console=console, auto_refresh=False)
+    second.start(refresh=True)
+    third = Live(Text("three"), console=console, auto_refresh=False)
+    third.start(refresh=True)
+    third.refresh()
+    second.stop()
+    third.refresh()
+    third.stop()
+    first.stop()
+    return buffer.getvalue()
+
+
+def _live_nested_file() -> str:
+    """Nested displays on a console that is not a terminal: nothing is drawn
+    until the first display stops, and prints pass straight through. The
+    first display's stop pops the display above it, so its final frame
+    shows itself alone."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer, force_terminal=False)
+    outer = Live(Text("outer"), console=console, auto_refresh=False)
+    outer.start(refresh=True)
+    inner = Live(Text("inner"), console=console, auto_refresh=False)
+    inner.start(refresh=True)
+    inner.update(Text("updated"), refresh=True)
+    console.print("printed")
+    inner.stop()
+    other = Live(Text("other"), console=console, auto_refresh=False, transient=True)
+    other.start(refresh=True)
+    outer.stop()
+    other.stop()
+    return buffer.getvalue()
+
+
+def _live_nested_screen() -> str:
+    """A display nested in one on the alternate screen is drawn inside its
+    `Screen`."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer, height=4)
+    outer = Live(Text("outer"), console=console, auto_refresh=False, screen=True)
+    outer.start(refresh=True)
+    inner = Live(Text("inner"), console=console, auto_refresh=False)
+    inner.start(refresh=True)
+    inner.refresh()
+    inner.stop()
+    outer.stop()
+    return buffer.getvalue()
+
+
 CONSOLE_CASES = [
     ("console_quiet", _console_quiet),
     ("console_size_setters", _console_size_setters),
@@ -561,6 +790,15 @@ CONSOLE_CASES = [
     ("console_live_stack", _console_live_stack),
     ("console_screen", _console_screen),
     ("console_status", _console_status),
+    ("progress_log", _progress_log),
+    ("progress_log_file", _progress_log_file),
+    ("live_set_live", _live_set_live),
+    ("live_nested", _live_nested),
+    ("live_nested_draw", _live_nested_draw),
+    ("live_nested_transient", _live_nested_transient),
+    ("live_nested_stop_order", _live_nested_stop_order),
+    ("live_nested_file", _live_nested_file),
+    ("live_nested_screen", _live_nested_screen),
 ]
 
 

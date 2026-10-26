@@ -1019,6 +1019,269 @@ fn console_status() -> String {
     String::from_utf8(live.stop()).unwrap()
 }
 
+// --- group 6 ------------------------------------------------------------
+
+/// The progress of `_progress_log`: a description and a ten-cell bar.
+fn copying_progress() -> rich::Progress {
+    rich::Progress::new()
+        .columns(vec![
+            rich::ProgressColumn::TextFormat(rich::TextColumn::new("{task.description}")),
+            rich::ProgressColumn::BarWith(rich::BarColumn::new().bar_width(Some(10))),
+        ])
+        .clock(|| 0.0)
+}
+
+fn progress_log() -> String {
+    let second = utc((2024, 1, 2), (3, 4, 6), 0);
+    let console = logging(40, vec![utc((2024, 1, 2), (3, 4, 5), 0), second]).build();
+    let live = copying_progress().start(console.clone(), Vec::<u8>::new(), 1e-9);
+    let task = live.add_task("Copying", 4.0, 0.0);
+    let (file, line) = APP;
+    live.log_at(
+        &[LogObject::Str("starting [bold]copy[/]")],
+        &LogOptions::default(),
+        file,
+        line,
+    )
+    .unwrap();
+    live.advance(task, 2.0);
+    live.refresh();
+    live.log_at(
+        &[
+            LogObject::Str("halfway"),
+            LogObject::Renderable(log_table()),
+        ],
+        &LogOptions::default(),
+        file,
+        line,
+    )
+    .unwrap();
+    let italic = LogOptions {
+        style: Some("italic".into()),
+        ..LogOptions::default()
+    };
+    live.log_at(&[LogObject::Str("same second")], &italic, file, line)
+        .unwrap();
+    live.advance(task, 2.0);
+    let (_, mut out) = live.stop();
+    // A disabled progress logs straight to the console. Upstream's shares
+    // the console, and its last time; the port's display owns a copy, so
+    // this one is logged at a time it has already shown.
+    let off =
+        rich::Progress::new()
+            .disable(true)
+            .start(console_after(second), Vec::<u8>::new(), 10.0);
+    off.log_at(
+        &[LogObject::Str("disabled")],
+        &LogOptions::default(),
+        file,
+        line,
+    )
+    .unwrap();
+    out.extend(off.stop().1);
+    String::from_utf8(out).unwrap()
+}
+
+/// A `_logging(40)` console that has already logged at `time`, so that the
+/// next log at that time leaves its time column blank.
+fn console_after(time: SystemTime) -> Console {
+    let console = logging(40, vec![time]).build();
+    console.capture(|c| {
+        c.log_at(&[LogObject::Str("")], &LogOptions::default(), APP.0, APP.1)
+            .unwrap();
+    });
+    console
+}
+
+fn progress_log_file() -> String {
+    let console = logging(40, vec![utc((2024, 1, 2), (3, 4, 5), 0)])
+        .force_terminal(false)
+        .color_system(None)
+        .build();
+    let live = copying_progress().start(console, Vec::<u8>::new(), 1e-9);
+    live.add_task("Copying", 4.0, 1.0);
+    live.log_at(
+        &[LogObject::Str("into a file")],
+        &LogOptions::default(),
+        APP.0,
+        APP.1,
+    )
+    .unwrap();
+    String::from_utf8(live.stop().1).unwrap()
+}
+
+fn marker() -> Arc<dyn std::any::Any + Send + Sync> {
+    Arc::new(())
+}
+
+fn live_set_live() -> String {
+    let console = console(20);
+    let mut out = vec![console.set_live(marker())];
+    console.clear_live();
+    let mut live = rich::Live::new(Box::new(Text::new("outer")), console, Vec::<u8>::new());
+    live.start();
+    out.push(live.console().set_live(marker()));
+    live.console().clear_live();
+    live.stop();
+    out.push(live.console().set_live(marker()));
+    live.console().clear_live();
+    let output = String::from_utf8(live.into_writer()).unwrap();
+    lines(&out.into_iter().map(py_bool).collect::<Vec<_>>()) + &output
+}
+
+/// A display on a console whose live stack already holds one (upstream's
+/// `console.set_live(_Outer())`).
+fn nested(content: &str, transient: bool) -> Vec<u8> {
+    let console = console(20);
+    console.set_live(marker());
+    let mut live = rich::Live::new(Box::new(Text::new(content)), console, Vec::<u8>::new())
+        .transient(transient);
+    live.start();
+    if !transient {
+        live.update(Box::new(Text::new("updated")));
+    }
+    live.stop();
+    live.into_writer()
+}
+
+fn live_nested() -> String {
+    // Each `Live` owns its console, so each display here gets its own; the
+    // Python side moves one console through the same states.
+    let mut out = nested("inner", false);
+    out.extend(nested("gone", true));
+    let mut first = rich::Live::new(Box::new(Text::new("first")), console(20), Vec::<u8>::new())
+        .transient(true);
+    first.start();
+    first.stop();
+    out.extend(first.into_writer());
+    String::from_utf8(out).unwrap()
+}
+
+/// One sink shared by the displays of a case: upstream's displays write to
+/// their one console's file.
+#[derive(Clone, Default)]
+struct Sink(std::rc::Rc<std::cell::RefCell<Vec<u8>>>);
+
+impl std::io::Write for Sink {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.borrow_mut().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Sink {
+    fn output(&self) -> String {
+        String::from_utf8(self.0.borrow().clone()).unwrap()
+    }
+}
+
+/// A display of `content` on a clone of `console`, writing to `sink`.
+fn display(console: &Console, sink: &Sink, content: &str) -> rich::Live<Sink> {
+    rich::Live::new(Box::new(Text::new(content)), console.clone(), sink.clone())
+}
+
+fn live_nested_draw() -> String {
+    let console = console(20);
+    let sink = Sink::default();
+    let mut outer = display(&console, &sink, "outer");
+    outer.start();
+    let mut inner = display(&console, &sink, "inner");
+    inner.start();
+    inner.refresh();
+    inner.update(Box::new(Text::new("inner\ntwo")));
+    outer.update(Box::new(Text::new("outer two")));
+    // `console.print(...)` goes through the first display's hook, from
+    // whichever display prints.
+    outer.print_str("printed");
+    outer.update_with(Box::new(Text::new("pending")), false);
+    inner.refresh();
+    inner.print_str("again");
+    inner.stop();
+    outer.print_str("after");
+    outer.stop();
+    sink.output()
+}
+
+fn live_nested_transient() -> String {
+    let console = console(20);
+    let sink = Sink::default();
+    let mut outer = display(&console, &sink, "outer").transient(true);
+    outer.start();
+    let mut inner = display(&console, &sink, "inner").transient(true);
+    inner.start();
+    outer.refresh();
+    inner.stop();
+    outer.refresh();
+    outer.stop();
+    let mut kept = display(&console, &sink, "kept");
+    kept.start();
+    let mut gone = display(&console, &sink, "gone").transient(true);
+    gone.start();
+    gone.refresh();
+    gone.stop();
+    kept.stop();
+    sink.output()
+}
+
+fn live_nested_stop_order() -> String {
+    let console = console(20);
+    let sink = Sink::default();
+    let mut outer = display(&console, &sink, "outer");
+    outer.start();
+    let mut inner = display(&console, &sink, "inner");
+    inner.start();
+    inner.refresh();
+    outer.stop();
+    inner.refresh();
+    inner.stop();
+    let mut first = display(&console, &sink, "one");
+    first.start();
+    let mut second = display(&console, &sink, "two");
+    second.start();
+    let mut third = display(&console, &sink, "three");
+    third.start();
+    third.refresh();
+    second.stop();
+    third.refresh();
+    third.stop();
+    first.stop();
+    sink.output()
+}
+
+fn live_nested_file() -> String {
+    let console = builder(20).force_terminal(false).build();
+    let sink = Sink::default();
+    let mut outer = display(&console, &sink, "outer");
+    outer.start();
+    let mut inner = display(&console, &sink, "inner");
+    inner.start();
+    inner.update(Box::new(Text::new("updated")));
+    inner.print_str("printed");
+    inner.stop();
+    let mut other = display(&console, &sink, "other").transient(true);
+    other.start();
+    outer.stop();
+    other.stop();
+    sink.output()
+}
+
+fn live_nested_screen() -> String {
+    let console = builder(20).height(4).build();
+    let sink = Sink::default();
+    let mut outer = display(&console, &sink, "outer").screen(true);
+    outer.start();
+    let mut inner = display(&console, &sink, "inner");
+    inner.start();
+    inner.refresh();
+    inner.stop();
+    outer.stop();
+    sink.output()
+}
+
 fn build(name: &str) -> String {
     match name {
         "console_quiet" => console_quiet(),
@@ -1043,11 +1306,20 @@ fn build(name: &str) -> String {
         "console_live_stack" => console_live_stack(),
         "console_screen" => console_screen(),
         "console_status" => console_status(),
+        "progress_log" => progress_log(),
+        "progress_log_file" => progress_log_file(),
+        "live_set_live" => live_set_live(),
+        "live_nested" => live_nested(),
+        "live_nested_draw" => live_nested_draw(),
+        "live_nested_transient" => live_nested_transient(),
+        "live_nested_stop_order" => live_nested_stop_order(),
+        "live_nested_file" => live_nested_file(),
+        "live_nested_screen" => live_nested_screen(),
         other => panic!("no builder for console case {other:?}"),
     }
 }
 
-const CASES: usize = 22;
+const CASES: usize = 31;
 
 #[test]
 fn console_parity() {
@@ -1146,4 +1418,45 @@ fn log_names_its_caller() {
             .ends_with(&format!("golden_console.rs:{line}")),
         "{out:?}"
     );
+}
+
+/// `Progress.log` and `Live::log` name the code that called them, as
+/// `Console::log` does.
+#[test]
+fn progress_and_live_log_name_their_caller() {
+    let console = || {
+        builder(100)
+            .force_terminal(false)
+            .color_system(None)
+            .log_time(false)
+            .build()
+    };
+    let (objects, options) = ([LogObject::Str("from progress")], LogOptions::default());
+    let progress = rich::Progress::new().start(console(), Vec::<u8>::new(), 1e-9);
+    let line = line!() + 1;
+    progress.log(&objects, &options).unwrap();
+    let out = String::from_utf8(progress.stop().1).unwrap();
+    assert!(
+        out.contains(&format!("golden_console.rs:{line}")),
+        "{out:?}"
+    );
+
+    let mut live = rich::Live::new(Box::new(Text::new("")), console(), Vec::<u8>::new());
+    live.start();
+    let line = line!() + 1;
+    live.log(&[LogObject::Str("from live")], &LogOptions::default())
+        .unwrap();
+    live.stop();
+    let out = String::from_utf8(live.into_writer()).unwrap();
+    assert!(
+        out.contains(&format!("golden_console.rs:{line}")),
+        "{out:?}"
+    );
+
+    // Malformed markup is an error, from the refresh thread too.
+    let progress = rich::Progress::new().start(console(), Vec::<u8>::new(), 1e-9);
+    assert!(progress
+        .log(&[LogObject::Str("[/bold]")], &LogOptions::default())
+        .is_err());
+    progress.stop();
 }
