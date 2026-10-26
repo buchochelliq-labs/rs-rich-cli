@@ -18,7 +18,7 @@ open ones are **permanent**, each for the reason in its entry:
 | Resolved earlier | §1 (table), §8, §10, §11, §13, §14 (stack), §27 |
 | Permanent: the language or platform | §1 (`UNICODE_VERSION`), §3, §3a, §6, §14 (per console), §14a, §15, §19 (reflection), §20, §25, §30, §38, §41, §42, §43, §44, §45, §47 |
 | Permanent: another engine | §9 and §18 (syntect, not Pygments), §21 (pulldown-cmark's emphasis) |
-| Permanent: an API or CLI choice | §2, §16 (`f64` counts, byte reads), §17 (a `Live` owns its console; proxy writers, not the process's stdout; no nested displays), §31, §32, §34, §40, §46, §48, §49 |
+| Permanent: an API or CLI choice | §2, §16 (`f64` counts, byte reads), §17 (a `Live` owns its console; proxy writers, not the process's stdout; nested displays drawn from their last rendering), §31, §32, §34, §40, §46, §48, §49 |
 | Permanent: ours, opt-in or additive | §22, §23, §26, §35, §36, §37, §39 |
 
 ## Current divergences
@@ -348,18 +348,38 @@ open ones are **permanent**, each for the reason in its entry:
     goes above it; here the console and the sink are moved into the
     `Live` (and into its refresh thread), so printing goes through
     `Live::print`. The output is the same.
-  - **A nested display draws alone (0.0.23).** As upstream's, `start`
-    pushes the display on its console's live stack (`Console::set_live`)
-    and `stop` pops it (`clear_live`). A display started on a console whose
-    stack already holds one is nested, as upstream's: it draws nothing
-    while it runs and prints its renderable when it stops, unless it is
-    transient. rich 15.0.0 raises no `LiveError` for it (the docstring of
-    `set_live` still names one). Upstream's nested display also asks the
-    first display to refresh, and the first draws both as a `Group`. Here
-    the stack holds a marker, not the display, and a second `Live` cannot
-    share the first's console (each owns its own), so neither happens; give
-    one `Live` a `Group` of both renderables instead. Golden `console.tsv`
-    (`live_set_live`, `live_nested`).
+  - **Nested displays are drawn from what they last rendered (0.0.23).**
+    As upstream's, `start` pushes the display on its console's live stack
+    (`Console::set_live`) and `stop` pops the top of it (`clear_live`). A
+    display started while the stack holds one is nested: it draws nothing
+    itself, the first display draws every display on the stack one after
+    another (upstream's `Group`), a nested display's refresh redraws the
+    first, and a nested display prints its renderable when it stops, unless
+    it is transient. rich 15.0.0 raises no `LiveError` for it. Golden
+    `console.tsv` (`live_set_live`, `live_nested` and the `live_nested_*`
+    cases: refreshes from either display, prints, transient displays, both
+    stop orders, a file, the alternate screen). What differs:
+    - The stack is shared by a console and its clones, since each `Live`
+      owns its console: displays nest when they are given one console's
+      clones. A clone shares nothing else.
+    - A `Live` is not `Send`, so the stack holds what other displays need
+      of it: its renderable as it last rendered it, as segments, and its
+      frame. A nested display renders its renderable when it starts, is
+      updated, refreshes and, with a refresh thread, at each tick, and the
+      first display draws those segments; upstream's first display renders
+      every display's renderable at each of its refreshes. A refresh of a
+      nested display draws the first display's renderable as that one last
+      rendered it (or as its last `update` without a refresh). Renderables
+      that do not change by themselves come out the same; a spinner in a
+      nested display with no refresh thread does not turn.
+    - Upstream's nested display has no refresh thread. A nested `AutoLive`
+      keeps its thread, and its ticks only render its renderable for the
+      first display to draw.
+    - A nested display's refresh writes the first display's frame to the
+      nested display's own sink, so displays that nest should write to one
+      terminal, as upstream's write to one console's file.
+    - A print from a display that does not draw goes through the first
+      display on the stack, not through every render hook on the console.
   - Jupyter widgets are not ported (§19).
 
 ### 18. Syntax highlighting uses `syntect`, not Pygments (non-byte-parity)
@@ -880,9 +900,10 @@ open ones are **permanent**, each for the reason in its entry:
   - The terminal's size is read once, when the console is built; upstream
     asks for it on each `size` read. `COLUMNS` and `LINES` are read at
     construction in both.
-  - `set_live`/`clear_live` keep a stack of `Arc<dyn Any>`. A `Live`
-    pushes a marker on its own console's stack when it starts and pops it
-    when it stops (0.0.23); upstream pushes the display itself (§17).
+  - `set_live`/`clear_live` keep a stack of `Arc<dyn Any>`, shared by a
+    console and its clones. A `Live` pushes an entry with its last
+    rendering and its frame when it starts and pops the stack when it
+    stops (0.0.23); upstream pushes the display itself (§17).
   - A `LogObject::Renderable` is shared (`Arc<dyn Renderable + Send +
     Sync>`), as a `Table` cell is, because a log lays its message out in
     a table.

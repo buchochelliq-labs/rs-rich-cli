@@ -40,6 +40,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   raises no `LiveError` here, and neither does the port. New golden cases
   `live_set_live` and `live_nested` (DIVERGENCES §17, §49).
 
+- **A nested `Live` draws inside the first display** (rs-rich): as rich
+  15.0.0 does, the first display on a console's live stack draws every
+  display on it, one after another, and a nested display's refresh redraws
+  the first. The live stack is now shared by a console and its clones, so
+  displays given clones of one console nest. `Live`, `AutoLive`,
+  `LiveProgress` and `LiveStatus` take part, from any thread. New golden
+  cases `live_nested_draw`, `live_nested_transient`,
+  `live_nested_stop_order`, `live_nested_file` and `live_nested_screen` in
+  `console.tsv`. What still differs is in DIVERGENCES §17.
+
 - **The CLI tour shows the new console features** (rs-rich-cli): `rich
   --demo`'s core sections now run `console.log` and `progress.log` (a
   fixed clock and a pseudo-file keep them the same on every run), a live

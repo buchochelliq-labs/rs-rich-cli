@@ -1625,4 +1625,158 @@ mod tests {
                     // but leak the thread; the assertion is simply that drop
                     // returns without panicking / deadlocking.
     }
+    /// One sink shared across threads, as nested displays share a terminal.
+    #[derive(Clone, Default)]
+    struct SharedSink(Arc<Mutex<Vec<u8>>>);
+
+    impl Write for SharedSink {
+        fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+            self.0.lock().unwrap().extend_from_slice(bytes);
+            Ok(bytes.len())
+        }
+
+        fn flush(&mut self) -> std::io::Result<()> {
+            Ok(())
+        }
+    }
+
+    impl SharedSink {
+        fn output(&self) -> String {
+            String::from_utf8(self.0.lock().unwrap().clone()).unwrap()
+        }
+    }
+
+    /// Run `scenario` on a thread, failing if it has not finished in time
+    /// (a deadlock between displays).
+    fn within_time(scenario: impl FnOnce() + Send + 'static) {
+        let (done, wait) = mpsc::channel();
+        let worker = thread::spawn(move || {
+            scenario();
+            let _ = done.send(());
+        });
+        match wait.recv_timeout(Duration::from_secs(30)) {
+            Ok(()) => worker.join().unwrap(),
+            Err(RecvTimeoutError::Disconnected) => {
+                if let Err(payload) = worker.join() {
+                    panic::resume_unwind(payload);
+                }
+            }
+            Err(RecvTimeoutError::Timeout) => panic!("nested displays deadlocked"),
+        }
+    }
+
+    fn spawn_text(console: &Console, sink: &SharedSink, content: &str) -> AutoLive<SharedSink> {
+        Live::spawn(
+            Box::new(Text::new(content)),
+            console.clone(),
+            sink.clone(),
+            500.0,
+        )
+    }
+
+    #[test]
+    fn a_nested_display_is_drawn_inside_the_first() {
+        let console = console();
+        let sink = SharedSink::default();
+        let mut outer = Live::new(Box::new(Text::new("outer")), console.clone(), sink.clone());
+        outer.start();
+        let mut inner = Live::new(Box::new(Text::new("inner")), console.clone(), sink.clone());
+        inner.start();
+        inner.refresh();
+        assert!(
+            sink.output().ends_with("outer\ninner"),
+            "{:?}",
+            sink.output()
+        );
+        inner.stop();
+        outer.stop();
+        // A clone shares the stack, so a display on it nests; an
+        // independent console does not.
+        assert!(console.clone().set_live(Arc::new(())));
+        console.clear_live();
+    }
+
+    #[test]
+    fn threaded_displays_start_and_stop_in_either_order() {
+        for inner_first in [true, false] {
+            within_time(move || {
+                let console = console();
+                let sink = SharedSink::default();
+                let outer = spawn_text(&console, &sink, "outer");
+                let inner = spawn_text(&console, &sink, "inner");
+                for step in 0..50 {
+                    inner.update(Box::new(Text::new(format!("inner {step}"))));
+                    outer.refresh();
+                    inner.refresh_wait();
+                    inner.print_str("printed");
+                }
+                if inner_first {
+                    inner.stop();
+                    outer.stop();
+                } else {
+                    outer.stop();
+                    inner.stop();
+                }
+                let output = sink.output();
+                assert!(output.contains("outer\ninner 49"), "{output:?}");
+                assert!(output.ends_with("\x1b[?25h") || output.ends_with('\n'));
+            });
+        }
+    }
+
+    #[test]
+    fn a_nested_display_stops_while_the_first_refreshes() {
+        within_time(|| {
+            let console = console();
+            let sink = SharedSink::default();
+            let outer = spawn_text(&console, &sink, "outer");
+            for round in 0..200 {
+                let mut inner = Live::new(
+                    Box::new(Text::new(format!("inner {round}"))),
+                    console.clone(),
+                    sink.clone(),
+                );
+                inner.start();
+                inner.refresh();
+                let nested = spawn_text(&console, &sink, "nested");
+                nested.refresh_wait();
+                drop(nested);
+                inner.stop();
+            }
+            outer.stop();
+            // Every display is off the stack again.
+            assert!(console.set_live(Arc::new(())));
+            console.clear_live();
+        });
+    }
+
+    #[test]
+    fn nested_progress_refreshes_from_inside_the_first_progress() {
+        // The first progress's refresh thread renders its table under the
+        // progress's lock, which `with` holds here while the nested
+        // progress redraws the first display.
+        within_time(|| {
+            let console = console();
+            let sink = SharedSink::default();
+            let first =
+                crate::progress::Progress::new().start(console.clone(), sink.clone(), 500.0);
+            let task = first.add_task("first", 10.0, 0.0);
+            let nested =
+                crate::progress::Progress::new().start(console.clone(), sink.clone(), 500.0);
+            let inner_task = nested.add_task("nested", 10.0, 0.0);
+            for _ in 0..20 {
+                first.with(|progress| {
+                    progress.advance(task, 0.5);
+                    nested.advance(inner_task, 0.5);
+                    nested.refresh();
+                });
+                thread::sleep(Duration::from_millis(1));
+            }
+            nested.stop();
+            first.stop();
+            let output = sink.output();
+            assert!(output.contains("first"), "{output:?}");
+            assert!(output.contains("nested"), "{output:?}");
+        });
+    }
 }

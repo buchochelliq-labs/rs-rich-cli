@@ -165,6 +165,16 @@ console and the writer move to the thread, so they must be `Send`.
     while it runs — including from another thread — lands in the middle of its
     redraws.
 
+!!! note "Nested displays"
+
+    Displays given clones of one console share its live stack, as upstream's
+    displays on one console do. A display started while another runs is
+    nested: the first display draws it below its own renderable, a refresh of
+    the nested display redraws the first, and when the nested display stops
+    it prints its renderable above the first, unless it is transient. This
+    works for `Live`, `AutoLive`, `LiveProgress` and `LiveStatus`, from any
+    thread. Give nested displays writers to the same terminal.
+
 !!! note "When stdout is not a terminal"
 
     `Live` draws nothing while running, and `stop` writes the final frame once,
