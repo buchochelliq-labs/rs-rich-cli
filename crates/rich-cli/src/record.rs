@@ -33,6 +33,8 @@ struct Args {
     key_overlay: Option<bool>,
     /// `--fps`: video frames a second, over the tape's `Set Framerate`.
     fps: Option<f64>,
+    /// `--audio`: record the program's sound, as `Set Audio on` does.
+    audio: bool,
 }
 
 fn parse_formats(value: &str) -> Result<Formats, String> {
@@ -77,6 +79,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         caption: None,
         key_overlay: None,
         fps: None,
+        audio: false,
     };
     let mut seen_command = false;
     let mut iter = args.iter();
@@ -106,6 +109,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         match name {
             "--" => options_done = true,
             "--check" => parsed.check = true,
+            "--audio" => parsed.audio = true,
             "--no-video" => {
                 parsed.formats.gif = false;
                 parsed.formats.apng = false;
@@ -203,6 +207,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
         bin_dir: args.bin_dir.clone(),
         repo: std::env::current_dir().ok(),
         frame_rate: args.fps,
+        audio: args.audio,
         ..Options::default()
     };
     // A tape's name picks its output directory (`--output/<stem>`), which
@@ -411,6 +416,9 @@ mod tests {
         .unwrap_or_else(|e| panic!("{e}"));
         assert_eq!(args.fps, Some(35.0));
         assert!(args.formats.apng && !args.formats.gif);
+        assert!(!args.audio, "sound is off unless asked");
+        let args = parse_args(&strings(&["record", "--audio", "a.tape"])).unwrap();
+        assert!(args.audio);
         for bad in ["0", "61", "fast"] {
             let Err(error) = parse_args(&strings(&["record", "--fps", bad, "a"])) else {
                 panic!("--fps {bad} was accepted");

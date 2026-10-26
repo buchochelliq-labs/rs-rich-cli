@@ -37,6 +37,20 @@ What rs-rich-doom built for itself, made generic
   `sixel::encode_palette` encodes indices into a palette of up to 256
   colours exactly, with no quantizing or resampling, and
   `sixel::index_exact` makes the indices and palette from RGBA.
+- **Sixel pictures keep their colours** (rich-art, `sixel`): a picture of
+  256 colours or fewer (no more than `max_colors`) is encoded with its
+  exact palette, by `SixelArt::encode`, `encode_cells` and so pictures in
+  intuiTUIve and Noctiluca. Past that the adaptive encoder quantizes, as
+  before. The new `sixel::encode_rgba` makes that choice for any RGBA
+  raster.
+- **Sound in recordings** (rich-record, intuituive, CLI): `Set Audio on`
+  in a tape, or `rich record --audio`, records the program's sound. The
+  recorder names a directory in `RICH_RECORD_AUDIO`, and the program
+  writes timed PCM streams there; intuiTUIve's audio outputs do it by
+  themselves, opening no device. An MP4 gets an AAC track, placed with
+  `-itsoffset`; a GIF, an APNG, the page and the cast get a WAV beside
+  them. Off by default. `Recording` has a new `audio` field and
+  `Options` a new `audio` switch.
 - **Pixel cells in their own colours** (intuituive):
   `Node::pixel_colors(PixelColors::Nearest)` colours each quadrant or
   Braille cell's two sides with the pixel nearest each side's average,

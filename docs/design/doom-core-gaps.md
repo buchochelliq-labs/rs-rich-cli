@@ -93,9 +93,13 @@ rs-rich-doom's encoder but for P1, which the raster attributes override
 bytes for a 3x7 image, `icy_sixel` decodes the size and `#123456` within
 Sixel's precision, `None` left unset, a long run split, past the palette,
 short or past `MAX_PIXELS` refused) and
-`exact_indexing_keeps_up_to_256_colours`. Not done: `Picture`'s Sixel path
-still quantizes; using `encode_palette` there for frames of 256 colours or
-fewer would change the Sixel bytes of pictures already in tapes.
+`exact_indexing_keeps_up_to_256_colours`. Since `023-avmedia`,
+`SixelArt::encode` and `encode_cells` (so `Picture`'s Sixel path too) go
+through `sixel::encode_rgba`, which uses `encode_palette` for a raster of
+no more colours than `max_colors` (256 by default) and the adaptive
+encoder past that. Tests: `a_picture_of_few_colours_keeps_its_exact_palette`,
+`transparency_is_kept_by_the_exact_palette` and
+`more_colours_than_the_palette_fall_back_to_the_adaptive_encoder`.
 
 - **What Doom needed:** encode a frame that already has at most 256 colours
   with exactly those colours, quickly: no quantizing, no resampling.
@@ -418,9 +422,24 @@ and `the_average_filter_blends_what_each_pixel_covers`, and
 
 ### 13. Sound in recordings (rs-rich-record)
 
-**Status: left for the maintainer's decision.** The pieces it builds on
-are there (gap 9's null output and `Output::tap`, with `Tap::to_wav`),
-but what joins them is a design choice, not a port of the proposal:
+**Status: built (branch `023-avmedia`), with option (a) below, the
+maintainer's choice.** `Set Audio on` in a tape, or `rich record
+--audio`, off by default. The recorder makes a directory and names it in
+the program's environment as `RICH_RECORD_AUDIO`; a program writes what
+it plays there, one timed stream a file (a header with the rate, the
+channels and the wall-clock time of the first sample, then `f32`
+samples; `rich_record::audio` documents it). intuiTUIve's `output()` and
+`output_with()` do it by themselves: under the recorder they open a
+null output paced on the real clock, and write to it
+(`audio::RECORD_AUDIO_ENV`). The recorder puts the streams on the
+recording's clock, cuts what played while hidden, and mixes them: an MP4
+gets an AAC track placed with `-itsoffset`, and a GIF, APNG, page or cast
+a WAV beside it (`rich_record::audio::Audio::wav`). The acceptance test
+(`crates/rich-record/tests/audio.rs`) records a program playing a 1 s
+440 Hz tone and checks that the WAV's tone, and the MP4's decoded, start
+within one frame of the frame that announces it and last 1 s.
+
+The options as they were laid out:
 
 - **How the program's sound reaches the recorder.** rs-rich-record does
   not depend on intuiTUIve, so either (a) a contract through the

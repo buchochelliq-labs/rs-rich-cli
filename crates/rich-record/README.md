@@ -34,7 +34,9 @@ the screen with a VT emulator, and writes:
   the tape's frame rate (`Set Framerate 35`, `--fps`) and with identical
   frames merged;
 - a self-contained HTML page: a small player (no CDN, no terminal emulator)
-  and the screenshots as selectable text.
+  and the screenshots as selectable text;
+- with `Set Audio on`, the program's sound: an AAC track in the MP4, and a
+  WAV beside the other outputs.
 
 `Set WindowFrame off`, `Set Caption "…"` and `Set KeyOverlay off` change how
 stills and video are presented, and `Output gif png` (or `Output demo.html`)
@@ -84,6 +86,17 @@ let problems = record::check(&recording, "media/demo".as_ref());
 assert!(problems.is_empty(), "{problems:?}");
 # Ok::<(), Box<dyn std::error::Error>>(())
 ```
+
+## Sound
+
+`Set Audio on` in a tape (or `rich record --audio`, or
+`Options::audio`) records the program's sound too. The recorder names a
+directory in the program's environment as `RICH_RECORD_AUDIO`, and a
+program writes what it plays there, as timed PCM streams (the format is in
+the `audio` module's docs). intuiTUIve's audio outputs do it by themselves.
+An MP4 carries the sound as AAC, placed with FFmpeg's `-itsoffset`; a GIF,
+an APNG, the page and the cast get a WAV beside them. What played during
+`Hide` is cut, as the frames are. It is off by default.
 
 ## Using the recorder without the CLI
 

@@ -1075,6 +1075,7 @@ wide as rich measures it, so the columns after it line up.
 | `Output gif png`, `Output demo.html` | Write only these formats (`png`, `svg`, `cast`, `gif`, `apng`, `mp4`, `html`; text grids always; without an `Output` line, all of them but `apng`, which is written only when an `Output` line or `--format` names it), or name the file a per-tape format goes to, as in VHS. Several words or lines add up; `--format` can still narrow them |
 | `Set Framerate 35`, `Set FontSize 10` | Video: frames a second, 1 to 60 (12 by default; `--fps` overrides it), and the size of video text in pixels, 4 to 64 (16) |
 | `Set KittyKeyboard on`, `Set KeyRepeat 200ms 33ms` | Keys: report the kitty keyboard protocol, so a program can turn it on and hear releases (off by default); a held key's autorepeat delay and interval (200ms 33ms) |
+| `Set Audio on` | Sound: record what the program plays (off by default; `--audio` turns it on too). See [Sound](#sound) |
 | `Set Shell zsh` | Run in `bash` (the default), `zsh`, `fish` or `sh`, each without your profile or rc files and with the same `❯` prompt. CI records in all four |
 | `Write FILE "text"`, `Exec "command"` | Prepare or change files, outside the terminal |
 | `Type "text"` | Type into the terminal, one character at a time |
@@ -1144,8 +1145,40 @@ rich record --check demo.tape               # fail if a screenshot changed
 | `--window-frame on\|off`, `--caption TEXT`, `--key-overlay on\|off` | Override the tape's `Set WindowFrame`, `Set Caption` and `Set KeyOverlay` |
 | `--no-video` | Skip the GIF, the APNG, the MP4 and the HTML page's player |
 | `--fps N` | Video frames a second, 1 to 60, over the tape's `Set Framerate` |
+| `--audio` | Record the program's sound, as the tape's `Set Audio on` does |
 | `--bin-dir DIR` | Put `DIR` first on the session's `PATH` (default: the directory of the running `rich`) |
 | `--font FILE` | Draw PNG and GIF text in another font |
+
+### Sound
+
+With `Set Audio on` in a tape, or `rich record --audio`, the recorder
+records the program's sound as well as its screen. It is off by default,
+and a recording without it is the same as before.
+
+The recorder makes a directory and names it in the program's environment
+as `RICH_RECORD_AUDIO`. A program that plays sound writes what it plays
+there instead of to a sound card. intuiTUIve's audio outputs
+(`audio::output`, `audio::output_with`, and a `Mixer` playing into one) do
+this by themselves: under the recorder they open no device, take their
+samples on the real clock, and write them to the recording. Any other
+program can write the same files: each is a 24-byte header (the magic
+`RRAUDIO1`, the rate as a `u32`, the channels as a `u16`, two zero bytes,
+and when its first sample played, in nanoseconds since the Unix epoch, as a
+`u64`, all little-endian), then the samples, interleaved little-endian
+`f32`, in a file whose name ends `.pcm`. The format is documented in the
+`rs-rich-record` crate's `audio` module.
+
+When the tape ends, the sound is put on the recording's clock: what played
+during `Hide` is cut, as the frames are, and the streams are mixed into one
+track.
+
+- An MP4 carries it as an AAC track, placed with FFmpeg's `-itsoffset`.
+  FFmpeg's built-in `aac` encoder is enough.
+- A GIF, an APNG, the HTML page and the cast have no sound of their own, so
+  a WAV goes beside them (`demo.gif` gives `demo.wav`). It starts with the
+  video, so the two play in step.
+- A program that played nothing while the recording was shown leaves no
+  WAV and no track.
 
 `$REPO` in a tape is the directory `rich record` was started in, so a tape
 can copy fixtures (`Exec "cp $REPO/fixtures/data.json ."`). Linux and macOS
