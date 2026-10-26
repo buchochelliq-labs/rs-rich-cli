@@ -110,6 +110,23 @@ fn text(content: &str) -> Box<dyn Renderable> {
     Box::new(Text::new(content))
 }
 
+/// The builder every console the `rich` binary prints through starts from.
+///
+/// The core reads `FORCE_COLOR` and `TTY_COMPATIBLE` as rich 15.0.0 does.
+/// The binary keeps its documented contract instead (`FORCE_COLOR` is not
+/// supported and redirected stdout stays plain), so it decides whether it
+/// writes to a terminal from standard output alone. A caller may still
+/// override that with `force_terminal`.
+///
+/// The core also exits with status 1 when the reader closes the pipe, as
+/// upstream does. For the binary a closed pipe is success (`rich … | head`):
+/// the console goes quiet and the command ends normally.
+pub(crate) fn console_builder() -> rich::console::ConsoleBuilder {
+    Console::builder()
+        .force_terminal(std::io::stdout().is_terminal())
+        .on_broken_pipe(|console| console.set_quiet(true))
+}
+
 const VERSION: &str = env!("CARGO_PKG_VERSION");
 
 /// How to render the resource. Mirrors the mutually-exclusive rich-cli flags.
@@ -4158,7 +4175,7 @@ fn run_watch(mut cli: Cli) -> ExitCode {
             previous = Some(fingerprint);
             // Each watch frame owns the viewport; clear stale rows when a
             // replacement is shorter, then start the new frame at the top.
-            let console = Console::new();
+            let console = crate::console_builder().build();
             console.clear();
             console.control(&Control::home());
             let _ = std::io::stdout().flush();
@@ -4435,7 +4452,9 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     // composing one renderable, so no `ForceWidth` wrapper can reach them.
     // Upstream's `Console(emoji=emoji, force_terminal=…)`: emoji codes stay
     // as typed unless `--emoji` is given.
-    let mut builder = Console::builder().no_color(cli.no_color).emoji(cli.emoji);
+    let mut builder = crate::console_builder()
+        .no_color(cli.no_color)
+        .emoji(cli.emoji);
     if cli.themed() {
         builder = builder.theme(cli_theme(&cli));
     }
@@ -6354,7 +6373,7 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         // HTML/SVG support truecolor independently of stdout. Render the already
         // loaded report for that destination; never reread images or recompute
         // the comparison. A nonterminal console prevents Sixel control data.
-        let mut export_console = Console::builder()
+        let mut export_console = crate::console_builder()
             .force_terminal(false)
             .color_system(Some(ColorSystem::Truecolor))
             .no_color(cli.no_color)
@@ -6489,7 +6508,7 @@ fn play_gifs(cli: &Cli, console: &Console) -> ExitCode {
     }
 
     // `play` needs its own console (it moves into the Live display).
-    let mut builder = Console::builder().no_color(cli.no_color);
+    let mut builder = crate::console_builder().no_color(cli.no_color);
     if cli.themed() {
         builder = builder.theme(cli_theme(cli));
     }
@@ -6698,7 +6717,7 @@ fn build_demo_console(no_color: bool) -> Console {
     // escape sequences into a pipe, and made `--no-color` a no-op on this path
     // alone while every other mode honoured it.
     let to_terminal = std::io::stdout().is_terminal() && !no_color;
-    let mut console = Console::builder()
+    let mut console = crate::console_builder()
         .force_terminal(to_terminal)
         .no_color(no_color)
         .color_system(if to_terminal {
@@ -6746,7 +6765,7 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
     // A second console, so it needs the same terminal/colour decision as the
     // main one — building it with force_terminal(true) unconditionally was what
     // leaked escape sequences into a pipe after the demo itself stopped.
-    let hl = Console::builder()
+    let hl = crate::console_builder()
         .force_terminal(to_terminal)
         .no_color(no_color)
         .color_system(if to_terminal {
@@ -6789,7 +6808,7 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
             .subtitle("bottom"),
     );
     // Legacy-Windows box substitution: a ROUNDED panel falls back to SQUARE.
-    let legacy = Console::builder()
+    let legacy = crate::console_builder()
         .force_terminal(to_terminal)
         .no_color(no_color)
         .color_system(if to_terminal {
@@ -7037,7 +7056,7 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
     show_escape("live refresh", &live_render.position_cursor());
     // Live — the full control stream for a two-frame in-place update (captured
     // to a buffer so the demo stays static instead of animating).
-    let live_console = Console::builder()
+    let live_console = crate::console_builder()
         .force_terminal(true)
         .color_system(Some(ColorSystem::Truecolor))
         .width(20)
@@ -7102,7 +7121,7 @@ fn run_demo(no_color: bool, delay: std::time::Duration) -> Console {
         header,
         Layout::with_renderable(text("footer (fixed size 3)")).size(3),
     ]);
-    let grid = Console::builder()
+    let grid = crate::console_builder()
         .force_terminal(true)
         .color_system(Some(ColorSystem::Truecolor))
         .width(48)

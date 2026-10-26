@@ -15,7 +15,7 @@
 use super::{render_target, run_once, watch_fingerprint, Cli, ExitClass};
 use rich::protocol::{RenderEnvironment, TargetCapabilities};
 use rich::rule::Rule;
-use rich::{Console, Segment, Style};
+use rich::{Segment, Style};
 use rich_ext::live::{LiveCoordinator, RegionId};
 use rich_ext::sanitize_terminal_controls;
 use rich_ext::target::{RenderTarget, TargetKind, TargetOverrides};
@@ -372,7 +372,7 @@ struct Viewport;
 impl Presenter for Viewport {
     fn render(&mut self, cli: &Cli, index: usize) -> Rendered {
         let resource = &cli.resources[index];
-        let console = Console::new();
+        let console = crate::console_builder().build();
         console.clear();
         console.control(&rich::control::Control::home());
         let _ = std::io::stdout().flush();
@@ -404,7 +404,7 @@ struct Regions {
 
 impl Regions {
     fn new(cli: &Cli) -> Self {
-        let mut builder = Console::builder().no_color(cli.no_color);
+        let mut builder = crate::console_builder().no_color(cli.no_color);
         if cli.themed() {
             builder = builder.theme(super::cli_theme(cli));
         }

@@ -139,7 +139,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                     text.push_str(&line);
                     text.push('\n');
                 }
-                let console = Console::builder().no_color(no_color).build();
+                let console = crate::console_builder().no_color(no_color).build();
                 text.push_str(&console.render_to_string(&CapabilityReport::new(&capabilities)));
                 text.push('\n');
             }
@@ -184,7 +184,7 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
     let no_color = settings["no_color"]
         .as_bool()
         .unwrap_or_else(|| std::env::var_os("NO_COLOR").is_some_and(|value| !value.is_empty()));
-    let mut builder = Console::builder().no_color(no_color);
+    let mut builder = crate::console_builder().no_color(no_color);
     if let Some(width) = settings["width"].as_u64().filter(|value| *value > 0) {
         builder = builder.width(width as usize);
     }

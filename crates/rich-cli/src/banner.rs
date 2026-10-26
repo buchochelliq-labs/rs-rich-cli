@@ -539,7 +539,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
         .filter(|ch| *ch == '\n' || !ch.is_control())
         .collect();
     let builder = || {
-        let builder = Console::builder().no_color(no_color);
+        let builder = crate::console_builder().no_color(no_color);
         let builder = if parsed.force_terminal {
             builder.force_terminal(true)
         } else {

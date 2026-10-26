@@ -46,7 +46,8 @@ pictures are fitted to the cells as the cells were drawn. Not taken
 from the proposal: `ImageView::aspect` (a picture shown at a ratio other
 than its pixels'; gap 12's `PixelBuf::draw_fitted` does it for pixel
 cells, and an app can resample a frame before handing it over),
-`ImageView::cell_px` and `keep_last_row`. Tests: `image.rs`'s
+`ImageView::cell_px` and `keep_last_row`. The maintainer dropped those
+three on 2026-10-26: they are not coming. Tests: `image.rs`'s
 `live_frames_keep_one_kitty_id_and_are_freed_once`,
 `sixel_frames_are_drawn_again_and_counted` and
 `an_overlay_picture_partly_covered_is_not_drawn_over_what_covers_it`, and
@@ -95,7 +96,10 @@ Sixel's precision, `None` left unset, a long run split, past the palette,
 short or past `MAX_PIXELS` refused) and
 `exact_indexing_keeps_up_to_256_colours`. Not done: `Picture`'s Sixel path
 still quantizes; using `encode_palette` there for frames of 256 colours or
-fewer would change the Sixel bytes of pictures already in tapes.
+fewer would change the Sixel bytes of pictures already in tapes. The
+maintainer deferred that palette Sixel path to
+[0.0.24](../plans/0.0.24.md) on 2026-10-26, because it changes tape
+bytes.
 
 - **What Doom needed:** encode a frame that already has at most 256 colours
   with exactly those colours, quickly: no quantizing, no resampling.
@@ -302,7 +306,8 @@ at its rate on the real clock, never more than its queue ahead.
 takes, after the volume: the newest `keep` of it (`Tap::samples`), the
 frames in all (`Tap::frames`), and `Tap::to_wav(path)` (32-bit float)
 with `wav`. The null output runs on the real clock only, not the app's:
-under the driver a test waits real time for it. Tests:
+under the driver a test waits real time for it. The maintainer kept it
+that way on 2026-10-26. Tests:
 `tests/audio_null.rs` (44,100 frames a second within 2%, a writer held to
 the queue; volume 0 taps only zeros; a 1 s tap keeps 1 s; hound reads the
 WAV back the same), and `OutputOptions::null`'s doc-test.
@@ -418,9 +423,14 @@ and `the_average_filter_blends_what_each_pixel_covers`, and
 
 ### 13. Sound in recordings (rs-rich-record)
 
-**Status: left for the maintainer's decision.** The pieces it builds on
-are there (gap 9's null output and `Output::tap`, with `Tap::to_wav`),
-but what joins them is a design choice, not a port of the proposal:
+**Status: decided on 2026-10-26, for [0.0.24](../plans/0.0.24.md).** The
+maintainer chose option (a) below, an environment contract: the recorder
+sets `RICH_RECORD_AUDIO=<path>`, and intuiTUIve's `output()` opens a null
+output tapped to that file. The tape side is `Set Audio on` or
+`rich record --audio`; MP4 output carries the sound, and other outputs
+(GIF, APNG, the HTML player) get a WAV beside them. The pieces it builds
+on are there (gap 9's null output and `Output::tap`, with
+`Tap::to_wav`). The options as they were put:
 
 - **How the program's sound reaches the recorder.** rs-rich-record does
   not depend on intuiTUIve, so either (a) a contract through the

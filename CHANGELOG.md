@@ -68,6 +68,46 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 - **`rich serve --compress`** (CLI, `serve` feature): deflates frames of 1 KiB or more for pages that can undo it. Off by default; worth it over a slow link.
 
+- **The `rich` binary keeps its console contract** (CLI). The core console
+  now reads `FORCE_COLOR` and `TTY_COMPATIBLE`, and exits with status 1 on
+  a broken pipe, as rich 15.0.0 does. The binary does neither, as
+  documented: every console it prints through starts from one builder
+  that decides terminal-ness from standard output alone, so redirected
+  output stays plain under `FORCE_COLOR=1`, and that makes a closed pipe
+  quiet the console, so `rich … | head -c1` still exits 0. The
+  maintainer's call on 2026-10-26. `tests/console_contract.rs`.
+
+- **Marketplace repository template**: step 5 of its README now gives
+  `release-0.0.22` as the example `RS_RICH_CLI_REF` (this repository's
+  tags are `release-X.Y.Z`), and says to move it with each release.
+
+### Migration notes for this release (core, ext)
+
+- **rs-rich-ext: `rst::parse` returns the document tree.** It returned
+  `Vec<rst::Block>`; it now returns an `rst::Element`, the root of a
+  docutils document tree (`tag`, `attrs`, `classes`, `names`,
+  `children` of `rst::Node::Text` or `rst::Node::Element`), with the
+  transforms applied. `Block`, `Inline`, `DefinitionItem`, `Field` and
+  `OptionItem` are gone. Walk the tree with `Element::elements`,
+  `find`, `walk` and `astext` where you matched on blocks; match on
+  `element.tag` (`"section"`, `"paragraph"`, `"bullet_list"`, …, docutils'
+  names). Rendering is unchanged in use: `RestructuredText::new(source)`.
+  The maintainer accepted the break on 2026-10-26.
+- **rs-rich: the console reads `FORCE_COLOR` and `TTY_COMPATIBLE`.** A
+  `Console` built without `force_terminal` now treats standard output as a
+  terminal when `TTY_COMPATIBLE=1` or `FORCE_COLOR` is set and not empty,
+  and as not one when `TTY_COMPATIBLE=0`, as rich 15.0.0 does. A program
+  that wants the old
+  `isatty`-only rule builds with
+  `.force_terminal(std::io::stdout().is_terminal())`; tests can pass
+  `ConsoleBuilder::environ` to detect from a map instead.
+- **rs-rich: a broken pipe ends the process with status 1.** When a print
+  finds the reader gone, the console goes quiet and calls
+  `std::process::exit(1)`, as upstream raises `SystemExit(1)`. Before, the
+  error was ignored and the program carried on. To keep going (or exit
+  0), give `ConsoleBuilder::on_broken_pipe` a handler, for example
+  `.on_broken_pipe(|console| console.set_quiet(true))`.
+
 ### rs-rich-doom's core gaps (rich-art, intuituive, rich-record)
 
 What rs-rich-doom built for itself, made generic

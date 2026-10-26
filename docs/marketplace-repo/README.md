@@ -74,8 +74,9 @@ by hand.
 
 5. **Pin the validator.** Set the repository variable `RS_RICH_CLI_REF` to
    the rs-rich-cli tag whose `scripts/validate_marketplace.py` and
-   `schemas/marketplace` apply (say `v0.0.22`), and move it with each
-   release. Without it, `main` is used.
+   `schemas/marketplace` apply. rs-rich-cli's release tags are
+   `release-X.Y.Z` (say `release-0.0.22`); move the variable to the new
+   tag with each release. Without it, `main` is used.
 
 6. **Add `scripts/build_index.py`**, then merge a listing (or run the
    workflow by hand) and approve the run. The first index has serial 1.

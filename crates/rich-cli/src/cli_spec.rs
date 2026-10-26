@@ -2117,7 +2117,7 @@ pub(crate) fn known_config_keys() -> Vec<String> {
 /// A console for stdout: colour only on a terminal, and never with
 /// `no_color`.
 pub(crate) fn console(no_color: bool) -> Console {
-    Console::builder().no_color(no_color).build()
+    crate::console_builder().no_color(no_color).build()
 }
 
 /// Render through a stdout console to a string (no trailing newline).
