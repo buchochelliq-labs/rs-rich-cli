@@ -266,6 +266,17 @@ the voices; the thread into a null output, read through a tap), and
 
 ### 8. A render callback output for synthesizers (intuiTUIve, `audio`)
 
+**Status: closed in 0.0.23.** `audio::output_with(options, render: impl
+FnMut(&mut [f32], u16) + Send + 'static) -> Result<Output, AudioError>`:
+the device's callback (or the null output's clock) calls `render` for each
+block. Volume, pause, `tap` and `failed` work as for `output`; `write` is
+refused. A panicking renderer stops the output and `failed()` says
+"the renderer panicked"; the app goes on (Rust's panic hook still prints
+the message to stderr). A `Mixer::detached` can be mixed from it. Tests:
+`tests/audio_render.rs` (a 440 Hz sine makes 440 rising crossings in a
+second; volume 0 is silence while the renderer goes on; a panicking
+renderer is reported), and `output_with`'s doc-test.
+
 - **What Doom needed:** the OPL synthesizer produces samples on demand, and
   its song timing runs off the samples it makes.
 - **Workaround:** the mixer thread pulls music into each block and writes it

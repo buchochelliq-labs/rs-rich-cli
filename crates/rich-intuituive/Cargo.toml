@@ -232,3 +232,8 @@ required-features = ["audio", "wav"]
 [[test]]
 name = "audio_mixer"
 required-features = ["audio"]
+
+# An output whose device calls a renderer, on the null output.
+[[test]]
+name = "audio_render"
+required-features = ["audio"]

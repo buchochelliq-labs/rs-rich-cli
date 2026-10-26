@@ -60,6 +60,10 @@ What rs-rich-doom built for itself, made generic
   `audio::Mixer` plays clips on numbered channels, each at its own rate,
   gain and pan, changed or stopped while playing, with streams under them.
   `Mixer::new` mixes into an output on its own thread.
+- **An output that calls a renderer** (intuituive, `audio`):
+  `audio::output_with` has the device's callback ask a synthesizer for
+  each block, with no queue between them. Volume, taps and `failed` work
+  as for `output`, and a renderer that panics is reported, not fatal.
 
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
 

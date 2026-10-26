@@ -182,6 +182,8 @@ struct Shared {
     /// What renders the samples, for an output made with a renderer
     /// ([`output_with`]), instead of the queue.
     render: Mutex<Option<Render>>,
+    /// Made with a renderer: writes are refused.
+    rendered: bool,
     /// The samples of a callback, before they become the device's format.
     scratch: Mutex<Vec<f32>>,
     /// The taps recording what the device takes.
@@ -220,6 +222,7 @@ impl Shared {
             volume: AtomicU32::new(1.0f32.to_bits()),
             stop: AtomicBool::new(false),
             failed: Mutex::new(None),
+            rendered: render.is_some(),
             render: Mutex::new(render),
             scratch: Mutex::new(Vec::new()),
             taps: Mutex::new(Vec::new()),
@@ -394,6 +397,45 @@ impl Tap {
 /// start.
 pub fn output(options: OutputOptions) -> Result<Output, AudioError> {
     open_output(options, None)
+}
+
+/// Open a sound card output (as [`output`]) whose device's callback calls
+/// `render` for each block it plays: a synthesizer, a tracker, a tone
+/// generator, a [`Mixer`](super::Mixer) mixed by hand; anything that
+/// makes sound when asked, its timing taken from the samples it makes,
+/// with no queue between it and the device. `render` fills interleaved
+/// samples (from -1 to 1) for the channels given; what it leaves is
+/// silence. Volume, pause, [`tap`](Output::tap) and
+/// [`failed`](Output::failed) work as for [`output`]; writes are refused.
+/// A renderer that panics stops the output, which reports
+/// [`failed`](Output::failed), and the app goes on. It runs on the audio
+/// thread: keep it quick, and keep locks out of it where possible.
+///
+/// ```
+/// use intuituive::audio::{output_with, OutputOptions};
+/// use std::time::Duration;
+///
+/// let mut phase = 0.0f32;
+/// let sine = output_with(OutputOptions::null().rate(8000).channels(1), move |out, _channels| {
+///     for sample in out.iter_mut() {
+///         *sample = (phase * std::f32::consts::TAU).sin() * 0.5;
+///         phase = (phase + 440.0 / 8000.0).fract();
+///     }
+/// })
+/// .unwrap();
+/// let tap = sine.tap(Duration::from_secs(1));
+/// std::thread::sleep(Duration::from_millis(100));
+/// assert!(tap.samples().iter().any(|s| *s > 0.4));
+/// assert!(!sine.write(&[0.0]));
+/// ```
+///
+/// # Errors
+/// As for [`output`].
+pub fn output_with(
+    options: OutputOptions,
+    render: impl FnMut(&mut [f32], u16) + Send + 'static,
+) -> Result<Output, AudioError> {
+    open_output(options, Some(Box::new(render)))
 }
 
 /// Open an output that plays `render` or its queue.
@@ -599,8 +641,12 @@ impl Output {
 
     /// Queue interleaved `samples` (`L R L R …`, each from -1 to 1), waiting
     /// while the queue is full: what a player's thread does. Whether they
-    /// were queued (not if the output has stopped).
+    /// were queued (not if the output has stopped, or renders its own sound,
+    /// [`output_with`]).
     pub fn write(&self, samples: &[f32]) -> bool {
+        if self.shared.rendered {
+            return false;
+        }
         let mut rest = samples;
         while !rest.is_empty() {
             let mut queue = lock(&self.shared.queue);
