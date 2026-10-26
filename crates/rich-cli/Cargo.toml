@@ -140,6 +140,9 @@ portable-pty = "0.9"
 vt100 = "0.16"
 # The WASM plugin tests compile the example module from text.
 wat = "1"
+# The official micro packs are zipped by the tests that pin their hashes
+# (tests/support/official.rs).
+zip = { version = "8", default-features = false }
 # `--export-png` tests decode the image (already in the tree through
 # rs-rich-record).
 png = "0.18"
