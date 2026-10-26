@@ -229,6 +229,22 @@ Tests: `tests/timedemo.rs` (a widget that sleeps 5 ms shows `draw` of
 
 ### 7. A voice mixer for sound effects (intuiTUIve, `pcm`/`audio`)
 
+**Status: closed in 0.0.23.** `audio::Mixer` (with `pcm`):
+`play(channel, clip: Arc<Clip>, gain, pan) -> Voice` (a sound on a
+channel stops the one there), `Voice::set(gain, pan)`, `stop`,
+`is_playing`, `Mixer::source(Box<dyn Source>)` for a stream, and
+`stop_all`. Clips and streams at any rate are resampled linearly. The pan
+is a balance: 0 plays the sound at its gain on both sides, -1 the left
+only; Doom's own pan law stays in Doom. `Mixer::new(&Output)` (with
+`audio`) mixes 256-frame blocks into the output on its own thread;
+`Mixer::detached(rate, channels)` and `Mixer::mix(&mut [f32])` mix by
+hand, from a renderer (gap 8) or a test. Tests: `tests/audio_mixer.rs`
+(two clips sum sample for sample; 11,025 Hz into 44,100 Hz lasts four
+times as many frames; pan -1 is left only; `stop` silences the next
+block; `is_playing` ends within a block of the clip's end; a stream under
+the voices; the thread into a null output, read through a tap), and
+`Mixer`'s doc-test.
+
 - **What Doom needed:** play many short sounds at once on numbered channels,
   each at its own sample rate, gain and pan, stopped or changed while
   playing, mixed into the output.

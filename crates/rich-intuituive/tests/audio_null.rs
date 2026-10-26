@@ -25,7 +25,9 @@ fn a_null_output_takes_its_rate_and_no_more_than_its_queue_ahead() {
     // Everything written was taken, in order, then silence.
     let samples = tap.samples();
     let first = samples.iter().position(|s| *s != 0.0).unwrap_or(0);
-    assert!(samples[first..first + second.len()].iter().all(|s| *s == 0.25));
+    assert!(samples[first..first + second.len()]
+        .iter()
+        .all(|s| *s == 0.25));
     assert!(samples[first + second.len()..].iter().all(|s| *s == 0.0));
 }
 

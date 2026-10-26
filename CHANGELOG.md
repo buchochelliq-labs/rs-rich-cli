@@ -56,6 +56,10 @@ What rs-rich-doom built for itself, made generic
   drops them, and `Output::tap` records what any output plays (with
   `Tap::to_wav` under `wav`). Tests of sound run on CI, and an app's sound
   can be saved for a demo.
+- **A voice mixer for sound effects** (intuituive, `pcm`/`audio`):
+  `audio::Mixer` plays clips on numbered channels, each at its own rate,
+  gain and pan, changed or stopped while playing, with streams under them.
+  `Mixer::new` mixes into an output on its own thread.
 
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
 

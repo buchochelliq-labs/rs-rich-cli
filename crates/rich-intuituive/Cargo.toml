@@ -227,3 +227,8 @@ required-features = ["art"]
 [[test]]
 name = "audio_null"
 required-features = ["audio", "wav"]
+
+# The voice mixer, mixed by hand and into a null output.
+[[test]]
+name = "audio_mixer"
+required-features = ["audio"]
