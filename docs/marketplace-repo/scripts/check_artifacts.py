@@ -50,6 +50,16 @@ TIERS = {"community": 0, "reviewed": 1, "official": 2}
 MUTABLE = {"yanked", "yank_reason"}
 
 
+def identity(listing: dict) -> tuple:
+    """What a listed version's artifact and checksums belong to: the id, the
+    kind and, for a crate, the crate's name. It never changes once a version
+    is listed, or the versions already checked would be credited to another
+    package without being checked again."""
+    crate = listing.get("crate")
+    return (listing.get("id"), listing.get("kind"),
+            crate.get("name") if isinstance(crate, dict) else None)
+
+
 def at_base(root: Path, base: str | None, relative: str):
     """The listing at `base`, or None when it is not there."""
     if base is None:
@@ -102,6 +112,11 @@ class Checker:
                        f"({'raised' if old else 'set'}) needs a maintainer's `tier-approved` label")
 
         old_versions = {v["version"]: v for v in old.get("versions", [])} if old else {}
+        if old_versions and identity(old) != identity(listing):
+            was, now = identity(old), identity(listing)
+            self.error(f"{name}: a listing's id, kind and crate name never change once a "
+                       f"version is listed (was {was}, now {now}); add a new listing instead")
+            return
         for version in listing.get("versions", []):
             number = version["version"]
             previous = old_versions.get(number)
