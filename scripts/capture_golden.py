@@ -683,6 +683,11 @@ RENDERABLE_CASES = [
     ("ansi_8bit", 20, _ansi("\x1b[38;5;214mx\x1b[0m")),
     ("ansi_truecolor", 20, _ansi("\x1b[38;2;255;136;0mx\x1b[0m")),
     ("ansi_attrs", 20, _ansi("\x1b[3;4;9mstyled\x1b[0m")),
+    # `ESC (` skips the next character, however many bytes it is (the
+    # `ansi` fuzz target's finding).
+    ("ansi_charset_multibyte", 20, _ansi("a\x1b(\u00e9b")),
+    ("ansi_charset_wide", 20, _ansi("\x1b(\u4e2d\u6587")),
+    ("ansi_charset_then_sgr", 20, _ansi("\x1b(\x1b[1mz\x1b[0m")),
     ("styled_on_red", 20, Styled(Text("hi"), "on red")),
     ("styled_panel", 8, Styled(Panel("x", box=box.SQUARE), "green")),
     ("progress_three", 50, _progress_table()),

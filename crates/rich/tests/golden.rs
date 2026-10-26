@@ -654,6 +654,9 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
             Box::new(AnsiDecoder::new().decode_line("\x1b[38;2;255;136;0mx\x1b[0m"))
         }
         "ansi_attrs" => Box::new(AnsiDecoder::new().decode_line("\x1b[3;4;9mstyled\x1b[0m")),
+        "ansi_charset_multibyte" => Box::new(AnsiDecoder::new().decode_line("a\x1b(\u{e9}b")),
+        "ansi_charset_wide" => Box::new(AnsiDecoder::new().decode_line("\x1b(\u{4e2d}\u{6587}")),
+        "ansi_charset_then_sgr" => Box::new(AnsiDecoder::new().decode_line("\x1b(\x1b[1mz\x1b[0m")),
         "styled_on_red" => Box::new(Styled::new(
             Box::new(Text::new("hi")),
             Style::parse("on red").unwrap(),
