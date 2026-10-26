@@ -169,6 +169,17 @@ Tests: `tests/input_timing.rs`, with `Holds::new(400 ms, 120 ms)`.
 
 ### 5. A worker on the app's clock, in lockstep (intuiTUIve)
 
+**Status: closed in 0.0.23.** `stepped_worker(period, max_catch_up, |steps:
+Steps<T>| ...) -> Signal<Option<T>>`, and `stepped_worker_with(Lockstep,
+work) -> (Signal<Option<T>>, Timer)` for the timeout (250 ms by default)
+and the timer. `Steps::wait() -> Option<u64>` blocks for ticks and returns
+`None` once the app has gone; `Steps::publish(T)` hands output over. It is
+a `fixed_step` underneath. Tests: `tests/lockstep.rs` (a second at 35 a
+second is 35 ticks and tick 35's output; a 300 ms stall hands over
+`max_catch_up`; a worker that ends makes each step return at once and the
+app quits; a worker asleep for a second times out and catches up), and
+`stepped_worker`'s doc-test.
+
 - **What Doom needed:** run a simulation that must live on its own thread
   (the C engine is global and blocking) so that it advances exactly as the
   app's clock does: real time in a terminal, exact time under the driver.

@@ -125,6 +125,7 @@ pub mod inspect;
 pub mod jobs;
 pub mod layout;
 mod list;
+mod lockstep;
 pub mod log;
 pub mod menu;
 #[cfg(feature = "micro")]
@@ -226,6 +227,7 @@ pub use jobs::{
 };
 pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use list::list_optional;
+pub use lockstep::{stepped_worker, stepped_worker_with, Lockstep, Steps};
 pub use log::Log;
 pub use miller::{miller_in, miller_of, MillerSource};
 pub use node::{

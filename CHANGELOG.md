@@ -47,6 +47,10 @@ What rs-rich-doom built for itself, made generic
   emulator's 4:3 or 8:7) from the cells' real shape, in whole cells,
   centred, the margins clear, with nearest or averaged pixels. It returns
   the cells used.
+- **A worker in lockstep with the app's clock** (intuituive):
+  `stepped_worker` runs a simulation on its own thread (an emulator core,
+  a script VM, a replay) and hands it the ticks the app's clock gives,
+  waiting for it to finish them, so it is exact under the driver.
 
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
 
