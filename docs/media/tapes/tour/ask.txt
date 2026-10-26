@@ -9,7 +9,7 @@ Ask, choose and browse from a script:
  • rich filter narrows a list as you type
  • rich confirm answers with its exit code
 
-╭─────────────────────────────────────── Note:  ───────────────────────────────────────╮
+╭──────────────────────────────────────── Note ────────────────────────────────────────╮
 │ Keys come from the terminal even when stdin is the list.                             │
 ╰──────────────────────────────────────────────────────────────────────────────────────╯
 ─────────────────────────────────── Ask in a script ────────────────────────────────────
