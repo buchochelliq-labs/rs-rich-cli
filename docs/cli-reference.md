@@ -2758,9 +2758,9 @@ rich plugin publish FILE --url URL [--listing FILE | --license SPDX --repository
 | `--id <ID>` | A theme's id (default: the file name); for a plugin or pack, checked against its manifest. |
 | `--version <VERSION>` | A theme's version; for a plugin or pack, checked against its manifest. |
 | `--name <TEXT>` | The human-readable name (default: the id) |
-| `--description <TEXT>` | One line on what it adds (default: a WASM plugin's own) |
+| `--description <TEXT>` | One line on what it adds (default: a WASM plugin's or micro pack's own) |
 | `--tier <TIER>` | community (the default), reviewed or official; raising it needs a maintainer. |
-| `--license <SPDX>` | The SPDX license expression. |
+| `--license <SPDX>` | The SPDX license expression (default: a micro pack's pack.json license) |
 | `--repository <URL>` | The source repository, https://. |
 | `--homepage <URL>` | A homepage, https://. |
 | `--author <NAME>` | An author; repeatable. |

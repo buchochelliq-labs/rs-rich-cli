@@ -2350,9 +2350,12 @@ manifest matches its listing.
 
 An installed, enabled WASM plugin loads on every run. Its file is checked
 against the lockfile first: a file that changed is not loaded, and the run
-warns and goes on. A micro pack or theme is installed, checked and
-recorded in the lockfile, but `rich` does not load it yet: add a pack to
-your micro layer with `rich micro install FILE`. A crate (Mermaid, DOT, lumis) is listed, never
+warns and goes on. An installed, enabled micro pack loads the same way,
+into the user layer after your own `~/.config/rich/micro/` (so your own
+asset keeps a name both have): its `:micro:` names expand on the next run,
+and `rich micro packs` lists it. `rich plugin disable` stops either
+loading. An installed theme is checked and recorded, but nothing selects it
+yet. A crate (Mermaid, DOT, lumis) is listed, never
 installed: `rich plugin install mermaid` exits 2 and prints the `cargo add`
 line to use instead.
 

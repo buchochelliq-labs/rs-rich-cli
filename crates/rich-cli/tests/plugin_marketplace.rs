@@ -106,6 +106,41 @@ fn shout(version: &str) -> Vec<u8> {
     wat::parse_str(SHOUT_WAT.replace("version 0.1.0", &format!("version {version}"))).unwrap()
 }
 
+/// `team` 1.0.0, a micro pack of one asset, `team/flag` (emoji 🚩), a
+/// name no built-in pack has, so `:micro:team/flag:` shows whether the
+/// installed pack is loaded.
+fn team_pack() -> Vec<u8> {
+    use std::io::Write;
+    let png = std::fs::read(manifest_dir().join("../rich-micro/builtin/status/success/static.png"))
+        .unwrap();
+    let pack = json!({
+        "schema_version": 1, "name": "team", "version": "1.0.0",
+        "description": "The team's flag", "license": "CC0-1.0",
+        "author": "The Team", "packages": ["flag"],
+    });
+    let manifest = json!({
+        "schema_version": 1, "name": "team/flag", "alt": "a red flag", "size": "2x1",
+        "fallback": {"emoji": "🚩", "text": "F"}, "static": "static.png",
+        "version": "1.0.0", "license": "CC0-1.0",
+    });
+    let mut writer = zip::ZipWriter::new(Cursor::new(Vec::new()));
+    let options = zip::write::SimpleFileOptions::default()
+        .compression_method(zip::CompressionMethod::Stored)
+        .last_modified_time(zip::DateTime::default());
+    for (name, bytes) in [
+        ("pack.json", serde_json::to_vec_pretty(&pack).unwrap()),
+        (
+            "flag/manifest.json",
+            serde_json::to_vec_pretty(&manifest).unwrap(),
+        ),
+        ("flag/static.png", png),
+    ] {
+        writer.start_file(name, options).unwrap();
+        writer.write_all(&bytes).unwrap();
+    }
+    writer.finish().unwrap().into_inner()
+}
+
 /// The fixture marketplace, written to a directory.
 struct Market {
     dir: PathBuf,
@@ -327,7 +362,24 @@ impl Market {
             )],
         );
 
+        let team = team_pack();
+        put("team-1.0.0.richmicro", &team);
+        let team = listing(
+            "team",
+            "micro-pack",
+            "community",
+            "https://github.com/example/team-icons",
+            vec![version(
+                "1.0.0",
+                json!({"micro_schema": 1}),
+                "team-1.0.0.richmicro",
+                &team,
+                json!([{"kind": "asset", "name": "team/flag"}]),
+            )],
+        );
+
         let listings = vec![
+            ("team".to_string(), team),
             ("shout".to_string(), shout_listing),
             ("future".to_string(), future),
             ("solarized".to_string(), solarized),
@@ -1016,23 +1068,119 @@ mod wasm {
 }
 
 /// The official micro packs install from the marketplace as listed, and
-/// the installed archive is a pack micro reads.
+/// load into micro's user layer from the install directory.
 #[cfg(feature = "art")]
 #[test]
 fn the_official_micro_packs_install_and_load_in_micro() {
     let w = world();
-    for (name, version) in official::PACKS {
-        let out = w.plugin(&["install", name, "--yes"]);
-        assert_code(&out, 0);
-        let file = w.plugins.join(format!("{name}/{name}-{version}.richmicro"));
-        let out = w.rich(&["micro", "install", file.to_str().unwrap()]);
-        assert_code(&out, 0);
+    for (name, _) in official::PACKS {
+        assert_code(&w.plugin(&["install", name, "--yes"]), 0);
     }
-    let out = w.plugin(&["verify"]);
+    assert_code(&w.plugin(&["verify"]), 0);
+    let out = w.rich(&["micro", "packs", "--report", "json"]);
     assert_code(&out, 0);
+    let report: Value = serde_json::from_slice(&out.stdout).unwrap();
+    for (name, version) in official::PACKS {
+        let file = w.plugins.join(format!("{name}/{name}-{version}.richmicro"));
+        assert!(
+            report["packs"]
+                .as_array()
+                .unwrap()
+                .iter()
+                .any(|p| p["layer"] == "user"
+                    && p["name"] == name
+                    && p["path"] == file.to_str().unwrap()),
+            "{name}: {report}"
+        );
+    }
+}
+
+/// A micro pack installed from the marketplace is loaded on the next run
+/// with no other step: its `:micro:` names expand. Disabled, or changed on
+/// disk since it was installed, it is not loaded.
+#[cfg(feature = "art")]
+#[test]
+fn an_installed_micro_pack_loads_until_disabled_or_changed() {
+    let w = world();
+    let flag = |w: &World| {
+        let out = w.rich(&["-p", "--emoji", "a :micro:team/flag: b"]);
+        assert_code(&out, 0);
+        (text(&out.stdout), text(&out.stderr))
+    };
+    assert_eq!(flag(&w).0, "a :micro:team/flag: b\n");
+    assert_code(&w.plugin(&["install", "team", "--yes"]), 0);
+    assert_eq!(flag(&w).0, "a 🚩 b\n");
     let out = w.rich(&["micro", "packs"]);
+    assert!(text(&out.stdout).contains("team"), "{}", text(&out.stdout));
+
+    assert_code(&w.plugin(&["disable", "team"]), 0);
+    assert_eq!(flag(&w).0, "a :micro:team/flag: b\n");
+    assert_code(&w.plugin(&["enable", "team"]), 0);
+    assert_eq!(flag(&w).0, "a 🚩 b\n");
+
+    let file = w.plugins.join("team/team-1.0.0.richmicro");
+    let mut bytes = std::fs::read(&file).unwrap();
+    let last = bytes.len() - 1;
+    bytes[last] ^= 1;
+    std::fs::write(&file, bytes).unwrap();
+    let (stdout, stderr) = flag(&w);
+    assert_eq!(stdout, "a :micro:team/flag: b\n");
+    assert!(stderr.contains("micro pack team is not loaded"), "{stderr}");
+}
+
+/// `publish` takes a new micro pack listing's description, license and
+/// author from its `pack.json` when the command line gives none.
+#[cfg(feature = "art")]
+#[test]
+fn publish_fills_a_micro_packs_listing_from_its_pack_json() {
+    let w = world();
+    let file = w.root.join("team-1.0.0.richmicro");
+    std::fs::write(&file, team_pack()).unwrap();
+    let output = w.root.join("team.json");
+    let out = w.rich(&[
+        "plugin",
+        "publish",
+        file.to_str().unwrap(),
+        "--url",
+        "https://github.com/example/team-icons/releases/download/v1.0.0/team-1.0.0.richmicro",
+        "--repository",
+        "https://github.com/example/team-icons",
+        "--output",
+        output.to_str().unwrap(),
+    ]);
     assert_code(&out, 0);
-    assert!(text(&out.stdout).contains("fun"), "{}", text(&out.stdout));
+    let listing: Value = serde_json::from_slice(&std::fs::read(&output).unwrap()).unwrap();
+    assert_eq!(listing["description"], "The team's flag");
+    assert_eq!(listing["license"], "CC0-1.0");
+    assert_eq!(listing["authors"], json!(["The Team"]));
+    assert_eq!(
+        listing["versions"][0]["capabilities"],
+        json!([{"kind": "asset", "name": "team/flag"}])
+    );
+
+    // The command line still wins.
+    let out = w.rich(&[
+        "plugin",
+        "publish",
+        file.to_str().unwrap(),
+        "--url",
+        "https://github.com/example/team-icons/releases/download/v1.0.0/team-1.0.0.richmicro",
+        "--repository",
+        "https://github.com/example/team-icons",
+        "--description",
+        "Flags",
+        "--license",
+        "MIT",
+        "--author",
+        "Someone",
+        "--output",
+        output.to_str().unwrap(),
+    ]);
+    assert_code(&out, 0);
+    let listing: Value = serde_json::from_slice(&std::fs::read(&output).unwrap()).unwrap();
+    assert_eq!(listing["description"], "Flags");
+    assert_eq!(listing["license"], "MIT");
+    assert_eq!(listing["authors"], json!(["Someone"]));
 }
 
 /// Write the fixture marketplace to `$RICH_TEST_MARKETPLACE`, for the CI

@@ -105,6 +105,9 @@ not start it.
    - Keep a copy of the private file in the password manager, then delete
      both local files.
 
+   This is planned to become a GitHub App before 1.0 (its tokens are
+   short-lived and scoped; see the 1.0.0 plan's Track B).
+
    A push by a deploy key starts workflows (one by the workflow's own
    token would not), but the signer's commit changes only `index.json`
    and `index.json.minisig`: the signing workflow's push trigger is

@@ -215,9 +215,9 @@ pub(crate) fn spec() -> rich_ext::cli_doc::CommandSpec {
                 .arg(publish_option("id", "ID", "A theme's id (default: the file name); for a plugin or pack, checked against its manifest"))
                 .arg(publish_option("version", "VERSION", "A theme's version; for a plugin or pack, checked against its manifest"))
                 .arg(publish_option("name", "TEXT", "The human-readable name (default: the id)"))
-                .arg(publish_option("description", "TEXT", "One line on what it adds (default: a WASM plugin's own)"))
+                .arg(publish_option("description", "TEXT", "One line on what it adds (default: a WASM plugin's or micro pack's own)"))
                 .arg(publish_option("tier", "TIER", "community (the default), reviewed or official; raising it needs a maintainer"))
-                .arg(publish_option("license", "SPDX", "The SPDX license expression"))
+                .arg(publish_option("license", "SPDX", "The SPDX license expression (default: a micro pack's pack.json license)"))
                 .arg(publish_option("repository", "URL", "The source repository, https://"))
                 .arg(publish_option("homepage", "URL", "A homepage, https://"))
                 .arg(publish_option("author", "NAME", "An author; repeatable"))
@@ -1196,43 +1196,55 @@ pub(crate) fn has_installed() -> bool {
     plugin_dir(None).is_some_and(|dir| dir.join(LOCKFILE_NAME).is_file())
 }
 
-/// The installed, enabled WASM plugins, each read once and checked against
-/// the lockfile, then loaded from the bytes checked. `skip` names plugins
-/// already loaded (`--plugin PATH` wins over an installed copy). Nothing
-/// installed costs one missing-file check. A plugin that fails is not
-/// loaded and is named in a warning: a changed file is refused.
-pub(crate) fn installed_plugins(skip: &[String]) -> (Vec<RuntimePlugin>, Vec<String>) {
+/// The install directory and the installed, enabled entries of `kind`, or
+/// nothing (with why, when the lockfile or state cannot be read). Nothing
+/// installed costs one missing-file check.
+fn installed_entries(kind: Kind, what: &str) -> (Option<(PathBuf, Vec<LockEntry>)>, Vec<String>) {
     let mut warnings = Vec::new();
-    let mut plugins = Vec::new();
     let Some(dir) = plugin_dir(None) else {
-        return (plugins, warnings);
+        return (None, warnings);
     };
     let lock_path = dir.join(LOCKFILE_NAME);
     if !lock_path.is_file() {
-        return (plugins, warnings);
+        return (None, warnings);
     }
     let lockfile = match Lockfile::load(&lock_path) {
         Ok(lockfile) => lockfile,
         Err(error) => {
-            warnings.push(format!("installed plugins are not loaded: {error}"));
-            return (plugins, warnings);
+            warnings.push(format!("installed {what} are not loaded: {error}"));
+            return (None, warnings);
         }
     };
     let state = match State::load(&dir) {
         Ok(state) => state,
         Err(failure) => {
             warnings.push(format!(
-                "installed plugins are not loaded: {}",
+                "installed {what} are not loaded: {}",
                 failure.message
             ));
-            return (plugins, warnings);
+            return (None, warnings);
         }
     };
-    let wanted: Vec<&LockEntry> = lockfile
+    let wanted: Vec<LockEntry> = lockfile
         .entries()
-        .filter(|e| e.kind == Kind::WasmPlugin && state.is_enabled(&e.id))
-        .filter(|e| !skip.contains(&e.id))
+        .filter(|e| e.kind == kind && state.is_enabled(&e.id))
+        .cloned()
         .collect();
+    (Some((dir, wanted)), warnings)
+}
+
+/// The installed, enabled WASM plugins, each read once and checked against
+/// the lockfile, then loaded from the bytes checked. `skip` names plugins
+/// already loaded (`--plugin PATH` wins over an installed copy). Nothing
+/// installed costs one missing-file check. A plugin that fails is not
+/// loaded and is named in a warning: a changed file is refused.
+pub(crate) fn installed_plugins(skip: &[String]) -> (Vec<RuntimePlugin>, Vec<String>) {
+    let mut plugins = Vec::new();
+    let (found, mut warnings) = installed_entries(Kind::WasmPlugin, "plugins");
+    let Some((dir, wanted)) = found else {
+        return (plugins, warnings);
+    };
+    let wanted: Vec<&LockEntry> = wanted.iter().filter(|e| !skip.contains(&e.id)).collect();
     if wanted.is_empty() {
         return (plugins, warnings);
     }
@@ -1256,6 +1268,32 @@ pub(crate) fn installed_plugins(skip: &[String]) -> (Vec<RuntimePlugin>, Vec<Str
         }
     }
     (plugins, warnings)
+}
+
+/// The installed, enabled micro packs, as `(id, file)`, for micro's
+/// registry to load into the user layer. Each file is checked against the
+/// lockfile first: one that changed on disk is left out and named in a
+/// warning. micro reads an archive by path, and reads an asset's images
+/// from it again when they are drawn, so the check is made when the
+/// registry loads, not on every read.
+#[cfg_attr(not(feature = "art"), allow(dead_code))]
+pub(crate) fn installed_micro_packs() -> (Vec<(String, PathBuf)>, Vec<String>) {
+    let mut packs = Vec::new();
+    let (found, mut warnings) = installed_entries(Kind::MicroPack, "micro packs");
+    let Some((dir, wanted)) = found else {
+        return (packs, warnings);
+    };
+    for entry in wanted {
+        match entry.verify(&dir) {
+            Ok(_) => packs.push((entry.id.clone(), entry.file(&dir))),
+            Err(error) => warnings.push(format!(
+                "micro pack {} is not loaded: {error}; `rich plugin verify` checks every \
+                 installed file",
+                entry.id
+            )),
+        }
+    }
+    (packs, warnings)
 }
 
 #[cfg(feature = "wasm-plugins")]

@@ -6,7 +6,9 @@
 //! The package is checked as an install would check it: a WASM module is
 //! loaded in the sandbox and its manifest gives the id, version, ABI and
 //! capabilities; a micro pack is read with micro's default limits and its
-//! `pack.json` gives the id, version and assets; a theme must parse. The
+//! `pack.json` gives the id, version and assets, and for a new listing the
+//! description, license and author unless they are given; a theme must
+//! parse. The
 //! listing written is read back with rs-rich-marketplace's own parser, so it
 //! passes the rules the marketplace's CI applies.
 use super::*;
@@ -20,6 +22,10 @@ struct Described {
     id: String,
     version: String,
     description: Option<String>,
+    /// A license and authors the package states (a micro pack's
+    /// `pack.json`), used when the command line gives none.
+    license: Option<String>,
+    authors: Vec<String>,
     requires: Value,
     capabilities: Vec<(String, String)>,
     permissions: Vec<String>,
@@ -148,17 +154,28 @@ pub(super) fn run(options: &Options) -> Outcome<Done> {
                     .filter(|d| !d.is_empty())
                     .ok_or_else(|| usage("a new listing needs --description"))?,
             };
-            json!({
+            let license = match option(options, "license") {
+                Some(text) => text.to_string(),
+                None => match described.license.clone() {
+                    Some(license) => license,
+                    None => need("license")?,
+                },
+            };
+            let mut value = json!({
                 "schema_version": rich_marketplace::LISTING_SCHEMA_VERSION,
                 "id": described.id,
                 "kind": kind.as_str(),
                 "name": option(options, "name").unwrap_or(&described.id),
                 "description": description,
                 "tier": option(options, "tier").unwrap_or("community"),
-                "license": need("license")?,
+                "license": license,
                 "repository": need("repository")?,
                 "versions": [],
-            })
+            });
+            if !described.authors.is_empty() {
+                value["authors"] = json!(described.authors);
+            }
+            value
         }
     };
     // Metadata given on the command line replaces what was there.
@@ -286,6 +303,8 @@ fn describe(kind: Kind, file: &Path, bytes: &[u8], options: &Options) -> Outcome
                 id,
                 version,
                 description: None,
+                license: None,
+                authors: Vec::new(),
                 requires: json!({"theme_format": rich_marketplace::THEME_FORMAT}),
                 permissions: Vec::new(),
             })
@@ -316,6 +335,8 @@ fn describe_wasm(file: &Path, bytes: &[u8]) -> Outcome<Described> {
         id: abi.name.clone(),
         version: abi.version.clone(),
         description: Some(abi.description.clone()),
+        license: None,
+        authors: Vec::new(),
         requires: json!({"abi": format!("{}.{}", abi.abi_major, abi.abi_minor)}),
         capabilities,
         permissions,
@@ -358,14 +379,37 @@ fn describe_pack(file: &Path, bytes: &[u8]) -> Outcome<Described> {
     if capabilities.is_empty() {
         return Err(data(format!("{}: the pack has no assets", file.display())));
     }
+    let manifest = pack_json(bytes);
+    let text = |key: &str| {
+        manifest
+            .as_ref()
+            .and_then(|m| m.get(key))
+            .and_then(Value::as_str)
+            .map(str::trim)
+            .filter(|t| !t.is_empty())
+            .map(str::to_string)
+    };
     Ok(Described {
         id: pack.name,
         version,
-        description: None,
+        description: text("description"),
+        license: text("license"),
+        authors: text("author").into_iter().collect(),
         requires: json!({"micro_schema": rich_marketplace::MICRO_SCHEMA_VERSION}),
         capabilities,
         permissions: Vec::new(),
     })
+}
+
+/// A micro pack archive's root `pack.json` (at most 64 KiB), as JSON.
+#[cfg(feature = "art")]
+fn pack_json(bytes: &[u8]) -> Option<Value> {
+    use std::io::Read;
+    let mut archive = zip::ZipArchive::new(std::io::Cursor::new(bytes)).ok()?;
+    let entry = archive.by_name("pack.json").ok()?;
+    let mut text = Vec::new();
+    entry.take(64 << 10).read_to_end(&mut text).ok()?;
+    serde_json::from_slice(&text).ok()
 }
 
 #[cfg(not(feature = "art"))]

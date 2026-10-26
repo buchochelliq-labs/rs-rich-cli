@@ -22,6 +22,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and a weekly job installs from the live marketplace once it is signed.
   The `official` tier now reads "rs-rich's own, built from its repository".
 
+- **Installed micro packs load** (rs-rich-cli): a micro pack installed with
+  `rich plugin install` loads on every run, into micro's user layer after
+  the user's own directory, once its file still hashes to what the lockfile
+  records; `rich plugin disable` stops it and `rich micro packs` lists it.
+  `rich plugin publish` fills a new micro pack listing's description,
+  license and author from its `pack.json` when they are not given.
+
 - **console.py fully ported** (rs-rich): the rest of upstream's `Console`.
   `quiet`; the size setters and upstream's size rules; `is_dumb_terminal`;
   `Console(soft_wrap=…, style=…)`; `color_system="auto"` and terminal

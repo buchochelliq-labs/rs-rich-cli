@@ -843,8 +843,8 @@ jobs:
   # binary installs from it with no network: each crate resolves for this
   # host's plugin API and is refused with its `cargo add` line, each WASM
   # plugin installs (its manifest checked in the sandbox), verifies and loads
-  # on the next run without --plugin, and each micro pack installs and is
-  # read by `rich micro install`.
+  # on the next run without --plugin, and each micro pack installs and loads
+  # into micro's user layer.
   plugin-compatibility:
     name: plugin marketplace compatibility
     runs-on: ubuntu-latest
@@ -902,13 +902,17 @@ jobs:
           printf '```loud\nhello there\n```\n' > loud.md
           "$rich" -m loud.md > rendered.txt
           grep -q "HELLO THERE" rendered.txt
-          mkdir -p "$RUNNER_TEMP/home"
           for pack in status dev fun; do
             "$rich" plugin install "$pack" --yes
-            HOME="$RUNNER_TEMP/home" "$rich" micro install "$RICH_PLUGIN_DIR/$pack/$pack-1.0.0.richmicro"
           done
           "$rich" plugin verify
-          rm -f info.json refusal.txt doc.md rendered.txt loud.md
+          # Installed packs load into micro's user layer with no other step.
+          "$rich" micro packs --report json > packs.json
+          for pack in status dev fun; do
+            jq -e --arg p "$RICH_PLUGIN_DIR/$pack/$pack-1.0.0.richmicro" \
+              '[.packs[] | select(.layer == "user" and .path == $p)] | length == 1' packs.json
+          done
+          rm -f info.json refusal.txt doc.md rendered.txt loud.md packs.json
 
   # Every published crate's public API against its snapshot in api/ (an
   # API change shows in review as a snapshot change), and cargo-semver-checks

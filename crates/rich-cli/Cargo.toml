@@ -48,7 +48,7 @@ fetch = ["dep:ureq", "rich-marketplace/http"]
 # and the micro assets: `rich micro`, `:micro:` in `--print --emoji`, and
 # (with `interact`) `rich asset --kind micro` and `rich explore --icons`.
 # Pulls in image decoders, so it can be dropped for a smaller binary.
-art = ["dep:rich-art", "dep:rich-micro", "rich-interact?/micro"]
+art = ["dep:rich-art", "dep:rich-micro", "dep:zip", "rich-interact?/micro"]
 # `rich mermaid FILE` and ```mermaid fences in `rich --markdown`, drawn as text.
 mermaid = ["dep:rich-mermaid"]
 # The `mmdc` Mermaid backend (Mermaid's CLI: Node and headless Chromium,
@@ -111,6 +111,8 @@ rich-micro = { workspace = true, optional = true }
 rich-marketplace = { workspace = true, default-features = false }
 # `rich plugin publish`: an artifact's SHA-256 (already in the tree).
 sha2 = "0.11"
+# `rich plugin publish` reads a micro pack's pack.json (with the art feature).
+zip = { version = "8", default-features = false, features = ["deflate-flate2"], optional = true }
 
 toml = "1.1"
 tempfile = "3"
