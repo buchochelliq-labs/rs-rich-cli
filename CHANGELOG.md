@@ -40,6 +40,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   raises no `LiveError` here, and neither does the port. New golden cases
   `live_set_live` and `live_nested` (DIVERGENCES §17, §49).
 
+- **The CLI tour shows the new console features** (rs-rich-cli): `rich
+  --demo`'s core sections now run `console.log` and `progress.log` (a
+  fixed clock and a pseudo-file keep them the same on every run), a live
+  `console.status` while the section pauses on a terminal, and a
+  `record=True` console's text, HTML and SVG exports. The tour tape takes
+  two more screenshots, `log` and `record`.
+
 - **`Surface` paints with `best`** (rs-rich-ext): a `Surface` now paints
   as an intuiTUIve app does, with `PaintStrategy::Best` unless
   `Surface::paint_strategy` or `RICH_PAINT_STRATEGY` chooses another. Its

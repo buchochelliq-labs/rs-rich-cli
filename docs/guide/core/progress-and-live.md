@@ -226,15 +226,18 @@ is the bar on its own — for a table cell, a panel, or your own renderable.
 `.style`, `.complete_style`, `.finished_style`, `.pulse_style`, `.pulse(true)`
 and `ProgressBar::indeterminate()`; `.animation_time(t)` picks the pulse frame.
 
-## Not yet ported
+## Differences from upstream
 
-- `Console.status()` / `with console.status(...)`: create a `Status` and drive
-  it with `Live` as shown above.
-- `Live`: `screen=True` (alternate screen), `redirect_stdout`/`redirect_stderr`
-  and `get_renderable` callbacks. (`vertical_overflow` is ported:
-  `Live::vertical_overflow(VerticalOverflow::Visible)`.)
-- `Progress`: `console.print` through the display (`progress.console`), and
-  `redirect_stdout`.
+- `Console::status(status)` is `with console.status(...)`: the display starts
+  at once, on a copy of the console, and `LiveStatus::stop` ends it.
+- A `Live` owns its console, so what upstream prints through the console
+  while a display runs goes through the display here: `Live::print` for
+  `console.print`, `Live::log` for `console.log`, and on a running progress
+  `LiveProgress::print` and `LiveProgress::log` for `progress.print` and
+  `progress.log`. A log names the code that called it, with its time.
+- The stdout and stderr redirect is a writer (`Live::stdout`,
+  `LiveProgress::stdout`), not the process's own stdout. See
+  [DIVERGENCES §17](../../DIVERGENCES.md#17-live-owns-its-console-and-sink-redirect-through-proxy-writers-settled-in-0022).
 
 ## See also
 

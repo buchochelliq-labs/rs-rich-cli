@@ -1,0 +1,28 @@
+}
+──────────────────────────────────────── pretty ────────────────────────────────────────
+[
+    (
+        "panel",
+        1,
+    ),
+    (
+        "table",
+        2,
+    ),
+    (
+        "tree",
+        3,
+    ),
+]
+───────────────────────────────────────── log ──────────────────────────────────────────
+[12:00:00] INFO     server started on port 8080                               main.rs:42
+           DEBUG    cache warm: 128 entries                                   main.rs:42
+           WARNING  disk usage at 85%                                         main.rs:42
+           ERROR    connection reset by peer                                  main.rs:42
+[12:00:00] console.log: the time, the message and the caller                    <demo>:7
+           a log in the same second leaves the time blank                       <demo>:8
+[12:00:00] progress.log: built                                                 <demo>:12
+           progress.log: tested                                                <demo>:13
+           progress.log: shipped                                               <demo>:14
+Deploying ━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━ 3/3
+

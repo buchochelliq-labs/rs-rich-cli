@@ -11,6 +11,12 @@ Mask /\/tmp\/\.tmp\w+/ "<tmp>"
 Mask /─+ exit (\d+) · \d+ms ─+/ "── exit · Nms ──"
 Type "rich --demo --demo-delay 1.5"
 Enter
+Wait "progress.log: shipped" 120s
+Sleep 400ms
+Screenshot log
+Wait "export_svg_recorded" 60s
+Sleep 400ms
+Screenshot record
 Wait "Inspect structured data" 120s
 Sleep 400ms
 Screenshot inspect
