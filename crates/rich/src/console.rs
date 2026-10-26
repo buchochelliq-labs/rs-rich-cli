@@ -206,6 +206,20 @@ pub type Environ = std::collections::HashMap<String, String>;
 /// A replacement for [`Console::on_broken_pipe`]'s default.
 type BrokenPipeHandler = std::sync::Arc<dyn Fn(&Console) + Send + Sync>;
 
+/// Upstream's `get_datetime`: the clock [`Console::log`] reads.
+type GetDateTime = std::sync::Arc<dyn Fn() -> std::time::SystemTime + Send + Sync>;
+
+/// Upstream's `FormatTimeCallable`: formats the time column of
+/// [`Console::log`].
+type FormatTime = std::sync::Arc<dyn Fn(std::time::SystemTime) -> Text + Send + Sync>;
+
+/// Upstream's `log_time_format`: a `strftime` format or a callable.
+#[derive(Clone)]
+enum LogTimeFormat {
+    Strftime(String),
+    Callable(FormatTime),
+}
+
 /// Read `key` from `environ`, or from the process environment without one.
 fn environ_get(environ: Option<&Environ>, key: &str) -> Option<String> {
     match environ {
@@ -305,6 +319,14 @@ pub struct Console {
     /// Upstream's `Console._record_buffer`: every segment written while
     /// recording (not what a capture takes, nor what a quiet console drops).
     record_buffer: std::sync::Mutex<Vec<Segment>>,
+    /// Upstream's `Console._log_render`, built from `log_time` and
+    /// `log_path`; it remembers the last time shown.
+    log_render: std::sync::Mutex<crate::log_render::LogRender>,
+    log_time: bool,
+    log_path: bool,
+    log_time_format: LogTimeFormat,
+    /// Upstream's `Console.get_datetime` (default `datetime.now`).
+    get_datetime: GetDateTime,
 }
 
 /// A `Send`-only highlighter behind a lock, so it can be shared by a `Sync`
@@ -393,6 +415,11 @@ impl Clone for Console {
             is_alt_screen: std::sync::atomic::AtomicBool::new(false),
             record: std::sync::atomic::AtomicBool::new(self.record()),
             record_buffer: std::sync::Mutex::new(Vec::new()),
+            log_render: std::sync::Mutex::new(new_log_render(self.log_time, self.log_path)),
+            log_time: self.log_time,
+            log_path: self.log_path,
+            log_time_format: self.log_time_format.clone(),
+            get_datetime: self.get_datetime.clone(),
         }
     }
 }
@@ -2189,6 +2216,10 @@ pub struct ConsoleBuilder {
     style: Option<crate::style::StyleType>,
     on_broken_pipe: Option<BrokenPipeHandler>,
     record: bool,
+    log_time: bool,
+    log_path: bool,
+    log_time_format: Option<LogTimeFormat>,
+    get_datetime: Option<GetDateTime>,
 }
 
 impl ConsoleBuilder {
@@ -2216,7 +2247,56 @@ impl ConsoleBuilder {
             style: None,
             on_broken_pipe: None,
             record: false,
+            log_time: true,
+            log_path: true,
+            log_time_format: None,
+            get_datetime: None,
         }
+    }
+
+    /// Show the time column in [`Console::log`] (default on). Port of
+    /// `Console(log_time=…)`.
+    pub fn log_time(mut self, value: bool) -> Self {
+        self.log_time = value;
+        self
+    }
+
+    /// Show the caller's file and line in [`Console::log`] (default on).
+    /// Port of `Console(log_path=…)`.
+    pub fn log_path(mut self, value: bool) -> Self {
+        self.log_path = value;
+        self
+    }
+
+    /// The `strftime` format of the time column in [`Console::log`]
+    /// (default `"[%X]"`). Port of `Console(log_time_format="…")`; the time
+    /// is formatted in UTC (see [`get_datetime`](Self::get_datetime)).
+    pub fn log_time_format(mut self, format: impl Into<String>) -> Self {
+        self.log_time_format = Some(LogTimeFormat::Strftime(format.into()));
+        self
+    }
+
+    /// Format the time column of [`Console::log`] with `format`. Port of
+    /// `Console(log_time_format=callable)`.
+    pub fn log_time_formatter(
+        mut self,
+        format: impl Fn(std::time::SystemTime) -> Text + Send + Sync + 'static,
+    ) -> Self {
+        self.log_time_format = Some(LogTimeFormat::Callable(std::sync::Arc::new(format)));
+        self
+    }
+
+    /// Read the time [`Console::log`] shows from `clock` (default
+    /// [`SystemTime::now`](std::time::SystemTime::now)). Port of
+    /// `Console(get_datetime=…)`. Upstream's `datetime.now()` is local
+    /// time; core has no time zone data, so its `strftime` formats the UTC
+    /// wall-clock time, and a clock that wants local time adds the offset.
+    pub fn get_datetime(
+        mut self,
+        clock: impl Fn() -> std::time::SystemTime + Send + Sync + 'static,
+    ) -> Self {
+        self.get_datetime = Some(std::sync::Arc::new(clock));
+        self
     }
 
     /// Record what is written (default off), for
@@ -2429,8 +2509,36 @@ impl ConsoleBuilder {
             is_alt_screen: std::sync::atomic::AtomicBool::new(false),
             record: std::sync::atomic::AtomicBool::new(self.record),
             record_buffer: std::sync::Mutex::new(Vec::new()),
+            log_render: std::sync::Mutex::new(new_log_render(self.log_time, self.log_path)),
+            log_time: self.log_time,
+            log_path: self.log_path,
+            log_time_format: self
+                .log_time_format
+                .unwrap_or_else(|| LogTimeFormat::Strftime("[%X]".to_string())),
+            get_datetime: self
+                .get_datetime
+                .unwrap_or_else(|| std::sync::Arc::new(std::time::SystemTime::now)),
         }
     }
+}
+
+/// Python's `os.path.abspath`: `path` joined to the working directory
+/// when it is relative.
+fn absolute_path(path: &str) -> String {
+    let path = std::path::Path::new(path);
+    if path.is_absolute() {
+        return path.to_string_lossy().into_owned();
+    }
+    std::env::current_dir()
+        .map(|directory| directory.join(path).to_string_lossy().into_owned())
+        .unwrap_or_else(|_| path.to_string_lossy().into_owned())
+}
+
+/// Upstream's `LogRender(show_time=log_time, show_path=log_path)`.
+fn new_log_render(log_time: bool, log_path: bool) -> crate::log_render::LogRender {
+    crate::log_render::LogRender::new()
+        .show_time(log_time)
+        .show_path(log_path)
 }
 
 /// Whether `TERM` names a terminal that cannot render styles (`dumb` or
@@ -2615,8 +2723,229 @@ impl Default for PrintOptions<'_> {
     }
 }
 
+/// One object passed to [`Console::log`]: a string (rendered as console
+/// markup), a `Text`, or any other renderable. A log keeps its renderables
+/// in the message column of a table, so they are shared rather than
+/// borrowed.
+#[derive(Clone)]
+pub enum LogObject<'a> {
+    /// A string, through `render_str` with the call's `emoji`, `markup` and
+    /// `highlight`.
+    Str(&'a str),
+    /// A `Text`, joined with the strings around it.
+    Text(&'a Text),
+    /// Any other renderable, which stands alone.
+    Renderable(std::sync::Arc<dyn Renderable + Send + Sync>),
+}
+
+/// The keyword arguments of upstream's `Console.log`, after defaults.
+/// `log_locals` is not ported ([DIVERGENCES §43]).
+///
+/// [DIVERGENCES §43]: https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/DIVERGENCES.md#43-console-features-tied-to-python-objects-or-jupyter
+#[derive(Clone)]
+pub struct LogOptions<'a> {
+    pub sep: &'a str,
+    pub end: &'a str,
+    pub style: Option<crate::style::StyleType>,
+    pub justify: Option<Justify>,
+    pub emoji: Option<bool>,
+    pub markup: Option<bool>,
+    pub highlight: Option<bool>,
+}
+
+impl Default for LogOptions<'_> {
+    fn default() -> Self {
+        LogOptions {
+            sep: " ",
+            end: "\n",
+            style: None,
+            justify: None,
+            emoji: None,
+            markup: None,
+            highlight: None,
+        }
+    }
+}
+
+/// One renderable `_collect_renderables` hands [`Console::log`], with the
+/// wrappers upstream puts round it: `Align` for `justify`, `Styled` for the
+/// console's style and then for the call's. A joined text carries its `end`.
+struct LogItem {
+    renderable: std::sync::Arc<dyn Renderable + Send + Sync>,
+    align: Option<crate::align::HorizontalAlign>,
+    /// The text's `end` after its lines, less the trailing line break this
+    /// port's lines do not end with. What runs past the column's width is
+    /// cropped, as upstream's.
+    end: Option<String>,
+    styles: Vec<Style>,
+}
+
+impl Renderable for LogItem {
+    fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
+        let mut segments = match self.align {
+            Some(align) => {
+                crate::align::Align::render_child(&*self.renderable, align, console, options)
+            }
+            None => self.renderable.rich_render(console, options),
+        };
+        if let Some(end) = self.end.as_deref().filter(|end| !end.is_empty()) {
+            segments.push(Segment::new(end, None));
+            if end.ends_with('\n') {
+                // A line break ending the text still ends a (blank) line.
+                segments.push(Segment::new("", None));
+            }
+        }
+        for style in &self.styles {
+            segments = Segment::apply_style_with(&segments, Some(style), None);
+        }
+        segments
+    }
+
+    fn measure(&self, console: &Console, options: &ConsoleOptions) -> crate::measure::Measurement {
+        crate::measure::Measurement::get(console, options, &*self.renderable)
+    }
+}
+
 /// The upstream `Console` methods built on its print pipeline.
 impl Console {
+    /// Log `objects` with the time and the caller's file and line. Port of
+    /// `Console.log(*objects, sep=…, end=…, style=…, justify=…, emoji=…,
+    /// markup=…, highlight=…)`: the objects are joined as for `print` and
+    /// laid out by upstream's `LogRender` table, with the time (blank when
+    /// it repeats the last one) and `file:line` linked to the file.
+    ///
+    /// The caller is the code calling `log`, found with `#[track_caller]`
+    /// (upstream inspects the stack). [`log_at`](Self::log_at) names it.
+    #[track_caller]
+    pub fn log(
+        &self,
+        objects: &[LogObject<'_>],
+        options: &LogOptions<'_>,
+    ) -> crate::errors::Result<()> {
+        let caller = std::panic::Location::caller();
+        self.log_at(objects, options, caller.file(), caller.line())
+    }
+
+    /// [`log`](Self::log) with the caller's `file` and `line` given:
+    /// upstream's `_caller_frame_info`. The path column shows the file's
+    /// name, linked to its absolute path unless it starts with `<`.
+    pub fn log_at(
+        &self,
+        objects: &[LogObject<'_>],
+        options: &LogOptions<'_>,
+        file: &str,
+        line: u32,
+    ) -> crate::errors::Result<()> {
+        let mut styles = Vec::new();
+        if let Some(style) = &self.style {
+            styles.push(self.get_style(style)?);
+        }
+        if let Some(style) = &options.style {
+            styles.push(self.get_style(style)?);
+        }
+        styles.retain(|style| !style.is_null());
+        let align = match options.justify {
+            Some(Justify::Left) => Some(crate::align::HorizontalAlign::Left),
+            Some(Justify::Center) => Some(crate::align::HorizontalAlign::Center),
+            Some(Justify::Right) => Some(crate::align::HorizontalAlign::Right),
+            _ => None,
+        };
+        let item = |renderable: std::sync::Arc<dyn Renderable + Send + Sync>,
+                    end: Option<String>|
+         -> std::sync::Arc<dyn Renderable + Send + Sync> {
+            std::sync::Arc::new(LogItem {
+                renderable,
+                align,
+                end,
+                styles: styles.clone(),
+            })
+        };
+        // Upstream's lines end with a break where this port's are joined by
+        // one (`Renderables`), so the end loses one trailing break.
+        let end = options
+            .end
+            .strip_suffix('\n')
+            .unwrap_or(options.end)
+            .to_string();
+        let mut renderables: Vec<std::sync::Arc<dyn Renderable + Send + Sync>> = Vec::new();
+        if objects.is_empty() {
+            // `objects = (NewLine(),)`: one blank line.
+            renderables.push(item(std::sync::Arc::new(Text::new("")), None));
+        }
+        let mut texts: Vec<Text> = Vec::new();
+        let flush =
+            |texts: &mut Vec<Text>,
+             renderables: &mut Vec<std::sync::Arc<dyn Renderable + Send + Sync>>| {
+                if !texts.is_empty() {
+                    let mut separator = Text::new(options.sep);
+                    separator.set_justify_option(options.justify);
+                    let joined = separator.join(texts);
+                    renderables.push(item(std::sync::Arc::new(joined), Some(end.clone())));
+                    texts.clear();
+                }
+            };
+        for object in objects {
+            match object {
+                LogObject::Str(content) => {
+                    let render_str = RenderStrOptions {
+                        emoji: options.emoji,
+                        markup: options.markup,
+                        highlight: options.highlight,
+                        ..Default::default()
+                    };
+                    texts.push(self.render_str_with(content, &render_str)?);
+                }
+                LogObject::Text(text) => texts.push((*text).clone()),
+                LogObject::Renderable(renderable) => {
+                    flush(&mut texts, &mut renderables);
+                    renderables.push(item(renderable.clone(), None));
+                }
+            }
+        }
+        flush(&mut texts, &mut renderables);
+
+        let time = self.log_time.then(|| {
+            let now = (self.get_datetime)();
+            match &self.log_time_format {
+                LogTimeFormat::Strftime(format) => {
+                    Text::new(crate::log_render::strftime(now, format))
+                }
+                LogTimeFormat::Callable(format) => format(now),
+            }
+        });
+        // `path = filename.rpartition(os.sep)[-1]`, and the link is the
+        // absolute path unless the name is a pseudo-file such as `<stdin>`.
+        let path = file
+            .rsplit(std::path::MAIN_SEPARATOR)
+            .next()
+            .unwrap_or(file);
+        let link_path = (!file.starts_with('<')).then(|| absolute_path(file));
+        let table = self
+            .log_render
+            .lock()
+            .unwrap_or_else(std::sync::PoisonError::into_inner)
+            .render_renderables(
+                self,
+                renderables,
+                time,
+                Text::new(""),
+                Some(path),
+                Some(line),
+                link_path.as_deref(),
+            );
+        let mut segments = self.render(&table, None);
+        if segments.is_empty() {
+            return Ok(());
+        }
+        segments.push(Segment::line());
+        let segments = Segment::split_and_crop_lines(&segments, self.width(), None, false, true)
+            .into_iter()
+            .flatten()
+            .collect();
+        self.emit_end(segments, false);
+        Ok(())
+    }
+
     /// Print `objects` as upstream's `Console.print(*objects, sep=…, end=…,
     /// style=…, justify=…, overflow=…, no_wrap=…, emoji=…, markup=…,
     /// highlight=…, width=…, height=…, crop=…, soft_wrap=…,

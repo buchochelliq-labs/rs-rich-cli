@@ -15,6 +15,7 @@ from __future__ import annotations
 
 import io
 import json
+from datetime import datetime
 import pathlib
 import re
 import sys
@@ -25,6 +26,7 @@ from rich.control import Control
 from rich.terminal_theme import MONOKAI, NIGHT_OWLISH
 from rich.panel import Panel
 from rich.rule import Rule
+from rich.table import Table
 from rich.text import Text
 
 
@@ -348,6 +350,94 @@ def _console_record_save() -> str:
         )
 
 
+# --- group 4: log ----------------------------------------------------------
+
+
+def _logging(width: int = 40, caller=("/src/app.py", 7), times=None, **overrides) -> Console:
+    """A console whose `log` reads a fixed clock (`get_datetime`) and names a
+    fixed caller (upstream's `_caller_frame_info`)."""
+    times = iter(times or [datetime(2024, 1, 2, 3, 4, 5, 678901)] * 20)
+    console = _console(width, get_datetime=lambda: next(times), **overrides)
+    console._caller_frame_info = lambda offset, currentframe=None: (*caller, {})
+    return console
+
+
+def _log(console: Console, *objects, **kwargs) -> str:
+    with console.capture() as capture:
+        console.log(*objects, **kwargs)
+    return _no_link_id(capture.get())
+
+
+def _log_table() -> Table:
+    # A renderable in a log shares the message column, as a table cell does;
+    # the port's cells need `Send + Sync` renderables, which a `Table` is
+    # and a `Panel` (holding any child) is not.
+    table = Table("a", "b")
+    table.add_row("1", "2")
+    return table
+
+
+def _console_log() -> str:
+    second = datetime(2024, 1, 2, 3, 4, 6)
+    first = datetime(2024, 1, 2, 3, 4, 5, 678901)
+    console = _logging(times=[first, first, second, second, second, second, second, second, second])
+    return "".join(
+        [
+            _log(console, "hello [bold]world[/]"),
+            _log(console, "same time", _log_table(), "after"),
+            _log(console, "a new second, a long message that folds over several lines"),
+            _log(console),
+            _log(console, "a", "b", sep="-", end="!"),
+            _log(console, "two", end="\n\n"),
+            _log(console, "x", end="x\ny"),
+            _log(console, "mid", justify="center"),
+            _log(console, "st", style="bold"),
+        ]
+    )
+
+
+def _console_log_options() -> str:
+    out = [
+        _log(_logging(log_time=False), "no time"),
+        _log(_logging(log_path=False), "no path"),
+        _log(_logging(log_time=False, log_path=False), "neither"),
+        _log(_logging(caller=("<stdin>", 3)), "pseudo file"),
+        _log(_logging(caller=("/a/b/deep.py", 1234)), "deep"),
+        _log(_logging(style="italic"), "console style", _log_table()),
+        _log(_logging(highlight=True), "x = 1, y = [True, None]"),
+        _log(_logging(highlight=True), "plain 1", highlight=False),
+        _log(_logging(20), "a narrow console wraps the message"),
+    ]
+    return "".join(out)
+
+
+def _console_log_time_format() -> str:
+    out = [
+        _log(
+            _logging(60, log_time_format="%Y-%m-%d %H:%M:%S.%f %j %a %A %b %B", log_path=False),
+            "x",
+        ),
+        _log(_logging(60, log_time_format="%p %I %y %c|%x %X|%D %T %F", log_path=False), "x"),
+        _log(_logging(60, log_time_format="%w %u %U %W %e %C %R %r %h %% %z%Z %Q", log_path=False), "x"),
+        _log(
+            _logging(
+                60,
+                log_time_format=lambda dt: Text(dt.strftime("%H:%M:%S.%f"), style="red"),
+                caller=("<stdin>", 3),
+            ),
+            "callable",
+        ),
+    ]
+    for when in [
+        datetime(1999, 12, 31, 23, 59, 59),
+        datetime(2000, 2, 29, 12, 0, 0),
+        datetime(2024, 12, 30, 0, 0, 1),
+        datetime(1969, 7, 20, 20, 17, 40),
+    ]:
+        out.append(_log(_logging(60, times=[when], log_time_format="%a %d %b %Y %H:%M:%S %j %U %W %w %p", log_path=False), "d"))
+    return "".join(out)
+
+
 CONSOLE_CASES = [
     ("console_quiet", _console_quiet),
     ("console_size_setters", _console_size_setters),
@@ -364,6 +454,9 @@ CONSOLE_CASES = [
     ("console_record_html", _console_record_html),
     ("console_record_svg", _console_record_svg),
     ("console_record_save", _console_record_save),
+    ("console_log", _console_log),
+    ("console_log_options", _console_log_options),
+    ("console_log_time_format", _console_log_time_format),
 ]
 
 

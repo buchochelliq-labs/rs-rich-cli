@@ -5,12 +5,16 @@
 //! environment (`ConsoleBuilder::environ`, upstream's `_environ`), so no
 //! case depends on the machine running it.
 
+use std::collections::VecDeque;
+use std::sync::{Arc, Mutex};
+use std::time::{Duration, SystemTime, UNIX_EPOCH};
+
 use rich::align::HorizontalAlign;
 use rich::console::{Environ, PrintObject as O, PrintOptions};
 use rich::terminal_theme::{MONOKAI, NIGHT_OWLISH};
 use rich::{
-    ColorSystem, Console, Control, ExportHtmlOptions, ExportSvgOptions, Justify, Panel, Renderable,
-    Rule, Text, Theme,
+    ColorSystem, Console, Control, ExportHtmlOptions, ExportSvgOptions, Justify, LogObject,
+    LogOptions, Panel, Renderable, Rule, Table, Text, Theme,
 };
 
 /// `_console`: truecolor, no highlighting.
@@ -634,6 +638,233 @@ fn console_record_save() -> String {
     out
 }
 
+// --- group 4 ------------------------------------------------------------
+
+/// The `SystemTime` of a naive datetime read as UTC, as the Python side's
+/// `datetime(…)` (which `strftime` formats as given).
+fn utc(date: (i64, i64, i64), time: (i64, i64, i64), micros: u32) -> SystemTime {
+    let (year, month, day) = date;
+    let year = if month <= 2 { year - 1 } else { year };
+    let era = year.div_euclid(400);
+    let yoe = year.rem_euclid(400);
+    let mp = if month > 2 { month - 3 } else { month + 9 };
+    let doy = (153 * mp + 2) / 5 + day - 1;
+    let days = era * 146_097 + yoe * 365 + yoe / 4 - yoe / 100 + doy - 719_468;
+    let seconds = days * 86_400 + time.0 * 3600 + time.1 * 60 + time.2;
+    let offset = Duration::new(seconds.unsigned_abs(), 0);
+    let base = if seconds >= 0 {
+        UNIX_EPOCH + offset
+    } else {
+        UNIX_EPOCH - offset
+    };
+    base + Duration::from_micros(u64::from(micros))
+}
+
+fn first_time() -> SystemTime {
+    utc((2024, 1, 2), (3, 4, 5), 678_901)
+}
+
+/// `_logging`: a fixed clock that steps through `times` (then repeats the
+/// last), and a fixed caller.
+fn logging(width: usize, times: Vec<SystemTime>) -> rich::console::ConsoleBuilder {
+    let times = Mutex::new(times.into_iter().collect::<VecDeque<_>>());
+    builder(width).get_datetime(move || {
+        let mut times = times.lock().unwrap();
+        if times.len() > 1 {
+            times.pop_front().unwrap()
+        } else {
+            *times.front().unwrap()
+        }
+    })
+}
+
+/// `console.log(*objects, **options)` from `caller`, under a capture.
+fn log_from(
+    console: &Console,
+    caller: (&str, u32),
+    objects: &[LogObject<'_>],
+    options: LogOptions<'_>,
+) -> String {
+    console.capture(|c| {
+        c.log_at(objects, &options, caller.0, caller.1).unwrap();
+    })
+}
+
+const APP: (&str, u32) = ("/src/app.py", 7);
+
+fn log(console: &Console, objects: &[LogObject<'_>], options: LogOptions<'_>) -> String {
+    log_from(console, APP, objects, options)
+}
+
+fn log_str(console: &Console, content: &str) -> String {
+    log(console, &[LogObject::Str(content)], LogOptions::default())
+}
+
+/// `_log_table`: `Table("a", "b")` with one row.
+fn log_table() -> Arc<dyn Renderable + Send + Sync> {
+    let mut table = Table::new();
+    table.add_column("a");
+    table.add_column("b");
+    table.add_row(&["1", "2"]);
+    Arc::new(table)
+}
+
+fn console_log() -> String {
+    let first = first_time();
+    let second = utc((2024, 1, 2), (3, 4, 6), 0);
+    let console = logging(40, vec![first, first, second]).build();
+    let panel = log_table();
+    [
+        log_str(&console, "hello [bold]world[/]"),
+        log(
+            &console,
+            &[
+                LogObject::Str("same time"),
+                LogObject::Renderable(panel),
+                LogObject::Str("after"),
+            ],
+            LogOptions::default(),
+        ),
+        log_str(
+            &console,
+            "a new second, a long message that folds over several lines",
+        ),
+        log(&console, &[], LogOptions::default()),
+        log(
+            &console,
+            &[LogObject::Str("a"), LogObject::Str("b")],
+            LogOptions {
+                sep: "-",
+                end: "!",
+                ..Default::default()
+            },
+        ),
+        log(
+            &console,
+            &[LogObject::Str("two")],
+            LogOptions {
+                end: "\n\n",
+                ..Default::default()
+            },
+        ),
+        log(
+            &console,
+            &[LogObject::Str("x")],
+            LogOptions {
+                end: "x\ny",
+                ..Default::default()
+            },
+        ),
+        log(
+            &console,
+            &[LogObject::Str("mid")],
+            LogOptions {
+                justify: Some(Justify::Center),
+                ..Default::default()
+            },
+        ),
+        log(
+            &console,
+            &[LogObject::Str("st")],
+            LogOptions {
+                style: Some("bold".into()),
+                ..Default::default()
+            },
+        ),
+    ]
+    .concat()
+}
+
+fn console_log_options() -> String {
+    let at = |width: usize| logging(width, vec![first_time()]);
+    let panel = log_table();
+    [
+        log_str(&at(40).log_time(false).build(), "no time"),
+        log_str(&at(40).log_path(false).build(), "no path"),
+        log_str(&at(40).log_time(false).log_path(false).build(), "neither"),
+        log_from(
+            &at(40).build(),
+            ("<stdin>", 3),
+            &[LogObject::Str("pseudo file")],
+            LogOptions::default(),
+        ),
+        log_from(
+            &at(40).build(),
+            ("/a/b/deep.py", 1234),
+            &[LogObject::Str("deep")],
+            LogOptions::default(),
+        ),
+        log(
+            &at(40).style("italic").build(),
+            &[
+                LogObject::Str("console style"),
+                LogObject::Renderable(panel),
+            ],
+            LogOptions::default(),
+        ),
+        log_str(&at(40).highlight(true).build(), "x = 1, y = [True, None]"),
+        log(
+            &at(40).highlight(true).build(),
+            &[LogObject::Str("plain 1")],
+            LogOptions {
+                highlight: Some(false),
+                ..Default::default()
+            },
+        ),
+        log_str(&at(20).build(), "a narrow console wraps the message"),
+    ]
+    .concat()
+}
+
+fn console_log_time_format() -> String {
+    let at = |format: &str| {
+        logging(60, vec![first_time()])
+            .log_time_format(format)
+            .log_path(false)
+            .build()
+    };
+    let mut out = vec![
+        log_str(&at("%Y-%m-%d %H:%M:%S.%f %j %a %A %b %B"), "x"),
+        log_str(&at("%p %I %y %c|%x %X|%D %T %F"), "x"),
+        log_str(&at("%w %u %U %W %e %C %R %r %h %% %z%Z %Q"), "x"),
+        log_from(
+            &logging(60, vec![first_time()])
+                .log_time_formatter(|time| {
+                    let micros = time.duration_since(UNIX_EPOCH).unwrap().subsec_micros();
+                    let seconds = time.duration_since(UNIX_EPOCH).unwrap().as_secs() % 86_400;
+                    Text::styled(
+                        format!(
+                            "{:02}:{:02}:{:02}.{micros:06}",
+                            seconds / 3600,
+                            seconds / 60 % 60,
+                            seconds % 60
+                        ),
+                        "red",
+                    )
+                })
+                .build(),
+            ("<stdin>", 3),
+            &[LogObject::Str("callable")],
+            LogOptions::default(),
+        ),
+    ];
+    for when in [
+        utc((1999, 12, 31), (23, 59, 59), 0),
+        utc((2000, 2, 29), (12, 0, 0), 0),
+        utc((2024, 12, 30), (0, 0, 1), 0),
+        utc((1969, 7, 20), (20, 17, 40), 0),
+    ] {
+        out.push(log_str(
+            &logging(60, vec![when])
+                .log_time_format("%a %d %b %Y %H:%M:%S %j %U %W %w %p")
+                .log_path(false)
+                .build(),
+            "d",
+        ));
+    }
+    out.concat()
+}
+
 fn build(name: &str) -> String {
     match name {
         "console_quiet" => console_quiet(),
@@ -651,11 +882,14 @@ fn build(name: &str) -> String {
         "console_record_html" => console_record_html(),
         "console_record_svg" => console_record_svg(),
         "console_record_save" => console_record_save(),
+        "console_log" => console_log(),
+        "console_log_options" => console_log_options(),
+        "console_log_time_format" => console_log_time_format(),
         other => panic!("no builder for console case {other:?}"),
     }
 }
 
-const CASES: usize = 15;
+const CASES: usize = 18;
 
 #[test]
 fn console_parity() {
@@ -670,8 +904,22 @@ fn console_parity() {
         let expected: String = serde_json::from_str(expected).expect("json string");
         let got = build(name);
         if got != expected {
+            // The first difference, with some context: the cases are long.
+            let at = got
+                .char_indices()
+                .zip(expected.chars())
+                .find(|((_, a), b)| a != b)
+                .map_or(got.len().min(expected.len()), |((at, _), _)| at);
+            let from = got.floor_char_boundary(at.saturating_sub(120));
+            let window = |text: &str| {
+                let from = text.floor_char_boundary(from);
+                let to = text.floor_char_boundary((at + 120).min(text.len()));
+                text[from..to].to_string()
+            };
             failures.push(format!(
-                "{name}:\n  expected {expected:?}\n  got      {got:?}"
+                "{name} (from byte {at}):\n  expected …{:?}\n  got      …{:?}",
+                window(&expected),
+                window(&got)
             ));
         }
         checked += 1;
@@ -714,4 +962,23 @@ fn on_broken_pipe_runs_the_replacement() {
     assert!(!console.quiet());
     console.on_broken_pipe();
     assert!(console.quiet());
+}
+
+/// `Console::log` names the code that called it (`#[track_caller]`, where
+/// upstream inspects the stack), linked to the file's absolute path.
+#[test]
+fn log_names_its_caller() {
+    let console = builder(100).color_system(None).log_time(false).build();
+    let mut line = 0;
+    let out = console.capture(|c| {
+        line = line!() + 1;
+        c.log(&[LogObject::Str("hi")], &LogOptions::default())
+            .unwrap()
+    });
+    assert!(out.starts_with("hi "), "{out:?}");
+    assert!(
+        out.trim_end()
+            .ends_with(&format!("golden_console.rs:{line}")),
+        "{out:?}"
+    );
 }
