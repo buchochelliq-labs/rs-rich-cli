@@ -159,10 +159,14 @@ jobs:
           minisign -G -W -p main.pub -s main.key
           minisign -G -W -p backup.pub -s backup.key
           python3 - "$market/keys/keys-1.json" <<'EOF'
-          import json, sys
+          import base64, json, sys
           def pair(name):
-              comment, key = open(f"{name}.pub").read().splitlines()[:2]
-              return {"id": comment.split()[-1], "public_key": key.strip()}
+              # The id from the key itself (bytes 2 to 10, little-endian):
+              # some minisign builds print it in the comment without its
+              # leading zeros, which the client refuses.
+              key = open(f"{name}.pub").read().splitlines()[1].strip()
+              key_id = int.from_bytes(base64.b64decode(key)[2:10], "little")
+              return {"id": f"{key_id:016X}", "public_key": key}
           json.dump({"schema_version": 1, "generation": 1, "main": pair("main"),
                      "backup": pair("backup")}, open(sys.argv[1], "w"), indent=2)
           EOF

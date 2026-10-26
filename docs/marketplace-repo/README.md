@@ -16,7 +16,7 @@ them could not push there. Copy them across as they are laid out:
 | `scripts/github_api.py`, `publish_releases.py`, `stats.py`, `discussions.py` | the same |
 | `scripts/fixtures/` (the script tests' recorded responses and listings) | the same |
 | `schemas/stats.schema.json` | the same |
-| `.gitattributes` | `.gitattributes` |
+| `.gitattributes`, `.gitignore` | the same |
 
 The marketplace's `official-2` branch holds these files as they are here,
 with its listings, its artifacts and a README on submitting a listing.
