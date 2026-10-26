@@ -1,0 +1,6 @@
+pub mod rich_macros
+pub proc macro rich_macros::#[derive(Rich)]
+pub proc macro rich_macros::markup!()
+pub proc macro rich_macros::richf!()
+pub proc macro rich_macros::style!()
+pub proc macro rich_macros::theme_key!()

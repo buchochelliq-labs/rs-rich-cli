@@ -1,0 +1,1431 @@
+pub mod rich_record
+pub mod rich_record::graphics
+pub struct rich_record::graphics::Image
+impl rich_record::graphics::Image
+pub fn rich_record::graphics::Image::gif(alloc::vec::Vec<u8>) -> core::option::Option<rich_record::graphics::Image>
+pub fn rich_record::graphics::Image::height(&self) -> u32
+pub fn rich_record::graphics::Image::pixels(&self) -> core::option::Option<alloc::vec::Vec<u8>>
+pub fn rich_record::graphics::Image::png(alloc::vec::Vec<u8>) -> core::option::Option<rich_record::graphics::Image>
+pub fn rich_record::graphics::Image::rgba(u32, u32, &[u8]) -> core::option::Option<rich_record::graphics::Image>
+pub fn rich_record::graphics::Image::width(&self) -> u32
+impl core::cmp::Eq for rich_record::graphics::Image
+impl core::cmp::PartialEq for rich_record::graphics::Image
+pub fn rich_record::graphics::Image::eq(&self, &rich_record::graphics::Image) -> bool
+impl core::fmt::Debug for rich_record::graphics::Image
+pub fn rich_record::graphics::Image::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_record::graphics::Image
+impl core::marker::Send for rich_record::graphics::Image
+impl core::marker::Sync for rich_record::graphics::Image
+impl core::marker::Unpin for rich_record::graphics::Image
+impl core::marker::UnsafeUnpin for rich_record::graphics::Image
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::graphics::Image
+impl core::panic::unwind_safe::UnwindSafe for rich_record::graphics::Image
+pub struct rich_record::graphics::Tile
+pub rich_record::graphics::Tile::below_text: bool
+pub rich_record::graphics::Tile::column: u16
+pub rich_record::graphics::Tile::columns: u16
+pub rich_record::graphics::Tile::image: alloc::sync::Arc<rich_record::graphics::Image>
+pub rich_record::graphics::Tile::row: u16
+pub rich_record::graphics::Tile::rows: u16
+pub rich_record::graphics::Tile::source: [f32; 4]
+impl core::clone::Clone for rich_record::graphics::Tile
+pub fn rich_record::graphics::Tile::clone(&self) -> rich_record::graphics::Tile
+impl core::cmp::Eq for rich_record::graphics::Tile
+impl core::cmp::PartialEq for rich_record::graphics::Tile
+pub fn rich_record::graphics::Tile::eq(&self, &rich_record::graphics::Tile) -> bool
+impl core::fmt::Debug for rich_record::graphics::Tile
+pub fn rich_record::graphics::Tile::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_record::graphics::Tile
+pub fn rich_record::graphics::Tile::hash<H: core::hash::Hasher>(&self, &mut H)
+impl core::marker::Freeze for rich_record::graphics::Tile
+impl core::marker::Send for rich_record::graphics::Tile
+impl core::marker::Sync for rich_record::graphics::Tile
+impl core::marker::Unpin for rich_record::graphics::Tile
+impl core::marker::UnsafeUnpin for rich_record::graphics::Tile
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::graphics::Tile
+impl core::panic::unwind_safe::UnwindSafe for rich_record::graphics::Tile
+pub const rich_record::graphics::CELL_PIXELS: (u32, u32)
+pub const rich_record::graphics::MAX_IMAGE_PIXELS: u64
+pub const rich_record::graphics::PLACEHOLDER: char
+pub fn rich_record::graphics::base64_decode(&[u8]) -> core::option::Option<alloc::vec::Vec<u8>>
+pub fn rich_record::graphics::decode_sixel(&[u8]) -> core::option::Option<rich_record::graphics::Image>
+pub mod rich_record::keyboard
+pub enum rich_record::keyboard::Event
+pub rich_record::keyboard::Event::Press
+pub rich_record::keyboard::Event::Release
+pub rich_record::keyboard::Event::Repeat
+impl core::clone::Clone for rich_record::keyboard::Event
+pub fn rich_record::keyboard::Event::clone(&self) -> rich_record::keyboard::Event
+impl core::cmp::Eq for rich_record::keyboard::Event
+impl core::cmp::PartialEq for rich_record::keyboard::Event
+pub fn rich_record::keyboard::Event::eq(&self, &rich_record::keyboard::Event) -> bool
+impl core::fmt::Debug for rich_record::keyboard::Event
+pub fn rich_record::keyboard::Event::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_record::keyboard::Event
+impl core::marker::StructuralPartialEq for rich_record::keyboard::Event
+impl core::marker::Freeze for rich_record::keyboard::Event
+impl core::marker::Send for rich_record::keyboard::Event
+impl core::marker::Sync for rich_record::keyboard::Event
+impl core::marker::Unpin for rich_record::keyboard::Event
+impl core::marker::UnsafeUnpin for rich_record::keyboard::Event
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::keyboard::Event
+impl core::panic::unwind_safe::UnwindSafe for rich_record::keyboard::Event
+pub enum rich_record::keyboard::Press
+pub rich_record::keyboard::Press::Char(char)
+pub rich_record::keyboard::Press::Key(rich_record::tape::Key)
+impl rich_record::keyboard::Press
+pub fn rich_record::keyboard::Press::bytes(self, rich_record::keyboard::Event, u8) -> core::option::Option<alloc::string::String>
+pub fn rich_record::keyboard::Press::label(self) -> alloc::string::String
+pub fn rich_record::keyboard::Press::legacy(self) -> alloc::string::String
+pub fn rich_record::keyboard::Press::parse(&str) -> core::option::Option<rich_record::keyboard::Press>
+impl core::clone::Clone for rich_record::keyboard::Press
+pub fn rich_record::keyboard::Press::clone(&self) -> rich_record::keyboard::Press
+impl core::cmp::Eq for rich_record::keyboard::Press
+impl core::cmp::PartialEq for rich_record::keyboard::Press
+pub fn rich_record::keyboard::Press::eq(&self, &rich_record::keyboard::Press) -> bool
+impl core::fmt::Debug for rich_record::keyboard::Press
+pub fn rich_record::keyboard::Press::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_record::keyboard::Press
+impl core::marker::StructuralPartialEq for rich_record::keyboard::Press
+impl core::marker::Freeze for rich_record::keyboard::Press
+impl core::marker::Send for rich_record::keyboard::Press
+impl core::marker::Sync for rich_record::keyboard::Press
+impl core::marker::Unpin for rich_record::keyboard::Press
+impl core::marker::UnsafeUnpin for rich_record::keyboard::Press
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::keyboard::Press
+impl core::panic::unwind_safe::UnwindSafe for rich_record::keyboard::Press
+pub const rich_record::keyboard::ALL_AS_ESCAPES: u8
+pub const rich_record::keyboard::DISAMBIGUATE: u8
+pub const rich_record::keyboard::REPORT_EVENTS: u8
+pub mod rich_record::record
+pub enum rich_record::record::Problem
+pub rich_record::record::Problem::Differs
+pub rich_record::record::Problem::Differs::diff: alloc::string::String
+pub rich_record::record::Problem::Differs::name: alloc::string::String
+pub rich_record::record::Problem::Orphaned
+pub rich_record::record::Problem::Orphaned::name: alloc::string::String
+impl core::clone::Clone for rich_record::record::Problem
+pub fn rich_record::record::Problem::clone(&self) -> rich_record::record::Problem
+impl core::cmp::Eq for rich_record::record::Problem
+impl core::cmp::PartialEq for rich_record::record::Problem
+pub fn rich_record::record::Problem::eq(&self, &rich_record::record::Problem) -> bool
+impl core::fmt::Debug for rich_record::record::Problem
+pub fn rich_record::record::Problem::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_record::record::Problem
+pub fn rich_record::record::Problem::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::record::Problem
+impl core::marker::Freeze for rich_record::record::Problem
+impl core::marker::Send for rich_record::record::Problem
+impl core::marker::Sync for rich_record::record::Problem
+impl core::marker::Unpin for rich_record::record::Problem
+impl core::marker::UnsafeUnpin for rich_record::record::Problem
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Problem
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Problem
+pub struct rich_record::record::Formats
+pub rich_record::record::Formats::apng: bool
+pub rich_record::record::Formats::cast: bool
+pub rich_record::record::Formats::gif: bool
+pub rich_record::record::Formats::html: bool
+pub rich_record::record::Formats::mp4: bool
+pub rich_record::record::Formats::png: bool
+pub rich_record::record::Formats::svg: bool
+impl rich_record::record::Formats
+pub const rich_record::record::Formats::ALL: rich_record::record::Formats
+pub const rich_record::record::Formats::DEFAULT: rich_record::record::Formats
+pub const rich_record::record::Formats::NONE: rich_record::record::Formats
+pub const rich_record::record::Formats::NO_VIDEO: rich_record::record::Formats
+pub fn rich_record::record::Formats::contains(self, rich_record::tape::Format) -> bool
+pub fn rich_record::record::Formats::intersect(self, rich_record::record::Formats) -> rich_record::record::Formats
+pub fn rich_record::record::Formats::set(&mut self, rich_record::tape::Format, bool)
+impl core::clone::Clone for rich_record::record::Formats
+pub fn rich_record::record::Formats::clone(&self) -> rich_record::record::Formats
+impl core::cmp::Eq for rich_record::record::Formats
+impl core::cmp::PartialEq for rich_record::record::Formats
+pub fn rich_record::record::Formats::eq(&self, &rich_record::record::Formats) -> bool
+impl core::fmt::Debug for rich_record::record::Formats
+pub fn rich_record::record::Formats::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_record::record::Formats
+impl core::marker::StructuralPartialEq for rich_record::record::Formats
+impl core::marker::Freeze for rich_record::record::Formats
+impl core::marker::Send for rich_record::record::Formats
+impl core::marker::Sync for rich_record::record::Formats
+impl core::marker::Unpin for rich_record::record::Formats
+impl core::marker::UnsafeUnpin for rich_record::record::Formats
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Formats
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Formats
+pub struct rich_record::record::Options
+pub rich_record::record::Options::bin_dir: core::option::Option<std::path::PathBuf>
+pub rich_record::record::Options::frame_rate: core::option::Option<f64>
+pub rich_record::record::Options::repo: core::option::Option<std::path::PathBuf>
+pub rich_record::record::Options::theme: rich_record::screen::Theme
+impl core::clone::Clone for rich_record::record::Options
+pub fn rich_record::record::Options::clone(&self) -> rich_record::record::Options
+impl core::default::Default for rich_record::record::Options
+pub fn rich_record::record::Options::default() -> rich_record::record::Options
+impl core::fmt::Debug for rich_record::record::Options
+pub fn rich_record::record::Options::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_record::record::Options
+impl core::marker::Send for rich_record::record::Options
+impl core::marker::Sync for rich_record::record::Options
+impl core::marker::Unpin for rich_record::record::Options
+impl core::marker::UnsafeUnpin for rich_record::record::Options
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Options
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Options
+pub struct rich_record::record::Presentation
+pub rich_record::record::Presentation::caption: core::option::Option<alloc::string::String>
+pub rich_record::record::Presentation::font_size: u16
+pub rich_record::record::Presentation::key_overlay: bool
+pub rich_record::record::Presentation::window: bool
+impl core::clone::Clone for rich_record::record::Presentation
+pub fn rich_record::record::Presentation::clone(&self) -> rich_record::record::Presentation
+impl core::cmp::Eq for rich_record::record::Presentation
+impl core::cmp::PartialEq for rich_record::record::Presentation
+pub fn rich_record::record::Presentation::eq(&self, &rich_record::record::Presentation) -> bool
+impl core::default::Default for rich_record::record::Presentation
+pub fn rich_record::record::Presentation::default() -> Self
+impl core::fmt::Debug for rich_record::record::Presentation
+pub fn rich_record::record::Presentation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::record::Presentation
+impl core::marker::Freeze for rich_record::record::Presentation
+impl core::marker::Send for rich_record::record::Presentation
+impl core::marker::Sync for rich_record::record::Presentation
+impl core::marker::Unpin for rich_record::record::Presentation
+impl core::marker::UnsafeUnpin for rich_record::record::Presentation
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Presentation
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Presentation
+pub struct rich_record::record::Recording
+pub rich_record::record::Recording::columns: u16
+pub rich_record::record::Recording::frame_rate: f64
+pub rich_record::record::Recording::masks: alloc::vec::Vec<(fancy_regex::Regex, alloc::string::String)>
+pub rich_record::record::Recording::outputs: alloc::vec::Vec<rich_record::tape::Output>
+pub rich_record::record::Recording::presentation: rich_record::record::Presentation
+pub rich_record::record::Recording::rows: u16
+pub rich_record::record::Recording::shots: alloc::vec::Vec<(alloc::string::String, rich_record::screen::Snapshot)>
+pub rich_record::record::Recording::timeline: rich_record::session::Timeline
+pub rich_record::record::Recording::title: alloc::string::String
+impl rich_record::record::Recording
+pub fn rich_record::record::Recording::default_formats(&self) -> rich_record::record::Formats
+pub fn rich_record::record::Recording::formats(&self, rich_record::record::Formats) -> rich_record::record::Formats
+pub fn rich_record::record::Recording::output_path(&self, rich_record::tape::Format, &str) -> alloc::string::String
+pub fn rich_record::record::Recording::text_grid(&self, &rich_record::screen::Snapshot) -> alloc::string::String
+impl core::clone::Clone for rich_record::record::Recording
+pub fn rich_record::record::Recording::clone(&self) -> rich_record::record::Recording
+impl core::fmt::Debug for rich_record::record::Recording
+pub fn rich_record::record::Recording::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_record::record::Recording
+impl core::marker::Send for rich_record::record::Recording
+impl core::marker::Sync for rich_record::record::Recording
+impl core::marker::Unpin for rich_record::record::Recording
+impl core::marker::UnsafeUnpin for rich_record::record::Recording
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Recording
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Recording
+pub struct rich_record::record::Skipped
+pub rich_record::record::Skipped::format: rich_record::tape::Format
+pub rich_record::record::Skipped::path: std::path::PathBuf
+pub rich_record::record::Skipped::reason: alloc::string::String
+impl core::clone::Clone for rich_record::record::Skipped
+pub fn rich_record::record::Skipped::clone(&self) -> rich_record::record::Skipped
+impl core::cmp::Eq for rich_record::record::Skipped
+impl core::cmp::PartialEq for rich_record::record::Skipped
+pub fn rich_record::record::Skipped::eq(&self, &rich_record::record::Skipped) -> bool
+impl core::fmt::Debug for rich_record::record::Skipped
+pub fn rich_record::record::Skipped::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::record::Skipped
+impl core::marker::Freeze for rich_record::record::Skipped
+impl core::marker::Send for rich_record::record::Skipped
+impl core::marker::Sync for rich_record::record::Skipped
+impl core::marker::Unpin for rich_record::record::Skipped
+impl core::marker::UnsafeUnpin for rich_record::record::Skipped
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Skipped
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Skipped
+pub struct rich_record::record::Written
+pub rich_record::record::Written::formats: rich_record::record::Formats
+pub rich_record::record::Written::paths: alloc::vec::Vec<std::path::PathBuf>
+pub rich_record::record::Written::skipped: alloc::vec::Vec<rich_record::record::Skipped>
+impl rich_record::record::Written
+pub fn rich_record::record::Written::is_complete(&self) -> bool
+impl core::clone::Clone for rich_record::record::Written
+pub fn rich_record::record::Written::clone(&self) -> rich_record::record::Written
+impl core::cmp::Eq for rich_record::record::Written
+impl core::cmp::PartialEq for rich_record::record::Written
+pub fn rich_record::record::Written::eq(&self, &rich_record::record::Written) -> bool
+impl core::fmt::Debug for rich_record::record::Written
+pub fn rich_record::record::Written::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::record::Written
+impl core::marker::Freeze for rich_record::record::Written
+impl core::marker::Send for rich_record::record::Written
+impl core::marker::Sync for rich_record::record::Written
+impl core::marker::Unpin for rich_record::record::Written
+impl core::marker::UnsafeUnpin for rich_record::record::Written
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Written
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Written
+pub const rich_record::record::FONT_SIZE: u16
+pub const rich_record::record::KEY_REPEAT: (core::time::Duration, core::time::Duration)
+pub fn rich_record::record::check(&rich_record::record::Recording, &std::path::Path) -> alloc::vec::Vec<rich_record::record::Problem>
+pub fn rich_record::record::orphans(&rich_record::record::Recording, &std::path::Path) -> alloc::vec::Vec<alloc::string::String>
+pub fn rich_record::record::record(&rich_record::tape::Tape, &str, &rich_record::record::Options) -> core::result::Result<rich_record::record::Recording, rich_record::tape::TapeError>
+pub fn rich_record::record::stem_allowed(&str) -> bool
+pub fn rich_record::record::warnings(&rich_record::tape::Tape) -> alloc::vec::Vec<alloc::string::String>
+pub fn rich_record::record::write(&rich_record::record::Recording, &std::path::Path, &str, rich_record::record::Formats, &rich_record::render::raster::Fonts, &rich_record::screen::Theme, core::option::Option<(&std::path::Path, &[u8])>) -> std::io::error::Result<alloc::vec::Vec<std::path::PathBuf>>
+pub fn rich_record::record::write_selected(&rich_record::record::Recording, &std::path::Path, &str, rich_record::record::Formats, &rich_record::render::raster::Fonts, &rich_record::screen::Theme, core::option::Option<(&std::path::Path, &[u8])>) -> std::io::error::Result<rich_record::record::Written>
+pub mod rich_record::render
+pub mod rich_record::render::cast
+pub fn rich_record::render::cast::cast(&rich_record::session::Timeline, u16, u16, &str, &rich_record::screen::Theme) -> alloc::string::String
+pub fn rich_record::render::cast::repaint(&rich_record::screen::Snapshot, &rich_record::screen::Theme) -> alloc::string::String
+pub mod rich_record::render::emoji
+pub struct rich_record::render::emoji::Bitmap
+pub rich_record::render::emoji::Bitmap::rgba: alloc::vec::Vec<[u8; 4]>
+pub rich_record::render::emoji::Bitmap::side: usize
+impl core::marker::Freeze for rich_record::render::emoji::Bitmap
+impl core::marker::Send for rich_record::render::emoji::Bitmap
+impl core::marker::Sync for rich_record::render::emoji::Bitmap
+impl core::marker::Unpin for rich_record::render::emoji::Bitmap
+impl core::marker::UnsafeUnpin for rich_record::render::emoji::Bitmap
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::render::emoji::Bitmap
+impl core::panic::unwind_safe::UnwindSafe for rich_record::render::emoji::Bitmap
+pub struct rich_record::render::emoji::Emoji
+impl rich_record::render::emoji::Emoji
+pub fn rich_record::render::emoji::Emoji::has(&self, char) -> bool
+pub fn rich_record::render::emoji::Emoji::render(&self, &str, usize) -> core::option::Option<alloc::sync::Arc<rich_record::render::emoji::Bitmap>>
+impl core::default::Default for rich_record::render::emoji::Emoji
+pub fn rich_record::render::emoji::Emoji::default() -> Self
+impl !core::marker::Freeze for rich_record::render::emoji::Emoji
+impl core::marker::Send for rich_record::render::emoji::Emoji
+impl core::marker::Sync for rich_record::render::emoji::Emoji
+impl core::marker::Unpin for rich_record::render::emoji::Emoji
+impl core::marker::UnsafeUnpin for rich_record::render::emoji::Emoji
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::render::emoji::Emoji
+impl core::panic::unwind_safe::UnwindSafe for rich_record::render::emoji::Emoji
+pub mod rich_record::render::html
+pub fn rich_record::render::html::page(&rich_record::render::Look<'_>, &[(alloc::string::String, rich_record::screen::Snapshot)], &rich_record::session::Timeline, &rich_record::screen::Theme, bool) -> alloc::string::String
+pub mod rich_record::render::png
+pub enum rich_record::render::png::PngError
+pub rich_record::render::png::PngError::BadSize(alloc::string::String)
+pub rich_record::render::png::PngError::TooLarge
+pub rich_record::render::png::PngError::TooLarge::height: usize
+pub rich_record::render::png::PngError::TooLarge::width: usize
+impl core::clone::Clone for rich_record::render::png::PngError
+pub fn rich_record::render::png::PngError::clone(&self) -> rich_record::render::png::PngError
+impl core::cmp::Eq for rich_record::render::png::PngError
+impl core::cmp::PartialEq for rich_record::render::png::PngError
+pub fn rich_record::render::png::PngError::eq(&self, &rich_record::render::png::PngError) -> bool
+impl core::error::Error for rich_record::render::png::PngError
+impl core::fmt::Debug for rich_record::render::png::PngError
+pub fn rich_record::render::png::PngError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_record::render::png::PngError
+pub fn rich_record::render::png::PngError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::render::png::PngError
+impl core::marker::Freeze for rich_record::render::png::PngError
+impl core::marker::Send for rich_record::render::png::PngError
+impl core::marker::Sync for rich_record::render::png::PngError
+impl core::marker::Unpin for rich_record::render::png::PngError
+impl core::marker::UnsafeUnpin for rich_record::render::png::PngError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::render::png::PngError
+impl core::panic::unwind_safe::UnwindSafe for rich_record::render::png::PngError
+pub struct rich_record::render::png::PngOptions<'a>
+pub rich_record::render::png::PngOptions::caption: core::option::Option<&'a str>
+pub rich_record::render::png::PngOptions::columns: core::option::Option<usize>
+pub rich_record::render::png::PngOptions::size: f32
+pub rich_record::render::png::PngOptions::theme: rich_record::screen::Theme
+pub rich_record::render::png::PngOptions::title: &'a str
+pub rich_record::render::png::PngOptions::window: bool
+impl core::default::Default for rich_record::render::png::PngOptions<'_>
+pub fn rich_record::render::png::PngOptions<'_>::default() -> Self
+impl<'a> core::clone::Clone for rich_record::render::png::PngOptions<'a>
+pub fn rich_record::render::png::PngOptions<'a>::clone(&self) -> rich_record::render::png::PngOptions<'a>
+impl<'a> core::fmt::Debug for rich_record::render::png::PngOptions<'a>
+pub fn rich_record::render::png::PngOptions<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Freeze for rich_record::render::png::PngOptions<'a>
+impl<'a> core::marker::Send for rich_record::render::png::PngOptions<'a>
+impl<'a> core::marker::Sync for rich_record::render::png::PngOptions<'a>
+impl<'a> core::marker::Unpin for rich_record::render::png::PngOptions<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_record::render::png::PngOptions<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_record::render::png::PngOptions<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rich_record::render::png::PngOptions<'a>
+pub fn rich_record::render::png::frame_canvas(&rich_ext::frame::Frame, &rich_record::render::raster::Fonts, &rich_record::render::png::PngOptions<'_>) -> core::result::Result<rich_record::render::raster::Canvas, rich_record::render::png::PngError>
+pub fn rich_record::render::png::frame_png(&rich_ext::frame::Frame, &rich_record::render::raster::Fonts, &rich_record::render::png::PngOptions<'_>) -> core::result::Result<alloc::vec::Vec<u8>, rich_record::render::png::PngError>
+pub fn rich_record::render::png::image_size(&rich_ext::frame::Frame, &rich_record::render::raster::Fonts, &rich_record::render::png::PngOptions<'_>) -> (usize, usize)
+pub fn rich_record::render::png::segments_png(&[rich::segment::Segment], &rich_record::render::raster::Fonts, &rich_record::render::png::PngOptions<'_>) -> core::result::Result<alloc::vec::Vec<u8>, rich_record::render::png::PngError>
+pub fn rich_record::render::png::snapshot(&rich_ext::frame::Frame, &rich_record::render::png::PngOptions<'_>) -> rich_record::screen::Snapshot
+pub mod rich_record::render::raster
+pub struct rich_record::render::raster::Apng<W: std::io::Write>
+impl<W: std::io::Write> rich_record::render::raster::Apng<W>
+pub fn rich_record::render::raster::Apng<W>::finish(self) -> std::io::error::Result<()>
+pub fn rich_record::render::raster::Apng<W>::start(W, usize, usize, usize) -> std::io::error::Result<rich_record::render::raster::Apng<W>>
+pub fn rich_record::render::raster::Apng<W>::write(&mut self, &rich_record::render::raster::Canvas, f64) -> std::io::error::Result<()>
+impl<W> core::marker::Freeze for rich_record::render::raster::Apng<W> where W: core::marker::Freeze
+impl<W> core::marker::Send for rich_record::render::raster::Apng<W> where W: core::marker::Send
+impl<W> core::marker::Sync for rich_record::render::raster::Apng<W> where W: core::marker::Sync
+impl<W> core::marker::Unpin for rich_record::render::raster::Apng<W> where W: core::marker::Unpin
+impl<W> core::marker::UnsafeUnpin for rich_record::render::raster::Apng<W> where W: core::marker::UnsafeUnpin
+impl<W> core::panic::unwind_safe::RefUnwindSafe for rich_record::render::raster::Apng<W> where W: core::panic::unwind_safe::RefUnwindSafe
+impl<W> core::panic::unwind_safe::UnwindSafe for rich_record::render::raster::Apng<W> where W: core::panic::unwind_safe::UnwindSafe
+pub struct rich_record::render::raster::Canvas
+pub rich_record::render::raster::Canvas::height: usize
+pub rich_record::render::raster::Canvas::pixels: alloc::vec::Vec<u8>
+pub rich_record::render::raster::Canvas::width: usize
+impl rich_record::render::raster::Canvas
+pub fn rich_record::render::raster::Canvas::fill_circle(&mut self, f64, f64, f64, rich_record::screen::Rgb)
+pub fn rich_record::render::raster::Canvas::fill_rect(&mut self, i64, i64, i64, i64, rich_record::screen::Rgb)
+pub fn rich_record::render::raster::Canvas::fill_rounded(&mut self, f64, f64, f64, f64, f64, rich_record::screen::Rgb)
+pub fn rich_record::render::raster::Canvas::new(usize, usize, rich_record::screen::Rgb) -> rich_record::render::raster::Canvas
+pub fn rich_record::render::raster::Canvas::paste(&mut self, &rich_record::render::raster::Canvas, usize, usize)
+pub fn rich_record::render::raster::Canvas::png(&self) -> alloc::vec::Vec<u8>
+impl core::clone::Clone for rich_record::render::raster::Canvas
+pub fn rich_record::render::raster::Canvas::clone(&self) -> rich_record::render::raster::Canvas
+impl core::cmp::Eq for rich_record::render::raster::Canvas
+impl core::cmp::PartialEq for rich_record::render::raster::Canvas
+pub fn rich_record::render::raster::Canvas::eq(&self, &rich_record::render::raster::Canvas) -> bool
+impl core::fmt::Debug for rich_record::render::raster::Canvas
+pub fn rich_record::render::raster::Canvas::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::render::raster::Canvas
+impl core::marker::Freeze for rich_record::render::raster::Canvas
+impl core::marker::Send for rich_record::render::raster::Canvas
+impl core::marker::Sync for rich_record::render::raster::Canvas
+impl core::marker::Unpin for rich_record::render::raster::Canvas
+impl core::marker::UnsafeUnpin for rich_record::render::raster::Canvas
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::render::raster::Canvas
+impl core::panic::unwind_safe::UnwindSafe for rich_record::render::raster::Canvas
+pub struct rich_record::render::raster::Fonts
+impl rich_record::render::raster::Fonts
+pub fn rich_record::render::raster::Fonts::embedded() -> rich_record::render::raster::Fonts
+pub fn rich_record::render::raster::Fonts::load(alloc::vec::Vec<u8>) -> core::result::Result<rich_record::render::raster::Fonts, alloc::string::String>
+impl core::default::Default for rich_record::render::raster::Fonts
+pub fn rich_record::render::raster::Fonts::default() -> Self
+impl !core::marker::Freeze for rich_record::render::raster::Fonts
+impl core::marker::Send for rich_record::render::raster::Fonts
+impl core::marker::Sync for rich_record::render::raster::Fonts
+impl core::marker::Unpin for rich_record::render::raster::Fonts
+impl core::marker::UnsafeUnpin for rich_record::render::raster::Fonts
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::render::raster::Fonts
+impl core::panic::unwind_safe::UnwindSafe for rich_record::render::raster::Fonts
+pub struct rich_record::render::raster::Frame<'a>
+pub rich_record::render::raster::Frame::caption: core::option::Option<&'a str>
+pub rich_record::render::raster::Frame::key: core::option::Option<&'a str>
+pub rich_record::render::raster::Frame::size: f32
+pub rich_record::render::raster::Frame::title: &'a str
+pub rich_record::render::raster::Frame::window: bool
+impl<'a> core::clone::Clone for rich_record::render::raster::Frame<'a>
+pub fn rich_record::render::raster::Frame<'a>::clone(&self) -> rich_record::render::raster::Frame<'a>
+impl<'a> core::fmt::Debug for rich_record::render::raster::Frame<'a>
+pub fn rich_record::render::raster::Frame<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Freeze for rich_record::render::raster::Frame<'a>
+impl<'a> core::marker::Send for rich_record::render::raster::Frame<'a>
+impl<'a> core::marker::Sync for rich_record::render::raster::Frame<'a>
+impl<'a> core::marker::Unpin for rich_record::render::raster::Frame<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_record::render::raster::Frame<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_record::render::raster::Frame<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rich_record::render::raster::Frame<'a>
+pub const rich_record::render::raster::MAX_PIXELS: usize
+pub fn rich_record::render::raster::apng(&[(rich_record::render::raster::Canvas, f64)], impl std::io::Write) -> std::io::error::Result<()>
+pub fn rich_record::render::raster::gif(&[(rich_record::render::raster::Canvas, f64)], impl std::io::Write) -> std::io::error::Result<()>
+pub fn rich_record::render::raster::gif_streamed(usize, usize, impl core::ops::function::FnMut(&mut rich_record::render::raster::Sink<'_>) -> std::io::error::Result<()>, impl std::io::Write) -> std::io::error::Result<()>
+pub fn rich_record::render::raster::render(&rich_record::screen::Snapshot, &rich_record::screen::Theme, &rich_record::render::raster::Fonts, &rich_record::render::raster::Frame<'_>) -> rich_record::render::raster::Canvas
+pub fn rich_record::render::raster::size(usize, usize, &rich_record::render::raster::Fonts, &rich_record::render::raster::Frame<'_>) -> (usize, usize)
+pub type rich_record::render::raster::Sink<'a> = (dyn core::ops::function::FnMut(rich_record::render::raster::Canvas, f64) -> std::io::error::Result<()> + 'a)
+pub mod rich_record::render::svg
+pub struct rich_record::render::svg::Look<'a>
+pub rich_record::render::svg::Look::caption: core::option::Option<&'a str>
+pub rich_record::render::svg::Look::text_size: f32
+pub rich_record::render::svg::Look::title: &'a str
+pub rich_record::render::svg::Look::window: bool
+impl<'a> rich_record::render::Look<'a>
+pub fn rich_record::render::Look<'a>::window(&'a str) -> rich_record::render::Look<'a>
+impl<'a> core::clone::Clone for rich_record::render::Look<'a>
+pub fn rich_record::render::Look<'a>::clone(&self) -> rich_record::render::Look<'a>
+impl<'a> core::fmt::Debug for rich_record::render::Look<'a>
+pub fn rich_record::render::Look<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for rich_record::render::Look<'a>
+impl<'a> core::marker::Freeze for rich_record::render::Look<'a>
+impl<'a> core::marker::Send for rich_record::render::Look<'a>
+impl<'a> core::marker::Sync for rich_record::render::Look<'a>
+impl<'a> core::marker::Unpin for rich_record::render::Look<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_record::render::Look<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_record::render::Look<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rich_record::render::Look<'a>
+pub fn rich_record::render::svg::svg(&rich_record::screen::Snapshot, &rich_record::screen::Theme, &rich_record::render::Look<'_>) -> alloc::string::String
+pub mod rich_record::render::video
+pub struct rich_record::render::video::Mp4
+impl rich_record::render::video::Mp4
+pub fn rich_record::render::video::Mp4::finish(self) -> std::io::error::Result<()>
+pub fn rich_record::render::video::Mp4::start(&std::path::Path, usize, usize) -> std::io::error::Result<rich_record::render::video::Mp4>
+pub fn rich_record::render::video::Mp4::start_at(&std::path::Path, usize, usize, f64) -> std::io::error::Result<rich_record::render::video::Mp4>
+pub fn rich_record::render::video::Mp4::write(&mut self, &rich_record::render::raster::Canvas, f64) -> std::io::error::Result<()>
+impl core::ops::drop::Drop for rich_record::render::video::Mp4
+pub fn rich_record::render::video::Mp4::drop(&mut self)
+impl core::marker::Freeze for rich_record::render::video::Mp4
+impl core::marker::Send for rich_record::render::video::Mp4
+impl core::marker::Sync for rich_record::render::video::Mp4
+impl core::marker::Unpin for rich_record::render::video::Mp4
+impl core::marker::UnsafeUnpin for rich_record::render::video::Mp4
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::render::video::Mp4
+impl core::panic::unwind_safe::UnwindSafe for rich_record::render::video::Mp4
+pub struct rich_record::render::video::VideoFrame
+pub rich_record::render::video::VideoFrame::cursor: bool
+pub rich_record::render::video::VideoFrame::frame: usize
+pub rich_record::render::video::VideoFrame::key: core::option::Option<alloc::string::String>
+pub rich_record::render::video::VideoFrame::seconds: f64
+impl rich_record::render::video::VideoFrame
+pub fn rich_record::render::video::VideoFrame::snapshot(&self, &rich_record::session::Timeline) -> rich_record::screen::Snapshot
+impl core::clone::Clone for rich_record::render::video::VideoFrame
+pub fn rich_record::render::video::VideoFrame::clone(&self) -> rich_record::render::video::VideoFrame
+impl core::cmp::PartialEq for rich_record::render::video::VideoFrame
+pub fn rich_record::render::video::VideoFrame::eq(&self, &rich_record::render::video::VideoFrame) -> bool
+impl core::fmt::Debug for rich_record::render::video::VideoFrame
+pub fn rich_record::render::video::VideoFrame::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::render::video::VideoFrame
+impl core::marker::Freeze for rich_record::render::video::VideoFrame
+impl core::marker::Send for rich_record::render::video::VideoFrame
+impl core::marker::Sync for rich_record::render::video::VideoFrame
+impl core::marker::Unpin for rich_record::render::video::VideoFrame
+impl core::marker::UnsafeUnpin for rich_record::render::video::VideoFrame
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::render::video::VideoFrame
+impl core::panic::unwind_safe::UnwindSafe for rich_record::render::video::VideoFrame
+pub fn rich_record::render::video::ffmpeg_available() -> bool
+pub fn rich_record::render::video::mp4(&[(rich_record::render::raster::Canvas, f64)], &std::path::Path) -> std::io::error::Result<()>
+pub fn rich_record::render::video::render(&rich_record::session::Timeline, &[rich_record::render::video::VideoFrame], &rich_record::screen::Theme, &rich_record::render::raster::Fonts, &rich_record::render::Look<'_>) -> alloc::vec::Vec<(rich_record::render::raster::Canvas, f64)>
+pub fn rich_record::render::video::render_each(&rich_record::session::Timeline, &[rich_record::render::video::VideoFrame], &rich_record::screen::Theme, &rich_record::render::raster::Fonts, &rich_record::render::Look<'_>, &mut rich_record::render::raster::Sink<'_>) -> std::io::error::Result<()>
+pub fn rich_record::render::video::sample(&rich_record::session::Timeline, f64) -> alloc::vec::Vec<rich_record::render::video::VideoFrame>
+pub fn rich_record::render::video::sample_with(&rich_record::session::Timeline, f64, bool) -> alloc::vec::Vec<rich_record::render::video::VideoFrame>
+pub fn rich_record::render::video::size(&rich_record::session::Timeline, &[rich_record::render::video::VideoFrame], &rich_record::render::raster::Fonts, &rich_record::render::Look<'_>) -> (usize, usize)
+pub struct rich_record::render::Look<'a>
+pub rich_record::render::Look::caption: core::option::Option<&'a str>
+pub rich_record::render::Look::text_size: f32
+pub rich_record::render::Look::title: &'a str
+pub rich_record::render::Look::window: bool
+impl<'a> rich_record::render::Look<'a>
+pub fn rich_record::render::Look<'a>::window(&'a str) -> rich_record::render::Look<'a>
+impl<'a> core::clone::Clone for rich_record::render::Look<'a>
+pub fn rich_record::render::Look<'a>::clone(&self) -> rich_record::render::Look<'a>
+impl<'a> core::fmt::Debug for rich_record::render::Look<'a>
+pub fn rich_record::render::Look<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for rich_record::render::Look<'a>
+impl<'a> core::marker::Freeze for rich_record::render::Look<'a>
+impl<'a> core::marker::Send for rich_record::render::Look<'a>
+impl<'a> core::marker::Sync for rich_record::render::Look<'a>
+impl<'a> core::marker::Unpin for rich_record::render::Look<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_record::render::Look<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_record::render::Look<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rich_record::render::Look<'a>
+pub mod rich_record::screen
+pub struct rich_record::screen::Cell
+pub rich_record::screen::Cell::bg: rich_record::screen::Rgb
+pub rich_record::screen::Cell::bold: bool
+pub rich_record::screen::Cell::fg: rich_record::screen::Rgb
+pub rich_record::screen::Cell::italic: bool
+pub rich_record::screen::Cell::text: alloc::string::String
+pub rich_record::screen::Cell::underline: bool
+pub rich_record::screen::Cell::width: u8
+impl rich_record::screen::Cell
+pub fn rich_record::screen::Cell::is_continuation(&self) -> bool
+pub fn rich_record::screen::Cell::same_style(&self, &rich_record::screen::Cell) -> bool
+impl core::clone::Clone for rich_record::screen::Cell
+pub fn rich_record::screen::Cell::clone(&self) -> rich_record::screen::Cell
+impl core::cmp::Eq for rich_record::screen::Cell
+impl core::cmp::PartialEq for rich_record::screen::Cell
+pub fn rich_record::screen::Cell::eq(&self, &rich_record::screen::Cell) -> bool
+impl core::fmt::Debug for rich_record::screen::Cell
+pub fn rich_record::screen::Cell::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_record::screen::Cell
+pub fn rich_record::screen::Cell::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_record::screen::Cell
+impl core::marker::Freeze for rich_record::screen::Cell
+impl core::marker::Send for rich_record::screen::Cell
+impl core::marker::Sync for rich_record::screen::Cell
+impl core::marker::Unpin for rich_record::screen::Cell
+impl core::marker::UnsafeUnpin for rich_record::screen::Cell
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::screen::Cell
+impl core::panic::unwind_safe::UnwindSafe for rich_record::screen::Cell
+pub struct rich_record::screen::Packed
+impl rich_record::screen::Packed
+pub fn rich_record::screen::Packed::columns(&self) -> usize
+pub fn rich_record::screen::Packed::cursor(&self) -> core::option::Option<(u16, u16)>
+pub fn rich_record::screen::Packed::height(&self) -> usize
+pub fn rich_record::screen::Packed::images(&self) -> &[rich_record::graphics::Tile]
+pub fn rich_record::screen::Packed::pack(&rich_record::screen::Snapshot, core::option::Option<&rich_record::screen::Packed>) -> rich_record::screen::Packed
+pub fn rich_record::screen::Packed::rows(&self) -> &[alloc::sync::Arc<rich_record::screen::PackedRow>]
+pub fn rich_record::screen::Packed::same_screen(&self, &rich_record::screen::Packed) -> bool
+pub fn rich_record::screen::Packed::snapshot(&self) -> rich_record::screen::Snapshot
+impl core::clone::Clone for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::clone(&self) -> rich_record::screen::Packed
+impl core::cmp::Eq for rich_record::screen::Packed
+impl core::cmp::PartialEq for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::eq(&self, &rich_record::screen::Packed) -> bool
+impl core::convert::From<&rich_record::screen::Snapshot> for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::from(&rich_record::screen::Snapshot) -> rich_record::screen::Packed
+impl core::default::Default for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::default() -> rich_record::screen::Packed
+impl core::fmt::Debug for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_record::screen::Packed
+impl core::marker::Freeze for rich_record::screen::Packed
+impl core::marker::Send for rich_record::screen::Packed
+impl core::marker::Sync for rich_record::screen::Packed
+impl core::marker::Unpin for rich_record::screen::Packed
+impl core::marker::UnsafeUnpin for rich_record::screen::Packed
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::screen::Packed
+impl core::panic::unwind_safe::UnwindSafe for rich_record::screen::Packed
+pub struct rich_record::screen::PackedRow
+impl rich_record::screen::PackedRow
+pub fn rich_record::screen::PackedRow::cells(&self) -> alloc::vec::Vec<rich_record::screen::Cell>
+impl core::cmp::Eq for rich_record::screen::PackedRow
+impl core::cmp::PartialEq for rich_record::screen::PackedRow
+pub fn rich_record::screen::PackedRow::eq(&self, &rich_record::screen::PackedRow) -> bool
+impl core::fmt::Debug for rich_record::screen::PackedRow
+pub fn rich_record::screen::PackedRow::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_record::screen::PackedRow
+pub fn rich_record::screen::PackedRow::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_record::screen::PackedRow
+impl core::marker::Freeze for rich_record::screen::PackedRow
+impl core::marker::Send for rich_record::screen::PackedRow
+impl core::marker::Sync for rich_record::screen::PackedRow
+impl core::marker::Unpin for rich_record::screen::PackedRow
+impl core::marker::UnsafeUnpin for rich_record::screen::PackedRow
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::screen::PackedRow
+impl core::panic::unwind_safe::UnwindSafe for rich_record::screen::PackedRow
+pub struct rich_record::screen::Snapshot
+pub rich_record::screen::Snapshot::cursor: core::option::Option<(u16, u16)>
+pub rich_record::screen::Snapshot::images: alloc::vec::Vec<rich_record::graphics::Tile>
+pub rich_record::screen::Snapshot::rows: alloc::vec::Vec<alloc::vec::Vec<rich_record::screen::Cell>>
+impl rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::columns(&self) -> usize
+pub fn rich_record::screen::Snapshot::export_frame(&self, &rich_record::screen::Theme) -> rich_ext::frame::Frame
+pub fn rich_record::screen::Snapshot::from_frame(&rich_ext::frame::Frame, &rich_record::screen::Theme, usize) -> rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::from_screen(&vt100::screen::Screen, &rich_record::screen::Theme) -> rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::text_grid(&self) -> alloc::string::String
+pub fn rich_record::screen::Snapshot::to_frame(&self) -> rich_ext::frame::Frame
+pub fn rich_record::screen::Snapshot::to_segments(&self) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::clone::Clone for rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::clone(&self) -> rich_record::screen::Snapshot
+impl core::cmp::Eq for rich_record::screen::Snapshot
+impl core::cmp::PartialEq for rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::eq(&self, &rich_record::screen::Snapshot) -> bool
+impl core::convert::From<&rich_record::screen::Snapshot> for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::from(&rich_record::screen::Snapshot) -> rich_record::screen::Packed
+impl core::default::Default for rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::default() -> rich_record::screen::Snapshot
+impl core::fmt::Debug for rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_record::screen::Snapshot
+impl core::marker::Freeze for rich_record::screen::Snapshot
+impl core::marker::Send for rich_record::screen::Snapshot
+impl core::marker::Sync for rich_record::screen::Snapshot
+impl core::marker::Unpin for rich_record::screen::Snapshot
+impl core::marker::UnsafeUnpin for rich_record::screen::Snapshot
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::screen::Snapshot
+impl core::panic::unwind_safe::UnwindSafe for rich_record::screen::Snapshot
+pub struct rich_record::screen::Theme
+pub rich_record::screen::Theme::ansi: [rich_record::screen::Rgb; 16]
+pub rich_record::screen::Theme::background: rich_record::screen::Rgb
+pub rich_record::screen::Theme::foreground: rich_record::screen::Rgb
+impl rich_record::screen::Theme
+pub fn rich_record::screen::Theme::indexed(&self, u8) -> rich_record::screen::Rgb
+pub fn rich_record::screen::Theme::terminal_theme(&self) -> rich::terminal_theme::TerminalTheme
+impl core::clone::Clone for rich_record::screen::Theme
+pub fn rich_record::screen::Theme::clone(&self) -> rich_record::screen::Theme
+impl core::cmp::Eq for rich_record::screen::Theme
+impl core::cmp::PartialEq for rich_record::screen::Theme
+pub fn rich_record::screen::Theme::eq(&self, &rich_record::screen::Theme) -> bool
+impl core::default::Default for rich_record::screen::Theme
+pub fn rich_record::screen::Theme::default() -> Self
+impl core::fmt::Debug for rich_record::screen::Theme
+pub fn rich_record::screen::Theme::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::screen::Theme
+impl core::marker::Freeze for rich_record::screen::Theme
+impl core::marker::Send for rich_record::screen::Theme
+impl core::marker::Sync for rich_record::screen::Theme
+impl core::marker::Unpin for rich_record::screen::Theme
+impl core::marker::UnsafeUnpin for rich_record::screen::Theme
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::screen::Theme
+impl core::panic::unwind_safe::UnwindSafe for rich_record::screen::Theme
+pub type rich_record::screen::Rgb = (u8, u8, u8)
+pub mod rich_record::session
+pub enum rich_record::session::Event
+pub rich_record::session::Event::Input(alloc::string::String)
+pub rich_record::session::Event::Output(alloc::string::String)
+pub rich_record::session::Event::Resize
+pub rich_record::session::Event::Resize::columns: u16
+pub rich_record::session::Event::Resize::rows: u16
+impl core::clone::Clone for rich_record::session::Event
+pub fn rich_record::session::Event::clone(&self) -> rich_record::session::Event
+impl core::cmp::Eq for rich_record::session::Event
+impl core::cmp::PartialEq for rich_record::session::Event
+pub fn rich_record::session::Event::eq(&self, &rich_record::session::Event) -> bool
+impl core::fmt::Debug for rich_record::session::Event
+pub fn rich_record::session::Event::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::session::Event
+impl core::marker::Freeze for rich_record::session::Event
+impl core::marker::Send for rich_record::session::Event
+impl core::marker::Sync for rich_record::session::Event
+impl core::marker::Unpin for rich_record::session::Event
+impl core::marker::UnsafeUnpin for rich_record::session::Event
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::session::Event
+impl core::panic::unwind_safe::UnwindSafe for rich_record::session::Event
+pub struct rich_record::session::Session
+impl rich_record::session::Session
+pub fn rich_record::session::Session::alive(&self) -> bool
+pub fn rich_record::session::Session::contents(&self) -> alloc::string::String
+pub fn rich_record::session::Session::error(&self) -> core::option::Option<alloc::string::String>
+pub fn rich_record::session::Session::finish(self) -> rich_record::session::Timeline
+pub fn rich_record::session::Session::hide(&self)
+pub fn rich_record::session::Session::keyboard_flags(&self) -> u8
+pub fn rich_record::session::Session::mark(&self)
+pub fn rich_record::session::Session::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_record::session::Session::seen(&self, impl core::ops::function::Fn(&str) -> bool) -> bool
+pub fn rich_record::session::Session::send(&mut self, &str, core::option::Option<alloc::string::String>) -> std::io::error::Result<()>
+pub fn rich_record::session::Session::set_frame_rate(&self, f64)
+pub fn rich_record::session::Session::set_kitty_keyboard(&self, bool)
+pub fn rich_record::session::Session::show(&self)
+pub fn rich_record::session::Session::snapshot(&self) -> rich_record::screen::Snapshot
+pub fn rich_record::session::Session::start(&[alloc::string::String], &std::path::Path, u16, u16, &[(alloc::string::String, alloc::string::String)], rich_record::screen::Theme) -> std::io::error::Result<rich_record::session::Session>
+impl core::ops::drop::Drop for rich_record::session::Session
+pub fn rich_record::session::Session::drop(&mut self)
+impl core::marker::Freeze for rich_record::session::Session
+impl core::marker::Send for rich_record::session::Session
+impl !core::marker::Sync for rich_record::session::Session
+impl core::marker::Unpin for rich_record::session::Session
+impl core::marker::UnsafeUnpin for rich_record::session::Session
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_record::session::Session
+impl !core::panic::unwind_safe::UnwindSafe for rich_record::session::Session
+pub struct rich_record::session::Timeline
+pub rich_record::session::Timeline::events: alloc::vec::Vec<(f64, rich_record::session::Event)>
+pub rich_record::session::Timeline::frames: alloc::vec::Vec<(f64, rich_record::screen::Packed)>
+pub rich_record::session::Timeline::keys: alloc::vec::Vec<(f64, alloc::string::String)>
+pub rich_record::session::Timeline::truncated: bool
+impl core::clone::Clone for rich_record::session::Timeline
+pub fn rich_record::session::Timeline::clone(&self) -> rich_record::session::Timeline
+impl core::default::Default for rich_record::session::Timeline
+pub fn rich_record::session::Timeline::default() -> rich_record::session::Timeline
+impl core::fmt::Debug for rich_record::session::Timeline
+pub fn rich_record::session::Timeline::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_record::session::Timeline
+impl core::marker::Send for rich_record::session::Timeline
+impl core::marker::Sync for rich_record::session::Timeline
+impl core::marker::Unpin for rich_record::session::Timeline
+impl core::marker::UnsafeUnpin for rich_record::session::Timeline
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::session::Timeline
+impl core::panic::unwind_safe::UnwindSafe for rich_record::session::Timeline
+pub const rich_record::session::FRAME_RATE: f64
+pub const rich_record::session::MAX_VIDEO: core::time::Duration
+pub mod rich_record::tape
+pub enum rich_record::tape::Button
+pub rich_record::tape::Button::Left
+pub rich_record::tape::Button::Middle
+pub rich_record::tape::Button::Right
+impl core::clone::Clone for rich_record::tape::Button
+pub fn rich_record::tape::Button::clone(&self) -> rich_record::tape::Button
+impl core::cmp::Eq for rich_record::tape::Button
+impl core::cmp::PartialEq for rich_record::tape::Button
+pub fn rich_record::tape::Button::eq(&self, &rich_record::tape::Button) -> bool
+impl core::fmt::Debug for rich_record::tape::Button
+pub fn rich_record::tape::Button::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_record::tape::Button
+impl core::marker::StructuralPartialEq for rich_record::tape::Button
+impl core::marker::Freeze for rich_record::tape::Button
+impl core::marker::Send for rich_record::tape::Button
+impl core::marker::Sync for rich_record::tape::Button
+impl core::marker::Unpin for rich_record::tape::Button
+impl core::marker::UnsafeUnpin for rich_record::tape::Button
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Button
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Button
+pub enum rich_record::tape::Format
+pub rich_record::tape::Format::Apng
+pub rich_record::tape::Format::Cast
+pub rich_record::tape::Format::Gif
+pub rich_record::tape::Format::Html
+pub rich_record::tape::Format::Mp4
+pub rich_record::tape::Format::Png
+pub rich_record::tape::Format::Svg
+impl rich_record::tape::Format
+pub const rich_record::tape::Format::ALL: [rich_record::tape::Format; 7]
+pub fn rich_record::tape::Format::extension(self) -> &'static str
+pub fn rich_record::tape::Format::parse(&str) -> core::option::Option<rich_record::tape::Format>
+pub fn rich_record::tape::Format::per_tape(self) -> bool
+impl core::clone::Clone for rich_record::tape::Format
+pub fn rich_record::tape::Format::clone(&self) -> rich_record::tape::Format
+impl core::cmp::Eq for rich_record::tape::Format
+impl core::cmp::Ord for rich_record::tape::Format
+pub fn rich_record::tape::Format::cmp(&self, &rich_record::tape::Format) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_record::tape::Format
+pub fn rich_record::tape::Format::eq(&self, &rich_record::tape::Format) -> bool
+impl core::cmp::PartialOrd for rich_record::tape::Format
+pub fn rich_record::tape::Format::partial_cmp(&self, &rich_record::tape::Format) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for rich_record::tape::Format
+pub fn rich_record::tape::Format::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_record::tape::Format
+pub fn rich_record::tape::Format::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_record::tape::Format
+impl core::marker::StructuralPartialEq for rich_record::tape::Format
+impl core::marker::Freeze for rich_record::tape::Format
+impl core::marker::Send for rich_record::tape::Format
+impl core::marker::Sync for rich_record::tape::Format
+impl core::marker::Unpin for rich_record::tape::Format
+impl core::marker::UnsafeUnpin for rich_record::tape::Format
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Format
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Format
+pub enum rich_record::tape::Key
+pub rich_record::tape::Key::Alt(char)
+pub rich_record::tape::Key::Backspace
+pub rich_record::tape::Key::Ctrl(char)
+pub rich_record::tape::Key::Delete
+pub rich_record::tape::Key::Down
+pub rich_record::tape::Key::End
+pub rich_record::tape::Key::Enter
+pub rich_record::tape::Key::Escape
+pub rich_record::tape::Key::F(u8)
+pub rich_record::tape::Key::Home
+pub rich_record::tape::Key::Insert
+pub rich_record::tape::Key::Left
+pub rich_record::tape::Key::Modified
+pub rich_record::tape::Key::Modified::key: rich_record::tape::Modifiable
+pub rich_record::tape::Key::Modified::mods: u8
+pub rich_record::tape::Key::PageDown
+pub rich_record::tape::Key::PageUp
+pub rich_record::tape::Key::Right
+pub rich_record::tape::Key::ShiftTab
+pub rich_record::tape::Key::Space
+pub rich_record::tape::Key::Tab
+pub rich_record::tape::Key::Up
+impl rich_record::tape::Key
+pub fn rich_record::tape::Key::bytes(self) -> alloc::string::String
+pub fn rich_record::tape::Key::label(self) -> alloc::string::String
+impl core::clone::Clone for rich_record::tape::Key
+pub fn rich_record::tape::Key::clone(&self) -> rich_record::tape::Key
+impl core::cmp::Eq for rich_record::tape::Key
+impl core::cmp::PartialEq for rich_record::tape::Key
+pub fn rich_record::tape::Key::eq(&self, &rich_record::tape::Key) -> bool
+impl core::fmt::Debug for rich_record::tape::Key
+pub fn rich_record::tape::Key::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_record::tape::Key
+impl core::marker::StructuralPartialEq for rich_record::tape::Key
+impl core::marker::Freeze for rich_record::tape::Key
+impl core::marker::Send for rich_record::tape::Key
+impl core::marker::Sync for rich_record::tape::Key
+impl core::marker::Unpin for rich_record::tape::Key
+impl core::marker::UnsafeUnpin for rich_record::tape::Key
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Key
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Key
+pub enum rich_record::tape::Modifiable
+pub rich_record::tape::Modifiable::Delete
+pub rich_record::tape::Modifiable::Down
+pub rich_record::tape::Modifiable::End
+pub rich_record::tape::Modifiable::F(u8)
+pub rich_record::tape::Modifiable::Home
+pub rich_record::tape::Modifiable::Insert
+pub rich_record::tape::Modifiable::Left
+pub rich_record::tape::Modifiable::PageDown
+pub rich_record::tape::Modifiable::PageUp
+pub rich_record::tape::Modifiable::Right
+pub rich_record::tape::Modifiable::Up
+impl core::clone::Clone for rich_record::tape::Modifiable
+pub fn rich_record::tape::Modifiable::clone(&self) -> rich_record::tape::Modifiable
+impl core::cmp::Eq for rich_record::tape::Modifiable
+impl core::cmp::PartialEq for rich_record::tape::Modifiable
+pub fn rich_record::tape::Modifiable::eq(&self, &rich_record::tape::Modifiable) -> bool
+impl core::fmt::Debug for rich_record::tape::Modifiable
+pub fn rich_record::tape::Modifiable::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_record::tape::Modifiable
+impl core::marker::StructuralPartialEq for rich_record::tape::Modifiable
+impl core::marker::Freeze for rich_record::tape::Modifiable
+impl core::marker::Send for rich_record::tape::Modifiable
+impl core::marker::Sync for rich_record::tape::Modifiable
+impl core::marker::Unpin for rich_record::tape::Modifiable
+impl core::marker::UnsafeUnpin for rich_record::tape::Modifiable
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Modifiable
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Modifiable
+pub enum rich_record::tape::MouseAction
+pub rich_record::tape::MouseAction::Click(rich_record::tape::Button)
+pub rich_record::tape::MouseAction::DoubleClick
+pub rich_record::tape::MouseAction::Drag
+pub rich_record::tape::MouseAction::Drag::to: (u16, u16)
+pub rich_record::tape::MouseAction::Move
+pub rich_record::tape::MouseAction::Scroll
+pub rich_record::tape::MouseAction::Scroll::up: bool
+impl core::clone::Clone for rich_record::tape::MouseAction
+pub fn rich_record::tape::MouseAction::clone(&self) -> rich_record::tape::MouseAction
+impl core::cmp::Eq for rich_record::tape::MouseAction
+impl core::cmp::PartialEq for rich_record::tape::MouseAction
+pub fn rich_record::tape::MouseAction::eq(&self, &rich_record::tape::MouseAction) -> bool
+impl core::fmt::Debug for rich_record::tape::MouseAction
+pub fn rich_record::tape::MouseAction::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_record::tape::MouseAction
+impl core::marker::StructuralPartialEq for rich_record::tape::MouseAction
+impl core::marker::Freeze for rich_record::tape::MouseAction
+impl core::marker::Send for rich_record::tape::MouseAction
+impl core::marker::Sync for rich_record::tape::MouseAction
+impl core::marker::Unpin for rich_record::tape::MouseAction
+impl core::marker::UnsafeUnpin for rich_record::tape::MouseAction
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::MouseAction
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::MouseAction
+pub enum rich_record::tape::Pattern
+pub rich_record::tape::Pattern::Regex(fancy_regex::Regex)
+pub rich_record::tape::Pattern::Text(alloc::string::String)
+impl rich_record::tape::Pattern
+pub fn rich_record::tape::Pattern::is_match(&self, &str) -> bool
+impl core::clone::Clone for rich_record::tape::Pattern
+pub fn rich_record::tape::Pattern::clone(&self) -> rich_record::tape::Pattern
+impl core::fmt::Debug for rich_record::tape::Pattern
+pub fn rich_record::tape::Pattern::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_record::tape::Pattern
+pub fn rich_record::tape::Pattern::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_record::tape::Pattern
+impl core::marker::Send for rich_record::tape::Pattern
+impl core::marker::Sync for rich_record::tape::Pattern
+impl core::marker::Unpin for rich_record::tape::Pattern
+impl core::marker::UnsafeUnpin for rich_record::tape::Pattern
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Pattern
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Pattern
+pub enum rich_record::tape::Shell
+pub rich_record::tape::Shell::Bash
+pub rich_record::tape::Shell::Fish
+pub rich_record::tape::Shell::Sh
+pub rich_record::tape::Shell::Zsh
+impl rich_record::tape::Shell
+pub fn rich_record::tape::Shell::name(self) -> &'static str
+pub fn rich_record::tape::Shell::parse(&str) -> core::option::Option<rich_record::tape::Shell>
+impl core::clone::Clone for rich_record::tape::Shell
+pub fn rich_record::tape::Shell::clone(&self) -> rich_record::tape::Shell
+impl core::cmp::Eq for rich_record::tape::Shell
+impl core::cmp::PartialEq for rich_record::tape::Shell
+pub fn rich_record::tape::Shell::eq(&self, &rich_record::tape::Shell) -> bool
+impl core::default::Default for rich_record::tape::Shell
+pub fn rich_record::tape::Shell::default() -> rich_record::tape::Shell
+impl core::fmt::Debug for rich_record::tape::Shell
+pub fn rich_record::tape::Shell::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_record::tape::Shell
+impl core::marker::StructuralPartialEq for rich_record::tape::Shell
+impl core::marker::Freeze for rich_record::tape::Shell
+impl core::marker::Send for rich_record::tape::Shell
+impl core::marker::Sync for rich_record::tape::Shell
+impl core::marker::Unpin for rich_record::tape::Shell
+impl core::marker::UnsafeUnpin for rich_record::tape::Shell
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Shell
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Shell
+pub enum rich_record::tape::Step
+pub rich_record::tape::Step::Exec(alloc::string::String)
+pub rich_record::tape::Step::Hide
+pub rich_record::tape::Step::Hold
+pub rich_record::tape::Step::Hold::duration: core::time::Duration
+pub rich_record::tape::Step::Hold::key: rich_record::keyboard::Press
+pub rich_record::tape::Step::Key
+pub rich_record::tape::Step::Key::count: u32
+pub rich_record::tape::Step::Key::key: rich_record::tape::Key
+pub rich_record::tape::Step::KeyDown(rich_record::keyboard::Press)
+pub rich_record::tape::Step::KeyUp(rich_record::keyboard::Press)
+pub rich_record::tape::Step::Mouse(rich_record::tape::Mouse)
+pub rich_record::tape::Step::Resize
+pub rich_record::tape::Step::Resize::columns: u16
+pub rich_record::tape::Step::Resize::rows: u16
+pub rich_record::tape::Step::Screenshot(alloc::string::String)
+pub rich_record::tape::Step::Show
+pub rich_record::tape::Step::Sleep(core::time::Duration)
+pub rich_record::tape::Step::Timeout(core::time::Duration)
+pub rich_record::tape::Step::Type(alloc::string::String)
+pub rich_record::tape::Step::TypingDelay(core::time::Duration)
+pub rich_record::tape::Step::Wait
+pub rich_record::tape::Step::Wait::pattern: rich_record::tape::Pattern
+pub rich_record::tape::Step::Wait::timeout: core::option::Option<core::time::Duration>
+pub rich_record::tape::Step::Write
+pub rich_record::tape::Step::Write::content: alloc::string::String
+pub rich_record::tape::Step::Write::path: alloc::string::String
+impl core::clone::Clone for rich_record::tape::Step
+pub fn rich_record::tape::Step::clone(&self) -> rich_record::tape::Step
+impl core::fmt::Debug for rich_record::tape::Step
+pub fn rich_record::tape::Step::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_record::tape::Step
+impl core::marker::Send for rich_record::tape::Step
+impl core::marker::Sync for rich_record::tape::Step
+impl core::marker::Unpin for rich_record::tape::Step
+impl core::marker::UnsafeUnpin for rich_record::tape::Step
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Step
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Step
+pub struct rich_record::tape::Mouse
+pub rich_record::tape::Mouse::action: rich_record::tape::MouseAction
+pub rich_record::tape::Mouse::at: (u16, u16)
+pub rich_record::tape::Mouse::count: u32
+impl rich_record::tape::Mouse
+pub fn rich_record::tape::Mouse::label(&self) -> alloc::string::String
+pub fn rich_record::tape::Mouse::reports(&self) -> alloc::vec::Vec<alloc::string::String>
+impl core::clone::Clone for rich_record::tape::Mouse
+pub fn rich_record::tape::Mouse::clone(&self) -> rich_record::tape::Mouse
+impl core::cmp::Eq for rich_record::tape::Mouse
+impl core::cmp::PartialEq for rich_record::tape::Mouse
+pub fn rich_record::tape::Mouse::eq(&self, &rich_record::tape::Mouse) -> bool
+impl core::fmt::Debug for rich_record::tape::Mouse
+pub fn rich_record::tape::Mouse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_record::tape::Mouse
+impl core::marker::StructuralPartialEq for rich_record::tape::Mouse
+impl core::marker::Freeze for rich_record::tape::Mouse
+impl core::marker::Send for rich_record::tape::Mouse
+impl core::marker::Sync for rich_record::tape::Mouse
+impl core::marker::Unpin for rich_record::tape::Mouse
+impl core::marker::UnsafeUnpin for rich_record::tape::Mouse
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Mouse
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Mouse
+pub struct rich_record::tape::Output
+pub rich_record::tape::Output::format: rich_record::tape::Format
+pub rich_record::tape::Output::path: core::option::Option<alloc::string::String>
+impl core::clone::Clone for rich_record::tape::Output
+pub fn rich_record::tape::Output::clone(&self) -> rich_record::tape::Output
+impl core::cmp::Eq for rich_record::tape::Output
+impl core::cmp::PartialEq for rich_record::tape::Output
+pub fn rich_record::tape::Output::eq(&self, &rich_record::tape::Output) -> bool
+impl core::fmt::Debug for rich_record::tape::Output
+pub fn rich_record::tape::Output::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::tape::Output
+impl core::marker::Freeze for rich_record::tape::Output
+impl core::marker::Send for rich_record::tape::Output
+impl core::marker::Sync for rich_record::tape::Output
+impl core::marker::Unpin for rich_record::tape::Output
+impl core::marker::UnsafeUnpin for rich_record::tape::Output
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Output
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Output
+pub struct rich_record::tape::Tape
+pub rich_record::tape::Tape::caption: core::option::Option<alloc::string::String>
+pub rich_record::tape::Tape::columns: u16
+pub rich_record::tape::Tape::env: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub rich_record::tape::Tape::font_size: core::option::Option<u16>
+pub rich_record::tape::Tape::frame_rate: core::option::Option<f64>
+pub rich_record::tape::Tape::key_overlay: core::option::Option<bool>
+pub rich_record::tape::Tape::key_repeat: core::option::Option<(core::time::Duration, core::time::Duration)>
+pub rich_record::tape::Tape::kitty_keyboard: bool
+pub rich_record::tape::Tape::masks: alloc::vec::Vec<(fancy_regex::Regex, alloc::string::String)>
+pub rich_record::tape::Tape::outputs: alloc::vec::Vec<rich_record::tape::Output>
+pub rich_record::tape::Tape::rows: u16
+pub rich_record::tape::Tape::shell: rich_record::tape::Shell
+pub rich_record::tape::Tape::steps: alloc::vec::Vec<(usize, rich_record::tape::Step)>
+pub rich_record::tape::Tape::title: core::option::Option<alloc::string::String>
+pub rich_record::tape::Tape::window_frame: core::option::Option<bool>
+impl rich_record::tape::Tape
+pub fn rich_record::tape::Tape::screenshots(&self) -> alloc::vec::Vec<&str>
+impl core::clone::Clone for rich_record::tape::Tape
+pub fn rich_record::tape::Tape::clone(&self) -> rich_record::tape::Tape
+impl core::fmt::Debug for rich_record::tape::Tape
+pub fn rich_record::tape::Tape::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_record::tape::Tape
+impl core::marker::Send for rich_record::tape::Tape
+impl core::marker::Sync for rich_record::tape::Tape
+impl core::marker::Unpin for rich_record::tape::Tape
+impl core::marker::UnsafeUnpin for rich_record::tape::Tape
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Tape
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Tape
+pub struct rich_record::tape::TapeError
+pub rich_record::tape::TapeError::line: usize
+pub rich_record::tape::TapeError::message: alloc::string::String
+impl rich_record::tape::TapeError
+pub fn rich_record::tape::TapeError::new(usize, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for rich_record::tape::TapeError
+pub fn rich_record::tape::TapeError::clone(&self) -> rich_record::tape::TapeError
+impl core::cmp::Eq for rich_record::tape::TapeError
+impl core::cmp::PartialEq for rich_record::tape::TapeError
+pub fn rich_record::tape::TapeError::eq(&self, &rich_record::tape::TapeError) -> bool
+impl core::error::Error for rich_record::tape::TapeError
+impl core::fmt::Debug for rich_record::tape::TapeError
+pub fn rich_record::tape::TapeError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_record::tape::TapeError
+pub fn rich_record::tape::TapeError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::tape::TapeError
+impl core::marker::Freeze for rich_record::tape::TapeError
+impl core::marker::Send for rich_record::tape::TapeError
+impl core::marker::Sync for rich_record::tape::TapeError
+impl core::marker::Unpin for rich_record::tape::TapeError
+impl core::marker::UnsafeUnpin for rich_record::tape::TapeError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::TapeError
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::TapeError
+pub const rich_record::tape::FONT_SIZES: core::ops::range::RangeInclusive<u16>
+pub const rich_record::tape::FRAME_RATES: core::ops::range::RangeInclusive<f64>
+pub const rich_record::tape::MAX_COLUMNS: u16
+pub const rich_record::tape::MAX_DURATION: core::time::Duration
+pub const rich_record::tape::MAX_ROWS: u16
+pub const rich_record::tape::MIN_COLUMNS: u16
+pub const rich_record::tape::MIN_ROWS: u16
+pub fn rich_record::tape::apply_masks(&[(fancy_regex::Regex, alloc::string::String)], &str) -> alloc::string::String
+pub fn rich_record::tape::parse(&str) -> core::result::Result<rich_record::tape::Tape, rich_record::tape::TapeError>
+pub fn rich_record::tape::parse_duration(&str) -> core::option::Option<core::time::Duration>
+pub fn rich_record::tape::parse_size(&str) -> core::option::Option<(u16, u16)>
+pub fn rich_record::tape::screenshot_name_allowed(&str) -> bool
+pub fn rich_record::tape::size_allowed(u16, u16) -> bool
+pub fn rich_record::tape::unescape(&str) -> alloc::string::String
+pub fn rich_record::tape::write_path_allowed(&str) -> bool
+pub mod rich_record::terminal
+pub struct rich_record::terminal::Terminal
+impl rich_record::terminal::Terminal
+pub fn rich_record::terminal::Terminal::cell_text<'a>(&self, &'a str) -> core::option::Option<alloc::borrow::Cow<'a, str>>
+pub fn rich_record::terminal::Terminal::contents(&self) -> alloc::string::String
+pub fn rich_record::terminal::Terminal::error(&self) -> core::option::Option<&str>
+pub fn rich_record::terminal::Terminal::in_synchronized_update(&self) -> bool
+pub fn rich_record::terminal::Terminal::keyboard_flags(&self) -> u8
+pub fn rich_record::terminal::Terminal::new(u16, u16) -> rich_record::terminal::Terminal
+pub fn rich_record::terminal::Terminal::process(&mut self, &[u8]) -> std::io::error::Result<()>
+pub fn rich_record::terminal::Terminal::screen(&self) -> &vt100::screen::Screen
+pub fn rich_record::terminal::Terminal::set_kitty_keyboard(&mut self, bool)
+pub fn rich_record::terminal::Terminal::set_scrollback(&mut self, usize)
+pub fn rich_record::terminal::Terminal::set_size(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_record::terminal::Terminal::snapshot(&self, &rich_record::screen::Theme) -> rich_record::screen::Snapshot
+pub fn rich_record::terminal::Terminal::take_replies(&mut self) -> alloc::vec::Vec<u8>
+pub fn rich_record::terminal::Terminal::with_scrollback(u16, u16, usize) -> rich_record::terminal::Terminal
+impl core::marker::Freeze for rich_record::terminal::Terminal
+impl core::marker::Send for rich_record::terminal::Terminal
+impl core::marker::Sync for rich_record::terminal::Terminal
+impl core::marker::Unpin for rich_record::terminal::Terminal
+impl core::marker::UnsafeUnpin for rich_record::terminal::Terminal
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::terminal::Terminal
+impl core::panic::unwind_safe::UnwindSafe for rich_record::terminal::Terminal
+pub enum rich_record::Format
+pub rich_record::Format::Apng
+pub rich_record::Format::Cast
+pub rich_record::Format::Gif
+pub rich_record::Format::Html
+pub rich_record::Format::Mp4
+pub rich_record::Format::Png
+pub rich_record::Format::Svg
+impl rich_record::tape::Format
+pub const rich_record::tape::Format::ALL: [rich_record::tape::Format; 7]
+pub fn rich_record::tape::Format::extension(self) -> &'static str
+pub fn rich_record::tape::Format::parse(&str) -> core::option::Option<rich_record::tape::Format>
+pub fn rich_record::tape::Format::per_tape(self) -> bool
+impl core::clone::Clone for rich_record::tape::Format
+pub fn rich_record::tape::Format::clone(&self) -> rich_record::tape::Format
+impl core::cmp::Eq for rich_record::tape::Format
+impl core::cmp::Ord for rich_record::tape::Format
+pub fn rich_record::tape::Format::cmp(&self, &rich_record::tape::Format) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_record::tape::Format
+pub fn rich_record::tape::Format::eq(&self, &rich_record::tape::Format) -> bool
+impl core::cmp::PartialOrd for rich_record::tape::Format
+pub fn rich_record::tape::Format::partial_cmp(&self, &rich_record::tape::Format) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for rich_record::tape::Format
+pub fn rich_record::tape::Format::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_record::tape::Format
+pub fn rich_record::tape::Format::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_record::tape::Format
+impl core::marker::StructuralPartialEq for rich_record::tape::Format
+impl core::marker::Freeze for rich_record::tape::Format
+impl core::marker::Send for rich_record::tape::Format
+impl core::marker::Sync for rich_record::tape::Format
+impl core::marker::Unpin for rich_record::tape::Format
+impl core::marker::UnsafeUnpin for rich_record::tape::Format
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Format
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Format
+pub enum rich_record::Problem
+pub rich_record::Problem::Differs
+pub rich_record::Problem::Differs::diff: alloc::string::String
+pub rich_record::Problem::Differs::name: alloc::string::String
+pub rich_record::Problem::Orphaned
+pub rich_record::Problem::Orphaned::name: alloc::string::String
+impl core::clone::Clone for rich_record::record::Problem
+pub fn rich_record::record::Problem::clone(&self) -> rich_record::record::Problem
+impl core::cmp::Eq for rich_record::record::Problem
+impl core::cmp::PartialEq for rich_record::record::Problem
+pub fn rich_record::record::Problem::eq(&self, &rich_record::record::Problem) -> bool
+impl core::fmt::Debug for rich_record::record::Problem
+pub fn rich_record::record::Problem::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_record::record::Problem
+pub fn rich_record::record::Problem::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::record::Problem
+impl core::marker::Freeze for rich_record::record::Problem
+impl core::marker::Send for rich_record::record::Problem
+impl core::marker::Sync for rich_record::record::Problem
+impl core::marker::Unpin for rich_record::record::Problem
+impl core::marker::UnsafeUnpin for rich_record::record::Problem
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Problem
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Problem
+pub struct rich_record::Formats
+pub rich_record::Formats::apng: bool
+pub rich_record::Formats::cast: bool
+pub rich_record::Formats::gif: bool
+pub rich_record::Formats::html: bool
+pub rich_record::Formats::mp4: bool
+pub rich_record::Formats::png: bool
+pub rich_record::Formats::svg: bool
+impl rich_record::record::Formats
+pub const rich_record::record::Formats::ALL: rich_record::record::Formats
+pub const rich_record::record::Formats::DEFAULT: rich_record::record::Formats
+pub const rich_record::record::Formats::NONE: rich_record::record::Formats
+pub const rich_record::record::Formats::NO_VIDEO: rich_record::record::Formats
+pub fn rich_record::record::Formats::contains(self, rich_record::tape::Format) -> bool
+pub fn rich_record::record::Formats::intersect(self, rich_record::record::Formats) -> rich_record::record::Formats
+pub fn rich_record::record::Formats::set(&mut self, rich_record::tape::Format, bool)
+impl core::clone::Clone for rich_record::record::Formats
+pub fn rich_record::record::Formats::clone(&self) -> rich_record::record::Formats
+impl core::cmp::Eq for rich_record::record::Formats
+impl core::cmp::PartialEq for rich_record::record::Formats
+pub fn rich_record::record::Formats::eq(&self, &rich_record::record::Formats) -> bool
+impl core::fmt::Debug for rich_record::record::Formats
+pub fn rich_record::record::Formats::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_record::record::Formats
+impl core::marker::StructuralPartialEq for rich_record::record::Formats
+impl core::marker::Freeze for rich_record::record::Formats
+impl core::marker::Send for rich_record::record::Formats
+impl core::marker::Sync for rich_record::record::Formats
+impl core::marker::Unpin for rich_record::record::Formats
+impl core::marker::UnsafeUnpin for rich_record::record::Formats
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Formats
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Formats
+pub struct rich_record::Options
+pub rich_record::Options::bin_dir: core::option::Option<std::path::PathBuf>
+pub rich_record::Options::frame_rate: core::option::Option<f64>
+pub rich_record::Options::repo: core::option::Option<std::path::PathBuf>
+pub rich_record::Options::theme: rich_record::screen::Theme
+impl core::clone::Clone for rich_record::record::Options
+pub fn rich_record::record::Options::clone(&self) -> rich_record::record::Options
+impl core::default::Default for rich_record::record::Options
+pub fn rich_record::record::Options::default() -> rich_record::record::Options
+impl core::fmt::Debug for rich_record::record::Options
+pub fn rich_record::record::Options::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_record::record::Options
+impl core::marker::Send for rich_record::record::Options
+impl core::marker::Sync for rich_record::record::Options
+impl core::marker::Unpin for rich_record::record::Options
+impl core::marker::UnsafeUnpin for rich_record::record::Options
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Options
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Options
+pub struct rich_record::Output
+pub rich_record::Output::format: rich_record::tape::Format
+pub rich_record::Output::path: core::option::Option<alloc::string::String>
+impl core::clone::Clone for rich_record::tape::Output
+pub fn rich_record::tape::Output::clone(&self) -> rich_record::tape::Output
+impl core::cmp::Eq for rich_record::tape::Output
+impl core::cmp::PartialEq for rich_record::tape::Output
+pub fn rich_record::tape::Output::eq(&self, &rich_record::tape::Output) -> bool
+impl core::fmt::Debug for rich_record::tape::Output
+pub fn rich_record::tape::Output::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::tape::Output
+impl core::marker::Freeze for rich_record::tape::Output
+impl core::marker::Send for rich_record::tape::Output
+impl core::marker::Sync for rich_record::tape::Output
+impl core::marker::Unpin for rich_record::tape::Output
+impl core::marker::UnsafeUnpin for rich_record::tape::Output
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Output
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Output
+pub struct rich_record::Packed
+impl rich_record::screen::Packed
+pub fn rich_record::screen::Packed::columns(&self) -> usize
+pub fn rich_record::screen::Packed::cursor(&self) -> core::option::Option<(u16, u16)>
+pub fn rich_record::screen::Packed::height(&self) -> usize
+pub fn rich_record::screen::Packed::images(&self) -> &[rich_record::graphics::Tile]
+pub fn rich_record::screen::Packed::pack(&rich_record::screen::Snapshot, core::option::Option<&rich_record::screen::Packed>) -> rich_record::screen::Packed
+pub fn rich_record::screen::Packed::rows(&self) -> &[alloc::sync::Arc<rich_record::screen::PackedRow>]
+pub fn rich_record::screen::Packed::same_screen(&self, &rich_record::screen::Packed) -> bool
+pub fn rich_record::screen::Packed::snapshot(&self) -> rich_record::screen::Snapshot
+impl core::clone::Clone for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::clone(&self) -> rich_record::screen::Packed
+impl core::cmp::Eq for rich_record::screen::Packed
+impl core::cmp::PartialEq for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::eq(&self, &rich_record::screen::Packed) -> bool
+impl core::convert::From<&rich_record::screen::Snapshot> for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::from(&rich_record::screen::Snapshot) -> rich_record::screen::Packed
+impl core::default::Default for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::default() -> rich_record::screen::Packed
+impl core::fmt::Debug for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_record::screen::Packed
+impl core::marker::Freeze for rich_record::screen::Packed
+impl core::marker::Send for rich_record::screen::Packed
+impl core::marker::Sync for rich_record::screen::Packed
+impl core::marker::Unpin for rich_record::screen::Packed
+impl core::marker::UnsafeUnpin for rich_record::screen::Packed
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::screen::Packed
+impl core::panic::unwind_safe::UnwindSafe for rich_record::screen::Packed
+pub struct rich_record::Presentation
+pub rich_record::Presentation::caption: core::option::Option<alloc::string::String>
+pub rich_record::Presentation::font_size: u16
+pub rich_record::Presentation::key_overlay: bool
+pub rich_record::Presentation::window: bool
+impl core::clone::Clone for rich_record::record::Presentation
+pub fn rich_record::record::Presentation::clone(&self) -> rich_record::record::Presentation
+impl core::cmp::Eq for rich_record::record::Presentation
+impl core::cmp::PartialEq for rich_record::record::Presentation
+pub fn rich_record::record::Presentation::eq(&self, &rich_record::record::Presentation) -> bool
+impl core::default::Default for rich_record::record::Presentation
+pub fn rich_record::record::Presentation::default() -> Self
+impl core::fmt::Debug for rich_record::record::Presentation
+pub fn rich_record::record::Presentation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::record::Presentation
+impl core::marker::Freeze for rich_record::record::Presentation
+impl core::marker::Send for rich_record::record::Presentation
+impl core::marker::Sync for rich_record::record::Presentation
+impl core::marker::Unpin for rich_record::record::Presentation
+impl core::marker::UnsafeUnpin for rich_record::record::Presentation
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Presentation
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Presentation
+pub struct rich_record::Recording
+pub rich_record::Recording::columns: u16
+pub rich_record::Recording::frame_rate: f64
+pub rich_record::Recording::masks: alloc::vec::Vec<(fancy_regex::Regex, alloc::string::String)>
+pub rich_record::Recording::outputs: alloc::vec::Vec<rich_record::tape::Output>
+pub rich_record::Recording::presentation: rich_record::record::Presentation
+pub rich_record::Recording::rows: u16
+pub rich_record::Recording::shots: alloc::vec::Vec<(alloc::string::String, rich_record::screen::Snapshot)>
+pub rich_record::Recording::timeline: rich_record::session::Timeline
+pub rich_record::Recording::title: alloc::string::String
+impl rich_record::record::Recording
+pub fn rich_record::record::Recording::default_formats(&self) -> rich_record::record::Formats
+pub fn rich_record::record::Recording::formats(&self, rich_record::record::Formats) -> rich_record::record::Formats
+pub fn rich_record::record::Recording::output_path(&self, rich_record::tape::Format, &str) -> alloc::string::String
+pub fn rich_record::record::Recording::text_grid(&self, &rich_record::screen::Snapshot) -> alloc::string::String
+impl core::clone::Clone for rich_record::record::Recording
+pub fn rich_record::record::Recording::clone(&self) -> rich_record::record::Recording
+impl core::fmt::Debug for rich_record::record::Recording
+pub fn rich_record::record::Recording::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_record::record::Recording
+impl core::marker::Send for rich_record::record::Recording
+impl core::marker::Sync for rich_record::record::Recording
+impl core::marker::Unpin for rich_record::record::Recording
+impl core::marker::UnsafeUnpin for rich_record::record::Recording
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Recording
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Recording
+pub struct rich_record::Skipped
+pub rich_record::Skipped::format: rich_record::tape::Format
+pub rich_record::Skipped::path: std::path::PathBuf
+pub rich_record::Skipped::reason: alloc::string::String
+impl core::clone::Clone for rich_record::record::Skipped
+pub fn rich_record::record::Skipped::clone(&self) -> rich_record::record::Skipped
+impl core::cmp::Eq for rich_record::record::Skipped
+impl core::cmp::PartialEq for rich_record::record::Skipped
+pub fn rich_record::record::Skipped::eq(&self, &rich_record::record::Skipped) -> bool
+impl core::fmt::Debug for rich_record::record::Skipped
+pub fn rich_record::record::Skipped::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::record::Skipped
+impl core::marker::Freeze for rich_record::record::Skipped
+impl core::marker::Send for rich_record::record::Skipped
+impl core::marker::Sync for rich_record::record::Skipped
+impl core::marker::Unpin for rich_record::record::Skipped
+impl core::marker::UnsafeUnpin for rich_record::record::Skipped
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Skipped
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Skipped
+pub struct rich_record::Snapshot
+pub rich_record::Snapshot::cursor: core::option::Option<(u16, u16)>
+pub rich_record::Snapshot::images: alloc::vec::Vec<rich_record::graphics::Tile>
+pub rich_record::Snapshot::rows: alloc::vec::Vec<alloc::vec::Vec<rich_record::screen::Cell>>
+impl rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::columns(&self) -> usize
+pub fn rich_record::screen::Snapshot::export_frame(&self, &rich_record::screen::Theme) -> rich_ext::frame::Frame
+pub fn rich_record::screen::Snapshot::from_frame(&rich_ext::frame::Frame, &rich_record::screen::Theme, usize) -> rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::from_screen(&vt100::screen::Screen, &rich_record::screen::Theme) -> rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::text_grid(&self) -> alloc::string::String
+pub fn rich_record::screen::Snapshot::to_frame(&self) -> rich_ext::frame::Frame
+pub fn rich_record::screen::Snapshot::to_segments(&self) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::clone::Clone for rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::clone(&self) -> rich_record::screen::Snapshot
+impl core::cmp::Eq for rich_record::screen::Snapshot
+impl core::cmp::PartialEq for rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::eq(&self, &rich_record::screen::Snapshot) -> bool
+impl core::convert::From<&rich_record::screen::Snapshot> for rich_record::screen::Packed
+pub fn rich_record::screen::Packed::from(&rich_record::screen::Snapshot) -> rich_record::screen::Packed
+impl core::default::Default for rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::default() -> rich_record::screen::Snapshot
+impl core::fmt::Debug for rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_record::screen::Snapshot
+pub fn rich_record::screen::Snapshot::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_record::screen::Snapshot
+impl core::marker::Freeze for rich_record::screen::Snapshot
+impl core::marker::Send for rich_record::screen::Snapshot
+impl core::marker::Sync for rich_record::screen::Snapshot
+impl core::marker::Unpin for rich_record::screen::Snapshot
+impl core::marker::UnsafeUnpin for rich_record::screen::Snapshot
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::screen::Snapshot
+impl core::panic::unwind_safe::UnwindSafe for rich_record::screen::Snapshot
+pub struct rich_record::Tape
+pub rich_record::Tape::caption: core::option::Option<alloc::string::String>
+pub rich_record::Tape::columns: u16
+pub rich_record::Tape::env: alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub rich_record::Tape::font_size: core::option::Option<u16>
+pub rich_record::Tape::frame_rate: core::option::Option<f64>
+pub rich_record::Tape::key_overlay: core::option::Option<bool>
+pub rich_record::Tape::key_repeat: core::option::Option<(core::time::Duration, core::time::Duration)>
+pub rich_record::Tape::kitty_keyboard: bool
+pub rich_record::Tape::masks: alloc::vec::Vec<(fancy_regex::Regex, alloc::string::String)>
+pub rich_record::Tape::outputs: alloc::vec::Vec<rich_record::tape::Output>
+pub rich_record::Tape::rows: u16
+pub rich_record::Tape::shell: rich_record::tape::Shell
+pub rich_record::Tape::steps: alloc::vec::Vec<(usize, rich_record::tape::Step)>
+pub rich_record::Tape::title: core::option::Option<alloc::string::String>
+pub rich_record::Tape::window_frame: core::option::Option<bool>
+impl rich_record::tape::Tape
+pub fn rich_record::tape::Tape::screenshots(&self) -> alloc::vec::Vec<&str>
+impl core::clone::Clone for rich_record::tape::Tape
+pub fn rich_record::tape::Tape::clone(&self) -> rich_record::tape::Tape
+impl core::fmt::Debug for rich_record::tape::Tape
+pub fn rich_record::tape::Tape::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_record::tape::Tape
+impl core::marker::Send for rich_record::tape::Tape
+impl core::marker::Sync for rich_record::tape::Tape
+impl core::marker::Unpin for rich_record::tape::Tape
+impl core::marker::UnsafeUnpin for rich_record::tape::Tape
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::Tape
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::Tape
+pub struct rich_record::TapeError
+pub rich_record::TapeError::line: usize
+pub rich_record::TapeError::message: alloc::string::String
+impl rich_record::tape::TapeError
+pub fn rich_record::tape::TapeError::new(usize, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for rich_record::tape::TapeError
+pub fn rich_record::tape::TapeError::clone(&self) -> rich_record::tape::TapeError
+impl core::cmp::Eq for rich_record::tape::TapeError
+impl core::cmp::PartialEq for rich_record::tape::TapeError
+pub fn rich_record::tape::TapeError::eq(&self, &rich_record::tape::TapeError) -> bool
+impl core::error::Error for rich_record::tape::TapeError
+impl core::fmt::Debug for rich_record::tape::TapeError
+pub fn rich_record::tape::TapeError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_record::tape::TapeError
+pub fn rich_record::tape::TapeError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::tape::TapeError
+impl core::marker::Freeze for rich_record::tape::TapeError
+impl core::marker::Send for rich_record::tape::TapeError
+impl core::marker::Sync for rich_record::tape::TapeError
+impl core::marker::Unpin for rich_record::tape::TapeError
+impl core::marker::UnsafeUnpin for rich_record::tape::TapeError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::tape::TapeError
+impl core::panic::unwind_safe::UnwindSafe for rich_record::tape::TapeError
+pub struct rich_record::Theme
+pub rich_record::Theme::ansi: [rich_record::screen::Rgb; 16]
+pub rich_record::Theme::background: rich_record::screen::Rgb
+pub rich_record::Theme::foreground: rich_record::screen::Rgb
+impl rich_record::screen::Theme
+pub fn rich_record::screen::Theme::indexed(&self, u8) -> rich_record::screen::Rgb
+pub fn rich_record::screen::Theme::terminal_theme(&self) -> rich::terminal_theme::TerminalTheme
+impl core::clone::Clone for rich_record::screen::Theme
+pub fn rich_record::screen::Theme::clone(&self) -> rich_record::screen::Theme
+impl core::cmp::Eq for rich_record::screen::Theme
+impl core::cmp::PartialEq for rich_record::screen::Theme
+pub fn rich_record::screen::Theme::eq(&self, &rich_record::screen::Theme) -> bool
+impl core::default::Default for rich_record::screen::Theme
+pub fn rich_record::screen::Theme::default() -> Self
+impl core::fmt::Debug for rich_record::screen::Theme
+pub fn rich_record::screen::Theme::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::screen::Theme
+impl core::marker::Freeze for rich_record::screen::Theme
+impl core::marker::Send for rich_record::screen::Theme
+impl core::marker::Sync for rich_record::screen::Theme
+impl core::marker::Unpin for rich_record::screen::Theme
+impl core::marker::UnsafeUnpin for rich_record::screen::Theme
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::screen::Theme
+impl core::panic::unwind_safe::UnwindSafe for rich_record::screen::Theme
+pub struct rich_record::Written
+pub rich_record::Written::formats: rich_record::record::Formats
+pub rich_record::Written::paths: alloc::vec::Vec<std::path::PathBuf>
+pub rich_record::Written::skipped: alloc::vec::Vec<rich_record::record::Skipped>
+impl rich_record::record::Written
+pub fn rich_record::record::Written::is_complete(&self) -> bool
+impl core::clone::Clone for rich_record::record::Written
+pub fn rich_record::record::Written::clone(&self) -> rich_record::record::Written
+impl core::cmp::Eq for rich_record::record::Written
+impl core::cmp::PartialEq for rich_record::record::Written
+pub fn rich_record::record::Written::eq(&self, &rich_record::record::Written) -> bool
+impl core::fmt::Debug for rich_record::record::Written
+pub fn rich_record::record::Written::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_record::record::Written
+impl core::marker::Freeze for rich_record::record::Written
+impl core::marker::Send for rich_record::record::Written
+impl core::marker::Sync for rich_record::record::Written
+impl core::marker::Unpin for rich_record::record::Written
+impl core::marker::UnsafeUnpin for rich_record::record::Written
+impl core::panic::unwind_safe::RefUnwindSafe for rich_record::record::Written
+impl core::panic::unwind_safe::UnwindSafe for rich_record::record::Written

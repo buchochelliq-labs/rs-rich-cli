@@ -1,0 +1,44 @@
+pub mod rich_lumis
+pub struct rich_lumis::LumisHighlighter
+impl rich_lumis::LumisHighlighter
+pub fn rich_lumis::LumisHighlighter::new() -> Self
+pub fn rich_lumis::LumisHighlighter::shared() -> alloc::sync::Arc<dyn rich::protocol::CodeHighlighter>
+impl core::clone::Clone for rich_lumis::LumisHighlighter
+pub fn rich_lumis::LumisHighlighter::clone(&self) -> rich_lumis::LumisHighlighter
+impl core::default::Default for rich_lumis::LumisHighlighter
+pub fn rich_lumis::LumisHighlighter::default() -> rich_lumis::LumisHighlighter
+impl core::fmt::Debug for rich_lumis::LumisHighlighter
+pub fn rich_lumis::LumisHighlighter::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_lumis::LumisHighlighter
+impl rich::protocol::CodeHighlighter for rich_lumis::LumisHighlighter
+pub fn rich_lumis::LumisHighlighter::default_theme(&self) -> &str
+pub fn rich_lumis::LumisHighlighter::highlight(&self, &str, core::option::Option<&str>, &str) -> core::result::Result<rich::protocol::HighlightedCode, rich::protocol::HighlightError>
+pub fn rich_lumis::LumisHighlighter::language_for_path(&self, &std::path::Path) -> core::option::Option<alloc::string::String>
+pub fn rich_lumis::LumisHighlighter::languages(&self) -> alloc::vec::Vec<alloc::string::String>
+pub fn rich_lumis::LumisHighlighter::themes(&self) -> alloc::vec::Vec<alloc::string::String>
+impl core::marker::Freeze for rich_lumis::LumisHighlighter
+impl core::marker::Send for rich_lumis::LumisHighlighter
+impl core::marker::Sync for rich_lumis::LumisHighlighter
+impl core::marker::Unpin for rich_lumis::LumisHighlighter
+impl core::marker::UnsafeUnpin for rich_lumis::LumisHighlighter
+impl core::panic::unwind_safe::RefUnwindSafe for rich_lumis::LumisHighlighter
+impl core::panic::unwind_safe::UnwindSafe for rich_lumis::LumisHighlighter
+pub struct rich_lumis::LumisPlugin
+impl core::clone::Clone for rich_lumis::LumisPlugin
+pub fn rich_lumis::LumisPlugin::clone(&self) -> rich_lumis::LumisPlugin
+impl core::default::Default for rich_lumis::LumisPlugin
+pub fn rich_lumis::LumisPlugin::default() -> rich_lumis::LumisPlugin
+impl core::fmt::Debug for rich_lumis::LumisPlugin
+pub fn rich_lumis::LumisPlugin::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_lumis::LumisPlugin
+impl rich_plugin_api::Plugin for rich_lumis::LumisPlugin
+pub fn rich_lumis::LumisPlugin::metadata(&self) -> rich_plugin_api::PluginMetadata
+pub fn rich_lumis::LumisPlugin::register(&self, &mut dyn rich_plugin_api::PluginRegistrar) -> core::result::Result<(), rich_plugin_api::PluginError>
+impl core::marker::Freeze for rich_lumis::LumisPlugin
+impl core::marker::Send for rich_lumis::LumisPlugin
+impl core::marker::Sync for rich_lumis::LumisPlugin
+impl core::marker::Unpin for rich_lumis::LumisPlugin
+impl core::marker::UnsafeUnpin for rich_lumis::LumisPlugin
+impl core::panic::unwind_safe::RefUnwindSafe for rich_lumis::LumisPlugin
+impl core::panic::unwind_safe::UnwindSafe for rich_lumis::LumisPlugin
+pub const rich_lumis::DEFAULT_THEME: &str

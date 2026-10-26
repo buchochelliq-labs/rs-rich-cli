@@ -1,0 +1,693 @@
+pub mod rich_embed
+pub mod rich_embed::browsh
+pub struct rich_embed::browsh::BrowshEngine
+impl rich_embed::browsh::BrowshEngine
+pub fn rich_embed::browsh::BrowshEngine::connect(impl core::convert::Into<alloc::string::String>) -> rich_embed::browsh::BrowshEngine
+pub fn rich_embed::browsh::BrowshEngine::new() -> rich_embed::browsh::BrowshEngine
+pub fn rich_embed::browsh::BrowshEngine::program(self, impl core::convert::Into<alloc::string::String>) -> rich_embed::browsh::BrowshEngine
+impl core::default::Default for rich_embed::browsh::BrowshEngine
+pub fn rich_embed::browsh::BrowshEngine::default() -> Self
+impl core::ops::drop::Drop for rich_embed::browsh::BrowshEngine
+pub fn rich_embed::browsh::BrowshEngine::drop(&mut self)
+impl rich_embed::WebEngine for rich_embed::browsh::BrowshEngine
+pub fn rich_embed::browsh::BrowshEngine::back(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::forward(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::input(&mut self, rich_embed::WebInput) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::open(&mut self, &str) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::poll(&mut self) -> core::option::Option<rich_embed::WebFrame>
+pub fn rich_embed::browsh::BrowshEngine::reload(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::browsh::BrowshEngine::state(&self) -> rich_embed::PageState
+impl core::marker::Freeze for rich_embed::browsh::BrowshEngine
+impl core::marker::Send for rich_embed::browsh::BrowshEngine
+impl core::marker::Sync for rich_embed::browsh::BrowshEngine
+impl core::marker::Unpin for rich_embed::browsh::BrowshEngine
+impl core::marker::UnsafeUnpin for rich_embed::browsh::BrowshEngine
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::browsh::BrowshEngine
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::browsh::BrowshEngine
+pub const rich_embed::browsh::DEFAULT_SERVER: &str
+pub mod rich_embed::chrome
+pub enum rich_embed::chrome::Downloads
+pub rich_embed::chrome::Downloads::Deny
+pub rich_embed::chrome::Downloads::Quarantine(std::path::PathBuf)
+impl core::clone::Clone for rich_embed::chrome::Downloads
+pub fn rich_embed::chrome::Downloads::clone(&self) -> rich_embed::chrome::Downloads
+impl core::cmp::Eq for rich_embed::chrome::Downloads
+impl core::cmp::PartialEq for rich_embed::chrome::Downloads
+pub fn rich_embed::chrome::Downloads::eq(&self, &rich_embed::chrome::Downloads) -> bool
+impl core::default::Default for rich_embed::chrome::Downloads
+pub fn rich_embed::chrome::Downloads::default() -> rich_embed::chrome::Downloads
+impl core::fmt::Debug for rich_embed::chrome::Downloads
+pub fn rich_embed::chrome::Downloads::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_embed::chrome::Downloads
+impl core::marker::Freeze for rich_embed::chrome::Downloads
+impl core::marker::Send for rich_embed::chrome::Downloads
+impl core::marker::Sync for rich_embed::chrome::Downloads
+impl core::marker::Unpin for rich_embed::chrome::Downloads
+impl core::marker::UnsafeUnpin for rich_embed::chrome::Downloads
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::Downloads
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::Downloads
+pub struct rich_embed::chrome::ChromeEngine
+impl rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::args<I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>>(self, I) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::audio(self, bool) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::binary(self, impl core::convert::Into<std::path::PathBuf>) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::cell_pixels(self, u32, u32) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::devtools(&mut self) -> std::io::error::Result<rich_embed::chrome::DevTools>
+pub fn rich_embed::chrome::ChromeEngine::downloads(self, rich_embed::chrome::Downloads) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::end_all()
+pub fn rich_embed::chrome::ChromeEngine::find() -> core::option::Option<std::path::PathBuf>
+pub fn rich_embed::chrome::ChromeEngine::new() -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::profile(self, impl core::convert::Into<std::path::PathBuf>) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::screencast(self, bool) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::screencast_on_demand(self, bool) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::set_screencast(&mut self, bool) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::take_screencast(&mut self) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
+impl core::default::Default for rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::default() -> Self
+impl core::fmt::Debug for rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::drop(&mut self)
+impl rich_embed::WebEngine for rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::back(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::forward(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::input(&mut self, rich_embed::WebInput) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::open(&mut self, &str) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::poll(&mut self) -> core::option::Option<rich_embed::WebFrame>
+pub fn rich_embed::chrome::ChromeEngine::reload(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::chrome::ChromeEngine::state(&self) -> rich_embed::PageState
+impl core::marker::Freeze for rich_embed::chrome::ChromeEngine
+impl core::marker::Send for rich_embed::chrome::ChromeEngine
+impl core::marker::Sync for rich_embed::chrome::ChromeEngine
+impl core::marker::Unpin for rich_embed::chrome::ChromeEngine
+impl core::marker::UnsafeUnpin for rich_embed::chrome::ChromeEngine
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::ChromeEngine
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::ChromeEngine
+pub struct rich_embed::chrome::DevTools
+impl rich_embed::chrome::DevTools
+pub fn rich_embed::chrome::DevTools::call(&self, &str, serde_json::value::Value, core::time::Duration) -> std::io::error::Result<serde_json::value::Value>
+pub fn rich_embed::chrome::DevTools::listen(&self, &[&str]) -> std::sync::mpsc::Receiver<rich_embed::chrome::DevToolsEvent>
+impl core::clone::Clone for rich_embed::chrome::DevTools
+pub fn rich_embed::chrome::DevTools::clone(&self) -> rich_embed::chrome::DevTools
+impl core::fmt::Debug for rich_embed::chrome::DevTools
+pub fn rich_embed::chrome::DevTools::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_embed::chrome::DevTools
+impl core::marker::Send for rich_embed::chrome::DevTools
+impl core::marker::Sync for rich_embed::chrome::DevTools
+impl core::marker::Unpin for rich_embed::chrome::DevTools
+impl core::marker::UnsafeUnpin for rich_embed::chrome::DevTools
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::DevTools
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::DevTools
+pub struct rich_embed::chrome::DevToolsEvent
+pub rich_embed::chrome::DevToolsEvent::method: alloc::string::String
+pub rich_embed::chrome::DevToolsEvent::params: serde_json::value::Value
+impl core::clone::Clone for rich_embed::chrome::DevToolsEvent
+pub fn rich_embed::chrome::DevToolsEvent::clone(&self) -> rich_embed::chrome::DevToolsEvent
+impl core::cmp::PartialEq for rich_embed::chrome::DevToolsEvent
+pub fn rich_embed::chrome::DevToolsEvent::eq(&self, &rich_embed::chrome::DevToolsEvent) -> bool
+impl core::fmt::Debug for rich_embed::chrome::DevToolsEvent
+pub fn rich_embed::chrome::DevToolsEvent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_embed::chrome::DevToolsEvent
+impl core::marker::Freeze for rich_embed::chrome::DevToolsEvent
+impl core::marker::Send for rich_embed::chrome::DevToolsEvent
+impl core::marker::Sync for rich_embed::chrome::DevToolsEvent
+impl core::marker::Unpin for rich_embed::chrome::DevToolsEvent
+impl core::marker::UnsafeUnpin for rich_embed::chrome::DevToolsEvent
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::DevToolsEvent
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::DevToolsEvent
+pub struct rich_embed::chrome::FrameMeta
+pub rich_embed::chrome::FrameMeta::device_height: f64
+pub rich_embed::chrome::FrameMeta::device_width: f64
+pub rich_embed::chrome::FrameMeta::offset_top: f64
+pub rich_embed::chrome::FrameMeta::page_scale: f64
+pub rich_embed::chrome::FrameMeta::scroll_x: f64
+pub rich_embed::chrome::FrameMeta::scroll_y: f64
+pub rich_embed::chrome::FrameMeta::timestamp: core::option::Option<f64>
+impl core::clone::Clone for rich_embed::chrome::FrameMeta
+pub fn rich_embed::chrome::FrameMeta::clone(&self) -> rich_embed::chrome::FrameMeta
+impl core::cmp::PartialEq for rich_embed::chrome::FrameMeta
+pub fn rich_embed::chrome::FrameMeta::eq(&self, &rich_embed::chrome::FrameMeta) -> bool
+impl core::default::Default for rich_embed::chrome::FrameMeta
+pub fn rich_embed::chrome::FrameMeta::default() -> rich_embed::chrome::FrameMeta
+impl core::fmt::Debug for rich_embed::chrome::FrameMeta
+pub fn rich_embed::chrome::FrameMeta::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_embed::chrome::FrameMeta
+impl core::marker::StructuralPartialEq for rich_embed::chrome::FrameMeta
+impl core::marker::Freeze for rich_embed::chrome::FrameMeta
+impl core::marker::Send for rich_embed::chrome::FrameMeta
+impl core::marker::Sync for rich_embed::chrome::FrameMeta
+impl core::marker::Unpin for rich_embed::chrome::FrameMeta
+impl core::marker::UnsafeUnpin for rich_embed::chrome::FrameMeta
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::FrameMeta
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::FrameMeta
+pub struct rich_embed::chrome::ScreencastFrame
+pub rich_embed::chrome::ScreencastFrame::meta: rich_embed::chrome::FrameMeta
+pub rich_embed::chrome::ScreencastFrame::pixels: rich_embed::Pixels
+impl rich_embed::chrome::ScreencastFrame
+pub fn rich_embed::chrome::ScreencastFrame::crop(&self, f64, f64, f64, f64) -> core::option::Option<rich_embed::Pixels>
+impl core::clone::Clone for rich_embed::chrome::ScreencastFrame
+pub fn rich_embed::chrome::ScreencastFrame::clone(&self) -> rich_embed::chrome::ScreencastFrame
+impl core::cmp::PartialEq for rich_embed::chrome::ScreencastFrame
+pub fn rich_embed::chrome::ScreencastFrame::eq(&self, &rich_embed::chrome::ScreencastFrame) -> bool
+impl core::default::Default for rich_embed::chrome::ScreencastFrame
+pub fn rich_embed::chrome::ScreencastFrame::default() -> rich_embed::chrome::ScreencastFrame
+impl core::fmt::Debug for rich_embed::chrome::ScreencastFrame
+pub fn rich_embed::chrome::ScreencastFrame::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_embed::chrome::ScreencastFrame
+impl core::marker::Freeze for rich_embed::chrome::ScreencastFrame
+impl core::marker::Send for rich_embed::chrome::ScreencastFrame
+impl core::marker::Sync for rich_embed::chrome::ScreencastFrame
+impl core::marker::Unpin for rich_embed::chrome::ScreencastFrame
+impl core::marker::UnsafeUnpin for rich_embed::chrome::ScreencastFrame
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::ScreencastFrame
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::ScreencastFrame
+pub const rich_embed::chrome::BINARY_NAMES: &[&str]
+pub mod rich_embed::keys
+pub fn rich_embed::keys::key_bytes(rich_interact::event::Key, bool) -> alloc::vec::Vec<u8>
+pub fn rich_embed::keys::mouse_bytes(rich_interact::event::Mouse, vt100::screen::MouseProtocolMode, vt100::screen::MouseProtocolEncoding) -> core::option::Option<alloc::vec::Vec<u8>>
+pub fn rich_embed::keys::paste_bytes(&str, bool) -> alloc::vec::Vec<u8>
+pub enum rich_embed::Downloads
+pub rich_embed::Downloads::Deny
+pub rich_embed::Downloads::Quarantine(std::path::PathBuf)
+impl core::clone::Clone for rich_embed::chrome::Downloads
+pub fn rich_embed::chrome::Downloads::clone(&self) -> rich_embed::chrome::Downloads
+impl core::cmp::Eq for rich_embed::chrome::Downloads
+impl core::cmp::PartialEq for rich_embed::chrome::Downloads
+pub fn rich_embed::chrome::Downloads::eq(&self, &rich_embed::chrome::Downloads) -> bool
+impl core::default::Default for rich_embed::chrome::Downloads
+pub fn rich_embed::chrome::Downloads::default() -> rich_embed::chrome::Downloads
+impl core::fmt::Debug for rich_embed::chrome::Downloads
+pub fn rich_embed::chrome::Downloads::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_embed::chrome::Downloads
+impl core::marker::Freeze for rich_embed::chrome::Downloads
+impl core::marker::Send for rich_embed::chrome::Downloads
+impl core::marker::Sync for rich_embed::chrome::Downloads
+impl core::marker::Unpin for rich_embed::chrome::Downloads
+impl core::marker::UnsafeUnpin for rich_embed::chrome::Downloads
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::Downloads
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::Downloads
+pub enum rich_embed::WebFrame
+pub rich_embed::WebFrame::Cells
+pub rich_embed::WebFrame::Cells::cursor: core::option::Option<(u16, u16)>
+pub rich_embed::WebFrame::Cells::lines: alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>
+pub rich_embed::WebFrame::Pixels(rich_embed::Pixels)
+impl core::clone::Clone for rich_embed::WebFrame
+pub fn rich_embed::WebFrame::clone(&self) -> rich_embed::WebFrame
+impl core::cmp::Eq for rich_embed::WebFrame
+impl core::cmp::PartialEq for rich_embed::WebFrame
+pub fn rich_embed::WebFrame::eq(&self, &rich_embed::WebFrame) -> bool
+impl core::fmt::Debug for rich_embed::WebFrame
+pub fn rich_embed::WebFrame::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_embed::WebFrame
+impl core::marker::Freeze for rich_embed::WebFrame
+impl core::marker::Send for rich_embed::WebFrame
+impl core::marker::Sync for rich_embed::WebFrame
+impl core::marker::Unpin for rich_embed::WebFrame
+impl core::marker::UnsafeUnpin for rich_embed::WebFrame
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::WebFrame
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::WebFrame
+pub enum rich_embed::WebInput
+pub rich_embed::WebInput::Key(rich_interact::event::Key)
+pub rich_embed::WebInput::Mouse(rich_interact::event::Mouse)
+pub rich_embed::WebInput::Paste(alloc::string::String)
+impl core::clone::Clone for rich_embed::WebInput
+pub fn rich_embed::WebInput::clone(&self) -> rich_embed::WebInput
+impl core::cmp::Eq for rich_embed::WebInput
+impl core::cmp::PartialEq for rich_embed::WebInput
+pub fn rich_embed::WebInput::eq(&self, &rich_embed::WebInput) -> bool
+impl core::fmt::Debug for rich_embed::WebInput
+pub fn rich_embed::WebInput::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_embed::WebInput
+impl core::marker::Freeze for rich_embed::WebInput
+impl core::marker::Send for rich_embed::WebInput
+impl core::marker::Sync for rich_embed::WebInput
+impl core::marker::Unpin for rich_embed::WebInput
+impl core::marker::UnsafeUnpin for rich_embed::WebInput
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::WebInput
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::WebInput
+pub struct rich_embed::BrowshEngine
+impl rich_embed::browsh::BrowshEngine
+pub fn rich_embed::browsh::BrowshEngine::connect(impl core::convert::Into<alloc::string::String>) -> rich_embed::browsh::BrowshEngine
+pub fn rich_embed::browsh::BrowshEngine::new() -> rich_embed::browsh::BrowshEngine
+pub fn rich_embed::browsh::BrowshEngine::program(self, impl core::convert::Into<alloc::string::String>) -> rich_embed::browsh::BrowshEngine
+impl core::default::Default for rich_embed::browsh::BrowshEngine
+pub fn rich_embed::browsh::BrowshEngine::default() -> Self
+impl core::ops::drop::Drop for rich_embed::browsh::BrowshEngine
+pub fn rich_embed::browsh::BrowshEngine::drop(&mut self)
+impl rich_embed::WebEngine for rich_embed::browsh::BrowshEngine
+pub fn rich_embed::browsh::BrowshEngine::back(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::forward(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::input(&mut self, rich_embed::WebInput) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::open(&mut self, &str) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::poll(&mut self) -> core::option::Option<rich_embed::WebFrame>
+pub fn rich_embed::browsh::BrowshEngine::reload(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::browsh::BrowshEngine::state(&self) -> rich_embed::PageState
+impl core::marker::Freeze for rich_embed::browsh::BrowshEngine
+impl core::marker::Send for rich_embed::browsh::BrowshEngine
+impl core::marker::Sync for rich_embed::browsh::BrowshEngine
+impl core::marker::Unpin for rich_embed::browsh::BrowshEngine
+impl core::marker::UnsafeUnpin for rich_embed::browsh::BrowshEngine
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::browsh::BrowshEngine
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::browsh::BrowshEngine
+pub struct rich_embed::ChromeEngine
+impl rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::args<I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<alloc::string::String>>(self, I) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::audio(self, bool) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::binary(self, impl core::convert::Into<std::path::PathBuf>) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::cell_pixels(self, u32, u32) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::devtools(&mut self) -> std::io::error::Result<rich_embed::chrome::DevTools>
+pub fn rich_embed::chrome::ChromeEngine::downloads(self, rich_embed::chrome::Downloads) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::end_all()
+pub fn rich_embed::chrome::ChromeEngine::find() -> core::option::Option<std::path::PathBuf>
+pub fn rich_embed::chrome::ChromeEngine::new() -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::profile(self, impl core::convert::Into<std::path::PathBuf>) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::screencast(self, bool) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::screencast_on_demand(self, bool) -> rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::set_screencast(&mut self, bool) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::take_screencast(&mut self) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
+impl core::default::Default for rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::default() -> Self
+impl core::fmt::Debug for rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::drop(&mut self)
+impl rich_embed::WebEngine for rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::back(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::forward(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::input(&mut self, rich_embed::WebInput) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::open(&mut self, &str) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::poll(&mut self) -> core::option::Option<rich_embed::WebFrame>
+pub fn rich_embed::chrome::ChromeEngine::reload(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::chrome::ChromeEngine::state(&self) -> rich_embed::PageState
+impl core::marker::Freeze for rich_embed::chrome::ChromeEngine
+impl core::marker::Send for rich_embed::chrome::ChromeEngine
+impl core::marker::Sync for rich_embed::chrome::ChromeEngine
+impl core::marker::Unpin for rich_embed::chrome::ChromeEngine
+impl core::marker::UnsafeUnpin for rich_embed::chrome::ChromeEngine
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::ChromeEngine
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::ChromeEngine
+pub struct rich_embed::Command
+impl rich_embed::Command
+pub fn rich_embed::Command::arg(self, impl core::convert::Into<std::ffi::os_str::OsString>) -> rich_embed::Command
+pub fn rich_embed::Command::args<I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<std::ffi::os_str::OsString>>(self, I) -> rich_embed::Command
+pub fn rich_embed::Command::cwd(self, impl core::convert::Into<std::path::PathBuf>) -> rich_embed::Command
+pub fn rich_embed::Command::env(self, impl core::convert::Into<std::ffi::os_str::OsString>, impl core::convert::Into<std::ffi::os_str::OsString>) -> rich_embed::Command
+pub fn rich_embed::Command::new(impl core::convert::Into<std::ffi::os_str::OsString>) -> rich_embed::Command
+pub fn rich_embed::Command::program(&self) -> &std::ffi::os_str::OsString
+impl core::clone::Clone for rich_embed::Command
+pub fn rich_embed::Command::clone(&self) -> rich_embed::Command
+impl core::cmp::Eq for rich_embed::Command
+impl core::cmp::PartialEq for rich_embed::Command
+pub fn rich_embed::Command::eq(&self, &rich_embed::Command) -> bool
+impl core::convert::From<&str> for rich_embed::Command
+pub fn rich_embed::Command::from(&str) -> rich_embed::Command
+impl core::convert::From<alloc::string::String> for rich_embed::Command
+pub fn rich_embed::Command::from(alloc::string::String) -> rich_embed::Command
+impl core::fmt::Debug for rich_embed::Command
+pub fn rich_embed::Command::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_embed::Command
+impl<S: core::convert::Into<std::ffi::os_str::OsString>, const N: usize> core::convert::From<[S; N]> for rich_embed::Command
+pub fn rich_embed::Command::from([S; N]) -> rich_embed::Command
+impl<S: core::convert::Into<std::ffi::os_str::OsString>> core::convert::From<alloc::vec::Vec<S>> for rich_embed::Command
+pub fn rich_embed::Command::from(alloc::vec::Vec<S>) -> rich_embed::Command
+impl core::marker::Freeze for rich_embed::Command
+impl core::marker::Send for rich_embed::Command
+impl core::marker::Sync for rich_embed::Command
+impl core::marker::Unpin for rich_embed::Command
+impl core::marker::UnsafeUnpin for rich_embed::Command
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::Command
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::Command
+pub struct rich_embed::DevTools
+impl rich_embed::chrome::DevTools
+pub fn rich_embed::chrome::DevTools::call(&self, &str, serde_json::value::Value, core::time::Duration) -> std::io::error::Result<serde_json::value::Value>
+pub fn rich_embed::chrome::DevTools::listen(&self, &[&str]) -> std::sync::mpsc::Receiver<rich_embed::chrome::DevToolsEvent>
+impl core::clone::Clone for rich_embed::chrome::DevTools
+pub fn rich_embed::chrome::DevTools::clone(&self) -> rich_embed::chrome::DevTools
+impl core::fmt::Debug for rich_embed::chrome::DevTools
+pub fn rich_embed::chrome::DevTools::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_embed::chrome::DevTools
+impl core::marker::Send for rich_embed::chrome::DevTools
+impl core::marker::Sync for rich_embed::chrome::DevTools
+impl core::marker::Unpin for rich_embed::chrome::DevTools
+impl core::marker::UnsafeUnpin for rich_embed::chrome::DevTools
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::DevTools
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::DevTools
+pub struct rich_embed::DevToolsEvent
+pub rich_embed::DevToolsEvent::method: alloc::string::String
+pub rich_embed::DevToolsEvent::params: serde_json::value::Value
+impl core::clone::Clone for rich_embed::chrome::DevToolsEvent
+pub fn rich_embed::chrome::DevToolsEvent::clone(&self) -> rich_embed::chrome::DevToolsEvent
+impl core::cmp::PartialEq for rich_embed::chrome::DevToolsEvent
+pub fn rich_embed::chrome::DevToolsEvent::eq(&self, &rich_embed::chrome::DevToolsEvent) -> bool
+impl core::fmt::Debug for rich_embed::chrome::DevToolsEvent
+pub fn rich_embed::chrome::DevToolsEvent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_embed::chrome::DevToolsEvent
+impl core::marker::Freeze for rich_embed::chrome::DevToolsEvent
+impl core::marker::Send for rich_embed::chrome::DevToolsEvent
+impl core::marker::Sync for rich_embed::chrome::DevToolsEvent
+impl core::marker::Unpin for rich_embed::chrome::DevToolsEvent
+impl core::marker::UnsafeUnpin for rich_embed::chrome::DevToolsEvent
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::DevToolsEvent
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::DevToolsEvent
+pub struct rich_embed::ExitStatus
+impl rich_embed::ExitStatus
+pub fn rich_embed::ExitStatus::code(&self) -> u32
+pub fn rich_embed::ExitStatus::signal(&self) -> core::option::Option<&str>
+pub fn rich_embed::ExitStatus::success(&self) -> bool
+pub fn rich_embed::ExitStatus::with_code(u32) -> rich_embed::ExitStatus
+pub fn rich_embed::ExitStatus::with_signal(impl core::convert::Into<alloc::string::String>) -> rich_embed::ExitStatus
+impl core::clone::Clone for rich_embed::ExitStatus
+pub fn rich_embed::ExitStatus::clone(&self) -> rich_embed::ExitStatus
+impl core::cmp::Eq for rich_embed::ExitStatus
+impl core::cmp::PartialEq for rich_embed::ExitStatus
+pub fn rich_embed::ExitStatus::eq(&self, &rich_embed::ExitStatus) -> bool
+impl core::convert::From<portable_pty::ExitStatus> for rich_embed::ExitStatus
+pub fn rich_embed::ExitStatus::from(portable_pty::ExitStatus) -> rich_embed::ExitStatus
+impl core::fmt::Debug for rich_embed::ExitStatus
+pub fn rich_embed::ExitStatus::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_embed::ExitStatus
+pub fn rich_embed::ExitStatus::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_embed::ExitStatus
+pub fn rich_embed::ExitStatus::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_embed::ExitStatus
+impl core::marker::Freeze for rich_embed::ExitStatus
+impl core::marker::Send for rich_embed::ExitStatus
+impl core::marker::Sync for rich_embed::ExitStatus
+impl core::marker::Unpin for rich_embed::ExitStatus
+impl core::marker::UnsafeUnpin for rich_embed::ExitStatus
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::ExitStatus
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::ExitStatus
+pub struct rich_embed::FrameMeta
+pub rich_embed::FrameMeta::device_height: f64
+pub rich_embed::FrameMeta::device_width: f64
+pub rich_embed::FrameMeta::offset_top: f64
+pub rich_embed::FrameMeta::page_scale: f64
+pub rich_embed::FrameMeta::scroll_x: f64
+pub rich_embed::FrameMeta::scroll_y: f64
+pub rich_embed::FrameMeta::timestamp: core::option::Option<f64>
+impl core::clone::Clone for rich_embed::chrome::FrameMeta
+pub fn rich_embed::chrome::FrameMeta::clone(&self) -> rich_embed::chrome::FrameMeta
+impl core::cmp::PartialEq for rich_embed::chrome::FrameMeta
+pub fn rich_embed::chrome::FrameMeta::eq(&self, &rich_embed::chrome::FrameMeta) -> bool
+impl core::default::Default for rich_embed::chrome::FrameMeta
+pub fn rich_embed::chrome::FrameMeta::default() -> rich_embed::chrome::FrameMeta
+impl core::fmt::Debug for rich_embed::chrome::FrameMeta
+pub fn rich_embed::chrome::FrameMeta::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_embed::chrome::FrameMeta
+impl core::marker::StructuralPartialEq for rich_embed::chrome::FrameMeta
+impl core::marker::Freeze for rich_embed::chrome::FrameMeta
+impl core::marker::Send for rich_embed::chrome::FrameMeta
+impl core::marker::Sync for rich_embed::chrome::FrameMeta
+impl core::marker::Unpin for rich_embed::chrome::FrameMeta
+impl core::marker::UnsafeUnpin for rich_embed::chrome::FrameMeta
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::FrameMeta
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::FrameMeta
+pub struct rich_embed::LocalPty
+impl rich_embed::LocalPty
+pub fn rich_embed::LocalPty::backpressure(self, usize) -> rich_embed::LocalPty
+pub fn rich_embed::LocalPty::new(impl core::convert::Into<rich_embed::Command>) -> rich_embed::LocalPty
+impl core::ops::drop::Drop for rich_embed::LocalPty
+pub fn rich_embed::LocalPty::drop(&mut self)
+impl rich_embed::PtyHost for rich_embed::LocalPty
+pub fn rich_embed::LocalPty::exit_status(&mut self) -> core::option::Option<rich_embed::ExitStatus>
+pub fn rich_embed::LocalPty::kill(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::LocalPty::read(&mut self) -> alloc::vec::Vec<u8>
+pub fn rich_embed::LocalPty::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::LocalPty::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::LocalPty::start(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::LocalPty::write(&mut self, &[u8]) -> std::io::error::Result<()>
+impl core::marker::Freeze for rich_embed::LocalPty
+impl core::marker::Send for rich_embed::LocalPty
+impl !core::marker::Sync for rich_embed::LocalPty
+impl core::marker::Unpin for rich_embed::LocalPty
+impl core::marker::UnsafeUnpin for rich_embed::LocalPty
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_embed::LocalPty
+impl !core::panic::unwind_safe::UnwindSafe for rich_embed::LocalPty
+pub struct rich_embed::PageState
+pub rich_embed::PageState::can_go_back: bool
+pub rich_embed::PageState::can_go_forward: bool
+pub rich_embed::PageState::error: core::option::Option<alloc::string::String>
+pub rich_embed::PageState::loading: bool
+pub rich_embed::PageState::title: alloc::string::String
+pub rich_embed::PageState::url: alloc::string::String
+impl core::clone::Clone for rich_embed::PageState
+pub fn rich_embed::PageState::clone(&self) -> rich_embed::PageState
+impl core::cmp::Eq for rich_embed::PageState
+impl core::cmp::PartialEq for rich_embed::PageState
+pub fn rich_embed::PageState::eq(&self, &rich_embed::PageState) -> bool
+impl core::default::Default for rich_embed::PageState
+pub fn rich_embed::PageState::default() -> rich_embed::PageState
+impl core::fmt::Debug for rich_embed::PageState
+pub fn rich_embed::PageState::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_embed::PageState
+impl core::marker::Freeze for rich_embed::PageState
+impl core::marker::Send for rich_embed::PageState
+impl core::marker::Sync for rich_embed::PageState
+impl core::marker::Unpin for rich_embed::PageState
+impl core::marker::UnsafeUnpin for rich_embed::PageState
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::PageState
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::PageState
+pub struct rich_embed::Pixels
+pub rich_embed::Pixels::height: u32
+pub rich_embed::Pixels::rgb: alloc::vec::Vec<u8>
+pub rich_embed::Pixels::width: u32
+impl rich_embed::Pixels
+pub fn rich_embed::Pixels::crop(&self, u32, u32, u32, u32) -> core::option::Option<rich_embed::Pixels>
+pub fn rich_embed::Pixels::new(u32, u32, alloc::vec::Vec<u8>) -> core::option::Option<rich_embed::Pixels>
+pub fn rich_embed::Pixels::to_rgba(&self) -> alloc::vec::Vec<u8>
+impl core::clone::Clone for rich_embed::Pixels
+pub fn rich_embed::Pixels::clone(&self) -> rich_embed::Pixels
+impl core::cmp::Eq for rich_embed::Pixels
+impl core::cmp::PartialEq for rich_embed::Pixels
+pub fn rich_embed::Pixels::eq(&self, &rich_embed::Pixels) -> bool
+impl core::default::Default for rich_embed::Pixels
+pub fn rich_embed::Pixels::default() -> rich_embed::Pixels
+impl core::fmt::Debug for rich_embed::Pixels
+pub fn rich_embed::Pixels::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_embed::Pixels
+impl core::marker::Freeze for rich_embed::Pixels
+impl core::marker::Send for rich_embed::Pixels
+impl core::marker::Sync for rich_embed::Pixels
+impl core::marker::Unpin for rich_embed::Pixels
+impl core::marker::UnsafeUnpin for rich_embed::Pixels
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::Pixels
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::Pixels
+pub struct rich_embed::ProgramEngine
+impl rich_embed::ProgramEngine
+pub fn rich_embed::ProgramEngine::args<I: core::iter::traits::collect::IntoIterator<Item = S>, S: core::convert::Into<std::ffi::os_str::OsString>>(self, I) -> rich_embed::ProgramEngine
+pub fn rich_embed::ProgramEngine::detect() -> rich_embed::ProgramEngine
+pub fn rich_embed::ProgramEngine::new(impl core::convert::Into<std::ffi::os_str::OsString>) -> rich_embed::ProgramEngine
+pub fn rich_embed::ProgramEngine::with_hosts(impl core::ops::function::FnMut(&str) -> alloc::boxed::Box<dyn rich_embed::PtyHost> + 'static) -> rich_embed::ProgramEngine
+impl rich_embed::WebEngine for rich_embed::ProgramEngine
+pub fn rich_embed::ProgramEngine::back(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::ProgramEngine::forward(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::ProgramEngine::input(&mut self, rich_embed::WebInput) -> std::io::error::Result<()>
+pub fn rich_embed::ProgramEngine::open(&mut self, &str) -> std::io::error::Result<()>
+pub fn rich_embed::ProgramEngine::poll(&mut self) -> core::option::Option<rich_embed::WebFrame>
+pub fn rich_embed::ProgramEngine::reload(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::ProgramEngine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::ProgramEngine::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::ProgramEngine::state(&self) -> rich_embed::PageState
+impl core::marker::Freeze for rich_embed::ProgramEngine
+impl !core::marker::Send for rich_embed::ProgramEngine
+impl !core::marker::Sync for rich_embed::ProgramEngine
+impl core::marker::Unpin for rich_embed::ProgramEngine
+impl core::marker::UnsafeUnpin for rich_embed::ProgramEngine
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_embed::ProgramEngine
+impl !core::panic::unwind_safe::UnwindSafe for rich_embed::ProgramEngine
+pub struct rich_embed::ReplayHandle
+impl rich_embed::ReplayHandle
+pub fn rich_embed::ReplayHandle::exit(&self, rich_embed::ExitStatus)
+pub fn rich_embed::ReplayHandle::feed(&self, impl core::convert::AsRef<[u8]>)
+pub fn rich_embed::ReplayHandle::killed(&self) -> bool
+pub fn rich_embed::ReplayHandle::sizes(&self) -> alloc::vec::Vec<(u16, u16)>
+pub fn rich_embed::ReplayHandle::started(&self) -> core::option::Option<(u16, u16)>
+pub fn rich_embed::ReplayHandle::take_written(&self) -> alloc::vec::Vec<u8>
+pub fn rich_embed::ReplayHandle::written(&self) -> alloc::vec::Vec<u8>
+impl core::clone::Clone for rich_embed::ReplayHandle
+pub fn rich_embed::ReplayHandle::clone(&self) -> rich_embed::ReplayHandle
+impl core::marker::Freeze for rich_embed::ReplayHandle
+impl core::marker::Send for rich_embed::ReplayHandle
+impl core::marker::Sync for rich_embed::ReplayHandle
+impl core::marker::Unpin for rich_embed::ReplayHandle
+impl core::marker::UnsafeUnpin for rich_embed::ReplayHandle
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::ReplayHandle
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::ReplayHandle
+pub struct rich_embed::ReplayHost
+impl rich_embed::ReplayHost
+pub fn rich_embed::ReplayHost::exit(self, rich_embed::ExitStatus) -> rich_embed::ReplayHost
+pub fn rich_embed::ReplayHost::handle(&self) -> rich_embed::ReplayHandle
+pub fn rich_embed::ReplayHost::new() -> rich_embed::ReplayHost
+pub fn rich_embed::ReplayHost::output(self, impl core::convert::AsRef<[u8]>) -> rich_embed::ReplayHost
+impl core::default::Default for rich_embed::ReplayHost
+pub fn rich_embed::ReplayHost::default() -> rich_embed::ReplayHost
+impl rich_embed::PtyHost for rich_embed::ReplayHost
+pub fn rich_embed::ReplayHost::exit_status(&mut self) -> core::option::Option<rich_embed::ExitStatus>
+pub fn rich_embed::ReplayHost::kill(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::ReplayHost::read(&mut self) -> alloc::vec::Vec<u8>
+pub fn rich_embed::ReplayHost::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::ReplayHost::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::ReplayHost::start(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::ReplayHost::write(&mut self, &[u8]) -> std::io::error::Result<()>
+impl core::marker::Freeze for rich_embed::ReplayHost
+impl core::marker::Send for rich_embed::ReplayHost
+impl core::marker::Sync for rich_embed::ReplayHost
+impl core::marker::Unpin for rich_embed::ReplayHost
+impl core::marker::UnsafeUnpin for rich_embed::ReplayHost
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::ReplayHost
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::ReplayHost
+pub struct rich_embed::ScreencastFrame
+pub rich_embed::ScreencastFrame::meta: rich_embed::chrome::FrameMeta
+pub rich_embed::ScreencastFrame::pixels: rich_embed::Pixels
+impl rich_embed::chrome::ScreencastFrame
+pub fn rich_embed::chrome::ScreencastFrame::crop(&self, f64, f64, f64, f64) -> core::option::Option<rich_embed::Pixels>
+impl core::clone::Clone for rich_embed::chrome::ScreencastFrame
+pub fn rich_embed::chrome::ScreencastFrame::clone(&self) -> rich_embed::chrome::ScreencastFrame
+impl core::cmp::PartialEq for rich_embed::chrome::ScreencastFrame
+pub fn rich_embed::chrome::ScreencastFrame::eq(&self, &rich_embed::chrome::ScreencastFrame) -> bool
+impl core::default::Default for rich_embed::chrome::ScreencastFrame
+pub fn rich_embed::chrome::ScreencastFrame::default() -> rich_embed::chrome::ScreencastFrame
+impl core::fmt::Debug for rich_embed::chrome::ScreencastFrame
+pub fn rich_embed::chrome::ScreencastFrame::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_embed::chrome::ScreencastFrame
+impl core::marker::Freeze for rich_embed::chrome::ScreencastFrame
+impl core::marker::Send for rich_embed::chrome::ScreencastFrame
+impl core::marker::Sync for rich_embed::chrome::ScreencastFrame
+impl core::marker::Unpin for rich_embed::chrome::ScreencastFrame
+impl core::marker::UnsafeUnpin for rich_embed::chrome::ScreencastFrame
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::chrome::ScreencastFrame
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::chrome::ScreencastFrame
+pub struct rich_embed::TerminalPane
+impl rich_embed::TerminalPane
+pub fn rich_embed::TerminalPane::node(self) -> intuituive::node::Node
+pub fn rich_embed::TerminalPane::on_exit(self, impl core::ops::function::FnMut(rich_embed::ExitStatus, &mut intuituive::app::Ctx) + 'static) -> rich_embed::TerminalPane
+pub fn rich_embed::TerminalPane::release_keys(self, &str) -> rich_embed::TerminalPane
+pub fn rich_embed::TerminalPane::scrollback(self, usize) -> rich_embed::TerminalPane
+pub fn rich_embed::TerminalPane::status(&self) -> intuituive::reactive::Signal<core::option::Option<rich_embed::ExitStatus>>
+impl core::convert::From<rich_embed::TerminalPane> for intuituive::node::Node
+pub fn intuituive::node::Node::from(rich_embed::TerminalPane) -> intuituive::node::Node
+impl core::marker::Freeze for rich_embed::TerminalPane
+impl !core::marker::Send for rich_embed::TerminalPane
+impl !core::marker::Sync for rich_embed::TerminalPane
+impl core::marker::Unpin for rich_embed::TerminalPane
+impl core::marker::UnsafeUnpin for rich_embed::TerminalPane
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_embed::TerminalPane
+impl !core::panic::unwind_safe::UnwindSafe for rich_embed::TerminalPane
+pub struct rich_embed::WebHandle
+impl rich_embed::WebHandle
+pub fn rich_embed::WebHandle::address(&self) -> intuituive::reactive::Signal<alloc::string::String>
+pub fn rich_embed::WebHandle::back(&self)
+pub fn rich_embed::WebHandle::can_go_back(&self) -> intuituive::reactive::Signal<bool>
+pub fn rich_embed::WebHandle::can_go_forward(&self) -> intuituive::reactive::Signal<bool>
+pub fn rich_embed::WebHandle::error(&self) -> intuituive::reactive::Signal<core::option::Option<alloc::string::String>>
+pub fn rich_embed::WebHandle::forward(&self)
+pub fn rich_embed::WebHandle::loading(&self) -> intuituive::reactive::Signal<bool>
+pub fn rich_embed::WebHandle::open(&self, impl core::convert::Into<alloc::string::String>)
+pub fn rich_embed::WebHandle::reload(&self)
+pub fn rich_embed::WebHandle::title(&self) -> intuituive::reactive::Signal<alloc::string::String>
+impl core::clone::Clone for rich_embed::WebHandle
+pub fn rich_embed::WebHandle::clone(&self) -> Self
+impl core::marker::Copy for rich_embed::WebHandle
+impl core::marker::Freeze for rich_embed::WebHandle
+impl core::marker::Send for rich_embed::WebHandle
+impl core::marker::Sync for rich_embed::WebHandle
+impl core::marker::Unpin for rich_embed::WebHandle
+impl core::marker::UnsafeUnpin for rich_embed::WebHandle
+impl core::panic::unwind_safe::RefUnwindSafe for rich_embed::WebHandle
+impl core::panic::unwind_safe::UnwindSafe for rich_embed::WebHandle
+pub struct rich_embed::WebView
+impl rich_embed::WebView
+pub fn rich_embed::WebView::address_bar(self, bool) -> rich_embed::WebView
+pub fn rich_embed::WebView::handle(&self) -> rich_embed::WebHandle
+pub fn rich_embed::WebView::node(self) -> intuituive::node::Node
+pub fn rich_embed::WebView::release_keys(self, &str) -> rich_embed::WebView
+impl core::convert::From<rich_embed::WebView> for intuituive::node::Node
+pub fn intuituive::node::Node::from(rich_embed::WebView) -> intuituive::node::Node
+impl core::marker::Freeze for rich_embed::WebView
+impl !core::marker::Send for rich_embed::WebView
+impl !core::marker::Sync for rich_embed::WebView
+impl core::marker::Unpin for rich_embed::WebView
+impl core::marker::UnsafeUnpin for rich_embed::WebView
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_embed::WebView
+impl !core::panic::unwind_safe::UnwindSafe for rich_embed::WebView
+pub const rich_embed::BROWSER_VARIABLE: &str
+pub const rich_embed::DEFAULT_SCROLLBACK: usize
+pub const rich_embed::KNOWN_BROWSERS: &[(&str, &[&str])]
+pub trait rich_embed::PtyHost
+pub fn rich_embed::PtyHost::exit_status(&mut self) -> core::option::Option<rich_embed::ExitStatus>
+pub fn rich_embed::PtyHost::kill(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::PtyHost::read(&mut self) -> alloc::vec::Vec<u8>
+pub fn rich_embed::PtyHost::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::PtyHost::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::PtyHost::start(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::PtyHost::write(&mut self, &[u8]) -> std::io::error::Result<()>
+impl rich_embed::PtyHost for rich_embed::LocalPty
+pub fn rich_embed::LocalPty::exit_status(&mut self) -> core::option::Option<rich_embed::ExitStatus>
+pub fn rich_embed::LocalPty::kill(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::LocalPty::read(&mut self) -> alloc::vec::Vec<u8>
+pub fn rich_embed::LocalPty::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::LocalPty::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::LocalPty::start(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::LocalPty::write(&mut self, &[u8]) -> std::io::error::Result<()>
+impl rich_embed::PtyHost for rich_embed::ReplayHost
+pub fn rich_embed::ReplayHost::exit_status(&mut self) -> core::option::Option<rich_embed::ExitStatus>
+pub fn rich_embed::ReplayHost::kill(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::ReplayHost::read(&mut self) -> alloc::vec::Vec<u8>
+pub fn rich_embed::ReplayHost::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::ReplayHost::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::ReplayHost::start(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::ReplayHost::write(&mut self, &[u8]) -> std::io::error::Result<()>
+pub trait rich_embed::WebEngine
+pub fn rich_embed::WebEngine::back(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::WebEngine::forward(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::WebEngine::input(&mut self, rich_embed::WebInput) -> std::io::error::Result<()>
+pub fn rich_embed::WebEngine::open(&mut self, &str) -> std::io::error::Result<()>
+pub fn rich_embed::WebEngine::poll(&mut self) -> core::option::Option<rich_embed::WebFrame>
+pub fn rich_embed::WebEngine::reload(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::WebEngine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::WebEngine::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::WebEngine::state(&self) -> rich_embed::PageState
+impl rich_embed::WebEngine for rich_embed::ProgramEngine
+pub fn rich_embed::ProgramEngine::back(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::ProgramEngine::forward(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::ProgramEngine::input(&mut self, rich_embed::WebInput) -> std::io::error::Result<()>
+pub fn rich_embed::ProgramEngine::open(&mut self, &str) -> std::io::error::Result<()>
+pub fn rich_embed::ProgramEngine::poll(&mut self) -> core::option::Option<rich_embed::WebFrame>
+pub fn rich_embed::ProgramEngine::reload(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::ProgramEngine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::ProgramEngine::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::ProgramEngine::state(&self) -> rich_embed::PageState
+impl rich_embed::WebEngine for rich_embed::browsh::BrowshEngine
+pub fn rich_embed::browsh::BrowshEngine::back(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::forward(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::input(&mut self, rich_embed::WebInput) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::open(&mut self, &str) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::poll(&mut self) -> core::option::Option<rich_embed::WebFrame>
+pub fn rich_embed::browsh::BrowshEngine::reload(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::browsh::BrowshEngine::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::browsh::BrowshEngine::state(&self) -> rich_embed::PageState
+impl rich_embed::WebEngine for rich_embed::chrome::ChromeEngine
+pub fn rich_embed::chrome::ChromeEngine::back(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::forward(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::input(&mut self, rich_embed::WebInput) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::open(&mut self, &str) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::poll(&mut self) -> core::option::Option<rich_embed::WebFrame>
+pub fn rich_embed::chrome::ChromeEngine::reload(&mut self) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::resize(&mut self, u16, u16) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::set_notify(&mut self, rich_embed::Notify)
+pub fn rich_embed::chrome::ChromeEngine::state(&self) -> rich_embed::PageState
+pub fn rich_embed::half_blocks(&rich_embed::Pixels, u16, u16) -> alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>
+pub fn rich_embed::terminal(impl core::convert::Into<rich_embed::Command>) -> rich_embed::TerminalPane
+pub fn rich_embed::terminal_with(impl rich_embed::PtyHost + 'static) -> rich_embed::TerminalPane
+pub fn rich_embed::web_view(impl core::convert::Into<alloc::string::String>) -> rich_embed::WebView
+pub fn rich_embed::web_view_with(impl rich_embed::WebEngine + 'static, impl core::convert::Into<alloc::string::String>) -> rich_embed::WebView
+pub type rich_embed::Notify = alloc::sync::Arc<(dyn core::ops::function::Fn() + core::marker::Send + core::marker::Sync)>

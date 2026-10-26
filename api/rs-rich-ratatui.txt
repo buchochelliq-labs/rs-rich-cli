@@ -1,0 +1,141 @@
+pub mod rich_ratatui
+pub use rich_ratatui::ratatui_core
+pub use rich_ratatui::style_from_color_name
+pub mod rich_ratatui::buffer
+pub struct rich_ratatui::buffer::BufferCell<'a>
+pub rich_ratatui::buffer::BufferCell::cell: &'a ratatui_core::buffer::cell::Cell
+pub rich_ratatui::buffer::BufferCell::style: rich_ratatui::buffer::CellStyle
+pub rich_ratatui::buffer::BufferCell::symbol: &'a str
+pub rich_ratatui::buffer::BufferCell::width: u16
+pub rich_ratatui::buffer::BufferCell::x: u16
+pub rich_ratatui::buffer::BufferCell::y: u16
+impl rich_ratatui::buffer::BufferCell<'_>
+pub fn rich_ratatui::buffer::BufferCell<'_>::is_forced_width(&self) -> bool
+impl<'a> core::clone::Clone for rich_ratatui::buffer::BufferCell<'a>
+pub fn rich_ratatui::buffer::BufferCell<'a>::clone(&self) -> rich_ratatui::buffer::BufferCell<'a>
+impl<'a> core::fmt::Debug for rich_ratatui::buffer::BufferCell<'a>
+pub fn rich_ratatui::buffer::BufferCell<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Copy for rich_ratatui::buffer::BufferCell<'a>
+impl<'a> core::marker::Freeze for rich_ratatui::buffer::BufferCell<'a>
+impl<'a> core::marker::Send for rich_ratatui::buffer::BufferCell<'a>
+impl<'a> core::marker::Sync for rich_ratatui::buffer::BufferCell<'a>
+impl<'a> core::marker::Unpin for rich_ratatui::buffer::BufferCell<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_ratatui::buffer::BufferCell<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_ratatui::buffer::BufferCell<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rich_ratatui::buffer::BufferCell<'a>
+pub struct rich_ratatui::buffer::CellStyle
+pub rich_ratatui::buffer::CellStyle::bg: ratatui_core::style::color::Color
+pub rich_ratatui::buffer::CellStyle::fg: ratatui_core::style::color::Color
+pub rich_ratatui::buffer::CellStyle::modifier: ratatui_core::style::Modifier
+impl rich_ratatui::buffer::CellStyle
+pub fn rich_ratatui::buffer::CellStyle::is_plain(self) -> bool
+pub fn rich_ratatui::buffer::CellStyle::of(&ratatui_core::buffer::cell::Cell) -> rich_ratatui::buffer::CellStyle
+pub fn rich_ratatui::buffer::CellStyle::to_rich_style(self) -> core::option::Option<rich::style::Style>
+impl core::clone::Clone for rich_ratatui::buffer::CellStyle
+pub fn rich_ratatui::buffer::CellStyle::clone(&self) -> rich_ratatui::buffer::CellStyle
+impl core::cmp::Eq for rich_ratatui::buffer::CellStyle
+impl core::cmp::PartialEq for rich_ratatui::buffer::CellStyle
+pub fn rich_ratatui::buffer::CellStyle::eq(&self, &rich_ratatui::buffer::CellStyle) -> bool
+impl core::fmt::Debug for rich_ratatui::buffer::CellStyle
+pub fn rich_ratatui::buffer::CellStyle::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_ratatui::buffer::CellStyle
+pub fn rich_ratatui::buffer::CellStyle::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_ratatui::buffer::CellStyle
+impl core::marker::StructuralPartialEq for rich_ratatui::buffer::CellStyle
+impl core::marker::Freeze for rich_ratatui::buffer::CellStyle
+impl core::marker::Send for rich_ratatui::buffer::CellStyle
+impl core::marker::Sync for rich_ratatui::buffer::CellStyle
+impl core::marker::Unpin for rich_ratatui::buffer::CellStyle
+impl core::marker::UnsafeUnpin for rich_ratatui::buffer::CellStyle
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ratatui::buffer::CellStyle
+impl core::panic::unwind_safe::UnwindSafe for rich_ratatui::buffer::CellStyle
+pub struct rich_ratatui::buffer::Cells<'a>
+impl<'a> core::clone::Clone for rich_ratatui::buffer::Cells<'a>
+pub fn rich_ratatui::buffer::Cells<'a>::clone(&self) -> rich_ratatui::buffer::Cells<'a>
+impl<'a> core::fmt::Debug for rich_ratatui::buffer::Cells<'a>
+pub fn rich_ratatui::buffer::Cells<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::iter::traits::iterator::Iterator for rich_ratatui::buffer::Cells<'a>
+pub type rich_ratatui::buffer::Cells<'a>::Item = rich_ratatui::buffer::BufferCell<'a>
+pub fn rich_ratatui::buffer::Cells<'a>::next(&mut self) -> core::option::Option<rich_ratatui::buffer::BufferCell<'a>>
+impl<'a> core::marker::Freeze for rich_ratatui::buffer::Cells<'a>
+impl<'a> core::marker::Send for rich_ratatui::buffer::Cells<'a>
+impl<'a> core::marker::Sync for rich_ratatui::buffer::Cells<'a>
+impl<'a> core::marker::Unpin for rich_ratatui::buffer::Cells<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_ratatui::buffer::Cells<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_ratatui::buffer::Cells<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rich_ratatui::buffer::Cells<'a>
+pub struct rich_ratatui::buffer::StyleCache
+impl rich_ratatui::buffer::StyleCache
+pub fn rich_ratatui::buffer::StyleCache::get(&mut self, rich_ratatui::buffer::CellStyle) -> core::option::Option<&rich::style::Style>
+pub fn rich_ratatui::buffer::StyleCache::is_empty(&self) -> bool
+pub fn rich_ratatui::buffer::StyleCache::len(&self) -> usize
+pub fn rich_ratatui::buffer::StyleCache::new() -> rich_ratatui::buffer::StyleCache
+impl core::default::Default for rich_ratatui::buffer::StyleCache
+pub fn rich_ratatui::buffer::StyleCache::default() -> rich_ratatui::buffer::StyleCache
+impl core::fmt::Debug for rich_ratatui::buffer::StyleCache
+pub fn rich_ratatui::buffer::StyleCache::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_ratatui::buffer::StyleCache
+impl core::marker::Send for rich_ratatui::buffer::StyleCache
+impl core::marker::Sync for rich_ratatui::buffer::StyleCache
+impl core::marker::Unpin for rich_ratatui::buffer::StyleCache
+impl core::marker::UnsafeUnpin for rich_ratatui::buffer::StyleCache
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ratatui::buffer::StyleCache
+impl core::panic::unwind_safe::UnwindSafe for rich_ratatui::buffer::StyleCache
+pub fn rich_ratatui::buffer::buffer_area_to_lines(&ratatui_core::buffer::buffer::Buffer, ratatui_core::layout::rect::Rect) -> alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>
+pub fn rich_ratatui::buffer::buffer_to_lines(&ratatui_core::buffer::buffer::Buffer) -> alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>
+pub fn rich_ratatui::buffer::cells(&ratatui_core::buffer::buffer::Buffer, ratatui_core::layout::rect::Rect) -> rich_ratatui::buffer::Cells<'_>
+pub fn rich_ratatui::buffer::lines_to_buffer(&[alloc::vec::Vec<rich::segment::Segment>], ratatui_core::layout::rect::Rect, &mut ratatui_core::buffer::buffer::Buffer)
+pub mod rich_ratatui::style
+pub use rich_ratatui::style::style_from_color_name
+pub fn rich_ratatui::style::to_ratatui_color(&rich::color::Color) -> ratatui_core::style::color::Color
+pub fn rich_ratatui::style::to_ratatui_style(&rich::style::Style) -> ratatui_core::style::Style
+pub fn rich_ratatui::style::to_rich_color(ratatui_core::style::color::Color) -> rich::color::Color
+pub fn rich_ratatui::style::to_rich_style(ratatui_core::style::Style) -> core::option::Option<rich::style::Style>
+pub struct rich_ratatui::RatatuiComponent<S, T>
+impl<S, T> rich_ratatui::RatatuiComponent<S, T>
+pub fn rich_ratatui::RatatuiComponent<S, T>::draw(&self, u16, u16) -> ratatui_core::buffer::buffer::Buffer
+pub fn rich_ratatui::RatatuiComponent<S, T>::height(self, u16) -> rich_ratatui::RatatuiComponent<S, T>
+pub fn rich_ratatui::RatatuiComponent<S, T>::on_event(self, impl core::ops::function::FnMut(&mut S, &rich_interact::event::Event) -> rich_interact::component::Flow<T> + 'static) -> rich_ratatui::RatatuiComponent<S, T>
+pub fn rich_ratatui::RatatuiComponent<S, T>::state(&self) -> &S
+pub fn rich_ratatui::RatatuiComponent<S, T>::state_mut(&mut self) -> &mut S
+pub fn rich_ratatui::RatatuiComponent<S, T>::with_state(S, impl core::ops::function::Fn(&S, ratatui_core::layout::rect::Rect, &mut ratatui_core::buffer::buffer::Buffer) + 'static) -> rich_ratatui::RatatuiComponent<S, T>
+impl<T> rich_ratatui::RatatuiComponent<(), T>
+pub fn rich_ratatui::RatatuiComponent<(), T>::new(impl core::ops::function::Fn(ratatui_core::layout::rect::Rect, &mut ratatui_core::buffer::buffer::Buffer) + 'static) -> rich_ratatui::RatatuiComponent<(), T>
+impl<S, T> rich_interact::component::Component for rich_ratatui::RatatuiComponent<S, T>
+pub type rich_ratatui::RatatuiComponent<S, T>::Output = T
+pub fn rich_ratatui::RatatuiComponent<S, T>::handle(&mut self, &rich_interact::event::Event, &rich_interact::component::Context<'_>) -> rich_interact::component::Flow<T>
+pub fn rich_ratatui::RatatuiComponent<S, T>::render(&self, &rich_interact::component::Context<'_>) -> rich_interact::component::View
+impl<S, T> core::marker::Freeze for rich_ratatui::RatatuiComponent<S, T> where S: core::marker::Freeze
+impl<S, T> !core::marker::Send for rich_ratatui::RatatuiComponent<S, T>
+impl<S, T> !core::marker::Sync for rich_ratatui::RatatuiComponent<S, T>
+impl<S, T> core::marker::Unpin for rich_ratatui::RatatuiComponent<S, T> where S: core::marker::Unpin
+impl<S, T> core::marker::UnsafeUnpin for rich_ratatui::RatatuiComponent<S, T> where S: core::marker::UnsafeUnpin
+impl<S, T> !core::panic::unwind_safe::RefUnwindSafe for rich_ratatui::RatatuiComponent<S, T>
+impl<S, T> !core::panic::unwind_safe::UnwindSafe for rich_ratatui::RatatuiComponent<S, T>
+pub struct rich_ratatui::RichWidget<'a>
+impl<'a> rich_ratatui::RichWidget<'a>
+pub fn rich_ratatui::RichWidget<'a>::console(self, &'a rich::console::Console) -> rich_ratatui::RichWidget<'a>
+pub fn rich_ratatui::RichWidget<'a>::fill_height(self, bool) -> rich_ratatui::RichWidget<'a>
+pub fn rich_ratatui::RichWidget<'a>::lines(&self, ratatui_core::layout::rect::Rect) -> alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>
+pub fn rich_ratatui::RichWidget<'a>::markup(&str) -> rich_ratatui::RichWidget<'static>
+pub fn rich_ratatui::RichWidget<'a>::new(&'a dyn rich::protocol::Renderable) -> rich_ratatui::RichWidget<'a>
+pub fn rich_ratatui::RichWidget<'a>::owned(impl rich::protocol::Renderable + 'a) -> rich_ratatui::RichWidget<'a>
+impl ratatui_core::widgets::widget::Widget for &rich_ratatui::RichWidget<'_>
+pub fn &rich_ratatui::RichWidget<'_>::render(self, ratatui_core::layout::rect::Rect, &mut ratatui_core::buffer::buffer::Buffer)
+impl ratatui_core::widgets::widget::Widget for rich_ratatui::RichWidget<'_>
+pub fn rich_ratatui::RichWidget<'_>::render(self, ratatui_core::layout::rect::Rect, &mut ratatui_core::buffer::buffer::Buffer)
+impl<'a> core::marker::Freeze for rich_ratatui::RichWidget<'a>
+impl<'a> !core::marker::Send for rich_ratatui::RichWidget<'a>
+impl<'a> !core::marker::Sync for rich_ratatui::RichWidget<'a>
+impl<'a> core::marker::Unpin for rich_ratatui::RichWidget<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_ratatui::RichWidget<'a>
+impl<'a> !core::panic::unwind_safe::RefUnwindSafe for rich_ratatui::RichWidget<'a>
+impl<'a> !core::panic::unwind_safe::UnwindSafe for rich_ratatui::RichWidget<'a>
+pub fn rich_ratatui::buffer_area_to_lines(&ratatui_core::buffer::buffer::Buffer, ratatui_core::layout::rect::Rect) -> alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>
+pub fn rich_ratatui::buffer_to_lines(&ratatui_core::buffer::buffer::Buffer) -> alloc::vec::Vec<alloc::vec::Vec<rich::segment::Segment>>
+pub fn rich_ratatui::cells(&ratatui_core::buffer::buffer::Buffer, ratatui_core::layout::rect::Rect) -> rich_ratatui::buffer::Cells<'_>
+pub fn rich_ratatui::lines_to_buffer(&[alloc::vec::Vec<rich::segment::Segment>], ratatui_core::layout::rect::Rect, &mut ratatui_core::buffer::buffer::Buffer)
+pub fn rich_ratatui::to_ratatui_color(&rich::color::Color) -> ratatui_core::style::color::Color
+pub fn rich_ratatui::to_ratatui_style(&rich::style::Style) -> ratatui_core::style::Style
+pub fn rich_ratatui::to_rich_color(ratatui_core::style::color::Color) -> rich::color::Color
+pub fn rich_ratatui::to_rich_style(ratatui_core::style::Style) -> core::option::Option<rich::style::Style>

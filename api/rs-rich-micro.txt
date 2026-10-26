@@ -1,0 +1,2024 @@
+pub mod rich_micro
+pub use rich_micro::CellPixels
+pub mod rich_micro::api
+pub struct rich_micro::api::MicroAssetRef
+impl rich_micro::api::MicroAssetRef
+pub fn rich_micro::api::MicroAssetRef::asset(&self) -> &rich_micro::model::MicroAsset
+pub fn rich_micro::api::MicroAssetRef::from_registry(&rich_micro::registry::MicroRegistry, &str) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::api::MicroAssetRef::new(impl core::convert::Into<alloc::sync::Arc<rich_micro::model::MicroAsset>>) -> Self
+pub fn rich_micro::api::MicroAssetRef::preference(self, rich_micro::render::FallbackPreference) -> Self
+pub fn rich_micro::api::MicroAssetRef::text(&self) -> rich::text::Text
+impl core::clone::Clone for rich_micro::api::MicroAssetRef
+pub fn rich_micro::api::MicroAssetRef::clone(&self) -> rich_micro::api::MicroAssetRef
+impl core::fmt::Debug for rich_micro::api::MicroAssetRef
+pub fn rich_micro::api::MicroAssetRef::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich::protocol::Renderable for rich_micro::api::MicroAssetRef
+pub fn rich_micro::api::MicroAssetRef::fit_to_measurement(&self) -> bool
+pub fn rich_micro::api::MicroAssetRef::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_micro::api::MicroAssetRef::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_micro::api::MicroAssetRef
+impl core::marker::Send for rich_micro::api::MicroAssetRef
+impl core::marker::Sync for rich_micro::api::MicroAssetRef
+impl core::marker::Unpin for rich_micro::api::MicroAssetRef
+impl core::marker::UnsafeUnpin for rich_micro::api::MicroAssetRef
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::api::MicroAssetRef
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::api::MicroAssetRef
+pub struct rich_micro::api::MicroPlugin
+impl rich_micro::api::MicroPlugin
+pub fn rich_micro::api::MicroPlugin::new(alloc::sync::Arc<rich_micro::registry::MicroRegistry>) -> Self
+impl core::clone::Clone for rich_micro::api::MicroPlugin
+pub fn rich_micro::api::MicroPlugin::clone(&self) -> rich_micro::api::MicroPlugin
+impl core::fmt::Debug for rich_micro::api::MicroPlugin
+pub fn rich_micro::api::MicroPlugin::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_plugin_api::Plugin for rich_micro::api::MicroPlugin
+pub fn rich_micro::api::MicroPlugin::metadata(&self) -> rich_plugin_api::PluginMetadata
+pub fn rich_micro::api::MicroPlugin::register(&self, &mut dyn rich_plugin_api::PluginRegistrar) -> core::result::Result<(), rich_plugin_api::PluginError>
+impl core::marker::Freeze for rich_micro::api::MicroPlugin
+impl core::marker::Send for rich_micro::api::MicroPlugin
+impl core::marker::Sync for rich_micro::api::MicroPlugin
+impl core::marker::Unpin for rich_micro::api::MicroPlugin
+impl core::marker::UnsafeUnpin for rich_micro::api::MicroPlugin
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::api::MicroPlugin
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::api::MicroPlugin
+pub trait rich_micro::api::MicroExt
+pub fn rich_micro::api::MicroExt::append_micro(&mut self, &rich_micro::registry::MicroRegistry, &str) -> core::result::Result<&mut Self, rich_micro::error::MicroError>
+pub fn rich_micro::api::MicroExt::append_micro_asset(&mut self, &rich_micro::model::MicroAsset) -> &mut Self
+pub fn rich_micro::api::MicroExt::expand_micro(&mut self, &rich_micro::registry::MicroRegistry) -> alloc::vec::Vec<rich_micro::markup::Diagnostic>
+impl rich_micro::api::MicroExt for rich::text::Text
+pub fn rich::text::Text::append_micro(&mut self, &rich_micro::registry::MicroRegistry, &str) -> core::result::Result<&mut Self, rich_micro::error::MicroError>
+pub fn rich::text::Text::append_micro_asset(&mut self, &rich_micro::model::MicroAsset) -> &mut Self
+pub fn rich::text::Text::expand_micro(&mut self, &rich_micro::registry::MicroRegistry) -> alloc::vec::Vec<rich_micro::markup::Diagnostic>
+pub mod rich_micro::builtin
+pub const rich_micro::builtin::PACKS: &[&str]
+pub fn rich_micro::builtin::files() -> impl core::iter::traits::iterator::Iterator<Item = &'static str>
+pub fn rich_micro::builtin::packs(rich_micro::model::Layer) -> alloc::vec::Vec<core::result::Result<rich_micro::package::Pack, rich_micro::error::MicroError>>
+pub mod rich_micro::cache
+pub struct rich_micro::cache::ImageCache
+impl rich_micro::cache::ImageCache
+pub const rich_micro::cache::ImageCache::DEFAULT_BUDGET: usize
+pub fn rich_micro::cache::ImageCache::is_empty(&self) -> bool
+pub fn rich_micro::cache::ImageCache::len(&self) -> usize
+pub fn rich_micro::cache::ImageCache::new(usize, core::option::Option<std::path::PathBuf>) -> rich_micro::cache::ImageCache
+pub fn rich_micro::cache::ImageCache::prepare(&mut self, &rich_micro::model::MicroAsset, rich_art::graphics::CellPixels, bool, &rich_micro::package::Limits) -> core::option::Option<alloc::sync::Arc<rich_micro::cache::Prepared>>
+pub fn rich_micro::cache::ImageCache::used(&self) -> usize
+impl core::fmt::Debug for rich_micro::cache::ImageCache
+pub fn rich_micro::cache::ImageCache::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_micro::cache::ImageCache
+impl core::marker::Send for rich_micro::cache::ImageCache
+impl core::marker::Sync for rich_micro::cache::ImageCache
+impl core::marker::Unpin for rich_micro::cache::ImageCache
+impl core::marker::UnsafeUnpin for rich_micro::cache::ImageCache
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::cache::ImageCache
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::cache::ImageCache
+pub struct rich_micro::cache::Prepared
+pub rich_micro::cache::Prepared::cell: rich_art::graphics::CellPixels
+pub rich_micro::cache::Prepared::cols: usize
+pub rich_micro::cache::Prepared::frames: alloc::vec::Vec<rich_art::graphics::AnimationFrame>
+pub rich_micro::cache::Prepared::key: u64
+pub rich_micro::cache::Prepared::rows: usize
+impl rich_micro::cache::Prepared
+pub fn rich_micro::cache::Prepared::animated(&self) -> bool
+pub fn rich_micro::cache::Prepared::duration(&self) -> core::time::Duration
+pub fn rich_micro::cache::Prepared::frame_at(&self, core::time::Duration) -> (usize, core::option::Option<core::time::Duration>)
+impl core::fmt::Debug for rich_micro::cache::Prepared
+pub fn rich_micro::cache::Prepared::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl !core::marker::Freeze for rich_micro::cache::Prepared
+impl core::marker::Send for rich_micro::cache::Prepared
+impl core::marker::Sync for rich_micro::cache::Prepared
+impl core::marker::Unpin for rich_micro::cache::Prepared
+impl core::marker::UnsafeUnpin for rich_micro::cache::Prepared
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::cache::Prepared
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::cache::Prepared
+pub fn rich_micro::cache::user_cache_dir() -> core::option::Option<std::path::PathBuf>
+pub mod rich_micro::create
+pub struct rich_micro::create::PackageSpec
+pub rich_micro::create::PackageSpec::aliases: alloc::vec::Vec<alloc::string::String>
+pub rich_micro::create::PackageSpec::alt: alloc::string::String
+pub rich_micro::create::PackageSpec::author: core::option::Option<alloc::string::String>
+pub rich_micro::create::PackageSpec::emoji: core::option::Option<alloc::string::String>
+pub rich_micro::create::PackageSpec::license: core::option::Option<alloc::string::String>
+pub rich_micro::create::PackageSpec::name: alloc::string::String
+pub rich_micro::create::PackageSpec::text: core::option::Option<alloc::string::String>
+pub rich_micro::create::PackageSpec::version: core::option::Option<alloc::string::String>
+impl rich_micro::create::PackageSpec
+pub fn rich_micro::create::PackageSpec::alias(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_micro::create::PackageSpec::author(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_micro::create::PackageSpec::emoji(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_micro::create::PackageSpec::license(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_micro::create::PackageSpec::manifest(&self, &rich_micro::pipeline::Processed) -> serde_json::value::Value
+pub fn rich_micro::create::PackageSpec::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> rich_micro::create::PackageSpec
+pub fn rich_micro::create::PackageSpec::text(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_micro::create::PackageSpec::version(self, impl core::convert::Into<alloc::string::String>) -> Self
+impl core::clone::Clone for rich_micro::create::PackageSpec
+pub fn rich_micro::create::PackageSpec::clone(&self) -> rich_micro::create::PackageSpec
+impl core::cmp::Eq for rich_micro::create::PackageSpec
+impl core::cmp::PartialEq for rich_micro::create::PackageSpec
+pub fn rich_micro::create::PackageSpec::eq(&self, &rich_micro::create::PackageSpec) -> bool
+impl core::default::Default for rich_micro::create::PackageSpec
+pub fn rich_micro::create::PackageSpec::default() -> rich_micro::create::PackageSpec
+impl core::fmt::Debug for rich_micro::create::PackageSpec
+pub fn rich_micro::create::PackageSpec::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::create::PackageSpec
+impl core::marker::Freeze for rich_micro::create::PackageSpec
+impl core::marker::Send for rich_micro::create::PackageSpec
+impl core::marker::Sync for rich_micro::create::PackageSpec
+impl core::marker::Unpin for rich_micro::create::PackageSpec
+impl core::marker::UnsafeUnpin for rich_micro::create::PackageSpec
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::create::PackageSpec
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::create::PackageSpec
+pub const rich_micro::create::ANIMATION: &str
+pub const rich_micro::create::STATIC: &str
+pub fn rich_micro::create::package_files(&rich_micro::create::PackageSpec, &rich_micro::pipeline::Processed) -> core::result::Result<alloc::vec::Vec<(&'static str, alloc::vec::Vec<u8>)>, rich_micro::error::MicroError>
+pub fn rich_micro::create::package_path(&std::path::Path, &str, bool) -> std::path::PathBuf
+pub fn rich_micro::create::write_package(&std::path::Path, &rich_micro::create::PackageSpec, &rich_micro::pipeline::Processed, bool) -> core::result::Result<rich_micro::model::MicroAsset, rich_micro::error::MicroError>
+pub mod rich_micro::error
+pub enum rich_micro::error::MicroError
+pub rich_micro::error::MicroError::Image(alloc::string::String)
+pub rich_micro::error::MicroError::InvalidAlt(alloc::string::String)
+pub rich_micro::error::MicroError::InvalidFallback(alloc::string::String)
+pub rich_micro::error::MicroError::InvalidName(alloc::string::String)
+pub rich_micro::error::MicroError::InvalidSize(alloc::string::String)
+pub rich_micro::error::MicroError::Io(alloc::string::String)
+pub rich_micro::error::MicroError::Limit(alloc::string::String)
+pub rich_micro::error::MicroError::Manifest(alloc::string::String)
+pub rich_micro::error::MicroError::UnknownAsset(alloc::string::String)
+pub rich_micro::error::MicroError::UnsafePath(alloc::string::String)
+impl core::clone::Clone for rich_micro::error::MicroError
+pub fn rich_micro::error::MicroError::clone(&self) -> rich_micro::error::MicroError
+impl core::cmp::Eq for rich_micro::error::MicroError
+impl core::cmp::PartialEq for rich_micro::error::MicroError
+pub fn rich_micro::error::MicroError::eq(&self, &rich_micro::error::MicroError) -> bool
+impl core::error::Error for rich_micro::error::MicroError
+impl core::fmt::Debug for rich_micro::error::MicroError
+pub fn rich_micro::error::MicroError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_micro::error::MicroError
+pub fn rich_micro::error::MicroError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::error::MicroError
+impl core::marker::Freeze for rich_micro::error::MicroError
+impl core::marker::Send for rich_micro::error::MicroError
+impl core::marker::Sync for rich_micro::error::MicroError
+impl core::marker::Unpin for rich_micro::error::MicroError
+impl core::marker::UnsafeUnpin for rich_micro::error::MicroError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::error::MicroError
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::error::MicroError
+pub mod rich_micro::graphics
+pub enum rich_micro::graphics::MicroMode
+pub rich_micro::graphics::MicroMode::Blocks
+pub rich_micro::graphics::MicroMode::Iterm
+pub rich_micro::graphics::MicroMode::Kitty
+pub rich_micro::graphics::MicroMode::Sixel
+pub rich_micro::graphics::MicroMode::Text
+impl rich_micro::graphics::MicroMode
+pub fn rich_micro::graphics::MicroMode::is_graphics(self) -> bool
+pub fn rich_micro::graphics::MicroMode::name(self) -> &'static str
+pub fn rich_micro::graphics::MicroMode::parse(&str) -> core::option::Option<rich_micro::graphics::MicroMode>
+impl core::clone::Clone for rich_micro::graphics::MicroMode
+pub fn rich_micro::graphics::MicroMode::clone(&self) -> rich_micro::graphics::MicroMode
+impl core::cmp::Eq for rich_micro::graphics::MicroMode
+impl core::cmp::PartialEq for rich_micro::graphics::MicroMode
+pub fn rich_micro::graphics::MicroMode::eq(&self, &rich_micro::graphics::MicroMode) -> bool
+impl core::fmt::Debug for rich_micro::graphics::MicroMode
+pub fn rich_micro::graphics::MicroMode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_micro::graphics::MicroMode
+pub fn rich_micro::graphics::MicroMode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::graphics::MicroMode
+pub fn rich_micro::graphics::MicroMode::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::graphics::MicroMode
+impl core::marker::StructuralPartialEq for rich_micro::graphics::MicroMode
+impl core::marker::Freeze for rich_micro::graphics::MicroMode
+impl core::marker::Send for rich_micro::graphics::MicroMode
+impl core::marker::Sync for rich_micro::graphics::MicroMode
+impl core::marker::Unpin for rich_micro::graphics::MicroMode
+impl core::marker::UnsafeUnpin for rich_micro::graphics::MicroMode
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::graphics::MicroMode
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::graphics::MicroMode
+pub struct rich_micro::graphics::MicroGraphics
+impl rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::cache_bytes(&self) -> usize
+pub fn rich_micro::graphics::MicroGraphics::close(&self) -> alloc::string::String
+pub fn rich_micro::graphics::MicroGraphics::detect(alloc::sync::Arc<rich_micro::registry::MicroRegistry>) -> rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::kitty_ids(&self) -> alloc::vec::Vec<u32>
+pub fn rich_micro::graphics::MicroGraphics::new(alloc::sync::Arc<rich_micro::registry::MicroRegistry>, rich_micro::graphics::Selection) -> rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::registry(&self) -> &alloc::sync::Arc<rich_micro::registry::MicroRegistry>
+pub fn rich_micro::graphics::MicroGraphics::renderer(&self) -> alloc::sync::Arc<dyn rich_micro::render::MicroRenderer>
+pub fn rich_micro::graphics::MicroGraphics::selection(&self) -> &rich_micro::graphics::Selection
+pub fn rich_micro::graphics::MicroGraphics::source(&self) -> alloc::sync::Arc<dyn rich_ext::frame::graphics::PlacementSource>
+pub fn rich_micro::graphics::MicroGraphics::view<R: rich::protocol::Renderable>(&self, R) -> rich_micro::render::MicroView<R>
+pub fn rich_micro::graphics::MicroGraphics::with_cache_budget(self, usize) -> rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::with_clock(self, impl core::ops::function::Fn() -> core::time::Duration + core::marker::Send + core::marker::Sync + 'static) -> rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::with_disk_cache(self, core::option::Option<std::path::PathBuf>) -> rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::with_limits(self, rich_micro::package::Limits) -> rich_micro::graphics::MicroGraphics
+impl core::clone::Clone for rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::clone(&self) -> rich_micro::graphics::MicroGraphics
+impl core::fmt::Debug for rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_micro::graphics::MicroGraphics
+impl core::marker::Send for rich_micro::graphics::MicroGraphics
+impl core::marker::Sync for rich_micro::graphics::MicroGraphics
+impl core::marker::Unpin for rich_micro::graphics::MicroGraphics
+impl core::marker::UnsafeUnpin for rich_micro::graphics::MicroGraphics
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_micro::graphics::MicroGraphics
+impl !core::panic::unwind_safe::UnwindSafe for rich_micro::graphics::MicroGraphics
+pub struct rich_micro::graphics::Selection
+pub rich_micro::graphics::Selection::animate: bool
+pub rich_micro::graphics::Selection::blocks_first: bool
+pub rich_micro::graphics::Selection::cell: rich_art::graphics::CellPixels
+pub rich_micro::graphics::Selection::cell_known: bool
+pub rich_micro::graphics::Selection::color_system: core::option::Option<rich::color::ColorSystem>
+pub rich_micro::graphics::Selection::mode: rich_micro::graphics::MicroMode
+pub rich_micro::graphics::Selection::preference: rich_micro::render::FallbackPreference
+pub rich_micro::graphics::Selection::reason: alloc::string::String
+pub rich_micro::graphics::Selection::warning: core::option::Option<alloc::string::String>
+impl rich_micro::graphics::Selection
+pub fn rich_micro::graphics::Selection::animate(self, bool) -> rich_micro::graphics::Selection
+pub fn rich_micro::graphics::Selection::forced(rich_micro::graphics::MicroMode, rich_art::graphics::CellPixels) -> rich_micro::graphics::Selection
+pub fn rich_micro::graphics::Selection::text(&str) -> rich_micro::graphics::Selection
+impl core::clone::Clone for rich_micro::graphics::Selection
+pub fn rich_micro::graphics::Selection::clone(&self) -> rich_micro::graphics::Selection
+impl core::cmp::Eq for rich_micro::graphics::Selection
+impl core::cmp::PartialEq for rich_micro::graphics::Selection
+pub fn rich_micro::graphics::Selection::eq(&self, &rich_micro::graphics::Selection) -> bool
+impl core::fmt::Debug for rich_micro::graphics::Selection
+pub fn rich_micro::graphics::Selection::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::graphics::Selection
+impl core::marker::Freeze for rich_micro::graphics::Selection
+impl core::marker::Send for rich_micro::graphics::Selection
+impl core::marker::Sync for rich_micro::graphics::Selection
+impl core::marker::Unpin for rich_micro::graphics::Selection
+impl core::marker::UnsafeUnpin for rich_micro::graphics::Selection
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::graphics::Selection
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::graphics::Selection
+pub fn rich_micro::graphics::select(&rich_ext::graphics::GraphicsEnvironment, &dyn rich_ext::capabilities::Environment) -> rich_micro::graphics::Selection
+pub mod rich_micro::image
+pub fn rich_micro::image::sniff(&[u8], u32) -> core::result::Result<rich_micro::model::ImageInfo, rich_micro::error::MicroError>
+pub mod rich_micro::markup
+pub enum rich_micro::markup::DiagnosticKind
+pub rich_micro::markup::DiagnosticKind::Malformed
+pub rich_micro::markup::DiagnosticKind::Reserved
+pub rich_micro::markup::DiagnosticKind::UnknownAsset(alloc::string::String)
+impl core::clone::Clone for rich_micro::markup::DiagnosticKind
+pub fn rich_micro::markup::DiagnosticKind::clone(&self) -> rich_micro::markup::DiagnosticKind
+impl core::cmp::Eq for rich_micro::markup::DiagnosticKind
+impl core::cmp::PartialEq for rich_micro::markup::DiagnosticKind
+pub fn rich_micro::markup::DiagnosticKind::eq(&self, &rich_micro::markup::DiagnosticKind) -> bool
+impl core::fmt::Debug for rich_micro::markup::DiagnosticKind
+pub fn rich_micro::markup::DiagnosticKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::markup::DiagnosticKind
+impl core::marker::Freeze for rich_micro::markup::DiagnosticKind
+impl core::marker::Send for rich_micro::markup::DiagnosticKind
+impl core::marker::Sync for rich_micro::markup::DiagnosticKind
+impl core::marker::Unpin for rich_micro::markup::DiagnosticKind
+impl core::marker::UnsafeUnpin for rich_micro::markup::DiagnosticKind
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::markup::DiagnosticKind
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::markup::DiagnosticKind
+pub struct rich_micro::markup::Diagnostic
+pub rich_micro::markup::Diagnostic::kind: rich_micro::markup::DiagnosticKind
+pub rich_micro::markup::Diagnostic::offset: usize
+pub rich_micro::markup::Diagnostic::token: alloc::string::String
+impl core::clone::Clone for rich_micro::markup::Diagnostic
+pub fn rich_micro::markup::Diagnostic::clone(&self) -> rich_micro::markup::Diagnostic
+impl core::cmp::Eq for rich_micro::markup::Diagnostic
+impl core::cmp::PartialEq for rich_micro::markup::Diagnostic
+pub fn rich_micro::markup::Diagnostic::eq(&self, &rich_micro::markup::Diagnostic) -> bool
+impl core::fmt::Debug for rich_micro::markup::Diagnostic
+pub fn rich_micro::markup::Diagnostic::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_micro::markup::Diagnostic
+pub fn rich_micro::markup::Diagnostic::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::markup::Diagnostic
+impl core::marker::Freeze for rich_micro::markup::Diagnostic
+impl core::marker::Send for rich_micro::markup::Diagnostic
+impl core::marker::Sync for rich_micro::markup::Diagnostic
+impl core::marker::Unpin for rich_micro::markup::Diagnostic
+impl core::marker::UnsafeUnpin for rich_micro::markup::Diagnostic
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::markup::Diagnostic
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::markup::Diagnostic
+pub struct rich_micro::markup::MarkdownView<R>
+impl<R: rich::protocol::Renderable> rich::protocol::Renderable for rich_micro::markup::MarkdownView<R>
+pub fn rich_micro::markup::MarkdownView<R>::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_micro::markup::MarkdownView<R>::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl<R> core::marker::Freeze for rich_micro::markup::MarkdownView<R> where R: core::marker::Freeze
+impl<R> core::marker::Send for rich_micro::markup::MarkdownView<R> where R: core::marker::Send
+impl<R> core::marker::Sync for rich_micro::markup::MarkdownView<R> where R: core::marker::Sync
+impl<R> core::marker::Unpin for rich_micro::markup::MarkdownView<R> where R: core::marker::Unpin
+impl<R> core::marker::UnsafeUnpin for rich_micro::markup::MarkdownView<R> where R: core::marker::UnsafeUnpin
+impl<R> core::panic::unwind_safe::RefUnwindSafe for rich_micro::markup::MarkdownView<R> where R: core::panic::unwind_safe::RefUnwindSafe
+impl<R> core::panic::unwind_safe::UnwindSafe for rich_micro::markup::MarkdownView<R> where R: core::panic::unwind_safe::UnwindSafe
+pub struct rich_micro::markup::MicroTransform
+impl rich_micro::markup::MicroTransform
+pub fn rich_micro::markup::MicroTransform::new(alloc::sync::Arc<rich_micro::registry::MicroRegistry>) -> Self
+pub fn rich_micro::markup::MicroTransform::preference(self, rich_micro::render::FallbackPreference) -> Self
+impl core::clone::Clone for rich_micro::markup::MicroTransform
+pub fn rich_micro::markup::MicroTransform::clone(&self) -> rich_micro::markup::MicroTransform
+impl core::fmt::Debug for rich_micro::markup::MicroTransform
+pub fn rich_micro::markup::MicroTransform::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_plugin_api::TextTransform for rich_micro::markup::MicroTransform
+pub fn rich_micro::markup::MicroTransform::transform(&self, rich::text::Text) -> core::result::Result<rich::text::Text, rich_plugin_api::PluginError>
+impl core::marker::Freeze for rich_micro::markup::MicroTransform
+impl core::marker::Send for rich_micro::markup::MicroTransform
+impl core::marker::Sync for rich_micro::markup::MicroTransform
+impl core::marker::Unpin for rich_micro::markup::MicroTransform
+impl core::marker::UnsafeUnpin for rich_micro::markup::MicroTransform
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::markup::MicroTransform
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::markup::MicroTransform
+pub struct rich_micro::markup::PreparedMarkdown
+impl rich_micro::markup::PreparedMarkdown
+pub fn rich_micro::markup::PreparedMarkdown::diagnostics(&self) -> &[rich_micro::markup::Diagnostic]
+pub fn rich_micro::markup::PreparedMarkdown::has_assets(&self) -> bool
+pub fn rich_micro::markup::PreparedMarkdown::new(&str, &rich_micro::registry::MicroRegistry, rich_micro::render::FallbackPreference) -> Self
+pub fn rich_micro::markup::PreparedMarkdown::source(&self) -> &str
+pub fn rich_micro::markup::PreparedMarkdown::view<R: rich::protocol::Renderable>(&self, R) -> rich_micro::markup::MarkdownView<R>
+impl core::clone::Clone for rich_micro::markup::PreparedMarkdown
+pub fn rich_micro::markup::PreparedMarkdown::clone(&self) -> rich_micro::markup::PreparedMarkdown
+impl core::fmt::Debug for rich_micro::markup::PreparedMarkdown
+pub fn rich_micro::markup::PreparedMarkdown::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_micro::markup::PreparedMarkdown
+impl core::marker::Send for rich_micro::markup::PreparedMarkdown
+impl core::marker::Sync for rich_micro::markup::PreparedMarkdown
+impl core::marker::Unpin for rich_micro::markup::PreparedMarkdown
+impl core::marker::UnsafeUnpin for rich_micro::markup::PreparedMarkdown
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::markup::PreparedMarkdown
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::markup::PreparedMarkdown
+pub struct rich_micro::markup::PreparedMarkup
+impl rich_micro::markup::PreparedMarkup
+pub fn rich_micro::markup::PreparedMarkup::diagnostics(&self) -> &[rich_micro::markup::Diagnostic]
+pub fn rich_micro::markup::PreparedMarkup::finish(&self, &rich::text::Text) -> rich::text::Text
+pub fn rich_micro::markup::PreparedMarkup::markup(&self) -> &str
+pub fn rich_micro::markup::PreparedMarkup::new(&str, &rich_micro::registry::MicroRegistry, rich_micro::render::FallbackPreference) -> Self
+impl core::clone::Clone for rich_micro::markup::PreparedMarkup
+pub fn rich_micro::markup::PreparedMarkup::clone(&self) -> rich_micro::markup::PreparedMarkup
+impl core::fmt::Debug for rich_micro::markup::PreparedMarkup
+pub fn rich_micro::markup::PreparedMarkup::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_micro::markup::PreparedMarkup
+impl core::marker::Send for rich_micro::markup::PreparedMarkup
+impl core::marker::Sync for rich_micro::markup::PreparedMarkup
+impl core::marker::Unpin for rich_micro::markup::PreparedMarkup
+impl core::marker::UnsafeUnpin for rich_micro::markup::PreparedMarkup
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::markup::PreparedMarkup
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::markup::PreparedMarkup
+pub const rich_micro::markup::TOKEN_PREFIX: &str
+pub fn rich_micro::markup::expand(&rich::text::Text, &rich_micro::registry::MicroRegistry, rich_micro::render::FallbackPreference) -> (rich::text::Text, alloc::vec::Vec<rich_micro::markup::Diagnostic>)
+pub fn rich_micro::markup::markup_text(&str, &rich_micro::registry::MicroRegistry, bool, rich_micro::render::FallbackPreference) -> rich::errors::Result<(rich::text::Text, alloc::vec::Vec<rich_micro::markup::Diagnostic>)>
+pub fn rich_micro::markup::render_markup(&rich::console::Console, &str, &rich_micro::registry::MicroRegistry, rich_micro::render::FallbackPreference) -> (rich::text::Text, alloc::vec::Vec<rich_micro::markup::Diagnostic>)
+pub mod rich_micro::model
+pub enum rich_micro::model::AssetKind
+pub rich_micro::model::AssetKind::Animated
+pub rich_micro::model::AssetKind::Static
+impl rich_micro::model::AssetKind
+pub fn rich_micro::model::AssetKind::as_str(self) -> &'static str
+impl core::clone::Clone for rich_micro::model::AssetKind
+pub fn rich_micro::model::AssetKind::clone(&self) -> rich_micro::model::AssetKind
+impl core::cmp::Eq for rich_micro::model::AssetKind
+impl core::cmp::PartialEq for rich_micro::model::AssetKind
+pub fn rich_micro::model::AssetKind::eq(&self, &rich_micro::model::AssetKind) -> bool
+impl core::default::Default for rich_micro::model::AssetKind
+pub fn rich_micro::model::AssetKind::default() -> rich_micro::model::AssetKind
+impl core::fmt::Debug for rich_micro::model::AssetKind
+pub fn rich_micro::model::AssetKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::AssetKind
+pub fn rich_micro::model::AssetKind::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::model::AssetKind
+impl core::marker::StructuralPartialEq for rich_micro::model::AssetKind
+impl core::str::traits::FromStr for rich_micro::model::AssetKind
+pub type rich_micro::model::AssetKind::Err = rich_micro::error::MicroError
+pub fn rich_micro::model::AssetKind::from_str(&str) -> core::result::Result<Self, rich_micro::error::MicroError>
+impl core::marker::Freeze for rich_micro::model::AssetKind
+impl core::marker::Send for rich_micro::model::AssetKind
+impl core::marker::Sync for rich_micro::model::AssetKind
+impl core::marker::Unpin for rich_micro::model::AssetKind
+impl core::marker::UnsafeUnpin for rich_micro::model::AssetKind
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::AssetKind
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::AssetKind
+pub enum rich_micro::model::ImageFormat
+pub rich_micro::model::ImageFormat::Apng
+pub rich_micro::model::ImageFormat::Gif
+pub rich_micro::model::ImageFormat::Png
+pub rich_micro::model::ImageFormat::WebP
+impl rich_micro::model::ImageFormat
+pub fn rich_micro::model::ImageFormat::as_str(self) -> &'static str
+impl core::clone::Clone for rich_micro::model::ImageFormat
+pub fn rich_micro::model::ImageFormat::clone(&self) -> rich_micro::model::ImageFormat
+impl core::cmp::Eq for rich_micro::model::ImageFormat
+impl core::cmp::PartialEq for rich_micro::model::ImageFormat
+pub fn rich_micro::model::ImageFormat::eq(&self, &rich_micro::model::ImageFormat) -> bool
+impl core::fmt::Debug for rich_micro::model::ImageFormat
+pub fn rich_micro::model::ImageFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::ImageFormat
+pub fn rich_micro::model::ImageFormat::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::model::ImageFormat
+impl core::marker::StructuralPartialEq for rich_micro::model::ImageFormat
+impl core::marker::Freeze for rich_micro::model::ImageFormat
+impl core::marker::Send for rich_micro::model::ImageFormat
+impl core::marker::Sync for rich_micro::model::ImageFormat
+impl core::marker::Unpin for rich_micro::model::ImageFormat
+impl core::marker::UnsafeUnpin for rich_micro::model::ImageFormat
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::ImageFormat
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::ImageFormat
+pub enum rich_micro::model::Layer
+pub rich_micro::model::Layer::BuiltIn
+pub rich_micro::model::Layer::Inline
+pub rich_micro::model::Layer::Project
+pub rich_micro::model::Layer::User
+impl rich_micro::model::Layer
+pub const rich_micro::model::Layer::ALL: [rich_micro::model::Layer; 4]
+pub fn rich_micro::model::Layer::as_str(self) -> &'static str
+impl core::clone::Clone for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::clone(&self) -> rich_micro::model::Layer
+impl core::cmp::Eq for rich_micro::model::Layer
+impl core::cmp::Ord for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::cmp(&self, &rich_micro::model::Layer) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::eq(&self, &rich_micro::model::Layer) -> bool
+impl core::cmp::PartialOrd for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::partial_cmp(&self, &rich_micro::model::Layer) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::model::Layer
+impl core::marker::StructuralPartialEq for rich_micro::model::Layer
+impl core::marker::Freeze for rich_micro::model::Layer
+impl core::marker::Send for rich_micro::model::Layer
+impl core::marker::Sync for rich_micro::model::Layer
+impl core::marker::Unpin for rich_micro::model::Layer
+impl core::marker::UnsafeUnpin for rich_micro::model::Layer
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::Layer
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::Layer
+pub enum rich_micro::model::PackageLocation
+pub rich_micro::model::PackageLocation::Archive
+pub rich_micro::model::PackageLocation::Archive::path: std::path::PathBuf
+pub rich_micro::model::PackageLocation::Archive::prefix: alloc::string::String
+pub rich_micro::model::PackageLocation::BuiltIn(alloc::string::String)
+pub rich_micro::model::PackageLocation::Directory(std::path::PathBuf)
+impl core::clone::Clone for rich_micro::model::PackageLocation
+pub fn rich_micro::model::PackageLocation::clone(&self) -> rich_micro::model::PackageLocation
+impl core::cmp::Eq for rich_micro::model::PackageLocation
+impl core::cmp::PartialEq for rich_micro::model::PackageLocation
+pub fn rich_micro::model::PackageLocation::eq(&self, &rich_micro::model::PackageLocation) -> bool
+impl core::fmt::Debug for rich_micro::model::PackageLocation
+pub fn rich_micro::model::PackageLocation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::PackageLocation
+pub fn rich_micro::model::PackageLocation::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::model::PackageLocation
+impl core::marker::Freeze for rich_micro::model::PackageLocation
+impl core::marker::Send for rich_micro::model::PackageLocation
+impl core::marker::Sync for rich_micro::model::PackageLocation
+impl core::marker::Unpin for rich_micro::model::PackageLocation
+impl core::marker::UnsafeUnpin for rich_micro::model::PackageLocation
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::PackageLocation
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::PackageLocation
+pub struct rich_micro::model::CellSize
+impl rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::cols(self) -> usize
+pub fn rich_micro::model::CellSize::is_multi_row(self) -> bool
+pub fn rich_micro::model::CellSize::new(u16, u16) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::model::CellSize::rows(self) -> usize
+impl core::clone::Clone for rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::clone(&self) -> rich_micro::model::CellSize
+impl core::cmp::Eq for rich_micro::model::CellSize
+impl core::cmp::PartialEq for rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::eq(&self, &rich_micro::model::CellSize) -> bool
+impl core::default::Default for rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::default() -> Self
+impl core::fmt::Debug for rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::model::CellSize
+impl core::marker::StructuralPartialEq for rich_micro::model::CellSize
+impl core::str::traits::FromStr for rich_micro::model::CellSize
+pub type rich_micro::model::CellSize::Err = rich_micro::error::MicroError
+pub fn rich_micro::model::CellSize::from_str(&str) -> core::result::Result<Self, rich_micro::error::MicroError>
+impl core::marker::Freeze for rich_micro::model::CellSize
+impl core::marker::Send for rich_micro::model::CellSize
+impl core::marker::Sync for rich_micro::model::CellSize
+impl core::marker::Unpin for rich_micro::model::CellSize
+impl core::marker::UnsafeUnpin for rich_micro::model::CellSize
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::CellSize
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::CellSize
+pub struct rich_micro::model::Fallback
+pub rich_micro::model::Fallback::emoji: core::option::Option<alloc::string::String>
+pub rich_micro::model::Fallback::text: core::option::Option<alloc::string::String>
+impl core::clone::Clone for rich_micro::model::Fallback
+pub fn rich_micro::model::Fallback::clone(&self) -> rich_micro::model::Fallback
+impl core::cmp::Eq for rich_micro::model::Fallback
+impl core::cmp::PartialEq for rich_micro::model::Fallback
+pub fn rich_micro::model::Fallback::eq(&self, &rich_micro::model::Fallback) -> bool
+impl core::default::Default for rich_micro::model::Fallback
+pub fn rich_micro::model::Fallback::default() -> rich_micro::model::Fallback
+impl core::fmt::Debug for rich_micro::model::Fallback
+pub fn rich_micro::model::Fallback::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::Fallback
+pub fn rich_micro::model::Fallback::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::model::Fallback
+impl core::marker::Freeze for rich_micro::model::Fallback
+impl core::marker::Send for rich_micro::model::Fallback
+impl core::marker::Sync for rich_micro::model::Fallback
+impl core::marker::Unpin for rich_micro::model::Fallback
+impl core::marker::UnsafeUnpin for rich_micro::model::Fallback
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::Fallback
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::Fallback
+pub struct rich_micro::model::ImageInfo
+pub rich_micro::model::ImageInfo::format: rich_micro::model::ImageFormat
+pub rich_micro::model::ImageInfo::frames: u32
+pub rich_micro::model::ImageInfo::height: u32
+pub rich_micro::model::ImageInfo::width: u32
+impl rich_micro::model::ImageInfo
+pub fn rich_micro::model::ImageInfo::decoded_bytes(&self) -> u64
+impl core::clone::Clone for rich_micro::model::ImageInfo
+pub fn rich_micro::model::ImageInfo::clone(&self) -> rich_micro::model::ImageInfo
+impl core::cmp::Eq for rich_micro::model::ImageInfo
+impl core::cmp::PartialEq for rich_micro::model::ImageInfo
+pub fn rich_micro::model::ImageInfo::eq(&self, &rich_micro::model::ImageInfo) -> bool
+impl core::fmt::Debug for rich_micro::model::ImageInfo
+pub fn rich_micro::model::ImageInfo::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::ImageInfo
+pub fn rich_micro::model::ImageInfo::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::model::ImageInfo
+impl core::marker::StructuralPartialEq for rich_micro::model::ImageInfo
+impl core::marker::Freeze for rich_micro::model::ImageInfo
+impl core::marker::Send for rich_micro::model::ImageInfo
+impl core::marker::Sync for rich_micro::model::ImageInfo
+impl core::marker::Unpin for rich_micro::model::ImageInfo
+impl core::marker::UnsafeUnpin for rich_micro::model::ImageInfo
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::ImageInfo
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::ImageInfo
+pub struct rich_micro::model::ImageRef
+pub rich_micro::model::ImageRef::bytes: u64
+pub rich_micro::model::ImageRef::info: rich_micro::model::ImageInfo
+pub rich_micro::model::ImageRef::path: alloc::string::String
+impl core::clone::Clone for rich_micro::model::ImageRef
+pub fn rich_micro::model::ImageRef::clone(&self) -> rich_micro::model::ImageRef
+impl core::cmp::Eq for rich_micro::model::ImageRef
+impl core::cmp::PartialEq for rich_micro::model::ImageRef
+pub fn rich_micro::model::ImageRef::eq(&self, &rich_micro::model::ImageRef) -> bool
+impl core::fmt::Debug for rich_micro::model::ImageRef
+pub fn rich_micro::model::ImageRef::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::ImageRef
+pub fn rich_micro::model::ImageRef::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::model::ImageRef
+impl core::marker::Freeze for rich_micro::model::ImageRef
+impl core::marker::Send for rich_micro::model::ImageRef
+impl core::marker::Sync for rich_micro::model::ImageRef
+impl core::marker::Unpin for rich_micro::model::ImageRef
+impl core::marker::UnsafeUnpin for rich_micro::model::ImageRef
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::ImageRef
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::ImageRef
+pub struct rich_micro::model::MicroAsset
+impl rich_micro::model::MicroAsset
+pub fn rich_micro::model::MicroAsset::aliases(&self) -> &[alloc::string::String]
+pub fn rich_micro::model::MicroAsset::alt(&self) -> &str
+pub fn rich_micro::model::MicroAsset::author(&self) -> core::option::Option<&str>
+pub fn rich_micro::model::MicroAsset::cols(&self) -> usize
+pub fn rich_micro::model::MicroAsset::fallback(&self) -> &rich_micro::model::Fallback
+pub fn rich_micro::model::MicroAsset::kind(&self) -> rich_micro::model::AssetKind
+pub fn rich_micro::model::MicroAsset::license(&self) -> core::option::Option<&str>
+pub fn rich_micro::model::MicroAsset::name(&self) -> &str
+pub fn rich_micro::model::MicroAsset::new(&str, &str) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::origin(&self) -> &rich_micro::model::Origin
+pub fn rich_micro::model::MicroAsset::read_variant(&self, &rich_micro::model::ImageRef, &rich_micro::package::Limits) -> core::result::Result<alloc::vec::Vec<u8>, rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::rows(&self) -> usize
+pub fn rich_micro::model::MicroAsset::size(&self) -> rich_micro::model::CellSize
+pub fn rich_micro::model::MicroAsset::validate(&self) -> core::result::Result<(), rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::variants(&self) -> &rich_micro::model::Variants
+pub fn rich_micro::model::MicroAsset::version(&self) -> core::option::Option<&str>
+pub fn rich_micro::model::MicroAsset::with_alias(self, &str) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::with_author(self, &str) -> Self
+pub fn rich_micro::model::MicroAsset::with_emoji(self, &str) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::with_kind(self, rich_micro::model::AssetKind) -> Self
+pub fn rich_micro::model::MicroAsset::with_license(self, &str) -> Self
+pub fn rich_micro::model::MicroAsset::with_origin(self, rich_micro::model::Origin) -> Self
+pub fn rich_micro::model::MicroAsset::with_size(self, rich_micro::model::CellSize) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::with_text(self, &str) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::with_variants(self, rich_micro::model::Variants) -> Self
+pub fn rich_micro::model::MicroAsset::with_version(self, &str) -> Self
+impl core::clone::Clone for rich_micro::model::MicroAsset
+pub fn rich_micro::model::MicroAsset::clone(&self) -> rich_micro::model::MicroAsset
+impl core::cmp::Eq for rich_micro::model::MicroAsset
+impl core::cmp::PartialEq for rich_micro::model::MicroAsset
+pub fn rich_micro::model::MicroAsset::eq(&self, &rich_micro::model::MicroAsset) -> bool
+impl core::fmt::Debug for rich_micro::model::MicroAsset
+pub fn rich_micro::model::MicroAsset::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::MicroAsset
+pub fn rich_micro::model::MicroAsset::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::model::MicroAsset
+impl core::marker::Freeze for rich_micro::model::MicroAsset
+impl core::marker::Send for rich_micro::model::MicroAsset
+impl core::marker::Sync for rich_micro::model::MicroAsset
+impl core::marker::Unpin for rich_micro::model::MicroAsset
+impl core::marker::UnsafeUnpin for rich_micro::model::MicroAsset
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::MicroAsset
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::MicroAsset
+pub struct rich_micro::model::Origin
+pub rich_micro::model::Origin::layer: rich_micro::model::Layer
+pub rich_micro::model::Origin::location: core::option::Option<rich_micro::model::PackageLocation>
+pub rich_micro::model::Origin::pack: core::option::Option<alloc::string::String>
+impl core::clone::Clone for rich_micro::model::Origin
+pub fn rich_micro::model::Origin::clone(&self) -> rich_micro::model::Origin
+impl core::cmp::Eq for rich_micro::model::Origin
+impl core::cmp::PartialEq for rich_micro::model::Origin
+pub fn rich_micro::model::Origin::eq(&self, &rich_micro::model::Origin) -> bool
+impl core::default::Default for rich_micro::model::Origin
+pub fn rich_micro::model::Origin::default() -> Self
+impl core::fmt::Debug for rich_micro::model::Origin
+pub fn rich_micro::model::Origin::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_micro::model::Origin
+pub fn rich_micro::model::Origin::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::Origin
+pub fn rich_micro::model::Origin::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::model::Origin
+impl core::marker::Freeze for rich_micro::model::Origin
+impl core::marker::Send for rich_micro::model::Origin
+impl core::marker::Sync for rich_micro::model::Origin
+impl core::marker::Unpin for rich_micro::model::Origin
+impl core::marker::UnsafeUnpin for rich_micro::model::Origin
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::Origin
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::Origin
+pub struct rich_micro::model::Variants
+pub rich_micro::model::Variants::animation: core::option::Option<rich_micro::model::ImageRef>
+pub rich_micro::model::Variants::frames: alloc::vec::Vec<rich_micro::model::ImageRef>
+pub rich_micro::model::Variants::static_image: core::option::Option<rich_micro::model::ImageRef>
+impl rich_micro::model::Variants
+pub fn rich_micro::model::Variants::is_empty(&self) -> bool
+pub fn rich_micro::model::Variants::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &rich_micro::model::ImageRef>
+impl core::clone::Clone for rich_micro::model::Variants
+pub fn rich_micro::model::Variants::clone(&self) -> rich_micro::model::Variants
+impl core::cmp::Eq for rich_micro::model::Variants
+impl core::cmp::PartialEq for rich_micro::model::Variants
+pub fn rich_micro::model::Variants::eq(&self, &rich_micro::model::Variants) -> bool
+impl core::default::Default for rich_micro::model::Variants
+pub fn rich_micro::model::Variants::default() -> rich_micro::model::Variants
+impl core::fmt::Debug for rich_micro::model::Variants
+pub fn rich_micro::model::Variants::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::Variants
+pub fn rich_micro::model::Variants::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::model::Variants
+impl core::marker::Freeze for rich_micro::model::Variants
+impl core::marker::Send for rich_micro::model::Variants
+impl core::marker::Sync for rich_micro::model::Variants
+impl core::marker::Unpin for rich_micro::model::Variants
+impl core::marker::UnsafeUnpin for rich_micro::model::Variants
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::Variants
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::Variants
+pub const rich_micro::model::MAX_ALT_CHARS: usize
+pub const rich_micro::model::MAX_COLS: u16
+pub const rich_micro::model::MAX_ROWS: u16
+pub mod rich_micro::name
+pub const rich_micro::name::MAX_NAME_LEN: usize
+pub fn rich_micro::name::check_name(&str) -> core::result::Result<(), rich_micro::error::MicroError>
+pub fn rich_micro::name::is_valid_name(&str) -> bool
+pub mod rich_micro::package
+pub enum rich_micro::package::Loaded
+pub rich_micro::package::Loaded::Pack(rich_micro::package::Pack)
+pub rich_micro::package::Loaded::Package(alloc::boxed::Box<rich_micro::model::MicroAsset>)
+impl core::clone::Clone for rich_micro::package::Loaded
+pub fn rich_micro::package::Loaded::clone(&self) -> rich_micro::package::Loaded
+impl core::fmt::Debug for rich_micro::package::Loaded
+pub fn rich_micro::package::Loaded::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_micro::package::Loaded
+impl core::marker::Send for rich_micro::package::Loaded
+impl core::marker::Sync for rich_micro::package::Loaded
+impl core::marker::Unpin for rich_micro::package::Loaded
+impl core::marker::UnsafeUnpin for rich_micro::package::Loaded
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::package::Loaded
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::package::Loaded
+pub struct rich_micro::package::Limits
+pub rich_micro::package::Limits::max_archive_bytes: u64
+pub rich_micro::package::Limits::max_decoded_bytes: u64
+pub rich_micro::package::Limits::max_dimension: u32
+pub rich_micro::package::Limits::max_entries: usize
+pub rich_micro::package::Limits::max_file_bytes: u64
+pub rich_micro::package::Limits::max_frames: u32
+pub rich_micro::package::Limits::max_manifest_bytes: u64
+pub rich_micro::package::Limits::max_packages: usize
+pub rich_micro::package::Limits::max_total_bytes: u64
+impl core::clone::Clone for rich_micro::package::Limits
+pub fn rich_micro::package::Limits::clone(&self) -> rich_micro::package::Limits
+impl core::cmp::Eq for rich_micro::package::Limits
+impl core::cmp::PartialEq for rich_micro::package::Limits
+pub fn rich_micro::package::Limits::eq(&self, &rich_micro::package::Limits) -> bool
+impl core::default::Default for rich_micro::package::Limits
+pub fn rich_micro::package::Limits::default() -> Self
+impl core::fmt::Debug for rich_micro::package::Limits
+pub fn rich_micro::package::Limits::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::package::Limits
+impl core::marker::Freeze for rich_micro::package::Limits
+impl core::marker::Send for rich_micro::package::Limits
+impl core::marker::Sync for rich_micro::package::Limits
+impl core::marker::Unpin for rich_micro::package::Limits
+impl core::marker::UnsafeUnpin for rich_micro::package::Limits
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::package::Limits
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::package::Limits
+pub struct rich_micro::package::Pack
+pub rich_micro::package::Pack::assets: alloc::vec::Vec<rich_micro::model::MicroAsset>
+pub rich_micro::package::Pack::name: alloc::string::String
+pub rich_micro::package::Pack::rejected: alloc::vec::Vec<(alloc::string::String, rich_micro::error::MicroError)>
+pub rich_micro::package::Pack::version: core::option::Option<alloc::string::String>
+impl core::clone::Clone for rich_micro::package::Pack
+pub fn rich_micro::package::Pack::clone(&self) -> rich_micro::package::Pack
+impl core::fmt::Debug for rich_micro::package::Pack
+pub fn rich_micro::package::Pack::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_micro::package::Pack
+impl core::marker::Send for rich_micro::package::Pack
+impl core::marker::Sync for rich_micro::package::Pack
+impl core::marker::Unpin for rich_micro::package::Pack
+impl core::marker::UnsafeUnpin for rich_micro::package::Pack
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::package::Pack
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::package::Pack
+pub const rich_micro::package::MANIFEST: &str
+pub const rich_micro::package::PACK_INDEX: &str
+pub const rich_micro::package::SCHEMA_VERSION: u64
+pub fn rich_micro::package::load(&std::path::Path, rich_micro::model::Layer, &rich_micro::package::Limits) -> core::result::Result<rich_micro::package::Loaded, rich_micro::error::MicroError>
+pub fn rich_micro::package::load_pack(&std::path::Path, rich_micro::model::Layer, &rich_micro::package::Limits) -> core::result::Result<rich_micro::package::Pack, rich_micro::error::MicroError>
+pub fn rich_micro::package::load_package(&std::path::Path, rich_micro::model::Layer, &rich_micro::package::Limits) -> core::result::Result<rich_micro::model::MicroAsset, rich_micro::error::MicroError>
+pub fn rich_micro::package::safe_relative(&str) -> core::result::Result<alloc::string::String, rich_micro::error::MicroError>
+pub mod rich_micro::pipeline
+pub enum rich_micro::pipeline::Transparency
+pub rich_micro::pipeline::Transparency::Flatten([u8; 3])
+pub rich_micro::pipeline::Transparency::Keep
+pub rich_micro::pipeline::Transparency::Key([u8; 3])
+pub rich_micro::pipeline::Transparency::Threshold(u8)
+impl core::clone::Clone for rich_micro::pipeline::Transparency
+pub fn rich_micro::pipeline::Transparency::clone(&self) -> rich_micro::pipeline::Transparency
+impl core::cmp::Eq for rich_micro::pipeline::Transparency
+impl core::cmp::PartialEq for rich_micro::pipeline::Transparency
+pub fn rich_micro::pipeline::Transparency::eq(&self, &rich_micro::pipeline::Transparency) -> bool
+impl core::default::Default for rich_micro::pipeline::Transparency
+pub fn rich_micro::pipeline::Transparency::default() -> Self
+impl core::fmt::Debug for rich_micro::pipeline::Transparency
+pub fn rich_micro::pipeline::Transparency::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_micro::pipeline::Transparency
+impl core::marker::StructuralPartialEq for rich_micro::pipeline::Transparency
+impl core::marker::Freeze for rich_micro::pipeline::Transparency
+impl core::marker::Send for rich_micro::pipeline::Transparency
+impl core::marker::Sync for rich_micro::pipeline::Transparency
+impl core::marker::Unpin for rich_micro::pipeline::Transparency
+impl core::marker::UnsafeUnpin for rich_micro::pipeline::Transparency
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::pipeline::Transparency
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::pipeline::Transparency
+pub struct rich_micro::pipeline::Magnified(pub image::images::buffer::RgbaImage)
+impl rich_micro::pipeline::Magnified
+pub fn rich_micro::pipeline::Magnified::cols(&self) -> usize
+impl core::clone::Clone for rich_micro::pipeline::Magnified
+pub fn rich_micro::pipeline::Magnified::clone(&self) -> rich_micro::pipeline::Magnified
+impl core::fmt::Debug for rich_micro::pipeline::Magnified
+pub fn rich_micro::pipeline::Magnified::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich::protocol::Renderable for rich_micro::pipeline::Magnified
+pub fn rich_micro::pipeline::Magnified::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_micro::pipeline::Magnified::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_micro::pipeline::Magnified
+impl core::marker::Send for rich_micro::pipeline::Magnified
+impl core::marker::Sync for rich_micro::pipeline::Magnified
+impl core::marker::Unpin for rich_micro::pipeline::Magnified
+impl core::marker::UnsafeUnpin for rich_micro::pipeline::Magnified
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::pipeline::Magnified
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::pipeline::Magnified
+pub struct rich_micro::pipeline::Pipeline
+pub rich_micro::pipeline::Pipeline::anchor: rich_art::image_art::ImageAnchor
+pub rich_micro::pipeline::Pipeline::budget: rich_art::graphics::FrameBudget
+pub rich_micro::pipeline::Pipeline::cell: rich_art::graphics::CellPixels
+pub rich_micro::pipeline::Pipeline::colors: rich_art::image_color::ImageColorMode
+pub rich_micro::pipeline::Pipeline::dither: rich_art::image_color::Dither
+pub rich_micro::pipeline::Pipeline::fit: rich_art::image_art::ImageFit
+pub rich_micro::pipeline::Pipeline::sharpen: core::option::Option<f32>
+pub rich_micro::pipeline::Pipeline::size: rich_micro::model::CellSize
+pub rich_micro::pipeline::Pipeline::transforms: rich_art::transform::ImageTransforms
+pub rich_micro::pipeline::Pipeline::transparency: rich_micro::pipeline::Transparency
+impl rich_micro::pipeline::Pipeline
+pub fn rich_micro::pipeline::Pipeline::canvas(&self) -> (u32, u32)
+pub fn rich_micro::pipeline::Pipeline::new(rich_micro::model::CellSize) -> rich_micro::pipeline::Pipeline
+pub fn rich_micro::pipeline::Pipeline::process_bytes(&self, &[u8]) -> core::result::Result<rich_micro::pipeline::Processed, rich_micro::error::MicroError>
+pub fn rich_micro::pipeline::Pipeline::process_frames(&self, &[rich_art::graphics::AnimationFrame]) -> rich_micro::pipeline::Processed
+pub fn rich_micro::pipeline::Pipeline::process_image(&self, &image::images::dynimage::DynamicImage) -> rich_micro::pipeline::Processed
+pub fn rich_micro::pipeline::Pipeline::validate(&self) -> core::result::Result<(), rich_micro::error::MicroError>
+impl core::clone::Clone for rich_micro::pipeline::Pipeline
+pub fn rich_micro::pipeline::Pipeline::clone(&self) -> rich_micro::pipeline::Pipeline
+impl core::cmp::PartialEq for rich_micro::pipeline::Pipeline
+pub fn rich_micro::pipeline::Pipeline::eq(&self, &rich_micro::pipeline::Pipeline) -> bool
+impl core::fmt::Debug for rich_micro::pipeline::Pipeline
+pub fn rich_micro::pipeline::Pipeline::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_micro::pipeline::Pipeline
+impl core::marker::StructuralPartialEq for rich_micro::pipeline::Pipeline
+impl core::marker::Freeze for rich_micro::pipeline::Pipeline
+impl core::marker::Send for rich_micro::pipeline::Pipeline
+impl core::marker::Sync for rich_micro::pipeline::Pipeline
+impl core::marker::Unpin for rich_micro::pipeline::Pipeline
+impl core::marker::UnsafeUnpin for rich_micro::pipeline::Pipeline
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::pipeline::Pipeline
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::pipeline::Pipeline
+pub struct rich_micro::pipeline::Processed
+pub rich_micro::pipeline::Processed::cell: rich_art::graphics::CellPixels
+pub rich_micro::pipeline::Processed::frames: alloc::vec::Vec<rich_art::graphics::AnimationFrame>
+pub rich_micro::pipeline::Processed::size: rich_micro::model::CellSize
+impl rich_micro::pipeline::Processed
+pub fn rich_micro::pipeline::Processed::animated(&self) -> bool
+pub fn rich_micro::pipeline::Processed::gif(&self) -> core::result::Result<core::option::Option<alloc::vec::Vec<u8>>, rich_micro::error::MicroError>
+pub fn rich_micro::pipeline::Processed::png(&self) -> core::result::Result<alloc::vec::Vec<u8>, rich_micro::error::MicroError>
+pub fn rich_micro::pipeline::Processed::preview(&self) -> rich_micro::pipeline::Magnified
+pub fn rich_micro::pipeline::Processed::still(&self) -> &image::images::buffer::RgbaImage
+impl core::clone::Clone for rich_micro::pipeline::Processed
+pub fn rich_micro::pipeline::Processed::clone(&self) -> rich_micro::pipeline::Processed
+impl core::cmp::Eq for rich_micro::pipeline::Processed
+impl core::cmp::PartialEq for rich_micro::pipeline::Processed
+pub fn rich_micro::pipeline::Processed::eq(&self, &rich_micro::pipeline::Processed) -> bool
+impl core::fmt::Debug for rich_micro::pipeline::Processed
+pub fn rich_micro::pipeline::Processed::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::pipeline::Processed
+impl core::marker::Freeze for rich_micro::pipeline::Processed
+impl core::marker::Send for rich_micro::pipeline::Processed
+impl core::marker::Sync for rich_micro::pipeline::Processed
+impl core::marker::Unpin for rich_micro::pipeline::Processed
+impl core::marker::UnsafeUnpin for rich_micro::pipeline::Processed
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::pipeline::Processed
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::pipeline::Processed
+pub const rich_micro::pipeline::MAX_SOURCE_BYTES: usize
+pub const rich_micro::pipeline::MAX_SOURCE_DIMENSION: u32
+pub mod rich_micro::registry
+pub struct rich_micro::registry::Collision
+pub rich_micro::registry::Collision::dropped: alloc::string::String
+pub rich_micro::registry::Collision::kept: alloc::string::String
+pub rich_micro::registry::Collision::layer: rich_micro::model::Layer
+pub rich_micro::registry::Collision::name: alloc::string::String
+impl core::clone::Clone for rich_micro::registry::Collision
+pub fn rich_micro::registry::Collision::clone(&self) -> rich_micro::registry::Collision
+impl core::cmp::Eq for rich_micro::registry::Collision
+impl core::cmp::PartialEq for rich_micro::registry::Collision
+pub fn rich_micro::registry::Collision::eq(&self, &rich_micro::registry::Collision) -> bool
+impl core::fmt::Debug for rich_micro::registry::Collision
+pub fn rich_micro::registry::Collision::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::registry::Collision
+impl core::marker::Freeze for rich_micro::registry::Collision
+impl core::marker::Send for rich_micro::registry::Collision
+impl core::marker::Sync for rich_micro::registry::Collision
+impl core::marker::Unpin for rich_micro::registry::Collision
+impl core::marker::UnsafeUnpin for rich_micro::registry::Collision
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::registry::Collision
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::registry::Collision
+pub struct rich_micro::registry::LoadReport
+pub rich_micro::registry::LoadReport::collisions: alloc::vec::Vec<rich_micro::registry::Collision>
+pub rich_micro::registry::LoadReport::rejected: alloc::vec::Vec<rich_micro::registry::Rejected>
+pub rich_micro::registry::LoadReport::untrusted_project: core::option::Option<std::path::PathBuf>
+impl core::clone::Clone for rich_micro::registry::LoadReport
+pub fn rich_micro::registry::LoadReport::clone(&self) -> rich_micro::registry::LoadReport
+impl core::cmp::Eq for rich_micro::registry::LoadReport
+impl core::cmp::PartialEq for rich_micro::registry::LoadReport
+pub fn rich_micro::registry::LoadReport::eq(&self, &rich_micro::registry::LoadReport) -> bool
+impl core::default::Default for rich_micro::registry::LoadReport
+pub fn rich_micro::registry::LoadReport::default() -> rich_micro::registry::LoadReport
+impl core::fmt::Debug for rich_micro::registry::LoadReport
+pub fn rich_micro::registry::LoadReport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::registry::LoadReport
+impl core::marker::Freeze for rich_micro::registry::LoadReport
+impl core::marker::Send for rich_micro::registry::LoadReport
+impl core::marker::Sync for rich_micro::registry::LoadReport
+impl core::marker::Unpin for rich_micro::registry::LoadReport
+impl core::marker::UnsafeUnpin for rich_micro::registry::LoadReport
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::registry::LoadReport
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::registry::LoadReport
+pub struct rich_micro::registry::MicroRegistry
+impl rich_micro::registry::MicroRegistry
+pub fn rich_micro::registry::MicroRegistry::add(&mut self, rich_micro::model::Layer, rich_micro::model::MicroAsset) -> core::result::Result<alloc::vec::Vec<rich_micro::registry::Collision>, rich_micro::error::MicroError>
+pub fn rich_micro::registry::MicroRegistry::assets(&self) -> alloc::vec::Vec<&alloc::sync::Arc<rich_micro::model::MicroAsset>>
+pub fn rich_micro::registry::MicroRegistry::builtin() -> Self
+pub fn rich_micro::registry::MicroRegistry::explain(&self, &str) -> core::option::Option<rich_ext::cli_doc::precedence::Explanation>
+pub fn rich_micro::registry::MicroRegistry::get(&self, rich_micro::model::Layer, &str) -> core::option::Option<&alloc::sync::Arc<rich_micro::model::MicroAsset>>
+pub fn rich_micro::registry::MicroRegistry::layer(&self, rich_micro::model::Layer) -> impl core::iter::traits::iterator::Iterator<Item = &alloc::sync::Arc<rich_micro::model::MicroAsset>>
+pub fn rich_micro::registry::MicroRegistry::load(&rich_micro::registry::MicroRoots, &rich_micro::package::Limits) -> (Self, rich_micro::registry::LoadReport)
+pub fn rich_micro::registry::MicroRegistry::load_builtin_set(&mut self, &mut rich_micro::registry::LoadReport)
+pub fn rich_micro::registry::MicroRegistry::load_dir(&mut self, rich_micro::model::Layer, &std::path::Path, &rich_micro::package::Limits, &mut rich_micro::registry::LoadReport)
+pub fn rich_micro::registry::MicroRegistry::names(&self) -> alloc::vec::Vec<&str>
+pub fn rich_micro::registry::MicroRegistry::new() -> Self
+pub fn rich_micro::registry::MicroRegistry::precedence(&self) -> rich_ext::cli_doc::precedence::Precedence
+pub fn rich_micro::registry::MicroRegistry::remove(&mut self, rich_micro::model::Layer, &str) -> core::option::Option<alloc::sync::Arc<rich_micro::model::MicroAsset>>
+pub fn rich_micro::registry::MicroRegistry::require(&self, &str) -> core::result::Result<&alloc::sync::Arc<rich_micro::model::MicroAsset>, rich_micro::error::MicroError>
+pub fn rich_micro::registry::MicroRegistry::resolve(&self, &str) -> core::option::Option<&alloc::sync::Arc<rich_micro::model::MicroAsset>>
+pub fn rich_micro::registry::MicroRegistry::shadowed(&self, &str) -> alloc::vec::Vec<&alloc::sync::Arc<rich_micro::model::MicroAsset>>
+impl core::clone::Clone for rich_micro::registry::MicroRegistry
+pub fn rich_micro::registry::MicroRegistry::clone(&self) -> rich_micro::registry::MicroRegistry
+impl core::default::Default for rich_micro::registry::MicroRegistry
+pub fn rich_micro::registry::MicroRegistry::default() -> rich_micro::registry::MicroRegistry
+impl core::fmt::Debug for rich_micro::registry::MicroRegistry
+pub fn rich_micro::registry::MicroRegistry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_micro::registry::MicroRegistry
+impl core::marker::Send for rich_micro::registry::MicroRegistry
+impl core::marker::Sync for rich_micro::registry::MicroRegistry
+impl core::marker::Unpin for rich_micro::registry::MicroRegistry
+impl core::marker::UnsafeUnpin for rich_micro::registry::MicroRegistry
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::registry::MicroRegistry
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::registry::MicroRegistry
+pub struct rich_micro::registry::MicroRoots
+pub rich_micro::registry::MicroRoots::builtin: core::option::Option<std::path::PathBuf>
+pub rich_micro::registry::MicroRoots::builtin_set: bool
+pub rich_micro::registry::MicroRoots::project: core::option::Option<std::path::PathBuf>
+pub rich_micro::registry::MicroRoots::project_trusted: bool
+pub rich_micro::registry::MicroRoots::user: core::option::Option<std::path::PathBuf>
+impl rich_micro::registry::MicroRoots
+pub fn rich_micro::registry::MicroRoots::from_env(core::option::Option<&std::path::Path>) -> Self
+pub fn rich_micro::registry::MicroRoots::project_dir(&std::path::Path) -> std::path::PathBuf
+pub fn rich_micro::registry::MicroRoots::trust_project(self, bool) -> Self
+pub fn rich_micro::registry::MicroRoots::user_dir(&std::path::Path) -> std::path::PathBuf
+impl core::clone::Clone for rich_micro::registry::MicroRoots
+pub fn rich_micro::registry::MicroRoots::clone(&self) -> rich_micro::registry::MicroRoots
+impl core::cmp::Eq for rich_micro::registry::MicroRoots
+impl core::cmp::PartialEq for rich_micro::registry::MicroRoots
+pub fn rich_micro::registry::MicroRoots::eq(&self, &rich_micro::registry::MicroRoots) -> bool
+impl core::default::Default for rich_micro::registry::MicroRoots
+pub fn rich_micro::registry::MicroRoots::default() -> rich_micro::registry::MicroRoots
+impl core::fmt::Debug for rich_micro::registry::MicroRoots
+pub fn rich_micro::registry::MicroRoots::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::registry::MicroRoots
+impl core::marker::Freeze for rich_micro::registry::MicroRoots
+impl core::marker::Send for rich_micro::registry::MicroRoots
+impl core::marker::Sync for rich_micro::registry::MicroRoots
+impl core::marker::Unpin for rich_micro::registry::MicroRoots
+impl core::marker::UnsafeUnpin for rich_micro::registry::MicroRoots
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::registry::MicroRoots
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::registry::MicroRoots
+pub struct rich_micro::registry::Rejected
+pub rich_micro::registry::Rejected::error: rich_micro::error::MicroError
+pub rich_micro::registry::Rejected::layer: rich_micro::model::Layer
+pub rich_micro::registry::Rejected::package: core::option::Option<alloc::string::String>
+pub rich_micro::registry::Rejected::path: std::path::PathBuf
+impl core::clone::Clone for rich_micro::registry::Rejected
+pub fn rich_micro::registry::Rejected::clone(&self) -> rich_micro::registry::Rejected
+impl core::cmp::Eq for rich_micro::registry::Rejected
+impl core::cmp::PartialEq for rich_micro::registry::Rejected
+pub fn rich_micro::registry::Rejected::eq(&self, &rich_micro::registry::Rejected) -> bool
+impl core::fmt::Debug for rich_micro::registry::Rejected
+pub fn rich_micro::registry::Rejected::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::registry::Rejected
+impl core::marker::Freeze for rich_micro::registry::Rejected
+impl core::marker::Send for rich_micro::registry::Rejected
+impl core::marker::Sync for rich_micro::registry::Rejected
+impl core::marker::Unpin for rich_micro::registry::Rejected
+impl core::marker::UnsafeUnpin for rich_micro::registry::Rejected
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::registry::Rejected
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::registry::Rejected
+pub mod rich_micro::render
+pub enum rich_micro::render::FallbackPreference
+pub rich_micro::render::FallbackPreference::Alt
+pub rich_micro::render::FallbackPreference::Emoji
+pub rich_micro::render::FallbackPreference::Text
+impl core::clone::Clone for rich_micro::render::FallbackPreference
+pub fn rich_micro::render::FallbackPreference::clone(&self) -> rich_micro::render::FallbackPreference
+impl core::cmp::Eq for rich_micro::render::FallbackPreference
+impl core::cmp::PartialEq for rich_micro::render::FallbackPreference
+pub fn rich_micro::render::FallbackPreference::eq(&self, &rich_micro::render::FallbackPreference) -> bool
+impl core::default::Default for rich_micro::render::FallbackPreference
+pub fn rich_micro::render::FallbackPreference::default() -> rich_micro::render::FallbackPreference
+impl core::fmt::Debug for rich_micro::render::FallbackPreference
+pub fn rich_micro::render::FallbackPreference::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::render::FallbackPreference
+pub fn rich_micro::render::FallbackPreference::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::render::FallbackPreference
+impl core::marker::StructuralPartialEq for rich_micro::render::FallbackPreference
+impl core::marker::Freeze for rich_micro::render::FallbackPreference
+impl core::marker::Send for rich_micro::render::FallbackPreference
+impl core::marker::Sync for rich_micro::render::FallbackPreference
+impl core::marker::Unpin for rich_micro::render::FallbackPreference
+impl core::marker::UnsafeUnpin for rich_micro::render::FallbackPreference
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::render::FallbackPreference
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::render::FallbackPreference
+pub struct rich_micro::render::FallbackRenderer
+pub rich_micro::render::FallbackRenderer::preference: rich_micro::render::FallbackPreference
+impl rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::new(rich_micro::render::FallbackPreference) -> Self
+impl core::clone::Clone for rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::clone(&self) -> rich_micro::render::FallbackRenderer
+impl core::cmp::Eq for rich_micro::render::FallbackRenderer
+impl core::cmp::PartialEq for rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::eq(&self, &rich_micro::render::FallbackRenderer) -> bool
+impl core::default::Default for rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::default() -> rich_micro::render::FallbackRenderer
+impl core::fmt::Debug for rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_micro::render::FallbackRenderer
+impl core::marker::StructuralPartialEq for rich_micro::render::FallbackRenderer
+impl rich_micro::render::MicroRenderer for rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::name(&self) -> &str
+pub fn rich_micro::render::FallbackRenderer::render(&self, &rich_micro::render::Placement<'_>, &rich::console::Console) -> core::option::Option<alloc::vec::Vec<rich::segment::Segment>>
+impl core::marker::Freeze for rich_micro::render::FallbackRenderer
+impl core::marker::Send for rich_micro::render::FallbackRenderer
+impl core::marker::Sync for rich_micro::render::FallbackRenderer
+impl core::marker::Unpin for rich_micro::render::FallbackRenderer
+impl core::marker::UnsafeUnpin for rich_micro::render::FallbackRenderer
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::render::FallbackRenderer
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::render::FallbackRenderer
+pub struct rich_micro::render::MicroMeta
+pub rich_micro::render::MicroMeta::cols: usize
+pub rich_micro::render::MicroMeta::id: u64
+pub rich_micro::render::MicroMeta::name: alloc::string::String
+pub rich_micro::render::MicroMeta::row: usize
+pub rich_micro::render::MicroMeta::rows: usize
+impl rich_micro::render::MicroMeta
+pub fn rich_micro::render::MicroMeta::from_segment(&rich::segment::Segment) -> core::option::Option<Self>
+pub fn rich_micro::render::MicroMeta::from_style(&rich::style::Style) -> core::option::Option<Self>
+pub fn rich_micro::render::MicroMeta::new(&rich_micro::model::MicroAsset) -> Self
+pub fn rich_micro::render::MicroMeta::to_style(&self) -> rich::style::Style
+pub fn rich_micro::render::MicroMeta::to_value(&self) -> rich::style::MetaValue
+pub fn rich_micro::render::MicroMeta::with_row(&self, usize) -> Self
+impl core::clone::Clone for rich_micro::render::MicroMeta
+pub fn rich_micro::render::MicroMeta::clone(&self) -> rich_micro::render::MicroMeta
+impl core::cmp::Eq for rich_micro::render::MicroMeta
+impl core::cmp::PartialEq for rich_micro::render::MicroMeta
+pub fn rich_micro::render::MicroMeta::eq(&self, &rich_micro::render::MicroMeta) -> bool
+impl core::fmt::Debug for rich_micro::render::MicroMeta
+pub fn rich_micro::render::MicroMeta::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::render::MicroMeta
+pub fn rich_micro::render::MicroMeta::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::render::MicroMeta
+impl core::marker::Freeze for rich_micro::render::MicroMeta
+impl core::marker::Send for rich_micro::render::MicroMeta
+impl core::marker::Sync for rich_micro::render::MicroMeta
+impl core::marker::Unpin for rich_micro::render::MicroMeta
+impl core::marker::UnsafeUnpin for rich_micro::render::MicroMeta
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::render::MicroMeta
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::render::MicroMeta
+pub struct rich_micro::render::MicroView<R>
+impl<R: rich::protocol::Renderable> rich_micro::render::MicroView<R>
+pub fn rich_micro::render::MicroView<R>::new(R, alloc::sync::Arc<rich_micro::registry::MicroRegistry>) -> Self
+pub fn rich_micro::render::MicroView<R>::renderer(self, alloc::sync::Arc<dyn rich_micro::render::MicroRenderer>) -> Self
+impl<R: rich::protocol::Renderable> rich::protocol::Renderable for rich_micro::render::MicroView<R>
+pub fn rich_micro::render::MicroView<R>::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_micro::render::MicroView<R>::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl<R> core::marker::Freeze for rich_micro::render::MicroView<R> where R: core::marker::Freeze
+impl<R> core::marker::Send for rich_micro::render::MicroView<R> where R: core::marker::Send
+impl<R> core::marker::Sync for rich_micro::render::MicroView<R> where R: core::marker::Sync
+impl<R> core::marker::Unpin for rich_micro::render::MicroView<R> where R: core::marker::Unpin
+impl<R> core::marker::UnsafeUnpin for rich_micro::render::MicroView<R> where R: core::marker::UnsafeUnpin
+impl<R> !core::panic::unwind_safe::RefUnwindSafe for rich_micro::render::MicroView<R>
+impl<R> !core::panic::unwind_safe::UnwindSafe for rich_micro::render::MicroView<R>
+pub struct rich_micro::render::Placement<'a>
+pub rich_micro::render::Placement::asset: &'a rich_micro::model::MicroAsset
+pub rich_micro::render::Placement::fallback: alloc::string::String
+pub rich_micro::render::Placement::meta: rich_micro::render::MicroMeta
+pub rich_micro::render::Placement::style: core::option::Option<rich::style::Style>
+impl<'a> core::clone::Clone for rich_micro::render::Placement<'a>
+pub fn rich_micro::render::Placement<'a>::clone(&self) -> rich_micro::render::Placement<'a>
+impl<'a> core::fmt::Debug for rich_micro::render::Placement<'a>
+pub fn rich_micro::render::Placement<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Freeze for rich_micro::render::Placement<'a>
+impl<'a> core::marker::Send for rich_micro::render::Placement<'a>
+impl<'a> core::marker::Sync for rich_micro::render::Placement<'a>
+impl<'a> core::marker::Unpin for rich_micro::render::Placement<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_micro::render::Placement<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_micro::render::Placement<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rich_micro::render::Placement<'a>
+pub const rich_micro::render::MICRO_META_KEY: &str
+pub const rich_micro::render::PAD_CELL: char
+pub trait rich_micro::render::MicroRenderer: core::marker::Send + core::marker::Sync
+pub fn rich_micro::render::MicroRenderer::name(&self) -> &str
+pub fn rich_micro::render::MicroRenderer::render(&self, &rich_micro::render::Placement<'_>, &rich::console::Console) -> core::option::Option<alloc::vec::Vec<rich::segment::Segment>>
+impl rich_micro::render::MicroRenderer for rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::name(&self) -> &str
+pub fn rich_micro::render::FallbackRenderer::render(&self, &rich_micro::render::Placement<'_>, &rich::console::Console) -> core::option::Option<alloc::vec::Vec<rich::segment::Segment>>
+impl<T: rich_micro::render::MicroRenderer + ?core::marker::Sized> rich_micro::render::MicroRenderer for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::name(&self) -> &str
+pub fn alloc::sync::Arc<T>::render(&self, &rich_micro::render::Placement<'_>, &rich::console::Console) -> core::option::Option<alloc::vec::Vec<rich::segment::Segment>>
+pub fn rich_micro::render::fallback_cells(&rich_micro::model::MicroAsset, rich_micro::render::FallbackPreference) -> alloc::string::String
+pub fn rich_micro::render::fallback_row(&rich_micro::model::MicroAsset, rich_micro::render::FallbackPreference, usize) -> alloc::string::String
+pub fn rich_micro::render::placeholder(&rich_micro::model::MicroAsset, rich_micro::render::FallbackPreference) -> rich::text::Text
+pub fn rich_micro::render::rewrite(alloc::vec::Vec<rich::segment::Segment>, &rich_micro::registry::MicroRegistry, &[alloc::sync::Arc<dyn rich_micro::render::MicroRenderer>], &rich::console::Console) -> alloc::vec::Vec<rich::segment::Segment>
+pub mod rich_micro::rows
+pub struct rich_micro::rows::MicroRows<R>
+impl<R> rich_micro::rows::MicroRows<R>
+pub fn rich_micro::rows::MicroRows<R>::inner(&self) -> &R
+pub fn rich_micro::rows::MicroRows<R>::into_inner(self) -> R
+pub fn rich_micro::rows::MicroRows<R>::new(R) -> Self
+impl<R: core::clone::Clone> core::clone::Clone for rich_micro::rows::MicroRows<R>
+pub fn rich_micro::rows::MicroRows<R>::clone(&self) -> rich_micro::rows::MicroRows<R>
+impl<R: core::fmt::Debug> core::fmt::Debug for rich_micro::rows::MicroRows<R>
+pub fn rich_micro::rows::MicroRows<R>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<R: rich::protocol::Renderable> rich::protocol::Renderable for rich_micro::rows::MicroRows<R>
+pub fn rich_micro::rows::MicroRows<R>::fit_to_measurement(&self) -> bool
+pub fn rich_micro::rows::MicroRows<R>::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_micro::rows::MicroRows<R>::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+pub fn rich_micro::rows::MicroRows<R>::vertical(&self) -> core::option::Option<rich::align::VerticalAlign>
+impl<R> core::marker::Freeze for rich_micro::rows::MicroRows<R> where R: core::marker::Freeze
+impl<R> core::marker::Send for rich_micro::rows::MicroRows<R> where R: core::marker::Send
+impl<R> core::marker::Sync for rich_micro::rows::MicroRows<R> where R: core::marker::Sync
+impl<R> core::marker::Unpin for rich_micro::rows::MicroRows<R> where R: core::marker::Unpin
+impl<R> core::marker::UnsafeUnpin for rich_micro::rows::MicroRows<R> where R: core::marker::UnsafeUnpin
+impl<R> core::panic::unwind_safe::RefUnwindSafe for rich_micro::rows::MicroRows<R> where R: core::panic::unwind_safe::RefUnwindSafe
+impl<R> core::panic::unwind_safe::UnwindSafe for rich_micro::rows::MicroRows<R> where R: core::panic::unwind_safe::UnwindSafe
+pub fn rich_micro::rows::reserve_rows(alloc::vec::Vec<rich::segment::Segment>) -> alloc::vec::Vec<rich::segment::Segment>
+pub enum rich_micro::AssetKind
+pub rich_micro::AssetKind::Animated
+pub rich_micro::AssetKind::Static
+impl rich_micro::model::AssetKind
+pub fn rich_micro::model::AssetKind::as_str(self) -> &'static str
+impl core::clone::Clone for rich_micro::model::AssetKind
+pub fn rich_micro::model::AssetKind::clone(&self) -> rich_micro::model::AssetKind
+impl core::cmp::Eq for rich_micro::model::AssetKind
+impl core::cmp::PartialEq for rich_micro::model::AssetKind
+pub fn rich_micro::model::AssetKind::eq(&self, &rich_micro::model::AssetKind) -> bool
+impl core::default::Default for rich_micro::model::AssetKind
+pub fn rich_micro::model::AssetKind::default() -> rich_micro::model::AssetKind
+impl core::fmt::Debug for rich_micro::model::AssetKind
+pub fn rich_micro::model::AssetKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::AssetKind
+pub fn rich_micro::model::AssetKind::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::model::AssetKind
+impl core::marker::StructuralPartialEq for rich_micro::model::AssetKind
+impl core::str::traits::FromStr for rich_micro::model::AssetKind
+pub type rich_micro::model::AssetKind::Err = rich_micro::error::MicroError
+pub fn rich_micro::model::AssetKind::from_str(&str) -> core::result::Result<Self, rich_micro::error::MicroError>
+impl core::marker::Freeze for rich_micro::model::AssetKind
+impl core::marker::Send for rich_micro::model::AssetKind
+impl core::marker::Sync for rich_micro::model::AssetKind
+impl core::marker::Unpin for rich_micro::model::AssetKind
+impl core::marker::UnsafeUnpin for rich_micro::model::AssetKind
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::AssetKind
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::AssetKind
+pub enum rich_micro::DiagnosticKind
+pub rich_micro::DiagnosticKind::Malformed
+pub rich_micro::DiagnosticKind::Reserved
+pub rich_micro::DiagnosticKind::UnknownAsset(alloc::string::String)
+impl core::clone::Clone for rich_micro::markup::DiagnosticKind
+pub fn rich_micro::markup::DiagnosticKind::clone(&self) -> rich_micro::markup::DiagnosticKind
+impl core::cmp::Eq for rich_micro::markup::DiagnosticKind
+impl core::cmp::PartialEq for rich_micro::markup::DiagnosticKind
+pub fn rich_micro::markup::DiagnosticKind::eq(&self, &rich_micro::markup::DiagnosticKind) -> bool
+impl core::fmt::Debug for rich_micro::markup::DiagnosticKind
+pub fn rich_micro::markup::DiagnosticKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::markup::DiagnosticKind
+impl core::marker::Freeze for rich_micro::markup::DiagnosticKind
+impl core::marker::Send for rich_micro::markup::DiagnosticKind
+impl core::marker::Sync for rich_micro::markup::DiagnosticKind
+impl core::marker::Unpin for rich_micro::markup::DiagnosticKind
+impl core::marker::UnsafeUnpin for rich_micro::markup::DiagnosticKind
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::markup::DiagnosticKind
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::markup::DiagnosticKind
+pub enum rich_micro::FallbackPreference
+pub rich_micro::FallbackPreference::Alt
+pub rich_micro::FallbackPreference::Emoji
+pub rich_micro::FallbackPreference::Text
+impl core::clone::Clone for rich_micro::render::FallbackPreference
+pub fn rich_micro::render::FallbackPreference::clone(&self) -> rich_micro::render::FallbackPreference
+impl core::cmp::Eq for rich_micro::render::FallbackPreference
+impl core::cmp::PartialEq for rich_micro::render::FallbackPreference
+pub fn rich_micro::render::FallbackPreference::eq(&self, &rich_micro::render::FallbackPreference) -> bool
+impl core::default::Default for rich_micro::render::FallbackPreference
+pub fn rich_micro::render::FallbackPreference::default() -> rich_micro::render::FallbackPreference
+impl core::fmt::Debug for rich_micro::render::FallbackPreference
+pub fn rich_micro::render::FallbackPreference::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::render::FallbackPreference
+pub fn rich_micro::render::FallbackPreference::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::render::FallbackPreference
+impl core::marker::StructuralPartialEq for rich_micro::render::FallbackPreference
+impl core::marker::Freeze for rich_micro::render::FallbackPreference
+impl core::marker::Send for rich_micro::render::FallbackPreference
+impl core::marker::Sync for rich_micro::render::FallbackPreference
+impl core::marker::Unpin for rich_micro::render::FallbackPreference
+impl core::marker::UnsafeUnpin for rich_micro::render::FallbackPreference
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::render::FallbackPreference
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::render::FallbackPreference
+pub enum rich_micro::ImageFormat
+pub rich_micro::ImageFormat::Apng
+pub rich_micro::ImageFormat::Gif
+pub rich_micro::ImageFormat::Png
+pub rich_micro::ImageFormat::WebP
+impl rich_micro::model::ImageFormat
+pub fn rich_micro::model::ImageFormat::as_str(self) -> &'static str
+impl core::clone::Clone for rich_micro::model::ImageFormat
+pub fn rich_micro::model::ImageFormat::clone(&self) -> rich_micro::model::ImageFormat
+impl core::cmp::Eq for rich_micro::model::ImageFormat
+impl core::cmp::PartialEq for rich_micro::model::ImageFormat
+pub fn rich_micro::model::ImageFormat::eq(&self, &rich_micro::model::ImageFormat) -> bool
+impl core::fmt::Debug for rich_micro::model::ImageFormat
+pub fn rich_micro::model::ImageFormat::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::ImageFormat
+pub fn rich_micro::model::ImageFormat::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::model::ImageFormat
+impl core::marker::StructuralPartialEq for rich_micro::model::ImageFormat
+impl core::marker::Freeze for rich_micro::model::ImageFormat
+impl core::marker::Send for rich_micro::model::ImageFormat
+impl core::marker::Sync for rich_micro::model::ImageFormat
+impl core::marker::Unpin for rich_micro::model::ImageFormat
+impl core::marker::UnsafeUnpin for rich_micro::model::ImageFormat
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::ImageFormat
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::ImageFormat
+pub enum rich_micro::Layer
+pub rich_micro::Layer::BuiltIn
+pub rich_micro::Layer::Inline
+pub rich_micro::Layer::Project
+pub rich_micro::Layer::User
+impl rich_micro::model::Layer
+pub const rich_micro::model::Layer::ALL: [rich_micro::model::Layer; 4]
+pub fn rich_micro::model::Layer::as_str(self) -> &'static str
+impl core::clone::Clone for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::clone(&self) -> rich_micro::model::Layer
+impl core::cmp::Eq for rich_micro::model::Layer
+impl core::cmp::Ord for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::cmp(&self, &rich_micro::model::Layer) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::eq(&self, &rich_micro::model::Layer) -> bool
+impl core::cmp::PartialOrd for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::partial_cmp(&self, &rich_micro::model::Layer) -> core::option::Option<core::cmp::Ordering>
+impl core::fmt::Debug for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::Layer
+pub fn rich_micro::model::Layer::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::model::Layer
+impl core::marker::StructuralPartialEq for rich_micro::model::Layer
+impl core::marker::Freeze for rich_micro::model::Layer
+impl core::marker::Send for rich_micro::model::Layer
+impl core::marker::Sync for rich_micro::model::Layer
+impl core::marker::Unpin for rich_micro::model::Layer
+impl core::marker::UnsafeUnpin for rich_micro::model::Layer
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::Layer
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::Layer
+pub enum rich_micro::MicroError
+pub rich_micro::MicroError::Image(alloc::string::String)
+pub rich_micro::MicroError::InvalidAlt(alloc::string::String)
+pub rich_micro::MicroError::InvalidFallback(alloc::string::String)
+pub rich_micro::MicroError::InvalidName(alloc::string::String)
+pub rich_micro::MicroError::InvalidSize(alloc::string::String)
+pub rich_micro::MicroError::Io(alloc::string::String)
+pub rich_micro::MicroError::Limit(alloc::string::String)
+pub rich_micro::MicroError::Manifest(alloc::string::String)
+pub rich_micro::MicroError::UnknownAsset(alloc::string::String)
+pub rich_micro::MicroError::UnsafePath(alloc::string::String)
+impl core::clone::Clone for rich_micro::error::MicroError
+pub fn rich_micro::error::MicroError::clone(&self) -> rich_micro::error::MicroError
+impl core::cmp::Eq for rich_micro::error::MicroError
+impl core::cmp::PartialEq for rich_micro::error::MicroError
+pub fn rich_micro::error::MicroError::eq(&self, &rich_micro::error::MicroError) -> bool
+impl core::error::Error for rich_micro::error::MicroError
+impl core::fmt::Debug for rich_micro::error::MicroError
+pub fn rich_micro::error::MicroError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_micro::error::MicroError
+pub fn rich_micro::error::MicroError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::error::MicroError
+impl core::marker::Freeze for rich_micro::error::MicroError
+impl core::marker::Send for rich_micro::error::MicroError
+impl core::marker::Sync for rich_micro::error::MicroError
+impl core::marker::Unpin for rich_micro::error::MicroError
+impl core::marker::UnsafeUnpin for rich_micro::error::MicroError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::error::MicroError
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::error::MicroError
+pub enum rich_micro::MicroMode
+pub rich_micro::MicroMode::Blocks
+pub rich_micro::MicroMode::Iterm
+pub rich_micro::MicroMode::Kitty
+pub rich_micro::MicroMode::Sixel
+pub rich_micro::MicroMode::Text
+impl rich_micro::graphics::MicroMode
+pub fn rich_micro::graphics::MicroMode::is_graphics(self) -> bool
+pub fn rich_micro::graphics::MicroMode::name(self) -> &'static str
+pub fn rich_micro::graphics::MicroMode::parse(&str) -> core::option::Option<rich_micro::graphics::MicroMode>
+impl core::clone::Clone for rich_micro::graphics::MicroMode
+pub fn rich_micro::graphics::MicroMode::clone(&self) -> rich_micro::graphics::MicroMode
+impl core::cmp::Eq for rich_micro::graphics::MicroMode
+impl core::cmp::PartialEq for rich_micro::graphics::MicroMode
+pub fn rich_micro::graphics::MicroMode::eq(&self, &rich_micro::graphics::MicroMode) -> bool
+impl core::fmt::Debug for rich_micro::graphics::MicroMode
+pub fn rich_micro::graphics::MicroMode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_micro::graphics::MicroMode
+pub fn rich_micro::graphics::MicroMode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::graphics::MicroMode
+pub fn rich_micro::graphics::MicroMode::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::graphics::MicroMode
+impl core::marker::StructuralPartialEq for rich_micro::graphics::MicroMode
+impl core::marker::Freeze for rich_micro::graphics::MicroMode
+impl core::marker::Send for rich_micro::graphics::MicroMode
+impl core::marker::Sync for rich_micro::graphics::MicroMode
+impl core::marker::Unpin for rich_micro::graphics::MicroMode
+impl core::marker::UnsafeUnpin for rich_micro::graphics::MicroMode
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::graphics::MicroMode
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::graphics::MicroMode
+pub enum rich_micro::PackageLocation
+pub rich_micro::PackageLocation::Archive
+pub rich_micro::PackageLocation::Archive::path: std::path::PathBuf
+pub rich_micro::PackageLocation::Archive::prefix: alloc::string::String
+pub rich_micro::PackageLocation::BuiltIn(alloc::string::String)
+pub rich_micro::PackageLocation::Directory(std::path::PathBuf)
+impl core::clone::Clone for rich_micro::model::PackageLocation
+pub fn rich_micro::model::PackageLocation::clone(&self) -> rich_micro::model::PackageLocation
+impl core::cmp::Eq for rich_micro::model::PackageLocation
+impl core::cmp::PartialEq for rich_micro::model::PackageLocation
+pub fn rich_micro::model::PackageLocation::eq(&self, &rich_micro::model::PackageLocation) -> bool
+impl core::fmt::Debug for rich_micro::model::PackageLocation
+pub fn rich_micro::model::PackageLocation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::PackageLocation
+pub fn rich_micro::model::PackageLocation::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::model::PackageLocation
+impl core::marker::Freeze for rich_micro::model::PackageLocation
+impl core::marker::Send for rich_micro::model::PackageLocation
+impl core::marker::Sync for rich_micro::model::PackageLocation
+impl core::marker::Unpin for rich_micro::model::PackageLocation
+impl core::marker::UnsafeUnpin for rich_micro::model::PackageLocation
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::PackageLocation
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::PackageLocation
+pub struct rich_micro::CellSize
+impl rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::cols(self) -> usize
+pub fn rich_micro::model::CellSize::is_multi_row(self) -> bool
+pub fn rich_micro::model::CellSize::new(u16, u16) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::model::CellSize::rows(self) -> usize
+impl core::clone::Clone for rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::clone(&self) -> rich_micro::model::CellSize
+impl core::cmp::Eq for rich_micro::model::CellSize
+impl core::cmp::PartialEq for rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::eq(&self, &rich_micro::model::CellSize) -> bool
+impl core::default::Default for rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::default() -> Self
+impl core::fmt::Debug for rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::CellSize
+pub fn rich_micro::model::CellSize::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::model::CellSize
+impl core::marker::StructuralPartialEq for rich_micro::model::CellSize
+impl core::str::traits::FromStr for rich_micro::model::CellSize
+pub type rich_micro::model::CellSize::Err = rich_micro::error::MicroError
+pub fn rich_micro::model::CellSize::from_str(&str) -> core::result::Result<Self, rich_micro::error::MicroError>
+impl core::marker::Freeze for rich_micro::model::CellSize
+impl core::marker::Send for rich_micro::model::CellSize
+impl core::marker::Sync for rich_micro::model::CellSize
+impl core::marker::Unpin for rich_micro::model::CellSize
+impl core::marker::UnsafeUnpin for rich_micro::model::CellSize
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::CellSize
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::CellSize
+pub struct rich_micro::Collision
+pub rich_micro::Collision::dropped: alloc::string::String
+pub rich_micro::Collision::kept: alloc::string::String
+pub rich_micro::Collision::layer: rich_micro::model::Layer
+pub rich_micro::Collision::name: alloc::string::String
+impl core::clone::Clone for rich_micro::registry::Collision
+pub fn rich_micro::registry::Collision::clone(&self) -> rich_micro::registry::Collision
+impl core::cmp::Eq for rich_micro::registry::Collision
+impl core::cmp::PartialEq for rich_micro::registry::Collision
+pub fn rich_micro::registry::Collision::eq(&self, &rich_micro::registry::Collision) -> bool
+impl core::fmt::Debug for rich_micro::registry::Collision
+pub fn rich_micro::registry::Collision::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::registry::Collision
+impl core::marker::Freeze for rich_micro::registry::Collision
+impl core::marker::Send for rich_micro::registry::Collision
+impl core::marker::Sync for rich_micro::registry::Collision
+impl core::marker::Unpin for rich_micro::registry::Collision
+impl core::marker::UnsafeUnpin for rich_micro::registry::Collision
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::registry::Collision
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::registry::Collision
+pub struct rich_micro::Diagnostic
+pub rich_micro::Diagnostic::kind: rich_micro::markup::DiagnosticKind
+pub rich_micro::Diagnostic::offset: usize
+pub rich_micro::Diagnostic::token: alloc::string::String
+impl core::clone::Clone for rich_micro::markup::Diagnostic
+pub fn rich_micro::markup::Diagnostic::clone(&self) -> rich_micro::markup::Diagnostic
+impl core::cmp::Eq for rich_micro::markup::Diagnostic
+impl core::cmp::PartialEq for rich_micro::markup::Diagnostic
+pub fn rich_micro::markup::Diagnostic::eq(&self, &rich_micro::markup::Diagnostic) -> bool
+impl core::fmt::Debug for rich_micro::markup::Diagnostic
+pub fn rich_micro::markup::Diagnostic::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_micro::markup::Diagnostic
+pub fn rich_micro::markup::Diagnostic::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::markup::Diagnostic
+impl core::marker::Freeze for rich_micro::markup::Diagnostic
+impl core::marker::Send for rich_micro::markup::Diagnostic
+impl core::marker::Sync for rich_micro::markup::Diagnostic
+impl core::marker::Unpin for rich_micro::markup::Diagnostic
+impl core::marker::UnsafeUnpin for rich_micro::markup::Diagnostic
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::markup::Diagnostic
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::markup::Diagnostic
+pub struct rich_micro::Fallback
+pub rich_micro::Fallback::emoji: core::option::Option<alloc::string::String>
+pub rich_micro::Fallback::text: core::option::Option<alloc::string::String>
+impl core::clone::Clone for rich_micro::model::Fallback
+pub fn rich_micro::model::Fallback::clone(&self) -> rich_micro::model::Fallback
+impl core::cmp::Eq for rich_micro::model::Fallback
+impl core::cmp::PartialEq for rich_micro::model::Fallback
+pub fn rich_micro::model::Fallback::eq(&self, &rich_micro::model::Fallback) -> bool
+impl core::default::Default for rich_micro::model::Fallback
+pub fn rich_micro::model::Fallback::default() -> rich_micro::model::Fallback
+impl core::fmt::Debug for rich_micro::model::Fallback
+pub fn rich_micro::model::Fallback::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::Fallback
+pub fn rich_micro::model::Fallback::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::model::Fallback
+impl core::marker::Freeze for rich_micro::model::Fallback
+impl core::marker::Send for rich_micro::model::Fallback
+impl core::marker::Sync for rich_micro::model::Fallback
+impl core::marker::Unpin for rich_micro::model::Fallback
+impl core::marker::UnsafeUnpin for rich_micro::model::Fallback
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::Fallback
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::Fallback
+pub struct rich_micro::FallbackRenderer
+pub rich_micro::FallbackRenderer::preference: rich_micro::render::FallbackPreference
+impl rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::new(rich_micro::render::FallbackPreference) -> Self
+impl core::clone::Clone for rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::clone(&self) -> rich_micro::render::FallbackRenderer
+impl core::cmp::Eq for rich_micro::render::FallbackRenderer
+impl core::cmp::PartialEq for rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::eq(&self, &rich_micro::render::FallbackRenderer) -> bool
+impl core::default::Default for rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::default() -> rich_micro::render::FallbackRenderer
+impl core::fmt::Debug for rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_micro::render::FallbackRenderer
+impl core::marker::StructuralPartialEq for rich_micro::render::FallbackRenderer
+impl rich_micro::render::MicroRenderer for rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::name(&self) -> &str
+pub fn rich_micro::render::FallbackRenderer::render(&self, &rich_micro::render::Placement<'_>, &rich::console::Console) -> core::option::Option<alloc::vec::Vec<rich::segment::Segment>>
+impl core::marker::Freeze for rich_micro::render::FallbackRenderer
+impl core::marker::Send for rich_micro::render::FallbackRenderer
+impl core::marker::Sync for rich_micro::render::FallbackRenderer
+impl core::marker::Unpin for rich_micro::render::FallbackRenderer
+impl core::marker::UnsafeUnpin for rich_micro::render::FallbackRenderer
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::render::FallbackRenderer
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::render::FallbackRenderer
+pub struct rich_micro::ImageCache
+impl rich_micro::cache::ImageCache
+pub const rich_micro::cache::ImageCache::DEFAULT_BUDGET: usize
+pub fn rich_micro::cache::ImageCache::is_empty(&self) -> bool
+pub fn rich_micro::cache::ImageCache::len(&self) -> usize
+pub fn rich_micro::cache::ImageCache::new(usize, core::option::Option<std::path::PathBuf>) -> rich_micro::cache::ImageCache
+pub fn rich_micro::cache::ImageCache::prepare(&mut self, &rich_micro::model::MicroAsset, rich_art::graphics::CellPixels, bool, &rich_micro::package::Limits) -> core::option::Option<alloc::sync::Arc<rich_micro::cache::Prepared>>
+pub fn rich_micro::cache::ImageCache::used(&self) -> usize
+impl core::fmt::Debug for rich_micro::cache::ImageCache
+pub fn rich_micro::cache::ImageCache::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_micro::cache::ImageCache
+impl core::marker::Send for rich_micro::cache::ImageCache
+impl core::marker::Sync for rich_micro::cache::ImageCache
+impl core::marker::Unpin for rich_micro::cache::ImageCache
+impl core::marker::UnsafeUnpin for rich_micro::cache::ImageCache
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::cache::ImageCache
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::cache::ImageCache
+pub struct rich_micro::ImageInfo
+pub rich_micro::ImageInfo::format: rich_micro::model::ImageFormat
+pub rich_micro::ImageInfo::frames: u32
+pub rich_micro::ImageInfo::height: u32
+pub rich_micro::ImageInfo::width: u32
+impl rich_micro::model::ImageInfo
+pub fn rich_micro::model::ImageInfo::decoded_bytes(&self) -> u64
+impl core::clone::Clone for rich_micro::model::ImageInfo
+pub fn rich_micro::model::ImageInfo::clone(&self) -> rich_micro::model::ImageInfo
+impl core::cmp::Eq for rich_micro::model::ImageInfo
+impl core::cmp::PartialEq for rich_micro::model::ImageInfo
+pub fn rich_micro::model::ImageInfo::eq(&self, &rich_micro::model::ImageInfo) -> bool
+impl core::fmt::Debug for rich_micro::model::ImageInfo
+pub fn rich_micro::model::ImageInfo::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::ImageInfo
+pub fn rich_micro::model::ImageInfo::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_micro::model::ImageInfo
+impl core::marker::StructuralPartialEq for rich_micro::model::ImageInfo
+impl core::marker::Freeze for rich_micro::model::ImageInfo
+impl core::marker::Send for rich_micro::model::ImageInfo
+impl core::marker::Sync for rich_micro::model::ImageInfo
+impl core::marker::Unpin for rich_micro::model::ImageInfo
+impl core::marker::UnsafeUnpin for rich_micro::model::ImageInfo
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::ImageInfo
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::ImageInfo
+pub struct rich_micro::ImageRef
+pub rich_micro::ImageRef::bytes: u64
+pub rich_micro::ImageRef::info: rich_micro::model::ImageInfo
+pub rich_micro::ImageRef::path: alloc::string::String
+impl core::clone::Clone for rich_micro::model::ImageRef
+pub fn rich_micro::model::ImageRef::clone(&self) -> rich_micro::model::ImageRef
+impl core::cmp::Eq for rich_micro::model::ImageRef
+impl core::cmp::PartialEq for rich_micro::model::ImageRef
+pub fn rich_micro::model::ImageRef::eq(&self, &rich_micro::model::ImageRef) -> bool
+impl core::fmt::Debug for rich_micro::model::ImageRef
+pub fn rich_micro::model::ImageRef::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::ImageRef
+pub fn rich_micro::model::ImageRef::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::model::ImageRef
+impl core::marker::Freeze for rich_micro::model::ImageRef
+impl core::marker::Send for rich_micro::model::ImageRef
+impl core::marker::Sync for rich_micro::model::ImageRef
+impl core::marker::Unpin for rich_micro::model::ImageRef
+impl core::marker::UnsafeUnpin for rich_micro::model::ImageRef
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::ImageRef
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::ImageRef
+pub struct rich_micro::Limits
+pub rich_micro::Limits::max_archive_bytes: u64
+pub rich_micro::Limits::max_decoded_bytes: u64
+pub rich_micro::Limits::max_dimension: u32
+pub rich_micro::Limits::max_entries: usize
+pub rich_micro::Limits::max_file_bytes: u64
+pub rich_micro::Limits::max_frames: u32
+pub rich_micro::Limits::max_manifest_bytes: u64
+pub rich_micro::Limits::max_packages: usize
+pub rich_micro::Limits::max_total_bytes: u64
+impl core::clone::Clone for rich_micro::package::Limits
+pub fn rich_micro::package::Limits::clone(&self) -> rich_micro::package::Limits
+impl core::cmp::Eq for rich_micro::package::Limits
+impl core::cmp::PartialEq for rich_micro::package::Limits
+pub fn rich_micro::package::Limits::eq(&self, &rich_micro::package::Limits) -> bool
+impl core::default::Default for rich_micro::package::Limits
+pub fn rich_micro::package::Limits::default() -> Self
+impl core::fmt::Debug for rich_micro::package::Limits
+pub fn rich_micro::package::Limits::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::package::Limits
+impl core::marker::Freeze for rich_micro::package::Limits
+impl core::marker::Send for rich_micro::package::Limits
+impl core::marker::Sync for rich_micro::package::Limits
+impl core::marker::Unpin for rich_micro::package::Limits
+impl core::marker::UnsafeUnpin for rich_micro::package::Limits
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::package::Limits
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::package::Limits
+pub struct rich_micro::LoadReport
+pub rich_micro::LoadReport::collisions: alloc::vec::Vec<rich_micro::registry::Collision>
+pub rich_micro::LoadReport::rejected: alloc::vec::Vec<rich_micro::registry::Rejected>
+pub rich_micro::LoadReport::untrusted_project: core::option::Option<std::path::PathBuf>
+impl core::clone::Clone for rich_micro::registry::LoadReport
+pub fn rich_micro::registry::LoadReport::clone(&self) -> rich_micro::registry::LoadReport
+impl core::cmp::Eq for rich_micro::registry::LoadReport
+impl core::cmp::PartialEq for rich_micro::registry::LoadReport
+pub fn rich_micro::registry::LoadReport::eq(&self, &rich_micro::registry::LoadReport) -> bool
+impl core::default::Default for rich_micro::registry::LoadReport
+pub fn rich_micro::registry::LoadReport::default() -> rich_micro::registry::LoadReport
+impl core::fmt::Debug for rich_micro::registry::LoadReport
+pub fn rich_micro::registry::LoadReport::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::registry::LoadReport
+impl core::marker::Freeze for rich_micro::registry::LoadReport
+impl core::marker::Send for rich_micro::registry::LoadReport
+impl core::marker::Sync for rich_micro::registry::LoadReport
+impl core::marker::Unpin for rich_micro::registry::LoadReport
+impl core::marker::UnsafeUnpin for rich_micro::registry::LoadReport
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::registry::LoadReport
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::registry::LoadReport
+pub struct rich_micro::MarkdownView<R>
+impl<R: rich::protocol::Renderable> rich::protocol::Renderable for rich_micro::markup::MarkdownView<R>
+pub fn rich_micro::markup::MarkdownView<R>::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_micro::markup::MarkdownView<R>::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl<R> core::marker::Freeze for rich_micro::markup::MarkdownView<R> where R: core::marker::Freeze
+impl<R> core::marker::Send for rich_micro::markup::MarkdownView<R> where R: core::marker::Send
+impl<R> core::marker::Sync for rich_micro::markup::MarkdownView<R> where R: core::marker::Sync
+impl<R> core::marker::Unpin for rich_micro::markup::MarkdownView<R> where R: core::marker::Unpin
+impl<R> core::marker::UnsafeUnpin for rich_micro::markup::MarkdownView<R> where R: core::marker::UnsafeUnpin
+impl<R> core::panic::unwind_safe::RefUnwindSafe for rich_micro::markup::MarkdownView<R> where R: core::panic::unwind_safe::RefUnwindSafe
+impl<R> core::panic::unwind_safe::UnwindSafe for rich_micro::markup::MarkdownView<R> where R: core::panic::unwind_safe::UnwindSafe
+pub struct rich_micro::MicroAsset
+impl rich_micro::model::MicroAsset
+pub fn rich_micro::model::MicroAsset::aliases(&self) -> &[alloc::string::String]
+pub fn rich_micro::model::MicroAsset::alt(&self) -> &str
+pub fn rich_micro::model::MicroAsset::author(&self) -> core::option::Option<&str>
+pub fn rich_micro::model::MicroAsset::cols(&self) -> usize
+pub fn rich_micro::model::MicroAsset::fallback(&self) -> &rich_micro::model::Fallback
+pub fn rich_micro::model::MicroAsset::kind(&self) -> rich_micro::model::AssetKind
+pub fn rich_micro::model::MicroAsset::license(&self) -> core::option::Option<&str>
+pub fn rich_micro::model::MicroAsset::name(&self) -> &str
+pub fn rich_micro::model::MicroAsset::new(&str, &str) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::origin(&self) -> &rich_micro::model::Origin
+pub fn rich_micro::model::MicroAsset::read_variant(&self, &rich_micro::model::ImageRef, &rich_micro::package::Limits) -> core::result::Result<alloc::vec::Vec<u8>, rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::rows(&self) -> usize
+pub fn rich_micro::model::MicroAsset::size(&self) -> rich_micro::model::CellSize
+pub fn rich_micro::model::MicroAsset::validate(&self) -> core::result::Result<(), rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::variants(&self) -> &rich_micro::model::Variants
+pub fn rich_micro::model::MicroAsset::version(&self) -> core::option::Option<&str>
+pub fn rich_micro::model::MicroAsset::with_alias(self, &str) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::with_author(self, &str) -> Self
+pub fn rich_micro::model::MicroAsset::with_emoji(self, &str) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::with_kind(self, rich_micro::model::AssetKind) -> Self
+pub fn rich_micro::model::MicroAsset::with_license(self, &str) -> Self
+pub fn rich_micro::model::MicroAsset::with_origin(self, rich_micro::model::Origin) -> Self
+pub fn rich_micro::model::MicroAsset::with_size(self, rich_micro::model::CellSize) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::with_text(self, &str) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::model::MicroAsset::with_variants(self, rich_micro::model::Variants) -> Self
+pub fn rich_micro::model::MicroAsset::with_version(self, &str) -> Self
+impl core::clone::Clone for rich_micro::model::MicroAsset
+pub fn rich_micro::model::MicroAsset::clone(&self) -> rich_micro::model::MicroAsset
+impl core::cmp::Eq for rich_micro::model::MicroAsset
+impl core::cmp::PartialEq for rich_micro::model::MicroAsset
+pub fn rich_micro::model::MicroAsset::eq(&self, &rich_micro::model::MicroAsset) -> bool
+impl core::fmt::Debug for rich_micro::model::MicroAsset
+pub fn rich_micro::model::MicroAsset::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::MicroAsset
+pub fn rich_micro::model::MicroAsset::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::model::MicroAsset
+impl core::marker::Freeze for rich_micro::model::MicroAsset
+impl core::marker::Send for rich_micro::model::MicroAsset
+impl core::marker::Sync for rich_micro::model::MicroAsset
+impl core::marker::Unpin for rich_micro::model::MicroAsset
+impl core::marker::UnsafeUnpin for rich_micro::model::MicroAsset
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::MicroAsset
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::MicroAsset
+pub struct rich_micro::MicroAssetRef
+impl rich_micro::api::MicroAssetRef
+pub fn rich_micro::api::MicroAssetRef::asset(&self) -> &rich_micro::model::MicroAsset
+pub fn rich_micro::api::MicroAssetRef::from_registry(&rich_micro::registry::MicroRegistry, &str) -> core::result::Result<Self, rich_micro::error::MicroError>
+pub fn rich_micro::api::MicroAssetRef::new(impl core::convert::Into<alloc::sync::Arc<rich_micro::model::MicroAsset>>) -> Self
+pub fn rich_micro::api::MicroAssetRef::preference(self, rich_micro::render::FallbackPreference) -> Self
+pub fn rich_micro::api::MicroAssetRef::text(&self) -> rich::text::Text
+impl core::clone::Clone for rich_micro::api::MicroAssetRef
+pub fn rich_micro::api::MicroAssetRef::clone(&self) -> rich_micro::api::MicroAssetRef
+impl core::fmt::Debug for rich_micro::api::MicroAssetRef
+pub fn rich_micro::api::MicroAssetRef::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich::protocol::Renderable for rich_micro::api::MicroAssetRef
+pub fn rich_micro::api::MicroAssetRef::fit_to_measurement(&self) -> bool
+pub fn rich_micro::api::MicroAssetRef::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_micro::api::MicroAssetRef::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_micro::api::MicroAssetRef
+impl core::marker::Send for rich_micro::api::MicroAssetRef
+impl core::marker::Sync for rich_micro::api::MicroAssetRef
+impl core::marker::Unpin for rich_micro::api::MicroAssetRef
+impl core::marker::UnsafeUnpin for rich_micro::api::MicroAssetRef
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::api::MicroAssetRef
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::api::MicroAssetRef
+pub struct rich_micro::MicroGraphics
+impl rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::cache_bytes(&self) -> usize
+pub fn rich_micro::graphics::MicroGraphics::close(&self) -> alloc::string::String
+pub fn rich_micro::graphics::MicroGraphics::detect(alloc::sync::Arc<rich_micro::registry::MicroRegistry>) -> rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::kitty_ids(&self) -> alloc::vec::Vec<u32>
+pub fn rich_micro::graphics::MicroGraphics::new(alloc::sync::Arc<rich_micro::registry::MicroRegistry>, rich_micro::graphics::Selection) -> rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::registry(&self) -> &alloc::sync::Arc<rich_micro::registry::MicroRegistry>
+pub fn rich_micro::graphics::MicroGraphics::renderer(&self) -> alloc::sync::Arc<dyn rich_micro::render::MicroRenderer>
+pub fn rich_micro::graphics::MicroGraphics::selection(&self) -> &rich_micro::graphics::Selection
+pub fn rich_micro::graphics::MicroGraphics::source(&self) -> alloc::sync::Arc<dyn rich_ext::frame::graphics::PlacementSource>
+pub fn rich_micro::graphics::MicroGraphics::view<R: rich::protocol::Renderable>(&self, R) -> rich_micro::render::MicroView<R>
+pub fn rich_micro::graphics::MicroGraphics::with_cache_budget(self, usize) -> rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::with_clock(self, impl core::ops::function::Fn() -> core::time::Duration + core::marker::Send + core::marker::Sync + 'static) -> rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::with_disk_cache(self, core::option::Option<std::path::PathBuf>) -> rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::with_limits(self, rich_micro::package::Limits) -> rich_micro::graphics::MicroGraphics
+impl core::clone::Clone for rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::clone(&self) -> rich_micro::graphics::MicroGraphics
+impl core::fmt::Debug for rich_micro::graphics::MicroGraphics
+pub fn rich_micro::graphics::MicroGraphics::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_micro::graphics::MicroGraphics
+impl core::marker::Send for rich_micro::graphics::MicroGraphics
+impl core::marker::Sync for rich_micro::graphics::MicroGraphics
+impl core::marker::Unpin for rich_micro::graphics::MicroGraphics
+impl core::marker::UnsafeUnpin for rich_micro::graphics::MicroGraphics
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_micro::graphics::MicroGraphics
+impl !core::panic::unwind_safe::UnwindSafe for rich_micro::graphics::MicroGraphics
+pub struct rich_micro::MicroMeta
+pub rich_micro::MicroMeta::cols: usize
+pub rich_micro::MicroMeta::id: u64
+pub rich_micro::MicroMeta::name: alloc::string::String
+pub rich_micro::MicroMeta::row: usize
+pub rich_micro::MicroMeta::rows: usize
+impl rich_micro::render::MicroMeta
+pub fn rich_micro::render::MicroMeta::from_segment(&rich::segment::Segment) -> core::option::Option<Self>
+pub fn rich_micro::render::MicroMeta::from_style(&rich::style::Style) -> core::option::Option<Self>
+pub fn rich_micro::render::MicroMeta::new(&rich_micro::model::MicroAsset) -> Self
+pub fn rich_micro::render::MicroMeta::to_style(&self) -> rich::style::Style
+pub fn rich_micro::render::MicroMeta::to_value(&self) -> rich::style::MetaValue
+pub fn rich_micro::render::MicroMeta::with_row(&self, usize) -> Self
+impl core::clone::Clone for rich_micro::render::MicroMeta
+pub fn rich_micro::render::MicroMeta::clone(&self) -> rich_micro::render::MicroMeta
+impl core::cmp::Eq for rich_micro::render::MicroMeta
+impl core::cmp::PartialEq for rich_micro::render::MicroMeta
+pub fn rich_micro::render::MicroMeta::eq(&self, &rich_micro::render::MicroMeta) -> bool
+impl core::fmt::Debug for rich_micro::render::MicroMeta
+pub fn rich_micro::render::MicroMeta::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::render::MicroMeta
+pub fn rich_micro::render::MicroMeta::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::render::MicroMeta
+impl core::marker::Freeze for rich_micro::render::MicroMeta
+impl core::marker::Send for rich_micro::render::MicroMeta
+impl core::marker::Sync for rich_micro::render::MicroMeta
+impl core::marker::Unpin for rich_micro::render::MicroMeta
+impl core::marker::UnsafeUnpin for rich_micro::render::MicroMeta
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::render::MicroMeta
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::render::MicroMeta
+pub struct rich_micro::MicroPlugin
+impl rich_micro::api::MicroPlugin
+pub fn rich_micro::api::MicroPlugin::new(alloc::sync::Arc<rich_micro::registry::MicroRegistry>) -> Self
+impl core::clone::Clone for rich_micro::api::MicroPlugin
+pub fn rich_micro::api::MicroPlugin::clone(&self) -> rich_micro::api::MicroPlugin
+impl core::fmt::Debug for rich_micro::api::MicroPlugin
+pub fn rich_micro::api::MicroPlugin::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_plugin_api::Plugin for rich_micro::api::MicroPlugin
+pub fn rich_micro::api::MicroPlugin::metadata(&self) -> rich_plugin_api::PluginMetadata
+pub fn rich_micro::api::MicroPlugin::register(&self, &mut dyn rich_plugin_api::PluginRegistrar) -> core::result::Result<(), rich_plugin_api::PluginError>
+impl core::marker::Freeze for rich_micro::api::MicroPlugin
+impl core::marker::Send for rich_micro::api::MicroPlugin
+impl core::marker::Sync for rich_micro::api::MicroPlugin
+impl core::marker::Unpin for rich_micro::api::MicroPlugin
+impl core::marker::UnsafeUnpin for rich_micro::api::MicroPlugin
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::api::MicroPlugin
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::api::MicroPlugin
+pub struct rich_micro::MicroRegistry
+impl rich_micro::registry::MicroRegistry
+pub fn rich_micro::registry::MicroRegistry::add(&mut self, rich_micro::model::Layer, rich_micro::model::MicroAsset) -> core::result::Result<alloc::vec::Vec<rich_micro::registry::Collision>, rich_micro::error::MicroError>
+pub fn rich_micro::registry::MicroRegistry::assets(&self) -> alloc::vec::Vec<&alloc::sync::Arc<rich_micro::model::MicroAsset>>
+pub fn rich_micro::registry::MicroRegistry::builtin() -> Self
+pub fn rich_micro::registry::MicroRegistry::explain(&self, &str) -> core::option::Option<rich_ext::cli_doc::precedence::Explanation>
+pub fn rich_micro::registry::MicroRegistry::get(&self, rich_micro::model::Layer, &str) -> core::option::Option<&alloc::sync::Arc<rich_micro::model::MicroAsset>>
+pub fn rich_micro::registry::MicroRegistry::layer(&self, rich_micro::model::Layer) -> impl core::iter::traits::iterator::Iterator<Item = &alloc::sync::Arc<rich_micro::model::MicroAsset>>
+pub fn rich_micro::registry::MicroRegistry::load(&rich_micro::registry::MicroRoots, &rich_micro::package::Limits) -> (Self, rich_micro::registry::LoadReport)
+pub fn rich_micro::registry::MicroRegistry::load_builtin_set(&mut self, &mut rich_micro::registry::LoadReport)
+pub fn rich_micro::registry::MicroRegistry::load_dir(&mut self, rich_micro::model::Layer, &std::path::Path, &rich_micro::package::Limits, &mut rich_micro::registry::LoadReport)
+pub fn rich_micro::registry::MicroRegistry::names(&self) -> alloc::vec::Vec<&str>
+pub fn rich_micro::registry::MicroRegistry::new() -> Self
+pub fn rich_micro::registry::MicroRegistry::precedence(&self) -> rich_ext::cli_doc::precedence::Precedence
+pub fn rich_micro::registry::MicroRegistry::remove(&mut self, rich_micro::model::Layer, &str) -> core::option::Option<alloc::sync::Arc<rich_micro::model::MicroAsset>>
+pub fn rich_micro::registry::MicroRegistry::require(&self, &str) -> core::result::Result<&alloc::sync::Arc<rich_micro::model::MicroAsset>, rich_micro::error::MicroError>
+pub fn rich_micro::registry::MicroRegistry::resolve(&self, &str) -> core::option::Option<&alloc::sync::Arc<rich_micro::model::MicroAsset>>
+pub fn rich_micro::registry::MicroRegistry::shadowed(&self, &str) -> alloc::vec::Vec<&alloc::sync::Arc<rich_micro::model::MicroAsset>>
+impl core::clone::Clone for rich_micro::registry::MicroRegistry
+pub fn rich_micro::registry::MicroRegistry::clone(&self) -> rich_micro::registry::MicroRegistry
+impl core::default::Default for rich_micro::registry::MicroRegistry
+pub fn rich_micro::registry::MicroRegistry::default() -> rich_micro::registry::MicroRegistry
+impl core::fmt::Debug for rich_micro::registry::MicroRegistry
+pub fn rich_micro::registry::MicroRegistry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_micro::registry::MicroRegistry
+impl core::marker::Send for rich_micro::registry::MicroRegistry
+impl core::marker::Sync for rich_micro::registry::MicroRegistry
+impl core::marker::Unpin for rich_micro::registry::MicroRegistry
+impl core::marker::UnsafeUnpin for rich_micro::registry::MicroRegistry
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::registry::MicroRegistry
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::registry::MicroRegistry
+pub struct rich_micro::MicroRoots
+pub rich_micro::MicroRoots::builtin: core::option::Option<std::path::PathBuf>
+pub rich_micro::MicroRoots::builtin_set: bool
+pub rich_micro::MicroRoots::project: core::option::Option<std::path::PathBuf>
+pub rich_micro::MicroRoots::project_trusted: bool
+pub rich_micro::MicroRoots::user: core::option::Option<std::path::PathBuf>
+impl rich_micro::registry::MicroRoots
+pub fn rich_micro::registry::MicroRoots::from_env(core::option::Option<&std::path::Path>) -> Self
+pub fn rich_micro::registry::MicroRoots::project_dir(&std::path::Path) -> std::path::PathBuf
+pub fn rich_micro::registry::MicroRoots::trust_project(self, bool) -> Self
+pub fn rich_micro::registry::MicroRoots::user_dir(&std::path::Path) -> std::path::PathBuf
+impl core::clone::Clone for rich_micro::registry::MicroRoots
+pub fn rich_micro::registry::MicroRoots::clone(&self) -> rich_micro::registry::MicroRoots
+impl core::cmp::Eq for rich_micro::registry::MicroRoots
+impl core::cmp::PartialEq for rich_micro::registry::MicroRoots
+pub fn rich_micro::registry::MicroRoots::eq(&self, &rich_micro::registry::MicroRoots) -> bool
+impl core::default::Default for rich_micro::registry::MicroRoots
+pub fn rich_micro::registry::MicroRoots::default() -> rich_micro::registry::MicroRoots
+impl core::fmt::Debug for rich_micro::registry::MicroRoots
+pub fn rich_micro::registry::MicroRoots::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::registry::MicroRoots
+impl core::marker::Freeze for rich_micro::registry::MicroRoots
+impl core::marker::Send for rich_micro::registry::MicroRoots
+impl core::marker::Sync for rich_micro::registry::MicroRoots
+impl core::marker::Unpin for rich_micro::registry::MicroRoots
+impl core::marker::UnsafeUnpin for rich_micro::registry::MicroRoots
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::registry::MicroRoots
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::registry::MicroRoots
+pub struct rich_micro::MicroRows<R>
+impl<R> rich_micro::rows::MicroRows<R>
+pub fn rich_micro::rows::MicroRows<R>::inner(&self) -> &R
+pub fn rich_micro::rows::MicroRows<R>::into_inner(self) -> R
+pub fn rich_micro::rows::MicroRows<R>::new(R) -> Self
+impl<R: core::clone::Clone> core::clone::Clone for rich_micro::rows::MicroRows<R>
+pub fn rich_micro::rows::MicroRows<R>::clone(&self) -> rich_micro::rows::MicroRows<R>
+impl<R: core::fmt::Debug> core::fmt::Debug for rich_micro::rows::MicroRows<R>
+pub fn rich_micro::rows::MicroRows<R>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<R: rich::protocol::Renderable> rich::protocol::Renderable for rich_micro::rows::MicroRows<R>
+pub fn rich_micro::rows::MicroRows<R>::fit_to_measurement(&self) -> bool
+pub fn rich_micro::rows::MicroRows<R>::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_micro::rows::MicroRows<R>::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+pub fn rich_micro::rows::MicroRows<R>::vertical(&self) -> core::option::Option<rich::align::VerticalAlign>
+impl<R> core::marker::Freeze for rich_micro::rows::MicroRows<R> where R: core::marker::Freeze
+impl<R> core::marker::Send for rich_micro::rows::MicroRows<R> where R: core::marker::Send
+impl<R> core::marker::Sync for rich_micro::rows::MicroRows<R> where R: core::marker::Sync
+impl<R> core::marker::Unpin for rich_micro::rows::MicroRows<R> where R: core::marker::Unpin
+impl<R> core::marker::UnsafeUnpin for rich_micro::rows::MicroRows<R> where R: core::marker::UnsafeUnpin
+impl<R> core::panic::unwind_safe::RefUnwindSafe for rich_micro::rows::MicroRows<R> where R: core::panic::unwind_safe::RefUnwindSafe
+impl<R> core::panic::unwind_safe::UnwindSafe for rich_micro::rows::MicroRows<R> where R: core::panic::unwind_safe::UnwindSafe
+pub struct rich_micro::MicroTransform
+impl rich_micro::markup::MicroTransform
+pub fn rich_micro::markup::MicroTransform::new(alloc::sync::Arc<rich_micro::registry::MicroRegistry>) -> Self
+pub fn rich_micro::markup::MicroTransform::preference(self, rich_micro::render::FallbackPreference) -> Self
+impl core::clone::Clone for rich_micro::markup::MicroTransform
+pub fn rich_micro::markup::MicroTransform::clone(&self) -> rich_micro::markup::MicroTransform
+impl core::fmt::Debug for rich_micro::markup::MicroTransform
+pub fn rich_micro::markup::MicroTransform::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl rich_plugin_api::TextTransform for rich_micro::markup::MicroTransform
+pub fn rich_micro::markup::MicroTransform::transform(&self, rich::text::Text) -> core::result::Result<rich::text::Text, rich_plugin_api::PluginError>
+impl core::marker::Freeze for rich_micro::markup::MicroTransform
+impl core::marker::Send for rich_micro::markup::MicroTransform
+impl core::marker::Sync for rich_micro::markup::MicroTransform
+impl core::marker::Unpin for rich_micro::markup::MicroTransform
+impl core::marker::UnsafeUnpin for rich_micro::markup::MicroTransform
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::markup::MicroTransform
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::markup::MicroTransform
+pub struct rich_micro::MicroView<R>
+impl<R: rich::protocol::Renderable> rich_micro::render::MicroView<R>
+pub fn rich_micro::render::MicroView<R>::new(R, alloc::sync::Arc<rich_micro::registry::MicroRegistry>) -> Self
+pub fn rich_micro::render::MicroView<R>::renderer(self, alloc::sync::Arc<dyn rich_micro::render::MicroRenderer>) -> Self
+impl<R: rich::protocol::Renderable> rich::protocol::Renderable for rich_micro::render::MicroView<R>
+pub fn rich_micro::render::MicroView<R>::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_micro::render::MicroView<R>::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl<R> core::marker::Freeze for rich_micro::render::MicroView<R> where R: core::marker::Freeze
+impl<R> core::marker::Send for rich_micro::render::MicroView<R> where R: core::marker::Send
+impl<R> core::marker::Sync for rich_micro::render::MicroView<R> where R: core::marker::Sync
+impl<R> core::marker::Unpin for rich_micro::render::MicroView<R> where R: core::marker::Unpin
+impl<R> core::marker::UnsafeUnpin for rich_micro::render::MicroView<R> where R: core::marker::UnsafeUnpin
+impl<R> !core::panic::unwind_safe::RefUnwindSafe for rich_micro::render::MicroView<R>
+impl<R> !core::panic::unwind_safe::UnwindSafe for rich_micro::render::MicroView<R>
+pub struct rich_micro::Origin
+pub rich_micro::Origin::layer: rich_micro::model::Layer
+pub rich_micro::Origin::location: core::option::Option<rich_micro::model::PackageLocation>
+pub rich_micro::Origin::pack: core::option::Option<alloc::string::String>
+impl core::clone::Clone for rich_micro::model::Origin
+pub fn rich_micro::model::Origin::clone(&self) -> rich_micro::model::Origin
+impl core::cmp::Eq for rich_micro::model::Origin
+impl core::cmp::PartialEq for rich_micro::model::Origin
+pub fn rich_micro::model::Origin::eq(&self, &rich_micro::model::Origin) -> bool
+impl core::default::Default for rich_micro::model::Origin
+pub fn rich_micro::model::Origin::default() -> Self
+impl core::fmt::Debug for rich_micro::model::Origin
+pub fn rich_micro::model::Origin::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_micro::model::Origin
+pub fn rich_micro::model::Origin::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::Origin
+pub fn rich_micro::model::Origin::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::model::Origin
+impl core::marker::Freeze for rich_micro::model::Origin
+impl core::marker::Send for rich_micro::model::Origin
+impl core::marker::Sync for rich_micro::model::Origin
+impl core::marker::Unpin for rich_micro::model::Origin
+impl core::marker::UnsafeUnpin for rich_micro::model::Origin
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::Origin
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::Origin
+pub struct rich_micro::Pack
+pub rich_micro::Pack::assets: alloc::vec::Vec<rich_micro::model::MicroAsset>
+pub rich_micro::Pack::name: alloc::string::String
+pub rich_micro::Pack::rejected: alloc::vec::Vec<(alloc::string::String, rich_micro::error::MicroError)>
+pub rich_micro::Pack::version: core::option::Option<alloc::string::String>
+impl core::clone::Clone for rich_micro::package::Pack
+pub fn rich_micro::package::Pack::clone(&self) -> rich_micro::package::Pack
+impl core::fmt::Debug for rich_micro::package::Pack
+pub fn rich_micro::package::Pack::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_micro::package::Pack
+impl core::marker::Send for rich_micro::package::Pack
+impl core::marker::Sync for rich_micro::package::Pack
+impl core::marker::Unpin for rich_micro::package::Pack
+impl core::marker::UnsafeUnpin for rich_micro::package::Pack
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::package::Pack
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::package::Pack
+pub struct rich_micro::Placement<'a>
+pub rich_micro::Placement::asset: &'a rich_micro::model::MicroAsset
+pub rich_micro::Placement::fallback: alloc::string::String
+pub rich_micro::Placement::meta: rich_micro::render::MicroMeta
+pub rich_micro::Placement::style: core::option::Option<rich::style::Style>
+impl<'a> core::clone::Clone for rich_micro::render::Placement<'a>
+pub fn rich_micro::render::Placement<'a>::clone(&self) -> rich_micro::render::Placement<'a>
+impl<'a> core::fmt::Debug for rich_micro::render::Placement<'a>
+pub fn rich_micro::render::Placement<'a>::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl<'a> core::marker::Freeze for rich_micro::render::Placement<'a>
+impl<'a> core::marker::Send for rich_micro::render::Placement<'a>
+impl<'a> core::marker::Sync for rich_micro::render::Placement<'a>
+impl<'a> core::marker::Unpin for rich_micro::render::Placement<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_micro::render::Placement<'a>
+impl<'a> core::panic::unwind_safe::RefUnwindSafe for rich_micro::render::Placement<'a>
+impl<'a> core::panic::unwind_safe::UnwindSafe for rich_micro::render::Placement<'a>
+pub struct rich_micro::Prepared
+pub rich_micro::Prepared::cell: rich_art::graphics::CellPixels
+pub rich_micro::Prepared::cols: usize
+pub rich_micro::Prepared::frames: alloc::vec::Vec<rich_art::graphics::AnimationFrame>
+pub rich_micro::Prepared::key: u64
+pub rich_micro::Prepared::rows: usize
+impl rich_micro::cache::Prepared
+pub fn rich_micro::cache::Prepared::animated(&self) -> bool
+pub fn rich_micro::cache::Prepared::duration(&self) -> core::time::Duration
+pub fn rich_micro::cache::Prepared::frame_at(&self, core::time::Duration) -> (usize, core::option::Option<core::time::Duration>)
+impl core::fmt::Debug for rich_micro::cache::Prepared
+pub fn rich_micro::cache::Prepared::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl !core::marker::Freeze for rich_micro::cache::Prepared
+impl core::marker::Send for rich_micro::cache::Prepared
+impl core::marker::Sync for rich_micro::cache::Prepared
+impl core::marker::Unpin for rich_micro::cache::Prepared
+impl core::marker::UnsafeUnpin for rich_micro::cache::Prepared
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::cache::Prepared
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::cache::Prepared
+pub struct rich_micro::PreparedMarkdown
+impl rich_micro::markup::PreparedMarkdown
+pub fn rich_micro::markup::PreparedMarkdown::diagnostics(&self) -> &[rich_micro::markup::Diagnostic]
+pub fn rich_micro::markup::PreparedMarkdown::has_assets(&self) -> bool
+pub fn rich_micro::markup::PreparedMarkdown::new(&str, &rich_micro::registry::MicroRegistry, rich_micro::render::FallbackPreference) -> Self
+pub fn rich_micro::markup::PreparedMarkdown::source(&self) -> &str
+pub fn rich_micro::markup::PreparedMarkdown::view<R: rich::protocol::Renderable>(&self, R) -> rich_micro::markup::MarkdownView<R>
+impl core::clone::Clone for rich_micro::markup::PreparedMarkdown
+pub fn rich_micro::markup::PreparedMarkdown::clone(&self) -> rich_micro::markup::PreparedMarkdown
+impl core::fmt::Debug for rich_micro::markup::PreparedMarkdown
+pub fn rich_micro::markup::PreparedMarkdown::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_micro::markup::PreparedMarkdown
+impl core::marker::Send for rich_micro::markup::PreparedMarkdown
+impl core::marker::Sync for rich_micro::markup::PreparedMarkdown
+impl core::marker::Unpin for rich_micro::markup::PreparedMarkdown
+impl core::marker::UnsafeUnpin for rich_micro::markup::PreparedMarkdown
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::markup::PreparedMarkdown
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::markup::PreparedMarkdown
+pub struct rich_micro::PreparedMarkup
+impl rich_micro::markup::PreparedMarkup
+pub fn rich_micro::markup::PreparedMarkup::diagnostics(&self) -> &[rich_micro::markup::Diagnostic]
+pub fn rich_micro::markup::PreparedMarkup::finish(&self, &rich::text::Text) -> rich::text::Text
+pub fn rich_micro::markup::PreparedMarkup::markup(&self) -> &str
+pub fn rich_micro::markup::PreparedMarkup::new(&str, &rich_micro::registry::MicroRegistry, rich_micro::render::FallbackPreference) -> Self
+impl core::clone::Clone for rich_micro::markup::PreparedMarkup
+pub fn rich_micro::markup::PreparedMarkup::clone(&self) -> rich_micro::markup::PreparedMarkup
+impl core::fmt::Debug for rich_micro::markup::PreparedMarkup
+pub fn rich_micro::markup::PreparedMarkup::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_micro::markup::PreparedMarkup
+impl core::marker::Send for rich_micro::markup::PreparedMarkup
+impl core::marker::Sync for rich_micro::markup::PreparedMarkup
+impl core::marker::Unpin for rich_micro::markup::PreparedMarkup
+impl core::marker::UnsafeUnpin for rich_micro::markup::PreparedMarkup
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::markup::PreparedMarkup
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::markup::PreparedMarkup
+pub struct rich_micro::Rejected
+pub rich_micro::Rejected::error: rich_micro::error::MicroError
+pub rich_micro::Rejected::layer: rich_micro::model::Layer
+pub rich_micro::Rejected::package: core::option::Option<alloc::string::String>
+pub rich_micro::Rejected::path: std::path::PathBuf
+impl core::clone::Clone for rich_micro::registry::Rejected
+pub fn rich_micro::registry::Rejected::clone(&self) -> rich_micro::registry::Rejected
+impl core::cmp::Eq for rich_micro::registry::Rejected
+impl core::cmp::PartialEq for rich_micro::registry::Rejected
+pub fn rich_micro::registry::Rejected::eq(&self, &rich_micro::registry::Rejected) -> bool
+impl core::fmt::Debug for rich_micro::registry::Rejected
+pub fn rich_micro::registry::Rejected::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::registry::Rejected
+impl core::marker::Freeze for rich_micro::registry::Rejected
+impl core::marker::Send for rich_micro::registry::Rejected
+impl core::marker::Sync for rich_micro::registry::Rejected
+impl core::marker::Unpin for rich_micro::registry::Rejected
+impl core::marker::UnsafeUnpin for rich_micro::registry::Rejected
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::registry::Rejected
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::registry::Rejected
+pub struct rich_micro::Selection
+pub rich_micro::Selection::animate: bool
+pub rich_micro::Selection::blocks_first: bool
+pub rich_micro::Selection::cell: rich_art::graphics::CellPixels
+pub rich_micro::Selection::cell_known: bool
+pub rich_micro::Selection::color_system: core::option::Option<rich::color::ColorSystem>
+pub rich_micro::Selection::mode: rich_micro::graphics::MicroMode
+pub rich_micro::Selection::preference: rich_micro::render::FallbackPreference
+pub rich_micro::Selection::reason: alloc::string::String
+pub rich_micro::Selection::warning: core::option::Option<alloc::string::String>
+impl rich_micro::graphics::Selection
+pub fn rich_micro::graphics::Selection::animate(self, bool) -> rich_micro::graphics::Selection
+pub fn rich_micro::graphics::Selection::forced(rich_micro::graphics::MicroMode, rich_art::graphics::CellPixels) -> rich_micro::graphics::Selection
+pub fn rich_micro::graphics::Selection::text(&str) -> rich_micro::graphics::Selection
+impl core::clone::Clone for rich_micro::graphics::Selection
+pub fn rich_micro::graphics::Selection::clone(&self) -> rich_micro::graphics::Selection
+impl core::cmp::Eq for rich_micro::graphics::Selection
+impl core::cmp::PartialEq for rich_micro::graphics::Selection
+pub fn rich_micro::graphics::Selection::eq(&self, &rich_micro::graphics::Selection) -> bool
+impl core::fmt::Debug for rich_micro::graphics::Selection
+pub fn rich_micro::graphics::Selection::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_micro::graphics::Selection
+impl core::marker::Freeze for rich_micro::graphics::Selection
+impl core::marker::Send for rich_micro::graphics::Selection
+impl core::marker::Sync for rich_micro::graphics::Selection
+impl core::marker::Unpin for rich_micro::graphics::Selection
+impl core::marker::UnsafeUnpin for rich_micro::graphics::Selection
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::graphics::Selection
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::graphics::Selection
+pub struct rich_micro::Variants
+pub rich_micro::Variants::animation: core::option::Option<rich_micro::model::ImageRef>
+pub rich_micro::Variants::frames: alloc::vec::Vec<rich_micro::model::ImageRef>
+pub rich_micro::Variants::static_image: core::option::Option<rich_micro::model::ImageRef>
+impl rich_micro::model::Variants
+pub fn rich_micro::model::Variants::is_empty(&self) -> bool
+pub fn rich_micro::model::Variants::iter(&self) -> impl core::iter::traits::iterator::Iterator<Item = &rich_micro::model::ImageRef>
+impl core::clone::Clone for rich_micro::model::Variants
+pub fn rich_micro::model::Variants::clone(&self) -> rich_micro::model::Variants
+impl core::cmp::Eq for rich_micro::model::Variants
+impl core::cmp::PartialEq for rich_micro::model::Variants
+pub fn rich_micro::model::Variants::eq(&self, &rich_micro::model::Variants) -> bool
+impl core::default::Default for rich_micro::model::Variants
+pub fn rich_micro::model::Variants::default() -> rich_micro::model::Variants
+impl core::fmt::Debug for rich_micro::model::Variants
+pub fn rich_micro::model::Variants::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_micro::model::Variants
+pub fn rich_micro::model::Variants::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_micro::model::Variants
+impl core::marker::Freeze for rich_micro::model::Variants
+impl core::marker::Send for rich_micro::model::Variants
+impl core::marker::Sync for rich_micro::model::Variants
+impl core::marker::Unpin for rich_micro::model::Variants
+impl core::marker::UnsafeUnpin for rich_micro::model::Variants
+impl core::panic::unwind_safe::RefUnwindSafe for rich_micro::model::Variants
+impl core::panic::unwind_safe::UnwindSafe for rich_micro::model::Variants
+pub const rich_micro::MICRO_META_KEY: &str
+pub const rich_micro::PAD_CELL: char
+pub trait rich_micro::MicroExt
+pub fn rich_micro::MicroExt::append_micro(&mut self, &rich_micro::registry::MicroRegistry, &str) -> core::result::Result<&mut Self, rich_micro::error::MicroError>
+pub fn rich_micro::MicroExt::append_micro_asset(&mut self, &rich_micro::model::MicroAsset) -> &mut Self
+pub fn rich_micro::MicroExt::expand_micro(&mut self, &rich_micro::registry::MicroRegistry) -> alloc::vec::Vec<rich_micro::markup::Diagnostic>
+impl rich_micro::api::MicroExt for rich::text::Text
+pub fn rich::text::Text::append_micro(&mut self, &rich_micro::registry::MicroRegistry, &str) -> core::result::Result<&mut Self, rich_micro::error::MicroError>
+pub fn rich::text::Text::append_micro_asset(&mut self, &rich_micro::model::MicroAsset) -> &mut Self
+pub fn rich::text::Text::expand_micro(&mut self, &rich_micro::registry::MicroRegistry) -> alloc::vec::Vec<rich_micro::markup::Diagnostic>
+pub trait rich_micro::MicroRenderer: core::marker::Send + core::marker::Sync
+pub fn rich_micro::MicroRenderer::name(&self) -> &str
+pub fn rich_micro::MicroRenderer::render(&self, &rich_micro::render::Placement<'_>, &rich::console::Console) -> core::option::Option<alloc::vec::Vec<rich::segment::Segment>>
+impl rich_micro::render::MicroRenderer for rich_micro::render::FallbackRenderer
+pub fn rich_micro::render::FallbackRenderer::name(&self) -> &str
+pub fn rich_micro::render::FallbackRenderer::render(&self, &rich_micro::render::Placement<'_>, &rich::console::Console) -> core::option::Option<alloc::vec::Vec<rich::segment::Segment>>
+impl<T: rich_micro::render::MicroRenderer + ?core::marker::Sized> rich_micro::render::MicroRenderer for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::name(&self) -> &str
+pub fn alloc::sync::Arc<T>::render(&self, &rich_micro::render::Placement<'_>, &rich::console::Console) -> core::option::Option<alloc::vec::Vec<rich::segment::Segment>>
+pub fn rich_micro::expand(&rich::text::Text, &rich_micro::registry::MicroRegistry, rich_micro::render::FallbackPreference) -> (rich::text::Text, alloc::vec::Vec<rich_micro::markup::Diagnostic>)
+pub fn rich_micro::fallback_cells(&rich_micro::model::MicroAsset, rich_micro::render::FallbackPreference) -> alloc::string::String
+pub fn rich_micro::fallback_row(&rich_micro::model::MicroAsset, rich_micro::render::FallbackPreference, usize) -> alloc::string::String
+pub fn rich_micro::is_valid_name(&str) -> bool
+pub fn rich_micro::markup_text(&str, &rich_micro::registry::MicroRegistry, bool, rich_micro::render::FallbackPreference) -> rich::errors::Result<(rich::text::Text, alloc::vec::Vec<rich_micro::markup::Diagnostic>)>
+pub fn rich_micro::placeholder(&rich_micro::model::MicroAsset, rich_micro::render::FallbackPreference) -> rich::text::Text
+pub fn rich_micro::render_markup(&rich::console::Console, &str, &rich_micro::registry::MicroRegistry, rich_micro::render::FallbackPreference) -> (rich::text::Text, alloc::vec::Vec<rich_micro::markup::Diagnostic>)
+pub fn rich_micro::reserve_rows(alloc::vec::Vec<rich::segment::Segment>) -> alloc::vec::Vec<rich::segment::Segment>
+pub fn rich_micro::select(&rich_ext::graphics::GraphicsEnvironment, &dyn rich_ext::capabilities::Environment) -> rich_micro::graphics::Selection
