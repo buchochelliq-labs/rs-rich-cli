@@ -130,9 +130,10 @@ pub(crate) fn spec() -> rich_ext::cli_doc::CommandSpec {
                 .about(
                     "List the marketplace's packages, or those with every word of QUERY in their \
                      id, name, description, keywords, authors or capabilities; the tier shows as \
-                     `✓ official`, `reviewed` or `community`, and who authored each",
+                     `✓ official`, `approved` or `community`, a maintainers' pick as \
+                     `★ recommended`, and who authored each",
                 )
-                .usage("search [QUERY] [--kind KIND] [--tier TIER]")
+                .usage("search [QUERY] [--kind KIND] [--tier TIER] [--recommended]")
                 .arg(ArgSpec::positional("query").help("Words to look for, in any case"))
                 .arg(
                     ArgSpec::option("kind")
@@ -142,8 +143,14 @@ pub(crate) fn spec() -> rich_ext::cli_doc::CommandSpec {
                 .arg(
                     ArgSpec::option("tier")
                         .value_name("TIER")
-                        .help("Only this tier: official (rs-rich's own), reviewed or community"),
+                        .help(
+                            "Only this tier: official (rs-rich's own), reviewed (shown as \
+                             approved) or community",
+                        ),
                 )
+                .arg(ArgSpec::flag("recommended").help(
+                    "Only the maintainers' picks, marked `★ recommended`",
+                ))
                 .example("rich plugin search rot13", "Packages with a rot13 capability, say")
                 .example("rich plugin search --kind theme --tier official", "rs-rich's own themes"),
         ))
@@ -368,6 +375,8 @@ pub(crate) struct Options {
     pub kind: Option<Kind>,
     /// `search --tier TIER`.
     pub tier: Option<Tier>,
+    /// `search --recommended`.
+    pub recommended: bool,
     /// `publish`'s options, by name without `--`; repeatable ones keep
     /// every value.
     pub publish: BTreeMap<&'static str, Vec<String>>,
@@ -409,6 +418,7 @@ fn parse(args: &[String]) -> Outcome<Options> {
             "--plugin-dir" => options.plugin_dir = Some(fs_path(&value(arg)?)),
             "--marketplace-keys" => options.keys = Some(fs_path(&value(arg)?)),
             "--kind" => kind = Some(value(arg)?),
+            "--recommended" => options.recommended = true,
             "--report" => {
                 options.json = match value(arg)?.as_str() {
                     "json" => true,
@@ -476,6 +486,9 @@ fn parse(args: &[String]) -> Outcome<Options> {
                 controls::shown(&name)
             ))
         })?);
+    }
+    if options.recommended && options.command != "search" {
+        return Err(usage("--recommended only applies to `rich plugin search`"));
     }
     if options.command == "search" {
         if let Some(name) = options.publish.remove("tier").and_then(|mut v| v.pop()) {
@@ -1380,22 +1393,54 @@ fn escape(text: &str) -> String {
 pub(crate) fn tier_meaning(tier: Tier) -> &'static str {
     match tier {
         Tier::Official => "rs-rich's own, built from its repository",
-        Tier::Reviewed => "a maintainer read the source and rebuilt the same artifact",
+        Tier::Reviewed => "a maintainer reviewed the source and rebuilt the same artifact",
         _ => "checked by the marketplace's CI only, not reviewed",
     }
 }
 
 /// The tier as a marker that reads the same without colour: `✓ official`,
-/// `reviewed` or `community`. Only ever made from a listing's `tier`.
+/// `approved` (the `reviewed` tier) or `community`. Only ever made from a
+/// listing's `tier`.
 pub(crate) fn tier_label(tier: Tier) -> &'static str {
     match tier {
         Tier::Official => "✓ official",
-        Tier::Reviewed => "reviewed",
+        Tier::Reviewed => "approved",
         _ => "community",
     }
 }
 
-/// [`tier_label`] as markup: official in green, reviewed plain, community
+/// The tier's name as people see it; a listing and the reports say
+/// `reviewed`, shown as Approved.
+pub(crate) fn tier_display(tier: Tier) -> &'static str {
+    match tier {
+        Tier::Official => "Official",
+        Tier::Reviewed => "Approved",
+        _ => "Community",
+    }
+}
+
+/// The maintainers' pick, as a marker that reads the same without colour.
+pub(crate) const RECOMMENDED_LABEL: &str = "★ recommended";
+
+/// [`tier_marker`], and `★ recommended` under it for a recommended
+/// listing. Only ever made from the listing's `tier` and `recommended`.
+pub(crate) fn marks(listing: &Listing) -> String {
+    let mut text = tier_marker(listing.tier);
+    if listing.recommended.is_some() {
+        text.push_str(&format!("\n[bold magenta]{RECOMMENDED_LABEL}[/]"));
+    }
+    text
+}
+
+/// The `Recommended` row: since when, and the maintainer's note.
+pub(crate) fn recommended_text(recommended: &rich_marketplace::Recommended) -> String {
+    format!(
+        "{RECOMMENDED_LABEL} since {}: {}",
+        recommended.since, recommended.note
+    )
+}
+
+/// [`tier_label`] as markup: official in green, approved plain, community
 /// in yellow.
 pub(crate) fn tier_marker(tier: Tier) -> String {
     match tier {
@@ -1475,7 +1520,7 @@ pub(crate) fn publisher(listing: &Listing) -> String {
     match listing.tier {
         Tier::Official => "Official: built and published by rs-rich".into(),
         Tier::Reviewed => format!(
-            "Reviewed: published by {owner}, not by rs-rich; a maintainer read its source and \
+            "Approved: published by {owner}, not by rs-rich; a maintainer read its source and \
              rebuilt it"
         ),
         _ => format!(
@@ -1488,6 +1533,11 @@ pub(crate) fn publisher(listing: &Listing) -> String {
 /// A grid or preview row's value as markup: escaped, with the `Tier` row's
 /// leading [`tier_label`] coloured as [`tier_marker`].
 pub(crate) fn row_markup(key: &str, value: &str) -> String {
+    if key == "Recommended" {
+        if let Some(rest) = value.strip_prefix(RECOMMENDED_LABEL) {
+            return format!("[bold magenta]{RECOMMENDED_LABEL}[/]{}", escape(rest));
+        }
+    }
     if key == "Tier" {
         for tier in [Tier::Official, Tier::Reviewed, Tier::Community] {
             if let Some(rest) = value.strip_prefix(tier_label(tier)) {
@@ -1572,6 +1622,8 @@ fn listing_json(listing: &Listing, host: &Host, installed: Option<&LockEntry>) -
         "name": listing.name,
         "description": listing.description,
         "tier": listing.tier.as_str(),
+        "tier_label": tier_display(listing.tier),
+        "recommended": listing.recommended.as_ref().map(|r| json!({"since": r.since, "note": r.note})),
         "license": listing.license,
         "authors": listing.authors,
         "repository": listing.repository,
@@ -1676,6 +1728,9 @@ pub(crate) fn provenance(
         ("Author", authored_by(listing)),
         ("Source", listing.repository.clone()),
     ];
+    if let Some(recommended) = &listing.recommended {
+        rows.push(("Recommended", recommended_text(recommended)));
+    }
     if let Some(revision) = &version.source_revision {
         rows.push(("Revision", revision.clone()));
     }
@@ -1726,17 +1781,15 @@ fn lockfile(dir: &Path) -> Outcome<Lockfile> {
 pub(crate) const MARKETPLACE_PAGE: &str =
     "https://buchochelliq-labs.github.io/rs-rich-cli/latest/marketplace/";
 
-/// Whether `listing` is one `search` shows: of `kind` and `tier` when
-/// given, and with every word of `query` (lower-cased) in its id, name,
+/// Whether `listing` is one `search` shows: of `--kind` and `--tier` when
+/// given, recommended for `--recommended`, and with every word of `query` (lower-cased) in its id, name,
 /// description, keywords, authors, crate, kind or any version's
 /// capabilities.
-pub(crate) fn search_matches(
-    listing: &Listing,
-    query: &str,
-    kind: Option<Kind>,
-    tier: Option<Tier>,
-) -> bool {
-    if kind.is_some_and(|k| k != listing.kind) || tier.is_some_and(|t| t != listing.tier) {
+pub(crate) fn search_matches(listing: &Listing, query: &str, options: &Options) -> bool {
+    if options.kind.is_some_and(|k| k != listing.kind)
+        || options.tier.is_some_and(|t| t != listing.tier)
+        || (options.recommended && listing.recommended.is_none())
+    {
         return false;
     }
     let mut fields = vec![
@@ -1772,7 +1825,7 @@ fn search(options: &Options) -> Outcome<Done> {
     let mut rows = Vec::new();
     let mut found = Vec::new();
     for listing in market.listings()? {
-        if !search_matches(&listing, &query, options.kind, options.tier) {
+        if !search_matches(&listing, &query, options) {
             continue;
         }
         let installed = lock.get(&listing.id);
@@ -1782,7 +1835,7 @@ fn search(options: &Options) -> Outcome<Done> {
         rows.push(vec![
             escape(&listing.id),
             escape(listing.kind.as_str()),
-            tier_marker(listing.tier),
+            marks(&listing),
             escape(&candidate),
             escape(&installed.map_or_else(String::new, |e| e.version.clone())),
             format!(
@@ -1855,10 +1908,15 @@ fn info(options: &Options) -> Outcome<Done> {
         ),
         ("Publisher", publisher(&listing)),
         ("Author", authored_by(&listing)),
+    ];
+    if let Some(recommended) = &listing.recommended {
+        rows.push(("Recommended", recommended_text(recommended)));
+    }
+    rows.extend([
         ("Description", listing.description.clone()),
         ("License", listing.license.clone()),
         ("Repository", listing.repository.clone()),
-    ];
+    ]);
     if let Some(homepage) = &listing.homepage {
         rows.push(("Homepage", homepage.clone()));
     }
@@ -1931,6 +1989,7 @@ fn entry_json(entry: &LockEntry) -> Value {
         "kind": entry.kind.as_str(),
         "version": entry.version,
         "tier": entry.tier.as_str(),
+        "tier_label": tier_display(entry.tier),
         "url": entry.url,
         "sha256": entry.sha256,
         "size": entry.size,
@@ -2355,6 +2414,7 @@ pub(crate) fn run_on(options: &Options, command: &str, id: &str) -> Outcome<Done
         keys: options.keys.clone(),
         kind: None,
         tier: None,
+        recommended: false,
         publish: BTreeMap::new(),
     };
     match command {
@@ -2447,7 +2507,7 @@ mod tests {
     fn tier_markers() {
         // Colour only marks what the plain words already say.
         assert_eq!(tier_marker(Tier::Official), "[bold green]✓ official[/]");
-        assert_eq!(tier_marker(Tier::Reviewed), "reviewed");
+        assert_eq!(tier_marker(Tier::Reviewed), "approved");
         assert_eq!(tier_marker(Tier::Community), "[yellow]community[/]");
         assert_eq!(
             row_markup("Tier", "community: [b]x[/b]"),
@@ -2455,6 +2515,10 @@ mod tests {
         );
         // Only the Tier row is marked; any other value is escaped as is.
         assert_eq!(row_markup("Name", "✓ official"), "✓ official");
+        assert_eq!(
+            row_markup("Recommended", "★ recommended since x: [i]"),
+            "[bold magenta]★ recommended[/] since x: \\[i]"
+        );
         assert_eq!(repository_owner("https://github.com/ada/x.git"), "ada");
         assert_eq!(repository_owner("https://example.test"), "example.test");
         assert_eq!(

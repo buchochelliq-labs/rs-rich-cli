@@ -101,6 +101,9 @@ fn item(listing: &Listing, installed: Option<&LockEntry>, state: &State) -> Item
     let candidate = resolve(listing, &host, &Request::Newest).ok();
     let version = candidate.or_else(|| listing.versions.first());
     let mut label = format!("{}  {}", line(&listing.id), tier_label(listing.tier));
+    if listing.recommended.is_some() {
+        label.push_str(&format!("  {RECOMMENDED_LABEL}"));
+    }
     if let Some(entry) = installed {
         label.push_str(&format!("  installed {}", entry.version));
         if !state.is_enabled(&entry.id) {

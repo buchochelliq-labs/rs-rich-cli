@@ -288,6 +288,12 @@ def semantic_errors(listing):
             expected = f"https://static.crates.io/crates/{name}/{name}-{number}.crate"
             if entry["artifact"]["url"] != expected:
                 out.append(f"{at}.artifact.url: must be {expected}")
+    if "recommended" in listing:
+        since = listing["recommended"]["since"]
+        try:
+            datetime.date.fromisoformat(since)
+        except ValueError:
+            out.append(f"recommended.since: not a real day: {since!r}")
     if listing["tier"] == "official" and not listing["repository"].startswith(OFFICIAL_PREFIX):
         out.append(f"tier: 'official' is only for packages under {OFFICIAL_PREFIX}")
     return out

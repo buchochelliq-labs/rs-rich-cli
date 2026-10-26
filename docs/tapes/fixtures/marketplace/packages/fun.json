@@ -1,0 +1,60 @@
+{
+  "schema_version": 1,
+  "id": "fun",
+  "kind": "micro-pack",
+  "name": "Fun micro pack",
+  "description": "Fun icons: heart, star, cat, coffee, and two rows high, trophy and campfire",
+  "tier": "official",
+  "license": "MIT",
+  "repository": "https://github.com/buchochelliq-labs/rs-rich-cli",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "published": "2026-10-26",
+      "requires": {
+        "micro_schema": 1
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/main/artifacts/fun/fun-1.0.0.richmicro",
+        "sha256": "dc0b203a1fbd1ead46bc61b9ab552de6d280869ed5def8f8fa3fb326eb22589c",
+        "size": 15655
+      },
+      "capabilities": [
+        {
+          "kind": "asset",
+          "name": "fun/campfire"
+        },
+        {
+          "kind": "asset",
+          "name": "fun/cat"
+        },
+        {
+          "kind": "asset",
+          "name": "fun/coffee"
+        },
+        {
+          "kind": "asset",
+          "name": "fun/heart"
+        },
+        {
+          "kind": "asset",
+          "name": "fun/star"
+        },
+        {
+          "kind": "asset",
+          "name": "fun/trophy"
+        }
+      ],
+      "permissions": []
+    }
+  ],
+  "authors": [
+    "rs-rich contributors"
+  ],
+  "homepage": "https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/crates/rich-micro/builtin/fun",
+  "keywords": [
+    "micro",
+    "icons",
+    "fun"
+  ]
+}

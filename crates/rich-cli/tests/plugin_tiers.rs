@@ -52,7 +52,7 @@ const THEME: &[u8] = b"[styles]\nwarning = bold red\n";
 
 fn theme(id: &str, tier: &str, repository: &str, authors: Value, description: &str) -> Value {
     let url = format!("https://example.test/themes/{id}.ini");
-    json!({
+    let mut listing = json!({
         "schema_version": 1, "id": id, "kind": "theme", "name": format!("{id} theme"),
         "description": description, "tier": tier, "license": "MIT",
         "authors": authors, "repository": repository,
@@ -63,12 +63,16 @@ fn theme(id: &str, tier: &str, repository: &str, authors: Value, description: &s
             "capabilities": [{"kind": "theme", "name": format!("{id}-colours")}],
             "permissions": [],
         }],
-    })
+    });
+    if id == "solar" {
+        listing["recommended"] = json!({"since": "2026-10-25", "note": "Easy on the eyes"});
+    }
+    listing
 }
 
-/// The marketplace: an official, a reviewed and a community theme (whose
-/// authors and description claim to be rs-rich's), and a community crate
-/// with no authors.
+/// The marketplace: an official, a reviewed (and recommended) and a
+/// community theme (whose authors and description claim to be rs-rich's,
+/// and recommended), and a community crate with no authors.
 fn write_marketplace(dir: &Path) {
     let listings = [
         theme(
@@ -90,7 +94,7 @@ fn write_marketplace(dir: &Path) {
             "community",
             "https://github.com/mallory/sneaky.git",
             json!(["rs-rich", "Bob", "Carol", "Dave", "Erin"]),
-            "✓ official Official · by rs-rich [bold green]theme[/]",
+            "✓ official ★ recommended Official · by rs-rich [bold green]theme[/]",
         ),
         json!({
             "schema_version": 1, "id": "gadget", "kind": "crate", "name": "Gadget",
@@ -223,7 +227,7 @@ fn search_marks_each_tier_in_plain_text() {
     assert_ok(&out);
     let text = stdout(&out);
     assert!(row(&text, "inkwell").contains("✓ official"), "{text}");
-    assert!(row(&text, "solar").contains(" reviewed "), "{text}");
+    assert!(row(&text, "solar").contains(" approved "), "{text}");
     assert!(row(&text, "sneaky").contains(" community "), "{text}");
     assert!(!row(&text, "sneaky").contains("✓ official │"), "{text}");
     assert!(text.contains("Authored by rs-rich "), "{text}");
@@ -270,7 +274,7 @@ fn info_says_who_publishes_it() {
     assert!(text.contains("community: checked by"), "{text}");
     let text = stdout(&w.plugin(&["info", "solar"]));
     assert!(
-        text.contains("Reviewed: published by ada, not by rs-rich"),
+        text.contains("Approved: published by ada, not by rs-rich"),
         "{text}"
     );
 }
@@ -344,4 +348,33 @@ fn search_refuses_unknown_filters_and_hints_when_nothing_matches() {
     assert!(text.contains("No packages match"), "{text}");
     assert!(text.contains("rich plugin browse"), "{text}");
     assert!(text.contains("/marketplace/"), "{text}");
+}
+
+#[test]
+fn recommended_is_marked_filtered_and_explained() {
+    let w = world();
+    let text = stdout(&w.plugin(&["search"]));
+    let lines: Vec<&str> = text.lines().collect();
+    let solar = lines.iter().position(|l| l.contains(" solar ")).unwrap();
+    assert!(lines[solar + 1].contains("★ recommended"), "{text}");
+    // Only solar is recommended; sneaky's description says so in its own words.
+    assert_eq!(text.matches("│ ★ recommended").count(), 1, "{text}");
+    let out = w.plugin(&["search", "--recommended", "--report", "json"]);
+    assert_ok(&out);
+    let report: Value = serde_json::from_slice(&out.stderr).unwrap();
+    let packages = report["result"]["packages"].as_array().unwrap();
+    assert_eq!(packages.len(), 1);
+    assert_eq!(packages[0]["id"], "solar");
+    assert_eq!(packages[0]["tier"], "reviewed");
+    assert_eq!(packages[0]["tier_label"], "Approved");
+    assert_eq!(packages[0]["recommended"]["note"], "Easy on the eyes");
+    let text = stdout(&w.plugin(&["info", "solar"]));
+    assert!(
+        text.contains("★ recommended since 2026-10-25: Easy on the eyes"),
+        "{text}"
+    );
+    let text = stdout(&w.plugin(&["info", "sneaky"]));
+    assert!(!text.contains("Recommended "), "{text}");
+    let out = w.plugin(&["list", "--recommended"]);
+    assert_eq!(out.status.code(), Some(2));
 }
