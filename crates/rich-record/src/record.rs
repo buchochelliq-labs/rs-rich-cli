@@ -8,6 +8,7 @@ use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use serde_json::json;
 
+use crate::audio::{self, Audio};
 use crate::keyboard::{Event as KeyEvent, Press};
 use crate::render::{cast, html, raster, svg, video, Look};
 use crate::screen::{Snapshot, Theme};
@@ -57,6 +58,9 @@ pub struct Options {
     pub theme: Theme,
     /// Video frames a second, over the tape's `Set Framerate`.
     pub frame_rate: Option<f64>,
+    /// Record the program's sound, as a tape's `Set Audio on` does
+    /// (`rich record --audio`): see [`crate::audio`].
+    pub audio: bool,
 }
 
 /// How a recording is presented: `Set WindowFrame`, `Set Caption` and
@@ -101,6 +105,10 @@ pub struct Recording {
     /// Video frames a second: the tape's `Set Framerate` (or
     /// [`Options::frame_rate`]), else [`FRAME_RATE`].
     pub frame_rate: f64,
+    /// The program's sound, on the video's clock, when the tape recorded
+    /// it (`Set Audio on`, [`Options::audio`]) and the program played any
+    /// while shown.
+    pub audio: Option<Audio>,
 }
 
 /// A temporary directory, removed on drop.
@@ -138,6 +146,21 @@ impl Drop for Workspace {
 
 /// The session's environment: pinned so recordings repeat.
 fn environment(workspace: &Path, tape: &Tape, options: &Options) -> Vec<(String, String)> {
+    let mut env = pinned_environment(workspace, tape, options);
+    if tape.audio || options.audio {
+        env.push((
+            audio::ENV.into(),
+            workspace.join(AUDIO_DIR).display().to_string(),
+        ));
+    }
+    env
+}
+
+/// Where in the workspace the program's sound streams are written.
+const AUDIO_DIR: &str = ".audio";
+
+/// The environment without the sound contract.
+fn pinned_environment(workspace: &Path, tape: &Tape, options: &Options) -> Vec<(String, String)> {
     let home = workspace.join(".home");
     let inherited = std::env::var_os("PATH").unwrap_or_else(|| "/usr/bin:/bin".into());
     // The shell runs in the workspace, so a relative directory is resolved
@@ -453,6 +476,10 @@ pub fn record(tape: &Tape, stem: &str, options: &Options) -> Result<Recording, T
     }
     let io = |e: std::io::Error| TapeError::new(0, e.to_string());
     let workspace = Workspace::new(stem).map_err(io)?;
+    let with_audio = tape.audio || options.audio;
+    if with_audio {
+        std::fs::create_dir_all(workspace.0.join(AUDIO_DIR)).map_err(io)?;
+    }
     let env = environment(&workspace.0, tape, options);
     let shell = shell_command(tape.shell);
     let mut session = Session::start(
@@ -585,7 +612,15 @@ pub fn record(tape: &Tape, stem: &str, options: &Options) -> Result<Recording, T
     held.release_all(&mut session).map_err(io)?;
     std::thread::sleep(Duration::from_millis(300));
     failed(&session, 0)?;
+    session.hide();
+    let spans = session.spans();
     let timeline = session.finish();
+    let audio = if with_audio {
+        let zero = timeline.frames.first().map_or(0.0, |(t, _)| *t);
+        audio::compose(&audio::read_dir(&workspace.0.join(AUDIO_DIR)), &spans, zero)
+    } else {
+        None
+    };
     if shots.is_empty() {
         return Err(TapeError::new(0, "the tape takes no Screenshot"));
     }
@@ -604,6 +639,7 @@ pub fn record(tape: &Tape, stem: &str, options: &Options) -> Result<Recording, T
         masks: tape.masks.clone(),
         timeline,
         frame_rate,
+        audio,
     })
 }
 
@@ -879,6 +915,60 @@ pub struct Skipped {
     pub reason: String,
 }
 
+/// A recording's sound written for FFmpeg to read, removed on drop.
+struct SoundFile {
+    path: PathBuf,
+    offset: f64,
+}
+
+impl SoundFile {
+    fn write(audio: &Audio, stem: &str) -> std::io::Result<SoundFile> {
+        let nanos = SystemTime::now()
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| d.as_nanos());
+        let path = std::env::temp_dir().join(format!(
+            "rich-record-{stem}-{}-{nanos}.wav",
+            std::process::id()
+        ));
+        std::fs::write(&path, audio.wav(false))?;
+        Ok(SoundFile {
+            path,
+            offset: audio.offset,
+        })
+    }
+}
+
+impl Drop for SoundFile {
+    fn drop(&mut self) {
+        let _ = std::fs::remove_file(&self.path);
+    }
+}
+
+/// Where the WAV of a recording's sound goes, relative to the output
+/// directory: beside the first of its GIF, APNG, page and cast written
+/// (`demo.gif` gives `demo.wav`), or, with none of them, beside an MP4
+/// that could not be made. `None` when only an MP4 (which carries the
+/// sound) or only stills are written.
+pub fn wav_path(
+    recording: &Recording,
+    stem: &str,
+    formats: Formats,
+    mp4_written: bool,
+) -> Option<String> {
+    let beside = [
+        (formats.gif, Format::Gif),
+        (formats.apng, Format::Apng),
+        (formats.html, Format::Html),
+        (formats.cast, Format::Cast),
+        (formats.mp4 && !mp4_written, Format::Mp4),
+    ]
+    .into_iter()
+    .find_map(|(on, format)| on.then_some(format))?;
+    let path = recording.output_path(beside, stem);
+    let path = Path::new(&path).with_extension("wav");
+    Some(path.to_string_lossy().into_owned())
+}
+
 /// Write the files the tape asks for: [`write`] with the tape's `Output`
 /// formats that `allowed` also permits ([`Recording::formats`]), so a tape
 /// that names `Output demo.png` writes a PNG and not every format. Pass
@@ -907,7 +997,21 @@ pub fn write_selected(
         mp4: formats.mp4 && video::ffmpeg_available(),
         ..formats
     };
-    let paths = write(recording, dir, stem, encode, fonts, theme, provenance)?;
+    let mut paths = write(recording, dir, stem, encode, fonts, theme, provenance)?;
+    // A video that could not be made, with nothing else to put its sound
+    // beside: the WAV takes its place.
+    if let Some(audio) = &recording.audio {
+        if formats.mp4 && !encode.mp4 && wav_path(recording, stem, encode, false).is_none() {
+            if let Some(name) = wav_path(recording, stem, formats, false) {
+                let path = dir.join(name);
+                if let Some(parent) = path.parent() {
+                    std::fs::create_dir_all(parent)?;
+                }
+                std::fs::write(&path, audio.wav(true))?;
+                paths.push(path);
+            }
+        }
+    }
     let mut skipped = Vec::new();
     if formats.mp4 {
         let path = dir.join(recording.output_path(Format::Mp4, stem));
@@ -1066,12 +1170,19 @@ pub fn write(
             std::fs::create_dir_all(parent)?;
         }
     }
-    let mut mp4 = if formats.mp4 && video::ffmpeg_available() {
-        Some(video::Mp4::start_at(
+    let encode_mp4 = formats.mp4 && video::ffmpeg_available();
+    // The MP4's sound track, from a WAV FFmpeg reads beside the frames.
+    let sound = match &recording.audio {
+        Some(audio) if encode_mp4 => Some(SoundFile::write(audio, stem)?),
+        _ => None,
+    };
+    let mut mp4 = if encode_mp4 {
+        Some(video::Mp4::start_with_sound(
             &mp4_path,
             video_width,
             video_height,
             recording.frame_rate,
+            sound.as_ref().map(|s| (s.path.as_path(), s.offset)),
         )?)
     } else {
         None
@@ -1137,6 +1248,13 @@ pub fn write(
     if let Some(mp4) = mp4 {
         mp4.finish()?;
     }
+    drop(sound);
+    // The other outputs have no sound of their own: a WAV beside them.
+    if let Some(audio) = &recording.audio {
+        if let Some(path) = wav_path(recording, stem, formats, mp4_written) {
+            save(&mut written, path, &audio.wav(true))?;
+        }
+    }
     if let Some(apng) = apng {
         apng.finish()?;
         written.push(apng_path);
@@ -1197,6 +1315,7 @@ mod tests {
                 frames: vec![(0.0, crate::screen::Packed::from(&snapshot))],
                 ..Timeline::default()
             },
+            audio: None,
         }
     }
 

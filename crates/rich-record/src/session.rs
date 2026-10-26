@@ -69,6 +69,9 @@ struct State {
     hidden_since: Instant,
     hidden_total: Duration,
     start: Instant,
+    /// The shown stretches, by the wall clock and the timeline; the last
+    /// one's length is infinite while it is shown.
+    spans: Vec<crate::audio::Span>,
     utf8: Vec<u8>,
     /// Every screen shown since the last [`Session::mark`], so a `Wait`
     /// sees text that scrolled away between polls; at most [`MAX_SEEN`]
@@ -103,6 +106,7 @@ impl State {
             hidden_since: now,
             hidden_total: Duration::ZERO,
             start: now,
+            spans: Vec::new(),
             utf8: Vec::new(),
             seen: VecDeque::new(),
             seen_bytes: 0,
@@ -643,6 +647,19 @@ impl Session {
         self.lock().alive
     }
 
+    /// The stretches shown so far, by the wall clock and on the timeline:
+    /// what puts a program's sound on the recording's clock
+    /// ([`crate::audio::compose`]). One still shown ends now.
+    pub fn spans(&self) -> Vec<crate::audio::Span> {
+        let state = self.lock();
+        let now = state.now();
+        let mut spans = state.spans.clone();
+        if let Some(span) = spans.last_mut().filter(|s| s.length.is_infinite()) {
+            span.length = now - span.at;
+        }
+        spans
+    }
+
     pub fn snapshot(&self) -> Snapshot {
         let state = self.lock();
         state.terminal.snapshot(&state.theme)
@@ -652,6 +669,10 @@ impl Session {
         let mut state = self.lock();
         if !state.hidden {
             state.flush();
+            let now = state.now();
+            if let Some(span) = state.spans.last_mut() {
+                span.length = now - span.at;
+            }
             state.hidden = true;
             state.hidden_since = Instant::now();
         }
@@ -665,6 +686,12 @@ impl Session {
             let hidden = state.hidden_since.elapsed();
             state.hidden_total += hidden;
             state.hidden = false;
+            let at = state.now();
+            state.spans.push(crate::audio::Span {
+                wall: std::time::SystemTime::now(),
+                at,
+                length: f64::INFINITY,
+            });
             state.utf8.clear();
             state.batch.clear();
             state.overflow = false;

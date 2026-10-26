@@ -242,3 +242,9 @@ required-features = ["audio"]
 [[test]]
 name = "audio_alsa_quiet"
 required-features = ["audio"]
+
+# An output under `rich record --audio` (RICH_RECORD_AUDIO) writes what it
+# plays to the recorder's directory, timed, and opens no device.
+[[test]]
+name = "audio_record_env"
+required-features = ["audio"]

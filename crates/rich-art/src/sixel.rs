@@ -191,11 +191,7 @@ impl SixelArt {
                 .collect();
             return encode_indexed(&pixels, w as usize, h as usize);
         }
-        let opts = icy_sixel::EncodeOptions {
-            max_colors: self.max_colors,
-            ..Default::default()
-        };
-        icy_sixel::sixel_encode(scaled.as_raw(), w as usize, h as usize, &opts).ok()
+        encode_rgba(scaled.as_raw(), w as usize, h as usize, self.max_colors)
     }
 
     /// The Sixel escape for this image fitted to exactly `cols × rows` cells
@@ -211,12 +207,52 @@ impl SixelArt {
         if u64::from(w) * u64::from(h) > MAX_PIXELS {
             return None;
         }
-        let opts = icy_sixel::EncodeOptions {
-            max_colors: self.max_colors,
-            ..Default::default()
-        };
-        icy_sixel::sixel_encode(fitted.as_raw(), w as usize, h as usize, &opts).ok()
+        encode_rgba(fitted.as_raw(), w as usize, h as usize, self.max_colors)
     }
+}
+
+/// Encode `rgba`, a `width` x `height` raster of RGBA bytes, as Sixel in
+/// up to `max_colors` colours (2 to 256). A picture of that many colours
+/// or fewer (pixel art, a plot, an emulator's screen, a picture scaled
+/// with nearest-neighbour sampling) keeps its exact colours: its palette
+/// is its own colours, through [`encode_palette`]. One of more is
+/// quantized by the adaptive encoder. Pixels under half opacity are
+/// transparent either way. What [`SixelArt::encode`] and
+/// [`SixelArt::encode_cells`] use. `None` when `rgba` is not
+/// `width * height * 4` bytes, the raster is past [`MAX_PIXELS`], or the
+/// encoder fails.
+///
+/// ```
+/// use rich_art::sixel::encode_rgba;
+///
+/// // Two colours: drawn with exactly those two registers.
+/// let rgba = [18, 52, 86, 255, 250, 128, 0, 255];
+/// let sixel = encode_rgba(&rgba, 2, 1, 256).unwrap();
+/// assert!(sixel.contains("#0;2;7;20;34#1;2;98;50;0"));
+/// ```
+pub fn encode_rgba(rgba: &[u8], width: usize, height: usize, max_colors: u16) -> Option<String> {
+    let area = width.checked_mul(height)?;
+    if area.checked_mul(4)? != rgba.len() || area as u64 > MAX_PIXELS {
+        return None;
+    }
+    let max_colors = max_colors.clamp(2, 256);
+    // The adaptive encoder's rule: under half opacity is transparent.
+    let pixels: Vec<[u8; 4]> = rgba
+        .as_chunks::<4>()
+        .0
+        .iter()
+        .map(|&[r, g, b, a]| [r, g, b, if a < 128 { 0 } else { 255 }])
+        .collect();
+    if let Some((indices, palette)) = index_exact(&pixels) {
+        if palette.len() <= usize::from(max_colors) {
+            return encode_palette(&indices, &palette, width, height);
+        }
+    }
+    let opts = icy_sixel::EncodeOptions {
+        max_colors,
+        ..Default::default()
+    };
+    icy_sixel::sixel_encode(rgba, width, height, &opts).ok()
 }
 
 /// Encode a raster of fixed-palette indices (`None` = transparent) as Sixel,
@@ -577,6 +613,102 @@ mod tests {
                 assert!(allowed.contains(&rgb), "{mode:?} {dither:?}: {rgb:?}");
             }
         }
+    }
+
+    /// The colour a Sixel decoder shows for `v`, stored in whole percent.
+    fn through_percent(v: u8) -> u8 {
+        let percent = (u32::from(v) * 100 + 127) / 255;
+        ((percent * 255 + 50) / 100) as u8
+    }
+
+    /// The colour registers a Sixel sequence defines (`#n;2;r;g;b`).
+    fn registers(sixel: &str) -> usize {
+        sixel
+            .split('#')
+            .skip(1)
+            .filter(|part| {
+                let digits = part.chars().take_while(char::is_ascii_digit).count();
+                digits > 0 && part[digits..].starts_with(";2;")
+            })
+            .count()
+    }
+
+    #[test]
+    fn a_picture_of_few_colours_keeps_its_exact_palette() {
+        // 200 colours, none of them ANSI's, at its own size (5 columns of
+        // 8 px is 40 px), so nothing is resampled.
+        let picture = RgbImage::from_fn(40, 24, |x, y| {
+            let i = (y * 40 + x) % 200;
+            Rgb([(i * 7 % 256) as u8 | 1, (i * 13 % 256) as u8, 255 - i as u8])
+        });
+        let art = SixelArt::new(DynamicImage::ImageRgb8(picture.clone())).width(5);
+        let sixel = art.encode(5).expect("encodes");
+        let rgba = DynamicImage::ImageRgb8(picture.clone()).to_rgba8();
+        assert_eq!(Some(sixel.clone()), encode_rgba(rgba.as_raw(), 40, 24, 256));
+        assert_eq!(registers(&sixel), 200, "one register a colour");
+        let image = decode(&sixel);
+        assert_eq!((image.width, image.height), (40, 24));
+        for (i, pixel) in picture.pixels().enumerate() {
+            let want = pixel.0.map(through_percent);
+            assert_eq!(image.pixels[i * 4..i * 4 + 3], want, "pixel {i}");
+            assert_eq!(image.pixels[i * 4 + 3], 255);
+        }
+        // In cells too, its margins transparent.
+        let cells = SixelArt::new(DynamicImage::ImageRgb8(picture))
+            .cell_px(8, 12)
+            .encode_cells(5, 3)
+            .expect("encodes");
+        let image = decode(&cells);
+        assert_eq!((image.width, image.height), (40, 36));
+        assert_eq!(image.pixels[3], 0, "the top margin is transparent");
+        assert_eq!(
+            image.pixels[(6 * 40) * 4..(6 * 40) * 4 + 3],
+            [1, 0, 255].map(through_percent)
+        );
+    }
+
+    #[test]
+    fn transparency_is_kept_by_the_exact_palette() {
+        let rgba = [9, 9, 9, 255, 0, 0, 0, 0, 200, 0, 0, 127, 1, 2, 3, 128];
+        let sixel = encode_rgba(&rgba, 4, 1, 256).expect("encodes");
+        assert_eq!(registers(&sixel), 2, "under half opacity is clear");
+        let image = decode(&sixel);
+        let alpha: Vec<u8> = image.pixels.chunks(4).take(4).map(|p| p[3]).collect();
+        assert_eq!(alpha, [255, 0, 0, 255]);
+        assert!(encode_rgba(&rgba[..12], 4, 1, 256).is_none(), "short");
+    }
+
+    #[test]
+    fn more_colours_than_the_palette_fall_back_to_the_adaptive_encoder() {
+        // 960 colours: past Sixel's 256 registers.
+        let gradient = RgbImage::from_fn(40, 24, |x, y| Rgb([(x * 6) as u8, (y * 10) as u8, 128]));
+        let rgba = DynamicImage::ImageRgb8(gradient).to_rgba8();
+        let adaptive = icy_sixel::sixel_encode(
+            rgba.as_raw(),
+            40,
+            24,
+            &icy_sixel::EncodeOptions {
+                max_colors: 256,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(encode_rgba(rgba.as_raw(), 40, 24, 256), Some(adaptive));
+        // Fewer colours than the picture has, but more than `max_colors`
+        // allows: adaptive too.
+        let few = &rgba.as_raw()[..40 * 4 * 3];
+        let sixteen = icy_sixel::sixel_encode(
+            few,
+            40,
+            3,
+            &icy_sixel::EncodeOptions {
+                max_colors: 16,
+                ..Default::default()
+            },
+        )
+        .unwrap();
+        assert_eq!(encode_rgba(few, 40, 3, 16), Some(sixteen));
+        assert_ne!(encode_rgba(few, 40, 3, 256), encode_rgba(few, 40, 3, 16));
     }
 
     #[test]
