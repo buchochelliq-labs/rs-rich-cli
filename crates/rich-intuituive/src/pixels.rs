@@ -35,6 +35,7 @@ use rich::color::Color;
 use rich::{Segment, Style};
 
 use crate::node::{Axis, Node};
+use crate::screen::Rect;
 use crate::sprite::Timing;
 use crate::widget::{Canvas, DrawCx, MeasureCx, Widget};
 
@@ -198,6 +199,106 @@ impl PixelBuf {
                 y += sy;
             }
         }
+    }
+
+    /// Draw `src`, a `width` x `height` picture, to fill this buffer as
+    /// `how` says: at a ratio of its own ([`Fitted::aspect`], Doom's
+    /// 320x200 shown at 4:3, an emulator's 8:7) from the cells' real shape
+    /// ([`Fitted::cell_aspect`]), fitted in whole cells and centred, the
+    /// margins [`CLEAR`]. Returns the cells the picture covers (in the
+    /// buffer's cells, [`Fitted::mode`]'s); an empty rectangle, and a
+    /// clear buffer, when `src` is not `width * height` pixels long.
+    ///
+    /// ```
+    /// use intuituive::pixels::{Fitted, PixelBuf, PixelMode};
+    ///
+    /// // 80x24 cells of half blocks; cells twice as tall as wide.
+    /// let mut buf = PixelBuf::new(80, 48);
+    /// let frame = vec![[200, 0, 0, 255]; 320 * 200];
+    /// let used = buf.draw_fitted(&frame, 320, 200, &Fitted::new(PixelMode::HalfBlocks).aspect(4.0 / 3.0));
+    /// assert_eq!((used.x, used.y, used.width, used.height), (8, 0, 64, 24));
+    /// assert_eq!(buf.get(7, 0), Some([0, 0, 0, 0]));
+    /// assert_eq!(buf.get(8, 0), Some([200, 0, 0, 255]));
+    /// ```
+    pub fn draw_fitted(&mut self, src: &[Rgba], width: u16, height: u16, how: &Fitted) -> Rect {
+        self.clear(CLEAR);
+        let (sw, sh) = (usize::from(width), usize::from(height));
+        let (pw, ph) = how.mode.cell();
+        let (cols, rows) = (self.width / pw, self.height / ph);
+        if src.len() != sw * sh || sw == 0 || sh == 0 || cols == 0 || rows == 0 {
+            return Rect::default();
+        }
+        // The picture's place in cells, before clipping: whole cells for
+        // a contained one, the picture's own size for a covering one.
+        let (c, r) = (f64::from(cols), f64::from(rows));
+        let cell_aspect = if how.cell_aspect > 0.0 {
+            how.cell_aspect
+        } else {
+            0.5
+        };
+        let (x0, y0, w, h) = match (how.aspect, how.fit) {
+            (None, _) | (_, PixelFit::Stretch) => (0.0, 0.0, c, r),
+            (Some(aspect), fit) => {
+                // Wider than the picture, in the cells' real shape.
+                let wide = c * cell_aspect / r > aspect;
+                let contain = fit == PixelFit::Contain;
+                let (w, h) = if wide == contain {
+                    (r * aspect / cell_aspect, r)
+                } else {
+                    (c, c * cell_aspect / aspect)
+                };
+                if contain {
+                    let (w, h) = (w.round().clamp(1.0, c), h.round().clamp(1.0, r));
+                    (((c - w) / 2.0).floor(), ((r - h) / 2.0).floor(), w, h)
+                } else {
+                    ((c - w) / 2.0, (r - h) / 2.0, w, h)
+                }
+            }
+        };
+        // In pixels.
+        let (fx, fy) = (x0 * f64::from(pw), y0 * f64::from(ph));
+        let (fw, fh) = (w * f64::from(pw), h * f64::from(ph));
+        let left = fx.max(0.0) as u16;
+        let top = fy.max(0.0) as u16;
+        let right = ((fx + fw).min(f64::from(cols * pw))).round() as u16;
+        let bottom = ((fy + fh).min(f64::from(rows * ph))).round() as u16;
+        let (sx, sy) = (sw as f64 / fw, sh as f64 / fh);
+        // The source columns each buffer column takes, as a range.
+        let span = |b: u16, f: f64, scale: f64, n: usize| {
+            let start = ((f64::from(b) - f) * scale).max(0.0);
+            let end = ((f64::from(b) + 1.0 - f) * scale).min(n as f64);
+            let first = (start as usize).min(n - 1);
+            let last = (end.ceil() as usize).clamp(first + 1, n);
+            let middle = (((f64::from(b) + 0.5 - f) * scale).max(0.0) as usize).min(n - 1);
+            (first, last, middle)
+        };
+        let columns: Vec<_> = (left..right).map(|b| span(b, fx, sx, sw)).collect();
+        for by in top..bottom {
+            let (y_first, y_last, y_mid) = span(by, fy, sy, sh);
+            let row = usize::from(by) * usize::from(self.width);
+            for (bx, &(x_first, x_last, x_mid)) in (left..right).zip(&columns) {
+                let pixel = match how.filter {
+                    Filter::Nearest => src[y_mid * sw + x_mid],
+                    Filter::Average => {
+                        let mut sum = [0u32; 4];
+                        for y in y_first..y_last {
+                            for p in &src[y * sw + x_first..y * sw + x_last] {
+                                (0..4).for_each(|i| sum[i] += u32::from(p[i]));
+                            }
+                        }
+                        let n = ((y_last - y_first) * (x_last - x_first)) as u32;
+                        sum.map(|v| ((v + n / 2) / n) as u8)
+                    }
+                };
+                self.data[row + usize::from(bx)] = pixel;
+            }
+        }
+        Rect::new(
+            left / pw,
+            top / ph,
+            right.div_ceil(pw) - left / pw,
+            bottom.div_ceil(ph) - top / ph,
+        )
     }
 
     /// Draw `sprite`'s first frame with its top left at `x`, `y`, `scale`
@@ -427,6 +528,95 @@ impl PixelMode {
             PixelMode::Quadrants => (2, 2),
             PixelMode::Braille => (2, 4),
         }
+    }
+}
+
+/// How [`PixelBuf::draw_fitted`] fits a picture kept to a ratio.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum PixelFit {
+    /// All of it, as large as fits in whole cells, centred; the margins
+    /// clear.
+    #[default]
+    Contain,
+    /// The whole buffer, the picture's middle cropped to it.
+    Cover,
+    /// The whole buffer, the ratio let go.
+    Stretch,
+}
+
+/// How [`PixelBuf::draw_fitted`] takes a picture's pixels into fewer or
+/// more of the buffer's.
+#[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
+#[non_exhaustive]
+pub enum Filter {
+    /// The source pixel at each buffer pixel's middle: the source's own
+    /// colours, exactly (a palette stays one).
+    #[default]
+    Nearest,
+    /// The source pixels each buffer pixel covers, averaged: smoother when
+    /// shrinking.
+    Average,
+}
+
+/// What [`PixelBuf::draw_fitted`] fits a picture to: the cells' pixels
+/// ([`mode`](Self::mode)) and shape ([`cell_aspect`](Self::cell_aspect)),
+/// the ratio to show it at, the fit and the filter.
+#[derive(Clone, Copy, Debug, PartialEq)]
+#[must_use = "builder methods return a new value; it does nothing until it is used"]
+pub struct Fitted {
+    /// The cell mode the buffer is shown in: its pixels a cell.
+    pub mode: PixelMode,
+    /// The ratio, width over height, to show the picture at; `None` fills
+    /// the buffer.
+    pub aspect: Option<f64>,
+    /// A cell's width over its height on the screen: 0.5 (the default)
+    /// for cells twice as tall as wide. A terminal's measured cell size
+    /// gives the real one.
+    pub cell_aspect: f64,
+    pub fit: PixelFit,
+    pub filter: Filter,
+}
+
+impl Fitted {
+    /// Fill a buffer shown in `mode`: no ratio kept, cells of 1:2,
+    /// contained, nearest pixels.
+    pub fn new(mode: PixelMode) -> Fitted {
+        Fitted {
+            mode,
+            aspect: None,
+            cell_aspect: 0.5,
+            fit: PixelFit::Contain,
+            filter: Filter::Nearest,
+        }
+    }
+
+    /// Show the picture at `aspect`, width over height (4:3 is `4.0 / 3.0`).
+    pub fn aspect(mut self, aspect: f64) -> Fitted {
+        self.aspect = (aspect.is_finite() && aspect > 0.0).then_some(aspect);
+        self
+    }
+
+    /// A cell's width over its height on the screen.
+    pub fn cell_aspect(mut self, cell_aspect: f64) -> Fitted {
+        self.cell_aspect = cell_aspect;
+        self
+    }
+
+    /// Read the buffer in `mode`'s cells.
+    pub fn mode(mut self, mode: PixelMode) -> Fitted {
+        self.mode = mode;
+        self
+    }
+
+    pub fn fit(mut self, fit: PixelFit) -> Fitted {
+        self.fit = fit;
+        self
+    }
+
+    pub fn filter(mut self, filter: Filter) -> Fitted {
+        self.filter = filter;
+        self
     }
 }
 
@@ -829,6 +1019,68 @@ mod tests {
             }
         }
         buf
+    }
+
+    #[test]
+    fn a_picture_is_fitted_at_its_ratio_in_whole_cells() {
+        // 320x200 in a palette of 7 colours, at 4:3, into 80x24 cells of
+        // half blocks twice as tall as wide: 64x24 at column 8.
+        let colours: Vec<Rgba> = (0..7u8).map(|i| [i * 30, 255 - i * 30, i, 255]).collect();
+        let src: Vec<Rgba> = (0..320 * 200)
+            .map(|i| colours[(i * 7 / 13 + i / 320) % 7])
+            .collect();
+        let mut buf = PixelBuf::new(80, 48);
+        let how = Fitted::new(PixelMode::HalfBlocks).aspect(4.0 / 3.0);
+        assert_eq!(
+            buf.draw_fitted(&src, 320, 200, &how),
+            Rect::new(8, 0, 64, 24)
+        );
+        for y in 0..48 {
+            for x in 0..80 {
+                let p = buf.get(x, y).unwrap();
+                if (8..72).contains(&x) {
+                    assert!(colours.contains(&p), "({x}, {y}) {p:?}");
+                } else {
+                    assert_eq!(p, CLEAR, "margin ({x}, {y})");
+                }
+            }
+        }
+        // With no ratio, the buffer is filled.
+        let mut buf = PixelBuf::new(80, 48);
+        let used = buf.draw_fitted(&src, 320, 200, &Fitted::new(PixelMode::HalfBlocks));
+        assert_eq!(used, Rect::new(0, 0, 80, 24));
+        assert!(buf.pixels().iter().all(|p| colours.contains(p)));
+        // A tall area letterboxes the rows instead; Braille's cells.
+        let mut buf = PixelBuf::new(40, 80);
+        let how = Fitted::new(PixelMode::Braille).aspect(4.0 / 3.0);
+        assert_eq!(
+            buf.draw_fitted(&src, 320, 200, &how),
+            Rect::new(0, 6, 20, 8)
+        );
+        // Covering fills the area; the picture's middle is kept.
+        let mut buf = PixelBuf::new(80, 48);
+        let how = how.mode(PixelMode::HalfBlocks).fit(PixelFit::Cover);
+        assert_eq!(
+            buf.draw_fitted(&src, 320, 200, &how),
+            Rect::new(0, 0, 80, 24)
+        );
+        assert!(buf.pixels().iter().all(|p| colours.contains(p)));
+        // A short source draws nothing.
+        assert_eq!(buf.draw_fitted(&src[1..], 320, 200, &how), Rect::default());
+        assert!(buf.pixels().iter().all(|p| *p == CLEAR));
+    }
+
+    #[test]
+    fn the_average_filter_blends_what_each_pixel_covers() {
+        // 4x2 of black and white columns into 2x2 (half blocks, 2x1 cells).
+        let (b, w) = ([0, 0, 0, 255], [255, 255, 255, 255]);
+        let src = [b, w, b, w, b, w, b, w];
+        let mut buf = PixelBuf::new(2, 2);
+        let how = Fitted::new(PixelMode::HalfBlocks).filter(Filter::Average);
+        buf.draw_fitted(&src, 4, 2, &how);
+        assert_eq!(buf.get(0, 0), Some([128, 128, 128, 255]));
+        buf.draw_fitted(&src, 4, 2, &how.filter(Filter::Nearest));
+        assert_eq!(buf.get(0, 0), Some(w));
     }
 
     #[test]

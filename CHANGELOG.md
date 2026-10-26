@@ -42,6 +42,11 @@ What rs-rich-doom built for itself, made generic
   Braille cell's two sides with the pixel nearest each side's average,
   never a blend, so a palette stays a palette. `Average` stays the
   default.
+- **A picture fitted in a pixel buffer** (intuituive):
+  `PixelBuf::draw_fitted` shows a picture at a ratio of its own (an
+  emulator's 4:3 or 8:7) from the cells' real shape, in whole cells,
+  centred, the margins clear, with nearest or averaged pixels. It returns
+  the cells used.
 
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
 

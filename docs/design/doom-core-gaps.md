@@ -323,6 +323,20 @@ black, in Braille and quadrants), `averaged_colours_are_the_default` and
 
 ### 12. An aspect-fitted pixel buffer (intuiTUIve, `pixels`)
 
+**Status: closed in 0.0.23.** `PixelBuf::draw_fitted(src, width, height,
+&Fitted) -> Rect`, where `Fitted::new(mode)` takes `.aspect(f64)`,
+`.cell_aspect(f64)` (default 0.5), `.fit(PixelFit::Contain | Cover |
+Stretch)` and `.filter(Filter::Nearest | Average)`; it returns the cells
+used. One change from the proposal: the fit is intuiTUIve's own
+`PixelFit`, not rs-rich-art's `ImageFit`, because `pixels` is core and
+rs-rich-art is behind the `art` plugin; and `Fitted` names the cell mode,
+which says how many pixels a cell holds. Tests:
+`a_picture_is_fitted_at_its_ratio_in_whole_cells` (320x200 at 4:3 into
+80x24 cells of 1:2 is 64x24 at column 8; `aspect` unset fills the buffer;
+`Nearest` keeps the source's colours; margins stay `CLEAR`; Braille; cover)
+and `the_average_filter_blends_what_each_pixel_covers`, and
+`draw_fitted`'s doc-test.
+
 - **What Doom needed:** a 320x200 frame shown at 4:3 in whatever cells the
   node has, from the cell's real aspect ratio, centred, the margins
   transparent.
