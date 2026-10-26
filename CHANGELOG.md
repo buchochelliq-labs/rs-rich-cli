@@ -29,6 +29,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   docs/BRANCHING.md's release steps name it. A broken anchor in the 0.0.20
   notes is fixed.
 
+- **Fixed: a page `switch` keeps hidden misses no update** (intuituive).
+  A page that held a scroll box kept its offscreen copy while hidden, so
+  when shown again it drew what it showed last, not what its signals said
+  (Noctiluca's page area, after a page was opened from the address bar in
+  reader mode). The page shown until now is hidden when the key changes,
+  so it draws afresh when it comes back. `tests/switch_hidden_child.rs`.
+
 - **`rich serve --compress`** (CLI, `serve` feature): deflates frames of 1 KiB or more for pages that can undo it. Off by default; worth it over a slow link.
 
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)

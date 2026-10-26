@@ -3008,7 +3008,7 @@ impl Node {
 
     /// Not shown this frame: no rectangle (so no clicks reach it or
     /// anything inside it), and it draws afresh when it comes back.
-    fn hide(&self) {
+    pub(crate) fn hide(&self) {
         if let Some(handle) = *self.rect_slot.borrow() {
             if handle.get_untracked().is_some() {
                 handle.set(None);
