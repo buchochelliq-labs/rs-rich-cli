@@ -1667,6 +1667,7 @@ dependencies = [
 name = "rs-rich-art"
 version = "0.0.16"
 dependencies = [
+ "flate2",
  "icy_sixel",
  "image",
  "rs-rich",
