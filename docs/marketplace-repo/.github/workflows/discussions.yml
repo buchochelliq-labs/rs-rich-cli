@@ -1,0 +1,53 @@
+# Open a Reviews discussion for every listed package that has none.
+#
+# This workflow belongs to the rs-rich-marketplace repository; rs-rich-cli
+# keeps a copy in docs/marketplace-repo/ (see the README there). The
+# contract is rs-rich-cli's docs/design/marketplace.md, "Stats".
+#
+# After a merge that touches packages/, and by hand, scripts/discussions.py
+# opens one discussion per package in the "Reviews" category, titled with
+# its id: people rate it with 👍 or 👎 on the first post and review it in
+# comments, and stats.yml counts them. A package whose discussion (opened
+# by this workflow) exists is skipped, so a run can be repeated.
+#
+# Discussions and the Reviews category are set up once in the repository's
+# settings (no API does either); until then the run fails with an error
+# saying so. The job's token does the rest: no environment, no secret.
+name: Review discussions
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+  workflow_dispatch:
+
+concurrency:
+  group: review-discussions
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  discussions:
+    name: one Reviews discussion per package
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+      discussions: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Open the missing discussions
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/discussions.py

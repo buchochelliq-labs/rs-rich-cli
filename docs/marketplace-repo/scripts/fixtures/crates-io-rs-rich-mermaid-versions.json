@@ -1,0 +1,56 @@
+{
+ "versions": [
+  {
+   "crate": "rs-rich-mermaid",
+   "num": "0.0.8",
+   "downloads": 20,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-mermaid",
+   "num": "0.0.7",
+   "downloads": 30,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-mermaid",
+   "num": "0.0.6",
+   "downloads": 17,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-mermaid",
+   "num": "0.0.5",
+   "downloads": 42,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-mermaid",
+   "num": "0.0.4",
+   "downloads": 22,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-mermaid",
+   "num": "0.0.3",
+   "downloads": 20,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-mermaid",
+   "num": "0.0.2",
+   "downloads": 19,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-mermaid",
+   "num": "0.0.1",
+   "downloads": 16,
+   "yanked": false
+  }
+ ],
+ "meta": {
+  "total": 8,
+  "next_page": null
+ }
+}

@@ -1,0 +1,67 @@
+{
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/main/schemas/stats.schema.json",
+  "title": "rs-rich marketplace stats",
+  "description": "stats.json on the marketplace's `stats` branch: download counts and ratings per package. Unsigned and display-only; nothing installs by it. Written nightly by scripts/stats.py.",
+  "type": "object",
+  "required": ["schema_version", "generated_at", "repository", "packages"],
+  "additionalProperties": false,
+  "properties": {
+    "schema_version": {"const": 1},
+    "generated_at": {
+      "description": "When it was written, UTC, to the second.",
+      "type": "string",
+      "pattern": "^[0-9]{4}-[0-9]{2}-[0-9]{2}T[0-9]{2}:[0-9]{2}:[0-9]{2}Z$"
+    },
+    "repository": {"description": "The marketplace repository, OWNER/NAME.", "type": "string"},
+    "packages": {
+      "description": "By package id: every listing in packages/.",
+      "type": "object",
+      "propertyNames": {"pattern": "^[a-z0-9][a-z0-9._-]*$"},
+      "additionalProperties": {"$ref": "#/$defs/package"}
+    }
+  },
+  "$defs": {
+    "count": {"type": ["integer", "null"], "minimum": 0},
+    "package": {
+      "type": "object",
+      "required": ["downloads", "reviews"],
+      "additionalProperties": false,
+      "properties": {
+        "downloads": {
+          "type": "object",
+          "required": ["total", "versions"],
+          "additionalProperties": false,
+          "properties": {
+            "total": {
+              "description": "The sum of the counted versions; null when none is counted.",
+              "$ref": "#/$defs/count"
+            },
+            "versions": {
+              "description": "By listed version: a release asset's download_count, crates.io's count for a crate, or null (not counted: a raw URL, or a release not made yet).",
+              "type": "object",
+              "additionalProperties": {"$ref": "#/$defs/count"}
+            }
+          }
+        },
+        "reviews": {
+          "description": "The package's discussion in the Reviews category, or null when there is none.",
+          "oneOf": [
+            {"type": "null"},
+            {
+              "type": "object",
+              "required": ["url", "up", "down", "comments"],
+              "additionalProperties": false,
+              "properties": {
+                "url": {"type": "string", "pattern": "^https://github\\.com/"},
+                "up": {"description": "👍 reactions on its first post.", "type": "integer", "minimum": 0},
+                "down": {"description": "👎 reactions on its first post.", "type": "integer", "minimum": 0},
+                "comments": {"type": "integer", "minimum": 0}
+              }
+            }
+          ]
+        }
+      }
+    }
+  }
+}

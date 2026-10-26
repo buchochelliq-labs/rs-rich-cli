@@ -1,0 +1,38 @@
+{
+ "data": {
+  "repository": {
+   "hasDiscussionsEnabled": true,
+   "discussionCategories": {"nodes": [
+    {"id": "DIC_general", "name": "General"},
+    {"id": "DIC_reviews", "name": "Reviews"}
+   ]},
+   "discussions": {
+    "pageInfo": {"hasNextPage": false, "endCursor": "Y3Vyc29yOjM="},
+    "nodes": [
+     {"title": "textcase", "url": "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/3",
+      "author": {"login": "github-actions"}, "category": {"name": "Reviews"},
+      "comments": {"totalCount": 2},
+      "reactionGroups": [
+       {"content": "THUMBS_UP", "reactors": {"totalCount": 4}},
+       {"content": "THUMBS_DOWN", "reactors": {"totalCount": 1}},
+       {"content": "HEART", "reactors": {"totalCount": 3}}
+      ]},
+     {"title": "dusk", "url": "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/4",
+      "author": {"login": "someone-else"}, "category": {"name": "Reviews"},
+      "comments": {"totalCount": 9},
+      "reactionGroups": [{"content": "THUMBS_UP", "reactors": {"totalCount": 99}}]},
+     {"title": "mermaid", "url": "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/5",
+      "author": {"login": "github-actions"}, "category": {"name": "General"},
+      "comments": {"totalCount": 0}, "reactionGroups": []},
+     {"title": "status", "url": "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/6",
+      "author": {"login": "github-actions"}, "category": {"name": "Reviews"},
+      "comments": {"totalCount": 0},
+      "reactionGroups": [
+       {"content": "THUMBS_UP", "reactors": {"totalCount": 0}},
+       {"content": "THUMBS_DOWN", "reactors": {"totalCount": 0}}
+      ]}
+    ]
+   }
+  }
+ }
+}

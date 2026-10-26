@@ -1,0 +1,38 @@
+{
+ "versions": [
+  {
+   "crate": "rs-rich-diagram",
+   "num": "0.0.5",
+   "downloads": 25,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-diagram",
+   "num": "0.0.4",
+   "downloads": 38,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-diagram",
+   "num": "0.0.3",
+   "downloads": 20,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-diagram",
+   "num": "0.0.2",
+   "downloads": 56,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-diagram",
+   "num": "0.0.1",
+   "downloads": 27,
+   "yanked": false
+  }
+ ],
+ "meta": {
+  "total": 5,
+  "next_page": null
+ }
+}

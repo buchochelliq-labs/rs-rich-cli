@@ -9,12 +9,16 @@ them could not push there. Copy them across as they are laid out:
 |---|---|
 | `.github/workflows/sign-index.yml` | `.github/workflows/sign-index.yml` |
 | `.github/workflows/check-listings.yml` | `.github/workflows/check-listings.yml` |
+| `.github/workflows/publish-artifacts.yml`, `stats.yml`, `discussions.yml` | the same |
 | `scripts/build_index.py` | `scripts/build_index.py` |
 | `scripts/check_artifacts.py`, `scripts/marketplace_common.py` | the same |
 | `scripts/add_crate_version.py`, `scripts/test_scripts.py` | the same |
+| `scripts/github_api.py`, `publish_releases.py`, `stats.py`, `discussions.py` | the same |
+| `scripts/fixtures/` (the script tests' recorded responses and listings) | the same |
+| `schemas/stats.schema.json` | the same |
 | `.gitattributes` | `.gitattributes` |
 
-The marketplace's `live-0.0.23` branch holds these files as they are here,
+The marketplace's `official-2` branch holds these files as they are here,
 with its listings, its artifacts and a README on submitting a listing.
 Change both copies together.
 
@@ -42,6 +46,30 @@ theme is installed with `rich`, built from rs-rich-cli at
 `RS_RICH_CLI_REF`, from a copy of the marketplace signed with a throwaway
 key made in the run. It never runs on a push, so the signer's commit does
 not start it.
+
+Three more workflows need no environment and no secret, only the job's
+token:
+
+- `publish-artifacts.yml`, after a merge that touches `packages/`: every
+  version hosted as a release asset of the marketplace
+  (`releases/download/ID-vVERSION/ID-VERSION.EXT`) gets its release, at
+  the merge commit, with the file from `artifacts/ID/` uploaded and read
+  back to check its size and SHA-256 (`contents: write`). An existing
+  asset is never replaced. Release tags are not covered by main's ruleset
+  (it targets the default branch only), so nothing needs a bypass.
+- `stats.yml`, nightly and by hand: `stats.json` (download counts and
+  ratings, `schemas/stats.schema.json`) committed to the `stats` branch,
+  never to main (`contents: write`, `discussions: read`).
+- `discussions.yml`, after a merge that touches `packages/` and by hand:
+  one discussion per package in the "Reviews" category
+  (`discussions: write`).
+
+`check-listings.yml` also refuses, in a listing that is not official, a
+reserved id, an id that looks like an official one, and "official" or
+"rs-rich" in its name (or "official" in its description), until a
+maintainer adds the `name-approved` label. Adding, changing or removing a listing's `recommended`
+(★ Recommended) needs a maintainer's `recommended-approved` label, a
+separate one from `tier-approved`.
 
 ## Installing it
 
@@ -125,9 +153,21 @@ not start it.
    check refuses a listing whose tier is set or raised above `community`
    until a maintainer adds it.
 
-7. **Merge the first listings**, the `live-0.0.23` pull request (official
+7. **Create the `name-approved` label** too. It lets a pull request
+   through the name check (an "unofficial" port, an id that only happens
+   to be close to an official one).
+
+8. **Create the `recommended-approved` label** as well, for `recommended`.
+
+9. **For stats and reviews:** enable Discussions (Settings, General,
+   Features), create a discussion category named `Reviews` with the
+   Announcement format (Discussions, Categories), then run "Review
+   discussions" and "Stats" once by hand. Neither step has an API.
+
+10. **Merge the first listings**, the `live-0.0.23` pull request (official
    listings, artifacts, scripts and workflows), once steps 1 to 6 are
    done: the merge touches `packages/`, so it starts the signing workflow.
+   (Done: the `live-0.0.23` pull request was merged on 2026-10-26.)
    Approve the run. The first index has serial 1; `rich plugin search`
    then works with no setting.
 

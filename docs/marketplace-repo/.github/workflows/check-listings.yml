@@ -17,7 +17,12 @@
 #    repository's own artifacts/, read from the pull request) and its size
 #    and SHA-256 checked; a crate's hash must be crates.io's index checksum.
 #    A listed version never changes, and setting or raising a tier needs a
-#    maintainer's `tier-approved` label.
+#    maintainer's `tier-approved` label. A listing that is not official may
+#    not take a reserved id (rs-rich*, rich-*, richcli*, official*, rich,
+#    rs), one that looks like an official id, or "official" or "rs-rich" in
+#    its name (or "official" in its description) without a maintainer's
+#    `name-approved` label. Adding, changing or removing `recommended`
+#    needs a maintainer's `recommended-approved` label.
 # 3. Each new WASM plugin, micro pack and theme version is installed with
 #    `rich`, built from rs-rich-cli at the same ref, from a local copy of
 #    this marketplace signed with a throwaway key made in the run: the
@@ -95,11 +100,20 @@ jobs:
         env:
           BASE: ${{ github.event.pull_request.base.sha }}
           TIER_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'tier-approved') }}
+          NAME_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'name-approved') }}
+          RECOMMENDED_APPROVED: ${{ contains(github.event.pull_request.labels.*.name, 'recommended-approved') }}
         run: |
           set -euo pipefail
           args=(--root "$PWD" --mirror "$RUNNER_TEMP/mirror" --installs "$RUNNER_TEMP/installs.txt")
           if [ -n "$BASE" ]; then args+=(--base "$BASE"); else args+=(--all); fi
           if [ "$TIER_APPROVED" = "true" ]; then args+=(--allow-tier); fi
+          # A base script that predates the name checks has no --allow-names.
+          if [ "$NAME_APPROVED" = "true" ] && grep -q -- "--allow-names" "$RUNNER_TEMP/tools/check_artifacts.py"; then
+            args+=(--allow-names)
+          fi
+          if [ "$RECOMMENDED_APPROVED" = "true" ] && grep -q -- "--allow-recommended" "$RUNNER_TEMP/tools/check_artifacts.py"; then
+            args+=(--allow-recommended)
+          fi
           python3 "$RUNNER_TEMP/tools/check_artifacts.py" "${args[@]}"
           if [ -s "$RUNNER_TEMP/installs.txt" ]; then
             echo "install=true" >> "$GITHUB_OUTPUT"

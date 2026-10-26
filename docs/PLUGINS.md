@@ -312,7 +312,8 @@ fixture marketplace with test keys checked into
 
 ```bash
 rich plugin search diagram        # id, kind, tier, the version this host loads
-rich plugin info textcase         # tier, source, versions, what loads here
+rich plugin search --sort downloads  # most downloaded first
+rich plugin info textcase         # tier, source, versions, what loads here, downloads, 👍/👎
 rich plugin install textcase      # shows tier, permissions, capabilities; asks
 rich plugin install textcase@0.1.0 --yes
 rich plugin list                  # what is installed; no network
@@ -360,6 +361,21 @@ rich plugin browse                # the same, in a selector with provenance
   the plugins and themes do). The marketplace serves them from its own
   `artifacts/`. Until the maintainer signs the first index,
   `search` says the marketplace has no `index.json` and exits 3.
+- **Downloads, ratings and reviews (0.0.23).** `info` shows a package's
+  downloads (per version), its 👍 and 👎 and its reviews link, and its
+  JSON report has a `stats` object; `search --sort downloads` sorts by
+  downloads. They come from the marketplace's `stats.json`, written
+  nightly to its `stats` branch from GitHub's release download counts,
+  crates.io's counts and each package's discussion in the "Reviews"
+  category. It is not signed and is shown only: nothing installs by it,
+  a missing or slow file is left out silently (3-second timeout), and
+  `rich` sends nothing to be counted. To rate a package, react 👍 or 👎
+  to its Reviews discussion; to review it, comment there. See
+  [Stats](design/marketplace.md#stats).
+- **Hosting (0.0.23).** The marketplace hosts the official WASM plugins,
+  packs and themes as release assets of its repository, one release per
+  version (`releases/download/ID-vVERSION/ID-VERSION.EXT`); the first
+  listings keep their raw `main` URLs.
 - **What installs.** A WASM plugin, a micro pack or a theme. A crate is
   listed only: `install` refuses it and prints its `cargo add` line, and
   `info` shows the same. An installed, enabled micro pack is loaded into

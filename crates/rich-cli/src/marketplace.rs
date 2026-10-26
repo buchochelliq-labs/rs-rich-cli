@@ -42,6 +42,9 @@ use serde_json::{json, Value};
 #[path = "marketplace_publish.rs"]
 mod publish;
 
+#[path = "marketplace_stats.rs"]
+mod stats;
+
 #[cfg(feature = "interact")]
 #[path = "marketplace_browse.rs"]
 mod browse;
@@ -128,12 +131,16 @@ pub(crate) fn spec() -> rich_ext::cli_doc::CommandSpec {
         .subcommand(with_common(
             CommandSpec::new("search")
                 .about("List the marketplace's packages, or those whose id, name, description or keywords contain QUERY")
-                .usage("search [QUERY]")
-                .arg(ArgSpec::positional("query").help("Text to look for, in any case")),
+                .usage("search [QUERY] [--sort id|downloads]")
+                .arg(ArgSpec::positional("query").help("Text to look for, in any case"))
+                .arg(ArgSpec::option("sort").value_name("ORDER").help(
+                    "id (the default), or downloads: most downloaded first, from the \
+                     marketplace's unsigned stats.json, with a Downloads column",
+                )),
         ))
         .subcommand(with_common(
             CommandSpec::new("info")
-                .about("One package: its tier, source, versions, what loads here, and for a crate the `cargo add` line")
+                .about("One package: its tier, source, versions, what loads here, for a crate the `cargo add` line, and its downloads, 👍/👎 and reviews link when the marketplace's stats.json is there (not signed, shown only)")
                 .usage("info ID")
                 .arg(id()),
         ))
@@ -348,6 +355,8 @@ pub(crate) struct Options {
     pub marketplace: Option<String>,
     pub plugin_dir: Option<PathBuf>,
     pub keys: Option<PathBuf>,
+    /// `search --sort`: `id` or `downloads`.
+    pub sort: Option<String>,
     /// `publish`'s options, by name without `--`; repeatable ones keep
     /// every value.
     pub publish: BTreeMap<&'static str, Vec<String>>,
@@ -387,6 +396,16 @@ fn parse(args: &[String]) -> Outcome<Options> {
             "--marketplace" => options.marketplace = Some(value(arg)?),
             "--plugin-dir" => options.plugin_dir = Some(fs_path(&value(arg)?)),
             "--marketplace-keys" => options.keys = Some(fs_path(&value(arg)?)),
+            "--sort" => {
+                let order = value(arg)?;
+                if !matches!(order.as_str(), "id" | "downloads") {
+                    return Err(usage(format!(
+                        "unknown --sort {:?} (id, downloads)",
+                        controls::shown(&order)
+                    )));
+                }
+                options.sort = Some(order);
+            }
             "--report" => {
                 options.json = match value(arg)?.as_str() {
                     "json" => true,
@@ -442,6 +461,9 @@ fn parse(args: &[String]) -> Outcome<Options> {
             controls::shown(&options.command),
             COMMANDS.join(", ")
         )));
+    }
+    if options.sort.is_some() && options.command != "search" {
+        return Err(usage("--sort only applies to `rich plugin search`"));
     }
     if options.command != "publish" && !options.publish.is_empty() {
         let names: Vec<String> = options.publish.keys().map(|k| format!("--{k}")).collect();
@@ -1568,9 +1590,30 @@ fn search(options: &Options) -> Outcome<Done> {
     let lock = lockfile(&dir)?;
     let query = options.positionals.join(" ").to_lowercase();
     let host = Host::current();
+    let by_downloads = options.sort.as_deref() == Some("downloads");
+    let stats = if by_downloads {
+        let stats = stats::load(&market.location);
+        if stats.is_none() && !options.json {
+            eprintln!(
+                "rich: the marketplace's stats.json is not available; sorted by id ({})",
+                stats::stats_source(&market.location)
+            );
+        }
+        stats
+    } else {
+        None
+    };
+    let mut listings = market.listings()?;
+    if let Some(stats) = &stats {
+        // Most downloaded first; not counted last; then by id.
+        listings.sort_by(|a, b| {
+            let (x, y) = (stats.total(&a.id), stats.total(&b.id));
+            y.cmp(&x).then_with(|| a.id.cmp(&b.id))
+        });
+    }
     let mut rows = Vec::new();
     let mut found = Vec::new();
-    for listing in market.listings()? {
+    for listing in listings {
         let haystack = [
             listing.id.as_str(),
             listing.name.as_str(),
@@ -1588,24 +1631,35 @@ fn search(options: &Options) -> Outcome<Done> {
         let candidate = resolve(&listing, &host, &Request::Newest)
             .map(|v| v.version.to_string())
             .unwrap_or_else(|_| "none for this host".into());
-        rows.push(vec![
+        let mut row = vec![
             listing.id.clone(),
             listing.kind.to_string(),
             listing.tier.to_string(),
             candidate,
             installed.map_or_else(String::new, |e| e.version.clone()),
-            listing.description.clone(),
-        ]);
-        found.push(listing_json(&listing, &host, installed));
+        ];
+        let mut value = listing_json(&listing, &host, installed);
+        if let Some(stats) = &stats {
+            row.push(
+                stats
+                    .total(&listing.id)
+                    .map_or_else(|| "-".to_string(), |n| n.to_string()),
+            );
+            value["stats"] = stats.package_json(&listing.id);
+        }
+        row.push(listing.description.clone());
+        rows.push(row);
+        found.push(value);
     }
+    let mut columns = vec!["Id", "Kind", "Tier", "Version", "Installed"];
+    if stats.is_some() {
+        columns.push("Downloads");
+    }
+    columns.push("Description");
     let text = if rows.is_empty() {
         "No packages match.\n".to_string()
     } else {
-        table(
-            &["Id", "Kind", "Tier", "Version", "Installed", "Description"],
-            &rows,
-            options.no_color,
-        )
+        table(&columns, &rows, options.no_color)
     };
     Ok(Done::new(
         text,
@@ -1675,6 +1729,17 @@ fn info(options: &Options) -> Outcome<Done> {
     if let Some(entry) = installed {
         rows.push(("Installed", entry.version.clone()));
     }
+    // Display-only: read after everything above is decided, and never
+    // consulted by install, update or verify.
+    let stats = stats::load(&market.location);
+    if let Some(stats) = &stats {
+        let versions: Vec<String> = listing
+            .versions
+            .iter()
+            .map(|v| v.version.to_string())
+            .collect();
+        rows.extend(stats.rows(&listing.id, &versions));
+    }
     let mut text = format!("{}\n\n", line(&listing.id));
     text.push_str(&grid(&rows, options.no_color));
     let versions: Vec<Vec<String>> = listing
@@ -1699,7 +1764,9 @@ fn info(options: &Options) -> Outcome<Done> {
         &versions,
         options.no_color,
     ));
-    Ok(Done::new(text, listing_json(&listing, &host, installed)))
+    let mut result = listing_json(&listing, &host, installed);
+    result["stats"] = stats.map_or(Value::Null, |s| s.package_json(&listing.id));
+    Ok(Done::new(text, result))
 }
 
 /// `ID` or `ID@VERSION`.
@@ -2146,6 +2213,7 @@ pub(crate) fn run_on(options: &Options, command: &str, id: &str) -> Outcome<Done
         marketplace: options.marketplace.clone(),
         plugin_dir: options.plugin_dir.clone(),
         keys: options.keys.clone(),
+        sort: None,
         publish: BTreeMap::new(),
     };
     match command {

@@ -22,6 +22,20 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and a weekly job installs from the live marketplace once it is signed.
   The `official` tier now reads "rs-rich's own, built from its repository".
 
+- **Marketplace downloads, ratings and reviews** (rs-rich-cli, the
+  marketplace repository): `rich plugin info` shows a package's downloads,
+  👍/👎 and reviews link, and its JSON report gains `stats`; `rich plugin
+  search --sort downloads` sorts by downloads. They come from the
+  marketplace's nightly `stats.json` on its `stats` branch (release asset
+  and crates.io download counts, and one Reviews discussion per package),
+  unsigned and display-only, read with a 3-second timeout and left out
+  silently when missing. `rich` never phones home. The marketplace now
+  hosts new official versions as release assets, made after the merge by
+  `publish-artifacts.yml`, and its pull request check refuses reserved and
+  lookalike ids and "official" wording in community listings unless a
+  maintainer labels the pull request `name-approved`.
+  `docs/marketplace-repo/` mirrors the new workflows and scripts.
+
 - **More official marketplace packages** (rs-rich-cli, its tests and
   `official/` sources): five themes, `dusk`, `paper`, `ocean`,
   `high-contrast` and `mono`, each an upstream `[styles]` file that sets

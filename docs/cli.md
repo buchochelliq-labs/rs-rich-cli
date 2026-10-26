@@ -2360,7 +2360,8 @@ A theme file is upstream rich's `[styles]` format, so the source files in
 
 ```bash
 rich plugin search                 # every package: kind, tier, version
-rich plugin info textcase          # its tier, source, versions and permissions
+rich plugin search --sort downloads # most downloaded first, with a Downloads column
+rich plugin info textcase          # tier, source, versions, permissions; downloads, 👍/👎, reviews
 rich plugin install textcase       # shows what it is and asks first
 rich plugin install textcase --yes # in a script
 rich -m README.md                  # textcase loads without --plugin
@@ -2371,6 +2372,14 @@ rich plugin verify                 # files against the lockfile, versions agains
 rich plugin remove textcase
 rich plugin browse                 # all of it in a selector, provenance beside the list
 ```
+
+`rich plugin info` also shows a package's downloads (in total and per
+version), its 👍 and 👎 and a link to its reviews, when the marketplace
+publishes them. They come from its `stats.json`, which is not signed and
+only shown: nothing installs by it, and a missing or slow file is left out
+without a word. `rich` itself sends nothing to be counted. To rate a
+package, react 👍 or 👎 to its discussion in the marketplace repository's
+Reviews category; to review it, comment there.
 
 Before it writes anything, `install` shows the package's tier
 (`official`, `reviewed` or `community`), its source and revision, the
