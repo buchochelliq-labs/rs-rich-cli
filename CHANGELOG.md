@@ -33,6 +33,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `console.print`. New golden cases `progress_log` and `progress_log_file`
   in `console.tsv`.
 
+- **`Live` uses its console's live stack** (rs-rich): `start` calls
+  `set_live` and `stop` calls `clear_live`, as upstream's do. A display
+  started while the stack holds another is nested: it draws nothing and
+  prints its renderable when it stops, unless it is transient. rich 15.0.0
+  raises no `LiveError` here, and neither does the port. New golden cases
+  `live_set_live` and `live_nested` (DIVERGENCES §17, §49).
+
 - **Noctiluca's live logs and terminal adaptations** (noctiluca): a
   `role=log`, `aria-live` or appended scroll box is followed through a
   live-only change ping and read incrementally, with no new snapshot. It

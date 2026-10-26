@@ -348,10 +348,18 @@ open ones are **permanent**, each for the reason in its entry:
     goes above it; here the console and the sink are moved into the
     `Live` (and into its refresh thread), so printing goes through
     `Live::print`. The output is the same.
-  - **No nested displays.** Upstream 14+ lets a second `Live` on the same
-    console join the first, which draws both as a `Group`. Because each
-    `Live` owns its console, a second one cannot find the first; give one
-    `Live` a `Group` of both renderables instead.
+  - **A nested display draws alone (0.0.23).** As upstream's, `start`
+    pushes the display on its console's live stack (`Console::set_live`)
+    and `stop` pops it (`clear_live`). A display started on a console whose
+    stack already holds one is nested, as upstream's: it draws nothing
+    while it runs and prints its renderable when it stops, unless it is
+    transient. rich 15.0.0 raises no `LiveError` for it (the docstring of
+    `set_live` still names one). Upstream's nested display also asks the
+    first display to refresh, and the first draws both as a `Group`. Here
+    the stack holds a marker, not the display, and a second `Live` cannot
+    share the first's console (each owns its own), so neither happens; give
+    one `Live` a `Group` of both renderables instead. Golden `console.tsv`
+    (`live_set_live`, `live_nested`).
   - Jupyter widgets are not ported (§19).
 
 ### 18. Syntax highlighting uses `syntect`, not Pygments (non-byte-parity)
@@ -872,8 +880,9 @@ open ones are **permanent**, each for the reason in its entry:
   - The terminal's size is read once, when the console is built; upstream
     asks for it on each `size` read. `COLUMNS` and `LINES` are read at
     construction in both.
-  - `set_live`/`clear_live` keep a stack of `Arc<dyn Any>`; the port's
-    `Live` owns its console and does not use it (§17).
+  - `set_live`/`clear_live` keep a stack of `Arc<dyn Any>`. A `Live`
+    pushes a marker on its own console's stack when it starts and pops it
+    when it stops (0.0.23); upstream pushes the display itself (§17).
   - A `LogObject::Renderable` is shared (`Arc<dyn Renderable + Send +
     Sync>`), as a `Table` cell is, because a log lays its message out in
     a table.

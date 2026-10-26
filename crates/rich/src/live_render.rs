@@ -76,6 +76,11 @@ impl LiveRender {
         self.renderable = renderable;
     }
 
+    /// The wrapped renderable. Upstream's `LiveRender.renderable`.
+    pub fn renderable(&self) -> &dyn Renderable {
+        self.renderable.as_ref()
+    }
+
     /// The height of the last render, `0` before any. Port of
     /// `LiveRender.last_render_height`.
     pub fn last_render_height(&self) -> usize {

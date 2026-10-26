@@ -1264,9 +1264,10 @@ impl Console {
     /// is the only one (the display that draws). Port of `Console.set_live`,
     /// which upstream's `Live` calls when it starts.
     ///
-    /// The port's [`Live`](crate::live::Live) owns its console and does not
-    /// share it with another display ([DIVERGENCES §17]), so it has no stack
-    /// to join; the stack is here for a display that shares a console.
+    /// A [`Live`](crate::live::Live) pushes a marker here when it starts and
+    /// pops it when it stops; one started while the stack is not empty is
+    /// nested and draws nothing itself. Each `Live` owns its console, so a
+    /// nested display cannot reach the first ([DIVERGENCES §17]).
     ///
     /// [DIVERGENCES §17]: https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/DIVERGENCES.md#17-live-owns-its-console-and-sink-redirect-through-proxy-writers-settled-in-0022
     pub fn set_live(&self, live: std::sync::Arc<dyn std::any::Any + Send + Sync>) -> bool {

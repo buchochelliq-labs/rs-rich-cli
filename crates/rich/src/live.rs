@@ -17,6 +17,11 @@
 //! `FileProxy` does (see [`file_proxy`](crate::file_proxy) for why the
 //! process's own stdout is not replaced). `console.log` during a display is
 //! [`Live::log`].
+//!
+//! As upstream's, `start` pushes the display on its console's live stack
+//! ([`Console::set_live`]) and `stop` pops it; a display started while the
+//! stack holds another is nested, and prints its renderable once, when it
+//! stops.
 
 use std::any::Any;
 use std::cell::Cell;
@@ -127,6 +132,9 @@ pub struct Live<W: Write> {
     started: bool,
     /// Upstream's render hook is pushed: from `start` to the end of `stop`.
     hooked: bool,
+    /// Upstream's `_nested`: the console's live stack held another display
+    /// when this one started, so this one draws nothing itself.
+    nested: bool,
     transient: bool,
     screen: bool,
     /// Upstream's `_alt_screen`: the alternate screen is on.
@@ -143,6 +151,11 @@ pub struct Live<W: Write> {
     /// at the next refresh.
     pending: Option<Box<dyn Renderable>>,
 }
+
+/// What a [`Live`] pushes on its console's live stack
+/// ([`Console::set_live`]). Upstream pushes the display itself; the port's
+/// stack holds `Send + Sync` values, which a `Live` is not.
+struct LiveMarker;
 
 /// Upstream's `get_renderable` callable.
 type GetRenderable = Box<dyn Fn() -> Box<dyn Renderable>>;
@@ -161,6 +174,7 @@ impl<W: Write> Live<W> {
             writer,
             started: false,
             hooked: false,
+            nested: false,
             transient: false,
             screen: false,
             alt_screen,
@@ -307,6 +321,12 @@ impl<W: Write> Live<W> {
             return;
         }
         self.started = true;
+        // `if not self.console.set_live(self)`: another display is on the
+        // console's stack, and this one is nested.
+        if !self.console.set_live(Arc::new(LiveMarker)) {
+            self.nested = true;
+            return;
+        }
         if self.screen {
             let enabled = self.set_alt_screen(true);
             self.alt_screen.set(enabled);
@@ -348,6 +368,11 @@ impl<W: Write> Live<W> {
             self.set_content(renderable);
         } else if let Some(renderable) = self.pending.take() {
             self.set_content(renderable);
+        }
+        // Upstream refreshes the first display on the stack instead. The
+        // port's stack holds markers, not displays (DIVERGENCES §17).
+        if self.nested {
+            return;
         }
         if self.is_interactive() || (!self.started && !self.is_transient()) {
             self.emit("");
@@ -433,6 +458,20 @@ impl<W: Write> Live<W> {
             return;
         }
         self.started = false;
+        self.console.clear_live();
+        if self.nested {
+            // A nested display prints its renderable once, at the end.
+            self.nested = false;
+            if !self.is_transient() {
+                self.refresh();
+                let rendered = self
+                    .console
+                    .capture(|console| console.print(self.live_render.renderable()));
+                self.write_str(&rendered);
+            }
+            let _ = self.writer.flush();
+            return;
+        }
         // "allow it to fully render on the last even if overflow".
         self.vertical_overflow = VerticalOverflow::Visible;
         self.live_render
@@ -478,7 +517,15 @@ impl<W: Write> Live<W> {
         if !self.started && !self.hooked {
             return;
         }
+        if self.started {
+            // `stop()` pops the live stack before its final refresh.
+            self.console.clear_live();
+        }
         self.started = false;
+        if std::mem::take(&mut self.nested) {
+            // A nested display drew nothing to restore.
+            return;
+        }
         self.hooked = false;
         if self.console.is_terminal() {
             let _ = write!(self.writer, "\n{}", Control::show_cursor(true).as_str());

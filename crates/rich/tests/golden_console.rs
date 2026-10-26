@@ -1110,6 +1110,53 @@ fn progress_log_file() -> String {
     String::from_utf8(live.stop().1).unwrap()
 }
 
+fn marker() -> Arc<dyn std::any::Any + Send + Sync> {
+    Arc::new(())
+}
+
+fn live_set_live() -> String {
+    let console = console(20);
+    let mut out = vec![console.set_live(marker())];
+    console.clear_live();
+    let mut live = rich::Live::new(Box::new(Text::new("outer")), console, Vec::<u8>::new());
+    live.start();
+    out.push(live.console().set_live(marker()));
+    live.console().clear_live();
+    live.stop();
+    out.push(live.console().set_live(marker()));
+    live.console().clear_live();
+    let output = String::from_utf8(live.into_writer()).unwrap();
+    lines(&out.into_iter().map(py_bool).collect::<Vec<_>>()) + &output
+}
+
+/// A display on a console whose live stack already holds one (upstream's
+/// `console.set_live(_Outer())`).
+fn nested(content: &str, transient: bool) -> Vec<u8> {
+    let console = console(20);
+    console.set_live(marker());
+    let mut live = rich::Live::new(Box::new(Text::new(content)), console, Vec::<u8>::new())
+        .transient(transient);
+    live.start();
+    if !transient {
+        live.update(Box::new(Text::new("updated")));
+    }
+    live.stop();
+    live.into_writer()
+}
+
+fn live_nested() -> String {
+    // Each `Live` owns its console, so each display here gets its own; the
+    // Python side moves one console through the same states.
+    let mut out = nested("inner", false);
+    out.extend(nested("gone", true));
+    let mut first = rich::Live::new(Box::new(Text::new("first")), console(20), Vec::<u8>::new())
+        .transient(true);
+    first.start();
+    first.stop();
+    out.extend(first.into_writer());
+    String::from_utf8(out).unwrap()
+}
+
 fn build(name: &str) -> String {
     match name {
         "console_quiet" => console_quiet(),
@@ -1136,11 +1183,13 @@ fn build(name: &str) -> String {
         "console_status" => console_status(),
         "progress_log" => progress_log(),
         "progress_log_file" => progress_log_file(),
+        "live_set_live" => live_set_live(),
+        "live_nested" => live_nested(),
         other => panic!("no builder for console case {other:?}"),
     }
 }
 
-const CASES: usize = 24;
+const CASES: usize = 26;
 
 #[test]
 fn console_parity() {

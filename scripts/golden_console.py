@@ -538,7 +538,7 @@ def _console_status() -> str:
     return buffer.getvalue()
 
 
-# --- group 6: Progress.log (0.0.23) ---------------------------------------
+# --- group 6: Progress.log, Live on the console's live stack (0.0.23) -----
 
 
 def _progress_log() -> str:
@@ -593,6 +593,57 @@ def _progress_log_file() -> str:
     return _no_link_id(buffer.getvalue())
 
 
+class _Outer:
+    """Stands in for a first live display on the stack: a nested one asks it
+    to refresh."""
+
+    def refresh(self) -> None:
+        pass
+
+
+def _live_set_live() -> str:
+    """`Live.start` pushes the display on its console's live stack and `stop`
+    pops it. A second display on the same console is not an error (rich 15
+    raises no `LiveError`): `set_live` answers that it is not the first."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer)
+    live = Live(Text("outer"), console=console, auto_refresh=False)
+    out = [console.set_live(object())]
+    console.clear_live()
+    live.start(refresh=True)
+    out.append(console.set_live(object()))
+    console.clear_live()
+    live.stop()
+    out.append(console.set_live(object()))
+    console.clear_live()
+    return _lines(*out) + buffer.getvalue()
+
+
+def _live_nested() -> str:
+    """A display started while another is on the console's stack is nested:
+    it draws nothing itself, and prints its renderable when it stops, unless
+    it is transient."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer)
+    console.set_live(_Outer())
+    inner = Live(Text("inner"), console=console, auto_refresh=False)
+    inner.start(refresh=True)
+    inner.update(Text("updated"), refresh=True)
+    inner.stop()
+    gone = Live(Text("gone"), console=console, auto_refresh=False, transient=True)
+    gone.start(refresh=True)
+    gone.stop()
+    console.clear_live()
+    first = Live(Text("first"), console=console, auto_refresh=False, transient=True)
+    first.start(refresh=True)
+    first.stop()
+    return buffer.getvalue()
+
+
 CONSOLE_CASES = [
     ("console_quiet", _console_quiet),
     ("console_size_setters", _console_size_setters),
@@ -618,6 +669,8 @@ CONSOLE_CASES = [
     ("console_status", _console_status),
     ("progress_log", _progress_log),
     ("progress_log_file", _progress_log_file),
+    ("live_set_live", _live_set_live),
+    ("live_nested", _live_nested),
 ]
 
 
