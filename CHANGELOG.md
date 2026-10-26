@@ -22,6 +22,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   fixtures: `stream-with-log.html`, `log-ul.html`, `log-div.html`,
   `adapt.html`.
 
+- **A real-site checklist for Noctiluca** (docs): five kinds of site to
+  open by hand before a release (news, a video watch page, a live stream
+  with chat, docs, a forum), what to look at on each, and the expected
+  limits, on [its status page](docs/guide/noctiluca/status.md#checking-on-real-sites);
+  docs/BRANCHING.md's release steps name it. A broken anchor in the 0.0.20
+  notes is fixed.
+
 - **`rich serve --compress`** (CLI, `serve` feature): deflates frames of 1 KiB or more for pages that can undo it. Off by default; worth it over a slow link.
 
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)

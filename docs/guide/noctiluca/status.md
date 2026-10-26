@@ -26,6 +26,32 @@ terminal for. The phases and their tests are in
   unless `[media] bandwidth` sets it. A site's `fps` is read but not
   applied.
 
+### Checking on real sites
+
+The tests run on the crate's own pages. Before a release, someone also
+opens five kinds of real site by hand, in Kitty or WezTerm and in a
+terminal with half blocks only, and notes what they see. Each row says
+what to look at; the limits below the table are expected, not bugs.
+
+| Site | What to look at |
+|---|---|
+| A news site's front page and one article | Pictures where the page puts them, captions, headings and reading order; reader mode (`r`) on the article; scrolling down a long front page loads more |
+| A video site's watch page | The poster with its play mark, then frames while it plays; play, pause, seek and mute; the media state in the status bar; the comments below |
+| A live stream with chat | The video, and the chat followed as a live log: new lines appear, small badges and emotes in their line, and it holds still when scrolled up (`{`, `}`) |
+| A docs site | Code blocks, tables and nested lists; the sidebar's links through hints (`f`); find in page (`/`); back and forward |
+| A forum thread and its reply form | Quotes and avatars; the reply box takes a draft and asks before it sends; a search field and a select; nothing is sent by the check itself |
+
+Expected limits on real sites:
+
+- **Logged-out walls.** "Confirm you're not a bot", a sign-in wall or a
+  cookie wall can stop a page. Noctiluca never tries to get past them;
+  note the wall and move on.
+- **DRM never plays.** A protected video shows its poster and nothing
+  else, and always will.
+- **An inline SVG drawing, a canvas and a frame** show as their alt text.
+- **Logs and chats** that a page fills in with a canvas, or in a frame,
+  are not followed.
+
 ## In 0.0.22 (Noctiluca 0.0.1): the reader phase
 
 | Works | Notes |

@@ -357,7 +357,10 @@ also lists the crates due when it was pushed.
 #### How to release
 
 From an up-to-date `main` (`git switch main && git pull --ff-only`), with
-authorization to publish:
+authorization to publish, and once someone has walked Noctiluca's
+[real-site checklist](guide/noctiluca/status.md#checking-on-real-sites)
+(a news site, a video watch page, a live stream with chat, a docs site and
+a forum) and put what they saw in the release notes:
 
 ```bash
 python3 scripts/release_cohort.py tag --dry-run   # the plan: what is tagged, kept, skipped
