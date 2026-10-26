@@ -21,7 +21,7 @@ cargo run -p rs-rich-ext --example guide_highlighters --features testing,syntax
 | Themes | 7 syntect themes, plus `ansi_dark` and `ansi_light` | 256 Neovim themes (default `monokai`), plus `ansi_dark` and `ansi_light` |
 | Speed | 2–4× faster with `onig` | a fixed cost per language, then the fastest on long files ([benchmarks](../../benchmarks.md#0012-code-highlighters)) |
 | Binary | about 15.7 MB for the CLI | about 169 MB for the CLI with every language; a bundle is far smaller |
-| Minimum Rust | the workspace's (1.90) | 1.91 |
+| Minimum Rust | the workspace's (1.90) | 1.95 |
 
 syntect is the default everywhere and is what upstream parity is measured
 with. Choose lumis for tree-sitter's more precise parsing, its languages or its

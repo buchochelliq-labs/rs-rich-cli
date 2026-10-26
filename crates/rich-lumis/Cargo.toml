@@ -14,8 +14,8 @@ license.workspace = true
 repository.workspace = true
 homepage.workspace = true
 authors.workspace = true
-# lumis itself needs 1.91; the rest of the workspace keeps its own minimum.
-rust-version = "1.91"
+# lumis itself needs 1.95; the rest of the workspace keeps its own minimum.
+rust-version = "1.95"
 readme = "README.md"
 documentation = "https://docs.rs/rs-rich-lumis"
 keywords = ["terminal", "syntax-highlighting", "tree-sitter", "rich"]
@@ -42,7 +42,7 @@ bundle-backend = ["lumis/lang-bundle-backend"]
 [dependencies]
 rich = { workspace = true, features = ["syntax"] }
 rich-plugin-api.workspace = true
-lumis = { version = "0.15", default-features = false }
+lumis = { version = "0.17", default-features = false }
 
 [dev-dependencies]
 # Path only: stripped when packaging, so publishing never waits on ext.

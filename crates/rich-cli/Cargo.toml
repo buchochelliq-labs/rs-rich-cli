@@ -71,7 +71,7 @@ serve = ["dep:rich-web"]
 interact = ["dep:rich-interact"]
 # The lumis (tree-sitter) code highlighter, chosen with `--highlighter lumis`.
 # Off by default: it compiles lumis's grammars (a much larger binary) and needs
-# Rust 1.91.
+# Rust 1.95.
 lumis = ["dep:rich-lumis"]
 # Runtime plugins, loaded with `--plugin PATH`, from a trusted config's
 # `plugins` list (never from a project's ./rich.toml), or installed with

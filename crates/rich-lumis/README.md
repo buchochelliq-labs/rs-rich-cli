@@ -28,5 +28,5 @@ let code = Syntax::new("fn main() {}", "rust")
   through [`rs-rich-plugin-api`](https://crates.io/crates/rs-rich-plugin-api).
 
 It is its own crate because lumis links tree-sitter's C runtime and its
-grammars. Only builds that ask for it pay for that. Requires Rust 1.91 (lumis's
+grammars. Only builds that ask for it pay for that. Requires Rust 1.95 (lumis's
 minimum).
