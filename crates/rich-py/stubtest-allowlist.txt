@@ -1,0 +1,29 @@
+# Accepted stubtest differences for rs_rich (scripts/check_python_stubs.py).
+# One entry per line, a regular expression over the full name; each says why.
+
+# Names only type checkers see: aliases and protocols the stubs define to
+# spell parameter types. They do not exist at runtime.
+rs_rich\._native\.(AlignArg|AlignMethod|AnchorArg|AxisArg|BorderArg|ChartBars|ChartCharset|ChartDirection|ChartFormat|ChartOrientation|ChartSummary|CheckStatus|ColumnArg|ConsoleRenderable|DataFormat|DataHeader|DiagramDirection|DiagramHead|EasingArg|EdgeArg|FailingRowsArg|FallbackName|FlowType|GetTimeCallable|Handler|InferredTypeName|JustifyMethod|KeysType|LumisPlugin|MicroPreference|NodeArg|OverflowArg|OverflowMethod|PaddingDimensions|PathLike|PlacementArg|RectArg|RenderableType|RichCast|RoleArg|SchemaLike|SchemaVersion|ScriptType|Seconds|ShadowArg|SidesArg|SizeArg|SpanLike|StringsArg|StyleRuleOp|StyleRuleTarget|StyleRulesArg|StyleType|TextAlignArg|TitleAlignArg|VerticalOverflowMethod)
+
+# A literal type alias, which stubtest reads as a union of literals.
+rs_rich\.emoji\.EmojiVariant
+
+# PyO3's `__call__` is a slot wrapper, so its runtime signature reads
+# `(*args, **kwargs)`; the stub gives the keywords it takes (Rich's).
+rs_rich\._native\.PromptBase\.__call__
+
+# `Console`'s methods that hand their arguments to the area that implements
+# them take `(*args, **kwargs)` at runtime; the stubs give the parameters
+# those areas take (Rich's).
+rs_rich\._native\.Console\.(status|pager|screen|print_exception)
+
+# `__all__` lists every name the native module exports. The stub declares it
+# without its contents; stubtest checks each of those names on its own.
+rs_rich\._native\.__all__
+
+# `LumisPlugin` is exported only by wheels built with the `lumis` feature;
+# the published wheel is built without it.
+rs_rich\.plugins\.__all__
+
+# A `NewType`, which stubtest does not read as the class its stub declares.
+rs_rich\._native\.TaskID

@@ -17,19 +17,19 @@ class NullFile(IO[str]):
     def isatty(self) -> bool:
         return False
 
-    def read(self, __n: int = 1) -> str:
+    def read(self, n: int = 1, /) -> str:
         return ""
 
     def readable(self) -> bool:
         return False
 
-    def readline(self, __limit: int = 1) -> str:
+    def readline(self, limit: int = 1, /) -> str:
         return ""
 
-    def readlines(self, __hint: int = 1) -> List[str]:
+    def readlines(self, hint: int = 1, /) -> List[str]:
         return []
 
-    def seek(self, __offset: int, __whence: int = 1) -> int:
+    def seek(self, offset: int, whence: int = 1, /) -> int:
         return 0
 
     def seekable(self) -> bool:
@@ -38,13 +38,13 @@ class NullFile(IO[str]):
     def tell(self) -> int:
         return 0
 
-    def truncate(self, __size: Optional[int] = 1) -> int:
+    def truncate(self, size: Optional[int] = 1, /) -> int:
         return 0
 
     def writable(self) -> bool:
         return False
 
-    def writelines(self, __lines: Iterable[str]) -> None:
+    def writelines(self, lines: Iterable[str], /) -> None:
         pass
 
     def __next__(self) -> str:
