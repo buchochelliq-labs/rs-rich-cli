@@ -133,13 +133,36 @@ pub(crate) fn spec() -> rich_ext::cli_doc::CommandSpec {
         )
         .subcommand(with_common(
             CommandSpec::new("search")
-                .about("List the marketplace's packages, or those whose id, name, description or keywords contain QUERY")
-                .usage("search [QUERY] [--sort id|downloads]")
-                .arg(ArgSpec::positional("query").help("Text to look for, in any case"))
+                .about(
+                    "List the marketplace's packages, or those with every word of QUERY in their \
+                     id, name, description, keywords, authors or capabilities; the tier shows as \
+                     `✓ official`, `approved` or `community`, a maintainers' pick as \
+                     `★ recommended`, and who authored each",
+                )
+                .usage("search [QUERY] [--kind KIND] [--tier TIER] [--recommended] [--sort id|downloads]")
+                .arg(ArgSpec::positional("query").help("Words to look for, in any case"))
+                .arg(
+                    ArgSpec::option("kind")
+                        .value_name("KIND")
+                        .help("Only this kind: crate, wasm-plugin, micro-pack or theme"),
+                )
+                .arg(
+                    ArgSpec::option("tier")
+                        .value_name("TIER")
+                        .help(
+                            "Only this tier: official (rs-rich's own), reviewed (shown as \
+                             approved) or community",
+                        ),
+                )
+                .arg(ArgSpec::flag("recommended").help(
+                    "Only the maintainers' picks, marked `★ recommended`",
+                ))
                 .arg(ArgSpec::option("sort").value_name("ORDER").help(
                     "id (the default), or downloads: most downloaded first, from the \
                      marketplace's unsigned stats.json, with a Downloads column",
-                )),
+                ))
+                .example("rich plugin search rot13", "Packages with a rot13 capability, say")
+                .example("rich plugin search --kind theme --tier official", "rs-rich's own themes"),
         ))
         .subcommand(with_common(
             CommandSpec::new("info")
@@ -360,6 +383,12 @@ pub(crate) struct Options {
     pub keys: Option<PathBuf>,
     /// `search --sort`: `id` or `downloads`.
     pub sort: Option<String>,
+    /// `search --kind KIND`.
+    pub kind: Option<Kind>,
+    /// `search --tier TIER`.
+    pub tier: Option<Tier>,
+    /// `search --recommended`.
+    pub recommended: bool,
     /// `publish`'s options, by name without `--`; repeatable ones keep
     /// every value.
     pub publish: BTreeMap<&'static str, Vec<String>>,
@@ -389,6 +418,7 @@ fn parse(args: &[String]) -> Outcome<Options> {
     let mut words = Vec::new();
     let mut iter = args.iter();
     let mut no_color = None;
+    let mut kind = None;
     while let Some(arg) = iter.next() {
         let mut value = |name: &str| {
             iter.next()
@@ -409,6 +439,8 @@ fn parse(args: &[String]) -> Outcome<Options> {
                 }
                 options.sort = Some(order);
             }
+            "--kind" => kind = Some(value(arg)?),
+            "--recommended" => options.recommended = true,
             "--report" => {
                 options.json = match value(arg)?.as_str() {
                     "json" => true,
@@ -467,6 +499,31 @@ fn parse(args: &[String]) -> Outcome<Options> {
     }
     if options.sort.is_some() && options.command != "search" {
         return Err(usage("--sort only applies to `rich plugin search`"));
+    }
+    // `search` takes `--kind` and `--tier`; `--tier` is also publish's.
+    if let Some(name) = kind {
+        if options.command != "search" {
+            return Err(usage("--kind only applies to `rich plugin search`"));
+        }
+        options.kind = Some(Kind::parse(&name).ok_or_else(|| {
+            usage(format!(
+                "unknown kind {:?} (crate, wasm-plugin, micro-pack, theme)",
+                controls::shown(&name)
+            ))
+        })?);
+    }
+    if options.recommended && options.command != "search" {
+        return Err(usage("--recommended only applies to `rich plugin search`"));
+    }
+    if options.command == "search" {
+        if let Some(name) = options.publish.remove("tier").and_then(|mut v| v.pop()) {
+            options.tier = Some(Tier::parse(&name).ok_or_else(|| {
+                usage(format!(
+                    "unknown tier {:?} (official, reviewed, community)",
+                    controls::shown(&name)
+                ))
+            })?);
+        }
     }
     if options.command != "publish" && !options.publish.is_empty() {
         let names: Vec<String> = options.publish.keys().map(|k| format!("--{k}")).collect();
@@ -1407,9 +1464,164 @@ fn escape(text: &str) -> String {
 pub(crate) fn tier_meaning(tier: Tier) -> &'static str {
     match tier {
         Tier::Official => "rs-rich's own, built from its repository",
-        Tier::Reviewed => "a maintainer read the source and rebuilt the same artifact",
+        Tier::Reviewed => "a maintainer reviewed the source and rebuilt the same artifact",
         _ => "checked by the marketplace's CI only, not reviewed",
     }
+}
+
+/// The tier as a marker that reads the same without colour: `✓ official`,
+/// `approved` (the `reviewed` tier) or `community`. Only ever made from a
+/// listing's `tier`.
+pub(crate) fn tier_label(tier: Tier) -> &'static str {
+    match tier {
+        Tier::Official => "✓ official",
+        Tier::Reviewed => "approved",
+        _ => "community",
+    }
+}
+
+/// The tier's name as people see it; a listing and the reports say
+/// `reviewed`, shown as Approved.
+pub(crate) fn tier_display(tier: Tier) -> &'static str {
+    match tier {
+        Tier::Official => "Official",
+        Tier::Reviewed => "Approved",
+        _ => "Community",
+    }
+}
+
+/// The maintainers' pick, as a marker that reads the same without colour.
+pub(crate) const RECOMMENDED_LABEL: &str = "★ recommended";
+
+/// [`tier_marker`], and `★ recommended` under it for a recommended
+/// listing. Only ever made from the listing's `tier` and `recommended`.
+pub(crate) fn marks(listing: &Listing) -> String {
+    let mut text = tier_marker(listing.tier);
+    if listing.recommended.is_some() {
+        text.push_str(&format!("\n[bold magenta]{RECOMMENDED_LABEL}[/]"));
+    }
+    text
+}
+
+/// The `Recommended` row: since when, and the maintainer's note.
+pub(crate) fn recommended_text(recommended: &rich_marketplace::Recommended) -> String {
+    format!(
+        "{RECOMMENDED_LABEL} since {}: {}",
+        recommended.since, recommended.note
+    )
+}
+
+/// [`tier_label`] as markup: official in green, approved plain, community
+/// in yellow.
+pub(crate) fn tier_marker(tier: Tier) -> String {
+    match tier {
+        Tier::Official => format!("[bold green]{}[/]", tier_label(tier)),
+        Tier::Reviewed => tier_label(tier).to_string(),
+        _ => format!("[yellow]{}[/]", tier_label(tier)),
+    }
+}
+
+/// A listing's repository as `host/owner/repo`, without the scheme.
+pub(crate) fn repository_source(repository: &str) -> String {
+    let rest = repository
+        .strip_prefix("https://")
+        .unwrap_or(repository)
+        .trim_end_matches('/');
+    line(rest.strip_suffix(".git").unwrap_or(rest))
+}
+
+/// Who publishes a listing's repository: the owner of a
+/// `host/owner/...` repository, else its host.
+pub(crate) fn repository_owner(repository: &str) -> String {
+    let source = repository_source(repository);
+    let mut parts = source.split('/');
+    let host = parts.next().unwrap_or_default().to_string();
+    parts
+        .next()
+        .filter(|owner| !owner.is_empty())
+        .map_or(host, str::to_string)
+}
+
+/// The longest author name shown, and how many are named before "and N
+/// more".
+const MAX_AUTHOR_CHARS: usize = 40;
+const MAX_AUTHORS: usize = 3;
+
+/// "Authored by …": `rs-rich` for an official package; otherwise the
+/// listing's own `authors` (its claim, in quotes when it names rs-rich, cut
+/// short) or the repository's owner, then the repository it comes from.
+pub(crate) fn authored_by(listing: &Listing) -> String {
+    format!("Authored by {}", authors_text(listing))
+}
+
+/// [`authored_by`] without its first words, for a row named "Authored by".
+pub(crate) fn authors_text(listing: &Listing) -> String {
+    if listing.tier == Tier::Official {
+        return "rs-rich".into();
+    }
+    let mut names: Vec<String> = listing
+        .authors
+        .iter()
+        .take(MAX_AUTHORS)
+        .map(|author| {
+            let author = line(author);
+            let mut short: String = author.chars().take(MAX_AUTHOR_CHARS).collect();
+            if short.len() < author.len() {
+                short.push('…');
+            }
+            if short.to_lowercase().contains("rs-rich") {
+                format!("\"{short}\"")
+            } else {
+                short
+            }
+        })
+        .collect();
+    if listing.authors.len() > MAX_AUTHORS {
+        names.push(format!("and {} more", listing.authors.len() - MAX_AUTHORS));
+    }
+    if names.is_empty() {
+        names.push(repository_owner(&listing.repository));
+    }
+    format!(
+        "{} from {}",
+        names.join(", "),
+        repository_source(&listing.repository)
+    )
+}
+
+/// Who publishes a package, by its tier: rs-rich for an official one, the
+/// repository's owner otherwise.
+pub(crate) fn publisher(listing: &Listing) -> String {
+    let owner = repository_owner(&listing.repository);
+    match listing.tier {
+        Tier::Official => "Official: built and published by rs-rich".into(),
+        Tier::Reviewed => format!(
+            "Approved: published by {owner}, not by rs-rich; a maintainer read its source and \
+             rebuilt it"
+        ),
+        _ => format!(
+            "Community: published by {owner}, not by rs-rich. Made by its author: check its \
+             source and permissions"
+        ),
+    }
+}
+
+/// A grid or preview row's value as markup: escaped, with the `Tier` row's
+/// leading [`tier_label`] coloured as [`tier_marker`].
+pub(crate) fn row_markup(key: &str, value: &str) -> String {
+    if key == "Recommended" {
+        if let Some(rest) = value.strip_prefix(RECOMMENDED_LABEL) {
+            return format!("[bold magenta]{RECOMMENDED_LABEL}[/]{}", escape(rest));
+        }
+    }
+    if key == "Tier" {
+        for tier in [Tier::Official, Tier::Reviewed, Tier::Community] {
+            if let Some(rest) = value.strip_prefix(tier_label(tier)) {
+                return format!("{}{}", tier_marker(tier), escape(rest));
+            }
+        }
+    }
+    escape(value)
 }
 
 pub(crate) fn requires_text(requires: Requires) -> String {
@@ -1486,6 +1698,8 @@ fn listing_json(listing: &Listing, host: &Host, installed: Option<&LockEntry>) -
         "name": listing.name,
         "description": listing.description,
         "tier": listing.tier.as_str(),
+        "tier_label": tier_display(listing.tier),
+        "recommended": listing.recommended.as_ref().map(|r| json!({"since": r.since, "note": r.note})),
         "license": listing.license,
         "authors": listing.authors,
         "repository": listing.repository,
@@ -1548,20 +1762,20 @@ fn grid(rows: &[(&str, String)], no_color: bool) -> String {
         },
     );
     for (key, value) in rows {
-        let value: Vec<String> = value.lines().map(escape).collect();
+        let value: Vec<String> = value.lines().map(|l| row_markup(key, l)).collect();
         table.add_row(&[&format!("[bold]{key}[/]"), &value.join("\n")]);
     }
     cli_spec::render(&table, no_color) + "\n"
 }
 
+/// A table of markup cells: the caller escapes what it did not write.
 fn table(columns: &[&str], rows: &[Vec<String>], no_color: bool) -> String {
     let mut table = rich::Table::new();
     for column in columns {
         table.add_column(*column);
     }
     for row in rows {
-        let cells: Vec<String> = row.iter().map(|c| escape(c)).collect();
-        let cells: Vec<&str> = cells.iter().map(String::as_str).collect();
+        let cells: Vec<&str> = row.iter().map(String::as_str).collect();
         table.add_row(&cells);
     }
     cli_spec::render(&table, no_color) + "\n"
@@ -1580,10 +1794,19 @@ pub(crate) fn provenance(
         ("Name", listing.name.clone()),
         (
             "Tier",
-            format!("{}: {}", listing.tier, tier_meaning(listing.tier)),
+            format!(
+                "{}: {}",
+                tier_label(listing.tier),
+                tier_meaning(listing.tier)
+            ),
         ),
+        ("Publisher", publisher(listing)),
+        ("Authored by", authors_text(listing)),
         ("Source", listing.repository.clone()),
     ];
+    if let Some(recommended) = &listing.recommended {
+        rows.push(("Recommended", recommended_text(recommended)));
+    }
     if let Some(revision) = &version.source_revision {
         rows.push(("Revision", revision.clone()));
     }
@@ -1630,8 +1853,44 @@ fn lockfile(dir: &Path) -> Outcome<Lockfile> {
     Lockfile::load(&dir.join(LOCKFILE_NAME)).map_err(lockfile_failure)
 }
 
-/// `search [QUERY]`: every listing whose id, name, description or keywords
-/// contain QUERY (any case).
+/// Where `rich plugin search` points when nothing matches.
+pub(crate) const MARKETPLACE_PAGE: &str =
+    "https://buchochelliq-labs.github.io/rs-rich-cli/latest/marketplace/";
+
+/// Whether `listing` is one `search` shows: of `--kind` and `--tier` when
+/// given, recommended for `--recommended`, and with every word of `query` (lower-cased) in its id, name,
+/// description, keywords, authors, crate, kind or any version's
+/// capabilities.
+pub(crate) fn search_matches(listing: &Listing, query: &str, options: &Options) -> bool {
+    if options.kind.is_some_and(|k| k != listing.kind)
+        || options.tier.is_some_and(|t| t != listing.tier)
+        || (options.recommended && listing.recommended.is_none())
+    {
+        return false;
+    }
+    let mut fields = vec![
+        listing.id.as_str(),
+        listing.name.as_str(),
+        listing.description.as_str(),
+        listing.kind.as_str(),
+    ];
+    fields.extend(listing.keywords.iter().map(String::as_str));
+    fields.extend(listing.authors.iter().map(String::as_str));
+    if let Some(info) = &listing.crate_info {
+        fields.push(info.name.as_str());
+    }
+    for version in &listing.versions {
+        for capability in &version.capabilities {
+            fields.push(capability.kind.as_str());
+            fields.push(capability.name.as_str());
+        }
+    }
+    let haystack = fields.join("\n").to_lowercase();
+    query.split_whitespace().all(|word| haystack.contains(word))
+}
+
+/// `search [QUERY] [--kind KIND] [--tier TIER]`: every listing that
+/// [`search_matches`].
 fn search(options: &Options) -> Outcome<Done> {
     let dir = require_dir(options)?;
     let mut state = State::load(&dir)?;
@@ -1663,17 +1922,7 @@ fn search(options: &Options) -> Outcome<Done> {
     let mut rows = Vec::new();
     let mut found = Vec::new();
     for listing in listings {
-        let haystack = [
-            listing.id.as_str(),
-            listing.name.as_str(),
-            listing.description.as_str(),
-        ]
-        .into_iter()
-        .chain(listing.keywords.iter().map(String::as_str))
-        .collect::<Vec<_>>()
-        .join("\n")
-        .to_lowercase();
-        if !query.is_empty() && !haystack.contains(&query) {
+        if !search_matches(&listing, &query, options) {
             continue;
         }
         let installed = lock.get(&listing.id);
@@ -1681,11 +1930,11 @@ fn search(options: &Options) -> Outcome<Done> {
             .map(|v| v.version.to_string())
             .unwrap_or_else(|_| "none for this host".into());
         let mut row = vec![
-            listing.id.clone(),
-            listing.kind.to_string(),
-            listing.tier.to_string(),
-            candidate,
-            installed.map_or_else(String::new, |e| e.version.clone()),
+            escape(&listing.id),
+            escape(listing.kind.as_str()),
+            marks(&listing),
+            escape(&candidate),
+            escape(&installed.map_or_else(String::new, |e| e.version.clone())),
         ];
         let mut value = listing_json(&listing, &host, installed);
         if let Some(stats) = &stats {
@@ -1696,7 +1945,11 @@ fn search(options: &Options) -> Outcome<Done> {
             );
             value["stats"] = stats.package_json(&listing.id);
         }
-        row.push(listing.description.clone());
+        row.push(format!(
+            "{}\n[dim]{}[/]",
+            escape(&listing.description),
+            escape(&authored_by(&listing))
+        ));
         rows.push(row);
         found.push(value);
     }
@@ -1706,7 +1959,10 @@ fn search(options: &Options) -> Outcome<Done> {
     }
     columns.push("Description");
     let text = if rows.is_empty() {
-        "No packages match.\n".to_string()
+        format!(
+            "No packages match. Try fewer words, or browse every package with `rich plugin \
+             browse`, or on the web: {MARKETPLACE_PAGE}\n"
+        )
     } else {
         table(&columns, &rows, options.no_color)
     };
@@ -1752,17 +2008,25 @@ fn info(options: &Options) -> Outcome<Done> {
         ("Kind", listing.kind.to_string()),
         (
             "Tier",
-            format!("{}: {}", listing.tier, tier_meaning(listing.tier)),
+            format!(
+                "{}: {}",
+                tier_label(listing.tier),
+                tier_meaning(listing.tier)
+            ),
         ),
+        ("Publisher", publisher(&listing)),
+        ("Authored by", authors_text(&listing)),
+    ];
+    if let Some(recommended) = &listing.recommended {
+        rows.push(("Recommended", recommended_text(recommended)));
+    }
+    rows.extend([
         ("Description", listing.description.clone()),
         ("License", listing.license.clone()),
         ("Repository", listing.repository.clone()),
-    ];
+    ]);
     if let Some(homepage) = &listing.homepage {
         rows.push(("Homepage", homepage.clone()));
-    }
-    if !listing.authors.is_empty() {
-        rows.push(("Authors", listing.authors.join(", ")));
     }
     match &candidate {
         Ok(version) => {
@@ -1795,7 +2059,7 @@ fn info(options: &Options) -> Outcome<Done> {
         .versions
         .iter()
         .map(|v| {
-            vec![
+            [
                 v.version.to_string(),
                 v.published.clone(),
                 requires_text(v.requires),
@@ -1805,6 +2069,9 @@ fn info(options: &Options) -> Outcome<Done> {
                 },
                 v.yanked.clone().unwrap_or_default(),
             ]
+            .iter()
+            .map(|cell| escape(cell))
+            .collect()
         })
         .collect();
     text.push('\n');
@@ -1840,6 +2107,7 @@ fn entry_json(entry: &LockEntry) -> Value {
         "kind": entry.kind.as_str(),
         "version": entry.version,
         "tier": entry.tier.as_str(),
+        "tier_label": tier_display(entry.tier),
         "url": entry.url,
         "sha256": entry.sha256,
         "size": entry.size,
@@ -2082,13 +2350,13 @@ fn list(options: &Options) -> Outcome<Done> {
             note.push_str(&format!("yanked: {reason}"));
         }
         rows.push(vec![
-            entry.id.clone(),
-            entry.version.clone(),
-            entry.kind.to_string(),
-            entry.tier.to_string(),
+            escape(&entry.id),
+            escape(&entry.version),
+            escape(entry.kind.as_str()),
+            tier_marker(entry.tier),
             if enabled { "yes" } else { "no" }.into(),
             status.into(),
-            note,
+            escape(&note),
         ]);
         let mut value = entry_json(entry);
         value["enabled"] = json!(enabled);
@@ -2263,6 +2531,9 @@ pub(crate) fn run_on(options: &Options, command: &str, id: &str) -> Outcome<Done
         plugin_dir: options.plugin_dir.clone(),
         keys: options.keys.clone(),
         sort: None,
+        kind: None,
+        tier: None,
+        recommended: false,
         publish: BTreeMap::new(),
     };
     match command {
@@ -2349,6 +2620,34 @@ mod tests {
         assert_eq!(id, "shout");
         assert!(matches!(request, Request::Exact(_)));
         assert!(requested_version("shout@x").is_err());
+    }
+
+    #[test]
+    fn tier_markers() {
+        // Colour only marks what the plain words already say.
+        assert_eq!(tier_marker(Tier::Official), "[bold green]✓ official[/]");
+        assert_eq!(tier_marker(Tier::Reviewed), "approved");
+        assert_eq!(tier_marker(Tier::Community), "[yellow]community[/]");
+        assert_eq!(
+            row_markup("Tier", "community: [b]x[/b]"),
+            "[yellow]community[/]: \\[b]x\\[/b]"
+        );
+        // Only the Tier row is marked; any other value is escaped as is.
+        assert_eq!(row_markup("Name", "✓ official"), "✓ official");
+        assert_eq!(
+            row_markup("Recommended", "★ recommended since x: [i]"),
+            "[bold magenta]★ recommended[/] since x: \\[i]"
+        );
+        assert_eq!(repository_owner("https://github.com/ada/x.git"), "ada");
+        assert_eq!(repository_owner("https://example.test"), "example.test");
+        assert_eq!(
+            repository_source("https://github.com/ada/x.git/"),
+            "github.com/ada/x"
+        );
+        let options = parse(&args(&["plugin", "search", "--tier", "reviewed"])).unwrap();
+        assert_eq!(options.tier, Some(Tier::Reviewed));
+        assert!(options.publish.is_empty());
+        assert!(parse(&args(&["plugin", "list", "--tier", "official"])).is_err());
     }
 
     #[test]

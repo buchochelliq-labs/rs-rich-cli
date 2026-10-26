@@ -1,0 +1,30 @@
+❯ rich plugin search --recommended
+┏━━━━━━━━━━━━━━┳━━━━━━━━━━━━━┳━━━━━━━━━━━━━━━┳━━━━━━━━━┳━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Id           ┃ Kind        ┃ Tier          ┃ Version ┃ Installed ┃ Description                       ┃
+┡━━━━━━━━━━━━━━╇━━━━━━━━━━━━━╇━━━━━━━━━━━━━━━╇━━━━━━━━━╇━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ status-icons │ micro-pack  │ approved      │ 1.0.0   │           │ Success, warning and failure      │
+│              │             │ ★ recommended │         │           │ badges as two-cell micro assets.  │
+│              │             │               │         │           │ Authored by Example Artist from   │
+│              │             │               │         │           │ github.com/example/status-icons   │
+│ textcase     │ wasm-plugin │ ✓ official    │ 0.2.0   │           │ Changes the case of ASCII text    │
+│              │             │ ★ recommended │         │           │ (upper, lower, title, snake,      │
+│              │             │               │         │           │ kebab, camel), and draws loud     │
+│              │             │               │         │           │ fences in bold capitals           │
+│              │             │               │         │           │ Authored by rs-rich               │
+└──────────────┴─────────────┴───────────────┴─────────┴───────────┴───────────────────────────────────┘
+❯
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

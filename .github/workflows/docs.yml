@@ -42,6 +42,7 @@ on:
       - crates/rich-intuituive/**
       - crates/rich-web/**
       - scripts/check_playground_*.mjs
+      - scripts/check_marketplace_page.mjs
       - scripts/test_build_versioned_docs.py
   pull_request:
     paths:
@@ -69,6 +70,7 @@ on:
       - crates/rich-intuituive/**
       - crates/rich-web/**
       - scripts/check_playground_*.mjs
+      - scripts/check_marketplace_page.mjs
       - scripts/test_build_versioned_docs.py
   workflow_dispatch:
 
@@ -171,6 +173,13 @@ jobs:
 
       - name: Build the Python site
         run: mkdocs build --strict -f mkdocs-python.yml
+
+      # The Marketplace page in headless Chromium, against the fixture
+      # marketplace (docs/tapes/fixtures/marketplace), and its logic under
+      # Node; then that no page of either site loads anything from another
+      # site (the fonts are served with it, and no GitHub API call).
+      - name: Check the Marketplace page, and that the site loads nothing from outside
+        run: node scripts/check_marketplace_page.mjs site
 
       - name: Check every referenced image exists
         run: |

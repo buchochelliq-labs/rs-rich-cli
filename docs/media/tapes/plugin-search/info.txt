@@ -1,0 +1,30 @@
+❯ rich plugin info shout
+shout
+
+Name          Shout
+Kind          wasm-plugin
+Tier          community: checked by the marketplace's CI only, not reviewed
+Publisher     Community: published by example, not by rs-rich. Made by its author: check its source and
+              permissions
+Authored by   Example Author from github.com/example/rich-shout
+Description   Upper-cases text and draws `shout` fences in bold.
+License       MIT OR Apache-2.0
+Repository    https://github.com/example/rich-shout
+Newest        0.2.0 (suits this host)
+Capabilities  transform upper, fence-markup shout, fence-ansi shout-ansi
+Permissions   ansi-output
+
+┏━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
+┃ Version ┃ Published  ┃ Requires       ┃ Loads here ┃ Yanked                                          ┃
+┡━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━╇━━━━━━━━━━━━╇━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┩
+│ 0.2.0   │ 2026-10-18 │ plugin ABI 1.0 │ yes        │                                                 │
+│ 0.1.1   │ 2026-10-12 │ plugin ABI 1.0 │ yes        │ The `upper` transform drops combining marks;    │
+│         │            │                │            │ use 0.2.0.                                      │
+│ 0.1.0   │ 2026-10-01 │ plugin ABI 1.0 │ yes        │                                                 │
+└─────────┴────────────┴────────────────┴────────────┴─────────────────────────────────────────────────┘
+❯
+
+
+
+
+

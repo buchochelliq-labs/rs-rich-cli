@@ -100,7 +100,10 @@ fn item(listing: &Listing, installed: Option<&LockEntry>, state: &State) -> Item
     let host = Host::current();
     let candidate = resolve(listing, &host, &Request::Newest).ok();
     let version = candidate.or_else(|| listing.versions.first());
-    let mut label = format!("{}  {}", line(&listing.id), listing.tier);
+    let mut label = format!("{}  {}", line(&listing.id), tier_label(listing.tier));
+    if listing.recommended.is_some() {
+        label.push_str(&format!("  {RECOMMENDED_LABEL}"));
+    }
     if let Some(entry) = installed {
         label.push_str(&format!("  installed {}", entry.version));
         if !state.is_enabled(&entry.id) {
@@ -111,8 +114,13 @@ fn item(listing: &Listing, installed: Option<&LockEntry>, state: &State) -> Item
         .description(line(&listing.description))
         .keyword(line(&listing.name))
         .keyword(listing.kind.as_str());
-    for keyword in &listing.keywords {
+    for keyword in listing.keywords.iter().chain(&listing.authors) {
         item = item.keyword(line(keyword));
+    }
+    if let Some(version) = version {
+        for capability in &version.capabilities {
+            item = item.keyword(line(&capability.name));
+        }
     }
     let mut markup = format!(
         "[bold]{}[/] {}\n\n",
@@ -121,7 +129,7 @@ fn item(listing: &Listing, installed: Option<&LockEntry>, state: &State) -> Item
     );
     if let Some(version) = version {
         for (key, value) in provenance(listing, version) {
-            markup.push_str(&format!("[bold]{key}[/]  {}\n", escape(&value)));
+            markup.push_str(&format!("[bold]{key}[/]  {}\n", row_markup(key, &value)));
         }
         if candidate.is_none() {
             markup.push_str("\n[yellow]No version of it suits this host.[/]\n");

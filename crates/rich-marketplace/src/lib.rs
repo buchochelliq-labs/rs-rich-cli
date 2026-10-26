@@ -67,8 +67,8 @@ pub use keys::{
     KeyId, KeySet, Rotation, RotationKind, TrustedKey, KEYS_COMMENT_PREFIX, KEYS_SCHEMA_VERSION,
 };
 pub use listing::{
-    Artifact, Capability, CrateInfo, Kind, ListedVersion, Listing, Requires, Tier,
-    LISTING_SCHEMA_VERSION, OFFICIAL_PREFIX,
+    Artifact, Capability, CrateInfo, Kind, ListedVersion, Listing, Recommended, Requires, Tier,
+    LISTING_SCHEMA_VERSION, MAX_RECOMMENDED_NOTE, OFFICIAL_PREFIX,
 };
 pub use lockfile::{LockEntry, Lockfile, LOCKFILE_NAME, LOCKFILE_SCHEMA_VERSION};
 pub use resolve::{resolve, Host, Request, MICRO_SCHEMA_VERSION, THEME_FORMAT};

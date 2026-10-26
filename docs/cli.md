@@ -2384,8 +2384,37 @@ without a word. `rich` itself sends nothing to be counted. To rate a
 package, react 👍 or 👎 to its discussion in the marketplace repository's
 Reviews category; to review it, comment there.
 
+**Searching.** `rich plugin search WORDS` lists the packages with every
+word in their id, name, description, keywords, authors or capabilities, so
+`rich plugin search rot13` finds the plugin with a `rot13` transform.
+`--kind` (`crate`, `wasm-plugin`, `micro-pack`, `theme`), `--tier`
+(`official`, `reviewed`, `community`) and `--recommended` narrow it. When
+nothing matches, it points at `rich plugin browse` and the
+[Marketplace page](marketplace.md), which lists the same packages in a
+browser, with download counts and reviews.
+
+```bash
+rich plugin search --kind theme --tier official   # rs-rich's own themes
+rich plugin search --recommended                  # the maintainers' picks
+```
+
+**Telling rs-rich's own packages apart.** Every command marks the tier:
+`✓ official` (green) is built and published by rs-rich, `approved` (the
+listing's `reviewed` tier) is someone else's package whose source a
+maintainer read and rebuilt, and `community` (yellow) is someone else's,
+checked by the marketplace's CI only. The words read the same without
+colour. `info` and the install prompt say who publishes the package
+("Official: built and published by rs-rich", or "Community: published by
+OWNER, not by rs-rich") and who authored it: rs-rich, or the listing's own
+`authors` and its repository. A listing's name, description and authors
+are its author's words; they cannot make the mark, and authors that claim
+rs-rich are shown in quotes. `★ recommended` marks a maintainer's pick,
+with the reason in `info`. The JSON reports keep `tier` as the listing says
+it and add `tier_label` and `recommended`.
+
 Before it writes anything, `install` shows the package's tier
-(`official`, `reviewed` or `community`), its source and revision, the
+(`✓ official`, `approved` or `community`), who publishes and authored it,
+its source and revision, the
 artifact's URL, SHA-256 and size, and its capabilities and permissions,
 then asks. Without a terminal it asks nothing: pass `--yes`, or it exits 3.
 Answering no exits 1. A WASM plugin is loaded in the sandbox before it is installed, to check that its

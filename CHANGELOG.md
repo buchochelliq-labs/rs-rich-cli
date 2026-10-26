@@ -9,6 +9,36 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **The docs site loads nothing from other sites** (docs). Roboto and
+  Roboto Mono are served with the site (`docs/assets/fonts/`, from
+  fontsource 5.3.0, OFL-1.1) instead of Google Fonts (`theme.font: false`
+  in both MkDocs configs), the header's repository link no longer asks the
+  GitHub API for stars and forks (`scripts/docs_overrides/partials/source.html`),
+  and the home page's shields.io and CI badges are plain links. The
+  Marketplace page's check now also fails when a built page embeds, or a
+  page in Chromium requests, anything from another host.
+
+- **Search the plugin marketplace on the web and in the terminal**
+  (docs, rs-rich-cli, rs-rich-marketplace, the listing format). The docs
+  site gains a [Marketplace page](docs/marketplace.md): it reads the signed
+  index and every listing in the browser (each checked by SHA-256 against
+  the index), with free-text search over ids, names, descriptions,
+  capabilities and authors, filters by kind and tier, "Official only" and
+  "Recommended only", six sorts (downloads and ratings from the nightly,
+  unsigned `stats.json`), deep links, and a copy button for each install or
+  `cargo add` command. It says when the first index is still being
+  signed, sends nothing but its requests to the marketplace, and is
+  checked in Chromium against a fixture marketplace. `rich plugin search`
+  gains `--kind`, `--tier` and `--recommended`, matches capabilities and
+  authors, needs every word, and points at `browse` and the page when
+  nothing matches; a new tape records `search`, `info` and `browse`.
+  Every `rich plugin` command marks rs-rich's own packages (`✓ official`),
+  shows the `reviewed` tier as "approved", and says who publishes and who
+  authored each package; reports add `tier_label`. A new optional listing
+  key, `recommended` (`since`, and a `note` of at most 140 characters),
+  marks a maintainer's pick: in the schema, the validator,
+  `Listing::recommended` and as `★ recommended`.
+
 - **The plugin marketplace goes live** (rs-rich-cli, rs-rich-plugin-api's
   examples): rs-rich-marketplace lists the Mermaid, DOT and lumis crates,
   `textcase` (a new official WASM plugin: the `upcase` and `downcase`

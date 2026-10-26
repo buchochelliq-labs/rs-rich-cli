@@ -10,6 +10,10 @@
     "Example Artist"
   ],
   "repository": "https://github.com/example/status-icons",
+  "recommended": {
+    "since": "2026-10-26",
+    "note": "Clear status badges that read well at two cells, in any colour scheme."
+  },
   "versions": [
     {
       "version": "1.0.0",
