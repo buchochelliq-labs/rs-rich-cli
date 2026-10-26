@@ -418,6 +418,27 @@ and `the_average_filter_blends_what_each_pixel_covers`, and
 
 ### 13. Sound in recordings (rs-rich-record)
 
+**Status: left for the maintainer's decision.** The pieces it builds on
+are there (gap 9's null output and `Output::tap`, with `Tap::to_wav`),
+but what joins them is a design choice, not a port of the proposal:
+
+- **How the program's sound reaches the recorder.** rs-rich-record does
+  not depend on intuiTUIve, so either (a) a contract through the
+  environment: the recorder sets, say, `RICH_RECORD_AUDIO=<path>` and
+  intuiTUIve's `output()` opens a null output tapped to that file, with
+  its start time on the recording's clock; (b) an ALSA device the
+  recorder provides (`HOME` with an `.asoundrc` onto a paced FIFO, as
+  rs-rich-doom's video script does), which covers any program but is
+  Linux-only and needs the recorder to pace the reads; or (c) a
+  PulseAudio null sink and its monitor, which needs a running server.
+- **The tape syntax and the format.** `Set Audio on` in a tape, or
+  `rich record --audio`, and what happens to outputs other than MP4 (GIF,
+  APNG and the HTML player have no sound; a WAV beside them?).
+- **Sync.** The recorder's frame timestamps are its own clock's; the
+  sound's start must be put on that clock (`-itsoffset` for ffmpeg), and
+  ffmpeg must have an AAC encoder (the built-in `aac` is enough).
+
+
 - **What Doom needed:** a video of the game with its sound.
 - **Workaround:** `docs/media/play/record.sh`: xterm on Xvfb captured by
   ffmpeg, the sound through gap 9's ALSA-FIFO tap, muxed with ffmpeg.
