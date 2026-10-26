@@ -9,17 +9,11 @@ pinned in UPSTREAM.toml, and writes what it printed beside the document:
 `crates/rich-ext/tests/rst.rs` asserts the port prints the same bytes.
 
 Install the pins in a virtualenv of their own (never beside rich-cli, which
-would downgrade rich; see AGENTS.md):
-
-    pip install "rich==15.0.0" "rich-rst==1.3.2" "docutils==0.23"
-    python scripts/capture_rst_golden.py
-
-With `--next`, it captures the release the port is moving to instead
-(`next` under `[rich-rst]` in UPSTREAM.toml; 2.x vendors its own docutils)
-into `fixtures/rst-next/`, which `rst.rs` measures but does not yet require:
+would downgrade rich; see AGENTS.md), with NO_COLOR unset. rich-rst 2.x
+vendors its own docutils:
 
     pip install "rich==15.0.0" "rich-rst==2.2.0"
-    python scripts/capture_rst_golden.py --next
+    python scripts/capture_rst_golden.py
 
 Only documents without code blocks are captured in colour: code is
 highlighted by Pygments upstream and by syntect here, as `--syntax` is.
@@ -51,23 +45,18 @@ COLOUR = {
     "line_blocks",
     "wide_tables",
     "structure",
+    "docinfo",
+    "fields",
 }
 
 
-def check_versions(next_release: bool) -> None:
+def check_versions() -> None:
     pins = tomllib.loads((ROOT / "UPSTREAM.toml").read_text())
     for section in ("rich", "rich-rst"):
-        key = "next" if next_release and section == "rich-rst" else "version"
-        expected = pins[section][key]
+        expected = pins[section]["version"]
         installed = importlib.metadata.version(pins[section]["pypi"])
         if installed != expected:
             sys.exit(f"{section}: installed {installed}, expected {expected} from UPSTREAM.toml")
-    if next_release:
-        return
-    expected = pins["rich-rst"]["docutils"]
-    installed = importlib.metadata.version("docutils")
-    if installed != expected:
-        sys.exit(f"docutils: installed {installed}, expected {expected} from UPSTREAM.toml")
 
 
 def render(source: str, width: int, colour: bool) -> str:
@@ -92,10 +81,8 @@ def render(source: str, width: int, colour: bool) -> str:
 
 
 def main() -> None:
-    next_release = "--next" in sys.argv[1:]
-    check_versions(next_release)
-    target = FIXTURES.with_name("rst-next") if next_release else FIXTURES
-    target.mkdir(exist_ok=True)
+    check_versions()
+    target = FIXTURES
     for path in sorted(FIXTURES.glob("*.rst")):
         source = path.read_text()
         for width in WIDTHS:

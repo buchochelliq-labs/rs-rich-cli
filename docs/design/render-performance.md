@@ -329,7 +329,10 @@ frame.
 
 `tests/versus_ratatui.rs`, release, like for like (µs a frame, bytes a
 frame); its `Feed` now hands out one key a frame, as noted above. The
-gated scenes use the default `cells`; `best` is shown where it differs.
+gated scenes used `cells`, the default then; `best` is shown where it differs.
+Since 0.0.23 the gate runs under `best`, the default. Its run on
+2026-10-26: the log append 325 B at 80x24 and 410 B at 200x60, the other
+scenes' bytes as under `cells`, every scene within the scorecard.
 
 | Size | Scene | ratatui | intuiTUIve before | intuiTUIve now |
 |---|---|---:|---:|---:|
@@ -661,7 +664,7 @@ choice sits at `Driver::paint` and inside `Painter::paint`, the one place
 a frame becomes bytes.
 
 - **`Cells`:** today's per-cell diff inside the damage. The default until
-  `best` has its numbers.
+  `best` had its numbers; since 0.0.23, `best` is.
 - **`Rows`:** compare whole rows by hash, and rewrite changed rows from
   their first change to their last.
 - **`Full`:** repaint everything: home, then each row, then clear the rest.
@@ -1245,7 +1248,11 @@ under a modal, so it waits for one.
 ## Open questions
 
 - **Decided on 2026-10-25:** `best` ships opt-in for one release, then
-  becomes the default once it beats `cells` on every scene. Work starts
+  becomes the default once it beats `cells` on every scene. **Done on
+  2026-10-26:** within 5% of the best fixed strategy on every scene of
+  the release benchmark, `best` is the default (`PaintStrategy::default()`
+  and an app that does not choose). A bare `Painter` starts on `cells`:
+  only its caller knows where pictures sit and whether tmux is in the way. Work starts
   now on two branches: the painter, and the viewport with Noctiluca.
 - **Decided on 2026-10-25:** the game ideas are lessons, not features.
   We learn how games optimise (measure first, profile each stage, then fix

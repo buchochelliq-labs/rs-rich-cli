@@ -608,42 +608,51 @@ open ones are **permanent**, each for the reason in its entry:
 - **Verdict (0.0.22): permanent** until a major CLI release.
 
 ### 35. `rich --rst` renders a subset of reStructuredText
-- **Differs:** rich-cli's `--rst` hands the document to docutils, and
-  `rich-rst` 1.3.2 renders the tree. `rich_ext::rst` parses the common subset
-  itself: sections, paragraphs and inline markup, lists, definition, field and
-  option lists, literal and doctest blocks, block quotes, line blocks, grid
-  and simple tables, footnotes, citations, hyperlink targets, `replace` and
-  `image` substitutions, and the `code`, admonition, `image`, `figure`,
-  `contents`, `topic`, `rubric`, `math`, `sidebar`, `raw`, `container` and
-  `compound` directives. Other directives (`list-table`, `csv-table`,
-  `include`, `unicode`, `header`, …) render nothing, and a figure's caption
-  is dropped. Two documents that make `rich-rst` raise render here: one that
-  starts with a field list, and a sidebar with more than a subtitle and one
-  paragraph. Also not ported: docutils' quoted literal blocks (unindented
-  lines after `::` that start with punctuation) and the `date` substitution
-  (`.. |d| date::`, today's date upstream), which render nothing; and a
-  byte-order mark at the start of the file, which the CLI's decoding strips
-  and docutils keeps as text.
-- **Deeper than docutils:** body elements nest at most 200 deep here (lists
-  in lists, quotes in quotes), and very deep documents stop nesting sooner
-  once re-reading their indented lines passes a budget linear in their size;
+- **Differs:** rich-cli's `--rst` hands the document to `rich-rst` 2.2.0,
+  which parses it with its vendored docutils (0.22.4), applies docutils'
+  transforms and renders the tree. `rich_ext::rst` parses the common subset
+  into the same tree and applies the same transforms (the document title
+  and subtitle, bibliographic fields, substitutions, footnote numbers and
+  symbols, hyperlink targets, the table of contents, transitions). The
+  subset: sections, paragraphs and inline markup (docutils' roles and the
+  Sphinx roles `rich-rst` registers), bullet, enumerated, definition, field
+  and option lists, literal, doctest and parsed-literal blocks, block quotes,
+  line blocks, grid and simple tables (cells that span included),
+  footnotes, citations, hyperlink targets (named, anonymous, indirect,
+  embedded), `replace` and `image` substitutions, and the `code`
+  (`code-block`, `sourcecode`), admonition, `seealso`, `versionadded`,
+  `versionchanged`, `deprecated`, `image`, `figure`, `contents`, `topic`,
+  `rubric`, `math`, `sidebar`, `raw`, `container`, `compound`,
+  `line-block`, `epigraph`, `highlights`, `pull-quote`, `table`,
+  `list-table` and `csv-table` (its data inline) directives, and `include`,
+  which says file access is off, as `rich-rst` does by default. Other
+  directives docutils or `rich-rst`'s Sphinx registry knows (`unicode`,
+  `date`, `sectnum`,
+  `header`, `footer`, `class`, `role`, `toctree`, `literalinclude`,
+  `glossary`, `hlist`, `only`, `centered`, the domain directives and a few
+  more) render nothing here; an unknown directive shows its source, as
+  upstream's error does. Also not ported: docutils' quoted literal blocks
+  (unindented lines after `::` that start with punctuation) and the `date`
+  substitution, which render nothing; and a byte-order mark at the start of
+  the file, which the CLI's decoding strips and docutils keeps as text.
+- **Deeper than docutils:** body elements nest at most 100 deep (lists in
+  lists, quotes in quotes), and very deep documents stop nesting sooner once
+  re-reading their indented lines passes a budget linear in their size;
   past that the rest is one plain paragraph. docutils itself stops with a
-  `RecursionError` at about 170 levels, so nothing upstream renders is
-  affected.
+  `RecursionError` at about 170 levels, where `rich-rst` raises.
 - **Same:** everything the subset covers prints byte for byte what
-  `rich-rst` prints on rich 15.0.0, quirks included
-  (`crates/rich-ext/tests/rst.rs`, fixtures from
-  `scripts/capture_rst_golden.py`). As everywhere, code blocks are
-  highlighted by syntect (§18) and OSC 8 links carry no `id=`.
+  `rich-rst` 2.2.0 prints on rich 15.0.0, quirks included
+  (`crates/rich-ext/tests/rst.rs`: 19 documents at two widths, 10 of them
+  in colour too, from `scripts/capture_rst_golden.py`). As everywhere,
+  code blocks are highlighted by syntect (§18) and OSC 8 links carry no
+  `id=`.
 - **Why:** there is no docutils for Rust, and the subset is what READMEs and
   docstrings use.
 - **Remove:** as more of docutils' directives are ported.
-- **Verdict (0.0.22): permanent** for the parts docutils alone can do.
-  The target is moving from rich-rst 1.3.2 to 2.2.0, a rewrite (docutils
-  vendored, Sphinx directives, real tables, list markers): its output for
-  every fixture is captured in `fixtures/rst-next/` and measured by an
-  ignored test in `crates/rich-ext/tests/rst.rs`; the port still matches
-  1.3.2 until it is switched over.
+- **Verdict (0.0.23): permanent** for the parts docutils alone can do. The
+  port moved from `rich-rst` 1.3.2 to 2.2.0 in 0.0.23 (plan item 2): titles
+  by section level, real tables, list markers, numbered footnotes and
+  resolved references, where 1.3.2 showed the raw tree.
 
 ### 36. Semantic regions: an opt-in seam, no default change (#226)
 - **Differs:** nothing by default. `rich::protocol` adds `RegionSink`, set on

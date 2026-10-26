@@ -1,13 +1,13 @@
-┌─────── raw stripped raw html ────────┐
+┌───────── stripped raw html ──────────┐
 │ A © B © C © D & E ¬it; F – G &bogus; │
 │  I < J > K if (a < b) {} L <tag>     │
 │ M N � O � P                          │
 └──────────────────────────────────────┘
-┌─────── raw stripped raw html ────────┐
-│ one two                              │
+┌───────── stripped raw html ──────────┐
+│ one two three &                      │
 └──────────────────────────────────────┘
 After.
 
-┌─────── raw stripped raw html ────────┐
+┌───────── stripped raw html ──────────┐
 │ x                                    │
 └──────────────────────────────────────┘
