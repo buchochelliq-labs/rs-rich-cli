@@ -118,6 +118,34 @@ fn a_module_that_loops_forever_is_stopped_by_fuel() {
 }
 
 #[test]
+fn a_loop_over_memory_grow_runs_out_of_fuel_without_overflowing_the_stack() {
+    // With wasmi's tail-call dispatch, an optimised build (`cargo test
+    // --release`) overflowed the host's stack on this loop and aborted the
+    // process; a debug build always used the portable dispatch. Found by the
+    // `plugin_wasm` fuzz target. The call runs on a small stack, so a
+    // dispatch that grows the stack per instruction fails here quickly.
+    let grow = plugin(
+        LOOPS,
+        "(loop $l (drop (memory.grow (local.get 0))) (br $l)) (i64.const 0)",
+        "",
+    );
+    let path = module("grow-loop.wasm", &grow);
+    let limits = WasmLimits {
+        fuel: 5_000_000,
+        ..WasmLimits::default()
+    };
+    let plugin = load_wasm(&path, &limits).unwrap();
+    let error = std::thread::Builder::new()
+        .stack_size(256 << 10)
+        .spawn(move || plugin.call(0, "x", 0))
+        .unwrap()
+        .join()
+        .expect("the call returns instead of overflowing the stack")
+        .unwrap_err();
+    assert!(error.contains("ran out of fuel"), "{error}");
+}
+
+#[test]
 fn a_module_that_asks_for_too_much_memory_is_refused() {
     let limits = WasmLimits {
         memory_bytes: 4 * 1024 * 1024,

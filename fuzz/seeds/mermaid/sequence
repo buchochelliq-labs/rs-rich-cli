@@ -1,0 +1,4 @@
+žsequenceDiagram
+  Alice->>Bob: hi
+  Bob-->>Alice: ok
+  Note over Alice,Bob: done

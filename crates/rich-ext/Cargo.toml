@@ -61,8 +61,13 @@ clap = { version = "4.5", default-features = false, features = ["std", "help", "
 # Runtime plugins (docs/design/plugin-loading.md). Native libraries through a
 # versioned C ABI, and WASM modules in wasmi, a pure-Rust interpreter (no JIT,
 # no WASI). Both off by default: loading either runs third-party code.
+# wasmi runs with its portable (loop) dispatch, not tail-call dispatch: with
+# tail calls, an optimised build overflowed the host's stack, aborting the
+# process, on a plugin that loops over `memory.grow` with a register operand
+# (wasmi 2.0.0; found by the `plugin_wasm` fuzz target). Slower, but a
+# plugin cannot take the host down.
 libloading = { version = "0.9", optional = true }
-wasmi = { version = "2", default-features = false, features = ["std", "validate", "stable", "auto-dispatch"], optional = true }
+wasmi = { version = "2", default-features = false, features = ["std", "validate", "stable", "portable-dispatch"], optional = true }
 # `fs::local_time`: the local time zone (chrono's `clock`, through
 # iana-time-zone). Already in the tree through arrow; off by default.
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"], optional = true }

@@ -9,6 +9,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **Fuzz targets, run nightly** (repository; rs-rich): `fuzz/` holds
+  cargo-fuzz targets for every parser that takes outside input (markup,
+  ANSI, Markdown, JSON, DOT, Mermaid, CSV/TSV and JSONL, stylesheets, the
+  VT emulator and tapes, web input and WebSocket frames, the marketplace's
+  documents and signatures, plugin manifests and WASM modules), and
+  `fuzz.yml` runs each for ten minutes every night. They found one bug,
+  fixed: `AnsiDecoder` panicked on a multi-byte character after `ESC (`;
+  it now skips one character, as rich 15.0.0 does. See
+  `docs/design/fuzzing.md`.
+
 - **The plugin marketplace goes live** (rs-rich-cli, rs-rich-plugin-api's
   examples): rs-rich-marketplace lists the Mermaid, DOT and lumis crates,
   `textcase` (a new official WASM plugin: the `upcase` and `downcase`
