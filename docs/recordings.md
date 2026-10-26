@@ -1157,10 +1157,14 @@ and a recording without it is the same as before.
 
 The recorder makes a directory and names it in the program's environment
 as `RICH_RECORD_AUDIO`. A program that plays sound writes what it plays
-there instead of to a sound card. intuiTUIve's audio outputs
-(`audio::output`, `audio::output_with`, and a `Mixer` playing into one) do
-this by themselves: under the recorder they open no device, take their
-samples on the real clock, and write them to the recording. Any other
+there as well. intuiTUIve's audio outputs (`audio::output`,
+`audio::output_with`, and a `Mixer` playing into one) do this by
+themselves. Under the recorder they play on the sound card as usual and
+copy every block the card plays into the recording, timed by the card's
+own clock: its latency is counted, and an underrun stays a gap of
+silence, so the sound keeps in step with the frames. With no sound card
+(CI, a headless machine) they take their samples on the real clock and
+write them to the recording alone. Any other
 program can write the same files: each is a 24-byte header (the magic
 `RRAUDIO1`, the rate as a `u32`, the channels as a `u16`, two zero bytes,
 and when its first sample played, in nanoseconds since the Unix epoch, as a

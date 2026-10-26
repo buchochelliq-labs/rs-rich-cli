@@ -93,7 +93,9 @@ assert!(problems.is_empty(), "{problems:?}");
 `Options::audio`) records the program's sound too. The recorder names a
 directory in the program's environment as `RICH_RECORD_AUDIO`, and a
 program writes what it plays there, as timed PCM streams (the format is in
-the `audio` module's docs). intuiTUIve's audio outputs do it by themselves.
+the `audio` module's docs). intuiTUIve's audio outputs do it by themselves,
+playing on the sound card as well, or to the recording alone when there
+is none.
 An MP4 carries the sound as AAC, placed with FFmpeg's `-itsoffset`; a GIF,
 an APNG, the page and the cast get a WAV beside them. What played during
 `Hide` is cut, as the frames are. It is off by default.

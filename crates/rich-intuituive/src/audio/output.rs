@@ -6,18 +6,17 @@
 //!
 //! Under `rich record --audio` (or a tape's `Set Audio on`) the recorder
 //! sets [`RECORD_AUDIO_ENV`] in the program's environment, and an output
-//! that would open a device writes what it plays to the recording instead
-//! (see [`output`]).
+//! that opens a device also writes what it plays to the recording; with
+//! no device to open, it plays to the recording alone (see [`output`]).
 
 use std::collections::VecDeque;
-use std::io::Write as _;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard, Weak};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
-use cpal::{FromSample, SampleFormat, SizedSample};
+use cpal::{FromSample, OutputStreamTimestamp, SampleFormat, SizedSample};
 
 use super::capture::{id_of, quiet, quiet_stream_thread};
 use super::{error, AudioError, Device, Host, Matrix};
@@ -196,7 +195,7 @@ struct Shared {
     /// The taps recording what the device takes.
     taps: Mutex<Vec<Weak<TapShared>>>,
     /// The recorder's stream, under `rich record --audio`.
-    recording: Mutex<Option<std::fs::File>>,
+    recording: Mutex<Option<Recorder<std::fs::File>>>,
 }
 
 /// A renderer: fills interleaved samples for the channels given.
@@ -241,19 +240,21 @@ impl Shared {
 
     /// The callback: fill `out` from the queue or the renderer (silence
     /// while paused or short), at the volume.
-    fn play<T: SizedSample + FromSample<f32>>(&self, out: &mut [T]) {
+    fn play<T: SizedSample + FromSample<f32>>(&self, out: &mut [T], at: OutputStreamTimestamp) {
         let mut scratch = lock(&self.scratch);
         scratch.clear();
         scratch.resize(out.len(), 0.0);
-        self.fill(&mut scratch);
+        self.fill(&mut scratch, Some(at));
         for (slot, &sample) in out.iter_mut().zip(scratch.iter()) {
             *slot = T::from_sample(sample);
         }
     }
 
     /// Fill `out`, interleaved, with what plays next, at the volume, and
-    /// hand it to the taps.
-    fn fill(&self, out: &mut [f32]) {
+    /// hand it to the taps and the recording. `at` is when a device's
+    /// callback says the block plays; a null output's blocks follow its
+    /// clock and have none.
+    fn fill(&self, out: &mut [f32], at: Option<OutputStreamTimestamp>) {
         let volume = f32::from_bits(self.volume.load(Ordering::Relaxed));
         let paused = self.paused.load(Ordering::Relaxed);
         out.fill(0.0);
@@ -291,11 +292,8 @@ impl Shared {
         });
         drop(taps);
         let mut recording = lock(&self.recording);
-        if let Some(file) = recording.as_mut() {
-            let bytes: Vec<u8> = out.iter().flat_map(|s| s.to_le_bytes()).collect();
-            // Written at once, unbuffered: the recorder may end the
-            // program at any moment.
-            if file.write_all(&bytes).is_err() {
+        if let Some(recorder) = recording.as_mut() {
+            if recorder.block(out, at, SystemTime::now()).is_err() {
                 *recording = None;
             }
         }
@@ -306,11 +304,14 @@ impl Shared {
 
 /// The environment variable `rich record` sets when it records sound
 /// (`rich record --audio`, a tape's `Set Audio on`): a directory. An
-/// output opened while it is set ([`output`], [`output_with`]) opens no
-/// device. It takes its samples on the real clock, as
-/// [`OutputOptions::null`] does, and writes them to a file of its own in
-/// that directory, which the recorder puts on the recording's clock: into
-/// an MP4's sound track, or a WAV beside the other files.
+/// output opened while it is set ([`output`], [`output_with`]) plays on
+/// its device as usual and also writes every block the device plays to a
+/// file of its own in that directory, timed by the device's callback
+/// (its latency counted). With no device to open (CI, a headless
+/// machine) it takes its samples on the real clock instead, as
+/// [`OutputOptions::null`] does, and writes them there. The recorder puts
+/// the file on the recording's clock: into an MP4's sound track, or a
+/// WAV beside the other files.
 ///
 /// Each file is a 24-byte header, then the samples as they play,
 /// interleaved little-endian `f32`: the magic `RRAUDIO1`, the rate (`u32`
@@ -330,29 +331,106 @@ fn recording_dir() -> Option<PathBuf> {
         .map(PathBuf::from)
 }
 
-/// A new stream file in `dir`, its header written, its first sample at
-/// `started`.
-fn recording_file(
-    dir: &std::path::Path,
-    rate: u32,
-    channels: u16,
-    started: SystemTime,
-) -> Option<std::fs::File> {
+/// A new, empty stream file in `dir`, and its path.
+fn recording_file(dir: &std::path::Path) -> Option<(std::fs::File, PathBuf)> {
     static OPENED: AtomicU32 = AtomicU32::new(0);
     let n = OPENED.fetch_add(1, Ordering::Relaxed);
     let path = dir.join(format!("{}-{n}.pcm", std::process::id()));
-    let mut file = std::fs::File::create(path).ok()?;
-    let nanos = started
-        .duration_since(UNIX_EPOCH)
-        .map_or(0, |d| u64::try_from(d.as_nanos()).unwrap_or(u64::MAX));
-    let mut header = Vec::with_capacity(24);
-    header.extend_from_slice(RECORD_MAGIC);
-    header.extend_from_slice(&rate.to_le_bytes());
-    header.extend_from_slice(&channels.to_le_bytes());
-    header.extend_from_slice(&[0, 0]);
-    header.extend_from_slice(&nanos.to_le_bytes());
-    file.write_all(&header).ok()?;
-    Some(file)
+    Some((std::fs::File::create(&path).ok()?, path))
+}
+
+/// How far a block may play from where the stream's count puts it before
+/// silence is added or samples are dropped to stay in step: a hundredth
+/// of a second, more than a callback's jitter.
+const RECORD_SLACK: Duration = Duration::from_millis(10);
+
+/// Writes what an output plays as a recorder's stream (see
+/// [`RECORD_AUDIO_ENV`]): the header when the first block is known to
+/// play, then every block. Blocks timed by a device's callback are kept
+/// in step with the device's clock: a gap (an underrun) becomes silence,
+/// and a block that plays earlier than the count says loses its overlap.
+struct Recorder<W: std::io::Write> {
+    out: W,
+    rate: u32,
+    channels: u16,
+    /// When the first sample played: set when the header is written.
+    started: Option<SystemTime>,
+    /// The first block's playback instant, on the device's clock.
+    first: Option<cpal::StreamInstant>,
+    /// Frames written.
+    frames: u64,
+}
+
+impl<W: std::io::Write> Recorder<W> {
+    fn new(out: W, rate: u32, channels: u16) -> Recorder<W> {
+        Recorder {
+            out,
+            rate,
+            channels: channels.max(1),
+            started: None,
+            first: None,
+            frames: 0,
+        }
+    }
+
+    /// Write the header: the first sample plays at `started`.
+    fn header(&mut self, started: SystemTime) -> std::io::Result<()> {
+        let nanos = started
+            .duration_since(UNIX_EPOCH)
+            .map_or(0, |d| u64::try_from(d.as_nanos()).unwrap_or(u64::MAX));
+        let mut header = Vec::with_capacity(24);
+        header.extend_from_slice(RECORD_MAGIC);
+        header.extend_from_slice(&self.rate.to_le_bytes());
+        header.extend_from_slice(&self.channels.to_le_bytes());
+        header.extend_from_slice(&[0, 0]);
+        header.extend_from_slice(&nanos.to_le_bytes());
+        self.out.write_all(&header)?;
+        self.started = Some(started);
+        Ok(())
+    }
+
+    /// Record `block`, interleaved, which plays `at` by a device's
+    /// callback (`now` being when the callback ran), or right after the
+    /// last one when `at` is `None`.
+    fn block(
+        &mut self,
+        block: &[f32],
+        at: Option<OutputStreamTimestamp>,
+        now: SystemTime,
+    ) -> std::io::Result<()> {
+        let channels = usize::from(self.channels);
+        let mut skip = 0usize;
+        match (at, self.started) {
+            (None, None) => self.header(now)?,
+            (None, Some(_)) => {}
+            (Some(at), None) => {
+                // The block is heard after the device's latency.
+                self.header(now + at.playback.duration_since(at.callback))?;
+                self.first = Some(at.playback);
+            }
+            (Some(at), Some(_)) => {
+                let first = *self.first.get_or_insert(at.playback);
+                let due = (at.playback.duration_since(first).as_secs_f64() * f64::from(self.rate))
+                    .round() as i64;
+                let drift = due - i64::try_from(self.frames).unwrap_or(i64::MAX);
+                let slack = (RECORD_SLACK.as_secs_f64() * f64::from(self.rate)) as i64;
+                if drift > slack {
+                    let silence = vec![0u8; drift as usize * channels * 4];
+                    self.out.write_all(&silence)?;
+                    self.frames += drift as u64;
+                } else if drift < -slack {
+                    skip = ((-drift) as usize).min(block.len() / channels);
+                }
+            }
+        }
+        let kept = &block[skip * channels..];
+        let bytes: Vec<u8> = kept.iter().flat_map(|s| s.to_le_bytes()).collect();
+        // Written at once, unbuffered: the recorder may end the program at
+        // any moment.
+        self.out.write_all(&bytes)?;
+        self.frames += (kept.len() / channels) as u64;
+        Ok(())
+    }
 }
 
 /// What a [`Tap`] and its output share.
@@ -452,11 +530,12 @@ impl Tap {
 /// one.
 ///
 /// While [`RECORD_AUDIO_ENV`] is set (a program run by `rich record
-/// --audio`), no device is opened: the output is a
-/// [null one](OutputOptions::null) at the rate and channels asked for
-/// (44,100 a second in two channels unless they say), and what it plays
-/// is written to the recording. Its [`device`](Output::device) is
-/// `"rich record"`.
+/// --audio`), the device plays as usual and what it plays is also written
+/// to the recording, timed by its callbacks. When no device can be
+/// opened, the output is a [null one](OutputOptions::null) at the rate
+/// and channels asked for (44,100 a second in two channels unless they
+/// say), whose sound goes to the recording alone; its
+/// [`device`](Output::device) is then `"rich record"`.
 ///
 /// ```no_run
 /// # #[cfg(feature = "audio")] {
@@ -521,17 +600,21 @@ fn open_output(options: OutputOptions, render: Option<Render>) -> Result<Output,
     if options.null {
         return Ok(null_output(&options, render, None));
     }
-    if let Some(dir) = recording_dir() {
-        return Ok(null_output(&options, render, Some(dir)));
-    }
+    let recording = recording_dir();
     let (opened, result) = mpsc::channel();
+    let (to_device, render_back) = mpsc::channel();
+    let fallback = options.clone();
+    let dir = recording.clone();
     std::thread::Builder::new()
         .name("intuituive-audio-out".into())
         .spawn(move || {
             let _quiet = quiet();
-            let (stream, shared) = match start(&options, render) {
+            let mut render = render;
+            let (stream, shared) = match start(&options, &mut render, dir.as_deref()) {
                 Ok(started) => started,
                 Err(e) => {
+                    // The renderer comes back for a recording's null output.
+                    let _ = to_device.send(render);
                     let _ = opened.send(Err(e));
                     return;
                 }
@@ -543,9 +626,18 @@ fn open_output(options: OutputOptions, render: Option<Render>) -> Result<Output,
             drop(stream);
         })
         .map_err(error)?;
-    let shared = result
+    let shared = match result
         .recv()
-        .unwrap_or_else(|_| Err(error("the audio thread stopped")))?;
+        .unwrap_or_else(|_| Err(error("the audio thread stopped")))
+    {
+        Ok(shared) => shared,
+        // Recording with no device: the recording alone, on the clock.
+        Err(_) if recording.is_some() => {
+            let render = render_back.recv().ok().flatten();
+            return Ok(null_output(&fallback, render, recording));
+        }
+        Err(e) => return Err(e),
+    };
     Ok(Output {
         _handle: Arc::new(Handle(shared.clone())),
         shared,
@@ -578,8 +670,11 @@ fn null_output(
         .name("intuituive-audio-null".into())
         .spawn(move || {
             let start = Instant::now();
-            if let Some(dir) = recording {
-                *lock(&taker.recording) = recording_file(&dir, rate, channels, SystemTime::now());
+            if let Some((file, _)) = recording.and_then(|dir| recording_file(&dir)) {
+                let mut recorder = Recorder::new(file, rate, channels);
+                if recorder.header(SystemTime::now()).is_ok() {
+                    *lock(&taker.recording) = Some(recorder);
+                }
             }
             let mut taken = 0u64;
             let mut buffer = Vec::new();
@@ -589,7 +684,7 @@ fn null_output(
                 if due > taken {
                     buffer.clear();
                     buffer.resize((due - taken) as usize * usize::from(channels), 0.0);
-                    taker.fill(&mut buffer);
+                    taker.fill(&mut buffer, None);
                     taken = due;
                 }
             }
@@ -604,10 +699,13 @@ fn null_output(
     }
 }
 
-/// Open and start the stream of a new output.
+/// Open and start the stream of a new output; with `recording`, what it
+/// plays is also written to a stream file there. `render` is taken only
+/// once the stream plays: on an error it is still there.
 fn start(
     options: &OutputOptions,
-    render: Option<Render>,
+    render: &mut Option<Render>,
+    recording: Option<&std::path::Path>,
 ) -> Result<(cpal::Stream, Arc<Shared>), AudioError> {
     let host = options.host.open()?;
     let device = match &options.device {
@@ -662,8 +760,14 @@ fn start(
         sample_rate: rate,
         buffer_size: cpal::BufferSize::Default,
     };
-    let shared = Arc::new(Shared::new(label, rate, channels, options.queue, render));
-    let stream = match format {
+    let shared = Arc::new(Shared::new(
+        label,
+        rate,
+        channels,
+        options.queue,
+        render.take(),
+    ));
+    let built = match format {
         SampleFormat::F32 => build::<f32>(&device, &config, &shared),
         SampleFormat::I16 => build::<i16>(&device, &config, &shared),
         SampleFormat::I32 => build::<i32>(&device, &config, &shared),
@@ -672,10 +776,30 @@ fn start(
         SampleFormat::U8 => build::<u8>(&device, &config, &shared),
         SampleFormat::I8 => build::<i8>(&device, &config, &shared),
         SampleFormat::U32 => build::<u32>(&device, &config, &shared),
-        other => return Err(error(format!("unsupported sample format {other}"))),
-    }?;
-    stream.play().map_err(error)?;
-    Ok((stream, shared))
+        other => Err(error(format!("unsupported sample format {other}"))),
+    };
+    // The stream file, before the stream plays, so its first block is
+    // recorded.
+    let file = match (&built, recording) {
+        (Ok(_), Some(dir)) => recording_file(dir),
+        _ => None,
+    };
+    let path = file.map(|(file, path)| {
+        *lock(&shared.recording) = Some(Recorder::new(file, rate, channels));
+        path
+    });
+    let stream = built.and_then(|stream| stream.play().map(|()| stream).map_err(error));
+    match stream {
+        Ok(stream) => Ok((stream, shared)),
+        Err(e) => {
+            *render = lock(&shared.render).take();
+            lock(&shared.recording).take();
+            if let Some(path) = path {
+                let _ = std::fs::remove_file(path);
+            }
+            Err(e)
+        }
+    }
 }
 
 /// The sample formats in the order to prefer them.
@@ -702,9 +826,9 @@ where
     device
         .build_output_stream::<T, _, _>(
             *config,
-            move |out: &mut [T], _| {
+            move |out: &mut [T], info: &cpal::OutputCallbackInfo| {
                 quiet_stream_thread();
-                data.play(out);
+                data.play(out, info.timestamp());
             },
             move |e| {
                 quiet_stream_thread();
@@ -863,6 +987,97 @@ impl Output {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use cpal::StreamInstant;
+
+    fn at(callback_ms: u64, playback_ms: u64) -> Option<OutputStreamTimestamp> {
+        Some(OutputStreamTimestamp {
+            callback: StreamInstant::from_nanos(callback_ms * 1_000_000),
+            playback: StreamInstant::from_nanos(playback_ms * 1_000_000),
+        })
+    }
+
+    fn header_nanos(bytes: &[u8]) -> u64 {
+        u64::from_le_bytes(bytes[16..24].try_into().unwrap())
+    }
+
+    fn samples(bytes: &[u8]) -> Vec<f32> {
+        bytes[24..]
+            .as_chunks::<4>()
+            .0
+            .iter()
+            .map(|b| f32::from_le_bytes(*b))
+            .collect()
+    }
+
+    #[test]
+    fn a_device_s_blocks_are_recorded_from_when_they_are_heard() {
+        let now = UNIX_EPOCH + Duration::from_secs(1_000);
+        let mut recorder = Recorder::new(Vec::new(), 1000, 1);
+        // Heard 30 ms after the callback: the device's latency.
+        recorder.block(&[0.5; 10], at(100, 130), now).unwrap();
+        assert_eq!(&recorder.out[..8], RECORD_MAGIC);
+        let heard = now + Duration::from_millis(30);
+        let nanos = heard.duration_since(UNIX_EPOCH).unwrap().as_nanos() as u64;
+        assert_eq!(header_nanos(&recorder.out), nanos);
+        // The next block, right after: written as it is (a callback's
+        // jitter within the slack changes nothing).
+        recorder.block(&[0.25; 10], at(112, 142), now).unwrap();
+        assert_eq!(samples(&recorder.out).len(), 20);
+        // An underrun: the device plays the next block 50 ms late, so 50
+        // ms of silence keep the count on the device's clock.
+        recorder.block(&[1.0; 10], at(190, 190), now).unwrap();
+        let all = samples(&recorder.out);
+        assert_eq!(all.len(), 20 + 40 + 10);
+        assert!(all[20..60].iter().all(|s| *s == 0.0));
+        assert_eq!(all[60], 1.0);
+        // A block that plays 30 ms earlier than the count says loses that
+        // much of its start, so what follows stays in step.
+        recorder.block(&[0.75; 40], at(170, 170), now).unwrap();
+        let all = samples(&recorder.out);
+        assert_eq!(all.len(), 70 + 10);
+        assert_eq!(recorder.frames, 80);
+    }
+
+    #[test]
+    fn a_null_output_s_blocks_follow_one_another() {
+        let now = UNIX_EPOCH + Duration::from_secs(5);
+        let mut recorder = Recorder::new(Vec::new(), 8000, 2);
+        recorder.block(&[0.5; 4], None, now).unwrap();
+        recorder
+            .block(&[0.25; 4], None, now + Duration::from_secs(9))
+            .unwrap();
+        assert_eq!(header_nanos(&recorder.out), 5_000_000_000);
+        assert_eq!(
+            samples(&recorder.out),
+            [0.5, 0.5, 0.5, 0.5, 0.25, 0.25, 0.25, 0.25]
+        );
+    }
+
+    #[test]
+    fn a_device_output_tees_what_it_plays_into_the_recording() {
+        // The device's side of an output, with no device: the callback's
+        // `play`, as cpal calls it.
+        let dir = std::env::temp_dir().join(format!("intuituive-tee-{}", std::process::id()));
+        std::fs::create_dir_all(&dir).unwrap();
+        let shared = Shared::new("card".into(), 1000, 1, Duration::from_secs(1), None);
+        *lock(&shared.recording) = Some(Recorder::new(recording_file(&dir).unwrap().0, 1000, 1));
+        let tap_free: Vec<f32> = (0..20).map(|i| i as f32 / 40.0).collect();
+        lock(&shared.queue).extend(tap_free.iter().copied());
+        let mut out = [0i16; 10];
+        shared.play(&mut out, at(0, 20).unwrap());
+        assert!(out[1] > 0 && out[9] > out[1], "the device plays it");
+        shared.play(&mut out, at(10, 30).unwrap());
+        drop(lock(&shared.recording).take());
+        let file = std::fs::read_dir(&dir)
+            .unwrap()
+            .next()
+            .unwrap()
+            .unwrap()
+            .path();
+        let bytes = std::fs::read(&file).unwrap();
+        assert_eq!(samples(&bytes), tap_free, "and the recording has the same");
+        let _ = std::fs::remove_dir_all(&dir);
+    }
 
     #[test]
     fn listing_and_opening_without_sound_does_not_panic() {

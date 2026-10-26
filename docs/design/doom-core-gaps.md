@@ -429,9 +429,13 @@ the program's environment as `RICH_RECORD_AUDIO`; a program writes what
 it plays there, one timed stream a file (a header with the rate, the
 channels and the wall-clock time of the first sample, then `f32`
 samples; `rich_record::audio` documents it). intuiTUIve's `output()` and
-`output_with()` do it by themselves: under the recorder they open a
-null output paced on the real clock, and write to it
-(`audio::RECORD_AUDIO_ENV`). The recorder puts the streams on the
+`output_with()` do it by themselves (`audio::RECORD_AUDIO_ENV`): under
+the recorder they play on the device as usual and tee every block it
+plays into the stream, timed by the device's callbacks (latency counted,
+an underrun kept as silence); with no device they fall back to a null
+output paced on the real clock, named "rich record", whose sound goes to
+the stream alone (the maintainer's call: on the device as well, not
+instead of it). The recorder puts the streams on the
 recording's clock, cuts what played while hidden, and mixes them: an MP4
 gets an AAC track placed with `-itsoffset`, and a GIF, APNG, page or cast
 a WAV beside it (`rich_record::audio::Audio::wav`). The acceptance test

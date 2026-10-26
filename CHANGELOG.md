@@ -46,8 +46,11 @@ What rs-rich-doom built for itself, made generic
 - **Sound in recordings** (rich-record, intuituive, CLI): `Set Audio on`
   in a tape, or `rich record --audio`, records the program's sound. The
   recorder names a directory in `RICH_RECORD_AUDIO`, and the program
-  writes timed PCM streams there; intuiTUIve's audio outputs do it by
-  themselves, opening no device. An MP4 gets an AAC track, placed with
+  writes timed PCM streams there. intuiTUIve's audio outputs do it by
+  themselves: they play on the sound card as usual and copy what it plays
+  into the stream, timed by the card's callbacks (latency counted,
+  underruns kept as silence); with no sound card they play to the stream
+  alone, on the real clock. An MP4 gets an AAC track, placed with
   `-itsoffset`; a GIF, an APNG, the page and the cast get a WAV beside
   them. Off by default. `Recording` has a new `audio` field and
   `Options` a new `audio` switch.

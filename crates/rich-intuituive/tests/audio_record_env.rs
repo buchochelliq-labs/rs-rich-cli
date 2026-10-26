@@ -1,6 +1,10 @@
 //! An output opened under `rich record --audio`: what it plays goes to the
-//! recorder's directory (`RICH_RECORD_AUDIO`), on the real clock. One test
-//! alone in its binary, as it sets the environment.
+//! recorder's directory (`RICH_RECORD_AUDIO`) as well as to the device.
+//! With no sound card that will play 8 kHz mono (CI, a container) it falls
+//! back to a null output on the real clock, whose sound goes to the
+//! recording alone: what is checked exactly here. The tee to a device is
+//! tested in `audio::output`'s unit tests. One test alone in its binary,
+//! as it sets the environment.
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
@@ -13,9 +17,10 @@ fn an_output_under_the_recorder_writes_its_sound_there_timed() {
     std::fs::create_dir_all(&dir).unwrap();
     std::env::set_var(RECORD_AUDIO_ENV, &dir);
     let before = SystemTime::now();
-    // A device output: no sound card is opened, so this works in a container.
+    // A device output; under the recorder it opens even with no device.
     let speaker = output(OutputOptions::new().rate(8000).channels(1)).unwrap();
-    assert_eq!(speaker.device(), "rich record");
+    // With no device, the recorder's own null output.
+    let fallback = speaker.device() == "rich record";
     assert_eq!((speaker.rate(), speaker.channels()), (8000, 1));
     std::thread::sleep(Duration::from_millis(100));
     assert!(speaker.write(&[0.5; 800]));
@@ -45,10 +50,12 @@ fn an_output_under_the_recorder_writes_its_sound_there_timed() {
         .collect();
     // Silence for the first tenth of a second, then the sound written.
     let first = samples.iter().position(|s| *s != 0.0).expect("the sound");
-    assert!(
-        (600..=1400).contains(&first),
-        "first sound at sample {first}"
-    );
+    if fallback {
+        assert!(
+            (600..=1400).contains(&first),
+            "first sound at sample {first}"
+        );
+    }
     assert!(samples[first..first + 800].iter().all(|s| *s == 0.5));
     // About as many samples as the time it ran.
     let ran = (nanos(after) - started) as f64 / 1e9 * 8000.0;

@@ -2,10 +2,15 @@
 //!
 //! The recorder makes a directory and names it in the recorded program's
 //! environment as [`ENV`] (`RICH_RECORD_AUDIO`). A program that plays
-//! sound writes what it plays there instead of to a sound card:
-//! intuiTUIve's audio outputs do it by themselves. Each stream is a file
-//! of its own, ending `.pcm`: a 24-byte header, then the samples as they
-//! play, interleaved little-endian `f32`.
+//! sound writes what it plays there too, as well as playing it on its
+//! sound card. intuiTUIve's audio outputs do it by themselves: they play
+//! on the device as usual and copy every block the device plays into the
+//! stream, timed by the device's callbacks (its latency counted, an
+//! underrun kept as silence), so the sound stays in step with the frames.
+//! With no device to open (CI, a headless machine) they play to the
+//! stream alone, on the real clock. Each stream is a file of its own,
+//! ending `.pcm`: a 24-byte header, then the samples as they play,
+//! interleaved little-endian `f32`.
 //!
 //! | bytes | what |
 //! |-------|------|
