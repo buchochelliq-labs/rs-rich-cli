@@ -22,6 +22,34 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and a weekly job installs from the live marketplace once it is signed.
   The `official` tier now reads "rs-rich's own, built from its repository".
 
+- **Marketplace downloads, ratings and reviews** (rs-rich-cli, the
+  marketplace repository): `rich plugin info` shows a package's downloads,
+  👍/👎 and reviews link, and its JSON report gains `stats`; `rich plugin
+  search --sort downloads` sorts by downloads. They come from the
+  marketplace's nightly `stats.json` on its `stats` branch (release asset
+  and crates.io download counts, and one Reviews discussion per package),
+  unsigned and display-only, read with a 3-second timeout and left out
+  silently when missing. `rich` never phones home. The marketplace now
+  hosts new official versions as release assets, made after the merge by
+  `publish-artifacts.yml`, and its pull request check refuses reserved and
+  lookalike ids and "official" wording in community listings unless a
+  maintainer labels the pull request `name-approved`.
+  `docs/marketplace-repo/` mirrors the new workflows and scripts.
+
+- **More official marketplace packages** (rs-rich-cli, its tests and
+  `official/` sources): five themes, `dusk`, `paper`, `ocean`,
+  `high-contrast` and `mono`, each an upstream `[styles]` file that sets
+  every coloured style of rich's default theme (but the colour names). The
+  coloured ones meet WCAG
+  AA against the background each names, and `high-contrast` meets AAA.
+  `textcase` 0.2.0 adds the `titlecase`, `snakecase`, `kebabcase` and
+  `camelcase` transforms. A second WASM plugin, `wordplay` 0.1.0, has
+  `rot13`, `reverse` (by character cluster, line by line) and `slug`. All
+  are UTF-8 safe: the ASCII-only transforms leave non-ASCII characters
+  alone. Each WASM version builds from its own file in
+  `crates/rich-cli/official/wasm/`, and `tests/official_artifacts.rs` pins
+  every hash; `tests/official_packages.rs` checks what they do.
+
 - **Installed micro packs load** (rs-rich-cli): a micro pack installed with
   `rich plugin install` loads on every run, into micro's user layer after
   the user's own directory, once its file still hashes to what the lockfile

@@ -1,0 +1,81 @@
+# Write stats.json (downloads and ratings per package) to the `stats` branch.
+#
+# This workflow belongs to the rs-rich-marketplace repository; rs-rich-cli
+# keeps a copy in docs/marketplace-repo/ (see the README there). The
+# contract is rs-rich-cli's docs/design/marketplace.md, "Stats".
+#
+# Nightly and by hand, scripts/stats.py reads the release assets'
+# download counts, crates.io's counts for the crate listings, and each
+# package's Reviews discussion (its 👍 and 👎 and comment count), and writes
+# stats.json, checked against schemas/stats.schema.json. The file is
+# committed to the `stats` branch (made on the first run), never to main:
+# it is outside the signed index, and `rich plugin info` and the docs site
+# only display it. The job's token does it all: no environment, no secret.
+# A push by that token starts no workflow.
+name: Stats
+
+on:
+  schedule:
+    # Every night, 03:41 UTC.
+    - cron: "41 3 * * *"
+  workflow_dispatch:
+
+concurrency:
+  group: marketplace-stats
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  stats:
+    name: write stats.json
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    permissions:
+      contents: write
+      discussions: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: main
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Count downloads and reviews
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          python3 -m pip install jsonschema
+          python3 scripts/stats.py --jsonschema require --output "$RUNNER_TEMP/stats.json"
+
+      - name: Commit it to the stats branch
+        run: |
+          set -euo pipefail
+          tree="$RUNNER_TEMP/stats-branch"
+          if git ls-remote --exit-code --heads origin stats >/dev/null; then
+            git fetch --depth=1 origin stats
+            git worktree add --detach "$tree" FETCH_HEAD
+          else
+            git worktree add --detach "$tree"
+            git -C "$tree" checkout --orphan stats
+            git -C "$tree" rm -rfq .
+            printf '%s\n' \
+              "# stats" "" \
+              "stats.json: download counts and ratings per package, written nightly by" \
+              "main's .github/workflows/stats.yml (schema: main's schemas/stats.schema.json)." \
+              "Unsigned and display-only: nothing installs by it." > "$tree/README.md"
+          fi
+          cp "$RUNNER_TEMP/stats.json" "$tree/stats.json"
+          cd "$tree"
+          git add README.md stats.json 2>/dev/null || git add stats.json
+          if git diff --cached --quiet; then
+            echo "stats.json is unchanged"
+            exit 0
+          fi
+          git config user.name "rs-rich-marketplace stats"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git commit -qm "stats.json, $(date -u +%Y-%m-%dT%H:%MZ)"
+          git push origin HEAD:refs/heads/stats

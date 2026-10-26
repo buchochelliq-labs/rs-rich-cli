@@ -2472,7 +2472,7 @@ rich plugin COMMAND [ARGS] [--marketplace LOCATION] [--marketplace-keys FILE] [-
 | Command | Description |
 | --- | --- |
 | `search` | List the marketplace's packages, or those whose id, name, description or keywords contain QUERY |
-| `info` | One package: its tier, source, versions, what loads here, and for a crate the `cargo add` line |
+| `info` | One package: its tier, source, versions, what loads here, for a crate the `cargo add` line, and its downloads, 👍/👎 and reviews link when the marketplace's stats.json is there (not signed, shown only) |
 | `install` | Show the tier, permissions and capabilities, ask, then download, check (size, SHA-256, the WASM manifest in the sandbox) and install; a crate is refused with its `cargo add` line |
 | `update` | Move installed packages (or those named) to the newest version this host loads, asking first; a yanked version is replaced |
 | `remove` | Uninstall packages: the lockfile entry, then the file |
@@ -2496,13 +2496,14 @@ List the marketplace's packages, or those whose id, name, description or keyword
 ##### Usage
 
 ```text
-rich plugin search [QUERY]
+rich plugin search [QUERY] [--sort id|downloads]
 ```
 
 ##### Options
 
 | Option | Description |
 | --- | --- |
+| `--sort <ORDER>` | id (the default), or downloads: most downloaded first, from the marketplace's unsigned stats.json, with a Downloads column. |
 | `--marketplace <LOCATION>` | The marketplace: an https:// base URL, or a directory or file:// URL laid out as the marketplace repository is (artifacts from its artifacts/HOST/PATH mirror, never the network); else RICH_MARKETPLACE, else the official one. |
 | `--marketplace-keys <FILE>` | Trust this keys-N.json instead of the keys compiled in; else RICH_MARKETPLACE_KEYS. |
 | `--plugin-dir <DIR>` | Install into DIR; else RICH_PLUGIN_DIR, else $XDG_DATA_HOME/rich/plugins (~/.local/share/rich/plugins) |
@@ -2516,7 +2517,7 @@ rich plugin search [QUERY]
 
 #### rich plugin info
 
-One package: its tier, source, versions, what loads here, and for a crate the `cargo add` line
+One package: its tier, source, versions, what loads here, for a crate the `cargo add` line, and its downloads, 👍/👎 and reviews link when the marketplace's stats.json is there (not signed, shown only)
 
 ##### Usage
 
