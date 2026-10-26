@@ -87,8 +87,6 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   crop to a rectangle of the page (`ScreencastFrame::crop`);
   `Pixels::crop` and `Pixels::to_rgba`.
 
-### Long pages and endless feeds (intuituive, noctiluca, rich-embed, rich-web)
-
 ### Versions: the 0.0.23 versions are open
 
 - Every package moves one patch past the 0.0.22 cohort, as the
