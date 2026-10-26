@@ -1,4 +1,5 @@
-◀▶ Form fixture https://fixture.example/form.html reader
+ NOCTILUCA   READER + CELLS   ◀▶   Form fixture
+ https://fixture.example/form.html
 Sign up
 Name Ada Lovelace                                                           ● edited · Enter applies
 Secret
@@ -25,6 +26,5 @@ Volume ╭───────────────────────�
 
 
 
-
-
-f1 actions · f hints · o open · r reader · q quit
+ reader | row 1/13
+ f1 actions | f hints | o open | r reader | q quit

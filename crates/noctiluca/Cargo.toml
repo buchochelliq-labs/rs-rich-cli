@@ -42,6 +42,9 @@ fake-engine = []
 rich.workspace = true
 rich-embed = { workspace = true, features = ["chrome"] }
 rich-intuituive = { workspace = true, features = ["art"] }
+# Pictures: decoding, animations, the byte budget and its step down;
+# video frames' pacing and the protocol each region steps down to.
+rich-art = { workspace = true, features = ["frames"] }
 serde_json.workspace = true
 # Stills of image regions in tests, and their decoding through rs-rich-art.
 image = { workspace = true }

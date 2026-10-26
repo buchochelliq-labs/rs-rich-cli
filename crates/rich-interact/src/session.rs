@@ -1091,6 +1091,11 @@ impl Waker {
 /// wait on it with the terminal.
 const WAKE_SLICE: Duration = Duration::from_millis(4);
 
+/// The longest a read woken over and over goes without looking at the
+/// terminal: a look on every wake costs a wake rate on some terminals
+/// (macOS's), none starves the keys.
+const KEYS_SLICE: Duration = Duration::from_millis(20);
+
 /// What a read waits on to see a [`Waker`]'s wake: its pipe on Unix.
 #[cfg(unix)]
 pub(crate) type WakeFd = std::os::unix::io::RawFd;
@@ -1262,6 +1267,9 @@ pub struct Session {
     /// Keys typed while the start-up query waited for its answer, read
     /// before anything else.
     typed: std::collections::VecDeque<Event>,
+    /// When the terminal was last looked at, so a session woken over and
+    /// over still reads its keys (see [`KEYS_SLICE`]).
+    looked: Instant,
     /// The terminal crossterm reads, when it is not standard input, opened
     /// to wait on it beside the waker.
     #[cfg(unix)]
@@ -1330,6 +1338,7 @@ impl Session {
             input: None,
             waker: None,
             typed: Default::default(),
+            looked: Instant::now(),
             #[cfg(unix)]
             tty: None,
         };
@@ -1669,9 +1678,17 @@ impl Backend for Session {
             if RESUMED.load(Ordering::SeqCst) {
                 return Ok(Some(self.repaint()));
             }
-            // Woken: back to the loop, which has something to pick up.
+            // Woken: back to the loop, which has something to pick up. An
+            // app woken over and over (frames arriving faster than it draws
+            // them) would never read the keyboard, so every `KEYS_SLICE` a
+            // key already waiting comes first, with no wait; the loop picks
+            // up what woke it all the same.
             if self.waker.as_ref().is_some_and(Waker::take) {
-                return Ok(None);
+                if self.looked.elapsed() < KEYS_SLICE {
+                    return Ok(None);
+                }
+                self.looked = Instant::now();
+                return self.next_event(Duration::ZERO);
             }
             // Short waits, so a resume is noticed without a key; shorter
             // where the waker cannot be waited on with the terminal.
@@ -1685,6 +1702,7 @@ impl Backend for Session {
             }
             // Events the library reports that components do not see (focus)
             // are skipped, not returned as a timeout.
+            self.looked = Instant::now();
             if let Some(event) = self.next_event(wait)? {
                 return Ok(Some(event));
             }

@@ -139,6 +139,37 @@ pub fn fill_pixels(
     }
 }
 
+/// `image` with a play mark drawn into its pixels at its bottom-left: a dark
+/// square with a white triangle, as video posters show one. Drawn into the
+/// pixels, it shows through every protocol; cells drawn over a Sixel or
+/// iTerm2 picture would be covered by it.
+pub fn play_mark(image: &DynamicImage) -> DynamicImage {
+    let mut out = image.to_rgba8();
+    let (w, h) = out.dimensions();
+    let side = (w.min(h) / 5).clamp(8, 96);
+    let (x0, y0) = (0, h.saturating_sub(side));
+    for y in y0..h {
+        for x in x0..(x0 + side).min(w) {
+            // The square, darkening what is under it.
+            let pixel = out.get_pixel_mut(x, y);
+            for c in 0..3 {
+                pixel.0[c] = (u16::from(pixel.0[c]) * 2 / 10) as u8;
+            }
+            pixel.0[3] = 255;
+            // The triangle, pointing right, in its middle half.
+            let (u, v) = (
+                f64::from(x - x0) / f64::from(side),
+                f64::from(y - y0) / f64::from(side),
+            );
+            let tip = 0.75 - (v - 0.5).abs() * 1.0;
+            if (0.3..=0.75).contains(&u) && (0.25..=0.75).contains(&v) && u <= 0.3 + tip - 0.25 {
+                pixel.0 = [255, 255, 255, 255];
+            }
+        }
+    }
+    DynamicImage::ImageRgba8(out)
+}
+
 /// `image` with `transforms` applied (rotation, flips, brightness,
 /// contrast, gamma, grayscale), keeping its alpha: the adjustments
 /// [`ImageArt`](crate::ImageArt) makes before fitting, for callers that fit
@@ -518,6 +549,22 @@ mod tests {
         let (before, after) = overlay("IMG", 2);
         assert_eq!(before, "\x1b7");
         assert_eq!(after, "\x1b8IMG\x1b8\x1b[2C");
+    }
+
+    #[test]
+    fn a_play_mark_is_drawn_into_the_pixels() {
+        let poster = DynamicImage::ImageRgba8(RgbaImage::from_pixel(
+            100,
+            50,
+            image::Rgba([200, 100, 50, 255]),
+        ));
+        let marked = play_mark(&poster).to_rgba8();
+        // Its top right is untouched; its bottom left is darkened, with
+        // white in the middle of the mark.
+        assert_eq!(marked.get_pixel(99, 0).0, [200, 100, 50, 255]);
+        assert_eq!(marked.get_pixel(0, 49).0, [40, 20, 10, 255]);
+        assert_eq!(marked.get_pixel(4, 45).0, [255, 255, 255, 255]);
+        assert_eq!(marked.dimensions(), (100, 50));
     }
 
     #[test]

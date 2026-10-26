@@ -65,7 +65,9 @@ noctiluca keys [--site HOST] [--config PATH]
 | `--profile NAME` | Keep a profile, with its cookies and storage, between runs (opt-in). A name of letters, digits, `-` and `_` |
 | `--chrome PATH` | The browser to run (default: [the one found](getting-started.md#the-chrome-it-needs)) |
 | `--images MODE` | How images reach the terminal: `ansi`, `kitty`, `sixel`, `iterm2` or `none` (default: the config's, else detected). See [images](media.md#images) |
-| `--fps N` | The media frame cap, 1 to 60. Read, and kept for video, which comes in 0.0.24; it changes nothing in 0.0.22 |
+| `--fps N` | The most frames a second a moving picture (a GIF, a video) shows, 1 to 60: a ceiling, not a target; video never goes above 8 |
+| `--adapt LIST` | Switch [terminal adaptations](adaptations.md#terminal-adaptations) off (`-name`) or on (`+name`) for this run: `--adapt=-collapse-nav,+text-over-pictures` |
+| `--no-adapt` | Every adaptation off: the faithful projection |
 | `--dump HOW` | Print the page's model and exit: `text`, `ax` (its controls) or `json` (all of it). Needs a page |
 | `--no-js` | Turn the page's script off |
 | `--config PATH` | Read another config file |
@@ -210,15 +212,22 @@ keys with a space (`g g`) is a sequence: press one, then the other.
 | `top` | To the top | `g g` | `home` |
 | `bottom` | To the bottom | `G` | `end` |
 | `reader` | Reader mode on or off | `r` | `alt+r` |
+| `adapt` | Adapted or faithful projection (terminal adaptations on or off) | `a` | `alt+a` |
+| `log.older` | Scroll the live log up (it holds still) | `{` | `alt+pageup` |
+| `log.newer` | Scroll the live log down (at its end it follows again) | `}` | `alt+pagedown` |
 | `media.play_pause` | Play or pause the media | `p` | `alt+p` |
 | `media.mute` | Mute or unmute the media | `alt+m` | `alt+m` |
 | `media.volume_up` | Volume up | `+` | `alt+up` |
+| `media.seek_back` | Back five seconds in the media | `[` | `ctrl+left` |
+| `media.seek_forward` | On five seconds in the media | `]` | `ctrl+right` |
 | `media.volume_down` | Volume down | `-` | `alt+down` |
+| `media.freeze` | Freeze or resume moving pictures | `f4` | `f4` |
 | `bookmark` | Bookmark this page | `m` | `ctrl+d` |
 | `bookmarks` | Bookmarks | `M` | `ctrl+b` |
 | `site.bind` | Bind a key on this site… | `ctrl+k` | `ctrl+k` |
 | `site.keys` | Site shortcuts… | `K` | `ctrl+shift+k` |
 | `actions` | Actions (this list) | `f1` | `f1` |
+| `about` | About: the version, the adaptations and which are on, and the codecs (`about:noctiluca`) | `?` | `alt+i` |
 | `quit` | Quit | `q` | `ctrl+q` |
 
 The tab actions are listed, and say "One tab for now" when you run them.

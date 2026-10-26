@@ -60,3 +60,67 @@ fn a_lazy_image_gets_its_still_once_its_picture_has_loaded() {
     }
     assert!(until(Duration::from_secs(10), &still), "no still");
 }
+
+/// The tab's pages, as they come, until `done` holds or `deadline` passes.
+fn wait_for(
+    updates: &mpsc::Receiver<Update>,
+    deadline: Duration,
+    done: impl Fn(&Page) -> bool,
+) -> Option<Arc<Page>> {
+    let start = Instant::now();
+    let mut last: Option<Arc<Page>> = None;
+    while start.elapsed() < deadline {
+        if let Ok(Update::Page(page)) = updates.recv_timeout(Duration::from_millis(50)) {
+            last = Some(page);
+        }
+        if last.as_deref().is_some_and(&done) {
+            return last;
+        }
+    }
+    None
+}
+
+#[test]
+fn pictures_are_decoded_from_the_files_the_page_loaded() {
+    let engine =
+        FakeEngine::from_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"))
+            .unwrap();
+    let (send, updates) = mpsc::channel();
+    let tab = Tab::spawn(Box::new(engine), move |u| {
+        let _ = send.send(u);
+    });
+    tab.send(Command::Open("news.html".into()));
+    let images = |p: &Page| {
+        p.media
+            .iter()
+            .filter(|m| m.kind == noctiluca::model::MediaKind::Image)
+            .count()
+    };
+    let page = wait_for(&updates, Duration::from_secs(20), |p| {
+        images(p) >= 5
+            && p.media
+                .iter()
+                .filter(|m| m.kind == noctiluca::model::MediaKind::Image)
+                .all(|m| m.picture.is_some())
+    })
+    .expect("every picture decoded");
+    let by_src = |name: &str| {
+        page.media
+            .iter()
+            .find(|m| m.src.ends_with(name))
+            .unwrap_or_else(|| panic!("no {name}"))
+    };
+    // The original file, not Chrome's pixels of its box: its own size.
+    let harbour = by_src("harbour.jpg").picture.clone().unwrap();
+    assert_eq!(
+        (harbour.image().width(), harbour.image().height()),
+        (640, 360)
+    );
+    // The GIF keeps its frames, for Kitty to play or us to step.
+    let tide = by_src("tide.gif").picture.clone().unwrap();
+    assert!(tide.is_animated());
+    assert_eq!(tide.frames().map(<[_]>::len), Some(12));
+    // A figure's caption is the page's own; the others get ours.
+    assert!(by_src("market.jpg").captioned);
+    assert!(!by_src("storm.jpg").captioned);
+}

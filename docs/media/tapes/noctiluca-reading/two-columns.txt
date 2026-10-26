@@ -1,4 +1,5 @@
-◀▶ Noctiluca fixture https://fixture.example/page.html projection
+ NOCTILUCA   PROJECTION + CELLS   ◀▶   Noctiluca fixture
+ https://fixture.example/page.html
 
  Sea
  sparkle
@@ -25,6 +26,5 @@
 
 
 
-
-
-f1 actions · f hints · o open · r reader · q quit
+ projection | row 1/16
+ f1 actions | f hints | o open | r reader | q quit

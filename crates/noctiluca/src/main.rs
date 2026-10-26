@@ -154,9 +154,14 @@ fn start_url(args: &Args, config: &Config, marks: &Bookmarks) -> Option<String> 
 fn engine(args: &Args, config: &Config) -> std::io::Result<Box<dyn Engine>> {
     #[cfg(feature = "fake-engine")]
     if let Some(dir) = std::env::var_os("NOCTILUCA_FAKE_ENGINE") {
-        return Ok(Box::new(noctiluca::testing::FakeEngine::from_dir(
-            Path::new(&dir),
-        )?));
+        // Videos play from Chrome's recorded frames, when there are some.
+        let frames = Path::new(&dir).join("frames");
+        let engine = noctiluca::testing::FakeEngine::from_dir(Path::new(&dir))?;
+        return Ok(Box::new(if frames.is_dir() {
+            engine.replaying(&frames)
+        } else {
+            engine
+        }));
     }
     let profile = args
         .profile
@@ -209,6 +214,8 @@ fn browse(args: Args) -> std::io::Result<()> {
         config.fps = fps;
     }
     config.audio |= args.audio;
+    config.adapt = noctiluca::args::adapt_of(&args, config.adapt)
+        .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
     let marks = bookmarks::default_path()
         .map(|p| Bookmarks::load(&p))
         .transpose()?

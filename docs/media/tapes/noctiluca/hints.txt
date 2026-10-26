@@ -1,4 +1,5 @@
-◀▶ Reader fixture file:///noctiluca/fixtures/reader.html reader
+ NOCTILUCA   READER + CELLS   ◀▶   Reader fixture
+ file:///noctiluca/fixtures/reader.html
 Plankton                                                                                           ┃
                                                                                                    ┃
 Tiny drifters of the [a]open sea, with light of their own.                                         ┃
@@ -22,9 +23,8 @@ Name      │ Size                                                              
 ──────────┼─────                                                                                   ┃
 Noctiluca │ 1 mm                                                                                   ┃
 Copepod   │ 2 mm                                                                                   ┃
-                                                                                                   ┃
-image: A glowing wave                                                                              ┃
-▀▀▀▀▀                                                                                              ┃
-                                                                                                   ┃
                                                                                                    │
- hints  type a label:   Esc cancels
+image: A glowing wave                                                                              │
+▀▀▀▀▀                                                                                              │
+  hints  type a label:   Esc cancels
+ f1 actions | f hints | o open | r reader | q quit

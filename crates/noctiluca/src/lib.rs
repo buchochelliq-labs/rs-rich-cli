@@ -25,12 +25,15 @@
 //!   needs from a browser, and [`cdp`] its Chrome backend over
 //!   rs-rich-embed ([`ChromeBackend`](cdp::ChromeBackend)).
 //! - [`tab`]: a [`Tab`](tab::Tab) runs an engine on a thread of its own:
-//!   loading, the debounced change ping, guarded actions and stills of
-//!   images. It sends [`Update`](tab::Update)s.
+//!   loading, the debounced change ping, live logs read incrementally,
+//!   guarded actions, stills and pictures. It sends
+//!   [`Update`](tab::Update)s.
 //! - [`model`]: the [`Page`](model::Page) model, rebuilt from each
 //!   snapshot: blocks of text, controls and media.
 //! - [`layout`]: the page as lines of cells, in reader mode or the
-//!   projection. [`widgets`] gives controls their intuiTUIve widgets.
+//!   projection; [`adapt`] its terminal adaptations, named generic rules
+//!   that can each be switched off; [`pictures`] draws pictures and moving
+//!   GIFs over their regions. [`widgets`] gives controls their intuiTUIve widgets.
 //! - [`app`]: the browser as an intuiTUIve app; [`actions`] is the one
 //!   list of what it can do, with the keys of both presets.
 //! - [`config`], [`bookmarks`], [`args`], [`dump`] (`--dump`) and
@@ -112,9 +115,12 @@
 //! # Ok::<(), std::io::Error>(())
 //! ```
 
+pub mod about;
 pub mod actions;
+pub mod adapt;
 pub mod app;
 pub mod args;
+pub mod bars;
 pub mod bookmarks;
 pub mod cdp;
 pub mod clean;
@@ -124,9 +130,11 @@ pub mod dump;
 pub mod engine;
 pub mod layout;
 pub mod model;
+pub mod pictures;
 pub mod tab;
 pub mod testing;
 pub mod url;
+pub mod video;
 pub mod widgets;
 
 pub use clean::clean;

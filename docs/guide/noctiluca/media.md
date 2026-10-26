@@ -1,9 +1,46 @@
-# Sound and media
+# Pictures, video and sound
 
-Noctiluca 0.0.22 plays sound, gives each video and audio its controls,
-and draws still images as pictures in reader mode. Pictures in the
-projection, animated GIFs and video frames come later; see
-[what's next](status.md).
+Noctiluca 0.0.23 draws a page's pictures where the page puts them, moves
+its animated GIFs, and plays its videos in their regions. Sound plays with
+`--audio`.
+
+## Pictures and video
+
+Pages read as terminal text, with their real pictures where the page puts
+them. Noctiluca draws them itself, with rs-rich-art and intuiTUIve: Kitty,
+Sixel or iTerm2 pixels when the terminal has them (`--images`, or `auto`),
+half blocks anywhere else. Chrome only lays the page out and hands over
+the files it loaded.
+
+- **Pictures** come from the page's own files (an `<img>`, a `<picture>`,
+  a CSS background on a box with no text), at their own quality, else
+  from Chrome's pixels (an SVG). Each fills the box Chrome gave it. A
+  picture with alt text and no caption of the page's gets an
+  `Image: …` line under it.
+- **Small pictures in a line** (a chat's badges and emotes, an icon) are
+  drawn in their line.
+- **Animated GIFs** move. Kitty plays them itself, for no further bytes;
+  elsewhere each frame is sent only when the terminal has room for it,
+  at most eight a second. `F4` freezes every moving picture, and their
+  bytes stop.
+- **Video** shows its poster with a play mark. `p` plays it in its region,
+  from frames Chrome paints, only while it plays; `[` and `]` seek five
+  seconds; `Alt+M` mutes. The status line says `media PLAYING 0:03 / 0:05`.
+- **Within the terminal's bandwidth.** Moving pictures share a byte budget
+  (`[media] bandwidth`, else 4 MB a second here and 256 kB over SSH), at
+  most `[media] fps` frames a second. Short of it, a picture steps down:
+  Kitty, then iTerm2, then Sixel, then half blocks. Over SSH, video starts
+  as half blocks unless `--images` names a protocol.
+
+![A news page in Noctiluca: a picture with its caption, a headline, and a video's poster](../../media/tapes/news/news.png)
+
+![A video page in Noctiluca: the player, the channel's avatar and buttons, and thumbnails side by side](../../media/tapes/media-grid/grid.png)
+
+Both are local test pages (`news.html`, `media-grid.html`), drawn as the
+proof of concept drew real sites: page text as terminal text, pictures
+inline with their captions, a video's poster with a play mark, the mode
+and address in the header, the media's state, the row and the keys in
+the status line. See [the recordings](../../recordings.md#a-news-page).
 
 ## Sound
 
@@ -53,13 +90,10 @@ unmutes. A play you ask for runs as your own gesture, so the page does not
 refuse it as autoplay. The F1 overlay says what each would do now ("Pause
 the media"), and why it cannot run ("No video or audio on this page.").
 
-In the projection, a video or an audio is a placeholder with its alt
-text. Its controls are in reader mode.
-
-**Video.** A video's sound plays, but its picture is not drawn in 0.0.22:
-it shows as its alt text. Video in its region (play, pause, seek and mute,
-frames under a budget, stepping down on a slow terminal) is planned for
-0.0.24.
+In the projection, a video is its poster, or its frames while it plays,
+and a page's own player controls are buttons like any other. `[` and `]`
+(`Ctrl+Left`, `Ctrl+Right` in the plain keys) seek five seconds, and `F4`
+freezes every moving picture.
 
 ## Images
 
@@ -68,16 +102,15 @@ each picture from Chrome's own pixels, after the page's text is shown, so
 text never waits for pictures. A picture keeps about its size on the page
 (8 by 18 CSS pixels a cell), under its alt text.
 
-In **the projection**, an image is a placeholder box with its alt text.
-Images that load lazily load as you scroll, as in a browser, and a
-picture partly in view shows the part on screen. Pictures in the
-projection and animated GIFs are planned for 0.0.23. Until then, an
-animated GIF shows as one still frame in reader mode.
+In **the projection**, an image is drawn over the box Chrome gave it (see
+[Pictures and video](#pictures-and-video)). Images that load lazily load
+as you scroll, as in a browser, and a picture partly in view shows the
+part on screen.
 
-A canvas, an SVG drawing and a frame (an `iframe`, an `embed`) show as
+A canvas, an inline SVG drawing and a frame (an `iframe`, an `embed`) show as
 their alt text in both views.
 
-| An image in reader mode, against a real Chrome | The same article in the projection |
+| An image in reader mode, against a real Chrome | The same article in the projection (0.0.22) |
 |---|---|
 | ![The article's picture drawn as Kitty graphics](../../media/tapes/noctiluca-chrome/live-image.png) | ![The figure as a placeholder with its alt text](../../media/tapes/noctiluca-reading/article-projection.png) |
 

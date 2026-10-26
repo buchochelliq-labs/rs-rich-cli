@@ -49,6 +49,16 @@ sixel = ["image", "dep:icy_sixel"]
 kitty = ["image"]
 # `iterm` encodes iTerm2's inline images (also WezTerm's).
 iterm = ["image"]
+# `picture`: pictures with an id the terminal knows them by (uploaded once,
+# placed by reference, new frames under one id), their cells for composing
+# into rows, every protocol's encoding, byte accounting and a pacer that
+# keeps moving pictures within a byte budget.
+picture = ["image", "sixel", "kitty", "iterm"]
+# `frames`: video frame display on `picture`. RGBA frames to every protocol,
+# frame pacing within a byte budget, the step down from Kitty to cells, and
+# byte accounting. No new dependencies; decoding video files is out of
+# scope (a browser's screencast or an emulator supplies the frames).
+frames = ["picture"]
 
 # The image/GIF examples only build when their feature is on.
 [[example]]

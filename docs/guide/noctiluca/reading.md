@@ -45,7 +45,7 @@ is left out.
 
 In reader mode, a page's controls are live intuiTUIve widgets in the
 column (see [Forms and controls](forms.md)), still images are drawn as
-pictures (see [Sound and media](media.md#images)), and each video and
+pictures (see [Pictures, video and sound](media.md#images)), and each video and
 audio gets play, mute and volume controls.
 
 A site's config table can choose its view (`view = "reader"`), so a site

@@ -1,0 +1,447 @@
+//! Video against a real Chrome: the PoC's `motion.webm` (a silent five
+//! seconds of a moving test pattern) in `video.html`. Runs when
+//! `RICH_EMBED_CHROME` names a browser, as a normal user.
+//!
+//! - its poster comes as the bytes the page loaded;
+//! - it plays, pauses and seeks through the tab's media commands, its
+//!   `currentTime` moves, and the frames cut from the screencast change;
+//! - a seek while paused brings one new frame;
+//! - fed to rs-rich-art's pacing, a region's bytes over two seconds stay
+//!   under its share of the budget, and a slow terminal steps it down to
+//!   character art;
+//! - `about:noctiluca`'s codec table says what `canPlayType` says.
+
+use std::path::Path;
+use std::sync::mpsc::{self, Receiver};
+use std::sync::Arc;
+use std::time::{Duration, Instant};
+
+use noctiluca::about;
+use noctiluca::cdp::{ChromeBackend, ChromeOptions};
+use noctiluca::engine::{MediaOp, NodeId, Playback};
+use noctiluca::file_url;
+use noctiluca::model::Page;
+use noctiluca::tab::{Command, Tab, Update};
+use noctiluca::video::{Pacing, VideoFrame};
+use rich_art::picture::{count_picture_bytes, picture_bytes, ByteBudget, Pixels};
+
+fn fixture(name: &str) -> String {
+    file_url(
+        &Path::new(env!("CARGO_MANIFEST_DIR"))
+            .join("tests/fixtures")
+            .join(name),
+    )
+    .unwrap()
+}
+
+fn start() -> Option<ChromeBackend> {
+    let Some(binary) = std::env::var_os("RICH_EMBED_CHROME") else {
+        eprintln!("skipped: set RICH_EMBED_CHROME to a Chrome or Chromium binary to run");
+        return None;
+    };
+    Some(
+        ChromeBackend::start(ChromeOptions {
+            binary: Some(binary.into()),
+            columns: 100,
+            rows: 40,
+            ..ChromeOptions::default()
+        })
+        .unwrap(),
+    )
+}
+
+/// The tab's updates: the newest page, and every frame.
+struct Watch {
+    tab: Tab,
+    updates: Receiver<Update>,
+    page: Option<Arc<Page>>,
+    frames: Vec<Arc<VideoFrame>>,
+}
+
+impl Watch {
+    fn new(engine: ChromeBackend) -> Watch {
+        let (send, updates) = mpsc::channel();
+        let tab = Tab::spawn(Box::new(engine), move |u| {
+            let _ = send.send(u);
+        });
+        Watch {
+            tab,
+            updates,
+            page: None,
+            frames: Vec::new(),
+        }
+    }
+
+    fn pump(&mut self, for_: Duration) {
+        let end = Instant::now() + for_;
+        while let Some(left) = end.checked_duration_since(Instant::now()) {
+            match self
+                .updates
+                .recv_timeout(left.min(Duration::from_millis(50)))
+            {
+                Ok(Update::Page(p)) => self.page = Some(p),
+                Ok(Update::Frame(f)) => self.frames.push(f),
+                _ => {}
+            }
+        }
+    }
+
+    fn until(&mut self, what: &str, ok: impl Fn(&Watch) -> bool) {
+        let start = Instant::now();
+        while !ok(self) {
+            assert!(
+                start.elapsed() < Duration::from_secs(30),
+                "timed out waiting for {what}: {:?}",
+                self.playback()
+            );
+            self.pump(Duration::from_millis(50));
+        }
+    }
+
+    fn video(&self) -> Option<&noctiluca::model::Media> {
+        self.page.as_ref()?.media.first()
+    }
+
+    fn playback(&self) -> Option<Playback> {
+        self.video()?.playback
+    }
+
+    fn node(&self) -> NodeId {
+        self.video().unwrap().node
+    }
+
+    fn media(&self, op: MediaOp) {
+        let page = self.page.as_ref().unwrap();
+        self.tab.send(Command::Media {
+            document: page.document,
+            node: page.media[0].node,
+            op,
+        });
+    }
+}
+
+#[test]
+fn motion_plays_pauses_and_seeks_and_its_frames_change() {
+    let Some(engine) = start() else { return };
+    let mut w = Watch::new(engine);
+    let url = fixture("video.html");
+    w.tab.send(Command::Open(url.clone()));
+    w.until("the video, ready", |w| {
+        w.page.as_ref().is_some_and(|p| p.url == url)
+            && w.playback()
+                .is_some_and(|p| p.ready >= 2 && p.duration.is_some())
+    });
+    let video = w.video().unwrap().clone();
+    assert_eq!(video.poster, fixture("glow.png"));
+    // The poster is the bytes of the page's own picture.
+    w.until("the poster", |w| {
+        w.video().is_some_and(|v| v.still.is_some())
+    });
+    let glow = std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/glow.png"))
+        .unwrap();
+    assert_eq!(&*w.video().unwrap().still.clone().unwrap(), &glow[..]);
+    assert_eq!(w.playback().unwrap().duration, Some(5.0));
+    assert_eq!(w.playback().unwrap().label(), "PAUSED");
+
+    // Off screen: playing sends no frames.
+    w.media(MediaOp::Play);
+    w.until("playing", |w| w.playback().is_some_and(|p| p.time > 0.2));
+    w.pump(Duration::from_millis(600));
+    assert!(w.frames.is_empty(), "frames of a region off screen");
+
+    // On screen: frames, which change as the clock moves.
+    w.tab.send(Command::Regions {
+        on_screen: vec![w.node()],
+        intervals: Vec::new(),
+    });
+    w.until("frames", |w| w.frames.len() >= 4);
+    let first = w.frames.first().unwrap().clone();
+    let last = w.frames.last().unwrap().clone();
+    assert_eq!(first.node, w.node());
+    // The region's own size, cut from the screencast.
+    // (A box at a fractional pixel takes in the pixel it starts in.)
+    assert!(
+        (320..=321).contains(&first.pixels.width),
+        "{}",
+        first.pixels.width
+    );
+    assert!(
+        (180..=181).contains(&first.pixels.height),
+        "{}",
+        first.pixels.height
+    );
+    assert!(last.seq > first.seq);
+    assert_ne!(
+        first.pixels.rgb, last.pixels.rgb,
+        "the frames did not change"
+    );
+    // At most eight a second.
+    let count = w.frames.len();
+    w.pump(Duration::from_secs(2));
+    let in_two = w.frames.len() - count;
+    assert!((2..=17).contains(&in_two), "{in_two} frames in two seconds");
+
+    // Paused: the clock holds, and frames stop.
+    w.media(MediaOp::Pause);
+    w.until("paused", |w| w.playback().is_some_and(|p| p.paused));
+    w.pump(Duration::from_millis(400));
+    let held = w.playback().unwrap().time;
+    let frames = w.frames.len();
+    w.pump(Duration::from_millis(1200));
+    assert_eq!(w.playback().unwrap().time, held);
+    assert!(w.frames.len() <= frames + 1, "frames while paused");
+
+    // A seek while paused: the time moves, it stays paused, and one new
+    // frame shows where it went.
+    let before = w.frames.last().unwrap().clone();
+    w.media(MediaOp::Seek(-100.0));
+    w.until("at the start", |w| {
+        w.playback().is_some_and(|p| p.time == 0.0)
+    });
+    w.media(MediaOp::Seek(2.5));
+    w.until("at 2.5 s", |w| {
+        w.playback().is_some_and(|p| (p.time - 2.5).abs() < 0.01)
+    });
+    assert!(w.playback().unwrap().paused);
+    w.until("a frame of the seek", |w| {
+        w.frames
+            .last()
+            .is_some_and(|f| f.pixels.rgb != before.pixels.rgb)
+    });
+    w.media(MediaOp::Seek(100.0));
+    w.until("at the end", |w| {
+        w.playback().is_some_and(|p| p.time == 5.0)
+    });
+
+    // Mute.
+    w.media(MediaOp::Mute(true));
+    w.until("muted", |w| w.playback().is_some_and(|p| p.muted));
+}
+
+/// Frames from a playing `motion.webm`, fed to `pacing` as the app does,
+/// each drawn picture's escapes counted as the painter counts them.
+/// Returns the region's node and the pacing's two-second byte count.
+fn pace(pacing: &mut Pacing, seconds: f64) -> (NodeId, u64, Vec<u64>) {
+    let engine = start().unwrap();
+    let mut w = Watch::new(engine);
+    let url = fixture("video.html");
+    w.tab.send(Command::Open(url.clone()));
+    w.until("the video, ready", |w| {
+        w.page.as_ref().is_some_and(|p| p.url == url) && w.playback().is_some_and(|p| p.ready >= 2)
+    });
+    w.tab.send(Command::Regions {
+        on_screen: vec![w.node()],
+        intervals: Vec::new(),
+    });
+    w.media(MediaOp::Play);
+    let node = w.node();
+    let (cols, rows) = (40, 10);
+    let mut window: Vec<(Instant, u64)> = Vec::new();
+    let mut peaks = Vec::new();
+    let end = Instant::now() + Duration::from_secs_f64(seconds);
+    let mut seen = 0;
+    while Instant::now() < end {
+        w.pump(Duration::from_millis(20));
+        for frame in &w.frames[seen..] {
+            let now = Instant::now();
+            if let Some(picture) = pacing.offer(frame, cols, rows, now, picture_bytes) {
+                // The painter: the picture's escapes in its protocol, or
+                // its cells, counted under its id.
+                let pixels = pacing.pixels(node);
+                let bytes = match picture.encode(pixels, cols, rows) {
+                    Some(escape) => escape.len() as u64,
+                    None => {
+                        let console = rich::Console::new();
+                        let view = rich_art::picture::ImageView::new().pixels(pixels);
+                        picture
+                            .lines(&console, view, cols as u16, rows as u16)
+                            .iter()
+                            .flatten()
+                            .map(|s| s.text.len() as u64 + 20)
+                            .sum()
+                    }
+                };
+                count_picture_bytes(picture.id(), bytes);
+                window.push((now, bytes));
+                window.retain(|(at, _)| now.duration_since(*at) <= Duration::from_secs(2));
+                peaks.push(window.iter().map(|(_, b)| b).sum());
+            }
+        }
+        seen = w.frames.len();
+    }
+    (node, pacing.recent_bytes(node), peaks)
+}
+
+#[test]
+fn a_regions_bytes_over_two_seconds_stay_under_its_cap() {
+    if std::env::var_os("RICH_EMBED_CHROME").is_none() {
+        eprintln!("skipped: set RICH_EMBED_CHROME to a Chrome or Chromium binary to run");
+        return;
+    }
+    // 400 kB a second, Kitty: the pacer learns what a frame costs.
+    let budget = ByteBudget::new(400_000);
+    let mut pacing = Pacing::new(budget, Pixels::Kitty);
+    let (node, _, peaks) = pace(&mut pacing, 4.0);
+    let cap = pacing.cap() * 2.0;
+    assert!(!peaks.is_empty(), "no frame drawn");
+    // After the first frame (its cost was a guess), every two-second
+    // window stays under the cap.
+    let worst = peaks.iter().skip(1).copied().max().unwrap_or(0);
+    assert!(
+        (worst as f64) <= cap,
+        "{worst} bytes in two seconds over a cap of {cap} ({:?})",
+        pacing.pixels(node)
+    );
+}
+
+#[test]
+fn a_slow_terminal_steps_video_down_to_character_art() {
+    if std::env::var_os("RICH_EMBED_CHROME").is_none() {
+        eprintln!("skipped: set RICH_EMBED_CHROME to a Chrome or Chromium binary to run");
+        return;
+    }
+    // 20 kB a second: fewer than two Kitty, iTerm2 or Sixel frames of a
+    // 40 x 10 region a second.
+    let mut pacing = Pacing::new(ByteBudget::new(20_000), Pixels::Kitty);
+    let (node, _, peaks) = pace(&mut pacing, 2.0);
+    assert_eq!(pacing.pixels(node), Pixels::Cells);
+    assert!(!peaks.is_empty(), "no frame drawn");
+}
+
+#[test]
+fn the_about_pages_codec_table_matches_can_play_type() {
+    let Some(engine) = start() else { return };
+    // What the page itself hears from canPlayType, asked in its own
+    // world, apart from the engine's isolated one.
+    let devtools = engine.devtools().clone();
+    let types = serde_json::to_string(&about::types()).unwrap();
+    let direct = devtools
+        .call(
+            "Runtime.evaluate",
+            serde_json::json!({"expression": format!(
+                "(() => {{ const v = document.createElement('video'); \
+                  return {types}.map(t => v.canPlayType(t)); }})()"
+            ), "returnByValue": true}),
+            Duration::from_secs(30),
+        )
+        .unwrap();
+    let direct: Vec<String> = direct["result"]["value"]
+        .as_array()
+        .unwrap()
+        .iter()
+        .map(|v| v.as_str().unwrap_or_default().to_string())
+        .collect();
+    // Chrome plays VP9 in WebM, whatever its build.
+    assert_eq!(direct[4], "probably", "{direct:?}");
+    let w = Watch::new(engine);
+    w.tab.send(Command::Open(about::ADDRESS.into()));
+    let start = Instant::now();
+    let (answers, product) = loop {
+        match w.updates.recv_timeout(Duration::from_millis(100)) {
+            Ok(Update::About { answers, product }) => break (answers, product),
+            _ => assert!(start.elapsed() < Duration::from_secs(30), "no about page"),
+        }
+    };
+    // The table the about page draws: one row a codec, saying what
+    // Chrome said.
+    assert_eq!(answers, direct);
+    assert_eq!(answers.len(), about::CODECS.len());
+    assert!(!product.is_empty() && product != "unknown", "{product}");
+    for ((name, _), answer) in about::CODECS.iter().zip(&answers) {
+        let verdict = about::verdict(answer);
+        assert!(
+            ["yes (probably)", "maybe", "no"].contains(&verdict),
+            "{name}: {verdict}"
+        );
+    }
+}
+
+#[test]
+fn the_video_keeps_playing_while_the_log_updates_within_its_cap() {
+    let Some(engine) = start() else { return };
+    let mut w = Watch::new(engine);
+    let url = fixture("stream-with-log.html");
+    w.tab.send(Command::Open(url.clone()));
+    let video = |w: &Watch| -> Option<noctiluca::model::Media> {
+        w.page
+            .as_ref()?
+            .media
+            .iter()
+            .find(|m| m.kind == noctiluca::model::MediaKind::Video)
+            .cloned()
+    };
+    let entries = |w: &Watch| -> usize {
+        w.page
+            .as_ref()
+            .and_then(|p| p.logs.first())
+            .map_or(0, |l| l.entries.len())
+    };
+    w.until("the stream, playing, and its log", |w| {
+        w.page.as_ref().is_some_and(|p| p.url == url)
+            && video(w).and_then(|v| v.playback).is_some_and(|p| !p.paused)
+            && entries(w) >= 6
+    });
+    let node = video(&w).unwrap().node;
+    w.tab.send(Command::Regions {
+        on_screen: vec![node],
+        intervals: Vec::new(),
+    });
+    // The region's first frame: the start (the screencast turning on, the
+    // stills of a page just read) is not what this measures.
+    let first = w.frames.len();
+    w.until("the region's first frame", |w| w.frames.len() > first);
+    // Four seconds: the log gains entries (one each 1.5 s, read as live
+    // changes), and the video's frames keep coming, paced within 400 kB
+    // a second.
+    let mut pacing = Pacing::new(ByteBudget::new(400_000), Pixels::Kitty);
+    let (cols, rows) = (40, 10);
+    let before = entries(&w);
+    let (mut seen, mut drawn) = (w.frames.len(), Vec::new());
+    let mut window: Vec<(Instant, u64)> = Vec::new();
+    let mut peaks = Vec::new();
+    let end = Instant::now() + Duration::from_secs(4);
+    while Instant::now() < end {
+        w.pump(Duration::from_millis(20));
+        for frame in &w.frames[seen..] {
+            let now = Instant::now();
+            if let Some(picture) = pacing.offer(frame, cols, rows, now, picture_bytes) {
+                let bytes = picture
+                    .encode(pacing.pixels(node), cols, rows)
+                    .map_or(0, |e| e.len() as u64);
+                count_picture_bytes(picture.id(), bytes);
+                window.push((now, bytes));
+                window.retain(|(at, _)| now.duration_since(*at) <= Duration::from_secs(2));
+                peaks.push(window.iter().map(|(_, b)| b).sum::<u64>());
+                drawn.push(now);
+            }
+        }
+        seen = w.frames.len();
+    }
+    assert!(entries(&w) >= before + 2, "the log did not update");
+    assert!(
+        video(&w)
+            .and_then(|v| v.playback)
+            .is_some_and(|p| !p.paused),
+        "the video stopped"
+    );
+    // Frames throughout the four seconds, not one burst: at the start
+    // and at the end, however busy the machine.
+    let start = end - Duration::from_secs(4);
+    let early = drawn
+        .iter()
+        .any(|t| *t < start + Duration::from_millis(1500));
+    let late = drawn
+        .iter()
+        .any(|t| *t >= end - Duration::from_millis(1500));
+    assert!(
+        drawn.len() >= 4 && early && late,
+        "{} frames: {drawn:?}",
+        drawn.len()
+    );
+    let cap = pacing.cap() * 2.0;
+    let worst = peaks.iter().skip(1).copied().max().unwrap_or(0);
+    assert!(
+        (worst as f64) <= cap,
+        "{worst} bytes in two seconds, cap {cap}"
+    );
+}

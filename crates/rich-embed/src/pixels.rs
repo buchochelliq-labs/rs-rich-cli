@@ -28,6 +28,34 @@ impl Pixels {
         })
     }
 
+    /// The `width` x `height` pixels from (`x`, `y`), clipped to the
+    /// frame. `None` when nothing of it is in the frame.
+    pub fn crop(&self, x: u32, y: u32, width: u32, height: u32) -> Option<Pixels> {
+        let x1 = x.saturating_add(width).min(self.width);
+        let y1 = y.saturating_add(height).min(self.height);
+        if x >= x1 || y >= y1 {
+            return None;
+        }
+        let mut rgb = Vec::with_capacity(((x1 - x) * (y1 - y) * 3) as usize);
+        for row in y..y1 {
+            let start = ((row * self.width + x) * 3) as usize;
+            let end = ((row * self.width + x1) * 3) as usize;
+            rgb.extend_from_slice(&self.rgb[start..end]);
+        }
+        Pixels::new(x1 - x, y1 - y, rgb)
+    }
+
+    /// The pixels as red, green, blue and alpha (opaque), for encoders that
+    /// take RGBA.
+    pub fn to_rgba(&self) -> Vec<u8> {
+        let mut out = Vec::with_capacity(self.rgb.len() / 3 * 4);
+        for pixel in self.rgb.as_chunks::<3>().0 {
+            out.extend_from_slice(pixel);
+            out.push(255);
+        }
+        out
+    }
+
     /// The average colour of the pixels in `x0..x1` x `y0..y1`.
     fn average(&self, x0: u32, x1: u32, y0: u32, y1: u32) -> (u8, u8, u8) {
         let mut sum = [0u64; 3];
@@ -126,5 +154,19 @@ mod tests {
         assert_eq!(wide.len(), 3);
         assert_eq!(wide[0][0].text, "▀▀▀▀");
         assert!(Pixels::new(2, 2, vec![0; 3]).is_none());
+    }
+
+    #[test]
+    fn crops_clip_to_the_frame() {
+        // 3 x 2, each pixel's red its index.
+        let rgb = (0..6u8).flat_map(|i| [i, 0, 0]).collect();
+        let pixels = Pixels::new(3, 2, rgb).unwrap();
+        let part = pixels.crop(1, 0, 5, 1).unwrap();
+        assert_eq!((part.width, part.height), (2, 1));
+        assert_eq!(part.rgb, vec![1, 0, 0, 2, 0, 0]);
+        let lower = pixels.crop(0, 1, 1, 9).unwrap();
+        assert_eq!(lower.rgb, vec![3, 0, 0]);
+        assert!(pixels.crop(3, 0, 1, 1).is_none());
+        assert_eq!(part.to_rgba(), vec![1, 0, 0, 255, 2, 0, 0, 255]);
     }
 }

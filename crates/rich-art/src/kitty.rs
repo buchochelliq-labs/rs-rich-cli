@@ -9,6 +9,7 @@
 //! overwritten like any other cell, and costs nothing to show again.
 //!
 //! - [`transmit`] sends a PNG and makes its virtual placement;
+//!   [`transmit_rgba`] sends raw RGBA pixels, with no PNG encode;
 //!   [`transmit_animation`] adds frames and starts Kitty's own playback.
 //! - [`placeholder_row`] is the text of one row of cells, and
 //!   [`id_color`] the colour those cells must be printed in.
@@ -143,6 +144,25 @@ pub fn transmit(id: u32, png: &[u8], cols: usize, rows: usize) -> String {
     command(
         &format!("a=T,U=1,f=100,t=d,i={id},c={cols},r={rows},q=2"),
         png,
+    )
+}
+
+/// Transmit raw RGBA pixels, `width` x `height`, as image `id` (`f=32`, no
+/// PNG encode) and give it a virtual placement of `cols × rows` cells, for
+/// placeholder cells to show: a live frame (video, an emulator's screen)
+/// sent many times a second, where a PNG encode per frame costs more than
+/// the bytes it saves. Sending it again under the same id replaces it.
+pub fn transmit_rgba(
+    id: u32,
+    rgba: &[u8],
+    width: u32,
+    height: u32,
+    cols: usize,
+    rows: usize,
+) -> String {
+    command(
+        &format!("a=T,U=1,f=32,s={width},v={height},t=d,i={id},c={cols},r={rows},q=2"),
+        rgba,
     )
 }
 

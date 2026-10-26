@@ -1,4 +1,5 @@
-◀▶ Reader fixture https://fixture.example/reader.html reader
+ NOCTILUCA   READER + CELLS   ◀▶   Reader fixture
+ https://fixture.example/reader.html
 Plankton                                                                                           ┃
                                                                                                    ┃
 Tiny drifters of the open sea, with light of their own.                                            ┃
@@ -10,10 +11,10 @@ Kinds                                                                           
   ◦ Pyrocystis                                                                                     ┃
 • Copepods                                                                                         ┃
 1. Bloom                                                                                           ┃
-2. Glow                                                                                            ┃
-          ╭─ Open: an address, a keyword, or words to search ────────────────────────────╮         ┃
-│ The sea │lamp shine                                                                    │         ┃
-          ╰──────────────────────────────────────────────────────────────────────────────╯         ┃
+2. Glow   ╭─ Open: an address, a keyword, or words to search ────────────────────────────╮         ┃
+          │lamp shine                                                                    │         ┃
+│ The sea ╰──────────────────────────────────────────────────────────────────────────────╯         ┃
+                                                                                                   ┃
 ▏glow = touch * 0.1                                                                                ┃
 ▏sleep()                                                                                           ┃
                                                                                                    ┃
@@ -22,9 +23,8 @@ Name      │ Size                                                              
 ──────────┼─────                                                                                   ┃
 Noctiluca │ 1 mm                                                                                   ┃
 Copepod   │ 2 mm                                                                                   ┃
-                                                                                                   ┃
-image: A glowing wave                                                                              ┃
-▀▀▀▀▀                                                                                              ┃
-                                                                                                   ┃
                                                                                                    │
-f1 actions · f hints · o open · r reader · q quit
+image: A glowing wave                                                                              │
+▀▀▀▀▀                                                                                              │
+ reader | row 1/29
+ f1 actions | f hints | o open | r reader | q quit

@@ -54,7 +54,8 @@ for reader mode and **q** to quit.
 | [Reading and moving around](noctiluca/reading.md) | The projection and reader mode, scrolling, link hints, find, history, bookmarks, the F1 overlay |
 | [Forms and controls](noctiluca/forms.md) | How a page's controls become widgets, typing, selects, check boxes, buttons, and what is not supported yet |
 | [Going places and keys](noctiluca/keys.md) | Keywords, the command line, the key presets, per-site keys, and every action with its keys |
-| [Sound and media](noctiluca/media.md) | `--audio`, the media controls, images and how they reach your terminal |
+| [Pictures, video and sound](noctiluca/media.md) | Pictures where the page puts them, animated GIFs, video in its region, the byte budget, `--audio` and the media controls |
+| [Live logs and adaptations](noctiluca/adaptations.md) | Chats and logs that follow their newest entries, and the terminal adaptations, each of which can be switched off |
 | [Configuration](noctiluca/config.md) | Every key of `config.toml`, with its type, default and meaning |
 | [Privacy and security](noctiluca/privacy.md) | The browser profile, downloads, the sandbox, cleaned page text, bot checks, and what is sent where |
 | [Using it as a library](noctiluca/library.md) | The engine trait, the tab, the page model, and a fake engine for tests |

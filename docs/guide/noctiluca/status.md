@@ -3,7 +3,28 @@
 Noctiluca grows in phases, each unlocked by what people use a browser in a
 terminal for. The phases and their tests are in
 [the design note](../../design/browser.md#phases). This page says what the
-0.0.22 release has, and what comes next.
+0.0.22 and 0.0.23 releases have, and what comes next.
+
+## In 0.0.23 (Noctiluca 0.0.2): pictures, video and live logs
+
+| Works | Notes |
+|---|---|
+| Pictures in the projection | From the page's own files, where the page puts them, in Kitty, Sixel, iTerm2 or half blocks; small pictures in their line of text; an `Image:` caption under one with none |
+| Animated GIFs | Moving within a byte budget, stepping down when it is short; Kitty plays them itself; `F4` freezes them |
+| Video | Its poster with a play mark, then its frames in its region while it plays on screen; play, pause, seek and mute; the media state in the status bar |
+| Live logs | A chat or log follows its newest entries, read without reading the page again, and holds still when scrolled up |
+| Terminal adaptations | Named generic rules, each switched off with `[adapt]` or `--adapt`; `a` for the faithful projection, `?` for the about page |
+| Long pages | Only the rows near the view are built; lazy images and endless feeds load as you scroll |
+
+### Known limits in 0.0.23
+
+- **One tab.**
+- **No fixed or sticky layer** and no paint order in the projection.
+- **An inline SVG drawing, a canvas and a frame** show as their alt text.
+- **The byte budget starts as a guess** (4 MB a second, 256 kB over
+  SSH), lowered to the rate your terminal takes output at once measured,
+  unless `[media] bandwidth` sets it. A site's `fps` is read but not
+  applied.
 
 ## In 0.0.22 (Noctiluca 0.0.1): the reader phase
 
@@ -28,31 +49,22 @@ the same pages through a real Chrome in CI.
 - **One tab.** The tab actions are listed and say "One tab for now".
 - **The projection is rough:** no fixed or sticky layer, no paint order.
 - **No pictures in the projection**, no animated GIFs (a still frame in
-  reader mode), and no video frames (a video's sound plays).
-- **`--fps` and `fps` are read but change nothing yet.**
+  reader mode), and no video frames (a video's sound plays). All three
+  came in 0.0.23.
+- **`--fps` and `fps` are read but change nothing yet** (they cap moving
+  pictures since 0.0.23).
 - **Downloads are refused**, with no switch to allow them.
 - **A binding cannot start from a link hint** or the focused element; the
   `Ctrl+K` picker lists the same elements.
 
 ## Planned
 
-**0.0.23: pictures and scrolling.**
-
-- Pictures in the projection.
-- Animated GIFs.
-- Done: Chrome's scroll follows Noctiluca's, so lazy images and infinite
-  feeds load as you scroll, and a picture partly in view shows its part.
-
-**Also in 0.0.23: video.** Play, pause, seek and mute a video in its own region,
-its frames under a budget, stepping down to character art on a slow
-terminal.
-
 **Later, without a date yet:**
 
 - **Forms and tables.** Every widget through the guarded commit, with
   conflicts caught; wide and long tables that scroll with their headers
   kept; signing in to a form.
-- **Layout.** Grid and columns side by side, sticky headers that stay
+- **Layout.** Sticky headers that stay
   pinned, a raster view from Chrome's screencast, a canvas as a region
   inside projected text.
 - **Tabs**, once rs-rich-embed drives several pages.

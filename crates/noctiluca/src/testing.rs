@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::io;
 use std::sync::{Arc, Mutex};
 
-use rich_embed::PageState;
+use rich_embed::{PageState, ScreencastFrame};
 use serde_json::Value;
 
 use crate::engine::{
@@ -36,6 +36,54 @@ pub struct FakeState {
     pub viewport_height: f64,
     /// Image nodes whose picture has not loaded (lazy, below the fold).
     pub not_loaded: std::collections::HashSet<i64>,
+    /// Whether the screencast is on.
+    pub screencast: bool,
+    /// Screencast frames waiting to be taken, oldest first: a test pushes
+    /// them.
+    pub frames: Vec<ScreencastFrame>,
+    /// `canPlayType`'s answers by media type.
+    pub codecs: HashMap<String, String>,
+    /// Resources the page loaded, by address: an image's original bytes.
+    pub resources: HashMap<String, Vec<u8>>,
+    /// Where resources not in [`resources`](Self::resources) are read
+    /// from: a fixture directory, by the address's path after its last
+    /// `/fixtures/` (else its last segment). Saved snapshots name their
+    /// fixtures `file:///noctiluca/fixtures/…`.
+    pub resource_root: Option<std::path::PathBuf>,
+    /// Chrome's recorded frames of videos (`STEM-NN.jpg`, the capture
+    /// example's `--frames`): with them, the page's videos play as Chrome
+    /// played them, autoplaying ones from the start, and the screencast
+    /// shows them in their boxes. `None`: a test pushes its own frames.
+    pub recorded: Option<std::path::PathBuf>,
+    /// The recorded frames read so far, by stem.
+    recorded_frames: HashMap<String, Vec<image::RgbImage>>,
+    /// When each playing video's clock started.
+    playing_since: HashMap<i64, std::time::Instant>,
+    /// The viewport's width in CSS pixels.
+    pub viewport_width: f64,
+}
+
+impl FakeState {
+    /// The bytes of the resource at `url`, if the test has them.
+    pub fn resource(&self, url: &str) -> Option<Vec<u8>> {
+        if let Some(bytes) = self.resources.get(url) {
+            return Some(bytes.clone());
+        }
+        let root = self.resource_root.as_ref()?;
+        let path = url.split(['?', '#']).next().unwrap_or(url);
+        let relative = match path.rfind("/fixtures/") {
+            Some(at) => &path[at + "/fixtures/".len()..],
+            None => path.rsplit('/').next().unwrap_or(path),
+        };
+        // Never above the root.
+        if relative
+            .split('/')
+            .any(|part| part == ".." || part.is_empty())
+        {
+            return None;
+        }
+        std::fs::read(root.join(relative)).ok()
+    }
 }
 
 impl FakeState {
@@ -188,9 +236,14 @@ pub fn snapshot_file(path: &std::path::Path) -> io::Result<PageSnapshot> {
 
 impl FakeEngine {
     /// An engine over the snapshots in `dir` (`NAME.json` each), showing
-    /// none yet.
+    /// none yet. Resources come from the `fixtures` directory beside it,
+    /// when there is one.
     pub fn from_dir(dir: &std::path::Path) -> io::Result<FakeEngine> {
         let mut state = FakeState::default();
+        let fixtures = dir.join("..").join("fixtures");
+        if fixtures.is_dir() {
+            state.resource_root = Some(fixtures);
+        }
         for entry in std::fs::read_dir(dir)? {
             let path = entry?.path();
             if path.extension().is_some_and(|e| e == "json") {
@@ -206,6 +259,14 @@ impl FakeEngine {
             state: Arc::new(Mutex::new(state)),
             on_act: None,
         })
+    }
+
+    /// Play videos from Chrome's recorded frames in `dir` (see
+    /// [`FakeState::recorded`]).
+    #[must_use]
+    pub fn replaying(self, dir: &std::path::Path) -> FakeEngine {
+        self.lock().recorded = Some(dir.to_path_buf());
+        self
     }
 
     /// Run `hook` on each action, to change the page as a browser would.
@@ -240,6 +301,109 @@ impl FakeState {
         self.at = self.history.len() - 1;
         self.current = Some(name);
         self.events.push(EngineEvent::Navigated(url.to_string()));
+        if self.recorded.is_some() {
+            self.ready_videos();
+        }
+    }
+
+    /// The current page's videos, ready to play as the recording did:
+    /// five seconds long, muted, the `autoplay` ones playing.
+    fn ready_videos(&mut self) {
+        let Some(page) = self.current.as_ref().and_then(|n| self.pages.get(n)) else {
+            return;
+        };
+        let model = crate::model::build(page, &mut crate::model::Revisions::new());
+        for video in model
+            .media
+            .iter()
+            .filter(|m| m.kind == crate::model::MediaKind::Video)
+        {
+            self.media.entry(video.node).or_insert(Playback {
+                paused: !video.autoplay,
+                muted: true,
+                volume: 1.0,
+                duration: Some(5.0),
+                ready: 4,
+                ..Playback::default()
+            });
+            if video.autoplay {
+                self.playing_since
+                    .insert(video.node, std::time::Instant::now());
+            }
+        }
+    }
+
+    /// A frame with each playing video's recorded frame in its box, as
+    /// Chrome's screencast paints it. It spans the playing videos (its
+    /// scroll at their top), wherever the scripted view is.
+    fn recorded_frame(&mut self) -> Option<ScreencastFrame> {
+        let dir = self.recorded.clone()?;
+        let page = self.current.as_ref().and_then(|n| self.pages.get(n))?;
+        let model = crate::model::build(page, &mut crate::model::Revisions::new());
+        let playing: Vec<_> = model
+            .media
+            .iter()
+            .filter(|m| m.kind == crate::model::MediaKind::Video)
+            .filter(|m| self.media.get(&m.node).is_some_and(|p| !p.paused))
+            .cloned()
+            .collect();
+        let top = playing.iter().map(|m| m.rect.y).fold(f64::MAX, f64::min);
+        let bottom = playing.iter().map(|m| m.rect.bottom()).fold(0.0, f64::max);
+        if playing.is_empty() || bottom <= top {
+            return None;
+        }
+        let width = self.viewport_width.max(80.0) as u32;
+        let height = (bottom - top).ceil().max(1.0) as u32;
+        let mut canvas = image::RgbImage::new(width, height);
+        for video in &playing {
+            let stem = video
+                .src
+                .rsplit('/')
+                .next()
+                .and_then(|name| name.split('.').next())
+                .unwrap_or_default()
+                .to_string();
+            let frames = self.recorded_frames.entry(stem.clone()).or_insert_with(|| {
+                (0..100)
+                    .map_while(|k| image::open(dir.join(format!("{stem}-{k:02}.jpg"))).ok())
+                    .map(|i| i.to_rgb8())
+                    .collect()
+            });
+            if frames.is_empty() {
+                continue;
+            }
+            let since = self
+                .playing_since
+                .get(&video.node)
+                .map_or(0.0, |t| t.elapsed().as_secs_f64());
+            let frame = &frames[(since * 8.0) as usize % frames.len()];
+            let (w, h) = (video.rect.width.max(1.0), video.rect.height.max(1.0));
+            let scaled = image::imageops::resize(
+                frame,
+                w as u32,
+                h as u32,
+                image::imageops::FilterType::Triangle,
+            );
+            image::imageops::overlay(
+                &mut canvas,
+                &scaled,
+                video.rect.x as i64,
+                (video.rect.y - top) as i64,
+            );
+        }
+        let scroll_y = top;
+        Some(ScreencastFrame {
+            pixels: rich_embed::Pixels::new(width, height, canvas.into_raw())?,
+            meta: rich_embed::FrameMeta {
+                scroll_x: 0.0,
+                scroll_y,
+                offset_top: 0.0,
+                page_scale: 1.0,
+                device_width: width as f64,
+                device_height: height as f64,
+                timestamp: None,
+            },
+        })
     }
 }
 
@@ -264,8 +428,10 @@ pub fn follow(action: &PageAction, state: &mut FakeState) {
 }
 
 impl Engine for FakeEngine {
-    fn resize(&mut self, _columns: u16, rows: u16) -> io::Result<()> {
-        self.lock().viewport_height = rows as f64 * crate::cdp::CELL.1 as f64;
+    fn resize(&mut self, columns: u16, rows: u16) -> io::Result<()> {
+        let mut state = self.lock();
+        state.viewport_height = rows as f64 * crate::cdp::CELL.1 as f64;
+        state.viewport_width = columns as f64 * crate::cdp::CELL.0 as f64;
         Ok(())
     }
 
@@ -349,12 +515,31 @@ impl Engine for FakeEngine {
                 _ => {}
             }
             if let PageAction::Media { node, op } = action {
+                if state.recorded.is_some() {
+                    match op {
+                        MediaOp::Play => {
+                            let at = state.media.get(node).map_or(0.0, |p| p.time);
+                            let start = std::time::Instant::now()
+                                .checked_sub(std::time::Duration::from_secs_f64(at))
+                                .unwrap_or_else(std::time::Instant::now);
+                            state.playing_since.insert(*node, start);
+                        }
+                        MediaOp::Pause => {
+                            state.playing_since.remove(node);
+                        }
+                        _ => {}
+                    }
+                }
                 if let Some(p) = state.media.get_mut(node) {
                     match op {
                         MediaOp::Play => p.paused = false,
                         MediaOp::Pause => p.paused = true,
                         MediaOp::Mute(on) => p.muted = *on,
                         MediaOp::Volume(v) => p.volume = *v,
+                        MediaOp::Seek(d) => {
+                            let end = p.duration.unwrap_or(p.time);
+                            p.time = (p.time + d).clamp(0.0, end);
+                        }
                     }
                 }
                 state.events.push(EngineEvent::Changed);
@@ -369,15 +554,28 @@ impl Engine for FakeEngine {
     }
 
     fn playback(&mut self, _tab: TabId, node: i64) -> io::Result<Playback> {
-        self.lock()
+        let state = self.lock();
+        let mut playback = state
             .media
             .get(&node)
             .copied()
-            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no media"))
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no media"))?;
+        // A recorded video's clock runs while it plays, looping.
+        if let Some(since) = state.playing_since.get(&node).filter(|_| !playback.paused) {
+            let length = playback.duration.unwrap_or(5.0).max(0.1);
+            playback.time = since.elapsed().as_secs_f64() % length;
+        }
+        Ok(playback)
     }
 
     fn image_ready(&mut self, _tab: TabId, node: i64) -> io::Result<bool> {
         Ok(!self.lock().not_loaded.contains(&node))
+    }
+
+    fn resource(&mut self, _tab: TabId, url: &str) -> io::Result<Vec<u8>> {
+        self.lock()
+            .resource(url)
+            .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no such resource"))
     }
 
     fn metrics(&mut self, _tab: TabId) -> io::Result<Metrics> {
@@ -387,6 +585,33 @@ impl Engine for FakeEngine {
             content_height: state.content_height(),
             viewport_height: state.viewport_height,
         })
+    }
+
+    fn set_screencast(&mut self, _tab: TabId, on: bool) -> io::Result<()> {
+        self.lock().screencast = on;
+        Ok(())
+    }
+
+    fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {
+        let mut state = self.lock();
+        if state.screencast && state.frames.is_empty() && state.recorded.is_some() {
+            return state.recorded_frame();
+        }
+        if !state.screencast || state.frames.is_empty() {
+            return None;
+        }
+        // The newest, as a browser that paints faster than it is asked.
+        let last = state.frames.pop();
+        state.frames.clear();
+        last
+    }
+
+    fn can_play(&mut self, _tab: TabId, types: &[&str]) -> io::Result<Vec<String>> {
+        let state = self.lock();
+        Ok(types
+            .iter()
+            .map(|t| state.codecs.get(*t).cloned().unwrap_or_default())
+            .collect())
     }
 
     fn events(&mut self) -> Vec<EngineEvent> {

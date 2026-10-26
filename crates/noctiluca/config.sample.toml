@@ -33,11 +33,34 @@ preset = "vim"
 [media]
 # Pages' sound plays on the machine Chrome runs on. Off by default.
 audio = false
-# The frame cap for media regions (read, and kept for video: it changes
-# nothing yet).
+# The most frames a second a moving picture (a GIF, a video) shows: a
+# ceiling, not a target; video never goes above 8.
 fps = 8
 # auto, ansi (half blocks), kitty, sixel, iterm2, or none (alt text only).
 images = "auto"
+# Bytes a second moving pictures may send the terminal, shared by those in
+# view; short of it, a picture steps down Kitty, iTerm2, Sixel, then half
+# blocks. Unset: 4M on this machine, 256K over SSH.
+# bandwidth = "4M"
+
+[adapt]
+# Terminal adaptations: named rules about constructs, never about a site.
+# Every rule is on but text-over-pictures, which changes what a page
+# means. `a` toggles all of them off and on while browsing, `?` lists
+# them, and --adapt=-RULE or --no-adapt sets them for one run.
+decorative-images = true
+inline-pictures = true
+cap-pictures = true
+captions = true
+icon-buttons = true
+snap-grids = true
+collapse-nav = true
+text-over-pictures = false
+live-tail = true
+# Off: the page's own colours, on white on a light terminal, lightness
+# inverted on black on a dark one (COLORFGBG says which).
+page-colors = true
+bandwidth = true
 
 [profile]
 # A kept profile (its cookies and storage stay between runs), opt-in. By

@@ -1,4 +1,5 @@
-◀▶ glow::Lamp - docs https://fixture.example/docs.html reader
+ NOCTILUCA   READER + CELLS   ◀▶   glow::Lamp - docs
+ https://fixture.example/docs.html
 • new
 • shine
 
@@ -25,6 +26,5 @@ brightness │ u8
 
 
 
-
-
-opening https://fixture.example/docs.html?q=shine
+ opening https://fixture.example/docs.html?q=shine
+ f1 actions | f hints | o open | r reader | q quit

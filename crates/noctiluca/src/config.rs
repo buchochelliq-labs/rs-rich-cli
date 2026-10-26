@@ -7,8 +7,11 @@
 //! - `[search]`: the search engine (`url`, with `{}` for the query).
 //! - `[keys]`: `preset` (`vim` or `plain`) and `action = "keys"` lines.
 //! - `[startup]`: `home` and `view` (`projection`, `reader`, `raster`).
-//! - `[media]`: `audio`, `fps`, `images`.
+//! - `[media]`: `audio`, `fps` (moving pictures' ceiling), `images`,
+//!   `bandwidth` (bytes a second for moving pictures: `"512K"`, `"4M"`).
 //! - `[profile]`: `name`, a kept profile (opt-in).
+//! - `[adapt]`: each terminal adaptation by name (`collapse-nav = false`),
+//!   on or off; see [`crate::adapt`].
 //! - `[site."PATTERN"]`: per-site `view`, `images`, `audio`, `fps`,
 //!   `width`, `keyword` and `[site."PATTERN".keys]`.
 //!
@@ -20,6 +23,7 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
+use crate::adapt::{Adapt, Rule, RULES};
 use crate::url::{complete_address, encode_query, host, looks_like_address};
 
 /// A view of a page.
@@ -182,15 +186,40 @@ pub struct Config {
     pub home: Option<String>,
     pub view: View,
     pub audio: bool,
+    /// The most frames a second a moving picture shows.
     pub fps: u32,
     pub images: Images,
+    /// Bytes a second moving pictures may send the terminal; `None`:
+    /// rs-rich-art's guess (4 MB on this machine, 256 kB over SSH).
+    pub bandwidth: Option<u64>,
     /// A kept profile's name, if one is asked for.
     pub profile: Option<String>,
     pub sites: Vec<Site>,
+    /// The terminal adaptations that are on.
+    pub adapt: Adapt,
     /// What was not understood, for the user.
     pub warnings: Vec<String>,
     /// The file it came from, which edits go to.
     pub path: Option<PathBuf>,
+}
+
+/// A byte count: a number, or a string with `K` or `M` (1024s) after it.
+/// At least 1 kB a second.
+fn parse_bytes(value: &toml::Value) -> Option<u64> {
+    let bytes = match value {
+        toml::Value::Integer(n) => u64::try_from(*n).ok()?,
+        toml::Value::String(s) => {
+            let s = s.trim();
+            let (number, unit) = match s.char_indices().last()? {
+                (at, 'k' | 'K') => (&s[..at], 1024),
+                (at, 'm' | 'M') => (&s[..at], 1024 * 1024),
+                _ => (s, 1),
+            };
+            number.trim().parse::<u64>().ok()?.checked_mul(unit)?
+        }
+        _ => return None,
+    };
+    (bytes >= 1024).then_some(bytes)
 }
 
 /// The search engine when none is set: DuckDuckGo's HTML search, with no
@@ -241,8 +270,10 @@ impl Default for Config {
             audio: false,
             fps: 8,
             images: Images::Auto,
+            bandwidth: None,
             profile: None,
             sites: Vec::new(),
+            adapt: Adapt::default(),
             warnings: Vec::new(),
             path: None,
         }
@@ -340,8 +371,10 @@ impl Config {
         let mut keys = Vec::new();
         let (mut home, mut view) = (None, View::Projection);
         let (mut audio, mut fps, mut images) = (false, 8u32, Images::Auto);
+        let mut bandwidth = None;
         let mut profile = None;
         let mut sites = Vec::new();
+        let mut adapt = Adapt::default();
         for (section, value) in &table {
             let Some(body) = value.as_table() else {
                 warn(format!("{section}: expected a table"));
@@ -450,6 +483,10 @@ impl Config {
                                 Some(i) => images = i,
                                 None => warn(format!("media.images: {s:?} is not auto, ansi, kitty, sixel, iterm2 or none")),
                             },
+                            ("bandwidth", value) => match parse_bytes(value) {
+                                Some(b) => bandwidth = Some(b),
+                                None => warn(format!("media.bandwidth: {value} is not a byte count (512K, 4M)")),
+                            },
                             _ => warn(format!("media.{key}: unknown key or value")),
                         }
                     }
@@ -462,6 +499,18 @@ impl Config {
                                 warn("profile.name: letters, digits, - and _ only".into())
                             }
                             _ => warn(format!("profile.{key}: unknown key")),
+                        }
+                    }
+                }
+                "adapt" => {
+                    for (key, value) in body {
+                        match (Rule::parse(key), value) {
+                            (Some(rule), toml::Value::Boolean(on)) => adapt.set(rule, *on),
+                            (Some(_), _) => warn(format!("adapt.{key}: expected true or false")),
+                            (None, _) => warn(format!(
+                                "adapt.{key}: not an adaptation (they are {})",
+                                RULES.iter().map(|r| r.name).collect::<Vec<_>>().join(", ")
+                            )),
                         }
                     }
                 }
@@ -485,8 +534,10 @@ impl Config {
         config.audio = audio;
         config.fps = fps;
         config.images = images;
+        config.bandwidth = bandwidth;
         config.profile = profile;
         config.sites = sites;
+        config.adapt = adapt;
         Ok(config)
     }
 
@@ -840,6 +891,17 @@ mod tests {
         assert_eq!(config.view, View::Reader);
         assert!(config.audio);
         assert_eq!((config.images, config.fps), (Images::Kitty, 12));
+        assert_eq!(
+            parse_bytes(&toml::Value::String("512K".into())),
+            Some(512 * 1024)
+        );
+        assert_eq!(
+            parse_bytes(&toml::Value::String("4M".into())),
+            Some(4 << 20)
+        );
+        assert_eq!(parse_bytes(&toml::Value::Integer(50_000)), Some(50_000));
+        assert_eq!(parse_bytes(&toml::Value::String("fast".into())), None);
+        assert_eq!(parse_bytes(&toml::Value::Integer(10)), None);
         assert_eq!(config.preset, Preset::Plain);
         assert_eq!(config.keys, [("hints".to_string(), "ctrl+g".to_string())]);
         assert_eq!(config.profile.as_deref(), Some("work"));
@@ -928,6 +990,8 @@ mod tests {
             Some(View::Reader)
         );
         assert!(config.shortcuts.contains_key("wiki"));
+        // The sample spells out the defaults.
+        assert_eq!(config.adapt, Adapt::default());
     }
 
     #[test]

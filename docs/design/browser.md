@@ -35,6 +35,23 @@ gets only generic pieces from this work (see
   place across readings (anchored by node), the layout is cached, a cut
   page says so, and the screencast is off. See
   [rendering performance](render-performance.md#what-landed).
+- **Video and the PoC's chrome (0.0.23, branch `023-video`)**: a playing
+  `<video>` plays in its region from Chrome's screencast, cropped, paced
+  within a byte budget and stepped down when short; play, pause, seek and
+  mute from keys and controls; a poster with a play mark; the header with
+  the view and the address and the status bar with the media state, the
+  row and the keys; `about:noctiluca`'s codec table. See
+  [Media regions](#media-regions).
+- **Pictures and GIFs (0.0.23, branch `023-media`)**: every picture is
+  decoded from the page's own file and drawn over its region in Kitty,
+  iTerm2, Sixel or half blocks; small pictures stay in their line of
+  text; animated GIFs move within the byte budget they share with video,
+  step down when it is short, and stop when frozen; a picture with no
+  caption gets an `Image:` line. The picture code is rs-rich-art's
+  `picture` and `frames` features, with intuiTUIve's `art` as glue. The
+  news and video fixtures (`news.html`, `media-grid.html`) have tapes.
+  Known limits: an inline SVG picture shows its alt text; only bytes are
+  paced, not the time an encode takes.
 - **Next**: 0.2, forms and tables (a login form, a dashboard and a
   settings page as fixtures); rs-rich-embed's faster loop and several
   pages (tabs).
@@ -206,6 +223,98 @@ rs-rich-art:   Kitty, iTerm2, Sixel, half blocks; fast frame encoding
 rs-rich-intuituive: retained nodes, signals, controls, modals, tabs,
                     jobs, finder, image nodes and graphics placement
 ```
+
+### No site-specific code
+
+A rule of the maintainer's (2026-10-25). Nothing in Noctiluca checks for a
+site: no host names, no per-site selectors, no "this is a chat" case.
+Everything comes from generic web semantics, so any page built from the
+same constructs reads the same way:
+
+- **pictures** from `<img>`, `<picture>` and CSS background images;
+- **video and audio** from `<video>` and `<audio>`, with their poster,
+  controls and play state;
+- **side by side** from grids and flex rows, by Chrome's geometry;
+- **live updates** from DOM mutations plus ARIA `role=log` and
+  `aria-live`: any live log follows its new entries and sticks to its
+  bottom;
+- **inputs and buttons** from their roles and names.
+
+The user's own site keys (`[site."…"]` in the config) are the user's
+settings, not code about a site. Fixtures are test pages named by what
+they exercise (`news.html`, `media-grid.html`, `stream-with-log.html`),
+in ordinary HTML.
+
+Every cell and pixel comes from our own stack: the model and projection,
+drawn by intuiTUIve's nodes and painter, pictures encoded by rs-rich-art
+and intuiTUIve's `art` feature. Chrome supplies the DOM, the layout,
+resource bytes and, while a video plays, cropped screencast frames. No
+external converter (the PoC's chafa) and no captured page stands in for
+rendering.
+
+### Terminal adaptations
+
+Optimising for the terminal is welcome when it is generic: a named rule
+about constructs and cells, applied to every page alike, with a test on a
+fixture.
+
+Each rule has a name (`crate::adapt`), and each can be switched off on
+its own: `[adapt]` in the config (`collapse-nav = false`), `--adapt` on
+the command line (`--adapt=-decorative-images,-collapse-nav`,
+`+text-over-pictures`), and `--no-adapt` for all of them. A key (`a`)
+toggles between the adapted and the **faithful** projection, and the
+about page (`?`) lists the rules and which are on. A rule is on by
+default unless it changes what the page means. The projection reads one
+`Adapt` set through `Marks::adapt`; the rules applied where pictures are
+drawn and by the media scheduler read the same set.
+
+| Rule (name) | What it does | Default | Applied by | Test |
+|---|---|---|---|---|
+| Decorative pictures drop (`decorative-images`) | A spacer or tracking pixel (under 8 x 8 CSS pixels) always drops; a picture marked `alt=""`, `aria-hidden` or `role=presentation` drops only when it is icon-sized (at most 16 CSS pixels tall, under a row). An empty-alt picture of real size (a card's thumbnail, a comment's avatar, titled by the text beside it) stays, drawn without a caption | on | layout | `adapt.rs`: `decorative_pictures_drop_and_real_ones_stay` |
+| Small pictures stay inline (`inline-pictures`) | An image at most two rows tall inside a line of text (an emote, a badge, an icon) is drawn in its line, at its cells. A live log's entries carry theirs as `Run::picture` | on | pictures | `tests/pictures.rs`: `small_pictures_in_a_logs_lines_are_drawn_in_their_cells` |
+| Picture heights are capped (`cap-pictures`) | A picture is at most `MAX_PICTURE_ROWS` (14) rows, narrowed to keep its shape; what is under it in its column moves up by the rows saved | on | layout, pictures | `adapt.rs`: `tall_pictures_are_capped_and_what_is_under_moves_up` |
+| A caption under each picture (`captions`) | A picture with alt text, at least three rows tall, and no `<figcaption>` gets an `Image: …` line under it, wrapped to the picture's box when the picture is capped | on | layout | `tests/pictures.rs`: `a_capped_pictures_caption_wraps_to_its_box_and_the_rule_switches_it_off` |
+| Buttons as `[ label ]` (`icon-buttons`) | A button reads as its accessible name in brackets, an icon-only one too; a face wider than its box pushes the controls after it on its row. Off, an icon-only button is a shaded box, as its picture would be | on | layout | `adapt.rs`: `icon_buttons_read_as_their_name` |
+| Grids fit the terminal (`snap-grids`) | A grid's (or a wrapping flex row's) items get equal cell widths that tile it, and when a column would be under `MIN_GRID_CELLS` (16) cells, fewer columns, the items flowing into more rows; what is under the grid moves by the rows it grew | on | layout | `adapt.rs`: `grids_snap_their_columns_to_the_cells` |
+| Navigation collapses on narrow terminals (`collapse-nav`) | Under `NARROW_COLUMNS` (100), a navigation or complementary landmark with no field and no live log in it becomes one row: its name, then its links (each still a hint target). A sidebar gives its columns to what is beside it | on | layout | `adapt.rs`: `navigation_collapses_to_a_row_on_a_narrow_terminal` |
+| Text over pictures of text (`text-over-pictures`) | A picture with alt text inside a heading, a link or a button, or a banner (four times wider than tall, at most three rows), is drawn as its alt text in one row | off: it changes meaning | layout | `adapt.rs`: `a_picture_of_text_reads_as_its_text_when_asked` |
+| A live log shows its tail (`live-tail`) | A `role=log`, `aria-live` or appended scroll box shows its newest entries that fit, and holds still while the user has scrolled it up (`{`, `}`); off, it shows from the entry Chrome shows first | on | layout | `logs.rs`, `live_logs.rs`, `app.rs` |
+| Page colours, readable (`page-colors`) | Every run keeps the page's colour as CSS. A saturated colour (a red "LIVE", an author's name) is drawn, mixed toward white on a dark terminal or toward black on a light one until it reads; a grey, or a colour near black or white (chroma under 0.25), takes the terminal's own foreground. The background is dark unless `COLORFGBG` says light. Links keep their link style. Off, the page's raw colours, links' too: on a light terminal as written, on a white backdrop behind the projected page; on a dark one with their lightness inverted in OKLab (`L` to `1 - L`, hue and chroma kept, so near-black text is light and a red stays red; inverting RGB would make it cyan), on black | on | layout | `adapt.rs`: `raw_colours_invert_lightness_on_a_dark_terminal_and_keep_their_hue` and the rule's unit tests; `pictures.rs`: `the_backdrop_fills_the_row_under_the_text`; `logs.rs`: `authors_keep_their_colour` |
+| Frame rates and tiers follow bandwidth (`bandwidth`) | Each moving region's frame rate comes from a byte budget, at most 8 a second, and it steps down Kitty, iTerm2, Sixel, then cells when short | on | media scheduler | `tests/video.rs`: `a_regions_bytes_over_two_seconds_stay_under_its_cap`, `a_slow_terminal_steps_video_down_to_character_art`; `tests/pictures.rs`: `an_animated_gif_moves_within_its_budget`, `a_slow_terminal_steps_the_gif_down_to_character_art` |
+
+The faithful projection (`--no-adapt`, or `a`) is checked against the
+adapted one on the fixture: `adapt.rs`,
+`no_adapt_gives_the_faithful_projection`.
+
+### Live logs
+
+Built in 0.0.23. Any live log, by generic semantics only: a box with
+`role=log` (or the AX role `log`), an `aria-live` box (`polite` or
+`assertive`) whose content is element entries (a live box of plain text,
+a status line, is ordinary text), or a scroll box the page appends
+element children to. A log's entries are the element children of its
+entry box: the log itself, or the one box it wraps them in (a scroller
+inside a panel). A log built from `<ul aria-live>` and one from
+`<div role=log>` read and project alike (`log-ul.html`, `log-div.html`).
+
+- **The live ping.** The isolated world's `MutationObserver` sorts each
+  batch of changes. When every change is inside a log the tab has read,
+  it pings `'live'` instead of `''`, and moves the revision of each entry
+  that changed. A picture loading in a log is a live change too. A scroll
+  box the page appends to becomes a log at the next full reading.
+- **Incremental reads.** On a live ping the tab reads only its logs
+  (`Engine::read_live`): in the same isolated world, a function returns
+  the entries' keys in order and the runs of only those whose revision
+  the tab has not seen. Entries are keyed by node, never by text. Each
+  run carries its colour when it differs from its entry's (an author's
+  name), and each picture its source, alt text and size. A field's value
+  inside an entry is never read. No snapshot is taken: measured on
+  `stream-with-log.html`, a new entry shows in well under 600 ms with no
+  full reading (`live_logs.rs`).
+- **The view.** The projection gives a log its own box, at its rows, and
+  shows its tail (the `live-tail` rule). `{` scrolls it up, by half its
+  rows in entries, and it holds still on the entry at its bottom while
+  new ones come; `}` scrolls down, and at the end it follows again.
 
 ### The engine trait
 
@@ -435,12 +544,136 @@ iTerm2 placement). For video it needs a path that takes decoded RGBA
 frames without encoding PNG in between. That is a proposal for rs-rich-art
 and intuiTUIve's `art` feature: fast frame encoding.
 
+**The picture API (0.0.23).** Picture handling is rs-rich-art's
+(`rich_art::picture`, its `picture` feature): decoding, fitting, every
+protocol's encoding, a picture's identity, byte accounting and the step
+down. intuiTUIve's `art` feature holds only the node and painter glue.
+Noctiluca only decides what shows where.
+
+```rust
+// rs-rich-art, `picture` feature
+pub enum Pixels { Cells, Kitty, Sixel, Iterm }      // detect(), name(), lower()
+pub struct ImageView { mode, fit, anchor, background, pixels } // builder
+pub struct Picture;                                  // Clone, Eq by (id, version)
+impl Picture {
+    pub fn new(image: DynamicImage) -> Picture;      // a new id
+    pub fn decode(bytes: &[u8]) -> Result<Picture, String>;
+    pub fn from_rgba(width: u32, height: u32, rgba: Vec<u8>) -> Option<Picture>;
+    pub fn animated(frames: Vec<AnimationFrame>) -> Option<Picture>; // Kitty plays it
+    pub fn next(&self, image: DynamicImage) -> Picture;              // same id, version + 1
+    pub fn next_rgba(&self, width: u32, height: u32, rgba: Vec<u8>) -> Option<Picture>;
+    pub fn still(&self) -> Picture;                  // an animation stopped
+    pub fn find(id: u32, version: u32) -> Option<Picture>;
+    pub fn id(&self) -> u32;
+    pub fn version(&self) -> u32;
+    pub fn image(&self) -> &Arc<DynamicImage>;
+    pub fn is_animated(&self) -> bool;
+    pub fn frames(&self) -> Option<&[AnimationFrame]>;
+    /// Cells for rows of one's own; tagged for the painter when in pixels.
+    pub fn lines(&self, console: &Console, view: ImageView, width: u16, height: u16)
+        -> Vec<Vec<Segment>>;
+    pub fn encode(&self, pixels: Pixels, cols: usize, rows: usize) -> Option<String>;
+    pub fn encode_rows(&self, pixels: Pixels, cols: usize, rows: usize,
+                       first: usize, shown: usize) -> Option<String>;
+    pub fn release(id: u32) -> String;
+}
+pub struct PictureTag { id, version, cols, rows, row, pixels } // of(&Style), style(), picture()
+pub fn picture_bytes(id: u32) -> u64;               // escapes sent for a picture so far
+pub fn count_picture_bytes(id: u32, bytes: u64);    // called by the painter's glue
+pub struct ByteBudget { bytes_per_second, max_fps: 8.0, min_fps: 2.0 } // new(), guess()
+pub struct Pacer;                                    // one moving picture's rate and tier
+impl Pacer {
+    pub fn new(pixels: Pixels, cols: usize, rows: usize) -> Pacer;
+    pub fn pixels(&self) -> Pixels;
+    pub fn resize(&mut self, cols: usize, rows: usize);
+    pub fn estimate(pixels: Pixels, cols: usize, rows: usize) -> u64;
+    pub fn fps(&self, budget: &ByteBudget, share: f64) -> f64;
+    pub fn due(&mut self, now: Instant, budget: &ByteBudget, share: f64) -> bool;
+    pub fn sent(&mut self, now: Instant, bytes: Option<u64>);
+    pub fn settle(&mut self, budget: &ByteBudget, share: f64) -> bool; // stepped down?
+    pub fn recent_bytes(&self) -> u64;               // the last two seconds
+}
+pub fn over_ssh() -> bool;
+// rs-rich-art, `kitty`: raw pixels, no PNG (Doom's gap 3)
+pub fn transmit_rgba(id: u32, rgba: &[u8], width: u32, height: u32,
+                     cols: usize, rows: usize) -> String;
+
+// rs-rich-intuituive, `art`: the glue
+pub use rich_art::picture::{picture_bytes, ImageView, Picture, Pixels};
+pub fn picture_of(picture: impl Fn() -> Option<Picture> + 'static, view: ImageView) -> Node;
+pub fn image_graphics() -> Arc<dyn PlacementSource>; // finds tags anywhere, counts bytes
+```
+
+A live frame keeps its picture's id, so Kitty replaces the image it holds
+(one `a=d` when the app ends), and Sixel and iTerm2 draw the new frame
+over its cells. `picture_of` draws a frame at once, with no worker. A
+moving picture's `Pacer` takes its share of the `ByteBudget`; where the
+painter's own frame budget lands (branches 023-paint and 023-core), the
+budget's `bytes_per_second` comes from the painter's measured output
+rate instead of `ByteBudget::guess`.
+
+**Video (0.0.23, branch `023-video`).** Built on that API:
+
+- **Media state, generically.** Every `<video>` and `<audio>` is read for
+  its poster, `paused`, `currentTime`, `duration`, `muted`, `volume`,
+  `readyState` and `error`, on the element in an isolated world.
+  `Playback::label` says `PLAYING`, `PAUSED`, `BUFFERING`, `ENDED` or
+  `ERROR`. A poster is the bytes the page loaded
+  (`Page.getResourceContent`), decoded through the picture path like an
+  image; a video with none shows a still of what Chrome paints there.
+- **Controls** are generic intents on the element: play, pause, mute,
+  volume and seek (`MediaOp::Seek`, within its seekable ranges, paused
+  stays paused), from the player's buttons and from keys (`p`, `[`, `]`,
+  `alt+m` in the vim set; `alt+p`, `ctrl+left`, `ctrl+right`, `alt+m` in
+  the plain one).
+- **Frames only while something plays on screen.** rs-rich-embed's
+  screencast runs on demand (`ChromeEngine::screencast_on_demand`): a
+  frame is decoded and acknowledged only when taken, so Chrome paints the
+  next only then. The tab turns it on when a video plays in a region the
+  view shows and off when none does, or when moving pictures are frozen
+  (F4). Each frame carries its scroll position
+  (`ScreencastFrame::meta`), and each playing region is cropped from it
+  (`ScreencastFrame::crop`). A region Chrome's viewport does not hold is
+  captured on its own; a paused region whose time moved (a seek) gets one
+  new frame.
+- **The frame budget.** Frames are cut at most eight a second a region,
+  or as the pacing asks. The app runs one rs-rich-art `Pacer` per region
+  (`video::Pacing`): equal shares of the `ByteBudget`, paced ten percent
+  under the share since a frame can cost more than the ones before it,
+  each frame's cost read from the painter's `picture_bytes`, and the step
+  down Kitty, iTerm2, Sixel, cells when a share allows fewer than two
+  frames a second. With `SSH_CONNECTION` or `SSH_TTY` set, video starts at
+  cells unless `--images` or `[media] images` names a protocol. Frames go
+  into `b.live` beside the GIFs', so the projection and reader mode draw
+  them where the poster was.
+- **One budget.** The GIFs' `Motion` and the videos' `Pacing` share one
+  `ByteBudget` (`[media] bandwidth`, or `ByteBudget::guess()`), split
+  equally among the regions that move, and read the `bandwidth` rule
+  through the effective adaptations. A `Pacer` plans for the largest
+  frame of the last few rather than their average, so one costly frame
+  does not overrun the share.
+- **The painter's measured rate.** With no `[media] bandwidth`, the
+  guess is lowered to the rate the terminal took output at, from
+  intuiTUIve's `FrameStats` (bytes written over the time the writes took,
+  once 64 kB more was written). A terminal that keeps up reads fast, so
+  the measure only ever lowers the guess.
+
+Tests: `tests/video.rs` (live: `motion.webm` plays, pauses, seeks, its
+`currentTime` moves and its frames change; a region's bytes over every
+two seconds stay under its cap; a 20 kB/s terminal steps down to cells;
+the about page's table matches `canPlayType`) and `tests/video_app.rs`
+(scripted engine: the header and status bar, a frame drawn in the
+region, the seek keys, freezing and pausing stop the screencast).
+
 **Codecs and DRM.** On this machine Chrome for Testing reports H.264 and
 AAC as playable (`canPlayType`: "probably"). That contradicts the lead's
 note that Chromium lacks them: plain open-source Chromium builds usually
 do lack them, but Chrome for Testing has them. So Noctiluca prefers a
 system Chrome, then Chrome for Testing, then Chromium, and shows the
-codec table in its about page. Full Chrome in `--headless=new` granted
+codec table in its about page, `about:noctiluca` (built: one page, opened
+by `?` or by going to the address, with the version, the terminal
+adaptations and a table of `canPlayType`'s answers for fifteen types,
+asked of the browser when it opens). Full Chrome in `--headless=new` granted
 Widevine access in a test here; its headless shell did not. Either way, DRM
 playback is out of scope by policy: Noctiluca never tries a licence
 request.
@@ -943,6 +1176,12 @@ Use cases 2 and 4.
 
 Non-goal: pixel-exact layout. Cells are not Chrome's glyphs.
 
+Status (0.0.23): the GIF criterion holds on `news.html`'s GIF
+(`tests/pictures.rs`: two different frames a second within budget,
+freezing stops the bytes, a slow terminal steps down to cells, Kitty
+loops the frames itself). Pictures are drawn from their own files.
+Sticky layers, the raster view and the canvas fallback are still to do.
+
 ### 0.4: media: video and audio
 
 Use case 5.
@@ -958,6 +1197,11 @@ Use case 5.
   `canPlayType`.
 
 Non-goal: DRM playback, ever.
+
+Status (0.0.23): done. `tests/video.rs` covers play, pause, seek, mute,
+the cap, the step down and the codec table; `audio.rs` the ALSA sink;
+`tests/video.rs` also checks that a video keeps playing while a live log
+updates within its cap.
 
 ### 0.5: automation API
 

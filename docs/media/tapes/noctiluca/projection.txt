@@ -1,4 +1,5 @@
-◀▶ Reader fixture file:///noctiluca/fixtures/reader.html projection
+ NOCTILUCA   PROJECTION + CELLS   ◀▶   Reader fixture
+ file:///noctiluca/fixtures/reader.html
                                                                                                    ┃
  Plankton                                                                                          ┃
                                                                                                    ┃
@@ -20,11 +21,10 @@
                                                                                                    ┃
       The sea was on fire with light.                                                              ┃
                                                                                                    ┃
- glow = touch * 0.1                                                                                ┃
- sleep()                                                                                           ┃
- Sizes                                                                                             ┃
- Name     Size                                                                                     ┃
+ glow = touch * 0.1                                                                                │
+ sleep()                                                                                           │
+ Sizes                                                                                             │
+ Name     Size                                                                                     │
  Noctiluc 1 mm                                                                                     │
- a                                                                                                 │
- Copepod  2 mm                                                                                     │
-projection view
+ projection view
+ f1 actions | f hints | o open | r reader | q quit

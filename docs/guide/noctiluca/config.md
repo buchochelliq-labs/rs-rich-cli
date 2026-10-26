@@ -99,8 +99,21 @@ name Noctiluca does not know is a warning, and only that line is skipped
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `audio` | boolean | `false` | Let pages play sound. It plays on the machine Chrome runs on |
-| `fps` | integer, 1 to 60 | `8` | The media frame cap. Read, and kept for video in 0.0.24: it changes nothing in 0.0.22 |
+| `fps` | integer, 1 to 60 | `8` | The most frames a second a moving picture (a GIF, a video) shows: a ceiling, not a target; video never goes above 8 |
 | `images` | `"auto"`, `"ansi"`, `"kitty"`, `"sixel"`, `"iterm2"` or `"none"` | `"auto"` | How pictures reach the terminal. See [Images](media.md#how-pictures-reach-your-terminal) |
+| `bandwidth` | bytes a second, as `"4M"`, `"256K"` or a number | 4M here, 256K over SSH | What moving pictures may send the terminal, shared by those in view. Short of it, a picture steps down Kitty, iTerm2, Sixel, then half blocks |
+
+## `[adapt]`
+
+Each [terminal adaptation](adaptations.md#terminal-adaptations) by its name, `true` or `false`:
+
+```toml
+[adapt]
+collapse-nav = false
+text-over-pictures = true
+```
+
+Every rule is on by default but `text-over-pictures`, which changes what a page means. `--adapt` and `--no-adapt` override this for one run.
 
 ## `[profile]`
 
@@ -122,7 +135,7 @@ page.
 | `view` | `"projection"` or `"reader"` | the current view | The view a page of this site opens in (`raster` is ignored here) |
 | `images` | boolean | `true` | `false` shows no pictures on this site, only alt text |
 | `audio` | boolean | sound as the run started | `false` keeps this site's media muted. `true` cannot turn sound on in a run that started without it |
-| `fps` | integer, 1 to 60 | the `[media]` cap | A frame cap for this site. Read, and kept for video in 0.0.24: it changes nothing in 0.0.22 |
+| `fps` | integer, 1 to 60 | the `[media]` cap | A frame cap for this site. Read, but not applied yet: the `[media]` cap applies |
 | `width` | integer, 20 to 1000 | the terminal's width | The width in cells Chrome lays this site's pages out at |
 | `keyword` | string, one word | none | `KEYWORD WORDS` in the address bar searches this site (`site:HOST WORDS` with your search engine) |
 | `keys` | table | none | Keys for this site only. See below |

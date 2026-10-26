@@ -53,9 +53,14 @@ rs-rich-embed, which is still to come.
 
 ## Pictures and sound
 
-**No pictures in the projection.** In 0.0.22, pictures are drawn in
-reader mode only; the projection shows a placeholder with the alt text.
-Press `r`. Pictures in the projection are planned for 0.0.23.
+**A picture shows as its alt text.** An inline SVG drawing, a canvas
+and a frame show as their alt text. A site table with `images = false`,
+or `--images none`, turns pictures off.
+
+**Moving pictures stutter, or turn to half blocks.** GIFs and video
+share a byte budget, and step down when the terminal is short of it. Over
+SSH the budget is small. Raise it with `[media] bandwidth`, or press `F4`
+to freeze them.
 
 **Blocky pictures.** By default Noctiluca picks what your terminal can
 show, and falls back to half blocks. In a terminal with Kitty graphics,
@@ -65,8 +70,8 @@ Sixel or iTerm2 images, name it with `--images` (or `[media] images`).
 where Chrome runs: over SSH, that is the server. A site table with
 `audio = false` keeps that site muted.
 
-**A video shows only its alt text.** Video frames come in 0.0.24. Its
-sound plays now, with `--audio`.
+**A video stays on its poster.** Press `p` to play it. Its frames are
+drawn only while it is on screen.
 
 ## Saving and leaving
 

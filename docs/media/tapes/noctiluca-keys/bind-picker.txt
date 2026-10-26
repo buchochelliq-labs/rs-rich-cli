@@ -1,30 +1,30 @@
-◀▶ Reader fixture https://fixture.example/reader.html reader
-Plankton                                                                                           ┃
-     ╭─ Bind a key on this site: to what? ────────────────────────────────────────────────────╮    ┃
-Tiny │▸ link "open sea"                                                                       │    ┃
-     │  link "the second page"                                                                │    ┃
-Kinds│  action open  Open an address, a keyword or a search                                   │    ┃
-     │  action open_tab  Open in a new tab                                                    │    ┃
-• Din│  action address  Edit this page's address                                              │    ┃
-  ◦ N│  action hints  Link hints: follow a link or use a control                              │    ┃
-  ◦ P│  action back  Back                                                                     │    ┃
-• Cop│  action forward  Forward                                                               │    ┃
-1. Bl│  action reload  Reload                                                                 │    ┃
-2. Gl│  action tab.next  Next tab                                                             │    ┃
-     │  action tab.previous  Previous tab                                                     │    ┃
-│ The│  action find  Find in page                                                             │    ┃
-     │  action find.next  Next match                                                          │    ┃
-▏glow│  action find.previous  Previous match                                                  │    ┃
-▏slee│  action scroll.down  Scroll down                                                       │    ┃
-     │  action scroll.up  Scroll up                                                           │    ┃
-Sizes│  action page.down  Page down                                                           │    ┃
-Name │  action page.up  Page up                                                               │    ┃
-─────│  action top  To the top                                                                │    ┃
-Nocti│  action bottom  To the bottom                                                          │    ┃
-Copep│  action reader  Reader mode on or off                                                  │    ┃
-     │                                                                                        │    ┃
-image│Enter chooses · Esc closes                                                              │    ┃
-▀▀▀▀▀╰────────────────────────────────────────────────────────────────────────────────────────╯    ┃
-                                                                                                   ┃
-                                                                                                   │
-f1 actions · f hints · o open · r reader · q quit
+ NOCTILUCA   READER + CELLS   ◀▶   Reader fixture
+ https://fixture.example/reader.html
+Plank╭─ Bind a key on this site: to what? ────────────────────────────────────────────────────╮    ┃
+     │▸ link "open sea"                                                                       │    ┃
+Tiny │  link "the second page"                                                                │    ┃
+     │  action open  Open an address, a keyword or a search                                   │    ┃
+Kinds│  action open_tab  Open in a new tab                                                    │    ┃
+     │  action address  Edit this page's address                                              │    ┃
+• Din│  action hints  Link hints: follow a link or use a control                              │    ┃
+  ◦ N│  action back  Back                                                                     │    ┃
+  ◦ P│  action forward  Forward                                                               │    ┃
+• Cop│  action reload  Reload                                                                 │    ┃
+1. Bl│  action tab.next  Next tab                                                             │    ┃
+2. Gl│  action tab.previous  Previous tab                                                     │    ┃
+     │  action find  Find in page                                                             │    ┃
+│ The│  action find.next  Next match                                                          │    ┃
+     │  action find.previous  Previous match                                                  │    ┃
+▏glow│  action scroll.down  Scroll down                                                       │    ┃
+▏slee│  action scroll.up  Scroll up                                                           │    ┃
+     │  action page.down  Page down                                                           │    ┃
+Sizes│  action page.up  Page up                                                               │    ┃
+Name │  action top  To the top                                                                │    ┃
+─────│  action bottom  To the bottom                                                          │    ┃
+Nocti│  action reader  Reader mode on or off                                                  │    ┃
+Copep│                                                                                        │    ┃
+     │Enter chooses · Esc closes                                                              │    │
+image╰────────────────────────────────────────────────────────────────────────────────────────╯    │
+▀▀▀▀▀                                                                                              │
+ reader | row 1/29
+ f1 actions | f hints | o open | r reader | q quit

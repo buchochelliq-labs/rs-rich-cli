@@ -9,6 +9,84 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **Noctiluca's live logs and terminal adaptations** (noctiluca): a
+  `role=log`, `aria-live` or appended scroll box is followed through a
+  live-only change ping and read incrementally, with no new snapshot. It
+  shows its newest entries, with their colours and small pictures, and
+  holds still while scrolled up (`{`, `}`). Eleven named terminal adaptations
+  (decorative pictures, capped pictures, icon buttons, snapped grids,
+  collapsed navigation, pictures of text, live tails, readable page
+  colours and more), each
+  switched off in `[adapt]`, with `--adapt=-RULE` or all with `--no-adapt`;
+  `a` toggles the faithful projection and `?` lists the rules. New
+  fixtures: `stream-with-log.html`, `log-ul.html`, `log-div.html`,
+  `adapt.html`.
+
+- **`rich serve --compress`** (CLI, `serve` feature): deflates frames of 1 KiB or more for pages that can undo it. Off by default; worth it over a slow link.
+
+### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
+
+- **Pictures where the page puts them.** Noctiluca decodes each picture
+  from the page's own file (through Chrome's resource cache, then `data:`
+  addresses, then a capture) and draws it over its region in Kitty,
+  iTerm2, Sixel or half blocks. Small pictures in a line of text, such as
+  a log's badges and emotes, are drawn in their cells. CSS background
+  pictures count too.
+- **Animated GIFs move**, within the terminal's byte budget, and step
+  down from Sixel to half blocks when the budget is short. Kitty gets the
+  frames once and loops them itself. GIFs and video share one budget,
+  set with `[media] bandwidth`, else a guess lowered to the rate the
+  terminal took output at (intuiTUIve's `FrameStats`). Freezing (F4) stops
+  them, and Kitty gets a still.
+- **Captions**: a picture with no caption of its own gets an `Image:`
+  line under it, wrapped to its box. The `captions` adaptation switches
+  this off.
+- **Page colours off** (`--adapt=-page-colors`): on a light terminal the
+  page keeps its own colours on white; on a dark one their lightness is
+  inverted (OKLab) on black, keeping hue.
+- **New fixtures**: `news.html` and `media-grid.html`, with pictures made
+  by `media/make.py`, and their tapes in the recordings.
+- **rs-rich-art's `picture` feature**: `Picture` (decoded once, with an
+  id and version, animated or still), `Player`, `PictureTag` for tagging
+  cells with the picture drawn over them, and `picture_bytes`. Its
+  `frames` feature adds `ByteBudget` and `Pacer`, which pace frames within
+  a byte budget (spaced and capped for the largest recent frame at the
+  current protocol) and step down
+  Kitty, iTerm2, Sixel, then cells. `kitty::transmit_rgba` and
+  `graphics::play_mark` are new.
+- **intuiTUIve's `art` feature** is glue over them: `picture_of` draws a
+  live picture node, and the image layer finds tagged cells, counts the
+  bytes it writes and uploads Kitty pictures from their first visible
+  row. An overlay picture is drawn only where its rows show whole.
+- **rs-rich-interact**: a session woken by another thread reads a waiting
+  key at once, so input is not starved while frames are sent.
+- **Faster debug builds of pictures**: the workspace builds `image`,
+  `icy_sixel`, `quantette` and `palette` optimised in the dev profile. A
+  Sixel encode went from 3 s to 35 ms.
+
+### Video in Noctiluca, and the PoC's header and status bar (noctiluca, rich-embed)
+
+- **A playing video plays in its region.** Chrome's screencast runs only
+  while a video plays on screen, each playing region is cropped from it,
+  and its frames are paced within the terminal's byte budget (at most
+  eight a second), stepping down Kitty, iTerm2, Sixel, then cells when the
+  budget is short. Over SSH video starts as cells unless you ask for a
+  protocol. Freezing (F4) stops the frames.
+- **Media controls**: play, pause, seek (`[` and `]`, or `ctrl+left` and
+  `ctrl+right`) and mute, from keys and the player. A paused video shows
+  its poster with a play mark.
+- **The header** shows the view, how pictures reach the terminal, the
+  title and the address; **the status bar** the media state
+  (`media PLAYING 0:03 / 0:05`), the row and the keys.
+- **`about:noctiluca`** (`?`, `Alt+I`): one about page with the version,
+  the terminal adaptations and which are on, and the codecs the browser
+  says it plays (`canPlayType`).
+- **rs-rich-embed's screencast on demand**: `screencast_on_demand` decodes
+  and acknowledges a frame only when `take_screencast` takes it, so Chrome
+  paints no more than are used. Frames carry their scroll position and
+  crop to a rectangle of the page (`ScreencastFrame::crop`);
+  `Pixels::crop` and `Pixels::to_rgba`.
+
 ### Versions: the 0.0.23 versions are open
 
 - Every package moves one patch past the 0.0.22 cohort, as the

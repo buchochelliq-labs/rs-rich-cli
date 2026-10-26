@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Stream with log</title>
+<!-- A live stream page built from ordinary HTML, for Noctiluca's tests and
+     tape: a playing video, the channel's name, avatar and title, a
+     role=log panel beside it that this page's own script fills on a timer,
+     and an input that sends (the page echoes the message). Local: no
+     network, no third-party assets. ?quiet stops the timer. -->
+<style>
+  body { margin: 0; font: 16px sans-serif; background: #0e0e10; color: #efeff1 }
+  header { display: flex; align-items: center; gap: 8px; padding: 8px }
+  header img { width: 36px; height: 36px; border-radius: 50% }
+  h1 { font-size: 18px; margin: 0 }
+  header p { margin: 0; color: #adadb8 }
+  .page { display: flex; gap: 16px; padding: 0 8px }
+  .stage { flex: 1; min-width: 0 }
+  video { width: 100%; height: 360px; background: #000; display: block }
+  #chat { width: 296px; flex: none }
+  #chat h2 { font-size: 16px; margin: 0 0 4px }
+  #log { height: 324px; overflow-y: auto }
+  #log > div { padding: 0 }
+  .author { font-weight: bold }
+  .badge, .emote { width: 18px; height: 18px; vertical-align: middle }
+  form { display: flex; gap: 8px; margin-top: 4px }
+  input { flex: 1; min-width: 0 }
+</style>
+<header>
+  <img alt="Lanternfish Lab" src="media/avatar-1.png">
+  <div>
+    <h1>Lanternfish Lab</h1>
+    <p>Live: the bay glows tonight</p>
+  </div>
+</header>
+<div class="page">
+  <section class="stage" aria-label="Stream">
+    <video src="media/motion.webm" autoplay muted loop playsinline></video>
+  </section>
+  <section id="chat" aria-label="Chat">
+    <h2>Chat</h2>
+    <div id="log" role="log" aria-label="Chat messages"></div>
+    <form id="send">
+      <input id="message" aria-label="Send a message" autocomplete="off">
+      <button>Send</button>
+    </form>
+  </section>
+</div>
+<script>
+  const log = document.getElementById('log');
+  const badge = "media/badge.png";
+  const emote = "media/emote.png";
+  // Post a message: an optional badge, the author in their colour, the
+  // words, and :glow: as a small picture.
+  function post(author, color, words, moderator) {
+    const row = document.createElement('div');
+    if (moderator) {
+      const b = document.createElement('img');
+      b.className = 'badge'; b.alt = 'moderator'; b.src = badge;
+      row.append(b, ' ');
+    }
+    const who = document.createElement('span');
+    who.className = 'author'; who.style.color = color; who.textContent = author;
+    row.append(who, ': ');
+    const parts = words.split(':glow:');
+    parts.forEach((part, i) => {
+      if (i > 0) {
+        const e = document.createElement('img');
+        e.className = 'emote'; e.alt = ':glow:'; e.src = emote;
+        row.append(e);
+      }
+      row.append(part);
+    });
+    log.append(row);
+    while (log.children.length > 100) log.firstElementChild.remove();
+    log.scrollTop = log.scrollHeight;
+  }
+  window.post = post;
+  const people = [['ada', '#ff7f50', true], ['bea', '#9acd32', false], ['cy', '#da70d6', false]];
+  const lines = ['the water is glowing :glow:', 'that blue is unreal', 'how deep is the camera?',
+                 'hello from the harbour', ':glow: :glow:', 'the tide is coming in'];
+  let n = 0;
+  function next() {
+    const [who, color, mod] = people[n % people.length];
+    post(who, color, lines[n % lines.length] + ' #' + (n + 1), mod);
+    n++;
+  }
+  for (let i = 0; i < 6; i++) next();
+  if (!location.search.includes('quiet')) setInterval(next, 1500);
+  document.getElementById('send').addEventListener('submit', event => {
+    event.preventDefault();
+    const field = document.getElementById('message');
+    const words = field.value.trim();
+    if (words) post('you', '#35d0ff', words, false);
+    field.value = '';
+  });
+</script>

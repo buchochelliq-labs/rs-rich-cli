@@ -1,0 +1,13 @@
+{
+  "tape": "docs/tapes/media-grid.tape",
+  "tape_fnv1a64": "c35452b03053fdd0",
+  "recorder": "rs-rich-record 0.0.10",
+  "rich": null,
+  "commit": "d057f88edcda4180c9fe3bac8d7bfb9ed0f314f0",
+  "screenshots": [
+    "watch",
+    "playing",
+    "grid"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

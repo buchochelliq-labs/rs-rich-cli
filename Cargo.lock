@@ -2150,6 +2150,7 @@ dependencies = [
  "image",
  "portable-pty",
  "rs-rich",
+ "rs-rich-art",
  "rs-rich-embed",
  "rs-rich-intuituive",
  "rs-rich-record",

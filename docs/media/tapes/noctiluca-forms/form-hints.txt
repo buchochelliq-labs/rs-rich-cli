@@ -1,4 +1,5 @@
-◀▶ Form fixture https://fixture.example/form.html reader
+ NOCTILUCA   READER + CELLS   ◀▶   Form fixture
+ https://fixture.example/form.html
 Sign up
 [a]Name Ada
 [s]Secret
@@ -25,6 +26,5 @@ Size
 
 
 
-
-
- hints  type a label:   Esc cancels
+  hints  type a label:   Esc cancels
+ f1 actions | f hints | o open | r reader | q quit

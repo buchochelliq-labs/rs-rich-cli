@@ -113,6 +113,18 @@ opt-level = 3
 opt-level = 3
 [profile.dev.package.crc32fast]
 opt-level = 3
+# Sixel encoding quantizes each picture's colours: unoptimised, a video
+# frame takes seconds, which starves an app drawing moving pictures (and the
+# docs' tapes record debug builds), so the encoder and its quantizer are
+# optimised even in dev builds too.
+[profile.dev.package.icy_sixel]
+opt-level = 3
+[profile.dev.package.quantette]
+opt-level = 3
+[profile.dev.package.palette]
+opt-level = 3
+[profile.dev.package.image]
+opt-level = 3
 # crossterm 0.29 subtracts one from mouse coordinates unchecked, so a report
 # of 0 (`\e[<0;0;0M`) panicked debug builds; release builds wrap it as well.
 [profile.dev.package.crossterm]

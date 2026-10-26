@@ -113,6 +113,27 @@ pub const ACTIONS: &[Action] = &[
     action("bottom", "To the bottom", "page", "G", "end"),
     action("reader", "Reader mode on or off", "view", "r", "alt+r"),
     action(
+        "adapt",
+        "Adapted or faithful projection (terminal adaptations on or off)",
+        "view",
+        "a",
+        "alt+a",
+    ),
+    action(
+        "log.older",
+        "Scroll the live log up (it holds still)",
+        "view",
+        "{",
+        "alt+pageup",
+    ),
+    action(
+        "log.newer",
+        "Scroll the live log down (at its end it follows again)",
+        "view",
+        "}",
+        "alt+pagedown",
+    ),
+    action(
         "media.play_pause",
         "Play or pause the media",
         "media",
@@ -126,8 +147,29 @@ pub const ACTIONS: &[Action] = &[
         "alt+m",
         "alt+m",
     ),
+    action(
+        "media.seek_back",
+        "Back five seconds in the media",
+        "media",
+        "[",
+        "ctrl+left",
+    ),
+    action(
+        "media.seek_forward",
+        "On five seconds in the media",
+        "media",
+        "]",
+        "ctrl+right",
+    ),
     action("media.volume_up", "Volume up", "media", "+", "alt+up"),
     action("media.volume_down", "Volume down", "media", "-", "alt+down"),
+    action(
+        "media.freeze",
+        "Freeze or resume moving pictures",
+        "media",
+        "f4",
+        "f4",
+    ),
     action("bookmark", "Bookmark this page", "keep", "m", "ctrl+d"),
     action("bookmarks", "Bookmarks", "keep", "M", "ctrl+b"),
     action(
@@ -139,6 +181,13 @@ pub const ACTIONS: &[Action] = &[
     ),
     action("site.keys", "Site shortcuts…", "keep", "K", "ctrl+shift+k"),
     action("actions", "Actions (this list)", "help", "f1", "f1"),
+    action(
+        "about",
+        "About: version and the active adaptations",
+        "help",
+        "?",
+        "alt+i",
+    ),
     action("quit", "Quit", "help", "q", "ctrl+q"),
 ];
 

@@ -41,6 +41,9 @@ use crate::engine::{NodeId, PageSnapshot, Rect};
 pub const MAX_BLOCKS: usize = 20_000;
 /// At most this many characters of one text.
 const MAX_TEXT: usize = 8192;
+/// The gap, in CSS pixels, between two text boxes on one line that keeps
+/// a space between their texts: half a cell.
+const GAP: f64 = 4.0;
 /// At most this many options of one select.
 const MAX_OPTIONS: usize = 500;
 
@@ -55,6 +58,26 @@ pub struct Run {
     /// The control (a link, mostly) this text belongs to: an index into
     /// [`Page::controls`].
     pub control: Option<usize>,
+    /// The page's colour for it, as CSS (`rgb(255, 0, 0)`): the
+    /// [page colours](crate::adapt::Rule::PageColors) rule decides how it
+    /// shows (adapted, a link is drawn as a link; off, in its own colour).
+    pub color: Option<String>,
+    /// A small picture in the line (an emote, a badge): the text is its
+    /// alt text, which stands in where pictures are not drawn.
+    pub picture: Option<Picture>,
+}
+
+/// A small picture inside a line of text.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Picture {
+    /// Its source address, cleaned.
+    pub src: String,
+    pub alt: String,
+    /// Its size in CSS pixels.
+    pub width: f64,
+    pub height: f64,
+    /// An empty `alt`, or hidden from assistive technology.
+    pub decorative: bool,
 }
 
 impl Run {
@@ -106,6 +129,8 @@ pub enum BlockKind {
     Media(usize),
     /// A form control: an index into [`Page::controls`].
     Control(usize),
+    /// A live log: an index into [`Page::logs`].
+    Log(usize),
 }
 
 /// A block of the page, in reading order.
@@ -121,6 +146,8 @@ pub struct Block {
     pub frame: Rect,
     /// The node that made it.
     pub node: NodeId,
+    /// The landmark it is in: an index into [`Page::regions`].
+    pub region: Option<usize>,
 }
 
 impl Block {
@@ -247,6 +274,9 @@ pub struct Control {
     pub rect: Rect,
     /// Whether the accessibility tree had it (else it is from the DOM).
     pub from_ax: bool,
+    /// A button with no text of its own: its name comes from a label or
+    /// a title (an icon button).
+    pub icon_only: bool,
     /// The meaning's revision: role, name, type, destination, options.
     pub revision: u32,
     /// The state's revision: value, checked, choice.
@@ -290,10 +320,109 @@ pub struct Media {
     pub alt: String,
     /// Its source address, cleaned.
     pub src: String,
-    /// A still of it, as image bytes (PNG), once captured.
+    /// Its picture's bytes once read: the original file the page loaded,
+    /// else a still of Chrome's pixels (PNG).
     pub still: Option<Arc<[u8]>>,
+    /// Its picture, decoded from [`still`](Self::still) on the tab's
+    /// worker: what the projection and reader mode draw. An animated GIF
+    /// carries its frames.
+    pub picture: Option<rich_intuituive::Picture>,
+    /// Whether the page captions it (a `<figure>` with a `<figcaption>`):
+    /// then it gets no `Image:` line of ours.
+    pub captioned: bool,
     /// A video's or an audio's playback, read from the element.
     pub playback: Option<crate::engine::Playback>,
+    /// A video's poster picture's address, cleaned; empty when it has
+    /// none.
+    pub poster: String,
+    /// Whether the element asks for the browser's own controls.
+    pub controls: bool,
+    /// Whether a video or audio plays by itself (`autoplay`).
+    pub autoplay: bool,
+    /// It has an `alt` attribute, and it is empty: decorative by the
+    /// author's word.
+    pub empty_alt: bool,
+    /// It is hidden from assistive technology (`aria-hidden`, or a
+    /// `presentation` role), itself or by an ancestor.
+    pub aria_hidden: bool,
+    /// It is inside a heading, a link, a button or a label: a picture
+    /// that stands for words.
+    pub in_label: bool,
+}
+
+/// What made a box a live log.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum LogKind {
+    /// `role=log`.
+    Log,
+    /// `aria-live` (`polite` or `assertive`).
+    Live,
+    /// A scroll box the page appends entries to.
+    Appended,
+}
+
+/// One entry of a live log: a child of its box, as one line of runs.
+#[derive(Clone, Debug, Default, PartialEq)]
+pub struct Entry {
+    /// Stable while the entry's node stays: its `backendNodeId` from a
+    /// snapshot, or the isolated world's own number for it.
+    pub key: u64,
+    pub runs: Vec<Run>,
+}
+
+impl Entry {
+    pub fn text(&self) -> String {
+        plain(&self.runs)
+    }
+}
+
+/// A live log: a box whose entries the page appends, followed through
+/// the live change ping and read incrementally.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Log {
+    pub node: NodeId,
+    pub kind: LogKind,
+    /// Its box, in CSS pixels of the document.
+    pub rect: Rect,
+    /// Its accessible name, if it has one.
+    pub label: String,
+    /// Its entries, oldest first: at most [`MAX_ENTRIES`], the newest.
+    pub entries: Vec<Entry>,
+    /// The first entry Chrome shows in the box, at its own scroll: what
+    /// the faithful projection shows from.
+    pub first_shown: Option<u64>,
+}
+
+/// At most this many entries of a live log are kept: the newest.
+pub const MAX_ENTRIES: usize = 500;
+
+/// What a landmark is.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+pub enum RegionKind {
+    /// `<nav>` or `role=navigation`.
+    Navigation,
+    /// `<aside>` or `role=complementary`.
+    Complementary,
+}
+
+/// A landmark of the page whose blocks can collapse together.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Region {
+    pub node: NodeId,
+    pub kind: RegionKind,
+    pub rect: Rect,
+    /// Its accessible name, if it has one.
+    pub label: String,
+    /// No field and no live log in it: it can collapse to its links.
+    pub collapsible: bool,
+}
+
+/// A grid, or a flex row that wraps: its items' boxes in order.
+#[derive(Clone, Debug, PartialEq)]
+pub struct Grid {
+    pub node: NodeId,
+    pub rect: Rect,
+    pub items: Vec<Rect>,
 }
 
 /// An action's binding to its target: the document, the node, and the
@@ -322,6 +451,15 @@ pub struct Page {
     pub truncated: bool,
     /// Whether the accessibility tree came with the snapshot.
     pub has_ax: bool,
+    /// Its live logs.
+    pub logs: Vec<Log>,
+    /// The small pictures in its lines ([`Run::picture`]: emotes, badges,
+    /// avatars), decoded on the tab's worker, by source address.
+    pub inline_pictures: HashMap<String, rich_intuituive::Picture>,
+    /// Its navigation and complementary landmarks.
+    pub regions: Vec<Region>,
+    /// Its grids and wrapping flex rows.
+    pub grids: Vec<Grid>,
 }
 
 impl Page {
@@ -369,6 +507,7 @@ impl Page {
                 }
                 BlockKind::Media(i) => out.push(format!("[{}]", self.media[*i].alt)),
                 BlockKind::Control(i) => out.push(self.controls[*i].name.clone()),
+                BlockKind::Log(i) => out.extend(self.logs[*i].entries.iter().map(Entry::text)),
                 _ => out.push(block.text()),
             }
         }
@@ -642,6 +781,47 @@ impl Dom {
         out
     }
 
+    /// Where a live log's entries are: the box itself, or the one box it
+    /// wraps them in (a scroller inside a panel), however deep. A box
+    /// whose only child holds inline content holds one entry: that child.
+    fn entry_root(&self, mut i: usize) -> usize {
+        let elements = |n: usize| -> Vec<usize> {
+            self.children[n]
+                .iter()
+                .copied()
+                .filter(|&c| {
+                    self.is_element(c)
+                        && self.layout[c].is_some()
+                        && !SKIPPED.contains(&self.name[c].as_str())
+                        && !self.name[c].starts_with("::")
+                })
+                .collect()
+        };
+        let texty = |n: usize| {
+            self.children[n]
+                .iter()
+                .any(|&c| self.kind[c] == 3 && !self.value[c].trim().is_empty())
+        };
+        for _ in 0..32 {
+            let mine = elements(i);
+            if mine.len() != 1 || texty(i) {
+                break;
+            }
+            let only = mine[0];
+            let theirs = elements(only);
+            if theirs.is_empty()
+                || texty(only)
+                || theirs
+                    .iter()
+                    .any(|&g| self.style(g, 0).starts_with("inline"))
+            {
+                break;
+            }
+            i = only;
+        }
+        i
+    }
+
     fn descendants(&self, i: usize) -> Vec<usize> {
         let mut out = Vec::new();
         let mut stack: Vec<usize> = self.children[i].iter().rev().copied().collect();
@@ -651,6 +831,54 @@ impl Dom {
         }
         out
     }
+}
+
+/// The address of node `i`'s CSS background picture, when it has one and
+/// no text of its own and is at least 16 x 16 CSS pixels: a thumbnail, an
+/// avatar or a banner drawn with `background-image`. The first `url(…)`
+/// of the style; gradients are not pictures.
+fn background_picture(dom: &Dom, i: usize) -> Option<String> {
+    let style = dom.style(i, 9);
+    let start = style.find("url(")? + 4;
+    let end = start + style[start..].find(')')?;
+    let url = style[start..end]
+        .trim()
+        .trim_matches(['"', '\''])
+        .to_string();
+    if url.is_empty() {
+        return None;
+    }
+    let rect = dom.rect(i)?;
+    if rect.width < 16.0 || rect.height < 16.0 {
+        return None;
+    }
+    let has_text = dom
+        .descendants(i)
+        .into_iter()
+        .any(|d| dom.kind[d] == 3 && dom.layout[d].is_some() && !dom.value[d].trim().is_empty());
+    (!has_text).then_some(url)
+}
+
+/// Whether node `i` is inside a `<figure>` (up to three levels up) that
+/// has a `<figcaption>`.
+fn captioned(dom: &Dom, i: usize) -> bool {
+    let mut at = i;
+    for _ in 0..3 {
+        let Some(parent) = usize::try_from(dom.parent[at])
+            .ok()
+            .filter(|&p| p < dom.name.len())
+        else {
+            return false;
+        };
+        if dom.name[parent] == "FIGURE" {
+            return dom
+                .descendants(parent)
+                .into_iter()
+                .any(|d| dom.name[d] == "FIGCAPTION");
+        }
+        at = parent;
+    }
+    false
 }
 
 /// The accessibility tree's nodes, by DOM node.
@@ -743,6 +971,10 @@ struct Context {
     /// Inside a label of a control, or a control: its text is the
     /// control's name, not text of its own.
     silent: bool,
+    /// The landmark it is in: an index into [`Page::regions`].
+    region: Option<usize>,
+    /// Hidden from assistive technology by an ancestor.
+    aria_hidden: bool,
 }
 
 /// Tags whose content is never page text.
@@ -757,14 +989,35 @@ struct Walker<'a> {
     page: Page,
     runs: Vec<Run>,
     rect: Option<Rect>,
+    /// The box of the last text in [`runs`](Self::runs).
+    last: Option<Rect>,
     marker: Option<String>,
     by_node: HashMap<NodeId, usize>,
     revisions: &'a mut Revisions,
+    /// Scroll boxes the page appends entries to: live logs too.
+    appended: &'a HashSet<NodeId>,
 }
 
 impl Walker<'_> {
     fn push(&mut self, run: Run, rect: Option<Rect>) {
         if let Some(rect) = rect {
+            // Two boxes on one line with a gap between them (flex items,
+            // links spaced by margins) keep a space between their texts.
+            if let Some(last) = self.last {
+                let one_line = rect.y < last.bottom() - 2.0 && last.y < rect.bottom() - 2.0;
+                let ends = self
+                    .runs
+                    .last()
+                    .is_none_or(|r| r.text.ends_with(char::is_whitespace));
+                if one_line
+                    && rect.x - last.right() >= GAP
+                    && !ends
+                    && !run.text.starts_with(char::is_whitespace)
+                {
+                    self.runs.push(Run::plain(" "));
+                }
+            }
+            self.last = Some(rect);
             self.rect = Some(union(self.rect, rect));
         }
         match self.runs.last_mut() {
@@ -772,7 +1025,10 @@ impl Walker<'_> {
                 if last.bold == run.bold
                     && last.italic == run.italic
                     && last.code == run.code
-                    && last.control == run.control =>
+                    && last.control == run.control
+                    && last.color == run.color
+                    && last.picture.is_none()
+                    && run.picture.is_none() =>
             {
                 last.text.push_str(&run.text)
             }
@@ -784,6 +1040,7 @@ impl Walker<'_> {
     fn flush(&mut self, context: &Context) {
         let mut runs = std::mem::take(&mut self.runs);
         let rect = self.rect.take();
+        self.last = None;
         if !context.pre {
             tidy(&mut runs);
         }
@@ -809,6 +1066,7 @@ impl Walker<'_> {
             rect,
             frame: context.frame,
             node: context.node,
+            region: context.region,
         });
     }
 
@@ -821,6 +1079,7 @@ impl Walker<'_> {
             rect,
             frame: rect,
             node: self.dom.backend[i],
+            region: context.region,
         });
     }
 
@@ -844,12 +1103,17 @@ impl Walker<'_> {
                     return;
                 }
                 let weight = dom.style(i, 4).parse::<u32>().unwrap_or(400);
+                let color = dom.style(i, 2);
                 let run = Run {
                     text: truncate(&text, MAX_TEXT),
                     bold: context.bold || weight >= 600,
                     italic: context.italic || matches!(dom.style(i, 5), "italic" | "oblique"),
                     code: context.code,
                     control: context.control,
+                    // The page's own colour, as CSS (a link's too): the
+                    // layout's page-colors rule decides what of it shows.
+                    color: (!color.is_empty()).then(|| truncate(&clean(color), 64)),
+                    picture: None,
                 };
                 self.push(run, dom.rect(i));
             }
@@ -909,6 +1173,19 @@ impl Walker<'_> {
             }
             return;
         }
+        if laid_out && dom.shows(i) && !context.silent {
+            if let Some(kind) = self.log_kind(i) {
+                self.flush(context);
+                self.log(i, kind, context);
+                return;
+            }
+        }
+        // A CSS background picture on a box with no text of its own (a
+        // thumbnail, an avatar, a banner): a picture region, under what
+        // the box holds. A box with text keeps its text instead.
+        if laid_out && dom.shows(i) && background_picture(dom, i).is_some() {
+            self.media(i, MediaKind::Image, context);
+        }
         // Controls: an interactive role in the AX tree, or a form element.
         let role = self.ax.role(backend).or_else(|| dom_role(dom, i));
         if let Some(role) = role {
@@ -946,11 +1223,66 @@ impl Walker<'_> {
                     rect,
                     frame: rect,
                     node: backend,
+                    region: context.region,
                 });
             }
             return;
         }
         let mut inner = context.clone();
+        let role_attr = dom.attr(i, "role").unwrap_or_default().to_ascii_lowercase();
+        if dom
+            .attr(i, "aria-hidden")
+            .is_some_and(|v| v.eq_ignore_ascii_case("true"))
+        {
+            inner.aria_hidden = true;
+        }
+        // Landmarks: the outermost navigation or complementary one.
+        if laid_out && context.region.is_none() {
+            let ax_role = self
+                .ax
+                .get(backend)
+                .and_then(|n| n["role"]["value"].as_str())
+                .unwrap_or_default();
+            let kind = match (name, role_attr.as_str(), ax_role) {
+                (_, "navigation", _) | (_, _, "navigation") | ("NAV", "", _) => {
+                    Some(RegionKind::Navigation)
+                }
+                (_, "complementary", _) | (_, _, "complementary") | ("ASIDE", "", _) => {
+                    Some(RegionKind::Complementary)
+                }
+                _ => None,
+            };
+            if let Some(kind) = kind {
+                inner.region = Some(self.page.regions.len());
+                self.page.regions.push(Region {
+                    node: backend,
+                    kind,
+                    rect: dom.rect(i).unwrap_or_default(),
+                    label: self.label(i),
+                    collapsible: true,
+                });
+            }
+        }
+        // Grids, and flex rows that wrap: their items, for snapping.
+        let display = dom.style(i, 0);
+        if laid_out
+            && (matches!(display, "grid" | "inline-grid")
+                || (matches!(display, "flex" | "inline-flex") && dom.style(i, 11) == "wrap"))
+        {
+            let items: Vec<Rect> = dom.children[i]
+                .iter()
+                .filter(|&&c| dom.is_element(c) && dom.shows(c))
+                .filter_map(|&c| dom.rect(c))
+                .filter(|r| !r.is_empty())
+                .collect();
+            if items.len() >= 2 {
+                self.page.grids.push(Grid {
+                    node: backend,
+                    rect: dom.rect(i).unwrap_or_default(),
+                    items,
+                });
+            }
+        }
         match name {
             "B" | "STRONG" => inner.bold = true,
             "I" | "EM" | "CITE" | "DFN" => inner.italic = true,
@@ -967,7 +1299,6 @@ impl Walker<'_> {
             }
             _ => {}
         }
-        let display = dom.style(i, 0);
         let is_block = laid_out
             && !display.is_empty()
             && !display.starts_with("inline")
@@ -1048,10 +1379,20 @@ impl Walker<'_> {
             .get(&i)
             .map(String::as_str)
             .or_else(|| dom.attr(i, "src"))
-            .map(|s| clean(&crate::url::resolve(&dom.url, s)))
+            .map(str::to_string)
+            .or_else(|| background_picture(dom, i))
+            .map(|s| clean(&crate::url::resolve(&dom.url, &s)))
             .unwrap_or_default();
+        let poster = dom
+            .attr(i, "poster")
+            .filter(|_| kind == MediaKind::Video)
+            .filter(|p| !p.trim().is_empty())
+            .map(|p| clean(&crate::url::resolve(&dom.url, p)))
+            .unwrap_or_default();
+        let controls = dom.attr(i, "controls").is_some();
         self.flush(context);
         let index = self.page.media.len();
+        let role = dom.attr(i, "role").unwrap_or_default().to_ascii_lowercase();
         self.page.media.push(Media {
             node: backend,
             kind,
@@ -1059,9 +1400,118 @@ impl Walker<'_> {
             alt: truncate(&alt, 500),
             src: truncate(&src, 2000),
             still: None,
+            picture: None,
+            captioned: captioned(dom, i),
             playback: None,
+            poster: truncate(&poster, 2000),
+            controls,
+            autoplay: dom.attr(i, "autoplay").is_some(),
+            empty_alt: dom.attr(i, "alt").is_some_and(|a| a.trim().is_empty()),
+            aria_hidden: context.aria_hidden
+                || dom
+                    .attr(i, "aria-hidden")
+                    .is_some_and(|v| v.eq_ignore_ascii_case("true"))
+                || matches!(role.as_str(), "presentation" | "none"),
+            in_label: context.control.is_some()
+                || context.silent
+                || matches!(context.kind, BlockKind::Heading(_)),
         });
         self.block(BlockKind::Media(index), i, context);
+    }
+
+    /// Its accessible name: the AX tree's, else `aria-label`.
+    fn label(&self, i: usize) -> String {
+        let dom = self.dom;
+        self.ax
+            .get(dom.backend[i])
+            .and_then(|n| ax_string(n, "name"))
+            .filter(|n| !n.is_empty())
+            .or_else(|| dom.attr(i, "aria-label").map(clean))
+            .map(|l| truncate(&l, 200))
+            .unwrap_or_default()
+    }
+
+    /// Whether node `i` is a live log, and why: `role=log`, `aria-live`,
+    /// or a scroll box the page appends to. A live box of plain text (a
+    /// status line) is not a log: a log's entries are elements.
+    fn log_kind(&self, i: usize) -> Option<LogKind> {
+        let dom = self.dom;
+        let role = dom.attr(i, "role").unwrap_or_default().to_ascii_lowercase();
+        let ax_log = self
+            .ax
+            .get(dom.backend[i])
+            .is_some_and(|n| n["role"]["value"] == "log");
+        let live = dom
+            .attr(i, "aria-live")
+            .is_some_and(|v| matches!(v.trim(), "polite" | "assertive"));
+        let kind = if role.split_whitespace().any(|r| r == "log") || ax_log {
+            LogKind::Log
+        } else if live {
+            LogKind::Live
+        } else if self.appended.contains(&dom.backend[i]) {
+            LogKind::Appended
+        } else {
+            return None;
+        };
+        let root = dom.entry_root(i);
+        let has_text = dom.children[root]
+            .iter()
+            .any(|&c| dom.kind[c] == 3 && !dom.value[c].trim().is_empty());
+        let has_entries = dom.children[root]
+            .iter()
+            .any(|&c| dom.is_element(c) && dom.layout[c].is_some());
+        (has_entries && !has_text).then_some(kind)
+    }
+
+    /// The live log on node `i`: each child of its entry box an entry,
+    /// its runs with their colours and small pictures.
+    fn log(&mut self, i: usize, kind: LogKind, context: &Context) {
+        let dom = self.dom;
+        let rect = dom.rect(i).unwrap_or_default();
+        let root = dom.entry_root(i);
+        let mut entries = Vec::new();
+        let mut first_shown = None;
+        for &child in &dom.children[root] {
+            if !dom.is_element(child)
+                || dom.layout[child].is_none()
+                || !dom.shows(child)
+                || SKIPPED.contains(&dom.name[child].as_str())
+            {
+                continue;
+            }
+            let frame = dom.rect(child).unwrap_or(rect);
+            let inner = Context {
+                kind: BlockKind::Paragraph,
+                frame,
+                node: dom.backend[child],
+                control: None,
+                silent: false,
+                ..context.clone()
+            };
+            let mut runs = self.inline(child, &inner);
+            tidy(&mut runs);
+            if runs.is_empty() {
+                continue;
+            }
+            let key = dom.backend[child] as u64;
+            if first_shown.is_none() && frame.bottom() > rect.y + 1.0 {
+                first_shown = Some(key);
+            }
+            entries.push(Entry { key, runs });
+        }
+        if entries.len() > MAX_ENTRIES {
+            entries.drain(..entries.len() - MAX_ENTRIES);
+        }
+        let index = self.page.logs.len();
+        self.page.logs.push(Log {
+            node: dom.backend[i],
+            kind,
+            rect,
+            label: self.label(i),
+            entries,
+            first_shown,
+        });
+        self.block(BlockKind::Log(index), i, context);
     }
 
     /// The control on node `i`, made once.
@@ -1209,6 +1659,12 @@ impl Walker<'_> {
                 .flatten(),
             rect: dom.rect(i).unwrap_or_default(),
             from_ax: ax.is_some(),
+            icon_only: role == Role::Button
+                && if dom.name[i] == "INPUT" {
+                    kind == "image"
+                } else {
+                    clean(&dom.raw_text(i)).trim().is_empty()
+                },
             revision: 0,
             state_revision: 0,
         };
@@ -1307,7 +1763,19 @@ impl Walker<'_> {
                     ..Run::default()
                 }),
                 BlockKind::Media(index) => {
-                    runs.push(Run::plain(format!("[{}] ", self.page.media[index].alt)))
+                    let media = &self.page.media[index];
+                    runs.push(Run {
+                        text: media.alt.clone(),
+                        picture: Some(Picture {
+                            src: media.src.clone(),
+                            alt: media.alt.clone(),
+                            width: media.rect.width,
+                            height: media.rect.height,
+                            decorative: crate::adapt::decorative(media),
+                        }),
+                        ..Run::default()
+                    });
+                    runs.push(Run::plain(" "));
                 }
                 _ => {
                     runs.extend(block.runs);
@@ -1320,6 +1788,78 @@ impl Walker<'_> {
         self.rect = saved_rect;
         runs
     }
+}
+
+/// The runs of a live log's entry as the engine's isolated world reads it
+/// (`[{t, c, b, i}, {img: {src, alt, w, h, hidden}}, …]`, untrusted):
+/// cleaned, with whitespace collapsed as a browser does.
+pub fn live_runs(value: &Value, base: &str) -> Vec<Run> {
+    let mut runs = Vec::new();
+    for part in value.as_array().into_iter().flatten().take(400) {
+        if let Some(img) = part.get("img") {
+            let alt = truncate(&clean_inline(img["alt"].as_str().unwrap_or_default()), 200);
+            let width = img["w"].as_f64().unwrap_or(0.0);
+            let height = img["h"].as_f64().unwrap_or(0.0);
+            let hidden = img["hidden"].as_bool().unwrap_or(false);
+            let empty_alt = img["alt"].as_str().is_some_and(|a| a.trim().is_empty());
+            runs.push(Run {
+                text: alt.trim().to_string(),
+                picture: Some(Picture {
+                    src: truncate(
+                        &clean(&crate::url::resolve(
+                            base,
+                            img["src"].as_str().unwrap_or_default(),
+                        )),
+                        2000,
+                    ),
+                    alt: alt.trim().to_string(),
+                    width,
+                    height,
+                    decorative: crate::adapt::is_decorative(width, height, hidden || empty_alt),
+                }),
+                ..Run::default()
+            });
+            runs.push(Run::plain(" "));
+            continue;
+        }
+        let text = part["t"].as_str().unwrap_or_default();
+        let text = if text == "\n" {
+            "\n".to_string()
+        } else {
+            clean_inline(text)
+        };
+        if text.is_empty() {
+            continue;
+        }
+        runs.push(Run {
+            text: truncate(&text, MAX_TEXT),
+            bold: part["b"].as_bool().unwrap_or(false),
+            italic: part["i"].as_bool().unwrap_or(false),
+            color: part["c"]
+                .as_str()
+                .filter(|c| !c.is_empty())
+                .map(|c| truncate(&clean(c), 64)),
+            ..Run::default()
+        });
+    }
+    // Merge neighbours of one style, as the walker does.
+    let mut merged: Vec<Run> = Vec::new();
+    for run in runs {
+        match merged.last_mut() {
+            Some(last)
+                if last.picture.is_none()
+                    && run.picture.is_none()
+                    && last.bold == run.bold
+                    && last.italic == run.italic
+                    && last.color == run.color =>
+            {
+                last.text.push_str(&run.text)
+            }
+            _ => merged.push(run),
+        }
+    }
+    tidy(&mut merged);
+    merged
 }
 
 /// A form element's role when the AX tree has none for it.
@@ -1389,6 +1929,16 @@ fn tidy(runs: &mut Vec<Run>) {
 
 /// The page in `snapshot`, its control revisions kept in `revisions`.
 pub fn build(snapshot: &PageSnapshot, revisions: &mut Revisions) -> Page {
+    build_with(snapshot, revisions, &HashSet::new())
+}
+
+/// [`build`], with the scroll boxes the page has appended entries to,
+/// as the engine saw them: they are live logs too.
+pub fn build_with(
+    snapshot: &PageSnapshot,
+    revisions: &mut Revisions,
+    appended: &HashSet<NodeId>,
+) -> Page {
     let dom = Dom::parse(&snapshot.dom);
     let ax = Ax::parse(&snapshot.ax);
     let root = dom.backend.first().copied().unwrap_or(-1);
@@ -1407,9 +1957,11 @@ pub fn build(snapshot: &PageSnapshot, revisions: &mut Revisions) -> Page {
         },
         runs: Vec::new(),
         rect: None,
+        last: None,
         marker: None,
         by_node: HashMap::new(),
         revisions,
+        appended,
     };
     let top = Context {
         kind: BlockKind::Paragraph,
@@ -1423,12 +1975,27 @@ pub fn build(snapshot: &PageSnapshot, revisions: &mut Revisions) -> Page {
         depth: 0,
         control: None,
         silent: false,
+        region: None,
+        aria_hidden: false,
     };
     if !dom.parent.is_empty() {
         walker.walk(0, &top);
     }
     walker.flush(&top);
-    walker.page
+    let mut page = walker.page;
+    // A landmark with a field or a live log in it is not only links: it
+    // never collapses.
+    for block in &page.blocks {
+        let busy = match &block.kind {
+            BlockKind::Log(_) => true,
+            BlockKind::Control(c) => page.controls[*c].role.is_text(),
+            _ => false,
+        };
+        if let (true, Some(r)) = (busy, block.region) {
+            page.regions[r].collapsible = false;
+        }
+    }
+    page
 }
 
 #[cfg(test)]
