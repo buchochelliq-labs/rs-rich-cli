@@ -120,3 +120,22 @@ fn a_mixer_plays_into_an_output_on_its_own_thread() {
     let right = samples.chunks(2).filter(|f| *f == [0.0, 0.5]).count();
     assert_eq!(right, 800);
 }
+
+#[test]
+fn a_downsampled_stream_keeps_its_place_across_source_buffers() {
+    // A ramp whose value is its frame number, at six times the mixer's
+    // rate, in the clip's 1024-frame buffers: output frame n is source
+    // frame 6n, also just after a buffer runs out.
+    let ramp = (0..12_000).map(|k| f64::from(k) / 100_000.0).collect();
+    let mixer = Mixer::detached(8000, 1);
+    mixer.source(Box::new(clip(48_000, vec![ramp])));
+    let out = mixed(&mixer, 1990);
+    for (n, sample) in out.iter().enumerate() {
+        let want = (6 * n) as f32 / 100_000.0;
+        assert!(
+            (sample - want).abs() < 1e-5,
+            "frame {n}: {sample} is not source frame {}",
+            6 * n
+        );
+    }
+}

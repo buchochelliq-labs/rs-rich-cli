@@ -149,8 +149,11 @@ impl Stream {
         };
         let l = at(first);
         let r = self.pending.get(1).map_or(l, at);
+        let pending = first.len();
         self.at += self.step;
-        let done = self.at as usize;
+        // Drain only what is pending: an advance past the buffer's end
+        // stays in `at`, to be taken from the next buffer.
+        let done = (self.at as usize).min(pending);
         for row in &mut self.pending {
             row.drain(..done.min(row.len()));
         }
