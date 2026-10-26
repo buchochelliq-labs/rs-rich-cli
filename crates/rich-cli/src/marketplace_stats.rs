@@ -112,7 +112,8 @@ impl Stats {
     }
 
     /// One package's stats as the JSON report shows them, cleaned: counts
-    /// are integers or null, and a review link only a GitHub one.
+    /// are integers or null, and a review link only one into the
+    /// marketplace's own Discussions ([`review_link`]).
     pub(crate) fn package_json(&self, id: &str) -> Value {
         let Some(entry) = self.packages.get(id) else {
             return json!({"source": self.source, "generated_at": self.generated_at,
@@ -129,15 +130,13 @@ impl Stats {
             })
             .unwrap_or_default();
         let reviews = entry.get("reviews").and_then(|r| {
-            let url = r.get("url")?.as_str()?;
-            url.starts_with("https://github.com/").then(|| {
-                json!({
-                    "url": line(url),
-                    "up": count(r.get("up")).unwrap_or(0),
-                    "down": count(r.get("down")).unwrap_or(0),
-                    "comments": count(r.get("comments")).unwrap_or(0),
-                })
-            })
+            let url = review_link(r.get("url")?.as_str()?)?;
+            Some(json!({
+                "url": line(&url),
+                "up": count(r.get("up")).unwrap_or(0),
+                "down": count(r.get("down")).unwrap_or(0),
+                "comments": count(r.get("comments")).unwrap_or(0),
+            }))
         });
         json!({
             "source": self.source,
@@ -195,6 +194,62 @@ impl Stats {
     }
 }
 
+/// Where every review link must point: the official marketplace's own
+/// Discussions. The docs' Marketplace page (`docs/assets/marketplace.js`,
+/// `readStats`) holds links to the same rule.
+const REVIEWS: &str = "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/";
+
+/// A review link from `stats.json`, if it may be shown: it starts with
+/// [`REVIEWS`] as written and still does once normalised as a browser
+/// would (dot segments, `%2e` spelled dots and `\` resolved), and has no
+/// query, fragment, `..` or `%2e%2e`. Anything else is not shown, so an
+/// unsigned file cannot send a reader elsewhere.
+fn review_link(raw: &str) -> Option<String> {
+    let lower = raw.to_ascii_lowercase();
+    if !raw.starts_with(REVIEWS)
+        || raw.contains(['?', '#', '\\'])
+        || raw.contains("..")
+        || lower.contains("%2e%2e")
+        || lower.contains(".%2e")
+        || lower.contains("%2e.")
+        || raw.chars().any(|c| c.is_control() || c.is_whitespace())
+    {
+        return None;
+    }
+    let normalised = normalise_path(raw);
+    normalised.starts_with(REVIEWS).then_some(normalised)
+}
+
+/// `url`'s path with its dot segments removed, as the WHATWG URL parser
+/// does for an `https://` URL: a `.` or `%2e` segment goes, and a `..` in
+/// any spelling takes the segment before it too.
+fn normalise_path(url: &str) -> String {
+    let Some(rest) = url.strip_prefix("https://") else {
+        return url.to_string();
+    };
+    let (host, path) = rest.split_once('/').unwrap_or((rest, ""));
+    let mut out: Vec<&str> = Vec::new();
+    let segments: Vec<&str> = path.split('/').collect();
+    for (i, segment) in segments.iter().enumerate() {
+        let last = i + 1 == segments.len();
+        match segment.to_ascii_lowercase().as_str() {
+            "." | "%2e" => {
+                if last {
+                    out.push("");
+                }
+            }
+            ".." | ".%2e" | "%2e." | "%2e%2e" => {
+                out.pop();
+                if last {
+                    out.push("");
+                }
+            }
+            _ => out.push(segment),
+        }
+    }
+    format!("https://{host}/{}", out.join("/"))
+}
+
 /// `1234567` as `1,234,567`.
 fn thousands(n: u64) -> String {
     let digits = n.to_string();
@@ -247,5 +302,46 @@ mod tests {
         assert_eq!(thousands(0), "0");
         assert_eq!(thousands(999), "999");
         assert_eq!(thousands(1000), "1,000");
+    }
+
+    #[test]
+    fn a_review_link_stays_in_the_marketplaces_discussions() {
+        let good = "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/7";
+        assert_eq!(review_link(good).as_deref(), Some(good));
+        for hostile in [
+            "https://evil.test/",
+            "https://github.com/someone-else/rs-rich-marketplace/discussions/7",
+            "https://github.com/buchochelliq-labs/rs-rich-marketplace/issues/7",
+            "http://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/7",
+            "https://github.com.evil.test/buchochelliq-labs/rs-rich-marketplace/discussions/7",
+            // Out of the discussions after normalising.
+            "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/../../evil/repo",
+            "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/%2e%2e/%2E%2E/x",
+            "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/.%2e/settings",
+            "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/%2E./settings",
+            "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/..",
+            "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/7\\..\\..\\x",
+            // Queries and fragments.
+            "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/7?next=https://evil.test",
+            "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/7#x",
+            "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/?",
+            // Hidden characters.
+            "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/7\u{1b}]8;;https://evil.test\u{7}",
+            "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/7 https://evil.test",
+            "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/.\t./x",
+            " https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/7",
+        ] {
+            assert_eq!(review_link(hostile), None, "{hostile:?}");
+        }
+        // A single dot segment normalises away and stays inside.
+        assert_eq!(
+            review_link("https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/./7")
+                .as_deref(),
+            Some(good)
+        );
+        assert_eq!(
+            normalise_path("https://h/a/b/%2e%2e/c/./d/.."),
+            "https://h/a/c/"
+        );
     }
 }

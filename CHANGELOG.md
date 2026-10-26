@@ -75,7 +75,10 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   marketplace's nightly `stats.json` on its `stats` branch (release asset
   and crates.io download counts, and one Reviews discussion per package),
   unsigned and display-only, read with a 3-second timeout and left out
-  silently when missing. `rich` never phones home. The marketplace now
+  silently when missing. Reviews show only when their link points into
+  the marketplace's own Discussions, checked as written and once
+  normalised, with no query, fragment or `..` (the same rule as the docs'
+  Marketplace page). `rich` never phones home. The marketplace now
   hosts new official versions as release assets, made after the merge by
   `publish-artifacts.yml`, and its pull request check refuses reserved and
   lookalike ids and "official" wording in community listings unless a

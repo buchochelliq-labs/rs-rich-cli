@@ -588,8 +588,13 @@ ends in `/main/` from the same base with `stats` in its place, else
 `stats.json` beside its index; a local one from its directory), with a
 3-second timeout, at most 4 MiB. A missing, slow or malformed file, or
 another `schema_version`, is left out without a word; counts that are not
-integers show as not counted, and a review link that is not on
-`https://github.com/` is dropped.
+integers show as not counted, and the reviews are dropped unless their
+link points into the marketplace's own Discussions: it must start with
+`https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/`
+as written and once normalised (dot segments, `%2e` dots), with no query,
+fragment, `..` or `%2e%2e`. The Marketplace page (`readStats`) and the CLI
+hold links to the same rule, so an unsigned `stats.json` cannot send a
+reader elsewhere.
 
 **How the tiers are shown (0.0.23).** People see the tiers as **Official**,
 **Approved** and **Community**: `reviewed` is shown as "Approved". The

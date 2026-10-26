@@ -301,6 +301,34 @@ fn a_review_link_is_only_a_github_one() {
 }
 
 #[test]
+fn a_review_link_must_stay_in_the_marketplaces_discussions() {
+    let w = World::new();
+    let base = "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/";
+    for hostile in [
+        format!("{base}../../../evil/phish"),
+        format!("{base}%2e%2e/%2e%2e/%2e%2e/evil/phish"),
+        format!("{base}.%2E/%2E./evil/phish"),
+        format!("{base}7?redirect=https://evil.test/phish"),
+        format!("{base}7#https://evil.test/phish"),
+        format!("{base}7\\..\\..\\evil"),
+        "https://github.com/evil/rs-rich-marketplace/discussions/7".to_string(),
+        "https://github.com/buchochelliq-labs/rs-rich-marketplace/issues/7".to_string(),
+    ] {
+        let mut stats = stats();
+        stats["packages"]["dusk"]["reviews"]["url"] = json!(hostile);
+        w.write_stats(&serde_json::to_vec(&stats).unwrap());
+        let result = w.report(&["info", "dusk"]);
+        assert_eq!(result["stats"]["reviews"], Value::Null, "{hostile}");
+        let shown = text(&w.plugin(&["info", "dusk"]).stdout);
+        assert!(!shown.contains("Reviews "), "{hostile}: {shown}");
+        assert!(
+            !shown.contains("evil") && !shown.contains("issues"),
+            "{shown}"
+        );
+    }
+}
+
+#[test]
 fn search_sorts_by_downloads() {
     let w = World::new();
     w.write_stats(&serde_json::to_vec(&stats()).unwrap());
