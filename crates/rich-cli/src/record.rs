@@ -444,6 +444,7 @@ mod tests {
             masks: Vec::new(),
             timeline: Default::default(),
             frame_rate: 12.0,
+            audio: None,
         };
         let allowed = |args: &[&str], recording: &recorder::Recording| {
             parse_args(&strings(args))

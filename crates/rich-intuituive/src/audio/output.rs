@@ -3,11 +3,18 @@
 //! [`OutputOptions::null`] opens no device at all, but takes the samples
 //! at its rate on a clock, and [`Output::tap`] records what an output
 //! takes: sound tested, and captured, on a machine with no sound card.
+//!
+//! Under `rich record --audio` (or a tape's `Set Audio on`) the recorder
+//! sets [`RECORD_AUDIO_ENV`] in the program's environment, and an output
+//! that would open a device writes what it plays to the recording instead
+//! (see [`output`]).
 
 use std::collections::VecDeque;
+use std::io::Write as _;
+use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
 use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard, Weak};
-use std::time::{Duration, Instant};
+use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
@@ -188,6 +195,8 @@ struct Shared {
     scratch: Mutex<Vec<f32>>,
     /// The taps recording what the device takes.
     taps: Mutex<Vec<Weak<TapShared>>>,
+    /// The recorder's stream, under `rich record --audio`.
+    recording: Mutex<Option<std::fs::File>>,
 }
 
 /// A renderer: fills interleaved samples for the channels given.
@@ -226,6 +235,7 @@ impl Shared {
             render: Mutex::new(render),
             scratch: Mutex::new(Vec::new()),
             taps: Mutex::new(Vec::new()),
+            recording: Mutex::new(None),
         }
     }
 
@@ -280,8 +290,69 @@ impl Shared {
             None => false,
         });
         drop(taps);
+        let mut recording = lock(&self.recording);
+        if let Some(file) = recording.as_mut() {
+            let bytes: Vec<u8> = out.iter().flat_map(|s| s.to_le_bytes()).collect();
+            // Written at once, unbuffered: the recorder may end the
+            // program at any moment.
+            if file.write_all(&bytes).is_err() {
+                *recording = None;
+            }
+        }
+        drop(recording);
         self.room.notify_all();
     }
+}
+
+/// The environment variable `rich record` sets when it records sound
+/// (`rich record --audio`, a tape's `Set Audio on`): a directory. An
+/// output opened while it is set ([`output`], [`output_with`]) opens no
+/// device. It takes its samples on the real clock, as
+/// [`OutputOptions::null`] does, and writes them to a file of its own in
+/// that directory, which the recorder puts on the recording's clock: into
+/// an MP4's sound track, or a WAV beside the other files.
+///
+/// Each file is a 24-byte header, then the samples as they play,
+/// interleaved little-endian `f32`: the magic `RRAUDIO1`, the rate (`u32`
+/// LE), the channels (`u16` LE), two zero bytes, and when the first sample
+/// played, in nanoseconds since the Unix epoch (`u64` LE). Sample `n`
+/// plays `n / rate` seconds after that. Any program may write one, in
+/// any name ending `.pcm`.
+pub const RECORD_AUDIO_ENV: &str = "RICH_RECORD_AUDIO";
+
+/// The magic a recorded stream starts with.
+const RECORD_MAGIC: &[u8; 8] = b"RRAUDIO1";
+
+/// The directory to record into, when a recorder asked for sound.
+fn recording_dir() -> Option<PathBuf> {
+    std::env::var_os(RECORD_AUDIO_ENV)
+        .filter(|dir| !dir.is_empty())
+        .map(PathBuf::from)
+}
+
+/// A new stream file in `dir`, its header written, its first sample at
+/// `started`.
+fn recording_file(
+    dir: &std::path::Path,
+    rate: u32,
+    channels: u16,
+    started: SystemTime,
+) -> Option<std::fs::File> {
+    static OPENED: AtomicU32 = AtomicU32::new(0);
+    let n = OPENED.fetch_add(1, Ordering::Relaxed);
+    let path = dir.join(format!("{}-{n}.pcm", std::process::id()));
+    let mut file = std::fs::File::create(path).ok()?;
+    let nanos = started
+        .duration_since(UNIX_EPOCH)
+        .map_or(0, |d| u64::try_from(d.as_nanos()).unwrap_or(u64::MAX));
+    let mut header = Vec::with_capacity(24);
+    header.extend_from_slice(RECORD_MAGIC);
+    header.extend_from_slice(&rate.to_le_bytes());
+    header.extend_from_slice(&channels.to_le_bytes());
+    header.extend_from_slice(&[0, 0]);
+    header.extend_from_slice(&nanos.to_le_bytes());
+    file.write_all(&header).ok()?;
+    Some(file)
 }
 
 /// What a [`Tap`] and its output share.
@@ -380,6 +451,13 @@ impl Tap {
 /// keeps the stream until it stops. Anywhere, before an app as well as in
 /// one.
 ///
+/// While [`RECORD_AUDIO_ENV`] is set (a program run by `rich record
+/// --audio`), no device is opened: the output is a
+/// [null one](OutputOptions::null) at the rate and channels asked for
+/// (44,100 a second in two channels unless they say), and what it plays
+/// is written to the recording. Its [`device`](Output::device) is
+/// `"rich record"`.
+///
 /// ```no_run
 /// # #[cfg(feature = "audio")] {
 /// use intuituive::audio::{output, OutputOptions};
@@ -441,7 +519,10 @@ pub fn output_with(
 /// Open an output that plays `render` or its queue.
 fn open_output(options: OutputOptions, render: Option<Render>) -> Result<Output, AudioError> {
     if options.null {
-        return Ok(null_output(&options, render));
+        return Ok(null_output(&options, render, None));
+    }
+    if let Some(dir) = recording_dir() {
+        return Ok(null_output(&options, render, Some(dir)));
     }
     let (opened, result) = mpsc::channel();
     std::thread::Builder::new()
@@ -471,12 +552,22 @@ fn open_output(options: OutputOptions, render: Option<Render>) -> Result<Output,
     })
 }
 
-/// An output with no device: a thread takes its samples at its rate.
-fn null_output(options: &OutputOptions, render: Option<Render>) -> Output {
+/// An output with no device: a thread takes its samples at its rate, and
+/// writes them to a stream file in `recording`, when given.
+fn null_output(
+    options: &OutputOptions,
+    render: Option<Render>,
+    recording: Option<PathBuf>,
+) -> Output {
     let rate = options.rate.unwrap_or(44_100);
     let channels = options.channels.unwrap_or(2);
+    let name = if recording.is_some() {
+        "rich record"
+    } else {
+        "null"
+    };
     let shared = Arc::new(Shared::new(
-        "null".into(),
+        name.into(),
         rate,
         channels,
         options.queue,
@@ -487,6 +578,9 @@ fn null_output(options: &OutputOptions, render: Option<Render>) -> Output {
         .name("intuituive-audio-null".into())
         .spawn(move || {
             let start = Instant::now();
+            if let Some(dir) = recording {
+                *lock(&taker.recording) = recording_file(&dir, rate, channels, SystemTime::now());
+            }
             let mut taken = 0u64;
             let mut buffer = Vec::new();
             while !taker.stop.load(Ordering::SeqCst) {

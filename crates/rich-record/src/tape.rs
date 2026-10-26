@@ -15,6 +15,7 @@
 //! Set FontSize 12            # text size of video frames, in pixels (16)
 //! Set KittyKeyboard on       # report the kitty keyboard protocol (off)
 //! Set KeyRepeat 200ms 33ms   # a held key's autorepeat: delay and interval
+//! Set Audio on               # record the program's sound (off; see crate::audio)
 //! Write data.json '{"a": 1}' # create a file in the workspace (\n, \t escapes)
 //! Exec "sed -i s/1/2/ data.json"   # run a command outside the terminal
 //! Type "rich data.json"      # type into the shell, one character at a time
@@ -632,6 +633,8 @@ pub struct Tape {
     /// `Set KeyRepeat`: how long a held key waits before it repeats, and
     /// how often it then does.
     pub key_repeat: Option<(Duration, Duration)>,
+    /// `Set Audio`: record the program's sound ([`crate::audio`]).
+    pub audio: bool,
     pub steps: Vec<(usize, Step)>,
 }
 
@@ -858,6 +861,7 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
         font_size: None,
         kitty_keyboard: false,
         key_repeat: None,
+        audio: false,
         steps: Vec::new(),
     };
     let wait_regex = Regex::new(r"^Wait\s+/(.*)/(?:\s+(\S+))?$").expect("valid regex");
@@ -952,6 +956,10 @@ pub fn parse(source: &str) -> Result<Tape, TapeError> {
                     }
                     "KeyOverlay" => {
                         tape.key_overlay = Some(switch(value)?);
+                        continue;
+                    }
+                    "Audio" => {
+                        tape.audio = switch(value)?;
                         continue;
                     }
                     "Shell" => {
