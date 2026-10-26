@@ -237,3 +237,8 @@ required-features = ["audio"]
 [[test]]
 name = "audio_render"
 required-features = ["audio"]
+
+# ALSA's messages kept off stderr for an output's life (Linux).
+[[test]]
+name = "audio_alsa_quiet"
+required-features = ["audio"]

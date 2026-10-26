@@ -329,6 +329,20 @@ WAV back the same), and `OutputOptions::null`'s doc-test.
 
 ### 10. ALSA's messages kept off the screen for the stream's life (intuiTUIve, `audio`)
 
+**Status: closed in 0.0.23, another way.** Each output's and capture's
+stream callbacks put intuiTUIve's keeping handler on the thread that runs
+the stream (cpal's), the first time they run, for that thread's life,
+which is the stream's. It stays thread-local (`snd_lib_error_set_local`),
+so nothing else in the process that uses ALSA is changed, and no C is
+needed: the process-wide handler (`snd_lib_error_set_handler`) is a
+variadic C function, which stable Rust cannot define, and alsa-lib gives
+no way to read the handler before it to put back. `audio::messages()`
+returns the lines as before. Test: `tests/audio_alsa_quiet.rs`, a child
+process (`HOME` with an `.asoundrc` whose default is ALSA's `file` plugin
+onto a path it cannot write) writes nothing to stderr, and its
+`messages()` holds `pcm_file.c`'s line; without the change the test fails
+with the lines on stderr. `messages`' doc-test.
+
 - **What Doom needed:** ALSA's complaints (an underrun) must never land on
   the game's screen.
 - **Workaround:** `csrc/sound.c`'s `rs_doom_quiet_alsa` installs a

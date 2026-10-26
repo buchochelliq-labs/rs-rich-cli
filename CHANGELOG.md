@@ -64,6 +64,10 @@ What rs-rich-doom built for itself, made generic
   `audio::output_with` has the device's callback ask a synthesizer for
   each block, with no queue between them. Volume, taps and `failed` work
   as for `output`, and a renderer that panics is reported, not fatal.
+- **ALSA kept off the screen while sound plays** (intuituive, `audio`):
+  an output's or a capture's stream thread keeps ALSA's messages (an
+  underrun, a failed write) for the stream's life, for `audio::messages`,
+  not only while the device opens.
 
 ### Pictures and GIFs in Noctiluca (noctiluca, rich-art, intuituive, rich-interact)
 

@@ -12,7 +12,7 @@ use std::time::{Duration, Instant};
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
 
-use super::capture::{id_of, quiet};
+use super::capture::{id_of, quiet, quiet_stream_thread};
 use super::{error, AudioError, Device, Host, Matrix};
 
 /// What [`output`] opens, and how.
@@ -608,14 +608,20 @@ where
     device
         .build_output_stream::<T, _, _>(
             *config,
-            move |out: &mut [T], _| data.play(out),
-            move |e| match e.kind() {
-                cpal::ErrorKind::Xrun
-                | cpal::ErrorKind::DeviceChanged
-                | cpal::ErrorKind::RealtimeDenied => {}
-                _ => {
-                    lock(&errors.failed).get_or_insert(e.to_string());
-                    errors.halt();
+            move |out: &mut [T], _| {
+                quiet_stream_thread();
+                data.play(out);
+            },
+            move |e| {
+                quiet_stream_thread();
+                match e.kind() {
+                    cpal::ErrorKind::Xrun
+                    | cpal::ErrorKind::DeviceChanged
+                    | cpal::ErrorKind::RealtimeDenied => {}
+                    _ => {
+                        lock(&errors.failed).get_or_insert(e.to_string());
+                        errors.halt();
+                    }
                 }
             },
             None,
