@@ -644,6 +644,129 @@ def _live_nested() -> str:
     return buffer.getvalue()
 
 
+def _live_nested_draw() -> str:
+    """A nested display draws inside the first: its refresh redraws the
+    first display, which shows every display on the stack one after
+    another. A print goes above them all, and a nested display that stops
+    prints its renderable there."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer)
+    outer = Live(Text("outer"), console=console, auto_refresh=False)
+    outer.start(refresh=True)
+    inner = Live(Text("inner"), console=console, auto_refresh=False)
+    inner.start(refresh=True)
+    inner.refresh()
+    inner.update(Text("inner\ntwo"), refresh=True)
+    outer.update(Text("outer two"), refresh=True)
+    console.print("printed")
+    outer.update(Text("pending"))
+    inner.refresh()
+    console.print("again")
+    inner.stop()
+    console.print("after")
+    outer.stop()
+    return buffer.getvalue()
+
+
+def _live_nested_transient() -> str:
+    """Transient displays nested and nesting: the first draws the nested one
+    as soon as it refreshes itself, and a transient nested display prints
+    nothing when it stops."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer)
+    outer = Live(Text("outer"), console=console, auto_refresh=False, transient=True)
+    outer.start(refresh=True)
+    inner = Live(Text("inner"), console=console, auto_refresh=False, transient=True)
+    inner.start(refresh=True)
+    outer.refresh()
+    inner.stop()
+    outer.refresh()
+    outer.stop()
+    kept = Live(Text("kept"), console=console, auto_refresh=False)
+    kept.start(refresh=True)
+    gone = Live(Text("gone"), console=console, auto_refresh=False, transient=True)
+    gone.start(refresh=True)
+    gone.refresh()
+    gone.stop()
+    kept.stop()
+    return buffer.getvalue()
+
+
+def _live_nested_stop_order() -> str:
+    """The first display stopping before the nested one: `clear_live` pops
+    the top of the stack, whichever display stops, so the first draws
+    itself alone, and the nested display then prints with no display
+    running. Three displays stop out of order the same way."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer)
+    outer = Live(Text("outer"), console=console, auto_refresh=False)
+    outer.start(refresh=True)
+    inner = Live(Text("inner"), console=console, auto_refresh=False)
+    inner.start(refresh=True)
+    inner.refresh()
+    outer.stop()
+    inner.refresh()
+    inner.stop()
+    first = Live(Text("one"), console=console, auto_refresh=False)
+    first.start(refresh=True)
+    second = Live(Text("two"), console=console, auto_refresh=False)
+    second.start(refresh=True)
+    third = Live(Text("three"), console=console, auto_refresh=False)
+    third.start(refresh=True)
+    third.refresh()
+    second.stop()
+    third.refresh()
+    third.stop()
+    first.stop()
+    return buffer.getvalue()
+
+
+def _live_nested_file() -> str:
+    """Nested displays on a console that is not a terminal: nothing is drawn
+    until the first display stops, and prints pass straight through. The
+    first display's stop pops the display above it, so its final frame
+    shows itself alone."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer, force_terminal=False)
+    outer = Live(Text("outer"), console=console, auto_refresh=False)
+    outer.start(refresh=True)
+    inner = Live(Text("inner"), console=console, auto_refresh=False)
+    inner.start(refresh=True)
+    inner.update(Text("updated"), refresh=True)
+    console.print("printed")
+    inner.stop()
+    other = Live(Text("other"), console=console, auto_refresh=False, transient=True)
+    other.start(refresh=True)
+    outer.stop()
+    other.stop()
+    return buffer.getvalue()
+
+
+def _live_nested_screen() -> str:
+    """A display nested in one on the alternate screen is drawn inside its
+    `Screen`."""
+    from rich.live import Live
+
+    buffer = io.StringIO()
+    console = _console(20, file=buffer, height=4)
+    outer = Live(Text("outer"), console=console, auto_refresh=False, screen=True)
+    outer.start(refresh=True)
+    inner = Live(Text("inner"), console=console, auto_refresh=False)
+    inner.start(refresh=True)
+    inner.refresh()
+    inner.stop()
+    outer.stop()
+    return buffer.getvalue()
+
+
 CONSOLE_CASES = [
     ("console_quiet", _console_quiet),
     ("console_size_setters", _console_size_setters),
@@ -671,6 +794,11 @@ CONSOLE_CASES = [
     ("progress_log_file", _progress_log_file),
     ("live_set_live", _live_set_live),
     ("live_nested", _live_nested),
+    ("live_nested_draw", _live_nested_draw),
+    ("live_nested_transient", _live_nested_transient),
+    ("live_nested_stop_order", _live_nested_stop_order),
+    ("live_nested_file", _live_nested_file),
+    ("live_nested_screen", _live_nested_screen),
 ]
 
 

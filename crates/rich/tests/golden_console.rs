@@ -1157,6 +1157,131 @@ fn live_nested() -> String {
     String::from_utf8(out).unwrap()
 }
 
+/// One sink shared by the displays of a case: upstream's displays write to
+/// their one console's file.
+#[derive(Clone, Default)]
+struct Sink(std::rc::Rc<std::cell::RefCell<Vec<u8>>>);
+
+impl std::io::Write for Sink {
+    fn write(&mut self, bytes: &[u8]) -> std::io::Result<usize> {
+        self.0.borrow_mut().extend_from_slice(bytes);
+        Ok(bytes.len())
+    }
+
+    fn flush(&mut self) -> std::io::Result<()> {
+        Ok(())
+    }
+}
+
+impl Sink {
+    fn output(&self) -> String {
+        String::from_utf8(self.0.borrow().clone()).unwrap()
+    }
+}
+
+/// A display of `content` on a clone of `console`, writing to `sink`.
+fn display(console: &Console, sink: &Sink, content: &str) -> rich::Live<Sink> {
+    rich::Live::new(Box::new(Text::new(content)), console.clone(), sink.clone())
+}
+
+fn live_nested_draw() -> String {
+    let console = console(20);
+    let sink = Sink::default();
+    let mut outer = display(&console, &sink, "outer");
+    outer.start();
+    let mut inner = display(&console, &sink, "inner");
+    inner.start();
+    inner.refresh();
+    inner.update(Box::new(Text::new("inner\ntwo")));
+    outer.update(Box::new(Text::new("outer two")));
+    // `console.print(...)` goes through the first display's hook, from
+    // whichever display prints.
+    outer.print_str("printed");
+    outer.update_with(Box::new(Text::new("pending")), false);
+    inner.refresh();
+    inner.print_str("again");
+    inner.stop();
+    outer.print_str("after");
+    outer.stop();
+    sink.output()
+}
+
+fn live_nested_transient() -> String {
+    let console = console(20);
+    let sink = Sink::default();
+    let mut outer = display(&console, &sink, "outer").transient(true);
+    outer.start();
+    let mut inner = display(&console, &sink, "inner").transient(true);
+    inner.start();
+    outer.refresh();
+    inner.stop();
+    outer.refresh();
+    outer.stop();
+    let mut kept = display(&console, &sink, "kept");
+    kept.start();
+    let mut gone = display(&console, &sink, "gone").transient(true);
+    gone.start();
+    gone.refresh();
+    gone.stop();
+    kept.stop();
+    sink.output()
+}
+
+fn live_nested_stop_order() -> String {
+    let console = console(20);
+    let sink = Sink::default();
+    let mut outer = display(&console, &sink, "outer");
+    outer.start();
+    let mut inner = display(&console, &sink, "inner");
+    inner.start();
+    inner.refresh();
+    outer.stop();
+    inner.refresh();
+    inner.stop();
+    let mut first = display(&console, &sink, "one");
+    first.start();
+    let mut second = display(&console, &sink, "two");
+    second.start();
+    let mut third = display(&console, &sink, "three");
+    third.start();
+    third.refresh();
+    second.stop();
+    third.refresh();
+    third.stop();
+    first.stop();
+    sink.output()
+}
+
+fn live_nested_file() -> String {
+    let console = builder(20).force_terminal(false).build();
+    let sink = Sink::default();
+    let mut outer = display(&console, &sink, "outer");
+    outer.start();
+    let mut inner = display(&console, &sink, "inner");
+    inner.start();
+    inner.update(Box::new(Text::new("updated")));
+    inner.print_str("printed");
+    inner.stop();
+    let mut other = display(&console, &sink, "other").transient(true);
+    other.start();
+    outer.stop();
+    other.stop();
+    sink.output()
+}
+
+fn live_nested_screen() -> String {
+    let console = builder(20).height(4).build();
+    let sink = Sink::default();
+    let mut outer = display(&console, &sink, "outer").screen(true);
+    outer.start();
+    let mut inner = display(&console, &sink, "inner");
+    inner.start();
+    inner.refresh();
+    inner.stop();
+    outer.stop();
+    sink.output()
+}
+
 fn build(name: &str) -> String {
     match name {
         "console_quiet" => console_quiet(),
@@ -1185,11 +1310,16 @@ fn build(name: &str) -> String {
         "progress_log_file" => progress_log_file(),
         "live_set_live" => live_set_live(),
         "live_nested" => live_nested(),
+        "live_nested_draw" => live_nested_draw(),
+        "live_nested_transient" => live_nested_transient(),
+        "live_nested_stop_order" => live_nested_stop_order(),
+        "live_nested_file" => live_nested_file(),
+        "live_nested_screen" => live_nested_screen(),
         other => panic!("no builder for console case {other:?}"),
     }
 }
 
-const CASES: usize = 26;
+const CASES: usize = 31;
 
 #[test]
 fn console_parity() {
