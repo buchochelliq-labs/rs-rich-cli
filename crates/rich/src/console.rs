@@ -2821,7 +2821,8 @@ fn detect_is_terminal(environ: Option<&Environ>) -> bool {
 }
 
 /// Upstream's `_TERM_COLORS`: the colour system named by the last
-/// hyphenated part of `TERM`.
+/// hyphenated part of `TERM`. Not on Windows, where `TERM` is not read.
+#[cfg(not(windows))]
 fn term_colors(colors: &str) -> Option<ColorSystem> {
     match colors {
         "kitty" | "256color" => Some(ColorSystem::EightBit),

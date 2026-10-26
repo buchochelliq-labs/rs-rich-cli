@@ -2,7 +2,7 @@
 //! rich 15.0.0: `FORCE_COLOR` and `TTY_COMPATIBLE` do not colour redirected
 //! stdout, and a reader closing the pipe early is success.
 
-use std::io::{Read, Write};
+use std::io::Write;
 use std::process::{Command, Stdio};
 
 fn bin() -> Command {
@@ -66,6 +66,8 @@ fn force_color_leaves_redirected_stdout_plain() {
 #[cfg(unix)]
 #[test]
 fn a_reader_closing_the_pipe_early_is_success() {
+    use std::io::Read;
+
     // Far more than a pipe buffer holds, so the write is still under way
     // when the reader closes its end.
     let input: String = (0..20_000)
