@@ -249,6 +249,7 @@ nav:
       - CLI usability: plans/0.0.7.md
       - Performance and confidence: plans/0.0.6.md
   - Releases:
+      - 0.0.23: releases/0.0.23.md
       - 0.0.22: releases/0.0.22.md
       - 0.0.21: releases/0.0.21.md
       - 0.0.20: releases/0.0.20.md
@@ -288,6 +289,7 @@ nav:
       - "Design: intuiTUIve spike (milestone 11)": design/intuituive.md
       - "Design: intuiTUIve widgets": design/intuituive-widgets.md
       - "Design: intuiTUIve against ratatui": design/intuituive-vs-ratatui.md
+      - "Design: intuiTUIve against Textual": design/textual-parity.md
       - "Design: what the intuiTUIve demos are missing": design/intuituive-demo-gaps.md
       - "Design: the demo loop, where things stand": design/intuituive-status.md
       - "Design: Noctiluca, a terminal web browser": design/browser.md
