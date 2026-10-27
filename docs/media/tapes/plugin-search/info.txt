@@ -13,6 +13,10 @@ Repository    https://github.com/example/rich-shout
 Newest        0.2.0 (suits this host)
 Capabilities  transform upper, fence-markup shout, fence-ansi shout-ansi
 Permissions   ansi-output
+Downloads     862 (0.2.0: 638, 0.1.1: 224, 0.1.0: not counted)
+Rating        👍 23  👎 4  (12 comments)
+Reviews       https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/11
+Stats         as of 2026-10-27; not signed, shown only
 
 ┏━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━┳━━━━━━━━━━━━┳━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓
 ┃ Version ┃ Published  ┃ Requires       ┃ Loads here ┃ Yanked                                          ┃
@@ -23,8 +27,4 @@ Permissions   ansi-output
 │ 0.1.0   │ 2026-10-01 │ plugin ABI 1.0 │ yes        │                                                 │
 └─────────┴────────────┴────────────────┴────────────┴─────────────────────────────────────────────────┘
 ❯
-
-
-
-
 

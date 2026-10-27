@@ -45,7 +45,7 @@ fn pair(name: &str) -> (String, String, minisign::PublicKey, minisign::SecretKey
 fn theme_listing(id: &str) -> Value {
     let (_, version) = official::THEMES.iter().find(|(t, _)| *t == id).unwrap();
     let body = official::theme(id);
-    json!({
+    let mut listing = json!({
         "schema_version": 1, "id": id, "kind": "theme", "name": format!("{id} theme"),
         "description": format!("The {id} theme"), "tier": "official", "license": "MIT",
         "repository": "https://github.com/buchochelliq-labs/rs-rich-cli",
@@ -57,7 +57,12 @@ fn theme_listing(id: &str) -> Value {
             },
             "capabilities": [{"kind": "theme", "name": id}], "permissions": [],
         }],
-    })
+    });
+    if id == "dusk" {
+        // A maintainer's pick, so `info` shows every line at once.
+        listing["recommended"] = json!({"since": "2026-10-26", "note": "A calm dark theme"});
+    }
+    listing
 }
 
 fn crate_listing() -> Value {
@@ -259,6 +264,38 @@ fn info_shows_downloads_rating_and_reviews() {
         w.report(&["info", "paper"])["stats"]["downloads"]["total"],
         Value::Null
     );
+}
+
+/// Every line the merged 0.0.23 branches give `info`, together and in
+/// order: the tier marker, the publisher, "Authored by", `★ recommended`
+/// and the stats.
+#[test]
+fn info_shows_tier_publisher_author_recommended_and_stats_together() {
+    let w = World::new();
+    w.write_stats(&serde_json::to_vec(&stats()).unwrap());
+    let out = w.plugin(&["info", "dusk"]);
+    assert!(out.status.success(), "{}", text(&out.stderr));
+    let shown = text(&out.stdout);
+    let mut at = 0;
+    for expected in [
+        "Tier          ✓ official: ",
+        "Publisher     Official: built and published by rs-rich",
+        "Authored by   rs-rich",
+        "Recommended   ★ recommended since 2026-10-26: A calm dark theme",
+        "Downloads     1,234 (1.0.0: 1,234)",
+        "Rating        👍 12  👎 1  (3 comments)",
+        "Reviews       https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/7",
+        "Stats         as of 2026-10-27; not signed, shown only",
+    ] {
+        let found = shown[at..]
+            .find(expected)
+            .unwrap_or_else(|| panic!("{expected:?} after byte {at} in\n{shown}"));
+        at += found + expected.len();
+    }
+    let result = w.report(&["info", "dusk"]);
+    assert_eq!(result["tier"], "official");
+    assert_eq!(result["recommended"]["since"], "2026-10-26");
+    assert_eq!(result["stats"]["downloads"]["total"], 1234);
 }
 
 #[test]
