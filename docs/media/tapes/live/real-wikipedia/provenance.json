@@ -1,0 +1,19 @@
+{
+  "tape": "docs/tapes/live/real-wikipedia.tape",
+  "tape_fnv1a64": "36a21404bf03b70d",
+  "recorder": "rs-rich-record 0.0.11",
+  "rich": "rich (rs-rich-cli) 0.0.23",
+  "commit": null,
+  "screenshots": [
+    "wikipedia-projection",
+    "wikipedia-hints",
+    "wikipedia-reader"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY.",
+  "recorded": "2026-10-27",
+  "sites": [
+    "https://en.wikipedia.org/wiki/Noctiluca_scintillans"
+  ],
+  "browser": "Chrome for Testing 153.0.8010.12",
+  "noctiluca": "0.0.2 (branch 023-realsites)"
+}

@@ -1,0 +1,40 @@
+ NOCTILUCA   READER + SIXEL   ◀▶   Array.prototype.map() - JavaScript | MDN
+ https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map
+JS                                                                                                                     │
+ Copy                                                                                                                  │
+                                                                                                                       │
+▏const numbers = [1, 4, 9];                                                                                            │
+▏const roots = numbers.map((num) => Math.sqrt(num));                                                                   │
+▏                                                                                                                      │
+▏// roots is now     [1, 2, 3]                                                                                         │
+▏// numbers is still [1, 4, 9]                                                                                         │
+▏                                                                                                                      │
+                                                                                                                       │
+Using map to reformat objects in an array                                                                              ┃
+                                                                                                                       ┃
+The following code takes an array of objects and creates a new array containing the newly reformatted objects.         ┃
+                                                                                                                       │
+JS                                                                                                                     │
+ Copy                                                                                                                  │
+                                                                                                                       │
+▏const kvArray = [                                                                                                     │
+▏  { key: 1, value: 10 },                                                                                              │
+▏  { key: 2, value: 20 },                                                                                              │
+▏  { key: 3, value: 30 },                                                                                              │
+▏];                                                                                                                    │
+▏                                                                                                                      │
+▏const reformattedArray = kvArray.map(({ key, value }) => ({ [key]: value }));                                         │
+▏                                                                                                                      │
+▏console.log(reformattedArray); // [{ 1: 10 }, { 2: 20 }, { 3: 30 }]                                                   │
+▏console.log(kvArray);                                                                                                 │
+▏// [                                                                                                                  │
+▏//   { key: 1, value: 10 },                                                                                           │
+▏//   { key: 2, value: 20 },                                                                                           │
+▏//   { key: 3, value: 30 }                                                                                            │
+▏// ]                                                                                                                  │
+▏                                                                                                                      │
+                                                                                                                       │
+Using parseInt() with map()                                                                                            │
+                                                                                                                       │
+ match 1 of 3
+ f1 actions | f hints | o open | r reader | q quit

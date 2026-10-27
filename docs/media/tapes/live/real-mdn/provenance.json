@@ -1,0 +1,18 @@
+{
+  "tape": "docs/tapes/live/real-mdn.tape",
+  "tape_fnv1a64": "cd55e5e8a2c93a0c",
+  "recorder": "rs-rich-record 0.0.11",
+  "rich": "rich (rs-rich-cli) 0.0.23",
+  "commit": null,
+  "screenshots": [
+    "mdn-projection",
+    "mdn-reader"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY.",
+  "recorded": "2026-10-27",
+  "sites": [
+    "https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map"
+  ],
+  "browser": "Chrome for Testing 153.0.8010.12",
+  "noctiluca": "0.0.2 (branch 023-realsites)"
+}
