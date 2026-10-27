@@ -1000,6 +1000,11 @@ struct Walker<'a> {
 
 impl Walker<'_> {
     fn push(&mut self, run: Run, rect: Option<Rect>) {
+        // A box with no area (Chrome gives some text, an empty inline or
+        // an icon's pseudo-element one at the page's origin) says nothing
+        // about where the text is: in the union it would stretch the block
+        // to the top of the page, and the projection would draw it there.
+        let rect = rect.filter(|r| r.width > 0.0 || r.height > 0.0);
         if let Some(rect) = rect {
             // Two boxes on one line with a gap between them (flex items,
             // links spaced by margins) keep a space between their texts.
@@ -1212,7 +1217,7 @@ impl Walker<'_> {
             self.block(BlockKind::Control(index), i, context);
             return;
         }
-        if name == "TABLE" && dom.style(i, 0).starts_with("table") {
+        if name == "TABLE" && dom.style(i, 0).starts_with("table") && !layout_table(dom, i) {
             self.flush(context);
             if let Some(table) = self.table(i, context) {
                 let rect = dom.rect(i).unwrap_or_default();
@@ -1448,7 +1453,12 @@ impl Walker<'_> {
             LogKind::Log
         } else if live {
             LogKind::Live
-        } else if self.appended.contains(&dom.backend[i]) {
+        } else if self.appended.contains(&dom.backend[i])
+            // The page's own root scrolls, but it is the page, not a log
+            // in it: a script appending to it (The Guardian's do) would
+            // turn the whole page into one log's entries.
+            && !matches!(dom.name[i].as_str(), "HTML" | "BODY")
+        {
             LogKind::Appended
         } else {
             return None;
@@ -1788,6 +1798,25 @@ impl Walker<'_> {
         self.rect = saved_rect;
         runs
     }
+}
+
+/// Whether table `i` lays a page out rather than holding data: it says
+/// so (`role="presentation"` or `"none"`), or a table is nested in it, as
+/// browsers' accessibility trees judge. Its contents are then read as the
+/// blocks they are, so a page built of tables (Hacker News) keeps its text.
+fn layout_table(dom: &Dom, i: usize) -> bool {
+    let role = dom.attr(i, "role").unwrap_or_default();
+    if role.eq_ignore_ascii_case("presentation") || role.eq_ignore_ascii_case("none") {
+        return true;
+    }
+    let mut stack: Vec<usize> = dom.children[i].clone();
+    while let Some(n) = stack.pop() {
+        if dom.name[n] == "TABLE" {
+            return true;
+        }
+        stack.extend(dom.children[n].iter().copied());
+    }
+    false
 }
 
 /// The runs of a live log's entry as the engine's isolated world reads it
@@ -2160,6 +2189,94 @@ mod tests {
             ]
         );
         assert!(page.blocks[1].runs[1].bold);
+    }
+
+    #[test]
+    fn a_table_that_lays_out_tables_is_read_as_blocks() {
+        // Hacker News: an outer table whose cell holds the stories' table.
+        let mut f = Fake::new();
+        let body = f.el(0, "BODY", &[], "block");
+        let outer = f.el(body, "TABLE", &[], "table");
+        let tr = f.el(outer, "TR", &[], "table-row");
+        let td = f.el(tr, "TD", &[], "table-cell");
+        let inner = f.el(td, "TABLE", &[], "table");
+        let row = f.el(inner, "TR", &[], "table-row");
+        let rank = f.el(row, "TD", &[], "table-cell");
+        f.text(rank, "1.");
+        let title = f.el(row, "TD", &[], "table-cell");
+        f.text(title, "A story");
+        let tr2 = f.el(outer, "TR", &[], "table-row");
+        let foot = f.el(tr2, "TD", &[], "table-cell");
+        f.text(foot, "Guidelines");
+        // A table that says it lays out is read as blocks too.
+        let said = f.el(body, "TABLE", &[("role", "presentation")], "table");
+        let tr3 = f.el(said, "TR", &[], "table-row");
+        let cell = f.el(tr3, "TD", &[], "table-cell");
+        f.text(cell, "Laid out");
+        let page = f.page(Value::Null);
+        let tables: Vec<&Table> = page
+            .blocks
+            .iter()
+            .filter_map(|b| match &b.kind {
+                BlockKind::Table(t) => Some(t),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(tables.len(), 1, "only the stories' table is a table");
+        let cells: Vec<String> = tables[0].rows[0].iter().map(|c| plain(&c.runs)).collect();
+        assert_eq!(cells, ["1.", "A story"]);
+        let texts: Vec<String> = page
+            .blocks
+            .iter()
+            .filter(|b| !matches!(b.kind, BlockKind::Table(_)))
+            .map(|b| b.text())
+            .collect();
+        assert_eq!(texts, ["Guidelines", "Laid out"]);
+    }
+
+    #[test]
+    fn a_box_with_no_area_does_not_move_its_block() {
+        // A footer link far down the page, with an empty text box at the
+        // origin beside its real one (as MDN's and GitHub's have).
+        let mut f = Fake::new();
+        let body = f.el(0, "BODY", &[], "block");
+        let p = f.el(body, "P", &[], "block");
+        f.text(p, "About");
+        let k = f.bounds.len() - 1;
+        f.bounds[k] = vec![10.0, 5000.0, 50.0, 18.0];
+        f.text(p, " ");
+        let k = f.bounds.len() - 1;
+        f.bounds[k] = vec![0.0, 0.0, 0.0, 0.0];
+        let page = f.page(Value::Null);
+        assert_eq!(page.blocks.len(), 1);
+        let rect = page.blocks[0].rect;
+        assert_eq!((rect.x, rect.y), (10.0, 5000.0));
+    }
+
+    #[test]
+    fn the_page_root_a_script_appends_to_is_not_a_log() {
+        let mut f = Fake::new();
+        let html = f.el(0, "HTML", &[], "block");
+        let body = f.el(html, "BODY", &[], "block");
+        let p = f.el(body, "P", &[], "block");
+        f.text(p, "Headline");
+        let chat = f.el(body, "DIV", &[], "block");
+        let line = f.el(chat, "DIV", &[], "block");
+        f.text(line, "hello");
+        let backend = |n: i64| 100 + n;
+        let appended: HashSet<NodeId> = [backend(html), backend(body), backend(chat)].into();
+        let snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: Value::Null,
+        };
+        let page = build_with(&snapshot, &mut Revisions::new(), &appended);
+        let kinds: Vec<_> = page
+            .blocks
+            .iter()
+            .map(|b| matches!(b.kind, BlockKind::Log(_)))
+            .collect();
+        assert_eq!(kinds, [false, true], "the paragraph, then the chat's log");
+        assert_eq!(page.logs.len(), 1);
     }
 
     #[test]

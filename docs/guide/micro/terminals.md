@@ -67,7 +67,8 @@ where a tape sets `RICH_MICRO=blocks`). The per-protocol PTY tests in
 cursor positions through an emulator; the protocols themselves are checked
 by hand in real Kitty, iTerm2 and a Sixel terminal before a release.
 
-WebP and frame-sequence animations draw their still image in this release.
+WebP animations play like GIF and APNG ones (since 0.0.23); frame-sequence
+animations draw their still image in this release.
 A two-row asset (2×2, 3×2) draws over both its rows in every mode above:
 Kitty with two rows of placeholders, iTerm2 and Sixel with one image of the
 whole box drawn from the second row (the cursor moves up a row to draw it

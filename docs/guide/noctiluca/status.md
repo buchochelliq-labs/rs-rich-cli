@@ -32,6 +32,7 @@ The tests run on the crate's own pages. Before a release, someone also
 opens five kinds of real site by hand, in Kitty or WezTerm and in a
 terminal with half blocks only, and notes what they see. Each row says
 what to look at; the limits below the table are expected, not bugs.
+[Noctiluca on real sites](real-sites.md) shows one such check, recorded.
 
 | Site | What to look at |
 |---|---|

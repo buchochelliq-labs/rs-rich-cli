@@ -327,9 +327,11 @@ rich plugin remove textcase
 rich plugin browse                # the same, in a selector with provenance
 ```
 
-The docs' [Marketplace page](marketplace.md) lists the same packages in a
-browser, with search, filters, download counts and reviews, and the
-command that installs each one. `rich plugin search` matches capabilities
+On the web, the marketplace's own site,
+[buchochelliq-labs.github.io/rs-rich-marketplace](https://buchochelliq-labs.github.io/rs-rich-marketplace/),
+lists the same packages in a browser, with search, filters, download
+counts and reviews, and the command that installs each one; the docs'
+[Marketplace page](marketplace.md) does too. `rich plugin search` matches capabilities
 and authors too, and filters with `--kind`, `--tier` and `--recommended`
 ([the CLI guide](cli.md#install-plugins-from-the-marketplace-0022)).
 

@@ -18,7 +18,7 @@ and `imagediff`. `rs_rich.art` itself exports everything.
 
 An image argument is any of:
 
-- a path (`str` or `os.PathLike`) to a PNG, JPEG or GIF file;
+- a path (`str` or `os.PathLike`) to a PNG, JPEG, GIF or WebP file;
 - the encoded bytes (`bytes`, `bytearray` or `memoryview`);
 - an [`ArtImage`](#artimage), a decoded image;
 - a Pillow image. Pillow is not a dependency: `rs_rich` reads the image's

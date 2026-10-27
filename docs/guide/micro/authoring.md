@@ -20,7 +20,7 @@ rich micro create logo.png --name team/logo --alt "our logo, a blue fox" \
     --emoji 🦊 --text TL --license MIT --add
 ```
 
-`create` reads a PNG, APNG, GIF or JPEG (up to 8192 pixels a side and
+`create` reads a PNG, APNG, GIF, JPEG or WebP (up to 8192 pixels a side and
 32 MiB), runs every frame through the pipeline, and writes a package the
 registry accepts; it reads the package back before it reports success, and
 removes it if it would not load. By default it writes `./team.logo/` (the

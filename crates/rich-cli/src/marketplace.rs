@@ -266,6 +266,15 @@ pub(crate) fn spec() -> rich_ext::cli_doc::CommandSpec {
                 ),
         )
         .section(
+            "On the web",
+            format!(
+                "The marketplace's own site, {MARKETPLACE_SITE}, searches and filters the same \
+                 signed index in a browser; so does the docs site's Marketplace page, \
+                 {MARKETPLACE_PAGE}. Both only show it: `rich plugin install` checks the \
+                 signature."
+            ),
+        )
+        .section(
             "Environment",
             "- RICH_MARKETPLACE: the marketplace, as --marketplace\n\
              - RICH_MARKETPLACE_KEYS: a keys-N.json to trust, as --marketplace-keys\n\
@@ -1853,7 +1862,12 @@ fn lockfile(dir: &Path) -> Outcome<Lockfile> {
     Lockfile::load(&dir.join(LOCKFILE_NAME)).map_err(lockfile_failure)
 }
 
-/// Where `rich plugin search` points when nothing matches.
+/// The marketplace's own web site: where `rich plugin search` points first
+/// when nothing matches, and `rich plugin --help`'s "On the web".
+pub(crate) const MARKETPLACE_SITE: &str =
+    "https://buchochelliq-labs.github.io/rs-rich-marketplace/";
+
+/// The docs site's Marketplace page, the second place on the web.
 pub(crate) const MARKETPLACE_PAGE: &str =
     "https://buchochelliq-labs.github.io/rs-rich-cli/latest/marketplace/";
 
@@ -1961,7 +1975,7 @@ fn search(options: &Options) -> Outcome<Done> {
     let text = if rows.is_empty() {
         format!(
             "No packages match. Try fewer words, or browse every package with `rich plugin \
-             browse`, or on the web: {MARKETPLACE_PAGE}\n"
+             browse`, or on the web: {MARKETPLACE_SITE} (or the docs' {MARKETPLACE_PAGE})\n"
         )
     } else {
         table(&columns, &rows, options.no_color)

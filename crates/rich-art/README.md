@@ -10,8 +10,8 @@ playback** and **perceptual image diffs** in the terminal.
 | Feature | Default | Pulls in |
 | --- | --- | --- |
 | FIGlet banners | ✅ always | no optional dependencies — just `rs-rich` |
-| `image` — images as ASCII, Braille, half blocks or quadrants | off | `image` (png + jpeg decoders) |
-| `gif` — animated GIF playback | off | `image` + its gif decoder |
+| `image` — images as ASCII, Braille, half blocks or quadrants | off | `image` (PNG, JPEG, GIF and WebP decoders; WebP is the pure-Rust `image-webp`) |
+| `gif` — animated GIF and animated WebP playback | off | `image` |
 | `sixel` — real pixels through the Sixel graphics protocol | off | `image` + `icy_sixel` |
 | `kitty` — the Kitty graphics protocol with Unicode placeholders | off | `image` |
 | `iterm` — iTerm2 inline images (also WezTerm) | off | `image` |
@@ -172,7 +172,8 @@ terminal graphics. The CLI depends on this public crate and contains only
 argument mapping and output policy.
 
 Animated GIFs play in place, driven by `rich`'s `Live` display and honouring
-each frame's own delay. Frame disposal is handled by the decoder, so frames
+each frame's own delay. `AnimatedArt` reads an animated WebP the same way
+(and a still WebP as one frame). Frame disposal is handled by the decoder, so frames
 never smear.
 
 ```rust

@@ -51,10 +51,10 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--ipynb` | Render RESOURCE as a Jupyter notebook. |
 | `--jsonl`, `--ndjson` | Stream JSON Lines / NDJSON records. |
 | `--log` | Stream log records: JSON Lines, logfmt and common text formats, filtered, followed and grouped. |
-| `--gif` | Animate GIFs side by side; pipes receive the first frame. |
+| `--gif` | Animate GIFs (and animated WebPs) side by side; pipes receive the first frame. |
 | `-u`, `--rule` | Draw a horizontal rule (RESOURCE is its title) |
 | `--diff` | Compare two images perceptually, two text files as a diff (syntax-aware; ANSI captures by visible text and style), or render one patch such as `git diff` output. |
-| `--image` | Render RESOURCE as a still image (ASCII/Braille/blocks/quadrants/Sixel) |
+| `--image` | Render RESOURCE (PNG, JPEG, GIF or WebP) as a still image (ASCII/Braille/blocks/quadrants/Sixel) |
 | `--inspect` | Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree. |
 | `--ansi-explain` | Decode every escape sequence in RESOURCE and show the visible text. |
 
@@ -346,9 +346,9 @@ Self-contained examples; ignores config; accepts --no-color.
 | `ipynb`, `notebook` | Render a Jupyter notebook (`--ipynb`) |
 | `jsonl`, `ndjson` | Stream JSON Lines / NDJSON records (`--jsonl`) |
 | `log`, `logs` | Stream log records (`--log`): JSON Lines, logfmt and common text formats; filter with --level and --where, follow a file with -f, group with --group |
-| `gif` | Animate GIFs (`--gif`) |
+| `gif` | Animate GIFs and animated WebPs (`--gif`) |
 | `diff` | Compare two images, two text files, or render one patch (`--diff`) |
-| `image` | Render a still image as ASCII/Braille/blocks/quadrants/Sixel (`--image`) |
+| `image` | Render a still image (PNG, JPEG, GIF or WebP) as ASCII/Braille/blocks/quadrants/Sixel (`--image`) |
 | `rule` | Draw a horizontal rule (`--rule`) |
 | `inspect` | Explore structured data (JSON, YAML, TOML, XML, INI, dotenv) as a tree (`--inspect`) |
 | `ansi`, `ansi-explain` | Decode escape sequences: `rich ansi explain FILE` (`--ansi-explain`) |
@@ -653,7 +653,7 @@ rich log [OPTIONS] [RESOURCE]
 
 ### rich gif
 
-Animate GIFs (`--gif`)
+Animate GIFs and animated WebPs (`--gif`)
 
 #### Usage
 
@@ -706,7 +706,7 @@ rich diff [OPTIONS] [RESOURCE]
 
 ### rich image
 
-Render a still image as ASCII/Braille/blocks/quadrants/Sixel (`--image`)
+Render a still image (PNG, JPEG, GIF or WebP) as ASCII/Braille/blocks/quadrants/Sixel (`--image`)
 
 #### Usage
 
@@ -1915,7 +1915,7 @@ rich micro [list | show | preview | add | remove | create | install | uninstall 
 | `preview` | Draw an asset inline, as this terminal shows it, and magnified at the terminal's cell size; a package path or an image file (run through the pipeline) works too |
 | `add` | Copy a package (a folder or .richmicro file) into the user layer |
 | `remove` | Delete an asset's package from the user layer |
-| `create` | Run an image (PNG, APNG, GIF or JPEG) through the pipeline and write a package the registry accepts |
+| `create` | Run an image (PNG, APNG, GIF, JPEG or WebP) through the pipeline and write a package the registry accepts |
 | `install` | Install a pack (a folder or zip with pack.json) into the user layer |
 | `uninstall` | Remove an installed pack by name from the user layer |
 | `packs` | The packs in each layer and the assets they hold |
@@ -2061,7 +2061,7 @@ rich micro remove NAME [--project] [--report json]
 
 #### rich micro create
 
-Run an image (PNG, APNG, GIF or JPEG) through the pipeline and write a package the registry accepts
+Run an image (PNG, APNG, GIF, JPEG or WebP) through the pipeline and write a package the registry accepts
 
 ##### Usage
 
@@ -2482,6 +2482,10 @@ rich plugin COMMAND [ARGS] [--marketplace LOCATION] [--marketplace-keys FILE] [-
 | `verify` | Check every installed file against the lockfile, and every installed version against the current index; yanked versions are reported with their reason; exits 4 when a file or listing does not match |
 | `browse` | The marketplace in a selector, with each package's provenance (tier, source, hash, permissions) beside the list; Enter installs, updates, removes, enables or disables |
 | `publish` | Check a local package (a WASM plugin, a micro pack or a theme), compute its SHA-256 and size, and write its listing JSON for a pull request to the marketplace repository; no network |
+
+#### On the web
+
+The marketplace's own site, https://buchochelliq-labs.github.io/rs-rich-marketplace/, searches and filters the same signed index in a browser; so does the docs site's Marketplace page, https://buchochelliq-labs.github.io/rs-rich-cli/latest/marketplace/. Both only show it: `rich plugin install` checks the signature.
 
 #### Environment
 

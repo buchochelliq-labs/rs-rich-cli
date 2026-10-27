@@ -1,0 +1,50 @@
+{
+  "schema_version": 1,
+  "id": "wordplay",
+  "kind": "wasm-plugin",
+  "name": "Word play",
+  "description": "Word games: rot13, reversal by character cluster, and slugs",
+  "tier": "official",
+  "license": "MIT",
+  "repository": "https://github.com/buchochelliq-labs/rs-rich-cli",
+  "versions": [
+    {
+      "version": "0.1.0",
+      "published": "2026-10-26",
+      "requires": {
+        "abi": "1.0"
+      },
+      "artifact": {
+        "url": "https://github.com/buchochelliq-labs/rs-rich-marketplace/releases/download/wordplay-v0.1.0/wordplay-0.1.0.wasm",
+        "sha256": "d14fe2459f83f7b95f2861d3ea3b1c1f1ce726a9c9779001669765240cfd0452",
+        "size": 1950
+      },
+      "source_revision": "d26de521746b47baa479b0f7c902f2ed8909b580",
+      "capabilities": [
+        {
+          "kind": "transform",
+          "name": "rot13"
+        },
+        {
+          "kind": "transform",
+          "name": "reverse"
+        },
+        {
+          "kind": "transform",
+          "name": "slug"
+        }
+      ],
+      "permissions": []
+    }
+  ],
+  "homepage": "https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/official/wasm/wordplay-0.1.0.wat",
+  "authors": [
+    "rs-rich contributors"
+  ],
+  "keywords": [
+    "transform",
+    "rot13",
+    "reverse",
+    "slug"
+  ]
+}

@@ -1130,7 +1130,9 @@ rich image photo.png --image-mode blocks --height 20
 ```
 
 Renders a single picture instead of a comparison: `--diff` needs exactly two
-images, `--image` needs exactly one. It shares the same `--image-mode`
+images, `--image` needs exactly one. PNG, JPEG, GIF and WebP are read
+(recognised by their content, whatever the name); an animated GIF or WebP
+draws its first frame. It shares the same `--image-mode`
 (auto/sixel/blocks/quadrants/braille/ascii) and capability auto-detection as `--diff`, plus a new
 `--height N` to bound the rendered rows independently of `--width`. `none` is
 rejected for `--image`, because it means "draw nothing" and there is no
@@ -2108,8 +2110,8 @@ rich capture [--cast FILE] [--redact] [--redact-pattern REGEX]... [--redact-prev
                                                      # run, show, export or record
 ```
 
-`view` routes Markdown, CSV, notebooks, JSON Lines, images, GIFs and patches to
-their renderers; shows source and structured data highlighted with line
+`view` routes Markdown, CSV, notebooks, JSON Lines, images, GIFs (and animated
+WebPs) and patches to their renderers; shows source and structured data highlighted with line
 numbers; and shows binary input as a hex dump. It pages by default unless a
 paging flag is given, and shows terminal controls in the file as inert text
 unless `--no-sanitize` is given (see
@@ -2346,6 +2348,12 @@ goes live with 0.0.23. It lists the official packages:
 Until the maintainer signs its first index, `rich plugin search` says
 there is no `index.json` and exits 3.
 
+To browse it on the web, use the marketplace's own site,
+[buchochelliq-labs.github.io/rs-rich-marketplace](https://buchochelliq-labs.github.io/rs-rich-marketplace/),
+or the docs site's [Marketplace page](marketplace.md). Both search the same
+signed index in a browser and only show it: `rich plugin install` checks
+the signature.
+
 The transforms run on `--print`, text and `--syntax`, in the order given:
 
 ```bash
@@ -2398,8 +2406,9 @@ word in their id, name, description, keywords, authors or capabilities, so
 `rich plugin search rot13` finds the plugin with a `rot13` transform.
 `--kind` (`crate`, `wasm-plugin`, `micro-pack`, `theme`), `--tier`
 (`official`, `reviewed`, `community`) and `--recommended` narrow it. When
-nothing matches, it points at `rich plugin browse` and the
-[Marketplace page](marketplace.md), which lists the same packages in a
+nothing matches, it points at `rich plugin browse`, the marketplace's
+[own site](https://buchochelliq-labs.github.io/rs-rich-marketplace/) and the
+docs' [Marketplace page](marketplace.md), which list the same packages in a
 browser, with download counts and reviews.
 
 ```bash
@@ -2637,6 +2646,9 @@ rich --gif animation.gif --gif-mode blocks --width 40 --loop 2
 rich animation.gif --gif-mode ascii
 rich --gif first.gif second.gif --gif-mode blocks --loop 0
 ```
+
+`--gif` also plays animated WebPs (`rich --gif spin.webp`), with their own
+frame delays; a still WebP is one frame.
 
 `--gif-mode` selects the GIF renderer independently of the image-diff-only
 `--image-mode` flag (used by still images and diffs). Existing invocations default to ASCII. Blocks pack two

@@ -417,7 +417,8 @@ impl ImageArt {
         }
     }
 
-    /// Decode an image from bytes (PNG, JPEG, GIF, ...).
+    /// Decode an image from bytes (PNG, JPEG, GIF or WebP; an animation's
+    /// first frame).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, image::ImageError> {
         Ok(ImageArt::new(image::load_from_memory(bytes)?))
     }

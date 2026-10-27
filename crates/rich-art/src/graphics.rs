@@ -15,6 +15,7 @@ use std::time::Duration;
 
 use image::codecs::gif::GifDecoder;
 use image::codecs::png::PngDecoder;
+use image::codecs::webp::WebPDecoder;
 use image::imageops::FilterType;
 use image::{AnimationDecoder, DynamicImage, Frame, ImageDecoder, ImageError, RgbaImage};
 
@@ -263,10 +264,37 @@ fn over_budget() -> ImageError {
     ))
 }
 
-/// Decode an animated GIF or APNG into full-canvas frames under `budget`.
-/// A still PNG decodes to one frame. Frames past `budget.max_frames` are
-/// dropped; decoding stops with an error when the frames so far take more
-/// than `budget.max_bytes`.
+/// A still image's one frame, decoded only if its canvas fits
+/// `budget.max_bytes` (four bytes a pixel), as each animation frame must.
+fn still_frame(
+    decoder: impl image::ImageDecoder,
+    budget: FrameBudget,
+) -> Result<Vec<AnimationFrame>, ImageError> {
+    let (width, height) = decoder.dimensions();
+    let size = (width as usize)
+        .checked_mul(height as usize)
+        .and_then(|pixels| pixels.checked_mul(4))
+        .ok_or_else(over_budget)?;
+    if size > budget.max_bytes {
+        return Err(over_budget());
+    }
+    let image = DynamicImage::from_decoder(decoder)?.to_rgba8();
+    Ok(vec![AnimationFrame {
+        image,
+        delay: ZERO_DELAY,
+    }])
+}
+
+/// Whether `bytes` start like a WebP file: a RIFF container of form `WEBP`.
+pub(crate) fn is_webp(bytes: &[u8]) -> bool {
+    bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP"
+}
+
+/// Decode an animated GIF, APNG or animated WebP into full-canvas frames
+/// under `budget`. A still PNG or WebP decodes to one frame. Frames past
+/// `budget.max_frames` are dropped; decoding stops with an error when the
+/// frames so far take more than `budget.max_bytes`, and a still image whose
+/// canvas alone takes more is refused before it is decoded.
 pub fn decode_animation(
     bytes: &[u8],
     budget: FrameBudget,
@@ -276,17 +304,21 @@ pub fn decode_animation(
         let mut decoder = GifDecoder::new(Cursor::new(bytes))?;
         decoder.set_limits(image::Limits::default())?;
         Box::new(decoder.into_frames())
+    } else if is_webp(bytes) {
+        let mut decoder = WebPDecoder::new(Cursor::new(bytes))?;
+        decoder.set_limits(image::Limits::default())?;
+        if decoder.has_animation() {
+            Box::new(decoder.into_frames())
+        } else {
+            return still_frame(decoder, budget);
+        }
     } else {
         let mut decoder = PngDecoder::new(Cursor::new(bytes))?;
         decoder.set_limits(image::Limits::default())?;
         if decoder.is_apng()? {
             Box::new(decoder.apng()?.into_frames())
         } else {
-            let image = DynamicImage::from_decoder(decoder)?.to_rgba8();
-            return Ok(vec![AnimationFrame {
-                image,
-                delay: ZERO_DELAY,
-            }]);
+            return still_frame(decoder, budget);
         }
     };
     let mut used = 0usize;

@@ -1,0 +1,53 @@
+{
+  "schema_version": 1,
+  "id": "mermaid",
+  "kind": "crate",
+  "name": "Mermaid diagrams",
+  "description": "Renders Mermaid flowcharts, sequence, state and other diagrams in the terminal, and ```mermaid fences in Markdown.",
+  "tier": "official",
+  "license": "MIT",
+  "authors": [
+    "rs-rich contributors"
+  ],
+  "repository": "https://github.com/buchochelliq-labs/rs-rich-cli",
+  "homepage": "https://docs.rs/rs-rich-mermaid",
+  "keywords": [
+    "diagram",
+    "mermaid",
+    "flowchart",
+    "fence"
+  ],
+  "crate": {
+    "name": "rs-rich-mermaid"
+  },
+  "versions": [
+    {
+      "version": "0.0.8",
+      "published": "2026-10-26",
+      "requires": {
+        "plugin_api": 1
+      },
+      "artifact": {
+        "url": "https://static.crates.io/crates/rs-rich-mermaid/rs-rich-mermaid-0.0.8.crate",
+        "sha256": "7f7f2d067169c4b4e7507ae5f80abd78f16cfc86b3d58b6758b85caef7dd0a5b",
+        "size": 49703
+      },
+      "capabilities": [
+        {
+          "kind": "fence-renderer",
+          "name": "mermaid"
+        },
+        {
+          "kind": "renderer",
+          "name": "mermaid"
+        }
+      ],
+      "permissions": [
+        "native-code",
+        "filesystem-read",
+        "filesystem-write",
+        "process"
+      ]
+    }
+  ]
+}

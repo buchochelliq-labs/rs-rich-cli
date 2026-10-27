@@ -274,13 +274,15 @@ impl Picture {
         Ok(Picture::new(shrink(image)))
     }
 
-    /// The image in `bytes`, keeping an animation: an animated GIF or APNG
-    /// of more than one frame becomes an [`animated`](Self::animated)
+    /// The image in `bytes`, keeping an animation: an animated GIF, APNG or
+    /// WebP of more than one frame becomes an [`animated`](Self::animated)
     /// picture (at most [`ANIMATION_FRAMES`] frames, each shrunk to at
     /// most [`ANIMATION_SIDE`] pixels a side, frames shorter than 20 ms
     /// merged into the next); anything else is [`decode`](Self::decode)d.
     pub fn decode_animated(bytes: &[u8]) -> Result<Picture, String> {
-        let animated = bytes.starts_with(b"GIF8") || bytes.starts_with(b"\x89PNG");
+        let animated = bytes.starts_with(b"GIF8")
+            || bytes.starts_with(b"\x89PNG")
+            || crate::graphics::is_webp(bytes);
         if animated {
             let budget = crate::graphics::FrameBudget {
                 max_bytes: 256 << 20,

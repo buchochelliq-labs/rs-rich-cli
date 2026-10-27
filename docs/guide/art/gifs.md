@@ -28,6 +28,9 @@ once, up front: every frame is composited to a full canvas, so the GIF's
 disposal rules (background, previous) are already applied and frames never
 smear.
 
+An animated WebP plays the same way: `AnimatedArt::from_path("spin.webp")?`
+reads its frames and their delays, and a still WebP is one frame.
+
 ## Playing it
 
 ```rust

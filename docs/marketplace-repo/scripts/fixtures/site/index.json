@@ -1,0 +1,72 @@
+{
+  "schema_version": 1,
+  "serial": 1,
+  "generated": "2026-10-26T12:00:00Z",
+  "expires": "2099-12-31T00:00:00Z",
+  "listings": {
+    "dev": {
+      "path": "packages/dev.json",
+      "sha256": "05b4b3d7472e708836f952ae038e462f806d753a76a7f15ad816f5ffa92b0e0f"
+    },
+    "dot": {
+      "path": "packages/dot.json",
+      "sha256": "13026981b0db50c7d6d8ce06906c0d8707b46ef36c3c10dcc18c174e822cabd6"
+    },
+    "dusk": {
+      "path": "packages/dusk.json",
+      "sha256": "bb53b8fc3c117fb47869dc9401448cb566035dcbc7bd4def114e292b48891ad3"
+    },
+    "fun": {
+      "path": "packages/fun.json",
+      "sha256": "044fc8b9bdd676f5e9963139d91ea0e10a344e578a626fb23e666d03f85408eb"
+    },
+    "high-contrast": {
+      "path": "packages/high-contrast.json",
+      "sha256": "4a1a0b1a2a1f67d352480c9d95e6c6ff188cc1f94041833a9a21b4b3339a8e7c"
+    },
+    "lumis": {
+      "path": "packages/lumis.json",
+      "sha256": "e01bcd105b72d1292a6698fafed0918fe996f8b8eb9fdc93f648ad3c6a27e113"
+    },
+    "mermaid": {
+      "path": "packages/mermaid.json",
+      "sha256": "d41060b0e7856ed23991175bacbbd7c1628437131caa0a9e405900a5d6bdd705"
+    },
+    "mono": {
+      "path": "packages/mono.json",
+      "sha256": "7aac0e7236c2bd87c8fcc04c5946cbe454424eb994e493ac8d85c161717e6fdb"
+    },
+    "ocean": {
+      "path": "packages/ocean.json",
+      "sha256": "55b27bd4f95529ebbf34ff1d6f983d807f727769d7f71d5d15f5cbeed7f67fad"
+    },
+    "paper": {
+      "path": "packages/paper.json",
+      "sha256": "c9e123c206453bfea90ca0ef54409b5fb3c19d75270f275c04bef4fe9ccc5247"
+    },
+    "shout": {
+      "path": "packages/shout.json",
+      "sha256": "7456d08808de7d1335c7eeda4f7fac65399d50c740cac8298ba93ba8a3921918"
+    },
+    "solarized": {
+      "path": "packages/solarized.json",
+      "sha256": "39314abefec8f33895a52d7ea0e1303f2a34ae7f7b8a7aa368cd51f77f3764c4"
+    },
+    "status-icons": {
+      "path": "packages/status-icons.json",
+      "sha256": "cf2a59d0b9b2f46aa857764f1900144bcb8e4fefab353dcced43d1679734439b"
+    },
+    "status": {
+      "path": "packages/status.json",
+      "sha256": "a4c09a9c240ed0a2095aea2ef6b0502fa9c2cd2c029ed7559d0cdacb5a177768"
+    },
+    "textcase": {
+      "path": "packages/textcase.json",
+      "sha256": "32c094ac745b26606a1d3283e71fd61410474be344f1c5a56601700113b2606f"
+    },
+    "wordplay": {
+      "path": "packages/wordplay.json",
+      "sha256": "c8d095d68916a2c6f87f2cdc436be496fb77077f1f0177a8486ebaffd680d04b"
+    }
+  }
+}

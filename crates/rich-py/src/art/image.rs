@@ -29,7 +29,7 @@ use crate::renderable::{self, AsRenderable};
 // ---------------------------------------------------------------------------
 // Loading images
 
-/// Decode an encoded image (PNG, JPEG or GIF).
+/// Decode an encoded image (PNG, JPEG, GIF or WebP).
 pub(crate) fn decode(bytes: &[u8]) -> PyResult<DynamicImage> {
     img::load_from_memory(bytes).map_err(|error| decode_error(&error))
 }
@@ -141,7 +141,7 @@ impl ArtImage {
         Ok(ArtImage::wrap(decode(&read_file(&path)?)?))
     }
 
-    /// Decode encoded image bytes (PNG, JPEG or GIF).
+    /// Decode encoded image bytes (PNG, JPEG, GIF or WebP).
     #[staticmethod]
     fn from_bytes(data: &Bound<'_, PyAny>) -> PyResult<Self> {
         let bytes = buffer_bytes(data)?.ok_or_else(|| PyTypeError::new_err("expected bytes"))?;

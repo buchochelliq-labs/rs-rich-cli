@@ -17,6 +17,7 @@ sys.path.insert(0, str(Path(__file__).resolve().parent))
 
 import add_crate_version  # noqa: E402
 import build_index  # noqa: E402
+import build_site  # noqa: E402
 import check_artifacts  # noqa: E402
 import discussions  # noqa: E402
 import github_api  # noqa: E402
@@ -404,6 +405,49 @@ class BuildIndex(unittest.TestCase):
             (root / "packages/wrong.json").write_text(common.dump_listing(other))
             with self.assertRaises(SystemExit):
                 build_index.main(["--root", str(root)])
+
+
+class BuildSite(unittest.TestCase):
+    def setUp(self):
+        self.tmp = tempfile.TemporaryDirectory()
+        self.root = Path(self.tmp.name) / "repo"
+        (self.root / "site").mkdir(parents=True)
+        (self.root / "site" / "index.html").write_text(
+            '<meta http-equiv="Content-Security-Policy" content="default-src \'none\'">', encoding="utf-8")
+        (self.root / "packages").mkdir()
+        (self.root / "keys").mkdir()
+        (self.root / "keys" / "keys-1.json").write_text("{}", encoding="utf-8")
+        self.signed = json.dumps({"id": "a", "name": "A <b>", "tier": "official", "kind": "theme"}).encode()
+        index = {"schema_version": 1, "listings": {"a": {"path": "packages/a.json", "sha256": common.sha256(self.signed)}}}
+        (self.root / "index.json").write_text(json.dumps(index), encoding="utf-8")
+        (self.root / "index.json.minisig").write_text("sig", encoding="utf-8")
+        self.out = Path(self.tmp.name) / "out"
+
+    def tearDown(self):
+        self.tmp.cleanup()
+
+    def test_serves_the_listing_the_index_signed(self):
+        (self.root / "packages" / "a.json").write_bytes(self.signed)
+        self.assertEqual(build_site.build(self.root, self.out, history=lambda root, path: iter(())), [])
+        self.assertEqual((self.out / "packages" / "a.json").read_bytes(), self.signed)
+        for name in ("index.html", "index.json", "index.json.minisig", "keys/keys-1.json"):
+            self.assertTrue((self.out / name).is_file(), name)
+        page = (self.out / "packages" / "index.html").read_text(encoding="utf-8")
+        self.assertIn('href="a.json"', page)
+        self.assertIn("A &lt;b&gt;", page)
+        self.assertNotIn("<script", page)
+
+    def test_a_listing_merged_after_the_signing_is_served_as_signed(self):
+        (self.root / "packages" / "a.json").write_bytes(b'{"id": "a", "changed": true}')
+        history = lambda root, path: iter([b"older", self.signed])
+        self.assertEqual(build_site.build(self.root, self.out, history=history), [])
+        self.assertEqual((self.out / "packages" / "a.json").read_bytes(), self.signed)
+
+    def test_a_listing_no_version_of_which_matches_is_an_error(self):
+        (self.root / "packages" / "a.json").write_bytes(b"{}")
+        problems = build_site.build(self.root, self.out, history=lambda root, path: iter([b"x"]))
+        self.assertEqual(len(problems), 1)
+        self.assertIn("packages/a.json", problems[0])
 
 
 class GitHubClient(unittest.TestCase):

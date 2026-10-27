@@ -83,7 +83,7 @@ and `fun/campfire` 3×2. `micro_create_package(..., size="3x2")` makes one.
 
 ## Making assets
 
-`micro_create_package` runs an image (a path, or PNG, APNG, GIF or JPEG
+`micro_create_package` runs an image (a path, or PNG, APNG, GIF, JPEG or WebP
 bytes, here made with Pillow) through the pipeline, fitted to the asset's cells with optional
 contrast, sharpening and transparency, and writes a package the registry
 accepts:

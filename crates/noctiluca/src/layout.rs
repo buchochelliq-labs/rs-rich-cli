@@ -147,20 +147,23 @@ pub fn to_text(lines: &[Line], marks: &Marks, first_row: usize) -> Text {
         if n > 0 {
             text.append("\n", None);
         }
-        let start = text.plain().chars().count();
+        // Text's spans are byte offsets; matches are char offsets.
+        let start = text.plain().len();
         for span in &line.spans {
             let style = (!span.style.is_empty()).then(|| span.style.as_str().into());
             text.append(&span.text, style);
         }
         if let Some(query) = marks.find.as_deref().filter(|q| !q.is_empty()) {
-            for (k, (at, len)) in matches(&line.plain(), query).into_iter().enumerate() {
+            let plain = line.plain();
+            let byte = |c: usize| plain.char_indices().nth(c).map_or(plain.len(), |(b, _)| b);
+            for (k, (at, len)) in matches(&plain, query).into_iter().enumerate() {
                 let current = marks.current == Some((first_row + n, k));
                 let style = if current {
                     "bold black on bright_yellow"
                 } else {
                     "black on yellow"
                 };
-                text.stylize(style, start + at, start + at + len);
+                text.stylize(style, start + byte(at), start + byte(at + len));
             }
         }
     }
@@ -937,6 +940,9 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         media: Option<(usize, usize, usize)>,
         /// Kept to one line, cut with `…` (a control's face).
         one_line: bool,
+        /// A table cell's row (the table's node, the row's index): the
+        /// cells of a row start on one terminal row.
+        row: Option<(crate::engine::NodeId, usize)>,
     }
     let mut items: Vec<Item> = Vec::new();
     let snap = |left: f64, right: f64| -> (usize, usize) {
@@ -965,6 +971,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             log: None,
             media: None,
             one_line: false,
+            row: None,
         }
     };
     let adapt = marks.adapt;
@@ -1057,6 +1064,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             log: None,
             media: None,
             one_line: false,
+            row: None,
         });
         if !side {
             shrunk.push((items.len() - 1, region.rect.height, x0, x1));
@@ -1064,6 +1072,12 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
     }
     for block in &page.blocks {
         if block.region.is_some_and(|r| collapsed[r]) {
+            continue;
+        }
+        // Wholly above or left of the page: text moved off screen for
+        // screen readers only (Wikipedia's reference back-links sit
+        // 100,000 pixels up), never shown.
+        if block.rect.bottom() < 0.0 || block.rect.right() < 0.0 {
             continue;
         }
         // A block's text wraps within the box that holds it; but text that
@@ -1098,18 +1112,25 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                         Vec::new(),
                     ));
                 }
-                for row in &table.rows {
+                for (r, row) in table.rows.iter().enumerate() {
                     for cell in row {
                         let base = if cell.header { "bold" } else { "" };
                         let spans = spans(&cell.runs, base, page, marks);
-                        items.push(text_item(
+                        // An empty cell (a vote arrow's) holds no cells
+                        // a cell beside it could grow into.
+                        if spans.iter().all(|s| s.text.trim().is_empty()) {
+                            continue;
+                        }
+                        let mut item = text_item(
                             block.node,
                             cell.rect,
                             cell.rect.x,
                             cell.rect.right(),
                             spans,
                             Vec::new(),
-                        ));
+                        );
+                        item.row = Some((block.node, r));
+                        items.push(item);
                     }
                 }
             }
@@ -1129,6 +1150,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     log: Some(log.node),
                     media: None,
                     one_line: false,
+                    row: None,
                 });
             }
             BlockKind::Media(index)
@@ -1161,9 +1183,19 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     crate::adapt::picture_cells(media.rect, m1 - m0, ch, adapt, MAX_MEDIA_ROWS);
                 let wide = m1;
                 let m1 = m0 + w;
+                // Captioned, the box keeps its whole width, so a capped
+                // (narrowed) picture's caption wraps to the page's width
+                // for it, not the picture's.
+                let captioned = adapt.on(Rule::Captions)
+                    && media.kind == MediaKind::Image
+                    && !media.captioned
+                    && !media.alt.is_empty()
+                    && rows >= CAPTIONED_ROWS;
                 let mut lines: Vec<Line> = (0..rows)
                     .map(|r| {
-                        let label = if r == rows / 2 {
+                        // The alt text once: in the box until the picture
+                        // comes, unless the caption under it says it.
+                        let label = if r == rows / 2 && !captioned {
                             crate::clean::truncate(&media.alt, w)
                         } else {
                             String::new()
@@ -1185,14 +1217,6 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                         *last = mark;
                     }
                 }
-                // Captioned, the box keeps its whole width, so a capped
-                // (narrowed) picture's caption wraps to the page's width
-                // for it, not the picture's.
-                let captioned = adapt.on(Rule::Captions)
-                    && media.kind == MediaKind::Image
-                    && !media.captioned
-                    && !media.alt.is_empty()
-                    && rows >= CAPTIONED_ROWS;
                 let x1 = if captioned { wide.max(m1) } else { m1 };
                 if captioned {
                     lines.extend(wrap(
@@ -1214,6 +1238,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     log: None,
                     media: Some((*index, rows, w)),
                     one_line: false,
+                    row: None,
                 });
                 if rows < full {
                     let (o0, o1) = snap(media.rect.x, media.rect.right());
@@ -1278,6 +1303,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     log: None,
                     media: None,
                     one_line: false,
+                    row: None,
                 });
             }
             kind => {
@@ -1414,16 +1440,80 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                 .unwrap_or(columns);
             item.x1 = needed.min(limit).max(item.x1);
         }
+    }
+    // Still narrower than its longest word (a right-aligned "10." in a
+    // narrow column, a box at the page's right edge), a box grows to the
+    // left too, into cells no box beside it on its rows claims, so a word
+    // is never broken over rows when there is room for it.
+    let mut placed: Vec<(f64, f64, usize, usize)> = items
+        .iter()
+        .map(|i| (i.top, i.bottom, i.x0, i.x1))
+        .collect();
+    for n in 0..items.len() {
+        let Some((spans, first)) = &items[n].wrap else {
+            continue;
+        };
+        let want = min_content(first, spans).min(columns);
+        let (top, bottom, x0, x1) = placed[n];
+        if x1 - x0 >= want {
+            continue;
+        }
+        let limit = placed
+            .iter()
+            .enumerate()
+            .filter(|(m, (t, b, _, end))| {
+                *m != n && *t < bottom - 0.5 && top < *b - 0.5 && *end <= x0
+            })
+            .map(|(_, (_, _, _, end))| end + 1)
+            .max()
+            .unwrap_or(0);
+        let start = x1.saturating_sub(want).max(limit).min(x0);
+        items[n].x0 = start;
+        placed[n].2 = start;
+    }
+    for item in items.iter_mut() {
+        let Some((spans, first)) = &item.wrap else {
+            continue;
+        };
         item.lines = wrap(spans, item.x1 - item.x0, first, &[]);
         if item.one_line && item.lines.len() > 1 {
             item.lines = vec![cut_line(first, spans, item.x1 - item.x0)];
         }
     }
-    // Reading order: top, then left.
+    // Reading order: top, then left. A table's rows keep their order, even
+    // where rounding puts a row and the one under it (Hacker News's subtext
+    // and the next story) on the same terminal row: each table row sorts at
+    // the terminal row of its highest cell, never above the row before it,
+    // and then by its index. One key per item, so the order is total.
+    let terminal_row = |top: f64| (top / ch).round() as i64;
+    let mut table_rows_at: HashMap<crate::engine::NodeId, Vec<(usize, i64)>> = HashMap::new();
+    for item in &items {
+        if let Some((table, index)) = item.row {
+            let rows = table_rows_at.entry(table).or_default();
+            let r = terminal_row(item.top);
+            match rows.iter_mut().find(|(i, _)| *i == index) {
+                Some((_, at)) => *at = (*at).min(r),
+                None => rows.push((index, r)),
+            }
+        }
+    }
+    let mut row_at: HashMap<(crate::engine::NodeId, usize), i64> = HashMap::new();
+    for (table, mut rows) in table_rows_at {
+        rows.sort_by_key(|(index, _)| *index);
+        let mut floor = i64::MIN;
+        for (index, r) in rows {
+            floor = floor.max(r);
+            row_at.insert((table, index), floor);
+        }
+    }
+    let key = |item: &Item| match item.row {
+        Some(row) => (row_at[&row], row.1, item.left),
+        None => (terminal_row(item.top), 0, item.left),
+    };
     items.sort_by(|a, b| {
-        let ra = (a.top / ch).round() as i64;
-        let rb = (b.top / ch).round() as i64;
-        ra.cmp(&rb).then(a.left.total_cmp(&b.left))
+        let (ra, ia, la) = key(a);
+        let (rb, ib, lb) = key(b);
+        ra.cmp(&rb).then(ia.cmp(&ib)).then(la.total_cmp(&lb))
     });
     let mut logs = Vec::new();
     type Placed = (
@@ -1434,14 +1524,25 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         Vec<Line>,
         crate::engine::NodeId,
         Option<(usize, usize, usize)>,
+        Option<(crate::engine::NodeId, usize)>,
     );
+    // Each table row's cells' columns, so its first cell placed starts the
+    // row below every cell's column, and the rest start there too.
+    let mut table_rows: HashMap<(crate::engine::NodeId, usize), Vec<(usize, usize)>> =
+        HashMap::new();
+    for item in &items {
+        if let Some(row) = item.row {
+            table_rows.entry(row).or_default().push((item.x0, item.x1));
+        }
+    }
+    let mut row_tops: HashMap<(crate::engine::NodeId, usize), usize> = HashMap::new();
     let boxes: Vec<Placed> = items
         .into_iter()
         .map(|i| {
             if let Some(log) = i.log {
                 logs.push((log, i.lines.len()));
             }
-            (i.top, i.left, i.x0, i.x1, i.lines, i.node, i.media)
+            (i.top, i.left, i.x0, i.x1, i.lines, i.node, i.media, i.row)
         })
         .collect();
     let mut placed_logs = Vec::new();
@@ -1455,12 +1556,26 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
     // after it); an empty string is the second cell of a wide character.
     let mut grid: Vec<Vec<Option<(String, usize)>>> = Vec::new();
     let mut styles: Vec<(String, Option<usize>)> = Vec::new();
-    for (top, _, x0, x1, lines, node, media) in boxes {
+    for (top, _, x0, x1, lines, node, media, table_row) in boxes {
         // A page can place a block millions of pixels down: blank rows
         // past a few screens tell the reader nothing, so the gap is capped
         // and the grid grows with the content, not the coordinates.
         let y0 = ((top / ch).round().max(0.0) as usize).min(grid.len() + MAX_GAP_ROWS);
-        let y = skyline[x0..x1].iter().copied().max().unwrap_or(0).max(y0);
+        let mut y = skyline[x0..x1].iter().copied().max().unwrap_or(0).max(y0);
+        // A table row's cells start together: a cell that wrapped onto two
+        // rows pushes the next row's cells down, all of them, not only the
+        // ones in its column.
+        if let Some(key) = table_row {
+            let row_y = *row_tops.entry(key).or_insert_with(|| {
+                table_rows[&key]
+                    .iter()
+                    .flat_map(|&(a, b)| skyline[a..b].iter().copied())
+                    .max()
+                    .unwrap_or(0)
+                    .max(y0)
+            });
+            y = y.max(row_y);
+        }
         if let Some(at) = logs.iter().position(|(log, _)| *log == node) {
             let (log, rows) = logs.remove(at);
             placed_logs.push((log, y, rows));
@@ -1678,12 +1793,25 @@ fn snap_grid<T>(
         });
         if let Some(n) = inside {
             let (dy, n0, n1) = places[n];
-            let (o0, _) = snap(grid.items[n].x, grid.items[n].right());
+            let (o0, o1) = snap(grid.items[n].x, grid.items[n].right());
             let dy = (dy / ch).round() * ch;
             *item_top += dy;
             *item_bottom += dy;
-            let start = (n0 + x0.saturating_sub(o0)).min(n1.saturating_sub(1));
-            let end = (n0 + x1.saturating_sub(o0)).clamp(start + 1, n1.max(start + 1));
+            // Its place in the item, scaled to the item's new width: an
+            // item that narrows keeps what is at its right inside it
+            // (Wikipedia's account links, MDN's "Learn more"), rather than
+            // each box clamped to the item's last column, one letter wide.
+            let (old, new) = ((o1 - o0).max(1), n1.saturating_sub(n0).max(1));
+            let scale = |x: usize| n0 + (x.saturating_sub(o0) * new).div_ceil(old).min(new);
+            let scale = |x: usize| {
+                if new >= old {
+                    n0 + x.saturating_sub(o0)
+                } else {
+                    scale(x)
+                }
+            };
+            let start = scale(*x0).min(n1.saturating_sub(1));
+            let end = scale(*x1).clamp(start + 1, n1.max(start + 1));
             *x0 = start;
             *x1 = end;
         } else if *item_top >= old_bottom - 0.5 && *x0 < g1 && g0 < *x1 && grown != 0.0 {
@@ -1691,6 +1819,16 @@ fn snap_grid<T>(
             *item_bottom += grown;
         }
     }
+}
+
+/// A box's min-content width in cells: its longest word, the first one
+/// with the first line's prefix (a hint label, a list marker).
+fn min_content(first: &[Span], spans: &[Span]) -> usize {
+    let text: String = spans.iter().map(|s| s.text.as_str()).collect();
+    let prefix: usize = first.iter().map(|s| cell_len(&s.text)).sum();
+    let mut words = text.split_whitespace().map(cell_len);
+    let lead = prefix + words.next().unwrap_or(0);
+    words.fold(lead, usize::max)
 }
 
 /// Labels for `count` link hints: home-row letters, all the same length.
@@ -1738,6 +1876,60 @@ mod tests {
         assert_eq!(
             lines.iter().map(Line::plain).collect::<Vec<_>>(),
             ["> a", "  b"]
+        );
+    }
+
+    #[test]
+    fn a_match_after_wide_characters_is_highlighted_where_it_is() {
+        // A code block's gutter (three bytes, one char) before the match:
+        // char offsets taken as bytes cut inside it and panicked.
+        let lines = [
+            Line {
+                spans: vec![Span::new("é", "")],
+            },
+            Line {
+                spans: vec![Span::new(" │ ", "dim"), Span::new("const numbers", "")],
+            },
+        ];
+        let marks = Marks {
+            find: Some("numbers".into()),
+            ..Marks::default()
+        };
+        let text = to_text(&lines, &marks, 0);
+        let span = text.spans().last().unwrap();
+        assert_eq!(&text.plain()[span.start..span.end], "numbers");
+    }
+
+    #[test]
+    fn text_moved_off_the_page_for_screen_readers_is_not_drawn() {
+        // Wikipedia's reference back-links sit 100,000 pixels above the
+        // page; they were drawn on its first rows.
+        use crate::engine::Rect;
+        use crate::model::{Block, Page, Run};
+        let block = |text: &str, rect: Rect| Block {
+            kind: BlockKind::Paragraph,
+            runs: vec![Run::plain(text)],
+            quote: 0,
+            rect,
+            frame: rect,
+            node: 1,
+            region: None,
+        };
+        let page = Page {
+            blocks: vec![
+                block("Jump up to:", Rect::new(87.0, -99_829.0, 12.0, 203.0)),
+                block("The article", Rect::new(8.0, 40.0, 200.0, 18.0)),
+            ],
+            ..Page::default()
+        };
+        let lines: Vec<String> = projection(&page, 80, (8.0, 18.0), &Marks::default())
+            .iter()
+            .map(Line::plain)
+            .collect();
+        assert!(!lines.iter().any(|l| l.contains("Jump up")), "{lines:#?}");
+        assert!(
+            lines.iter().any(|l| l.contains("The article")),
+            "{lines:#?}"
         );
     }
 

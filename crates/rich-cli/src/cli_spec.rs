@@ -273,7 +273,7 @@ fn render_modes() -> Vec<ArgSpec> {
         mode(
             "gif",
             None,
-            "Animate GIFs side by side; pipes receive the first frame",
+            "Animate GIFs (and animated WebPs) side by side; pipes receive the first frame",
         ),
         mode(
             "rule",
@@ -289,7 +289,8 @@ fn render_modes() -> Vec<ArgSpec> {
         mode(
             "image",
             None,
-            "Render RESOURCE as a still image (ASCII/Braille/blocks/quadrants/Sixel)",
+            "Render RESOURCE (PNG, JPEG, GIF or WebP) as a still image \
+             (ASCII/Braille/blocks/quadrants/Sixel)",
         ),
         mode(
             "inspect",
@@ -1795,7 +1796,7 @@ pub(crate) fn spec() -> CommandSpec {
             "Stream log records (`--log`): JSON Lines, logfmt and common text formats; filter \
              with --level and --where, follow a file with -f, group with --group",
         ),
-        ("gif", &[][..], "Animate GIFs (`--gif`)"),
+        ("gif", &[][..], "Animate GIFs and animated WebPs (`--gif`)"),
         (
             "diff",
             &[][..],
@@ -1804,7 +1805,8 @@ pub(crate) fn spec() -> CommandSpec {
         (
             "image",
             &[][..],
-            "Render a still image as ASCII/Braille/blocks/quadrants/Sixel (`--image`)",
+            "Render a still image (PNG, JPEG, GIF or WebP) as ASCII/Braille/blocks/quadrants/Sixel \
+             (`--image`)",
         ),
         ("rule", &[][..], "Draw a horizontal rule (`--rule`)"),
         (

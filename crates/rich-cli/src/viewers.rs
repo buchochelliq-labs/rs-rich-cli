@@ -188,6 +188,20 @@ pub(crate) fn notice(name: &str, shown: &str, hint: &str) {
     );
 }
 
+/// Whether the local file at `path` is an animated WebP: a RIFF `WEBP`
+/// container whose `VP8X` header sets the animation flag. Only the first 21
+/// bytes are read; anything unreadable is not animated.
+pub(crate) fn animated_webp(path: &std::path::Path) -> bool {
+    use std::io::Read;
+    let mut head = [0u8; 21];
+    std::fs::File::open(path)
+        .and_then(|mut file| file.read_exact(&mut head))
+        .is_ok()
+        && &head[..4] == b"RIFF"
+        && &head[8..16] == b"WEBPVP8X"
+        && head[20] & 0x02 != 0
+}
+
 /// Decide how to view a resource from its extension, then its content.
 pub(crate) fn detect(ext: Option<&str>, name: Option<&str>, bytes: &[u8]) -> ViewAs {
     match ext {

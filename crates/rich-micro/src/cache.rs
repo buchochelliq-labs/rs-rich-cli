@@ -336,14 +336,14 @@ fn write_atomically(path: &Path, bytes: &[u8]) -> std::io::Result<()> {
 }
 
 /// The image to draw `asset` from: its animation when `animate` and it has
-/// one this build decodes (GIF, APNG), else its still image, else the first
+/// one this build decodes (GIF, APNG, WebP), else its still image, else the first
 /// image of its animation or frame sequence. And whether it is animated.
 fn pick(asset: &MicroAsset, animate: bool) -> Option<(&ImageRef, bool)> {
     let variants = asset.variants();
     let decodable = |image: &&ImageRef| {
         matches!(
             image.info.format,
-            ImageFormat::Png | ImageFormat::Apng | ImageFormat::Gif
+            ImageFormat::Png | ImageFormat::Apng | ImageFormat::Gif | ImageFormat::WebP
         )
     };
     if animate {
