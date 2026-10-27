@@ -2483,6 +2483,10 @@ rich plugin COMMAND [ARGS] [--marketplace LOCATION] [--marketplace-keys FILE] [-
 | `browse` | The marketplace in a selector, with each package's provenance (tier, source, hash, permissions) beside the list; Enter installs, updates, removes, enables or disables |
 | `publish` | Check a local package (a WASM plugin, a micro pack or a theme), compute its SHA-256 and size, and write its listing JSON for a pull request to the marketplace repository; no network |
 
+#### On the web
+
+The marketplace's own site, https://buchochelliq-labs.github.io/rs-rich-marketplace/, searches and filters the same signed index in a browser; so does the docs site's Marketplace page, https://buchochelliq-labs.github.io/rs-rich-cli/latest/marketplace/. Both only show it: `rich plugin install` checks the signature.
+
 #### Environment
 
 - RICH_MARKETPLACE: the marketplace, as --marketplace

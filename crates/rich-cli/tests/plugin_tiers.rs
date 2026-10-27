@@ -348,7 +348,26 @@ fn search_refuses_unknown_filters_and_hints_when_nothing_matches() {
     let text = stdout(&out);
     assert!(text.contains("No packages match"), "{text}");
     assert!(text.contains("rich plugin browse"), "{text}");
-    assert!(text.contains("/marketplace/"), "{text}");
+    // The marketplace's own site first, then the docs' Marketplace page.
+    let site = text
+        .find("buchochelliq-labs.github.io/rs-rich-marketplace/")
+        .expect(&text);
+    let docs = text.find("rs-rich-cli/latest/marketplace/").expect(&text);
+    assert!(site < docs, "{text}");
+}
+
+#[test]
+fn help_names_the_marketplace_site_then_the_docs_page() {
+    let w = world();
+    let out = w.plugin(&["--help"]);
+    assert_ok(&out);
+    let text = stdout(&out);
+    assert!(text.contains("On the web"), "{text}");
+    let site = text
+        .find("buchochelliq-labs.github.io/rs-rich-marketplace/")
+        .expect(&text);
+    let docs = text.find("rs-rich-cli/latest/marketplace/").expect(&text);
+    assert!(site < docs, "{text}");
 }
 
 #[test]

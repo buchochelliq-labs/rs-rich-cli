@@ -19,9 +19,13 @@ environment and signed the first index
 ([0.0.23 plan, item 17](../plans/0.0.23.md)). This note is the contract
 between the marketplace repository, the crate and the CLI. It is part of the
 1.0 promise ([the plan to 1.0.0](../plans/1.0.0.md#track-b-the-plugin-marketplace-232-463)).
-The optional `recommended` key is new in 0.0.23 ([Recommended](#recommended)),
-and the docs' [Marketplace page](../marketplace.md) lists the marketplace
-in a browser.
+The optional `recommended` key is new in 0.0.23 ([Recommended](#recommended)).
+To browse the marketplace in a browser, use its own site,
+[buchochelliq-labs.github.io/rs-rich-marketplace](https://buchochelliq-labs.github.io/rs-rich-marketplace/)
+(the marketplace repository's `site/`, published by its `pages.yml` with
+the signed index and the listings it signed), or the docs'
+[Marketplace page](../marketplace.md). Both are viewers only: an install
+verifies the index's signature.
 
 Plugins already load three ways ([Extending](../PLUGINS.md),
 [Plugin loading](plugin-loading.md)): compiled in, as a native library from a

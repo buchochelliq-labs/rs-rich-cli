@@ -77,6 +77,17 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and AVIF pictures never arrived (they now come from Chrome's pixels), with
   their alt text drawn twice.
 
+- **The marketplace's own site** (docs; rs-rich-cli): the README, the
+  docs' Marketplace page, the CLI guide, `docs/PLUGINS.md` and the
+  marketplace design note now point first at the marketplace's web site,
+  [buchochelliq-labs.github.io/rs-rich-marketplace](https://buchochelliq-labs.github.io/rs-rich-marketplace/),
+  with the docs' Marketplace page as the second place; `rich plugin --help`
+  gains an "On the web" section naming both, and `rich plugin search`'s
+  no-match message names the site first. `docs/marketplace-repo/` mirrors
+  the site's files from the marketplace repository (`site/`, `pages.yml`,
+  `site-check.yml`, `build_site.py`, `check_site.mjs` and their fixtures),
+  and its README adds the Pages setup step.
+
 - **Fuzz targets, run nightly** (repository; rs-rich): `fuzz/` holds
   cargo-fuzz targets for every parser that takes outside input (markup,
   ANSI, Markdown, JSON, DOT, Mermaid, CSV/TSV and JSONL, stylesheets, the

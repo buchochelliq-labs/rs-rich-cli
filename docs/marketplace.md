@@ -4,7 +4,8 @@ Find plugins, micro packs and themes for `rich`. This page lists what the
 [plugin marketplace](https://github.com/buchochelliq-labs/rs-rich-marketplace)
 holds, and gives the command that installs each package. In a terminal,
 `rich plugin search` and `rich plugin browse` show the same list
-([In the terminal](#mkt-terminal)).
+([In the terminal](#mkt-terminal)). The marketplace also has its own site:
+[buchochelliq-labs.github.io/rs-rich-marketplace](https://buchochelliq-labs.github.io/rs-rich-marketplace/).
 
 <div id="mkt-app" class="mkt" data-base="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/main/" data-stats="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/stats/stats.json" data-tiers="design/marketplace/#tiers" markdown>
 

@@ -25,6 +25,6 @@
  sleep()                                                                                           │
  Sizes                                                                                             │
  Name     Size                                                                                     │
- Noctiluc 1 mm                                                                                     │
+Noctiluca 1 mm                                                                                     │
  projection view
  f1 actions | f hints | o open | r reader | q quit

@@ -2348,6 +2348,12 @@ goes live with 0.0.23. It lists the official packages:
 Until the maintainer signs its first index, `rich plugin search` says
 there is no `index.json` and exits 3.
 
+To browse it on the web, use the marketplace's own site,
+[buchochelliq-labs.github.io/rs-rich-marketplace](https://buchochelliq-labs.github.io/rs-rich-marketplace/),
+or the docs site's [Marketplace page](marketplace.md). Both search the same
+signed index in a browser and only show it: `rich plugin install` checks
+the signature.
+
 The transforms run on `--print`, text and `--syntax`, in the order given:
 
 ```bash
@@ -2400,8 +2406,9 @@ word in their id, name, description, keywords, authors or capabilities, so
 `rich plugin search rot13` finds the plugin with a `rot13` transform.
 `--kind` (`crate`, `wasm-plugin`, `micro-pack`, `theme`), `--tier`
 (`official`, `reviewed`, `community`) and `--recommended` narrow it. When
-nothing matches, it points at `rich plugin browse` and the
-[Marketplace page](marketplace.md), which lists the same packages in a
+nothing matches, it points at `rich plugin browse`, the marketplace's
+[own site](https://buchochelliq-labs.github.io/rs-rich-marketplace/) and the
+docs' [Marketplace page](marketplace.md), which list the same packages in a
 browser, with download counts and reviews.
 
 ```bash
