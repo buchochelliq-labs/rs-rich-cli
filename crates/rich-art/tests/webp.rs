@@ -124,3 +124,30 @@ fn a_picture_keeps_an_animated_webp_animated() {
     let picture = rich_art::picture::Picture::decode_animated(&bytes).unwrap();
     assert!(picture.is_animated());
 }
+
+#[test]
+fn a_still_image_over_the_budget_is_refused_before_it_is_decoded() {
+    // A still WebP or PNG used to return its one frame without the budget
+    // check every animation frame gets.
+    let tight = FrameBudget {
+        max_bytes: 1,
+        ..FrameBudget::default()
+    };
+    let webp = std::fs::read(fixture("ball.webp")).unwrap();
+    assert!(decode_animation(&webp, tight).is_err());
+    assert_eq!(
+        decode_animation(&webp, FrameBudget::default())
+            .unwrap()
+            .len(),
+        1
+    );
+
+    let png = std::fs::read(fixture("halo-before.png")).unwrap();
+    assert!(decode_animation(&png, tight).is_err());
+    assert_eq!(
+        decode_animation(&png, FrameBudget::default())
+            .unwrap()
+            .len(),
+        1
+    );
+}

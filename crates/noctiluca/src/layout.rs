@@ -1480,18 +1480,40 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             item.lines = vec![cut_line(first, spans, item.x1 - item.x0)];
         }
     }
-    // Reading order: top, then left.
+    // Reading order: top, then left. A table's rows keep their order, even
+    // where rounding puts a row and the one under it (Hacker News's subtext
+    // and the next story) on the same terminal row: each table row sorts at
+    // the terminal row of its highest cell, never above the row before it,
+    // and then by its index. One key per item, so the order is total.
+    let terminal_row = |top: f64| (top / ch).round() as i64;
+    let mut table_rows_at: HashMap<crate::engine::NodeId, Vec<(usize, i64)>> = HashMap::new();
+    for item in &items {
+        if let Some((table, index)) = item.row {
+            let rows = table_rows_at.entry(table).or_default();
+            let r = terminal_row(item.top);
+            match rows.iter_mut().find(|(i, _)| *i == index) {
+                Some((_, at)) => *at = (*at).min(r),
+                None => rows.push((index, r)),
+            }
+        }
+    }
+    let mut row_at: HashMap<(crate::engine::NodeId, usize), i64> = HashMap::new();
+    for (table, mut rows) in table_rows_at {
+        rows.sort_by_key(|(index, _)| *index);
+        let mut floor = i64::MIN;
+        for (index, r) in rows {
+            floor = floor.max(r);
+            row_at.insert((table, index), floor);
+        }
+    }
+    let key = |item: &Item| match item.row {
+        Some(row) => (row_at[&row], row.1, item.left),
+        None => (terminal_row(item.top), 0, item.left),
+    };
     items.sort_by(|a, b| {
-        let ra = (a.top / ch).round() as i64;
-        let rb = (b.top / ch).round() as i64;
-        // A table's rows keep their order, even where rounding puts a row
-        // and the one under it (Hacker News's subtext and the next story)
-        // on the same terminal row.
-        let rows = match (a.row, b.row) {
-            (Some((ta, ia)), Some((tb, ib))) if ta == tb => ia.cmp(&ib),
-            _ => std::cmp::Ordering::Equal,
-        };
-        ra.cmp(&rb).then(rows).then(a.left.total_cmp(&b.left))
+        let (ra, ia, la) = key(a);
+        let (rb, ib, lb) = key(b);
+        ra.cmp(&rb).then(ia.cmp(&ib)).then(la.total_cmp(&lb))
     });
     let mut logs = Vec::new();
     type Placed = (

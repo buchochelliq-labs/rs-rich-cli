@@ -224,3 +224,78 @@ fn a_captioned_picture_still_loading_shows_its_alt_text_once() {
     );
     assert_eq!(count, 1, "alt text shown {count} times: {lines:#?}");
 }
+
+#[test]
+fn a_tables_rows_keep_their_order_among_blocks_on_the_same_terminal_row() {
+    // Rows a few pixels apart round to one terminal row; their cells
+    // alternate between the right and the left, with paragraphs between
+    // them. The reading order must stay one total order (the sort used to
+    // compare a table's rows by index but everything else by position,
+    // which is not transitive and can make the sort panic), and every row
+    // must come after the one before it.
+    use noctiluca::engine::Rect;
+    use noctiluca::model::{BlockKind, Cell, Run, Table};
+    let mut page = page("reader");
+    let template = page
+        .blocks
+        .iter()
+        .find(|b| b.kind == BlockKind::Paragraph)
+        .cloned()
+        .unwrap();
+    let rows: Vec<Vec<Cell>> = (0..40)
+        .map(|i| {
+            let x = if i % 2 == 0 { 400.0 } else { 0.0 };
+            vec![Cell {
+                runs: vec![Run::plain(format!("row{i:02}"))],
+                header: false,
+                rect: Rect::new(x, 4.0 * i as f64, 60.0, 4.0),
+            }]
+        })
+        .collect();
+    let mut table = template.clone();
+    table.kind = BlockKind::Table(Table {
+        caption: String::new(),
+        rows,
+    });
+    table.rect = Rect::new(0.0, 0.0, 480.0, 160.0);
+    table.frame = table.rect;
+    let mut blocks = vec![table];
+    for i in 0..20 {
+        let mut paragraph = template.clone();
+        paragraph.runs = vec![Run::plain(format!("para{i:02}"))];
+        paragraph.rect = Rect::new(200.0, 8.0 * i as f64 + 2.0, 60.0, 4.0);
+        paragraph.frame = paragraph.rect;
+        blocks.push(paragraph);
+    }
+    page.media.clear();
+    let render = |blocks: Vec<_>| {
+        let mut page = page.clone();
+        page.blocks = blocks;
+        projection(&page, 120, (8.0, 18.0), &Marks::default())
+            .iter()
+            .map(Line::plain)
+            .collect::<Vec<String>>()
+    };
+    let lines = render(blocks.clone());
+    let text = lines.join("\n");
+    // One total order reads the same wherever the table sits among the
+    // paragraphs (paragraphs at one position keep their document order).
+    for at in [10, 20] {
+        let mut moved = blocks.clone();
+        let table = moved.remove(0);
+        moved.insert(at, table);
+        assert_eq!(render(moved).join("\n"), text, "order depends on the input");
+    }
+    // Rows sharing a terminal row may share a line, in any column; a row is
+    // never on a line above the row before it.
+    let mut last = 0;
+    for i in 0..40 {
+        let name = format!("row{i:02}");
+        let at = lines
+            .iter()
+            .position(|line| line.contains(&name))
+            .unwrap_or_else(|| panic!("{name} missing: {text}"));
+        assert!(at >= last, "{name} above the row before it: {text}");
+        last = at;
+    }
+}
