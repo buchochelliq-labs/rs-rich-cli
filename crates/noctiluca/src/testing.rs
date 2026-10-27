@@ -381,6 +381,9 @@ impl FakeState {
                 .and_then(|name| name.split('.').next())
                 .unwrap_or_default()
                 .to_string();
+            // The frame at the clock the status line shows: the frames
+            // span the video's length.
+            let at = self.clock(video.node).unwrap_or(0.0) / self.length(video.node);
             let frames = self.recorded_frames.entry(stem.clone()).or_insert_with(|| {
                 (0..100)
                     .map_while(|k| image::open(dir.join(format!("{stem}-{k:02}.jpg"))).ok())
@@ -390,10 +393,6 @@ impl FakeState {
             if frames.is_empty() {
                 continue;
             }
-            // The frame at the clock the status line shows: the frames
-            // span the video's length.
-            let length = self.length(video.node);
-            let at = self.clock(video.node).unwrap_or(0.0) / length;
             let frame = &frames[((at * frames.len() as f64) as usize).min(frames.len() - 1)];
             let (w, h) = (video.rect.width.max(1.0), video.rect.height.max(1.0));
             let scaled = image::imageops::resize(

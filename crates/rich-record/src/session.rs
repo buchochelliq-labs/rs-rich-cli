@@ -146,9 +146,15 @@ impl State {
         (self.start.elapsed() - self.hidden_total).as_secs_f64()
     }
 
+    /// The output so far is recorded: its screen kept as a frame, unless a
+    /// synchronized update is still open. Then the screen is half drawn (a
+    /// picture's cells written, its pixels not yet), and the update's end
+    /// is the frame ([`receive`](Self::receive) keeps it).
     fn frame(&mut self, t: f64) {
         self.last_frame = Some(t);
-        self.capture(t);
+        if !self.terminal.in_synchronized_update() {
+            self.capture(t);
+        }
     }
 
     /// The frame interval `at` falls in, counted from the first frame: the
@@ -878,6 +884,34 @@ mod tests {
         assert_eq!(state.timeline.frames.len(), before + 1);
         assert!(
             row_text(&state.timeline.frames.last().unwrap().1.snapshot(), 0).starts_with("xyz")
+        );
+    }
+
+    #[test]
+    fn an_update_open_across_a_frame_interval_is_kept_only_when_it_ends() {
+        let mut state = State::new(2, 10, Theme::default());
+        state.hidden = false;
+        state.frame(0.0);
+        state.receive(Some(1.0), b"\rold", false).unwrap();
+        let before = state.timeline.frames.len();
+        // A long update (a video frame's cells, then its picture), read in
+        // two parts a frame interval apart: the screen between them is
+        // half drawn, and no frame.
+        state
+            .receive(Some(2.0), b"\x1b[?2026h\rnew", false)
+            .unwrap();
+        state.receive(Some(2.5), b" cells", false).unwrap();
+        assert_eq!(state.timeline.frames.len(), before);
+        state
+            .receive(Some(2.6), b" done\x1b[?2026l", false)
+            .unwrap();
+        assert_eq!(state.timeline.frames.len(), before + 1);
+        let (at, last) = state.timeline.frames.last().unwrap();
+        assert_eq!(*at, 2.6);
+        assert!(
+            row_text(&last.snapshot(), 0).starts_with("new cells"),
+            "{}",
+            row_text(&last.snapshot(), 0)
         );
     }
 

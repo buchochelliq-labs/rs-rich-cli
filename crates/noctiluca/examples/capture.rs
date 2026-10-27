@@ -123,9 +123,13 @@ fn frames(out: &std::path::Path, page: &std::path::Path) -> std::io::Result<()> 
             .ok_or_else(|| std::io::Error::other("the video is out of the frame"))?;
         let image = image::RgbImage::from_raw(cut.width, cut.height, cut.rgb)
             .ok_or_else(|| std::io::Error::other("a frame of the wrong size"))?;
+        // A box at a fractional pixel takes in the pixel it starts in, and
+        // so a row or column of the page past it: the video's own size.
+        let (w, h) = (r.width.round() as u32, r.height.round() as u32);
+        let image = image::imageops::crop_imm(&image, 0, 0, w, h).to_image();
         let path = out.join(format!("{stem}-{k:02}.jpg"));
         let mut file = std::fs::File::create(&path)?;
-        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut file, 80)
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut file, 75)
             .encode_image(&image)
             .map_err(std::io::Error::other)?;
         saved += 1;

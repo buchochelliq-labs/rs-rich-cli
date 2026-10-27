@@ -148,7 +148,7 @@ def frame(t, size):
     # screen at the seam. Its wake glows behind it, wider and dimmer aft.
     margin = 0.12
     def boat_x(at):
-        return ((at / LOOP + 0.45) % 1.0) * (1 + 2 * margin) - margin
+        return ((at / LOOP + 0.2) % 1.0) * (1 + 2 * margin) - margin
     bx = boat_x(t)
     by = 0.105
     wake = np.zeros_like(x)
