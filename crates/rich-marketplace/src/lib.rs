@@ -46,7 +46,11 @@ mod install;
 mod keys;
 mod listing;
 mod lockfile;
+#[cfg(feature = "http")]
+pub mod redirect;
 mod resolve;
+#[cfg(feature = "http")]
+pub mod tls;
 mod transport;
 mod util;
 

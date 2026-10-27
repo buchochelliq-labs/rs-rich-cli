@@ -3560,20 +3560,29 @@ const MAX_BODY_BYTES: u64 = 16 * 1024 * 1024;
 /// a 30-second global timeout and [`MAX_BODY_BYTES`].
 ///
 /// Like `requests.get`, a non-2xx status is **not** an error — the body is
-/// returned so an error page still renders. TLS verification is on (rustls with
-/// bundled webpki roots).
+/// returned so an error page still renders. TLS verification is on (rustls,
+/// trusting the system's certificate store first and the bundled webpki roots
+/// as the fallback: `rich_marketplace::tls`).
 #[cfg(feature = "fetch")]
 fn fetch_url(url: &str, encoding: Option<Encoding>) -> Result<(String, Option<String>), String> {
     use std::time::Duration;
-    let mut response = ureq::get(url)
-        .config()
-        .timeout_global(Some(Duration::from_secs(30)))
-        // Match `requests.get`: don't turn 4xx/5xx into an error, so the
-        // response body (often a useful error page) is rendered instead.
-        .http_status_as_error(false)
-        .build()
-        .call()
-        .map_err(|err| format!("cannot fetch {url}: {err}"))?;
+    // Redirects (ten, as `requests` and ureq allow) are followed one request
+    // at a time: `rich_marketplace::redirect` says why.
+    let mut response = rich_marketplace::redirect::get_following(url, 10, false, |hop| {
+        rich_marketplace::tls::with_fallback(|trust| {
+            ureq::get(hop)
+                .config()
+                .timeout_global(Some(Duration::from_secs(30)))
+                // Match `requests.get`: don't turn 4xx/5xx into an error, so the
+                // response body (often a useful error page) is rendered instead.
+                .http_status_as_error(false)
+                .max_redirects(0)
+                .tls_config(trust.tls_config())
+                .build()
+                .call()
+        })
+    })
+    .map_err(|err| format!("cannot fetch {url}: {err}"))?;
     let content_type = response
         .headers()
         .get("content-type")

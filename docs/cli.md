@@ -242,8 +242,10 @@ parent directory does not exist), the watcher prints one notice and falls back
 to polling at `--watch-interval`. Idle watching does not busy-loop in either
 mode. Recursive directory and glob watching are not supported; name each file.
 
-URLs can be watched when the default `fetch` feature is enabled. A URL is
-always polled, and must be the only watched resource:
+URLs can be watched when the default `fetch` feature is enabled (a fetched
+`https://` URL trusts the system's certificate store first and the roots
+built into `rich` as the fallback, so a company proxy's root CA works). A
+URL is always polled, and must be the only watched resource:
 
 ```bash
 rich --watch --watch-cache --watch-interval 5 https://example.com/data.json
@@ -2453,7 +2455,12 @@ as it was installed, and reports a version yanked since with its reason
 | Trusted keys | `--marketplace-keys FILE` | `RICH_MARKETPLACE_KEYS` | the keys compiled in |
 
 A marketplace location is an `https://` URL, or a directory (a path or a
-`file://` URL) laid out as the marketplace repository is. A local one
+`file://` URL) laid out as the marketplace repository is. Downloads trust
+the system's certificate store first, so they work behind a company's
+TLS-inspecting proxy whose root CA is installed there (on Linux,
+`SSL_CERT_FILE` and `SSL_CERT_DIR` name the store), and Mozilla's roots
+built into `rich` when that fails. The index's signatures and each
+artifact's SHA-256 are checked either way. A local one
 serves each artifact from its own `artifacts/HOST/PATH`, never the
 network. The official keys (generation 1) are compiled in since 0.0.23;
 pass another `keys-N.json` with `--marketplace-keys` to trust a different

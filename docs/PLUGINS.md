@@ -289,7 +289,10 @@ live:
   `is_supported_api_version`, the loaders' own checks. A WASM version with
   a capability kind this host does not know is skipped.
 - **Installing.** `Installer` downloads over HTTPS only, through a
-  `Transport` (`HttpsTransport`, ureq, behind the default `http` feature),
+  `Transport` (`HttpsTransport`, ureq, behind the default `http` feature;
+  it trusts the system's certificate store first, so a TLS-inspecting
+  proxy's root CA works, and Mozilla's bundled roots as the fallback: see
+  `rich_marketplace::tls`),
   reads at most the declared size, checks the SHA-256, then checks the
   artifact by kind: a WASM module's header (a host with the sandbox passes
   an `ArtifactChecker` that runs `load_wasm` and `compare_wasm_manifest`),

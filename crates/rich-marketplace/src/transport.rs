@@ -75,26 +75,48 @@ impl Transport for MemoryTransport {
     }
 }
 
-/// Downloads with ureq (rustls, bundled roots): HTTPS only, redirects
-/// included, a 60-second overall timeout, and the body read to at most
-/// `max_bytes` after any content decoding.
+/// Downloads with ureq (rustls): HTTPS only, redirects included, a
+/// 60-second overall timeout, and the body read to at most `max_bytes`
+/// after any content decoding. The system's certificate store is trusted
+/// first and Mozilla's bundled roots are the fallback ([`crate::tls`]);
+/// redirects (at most five) are followed by [`crate::redirect`], not by
+/// ureq.
+/// The redirects [`HttpsTransport`] follows (GitHub's release downloads
+/// take one).
+#[cfg(feature = "http")]
+const MAX_REDIRECTS: u32 = 5;
+
 #[cfg(feature = "http")]
 #[derive(Debug)]
 pub struct HttpsTransport {
-    agent: ureq::Agent,
+    /// One agent per [`Trust`](crate::tls::Trust), in
+    /// [`Trust::ORDER`](crate::tls::Trust::ORDER).
+    agents: [ureq::Agent; 2],
 }
 
 #[cfg(feature = "http")]
 impl HttpsTransport {
     pub fn new() -> Self {
-        let config = ureq::Agent::config_builder()
-            .https_only(true)
-            .max_redirects(5)
-            .timeout_global(Some(std::time::Duration::from_secs(60)))
-            .user_agent(concat!("rs-rich-marketplace/", env!("CARGO_PKG_VERSION")))
-            .build();
+        let agent = |trust: crate::tls::Trust| {
+            let config = ureq::Agent::config_builder()
+                .https_only(true)
+                // Followed by `redirect::get_following`, five at most.
+                .max_redirects(0)
+                .timeout_global(Some(std::time::Duration::from_secs(60)))
+                .user_agent(concat!("rs-rich-marketplace/", env!("CARGO_PKG_VERSION")))
+                .tls_config(trust.tls_config())
+                .build();
+            ureq::Agent::new_with_config(config)
+        };
         HttpsTransport {
-            agent: ureq::Agent::new_with_config(config),
+            agents: crate::tls::Trust::ORDER.map(agent),
+        }
+    }
+
+    fn agent(&self, trust: crate::tls::Trust) -> &ureq::Agent {
+        match trust {
+            crate::tls::Trust::System => &self.agents[0],
+            crate::tls::Trust::Bundled => &self.agents[1],
         }
     }
 }
@@ -116,15 +138,18 @@ impl Transport for HttpsTransport {
             url: url.to_string(),
             message,
         };
-        let mut response = self.agent.get(url).call().map_err(|e| match e {
+        let mut response = crate::redirect::get_following(url, MAX_REDIRECTS, true, |hop| {
+            crate::tls::with_fallback(|trust| self.agent(trust).get(hop).call())
+        })
+        .map_err(|e| match e.last() {
             ureq::Error::StatusCode(status) => FetchError::Status {
                 url: url.to_string(),
-                status,
+                status: *status,
             },
             ureq::Error::RequireHttpsOnly(_) => FetchError::NotHttps {
                 url: url.to_string(),
             },
-            other => failed(other.to_string()),
+            _ => failed(e.to_string()),
         })?;
         // Bound the decoded body (as the CLI's fetch does): one byte past
         // the limit shows it is too long.

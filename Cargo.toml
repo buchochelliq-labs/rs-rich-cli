@@ -72,12 +72,15 @@ syntect = { version = "5", default-features = false, features = ["default-syntax
 # NON-default `image` feature so the default adds no image dependencies.
 image = { version = "0.25", default-features = false, features = ["png", "jpeg", "gif"] }
 
-# Blocking HTTP client for the CLI's URL fetch (rich-cli's `rich <url>`). Uses
-# rustls + bundled webpki roots (self-contained TLS, no OS cert dependency).
+# Blocking HTTP client for the CLI's URL fetch (rich-cli's `rich <url>`) and
+# rs-rich-marketplace's `HttpsTransport`. Uses rustls, trusting the system's
+# certificate store first (`platform-verifier`: a company proxy's or a
+# sandbox's root CA is there) with Mozilla's bundled webpki roots as the
+# fallback; `rich_marketplace::tls` holds the one place that chooses.
 # Behind rich-cli's default `fetch` feature so lean builds can opt out.
-# (No version pin needed: ureq 3.3 wants rustc 1.85, comfortably under the
-# workspace MSRV of 1.90.)
-ureq = "3"
+# (ureq 3.4 wants rustc 1.85 and rustls-platform-verifier 0.7 rustc 1.71,
+# both under the workspace MSRV of 1.90.)
+ureq = { version = "3.4", features = ["platform-verifier"] }
 
 # Event-driven file watching for the CLI's `--watch` (inotify, FSEvents,
 # ReadDirectoryChangesW, kqueue). The polling loop remains the fallback.
