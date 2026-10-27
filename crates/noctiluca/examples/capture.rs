@@ -6,10 +6,12 @@
 //! costs: the median of five snapshots and five AX trees, and their sizes.
 //! `--columns N` lays the pages out N cells wide (100 by default).
 //! `--frames OUT_DIR PAGE.html` records instead the frames of the page's
-//! first video as Chrome paints them, playing, cut to its box:
+//! first video as Chrome paints them, cut to its box:
 //! `OUT_DIR/STEM-NN.jpg`, STEM the video file's name without its
-//! extension, twelve frames an eighth of a second apart. The scripted
-//! engine plays them for a video with that source in the docs' tapes.
+//! extension, eight a second over its whole length, each seeked to while
+//! paused (a playing video's screencast frames come when Chrome paints,
+//! not on a clock). The scripted engine plays them for a video with that
+//! source in the docs' tapes, each at its time.
 
 use std::path::PathBuf;
 use std::time::{Duration, Instant};
@@ -23,6 +25,9 @@ fn median(mut times: Vec<Duration>) -> f64 {
     times.sort();
     times[times.len() / 2].as_secs_f64() * 1000.0
 }
+
+/// Recorded frames a second.
+const RATE: f64 = 8.0;
 
 /// Record the first video's frames of `page` into `out`.
 fn frames(out: &std::path::Path, page: &std::path::Path) -> std::io::Result<()> {
@@ -60,38 +65,74 @@ fn frames(out: &std::path::Path, page: &std::path::Path) -> std::io::Result<()> 
         .and_then(|name| name.split('.').next())
         .unwrap_or("video")
         .to_string();
-    engine.act(
-        TabId(0),
-        &PageAction::Media {
-            node: video.node,
-            op: MediaOp::Play,
-        },
+    // The picture alone: no native controls over it, as a paused video
+    // with `controls` would show.
+    engine.devtools().call(
+        "Runtime.evaluate",
+        json!({"expression": "document.querySelectorAll('video').forEach(v => v.controls = false)"}),
+        Duration::from_secs(30),
     )?;
     engine.set_screencast(TabId(0), true)?;
     std::fs::create_dir_all(out)?;
+    let length = engine
+        .playback(TabId(0), video.node)?
+        .duration
+        .unwrap_or(5.0);
+    let count = (length * RATE).round() as usize;
+    let mut latest = None;
     let mut saved = 0;
-    let mut next = Instant::now();
-    while saved < 12 && start.elapsed() < Duration::from_secs(60) {
-        std::thread::sleep(Duration::from_millis(10));
-        let Some(frame) = engine.screencast_frame(TabId(0)) else {
-            continue;
-        };
-        if Instant::now() < next {
-            continue;
+    for k in 0..count {
+        // Seek, paused, to the frame's time, and wait until Chrome is there.
+        let at = k as f64 / RATE;
+        let now = engine.playback(TabId(0), video.node)?.time;
+        // (A seek, even to where it is, also takes down the poster.)
+        engine.act(
+            TabId(0),
+            &PageAction::Media {
+                node: video.node,
+                op: MediaOp::Seek(at - now),
+            },
+        )?;
+        let asked = Instant::now();
+        while (engine.playback(TabId(0), video.node)?.time - at).abs() > 0.005 {
+            if asked.elapsed() > Duration::from_secs(10) {
+                return Err(std::io::Error::other(format!("no seek to {at}")));
+            }
+            std::thread::sleep(Duration::from_millis(20));
         }
-        let r = video.rect;
-        let Some(cut) = frame.crop(r.x, r.y, r.width, r.height) else {
-            continue;
+        // The frames Chrome paints after the seek: the last, once they
+        // stop.
+        let mut fresh = false;
+        let mut quiet = Instant::now();
+        while asked.elapsed() < Duration::from_secs(10) {
+            if let Some(frame) = engine.screencast_frame(TabId(0)) {
+                latest = Some(frame);
+                fresh = true;
+                quiet = Instant::now();
+            } else if fresh && quiet.elapsed() > Duration::from_millis(300) {
+                break;
+            }
+            std::thread::sleep(Duration::from_millis(10));
+        }
+        let Some(frame) = latest.as_ref().filter(|_| fresh) else {
+            return Err(std::io::Error::other(format!("no frame at {at}")));
         };
+        let r = video.rect;
+        let cut = frame
+            .crop(r.x, r.y, r.width, r.height)
+            .ok_or_else(|| std::io::Error::other("the video is out of the frame"))?;
         let image = image::RgbImage::from_raw(cut.width, cut.height, cut.rgb)
             .ok_or_else(|| std::io::Error::other("a frame of the wrong size"))?;
-        let path = out.join(format!("{stem}-{saved:02}.jpg"));
+        // A box at a fractional pixel takes in the pixel it starts in, and
+        // so a row or column of the page past it: the video's own size.
+        let (w, h) = (r.width.round() as u32, r.height.round() as u32);
+        let image = image::imageops::crop_imm(&image, 0, 0, w, h).to_image();
+        let path = out.join(format!("{stem}-{k:02}.jpg"));
         let mut file = std::fs::File::create(&path)?;
-        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut file, 70)
+        image::codecs::jpeg::JpegEncoder::new_with_quality(&mut file, 75)
             .encode_image(&image)
             .map_err(std::io::Error::other)?;
         saved += 1;
-        next = Instant::now() + Duration::from_millis(125);
     }
     println!("{saved} frames of {stem} in {}", out.display());
     Ok(())

@@ -8,6 +8,14 @@ terminal text you can select and copy, controls as
 is a crate of its own, [`noctiluca`](https://crates.io/crates/noctiluca),
 built on intuiTUIve and rs-rich-embed.
 
+<video controls muted playsinline preload="none" poster="../../assets/noctiluca/promo-poster.jpg" style="width:100%;max-width:960px" aria-label="Noctiluca's promo: a moonlit sea where glowing plankton blooms into a ring, a swarm of plankton, a network of glowing terminal windows with a Noctiluca window and the lanternfish, and the title Noctiluca, powered by intuiTUIve">
+  <source src="../../assets/noctiluca/promo.mp4" type="video/mp4">
+  <a href="../../assets/noctiluca/promo.mp4">Noctiluca's promo (MP4)</a>
+</video>
+
+*Noctiluca's promo (AI-generated, made for rs-rich; MIT). 36 seconds,
+with music: [download the MP4](../assets/noctiluca/promo.mp4).*
+
 Here it runs a real Chrome on the crate's local test pages: a two-column
 page in the projection, a link followed by its hint, a form filled in and
 sent, and an article in reader mode with its small picture drawn as Kitty

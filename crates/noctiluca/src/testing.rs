@@ -51,9 +51,11 @@ pub struct FakeState {
     /// fixtures `file:///noctiluca/fixtures/…`.
     pub resource_root: Option<std::path::PathBuf>,
     /// Chrome's recorded frames of videos (`STEM-NN.jpg`, the capture
-    /// example's `--frames`): with them, the page's videos play as Chrome
-    /// played them, autoplaying ones from the start, and the screencast
-    /// shows them in their boxes. `None`: a test pushes its own frames.
+    /// example's `--frames`, evenly spaced over the video's length): with
+    /// them, the page's videos play as Chrome played them, autoplaying
+    /// ones from the start, and the screencast shows them in their boxes,
+    /// each the frame at the video's clock. `None`: a test pushes its own
+    /// frames.
     pub recorded: Option<std::path::PathBuf>,
     /// The recorded frames read so far, by stem.
     recorded_frames: HashMap<String, Vec<image::RgbImage>>,
@@ -333,6 +335,22 @@ impl FakeState {
         }
     }
 
+    /// A recorded video's length in seconds.
+    fn length(&self, node: i64) -> f64 {
+        self.media
+            .get(&node)
+            .and_then(|p| p.duration)
+            .unwrap_or(5.0)
+            .max(0.1)
+    }
+
+    /// A playing recorded video's clock: the seconds since it started
+    /// playing (or as far as it had played), looping over its length.
+    fn clock(&self, node: i64) -> Option<f64> {
+        let since = self.playing_since.get(&node)?;
+        Some(since.elapsed().as_secs_f64() % self.length(node))
+    }
+
     /// A frame with each playing video's recorded frame in its box, as
     /// Chrome's screencast paints it. It spans the playing videos (its
     /// scroll at their top), wherever the scripted view is.
@@ -363,6 +381,9 @@ impl FakeState {
                 .and_then(|name| name.split('.').next())
                 .unwrap_or_default()
                 .to_string();
+            // The frame at the clock the status line shows: the frames
+            // span the video's length.
+            let at = self.clock(video.node).unwrap_or(0.0) / self.length(video.node);
             let frames = self.recorded_frames.entry(stem.clone()).or_insert_with(|| {
                 (0..100)
                     .map_while(|k| image::open(dir.join(format!("{stem}-{k:02}.jpg"))).ok())
@@ -372,11 +393,7 @@ impl FakeState {
             if frames.is_empty() {
                 continue;
             }
-            let since = self
-                .playing_since
-                .get(&video.node)
-                .map_or(0.0, |t| t.elapsed().as_secs_f64());
-            let frame = &frames[(since * 8.0) as usize % frames.len()];
+            let frame = &frames[((at * frames.len() as f64) as usize).min(frames.len() - 1)];
             let (w, h) = (video.rect.width.max(1.0), video.rect.height.max(1.0));
             let scaled = image::imageops::resize(
                 frame,
@@ -515,20 +532,16 @@ impl Engine for FakeEngine {
                 _ => {}
             }
             if let PageAction::Media { node, op } = action {
-                if state.recorded.is_some() {
-                    match op {
-                        MediaOp::Play => {
-                            let at = state.media.get(node).map_or(0.0, |p| p.time);
-                            let start = std::time::Instant::now()
-                                .checked_sub(std::time::Duration::from_secs_f64(at))
-                                .unwrap_or_else(std::time::Instant::now);
-                            state.playing_since.insert(*node, start);
+                // A recorded video's clock stops where it is; a play, or a
+                // seek while playing, starts it again from its time.
+                let recorded = state.recorded.is_some();
+                if recorded {
+                    if let Some(time) = state.clock(*node) {
+                        if let Some(p) = state.media.get_mut(node) {
+                            p.time = time;
                         }
-                        MediaOp::Pause => {
-                            state.playing_since.remove(node);
-                        }
-                        _ => {}
                     }
+                    state.playing_since.remove(node);
                 }
                 if let Some(p) = state.media.get_mut(node) {
                     match op {
@@ -541,6 +554,12 @@ impl Engine for FakeEngine {
                             p.time = (p.time + d).clamp(0.0, end);
                         }
                     }
+                }
+                if let Some(p) = state.media.get(node).filter(|p| recorded && !p.paused) {
+                    let start = std::time::Instant::now()
+                        .checked_sub(std::time::Duration::from_secs_f64(p.time))
+                        .unwrap_or_else(std::time::Instant::now);
+                    state.playing_since.insert(*node, start);
                 }
                 state.events.push(EngineEvent::Changed);
             }
@@ -561,9 +580,8 @@ impl Engine for FakeEngine {
             .copied()
             .ok_or_else(|| io::Error::new(io::ErrorKind::NotFound, "no media"))?;
         // A recorded video's clock runs while it plays, looping.
-        if let Some(since) = state.playing_since.get(&node).filter(|_| !playback.paused) {
-            let length = playback.duration.unwrap_or(5.0).max(0.1);
-            playback.time = since.elapsed().as_secs_f64() % length;
+        if let Some(time) = state.clock(node).filter(|_| !playback.paused) {
+            playback.time = time;
         }
         Ok(playback)
     }

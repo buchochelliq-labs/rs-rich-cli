@@ -69,7 +69,8 @@ Parity, the plugin marketplace and a terminal web browser:
   of its own, labels that change in place, a three-state check box,
   options known by key and a live action list.
 - **[Noctiluca](docs/guide/noctiluca.md)** (new): a web browser for the
-  terminal, on intuiTUIve and a headless Chrome.
+  terminal, on intuiTUIve and a headless Chrome. Watch
+  [its promo](docs/assets/noctiluca/promo.mp4) (AI-generated, MIT).
 - **Recording:** a tape writes an APNG only when asked. Memo has a spot for
   every crate.
 

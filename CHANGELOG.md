@@ -485,6 +485,20 @@ What rs-rich-doom built for itself, made generic
   paints no more than are used. Frames carry their scroll position and
   crop to a rectangle of the page (`ScreencastFrame::crop`);
   `Pixels::crop` and `Pixels::to_rgba`.
+- **Video fixtures of our own, and the promo in the docs** (noctiluca,
+  docs): `motion.webm` is now drawn by `make_video.py` (a night sea with
+  glowing waves and a boat, five seconds that loop, 70 KB), and a second
+  fixture, `bloom.webm` (264 KB), is cut by `make_bloom.py` from
+  Noctiluca's promo, an AI-generated video made for rs-rich (MIT). The news
+  and watch pages play the bloom; the stream page plays the generated
+  clip. The scripted engine replays Chrome's recorded frames of each by
+  the video's clock, and `capture --frames` records them paused, frame by
+  frame. The guide's front page plays the full promo (960x540, 4.2 MB).
+- **`rich record` keeps no frame mid synchronized update**
+  (rs-rich-record): output arriving a frame interval after the last frame
+  no longer keeps the screen while a synchronized update is open, so a
+  video frame's cells are not recorded without its Sixel picture (the
+  GIF showed half blocks of the next frame over the last picture).
 
 ### Versions: the 0.0.23 versions are open
 

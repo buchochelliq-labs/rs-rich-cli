@@ -3,7 +3,9 @@ stream-with-log.html).
 
 Every picture is drawn here from shapes and gradients, so the fixtures carry
 no third-party image. Run from anywhere: `python3 -I make.py` (needs Pillow);
-it writes beside itself. The output is deterministic.
+it writes beside itself. The output is deterministic. The videos and their
+posters come from beside it: motion.webm from make_video.py, and
+bloom.webm from make_bloom.py, cut from Noctiluca's AI-generated promo.
 """
 
 import math
@@ -160,17 +162,6 @@ def avatar(n, size=(64, 64)):
     return image
 
 
-def poster(size=(640, 360)):
-    """The player's poster: an abstract motion scene."""
-    w, h = size
-    image = gradient(size, (10, 20, 40), (30, 80, 120))
-    draw = ImageDraw.Draw(image)
-    for k in range(9):
-        y = 40 + k * 34
-        draw.arc([-80, y - 120, w + 80, y + 120], 200, 340, fill=(80 + k * 15, 200, 255 - k * 10), width=5)
-    return image
-
-
 def badge(size=(18, 18)):
     """A chat badge: a green rounded square with a white tick."""
     image = Image.new("RGBA", size, (0, 0, 0, 0))
@@ -218,7 +209,6 @@ def main():
     market().save(os.path.join(out, "market.jpg"), quality=82)
     storm().save(os.path.join(out, "storm.jpg"), quality=82)
     field().save(os.path.join(out, "field.jpg"), quality=82)
-    poster().save(os.path.join(out, "poster.jpg"), quality=82)
     for n in range(6):
         thumbnail(n).save(os.path.join(out, f"thumb-{n + 1}.jpg"), quality=80)
     for n in range(4):
