@@ -9,6 +9,20 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **WebP pictures, decoded everywhere** (rs-rich-art, noctiluca, rs-rich-micro,
+  rs-rich-cli; rs-rich-embed and the PyPI package build with it): the
+  workspace's `image` dependency gains its `webp` feature, the pure-Rust
+  `image-webp` decoder (MIT OR Apache-2.0, adds about 0.3 MB to a release
+  binary). `rich image`, `rich view`, `--diff` and stdin read WebP by
+  content or by its `.webp` extension; an animated WebP plays like a GIF in
+  `rich gif` and `rich view`, in rs-rich-art's `AnimatedArt`,
+  `graphics::decode_animation` and `Picture::decode_animated`, and in micro
+  assets (which drew a WebP animation's still image before); `rich image`
+  draws its first frame. Noctiluca decodes a page's WebP pictures itself
+  instead of taking Chrome's pixels of their box (AVIF still comes from
+  Chrome's pixels), and an animated one moves. Markdown already accepted
+  `data:image/webp` images.
+
 - **Noctiluca on real sites** (docs; noctiluca): a gallery page of BBC
   News, Wikipedia, Hacker News, MDN, The Guardian, GitHub, YouTube and
   Twitch (a live stream playing in place), recorded live from hand-run
