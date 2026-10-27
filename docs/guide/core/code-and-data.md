@@ -167,8 +167,10 @@ Some *text* with a [link](https://example.com).
     That is why upstream's `rich` CLI turns them off by default; do the same
     when your output may be piped.
 
-Markdown styles come from the theme: `markdown.h1`, `markdown.code`,
-`markdown.link`, `markdown.block_quote` and so on. See
+Markdown styles come from the console's theme: `markdown.h1`,
+`markdown.code`, `markdown.link`, `markdown.block_quote` and so on, each
+looked up when the document renders. A theme entry replaces the default
+style, so `markdown.h1 = italic` gives an italic heading with no colour. See
 [divergence #9](../../DIVERGENCES.md) for the few elements that differ.
 
 ## JSON

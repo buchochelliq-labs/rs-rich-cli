@@ -172,6 +172,9 @@ open ones are **permanent**, each for the reason in its entry:
   `style` are byte-parity too (golden `markdown_options`); `code_theme`,
   `inline_code_lexer` and `inline_code_theme` take `syntect` theme names. (The trailing-blank-line quirk for a
   document ending in a thematic break is also matched — golden `markdown_hr_end`.)
+  Every `markdown.*` style, `<kbd>`'s `markdown.kbd` among them, is looked up
+  in the console's theme as upstream does, in upstream's stack order; a theme
+  entry replaces the default outright (golden `markdown_theme`, 0.0.23).
 - **Why:** code blocks go through `syntect`, not Pygments (#18).
 - **Remove:** see the Syntax entry (#18).
 - **Verdict (0.0.22): permanent,** for code blocks only, as §18. Every other

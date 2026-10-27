@@ -2076,6 +2076,11 @@ The styles layer onto the built-in theme, and later layers override earlier ones
    installed theme `--theme NAME` falls back to.
 4. `--theme-style NAME=STYLE` bindings.
 
+Each layer replaces a named style outright, as upstream's theme stack does:
+`--theme-style repr.number=bold` prints numbers bold with no colour, not bold
+cyan. The styles reach everything that names them, Markdown's `markdown.*`
+styles in `rich -m` among them.
+
 A `theme_file` in a config file is relative to that config file, so the config
 works from any directory; an explicit `--theme-file` replaces it. A `theme_file`
 in a working-directory `rich.toml` is ignored with a warning; use
@@ -2359,7 +2364,9 @@ flag as one.
 
 A theme file is upstream rich's `[styles]` format, so the source files in
 `crates/rich-cli/official/themes/` also work directly:
-`rich --theme-file crates/rich-cli/official/themes/dusk.ini -p "[1, None]"`.
+`rich --theme-file crates/rich-cli/official/themes/dusk.ini -p "[1, None]"`,
+or `rich --theme-file crates/rich-cli/official/themes/dusk.ini -m README.md`
+for its `markdown.*` colours.
 
 ```bash
 rich plugin search                 # every package: kind, tier, version
