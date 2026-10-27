@@ -147,20 +147,23 @@ pub fn to_text(lines: &[Line], marks: &Marks, first_row: usize) -> Text {
         if n > 0 {
             text.append("\n", None);
         }
-        let start = text.plain().chars().count();
+        // Text's spans are byte offsets; matches are char offsets.
+        let start = text.plain().len();
         for span in &line.spans {
             let style = (!span.style.is_empty()).then(|| span.style.as_str().into());
             text.append(&span.text, style);
         }
         if let Some(query) = marks.find.as_deref().filter(|q| !q.is_empty()) {
-            for (k, (at, len)) in matches(&line.plain(), query).into_iter().enumerate() {
+            let plain = line.plain();
+            let byte = |c: usize| plain.char_indices().nth(c).map_or(plain.len(), |(b, _)| b);
+            for (k, (at, len)) in matches(&plain, query).into_iter().enumerate() {
                 let current = marks.current == Some((first_row + n, k));
                 let style = if current {
                     "bold black on bright_yellow"
                 } else {
                     "black on yellow"
                 };
-                text.stylize(style, start + at, start + at + len);
+                text.stylize(style, start + byte(at), start + byte(at + len));
             }
         }
     }
@@ -1739,6 +1742,27 @@ mod tests {
             lines.iter().map(Line::plain).collect::<Vec<_>>(),
             ["> a", "  b"]
         );
+    }
+
+    #[test]
+    fn a_match_after_wide_characters_is_highlighted_where_it_is() {
+        // A code block's gutter (three bytes, one char) before the match:
+        // char offsets taken as bytes cut inside it and panicked.
+        let lines = [
+            Line {
+                spans: vec![Span::new("é", "")],
+            },
+            Line {
+                spans: vec![Span::new(" │ ", "dim"), Span::new("const numbers", "")],
+            },
+        ];
+        let marks = Marks {
+            find: Some("numbers".into()),
+            ..Marks::default()
+        };
+        let text = to_text(&lines, &marks, 0);
+        let span = text.spans().last().unwrap();
+        assert_eq!(&text.plain()[span.start..span.end], "numbers");
     }
 
     #[test]
