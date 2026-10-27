@@ -55,8 +55,7 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 
 ## New in 0.0.23
 
-To be published as one release, `release-0.0.23`
-([release notes](docs/releases/0.0.23.md)). Faster frames, pictures and
+Published on 2026-10-27 ([release notes](docs/releases/0.0.23.md)). Faster frames, pictures and
 video in Noctiluca, and the marketplace goes live:
 
 - **The core:** `console.py` fully ported (capture, `record=` and its
@@ -184,7 +183,7 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 ## Releases
 
 Each release has notes in [`docs/releases/`](docs/releases/) (the newest
-published one is [0.0.22](docs/releases/0.0.22.md)), and
+published one is [0.0.23](docs/releases/0.0.23.md)), and
 [`CHANGELOG.md`](CHANGELOG.md) lists every change. What comes next is in the
 [roadmap](docs/ROADMAP.md) and the [0.0.24 plan](docs/plans/0.0.24.md). The
 manifest table above describes this checkout; crates.io is the source for

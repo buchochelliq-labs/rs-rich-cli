@@ -53,7 +53,7 @@ topic and a widget index.
 ## New in 0.0.23
 
 ![Memo, intuiTUIve's elephant, in the cartoon look](assets/intuituive/mascot/memo-cartoon.svg){ .tui-mascot width="128" }
-0.0.23, to be published as one release ([release notes](releases/0.0.23.md)),
+0.0.23, published on 2026-10-27 ([release notes](releases/0.0.23.md)),
 finishes porting the core's console, paints with fewer bytes, brings
 pictures and video to Noctiluca and puts the plugin marketplace live.
 

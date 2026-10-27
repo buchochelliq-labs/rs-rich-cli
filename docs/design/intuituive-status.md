@@ -3,23 +3,23 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-10-27)
+## Where things stand (2026-10-27, evening)
 
-- **0.0.23 is in release.** Every item but Memo's illustrations is merged
-  (#772, #773, #780, #783, #795, #823); the release PR prepares the cohort
-  from `main` with the notes ([0.0.23 release notes](../releases/0.0.23.md)).
-  After it merges, the maintainer tags it with
-  `python3 scripts/release_cohort.py tag`.
+- **0.0.23 is published** (19 crates from `main` at `2624ce5` by one
+  release run, `release-0.0.23`, on 2026-10-27, every one through Trusted
+  Publishing; `rs-rich` 0.0.11 on PyPI, `python-v0.0.11`; see the
+  [0.0.23 release notes](../releases/0.0.23.md)). The release PR merged as
+  #824.
 - **The marketplace is live** since 2026-10-26 (index serial 1), with
   [its own site](https://buchochelliq-labs.github.io/rs-rich-marketplace/).
-  After the tag: list the 0.0.23 crates (mermaid 0.0.9, dot 0.0.6, lumis
-  0.0.7) with `add_crate_version.py`, and move the marketplace's
-  `RS_RICH_CLI_REF` to `release-0.0.23`.
-- **The course to 1.0.0 is set** (2026-10-27,
-  [the plan's decisions 9 to 14](../plans/1.0.0.md#decisions-for-the-maintainer)):
-  sixteen stable packages, two tracks from 0.0.24 to 0.0.28 (Cornacai,
-  Textual parity and Noctiluca's improvements; the stable set's
-  preparation), then 0.1.0, and maintenance mode after 1.0.0.
+  Its follow-up: the 0.0.23 crates (mermaid 0.0.9, dot 0.0.6, lumis 0.0.7)
+  listed with `add_crate_version.py`, and `RS_RICH_CLI_REF` moved to
+  `release-0.0.23`, through a pull request there.
+- **0.0.24 is next** ([plan](../plans/0.0.24.md)): the first of the two
+  tracks to 0.0.28 set on 2026-10-27
+  ([the 1.0 plan's decisions 9 to 14](../plans/1.0.0.md#decisions-for-the-maintainer)):
+  Cornacai, Textual parity and Noctiluca's improvements; the stable set's
+  preparation. Its versions open after these notes.
 - **Waiting on the maintainer:** Memo's reference pictures; lumis 0.17
   (its minimum Rust is 1.95), on
   `claude/next-priority-items-3c5p8e-wip-deps-023-lumis`.

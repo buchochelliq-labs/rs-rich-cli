@@ -4,7 +4,8 @@ What does not work yet, what was never meant to, and what works differently on
 purpose. Three different things, kept apart — a deliberate trade-off listed as a
 bug makes a considered decision look like neglect.
 
-**Applies to** the 0.0.23 release (`rs-rich-cli` 0.0.23, `rs-rich` 0.0.13),
+**Applies to** the 0.0.23 release (`rs-rich-cli` 0.0.23, `rs-rich` 0.0.13,
+published 2026-10-27),
 reviewed against Python `rich` 15.0.0. Older entries name the release they
 were found in. Each entry links to its issue or report so you can check the
 status without waiting for this page to be updated.

@@ -9,16 +9,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## 0.0.23 cohort — to be published
+## 0.0.23 cohort — published 2026-10-27
 
-To be published from `main` by one `release.yml` run (tag
+Published on 2026-10-27 from `2624ce5` by one `release.yml` run (tag
 `release-0.0.23`): core 0.0.13 / macros 0.0.7 / plugin API 0.0.7 /
 art 0.0.16 / diagram 0.0.6 / mermaid 0.0.9 / lumis 0.0.7 / ext 0.0.20 /
 micro 0.0.9 / record 0.0.11 / interact 0.0.11 / ratatui 0.0.8 /
 intuituive 0.0.8 / embed 0.0.6 / web 0.0.6 / data 0.0.7 /
 marketplace 0.0.2 / noctiluca 0.0.2 / CLI 0.0.23, and
-`rs-rich` 0.0.11 on PyPI (`python-v0.0.11`, same commit). See
-[the release notes](docs/releases/0.0.23.md).
+`rs-rich` 0.0.11 on PyPI (`python-v0.0.11`, same commit, the same day).
+See [the release notes](docs/releases/0.0.23.md).
 
 - **Themes reach Markdown, and a theme style replaces** (rs-rich,
   rs-rich-cli). Core's `Markdown` now looks every `markdown.*` style up in
