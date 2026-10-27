@@ -378,7 +378,7 @@ fn a_replayed_video_shows_the_frame_at_its_clock() {
     engine.set_screencast(TabId(0), true).unwrap();
     // The colour at the middle of the video's box in the newest frame,
     // and the clock the status line shows.
-    let mut seen = |engine: &mut FakeEngine| {
+    let seen = |engine: &mut FakeEngine| {
         let frame = engine.screencast_frame(TabId(0)).unwrap();
         let r = video.rect;
         let cut = frame.crop(r.x, r.y, r.width, r.height).unwrap();
