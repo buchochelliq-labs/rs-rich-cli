@@ -124,3 +124,63 @@ fn pictures_are_decoded_from_the_files_the_page_loaded() {
     assert!(by_src("market.jpg").captioned);
     assert!(!by_src("storm.jpg").captioned);
 }
+
+#[test]
+fn a_picture_in_a_format_we_cannot_decode_is_taken_from_chromes_pixels() {
+    // The Guardian serves AVIF to Chrome (it asks for it). rs-rich-art does
+    // not read AVIF, so the picture is Chrome's pixels of its box, not a
+    // picture that never comes.
+    let engine =
+        FakeEngine::from_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"))
+            .unwrap();
+    let state = engine.state.clone();
+    let harbour = {
+        let state = state.lock().unwrap();
+        let page = build(&state.pages["news"], &mut Revisions::new());
+        let media = page
+            .media
+            .iter()
+            .find(|m| m.src.ends_with("harbour.jpg"))
+            .expect("harbour.jpg")
+            .clone();
+        media
+    };
+    // An AVIF file's head: recognised as AVIF, not readable here.
+    let mut avif = b"\0\0\0\x1cftypavif\0\0\0\0avifmif1miaf".to_vec();
+    avif.resize(256, 0);
+    assert_eq!(
+        image::guess_format(&avif).ok(),
+        Some(image::ImageFormat::Avif)
+    );
+    state
+        .lock()
+        .unwrap()
+        .resources
+        .insert(harbour.src.clone(), avif);
+    let (send, updates) = mpsc::channel();
+    let tab = Tab::spawn(Box::new(engine), move |u| {
+        let _ = send.send(u);
+    });
+    tab.send(Command::Open("news.html".into()));
+    let page = wait_for(&updates, Duration::from_secs(20), |p| {
+        p.media
+            .iter()
+            .any(|m| m.src == harbour.src && m.picture.is_some())
+    })
+    .expect("the AVIF picture never came");
+    let picture = page
+        .media
+        .iter()
+        .find(|m| m.src == harbour.src)
+        .and_then(|m| m.picture.clone())
+        .unwrap();
+    // Chrome's pixels of its box (the fake paints the box's size), not
+    // the 640x360 file.
+    assert_eq!(
+        (picture.image().width(), picture.image().height()),
+        (
+            harbour.rect.width.max(1.0) as u32,
+            harbour.rect.height.max(1.0) as u32
+        )
+    );
+}

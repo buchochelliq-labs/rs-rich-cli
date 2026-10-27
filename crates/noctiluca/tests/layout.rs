@@ -147,3 +147,80 @@ fn a_block_far_down_the_page_does_not_grow_the_projection() {
     assert!(lines.len() <= 300, "{} rows", lines.len());
     assert_eq!(lines.last().unwrap().plain(), "far away");
 }
+
+#[test]
+fn a_tables_rank_column_keeps_each_rank_beside_its_title() {
+    // rank-table.html, reduced from Hacker News: from rank 10 the rank is
+    // wider than its narrow right-aligned cell. It must not wrap its period
+    // onto a row of its own, and each rank stays on its title's row, even
+    // where rounding puts a story's subtext and the next story on one row.
+    let lines: Vec<String> = projection(&page("rank-table"), 120, (8.0, 18.0), &Marks::default())
+        .iter()
+        .map(Line::plain)
+        .collect();
+    let titles = [
+        (1, "Lanterns on the harbour wall"),
+        (9, "How the quay was rebuilt"),
+        (10, "Counting stars over the lighthouse"),
+        (11, "Ten years of shore lights"),
+        (12, "A history of the old pier"),
+    ];
+    for (rank, title) in titles {
+        let row = lines
+            .iter()
+            .find(|l| l.contains(title))
+            .unwrap_or_else(|| panic!("{title}: {lines:#?}"));
+        assert!(
+            row.trim_start().starts_with(&format!("{rank}. ")),
+            "rank {rank} not beside its title: {lines:#?}"
+        );
+    }
+    // No row holds a lone period.
+    assert!(!lines.iter().any(|l| l.trim() == "."), "{lines:#?}");
+}
+
+#[test]
+fn a_snapped_grid_item_keeps_its_links_readable() {
+    // narrow-grid.html, reduced from Wikipedia's header: snapping the grid
+    // to equal columns narrows its last item. Its links keep their words,
+    // never one letter to a row.
+    let lines: Vec<String> = projection(&page("narrow-grid"), 120, (8.0, 18.0), &Marks::default())
+        .iter()
+        .map(Line::plain)
+        .collect();
+    let text = lines.join("\n");
+    for word in ["Donate", "Create", "account", "Log"] {
+        assert!(
+            lines
+                .iter()
+                .any(|l| l.split_whitespace().any(|w| w == word)),
+            "{word} broken: {text}"
+        );
+    }
+    let short = lines
+        .iter()
+        .filter(|l| {
+            let t = l.trim();
+            !t.is_empty() && t.chars().count() <= 2
+        })
+        .count();
+    assert_eq!(short, 0, "one-letter rows: {text}");
+}
+
+#[test]
+fn a_captioned_picture_still_loading_shows_its_alt_text_once() {
+    // A picture with no caption of its own gets "Image: alt" under it; its
+    // box, until the picture comes, no longer says the alt text too (The
+    // Guardian's pictures showed it twice).
+    let lines: Vec<String> = projection(&page("news"), 100, (8.0, 18.0), &Marks::default())
+        .iter()
+        .map(Line::plain)
+        .collect();
+    let alt = "Boats at anchor";
+    let count = lines.iter().filter(|l| l.contains(alt)).count();
+    assert!(
+        lines.iter().any(|l| l.contains(&format!("Image: {alt}"))),
+        "no caption: {lines:#?}"
+    );
+    assert_eq!(count, 1, "alt text shown {count} times: {lines:#?}");
+}
