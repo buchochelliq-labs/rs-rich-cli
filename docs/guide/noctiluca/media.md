@@ -13,13 +13,14 @@ half blocks anywhere else. Chrome only lays the page out and hands over
 the files it loaded.
 
 - **Pictures** come from the page's own files (an `<img>`, a `<picture>`,
-  a CSS background on a box with no text), at their own quality, else
-  from Chrome's pixels (an SVG). Each fills the box Chrome gave it. A
+  a CSS background on a box with no text), at their own quality, when
+  they are PNG, JPEG, GIF or WebP; else from Chrome's pixels (an SVG, an
+  AVIF). Each fills the box Chrome gave it. A
   picture with alt text and no caption of the page's gets an
   `Image: …` line under it.
 - **Small pictures in a line** (a chat's badges and emotes, an icon) are
   drawn in their line.
-- **Animated GIFs** move. Kitty plays them itself, for no further bytes;
+- **Animated GIFs and WebPs** move. Kitty plays them itself, for no further bytes;
   elsewhere each frame is sent only when the terminal has room for it,
   at most eight a second. `F4` freezes every moving picture, and their
   bytes stop.

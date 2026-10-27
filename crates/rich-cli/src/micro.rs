@@ -203,7 +203,7 @@ pub(super) fn command() -> CommandSpec {
         .subcommand(pipeline_args(
             CommandSpec::new("create")
                 .about(
-                    "Run an image (PNG, APNG, GIF or JPEG) through the pipeline and write a \
+                    "Run an image (PNG, APNG, GIF, JPEG or WebP) through the pipeline and write a \
                      package the registry accepts",
                 )
                 .usage("create IMAGE --name NAME --alt TEXT [--emoji E] [--text T] [OPTIONS]")

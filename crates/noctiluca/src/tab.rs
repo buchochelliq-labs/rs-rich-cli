@@ -900,10 +900,10 @@ type ToDecode<K> = Sender<(K, Arc<[u8]>)>;
 type Job = (StillKey, Arc<[u8]>);
 
 /// Whether rs-rich-art can decode `bytes`: a format it recognises *and*
-/// reads. An SVG, an AVIF or a WebP (which Chrome asks for, and sites such
-/// as The Guardian serve it) gets a still of Chrome's pixels instead;
-/// taken as decodable, it failed on the decoder thread and the picture
-/// never came.
+/// reads (PNG, JPEG, GIF, WebP). An SVG or an AVIF (which Chrome asks for,
+/// and sites such as The Guardian serve it) gets a still of Chrome's pixels
+/// instead; taken as decodable, it failed on the decoder thread and the
+/// picture never came.
 fn decodable(bytes: &[u8]) -> bool {
     image::guess_format(bytes).is_ok_and(|format| format.reading_enabled())
 }

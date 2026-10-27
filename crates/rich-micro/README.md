@@ -101,7 +101,7 @@ shows.
 
 ## Making assets
 
-`pipeline::Pipeline` takes a PNG, APNG, GIF or JPEG and fits every frame to
+`pipeline::Pipeline` takes a PNG, APNG, GIF, JPEG or WebP and fits every frame to
 exactly the asset's cells (contain, cover with an anchor, or stretch), with
 brightness, contrast and gamma, an optional unsharp mask, a transparency
 rule (a threshold, kept, flattened, or a key colour) and an optional
