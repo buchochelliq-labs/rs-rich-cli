@@ -201,7 +201,9 @@ async function main() {
       "Save as tape downloads the lines typed and the samples they use");
 
     await page.goto(`${base}tutorial/06-cli/`);
-    check((await page.locator('.rich-playground[data-kind="cli"] + .rp-try').count()) > 0, "a guide page's CLI example has Try it");
+    // The buttons mount once the stamp has loaded, after the page has.
+    await cliTry.first().waitFor({ timeout: 15000 }).catch(() => {});
+    check((await cliTry.count()) > 0, "a guide page's CLI example has Try it");
 
     // Tier 3: apps in a terminal, in a worker.
     await page.goto(`${base}playground/`);
