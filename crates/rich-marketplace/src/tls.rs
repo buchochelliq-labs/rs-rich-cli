@@ -54,24 +54,25 @@ impl Trust {
 
 /// A request that failed: with the system's certificates, and, when that
 /// failure was one other roots could change, with the bundled roots too.
+/// (Boxed: ureq's errors are large.)
 #[derive(Debug)]
 pub struct TrustError {
     /// The first attempt's error (with [`Trust::System`]).
-    pub system: ureq::Error,
+    pub system: Box<ureq::Error>,
     /// The fallback's error, if the request was retried.
-    pub bundled: Option<ureq::Error>,
+    pub bundled: Option<Box<ureq::Error>>,
 }
 
 impl TrustError {
     /// The error that decides the outcome: the fallback's when there was
     /// one (it got furthest), else the first attempt's.
     pub fn last(&self) -> &ureq::Error {
-        self.bundled.as_ref().unwrap_or(&self.system)
+        self.bundled.as_deref().unwrap_or(&self.system)
     }
 
     /// The same, by value.
     pub fn into_last(self) -> ureq::Error {
-        self.bundled.unwrap_or(self.system)
+        *self.bundled.unwrap_or(self.system)
     }
 }
 
@@ -95,7 +96,7 @@ impl fmt::Display for TrustError {
 impl From<ureq::Error> for TrustError {
     fn from(system: ureq::Error) -> Self {
         TrustError {
-            system,
+            system: Box::new(system),
             bundled: None,
         }
     }
@@ -129,14 +130,11 @@ pub fn with_fallback<T>(
         Err(error) => error,
     };
     if !may_be_trust(&system) {
-        return Err(TrustError {
-            system,
-            bundled: None,
-        });
+        return Err(system.into());
     }
     attempt(Trust::Bundled).map_err(|bundled| TrustError {
-        system,
-        bundled: Some(bundled),
+        system: Box::new(system),
+        bundled: Some(Box::new(bundled)),
     })
 }
 
