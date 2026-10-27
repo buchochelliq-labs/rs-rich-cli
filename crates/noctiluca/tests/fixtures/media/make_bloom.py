@@ -4,7 +4,7 @@ bloom-poster.jpg, from the Noctiluca promo.
 Provenance: the promo (1280 x 720, 24 fps, H.264 + AAC, 36.25 s) is an
 AI-generated video the maintainer made for rs-rich; it ships under the
 repository's MIT licence. The full promo, re-encoded, is in the docs
-(docs/media/noctiluca/promo.mp4); the 9.5 MB master is not committed.
+(docs/assets/noctiluca/promo.mp4); the 9.5 MB master is not committed.
 
 The cut is "The bloom from the air": five seconds of the moonlit sea from
 1.5 s, where a ring of glowing plankton appears on the water, grows and

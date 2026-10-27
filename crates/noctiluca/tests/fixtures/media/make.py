@@ -3,8 +3,9 @@ stream-with-log.html).
 
 Every picture is drawn here from shapes and gradients, so the fixtures carry
 no third-party image. Run from anywhere: `python3 -I make.py` (needs Pillow);
-it writes beside itself. The output is deterministic. The video,
-motion.webm, and its poster come from make_video.py beside it.
+it writes beside itself. The output is deterministic. The videos and their
+posters come from beside it: motion.webm from make_video.py, and
+bloom.webm from make_bloom.py, cut from Noctiluca's AI-generated promo.
 """
 
 import math

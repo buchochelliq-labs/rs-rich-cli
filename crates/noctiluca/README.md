@@ -6,6 +6,8 @@ A terminal web browser on [intuiTUIve](https://crates.io/crates/rs-rich-intuitui
 Chrome loads and runs the page; Noctiluca reads what Chrome laid out and
 draws it in cells. Text stays terminal text you can select and copy,
 controls are intuiTUIve widgets, and images are media regions.
+[Watch the promo](https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-cli/main/docs/assets/noctiluca/promo.mp4)
+(36 s, AI-generated for rs-rich, MIT).
 
 ```
 noctiluca https://docs.rs/serde        # an address
