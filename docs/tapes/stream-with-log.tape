@@ -22,6 +22,9 @@ Show
 Type "noctiluca --images sixel https://fixture.example/stream-with-log.html"
 Enter
 Wait /hello from the harbour/
+# The video's first frame (a debug build takes longer to reach it): a
+# frame fills the stream's region with half blocks, a placeholder with ░.
+Wait /▀{30}/
 Sleep 1s
 Screenshot stream
 Type "{"
