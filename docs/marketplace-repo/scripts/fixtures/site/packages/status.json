@@ -1,0 +1,56 @@
+{
+  "schema_version": 1,
+  "id": "status",
+  "kind": "micro-pack",
+  "name": "Status micro pack",
+  "description": "Status badges: success, warning, error, info, loading",
+  "tier": "official",
+  "license": "MIT",
+  "repository": "https://github.com/buchochelliq-labs/rs-rich-cli",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "published": "2026-10-26",
+      "requires": {
+        "micro_schema": 1
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/main/artifacts/status/status-1.0.0.richmicro",
+        "sha256": "a22c3fec6e0c58cf29ae7d632d5e441c7c4c488201024500507a974707a2a292",
+        "size": 7645
+      },
+      "capabilities": [
+        {
+          "kind": "asset",
+          "name": "status/error"
+        },
+        {
+          "kind": "asset",
+          "name": "status/info"
+        },
+        {
+          "kind": "asset",
+          "name": "status/loading"
+        },
+        {
+          "kind": "asset",
+          "name": "status/success"
+        },
+        {
+          "kind": "asset",
+          "name": "status/warning"
+        }
+      ],
+      "permissions": []
+    }
+  ],
+  "authors": [
+    "rs-rich contributors"
+  ],
+  "homepage": "https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/crates/rich-micro/builtin/status",
+  "keywords": [
+    "micro",
+    "icons",
+    "status"
+  ]
+}

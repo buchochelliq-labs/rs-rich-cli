@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "id": "mono",
+  "kind": "theme",
+  "name": "Mono theme",
+  "description": "No colour at all, only attributes such as bold, italic and underline, for any background and colour mode",
+  "tier": "official",
+  "license": "MIT",
+  "repository": "https://github.com/buchochelliq-labs/rs-rich-cli",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "published": "2026-10-26",
+      "requires": {
+        "theme_format": 1
+      },
+      "artifact": {
+        "url": "https://github.com/buchochelliq-labs/rs-rich-marketplace/releases/download/mono-v1.0.0/mono-1.0.0.ini",
+        "sha256": "9d091abab2a6b91a8c97d885f96b9c47fab94da6adcb1e8b1fdecac06fb1ed30",
+        "size": 4744
+      },
+      "source_revision": "d26de521746b47baa479b0f7c902f2ed8909b580",
+      "capabilities": [
+        {
+          "kind": "theme",
+          "name": "mono"
+        }
+      ],
+      "permissions": []
+    }
+  ],
+  "homepage": "https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/official/themes/mono.ini",
+  "authors": [
+    "rs-rich contributors"
+  ],
+  "keywords": [
+    "theme",
+    "accessibility",
+    "monochrome"
+  ]
+}

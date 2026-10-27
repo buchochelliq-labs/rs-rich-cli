@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "id": "ocean",
+  "kind": "theme",
+  "name": "Ocean theme",
+  "description": "A dark theme in sea blues, greens and sand, for a dark terminal background",
+  "tier": "official",
+  "license": "MIT",
+  "repository": "https://github.com/buchochelliq-labs/rs-rich-cli",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "published": "2026-10-26",
+      "requires": {
+        "theme_format": 1
+      },
+      "artifact": {
+        "url": "https://github.com/buchochelliq-labs/rs-rich-marketplace/releases/download/ocean-v1.0.0/ocean-1.0.0.ini",
+        "sha256": "b6e01aa19c153b89e7d94c031bb64ff770ed34e6e0669ae23a3cbafcfa0e3582",
+        "size": 4538
+      },
+      "source_revision": "d26de521746b47baa479b0f7c902f2ed8909b580",
+      "capabilities": [
+        {
+          "kind": "theme",
+          "name": "ocean"
+        }
+      ],
+      "permissions": []
+    }
+  ],
+  "homepage": "https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/official/themes/ocean.ini",
+  "authors": [
+    "rs-rich contributors"
+  ],
+  "keywords": [
+    "theme",
+    "dark"
+  ]
+}

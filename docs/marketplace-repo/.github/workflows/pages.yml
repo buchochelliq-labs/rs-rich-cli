@@ -1,0 +1,90 @@
+# Publish the marketplace's web site to GitHub Pages:
+# https://buchochelliq-labs.github.io/rs-rich-marketplace/
+#
+# This workflow belongs to the rs-rich-marketplace repository; rs-rich-cli
+# keeps a copy in docs/marketplace-repo/ (see the README there).
+#
+# scripts/build_site.py assembles the site: site/ (the search page), the
+# signed index.json and index.json.minisig as committed, keys/, and each
+# listing as the index signed it (from git history when packages/ has moved
+# on since the last signing), so the page reads everything from its own
+# origin. Only stats.json comes from elsewhere, at runtime, from the
+# `stats` branch. The page is a viewer: `rich plugin install` verifies the
+# signature, and nothing here signs anything.
+#
+# It runs on a push to main that touches the site, the index, its
+# signature or the keys, and by hand. The signer's commit to main
+# (sign-index.yml, pushed with a deploy key) changes index.json, so it
+# starts this workflow and the site follows the new index: that is
+# intended. This workflow pushes nothing and makes no release, tag or
+# discussion, so it starts no other workflow; it needs no secret and no
+# environment but `github-pages`.
+#
+# One-time setup: Settings > Pages > Build and deployment > Source:
+# "GitHub Actions".
+name: Pages
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "site/**"
+      - "index.json"
+      - "index.json.minisig"
+      - "keys/**"
+      - "scripts/build_site.py"
+      - ".github/workflows/pages.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# One deployment at a time; a newer push waits rather than cancelling one
+# that is half done.
+concurrency:
+  group: pages
+  cancel-in-progress: false
+
+jobs:
+  build:
+    name: build the site
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      contents: read
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          # The history, so a listing changed since the last signing is
+          # served as the index signed it.
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Assemble the site and the signed index
+        run: python3 scripts/build_site.py --output "$RUNNER_TEMP/site"
+
+      - uses: actions/upload-pages-artifact@v5
+        with:
+          path: ${{ runner.temp }}/site
+
+  deploy:
+    name: deploy to pages
+    needs: build
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    permissions:
+      pages: write
+      id-token: write
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    steps:
+      - id: deployment
+        uses: actions/deploy-pages@v5

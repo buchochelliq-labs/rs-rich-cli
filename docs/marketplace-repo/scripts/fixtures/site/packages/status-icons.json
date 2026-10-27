@@ -1,0 +1,47 @@
+{
+  "schema_version": 1,
+  "id": "status-icons",
+  "kind": "micro-pack",
+  "name": "Status icons",
+  "description": "Success, warning and failure badges as two-cell micro assets.",
+  "tier": "reviewed",
+  "license": "CC0-1.0",
+  "authors": [
+    "Example Artist"
+  ],
+  "repository": "https://github.com/example/status-icons",
+  "recommended": {
+    "since": "2026-10-26",
+    "note": "Clear status badges that read well at two cells, in any colour scheme."
+  },
+  "versions": [
+    {
+      "version": "1.0.0",
+      "published": "2026-10-15",
+      "requires": {
+        "micro_schema": 1
+      },
+      "artifact": {
+        "url": "https://github.com/example/status-icons/releases/download/v1.0.0/status-icons.zip",
+        "sha256": "ecf26f0bc478ad14fcd94dfdb7ae510ee1d6a2e806b1e4562a14577ba07913b6",
+        "size": 40960
+      },
+      "source_revision": "ab451265d91fb20f35243a3f4454ca624ad74ff9",
+      "capabilities": [
+        {
+          "kind": "asset",
+          "name": "status/success"
+        },
+        {
+          "kind": "asset",
+          "name": "status/warning"
+        },
+        {
+          "kind": "asset",
+          "name": "status/failure"
+        }
+      ],
+      "permissions": []
+    }
+  ]
+}

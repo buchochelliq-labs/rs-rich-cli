@@ -1,0 +1,45 @@
+{
+  "schema_version": 1,
+  "id": "lumis",
+  "kind": "crate",
+  "name": "lumis highlighter",
+  "description": "Highlights code with lumis's tree-sitter grammars, as a code highlighter for Syntax and Markdown.",
+  "tier": "official",
+  "license": "MIT",
+  "authors": [
+    "rs-rich contributors"
+  ],
+  "repository": "https://github.com/buchochelliq-labs/rs-rich-cli",
+  "homepage": "https://docs.rs/rs-rich-lumis",
+  "keywords": [
+    "highlighter",
+    "syntax",
+    "tree-sitter"
+  ],
+  "crate": {
+    "name": "rs-rich-lumis"
+  },
+  "versions": [
+    {
+      "version": "0.0.6",
+      "published": "2026-10-26",
+      "requires": {
+        "plugin_api": 1
+      },
+      "artifact": {
+        "url": "https://static.crates.io/crates/rs-rich-lumis/rs-rich-lumis-0.0.6.crate",
+        "sha256": "07a8ad6bd4e27136bc0ab1d0d85dfe6e10610034acf27a2702356e67d51e4c9d",
+        "size": 19131
+      },
+      "capabilities": [
+        {
+          "kind": "code-highlighter",
+          "name": "lumis"
+        }
+      ],
+      "permissions": [
+        "native-code"
+      ]
+    }
+  ]
+}

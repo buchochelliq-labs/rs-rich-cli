@@ -1,0 +1,63 @@
+# Check the marketplace's web site before a maintainer merges a change to it.
+#
+# This workflow belongs to the rs-rich-marketplace repository; rs-rich-cli
+# keeps a copy in docs/marketplace-repo/ (see the README there).
+#
+# scripts/check_site.mjs tests the page's logic under Node and the page in
+# headless Chromium: against the fixture marketplace (scripts/fixtures/site)
+# for search, filters, sorts, badges, copying, the keyboard, hostile
+# listings, missing stats and an unsigned or unreachable index, with its
+# Content-Security-Policy in force; and against the site as
+# scripts/build_site.py builds it from the pull request (the real index and
+# the listings it signed). Nothing is fetched from outside the runner but
+# npm's Playwright and its Chromium; stats.json is answered from the
+# fixture.
+#
+# `pull_request`, not `pull_request_target`: a pull request from a fork
+# runs with a read-only token and no secrets. It pushes nothing.
+name: Check the site
+
+on:
+  pull_request:
+    paths:
+      - "site/**"
+      - "scripts/build_site.py"
+      - "scripts/check_site.mjs"
+      - "scripts/fixtures/site/**"
+      - ".github/workflows/pages.yml"
+      - ".github/workflows/site-check.yml"
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: site-check-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  check:
+    name: the page in Chromium
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version: "22"
+
+      - name: Install Playwright's Chromium
+        run: |
+          npm install -g playwright@1.56.1
+          npx playwright install --with-deps chromium
+
+      - name: Check the site
+        run: node scripts/check_site.mjs

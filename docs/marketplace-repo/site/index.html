@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<!-- Nothing loads from anywhere but this site, except stats.json from the
+     marketplace's stats branch; no HTML string can reach the DOM (Trusted
+     Types with no policy). See site/assets/marketplace.js. -->
+<meta http-equiv="Content-Security-Policy" content="default-src 'none'; script-src 'self'; style-src 'self'; font-src 'self'; img-src 'self'; connect-src 'self' https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/stats/stats.json; base-uri 'none'; form-action 'none'; require-trusted-types-for 'script'; trusted-types 'none'">
+<meta name="referrer" content="no-referrer">
+<meta name="color-scheme" content="light dark">
+<meta name="description" content="Search the rs-rich plugin marketplace: WASM plugins, micro packs, themes and crates for rich, with their tiers, install commands, downloads and reviews.">
+<title>rs-rich marketplace</title>
+<link rel="icon" href="favicon.svg" type="image/svg+xml">
+<link rel="stylesheet" href="assets/site.css">
+<link rel="stylesheet" href="assets/marketplace.css">
+<script src="assets/marketplace.js" defer></script>
+</head>
+<body>
+<a class="skip" href="#main">Skip to the packages</a>
+<header class="site-header">
+  <div class="wrap site-header-inner">
+    <a class="brand" href="./">
+      <img src="assets/mark.svg" width="32" height="32" alt="">
+      <span>rs-rich <span class="brand-sub">marketplace</span></span>
+    </a>
+    <nav aria-label="Site">
+      <ul class="nav">
+        <li><a href="https://buchochelliq-labs.github.io/rs-rich-cli/latest/">Docs</a></li>
+        <li><a href="https://github.com/buchochelliq-labs/rs-rich-marketplace#submitting-a-listing">Publish a package</a></li>
+        <li><a href="https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/design/marketplace.md#tiers">How trust works</a></li>
+      </ul>
+    </nav>
+  </div>
+</header>
+
+<main id="main" class="wrap" tabindex="-1">
+  <div class="intro">
+    <h1>Plugins, micro packs and themes for <code>rich</code></h1>
+    <p class="lede">Every package in the
+      <a href="https://github.com/buchochelliq-labs/rs-rich-marketplace">rs-rich plugin marketplace</a>,
+      with the command that installs it. In a terminal,
+      <code>rich plugin search</code> and <code>rich plugin browse</code> show
+      the same list.</p>
+    <aside class="trust" aria-labelledby="trust-title">
+      <p id="trust-title" class="trust-title">This page is only a viewer</p>
+      <p><code>rich plugin install</code> verifies the index's minisign
+        signature with the keys built into <code>rich</code>, then each
+        listing's SHA-256, then the download's size and SHA-256, before it
+        writes anything. This page checks the listings' hashes against the
+        index but not the signature, and nothing you do here installs
+        anything. <a href="#mkt-trust">More about trust</a>.</p>
+    </aside>
+  </div>
+
+  <section aria-labelledby="packages-title">
+    <h2 id="packages-title" class="visually-hidden">Packages</h2>
+    <div id="mkt-app" class="mkt"
+         data-base="./"
+         data-stats="https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/stats/stats.json"
+         data-tiers="https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/design/marketplace.md#tiers">
+      <noscript>
+        <div class="mkt-notice">
+          <p class="mkt-notice-title">This page needs JavaScript to search the marketplace.</p>
+          <p>Without it, every listing is in
+            <a href="packages/">packages/</a> on this site and in the
+            repository's
+            <a href="https://github.com/buchochelliq-labs/rs-rich-marketplace/tree/main/packages">packages folder</a>,
+            the signed index is <a href="index.json">index.json</a>, and
+            <code>rich plugin search</code> lists them in a terminal.</p>
+        </div>
+      </noscript>
+    </div>
+  </section>
+
+  <section class="prose" aria-labelledby="mkt-reading">
+    <h2 id="mkt-reading">How to read a package</h2>
+    <p><strong>Which packages are rs-rich's own.</strong> A package marked
+      <strong>✓ Official · by rs-rich</strong> is built and published by
+      rs-rich, from <a href="https://github.com/buchochelliq-labs/rs-rich-cli">its repository</a>.
+      The mark comes only from the listing's <code>tier</code>, which only a
+      maintainer can set, and the marketplace refuses <code>official</code>
+      for a package whose repository is not rs-rich's. Every other package is
+      someone else's: <strong>Approved</strong> means a maintainer read its
+      source and rebuilt the same file; <strong>Community</strong> means the
+      marketplace's checks passed and nothing more, so read its source and
+      permissions first. A package's own name, description and authors are
+      its author's words; "Authored by" names them in quotes when they claim
+      to be rs-rich. <strong>★ Recommended</strong> is a maintainer's pick,
+      with a note saying why.
+      <a href="https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/design/marketplace.md#tiers">The tiers</a>
+      say more.</p>
+    <p><strong>Kinds.</strong> A <em>WASM plugin</em> runs in a sandbox with
+      no files, network, clock or processes. A <em>micro pack</em> and a
+      <em>theme</em> are data. A <em>crate</em> is native code: it is never
+      installed by <code>rich</code>, so its command is the
+      <code>cargo add</code> line for your own program.</p>
+
+    <h2 id="mkt-trust">Trust</h2>
+    <p>This page only lists packages. It reads this site's copy of the
+      marketplace's <a href="index.json">index.json</a> and each listing it
+      names, checks each listing's SHA-256 against the index, and sends
+      nothing anywhere. It does not check the index's
+      <a href="index.json.minisig">signature</a>. <code>rich plugin install</code>
+      does: it verifies the minisign signature with the keys compiled into
+      <code>rich</code> (the public halves are in <a href="keys/keys-1.json">keys/</a>),
+      then the listing's hash, then the downloaded file's size and SHA-256,
+      before it writes anything.</p>
+    <p>Download counts and ratings come from the marketplace's
+      <a href="https://github.com/buchochelliq-labs/rs-rich-marketplace/blob/stats/stats.json">stats.json</a>,
+      refreshed nightly. They are not part of the signed index, and
+      <code>rich</code> never reads them to install anything. A rating is the
+      👍 and 👎 reactions on the package's discussion in the marketplace's
+      <a href="https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/categories/reviews">Reviews</a>
+      category, and its reviews are that discussion's comments. A count shows
+      as "—" where nothing was counted, such as a version published before
+      counting began.</p>
+
+    <h2 id="mkt-terminal">In the terminal</h2>
+<pre><code>rich plugin search                          # every package: kind, tier, version, author
+rich plugin search rot13                    # every word must match
+rich plugin search --kind theme --tier official
+rich plugin info textcase                   # who publishes it, every version, permissions
+rich plugin install textcase                # shows what it is and asks first
+rich plugin browse                          # all of it in a selector</code></pre>
+    <p>The <a href="https://buchochelliq-labs.github.io/rs-rich-cli/latest/">rs-rich documentation</a>
+      has every <code>rich plugin</code> command, and the repository's README
+      says <a href="https://github.com/buchochelliq-labs/rs-rich-marketplace#submitting-a-listing">how to publish a package</a>.</p>
+  </section>
+</main>
+
+<footer class="site-footer">
+  <div class="wrap footer-inner">
+    <p>The rs-rich plugin marketplace. This site is built from
+      <a href="https://github.com/buchochelliq-labs/rs-rich-marketplace">buchochelliq-labs/rs-rich-marketplace</a>
+      and serves its signed <a href="index.json">index</a>, its
+      <a href="index.json.minisig">signature</a> and its
+      <a href="keys/keys-1.json">keys</a> as committed.</p>
+    <ul class="footer-links">
+      <li><a href="https://github.com/buchochelliq-labs/rs-rich-marketplace">Repository</a></li>
+      <li><a href="https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/categories/reviews">Reviews</a></li>
+      <li><a href="https://buchochelliq-labs.github.io/rs-rich-cli/latest/">rs-rich docs</a></li>
+      <li><a href="https://github.com/buchochelliq-labs/rs-rich-cli">rs-rich</a></li>
+    </ul>
+  </div>
+</footer>
+</body>
+</html>

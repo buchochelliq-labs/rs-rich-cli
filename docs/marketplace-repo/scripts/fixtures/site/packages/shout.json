@@ -1,0 +1,99 @@
+{
+  "schema_version": 1,
+  "id": "shout",
+  "kind": "wasm-plugin",
+  "name": "Shout",
+  "description": "Upper-cases text and draws `shout` fences in bold.",
+  "tier": "community",
+  "license": "MIT OR Apache-2.0",
+  "authors": [
+    "Example Author"
+  ],
+  "repository": "https://github.com/example/rich-shout",
+  "keywords": [
+    "transform",
+    "fence"
+  ],
+  "versions": [
+    {
+      "version": "0.2.0",
+      "published": "2026-10-18",
+      "requires": {
+        "abi": "1.0"
+      },
+      "artifact": {
+        "url": "https://github.com/example/rich-shout/releases/download/v0.2.0/shout.wasm",
+        "sha256": "502a134eeed6db37578e8279a656a1ed669b4c9ca7f1de564f4a5e1054a375a5",
+        "size": 2048
+      },
+      "source_revision": "e26c737c5e9741d94abfea61e9d2065c6b59f2e5",
+      "capabilities": [
+        {
+          "kind": "transform",
+          "name": "upper"
+        },
+        {
+          "kind": "fence-markup",
+          "name": "shout"
+        },
+        {
+          "kind": "fence-ansi",
+          "name": "shout-ansi"
+        }
+      ],
+      "permissions": [
+        "ansi-output"
+      ]
+    },
+    {
+      "version": "0.1.1",
+      "published": "2026-10-12",
+      "requires": {
+        "abi": "1.0"
+      },
+      "artifact": {
+        "url": "https://github.com/example/rich-shout/releases/download/v0.1.1/shout.wasm",
+        "sha256": "67801fdd61417dd8cdca7a653c37aa611a883db8701df39398a83c51bcfd4c27",
+        "size": 1536
+      },
+      "source_revision": "a11cbb361f5ebecf0cb93a9dd1bc633ffd7a2c03",
+      "capabilities": [
+        {
+          "kind": "transform",
+          "name": "upper"
+        },
+        {
+          "kind": "fence-markup",
+          "name": "shout"
+        }
+      ],
+      "permissions": [],
+      "yanked": true,
+      "yank_reason": "The `upper` transform drops combining marks; use 0.2.0."
+    },
+    {
+      "version": "0.1.0",
+      "published": "2026-10-01",
+      "requires": {
+        "abi": "1.0"
+      },
+      "artifact": {
+        "url": "https://github.com/example/rich-shout/releases/download/v0.1.0/shout.wasm",
+        "sha256": "1addaa2942ef28b124626777997af5ba8f957e32bd68414f0276a3f7c53938a9",
+        "size": 1490
+      },
+      "source_revision": "6daf914451f977633782345e42d17ea29525a766",
+      "capabilities": [
+        {
+          "kind": "transform",
+          "name": "upper"
+        },
+        {
+          "kind": "fence-markup",
+          "name": "shout"
+        }
+      ],
+      "permissions": []
+    }
+  ]
+}

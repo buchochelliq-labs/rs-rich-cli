@@ -1,0 +1,57 @@
+{
+  "schema_version": 1,
+  "id": "dot",
+  "kind": "crate",
+  "name": "DOT diagrams",
+  "description": "Draws Graphviz DOT graphs as text through rs-rich-diagram's layout, and ```dot and ```graphviz fences in Markdown.",
+  "tier": "official",
+  "license": "MIT",
+  "authors": [
+    "rs-rich contributors"
+  ],
+  "repository": "https://github.com/buchochelliq-labs/rs-rich-cli",
+  "homepage": "https://docs.rs/rs-rich-diagram",
+  "keywords": [
+    "diagram",
+    "dot",
+    "graphviz",
+    "fence"
+  ],
+  "crate": {
+    "name": "rs-rich-diagram",
+    "features": [
+      "plugin"
+    ]
+  },
+  "versions": [
+    {
+      "version": "0.0.5",
+      "published": "2026-10-26",
+      "requires": {
+        "plugin_api": 1
+      },
+      "artifact": {
+        "url": "https://static.crates.io/crates/rs-rich-diagram/rs-rich-diagram-0.0.5.crate",
+        "sha256": "06fd83118941dc5360f8cfb91404b3708c5d50a0594650e55376ae393c36e03e",
+        "size": 60089
+      },
+      "capabilities": [
+        {
+          "kind": "fence-renderer",
+          "name": "dot"
+        },
+        {
+          "kind": "fence-renderer",
+          "name": "graphviz"
+        },
+        {
+          "kind": "renderer",
+          "name": "dot"
+        }
+      ],
+      "permissions": [
+        "native-code"
+      ]
+    }
+  ]
+}

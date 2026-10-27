@@ -14,7 +14,10 @@ them could not push there. Copy them across as they are laid out:
 | `scripts/check_artifacts.py`, `scripts/marketplace_common.py` | the same |
 | `scripts/add_crate_version.py`, `scripts/test_scripts.py` | the same |
 | `scripts/github_api.py`, `publish_releases.py`, `stats.py`, `discussions.py` | the same |
-| `scripts/fixtures/` (the script tests' recorded responses and listings) | the same |
+| `scripts/fixtures/` (the script tests' recorded responses and listings; `site/`, the web site's fixture marketplace) | the same |
+| `.github/workflows/pages.yml`, `site-check.yml` | the same |
+| `scripts/build_site.py`, `scripts/check_site.mjs` | the same |
+| `site/` (the web site's search page, its script, styles, fonts and their licences) | the same |
 | `schemas/stats.schema.json` | the same |
 | `.gitattributes`, `.gitignore` | the same |
 
@@ -70,6 +73,23 @@ reserved id, an id that looks like an official one, and "official" or
 maintainer adds the `name-approved` label. Adding, changing or removing a listing's `recommended`
 (★ Recommended) needs a maintainer's `recommended-approved` label, a
 separate one from `tier-approved`.
+
+The marketplace also has its own web site,
+[buchochelliq-labs.github.io/rs-rich-marketplace](https://buchochelliq-labs.github.io/rs-rich-marketplace/),
+which searches and filters the index in the browser. It is only a viewer:
+`rich plugin install` verifies the index's signature. Two workflows look
+after it, with no secret:
+
+- `pages.yml`, after a push to main that touches `site/`, the index, its
+  signature or `keys/` (the signer's commits included), and by hand:
+  `scripts/build_site.py` assembles `site/` with the signed index as
+  committed, its signature, `keys/` and each listing as the index signed
+  it, and the job publishes that to GitHub Pages (`pages: write`,
+  `id-token: write`, the `github-pages` environment).
+- `site-check.yml`, on each pull request that changes the site:
+  `scripts/check_site.mjs` tests the page in headless Chromium, against
+  the fixture marketplace in `scripts/fixtures/site/` and the site as
+  built.
 
 ## Installing it
 
@@ -170,6 +190,11 @@ separate one from `tier-approved`.
    (Done: the `live-0.0.23` pull request was merged on 2026-10-26.)
    Approve the run. The first index has serial 1; `rich plugin search`
    then works with no setting.
+
+11. **Turn on Pages:** Settings, Pages, Build and deployment, Source:
+   **GitHub Actions**. Then run **Pages** once by hand (Actions, Pages, Run
+   workflow); after that it runs on every push to main that changes
+   `site/`, the index, its signature or `keys/`.
 
 ## Rotating a key
 

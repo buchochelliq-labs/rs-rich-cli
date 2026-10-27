@@ -1,0 +1,31 @@
+{
+  "schema_version": 1,
+  "id": "solarized",
+  "kind": "theme",
+  "name": "Solarized",
+  "description": "Solarized colours for rich's default styles.",
+  "tier": "community",
+  "license": "MIT",
+  "repository": "https://github.com/example/rich-solarized",
+  "versions": [
+    {
+      "version": "1.2.0",
+      "published": "2026-09-30",
+      "requires": {
+        "theme_format": 1
+      },
+      "artifact": {
+        "url": "https://github.com/example/rich-solarized/releases/download/v1.2.0/solarized.ini",
+        "sha256": "715b96b3d22120e27809e118fc9041bc4c5b4d2ecb09894c13ce215a182161a9",
+        "size": 4096
+      },
+      "capabilities": [
+        {
+          "kind": "theme",
+          "name": "solarized"
+        }
+      ],
+      "permissions": []
+    }
+  ]
+}
