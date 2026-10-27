@@ -1,10 +1,11 @@
 {
   "tape": "docs/tapes/live/real-github.tape",
-  "tape_fnv1a64": "162872d86d7bd7ec",
+  "tape_fnv1a64": "e682a1e29266ec03",
   "recorder": "rs-rich-record 0.0.11",
   "rich": "rich (rs-rich-cli) 0.0.23",
   "commit": null,
   "screenshots": [
+    "github-projection",
     "github-readme"
   ],
   "note": "Every frame is real output of the program under test on a PTY.",

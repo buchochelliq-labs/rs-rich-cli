@@ -1,5 +1,5 @@
-# Noctiluca on GitHub (live): this repository's page, read in reader mode
-# down to its README.
+# Noctiluca on GitHub (live): this repository's page in the projection,
+# with GitHub's styles, then in reader mode down to its README.
 # A live site: it changes every day, so CI never runs or checks this tape
 # (its tape job checks only docs/tapes/*.tape). Re-record it by hand, as
 # docs/guide/noctiluca/real-sites.md says: as a normal user, with Chrome
@@ -12,10 +12,14 @@ Set Size 120x40
 Set TypingDelay 40ms
 Set Timeout 90s
 Output png
-Type "noctiluca --reader --images kitty https://github.com/buchochelliq-labs/rs-rich-cli"
+Type "noctiluca --images kitty https://github.com/buchochelliq-labs/rs-rich-cli"
 Enter
 Wait /rs-rich-cli/
-Sleep 8s
+Sleep 10s
+Screenshot github-projection
+Type "r"
+Wait /READER/
+Sleep 3s
 Type "/"
 Wait /Find in page/
 Type "Install and try"

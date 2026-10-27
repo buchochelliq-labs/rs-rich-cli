@@ -1,19 +1,19 @@
  NOCTILUCA   PROJECTION + SIXEL   ◀▶   Array.prototype.map() - JavaScript | MDN
  https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map
-                                                 Skip to main content                                                  ┃
-                                                    Skip to search                                              AD     ┃
-                                                                                                       Don't want to se│
-                                                                                                       ads?            │
+                                                                                                                       ┃
+                                                                                                                       ┃
                                                                                                                        │
                                                                                                                        │
                                                                                                                        │
+                                       [Search the site]                             [Toggle navigation]               │
+ MDN░░░░░░░░                                                                                                           │
                                                                                                                        │
-                                                                                                                       │
-                                                                                                                       │
-                                    Array.prototype.map()                                                              │
-                                                                                                                       │
-                                                                                                                       │
-                                                                                                                       │
+[Toggle sidebar]            Reference    Standard built-in objects Array    map()                 [Switch color theme] │
+       Web    JavaScript                                                                                               │
+In this article Try it Syntax       Array.prototype.map()                                                              │
+Description Examples                                                                                                   │
+Specifications Browser                                                                                                 │
+compatibility See also                                                                                                 │
                                                                                                                        │
                                     ▀▀▀▀▀               Baseline            WIDELY AVAILABLE                           │
                                                                                                                        │
@@ -23,18 +23,18 @@
                                                                                                                        │
                                                                                                                        │
                                                                                                                        │
-                                      See full compatibility                                                           │
-                                      This feature is well established and works across many devices and browser       │
-                                      versions. It’s been available across browsers since July 2015.                   │
+                                                                                                                       │
+                                                                                                                       │
                                     The map() method of Array instances creates a new array populated with the results │
                                     of calling a provided function on every element in the calling array.              │
-                                                                          L Try it                                     │
-                                                                          e 1                                          │
-                                                                          a 2                                          │
-                                                                          r 3                                          │
-                                                                          n 4                                          │
-                                                                          m 5  const array = [1, 4, 9, 16];// Pass a fu│
-                                                                          o 6                                          │
-                                                                          r                                            │
- projection | row 1/616
+                                                                                                                       │
+                                     JavaScript Demo: Array.prototype.map() Try it                                     │
+                                                                            1                                          │
+                                                                            2                                          │
+                                                                            3                                          │
+                                                                            4                                          │
+                                                                            5 const array = [1, 4, 9, 16];// Pass a fun│
+                                                                            6                                          │
+                                                                                                                       │
+ projection | row 1/608
  f1 actions | f hints | o open | r reader | q quit

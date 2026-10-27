@@ -1,10 +1,10 @@
  NOCTILUCA   PROJECTION + KITTY   ◀▶   astronomiemuseum - Twitch
  https://www.twitch.tv/astronomiemuseum
-[Skip to... Alt P]            Search Input [_]                            [Search Button]  34                          ┃
+ ░░░░░                        Search Input [_]                            [Search Button]  34                          ┃
  ░░░░░ Browse  [More Options]                                                                      [Prime offers] [Log ┃
- ░░░░░                                                                                                                 ┃
-  L…                                                                           [Collapse Chat]Stream Chat              ┃
-                                                                                                                       ┃
+                                                                                                                   [Sig┃
+  L…                                                                           [Collapse Chat]Stream Chat          [Use┃
+                                                                    LIVE                                     [Community┃
                                                                               Welcome to astronomiemuseum's chat room! ┃
                                                                                                                        ┃
                                                                                                                        ┃
@@ -18,7 +18,7 @@
                                                                                                                        │
                                                                                                                        │
                                                                                                                        │
-                                                                                             [Theatre Mode (alt+t)][Ful│
+                                                                                              [Theatre Mode (alt+t)][Fu│
                                                                                                                        │
                                                                                                                        │
                                                                                                                        │
@@ -31,10 +31,10 @@
                                                                                                                        │
                                                                                                                        │
                                                                                                                        │
-      [ Play ]                                                                                                         │
-     Use the Right Arrow Key to show more information.              LIVE                                               │
      Use the Right Arrow Key to show more information.       [Follow astronomiemuseum]                                 │
-     Use the     astronomiemuseum                              ░░░4 39:10:27       [Settings]                          │
-     Right       Science & Technology                          4 viewers   [More options]                              │
- projection | media PAUSED 0:00 / live | sound off (--audio) | row 1/111
+     Use the Right Arrow Key to show more information.         ░░░4 40:01:40        [Settings]                         │
+     Use the     astronomiemuseum                              4 viewers   [More options]                              │
+     Right       Science & Technology                               [Share]                                            │
+     Arrow Key          [Mute (m)]                                 40:01:40                                            │
+ projection | media PLAYING 0:13 / live | sound off (--audio) | row 1/110
  f1 actions | f hints | o open | r reader | p play/pause | [/] seek | alt+m mute | q quit
