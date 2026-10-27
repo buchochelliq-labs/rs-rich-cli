@@ -38,41 +38,100 @@ pub fn resolve_location(base: &str, location: &str) -> Option<String> {
     }
     let authority_end = rest.find(['/', '?', '#']).unwrap_or(rest.len());
     let (authority, path) = rest.split_at(authority_end);
-    if location.starts_with('/') {
-        return Some(format!("{scheme}://{authority}{location}"));
-    }
     let path = path.split(['?', '#']).next().unwrap_or("");
     if location.starts_with(['?', '#']) {
         // Only a query or fragment: on `base`'s own path.
         return Some(format!("{scheme}://{authority}{path}{location}"));
     }
-    // A relative reference: beside the last segment of `base`'s path.
-    let directory = match path.rfind('/') {
-        Some(slash) => &path[..=slash],
-        None => "/",
+    let (target, tail) = location.split_at(location.find(['?', '#']).unwrap_or(location.len()));
+    let merged = if target.starts_with('/') {
+        target.to_string()
+    } else {
+        // A relative reference: beside the last segment of `base`'s path.
+        let directory = match path.rfind('/') {
+            Some(slash) => &path[..=slash],
+            None => "/",
+        };
+        format!("{directory}{target}")
     };
-    Some(format!("{scheme}://{authority}{directory}{location}"))
+    Some(format!(
+        "{scheme}://{authority}{}{tail}",
+        remove_dot_segments(&merged)
+    ))
+}
+
+/// RFC 3986's `remove_dot_segments` (section 5.2.4) on an absolute path:
+/// `.` segments go, and `..` takes the segment before it with it.
+fn remove_dot_segments(path: &str) -> String {
+    let mut out: Vec<&str> = Vec::new();
+    let segments: Vec<&str> = path.split('/').skip(1).collect();
+    let last = segments.len().saturating_sub(1);
+    for (i, segment) in segments.iter().enumerate() {
+        match *segment {
+            "." => {
+                if i == last {
+                    out.push("");
+                }
+            }
+            ".." => {
+                out.pop();
+                if i == last {
+                    out.push("");
+                }
+            }
+            other => out.push(other),
+        }
+    }
+    format!("/{}", out.join("/"))
+}
+
+/// The time left to a redirect chain: [`get_following`] starts it, and each
+/// request (a fallback attempt and the body read included) gets only what
+/// remains, so the chain as a whole keeps to one overall timeout.
+#[derive(Clone, Copy, Debug)]
+pub struct Deadline(std::time::Instant);
+
+impl Deadline {
+    /// A deadline `budget` from now.
+    pub fn after(budget: std::time::Duration) -> Deadline {
+        Deadline(std::time::Instant::now() + budget)
+    }
+
+    /// The time left, or ureq's global timeout error once none is.
+    pub fn remaining(&self) -> Result<std::time::Duration, ureq::Error> {
+        let left = self.0.saturating_duration_since(std::time::Instant::now());
+        if left.is_zero() {
+            Err(ureq::Error::Timeout(ureq::Timeout::Global))
+        } else {
+            Ok(left)
+        }
+    }
 }
 
 /// GET `url` through `hop`, which makes one request with ureq's own
-/// redirects off (`max_redirects(0)`), and follow at most `max_redirects`
-/// redirects here. With `https_only`, a redirect to anything but
-/// `https://` is [`ureq::Error::RequireHttpsOnly`]; one hop too many is
-/// [`ureq::Error::TooManyRedirects`]. A redirect without a `Location` is
-/// returned as it is, as ureq does.
+/// redirects off (`max_redirects(0)`) and its global timeout set to the
+/// [`Deadline::remaining`] time, and follow at most `max_redirects`
+/// redirects here, all within `budget`. With `https_only`, a redirect to
+/// anything but `https://` is [`ureq::Error::RequireHttpsOnly`]; one hop
+/// too many is [`ureq::Error::TooManyRedirects`]; a chain past its budget
+/// is ureq's global timeout. A redirect without a `Location` is returned
+/// as it is, as ureq does.
 pub fn get_following<E>(
     url: &str,
     max_redirects: u32,
     https_only: bool,
-    mut hop: impl FnMut(&str) -> Result<ureq::http::Response<ureq::Body>, E>,
+    budget: std::time::Duration,
+    mut hop: impl FnMut(&str, Deadline) -> Result<ureq::http::Response<ureq::Body>, E>,
 ) -> Result<ureq::http::Response<ureq::Body>, E>
 where
     E: From<ureq::Error>,
 {
+    let deadline = Deadline::after(budget);
     let mut current = url.to_string();
     let mut redirects = 0;
     loop {
-        let response = hop(&current)?;
+        deadline.remaining()?;
+        let response = hop(&current, deadline)?;
         if !is_redirect(response.status().as_u16()) {
             return Ok(response);
         }
@@ -107,6 +166,8 @@ where
 mod tests {
     use super::*;
 
+    const BUDGET: std::time::Duration = std::time::Duration::from_secs(60);
+
     fn response(status: u16, location: Option<&str>) -> ureq::http::Response<ureq::Body> {
         let mut builder = ureq::http::Response::builder().status(status);
         if let Some(location) = location {
@@ -138,13 +199,51 @@ mod tests {
             resolve_location("https://host.test", "a").as_deref(),
             Some("https://host.test/a")
         );
+        // Dot segments are removed (RFC 3986, 5.2.4), the query kept.
+        let base = "https://host.test/releases/v1/index.json";
+        for (location, expected) in [
+            ("../asset.ini", "https://host.test/releases/asset.ini"),
+            ("./a/../b?x=../y", "https://host.test/releases/v1/b?x=../y"),
+            ("/a/./b/../c", "https://host.test/a/c"),
+            ("../../../..", "https://host.test/"),
+            ("..", "https://host.test/releases/"),
+            ("sub/.", "https://host.test/releases/v1/sub/"),
+        ] {
+            assert_eq!(
+                resolve_location(base, location).as_deref(),
+                Some(expected),
+                "{location}"
+            );
+        }
+    }
+
+    #[test]
+    fn a_chain_keeps_to_one_budget() {
+        // Each hop sees less time than the last, and a chain past its
+        // budget stops with the global timeout, not one more request.
+        let mut seen = Vec::new();
+        let error = get_following(
+            "https://a.test/x",
+            10,
+            true,
+            std::time::Duration::from_millis(120),
+            |_, deadline| {
+                seen.push(deadline.remaining()?);
+                std::thread::sleep(std::time::Duration::from_millis(50));
+                Ok::<_, ureq::Error>(response(302, Some("/again")))
+            },
+        )
+        .unwrap_err();
+        assert!(matches!(error, ureq::Error::Timeout(ureq::Timeout::Global)));
+        assert!(seen.len() <= 3, "{seen:?}");
+        assert!(seen.windows(2).all(|w| w[1] < w[0]), "{seen:?}");
     }
 
     #[test]
     fn redirects_are_followed_within_the_rules() {
         // Two hops, then the body.
         let mut asked = Vec::new();
-        let got = get_following("https://a.test/x", 5, true, |url| {
+        let got = get_following("https://a.test/x", 5, true, BUDGET, |url, _| {
             asked.push(url.to_string());
             Ok::<_, ureq::Error>(match url {
                 "https://a.test/x" => response(302, Some("/y")),
@@ -160,13 +259,13 @@ mod tests {
         );
 
         // HTTPS only refuses a downgrade.
-        let error = get_following("https://a.test/x", 5, true, |_| {
+        let error = get_following("https://a.test/x", 5, true, BUDGET, |_, _| {
             Ok::<_, ureq::Error>(response(302, Some("http://a.test/y")))
         })
         .unwrap_err();
         assert!(matches!(error, ureq::Error::RequireHttpsOnly(ref u) if u == "http://a.test/y"));
         // Without it, the downgrade is followed.
-        let got = get_following("https://a.test/x", 5, false, |url| {
+        let got = get_following("https://a.test/x", 5, false, BUDGET, |url, _| {
             Ok::<_, ureq::Error>(if url.starts_with("https") {
                 response(302, Some("http://a.test/y"))
             } else {
@@ -178,7 +277,7 @@ mod tests {
 
         // One hop past the limit.
         let mut hops = 0;
-        let error = get_following("https://a.test/x", 2, true, |_| {
+        let error = get_following("https://a.test/x", 2, true, BUDGET, |_, _| {
             hops += 1;
             Ok::<_, ureq::Error>(response(307, Some("/again")))
         })
@@ -188,7 +287,7 @@ mod tests {
 
         // A redirect without a location, or another status, is the answer.
         for (status, location) in [(302, None), (404, Some("/elsewhere")), (304, Some("/x"))] {
-            let got = get_following("https://a.test/x", 5, true, |_| {
+            let got = get_following("https://a.test/x", 5, true, BUDGET, |_, _| {
                 Ok::<_, ureq::Error>(response(status, location))
             })
             .unwrap();

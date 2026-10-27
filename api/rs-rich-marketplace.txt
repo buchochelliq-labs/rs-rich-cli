@@ -1,7 +1,23 @@
 pub mod rich_marketplace
 pub use rich_marketplace::semver
 pub mod rich_marketplace::redirect
-pub fn rich_marketplace::redirect::get_following<E>(&str, u32, bool, impl core::ops::function::FnMut(&str) -> core::result::Result<http::response::Response<ureq::body::Body>, E>) -> core::result::Result<http::response::Response<ureq::body::Body>, E> where E: core::convert::From<ureq::error::Error>
+pub struct rich_marketplace::redirect::Deadline(_)
+impl rich_marketplace::redirect::Deadline
+pub fn rich_marketplace::redirect::Deadline::after(core::time::Duration) -> rich_marketplace::redirect::Deadline
+pub fn rich_marketplace::redirect::Deadline::remaining(&self) -> core::result::Result<core::time::Duration, ureq::error::Error>
+impl core::clone::Clone for rich_marketplace::redirect::Deadline
+pub fn rich_marketplace::redirect::Deadline::clone(&self) -> rich_marketplace::redirect::Deadline
+impl core::fmt::Debug for rich_marketplace::redirect::Deadline
+pub fn rich_marketplace::redirect::Deadline::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_marketplace::redirect::Deadline
+impl core::marker::Freeze for rich_marketplace::redirect::Deadline
+impl core::marker::Send for rich_marketplace::redirect::Deadline
+impl core::marker::Sync for rich_marketplace::redirect::Deadline
+impl core::marker::Unpin for rich_marketplace::redirect::Deadline
+impl core::marker::UnsafeUnpin for rich_marketplace::redirect::Deadline
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::redirect::Deadline
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::redirect::Deadline
+pub fn rich_marketplace::redirect::get_following<E>(&str, u32, bool, core::time::Duration, impl core::ops::function::FnMut(&str, rich_marketplace::redirect::Deadline) -> core::result::Result<http::response::Response<ureq::body::Body>, E>) -> core::result::Result<http::response::Response<ureq::body::Body>, E> where E: core::convert::From<ureq::error::Error>
 pub fn rich_marketplace::redirect::resolve_location(&str, &str) -> core::option::Option<alloc::string::String>
 pub mod rich_marketplace::tls
 #[non_exhaustive] pub enum rich_marketplace::tls::Trust

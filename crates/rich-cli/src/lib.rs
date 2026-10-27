@@ -3568,21 +3568,24 @@ fn fetch_url(url: &str, encoding: Option<Encoding>) -> Result<(String, Option<St
     use std::time::Duration;
     // Redirects (ten, as `requests` and ureq allow) are followed one request
     // at a time: `rich_marketplace::redirect` says why.
-    let mut response = rich_marketplace::redirect::get_following(url, 10, false, |hop| {
-        rich_marketplace::tls::with_fallback(|trust| {
-            ureq::get(hop)
-                .config()
-                .timeout_global(Some(Duration::from_secs(30)))
-                // Match `requests.get`: don't turn 4xx/5xx into an error, so the
-                // response body (often a useful error page) is rendered instead.
-                .http_status_as_error(false)
-                .max_redirects(0)
-                .tls_config(trust.tls_config())
-                .build()
-                .call()
+    let budget = Duration::from_secs(30);
+    let mut response =
+        rich_marketplace::redirect::get_following(url, 10, false, budget, |hop, deadline| {
+            rich_marketplace::tls::with_fallback(|trust| {
+                ureq::get(hop)
+                    .config()
+                    // One 30-second budget for the whole chain and its body.
+                    .timeout_global(Some(deadline.remaining()?))
+                    // Match `requests.get`: don't turn 4xx/5xx into an error, so the
+                    // response body (often a useful error page) is rendered instead.
+                    .http_status_as_error(false)
+                    .max_redirects(0)
+                    .tls_config(trust.tls_config())
+                    .build()
+                    .call()
+            })
         })
-    })
-    .map_err(|err| format!("cannot fetch {url}: {err}"))?;
+        .map_err(|err| format!("cannot fetch {url}: {err}"))?;
     let content_type = response
         .headers()
         .get("content-type")

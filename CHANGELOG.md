@@ -33,7 +33,9 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   level. The new `rich_marketplace::tls` module (`Trust`, `with_fallback`)
   is the one place that chooses. Redirects are now followed one request at
   a time (`rich_marketplace::redirect`), with the same limits and
-  HTTPS-only rule: ureq's own redirect handling took a redirect whose
+  HTTPS-only rule, relative `Location`s resolved with RFC 3986's dot-segment
+  removal, and one overall timeout for the whole chain and its body (each
+  request gets only what remains: `redirect::Deadline`): ureq's own redirect handling took a redirect whose
   header block had not finished arriving, and through such a proxy GitHub's
   release downloads then failed with `chunk length cannot be read as a
   number`. Signatures and SHA-256 pins are checked as before: TLS is

@@ -75,17 +75,21 @@ impl Transport for MemoryTransport {
     }
 }
 
-/// Downloads with ureq (rustls): HTTPS only, redirects included, a
-/// 60-second overall timeout, and the body read to at most `max_bytes`
-/// after any content decoding. The system's certificate store is trusted
-/// first and Mozilla's bundled roots are the fallback ([`crate::tls`]);
-/// redirects (at most five) are followed by [`crate::redirect`], not by
-/// ureq.
 /// The redirects [`HttpsTransport`] follows (GitHub's release downloads
 /// take one).
 #[cfg(feature = "http")]
 const MAX_REDIRECTS: u32 = 5;
 
+/// How long one download may take, its redirects and body included.
+#[cfg(feature = "http")]
+const OVERALL_TIMEOUT: std::time::Duration = std::time::Duration::from_secs(60);
+
+/// Downloads with ureq (rustls): HTTPS only, redirects included, a
+/// 60-second overall timeout for the whole chain, and the body read to at
+/// most `max_bytes` after any content decoding. The system's certificate
+/// store is trusted first and Mozilla's bundled roots are the fallback
+/// ([`crate::tls`]); redirects (at most five) are followed by
+/// [`crate::redirect`], not by ureq.
 #[cfg(feature = "http")]
 #[derive(Debug)]
 pub struct HttpsTransport {
@@ -102,7 +106,7 @@ impl HttpsTransport {
                 .https_only(true)
                 // Followed by `redirect::get_following`, five at most.
                 .max_redirects(0)
-                .timeout_global(Some(std::time::Duration::from_secs(60)))
+                .timeout_global(Some(OVERALL_TIMEOUT))
                 .user_agent(concat!("rs-rich-marketplace/", env!("CARGO_PKG_VERSION")))
                 .tls_config(trust.tls_config())
                 .build();
@@ -138,9 +142,22 @@ impl Transport for HttpsTransport {
             url: url.to_string(),
             message,
         };
-        let mut response = crate::redirect::get_following(url, MAX_REDIRECTS, true, |hop| {
-            crate::tls::with_fallback(|trust| self.agent(trust).get(hop).call())
-        })
+        let mut response = crate::redirect::get_following(
+            url,
+            MAX_REDIRECTS,
+            true,
+            OVERALL_TIMEOUT,
+            |hop, deadline| {
+                crate::tls::with_fallback(|trust| {
+                    self.agent(trust)
+                        .get(hop)
+                        .config()
+                        .timeout_global(Some(deadline.remaining()?))
+                        .build()
+                        .call()
+                })
+            },
+        )
         .map_err(|e| match e.last() {
             ureq::Error::StatusCode(status) => FetchError::Status {
                 url: url.to_string(),
