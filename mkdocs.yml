@@ -220,6 +220,7 @@ nav:
       - Using it as a library: guide/noctiluca/library.md
       - Troubleshooting and FAQ: guide/noctiluca/troubleshooting.md
       - "What works today and what's next": guide/noctiluca/status.md
+      - Noctiluca on real sites: guide/noctiluca/real-sites.md
   - Gallery: gallery.md
   - Terminal recordings: recordings.md
   - CLI and art videos: demos.md

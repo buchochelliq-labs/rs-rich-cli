@@ -824,7 +824,9 @@ Three more tapes over the same saved pages show
 [`tapes/live/noctiluca-chrome.tape`](tapes/live/noctiluca-chrome.tape),
 runs a real Chrome on the crate's test pages, served from `127.0.0.1`. The
 tape job runs no browser, so that one is recorded by hand and not checked;
-its header says how. All of them are on
+its header says how. So are the tapes beside it that open real sites
+(Wikipedia, Hacker News, MDN and others), shown on
+[Noctiluca on real sites](guide/noctiluca/real-sites.md). All of them are on
 [Noctiluca's guide pages](guide/noctiluca.md).
 
 ## Charts from data

@@ -9,6 +9,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **Noctiluca on real sites** (docs; noctiluca): a gallery page of
+  Wikipedia, Hacker News, MDN, The Guardian, GitHub, YouTube and Twitch,
+  recorded live from hand-run tapes in `docs/tapes/live/` (not checked by
+  CI). Recording them fixed four noctiluca bugs: pages laid out with nested
+  tables lost their text, footers were drawn at the top of the projection,
+  The Guardian's front page was read as one live log, and find panicked
+  after a non-ASCII character.
+
 - **Fuzz targets, run nightly** (repository; rs-rich): `fuzz/` holds
   cargo-fuzz targets for every parser that takes outside input (markup,
   ANSI, Markdown, JSON, DOT, Mermaid, CSV/TSV and JSONL, stylesheets, the
