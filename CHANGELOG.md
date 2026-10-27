@@ -43,10 +43,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and on macOS and Windows security-framework, core-foundation and
   schannel.
 
-- **WASM plugin tests run optimised in CI** (repository). CI's `wasm` job
-  also runs rs-rich-ext's WASM plugin tests and the CLI's marketplace and
-  official-artifact tests with `--release`, where the stack overflow the
-  fuzz targets found showed (it did not in debug builds).
+- **WASM plugin tests run optimised in CI** (repository). A new
+  `wasm-plugins-release` job, required by `ci-ok`, runs rs-rich-ext's WASM
+  plugin tests and the CLI's marketplace, official-artifact and plugin
+  tests with `--release`, where the stack overflow the fuzz targets found
+  showed (it did not in debug builds).
 
 - **Fuzz targets, run nightly** (repository; rs-rich): `fuzz/` holds
   cargo-fuzz targets for every parser that takes outside input (markup,
