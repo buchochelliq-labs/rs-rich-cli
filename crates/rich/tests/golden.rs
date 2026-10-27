@@ -2138,6 +2138,56 @@ fn markdown_options_parity() {
     assert_eq!(checked, 8, "expected every markdown options case to run");
 }
 
+/// `Markdown` under a console theme, checked against upstream: every
+/// `markdown.*` style is looked up in the console's theme as upstream's
+/// `console.get_style` does, a theme entry replaces the default outright
+/// (attributes only means no colour), and a theme that does not inherit
+/// leaves the other names null.
+#[test]
+fn markdown_theme_parity() {
+    let data = include_str!("golden/markdown_theme.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fields: Vec<&str> = line.splitn(6, '\t').collect();
+        let [name, source, styles, inherit, hyperlinks, expected] = fields[..] else {
+            panic!("line {}: expected six fields", index + 1);
+        };
+        let source: String = serde_json::from_str(source).expect("source json");
+        let styles: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(styles).expect("styles json");
+        let expected: String = serde_json::from_str(expected).expect("expected json");
+        let theme = rich::theme::Theme::from_styles(
+            styles
+                .iter()
+                .map(|(name, style)| (name.clone(), style.as_str().expect("style").to_string())),
+            inherit == "true",
+        )
+        .expect("fixture styles parse");
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(50)
+            .highlight(false)
+            .no_color(false)
+            .theme(theme)
+            .build();
+        let markdown = Markdown::new(&source).hyperlinks(hyperlinks == "true");
+        let got = console.capture(|c| c.print(&markdown));
+        assert_eq!(
+            got,
+            expected,
+            "markdown theme case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 5, "expected every markdown theme case to run");
+}
+
 /// `ProgressBar` against upstream: determinate, pulse, ASCII and no-colour.
 /// Data-driven: each fixture line carries its own case.
 #[test]

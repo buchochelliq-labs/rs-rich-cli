@@ -28,17 +28,92 @@ use crate::syntax::Syntax;
 use crate::table::Table;
 use crate::text::Text;
 
-const CODE_STYLE: &str = "bold cyan on black"; // markdown.code
-const QUOTE_STYLE: &str = "magenta"; // markdown.block_quote
 /// The placeholder upstream's `ImageItem` puts in front of an image
 /// (`Text.assemble("🌆 ", title, " ")`). U+1F306 measures two cells.
 const IMAGE_MARKER: &str = "\u{1f306} ";
-const BULLET: &str = " \u{2022} "; // " • ", markdown.item.bullet = bold
-const QUOTE_PREFIX: &str = "\u{258c} "; // "▌ ", markdown.block_quote = magenta
-const LINK_STYLE: &str = "bright_blue"; // markdown.link
-const LINK_URL_STYLE: &str = "underline blue"; // markdown.link_url
-const TABLE_BORDER_STYLE: &str = "cyan"; // markdown.table.border
-const TABLE_HEADER_STYLE: &str = "not bold cyan"; // markdown.table.header
+const BULLET: &str = " \u{2022} "; // " • ", in markdown.item.bullet
+const QUOTE_PREFIX: &str = "\u{258c} "; // "▌ ", in markdown.block_quote
+
+/// The `markdown.*` styles upstream's renderer reads, each resolved as
+/// upstream resolves it: `console.get_style(name, default="none")` against the
+/// console's theme, so a theme's entries reach the document and a name the
+/// theme lacks is the null style. `markdown.code_block`, `markdown.list`,
+/// `markdown.text`, `markdown.emph`, `markdown.h1.border` and `markdown.h7`
+/// are in the default theme but nothing in rich 15.0.0's `markdown.py` shows
+/// them (a code block renders its source through `Syntax`).
+#[derive(Clone, Debug, PartialEq)]
+struct MarkdownStyles {
+    /// `Paragraph.style_name`.
+    paragraph: Style,
+    /// `markdown.h1` … `markdown.h6`, `Heading.style_name`.
+    headings: [Style; 6],
+    /// `BlockQuote.style_name`.
+    block_quote: Style,
+    /// `ListItem.style_name`.
+    item: Style,
+    item_bullet: Style,
+    item_number: Style,
+    hr: Style,
+    /// The inline tags: `markdown.em`, `markdown.strong`, `markdown.code`,
+    /// `markdown.s`.
+    em: Style,
+    strong: Style,
+    code: Style,
+    s: Style,
+    /// `<kbd>`, read with `default="bold"`.
+    kbd: Style,
+    link: Style,
+    link_url: Style,
+    table_border: Style,
+    table_header: Style,
+}
+
+impl MarkdownStyles {
+    fn resolve(theme: &crate::theme::Theme) -> Self {
+        let get =
+            |name: &str| theme.get_style_or_null(&crate::style::StyleType::Name(name.to_string()));
+        MarkdownStyles {
+            paragraph: get("markdown.paragraph"),
+            headings: std::array::from_fn(|index| get(&format!("markdown.h{}", index + 1))),
+            block_quote: get("markdown.block_quote"),
+            item: get("markdown.item"),
+            item_bullet: get("markdown.item.bullet"),
+            item_number: get("markdown.item.number"),
+            hr: get("markdown.hr"),
+            em: get("markdown.em"),
+            strong: get("markdown.strong"),
+            code: get("markdown.code"),
+            s: get("markdown.s"),
+            // `get_style("markdown.kbd", default="bold")`: the default is only
+            // used for a name that neither the theme nor `Style.parse` knows,
+            // and `markdown.kbd` never parses.
+            kbd: theme
+                .get_style(&crate::style::StyleType::Name("markdown.kbd".to_string()))
+                .unwrap_or_else(|_| Style::parse("bold").expect("valid style")),
+            link: get("markdown.link"),
+            link_url: get("markdown.link_url"),
+            table_border: get("markdown.table.border"),
+            table_header: get("markdown.table.header"),
+        }
+    }
+
+    /// The styles of upstream's default theme, which a document is parsed
+    /// with until a console with another theme renders it.
+    fn default_theme() -> &'static MarkdownStyles {
+        static DEFAULT: std::sync::OnceLock<MarkdownStyles> = std::sync::OnceLock::new();
+        DEFAULT.get_or_init(|| MarkdownStyles::resolve(crate::theme::Theme::default_shared()))
+    }
+}
+
+/// `StyleStack.push`: `style` over `base`. A null style changes nothing, so
+/// pushing one leaves no base at all as no base.
+fn push_style(base: Option<&Style>, style: &Style) -> Option<Style> {
+    match base {
+        Some(base) => Some(base.combine(style)),
+        None if style.is_null() => None,
+        None => Some(style.clone()),
+    }
+}
 
 /// One item of a list. An item is a **container**: it holds whatever blocks it
 /// contains — paragraphs, code, tables, quotes, further lists — not a single
@@ -212,7 +287,7 @@ impl Markdown {
         let options = MarkdownOptions::default();
         Markdown {
             source: source.to_string(),
-            blocks: parse(source, &options),
+            blocks: parse(source, &options, MarkdownStyles::default_theme()),
             options,
         }
     }
@@ -300,7 +375,7 @@ impl Markdown {
     }
 
     fn reparse(mut self) -> Self {
-        self.blocks = parse(&self.source, &self.options);
+        self.blocks = parse(&self.source, &self.options, MarkdownStyles::default_theme());
         self
     }
 }
@@ -316,50 +391,62 @@ fn heading_level(level: HeadingLevel) -> usize {
     }
 }
 
-/// `(base style, justify)` for a heading level (`default_styles.py` +
-/// `Heading.LEVEL_ALIGN`).
-fn heading_format(level: usize) -> (Style, Justify) {
-    let (spec, justify) = match level {
-        1 => ("bold underline", Justify::Center),
-        2 => ("underline magenta", Justify::Left),
-        3 => ("bold magenta", Justify::Left),
-        4 => ("italic magenta", Justify::Left),
-        5 => ("italic", Justify::Left),
-        _ => ("dim", Justify::Left),
-    };
-    (Style::parse(spec).unwrap_or_default(), justify)
+/// `Heading.LEVEL_ALIGN`: h1 is centred, every other level left-aligned.
+fn heading_justify(level: usize) -> Justify {
+    if level == 1 {
+        Justify::Center
+    } else {
+        Justify::Left
+    }
 }
 
-fn inline_style(strong: usize, emphasis: usize, strike: usize) -> Option<Style> {
-    if strong == 0 && emphasis == 0 && strike == 0 {
-        return None;
+/// An inline style open on upstream's style stack, so its closing tag pops it.
+#[derive(Clone, Copy, PartialEq)]
+enum Inline {
+    Strong,
+    Emphasis,
+    Strike,
+    /// `link_open` with `hyperlinks=True`: `markdown.link_url` plus the target.
+    Link,
+    /// `<kbd>`.
+    Kbd,
+}
+
+/// Pop the innermost open `kind`. Upstream's `leave_style` pops the top of
+/// the stack, which is the same entry whenever the tags nest.
+fn leave_inline(inline: &mut Vec<(Inline, Style)>, kind: Inline) {
+    if let Some(index) = inline.iter().rposition(|(open, _)| *open == kind) {
+        inline.remove(index);
     }
-    let mut style = Style::new();
-    if strong > 0 {
-        style = style.combine(&Style::parse("bold").expect("valid style"));
-    }
-    if emphasis > 0 {
-        style = style.combine(&Style::parse("italic").expect("valid style"));
-    }
-    if strike > 0 {
-        // `markdown.s` in upstream's default theme.
-        style = style.combine(&Style::parse("strike").expect("valid style"));
-    }
-    Some(style)
 }
 
 /// `markdown.link_url` plus the OSC 8 target, which is what upstream pushes for
-/// a link when `hyperlinks=True`.
+/// a link when `hyperlinks=True` (`link_style += Style(link=href)`).
 ///
 /// An empty destination (`[k]()`) gives no OSC 8 at all: upstream's
 /// `Style(link="")` renders no hyperlink, as its link is falsy.
-fn link_style(url: &str) -> Style {
-    let style = Style::parse(LINK_URL_STYLE).expect("valid style");
+fn link_style(url: &str, link_url: &Style) -> Style {
     if url.is_empty() {
-        style
+        link_url.clone()
     } else {
-        style.with_link(url.to_string())
+        link_url.clone().with_link(url.to_string())
     }
+}
+
+/// The bottom of upstream's style stack at this point in the parse: the
+/// document `style`, then `markdown.block_quote` for each enclosing quote and
+/// `markdown.item` for each enclosing list item, outermost first, as each
+/// container's `on_enter` pushed it.
+fn container_root(md: &MarkdownOptions, styles: &MarkdownStyles, stack: &[Frame]) -> Option<Style> {
+    let mut root = md.style.clone();
+    for frame in stack {
+        match frame {
+            Frame::Quote { .. } => root = push_style(root.as_ref(), &styles.block_quote),
+            Frame::Item { .. } => root = push_style(root.as_ref(), &styles.item),
+            Frame::List { .. } => {}
+        }
+    }
+    root
 }
 
 /// Upstream's `MarkdownContext.style_stack.current`: the product of every style
@@ -371,46 +458,23 @@ fn link_style(url: &str) -> Style {
 /// blue. Applying only the innermost layer dropped the outer attributes, and —
 /// worse — a link whose whole text was inline code lost its URL entirely.
 ///
-/// `extra` is the run's own style (`markdown.code` for a code span), pushed last
+/// `root` is [`container_root`], `block` the open paragraph's or heading's
+/// style, `inline` the open inline styles in the order they opened, and
+/// `extra` the run's own style (`markdown.code` for a code span), pushed last
 /// because upstream enters it after the link.
-/// The bottom of upstream's style stack at this point in the parse: the
-/// document `style`, with `markdown.block_quote` pushed for each enclosing quote
-/// (`markdown.item` is `none`).
-fn quote_root(md: &MarkdownOptions, stack: &[Frame]) -> Option<Style> {
-    let mut root = md.style.clone();
-    if stack
-        .iter()
-        .any(|frame| matches!(frame, Frame::Quote { .. }))
-    {
-        let quote = Style::parse(QUOTE_STYLE).expect("valid style");
-        root = Some(match root {
-            Some(root) => root.combine(&quote),
-            None => quote,
-        });
-    }
-    root
-}
-
 fn stack_style(
     root: Option<&Style>,
-    heading: Option<&Style>,
-    inline: Option<Style>,
-    link: Option<&str>,
-    extra: Option<Style>,
+    block: Option<&Style>,
+    inline: &[(Inline, Style)],
+    extra: Option<&Style>,
 ) -> Option<Style> {
-    let mut current: Option<Style> = None;
-    for layer in [
-        root.cloned(),
-        heading.cloned(),
-        inline,
-        link.map(link_style),
-        extra,
-    ] {
-        let Some(next) = layer else { continue };
-        current = Some(match current {
-            Some(previous) => previous.combine(&next),
-            None => next,
-        });
+    let mut current = root.cloned();
+    let layers = block
+        .into_iter()
+        .chain(inline.iter().map(|(_, style)| style))
+        .chain(extra);
+    for layer in layers {
+        current = push_style(current.as_ref(), layer);
     }
     current
 }
@@ -1221,7 +1285,7 @@ fn split_paragraph_tables(source: &str) -> Option<String> {
     Some(split)
 }
 
-fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
+fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Block> {
     let split = split_paragraph_tables(source);
     let source = split.as_deref().unwrap_or(source);
     let escaped = escape_refused_definitions(source);
@@ -1230,13 +1294,14 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
     let paragraph_justify = md.justify.unwrap_or(Justify::Left);
     let mut blocks: Vec<Block> = Vec::new();
     let mut current: Option<Text> = None;
-    let mut heading_style: Option<Style> = None;
+    // The open paragraph's or heading's style (`markdown.paragraph`,
+    // `markdown.h<n>`), which sits on the stack over the containers' styles.
+    let mut block_style: Option<Style> = None;
     // The open heading's level, for its block (semantic regions only).
     let mut heading_open: Option<u8> = None;
     let mut justify = Justify::Left;
-    let mut strong = 0usize;
-    let mut emphasis = 0usize;
-    let mut strike = 0usize;
+    // The open inline styles, in the order they opened.
+    let mut inline: Vec<(Inline, Style)> = Vec::new();
     // Depth of single-tilde spans currently open; their delimiters are re-emitted
     // as literal text so the run is not styled.
     let mut single_tilde = 0usize;
@@ -1349,12 +1414,21 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                 // An autolink's text is its destination, which markdown-it
                 // shows through `normalizeLinkText` instead.
                 autolink = matches!(link_type, LinkType::Autolink | LinkType::Email);
-                if !hyperlinks {
+                if hyperlinks {
+                    // `context.enter_style(link_style)`, in nesting order with
+                    // the inline tags around and inside it.
+                    if let Some(url) = &link {
+                        inline.push((Inline::Link, link_style(url, &styles.link_url)));
+                    }
+                } else {
                     link_label = Some(String::new());
                 }
             }
             Event::End(TagEnd::Link) => {
                 autolink = false;
+                if hyperlinks {
+                    leave_inline(&mut inline, Inline::Link);
+                }
                 let url = link.take();
                 let label = link_label.take();
                 // `hyperlinks=False`: upstream flushes the buffered label under
@@ -1368,29 +1442,20 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                 // redirected render.
                 if let Some(url) = url.filter(|_| !hyperlinks) {
                     let label = label.unwrap_or_default();
-                    let inline = inline_style(strong, emphasis, strike);
                     // In a table cell the URL is part of the cell's text, so it
                     // counts towards the column width, as upstream measures it.
                     let block = inline_target(&mut current, &mut table);
-                    let layer = |style: Option<Style>| {
-                        stack_style(
-                            quote_root(md, &stack).as_ref(),
-                            heading_style.as_ref(),
-                            inline.clone(),
-                            None,
-                            style,
-                        )
+                    let root = container_root(md, styles, &stack);
+                    let layer = |style: Option<&Style>| {
+                        stack_style(root.as_ref(), block_style.as_ref(), &inline, style)
                     };
                     // An empty label appends a zero-length span upstream,
                     // which renders as nothing at all.
                     if !label.is_empty() {
-                        block.append(&label, layer(Style::parse(LINK_STYLE).ok()).map(Into::into));
+                        block.append(&label, layer(Some(&styles.link)).map(Into::into));
                     }
                     block.append(" (", layer(None).map(Into::into));
-                    block.append(
-                        &url,
-                        layer(Style::parse(LINK_URL_STYLE).ok()).map(Into::into),
-                    );
+                    block.append(&url, layer(Some(&styles.link_url)).map(Into::into));
                     block.append(")", layer(None).map(Into::into));
                 }
             }
@@ -1425,10 +1490,9 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                             alt,
                             link.as_deref(),
                             stack_style(
-                                quote_root(md, &stack).as_ref(),
-                                heading_style.as_ref(),
-                                inline_style(strong, emphasis, strike),
-                                link.as_deref().filter(|_| hyperlinks),
+                                container_root(md, styles, &stack).as_ref(),
+                                block_style.as_ref(),
+                                &inline,
                                 None,
                             ),
                             hyperlinks,
@@ -1470,6 +1534,9 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
             }
             Event::Start(Tag::Table(aligns)) => {
                 flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
+                // A cell is not a paragraph: no `markdown.paragraph` in it,
+                // even in a tight item whose hidden paragraph closed here.
+                block_style = None;
                 table = Some(TableAccum {
                     alignments: aligns.into_iter().map(alignment_justify).collect(),
                     ..TableAccum::default()
@@ -1567,7 +1634,8 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                 // no enclosing Paragraph, so open a buffer here for it to land
                 // in. A loose item simply resets this at its Start(Paragraph).
                 current = Some(Text::new(""));
-                heading_style = None;
+                // markdown-it's hidden paragraph: `markdown.paragraph` is open.
+                block_style = Some(styles.paragraph.clone());
                 heading_open = None;
                 justify = paragraph_justify;
             }
@@ -1609,18 +1677,20 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
             Event::Start(Tag::Paragraph) => {
                 flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
                 current = Some(Text::new(""));
-                heading_style = None;
+                // `context.enter_style("markdown.paragraph")`.
+                block_style = Some(styles.paragraph.clone());
                 heading_open = None;
                 // `Paragraph.create`: `markdown.justify or "left"`.
                 justify = paragraph_justify;
             }
             Event::Start(Tag::Heading { level, .. }) => {
                 flush_pending(&mut current, &mut blocks, &mut stack, paragraph_justify);
-                let (style, heading_justify) = heading_format(heading_level(level));
+                let level = heading_level(level);
                 current = Some(Text::new(""));
-                heading_style = Some(style);
-                heading_open = Some(heading_level(level) as u8);
-                justify = heading_justify;
+                // `context.enter_style(f"markdown.{tag}")`.
+                block_style = Some(styles.headings[level - 1].clone());
+                heading_open = Some(level as u8);
+                justify = heading_justify(level);
             }
             Event::End(TagEnd::Paragraph) | Event::End(TagEnd::Heading(_)) => {
                 if let Some(mut text) = current.take() {
@@ -1631,7 +1701,7 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                     if in_quote {
                         // Quote paragraph: the quote style (over the document
                         // style) as its base, so its padding carries it too.
-                        if let Some(root) = quote_root(md, &stack) {
+                        if let Some(root) = container_root(md, styles, &stack) {
                             text.set_base_style(root);
                         }
                     }
@@ -1645,17 +1715,16 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                     text.set_justify(justify);
                     sink(&mut blocks, &mut stack).push(Block::Text(text, heading_open));
                 }
-                heading_style = None;
+                block_style = None;
                 heading_open = None;
                 justify = Justify::Left;
-                strong = 0;
-                emphasis = 0;
+                inline.retain(|(kind, _)| !matches!(kind, Inline::Strong | Inline::Emphasis));
             }
-            Event::Start(Tag::Strong) => strong += 1,
-            Event::End(TagEnd::Strong) => strong = strong.saturating_sub(1),
+            Event::Start(Tag::Strong) => inline.push((Inline::Strong, styles.strong.clone())),
+            Event::End(TagEnd::Strong) => leave_inline(&mut inline, Inline::Strong),
             Event::Start(Tag::Strikethrough) => {
                 if source[range.clone()].starts_with("~~") {
-                    strike += 1;
+                    inline.push((Inline::Strike, styles.s.clone()));
                 } else {
                     // Single-tilde: not a delimiter upstream. Keep the literal
                     // text, tildes and all.
@@ -1674,11 +1743,19 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                     single_tilde -= 1;
                     push_tilde(&mut current, &mut table, &mut link_label);
                 } else {
-                    strike = strike.saturating_sub(1);
+                    leave_inline(&mut inline, Inline::Strike);
                 }
             }
-            Event::Start(Tag::Emphasis) => emphasis += 1,
-            Event::End(TagEnd::Emphasis) => emphasis = emphasis.saturating_sub(1),
+            Event::Start(Tag::Emphasis) => inline.push((Inline::Emphasis, styles.em.clone())),
+            Event::End(TagEnd::Emphasis) => leave_inline(&mut inline, Inline::Emphasis),
+            // `<kbd>` enters `markdown.kbd` and `</kbd>` leaves it; upstream
+            // skips every other inline tag.
+            Event::InlineHtml(html) if &*html == "<kbd>" => {
+                inline.push((Inline::Kbd, styles.kbd.clone()));
+            }
+            Event::InlineHtml(html) if &*html == "</kbd>" => {
+                leave_inline(&mut inline, Inline::Kbd);
+            }
             Event::Text(text) => {
                 let text = if autolink {
                     CowStr::from(normalize_link_text(&text))
@@ -1697,10 +1774,9 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                     // buffer already flushed by that block's start.
                     let block = inline_target(&mut current, &mut table);
                     let style = stack_style(
-                        quote_root(md, &stack).as_ref(),
-                        heading_style.as_ref(),
-                        inline_style(strong, emphasis, strike),
-                        link.as_deref().filter(|_| hyperlinks),
+                        container_root(md, styles, &stack).as_ref(),
+                        block_style.as_ref(),
+                        &inline,
                         None,
                     );
                     block.append(&text, style.map(Into::into));
@@ -1731,10 +1807,9 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                         let mut highlighted = syntax.highlight();
                         highlighted.rstrip();
                         let style = stack_style(
-                            quote_root(md, &stack).as_ref(),
-                            heading_style.as_ref(),
-                            inline_style(strong, emphasis, strike),
-                            link.as_deref().filter(|_| hyperlinks),
+                            container_root(md, styles, &stack).as_ref(),
+                            block_style.as_ref(),
+                            &inline,
                             None,
                         );
                         let mut fragment = Text::new("");
@@ -1746,11 +1821,10 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                         continue;
                     }
                     let style = stack_style(
-                        quote_root(md, &stack).as_ref(),
-                        heading_style.as_ref(),
-                        inline_style(strong, emphasis, strike),
-                        link.as_deref().filter(|_| hyperlinks),
-                        Style::parse(CODE_STYLE).ok(),
+                        container_root(md, styles, &stack).as_ref(),
+                        block_style.as_ref(),
+                        &inline,
+                        Some(&styles.code),
                     );
                     block.append(&text, style.map(Into::into));
                 }
@@ -1763,10 +1837,9 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                 link_label.as_mut(),
                 " ",
                 stack_style(
-                    quote_root(md, &stack).as_ref(),
-                    heading_style.as_ref(),
-                    inline_style(strong, emphasis, strike),
-                    link.as_deref().filter(|_| hyperlinks),
+                    container_root(md, styles, &stack).as_ref(),
+                    block_style.as_ref(),
+                    &inline,
                     None,
                 ),
             ),
@@ -1775,10 +1848,9 @@ fn parse(source: &str, md: &MarkdownOptions) -> Vec<Block> {
                 link_label.as_mut(),
                 "\n",
                 stack_style(
-                    quote_root(md, &stack).as_ref(),
-                    heading_style.as_ref(),
-                    inline_style(strong, emphasis, strike),
-                    link.as_deref().filter(|_| hyperlinks),
+                    container_root(md, styles, &stack).as_ref(),
+                    block_style.as_ref(),
+                    &inline,
                     None,
                 ),
             ),
@@ -1794,7 +1866,13 @@ impl Renderable for Markdown {
         // known. With a console-wide default highlighter and none of our own,
         // parse again with it so inline code and code blocks share one engine
         // and theme.
+        //
+        // The `markdown.*` styles are upstream's `console.get_style` lookups,
+        // so they come from the console's theme. The document was parsed with
+        // the default theme's; under any other, parse again with the console's.
         use crate::protocol::ConsoleCodeHighlighting;
+        let styles = MarkdownStyles::resolve(console.theme());
+        let themed = styles != *MarkdownStyles::default_theme();
         let reparsed;
         let blocks = match (&self.options.highlighter, console.code_highlighting()) {
             (None, Some(default)) if self.options.inline_code_lexer.is_some() => {
@@ -1803,7 +1881,11 @@ impl Renderable for Markdown {
                 if with_default.code_theme.is_none() {
                     with_default.code_theme = default.theme.clone();
                 }
-                reparsed = parse(&self.source, &with_default);
+                reparsed = parse(&self.source, &with_default, &styles);
+                &reparsed
+            }
+            _ if themed => {
+                reparsed = parse(&self.source, &self.options, &styles);
                 &reparsed
             }
             _ => &self.blocks,
@@ -1812,6 +1894,7 @@ impl Renderable for Markdown {
             blocks,
             console,
             options,
+            &styles,
             options.max_width,
             true,
             self.options.style.as_ref(),
@@ -1892,6 +1975,7 @@ fn render_blocks(
     blocks: &[Block],
     console: &Console,
     options: &ConsoleOptions,
+    styles: &MarkdownStyles,
     width: usize,
     top_level: bool,
     root: Option<&Style>,
@@ -1987,16 +2071,14 @@ fn render_blocks(
                 join_previous = *joins_next;
             }
             Block::List { items } => {
+                // `render_lines(self.elements, …, style=self.style)`: the item
+                // style (`markdown.item` over the enclosing style) sits under
+                // its content and padding, and under every block inside it.
+                let item_root = push_style(root, &styles.item);
                 for item in items {
                     let (prefix, prefix_style) = match item.number {
-                        Some(number) => (
-                            format!(" {number} "),
-                            Style::parse("cyan").expect("valid style"),
-                        ),
-                        None => (
-                            BULLET.to_string(),
-                            Style::parse("bold").expect("valid style"),
-                        ),
+                        Some(number) => (format!(" {number} "), styles.item_number.clone()),
+                        None => (BULLET.to_string(), styles.item_bullet.clone()),
                     };
                     let prefix_width = cell_len(&prefix);
                     // The item's own blocks, rendered in the space left beside
@@ -2006,9 +2088,10 @@ fn render_blocks(
                         &item.blocks,
                         console,
                         options,
+                        styles,
                         width.saturating_sub(prefix_width),
                         false,
-                        root,
+                        item_root.as_ref(),
                     );
                     // A leading blank row would push the marker off its content.
                     let mut item_lines: Vec<Vec<Segment>> = item_lines
@@ -2028,10 +2111,7 @@ fn render_blocks(
                                 Some(prefix_style.clone()),
                             ));
                         }
-                        // `render_lines(self.elements, …, style=self.style)`: the
-                        // item style (the document style under `markdown.item`)
-                        // sits under its content and padding.
-                        match root {
+                        match &item_root {
                             Some(root) => row.extend(Segment::apply_style(&line, root)),
                             None => row.extend(line),
                         }
@@ -2043,17 +2123,14 @@ fn render_blocks(
             Block::Quote { blocks: quoted, .. } => {
                 // `context.enter_style("markdown.block_quote")`: the quote style
                 // over the enclosing style.
-                let quote = Style::parse(QUOTE_STYLE).expect("valid style");
-                let prefix_style = match root {
-                    Some(root) => root.combine(&quote),
-                    None => quote,
-                };
+                let prefix_style = push_style(root, &styles.block_quote).unwrap_or_default();
                 // Upstream renders quote content at `max_width - 4`.
                 let content_width = width.saturating_sub(4);
                 let quoted_lines = render_blocks(
                     quoted,
                     console,
                     options,
+                    styles,
                     content_width,
                     false,
                     Some(&prefix_style),
@@ -2128,8 +2205,11 @@ fn render_blocks(
                 lines.extend(Segment::split_lines(&segments));
             }
             Block::Rule => {
-                let style = Style::parse("dim").expect("valid style");
-                lines.push(vec![Segment::new("-".repeat(width), Some(style))]);
+                // `Rule(style=console.get_style("markdown.hr"), characters="-")`.
+                lines.push(vec![Segment::new(
+                    "-".repeat(width),
+                    Some(styles.hr.clone()),
+                )]);
                 // Upstream's rule carries a trailing blank row of its own, in
                 // place of the usual inter-block gap (`HorizontalRule.new_line
                 // = False`). Inside a quote that row picks up the quote prefix,
@@ -2156,8 +2236,8 @@ fn render_blocks(
                     .box_set(SIMPLE)
                     .pad_edge(false)
                     .collapse_padding(true)
-                    .style(Style::parse(TABLE_BORDER_STYLE).expect("valid style"));
-                let header_style = Style::parse(TABLE_HEADER_STYLE).expect("valid style");
+                    .style(styles.table_border.clone());
+                let header_style = styles.table_header.clone();
                 for (col, header) in headers.iter().enumerate() {
                     let justify = alignments.get(col).copied().unwrap_or(Justify::Left);
                     // `heading.stylize("markdown.table.header")`: a span over the
