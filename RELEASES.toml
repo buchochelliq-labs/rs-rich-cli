@@ -31,116 +31,116 @@
 name = "rs-rich"
 registry = "crates.io"
 manifest = "crates/rich/Cargo.toml"
-version = "0.0.13"
+version = "0.0.14"
 
 [[package]]
 name = "rs-rich-macros"
 registry = "crates.io"
 manifest = "crates/rich-macros/Cargo.toml"
-version = "0.0.7"
+version = "0.0.8"
 
 [[package]]
 name = "rs-rich-plugin-api"
 registry = "crates.io"
 manifest = "crates/rich-plugin-api/Cargo.toml"
-version = "0.0.7"
+version = "0.0.8"
 
 [[package]]
 name = "rs-rich-art"
 registry = "crates.io"
 manifest = "crates/rich-art/Cargo.toml"
-version = "0.0.16"
+version = "0.0.17"
 
 [[package]]
 name = "rs-rich-diagram"
 registry = "crates.io"
 manifest = "crates/rich-diagram/Cargo.toml"
-version = "0.0.6"
+version = "0.0.7"
 
 [[package]]
 name = "rs-rich-mermaid"
 registry = "crates.io"
 manifest = "crates/rich-mermaid/Cargo.toml"
-version = "0.0.9"
+version = "0.0.10"
 
 [[package]]
 name = "rs-rich-lumis"
 registry = "crates.io"
 manifest = "crates/rich-lumis/Cargo.toml"
-version = "0.0.7"
+version = "0.0.8"
 
 [[package]]
 name = "rs-rich-ext"
 registry = "crates.io"
 manifest = "crates/rich-ext/Cargo.toml"
-version = "0.0.20"
+version = "0.0.21"
 
 [[package]]
 name = "rs-rich-micro"
 registry = "crates.io"
 manifest = "crates/rich-micro/Cargo.toml"
-version = "0.0.9"
+version = "0.0.10"
 
 [[package]]
 name = "rs-rich-record"
 registry = "crates.io"
 manifest = "crates/rich-record/Cargo.toml"
-version = "0.0.11"
+version = "0.0.12"
 
 [[package]]
 name = "rs-rich-interact"
 registry = "crates.io"
 manifest = "crates/rich-interact/Cargo.toml"
-version = "0.0.11"
+version = "0.0.12"
 
 [[package]]
 name = "rs-rich-ratatui"
 registry = "crates.io"
 manifest = "crates/rich-ratatui/Cargo.toml"
-version = "0.0.8"
+version = "0.0.9"
 
 [[package]]
 name = "rs-rich-intuituive"
 registry = "crates.io"
 manifest = "crates/rich-intuituive/Cargo.toml"
-version = "0.0.8"
+version = "0.0.9"
 
 [[package]]
 name = "rs-rich-embed"
 registry = "crates.io"
 manifest = "crates/rich-embed/Cargo.toml"
-version = "0.0.6"
+version = "0.0.7"
 
 [[package]]
 name = "rs-rich-web"
 registry = "crates.io"
 manifest = "crates/rich-web/Cargo.toml"
-version = "0.0.6"
+version = "0.0.7"
 
 [[package]]
 name = "rs-rich-data"
 registry = "crates.io"
 manifest = "crates/rich-data/Cargo.toml"
-version = "0.0.7"
+version = "0.0.8"
 
 [[package]]
 name = "rs-rich-marketplace"
 registry = "crates.io"
 manifest = "crates/rich-marketplace/Cargo.toml"
-version = "0.0.2"
+version = "0.0.3"
 
 # Noctiluca, the terminal web browser: a leaf, a binary of its own.
 [[package]]
 name = "noctiluca"
 registry = "crates.io"
 manifest = "crates/noctiluca/Cargo.toml"
-version = "0.0.2"
+version = "0.0.3"
 
 [[package]]
 name = "rs-rich-cli"
 registry = "crates.io"
 manifest = "crates/rich-cli/Cargo.toml"
-version = "0.0.23"
+version = "0.0.24"
 
 # The Python bindings: PyPI `rs-rich`, versioned by crates/rich-py/pyproject.toml
 # (its Cargo.toml must agree). Outside the Cargo workspace.
@@ -148,4 +148,4 @@ version = "0.0.23"
 name = "rs-rich"
 registry = "pypi"
 manifest = "crates/rich-py/pyproject.toml"
-version = "0.0.11"
+version = "0.0.12"

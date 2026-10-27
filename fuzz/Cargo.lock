@@ -908,7 +908,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich"
-version = "0.0.13"
+version = "0.0.14"
 dependencies = [
  "anstyle-query",
  "compact_str",
@@ -921,7 +921,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-data"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "rs-rich",
  "rs-rich-ext",
@@ -931,14 +931,14 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-diagram"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "rs-rich",
 ]
 
 [[package]]
 name = "rs-rich-ext"
-version = "0.0.20"
+version = "0.0.21"
 dependencies = [
  "fancy-regex 0.19.2",
  "libc",
@@ -974,7 +974,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-interact"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "crossterm",
  "fancy-regex 0.19.2",
@@ -988,7 +988,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-intuituive"
-version = "0.0.8"
+version = "0.0.9"
 dependencies = [
  "kasuari",
  "rs-rich",
@@ -998,7 +998,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-marketplace"
-version = "0.0.2"
+version = "0.0.3"
 dependencies = [
  "flate2",
  "minisign-verify",
@@ -1013,7 +1013,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-mermaid"
-version = "0.0.9"
+version = "0.0.10"
 dependencies = [
  "rs-rich",
  "rs-rich-diagram",
@@ -1022,7 +1022,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-plugin-api"
-version = "0.0.7"
+version = "0.0.8"
 dependencies = [
  "inventory",
  "rs-rich",
@@ -1030,7 +1030,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-record"
-version = "0.0.11"
+version = "0.0.12"
 dependencies = [
  "color_quant 2.0.0",
  "fancy-regex 0.19.2",
@@ -1049,7 +1049,7 @@ dependencies = [
 
 [[package]]
 name = "rs-rich-web"
-version = "0.0.6"
+version = "0.0.7"
 dependencies = [
  "rs-rich-intuituive",
  "serde_json",

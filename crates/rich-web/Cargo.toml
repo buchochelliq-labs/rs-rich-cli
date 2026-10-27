@@ -14,7 +14,7 @@
 # 0.0.1. See AGENTS.md → Versioning.
 [package]
 name = "rs-rich-web"
-version = "0.0.6"
+version = "0.0.7"
 description = "Serve rs-rich intuiTUIve apps, or any terminal program on a PTY, to a web browser over a WebSocket, drawn by a vendored xterm.js or as accessible DOM"
 edition.workspace = true
 license.workspace = true
@@ -87,7 +87,7 @@ required-features = ["server"]
 # Without its defaults, so `syntax` above can leave syntect out (a path
 # dependency, as rs-rich-ratatui's rs-rich-ext is: a workspace dependency
 # keeps its defaults).
-rich-intuituive = { package = "rs-rich-intuituive", path = "../rich-intuituive", version = "0.0.8", default-features = false }
+rich-intuituive = { package = "rs-rich-intuituive", path = "../rich-intuituive", version = "0.0.9", default-features = false }
 # A program per connection: `PtyHost`, and `LocalPty` (portable-pty, a PTY on
 # Unix and ConPTY on Windows), shared with the terminal pane.
 rich-embed = { workspace = true, optional = true }

@@ -8,7 +8,7 @@
 # 0.0.1.
 [package]
 name = "rs-rich-interact"
-version = "0.0.11"
+version = "0.0.12"
 description = "Interactive terminal components for rs-rich: event loop, viewport, item model, headless testing"
 edition.workspace = true
 license.workspace = true
@@ -74,7 +74,7 @@ required-features = ["data"]
 rich.workspace = true
 # Without its defaults, so `syntax` decides whether syntect comes in. A
 # path dependency, as a workspace one cannot turn its defaults off.
-rich-ext = { package = "rs-rich-ext", path = "../rich-ext", version = "0.0.20", default-features = false }
+rich-ext = { package = "rs-rich-ext", path = "../rich-ext", version = "0.0.21", default-features = false }
 # The text buffer's search (`edit::Search`): plain strings and regular
 # expressions (already in the tree, through rs-rich).
 fancy-regex.workspace = true

@@ -19,7 +19,8 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   tracks to 0.0.28 set on 2026-10-27
   ([the 1.0 plan's decisions 9 to 14](../plans/1.0.0.md#decisions-for-the-maintainer)):
   Cornacai, Textual parity and Noctiluca's improvements; the stable set's
-  preparation. Its versions open after these notes.
+  preparation. Its versions are open (every package one patch past
+  0.0.23).
 - **Waiting on the maintainer:** Memo's reference pictures; lumis 0.17
   (its minimum Rust is 1.95), on
   `claude/next-priority-items-3c5p8e-wip-deps-023-lumis`.
