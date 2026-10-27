@@ -101,9 +101,10 @@ termion = { version = "4", optional = true }
 # A timed wait on the terminal, for the start-up query and the termion and
 # termwiz backends' reads (crossterm's `use-dev-tty` already depends on it).
 filedescriptor = "0.8"
-# Restore the terminal on SIGTERM, SIGHUP and SIGQUIT (crossterm already
-# depends on it).
-signal-hook = "0.3"
+# Restore the terminal on SIGTERM, SIGHUP and SIGQUIT. crossterm 0.29 still
+# depends on 0.3; both share one signal-hook-registry, so their handlers
+# chain.
+signal-hook = "0.4"
 # O_NONBLOCK, to open a file for its preview without blocking (crossterm
 # already depends on it).
 libc = "0.2"

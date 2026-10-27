@@ -244,7 +244,7 @@ jobs:
           # The playground's modules, and the `rich` CLI for its terminal.
           targets: wasm32-unknown-unknown, wasm32-wasip1
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@v7
         with:
           node-version: "22"
 

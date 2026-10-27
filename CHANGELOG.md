@@ -55,6 +55,17 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   marks a maintainer's pick: in the schema, the validator,
   `Listing::recommended` and as `★ recommended`.
 
+- **Dependencies** (Dependabot's open pull requests): zip 8 to 9 (rs-rich-ext,
+  rs-rich-micro, rs-rich-marketplace, rs-rich-cli; zip now decodes an
+  entry's name on demand, so an undecodable name is listed lossily by
+  rs-rich-ext and refused by rs-rich-micro), signal-hook 0.3 to 0.4
+  (rs-rich-interact, no code change), and lockfile patch bumps of wat,
+  libc, syn, serde_json, trybuild, flate2 and rustix. CI moves to
+  setup-node 7 and gh-action-pypi-publish 1.14.3. Dependabot now opens one
+  grouped pull request a week per ecosystem for minor and patch updates,
+  and a pull request's newer CI run cancels its older one. lumis 0.17
+  waits: it raises rs-rich-lumis's minimum Rust to 1.95.
+
 - **The plugin marketplace goes live** (rs-rich-cli, rs-rich-plugin-api's
   examples): rs-rich-marketplace lists the Mermaid, DOT and lumis crates,
   `textcase` (a new official WASM plugin: the `upcase` and `downcase`
