@@ -1200,7 +1200,25 @@ fn an_installed_theme_is_selected_by_theme_until_disabled_or_changed() {
         page.contains("color: #000080") && !page.contains(MAGENTA),
         "{page}"
     );
+    // A config's own `theme = "..."` names only a config theme.
+    std::fs::write(w.root.join("rich.toml"), "theme = 'dusk'\n").unwrap();
+    let (out, page) = render(&w, &[]);
+    assert_code(&out, 2);
+    assert!(!page.contains(MAGENTA), "{page}");
+    assert!(
+        text(&out.stderr).contains("unknown theme \"dusk\""),
+        "{}",
+        text(&out.stderr)
+    );
+    // `--theme` still finds the installed one, over the config's line.
+    let (out, page) = render(&w, &["--theme", "dusk"]);
+    assert_code(&out, 0);
+    assert!(page.contains(MAGENTA), "{page}");
     std::fs::remove_file(w.root.join("rich.toml")).unwrap();
+    // And with no config at all.
+    let (out, page) = render(&w, &["--no-config", "--theme", "dusk"]);
+    assert_code(&out, 0);
+    assert!(page.contains(MAGENTA), "{page}");
 
     assert_code(&w.plugin(&["disable", "dusk"]), 0);
     let (out, _) = render(&w, &["--theme", "dusk"]);
