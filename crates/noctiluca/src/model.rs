@@ -1000,6 +1000,11 @@ struct Walker<'a> {
 
 impl Walker<'_> {
     fn push(&mut self, run: Run, rect: Option<Rect>) {
+        // A box with no area (Chrome gives some text, an empty inline or
+        // an icon's pseudo-element one at the page's origin) says nothing
+        // about where the text is: in the union it would stretch the block
+        // to the top of the page, and the projection would draw it there.
+        let rect = rect.filter(|r| r.width > 0.0 || r.height > 0.0);
         if let Some(rect) = rect {
             // Two boxes on one line with a gap between them (flex items,
             // links spaced by margins) keep a space between their texts.
@@ -2222,6 +2227,25 @@ mod tests {
             .map(|b| b.text())
             .collect();
         assert_eq!(texts, ["Guidelines", "Laid out"]);
+    }
+
+    #[test]
+    fn a_box_with_no_area_does_not_move_its_block() {
+        // A footer link far down the page, with an empty text box at the
+        // origin beside its real one (as MDN's and GitHub's have).
+        let mut f = Fake::new();
+        let body = f.el(0, "BODY", &[], "block");
+        let p = f.el(body, "P", &[], "block");
+        f.text(p, "About");
+        let k = f.bounds.len() - 1;
+        f.bounds[k] = vec![10.0, 5000.0, 50.0, 18.0];
+        f.text(p, " ");
+        let k = f.bounds.len() - 1;
+        f.bounds[k] = vec![0.0, 0.0, 0.0, 0.0];
+        let page = f.page(Value::Null);
+        assert_eq!(page.blocks.len(), 1);
+        let rect = page.blocks[0].rect;
+        assert_eq!((rect.x, rect.y), (10.0, 5000.0));
     }
 
     #[test]
