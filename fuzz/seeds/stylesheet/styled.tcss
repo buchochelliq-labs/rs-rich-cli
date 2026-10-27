@@ -1,0 +1,17 @@
+/* The stylesheet of the `styled` example. Run
+   `styled styled.tcss` and edit this file: the app reads it again
+   when it changes. */
+
+#title { dock: top; size: 1; padding: 0 1; background: $accent; color: white; text-style: bold; }
+#status { dock: bottom; size: 1; padding: 0 1; color: $muted; }
+
+#services { size: 4; gap: 1; }
+.card { border: round grey50; padding: 0 1; }
+.card:hover { background: grey23; }
+.card:focus { color: $accent; text-style: bold; }
+.down { color: red; }
+.down:focus { background: red; color: white; }
+
+#deploys { border: round $accent; border-title: Deploys; }
+table { color: grey70; }
+table:focus { color: white; }

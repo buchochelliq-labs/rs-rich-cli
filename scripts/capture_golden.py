@@ -683,6 +683,11 @@ RENDERABLE_CASES = [
     ("ansi_8bit", 20, _ansi("\x1b[38;5;214mx\x1b[0m")),
     ("ansi_truecolor", 20, _ansi("\x1b[38;2;255;136;0mx\x1b[0m")),
     ("ansi_attrs", 20, _ansi("\x1b[3;4;9mstyled\x1b[0m")),
+    # `ESC (` skips the next character, however many bytes it is (the
+    # `ansi` fuzz target's finding).
+    ("ansi_charset_multibyte", 20, _ansi("a\x1b(\u00e9b")),
+    ("ansi_charset_wide", 20, _ansi("\x1b(\u4e2d\u6587")),
+    ("ansi_charset_then_sgr", 20, _ansi("\x1b(\x1b[1mz\x1b[0m")),
     ("styled_on_red", 20, Styled(Text("hi"), "on red")),
     ("styled_panel", 8, Styled(Panel("x", box=box.SQUARE), "green")),
     ("progress_three", 50, _progress_table()),
@@ -1164,6 +1169,9 @@ HIGHLIGHT_CASES = [
     ("themed_str", {"repr.str": "italic yellow"}, "greeting = 'hello'"),
     # A name the theme does not define falls back to the default table.
     ("partial_override", {"repr.number": "underline"}, "call(1, 'two', True)"),
+    # A theme entry replaces the default style outright: `repr.number = bold`
+    # has no colour, so neither do the numbers.
+    ("attributes_only_number", {"repr.number": "bold"}, "[1, 2.5] abc123 v1.2"),
     # Markup and highlighting in the same string, both theme-resolved.
     ("markup_and_highlight", {"accent": "bold blue", "repr.number": "green"}, "[accent]total[/] = 7"),
     # An unknown tag name is a no-op upstream, not an error.
@@ -1722,6 +1730,87 @@ MARKDOWN_OPTIONS_CASES: list[tuple[str, str, dict]] = [
      "> - quoted item that wraps over more than one line here", {}),
     ("wrapped_items_styled", "- one two three four five six seven eight nine ten eleven\n\n"
      "> - quoted item that wraps over more than one line here", {"style": "on blue"}),
+]
+
+MARKDOWN_THEME_HEADER = """\
+# Golden parity fixtures for Markdown under a console theme — captured from
+# real Python `rich`. Regenerate with: python scripts/capture_golden.py
+#
+# Format: <name>\t<markdown source as json>\t<theme styles as json>\t<inherit>
+#   \t<hyperlinks>\t<output of Console(theme=Theme(styles, inherit)).print(
+#   Markdown(source, hyperlinks=hyperlinks)) at width 50, as json>
+# OSC 8 `id=<n>` parameters (random upstream) are stripped.
+#
+# Upstream's Markdown looks every `markdown.*` style up in the console's theme
+# (`console.get_style(name, default="none")`), so a theme's entries reach the
+# document, an entry replaces the default style outright, and a name the theme
+# lacks is the null style (`markdown.kbd` falls back to bold).
+"""
+
+MARKDOWN_THEME_DOC = (
+    MARKDOWN_OPTIONS_DOC
+    + "\n\nMixed *em **strong in em** em* and **strong *em in strong* strong**, "
+    "~~gone~~ and <kbd>Ctrl</kbd>.\n\n- item with `code`\n\n  > quote in item\n\n"
+    "> - item in quote\n\n### Three\n\n#### Four\n\n##### Five\n\n###### Six"
+)
+
+MARKDOWN_THEME_LINKS = (
+    "**[bold link](https://x.io)** and [**link bold**](https://y.io) "
+    "and [`code`](https://z.io).\n\n# [Heading link](https://h.io)"
+)
+
+#: Every `markdown.*` style rich 15.0.0's `markdown.py` reads, coloured, with
+#: the inline ones in different colours so their nesting order shows.
+MARKDOWN_THEME_FULL = {
+    "markdown.paragraph": "#d0d0d0",
+    "markdown.h1": "bold underline #d7b8ff",
+    "markdown.h2": "bold #c39cf2",
+    "markdown.h3": "italic #7fcbd8",
+    "markdown.h4": "#eccb7a",
+    "markdown.h5": "dim #9a96aa",
+    "markdown.h6": "reverse",
+    "markdown.code": "bold #f0e8ff on #2c2a3a",
+    "markdown.block_quote": "italic #b9b3cc",
+    "markdown.item": "#8fd694",
+    "markdown.item.bullet": "bold #c39cf2",
+    "markdown.item.number": "#7fcbd8",
+    "markdown.hr": "#6b6488",
+    "markdown.em": "italic #f58a98",
+    "markdown.strong": "bold #f2b880",
+    "markdown.s": "strike #9a96aa",
+    "markdown.kbd": "bold #ffd75f",
+    "markdown.link": "#93bfff",
+    "markdown.link_url": "underline #5f87ff",
+    "markdown.table.border": "#6b6488",
+    "markdown.table.header": "bold #d7b8ff",
+}
+
+#: Attributes only: each entry replaces the default style, colour and all.
+MARKDOWN_THEME_ATTRIBUTES = {
+    "markdown.h1": "italic",
+    "markdown.h2": "bold",
+    "markdown.code": "underline",
+    "markdown.block_quote": "bold",
+    "markdown.item.bullet": "none",
+    "markdown.item.number": "italic",
+    "markdown.hr": "bold",
+    "markdown.link": "underline",
+    "markdown.link_url": "italic",
+    "markdown.table.border": "dim",
+    "markdown.table.header": "italic",
+}
+
+#: (name, source, theme styles, inherit, hyperlinks)
+MARKDOWN_THEME_CASES: list[tuple[str, str, dict, bool, bool]] = [
+    ("full", MARKDOWN_THEME_DOC, MARKDOWN_THEME_FULL, True, False),
+    ("full_links", MARKDOWN_THEME_LINKS, MARKDOWN_THEME_FULL, True, True),
+    ("attributes_only", MARKDOWN_THEME_DOC, MARKDOWN_THEME_ATTRIBUTES, True, False),
+    ("attributes_only_links", MARKDOWN_THEME_LINKS, MARKDOWN_THEME_ATTRIBUTES, True, True),
+    # A theme that does not inherit: every other `markdown.*` name is unknown.
+    # (No table: upstream's Table itself needs `table.header`.)
+    ("no_inherit", "## Two\n\nSome **strong**, *em*, <kbd>K</kbd> and `code`.\n\n"
+     "- item\n\n> quote\n\n---\n\nEnd [link](https://x.io).",
+     {"markdown.h2": "red", "markdown.strong": "underline"}, False, False),
 ]
 
 PROGRESS_BAR_HEADER = """\
@@ -2782,6 +2871,30 @@ def main() -> None:
         )
     options_path.write_text("\n".join(olines) + "\n", encoding="utf-8", newline="\n")
     print(f"wrote {len(MARKDOWN_OPTIONS_CASES)} markdown option cases to {options_path}")
+
+    # --- markdown under a console theme ----------------------------------
+    import re as _re_theme
+
+    theme_md_path = golden_dir() / "markdown_theme.tsv"
+    tmlines = [MARKDOWN_THEME_HEADER.rstrip("\n")]
+    for name, source, styles, inherit, hyperlinks in MARKDOWN_THEME_CASES:
+        tmconsole = Console(
+            force_terminal=True,
+            color_system="truecolor",
+            width=50,
+            highlight=False,
+            no_color=False,
+            theme=RichTheme(styles, inherit=inherit),
+        )
+        with tmconsole.capture() as capture:
+            tmconsole.print(Markdown(source, hyperlinks=hyperlinks))
+        output = _re_theme.sub(r"\x1b\]8;id=\d+;", "\x1b]8;;", capture.get())
+        tmlines.append(
+            f"{name}\t{json.dumps(source)}\t{json.dumps(styles)}\t{str(inherit).lower()}"
+            f"\t{str(hyperlinks).lower()}\t{json.dumps(output)}"
+        )
+    theme_md_path.write_text("\n".join(tmlines) + "\n", encoding="utf-8", newline="\n")
+    print(f"wrote {len(MARKDOWN_THEME_CASES)} markdown theme cases to {theme_md_path}")
 
     # --- progress bar ----------------------------------------------------
     bar_path = golden_dir() / "progress_bar.tsv"

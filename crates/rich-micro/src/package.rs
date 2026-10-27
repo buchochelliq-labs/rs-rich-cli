@@ -230,7 +230,7 @@ impl Source {
         let mut seen = std::collections::HashSet::new();
         for index in 0..archive.len() {
             let entry = archive.by_index_raw(index).map_err(|e| io_error(path, e))?;
-            let name = entry.name().to_string();
+            let name = entry.name().map_err(|e| io_error(path, e))?.into_owned();
             let normal = safe_relative(&name)
                 .map_err(|e| MicroError::UnsafePath(format!("{}: {e}", path.display())))?;
             if entry.is_symlink() {
@@ -287,7 +287,9 @@ impl Source {
             Source::Directory { root, .. } => root.join(relative).is_dir(),
             Source::Archive { archive, .. } => {
                 let prefix = format!("{relative}/");
-                archive.file_names().any(|name| name.starts_with(&prefix))
+                archive
+                    .file_names()
+                    .any(|name| name.is_ok_and(|name| name.starts_with(&prefix)))
             }
             Source::Embedded { root } => crate::builtin::is_dir(&join(root, relative)),
         }

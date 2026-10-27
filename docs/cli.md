@@ -242,8 +242,10 @@ parent directory does not exist), the watcher prints one notice and falls back
 to polling at `--watch-interval`. Idle watching does not busy-loop in either
 mode. Recursive directory and glob watching are not supported; name each file.
 
-URLs can be watched when the default `fetch` feature is enabled. A URL is
-always polled, and must be the only watched resource:
+URLs can be watched when the default `fetch` feature is enabled (a fetched
+`https://` URL trusts the system's certificate store first and the roots
+built into `rich` as the fallback, so a company proxy's root CA works). A
+URL is always polled, and must be the only watched resource:
 
 ```bash
 rich --watch --watch-cache --watch-interval 5 https://example.com/data.json
@@ -2042,8 +2044,10 @@ rich --config rich.toml --theme night --theme-style 'notice=bold green' --print 
 ```
 
 Defaults, the selected profile's `theme`, then `--theme NAME` determine the
-selected theme. Repeated `--theme-style NAME=STYLE` bindings override configured
-bindings. Theme and style names start with an ASCII letter, digit or underscore;
+selected theme. When the config has no theme named by `--theme NAME`, an
+installed, enabled marketplace theme whose id is NAME is used (`rich plugin
+install`, below). Repeated
+`--theme-style NAME=STYLE` bindings override configured bindings. Theme and style names start with an ASCII letter, digit or underscore;
 subsequent characters may also be dots or hyphens. All definitions and references
 are validated, including inactive profiles and themes. `rich config show` exposes
 the selected theme. Batch workers receive the resolved bindings so parallel
@@ -2070,8 +2074,14 @@ The styles layer onto the built-in theme, and later layers override earlier ones
 
 1. The built-in default theme.
 2. `--theme-file`, or `theme_file` in the config.
-3. The selected config theme (`theme`, `--profile`, `--theme NAME`).
+3. The selected config theme (`theme`, `--profile`, `--theme NAME`), or the
+   installed theme `--theme NAME` falls back to.
 4. `--theme-style NAME=STYLE` bindings.
+
+Each layer replaces a named style outright, as upstream's theme stack does:
+`--theme-style repr.number=bold` prints numbers bold with no colour, not bold
+cyan. The styles reach everything that names them, Markdown's `markdown.*`
+styles in `rich -m` among them.
 
 A `theme_file` in a config file is relative to that config file, so the config
 works from any directory; an explicit `--theme-file` replaces it. A `theme_file`
@@ -2321,15 +2331,49 @@ SHA-256 against a signed index.
 
 The official marketplace,
 [`buchochelliq-labs/rs-rich-marketplace`](https://github.com/buchochelliq-labs/rs-rich-marketplace),
-goes live with 0.0.23. It lists the official plugins (Mermaid, DOT and
-lumis as crates, and `textcase`, a WASM plugin with the `upcase` and
-`downcase` transforms and a `loud` fence) and the built-in micro packs
-(`status`, `dev`, `fun`). Until the maintainer signs its first index,
-`rich plugin search` says there is no `index.json` and exits 3.
+goes live with 0.0.23. It lists the official packages:
+
+- Mermaid, DOT and lumis, as crates;
+- `textcase`, a WASM plugin: the `upcase`, `downcase`, `titlecase`,
+  `snakecase`, `kebabcase` and `camelcase` transforms (the last four from
+  0.2.0) and a `loud` fence;
+- `wordplay`, a WASM plugin: the `rot13`, `reverse` and `slug` transforms;
+- the built-in micro packs `status`, `dev` and `fun`;
+- the themes `dusk`, `ocean` (both dark), `paper` (light), `high-contrast`
+  (for a black background, every text colour at least 7:1) and `mono` (no
+  colour).
+
+Until the maintainer signs its first index, `rich plugin search` says
+there is no `index.json` and exits 3.
+
+The transforms run on `--print`, text and `--syntax`, in the order given:
+
+```bash
+rich plugin install textcase --yes
+rich --transform titlecase -p "the quick brown fox"   # The Quick Brown Fox
+rich --transform snakecase -p "parseHTTP2Header"      # parse_http2_header
+rich plugin install wordplay --yes
+rich --transform rot13 -p "Hello, World!"             # Uryyb, Jbeyq!
+rich --transform reverse -p "drawer"                  # reward
+rich --transform slug -p "Crème Brûlée, 2nd try!"     # crème-brûlée-2nd-try
+```
+
+Only ASCII letters change case (and only they rotate in `rot13`); a
+non-ASCII character passes through whole, as part of its word. The
+identifier cases and `slug` work line by line. `reverse` keeps each line
+in place and reverses its characters, moving an accent, emoji sequence or
+flag as one.
+
+A theme file is upstream rich's `[styles]` format, so the source files in
+`crates/rich-cli/official/themes/` also work directly:
+`rich --theme-file crates/rich-cli/official/themes/dusk.ini -p "[1, None]"`,
+or `rich --theme-file crates/rich-cli/official/themes/dusk.ini -m README.md`
+for its `markdown.*` colours.
 
 ```bash
 rich plugin search                 # every package: kind, tier, version
-rich plugin info textcase          # its tier, source, versions and permissions
+rich plugin search --sort downloads # most downloaded first, with a Downloads column
+rich plugin info textcase          # tier, source, versions, permissions; downloads, 👍/👎, reviews
 rich plugin install textcase       # shows what it is and asks first
 rich plugin install textcase --yes # in a script
 rich -m README.md                  # textcase loads without --plugin
@@ -2341,8 +2385,45 @@ rich plugin remove textcase
 rich plugin browse                 # all of it in a selector, provenance beside the list
 ```
 
+`rich plugin info` also shows a package's downloads (in total and per
+version), its 👍 and 👎 and a link to its reviews, when the marketplace
+publishes them. They come from its `stats.json`, which is not signed and
+only shown: nothing installs by it, and a missing or slow file is left out
+without a word. `rich` itself sends nothing to be counted. To rate a
+package, react 👍 or 👎 to its discussion in the marketplace repository's
+Reviews category; to review it, comment there.
+
+**Searching.** `rich plugin search WORDS` lists the packages with every
+word in their id, name, description, keywords, authors or capabilities, so
+`rich plugin search rot13` finds the plugin with a `rot13` transform.
+`--kind` (`crate`, `wasm-plugin`, `micro-pack`, `theme`), `--tier`
+(`official`, `reviewed`, `community`) and `--recommended` narrow it. When
+nothing matches, it points at `rich plugin browse` and the
+[Marketplace page](marketplace.md), which lists the same packages in a
+browser, with download counts and reviews.
+
+```bash
+rich plugin search --kind theme --tier official   # rs-rich's own themes
+rich plugin search --recommended                  # the maintainers' picks
+```
+
+**Telling rs-rich's own packages apart.** Every command marks the tier:
+`✓ official` (green) is built and published by rs-rich, `approved` (the
+listing's `reviewed` tier) is someone else's package whose source a
+maintainer read and rebuilt, and `community` (yellow) is someone else's,
+checked by the marketplace's CI only. The words read the same without
+colour. `info` and the install prompt say who publishes the package
+("Official: built and published by rs-rich", or "Community: published by
+OWNER, not by rs-rich") and who authored it: rs-rich, or the listing's own
+`authors` and its repository. A listing's name, description and authors
+are its author's words; they cannot make the mark, and authors that claim
+rs-rich are shown in quotes. `★ recommended` marks a maintainer's pick,
+with the reason in `info`. The JSON reports keep `tier` as the listing says
+it and add `tier_label` and `recommended`.
+
 Before it writes anything, `install` shows the package's tier
-(`official`, `reviewed` or `community`), its source and revision, the
+(`✓ official`, `approved` or `community`), who publishes and authored it,
+its source and revision, the
 artifact's URL, SHA-256 and size, and its capabilities and permissions,
 then asks. Without a terminal it asks nothing: pass `--yes`, or it exits 3.
 Answering no exits 1. A WASM plugin is loaded in the sandbox before it is installed, to check that its
@@ -2354,8 +2435,11 @@ warns and goes on. An installed, enabled micro pack loads the same way,
 into the user layer after your own `~/.config/rich/micro/` (so your own
 asset keeps a name both have): its `:micro:` names expand on the next run,
 and `rich micro packs` lists it. `rich plugin disable` stops either
-loading. An installed theme is checked and recorded, but nothing selects it
-yet. A crate (Mermaid, DOT, lumis) is listed, never
+loading. An installed, enabled theme is what `--theme ID` selects when your
+config has no theme of that name (a config theme wins a clash). Its file is
+checked against the lockfile when it is selected: a file that changed is not
+used, and the run warns and reports the theme unknown. A disabled theme is
+not found. A crate (Mermaid, DOT, lumis) is listed, never
 installed: `rich plugin install mermaid` exits 2 and prints the `cargo add`
 line to use instead.
 
@@ -2371,7 +2455,12 @@ as it was installed, and reports a version yanked since with its reason
 | Trusted keys | `--marketplace-keys FILE` | `RICH_MARKETPLACE_KEYS` | the keys compiled in |
 
 A marketplace location is an `https://` URL, or a directory (a path or a
-`file://` URL) laid out as the marketplace repository is. A local one
+`file://` URL) laid out as the marketplace repository is. Downloads trust
+the system's certificate store first, so they work behind a company's
+TLS-inspecting proxy whose root CA is installed there (on Linux,
+`SSL_CERT_FILE` and `SSL_CERT_DIR` name the store), and Mozilla's roots
+built into `rich` when that fails. The index's signatures and each
+artifact's SHA-256 are checked either way. A local one
 serves each artifact from its own `artifacts/HOST/PATH`, never the
 network. The official keys (generation 1) are compiled in since 0.0.23;
 pass another `keys-N.json` with `--marketplace-keys` to trust a different

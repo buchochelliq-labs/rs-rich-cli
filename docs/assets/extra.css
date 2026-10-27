@@ -36,6 +36,14 @@
   flex: 0 0 auto;
   min-height: 24px;
   line-height: 1;
+  padding: 0 0.6em;
+  border: 1px solid var(--md-default-fg-color--lighter);
+  border-radius: 999px;
+  font-size: 0.7rem;
+}
+.md-typeset .project-badges a:hover,
+.md-typeset .project-badges a:focus-visible {
+  border-color: var(--md-accent-fg-color);
 }
 .md-typeset .project-badges img,
 .md-typeset table img[src^="https://img.shields.io/"] {

@@ -1,4 +1,5 @@
-# The official marketplace artifacts built by tests/support/official.rs:
+# The official marketplace artifacts built by tests/support/official.rs
+# (official::all_artifacts, in its order):
 # SHA-256, size in bytes, path under the marketplace's artifacts/.
 # Each is listed in rs-rich-marketplace's packages/ with this hash; a listed
 # version never changes, so a new hash goes with a new version.
@@ -6,3 +7,10 @@
 a22c3fec6e0c58cf29ae7d632d5e441c7c4c488201024500507a974707a2a292  7645  status/status-1.0.0.richmicro
 a5b914f10314a2e469fd68e45ecfc63bbd122c1121e65248f1bcbb93cd407059  4597  dev/dev-1.0.0.richmicro
 dc0b203a1fbd1ead46bc61b9ab552de6d280869ed5def8f8fa3fb326eb22589c  15655  fun/fun-1.0.0.richmicro
+31b870abcaf18270064d9c8aaa3e8f78b200a83b9ca847767f60c266617579e9  1784  textcase/textcase-0.2.0.wasm
+d14fe2459f83f7b95f2861d3ea3b1c1f1ce726a9c9779001669765240cfd0452  1950  wordplay/wordplay-0.1.0.wasm
+6c5af968c76ad7be6f5c9437109b60f4bc0dac5e0362b7ac99f35881f33cc8db  4524  dusk/dusk-1.0.0.ini
+ba471f21510d1261f75cc0203712399f71c285fb1a616e7a4427e87b47fa8ac2  4532  paper/paper-1.0.0.ini
+b6e01aa19c153b89e7d94c031bb64ff770ed34e6e0669ae23a3cbafcfa0e3582  4538  ocean/ocean-1.0.0.ini
+902e91575c0c45f6237dec8c17ef1e22cf43d06eacf96e1b50247e948a270aec  4616  high-contrast/high-contrast-1.0.0.ini
+9d091abab2a6b91a8c97d885f96b9c47fab94da6adcb1e8b1fdecac06fb1ed30  4744  mono/mono-1.0.0.ini

@@ -289,7 +289,10 @@ live:
   `is_supported_api_version`, the loaders' own checks. A WASM version with
   a capability kind this host does not know is skipped.
 - **Installing.** `Installer` downloads over HTTPS only, through a
-  `Transport` (`HttpsTransport`, ureq, behind the default `http` feature),
+  `Transport` (`HttpsTransport`, ureq, behind the default `http` feature;
+  it trusts the system's certificate store first, so a TLS-inspecting
+  proxy's root CA works, and Mozilla's bundled roots as the fallback: see
+  `rich_marketplace::tls`),
   reads at most the declared size, checks the SHA-256, then checks the
   artifact by kind: a WASM module's header (a host with the sandbox passes
   an `ArtifactChecker` that runs `load_wasm` and `compare_wasm_manifest`),
@@ -312,7 +315,8 @@ fixture marketplace with test keys checked into
 
 ```bash
 rich plugin search diagram        # id, kind, tier, the version this host loads
-rich plugin info textcase         # tier, source, versions, what loads here
+rich plugin search --sort downloads  # most downloaded first
+rich plugin info textcase         # tier, source, versions, what loads here, downloads, 👍/👎
 rich plugin install textcase      # shows tier, permissions, capabilities; asks
 rich plugin install textcase@0.1.0 --yes
 rich plugin list                  # what is installed; no network
@@ -323,24 +327,85 @@ rich plugin remove textcase
 rich plugin browse                # the same, in a selector with provenance
 ```
 
+The docs' [Marketplace page](marketplace.md) lists the same packages in a
+browser, with search, filters, download counts and reviews, and the
+command that installs each one. `rich plugin search` matches capabilities
+and authors too, and filters with `--kind`, `--tier` and `--recommended`
+([the CLI guide](cli.md#install-plugins-from-the-marketplace-0022)).
+
+**Which packages are rs-rich's own.** The `official` tier, shown as
+`✓ official` in the CLI and an "Official · by rs-rich" badge on the page,
+is only for packages built and published by rs-rich from its own
+repositories: the marketplace refuses `official` for any other repository,
+and only a maintainer can set a tier. `rich plugin info` and the install
+prompt say who publishes every package and who authored it, and a
+non-official package says "not by rs-rich". `reviewed` packages are shown
+as **Approved**: a maintainer read the source and rebuilt the same file.
+`community` packages were only checked by the marketplace's CI. A
+maintainer can also mark any package `★ recommended`, with a short reason
+([the format](design/marketplace.md#recommended)).
+
 - **What is listed (0.0.23).** The official marketplace,
   [`buchochelliq-labs/rs-rich-marketplace`](https://github.com/buchochelliq-labs/rs-rich-marketplace),
-  goes live with 0.0.23: the Mermaid, DOT and lumis crates, `textcase` (a
-  WASM plugin built from
-  `crates/rich-plugin-api/examples/wasm/textcase.wat`: the `upcase` and
-  `downcase` transforms and a `loud` fence) and the built-in micro packs
-  `status`, `dev` and `fun` as `.richmicro` archives. The WASM plugin and
-  the packs are built reproducibly, and `crates/rich-cli/tests/official_artifacts.rs`
-  checks each rebuild against its pinned hash. The marketplace serves them
-  from its own `artifacts/`. Until the maintainer signs the first index,
+  goes live with 0.0.23. It lists:
+  - the Mermaid, DOT and lumis crates;
+  - `textcase`, a WASM plugin. 0.1.0 is
+    `crates/rich-plugin-api/examples/wasm/textcase.wat`: the `upcase` and
+    `downcase` transforms and a `loud` fence. 0.2.0
+    (`crates/rich-cli/official/wasm/textcase-0.2.0.wat`) adds the
+    `titlecase`, `snakecase`, `kebabcase` and `camelcase` transforms;
+  - `wordplay` 0.1.0, a WASM plugin
+    (`crates/rich-cli/official/wasm/wordplay-0.1.0.wat`): the `rot13`,
+    `reverse` and `slug` transforms;
+  - the built-in micro packs `status`, `dev` and `fun`, as `.richmicro`
+    archives;
+  - five themes, from `crates/rich-cli/official/themes/`: `dusk` and
+    `ocean` (dark), `paper` (light), `high-contrast` (every text colour at
+    least 7:1 against black, WCAG AAA) and `mono` (no colour, attributes
+    only). Each is an upstream `[styles]` file that sets every style of
+    rich's default theme that has a colour (but the colour names, such as
+    `red`); the coloured ones meet WCAG AA
+    (4.5:1) against the background each file names.
+
+  The case transforms, `rot13` and `slug` change ASCII letters only, and
+  pass every byte of a non-ASCII character through as part of a word, so
+  their output is UTF-8. The identifier cases and `slug` work line by line.
+  `reverse` reverses each line by character cluster: a character with its
+  combining marks, variation selectors, skin tones and ZWJ sequences, and a
+  flag's two regional indicators, move as one. It needs no Unicode tables,
+  so it is not full UAX #29 (conjoining Hangul jamo and Indic spacing marks
+  are split). Each transform takes at least 256 KiB in one call within the
+  default fuel. A listed version never changes, so each WASM version has
+  its own source file. The plugins, packs and themes are built
+  reproducibly, and `crates/rich-cli/tests/official_artifacts.rs` checks
+  each rebuild against its pinned hash (`official_packages.rs` checks what
+  the plugins and themes do). The marketplace serves them from its own
+  `artifacts/`. Until the maintainer signs the first index,
   `search` says the marketplace has no `index.json` and exits 3.
+- **Downloads, ratings and reviews (0.0.23).** `info` shows a package's
+  downloads (per version), its 👍 and 👎 and its reviews link, and its
+  JSON report has a `stats` object; `search --sort downloads` sorts by
+  downloads. They come from the marketplace's `stats.json`, written
+  nightly to its `stats` branch from GitHub's release download counts,
+  crates.io's counts and each package's discussion in the "Reviews"
+  category. It is not signed and is shown only: nothing installs by it,
+  a missing or slow file is left out silently (3-second timeout), and
+  `rich` sends nothing to be counted. To rate a package, react 👍 or 👎
+  to its Reviews discussion; to review it, comment there. See
+  [Stats](design/marketplace.md#stats).
+- **Hosting (0.0.23).** The marketplace hosts the official WASM plugins,
+  packs and themes as release assets of its repository, one release per
+  version (`releases/download/ID-vVERSION/ID-VERSION.EXT`); the first
+  listings keep their raw `main` URLs.
 - **What installs.** A WASM plugin, a micro pack or a theme. A crate is
   listed only: `install` refuses it and prints its `cargo add` line, and
   `info` shows the same. An installed, enabled micro pack is loaded into
   micro's user layer on every run (after the user's own directory, so the
   user's own asset keeps a name both claim), once its file is checked
-  against the lockfile; `disable` stops it. An installed theme is checked
-  and recorded, but nothing selects it yet.
+  against the lockfile; `disable` stops it. An installed, enabled theme is
+  what `--theme ID` selects when the user's config has no theme of that
+  name (the config's own theme wins a clash), once its file is checked
+  against the lockfile; a changed file is not used, with a warning.
 - **The prompt.** `install` and `update` print the package's tier, source,
   revision, artifact URL, SHA-256, size, requirement, capabilities and
   permissions, then ask. Nothing is downloaded before the answer. `--yes`

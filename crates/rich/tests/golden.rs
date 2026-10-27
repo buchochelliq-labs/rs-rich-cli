@@ -654,6 +654,9 @@ fn build_renderable(name: &str) -> Box<dyn Renderable> {
             Box::new(AnsiDecoder::new().decode_line("\x1b[38;2;255;136;0mx\x1b[0m"))
         }
         "ansi_attrs" => Box::new(AnsiDecoder::new().decode_line("\x1b[3;4;9mstyled\x1b[0m")),
+        "ansi_charset_multibyte" => Box::new(AnsiDecoder::new().decode_line("a\x1b(\u{e9}b")),
+        "ansi_charset_wide" => Box::new(AnsiDecoder::new().decode_line("\x1b(\u{4e2d}\u{6587}")),
+        "ansi_charset_then_sgr" => Box::new(AnsiDecoder::new().decode_line("\x1b(\x1b[1mz\x1b[0m")),
         "styled_on_red" => Box::new(Styled::new(
             Box::new(Text::new("hi")),
             Style::parse("on red").unwrap(),
@@ -2133,6 +2136,56 @@ fn markdown_options_parity() {
         checked += 1;
     }
     assert_eq!(checked, 8, "expected every markdown options case to run");
+}
+
+/// `Markdown` under a console theme, checked against upstream: every
+/// `markdown.*` style is looked up in the console's theme as upstream's
+/// `console.get_style` does, a theme entry replaces the default outright
+/// (attributes only means no colour), and a theme that does not inherit
+/// leaves the other names null.
+#[test]
+fn markdown_theme_parity() {
+    let data = include_str!("golden/markdown_theme.tsv");
+    let mut checked = 0;
+    for (index, raw) in data.lines().enumerate() {
+        let line = raw.trim_end_matches('\r');
+        if line.trim().is_empty() || line.starts_with('#') {
+            continue;
+        }
+        let fields: Vec<&str> = line.splitn(6, '\t').collect();
+        let [name, source, styles, inherit, hyperlinks, expected] = fields[..] else {
+            panic!("line {}: expected six fields", index + 1);
+        };
+        let source: String = serde_json::from_str(source).expect("source json");
+        let styles: serde_json::Map<String, serde_json::Value> =
+            serde_json::from_str(styles).expect("styles json");
+        let expected: String = serde_json::from_str(expected).expect("expected json");
+        let theme = rich::theme::Theme::from_styles(
+            styles
+                .iter()
+                .map(|(name, style)| (name.clone(), style.as_str().expect("style").to_string())),
+            inherit == "true",
+        )
+        .expect("fixture styles parse");
+        let console = Console::builder()
+            .force_terminal(true)
+            .color_system(Some(ColorSystem::Truecolor))
+            .width(50)
+            .highlight(false)
+            .no_color(false)
+            .theme(theme)
+            .build();
+        let markdown = Markdown::new(&source).hyperlinks(hyperlinks == "true");
+        let got = console.capture(|c| c.print(&markdown));
+        assert_eq!(
+            got,
+            expected,
+            "markdown theme case {name:?} (line {}) diverged",
+            index + 1
+        );
+        checked += 1;
+    }
+    assert_eq!(checked, 5, "expected every markdown theme case to run");
 }
 
 /// `ProgressBar` against upstream: determinate, pulse, ASCII and no-colour.

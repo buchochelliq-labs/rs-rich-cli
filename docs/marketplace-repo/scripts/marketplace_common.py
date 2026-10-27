@@ -12,8 +12,16 @@ import re
 import urllib.request
 
 USER_AGENT = "rs-rich-marketplace-tools"
-# Where the marketplace serves its own artifacts (`artifacts/` on main).
-RAW_MAIN = "https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/main/"
+REPOSITORY = "buchochelliq-labs/rs-rich-marketplace"
+# Where the marketplace served its own artifacts until 0.0.23's first
+# listings (`artifacts/` on main). Those versions keep these URLs, since a
+# listed version never changes.
+RAW_MAIN = f"https://raw.githubusercontent.com/{REPOSITORY}/main/"
+# Where it serves them now: one release per package version, tagged
+# `ID-vVERSION`, its file a release asset. The pull request carries the file
+# as `artifacts/ID/FILE`, and publish-artifacts.yml makes the release after
+# the merge.
+RELEASES = f"https://github.com/{REPOSITORY}/releases/download/"
 # The largest artifact the format allows (a WASM module, 16 MiB) and a
 # generous bound for a .crate file.
 MAX_DOWNLOAD = 64 << 20
@@ -54,6 +62,38 @@ def fetch(url: str, limit: int = MAX_DOWNLOAD) -> bytes:
     if len(data) > limit:
         raise ValueError(f"{url}: larger than {limit} bytes")
     return data
+
+
+def release_tag(listing_id: str, version: str) -> str:
+    """The release (and tag) a hosted version lives in."""
+    return f"{listing_id}-v{version}"
+
+
+def release_asset(url: str):
+    """`(tag, file)` for a release asset URL of this repository, else None."""
+    if not url.startswith(RELEASES):
+        return None
+    parts = url[len(RELEASES):].split("/")
+    if len(parts) != 2 or not all(parts) or any(p in (".", "..") for p in parts):
+        raise ValueError(f"{url}: expected {RELEASES}TAG/FILE")
+    return parts[0], parts[1]
+
+
+def hosted_path(listing_id: str, version: str, url: str):
+    """The checkout path (`artifacts/...`) of an artifact this repository
+    hosts, or None for one hosted elsewhere. A release asset must be in the
+    release `ID-vVERSION` and named `ID-VERSION.EXT`."""
+    if url.startswith(RAW_MAIN):
+        return url[len(RAW_MAIN):]
+    asset = release_asset(url)
+    if asset is None:
+        return None
+    tag, name = asset
+    if tag != release_tag(listing_id, version):
+        raise ValueError(f"{url}: the release must be {release_tag(listing_id, version)}, not {tag}")
+    if not name.startswith(f"{listing_id}-{version}.") or "/" in name:
+        raise ValueError(f"{url}: the file must be named {listing_id}-{version}.EXT, not {name}")
+    return f"artifacts/{listing_id}/{name}"
 
 
 def sparse_index_path(name: str) -> str:

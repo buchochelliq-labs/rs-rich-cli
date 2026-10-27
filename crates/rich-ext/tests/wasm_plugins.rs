@@ -2,7 +2,7 @@
 //! limits hold (fuel, memory, no imports, the ABI version).
 #![cfg(feature = "wasm-plugins")]
 
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use rich::{Console, Text};
@@ -115,6 +115,49 @@ fn a_module_that_loops_forever_is_stopped_by_fuel() {
     let error = load_wasm(&path, &limits).unwrap_err();
     assert!(matches!(error, LoadError::Limit { .. }), "{error}");
     assert!(error.to_string().contains("fuel"), "{error}");
+}
+
+#[test]
+fn a_loop_over_memory_grow_runs_out_of_fuel_without_overflowing_the_stack() {
+    // With wasmi's tail-call dispatch, an optimised build (`cargo test
+    // --release`) overflowed the host's stack on this loop and aborted the
+    // process; a debug build always used the portable dispatch. Found by the
+    // `plugin_wasm` fuzz target. The call runs on a thread's usual 2 MiB
+    // stack, which a dispatch that grows the stack per instruction exhausts
+    // long before the fuel runs out.
+    let grow = plugin(
+        LOOPS,
+        "(loop $l (drop (memory.grow (local.get 0))) (br $l)) (i64.const 0)",
+        "",
+    );
+    let path = module("grow-loop.wasm", &grow);
+    let limits = WasmLimits {
+        fuel: 5_000_000,
+        ..WasmLimits::default()
+    };
+    let plugin = load_wasm(&path, &limits).unwrap();
+    let error = std::thread::Builder::new()
+        .stack_size(2 << 20)
+        .spawn(move || plugin.call(0, "x", 0))
+        .unwrap()
+        .join()
+        .expect("the call returns instead of overflowing the stack")
+        .unwrap_err();
+    assert!(error.contains("ran out of fuel"), "{error}");
+}
+
+#[test]
+fn a_code_section_with_bytes_but_no_functions_is_refused() {
+    // wasmi 2.0.0 divided by zero on this section (no functions, 1000 bytes
+    // of bodies) before reading it through. Found by the `plugin_wasm` fuzz
+    // target.
+    let mut bytes = b"\0asm\x01\0\0\0".to_vec();
+    bytes.extend([0x0a, 0xe9, 0x07, 0x00]); // the code section: 1001 bytes, 0 functions
+    bytes.extend([0u8; 1000]);
+    let error =
+        load_wasm_bytes(&bytes, Path::new("empty-code.wasm"), &WasmLimits::default()).unwrap_err();
+    assert!(matches!(error, LoadError::NotAPlugin { .. }), "{error}");
+    assert!(error.to_string().contains("invalid WASM"), "{error}");
 }
 
 #[test]

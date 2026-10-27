@@ -98,6 +98,8 @@ fn sha256(bytes: &[u8]) -> String {
 
 const SHOUT_WAT: &str = include_str!("../../rich-plugin-api/examples/wasm/shout.wat");
 const THEME: &[u8] = b"[styles]\nwarning = bold red\ninfo = dim cyan\n";
+/// `dusk`, a community theme: `alert` is magenta, `repr.number` underlined.
+const DUSK: &[u8] = b"[styles]\nalert = bold magenta\nrepr.number = underline\n";
 const BASE: &str = "https://example.test/releases";
 
 /// The shout module with its manifest's version replaced (same length).
@@ -280,8 +282,9 @@ fn workspace_version(dir: &str) -> String {
 impl Market {
     /// `shout` (0.1.0 good, 0.0.9 yanked), `future` (a WASM plugin for ABI
     /// 2 only), `solarized` (a theme), `broken` (a theme whose file does not
-    /// match its hash), the official crates, listed only, and the official
-    /// `textcase` plugin and micro packs, as the marketplace lists them.
+    /// match its hash), `dusk` (a community theme), the official crates,
+    /// listed only, and the official `textcase` plugin and micro packs, as
+    /// the marketplace lists them.
     fn write(dir: &Path) -> Market {
         let artifacts = dir.join("artifacts/example.test/releases");
         std::fs::create_dir_all(&artifacts).unwrap();
@@ -362,6 +365,21 @@ impl Market {
             )],
         );
 
+        put("dusk-0.3.0.ini", DUSK);
+        let dusk = listing(
+            "dusk",
+            "theme",
+            "community",
+            "https://github.com/example/rich-dusk",
+            vec![version(
+                "0.3.0",
+                json!({"theme_format": 1}),
+                "dusk-0.3.0.ini",
+                DUSK,
+                theme_caps("dusk"),
+            )],
+        );
+
         let team = team_pack();
         put("team-1.0.0.richmicro", &team);
         let team = listing(
@@ -384,6 +402,7 @@ impl Market {
             ("future".to_string(), future),
             ("solarized".to_string(), solarized),
             ("broken".to_string(), broken),
+            ("dusk".to_string(), dusk),
             (
                 "mermaid".to_string(),
                 crate_listing(
@@ -502,7 +521,13 @@ impl World {
 
     /// `rich ARGS`, with the install directory in RICH_PLUGIN_DIR.
     fn rich(&self, args: &[&str]) -> Output {
-        Command::new(env!("CARGO_BIN_EXE_rich"))
+        self.command(args).output().unwrap()
+    }
+
+    /// The command [`World::rich`] runs.
+    fn command(&self, args: &[&str]) -> Command {
+        let mut command = Command::new(env!("CARGO_BIN_EXE_rich"));
+        command
             .current_dir(&self.root)
             .env("HOME", &self.home)
             .env("USERPROFILE", &self.home)
@@ -513,9 +538,8 @@ impl World {
             .env("COLUMNS", "120")
             .env("NO_COLOR", "1")
             .args(args)
-            .stdin(Stdio::null())
-            .output()
-            .unwrap()
+            .stdin(Stdio::null());
+        command
     }
 
     fn lockfile(&self) -> Value {
@@ -1126,6 +1150,94 @@ fn an_installed_micro_pack_loads_until_disabled_or_changed() {
     let (stdout, stderr) = flag(&w);
     assert_eq!(stdout, "a :micro:team/flag: b\n");
     assert!(stderr.contains("micro pack team is not loaded"), "{stderr}");
+}
+
+/// An installed, enabled theme is what `--theme ID` selects when the
+/// config has no theme of that name. The config's own theme wins a clash;
+/// a disabled theme is not found, and one whose file changed on disk is
+/// not used, with a warning.
+#[test]
+fn an_installed_theme_is_selected_by_theme_until_disabled_or_changed() {
+    let w = world();
+    // The exported page carries the resolved styles; colour is kept.
+    let render = |w: &World, extra: &[&str]| {
+        let mut args = vec!["--print", "[alert]x[/]", "--export-html", "out.html"];
+        args.extend(extra);
+        let out = w.command(&args).env_remove("NO_COLOR").output().unwrap();
+        let page = std::fs::read_to_string(w.root.join("out.html")).unwrap_or_default();
+        let _ = std::fs::remove_file(w.root.join("out.html"));
+        (out, page)
+    };
+    const MAGENTA: &str = "color: #800080";
+
+    let (out, _) = render(&w, &["--theme", "dusk"]);
+    assert_code(&out, 2);
+    let stderr = text(&out.stderr);
+    assert!(stderr.contains("unknown theme \"dusk\""), "{stderr}");
+    assert!(stderr.contains("rich plugin search"), "{stderr}");
+
+    assert_code(&w.plugin(&["install", "dusk", "--yes"]), 0);
+    let (out, page) = render(&w, &["--theme", "dusk"]);
+    assert_code(&out, 0);
+    assert!(page.contains(MAGENTA), "{page}");
+    assert!(text(&out.stderr).is_empty(), "{}", text(&out.stderr));
+    // Not selected, it does nothing.
+    let (out, page) = render(&w, &[]);
+    assert_code(&out, 0);
+    assert!(!page.contains(MAGENTA), "{page}");
+    // `--theme-style` still overrides its bindings.
+    let (_, page) = render(&w, &["--theme", "dusk", "--theme-style", "alert=green"]);
+    assert!(
+        page.contains("color: #008000") && !page.contains(MAGENTA),
+        "{page}"
+    );
+
+    // A config theme of the same name wins.
+    std::fs::write(w.root.join("rich.toml"), "[themes.dusk]\nalert = 'blue'\n").unwrap();
+    let (out, page) = render(&w, &["--theme", "dusk"]);
+    assert_code(&out, 0);
+    assert!(
+        page.contains("color: #000080") && !page.contains(MAGENTA),
+        "{page}"
+    );
+    // A config's own `theme = "..."` names only a config theme.
+    std::fs::write(w.root.join("rich.toml"), "[defaults]\ntheme = 'dusk'\n").unwrap();
+    let (out, page) = render(&w, &[]);
+    assert_code(&out, 2);
+    assert!(!page.contains(MAGENTA), "{page}");
+    assert!(
+        text(&out.stderr).contains("unknown theme \"dusk\""),
+        "{}",
+        text(&out.stderr)
+    );
+    std::fs::remove_file(w.root.join("rich.toml")).unwrap();
+    // And with no config at all.
+    let (out, page) = render(&w, &["--no-config", "--theme", "dusk"]);
+    assert_code(&out, 0);
+    assert!(page.contains(MAGENTA), "{page}");
+
+    assert_code(&w.plugin(&["disable", "dusk"]), 0);
+    let (out, _) = render(&w, &["--theme", "dusk"]);
+    assert_code(&out, 2);
+    assert!(
+        text(&out.stderr).contains("unknown theme"),
+        "{}",
+        text(&out.stderr)
+    );
+    assert_code(&w.plugin(&["enable", "dusk"]), 0);
+    assert_code(&render(&w, &["--theme", "dusk"]).0, 0);
+
+    std::fs::write(
+        w.plugins.join("dusk/dusk-0.3.0.ini"),
+        "[styles]\nalert = bold green\n",
+    )
+    .unwrap();
+    let (out, page) = render(&w, &["--theme", "dusk"]);
+    assert_code(&out, 2);
+    assert!(!page.contains("color: #008000"), "{page}");
+    let stderr = text(&out.stderr);
+    assert!(stderr.contains("theme dusk is not loaded"), "{stderr}");
+    assert!(stderr.contains("unknown theme"), "{stderr}");
 }
 
 /// `publish` takes a new micro pack listing's description, license and

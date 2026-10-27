@@ -24,8 +24,10 @@
 ;;   RICH_OFFICIAL_ARTIFACTS=dir cargo test -p rs-rich-cli --locked \
 ;;       --test official_artifacts -- --ignored write_official_artifacts
 ;;
-;; Change this file only with a new version in the manifest below, and pin
-;; the new hash: a listed version never changes.
+;; This file is textcase 0.1.0 and stays so: a listed version never changes.
+;; Later versions (0.2.0 adds titlecase, snakecase, kebabcase and camelcase)
+;; are built from crates/rich-cli/official/wasm/textcase-VERSION.wat, beside
+;; the second official plugin, wordplay.
 (module
   (memory (export "memory") 1)
   ;; A bump allocator: every call runs in a fresh instance, so nothing is freed.

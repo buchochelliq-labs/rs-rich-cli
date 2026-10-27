@@ -59,6 +59,8 @@ class ExamplesTest(unittest.TestCase):
             "crate-url-mismatch": "static.crates.io",
             "official-outside-repository": "tier:",
             "duplicate-version": "repeats",
+            "recommended-long-note": "recommended.note",
+            "recommended-bad-day": "recommended.since",
         }
         self.assertEqual(set(reasons), {p.stem for p in INVALID})
         for path in INVALID:
@@ -110,6 +112,24 @@ class RulesTest(unittest.TestCase):
             with self.subTest(version):
                 self.assertEqual(self.errors(listing) == [], ok, self.errors(listing))
                 self.assertEqual(vm.SEMVER.match(version) is not None, ok)
+
+    def test_recommended_is_a_day_and_a_short_note(self):
+        listing = example("status-icons")
+        self.assertEqual(self.errors(listing), [])
+        for mutate in (
+            lambda r: r.pop("note"),
+            lambda r: r.pop("since"),
+            lambda r: r.__setitem__("by", "someone"),
+            lambda r: r.__setitem__("note", ""),
+            lambda r: r.__setitem__("note", "two\nlines"),
+            lambda r: r.__setitem__("since", "26-10-2026"),
+        ):
+            listing = example("status-icons")
+            mutate(listing["recommended"])
+            self.assertNotEqual(self.errors(listing), [])
+        listing = example("status-icons")
+        listing["recommended"]["note"] = "x" * 140
+        self.assertEqual(self.errors(listing), [])
 
     def test_a_published_day_must_exist(self):
         listing = example("shout")

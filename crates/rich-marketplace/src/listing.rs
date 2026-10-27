@@ -190,6 +190,20 @@ pub struct CrateInfo {
     pub features: Vec<String>,
 }
 
+/// A maintainer's pick (the optional `recommended`): the day it was
+/// given and why, in at most 140 characters. Like the tier, only a
+/// maintainer sets it, and it is signed with the rest of the listing.
+#[derive(Clone, Debug, PartialEq, Eq)]
+#[non_exhaustive]
+pub struct Recommended {
+    /// `YYYY-MM-DD`.
+    pub since: String,
+    pub note: String,
+}
+
+/// The longest `recommended.note`, in characters.
+pub const MAX_RECOMMENDED_NOTE: usize = 140;
+
 /// One package and every version ever listed, newest first.
 #[derive(Clone, Debug, PartialEq, Eq)]
 #[non_exhaustive]
@@ -205,6 +219,8 @@ pub struct Listing {
     pub homepage: Option<String>,
     pub keywords: Vec<String>,
     pub crate_info: Option<CrateInfo>,
+    /// A maintainer's pick, when it is one.
+    pub recommended: Option<Recommended>,
     pub versions: Vec<ListedVersion>,
 }
 
@@ -270,6 +286,10 @@ impl Listing {
             (_, Some(_)) => return Err(invalid("crate", "only for a crate")),
             (_, None) => None,
         };
+        let recommended = match map.get("recommended") {
+            None => None,
+            Some(value) => Some(recommended(value)?),
+        };
         let versions = map
             .get("versions")
             .and_then(Value::as_array)
@@ -295,6 +315,7 @@ impl Listing {
             homepage,
             keywords,
             crate_info,
+            recommended,
             versions,
         };
         listing.check_rules()?;
@@ -393,6 +414,27 @@ fn string<'a>(map: &'a Map<String, Value>, key: &str, at: &str) -> Result<&'a st
 }
 
 /// One line: 1 to 1024 characters, no control characters.
+fn recommended(value: &Value) -> Result<Recommended, ListingError> {
+    let map = value
+        .as_object()
+        .ok_or_else(|| invalid("recommended", "not an object"))?;
+    let since = string(map, "since", "recommended.since")?;
+    if parse_date(since).is_none() {
+        return Err(invalid("recommended.since", "not a real day YYYY-MM-DD"));
+    }
+    let note = line(string(map, "note", "recommended.note")?, "recommended.note")?;
+    if note.chars().count() > MAX_RECOMMENDED_NOTE {
+        return Err(invalid(
+            "recommended.note",
+            "must be at most 140 characters",
+        ));
+    }
+    Ok(Recommended {
+        since: since.to_string(),
+        note: note.to_string(),
+    })
+}
+
 fn line<'a>(text: &'a str, at: &str) -> Result<&'a str, ListingError> {
     let count = text.chars().count();
     if count == 0 || count > 1024 {
@@ -826,6 +868,29 @@ mod tests {
         assert_eq!(newest.requires, Requires::Abi { major: 1, minor: 0 });
         assert!(!newest.is_yanked());
         assert!(listing.versions.iter().any(ListedVersion::is_yanked));
+    }
+
+    #[test]
+    fn recommended_reads_as_written() {
+        let path = examples("valid")
+            .into_iter()
+            .find(|p| p.ends_with("status-icons.json"))
+            .unwrap();
+        let text = std::fs::read_to_string(path).unwrap();
+        let listing = Listing::parse(text.as_bytes()).unwrap();
+        let recommended = listing.recommended.unwrap();
+        assert_eq!(recommended.since, "2026-10-26");
+        assert!(recommended.note.starts_with("Clear status badges"));
+        let long = text.replacen(&recommended.note, &"x".repeat(MAX_RECOMMENDED_NOTE + 1), 1);
+        assert!(Listing::parse(long.as_bytes()).is_err());
+        let bad_day = text.replacen("\"since\": \"2026-10-26\"", "\"since\": \"2026-02-30\"", 1);
+        assert!(Listing::parse(bad_day.as_bytes()).is_err());
+        let without = examples("valid")
+            .into_iter()
+            .find(|p| p.ends_with("shout.json"))
+            .unwrap();
+        let listing = Listing::parse(&std::fs::read(without).unwrap()).unwrap();
+        assert_eq!(listing.recommended, None);
     }
 
     #[test]

@@ -1,0 +1,15 @@
+{
+  "tape": "docs/tapes/plugin-search.tape",
+  "tape_fnv1a64": "262b1a6a198d2bf1",
+  "recorder": "rs-rich-record 0.0.11",
+  "rich": null,
+  "commit": "91406f268e33091f3149d430137520dd31dddf72",
+  "screenshots": [
+    "themes",
+    "recommended",
+    "info",
+    "browse",
+    "filter"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

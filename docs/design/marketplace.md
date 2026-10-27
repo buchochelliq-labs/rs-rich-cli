@@ -10,13 +10,18 @@ with the marketplace repository's signing workflow kept to hand over in
 [`docs/marketplace-repo/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/docs/marketplace-repo).
 **The marketplace goes live with 0.0.23** (the maintainer's call on
 2026-10-26): the marketplace repository lists every official plugin
-(Mermaid, DOT and lumis as crates, the `textcase` WASM plugin) and the
-built-in micro packs (`status`, `dev`, `fun`), and checks every listing
+(Mermaid, DOT and lumis as crates, the `textcase` and `wordplay` WASM
+plugins), the built-in micro packs (`status`, `dev`, `fun`) and the
+official themes (`dusk`, `paper`, `ocean`, `high-contrast`, `mono`), and
+checks every listing
 pull request; it is live once the maintainer has set up the signing
 environment and signed the first index
 ([0.0.23 plan, item 17](../plans/0.0.23.md)). This note is the contract
 between the marketplace repository, the crate and the CLI. It is part of the
 1.0 promise ([the plan to 1.0.0](../plans/1.0.0.md#track-b-the-plugin-marketplace-232-463)).
+The optional `recommended` key is new in 0.0.23 ([Recommended](#recommended)),
+and the docs' [Marketplace page](../marketplace.md) lists the marketplace
+in a browser.
 
 Plugins already load three ways ([Extending](../PLUGINS.md),
 [Plugin loading](plugin-loading.md)): compiled in, as a native library from a
@@ -24,9 +29,16 @@ path, or as a WASM module from a path. The marketplace adds a way to *find,
 trust, install and update* a package. It stores where each artifact is and
 what it hashes to, never the artifact: crates stay on crates.io, and WASM
 modules and asset packs on their authors' release pages. The one exception
-is the official WASM plugin and micro packs, which the marketplace
-repository serves itself from its `artifacts/` (by
-`raw.githubusercontent.com` URLs on `main`), pinned by hash like any other.
+is the official WASM plugins, micro packs and themes, which the marketplace
+repository hosts itself, pinned by hash like any other: since the themes,
+each version as a release asset,
+`https://github.com/buchochelliq-labs/rs-rich-marketplace/releases/download/ID-vVERSION/ID-VERSION.EXT`
+(one release per version, made after the merge by its
+`publish-artifacts.yml`); the first ones keep their
+`raw.githubusercontent.com` URLs on `main`, since a listed version never
+changes. Either way the listing's pull request carries the file in
+`artifacts/ID/`, where its check reads it. See [Stats](#stats) for what
+the release counts are used for.
 
 ## Summary
 
@@ -87,6 +99,7 @@ marked optional:
 | `repository` | string | The source repository, `https://`. |
 | `homepage` | string | Optional, `https://`. |
 | `keywords` | strings | Optional, at most 8, for search. |
+| `recommended` | object | Optional, set by a maintainer: `since` (`YYYY-MM-DD`) and `note` (at most 140 characters). See [Recommended](#recommended). |
 | `crate` | object | For a `crate` only, and required there: `name` (the crate on crates.io) and optional `features` (the Cargo features that enable the plugin). |
 | `versions` | array | Every version ever listed, **newest first** by SemVer precedence. |
 
@@ -304,7 +317,8 @@ holds listings that must be refused, each named for its fault: `bad-hash`
 library cannot be listed), `missing-abi`, `wasm-network-permission`,
 `yanked-without-reason`, `crate-without-native-code`, `http-artifact`,
 `unsorted-versions`, `ansi-without-permission`, `crate-url-mismatch`,
-`official-outside-repository` and `duplicate-version`.
+`official-outside-repository`, `duplicate-version`,
+`recommended-long-note` and `recommended-bad-day`.
 
 ## The index
 
@@ -381,7 +395,7 @@ made by any other key is refused before it is checked.
 |---|---|
 | Refreshing the index (`rich plugin update`, `search` with a stale cache) | First the key chain (below), then `index.json.minisig` against the current main key, the trusted comment's serial, `schema_version`, the serial against the last accepted one, and `expires`. The verified index is cached with its signature. |
 | Reading a listing (`search`, `info`, `install`) | Its SHA-256 against the index, then the schema and the rules beyond it, and that its `id` is the key it is filed under. |
-| Installing | The version resolves (below) and is not yanked. The artifact is downloaded over HTTPS only (redirects too), reading at most `size` bytes, into a temporary file beside the destination; its size and SHA-256 must match. Then by kind: a WASM module is loaded in the sandbox (`load_wasm`), and its manifest's name, version, ABI and capabilities must equal the listing's; a micro pack is read with the default limits, and its `pack.json` name and version must equal the id and version; a theme file must parse. Only then is it moved into place and written to the lockfile (id, kind, version, URL, SHA-256, tier and the index serial). |
+| Installing | The version resolves (below) and is not yanked. The artifact is downloaded over HTTPS only (redirects too, at most five, followed one request at a time), trusting the system's certificate store first and Mozilla's bundled roots as the fallback (TLS is transport only: the trust is the signatures' and the SHA-256's), reading at most `size` bytes, into a temporary file beside the destination; its size and SHA-256 must match. Then by kind: a WASM module is loaded in the sandbox (`load_wasm`), and its manifest's name, version, ABI and capabilities must equal the listing's; a micro pack is read with the default limits, and its `pack.json` name and version must equal the id and version; a theme file must parse. Only then is it moved into place and written to the lockfile (id, kind, version, URL, SHA-256, tier and the index serial). |
 | Every load (each run) | The installed file's SHA-256 against the lockfile; a file changed on disk is not loaded. No network. |
 | `rich plugin verify` | Every installed file against the lockfile, and against the current index: a version yanked since is reported with its reason. |
 
@@ -456,6 +470,13 @@ Only a `wasm-plugin`, a `micro-pack` and a `theme` install from the
 marketplace. They are sandboxed code or data, so the install prompt can say
 what they will do (their capabilities, permissions and tier) and mean it.
 
+Once installed and enabled, each is used with no other step, after its file
+is checked again against the lockfile (a changed file is not used, with a
+warning): a WASM plugin loads on every run, a micro pack loads into micro's
+user layer, and a **theme** is what `--theme ID` selects when the user's
+config has no theme of that name. The config's own theme wins a clash, and a
+disabled theme is not found.
+
 A **`crate`** is listed only: it is native code that runs with the user's
 rights, and it is built into a program rather than added to one. `rich
 plugin install mermaid` refuses and prints what to do instead:
@@ -485,13 +506,135 @@ for its own major, and says that newer versions need a newer host.
 
 | Tier | Meaning | Who sets it |
 |---|---|---|
-| `official` | This repository's own packages: the Mermaid, DOT and lumis crates, the `textcase` WASM plugin and the built-in micro packs, built from this repository (the crates by its release workflow, the others reproducibly by `tests/official_artifacts.rs`, which pins their hashes). The repository must be under `buchochelliq-labs`. | The maintainer. |
+| `official` | This repository's own packages: the Mermaid, DOT and lumis crates, the `textcase` and `wordplay` WASM plugins, the built-in micro packs and the official themes, built from this repository (the crates by its release workflow, the others reproducibly by `tests/official_artifacts.rs`, which pins their hashes). The repository must be under `buchochelliq-labs`. | The maintainer. |
 | `reviewed` | A maintainer has read the source at `source_revision`, rebuilt the artifact and got the same hash. | The maintainer, per version. |
 | `community` | The marketplace's CI checked the listing, the hash and (for a WASM plugin) that it loads in the sandbox against the current host. Nothing more. | The default. |
 
 The tier is shown wherever a package is: in search results, in `info`, and
 in the install prompt. A change that sets or raises a tier is refused by the
-marketplace's CI unless a maintainer approves it.
+marketplace's CI unless a maintainer approves it (the `tier-approved`
+label).
+
+**Users can always tell ours.** Only `official` marks rs-rich's own
+packages, the CLI and the docs site show it as a badge beside the id, and
+nothing else may pass for it. Besides the tier rule (and the validator's:
+`official` only for a repository under `buchochelliq-labs`), the
+marketplace's pull request check (`scripts/check_artifacts.py`) refuses,
+in a listing that is not official and is new or renamed:
+
+- **reserved ids:** one starting with `rs-rich`, `rich-`, `richcli` or
+  `official` (ignoring `-`, `_` and `.`, except in `rich-`), or `rich` or
+  `rs`;
+- **lookalike ids:** equal to an official id once `-`, `_` and `.` are
+  dropped (`text-case`), or, for an official id of four characters or
+  more, one insertion, deletion or substitution from it (`textcase2`,
+  `wordp1ay`); and an id that is not ASCII (`textcаse`, with a Cyrillic
+  а), which the schema's id pattern refuses too;
+- **reserved wording:** "official" or "rs-rich" (so "by rs-rich") in the
+  name, or "official" in the description, in any case and with any
+  separators.
+
+A maintainer's `name-approved` label lifts the name check for a genuine
+case, such as "an unofficial port of …". A listing already merged is
+checked again only when its id, name or description changes.
+
+The same check gates a listing's `recommended` mark (★ Recommended):
+adding, changing or removing it needs a maintainer's
+`recommended-approved` label, separate from `tier-approved`.
+
+## Stats
+
+Download counts and ratings are **unsigned and display-only**. They live
+outside the signed index, nothing installs, resolves or trusts by them,
+and `rich` sends nothing to count anything: no telemetry and no install
+pings. The counts are the ones GitHub and crates.io keep anyway.
+
+The marketplace repository's `stats.yml` writes them nightly to
+`stats.json` on its `stats` branch (never `main`), with the job's token:
+
+`https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/stats/stats.json`
+
+```json
+{
+  "schema_version": 1,
+  "generated_at": "2026-10-27T03:41:07Z",
+  "repository": "buchochelliq-labs/rs-rich-marketplace",
+  "packages": {
+    "textcase": {
+      "downloads": {"total": 17, "versions": {"0.2.0": 17, "0.1.0": null}},
+      "reviews": {"url": "https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/3",
+                  "up": 4, "down": 1, "comments": 2}
+    }
+  }
+}
+```
+
+- `downloads.versions`, per listed version: the release asset's
+  `download_count` for a version the marketplace hosts as a release,
+  crates.io's count for a crate, and `null` (not counted) for a version on
+  a raw URL or whose release is not made yet. `total` is the sum of the
+  counted versions, `null` when none is.
+- `reviews`: the package's discussion in the marketplace repository's
+  "Reviews" category, titled with its id and opened by `discussions.yml`
+  (one written by anyone else is ignored): its URL, the 👍 and 👎
+  reactions on its first post, and its comment count; `null` without one.
+
+The schema is the marketplace repository's `schemas/stats.schema.json`.
+`rich plugin info ID` shows the downloads, the rating and the reviews link,
+and its JSON report gains a `stats` object (`null` without them); `rich
+plugin search --sort downloads` sorts by the total. The client reads the
+official file from that URL (another `https://` marketplace whose base
+ends in `/main/` from the same base with `stats` in its place, else
+`stats.json` beside its index; a local one from its directory), with a
+3-second timeout, at most 4 MiB. A missing, slow or malformed file, or
+another `schema_version`, is left out without a word; counts that are not
+integers show as not counted, and the reviews are dropped unless their
+link points into the marketplace's own Discussions: it must start with
+`https://github.com/buchochelliq-labs/rs-rich-marketplace/discussions/`
+as written and once normalised (dot segments, `%2e` dots), with no query,
+fragment, `..` or `%2e%2e`. The Marketplace page (`readStats`) and the CLI
+hold links to the same rule, so an unsigned `stats.json` cannot send a
+reader elsewhere.
+
+**How the tiers are shown (0.0.23).** People see the tiers as **Official**,
+**Approved** and **Community**: `reviewed` is shown as "Approved". The
+listing format, the lockfile and the reports keep `reviewed`, since a 0.0.22
+client refuses a tier it does not know; the reports add a `tier_label`. The
+CLI marks the tier as `✓ official` (green), `approved` and `community`
+(yellow), words that read the same without colour, and the
+[Marketplace page](../marketplace.md) draws an "Official · by rs-rich"
+badge. Both say who publishes a package (rs-rich for an official one, else
+its repository's owner) and who authored it ("Authored by rs-rich", or the
+listing's own `authors`, quoted when they name rs-rich, and its
+repository). The marks come only from the `tier` and `recommended` fields:
+a listing's name, description and authors are always shown as plain text.
+
+## Recommended
+
+`recommended` is an optional listing key: a maintainer's pick, given to any
+package of any tier.
+
+```json
+"recommended": {"since": "2026-10-26", "note": "A small, sandboxed first plugin."}
+```
+
+- `since` is the day it was given, `YYYY-MM-DD`; `note` says why, in one
+  line of at most 140 characters. Both are required, and no other key is
+  allowed (the schema, `scripts/validate_marketplace.py`).
+- **Only a maintainer sets it.** The marketplace's pull request check
+  refuses a change that adds or changes `recommended` without a
+  maintainer's label. It is part of the listing, so the signed index covers
+  it, unlike the display-only `stats.json`.
+- **Shown** as `★ recommended` by `rich plugin search`, `info` (with the
+  note), `browse` and the install prompt, and as a ★ Recommended badge on
+  the [Marketplace page](../marketplace.md); `rich plugin search
+  --recommended` lists only these. rs-rich-marketplace reads it as
+  `Listing::recommended`.
+- **Status:** in the format since 0.0.23. A 0.0.22 client ignores the key
+  (a client ignores keys it does not know within a schema version). The
+  marketplace's CI validates with rs-rich-cli's validator pinned at
+  `release-0.0.22` until 0.0.23 is tagged, which refuses the key, so no
+  listing uses it before then.
 
 ## Yanking
 

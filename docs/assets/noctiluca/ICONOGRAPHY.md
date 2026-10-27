@@ -62,6 +62,12 @@ have a rim in the rim colour, so they stay visible on white.
 | `lanternfish-pixel.txt` | The same grid as characters, with the palette | Source for a `pixels` buffer or a test |
 | `lanternfish-pixel.svg` | The same grid as SVG runs | The pixel version in docs |
 | `preview.html` | Every file on dark and light | Reviewing changes |
+| `promo.mp4` | Noctiluca's promo: the bloom on a night sea, glowing plankton, a network of terminal windows, the title. AI-generated, made by the maintainer for rs-rich, MIT. 960x540, H.264 and AAC, 36 s | The docs page's introduction, the READMEs |
+| `promo-poster.jpg` | The promo's title frame (33 s) | The video's poster |
+
+The promo's five seconds of the bloom are also Noctiluca's video fixture
+`crates/noctiluca/tests/fixtures/media/bloom.webm`, cut by `make_bloom.py`
+there.
 
 Memo in `memo-amazed.svg` is drawn from her own files in
 `docs/assets/intuituive/mascot/`, with her palette: her hero's body, her

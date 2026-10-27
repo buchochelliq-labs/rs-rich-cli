@@ -1,0 +1,41 @@
+{
+  "schema_version": 1,
+  "id": "high-contrast",
+  "kind": "theme",
+  "name": "High-contrast theme",
+  "description": "Bright colours on black, every text colour at least 7:1 (WCAG AAA); no dim text",
+  "tier": "official",
+  "license": "MIT",
+  "repository": "https://github.com/buchochelliq-labs/rs-rich-cli",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "published": "2026-10-26",
+      "requires": {
+        "theme_format": 1
+      },
+      "artifact": {
+        "url": "https://github.com/buchochelliq-labs/rs-rich-marketplace/releases/download/high-contrast-v1.0.0/high-contrast-1.0.0.ini",
+        "sha256": "902e91575c0c45f6237dec8c17ef1e22cf43d06eacf96e1b50247e948a270aec",
+        "size": 4616
+      },
+      "source_revision": "d26de521746b47baa479b0f7c902f2ed8909b580",
+      "capabilities": [
+        {
+          "kind": "theme",
+          "name": "high-contrast"
+        }
+      ],
+      "permissions": []
+    }
+  ],
+  "homepage": "https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/official/themes/high-contrast.ini",
+  "authors": [
+    "rs-rich contributors"
+  ],
+  "keywords": [
+    "theme",
+    "accessibility",
+    "dark"
+  ]
+}

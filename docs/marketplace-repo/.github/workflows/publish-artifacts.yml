@@ -1,0 +1,58 @@
+# Publish the artifacts this repository hosts, as GitHub release assets.
+#
+# This workflow belongs to the rs-rich-marketplace repository; rs-rich-cli
+# keeps a copy in docs/marketplace-repo/ (see the README there). The
+# contract is rs-rich-cli's docs/design/marketplace.md, "Hosting".
+#
+# A version this repository hosts is listed with the URL
+#   https://github.com/buchochelliq-labs/rs-rich-marketplace/releases/download/ID-vVERSION/ID-VERSION.EXT
+# and its pull request carries the file as artifacts/ID/ID-VERSION.EXT,
+# where check-listings.yml checks it. After the merge this makes the
+# release ID-vVERSION at the merge commit (never marked latest), uploads
+# the file, and reads the asset back: its size and SHA-256 must equal the
+# listing's (scripts/publish_releases.py). A release or asset already there
+# is only checked, so the run can be repeated; an asset is never replaced.
+#
+# It needs no environment and no secret: the job's token, with
+# `contents: write`, creates releases and tags, which is not a push to
+# main, so main's ruleset (branch rules on the default branch) does not
+# apply. The index is signed by sign-index.yml without waiting for this:
+# the client checks every download's SHA-256, so an install in the minutes
+# before the asset exists fails cleanly and works once it does.
+name: Publish artifacts
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "packages/**"
+  workflow_dispatch:
+
+concurrency:
+  group: publish-artifacts
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  publish:
+    name: release assets for hosted versions
+    if: github.ref == 'refs/heads/main'
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          persist-credentials: false
+
+      - uses: actions/setup-python@v7
+        with:
+          python-version: "3.12"
+
+      - name: Make missing releases and check every hosted asset
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: python3 scripts/publish_releases.py --target "$GITHUB_SHA"

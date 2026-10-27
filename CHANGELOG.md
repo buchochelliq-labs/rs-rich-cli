@@ -9,6 +9,105 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **Themes reach Markdown, and a theme style replaces** (rs-rich,
+  rs-rich-cli). Core's `Markdown` now looks every `markdown.*` style up in
+  the console's theme, as rich 15.0.0 does, so a theme's (or
+  `--theme-file`'s) `markdown.h1`, `markdown.code`, `markdown.link` and the
+  rest show in `rich -m`; the styles stack in upstream's order, and
+  `<kbd>` renders in `markdown.kbd`. The default theme renders as before
+  (golden `markdown_theme.tsv`). In the CLI, `--theme-style
+  repr.number=bold` printed numbers bold cyan: rs-rich-ext's example
+  `NumberHighlighter` painted digits a fixed colour over the theme. The
+  CLI no longer installs it, so numbers take the theme's style alone and
+  digits upstream leaves plain (`abc123`) are plain.
+
+- **HTTPS downloads trust the system's certificate store** (rs-rich-marketplace,
+  rs-rich-cli). `rich plugin install`, `rich <url>` and the marketplace's
+  download statistics trusted only Mozilla's bundled roots, so behind a
+  TLS-inspecting proxy with its own root CA (a company network's, or a
+  sandbox's) a download failed with `invalid peer certificate:
+  UnknownIssuer`. They now trust the operating system's store first
+  (ureq's platform verifier: the OS verifier on Windows and macOS, the
+  system's CA files on Linux, honouring `SSL_CERT_FILE` and `SSL_CERT_DIR`)
+  and retry once with the bundled roots when that fails at the TLS or I/O
+  level. The new `rich_marketplace::tls` module (`Trust`, `with_fallback`)
+  is the one place that chooses. Redirects are now followed one request at
+  a time (`rich_marketplace::redirect`), with the same limits and
+  HTTPS-only rule, relative `Location`s resolved with RFC 3986's dot-segment
+  removal, and one overall timeout for the whole chain and its body (each
+  request gets only what remains: `redirect::Deadline`): ureq's own redirect handling took a redirect whose
+  header block had not finished arriving, and through such a proxy GitHub's
+  release downloads then failed with `chunk length cannot be read as a
+  number`. Signatures and SHA-256 pins are checked as before: TLS is
+  transport only. New dependencies, all permissive: rustls-platform-verifier
+  (MIT OR Apache-2.0), rustls-native-certs (Apache-2.0 OR ISC OR MIT),
+  openssl-probe, webpki-root-certs (CDLA-Permissive-2.0, as webpki-roots),
+  and on macOS and Windows security-framework, core-foundation and
+  schannel.
+
+- **WASM plugin tests run optimised in CI** (repository). A new
+  `wasm-plugins-release` job, required by `ci-ok`, runs rs-rich-ext's WASM
+  plugin tests and the CLI's marketplace, official-artifact and plugin
+  tests with `--release`, where the stack overflow the fuzz targets found
+  showed (it did not in debug builds).
+
+- **Fuzz targets, run nightly** (repository; rs-rich): `fuzz/` holds
+  cargo-fuzz targets for every parser that takes outside input (markup,
+  ANSI, Markdown, JSON, DOT, Mermaid, CSV/TSV and JSONL, stylesheets, the
+  VT emulator and tapes, web input and WebSocket frames, the marketplace's
+  documents and signatures, plugin manifests and WASM modules), and
+  `fuzz.yml` runs each for ten minutes every night. See
+  `docs/design/fuzzing.md`. Three bugs they found are fixed:
+  - rs-rich: `AnsiDecoder` panicked on a multi-byte character after
+    `ESC (`. It now skips one character, as rich 15.0.0 does.
+  - rs-rich-ext: a WASM plugin looping over `memory.grow` could overflow
+    the host's stack and abort it in an optimised build. wasmi now runs
+    with its portable dispatch, which is slower but safe.
+  - rs-rich-ext: a WASM module whose code section declares no functions
+    but holds bytes made wasmi divide by zero. Modules are now validated with
+    wasmparser before wasmi reads them.
+
+- **The docs site loads nothing from other sites** (docs). Roboto and
+  Roboto Mono are served with the site (`docs/assets/fonts/`, from
+  fontsource 5.3.0, OFL-1.1) instead of Google Fonts (`theme.font: false`
+  in both MkDocs configs), the header's repository link no longer asks the
+  GitHub API for stars and forks (`scripts/docs_overrides/partials/source.html`),
+  and the home page's shields.io and CI badges are plain links. The
+  Marketplace page's check now also fails when a built page embeds, or a
+  page in Chromium requests, anything from another host.
+
+- **Search the plugin marketplace on the web and in the terminal**
+  (docs, rs-rich-cli, rs-rich-marketplace, the listing format). The docs
+  site gains a [Marketplace page](docs/marketplace.md): it reads the signed
+  index and every listing in the browser (each checked by SHA-256 against
+  the index), with free-text search over ids, names, descriptions,
+  capabilities and authors, filters by kind and tier, "Official only" and
+  "Recommended only", six sorts (downloads and ratings from the nightly,
+  unsigned `stats.json`), deep links, and a copy button for each install or
+  `cargo add` command. It says when the first index is still being
+  signed, sends nothing but its requests to the marketplace, and is
+  checked in Chromium against a fixture marketplace. `rich plugin search`
+  gains `--kind`, `--tier` and `--recommended`, matches capabilities and
+  authors, needs every word, and points at `browse` and the page when
+  nothing matches; a new tape records `search`, `info` and `browse`.
+  Every `rich plugin` command marks rs-rich's own packages (`✓ official`),
+  shows the `reviewed` tier as "approved", and says who publishes and who
+  authored each package; reports add `tier_label`. A new optional listing
+  key, `recommended` (`since`, and a `note` of at most 140 characters),
+  marks a maintainer's pick: in the schema, the validator,
+  `Listing::recommended` and as `★ recommended`.
+
+- **Dependencies** (Dependabot's open pull requests): zip 8 to 9 (rs-rich-ext,
+  rs-rich-micro, rs-rich-marketplace, rs-rich-cli; zip now decodes an
+  entry's name on demand, so an undecodable name is listed lossily by
+  rs-rich-ext and refused by rs-rich-micro), signal-hook 0.3 to 0.4
+  (rs-rich-interact, no code change), and lockfile patch bumps of wat,
+  libc, syn, serde_json, trybuild, flate2 and rustix. CI moves to
+  setup-node 7 and gh-action-pypi-publish 1.14.3. Dependabot now opens one
+  grouped pull request a week per ecosystem for minor and patch updates,
+  and a pull request's newer CI run cancels its older one. lumis 0.17
+  waits: it raises rs-rich-lumis's minimum Rust to 1.95.
+
 - **The plugin marketplace goes live** (rs-rich-cli, rs-rich-plugin-api's
   examples): rs-rich-marketplace lists the Mermaid, DOT and lumis crates,
   `textcase` (a new official WASM plugin: the `upcase` and `downcase`
@@ -22,12 +121,57 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and a weekly job installs from the live marketplace once it is signed.
   The `official` tier now reads "rs-rich's own, built from its repository".
 
+- **Marketplace downloads, ratings and reviews** (rs-rich-cli, the
+  marketplace repository): `rich plugin info` shows a package's downloads,
+  👍/👎 and reviews link, and its JSON report gains `stats`; `rich plugin
+  search --sort downloads` sorts by downloads. They come from the
+  marketplace's nightly `stats.json` on its `stats` branch (release asset
+  and crates.io download counts, and one Reviews discussion per package),
+  unsigned and display-only, read with a 3-second timeout and left out
+  silently when missing. Reviews show only when their link points into
+  the marketplace's own Discussions, checked as written and once
+  normalised, with no query, fragment or `..` (the same rule as the docs'
+  Marketplace page). `rich` never phones home. The marketplace now
+  hosts new official versions as release assets, made after the merge by
+  `publish-artifacts.yml`, and its pull request check refuses reserved and
+  lookalike ids and "official" wording in community listings unless a
+  maintainer labels the pull request `name-approved`.
+  `docs/marketplace-repo/` mirrors the new workflows and scripts.
+
+- **More official marketplace packages** (rs-rich-cli, its tests and
+  `official/` sources): five themes, `dusk`, `paper`, `ocean`,
+  `high-contrast` and `mono`, each an upstream `[styles]` file that sets
+  every coloured style of rich's default theme (but the colour names). The
+  coloured ones meet WCAG
+  AA against the background each names, and `high-contrast` meets AAA.
+  `textcase` 0.2.0 adds the `titlecase`, `snakecase`, `kebabcase` and
+  `camelcase` transforms. A second WASM plugin, `wordplay` 0.1.0, has
+  `rot13`, `reverse` (by character cluster, line by line) and `slug`. All
+  are UTF-8 safe: the ASCII-only transforms leave non-ASCII characters
+  alone. Each WASM version builds from its own file in
+  `crates/rich-cli/official/wasm/`, and `tests/official_artifacts.rs` pins
+  every hash; `tests/official_packages.rs` checks what they do.
+
 - **Installed micro packs load** (rs-rich-cli): a micro pack installed with
   `rich plugin install` loads on every run, into micro's user layer after
   the user's own directory, once its file still hashes to what the lockfile
   records; `rich plugin disable` stops it and `rich micro packs` lists it.
   `rich plugin publish` fills a new micro pack listing's description,
   license and author from its `pack.json` when they are not given.
+
+- **Installed themes are usable** (rs-rich-cli): `--theme NAME` falls back
+  to an installed, enabled marketplace theme whose id is NAME when the
+  config has no theme of that name. Its file must still hash to the
+  lockfile, or the run warns and does not use it. A config theme wins a
+  clash, and a disabled theme is not found. An unknown theme's error now
+  says that `rich plugin search` lists themes.
+
+- **CI lints on Windows** (rs-rich-cli's tests, rs-rich-intuituive): the
+  Windows web job now runs clippy on rs-rich, intuiTUIve with all its
+  features and the CLI's tests without default features. Three warnings
+  only Windows saw are fixed: an unused `pid` and `has_colour` in the CLI's
+  tests, and `quiet()` returning `()` off Linux, which now returns a guard
+  as it does on Linux.
 
 - **console.py fully ported** (rs-rich): the rest of upstream's `Console`.
   `quiet`; the size setters and upstream's size rules; `is_dumb_terminal`;
@@ -344,6 +488,20 @@ What rs-rich-doom built for itself, made generic
   paints no more than are used. Frames carry their scroll position and
   crop to a rectangle of the page (`ScreencastFrame::crop`);
   `Pixels::crop` and `Pixels::to_rgba`.
+- **Video fixtures of our own, and the promo in the docs** (noctiluca,
+  docs): `motion.webm` is now drawn by `make_video.py` (a night sea with
+  glowing waves and a boat, five seconds that loop, 70 KB), and a second
+  fixture, `bloom.webm` (264 KB), is cut by `make_bloom.py` from
+  Noctiluca's promo, an AI-generated video made for rs-rich (MIT). The news
+  and watch pages play the bloom; the stream page plays the generated
+  clip. The scripted engine replays Chrome's recorded frames of each by
+  the video's clock, and `capture --frames` records them paused, frame by
+  frame. The guide's front page plays the full promo (960x540, 4.2 MB).
+- **`rich record` keeps no frame mid synchronized update**
+  (rs-rich-record): output arriving a frame interval after the last frame
+  no longer keeps the screen while a synchronized update is open, so a
+  video frame's cells are not recorded without its Sixel picture (the
+  GIF showed half blocks of the next frame over the last picture).
 
 ### Versions: the 0.0.23 versions are open
 

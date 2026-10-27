@@ -875,6 +875,22 @@ fn code_highlighting(
     Ok(registry.code_highlighting())
 }
 
+/// rich-ext's default code highlighting (syntect) for a console that renders
+/// a resource, without rich-ext's example number highlighter.
+///
+/// Upstream rich-cli highlights with rich's `ReprHighlighter` alone. The
+/// number highlighter painted every run of digits a fixed bold cyan over it,
+/// so digits upstream leaves plain (`abc123`) came out cyan, and a theme's
+/// `repr.number` could not take the colour away: `--theme-style
+/// repr.number=bold` kept the digits cyan, where upstream's theme replaces
+/// the style and they render bold alone.
+fn install_render_defaults(console: &mut Console) {
+    use rich::ConsoleCodeHighlighting;
+    if let Some(highlighting) = rich_ext::ExtensionRegistry::with_defaults().code_highlighting() {
+        console.set_code_highlighting(Some(highlighting));
+    }
+}
+
 /// Give `console` the code highlighting `cli` chose (parsing checked it).
 fn apply_code_highlighting(console: &mut Console, cli: &Cli) {
     use rich::ConsoleCodeHighlighting;
@@ -3544,19 +3560,31 @@ const MAX_BODY_BYTES: u64 = 16 * 1024 * 1024;
 /// a 30-second global timeout and [`MAX_BODY_BYTES`].
 ///
 /// Like `requests.get`, a non-2xx status is **not** an error — the body is
-/// returned so an error page still renders. TLS verification is on (rustls with
-/// bundled webpki roots).
+/// returned so an error page still renders. TLS verification is on (rustls,
+/// trusting the system's certificate store first and the bundled webpki roots
+/// as the fallback: `rich_marketplace::tls`).
 #[cfg(feature = "fetch")]
 fn fetch_url(url: &str, encoding: Option<Encoding>) -> Result<(String, Option<String>), String> {
     use std::time::Duration;
-    let mut response = ureq::get(url)
-        .config()
-        .timeout_global(Some(Duration::from_secs(30)))
-        // Match `requests.get`: don't turn 4xx/5xx into an error, so the
-        // response body (often a useful error page) is rendered instead.
-        .http_status_as_error(false)
-        .build()
-        .call()
+    // Redirects (ten, as `requests` and ureq allow) are followed one request
+    // at a time: `rich_marketplace::redirect` says why.
+    let budget = Duration::from_secs(30);
+    let mut response =
+        rich_marketplace::redirect::get_following(url, 10, false, budget, |hop, deadline| {
+            rich_marketplace::tls::with_fallback(|trust| {
+                ureq::get(hop)
+                    .config()
+                    // One 30-second budget for the whole chain and its body.
+                    .timeout_global(Some(deadline.remaining()?))
+                    // Match `requests.get`: don't turn 4xx/5xx into an error, so the
+                    // response body (often a useful error page) is rendered instead.
+                    .http_status_as_error(false)
+                    .max_redirects(0)
+                    .tls_config(trust.tls_config())
+                    .build()
+                    .call()
+            })
+        })
         .map_err(|err| format!("cannot fetch {url}: {err}"))?;
     let content_type = response
         .headers()
@@ -4476,7 +4504,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     }
     let mut console = builder.build();
     render_target::attach(&mut console);
-    console.install_extensions();
+    install_render_defaults(&mut console);
     plugins::install_highlighters(&mut console);
     apply_code_highlighting(&mut console, &cli);
 
@@ -6381,7 +6409,7 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             .height(console.height())
             .theme(console.theme().clone())
             .build();
-        export_console.install_extensions();
+        install_render_defaults(&mut export_console);
         let segments = export_console.record_output(|c| render_report(c, true));
         wrote = wrote.and_then(|()| save_exports(&export_console, export, &segments));
     }

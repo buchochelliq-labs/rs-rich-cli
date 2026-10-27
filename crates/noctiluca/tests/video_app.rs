@@ -117,7 +117,7 @@ fn frame(rgb: [u8; 3]) -> ScreencastFrame {
 #[test]
 fn the_header_and_status_bar_say_the_mode_the_address_and_the_media() {
     let mut driver = app(Box::new(engine()), options(View::Projection)).driver(100, 30);
-    wait_for(&mut driver, "A moving test pattern");
+    wait_for(&mut driver, "The bloom from the air");
     let lines = driver.screen().plain();
     // The header: the browser, the view and the pictures' protocol, the
     // title; then the address.

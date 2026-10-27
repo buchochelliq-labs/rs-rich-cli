@@ -1,5 +1,5 @@
-//! Video against a real Chrome: the PoC's `motion.webm` (a silent five
-//! seconds of a moving test pattern) in `video.html`. Runs when
+//! Video against a real Chrome: `motion.webm` (five silent seconds of
+//! glowing waves, drawn by `media/make_video.py`) in `video.html`. Runs when
 //! `RICH_EMBED_CHROME` names a browser, as a normal user.
 //!
 //! - its poster comes as the bytes the page loaded;

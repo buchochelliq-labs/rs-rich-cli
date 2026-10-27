@@ -1,0 +1,13 @@
+{
+  "schema_version": 1,
+  "plugins": {
+    "textcase": {
+      "kind": "wasm",
+      "version": "0.1.0",
+      "path": "textcase/textcase-0.1.0.wasm",
+      "sha256": "0000000000000000000000000000000000000000000000000000000000000000",
+      "index_serial": 1,
+      "installed": "2026-10-26T00:00:00Z"
+    }
+  }
+}

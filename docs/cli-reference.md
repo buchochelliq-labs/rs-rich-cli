@@ -295,7 +295,7 @@ Choose at most one; the default auto-detects .md/.rst/.json/.csv/.tsv/.ipynb, .m
 | `--config <PATH>` | Read versioned TOML defaults from PATH. |
 | `--profile <NAME>` | Select a config profile. Default: `default`. |
 | `--no-config` | Disable config discovery. |
-| `--theme <NAME>` | Select a named theme from config. Config: `theme`. |
+| `--theme <NAME>` | Select a named theme from config; --theme also finds installed themes. Config: `theme`. |
 | `--theme-style <NAME=STYLE>...` | Override a theme binding; repeatable and worker-safe. |
 | `--theme-file <PATH>` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it. Config: `theme_file`. |
 | `--plugin <PATH>...` | Load a runtime plugin: a WASM module (.wasm, sandboxed; the default wasm-plugins feature) or a native library (.so, .dylib, .dll, which runs its own code; a build with the dylib-plugins feature); repeatable. `rich plugins list` shows what is loaded. Config: `plugins`. |
@@ -2471,8 +2471,8 @@ rich plugin COMMAND [ARGS] [--marketplace LOCATION] [--marketplace-keys FILE] [-
 
 | Command | Description |
 | --- | --- |
-| `search` | List the marketplace's packages, or those whose id, name, description or keywords contain QUERY |
-| `info` | One package: its tier, source, versions, what loads here, and for a crate the `cargo add` line |
+| `search` | List the marketplace's packages, or those with every word of QUERY in their id, name, description, keywords, authors or capabilities; the tier shows as `✓ official`, `approved` or `community`, a maintainers' pick as `★ recommended`, and who authored each |
+| `info` | One package: its tier, source, versions, what loads here, for a crate the `cargo add` line, and its downloads, 👍/👎 and reviews link when the marketplace's stats.json is there (not signed, shown only) |
 | `install` | Show the tier, permissions and capabilities, ask, then download, check (size, SHA-256, the WASM manifest in the sandbox) and install; a crate is refused with its `cargo add` line |
 | `update` | Move installed packages (or those named) to the newest version this host loads, asking first; a yanked version is replaced |
 | `remove` | Uninstall packages: the lockfile entry, then the file |
@@ -2491,18 +2491,22 @@ rich plugin COMMAND [ARGS] [--marketplace LOCATION] [--marketplace-keys FILE] [-
 
 #### rich plugin search
 
-List the marketplace's packages, or those whose id, name, description or keywords contain QUERY
+List the marketplace's packages, or those with every word of QUERY in their id, name, description, keywords, authors or capabilities; the tier shows as `✓ official`, `approved` or `community`, a maintainers' pick as `★ recommended`, and who authored each
 
 ##### Usage
 
 ```text
-rich plugin search [QUERY]
+rich plugin search [QUERY] [--kind KIND] [--tier TIER] [--recommended] [--sort id|downloads]
 ```
 
 ##### Options
 
 | Option | Description |
 | --- | --- |
+| `--kind <KIND>` | Only this kind: crate, wasm-plugin, micro-pack or theme. |
+| `--tier <TIER>` | Only this tier: official (rs-rich's own), reviewed (shown as approved) or community. |
+| `--recommended` | Only the maintainers' picks, marked `★ recommended`. |
+| `--sort <ORDER>` | id (the default), or downloads: most downloaded first, from the marketplace's unsigned stats.json, with a Downloads column. |
 | `--marketplace <LOCATION>` | The marketplace: an https:// base URL, or a directory or file:// URL laid out as the marketplace repository is (artifacts from its artifacts/HOST/PATH mirror, never the network); else RICH_MARKETPLACE, else the official one. |
 | `--marketplace-keys <FILE>` | Trust this keys-N.json instead of the keys compiled in; else RICH_MARKETPLACE_KEYS. |
 | `--plugin-dir <DIR>` | Install into DIR; else RICH_PLUGIN_DIR, else $XDG_DATA_HOME/rich/plugins (~/.local/share/rich/plugins) |
@@ -2512,11 +2516,25 @@ rich plugin search [QUERY]
 
 | Argument | Description |
 | --- | --- |
-| `[QUERY]` | Text to look for, in any case. |
+| `[QUERY]` | Words to look for, in any case. |
+
+##### Examples
+
+Packages with a rot13 capability, say
+
+```sh
+rich plugin search rot13
+```
+
+rs-rich's own themes
+
+```sh
+rich plugin search --kind theme --tier official
+```
 
 #### rich plugin info
 
-One package: its tier, source, versions, what loads here, and for a crate the `cargo add` line
+One package: its tier, source, versions, what loads here, for a crate the `cargo add` line, and its downloads, 👍/👎 and reviews link when the marketplace's stats.json is there (not signed, shown only)
 
 ##### Usage
 
@@ -2861,7 +2879,7 @@ Settings are read from these sources, lowest precedence first; a later source ov
 | `continue_on_error` | bool | | | `--continue-on-error` | Process all planned inputs and aggregate failures |
 | `overwrite` | bool | | | `--overwrite` | Allow existing batch export destinations |
 | `collision` | enum: `error`, `overwrite`, `suffix` | `error` | | `--collision` | Batch policy for existing destinations |
-| `theme` | string | | | `--theme` | Select a named theme from config |
+| `theme` | string | | | `--theme` | Select a named theme from config; --theme also finds installed themes |
 | `theme_file` | string | | | `--theme-file` | Load styles from an upstream rich theme file ([styles] section); --theme and --theme-style override it |
 | `plugins` | list of paths | | | `--plugin` | Load a runtime plugin: a WASM module (.wasm, sandboxed; the default wasm-plugins feature) or a native library (.so, .dylib, .dll, which runs its own code; a build with the dylib-plugins feature); repeatable. `rich plugins list` shows what is loaded |
 | `micro_project` | bool | | | `--micro-project` | Load micro assets from the project's .rich/micro/ (off by default: a project's assets load only when you trust it; ./rich.toml cannot turn this on) |

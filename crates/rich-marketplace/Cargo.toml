@@ -34,8 +34,10 @@ workspace = true
 [features]
 default = ["http"]
 # `HttpsTransport`: downloads with ureq, the client the CLI's `fetch` feature
-# already uses (rustls with bundled roots, HTTPS only, redirects too). Off,
-# the crate has only the `Transport` trait and `MemoryTransport`.
+# already uses (rustls, HTTPS only, redirects too), and the `tls` module that
+# chooses its roots: the system's certificate store first, Mozilla's bundled
+# roots as the fallback. Off, the crate has only the `Transport` trait and
+# `MemoryTransport`.
 http = ["dep:ureq"]
 
 [dependencies]
@@ -57,10 +59,17 @@ semver = "1"
 sha2 = "0.11"
 # A micro pack's `pack.json`, read from its archive: the reader and codecs
 # rs-rich-micro uses, so the tree gains nothing.
-zip = { version = "8", default-features = false, features = ["deflate-flate2"] }
+zip = { version = "9", default-features = false, features = ["deflate-flate2"] }
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"] }
 ureq = { workspace = true, optional = true }
 
 [dev-dependencies]
 # Signs the fixture marketplace with the test keys in tests/fixtures/keys.
 minisign = "0.10"
+# The TLS server in tests/https_trust.rs: the rustls ureq already builds on
+# (ring), so the tree gains nothing.
+rustls = { version = "0.23", default-features = false, features = ["ring", "std"] }
+
+[[test]]
+name = "https_trust"
+required-features = ["http"]

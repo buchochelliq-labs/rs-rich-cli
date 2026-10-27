@@ -1,0 +1,18 @@
+žerDiagram
+    CUSTOMER ||--o{ ORDER : places
+    ORDER ||--|{ LINE-ITEM : contains
+    CUSTOMER }|..|{ DELIVERY-ADDRESS : uses
+    CUSTOMER {
+        string name
+        string custNumber PK
+        string sector
+    }
+    ORDER {
+        int orderNumber PK
+        string deliveryAddress FK "where it goes"
+    }
+    LINE-ITEM {
+        string productCode FK
+        int quantity
+        float pricePerUnit
+    }

@@ -12,13 +12,21 @@ site_dir: site
 exclude_docs: |
   python/
   assets/vendor/**/README.md
+  assets/fonts/README.md
   assets/intuituive/mascot/MASCOT.md
   # Files to hand over to the rs-rich-marketplace repository, not pages.
   marketplace-repo/
+  # A fixture for the plugin-search tape and the Marketplace page's checks.
+  tapes/fixtures/marketplace/
   assets/noctiluca/ICONOGRAPHY.md
 
 theme:
   name: material
+  # No request leaves the site: the fonts are served with it
+  # (docs/assets/fonts.css), and the overrides' partials/source.html keeps
+  # the repository link without Material's call to the GitHub API.
+  font: false
+  custom_dir: scripts/docs_overrides
   # rs-rich's mark and favicon (docs/assets/rs-rich/); intuiTUIve's pages
   # keep their own purple, set by assets/subsite.js.
   logo: assets/rs-rich/mark.svg
@@ -76,20 +84,24 @@ plugins:
   - search
 
 extra_css:
+  - assets/fonts.css
   - assets/extra.css
   - assets/vendor/asciinema-player-3.17.0/asciinema-player.css
   - assets/playground.css
+  - assets/marketplace.css
 
 extra_javascript:
   - assets/vendor/asciinema-player-3.17.0/asciinema-player.min.js
   - assets/tapes.js
   - assets/subsite.js
   - assets/playground.js
+  - assets/marketplace.js
 
 nav:
   - Home: index.md
   - Getting started: getting-started.md
   - Playground: playground.md
+  - Marketplace: marketplace.md
   - Tutorial:
       - tutorial/index.md
       - 1. Your first output: tutorial/01-hello.md
@@ -278,6 +290,7 @@ nav:
       - "Design: what the intuiTUIve demos are missing": design/intuituive-demo-gaps.md
       - "Design: the demo loop, where things stand": design/intuituive-status.md
       - "Design: Noctiluca, a terminal web browser": design/browser.md
+      - "Design: fuzzing": design/fuzzing.md
       - "Design: the clones' gap reports":
           - "git (gitui)": design/gaps/git.md
           - "top (bottom)": design/gaps/top.md

@@ -1,0 +1,30 @@
+❯ rich plugin browse
+? Plugins › rot13
+❯ wordplay  ✓ official  Word games: rot13, rev │ Word play Word games: rot13, reversal by character
+                                               │ cluster, and slugs
+                                               │
+                                               │ Package  wordplay 0.1.0 (wasm-plugin)
+                                               │ Name  Word play
+                                               │ Tier  ✓ official: rs-rich's own, built from its
+                                               │ repository
+                                               │ Publisher  Official: built and published by rs-rich
+                                               │ Authored by  rs-rich
+                                               │ Source
+                                               │ https://github.com/buchochelliq-labs/rs-rich-cli
+                                               │ Revision  d26de521746b47baa479b0f7c902f2ed8909b580
+  1/16 · ↑↓ move · enter pick · esc cancel
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+

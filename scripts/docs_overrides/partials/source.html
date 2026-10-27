@@ -1,0 +1,13 @@
+{#- Material's partials/source.html without `data-md-component="source"`:
+    the same link to the repository, but Material's script no longer asks
+    the GitHub API for its stars and forks, so no page sends a request
+    anywhere but the site itself. -#}
+<a href="{{ config.repo_url }}" title="{{ lang.t('source') }}" class="md-source">
+  <div class="md-source__icon md-icon">
+    {% set icon = config.theme.icon.repo or "fontawesome/brands/git-alt" %}
+    {% include ".icons/" ~ icon ~ ".svg" %}
+  </div>
+  <div class="md-source__repository">
+    {{ config.repo_name }}
+  </div>
+</a>

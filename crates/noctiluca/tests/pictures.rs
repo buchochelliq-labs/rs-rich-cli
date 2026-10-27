@@ -282,7 +282,7 @@ fn a_capped_pictures_caption_wraps_to_its_box_and_the_rule_switches_it_off() {
 
 #[test]
 fn a_video_plays_chromes_recorded_frames_in_its_region() {
-    // The scripted engine replays Chrome's own frames of motion.webm, as
+    // The scripted engine replays Chrome's own frames of bloom.webm, as
     // the docs' tapes do: playing, the region's picture changes.
     let engine = FakeEngine::from_dir(&snapshots())
         .unwrap()
@@ -301,8 +301,120 @@ fn a_video_plays_chromes_recorded_frames_in_its_region() {
         screen(&driver)
     );
     key(&mut driver, "p");
-    let out = written_for(&mut driver, Duration::from_secs(3));
+    // Five seconds: a debug build's Sixel of a detailed frame is slow, and
+    // the other tests share the machine.
+    let out = written_for(&mut driver, Duration::from_secs(5));
     assert!(screen(&driver).contains("PLAYING"), "{}", screen(&driver));
     let frames = out.matches("\x1bP").count();
+    assert!(frames >= 3, "{frames} frames in five seconds");
+}
+
+#[test]
+fn both_fixture_videos_have_recorded_frames_and_the_generated_one_autoplays() {
+    // The fixtures' two clips: make_bloom.py's cut of the promo (the news
+    // and watch pages) and make_video.py's generated one (the stream
+    // page). Each is WebM with forty recorded frames of its 480 x 270 box,
+    // and the frames move.
+    let media = Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/media");
+    for stem in ["bloom", "motion"] {
+        let webm = std::fs::read(media.join(format!("{stem}.webm"))).unwrap();
+        assert_eq!(&webm[..4], b"\x1a\x45\xdf\xa3", "{stem}.webm is no WebM");
+        let frames: Vec<_> = (0..40)
+            .map(|k| {
+                image::open(snapshots().join(format!("frames/{stem}-{k:02}.jpg")))
+                    .unwrap()
+                    .to_rgb8()
+            })
+            .collect();
+        assert!(
+            frames.iter().all(|f| f.dimensions() == (480, 270)),
+            "{stem}"
+        );
+        assert_ne!(frames[0], frames[20], "{stem}'s frames do not move");
+    }
+    // The stream page's video plays by itself: replayed frames drawn
+    // without a key.
+    let engine = FakeEngine::from_dir(&snapshots())
+        .unwrap()
+        .replaying(&snapshots().join("frames"));
+    let mut driver = app(
+        Box::new(engine),
+        options("stream-with-log.html", Images::Sixel),
+    )
+    .driver(120, 40);
+    let (_, ready) = run_until(&mut driver, Duration::from_secs(20), |_, screen| {
+        screen.contains("PLAYING")
+    });
+    assert!(ready, "{}", screen(&driver));
+    let out = written_for(&mut driver, Duration::from_secs(3));
+    let frames = out.matches("\x1bP").count();
     assert!(frames >= 3, "{frames} frames in three seconds");
+}
+
+#[test]
+fn a_replayed_video_shows_the_frame_at_its_clock() {
+    use noctiluca::engine::{Engine, MediaOp, PageAction, TabId};
+    use noctiluca::model::{build, MediaKind, Revisions};
+    // Four recorded frames over the five seconds, one colour each.
+    let dir = std::env::temp_dir().join(format!("noctiluca-replay-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let colours = [[200, 0, 0], [0, 200, 0], [0, 0, 200], [200, 200, 200]];
+    for (k, colour) in colours.iter().enumerate() {
+        image::RgbImage::from_pixel(32, 18, image::Rgb(*colour))
+            .save(dir.join(format!("bloom-{k:02}.jpg")))
+            .unwrap();
+    }
+    let mut engine = FakeEngine::from_dir(&snapshots()).unwrap().replaying(&dir);
+    engine
+        .open(TabId(0), "file:///noctiluca/fixtures/news.html")
+        .unwrap();
+    let page = build(&engine.snapshot(TabId(0)).unwrap(), &mut Revisions::new());
+    let video = page
+        .media
+        .iter()
+        .find(|m| m.kind == MediaKind::Video)
+        .unwrap()
+        .clone();
+    engine.set_screencast(TabId(0), true).unwrap();
+    // The colour at the middle of the video's box in the newest frame,
+    // and the clock the status line shows.
+    let seen = |engine: &mut FakeEngine| {
+        let frame = engine.screencast_frame(TabId(0)).unwrap();
+        let r = video.rect;
+        let cut = frame.crop(r.x, r.y, r.width, r.height).unwrap();
+        let at = ((cut.height / 2 * cut.width + cut.width / 2) * 3) as usize;
+        let rgb = &cut.rgb[at..at + 3];
+        let colour = colours
+            .iter()
+            .position(|c| c.iter().zip(rgb).all(|(a, b)| a.abs_diff(*b) < 40))
+            .unwrap_or_else(|| panic!("{rgb:?}"));
+        (colour, engine.playback(TabId(0), video.node).unwrap().time)
+    };
+    let media = |engine: &mut FakeEngine, op| {
+        engine
+            .act(
+                TabId(0),
+                &PageAction::Media {
+                    node: video.node,
+                    op,
+                },
+            )
+            .unwrap();
+    };
+    // Each second of the clock shows the frame recorded at it: 2.6 s is
+    // the third of four frames over five seconds (a replay at a fixed
+    // eight frames a second showed the first, at frame 20 of a loop of 4).
+    media(&mut engine, MediaOp::Seek(2.6));
+    media(&mut engine, MediaOp::Play);
+    let (colour, time) = seen(&mut engine);
+    assert_eq!(colour, 2, "at {time}");
+    assert!((2.6..2.9).contains(&time), "{time}");
+    media(&mut engine, MediaOp::Pause);
+    media(&mut engine, MediaOp::Seek(1.4));
+    let held = engine.playback(TabId(0), video.node).unwrap().time;
+    assert!((4.0..4.3).contains(&held), "{held}");
+    media(&mut engine, MediaOp::Play);
+    let (colour, time) = seen(&mut engine);
+    assert_eq!(colour, 3, "at {time}");
+    std::fs::remove_dir_all(&dir).ok();
 }

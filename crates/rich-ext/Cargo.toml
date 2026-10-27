@@ -61,15 +61,25 @@ clap = { version = "4.5", default-features = false, features = ["std", "help", "
 # Runtime plugins (docs/design/plugin-loading.md). Native libraries through a
 # versioned C ABI, and WASM modules in wasmi, a pure-Rust interpreter (no JIT,
 # no WASI). Both off by default: loading either runs third-party code.
+# wasmi runs with its portable (loop) dispatch, not tail-call dispatch: with
+# tail calls, an optimised build overflowed the host's stack, aborting the
+# process, on a plugin that loops over `memory.grow` with a register operand
+# (wasmi 2.0.0; found by the `plugin_wasm` fuzz target). Slower, but a
+# plugin cannot take the host down.
 libloading = { version = "0.9", optional = true }
-wasmi = { version = "2", default-features = false, features = ["std", "validate", "stable", "auto-dispatch"], optional = true }
+wasmi = { version = "2", default-features = false, features = ["std", "validate", "stable", "portable-dispatch"], optional = true }
+# A module is validated by wasmparser (the parser wasmi itself uses, at its
+# version) before wasmi reads it: wasmi 2.0.0 divides by zero on a code
+# section that declares no functions but holds bytes (found by the
+# `plugin_wasm` fuzz target), and the validator refuses that section first.
+wasmparser = { version = "0.228", default-features = false, features = ["std", "validate", "features"], optional = true }
 # `fs::local_time`: the local time zone (chrono's `clock`, through
 # iana-time-zone). Already in the tree through arrow; off by default.
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"], optional = true }
 # `archive`: zip listings and extraction (deflate only, through flate2's
 # pure-Rust backend), and gzip for `.tar.gz`. Both already in the tree
 # through rs-rich-micro; off by default.
-zip = { version = "8", default-features = false, features = ["deflate-flate2"], optional = true }
+zip = { version = "9", default-features = false, features = ["deflate-flate2"], optional = true }
 flate2 = { version = "1.1", default-features = false, features = ["rust_backend"], optional = true }
 # `qr`: the QR code encoder (Project Nayuki's reference implementation;
 # MIT, no dependencies, one file). Lighter than `qrcode`, whose renderers
@@ -137,7 +147,7 @@ clap = ["dep:clap"]
 # `rich_plugin_api::abi`. They run arbitrary native code: trust-only.
 dylib-plugins = ["dep:libloading"]
 # Load sandboxed WASM plugins: no imports, a fuel limit and a memory cap.
-wasm-plugins = ["dep:wasmi"]
+wasm-plugins = ["dep:wasmi", "dep:wasmparser"]
 # `fs::local_time` and `fs::short_local_time`: times in the local time zone,
 # through chrono.
 local-time = ["dep:chrono"]

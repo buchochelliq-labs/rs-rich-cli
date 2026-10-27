@@ -33,6 +33,16 @@
     },
     "repository": {"description": "The source repository.", "$ref": "#/$defs/https_url"},
     "homepage": {"$ref": "#/$defs/https_url"},
+    "recommended": {
+      "description": "A maintainer's pick: the day it was given and, in at most 140 characters, why. Only a maintainer sets it. Shown as Recommended.",
+      "type": "object",
+      "required": ["since", "note"],
+      "additionalProperties": false,
+      "properties": {
+        "since": {"description": "The day it was given, YYYY-MM-DD.", "type": "string", "pattern": "^[0-9]{4}-(0[1-9]|1[0-2])-(0[1-9]|[12][0-9]|3[01])$"},
+        "note": {"description": "Why, in one line.", "type": "string", "minLength": 1, "maxLength": 140, "pattern": "^[^\\u0000-\\u001f\\u007f]*$"}
+      }
+    },
     "keywords": {
       "type": "array",
       "items": {"type": "string", "pattern": "^[a-z0-9][a-z0-9-]{0,31}$"},

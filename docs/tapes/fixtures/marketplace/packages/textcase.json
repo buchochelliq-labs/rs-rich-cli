@@ -1,0 +1,102 @@
+{
+  "schema_version": 1,
+  "id": "textcase",
+  "kind": "wasm-plugin",
+  "name": "Text case",
+  "description": "Changes the case of ASCII text (upper, lower, title, snake, kebab, camel), and draws loud fences in bold capitals",
+  "tier": "official",
+  "license": "MIT",
+  "repository": "https://github.com/buchochelliq-labs/rs-rich-cli",
+  "recommended": {
+    "since": "2026-10-26",
+    "note": "A small, sandboxed first plugin: six case transforms and a loud fence, with no permissions beyond colour."
+  },
+  "versions": [
+    {
+      "version": "0.2.0",
+      "published": "2026-10-26",
+      "requires": {
+        "abi": "1.0"
+      },
+      "artifact": {
+        "url": "https://github.com/buchochelliq-labs/rs-rich-marketplace/releases/download/textcase-v0.2.0/textcase-0.2.0.wasm",
+        "sha256": "31b870abcaf18270064d9c8aaa3e8f78b200a83b9ca847767f60c266617579e9",
+        "size": 1784
+      },
+      "source_revision": "d26de521746b47baa479b0f7c902f2ed8909b580",
+      "capabilities": [
+        {
+          "kind": "transform",
+          "name": "upcase"
+        },
+        {
+          "kind": "transform",
+          "name": "downcase"
+        },
+        {
+          "kind": "fence-ansi",
+          "name": "loud"
+        },
+        {
+          "kind": "transform",
+          "name": "titlecase"
+        },
+        {
+          "kind": "transform",
+          "name": "snakecase"
+        },
+        {
+          "kind": "transform",
+          "name": "kebabcase"
+        },
+        {
+          "kind": "transform",
+          "name": "camelcase"
+        }
+      ],
+      "permissions": [
+        "ansi-output"
+      ]
+    },
+    {
+      "version": "0.1.0",
+      "published": "2026-10-26",
+      "requires": {
+        "abi": "1.0"
+      },
+      "artifact": {
+        "url": "https://raw.githubusercontent.com/buchochelliq-labs/rs-rich-marketplace/main/artifacts/textcase/textcase-0.1.0.wasm",
+        "sha256": "76fe3c63d718de80b84f05506bad39edb480d84c719a4cc17c1b4a356be495c7",
+        "size": 875
+      },
+      "source_revision": "124ea70593df1b0b4af65f0c1e9df1e11072ce12",
+      "capabilities": [
+        {
+          "kind": "transform",
+          "name": "upcase"
+        },
+        {
+          "kind": "transform",
+          "name": "downcase"
+        },
+        {
+          "kind": "fence-ansi",
+          "name": "loud"
+        }
+      ],
+      "permissions": [
+        "ansi-output"
+      ]
+    }
+  ],
+  "homepage": "https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-plugin-api/examples/wasm/textcase.wat",
+  "authors": [
+    "rs-rich contributors"
+  ],
+  "keywords": [
+    "transform",
+    "fence",
+    "case",
+    "example"
+  ]
+}

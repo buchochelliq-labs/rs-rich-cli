@@ -1,0 +1,40 @@
+{
+  "schema_version": 1,
+  "id": "paper",
+  "kind": "theme",
+  "name": "Paper theme",
+  "description": "A light theme in inks on warm paper, for a light terminal background",
+  "tier": "official",
+  "license": "MIT",
+  "repository": "https://github.com/buchochelliq-labs/rs-rich-cli",
+  "versions": [
+    {
+      "version": "1.0.0",
+      "published": "2026-10-26",
+      "requires": {
+        "theme_format": 1
+      },
+      "artifact": {
+        "url": "https://github.com/buchochelliq-labs/rs-rich-marketplace/releases/download/paper-v1.0.0/paper-1.0.0.ini",
+        "sha256": "ba471f21510d1261f75cc0203712399f71c285fb1a616e7a4427e87b47fa8ac2",
+        "size": 4532
+      },
+      "source_revision": "d26de521746b47baa479b0f7c902f2ed8909b580",
+      "capabilities": [
+        {
+          "kind": "theme",
+          "name": "paper"
+        }
+      ],
+      "permissions": []
+    }
+  ],
+  "homepage": "https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/official/themes/paper.ini",
+  "authors": [
+    "rs-rich contributors"
+  ],
+  "keywords": [
+    "theme",
+    "light"
+  ]
+}

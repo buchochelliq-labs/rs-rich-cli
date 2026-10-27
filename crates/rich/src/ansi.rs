@@ -120,8 +120,11 @@ fn tokenize(line: &str) -> Vec<Token> {
             Some(sgr) => {
                 let sgr = sgr.as_str();
                 if sgr == "(" {
-                    // Charset-select escape consumes the following byte too.
-                    position = (end + 1).min(line.len());
+                    // Charset-select escape consumes the following character
+                    // too: one code point, as upstream's `end + 1` indexes a
+                    // Python string (not one byte, which could split a
+                    // character).
+                    position = end + line[end..].chars().next().map_or(0, char::len_utf8);
                     continue;
                 }
                 if let Some(params) = sgr.strip_prefix('[').and_then(|s| s.strip_suffix('m')) {
@@ -316,6 +319,27 @@ mod tests {
             .map(|t| console.render_to_string(t))
             .collect::<Vec<_>>()
             .join("\n")
+    }
+
+    #[test]
+    fn charset_select_skips_one_character_as_rich_15() {
+        // Captured from rich 15.0.0's `AnsiDecoder().decode(s)` (`.markup`).
+        // A multi-byte character after `ESC (` used to panic (found by the
+        // `ansi` fuzz target).
+        let cases: [(&str, &[&str]); 4] = [
+            ("a\x1b(\u{e9}b", &["ab"]),
+            ("\x1b(\u{4e2d}\u{6587}", &["\u{6587}"]),
+            ("x\x1b(", &["x"]),
+            ("\x1b(\x1b[1mz", &["[bold]z[/bold]"]),
+        ];
+        for (input, expected) in cases {
+            let got: Vec<String> = AnsiDecoder::new()
+                .decode(input)
+                .iter()
+                .map(Text::markup)
+                .collect();
+            assert_eq!(got, expected, "{input:?}");
+        }
     }
 
     #[test]

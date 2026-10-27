@@ -112,7 +112,7 @@ rich-marketplace = { workspace = true, default-features = false }
 # `rich plugin publish`: an artifact's SHA-256 (already in the tree).
 sha2 = "0.11"
 # `rich plugin publish` reads a micro pack's pack.json (with the art feature).
-zip = { version = "8", default-features = false, features = ["deflate-flate2"], optional = true }
+zip = { version = "9", default-features = false, features = ["deflate-flate2"], optional = true }
 
 toml = "1.1"
 tempfile = "3"
@@ -144,7 +144,7 @@ vt100 = "0.16"
 wat = "1"
 # The official micro packs are zipped by the tests that pin their hashes
 # (tests/support/official.rs).
-zip = { version = "8", default-features = false }
+zip = { version = "9", default-features = false }
 # `--export-png` tests decode the image (already in the tree through
 # rs-rich-record).
 png = "0.18"

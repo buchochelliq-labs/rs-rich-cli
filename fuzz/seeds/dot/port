@@ -1,0 +1,4 @@
+ždigraph {
+  a -> b
+  a:out -> c
+}

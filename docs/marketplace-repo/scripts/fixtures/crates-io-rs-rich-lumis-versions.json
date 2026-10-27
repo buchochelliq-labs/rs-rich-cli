@@ -1,0 +1,44 @@
+{
+ "versions": [
+  {
+   "crate": "rs-rich-lumis",
+   "num": "0.0.6",
+   "downloads": 12,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-lumis",
+   "num": "0.0.5",
+   "downloads": 17,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-lumis",
+   "num": "0.0.4",
+   "downloads": 11,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-lumis",
+   "num": "0.0.3",
+   "downloads": 28,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-lumis",
+   "num": "0.0.2",
+   "downloads": 13,
+   "yanked": false
+  },
+  {
+   "crate": "rs-rich-lumis",
+   "num": "0.0.1",
+   "downloads": 13,
+   "yanked": false
+  }
+ ],
+ "meta": {
+  "total": 6,
+  "next_page": null
+ }
+}

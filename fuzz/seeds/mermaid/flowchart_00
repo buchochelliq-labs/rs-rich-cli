@@ -1,0 +1,5 @@
+žflowchart TD
+  a[rect] --> b(round) --> c([stadium]) --> d[[subroutine]]
+  e[(cylinder)] --> f((circle)) --> g(((double))) --> h>flag]
+  i{decision} --> j{{hexagon}} --> k[/in/] --> l[\\out\\]
+  m[/top\\] --> n[\\bottom/]

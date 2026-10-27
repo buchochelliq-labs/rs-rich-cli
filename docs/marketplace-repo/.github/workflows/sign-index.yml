@@ -139,10 +139,32 @@ jobs:
           umask 077
           key="$RUNNER_TEMP/main.key"
           trap 'rm -f "$key"' EXIT
-          printf '%s\n' "$MINISIGN_KEY" > "$key"
+          # A secret pasted on Windows keeps its CRs, and a paste can drop the
+          # comment line or add blank ones: write the key minisign expects, an
+          # "untrusted comment:" line and the base64 line, from either shape.
+          # Only facts about its shape are printed, never the key.
+          python3 - "$key" <<'PY'
+          import os, re, sys
+          lines = [l.strip() for l in os.environ["MINISIGN_KEY"].replace("\r", "").split("\n")]
+          lines = [l for l in lines if l]
+          comment = next((l for l in lines if l.startswith("untrusted comment:")), None)
+          body = [l for l in lines if not l.startswith("untrusted comment:")]
+          shape = (f"{len(lines)} non-empty line(s), comment line "
+                   f"{'present' if comment else 'missing'}, "
+                   f"{len(body)} key line(s) of {[len(l) for l in body]} characters")
+          # A secret key line is 212 characters (158 bytes); a public key's is 56.
+          if len(body) != 1 or len(body[0]) != 212 or not re.fullmatch(r"[A-Za-z0-9+/]+={0,2}", body[0]):
+              print(f"::error::MARKETPLACE_MINISIGN_KEY is not a minisign secret key: {shape}. "
+                    "Paste the whole of main.key (two lines: the untrusted comment, "
+                    "then one long base64 line), not main.pub.")
+              sys.exit(1)
+          print(f"secret key shape: {shape}")
+          with open(sys.argv[1], "w", encoding="ascii") as f:
+              f.write((comment or "untrusted comment: minisign secret key") + "\n" + body[0] + "\n")
+          PY
           # minisign reads the password from standard input when it is not
-          # a terminal.
-          printf '%s\n' "$MINISIGN_PASSWORD" | minisign -S -s "$key" -m index.json \
+          # a terminal; a pasted CR would be part of it.
+          printf '%s\n' "${MINISIGN_PASSWORD%$'\r'}" | minisign -S -s "$key" -m index.json \
             -x index.json.minisig -t "rs-rich-marketplace index serial=$SERIAL"
 
       - name: The signature verifies with the newest published main key

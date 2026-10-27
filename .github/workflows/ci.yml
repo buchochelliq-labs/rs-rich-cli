@@ -13,6 +13,14 @@ on:
     branches: [main]
   pull_request:
 
+# A pull request's newer run cancels its older one. Every other event gets a
+# group of its own (the run id), so runs on main, tags, schedules and release
+# calls are never cancelled, nor dropped while pending as a shared
+# `github.ref` group would drop them.
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.run_id }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
 # Least privilege. Without this the workflow inherits the repository default,
 # which may include write scopes it has no use for — CI only ever reads the
 # tree. Flagged by CodeQL; the other workflows already declare theirs.
@@ -119,6 +127,16 @@ jobs:
 
       - name: Clippy
         run: cargo clippy --all-targets -- -D warnings
+
+      # The fuzz targets (fuzz/, a workspace of their own) are formatted,
+      # still build against the crates' APIs, and their lockfile is current.
+      # Fuzzing itself runs nightly (fuzz.yml); a check needs no nightly.
+      - name: The fuzz targets build
+        env:
+          CARGO_TARGET_DIR: target
+        run: |
+          cargo fmt --manifest-path fuzz/Cargo.toml --check
+          cargo check --locked --manifest-path fuzz/Cargo.toml --bins
 
       # The run's output is kept: a failure in an early test target ends up
       # far above the end of the log, so the next step prints each failing
@@ -409,11 +427,12 @@ jobs:
   # rs-rich-web's process per session on Windows: each session's process in
   # a job object, which ends it and what it started when the session ends or
   # the server dies. Only these tests; the rest of the crate's run on Linux
-  # and macOS.
+  # and macOS. It also lints, on Windows, the core, intuiTUIve and the CLI's
+  # tests, whose code differs off Unix and off Linux.
   windows-web:
     name: Windows web sessions
     runs-on: windows-latest
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
         with:
@@ -429,6 +448,17 @@ jobs:
 
       - name: Clippy (rs-rich-web, Windows)
         run: cargo clippy -p rs-rich-web --all-targets --locked -- -D warnings
+
+      # bash, so each command's failure fails the step. intuiTUIve with all
+      # its features (cpal's WASAPI; the web job builds most of it already);
+      # the CLI without its default features, to keep the step short: the
+      # Unix-only code its tests gate is the same either way.
+      - name: Clippy (rs-rich, intuiTUIve, the CLI's tests; Windows)
+        shell: bash
+        run: |
+          cargo clippy -p rs-rich --all-targets --locked -- -D warnings
+          cargo clippy -p rs-rich-intuituive --all-features --all-targets --locked -- -D warnings
+          cargo clippy -p rs-rich-cli --no-default-features --all-targets --locked -- -D warnings
 
       # One command a step: in a pwsh step of several, only the last one's
       # exit code would fail it.
@@ -833,6 +863,37 @@ jobs:
           cargo check --locked --target wasm32-wasip1
           -p rs-rich-cli --no-default-features --features art,mermaid
 
+  # WASM plugins in an optimised build (docs/design/fuzzing.md, "Known
+  # findings"): the `memory.grow` stack overflow the fuzz targets found
+  # showed only with `--release` (wasmi's dispatch differs from a debug
+  # build's). rs-rich-ext's sandbox tests, and the CLI's tests that load
+  # modules: the test marketplace's installs, the official artifacts and
+  # `--plugin`.
+  wasm-plugins-release:
+    name: WASM plugins (release)
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: The WASM plugin tests (release)
+        run: >-
+          cargo test --release --locked
+          -p rs-rich-ext --features wasm-plugins --test wasm_plugins
+
+      - name: The CLI's tests that load WASM plugins (release)
+        run: >-
+          cargo test --release --locked
+          -p rs-rich-cli --test plugin_marketplace --test official_artifacts --test plugins
+
   # The plugin marketplace against this host (docs/design/marketplace.md):
   # a test marketplace written from crates/rich-cli/tests/plugin_marketplace.rs,
   # signed with rs-rich-marketplace's test key, listing the official plugins
@@ -912,6 +973,9 @@ jobs:
             jq -e --arg p "$RICH_PLUGIN_DIR/$pack/$pack-1.0.0.richmicro" \
               '[.packs[] | select(.layer == "user" and .path == $p)] | length == 1' packs.json
           done
+          # An installed theme is what `--theme ID` selects.
+          "$rich" plugin install dusk --yes
+          "$rich" --theme dusk -p "[alert]themed[/]" | grep -q themed
           rm -f info.json refusal.txt doc.md rendered.txt loud.md packs.json
 
   # Every published crate's public API against its snapshot in api/ (an
@@ -983,7 +1047,7 @@ jobs:
 
   ci-ok:
     name: ci-ok
-    needs: [check, features, macos, msrv, parity, release-tests, api, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, paint-bench, wasm, plugin-compatibility, browser]
+    needs: [check, features, macos, msrv, parity, release-tests, api, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, paint-bench, wasm, wasm-plugins-release, plugin-compatibility, browser]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()
