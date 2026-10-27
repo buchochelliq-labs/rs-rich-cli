@@ -1,10 +1,12 @@
-//! Animated GIFs played in the terminal as ASCII/ANSI art.
+//! Animated GIFs (and animated WebPs) played in the terminal as ASCII/ANSI
+//! art.
 //!
 //! Frames use [`AsciiArt`](crate::AsciiArt) by default, or explicitly selected
 //! [`BlockArt`](crate::BlockArt) on color terminals, and are drawn in
 //! place through `rich`'s [`Live`] display, honouring the GIF's own per-frame
 //! delays. Frame disposal (background / previous) is handled by the `image`
-//! decoder, so every frame arrives as a full canvas.
+//! decoder, so every frame arrives as a full canvas. A WebP, animated or
+//! still, is read the same way; a still one is a single frame.
 //!
 //! Requires the non-default `gif` feature.
 //!
@@ -21,7 +23,8 @@ use std::io::Write;
 use std::time::Duration;
 
 use image::codecs::gif::GifDecoder;
-use image::{AnimationDecoder, DynamicImage, ImageDecoder, ImageError};
+use image::codecs::webp::WebPDecoder;
+use image::{AnimationDecoder, DynamicImage, Frames, ImageDecoder, ImageError};
 
 use rich::protocol::Renderable;
 use rich::{Console, Control, Live};
@@ -83,7 +86,7 @@ impl AnimatedArt {
     /// still image by default.
     pub const MAX_DECODED_BYTES: usize = 512 * 1024 * 1024;
 
-    /// Decode an animated GIF from bytes.
+    /// Decode an animated GIF, or a WebP (animated or still), from bytes.
     ///
     /// Fails with [`ImageError::Limits`] when the canvas alone is beyond
     /// `image`'s default limits, or when all frames together would take more
@@ -94,10 +97,29 @@ impl AnimatedArt {
 
     /// [`from_bytes`](Self::from_bytes) with an explicit frame-memory budget.
     fn from_bytes_within(bytes: &[u8], budget: usize) -> Result<Self, ImageError> {
-        let mut decoder = GifDecoder::new(std::io::Cursor::new(bytes))?;
-        // `GifDecoder::new` starts with no limits at all; use `image`'s
-        // defaults, as a still image gets, so the canvas is checked up front.
-        decoder.set_limits(image::Limits::default())?;
+        let ((width, height), frames, iter) = if crate::graphics::is_webp(bytes) {
+            let mut decoder = WebPDecoder::new(std::io::Cursor::new(bytes))?;
+            decoder.set_limits(image::Limits::default())?;
+            let dimensions = decoder.dimensions();
+            if decoder.has_animation() {
+                (dimensions, count_webp_frames(bytes), decoder.into_frames())
+            } else {
+                // A still WebP is one frame, shown for the default delay.
+                let still = image::Frame::new(DynamicImage::from_decoder(decoder)?.to_rgba8());
+                let one: Frames<'_> = Frames::new(Box::new(std::iter::once(Ok(still))));
+                (dimensions, 1, one)
+            }
+        } else {
+            let mut decoder = GifDecoder::new(std::io::Cursor::new(bytes))?;
+            // `GifDecoder::new` starts with no limits at all; use `image`'s
+            // defaults, as a still image gets, so the canvas is checked up front.
+            decoder.set_limits(image::Limits::default())?;
+            (
+                decoder.dimensions(),
+                count_image_blocks(bytes),
+                decoder.into_frames(),
+            )
+        };
         let over_budget = || {
             ImageError::Limits(image::error::LimitError::from_kind(
                 image::error::LimitErrorKind::InsufficientMemory,
@@ -106,20 +128,19 @@ impl AnimatedArt {
         // Refuse up front, before decoding anything, when the frame count
         // already rules the file out; the running total below still guards
         // whatever the pre-scan cannot see.
-        let (width, height) = decoder.dimensions();
         let canvas = (width as usize)
             .checked_mul(height as usize)
             .and_then(|pixels| pixels.checked_mul(4))
             .ok_or_else(over_budget)?;
         if canvas
-            .checked_mul(count_image_blocks(bytes))
+            .checked_mul(frames)
             .is_none_or(|total| total > budget)
         {
             return Err(over_budget());
         }
         let mut used = 0usize;
         let mut decoded = Vec::new();
-        for frame in decoder.into_frames() {
+        for frame in iter {
             let frame = frame?;
             let buffer = frame.buffer();
             let size = (buffer.width() as usize)
@@ -168,7 +189,7 @@ impl AnimatedArt {
         })
     }
 
-    /// Decode an animated GIF from a file.
+    /// Decode an animated GIF, or a WebP, from a file.
     pub fn from_path(path: impl AsRef<std::path::Path>) -> Result<Self, ImageError> {
         Self::from_bytes(&std::fs::read(path)?)
     }
@@ -439,6 +460,30 @@ impl Renderable for AnimatedArt {
             None => Vec::new(),
         }
     }
+}
+
+/// Count the frames (`ANMF` chunks) of an animated WebP by walking its RIFF
+/// chunks, without decoding anything. A truncated or malformed file yields
+/// the frames seen so far; the decoder reports the actual error.
+fn count_webp_frames(bytes: &[u8]) -> usize {
+    let mut at = 12usize;
+    let mut count = 0;
+    while let Some(header) = bytes.get(at..at.saturating_add(8)) {
+        if &header[..4] == b"ANMF" {
+            count += 1;
+        }
+        let size = u32::from_le_bytes([header[4], header[5], header[6], header[7]]) as usize;
+        // Chunks are padded to an even size.
+        match at
+            .checked_add(8)
+            .and_then(|a| a.checked_add(size))
+            .and_then(|a| a.checked_add(size & 1))
+        {
+            Some(next) => at = next,
+            None => break,
+        }
+    }
+    count
 }
 
 /// Count the image blocks (frames) in a GIF by walking its block structure,
