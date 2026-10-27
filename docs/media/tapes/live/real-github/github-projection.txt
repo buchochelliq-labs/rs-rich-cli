@@ -1,0 +1,40 @@
+ NOCTILUCA   PROJECTION + KITTY   ◀▶   GitHub - buchochelliq-labs/rs-rich-cli · GitHub
+ https://github.com/buchochelliq-labs/rs-rich-cli
+Skip to content                                                                                                        ┃
+Navigation Menu                                           ░░░░                                           Sign in [Appea┃
+   [Toggle navigation]                                    ░░░░                                                         │
+                                                                                                                       │
+Repository navigation                                                                                                  │
+   buchochelliq-labs rs-rich-cli                                                                                       │
+                                                                                                                       │
+   ░░ Code          ░░ Issues 173    ░░ Pull     16   ░░ Discussions   ░░ Actions       ░░ Projects         [More items│
+                              (173)     requests (16)                                                                  │
+                                                                                                                       │
+     rs-rich-c                                                                                                         │
+     li        Public                                                             ░                ░                   │
+                                                                                  Notifications    (0)                 │
+                                                                                ░               Fork 0                 │
+  [main branch]                              [Go to file]                       Star 1                                 │
+             ░  ░                                                               (1)                                    │
+                                                                                                                       │
+                                                 [ Code ]                                                              │
+  n1ckyb Merge pull request #783 from                     [success]                                                    │
+         buchochelliq-labs/claude/next-priority-i           About                                                      │
+         …                                                  buchochelliq-labs.github.io/rs-r                           │
+   Latest commit                    [Open commit details]   ich-cli/ Topics ascii ascii-art                            │
+  Folders and files                      61a2a6d4 hours     asciinemacli rich rich-cli                                 │
+                                         ·      ago         terminal terminal-ui tui                                   │
+  Name                  Last commit message            ░    Resources Readme License                                   │
+  .cargo                py, art, audit: nesting depth Histo Contributing Contributing                                  │
+                        as Rich's, no crash on small  ry    Activity Custom properties Stars                           │
+                        stacks; ta…                         1 star Watchers 0 watching Forks                           │
+  .claude/skills        release: the validationLast commit  0 forks Report repository                                  │
+                        wrapper runs the plan  date         Releases 17 (17) Release 0.0.22                            │
+                        with --semver-checks   last month   Latest yesterday + 16 releases                             │
+  .githooks             Release hygiene:       8 hours ago  Contributors 4 (4)      claude                             │
+                        branching strategy,    2 months ago Claude      n1ckyb      Copilot                            │
+                        release skill, and                       dependabot[bot]                                       │
+                        enforced temp…                      Languages Rust 91.2% Python 8.5%                           │
+  .github               Installed micro packs  6 hours ago  JavaScript 0.3% Shell 0%                                   │
+ projection | row 1/550
+ f1 actions | f hints | o open | r reader | q quit

@@ -1,0 +1,40 @@
+ NOCTILUCA   PROJECTION + CELLS   ◀▶   Hacker News
+ https://news.ycombinator.com/
+                                                                                                                       ┃
+             [aas]Hacker News [aad]new | [aaf]past | [aag]comments | [aah]ask | [aaj]show | [aak]jobs [aae]login       ┃
+             | [aal]submit                                                                                             ┃
+          1.  [aar]Three new discoveries in mathematics, computer science, and physics ([aau]openai.com)               ┃
+              516 points by [aai]jonluca [aao]4 hours ago | [asa]hide | [ass]205 comments                              ┃
+          2.  [asf]The Exponential Time Hypothesis Is False [pdf] ([asg]github.com/openai)                             ┃
+              322 points by [ash]vok [asj]4 hours ago | [ask]hide | [asl]131 comments                                  ┃
+          3.  [asw]Sebastian Raschka's from-scratch video course on building reasoning models ([asr]sebastianraschka.co┃
+              )                                                                                                        ┃
+              570 points by [asu]sgiannopoulos [asi]11 hours ago | [aso]hide | [ada]82 comments                        ┃
+          4.  [add]Oldest GUI application that still runs on Windows 11 ([adf]enlyth.com)                              ┃
+              307 points by [adg]enlyth [adh]8 hours ago | [adj]hide | [adk]191 comments                               ┃
+          5.  [ade]Cross-request KV cache exposure in the GLM-5.3 Workers AI model (155 responses) ([adw]cloudflare.com┃
+              81 points by [adr]wondersky [adu]3 hours ago | [adi]hide | [ado]22 comments                              ┃
+          6.  [afs]Type Server Protocol ([afd]github.com/microsoft)                                                    ┃
+              197 points by [aff]adamnemecek [afg]8 hours ago | [afh]hide | [afj]140 comments                          ┃
+          7.  [afl]16-bit Windows (Windows 1.x, 2.x, 3.0, 3.1, etc.) on 64-bit Windows ([afe]github.com/otya128)       ┃
+              19 points by [afw]doener [afr]1 hour ago | [afu]hide | [afi]1 comment                                    ┃
+          8.  [aga]A Printer Printing onto Paper ([ags]twitter.com/macrofying)                                         ┃
+              68 points by [agd]MrBuddyCasino [agf]4 hours ago | [agg]hide | [agh]17 comments                          │
+          9.  [agk]CSS-Tricks has a new owner ([agl]css-tricks.com)                                                    │
+              390 points by [age]edent [agw]10 hours ago | [agr]hide | [agu]90 comments                                │
+          10. [ago]Is PHP Running on Your ColdFusion Server? How to Check, and Remove It ([aha]gregoryalexander.com)   │
+              28 points by [ahs]rmason [ahd]4 hours ago | [ahf]hide | [ahg]18 comments                                 │
+          11. [ahj]Solar power is becoming bigger than nuclear ([ahk]bbc.com)                                          │
+              153 points by [ahl]geox [ahe]11 hours ago | [ahw]hide | [ahr]257 comments                                │
+          12. [ahi]Nietzschian Debugger ([aho]github.com/dilawarshafiq)                                                │
+              132 points by [aja]dilawargopang [ajs]9 hours ago | [ajd]hide | [ajf]43 comments                         │
+          13. [ajh]GPT-6.1 Terra ([ajj]openai.com)                                                                     │
+              516 points by [ajk]meetpateltech [ajl]8 hours ago | [aje]hide | [ajw]329 comments                        │
+          14. [aju]A Man from the Future: Why Johnny Can't Stop Abstracting ([aji]muratbuffalo.blogspot.com)           │
+              124 points by [ajo]aray07 [aka]8 hours ago | [aks]hide | [akd]64 comments                                │
+          15. [akg]LISPy things you can do in 64K bytes of core (2019) ([akh]t3x.org)                                  │
+              30 points by [akj]andsoitis [akk]3 hours ago | [akl]hide | [ake]3 comments                               │
+          16. [akr]Anthropic S-1 ([aku]sec.gov)                                                                        │
+              1491 points by [aki]SiNTEx [ako]13 hours ago | [ala]hide | [als]1463 comments                            │
+  hints  type a label:   Esc cancels
+ f1 actions | f hints | o open | r reader | q quit

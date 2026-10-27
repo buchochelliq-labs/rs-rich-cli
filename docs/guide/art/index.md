@@ -33,8 +33,8 @@ decoders:
 | Feature | Default | Adds | Pulls in |
 |---|---|---|---|
 | *(none)* | ✅ | `Figlet` banners | only `rs-rich` |
-| `image` | off | `ImageArt`, the ASCII/Braille/block/quadrant backends, `imagediff` | the `image` crate (PNG and JPEG decoders) |
-| `gif` | off | `AnimatedArt`, `Stage` | `image` plus its GIF decoder |
+| `image` | off | `ImageArt`, the ASCII/Braille/block/quadrant backends, `imagediff` | the `image` crate (PNG, JPEG, GIF and WebP decoders) |
+| `gif` | off | `AnimatedArt`, `Stage` (animated GIFs and WebPs) | `image` |
 | `sixel` | off | `SixelArt`, Sixel through `ImageArt` | `image` plus `icy_sixel` |
 
 `gif` and `sixel` each switch on `image`. The `image` crate is re-exported as

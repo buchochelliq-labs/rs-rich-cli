@@ -4461,7 +4461,17 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                 );
             }
         }
-        let kind = viewers::detect(ext.as_deref(), cli.resource.as_deref(), &view_bytes);
+        let mut kind = viewers::detect(ext.as_deref(), cli.resource.as_deref(), &view_bytes);
+        // An animated WebP plays, as a GIF does; a still one is an image.
+        if kind == viewers::ViewAs::Image
+            && ext.as_deref() == Some("webp")
+            && cli
+                .resource
+                .as_deref()
+                .is_some_and(|r| !is_url(r) && viewers::animated_webp(&fs_path(r)))
+        {
+            kind = viewers::ViewAs::Gif;
+        }
         mode = match kind {
             viewers::ViewAs::Markdown => Mode::Markdown,
             viewers::ViewAs::Csv => Mode::Csv,
@@ -6016,7 +6026,7 @@ fn open_image_path(path: &str) -> Result<rich_art::image::DynamicImage, String> 
             let hint = match &err {
                 rich_art::image::ImageError::Unsupported(error) => match error.kind() {
                     UnsupportedErrorKind::Format(ImageFormatHint::PathExtension(ext)) =>
-                        Some(format!("unsupported image extension {}; use a supported image format such as PNG or JPEG", ext.display())),
+                        Some(format!("unsupported image extension {}; use a supported image format such as PNG, JPEG, GIF or WebP", ext.display())),
                     _ => None,
                 },
                 _ => None,

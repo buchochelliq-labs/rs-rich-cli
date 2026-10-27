@@ -25,8 +25,8 @@ Render it with half blocks, 48 columns wide:
 
 ![The test card drawn with half blocks](../../media/guide/guide_images-quickstart.svg)
 
-For a file, use `ImageArt::from_path("photo.png")?` (PNG and JPEG with the
-`image` feature; GIF too with `gif`). `ImageArt::from_bytes` decodes from memory
+For a file, use `ImageArt::from_path("photo.png")?` (PNG, JPEG, GIF and WebP
+with the `image` feature; an animation draws its first frame). `ImageArt::from_bytes` decodes from memory
 and `ImageArt::new` takes an `image::DynamicImage` you already have.
 
 ## Modes

@@ -1,0 +1,40 @@
+ NOCTILUCA   READER + SIXEL   ◀▶   Array.prototype.map() - JavaScript | MDN
+ https://developer.mozilla.org/en-US/docs/Web/JavaScript/Reference/Global_Objects/Array/map
+                                                                                                                       │
+▏map(callbackFn)                                                                                                       │
+▏map(callbackFn, thisArg)                                                                                              │
+▏                                                                                                                      │
+                                                                                                                       │
+Parameters                                                                                                             ┃
+                                                                                                                       ┃
+callbackFn                                                                                                             ┃
+                                                                                                                       │
+A function to execute for each element in the array. Its return value is added as a single element in the new array.   │
+The function is called with the following arguments:                                                                   │
+                                                                                                                       │
+element                                                                                                                │
+                                                                                                                       │
+The current element being processed in the array.                                                                      │
+                                                                                                                       │
+index                                                                                                                  │
+                                                                                                                       │
+The index of the current element being processed in the array.                                                         │
+                                                                                                                       │
+array                                                                                                                  │
+                                                                                                                       │
+The array map() was called upon.                                                                                       │
+                                                                                                                       │
+thisArg Optional                                                                                                       │
+                                                                                                                       │
+A value to use as this when executing callbackFn . See iterative methods.                                              │
+                                                                                                                       │
+Return value                                                                                                           │
+                                                                                                                       │
+A new array with each element being the result of the callback function.                                               │
+                                                                                                                       │
+Description                                                                                                            │
+                                                                                                                       │
+The map() method is an iterative method. It calls a provided callbackFn function once for each element in an array and │
+constructs a new array from the results. Read the iterative methods section for more information about how these       │
+ match 1 of 3
+ f1 actions | f hints | o open | r reader | q quit

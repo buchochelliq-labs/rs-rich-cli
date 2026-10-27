@@ -191,6 +191,7 @@ pub const PING_SCRIPT: &str = r#"(function start(tries) {
       const target = r.target;
       if (r.type === 'childList' && target.nodeType === 1 && r.nextSibling === null &&
           !live.appended.has(target) && !isLog(target) &&
+          target !== document.documentElement && target !== document.body &&
           [...r.addedNodes].some(n => n.nodeType === 1)) {
         const overflow = style(target).overflowY;
         if (overflow === 'auto' || overflow === 'scroll') {

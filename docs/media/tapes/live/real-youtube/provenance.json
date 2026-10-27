@@ -1,0 +1,18 @@
+{
+  "tape": "docs/tapes/live/real-youtube.tape",
+  "tape_fnv1a64": "a2acc679b4f97b2d",
+  "recorder": "rs-rich-record 0.0.11",
+  "rich": "rich (rs-rich-cli) 0.0.23",
+  "commit": null,
+  "screenshots": [
+    "youtube-watch",
+    "youtube-codecs"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY.",
+  "recorded": "2026-10-27",
+  "sites": [
+    "https://www.youtube.com/watch?v=aqz-KE-bpKQ"
+  ],
+  "browser": "Chrome for Testing 153.0.8010.12",
+  "noctiluca": "0.0.2 (branch 023-realsites)"
+}

@@ -110,7 +110,8 @@ changes in it. Give two files to compare them, or pipe a real patch:
 ## `rich: cannot read <file>: The image format <Name> is not supported`
 
 `--image` (or `rich image`) recognised the file as an image in a format `rich`
-cannot decode. Convert it to PNG, JPEG, GIF, WebP or BMP first. A truncated or
+cannot decode (AVIF, BMP or TIFF, for instance). Convert it to PNG, JPEG, GIF
+or WebP first. A truncated or
 corrupt image fails the same way, with the decoder's message (such as
 `unexpected end of file`). The exit code is 3.
 

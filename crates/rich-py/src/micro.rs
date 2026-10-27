@@ -506,7 +506,7 @@ fn fit(name: &str) -> PyResult<rich_art::ImageFit> {
     })
 }
 
-/// Run `image` (a path, or PNG, APNG, GIF or JPEG bytes) through the
+/// Run `image` (a path, or PNG, APNG, GIF, JPEG or WebP bytes) through the
 /// pipeline and write a package at `dest` (a folder, or a `.richmicro`
 /// zip with `archive=True`). Returns the asset as the registry reads it.
 #[pyfunction]

@@ -1,7 +1,7 @@
 //! The image and animation pipeline (#571, #572): from any picture to the
 //! images a package holds, fitted to its cells.
 //!
-//! A source image (PNG, APNG, GIF or JPEG) is decoded under hard limits,
+//! A source image (PNG, APNG, GIF, JPEG or WebP) is decoded under hard limits,
 //! then every frame goes through the same steps, all of them `rich-art`'s
 //! image code: the adjustments (brightness, contrast, gamma, grayscale),
 //! fitting to exactly `cols × cell width` by `rows × cell height` pixels
@@ -146,7 +146,7 @@ impl Pipeline {
         Ok(())
     }
 
-    /// Decode `bytes` (PNG, APNG, GIF or JPEG) and run every frame through
+    /// Decode `bytes` (PNG, APNG, GIF, JPEG or WebP) and run every frame through
     /// the pipeline. A still source gives one frame.
     pub fn process_bytes(&self, bytes: &[u8]) -> Result<Processed, MicroError> {
         self.validate()?;
@@ -236,7 +236,8 @@ fn decode(bytes: &[u8], budget: FrameBudget) -> Result<Vec<AnimationFrame>, Micr
              {MAX_SOURCE_DIMENSION} on each side"
         )));
     }
-    if bytes.starts_with(b"GIF8") || bytes.starts_with(b"\x89PNG\r\n\x1a\n") {
+    let webp = bytes.len() >= 12 && bytes.starts_with(b"RIFF") && &bytes[8..12] == b"WEBP";
+    if bytes.starts_with(b"GIF8") || bytes.starts_with(b"\x89PNG\r\n\x1a\n") || webp {
         let frames = decode_animation(bytes, budget).map_err(bad)?;
         if frames.is_empty() {
             return Err(MicroError::Image("the image has no frames".into()));
@@ -421,6 +422,18 @@ mod tests {
         assert!(pipeline.process_bytes(b"not an image").is_err());
         pipeline.sharpen = Some(-1.0);
         assert!(pipeline.process_bytes(&png).is_err());
+    }
+
+    #[test]
+    fn decodes_webp_stills_and_animations() {
+        let fixtures = concat!(env!("CARGO_MANIFEST_DIR"), "/../rich-art/tests/fixtures/");
+        let pipeline = Pipeline::new(CellSize::default());
+        let animated = std::fs::read(format!("{fixtures}ball-animated.webp")).unwrap();
+        assert!(pipeline.process_bytes(&animated).unwrap().animated());
+        let still = std::fs::read(format!("{fixtures}ball.webp")).unwrap();
+        let out = pipeline.process_bytes(&still).unwrap();
+        assert!(!out.animated());
+        assert_eq!(out.still().dimensions(), (16, 16));
     }
 
     #[test]

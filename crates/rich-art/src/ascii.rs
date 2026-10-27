@@ -66,7 +66,7 @@ impl AsciiArt {
         }
     }
 
-    /// Decode an image from bytes (PNG or JPEG).
+    /// Decode an image from bytes (PNG, JPEG, GIF or WebP).
     pub fn from_bytes(bytes: &[u8]) -> Result<Self, ImageError> {
         Ok(AsciiArt::new(image::load_from_memory(bytes)?))
     }

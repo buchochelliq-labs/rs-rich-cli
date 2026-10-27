@@ -69,8 +69,8 @@ not mirror Python `rich-cli`. The tracked upstream release is **`rich-cli`
 | `--ipynb` | a Jupyter notebook |
 | `--jsonl` | streaming JSON Lines / NDJSON |
 | `--log` | streaming structured-log JSONL |
-| `--gif` | animated GIFs, several at once |
-| `--image` | a still image as ASCII, Braille, half-blocks, quadrants, or Sixel |
+| `--gif` | animated GIFs (and animated WebPs), several at once |
+| `--image` | a still image (PNG, JPEG, GIF or WebP) as ASCII, Braille, half-blocks, quadrants, or Sixel |
 | `--diff` | two images, two text files, or one patch |
 | `--inspect` | structured data as a tree (`rich inspect`) |
 | `--ansi-explain` | the escape sequences in a capture (`rich ansi explain`) |
