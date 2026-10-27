@@ -9,6 +9,33 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **HTTPS downloads trust the system's certificate store** (rs-rich-marketplace,
+  rs-rich-cli). `rich plugin install`, `rich <url>` and the marketplace's
+  download statistics trusted only Mozilla's bundled roots, so behind a
+  TLS-inspecting proxy with its own root CA (a company network's, or a
+  sandbox's) a download failed with `invalid peer certificate:
+  UnknownIssuer`. They now trust the operating system's store first
+  (ureq's platform verifier: the OS verifier on Windows and macOS, the
+  system's CA files on Linux, honouring `SSL_CERT_FILE` and `SSL_CERT_DIR`)
+  and retry once with the bundled roots when that fails at the TLS or I/O
+  level. The new `rich_marketplace::tls` module (`Trust`, `with_fallback`)
+  is the one place that chooses. Redirects are now followed one request at
+  a time (`rich_marketplace::redirect`), with the same limits and
+  HTTPS-only rule: ureq's own redirect handling took a redirect whose
+  header block had not finished arriving, and through such a proxy GitHub's
+  release downloads then failed with `chunk length cannot be read as a
+  number`. Signatures and SHA-256 pins are checked as before: TLS is
+  transport only. New dependencies, all permissive: rustls-platform-verifier
+  (MIT OR Apache-2.0), rustls-native-certs (Apache-2.0 OR ISC OR MIT),
+  openssl-probe, webpki-root-certs (CDLA-Permissive-2.0, as webpki-roots),
+  and on macOS and Windows security-framework, core-foundation and
+  schannel.
+
+- **WASM plugin tests run optimised in CI** (repository). CI's `wasm` job
+  also runs rs-rich-ext's WASM plugin tests and the CLI's marketplace and
+  official-artifact tests with `--release`, where the stack overflow the
+  fuzz targets found showed (it did not in debug builds).
+
 - **Fuzz targets, run nightly** (repository; rs-rich): `fuzz/` holds
   cargo-fuzz targets for every parser that takes outside input (markup,
   ANSI, Markdown, JSON, DOT, Mermaid, CSV/TSV and JSONL, stylesheets, the

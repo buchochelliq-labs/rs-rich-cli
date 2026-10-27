@@ -132,7 +132,10 @@ regression test in its crate:
   every instruction there. rs-rich-ext now builds wasmi with its portable
   (loop) dispatch, which is slower but cannot do that. The test fails
   without the fix only under `cargo test --release`: a debug build always
-  used the portable dispatch.
+  used the portable dispatch. So CI's `wasm-plugins-release` job runs
+  rs-rich-ext's `wasm_plugins` tests, and the CLI's tests that load WASM
+  plugins (`plugin_marketplace`, `official_artifacts`, `plugins`), with
+  `--release` on every pull request.
 - `plugin_wasm`: wasmi 2.0.0 divided by zero (a panic) on a code section
   that declares no functions but holds bytes. rs-rich-ext now validates a
   module with wasmparser (the parser wasmi uses, at its version) first,
