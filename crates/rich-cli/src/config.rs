@@ -752,11 +752,10 @@ fn normalize_watch(settings: &mut Settings, explicit: &Settings) -> Result<(), S
     Ok(())
 }
 
-/// The selected theme's bindings: the config's theme of that name, else,
-/// for `--theme NAME` only, an installed, enabled marketplace theme whose
-/// id is the name (its file still hashing to the lockfile). A config's own
-/// `theme = "..."` names only one of its themes. `warn` prints why an
-/// installed theme was not used.
+/// The selected theme's bindings: the config's theme of that name, else an
+/// installed, enabled marketplace theme whose id is the name (its file
+/// still hashing to the lockfile). `warn` prints why an installed theme was
+/// not used.
 fn selected_theme(
     configuration: &mut Configuration,
     args: &Arguments,
@@ -772,9 +771,6 @@ fn selected_theme(
     };
     if let Some(styles) = configuration.themes.get(name) {
         return Ok(styles.clone());
-    }
-    if args.theme.is_none() {
-        return Err(format!("unknown theme {name:?}"));
     }
     let (installed, warnings) = super::marketplace::installed_theme(name);
     if warn {
