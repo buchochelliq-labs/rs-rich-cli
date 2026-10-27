@@ -64,14 +64,21 @@ pub(crate) fn load(location: &Location) -> Option<Stats> {
 fn fetch_remote(url: &str) -> Option<Vec<u8>> {
     use std::io::Read;
     rich_marketplace::require_https(url).ok()?;
-    let config = ureq::Agent::config_builder()
-        .https_only(true)
-        .max_redirects(3)
-        .timeout_global(Some(STATS_TIMEOUT))
-        .user_agent("rs-rich-marketplace-stats")
-        .build();
-    let agent = ureq::Agent::new_with_config(config);
-    let mut response = agent.get(url).call().ok()?;
+    // The system's certificates first, the bundled roots as the fallback;
+    // redirects (three at most) followed one request at a time.
+    let mut response = rich_marketplace::redirect::get_following(url, 3, true, |hop| {
+        rich_marketplace::tls::with_fallback(|trust| {
+            let config = ureq::Agent::config_builder()
+                .https_only(true)
+                .max_redirects(0)
+                .timeout_global(Some(STATS_TIMEOUT))
+                .user_agent("rs-rich-marketplace-stats")
+                .tls_config(trust.tls_config())
+                .build();
+            ureq::Agent::new_with_config(config).get(hop).call()
+        })
+    })
+    .ok()?;
     let mut body = Vec::new();
     response
         .body_mut()
