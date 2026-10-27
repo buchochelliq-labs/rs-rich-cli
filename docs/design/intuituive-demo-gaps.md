@@ -17,6 +17,9 @@ original app leans on, and the ones comparable libraries (ratatui and its
 crates, Bubble Tea and Bubbles, Textual) offer. Each entry gives what it
 would replace, an API sketch, core or plugin, and how much it would help.
 
+A whole-framework comparison with Textual, widget by widget, with its
+gaps filed as issues, is in [the Textual parity audit](textual-parity.md).
+
 Where a gap belongs:
 
 - **core**: rs-rich-intuituive itself (layout, widgets, keys, popups);

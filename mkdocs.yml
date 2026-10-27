@@ -287,6 +287,7 @@ nav:
       - "Design: intuiTUIve spike (milestone 11)": design/intuituive.md
       - "Design: intuiTUIve widgets": design/intuituive-widgets.md
       - "Design: intuiTUIve against ratatui": design/intuituive-vs-ratatui.md
+      - "Design: intuiTUIve against Textual": design/textual-parity.md
       - "Design: what the intuiTUIve demos are missing": design/intuituive-demo-gaps.md
       - "Design: the demo loop, where things stand": design/intuituive-status.md
       - "Design: Noctiluca, a terminal web browser": design/browser.md
