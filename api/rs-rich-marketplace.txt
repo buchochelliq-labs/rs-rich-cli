@@ -1,5 +1,57 @@
 pub mod rich_marketplace
 pub use rich_marketplace::semver
+pub mod rich_marketplace::redirect
+pub fn rich_marketplace::redirect::get_following<E>(&str, u32, bool, impl core::ops::function::FnMut(&str) -> core::result::Result<http::response::Response<ureq::body::Body>, E>) -> core::result::Result<http::response::Response<ureq::body::Body>, E> where E: core::convert::From<ureq::error::Error>
+pub fn rich_marketplace::redirect::resolve_location(&str, &str) -> core::option::Option<alloc::string::String>
+pub mod rich_marketplace::tls
+#[non_exhaustive] pub enum rich_marketplace::tls::Trust
+pub rich_marketplace::tls::Trust::Bundled
+pub rich_marketplace::tls::Trust::System
+impl rich_marketplace::tls::Trust
+pub const rich_marketplace::tls::Trust::ORDER: [rich_marketplace::tls::Trust; 2]
+pub fn rich_marketplace::tls::Trust::describe(self) -> &'static str
+pub fn rich_marketplace::tls::Trust::tls_config(self) -> ureq::tls::TlsConfig
+impl core::clone::Clone for rich_marketplace::tls::Trust
+pub fn rich_marketplace::tls::Trust::clone(&self) -> rich_marketplace::tls::Trust
+impl core::cmp::Eq for rich_marketplace::tls::Trust
+impl core::cmp::PartialEq for rich_marketplace::tls::Trust
+pub fn rich_marketplace::tls::Trust::eq(&self, &rich_marketplace::tls::Trust) -> bool
+impl core::fmt::Debug for rich_marketplace::tls::Trust
+pub fn rich_marketplace::tls::Trust::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_marketplace::tls::Trust
+pub fn rich_marketplace::tls::Trust::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_marketplace::tls::Trust
+impl core::marker::StructuralPartialEq for rich_marketplace::tls::Trust
+impl core::marker::Freeze for rich_marketplace::tls::Trust
+impl core::marker::Send for rich_marketplace::tls::Trust
+impl core::marker::Sync for rich_marketplace::tls::Trust
+impl core::marker::Unpin for rich_marketplace::tls::Trust
+impl core::marker::UnsafeUnpin for rich_marketplace::tls::Trust
+impl core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::tls::Trust
+impl core::panic::unwind_safe::UnwindSafe for rich_marketplace::tls::Trust
+pub struct rich_marketplace::tls::TrustError
+pub rich_marketplace::tls::TrustError::bundled: core::option::Option<alloc::boxed::Box<ureq::error::Error>>
+pub rich_marketplace::tls::TrustError::system: alloc::boxed::Box<ureq::error::Error>
+impl rich_marketplace::tls::TrustError
+pub fn rich_marketplace::tls::TrustError::into_last(self) -> ureq::error::Error
+pub fn rich_marketplace::tls::TrustError::last(&self) -> &ureq::error::Error
+impl core::convert::From<ureq::error::Error> for rich_marketplace::tls::TrustError
+pub fn rich_marketplace::tls::TrustError::from(ureq::error::Error) -> Self
+impl core::error::Error for rich_marketplace::tls::TrustError
+pub fn rich_marketplace::tls::TrustError::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for rich_marketplace::tls::TrustError
+pub fn rich_marketplace::tls::TrustError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_marketplace::tls::TrustError
+pub fn rich_marketplace::tls::TrustError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_marketplace::tls::TrustError
+impl core::marker::Send for rich_marketplace::tls::TrustError
+impl core::marker::Sync for rich_marketplace::tls::TrustError
+impl core::marker::Unpin for rich_marketplace::tls::TrustError
+impl core::marker::UnsafeUnpin for rich_marketplace::tls::TrustError
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_marketplace::tls::TrustError
+impl !core::panic::unwind_safe::UnwindSafe for rich_marketplace::tls::TrustError
+pub fn rich_marketplace::tls::may_be_trust(&ureq::error::Error) -> bool
+pub fn rich_marketplace::tls::with_fallback<T>(impl core::ops::function::FnMut(rich_marketplace::tls::Trust) -> core::result::Result<T, ureq::error::Error>) -> core::result::Result<T, rich_marketplace::tls::TrustError>
 #[non_exhaustive] pub enum rich_marketplace::CheckError
 pub rich_marketplace::CheckError::Host(alloc::string::String)
 pub rich_marketplace::CheckError::ManifestMismatch
