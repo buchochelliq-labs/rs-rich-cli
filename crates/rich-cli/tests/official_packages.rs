@@ -221,11 +221,10 @@ fn sgr_parameters(text: &str) -> Vec<Vec<u32>> {
         .collect()
 }
 
-/// Each theme renders through `--theme-file`: a Markdown sample, printed
+/// Each theme renders through `--theme-file`: Markdown (the heading, inline
+/// code, bullets and quote in the theme's `markdown.*` colours), printed
 /// values (numbers in the theme's `repr.number` colour) and JSON (keys in
-/// its `json.key` colour); mono with attributes only. The Markdown is only
-/// checked to render: core's `Markdown` does not read `markdown.*` styles
-/// from the console's theme yet.
+/// its `json.key` colour); mono with attributes only.
 #[test]
 fn every_theme_renders_through_theme_file() {
     let dir = tempfile::tempdir().unwrap();
@@ -263,7 +262,10 @@ fn every_theme_renders_through_theme_file() {
         assert!(json.contains("stars"), "{id}: {json:?}");
 
         if id == "mono" {
-            for params in [printed, json].into_iter().flat_map(|o| sgr_parameters(o)) {
+            for params in [markdown, printed, json]
+                .into_iter()
+                .flat_map(|o| sgr_parameters(o))
+            {
                 for p in &params {
                     // 39 and 49 are the terminal's own colours.
                     assert!(
@@ -273,6 +275,8 @@ fn every_theme_renders_through_theme_file() {
                 }
             }
             assert!(printed.contains("\u{1b}[1"), "{id}: {printed:?}");
+            // `markdown.h1 = bold underline`.
+            assert!(markdown.contains("\u{1b}[1;4m"), "{id}: {markdown:?}");
             continue;
         }
         let theme = theme(id);
@@ -290,6 +294,31 @@ fn every_theme_renders_through_theme_file() {
             "{id}: {printed:?}"
         );
         assert!(json.contains(&colour("json.key")), "{id}: {json:?}");
+        for name in [
+            "markdown.h1",
+            "markdown.code",
+            "markdown.item.bullet",
+            "markdown.block_quote",
+        ] {
+            assert!(
+                markdown.contains(&colour(name)),
+                "{id} {name}: {markdown:?}"
+            );
+        }
+        let code_background = theme
+            .get("markdown.code")
+            .unwrap()
+            .bgcolor()
+            .unwrap()
+            .get_truecolor()
+            .unwrap();
+        assert!(
+            markdown.contains(&format!(
+                "48;2;{};{};{}",
+                code_background.red, code_background.green, code_background.blue
+            )),
+            "{id}: {markdown:?}"
+        );
         assert!(json.contains(&colour("json.number")), "{id}: {json:?}");
     }
 }

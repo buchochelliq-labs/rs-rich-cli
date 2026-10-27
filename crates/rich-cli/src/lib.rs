@@ -875,6 +875,22 @@ fn code_highlighting(
     Ok(registry.code_highlighting())
 }
 
+/// rich-ext's default code highlighting (syntect) for a console that renders
+/// a resource, without rich-ext's example number highlighter.
+///
+/// Upstream rich-cli highlights with rich's `ReprHighlighter` alone. The
+/// number highlighter painted every run of digits a fixed bold cyan over it,
+/// so digits upstream leaves plain (`abc123`) came out cyan, and a theme's
+/// `repr.number` could not take the colour away: `--theme-style
+/// repr.number=bold` kept the digits cyan, where upstream's theme replaces
+/// the style and they render bold alone.
+fn install_render_defaults(console: &mut Console) {
+    use rich::ConsoleCodeHighlighting;
+    if let Some(highlighting) = rich_ext::ExtensionRegistry::with_defaults().code_highlighting() {
+        console.set_code_highlighting(Some(highlighting));
+    }
+}
+
 /// Give `console` the code highlighting `cli` chose (parsing checked it).
 fn apply_code_highlighting(console: &mut Console, cli: &Cli) {
     use rich::ConsoleCodeHighlighting;
@@ -4476,7 +4492,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     }
     let mut console = builder.build();
     render_target::attach(&mut console);
-    console.install_extensions();
+    install_render_defaults(&mut console);
     plugins::install_highlighters(&mut console);
     apply_code_highlighting(&mut console, &cli);
 
@@ -6381,7 +6397,7 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
             .height(console.height())
             .theme(console.theme().clone())
             .build();
-        export_console.install_extensions();
+        install_render_defaults(&mut export_console);
         let segments = export_console.record_output(|c| render_report(c, true));
         wrote = wrote.and_then(|()| save_exports(&export_console, export, &segments));
     }

@@ -9,6 +9,18 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+- **Themes reach Markdown, and a theme style replaces** (rs-rich,
+  rs-rich-cli). Core's `Markdown` now looks every `markdown.*` style up in
+  the console's theme, as rich 15.0.0 does, so a theme's (or
+  `--theme-file`'s) `markdown.h1`, `markdown.code`, `markdown.link` and the
+  rest show in `rich -m`; the styles stack in upstream's order, and
+  `<kbd>` renders in `markdown.kbd`. The default theme renders as before
+  (golden `markdown_theme.tsv`). In the CLI, `--theme-style
+  repr.number=bold` printed numbers bold cyan: rs-rich-ext's example
+  `NumberHighlighter` painted digits a fixed colour over the theme. The
+  CLI no longer installs it, so numbers take the theme's style alone and
+  digits upstream leaves plain (`abc123`) are plain.
+
 - **Fuzz targets, run nightly** (repository; rs-rich): `fuzz/` holds
   cargo-fuzz targets for every parser that takes outside input (markup,
   ANSI, Markdown, JSON, DOT, Mermaid, CSV/TSV and JSONL, stylesheets, the

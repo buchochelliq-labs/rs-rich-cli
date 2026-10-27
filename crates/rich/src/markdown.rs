@@ -106,7 +106,7 @@ impl MarkdownStyles {
 }
 
 /// `StyleStack.push`: `style` over `base`. A null style changes nothing, so
-/// pushing one leaves no base at all as no base.
+/// pushing one onto an empty stack leaves it empty.
 fn push_style(base: Option<&Style>, style: &Style) -> Option<Style> {
     match base {
         Some(base) => Some(base.combine(style)),

@@ -171,3 +171,53 @@ fn the_config_key_is_validated() {
     assert_eq!(out.status.code(), Some(2));
     assert!(String::from_utf8_lossy(&out.stderr).contains("theme_file"));
 }
+
+/// A theme entry replaces the named style outright, as upstream's theme stack
+/// does: `repr.number=bold` has no colour, so the numbers are bold alone. The
+/// expected bytes are rich 15.0.0's (`highlight.tsv`'s
+/// `attributes_only_number`). Digits the repr highlighter leaves alone
+/// (`abc123`) stay plain, as upstream rich-cli prints them.
+#[test]
+fn an_attributes_only_theme_style_drops_the_default_colour() {
+    let root = tempfile::tempdir().unwrap();
+    let source = "[1, 2.5] abc123 v1.2";
+    let upstream = "\x1b[1m[\x1b[0m\x1b[1m1\x1b[0m, \x1b[1m2.5\x1b[0m\x1b[1m]\x1b[0m abc123 v1.\x1b[1m2\x1b[0m";
+    for args in [
+        &[
+            "--force-terminal",
+            "--theme-style",
+            "repr.number=bold",
+            "-p",
+            source,
+        ][..],
+        &[
+            "--force-terminal",
+            "--theme-file",
+            "theme.ini",
+            "-p",
+            source,
+        ],
+    ] {
+        std::fs::write(
+            root.path().join("theme.ini"),
+            "[styles]\nrepr.number = bold\n",
+        )
+        .unwrap();
+        let out = run_in(root.path(), args, "");
+        assert!(
+            out.status.success(),
+            "{}",
+            String::from_utf8_lossy(&out.stderr)
+        );
+        assert_eq!(
+            String::from_utf8_lossy(&out.stdout).trim_end_matches('\n'),
+            upstream,
+            "{args:?}"
+        );
+    }
+    // The default theme: one `repr.number` span per number, nothing else.
+    let out = run_in(root.path(), &["--force-terminal", "-p", source], "");
+    let printed = String::from_utf8_lossy(&out.stdout);
+    assert!(printed.contains("\x1b[1;36m2.5\x1b[0m"), "{printed:?}");
+    assert!(printed.contains(" abc123 v1."), "{printed:?}");
+}
