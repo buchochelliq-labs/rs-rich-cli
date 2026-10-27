@@ -14,8 +14,8 @@ with the marketplace repository's signing workflow kept to hand over in
 plugins), the built-in micro packs (`status`, `dev`, `fun`) and the
 official themes (`dusk`, `paper`, `ocean`, `high-contrast`, `mono`), and
 checks every listing
-pull request; it is live once the maintainer has set up the signing
-environment and signed the first index
+pull request. It went live on 2026-10-26, when the signing workflow
+signed the first index, serial 1
 ([0.0.23 plan, item 17](../plans/0.0.23.md)). This note is the contract
 between the marketplace repository, the crate and the CLI. It is part of the
 1.0 promise ([the plan to 1.0.0](../plans/1.0.0.md#track-b-the-plugin-marketplace-232-463)).

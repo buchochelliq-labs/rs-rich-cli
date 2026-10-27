@@ -53,26 +53,27 @@ console.print_str("[bold red]Hello[/] [green]World[/] — 42");
 [Getting started](docs/getting-started.md) has a complete program; the
 [tutorial](docs/tutorial/index.md) builds up from there.
 
-## New in 0.0.22
+## New in 0.0.23
 
-Published on 2026-10-25 ([release notes](docs/releases/0.0.22.md)).
-Parity, the plugin marketplace and a terminal web browser:
+To be published as one release, `release-0.0.23`
+([release notes](docs/releases/0.0.23.md)). Faster frames, pictures and
+video in Noctiluca, and the marketplace goes live:
 
-- **Parity with rich 15.0.0:** the widget, live display and document
-  modules ported or recorded as divergences, `scope.py` ported, a verdict
-  for every divergence, and the differential fuzzer on Markdown, trees,
-  columns, progress, Pretty and JSON.
-- **The marketplace:** the new `rs-rich-marketplace` crate (a signed index,
-  verified installs, a lockfile), `rich plugin` with `browse` and
-  `publish`, and WASM plugins on by default.
-- **intuiTUIve:** flush panel titles, a tree table, `min_size` with a node
-  of its own, labels that change in place, a three-state check box,
-  options known by key and a live action list.
-- **[Noctiluca](docs/guide/noctiluca.md)** (new): a web browser for the
-  terminal, on intuiTUIve and a headless Chrome. Watch
-  [its promo](docs/assets/noctiluca/promo.mp4) (AI-generated, MIT).
-- **Recording:** a tape writes an APNG only when asked. Memo has a spot for
-  every crate.
+- **The core:** `console.py` fully ported (capture, `record=` and its
+  exports, `log`, render hooks, `screen()`, `status()`, nested `Live`),
+  themes in Markdown, and fast paths that render the same bytes in a
+  fraction of the time.
+- **intuiTUIve:** the `best` paint strategy by default (a scrolled log sends
+  a row's bytes, not a screen's), a fast drawing path, virtual scrolling,
+  a timedemo, sound in recordings, and what rs-rich-doom built for itself.
+- **[Noctiluca](docs/guide/noctiluca.md):** pictures, GIFs and video where
+  the page puts them, live logs, terminal adaptations, and a
+  [gallery of real sites](docs/guide/noctiluca/real-sites.md).
+- **The marketplace is live:** signed, trusted with no flags, with official
+  plugins, themes and micro packs, statistics, and
+  [its own site](https://buchochelliq-labs.github.io/rs-rich-marketplace/).
+- **Also:** WebP everywhere, HTTPS through the system's certificates,
+  `rich --rst` on rich-rst 2.2.0, API checks and nightly fuzzing.
 
 The [changelog](CHANGELOG.md) lists every change.
 
@@ -185,7 +186,7 @@ why, is in [docs/ROADMAP.md](docs/ROADMAP.md); the tracking epic is
 Each release has notes in [`docs/releases/`](docs/releases/) (the newest
 published one is [0.0.22](docs/releases/0.0.22.md)), and
 [`CHANGELOG.md`](CHANGELOG.md) lists every change. What comes next is in the
-[roadmap](docs/ROADMAP.md) and the [0.0.23 plan](docs/plans/0.0.23.md). The
+[roadmap](docs/ROADMAP.md) and the [0.0.24 plan](docs/plans/0.0.24.md). The
 manifest table above describes this checkout; crates.io is the source for
 published versions.
 

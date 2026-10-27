@@ -4,8 +4,7 @@ What does not work yet, what was never meant to, and what works differently on
 purpose. Three different things, kept apart — a deliberate trade-off listed as a
 bug makes a considered decision look like neglect.
 
-**Applies to** the 0.0.22 release (`rs-rich-cli` 0.0.22, `rs-rich` 0.0.12,
-published 2026-10-25),
+**Applies to** the 0.0.23 release (`rs-rich-cli` 0.0.23, `rs-rich` 0.0.13),
 reviewed against Python `rich` 15.0.0. Older entries name the release they
 were found in. Each entry links to its issue or report so you can check the
 status without waiting for this page to be updated.
@@ -35,7 +34,7 @@ frames over 0.8 s, so its video plays in jumps. 0.0.22 splits a late read
 into the updates inside it, which did not fix macOS: its runners still kept
 5 frames over 0.5 s. The cause there is not known yet, and the frame-rate
 test keeps its lower bound on Linux only until it is. Record games on Linux
-for now. Found in 0.0.20, still open in 0.0.22
+for now. Found in 0.0.20, still open in 0.0.23
 ([plan](plans/0.0.22.md#1-round-7s-last-items-record-intuituive)).
 
 ### An ordered Markdown item holding only an empty link loses its row under `justify="full"`
@@ -239,6 +238,16 @@ fixes to `view`, stack traces and hyperlinks) are in the changelog instead. Full
 
 | Symptom | Fixed in |
 |---------|----------|
+| `rich plugin install`, `rich <url>` and the marketplace statistics failed behind a TLS-inspecting proxy with `invalid peer certificate: UnknownIssuer`, or with `chunk length cannot be read as a number` on a redirect | marketplace `0.0.2`, CLI `0.0.23` |
+| `--theme-style repr.number=bold` printed numbers bold cyan, and a theme's `markdown.*` styles did not reach `rich -m` | core `0.0.13`, CLI `0.0.23` |
+| `AnsiDecoder` panicked on a multi-byte character after `ESC (` | core `0.0.13` |
+| A WASM plugin looping over `memory.grow` could abort the host in an optimised build; a module with an empty code section made it divide by zero | ext `0.0.20` |
+| U+9FBC to U+9FFF measured two cells in rs-rich-ext's quick widths, where rich's tables before Unicode 5.2 measure one | ext `0.0.20` |
+| A page `switch` showed a hidden page's last frame when it came back (Noctiluca's page area after opening a page in reader mode) | intuituive `0.0.8` |
+| A session's process could slip past `rich serve --memory` on Linux during a large allocation at startup | web `0.0.6` |
+| Noctiluca lost the text of pages laid out with nested tables, drew footers at the top, read The Guardian as one live log, panicked in find after a non-ASCII character, and drew AVIF pictures' alt text twice | noctiluca `0.0.2` |
+| A recording of a video kept a frame mid synchronized update, showing half blocks over the last picture | record `0.0.11`, CLI `0.0.23` |
+| The Python package's console was a column wider than upstream's on a legacy Windows console with `LINES` set | PyPI `0.0.11` |
 | <a id="four-intuituive-bugs-the-demo-clones-found"></a>A `cx.focus(x)` just before `cx.modal(..)` was lost when the modal closed; a styled `layers` node let the layers below show through its children's gaps; `layout::squarify` gave the largest item no tile; a `previews_keys` container took a command line's letters (round 7's four bugs) | intuituive `0.0.6` |
 | Filtering a million rows through `view_of` was slower than a hand-written loop (15.4 s against 3.3 s unoptimised) | intuituive `0.0.6`, ext `0.0.18` |
 | Markdown the differential fuzzer and the parity work checked (tables nested in lists and quotes, tables that interrupt a paragraph, refused reference definitions, empty list items, empty link destinations) printed unlike upstream | core `0.0.12` |

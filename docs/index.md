@@ -50,30 +50,28 @@ topic and a widget index.
 
 </div>
 
-## New in 0.0.22
+## New in 0.0.23
 
 ![Memo, intuiTUIve's elephant, in the cartoon look](assets/intuituive/mascot/memo-cartoon.svg){ .tui-mascot width="128" }
-0.0.22, published on 2026-10-25 ([release notes](releases/0.0.22.md)),
-checks the core against `rich` 15.0.0 module by module, ships the plugin
-marketplace end to end, and adds a web browser for the terminal.
+0.0.23, to be published as one release ([release notes](releases/0.0.23.md)),
+finishes porting the core's console, paints with fewer bytes, brings
+pictures and video to Noctiluca and puts the plugin marketplace live.
 
-- **Parity:** the widget, live display and document modules ported or
-  recorded in [DIVERGENCES](DIVERGENCES.md), `scope.py` ported, a verdict
-  for every divergence, and the [differential fuzzer](parity.md) on the
-  document renderers.
-- **The marketplace:** the new `rs-rich-marketplace` crate,
-  [`rich plugin`](PLUGINS.md) with `browse` and `publish`, and WASM plugins
-  on by default.
-- **intuiTUIve:** [flush panel titles](guide/intuituive/panels.md), a
-  [tree table](guide/intuituive/tables.md), `min_size` with a node of its
-  own, and [controls](guide/intuituive/controls.md) whose labels and
-  options change while they are shown.
-- **[Noctiluca](guide/noctiluca.md)** (new): a web browser for the
-  terminal, on intuiTUIve and a headless Chrome.
-- **Recording:** a tape writes an APNG only when asked. Memo has a spot for
-  every crate.
+- **The core:** `console.py` fully ported, themes in Markdown, and fast
+  paths that render the same bytes in a fraction of the time.
+- **intuiTUIve:** the `best` paint strategy by default, a fast drawing
+  path, virtual scrolling, a timedemo and sound in recordings.
+- **[Noctiluca](guide/noctiluca.md):** [pictures, GIFs and
+  video](guide/noctiluca/media.md), live logs,
+  [terminal adaptations](guide/noctiluca/adaptations.md) and a
+  [gallery of real sites](guide/noctiluca/real-sites.md).
+- **[The marketplace](marketplace.md) is live**: signed, with official
+  plugins, themes and micro packs, and
+  [its own site](https://buchochelliq-labs.github.io/rs-rich-marketplace/).
+- **Also:** WebP everywhere, HTTPS through the system's certificates,
+  `rich --rst` on rich-rst 2.2.0, API checks and nightly fuzzing.
 
-Earlier releases are under [Releases](releases/0.0.22.md) in the
+Earlier releases are under [Releases](releases/0.0.23.md) in the
 navigation; the [roadmap](ROADMAP.md) says what comes next.
 
 ### Which version are these docs for?
@@ -284,6 +282,6 @@ published or not. Each crate versions independently; see
 | ![](assets/rs-rich/troubleshooting.svg){ .rs-icon width="20" } [Troubleshooting](troubleshooting.md) | When the output is not what you expected |
 | ![](assets/rs-rich/known-issues.svg){ .rs-icon width="20" } [Known issues](known-issues.md) | What is known not to work yet |
 | ![](assets/rs-rich/plans.svg){ .rs-icon width="20" } [Development plans](plans/1.0.0.md) | What each release sets out to do |
-| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.22.md) | What each release shipped |
+| ![](assets/rs-rich/releases.svg){ .rs-icon width="20" } [Releases](releases/0.0.23.md) | What each release shipped |
 | ![](assets/rs-rich/parity.svg){ .rs-icon width="20" } [Parity with Python rich](parity.md) | What matches upstream, and how it is proven |
 | ![](assets/rs-rich/contributing.svg){ .rs-icon width="20" } [Contributing](BRANCHING.md) | Branches, architecture and design notes |

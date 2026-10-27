@@ -1,8 +1,8 @@
 # Roadmap
 
 What each release delivered, and where this goes next: the
-[plan to 1.0.0](plans/1.0.0.md), after the 0.0.22 cohort (published
-2026-10-25) and with [0.0.23](plans/0.0.23.md) in progress.
+[plan to 1.0.0](plans/1.0.0.md), with the 0.0.23 cohort in release and
+[0.0.24](plans/0.0.24.md) next.
 Ordered by what unblocks people, not by what is most interesting to build.
 
 Two rules constrain everything here:
@@ -215,6 +215,20 @@ and #499). Delivered:
   and `capture` commands;
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
+
+## 0.0.23 — faster frames, Noctiluca's media, the marketplace live (in release)
+
+The [0.0.23 plan](plans/0.0.23.md) took what 0.0.22 handed on (rs-rich-doom's
+core gaps, `rich-rst` 2.2.0, Noctiluca's media, rendering performance) and
+grew as the maintainer brought items forward: `console.py` in full, sound in
+tapes, the API checks and fuzzing from stages 3 and 4 of the
+[plan to 1.0.0](plans/1.0.0.md), the marketplace's official keys and its
+going live, WebP, and Noctiluca on real sites. What ships: every library
+row in [Module status](PORTING.md) complete or a divergence, byte-identical
+fast paths in the core, `best` painting, pictures and video in Noctiluca,
+and a signed, live marketplace with its own site (see the
+[release notes](releases/0.0.23.md)). AVIF and lumis 0.17 move to
+[0.0.24](plans/0.0.24.md).
 
 ## 0.0.22 — parity, the marketplace, round 7's last items (published 2026-10-25)
 
