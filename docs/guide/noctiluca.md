@@ -61,7 +61,7 @@ for reader mode and **q** to quit.
 | [Using it as a library](noctiluca/library.md) | The engine trait, the tab, the page model, and a fake engine for tests |
 | [Troubleshooting and FAQ](noctiluca/troubleshooting.md) | What to do when something does not work |
 | [What works today and what's next](noctiluca/status.md) | The phases, and what each release brings |
-| [Noctiluca on real sites](noctiluca/real-sites.md) | Wikipedia, Hacker News, MDN, The Guardian, GitHub, YouTube and Twitch, recorded live, and what broke |
+| [Noctiluca on real sites](noctiluca/real-sites.md) | BBC News, Wikipedia, Hacker News, MDN, The Guardian, GitHub, YouTube and Twitch, recorded live, and what broke |
 
 ## Views
 
