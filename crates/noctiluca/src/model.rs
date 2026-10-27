@@ -1212,7 +1212,7 @@ impl Walker<'_> {
             self.block(BlockKind::Control(index), i, context);
             return;
         }
-        if name == "TABLE" && dom.style(i, 0).starts_with("table") {
+        if name == "TABLE" && dom.style(i, 0).starts_with("table") && !layout_table(dom, i) {
             self.flush(context);
             if let Some(table) = self.table(i, context) {
                 let rect = dom.rect(i).unwrap_or_default();
@@ -1790,6 +1790,25 @@ impl Walker<'_> {
     }
 }
 
+/// Whether table `i` lays a page out rather than holding data: it says
+/// so (`role="presentation"` or `"none"`), or a table is nested in it, as
+/// browsers' accessibility trees judge. Its contents are then read as the
+/// blocks they are, so a page built of tables (Hacker News) keeps its text.
+fn layout_table(dom: &Dom, i: usize) -> bool {
+    let role = dom.attr(i, "role").unwrap_or_default();
+    if role.eq_ignore_ascii_case("presentation") || role.eq_ignore_ascii_case("none") {
+        return true;
+    }
+    let mut stack: Vec<usize> = dom.children[i].clone();
+    while let Some(n) = stack.pop() {
+        if dom.name[n] == "TABLE" {
+            return true;
+        }
+        stack.extend(dom.children[n].iter().copied());
+    }
+    false
+}
+
 /// The runs of a live log's entry as the engine's isolated world reads it
 /// (`[{t, c, b, i}, {img: {src, alt, w, h, hidden}}, …]`, untrusted):
 /// cleaned, with whitespace collapsed as a browser does.
@@ -2160,6 +2179,49 @@ mod tests {
             ]
         );
         assert!(page.blocks[1].runs[1].bold);
+    }
+
+    #[test]
+    fn a_table_that_lays_out_tables_is_read_as_blocks() {
+        // Hacker News: an outer table whose cell holds the stories' table.
+        let mut f = Fake::new();
+        let body = f.el(0, "BODY", &[], "block");
+        let outer = f.el(body, "TABLE", &[], "table");
+        let tr = f.el(outer, "TR", &[], "table-row");
+        let td = f.el(tr, "TD", &[], "table-cell");
+        let inner = f.el(td, "TABLE", &[], "table");
+        let row = f.el(inner, "TR", &[], "table-row");
+        let rank = f.el(row, "TD", &[], "table-cell");
+        f.text(rank, "1.");
+        let title = f.el(row, "TD", &[], "table-cell");
+        f.text(title, "A story");
+        let tr2 = f.el(outer, "TR", &[], "table-row");
+        let foot = f.el(tr2, "TD", &[], "table-cell");
+        f.text(foot, "Guidelines");
+        // A table that says it lays out is read as blocks too.
+        let said = f.el(body, "TABLE", &[("role", "presentation")], "table");
+        let tr3 = f.el(said, "TR", &[], "table-row");
+        let cell = f.el(tr3, "TD", &[], "table-cell");
+        f.text(cell, "Laid out");
+        let page = f.page(Value::Null);
+        let tables: Vec<&Table> = page
+            .blocks
+            .iter()
+            .filter_map(|b| match &b.kind {
+                BlockKind::Table(t) => Some(t),
+                _ => None,
+            })
+            .collect();
+        assert_eq!(tables.len(), 1, "only the stories' table is a table");
+        let cells: Vec<String> = tables[0].rows[0].iter().map(|c| plain(&c.runs)).collect();
+        assert_eq!(cells, ["1.", "A story"]);
+        let texts: Vec<String> = page
+            .blocks
+            .iter()
+            .filter(|b| !matches!(b.kind, BlockKind::Table(_)))
+            .map(|b| b.text())
+            .collect();
+        assert_eq!(texts, ["Guidelines", "Laid out"]);
     }
 
     #[test]
