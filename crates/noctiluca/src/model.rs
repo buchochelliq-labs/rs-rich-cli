@@ -1453,7 +1453,12 @@ impl Walker<'_> {
             LogKind::Log
         } else if live {
             LogKind::Live
-        } else if self.appended.contains(&dom.backend[i]) {
+        } else if self.appended.contains(&dom.backend[i])
+            // The page's own root scrolls, but it is the page, not a log
+            // in it: a script appending to it (The Guardian's do) would
+            // turn the whole page into one log's entries.
+            && !matches!(dom.name[i].as_str(), "HTML" | "BODY")
+        {
             LogKind::Appended
         } else {
             return None;
@@ -2246,6 +2251,32 @@ mod tests {
         assert_eq!(page.blocks.len(), 1);
         let rect = page.blocks[0].rect;
         assert_eq!((rect.x, rect.y), (10.0, 5000.0));
+    }
+
+    #[test]
+    fn the_page_root_a_script_appends_to_is_not_a_log() {
+        let mut f = Fake::new();
+        let html = f.el(0, "HTML", &[], "block");
+        let body = f.el(html, "BODY", &[], "block");
+        let p = f.el(body, "P", &[], "block");
+        f.text(p, "Headline");
+        let chat = f.el(body, "DIV", &[], "block");
+        let line = f.el(chat, "DIV", &[], "block");
+        f.text(line, "hello");
+        let backend = |n: i64| 100 + n;
+        let appended: HashSet<NodeId> = [backend(html), backend(body), backend(chat)].into();
+        let snapshot = PageSnapshot {
+            dom: f.snapshot(),
+            ax: Value::Null,
+        };
+        let page = build_with(&snapshot, &mut Revisions::new(), &appended);
+        let kinds: Vec<_> = page
+            .blocks
+            .iter()
+            .map(|b| matches!(b.kind, BlockKind::Log(_)))
+            .collect();
+        assert_eq!(kinds, [false, true], "the paragraph, then the chat's log");
+        assert_eq!(page.logs.len(), 1);
     }
 
     #[test]
