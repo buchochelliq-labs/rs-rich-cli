@@ -109,6 +109,12 @@ jobs:
   check:
     name: fmt · clippy · test
     runs-on: ubuntu-latest
+    # The workspace's debug test binaries and doctests outgrew the runner's
+    # disk ("No space left on device" while linking doctests, #825), so this
+    # job builds without debug info, as the release test does.
+    env:
+      CARGO_PROFILE_DEV_DEBUG: "0"
+      CARGO_PROFILE_TEST_DEBUG: "0"
     steps:
       - uses: actions/checkout@v7
         with:

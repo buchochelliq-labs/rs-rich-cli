@@ -73,7 +73,8 @@ class Reports(unittest.TestCase):
     def test_the_checked_in_known_breaks_parse(self):
         text = (ROOT / "api/semver-breaks.toml").read_text(encoding="utf-8")
         breaks = semver_check.known_breaks(text)
-        for entry in tomllib.loads(text)["break"]:
+        # Empty between releases: a published version's entries are removed.
+        for entry in tomllib.loads(text).get("break", []):
             self.assertTrue(entry["why"])
             self.assertIn(entry["lint"], breaks[(entry["crate"], entry["version"])])
 

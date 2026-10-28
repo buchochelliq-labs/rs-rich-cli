@@ -1,7 +1,7 @@
  NOCTILUCA   PROJECTION + SIXEL   ◀▶   Stream with log
  file:///noctiluca/fixtures/stream-with-log.html
      ╭─ About Noctiluca ───────────────────────────────────────────────────────────────────────────────╮
- ▄▀▀▀│Noctiluca 0.0.2                                                                                 ┃│
+ ▄▀▀▀│Noctiluca 0.0.3                                                                                 ┃│
  ▀▀▀▀│Browser: unknown                                                                                ┃│
  ▀▀▀▀│                                                                                                ┃│
  ▀▀▀▀│Terminal adaptations (active rules):                                                            ┃│

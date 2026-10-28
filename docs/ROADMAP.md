@@ -1,8 +1,8 @@
 # Roadmap
 
 What each release delivered, and where this goes next: the
-[plan to 1.0.0](plans/1.0.0.md), with the 0.0.23 cohort in release and
-[0.0.24](plans/0.0.24.md) next.
+[plan to 1.0.0](plans/1.0.0.md), after the 0.0.23 cohort (published
+2026-10-27) and with [0.0.24](plans/0.0.24.md) next.
 Ordered by what unblocks people, not by what is most interesting to build.
 
 Two rules constrain everything here:
@@ -216,7 +216,7 @@ and #499). Delivered:
 - Atkinson dithering, OKLab distance, Sixel/GIF colour modes, alpha backgrounds
   (#498) and `--theme-file` (#499).
 
-## 0.0.23 — faster frames, Noctiluca's media, the marketplace live (in release)
+## 0.0.23 — faster frames, Noctiluca's media, the marketplace live (published 2026-10-27)
 
 The [0.0.23 plan](plans/0.0.23.md) took what 0.0.22 handed on (rs-rich-doom's
 core gaps, `rich-rst` 2.2.0, Noctiluca's media, rendering performance) and

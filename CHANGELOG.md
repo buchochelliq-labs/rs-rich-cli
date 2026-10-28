@@ -9,16 +9,34 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
-## 0.0.23 cohort — to be published
+### Versions: the 0.0.24 versions are open
 
-To be published from `main` by one `release.yml` run (tag
+- Every package moves one patch past the 0.0.23 cohort, as the
+  [0.0.24 plan](docs/plans/0.0.24.md#versions) lists: core 0.0.14,
+  macros 0.0.8, plugin API 0.0.8, art 0.0.17, diagram 0.0.7, Mermaid
+  0.0.10, lumis 0.0.8, ext 0.0.21, micro 0.0.10, record 0.0.12, interact
+  0.0.12, ratatui 0.0.9, intuituive 0.0.9, embed 0.0.7, web 0.0.7, data
+  0.0.8, marketplace 0.0.3, noctiluca 0.0.3, the CLI 0.0.24 and `rs-rich`
+  0.0.12 on PyPI. Cargo's 0.0.x requirements are exact, so every crate
+  that depends on one that moves moves too. `RELEASES.toml`, the five
+  lockfiles (the root, the Python bindings', the docs playground's, its
+  spike's and the fuzz targets'), the version tables, the CLI reference and
+  the intuiTUIve app template follow. `docs-versions.toml` pins 0.0.23's
+  docs to the commit before this one.
+- `api/semver-breaks.toml`'s 0.0.23 entries are spent (their versions are
+  on crates.io) and removed; its test now accepts an empty list, as the
+  check itself does.
+
+## 0.0.23 cohort — published 2026-10-27
+
+Published on 2026-10-27 from `2624ce5` by one `release.yml` run (tag
 `release-0.0.23`): core 0.0.13 / macros 0.0.7 / plugin API 0.0.7 /
 art 0.0.16 / diagram 0.0.6 / mermaid 0.0.9 / lumis 0.0.7 / ext 0.0.20 /
 micro 0.0.9 / record 0.0.11 / interact 0.0.11 / ratatui 0.0.8 /
 intuituive 0.0.8 / embed 0.0.6 / web 0.0.6 / data 0.0.7 /
 marketplace 0.0.2 / noctiluca 0.0.2 / CLI 0.0.23, and
-`rs-rich` 0.0.11 on PyPI (`python-v0.0.11`, same commit). See
-[the release notes](docs/releases/0.0.23.md).
+`rs-rich` 0.0.11 on PyPI (`python-v0.0.11`, same commit, the same day).
+See [the release notes](docs/releases/0.0.23.md).
 
 - **Themes reach Markdown, and a theme style replaces** (rs-rich,
   rs-rich-cli). Core's `Markdown` now looks every `markdown.*` style up in
