@@ -604,7 +604,9 @@ impl Parser {
                     [start] => Some((self.number(start, line)?, 1)),
                     [start, step] => Some((self.number(start, line)?, self.number(step, line)?)),
                     _ => {
-                        return Err(self.error(line, "`autonumber` takes a start and a step".into()));
+                        return Err(
+                            self.error(line, "`autonumber` takes a start and a step".into())
+                        );
                     }
                 };
                 Ok(())
