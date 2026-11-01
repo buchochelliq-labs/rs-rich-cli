@@ -7,7 +7,7 @@ bookmarks and the F1 overlay. The keys here are the default `vim` set;
 `plain` set too.
 
 <div class="tape-player" data-cast="../../../media/tapes/noctiluca-reading/noctiluca-reading.cast" data-poster="npt:0:3">
-  <img src="../../../media/tapes/noctiluca-reading/noctiluca-reading.gif" alt="Noctiluca showing a two-column page in the projection, an article in the projection and in reader mode, and finding a word">
+  <img src="../../media/tapes/noctiluca-reading/noctiluca-reading.gif" alt="Noctiluca showing a two-column page in the projection, an article in the projection and in reader mode, and finding a word">
 </div>
 
 ## The projection

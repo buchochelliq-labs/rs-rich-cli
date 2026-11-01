@@ -12,7 +12,7 @@ suite with three-second section pauses. Use `--demo-delay 5` to slow it down;
 Ctrl+C stops cleanly. See [the tour instructions](cli.md#take-the-guided-tour).
 
 <div class="tape-player" data-cast="../media/tapes/tour/tour.cast" data-poster="npt:0:20">
-  <img src="../media/tapes/tour/tour.gif" alt="The guided tour of the rich CLI suite, recorded in a real terminal">
+  <img src="media/tapes/tour/tour.gif" alt="The guided tour of the rich CLI suite, recorded in a real terminal">
 </div>
 
 [Cast](media/tapes/tour/tour.cast) · [GIF](media/tapes/tour/tour.gif) ·
@@ -68,7 +68,7 @@ available demo sections and terminal batch progress. Each scene uses actual
 recorded terminal output, with captions and three-second holds; no audio.
 
 <video controls playsinline preload="none" poster="../assets/demos/v9-workflows.png" style="width:100%;max-width:1100px" aria-label="CLI 0.0.9 themes, image dithering and workflow diagnostics">
-  <source src="../assets/demos/v9-workflows.mp4" type="video/mp4">
+  <source src="assets/demos/v9-workflows.mp4" type="video/mp4">
   Your browser cannot play this video. Use the download below.
 </video>
 
@@ -92,7 +92,7 @@ ratio, so a particular viewport crops only one axis. Positions on the other
 axis therefore produce the same crop.
 
 <video controls playsinline preload="none" poster="../assets/demos/v8-crop-anchors.png" style="width:100%;max-width:1100px" aria-label="Nine crop anchors in wide and tall viewports">
-  <source src="../assets/demos/v8-crop-anchors.mp4" type="video/mp4">
+  <source src="assets/demos/v8-crop-anchors.mp4" type="video/mp4">
   Your browser cannot play this video. Use the download below.
 </video>
 
@@ -105,7 +105,7 @@ is still empty. The second exports both documents with `--jobs 2`, checks the
 resulting HTML files, and records the real JSON completion report.
 
 <video controls playsinline preload="none" poster="../assets/demos/v8-batch.png" style="width:100%;max-width:1100px" aria-label="Batch dry-run followed by parallel HTML export">
-  <source src="../assets/demos/v8-batch.mp4" type="video/mp4">
+  <source src="assets/demos/v8-batch.mp4" type="video/mp4">
   Your browser cannot play this video. Use the download below.
 </video>
 
@@ -119,7 +119,7 @@ places the profile before defaults to demonstrate that TOML document order does
 not change precedence.
 
 <video controls playsinline preload="none" poster="../assets/demos/v8-config.png" style="width:100%;max-width:1100px" aria-label="Configuration validation, profile selection and explicit overrides">
-  <source src="../assets/demos/v8-config.mp4" type="video/mp4">
+  <source src="assets/demos/v8-config.mp4" type="video/mp4">
   Your browser cannot play this video. Use the download below.
 </video>
 
@@ -156,7 +156,7 @@ There is no audio.
 The same bundled cat image rendered as half-blocks, Braille and ASCII.
 
 <video controls playsinline preload="none" poster="../assets/demos/release-image-modes.png" style="width:100%;max-width:1100px" aria-label="Image render modes">
-  <source src="../assets/demos/release-image-modes.mp4" type="video/mp4">
+  <source src="assets/demos/release-image-modes.mp4" type="video/mp4">
   Your browser cannot play this video. Use the download below.
 </video>
 
@@ -167,7 +167,7 @@ The same bundled cat image rendered as half-blocks, Braille and ASCII.
 Contain, cover, then a translucent input composited over a purple background.
 
 <video controls playsinline preload="none" poster="../assets/demos/release-image-fit.png" style="width:100%;max-width:1100px" aria-label="Fit, crop and transparency">
-  <source src="../assets/demos/release-image-fit.mp4" type="video/mp4">
+  <source src="assets/demos/release-image-fit.mp4" type="video/mp4">
   Your browser cannot play this video. Use the download below.
 </video>
 
@@ -178,7 +178,7 @@ Contain, cover, then a translucent input composited over a purple background.
 A file changes, becomes invalid and recovers; batch then exports two HTML files.
 
 <video controls playsinline preload="none" poster="../assets/demos/release-workflows.png" style="width:100%;max-width:1100px" aria-label="Watch and batch workflows">
-  <source src="../assets/demos/release-workflows.mp4" type="video/mp4">
+  <source src="assets/demos/release-workflows.mp4" type="video/mp4">
   Your browser cannot play this video. Use the download below.
 </video>
 
@@ -199,7 +199,7 @@ These clips replay real output from our archived CLI recordings. They have no au
 ## Compare the renderers
 
 <video controls playsinline preload="none" poster="../assets/demos/rich-art-comparison.png" style="width:100%;max-width:980px" aria-label="Bouncing ball rendered as half-blocks and ASCII">
-  <source src="../assets/demos/rich-art-comparison.mp4" type="video/mp4">
+  <source src="assets/demos/rich-art-comparison.mp4" type="video/mp4">
   Your browser cannot play this video. Use the MP4 download below.
 </video>
 
@@ -212,7 +212,7 @@ per terminal cell. The right side uses ASCII characters; both retain color.
 ## Half-block rendering
 
 <video controls playsinline preload="none" poster="../assets/demos/rich-art-truecolor.png" style="width:100%;max-width:480px" aria-label="Half-block bouncing-ball animation">
-  <source src="../assets/demos/rich-art-truecolor.mp4" type="video/mp4">
+  <source src="assets/demos/rich-art-truecolor.mp4" type="video/mp4">
   Your browser cannot play this video. Use the MP4 download below.
 </video>
 
@@ -227,7 +227,7 @@ cargo run -p rs-rich-cli -- --gif crates/rich-art/examples/assets/ball.gif --gif
 ## ASCII rendering
 
 <video controls playsinline preload="none" poster="../assets/demos/rich-art-ascii.png" style="width:100%;max-width:480px" aria-label="Colored ASCII bouncing-ball animation">
-  <source src="../assets/demos/rich-art-ascii.mp4" type="video/mp4">
+  <source src="assets/demos/rich-art-ascii.mp4" type="video/mp4">
   Your browser cannot play this video. Use the MP4 download below.
 </video>
 

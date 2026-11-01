@@ -54,7 +54,7 @@ Here it runs bash in the shell pane and `w3m` on a local page in the web
 view; Ctrl+L opens another address:
 
 <div class="tape-player" data-cast="../../../media/tapes/embed/embed.cast" data-poster="npt:0:4">
-  <img src="../../../media/tapes/embed/embed.gif" alt="A shell in a terminal pane running rich, beside w3m in a web view">
+  <img src="../../media/tapes/embed/embed.gif" alt="A shell in a terminal pane running rich, beside w3m in a web view">
 </div>
 
 | The shell | Another address |

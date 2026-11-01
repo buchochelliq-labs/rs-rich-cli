@@ -5,7 +5,7 @@ your own, and keys that work on one site only. It ends with every action
 and its keys.
 
 <div class="tape-player" data-cast="../../../media/tapes/noctiluca-keys/noctiluca-keys.cast" data-poster="npt:0:3">
-  <img src="../../../media/tapes/noctiluca-keys/noctiluca-keys.gif" alt="A keyword opening its search, then a key bound to a link on the site from inside Noctiluca, used, listed, and shown first in F1">
+  <img src="../../media/tapes/noctiluca-keys/noctiluca-keys.gif" alt="A keyword opening its search, then a key bound to a link on the site from inside Noctiluca, used, listed, and shown first in F1">
 </div>
 
 ## Keywords

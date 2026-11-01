@@ -37,7 +37,7 @@ would say.
 has them.
 
 <div class="tape-player" data-cast="../../../media/tapes/noctiluca-forms/noctiluca-forms.cast" data-poster="npt:0:3">
-  <img src="../../../media/tapes/noctiluca-forms/noctiluca-forms.gif" alt="A form in reader mode: hint labels on its controls, a field typed into, a select opened, and the form in the projection">
+  <img src="../../media/tapes/noctiluca-forms/noctiluca-forms.gif" alt="A form in reader mode: hint labels on its controls, a field typed into, a select opened, and the form in the projection">
 </div>
 
 Press `f` for [link hints](reading.md#link-hints): every control that is
