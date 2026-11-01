@@ -753,7 +753,7 @@ fn play(art: &AnimatedBanner, console: &Console, looping: bool) -> std::io::Resu
             None => {}
         }
     }
-    write!(stdout, "\x1b[?25h\n")?;
+    writeln!(stdout, "\x1b[?25h")?;
     stdout.flush()?;
     Ok(interrupted)
 }
@@ -947,10 +947,9 @@ mod tests {
         assert_eq!(parsed.seed, 9);
         assert!(!parse_args(&args(&["banner", "Hi"])).unwrap().animated());
         assert!(
-            parse_args(&args(&["banner", "--once", "Hi"]))
+            !parse_args(&args(&["banner", "--once", "Hi"]))
                 .unwrap()
                 .animated()
-                == false
         );
     }
 

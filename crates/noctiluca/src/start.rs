@@ -82,6 +82,9 @@ pub fn leaves(command: &crate::tab::Command) -> bool {
     }
 }
 
+/// Opens an address.
+pub type Opener = Rc<dyn Fn(String, &mut Ctx)>;
+
 /// What the start page needs from the app.
 #[derive(Clone)]
 pub struct StartPage {
@@ -89,7 +92,7 @@ pub struct StartPage {
     pub keymap: Keymap,
     pub bookmarks: Signal<Bookmarks>,
     /// Open an address.
-    pub open: Rc<dyn Fn(String, &mut Ctx)>,
+    pub open: Opener,
     /// Open the about page (the `about` action).
     pub about: Rc<dyn Fn(&mut Ctx)>,
     /// Rows the browser's own bars take, under the terminal's.

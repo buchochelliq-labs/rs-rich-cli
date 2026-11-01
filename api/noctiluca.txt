@@ -182,6 +182,7 @@ pub noctiluca::app::Browser::message: intuituive::reactive::Signal<alloc::string
 pub noctiluca::app::Browser::page: intuituive::reactive::Signal<core::option::Option<alloc::sync::Arc<noctiluca::model::Page>>>
 pub noctiluca::app::Browser::pixels: intuituive::reactive::Memo<rich_art::picture::Pixels>
 pub noctiluca::app::Browser::scroll: intuituive::reactive::Signal<u64>
+pub noctiluca::app::Browser::start: intuituive::reactive::Signal<bool>
 pub noctiluca::app::Browser::state: intuituive::reactive::Signal<rich_embed::web::PageState>
 pub noctiluca::app::Browser::videos: intuituive::reactive::Signal<alloc::rc::Rc<std::collections::hash::map::HashMap<noctiluca::engine::NodeId, noctiluca::pictures::Live>>>
 pub noctiluca::app::Browser::view: intuituive::reactive::Signal<noctiluca::config::View>
@@ -1857,6 +1858,55 @@ pub fn noctiluca::pictures::on_backdrop(alloc::vec::Vec<rich::segment::Segment>,
 pub fn noctiluca::pictures::pixels(noctiluca::config::Images) -> rich_art::picture::Pixels
 pub fn noctiluca::pictures::splice(&rich::console::Console, &noctiluca::pictures::Cells, alloc::vec::Vec<rich::segment::Segment>, usize, usize, &[noctiluca::layout::Region], impl core::ops::function::Fn(&noctiluca::layout::Region) -> core::option::Option<(rich_art::picture::Picture, rich_art::picture::Pixels)>) -> alloc::vec::Vec<rich::segment::Segment>
 pub fn noctiluca::pictures::view(rich_art::picture::Pixels) -> rich_art::picture::ImageView
+pub mod noctiluca::start
+pub enum noctiluca::start::FishPlace
+pub noctiluca::start::FishPlace::Above
+pub noctiluca::start::FishPlace::Beside
+pub noctiluca::start::FishPlace::None
+impl core::clone::Clone for noctiluca::start::FishPlace
+pub fn noctiluca::start::FishPlace::clone(&self) -> noctiluca::start::FishPlace
+impl core::cmp::Eq for noctiluca::start::FishPlace
+impl core::cmp::PartialEq for noctiluca::start::FishPlace
+pub fn noctiluca::start::FishPlace::eq(&self, &noctiluca::start::FishPlace) -> bool
+impl core::fmt::Debug for noctiluca::start::FishPlace
+pub fn noctiluca::start::FishPlace::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::start::FishPlace
+pub fn noctiluca::start::FishPlace::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for noctiluca::start::FishPlace
+impl core::marker::StructuralPartialEq for noctiluca::start::FishPlace
+impl core::marker::Freeze for noctiluca::start::FishPlace
+impl core::marker::Send for noctiluca::start::FishPlace
+impl core::marker::Sync for noctiluca::start::FishPlace
+impl core::marker::Unpin for noctiluca::start::FishPlace
+impl core::marker::UnsafeUnpin for noctiluca::start::FishPlace
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::start::FishPlace
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::start::FishPlace
+pub struct noctiluca::start::StartPage
+pub noctiluca::start::StartPage::about: alloc::rc::Rc<dyn core::ops::function::Fn(&mut intuituive::app::Ctx)>
+pub noctiluca::start::StartPage::bookmarks: intuituive::reactive::Signal<noctiluca::bookmarks::Bookmarks>
+pub noctiluca::start::StartPage::chrome_rows: u16
+pub noctiluca::start::StartPage::keymap: rich_interact::keymap::Keymap
+pub noctiluca::start::StartPage::open: noctiluca::start::Opener
+impl core::clone::Clone for noctiluca::start::StartPage
+pub fn noctiluca::start::StartPage::clone(&self) -> noctiluca::start::StartPage
+impl core::marker::Freeze for noctiluca::start::StartPage
+impl !core::marker::Send for noctiluca::start::StartPage
+impl !core::marker::Sync for noctiluca::start::StartPage
+impl core::marker::Unpin for noctiluca::start::StartPage
+impl core::marker::UnsafeUnpin for noctiluca::start::StartPage
+impl !core::panic::unwind_safe::RefUnwindSafe for noctiluca::start::StartPage
+impl !core::panic::unwind_safe::UnwindSafe for noctiluca::start::StartPage
+pub const noctiluca::start::FISH_CELLS: (u16, u16)
+pub const noctiluca::start::FISH_NAME: &str
+pub const noctiluca::start::LANTERNFISH: &str
+pub const noctiluca::start::TAGLINE: &str
+pub const noctiluca::start::TITLE: &str
+pub fn noctiluca::start::duration() -> core::time::Duration
+pub fn noctiluca::start::fish_place(u16, u16, (u16, u16)) -> noctiluca::start::FishPlace
+pub fn noctiluca::start::lanternfish(f64) -> intuituive::pixels::PixelSprite
+pub fn noctiluca::start::leaves(&noctiluca::tab::Command) -> bool
+pub fn noctiluca::start::page(noctiluca::start::StartPage) -> intuituive::node::Node
+pub type noctiluca::start::Opener = alloc::rc::Rc<dyn core::ops::function::Fn(alloc::string::String, &mut intuituive::app::Ctx)>
 pub mod noctiluca::tab
 pub enum noctiluca::tab::Command
 pub noctiluca::tab::Command::Act
