@@ -34,6 +34,7 @@ site, and each can be switched off.
 | `icon-buttons` | Shows every button, icon-only ones too, as `[ label ]` from its name | on |
 | `snap-grids` | Snaps a grid's columns to the cells, with fewer columns when they would be too narrow | on |
 | `collapse-nav` | On a narrow terminal (under 100 columns), a navigation or sidebar becomes one row of its links | on |
+| `collapse-gaps` | Rows blank across the whole page (an empty ad slot, a hidden menu, a spacer) collapse to one blank row | on |
 | `text-over-pictures` | Draws a picture of text (a heading or button image, a banner) as its text | off: it changes meaning |
 | `live-tail` | A live log shows its newest entries unless you scrolled it up | on |
 | `page-colors` | Keeps the page's saturated text colours (a red label, a chat name), readable on your terminal; greys follow your terminal's own colour. Off, the page's own colours: on a light terminal as the page wrote them, on white; on a dark one with their lightness turned over (dark text reads light, a red stays red), on black | on |

@@ -68,6 +68,7 @@ noctiluca keys [--site HOST] [--config PATH]
 | `--fps N` | The most frames a second a moving picture (a GIF, a video) shows, 1 to 60: a ceiling, not a target (default 30); video never goes above 30 |
 | `--adapt LIST` | Switch [terminal adaptations](adaptations.md#terminal-adaptations) off (`-name`) or on (`+name`) for this run: `--adapt=-collapse-nav,+text-over-pictures` |
 | `--no-adapt` | Every adaptation off: the faithful projection |
+| `--transparent` | Where a page sets no background of its own, the terminal's background shows (a translucent or themed terminal). See [the config](config.md#startup) |
 | `--no-mouse` | Leave the mouse to the terminal: no clicks or wheel in Noctiluca, and the terminal's own selection and scrollback. See [the mouse](#the-mouse) |
 | `--dump HOW` | Print the page's model and exit: `text`, `ax` (its controls) or `json` (all of it). Needs a page |
 | `--no-js` | Turn the page's script off |

@@ -1,0 +1,25 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Settle fixture</title>
+<!-- Written for Noctiluca's corpus, reduced from a reference page whose
+     header is put in place by a script after load: until then the header
+     sits over the code example under it. The script moves it with a
+     stylesheet rule (CSSOM, not the DOM), as web fonts and style
+     hydration do, so no DOM mutation says the layout moved. The first
+     reading can catch the header over the code; Noctiluca reads the new
+     document again until its layout holds still. -->
+<style id="late">
+  body { font: 16px sans-serif; margin: 0; }
+  header { position: absolute; top: 60px; left: 0; }
+  pre { margin: 60px 8px 0; }
+</style>
+<header><h1>Array.prototype.map()</h1></header>
+<pre>const doubled = [1, 2, 3].map((x) =&gt; x * 2);</pre>
+<script>
+  setTimeout(() => {
+    const sheet = document.getElementById('late').sheet;
+    sheet.insertRule('header { position: static; height: 60px; }', sheet.cssRules.length);
+    sheet.insertRule('pre { margin-top: 20px; }', sheet.cssRules.length);
+  }, 300);
+</script>

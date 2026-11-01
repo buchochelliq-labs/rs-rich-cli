@@ -2085,9 +2085,21 @@ fn projection_view(b: Browser) -> Node {
             };
             let width = usize::from(width.max(1));
             // The page colours rule off: the page's own colours, on white
-            // (a light terminal) or black.
-            let backdrop = (!b.effective_adapt().on(crate::adapt::Rule::PageColors))
-                .then(|| crate::adapt::backdrop(crate::adapt::background()));
+            // (a light terminal) or black; with `--transparent`, on the
+            // page's own background, or the terminal's where it sets none.
+            let backdrop = if b.effective_adapt().on(crate::adapt::Rule::PageColors) {
+                None
+            } else {
+                let transparent = b.config.with(|c| c.transparent);
+                let page = b
+                    .page
+                    .with(|p| p.as_ref().and_then(|p| p.background.clone()));
+                crate::adapt::page_backdrop(
+                    page.as_deref(),
+                    transparent,
+                    crate::adapt::background(),
+                )
+            };
             let drawn = b.layout.with(|l| {
                 let row = l.rows.get(&key).copied().unwrap_or(i);
                 let Some(line) = l.lines.get(row) else {
@@ -2147,7 +2159,7 @@ fn projection_view(b: Browser) -> Node {
             match backdrop {
                 Some(backdrop) => drawn
                     .into_iter()
-                    .map(|line| pictures::on_backdrop(line, width, backdrop))
+                    .map(|line| pictures::on_backdrop(line, width, &backdrop))
                     .collect(),
                 None => drawn,
             }

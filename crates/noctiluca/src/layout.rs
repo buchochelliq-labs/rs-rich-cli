@@ -958,6 +958,10 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         /// A table cell's row (the table's node, the row's index): the
         /// cells of a row start on one terminal row.
         row: Option<(crate::engine::NodeId, usize)>,
+        /// A picture's `Image:` caption, wrapped under it to the box's
+        /// width once the box has its final columns (a snapped grid can
+        /// narrow it).
+        caption: Option<Vec<Span>>,
     }
     let mut items: Vec<Item> = Vec::new();
     let snap = |left: f64, right: f64| -> (usize, usize) {
@@ -987,6 +991,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             media: None,
             one_line: false,
             row: None,
+            caption: None,
         }
     };
     let adapt = marks.adapt;
@@ -1080,6 +1085,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             media: None,
             one_line: false,
             row: None,
+            caption: None,
         });
         if !side {
             shrunk.push((items.len() - 1, region.rect.height, x0, x1));
@@ -1166,6 +1172,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     media: None,
                     one_line: false,
                     row: None,
+                    caption: None,
                 });
             }
             BlockKind::Media(index)
@@ -1233,14 +1240,8 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     *last = mark;
                 }
                 let x1 = if captioned { wide.max(m1) } else { m1 };
-                if captioned {
-                    lines.extend(wrap(
-                        &[Span::new(format!("Image: {}", media.alt), "italic")],
-                        (x1 - m0).max(1),
-                        &[],
-                        &[],
-                    ));
-                }
+                let caption =
+                    captioned.then(|| vec![Span::new(format!("Image: {}", media.alt), "italic")]);
                 items.push(Item {
                     top: media.rect.y,
                     bottom: media.rect.y + rows as f64 * ch,
@@ -1254,6 +1255,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     media: Some((*index, rows, w)),
                     one_line: false,
                     row: None,
+                    caption,
                 });
                 if rows < full {
                     let (o0, o1) = snap(media.rect.x, media.rect.right());
@@ -1319,6 +1321,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     media: None,
                     one_line: false,
                     row: None,
+                    caption: None,
                 });
             }
             kind => {
@@ -1487,6 +1490,10 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         placed[n].2 = start;
     }
     for item in items.iter_mut() {
+        if let Some(caption) = &item.caption {
+            item.lines
+                .extend(wrap(caption, (item.x1 - item.x0).max(1), &[], &[]));
+        }
         let Some((spans, first)) = &item.wrap else {
             continue;
         };
@@ -1571,11 +1578,25 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
     // after it); an empty string is the second cell of a wide character.
     let mut grid: Vec<Vec<Option<(String, usize)>>> = Vec::new();
     let mut styles: Vec<(String, Option<usize>)> = Vec::new();
+    // Rows taken out so far by collapsed gaps: every box after one moves
+    // up by them, so what is beside it keeps its place.
+    let collapse = adapt.on(Rule::CollapseGaps);
+    let mut lifted = 0usize;
     for (top, _, x0, x1, lines, node, media, table_row) in boxes {
         // A page can place a block millions of pixels down: blank rows
         // past a few screens tell the reader nothing, so the gap is capped
         // and the grid grows with the content, not the coordinates.
-        let y0 = ((top / ch).round().max(0.0) as usize).min(grid.len() + MAX_GAP_ROWS);
+        let mut y0 = ((top / ch).round().max(0.0) as usize)
+            .saturating_sub(lifted)
+            .min(grid.len() + MAX_GAP_ROWS);
+        // Rows blank in every column (no box drew on them: the place of
+        // an empty slot, a hidden menu, a spacer) collapse to one, none at
+        // the top of the page.
+        let keep = grid.len() + usize::from(!grid.is_empty());
+        if collapse && y0 > keep {
+            lifted += y0 - keep;
+            y0 = keep;
+        }
         let mut y = skyline[x0..x1].iter().copied().max().unwrap_or(0).max(y0);
         // A table row's cells start together: a cell that wrapped onto two
         // rows pushes the next row's cells down, all of them, not only the

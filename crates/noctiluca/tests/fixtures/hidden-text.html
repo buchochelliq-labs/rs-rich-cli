@@ -1,0 +1,37 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Hidden text fixture</title>
+<!-- Written for Noctiluca's corpus, reduced from a streaming site's
+     sidebar of channels: each card's link holds an avatar, the channel's
+     name and a hint for keyboard users that only shows on demand, hidden
+     a different way in each card. None of the hints is drawn; an icon
+     link whose only text is hidden keeps it as its name. At 100 columns,
+     8 x 18 CSS pixels a cell. -->
+<style>
+  body { font: 16px sans-serif; margin: 0; }
+  nav { position: absolute; left: 0; top: 0; width: 240px; }
+  nav a { display: block; position: relative; height: 42px; }
+  nav img { width: 30px; height: 30px; }
+  .sr-only { position: absolute; width: 1px; height: 1px; overflow: hidden;
+             clip: rect(0 0 0 0); white-space: nowrap; }
+  .faded { position: absolute; left: 250px; top: 0; opacity: 0; }
+  .inset { position: absolute; left: 50px; top: 20px; clip-path: inset(50%); }
+  .shut { visibility: hidden; }
+  main { margin-left: 260px; }
+</style>
+<nav aria-label="Followed channels">
+  <a href="#one"><img src="media/avatar-1.png" alt=""> Glowworm
+    <span class="sr-only">Use the Right Arrow Key to show more information.</span></a>
+  <a href="#two"><img src="media/avatar-2.png" alt=""> Tidepool
+    <div class="faded"><p>Use the Right Arrow Key to show more information.</p></div></a>
+  <a href="#three"><img src="media/avatar-3.png" alt=""> Sea Sparkle
+    <span class="inset">Use the Right Arrow Key to show more information.</span></a>
+  <a href="#four"><img src="media/avatar-4.png" alt=""> Night Swim
+    <span class="shut"><span>Use the Right Arrow Key to show more information.</span></span></a>
+  <a href="#search"><span class="sr-only">Search channels</span></a>
+</nav>
+<main>
+  <h1>Live channels</h1>
+  <p>Four channels are live.</p>
+</main>

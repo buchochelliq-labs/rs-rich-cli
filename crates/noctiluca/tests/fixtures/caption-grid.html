@@ -1,0 +1,27 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Caption grid fixture</title>
+<!-- Written for Noctiluca's corpus, reduced from a news front page's lead
+     row: a grid of a wide story (two thirds) and a narrow one, the wide
+     one's picture with long alt text and no <figcaption>. Snapping the
+     grid gives both items one width, which narrows the wide one: its
+     picture's `Image:` caption must wrap to the narrower box, all of it
+     shown, not be cut at the box's new edge. At 100 columns, 8 x 18 CSS
+     pixels a cell. -->
+<style>
+  body { font: 16px sans-serif; margin: 0; }
+  .row { display: grid; grid-template-columns: 2fr 1fr; gap: 8px; width: 800px; }
+  .row img { width: 100%; height: 297px; display: block; }
+</style>
+<div class="row">
+  <div class="lead">
+    <img src="media/harbour.jpg" alt="Boats rest in the harbour at dusk while the tide turns and the first lights of the town come on along the sea wall">
+    <h2>The harbour at night</h2>
+  </div>
+  <div class="side">
+    <h3>Tides this week</h3>
+    <p>High water comes an hour later each day.</p>
+  </div>
+</div>
+<p>Under the row.</p>

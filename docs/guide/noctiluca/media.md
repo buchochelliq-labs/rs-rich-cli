@@ -15,7 +15,11 @@ the files it loaded.
 - **Pictures** come from the page's own files (an `<img>`, a `<picture>`,
   a CSS background on a box with no text), at their own quality, when
   they are PNG, JPEG, GIF or WebP; else from Chrome's pixels (an SVG, an
-  AVIF). Each fills the box Chrome gave it. A
+  inline `<svg>` drawing, an AVIF). Each fills the box Chrome gave it. A
+  build with the `avif` feature (`cargo install noctiluca --features avif`)
+  decodes AVIF from the page's own files too; it links the C library
+  libdav1d, which must be installed first (`apt install libdav1d-dev`,
+  `brew install dav1d`, vcpkg's `dav1d` on Windows). A
   picture with alt text and no caption of the page's gets an
   `Image: …` line under it.
 - **Small pictures in a line** (a chat's badges and emotes, an icon) are

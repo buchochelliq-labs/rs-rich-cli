@@ -1,0 +1,31 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Gaps fixture</title>
+<!-- Written for Noctiluca's corpus, reduced from a news front page and a
+     reference page: a header, then an ad slot that stays empty (twelve
+     rows of nothing), the first story; then a two-column part, a tall
+     sidebar of links beside a short main column, and an empty spacer
+     after it. Rows blank in every column collapse to one; the rows beside
+     the sidebar stay, since the sidebar draws on them. At 100 columns,
+     8 x 18 CSS pixels a cell. -->
+<style>
+  body { font: 16px sans-serif; margin: 0; }
+  header { display: flex; justify-content: space-between; height: 36px; padding: 0 8px; }
+  .slot { height: 216px; }
+  .columns { display: flex; }
+  .columns aside { width: 200px; }
+  .columns ul { list-style: none; margin: 0; padding: 0; }
+  .spacer { height: 180px; }
+</style>
+<header><a href="#menu">Open menu</a><a href="#live">Watch Live</a></header>
+<div class="slot"></div>
+<h2>The first story</h2>
+<p>Its first paragraph.</p>
+<div class="columns">
+  <aside><ul><li><a href="#1">One</a><li><a href="#2">Two</a><li><a href="#3">Three</a>
+    <li><a href="#4">Four</a><li><a href="#5">Five</a><li><a href="#6">Six</a></ul></aside>
+  <main><p>Beside the sidebar.</p></main>
+</div>
+<div class="spacer"></div>
+<p>After the spacer.</p>

@@ -37,6 +37,9 @@ pub struct Args {
     /// `--no-mouse`: leave the mouse to the terminal (its own selection
     /// and scrollback), so clicks and the wheel do not reach the browser.
     pub no_mouse: bool,
+    /// `--transparent`: where a page sets no background, the terminal's
+    /// own shows.
+    pub transparent: bool,
 }
 
 /// What the command line asks for.
@@ -70,6 +73,8 @@ usage: noctiluca [OPTIONS] [URL | FILE | KEYWORD WORDS…]
   --no-js                              turn the page's script off
   --no-mouse                           leave the mouse to the terminal (no
                                        clicks; its own text selection)
+  --transparent                        let the terminal's background show where a
+                                       page sets none of its own
   --adapt -RULE,+RULE,…                switch terminal adaptations off or on
                                        (decorative-images, collapse-nav, …;
                                        ? while browsing lists them)
@@ -135,6 +140,7 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
             "--audio" => parsed.audio = true,
             "--no-js" => parsed.no_js = true,
             "--no-mouse" => parsed.no_mouse = true,
+            "--transparent" => parsed.transparent = true,
             "--no-adapt" => parsed.no_adapt = true,
             "--adapt" => {
                 let value = value_of(name, inline, &mut rest)?;

@@ -277,6 +277,7 @@ drawn and by the media scheduler read the same set.
 | Buttons as `[ label ]` (`icon-buttons`) | A button reads as its accessible name in brackets, an icon-only one too; a face wider than its box pushes the controls after it on its row. Off, an icon-only button is a shaded box, as its picture would be | on | layout | `adapt.rs`: `icon_buttons_read_as_their_name` |
 | Grids fit the terminal (`snap-grids`) | A grid's (or a wrapping flex row's) items get equal cell widths that tile it, and when a column would be under `MIN_GRID_CELLS` (16) cells, fewer columns, the items flowing into more rows; what is under the grid moves by the rows it grew | on | layout | `adapt.rs`: `grids_snap_their_columns_to_the_cells` |
 | Navigation collapses on narrow terminals (`collapse-nav`) | Under `NARROW_COLUMNS` (100), a navigation or complementary landmark with no field and no live log in it becomes one row: its name, then its links (each still a hint target). A sidebar gives its columns to what is beside it | on | layout | `adapt.rs`: `navigation_collapses_to_a_row_on_a_narrow_terminal` |
+| Blank rows collapse (`collapse-gaps`) | Rows no box draws on in any column (the place of an empty ad slot, a hidden menu, a sticky spacer) collapse to one blank row, none at the top; every box under them moves up by the rows taken out, so what is beside it keeps its place. Rows blank in one column but not another (beside a tall sidebar) stay | on | layout | `tests/layout.rs`: `rows_blank_in_every_column_collapse_and_rows_beside_a_sidebar_stay` |
 | Text over pictures of text (`text-over-pictures`) | A picture with alt text inside a heading, a link or a button, or a banner (four times wider than tall, at most three rows), is drawn as its alt text in one row | off: it changes meaning | layout | `adapt.rs`: `a_picture_of_text_reads_as_its_text_when_asked` |
 | A live log shows its tail (`live-tail`) | A `role=log`, `aria-live` or appended scroll box shows its newest entries that fit, and holds still while the user has scrolled it up (`{`, `}`); off, it shows from the entry Chrome shows first | on | layout | `logs.rs`, `live_logs.rs`, `app.rs` |
 | Page colours, readable (`page-colors`) | Every run keeps the page's colour as CSS. A saturated colour (a red "LIVE", an author's name) is drawn, mixed toward white on a dark terminal or toward black on a light one until it reads; a grey, or a colour near black or white (chroma under 0.25), takes the terminal's own foreground. The background is dark unless `COLORFGBG` says light. Links keep their link style. Off, the page's raw colours, links' too: on a light terminal as written, on a white backdrop behind the projected page; on a dark one with their lightness inverted in OKLab (`L` to `1 - L`, hue and chroma kept, so near-black text is light and a red stays red; inverting RGB would make it cyan), on black | on | layout | `adapt.rs`: `raw_colours_invert_lightness_on_a_dark_terminal_and_keep_their_hue` and the rule's unit tests; `pictures.rs`: `the_backdrop_fills_the_row_under_the_text`; `logs.rs`: `authors_keep_their_colour` |
@@ -388,6 +389,16 @@ The script also samples the form fields' values every 500 ms (passwords
 left out), as the PoC did, so a value a page script sets with no event
 is still seen.
 
+A layout can move with no DOM change: web fonts arriving, a header a
+script puts in place with a stylesheet rule, content shifted by what
+loaded above it. The script pings for those too (`document.fonts`, a
+`ResizeObserver` on the root and the body, `layout-shift` entries), and
+the tab reads a new document again every `SETTLE_STEP` (250 ms) until two
+readings in a row put its boxes in the same places, for at most
+`SETTLE_MAX` (3 s). So a first reading taken while the layout still moved
+(a header drawn over the code under it) is replaced (built in 0.0.24,
+`tests/settle.rs`).
+
 The lead's direction asked for `Runtime.addBinding` with a
 MutationObserver. Doing that in the page's main world would bring back the
 PoC's exposure, since the binding would be a global the page can call or
@@ -480,6 +491,10 @@ to one row. The algorithm:
   scroll. So lazy loading and infinite scroll fire, and near the end of
   the projection Chrome is scrolled to its bottom and the page read again
   on its change ping.
+  Pictures get their stills eight at a time, nearest Chrome's view
+  first; the next batch follows on the next tick, with no new reading, and
+  a scroll starts one, so a picture Chrome loaded before the reader got to
+  it (no ping comes then) still arrives (0.0.24, `tests/images.rs`).
 
 A test can check the invariants on every fixture page: no two text runs
 share a cell, reading order is kept within a column band, and every

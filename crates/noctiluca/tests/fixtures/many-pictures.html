@@ -1,0 +1,20 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>Many pictures fixture</title>
+<!-- Written for Noctiluca's corpus, reduced from a news front page: a long
+     column of thirty stories, each with a lazily loaded picture. The
+     pictures far down load as Chrome's view follows Noctiluca's scroll,
+     often before the reader gets to them, with no change to ping once
+     they are in. Every one must get its picture, not only the first
+     batch the tab takes. -->
+<style>
+  body { font: 16px sans-serif; margin: 0; }
+  article { height: 200px; }
+  img { width: 160px; height: 120px; display: block; }
+</style>
+<script>
+  for (let k = 1; k <= 30; k++)
+    document.write(`<article><img loading="lazy" src="media/field.jpg?${k}" alt="Field ${k}">` +
+                   `<p>Story ${k}</p></article>`);
+</script>

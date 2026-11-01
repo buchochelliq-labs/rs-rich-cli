@@ -37,6 +37,10 @@ required-features = ["fake-engine"]
 # `NOCTILUCA_FAKE_ENGINE` names, instead of starting Chrome (the PTY test
 # and the docs tape, with no browser). Off, the variable is ignored.
 fake-engine = []
+# Decode AVIF pictures from the bytes the page loaded (rs-rich-art's `avif`,
+# which links libdav1d: `apt install libdav1d-dev`, `brew install dav1d`).
+# Off, an AVIF picture is drawn from Chrome's own pixels of its box.
+avif = ["rich-art/avif"]
 
 [dependencies]
 rich.workspace = true
