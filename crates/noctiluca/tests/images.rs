@@ -127,9 +127,10 @@ fn pictures_are_decoded_from_the_files_the_page_loaded() {
 
 #[test]
 fn a_picture_in_a_format_we_cannot_decode_is_taken_from_chromes_pixels() {
-    // The Guardian serves AVIF to Chrome (it asks for it). rs-rich-art does
-    // not read AVIF, so the picture is Chrome's pixels of its box, not a
-    // picture that never comes.
+    // The Guardian serves AVIF to Chrome (it asks for it). rs-rich-art
+    // does not read AVIF without its `avif` feature, and with it not this
+    // file, which is a head only: the picture is Chrome's pixels of its
+    // box, not a picture that never comes.
     let engine =
         FakeEngine::from_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"))
             .unwrap();
@@ -144,7 +145,7 @@ fn a_picture_in_a_format_we_cannot_decode_is_taken_from_chromes_pixels() {
             .expect("harbour.jpg")
             .clone()
     };
-    // An AVIF file's head: recognised as AVIF, not readable here.
+    // An AVIF file's head: recognised as AVIF, not readable.
     let mut avif = b"\0\0\0\x1cftypavif\0\0\0\0avifmif1miaf".to_vec();
     avif.resize(256, 0);
     assert_eq!(
@@ -412,4 +413,54 @@ fn every_picture_of_a_long_page_gets_its_still_with_no_more_pings() {
         page.is_some(),
         "pictures past the first batches never got stills"
     );
+}
+
+#[test]
+fn an_avif_picture_is_decoded_with_the_feature_and_taken_from_chrome_without() {
+    // tests/fixtures/avif.html as Chrome lays it out.
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let src = "file:///noctiluca/fixtures/glow.avif";
+    let mut p = PageBuilder::new(
+        src.replace("glow.avif", "avif.html").as_str(),
+        "AVIF fixture",
+        800.0,
+        120.0,
+    );
+    let body = p.body();
+    let para = p.element(body, "P", &[], &[], Some(Rect::new(8.0, 16.0, 784.0, 18.0)));
+    p.text(
+        para,
+        "A picture in AVIF:",
+        Rect::new(8.0, 16.0, 140.0, 18.0),
+    );
+    p.image(body, src, "A glow", Rect::new(8.0, 50.0, 64.0, 64.0));
+    let avif =
+        std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/glow.avif"))
+            .unwrap();
+    let dir = std::env::temp_dir().join(format!("noctiluca-avif-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let engine = FakeEngine::from_dir(&dir).unwrap();
+    {
+        let mut state = engine.state.lock().unwrap();
+        state.pages.insert("avif".into(), p.snapshot());
+        state.resources.insert(src.into(), avif.clone());
+    }
+    let (send, updates) = mpsc::channel();
+    let tab = Tab::spawn(Box::new(engine), move |u| {
+        let _ = send.send(u);
+    });
+    tab.send(Command::Open("avif.html".into()));
+    let page = wait_for(&updates, Duration::from_secs(10), |p| {
+        p.media.first().is_some_and(|m| m.picture.is_some())
+    })
+    .expect("the picture was never drawn");
+    let still = page.media[0].still.clone().unwrap();
+    if cfg!(feature = "avif") {
+        // The page's own bytes, decoded.
+        assert_eq!(&still[..], &avif[..]);
+    } else {
+        // Chrome's pixels of the box, as PNG.
+        assert!(still.starts_with(b"\x89PNG"));
+    }
 }

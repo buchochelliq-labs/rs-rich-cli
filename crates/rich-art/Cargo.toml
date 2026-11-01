@@ -41,6 +41,12 @@ default = []
 # `image` enables image -> ASCII/ANSI art (jp2a-style). Off by default so the
 # crate adds no optional image dependencies for the FIGlet banners alone.
 image = ["dep:image"]
+# `avif` decodes AVIF pictures, through `image`'s `avif-native`, which links
+# the C library libdav1d: off by default, so a default build stays pure Rust
+# and installs anywhere. It needs libdav1d installed (`apt install
+# libdav1d-dev`, `brew install dav1d`, vcpkg's `dav1d` on Windows) and
+# pkg-config to find it.
+avif = ["image", "image/avif-native"]
 # `gif` adds animated-GIF playback, driven by `rich`'s Live display.
 gif = ["image"]
 # `sixel` renders real pixels via the Sixel graphics protocol.
@@ -88,8 +94,9 @@ required-features = ["image"]
 
 
 [package.metadata.docs.rs]
-# Show the image, GIF and Sixel APIs on docs.rs.
-all-features = true
+# Show the image, GIF and Sixel APIs on docs.rs: every feature but `avif`,
+# which links libdav1d and adds no API.
+features = ["image", "gif", "sixel", "kitty", "iterm", "picture", "frames"]
 
 [lib]
 # The package is `rs-rich-art` on crates.io (plain `rich` is taken), but the

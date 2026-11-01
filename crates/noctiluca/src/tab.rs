@@ -992,7 +992,18 @@ type Job = (StillKey, Arc<[u8]>);
 /// instead; taken as decodable, it failed on the decoder thread and the
 /// picture never came.
 fn decodable(bytes: &[u8]) -> bool {
-    image::guess_format(bytes).is_ok_and(|format| format.reading_enabled())
+    // `image` decodes AVIF with `avif-native` (the `avif` feature), but its
+    // `reading_enabled` answers for its encoder's feature: with the feature,
+    // an AVIF file is decodable when its decoder opens it (a file it cannot
+    // read still falls back to Chrome's pixels).
+    image::guess_format(bytes).is_ok_and(|format| {
+        format.reading_enabled()
+            || cfg!(feature = "avif")
+                && format == image::ImageFormat::Avif
+                && image::ImageReader::with_format(std::io::Cursor::new(bytes), format)
+                    .into_dimensions()
+                    .is_ok()
+    })
 }
 
 /// The bytes of a `data:` address's body (after `data:`), when it is

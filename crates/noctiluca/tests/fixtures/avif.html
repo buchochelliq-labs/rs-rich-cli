@@ -1,0 +1,11 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>AVIF fixture</title>
+<!-- Written for Noctiluca's corpus: a picture served as AVIF (glow.avif,
+     glow.png as lossless-ish AV1, made with
+     `ffmpeg -i glow.png -frames:v 1 -c:v libaom-av1 -still-picture 1 -crf 30 glow.avif`).
+     With the `avif` feature it is decoded from the bytes the page loaded;
+     without it, drawn from Chrome's own pixels of its box. -->
+<p>A picture in AVIF:</p>
+<img src="glow.avif" alt="A glow" width="64" height="64">

@@ -49,6 +49,10 @@ fetch = ["dep:ureq", "rich-marketplace/http"]
 # (with `interact`) `rich asset --kind micro` and `rich explore --icons`.
 # Pulls in image decoders, so it can be dropped for a smaller binary.
 art = ["dep:rich-art", "dep:rich-micro", "dep:zip", "rich-interact?/micro"]
+# AVIF pictures in the image renderers (rs-rich-art's `avif`). Off by default:
+# it links libdav1d, which must be installed (`apt install libdav1d-dev`,
+# `brew install dav1d`).
+avif = ["art", "rich-art/avif"]
 # `rich mermaid FILE` and ```mermaid fences in `rich --markdown`, drawn as text.
 mermaid = ["dep:rich-mermaid"]
 # The `mmdc` Mermaid backend (Mermaid's CLI: Node and headless Chromium,
