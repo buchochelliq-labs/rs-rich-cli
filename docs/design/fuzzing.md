@@ -4,7 +4,7 @@ The `fuzz/` directory holds [cargo-fuzz](https://github.com/rust-fuzz/cargo-fuzz
 targets for every parser in the repository that takes outside input. They
 run every night in CI (`.github/workflows/fuzz.yml`). This
 is the fuzzing item of the 1.0 plan's
-[Stage 4](../plans/1.0.0.md#stage-4--hardening-01x), brought forward to
+[Stage 4](../plans/1.0.0.md#stage-4-hardening-01x), brought forward to
 0.0.23 ([item 18](../plans/0.0.23.md)).
 
 This is a different tool from the
