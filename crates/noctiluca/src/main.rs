@@ -184,6 +184,7 @@ fn engine(args: &Args, config: &Config) -> std::io::Result<Box<dyn Engine>> {
         profile,
         quarantine: None,
         no_js: args.no_js,
+        transparent: args.transparent || config.transparent,
         columns,
         rows,
     })
@@ -214,6 +215,7 @@ fn browse(args: Args) -> std::io::Result<()> {
         config.fps = fps;
     }
     config.audio |= args.audio;
+    config.transparent |= args.transparent;
     config.adapt = noctiluca::args::adapt_of(&args, config.adapt)
         .map_err(|e| std::io::Error::new(std::io::ErrorKind::InvalidInput, e))?;
     let marks = bookmarks::default_path()

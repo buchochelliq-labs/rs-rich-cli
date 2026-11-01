@@ -62,6 +62,7 @@ The command line wins over the file: `--reader` over `[startup] view`,
 |---|---|---|---|
 | `home` | string | none: an empty page | The page to open when none is named on the command line, and when the address bar is left empty |
 | `view` | `"projection"`, `"reader"` or `"raster"` | `"projection"` | The first view. `raster` starts the debugging view |
+| `transparent` | boolean | `false` | Where a page sets no background of its own, let the terminal's background show: in the faithful projection (a page with a background keeps it), and in Chrome's pixels, whose transparency Kitty keeps. `--transparent` sets it for one run |
 
 ## `[search]`
 

@@ -472,6 +472,24 @@ pub fn backdrop(background: Background) -> &'static str {
     }
 }
 
+/// The background drawn behind the projected page with the page colours
+/// rule off. Without `transparent`, the [`backdrop`]. With it, the page's
+/// own background (`page`, its CSS, as [`raw_color`] draws colours), and
+/// none where the page sets none: the terminal's own background shows.
+/// Raw colours already follow the terminal's background, so the page's
+/// text stays readable on it.
+pub fn page_backdrop(
+    page: Option<&str>,
+    transparent: bool,
+    background: Background,
+) -> Option<String> {
+    if !transparent {
+        return Some(backdrop(background).to_string());
+    }
+    page.and_then(|css| raw_color(css, background))
+        .map(|colour| format!("on {colour}"))
+}
+
 /// sRGB (0 to 255) to OKLab.
 fn oklab(r: f64, g: f64, b: f64) -> (f64, f64, f64) {
     let linear = |c: f64| {
@@ -553,6 +571,15 @@ mod tests {
         }
         assert_eq!(raw_color("rgba(0, 0, 0, 0)", Background::Dark), None);
         // White behind the page on a light terminal, black on a dark one.
+        assert_eq!(
+            page_backdrop(None, false, Background::Dark).as_deref(),
+            Some("on rgb(0,0,0)")
+        );
+        assert_eq!(page_backdrop(None, true, Background::Dark), None);
+        assert_eq!(
+            page_backdrop(Some("rgb(255, 255, 255)"), true, Background::Light).as_deref(),
+            Some("on rgb(255,255,255)")
+        );
         assert_eq!(backdrop(Background::Light), "on rgb(255,255,255)");
         assert_eq!(backdrop(Background::Dark), "on rgb(0,0,0)");
         // OKLab round-trips.

@@ -359,6 +359,15 @@ impl PageBuilder {
         at
     }
 
+    /// Set one computed style of a laid-out node (the `<body>`'s
+    /// background, say); its children made after take what they inherit.
+    pub fn set_style(&mut self, node: usize, style: &str, value: &str) {
+        let at = crate::cdp::SNAPSHOT_STYLES.iter().position(|s| *s == style);
+        if let (Some(at), Some((styles, _))) = (at, self.layout[node].as_mut()) {
+            styles[at] = value.to_string();
+        }
+    }
+
     /// A text node under `parent`, laid out in `rect` (the union of its
     /// line boxes) unless its parent has no box.
     pub fn text(&mut self, parent: usize, text: &str, rect: Rect) -> usize {

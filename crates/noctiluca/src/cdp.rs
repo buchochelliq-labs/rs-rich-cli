@@ -295,6 +295,9 @@ pub struct ChromeOptions {
     pub quarantine: Option<PathBuf>,
     /// Turn the page's script off.
     pub no_js: bool,
+    /// Chrome's default background transparent, not white: where a page
+    /// sets none, its captured pixels keep their alpha (`--transparent`).
+    pub transparent: bool,
     /// The page's size in cells.
     pub columns: u16,
     pub rows: u16,
@@ -376,6 +379,13 @@ impl ChromeBackend {
             devtools.call(
                 "Emulation.setScriptExecutionDisabled",
                 json!({"value": true}),
+                CALL,
+            )?;
+        }
+        if options.transparent {
+            devtools.call(
+                "Emulation.setDefaultBackgroundColorOverride",
+                json!({"color": {"r": 0, "g": 0, "b": 0, "a": 0}}),
                 CALL,
             )?;
         }

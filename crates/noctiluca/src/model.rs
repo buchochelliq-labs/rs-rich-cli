@@ -451,6 +451,10 @@ pub struct Page {
     pub truncated: bool,
     /// Whether the accessibility tree came with the snapshot.
     pub has_ax: bool,
+    /// The page's own background colour, as CSS: its root's, else its
+    /// body's, as browsers paint the canvas; `None` when both are
+    /// transparent (the page sets none).
+    pub background: Option<String>,
     /// Its live logs.
     pub logs: Vec<Log>,
     /// The small pictures in its lines ([`Run::picture`]: emotes, badges,
@@ -886,6 +890,35 @@ fn conceals(dom: &Dom, i: usize) -> bool {
         return true;
     }
     false
+}
+
+/// The page's background colour: the root element's, else the body's
+/// (the root's or body's background paints the whole canvas), when it is
+/// not transparent.
+fn page_background(dom: &Dom) -> Option<String> {
+    let find = |name: &str| (0..dom.name.len()).find(|&i| dom.is_element(i) && dom.name[i] == name);
+    ["HTML", "BODY"]
+        .into_iter()
+        .filter_map(find)
+        .map(|i| dom.style(i, 3).trim().to_ascii_lowercase())
+        .find(|css| opaque(css))
+        .map(|css| truncate(&clean(&css), 64))
+}
+
+/// Whether a computed colour paints anything: not `transparent`, not an
+/// alpha of 0, not empty.
+fn opaque(css: &str) -> bool {
+    if css.is_empty() || css == "transparent" {
+        return false;
+    }
+    match css.strip_prefix("rgba(").and_then(|r| r.strip_suffix(')')) {
+        Some(inner) => inner
+            .rsplit([',', '/'])
+            .next()
+            .and_then(|a| a.trim().parse::<f64>().ok())
+            .is_none_or(|a| a > 0.0),
+        None => true,
+    }
 }
 
 /// Whether anything in node `i` shows that is not visually hidden: text,
@@ -2133,6 +2166,7 @@ pub fn build_with(
             width: dom.width,
             height: dom.height,
             has_ax: !ax.by_node.is_empty(),
+            background: page_background(&dom),
             ..Page::default()
         },
         runs: Vec::new(),

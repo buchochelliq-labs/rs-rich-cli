@@ -507,3 +507,106 @@ fn a_page_opened_in_reader_mode_is_the_one_the_projection_shows() {
     assert!(text.contains("You followed the link"), "{text}");
     assert!(!text.contains("A lamp that glows"), "{text}");
 }
+
+/// `tests/fixtures/no-background.html` (`background` `None`) or
+/// `with-background.html`, as Chrome lays them out at 800 CSS pixels.
+fn plan(background: Option<&str>) -> noctiluca::engine::PageSnapshot {
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let name = if background.is_some() {
+        "with-background"
+    } else {
+        "no-background"
+    };
+    let mut p = PageBuilder::new(
+        &format!("https://fixture.example/{name}.html"),
+        "Plan",
+        800.0,
+        200.0,
+    );
+    let body = p.body();
+    if let Some(colour) = background {
+        p.set_style(body, "background-color", colour);
+    }
+    let h1 = p.element(
+        body,
+        "H1",
+        &[],
+        &[("font-weight", "700")],
+        Some(Rect::new(8.0, 21.0, 784.0, 37.0)),
+    );
+    p.text(h1, "Plan", Rect::new(8.0, 21.0, 70.0, 37.0));
+    let para = p.element(body, "P", &[], &[], Some(Rect::new(8.0, 80.0, 784.0, 18.0)));
+    p.text(
+        para,
+        "Ship the release on Friday.",
+        Rect::new(8.0, 80.0, 210.0, 18.0),
+    );
+    p.snapshot()
+}
+
+/// The background colour of the cells of the row that shows `text`, in
+/// the faithful projection (`--no-adapt`), with or without
+/// `--transparent`.
+fn page_backgrounds(transparent: bool, background: Option<&str>) -> Vec<Option<String>> {
+    let dir = std::env::temp_dir().join(format!("noctiluca-bg-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let engine = FakeEngine::from_dir(&dir).unwrap();
+    let name = if background.is_some() {
+        "with-background"
+    } else {
+        "no-background"
+    };
+    engine
+        .state
+        .lock()
+        .unwrap()
+        .pages
+        .insert(name.into(), plan(background));
+    let config = Config {
+        transparent,
+        adapt: noctiluca::adapt::Adapt::none(),
+        ..Config::default()
+    };
+    let url = format!("https://fixture.example/{name}.html");
+    let mut driver = app(Box::new(engine), projection(config, &url)).driver(100, 20);
+    wait_for(&mut driver, "Ship the release");
+    let lines = driver.screen().lines();
+    let row = driver
+        .screen()
+        .plain()
+        .iter()
+        .position(|l| l.contains("Ship the release"))
+        .unwrap();
+    lines[row]
+        .iter()
+        .map(|s| {
+            s.style
+                .as_ref()
+                .and_then(|s| s.bgcolor())
+                .map(|c| format!("{c:?}"))
+        })
+        .collect()
+}
+
+#[test]
+fn transparent_lets_the_terminals_background_show_where_the_page_sets_none() {
+    // Without it, the faithful projection is drawn on its backdrop.
+    let backdrop = page_backgrounds(false, None);
+    assert!(backdrop.iter().all(Option::is_some), "{backdrop:?}");
+    // With it, a page with no background leaves the cells at the
+    // terminal's default.
+    let none = page_backgrounds(true, None);
+    assert!(none.iter().all(Option::is_none), "{none:?}");
+    // A page with its own background keeps it.
+    let own = page_backgrounds(true, Some("rgb(255, 250, 230)"));
+    assert!(own.iter().all(Option::is_some), "{own:?}");
+}
+
+#[test]
+fn transparent_is_read_from_the_config() {
+    let config = Config::parse("[startup]\ntransparent = true\n").unwrap();
+    assert!(config.warnings.is_empty(), "{:?}", config.warnings);
+    assert!(config.transparent);
+    assert!(!Config::default().transparent);
+}
