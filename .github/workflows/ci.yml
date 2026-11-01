@@ -318,6 +318,10 @@ jobs:
             args: ""
           - crate: rs-rich-marketplace
             args: "--no-default-features"
+          # The ACP client: transcripts replayed by a fake agent on in-process
+          # pipes, and a spawned `sh` agent (no agent installed, no network).
+          - crate: rs-rich-acp
+            args: ""
           # Noctiluca, the terminal browser: its model, layout, config and
           # app tests on Chrome's saved snapshots of its fixture pages, and
           # its binary on a PTY (the test-only `fake-engine` feature; the

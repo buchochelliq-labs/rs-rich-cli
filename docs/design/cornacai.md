@@ -77,11 +77,15 @@ with it. It depends on nothing of ours (serde and serde_json only) and has
 - **The app implements `Client`:** `session_update`, `request_permission`
   (required), and the optional `read_text_file`, `write_text_file` and
   `terminal/*` handlers, which answer "method not found" by default.
-- **Typed messages:** every v1 method's parameters and results as serde
-  structs. Unknown fields are ignored; unknown `sessionUpdate`, content and
-  tool-call-content variants arrive as `Other { kind, value }` with the raw
-  JSON; unknown strings in open enums (tool kinds, statuses, stop reasons)
-  are kept as `Other(String)`. `_meta` is carried where the app may want it.
+- **Typed messages:** serde structs for the methods a first client needs
+  (`initialize`, `authenticate`, `session/new`, `session/load`,
+  `session/set_mode`, `session/prompt`, `session/cancel`, `session/update`
+  and every agent-to-client method); anything else goes through
+  `Connection::request` and `Client::ext_method` as raw JSON. Unknown
+  fields are ignored (`_meta` among them, for now); unknown `sessionUpdate`,
+  content and tool-call-content variants arrive as `Unknown { kind, value }`
+  with the raw JSON; unknown strings in open enums (tool kinds, statuses,
+  stop reasons) are kept as `Unknown(String)`.
 - **Helpers the app may use, not must:** `Workspace` (the root set and the
   path checks below), `fs::read_text_file` and `fs::write_text_file` on it,
   and `Terminals`, a process table for the `terminal/*` methods with the

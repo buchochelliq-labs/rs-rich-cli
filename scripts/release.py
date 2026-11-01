@@ -27,7 +27,7 @@ from urllib.request import Request, urlopen
 CRATES = ("rs-rich", "rs-rich-plugin-api", "rs-rich-macros", "rs-rich-ext", "rs-rich-cli", "rs-rich-art",
           "rs-rich-mermaid", "rs-rich-lumis", "rs-rich-record", "rs-rich-interact", "rs-rich-micro",
           "rs-rich-diagram", "rs-rich-data", "rs-rich-ratatui", "rs-rich-intuituive", "rs-rich-web", "rs-rich-embed",
-          "rs-rich-marketplace", "noctiluca")
+          "rs-rich-marketplace", "rs-rich-acp", "noctiluca")
 NUMBER = r"(?:0|[1-9][0-9]*)"
 PRERELEASE = rf"(?:{NUMBER}|[0-9]*[A-Za-z-][0-9A-Za-z-]*)"
 VERSION = rf"{NUMBER}\.{NUMBER}\.{NUMBER}(?:-{PRERELEASE}(?:\.{PRERELEASE})*)?(?:\+[0-9A-Za-z-]+(?:\.[0-9A-Za-z-]+)*)?"
@@ -111,7 +111,7 @@ def select(tag, metadata, root, wanted=None, releases=None):
     for name in ("rs-rich", "rs-rich-plugin-api", "rs-rich-macros", "rs-rich-ext", "rs-rich-art",
                  "rs-rich-mermaid", "rs-rich-lumis", "rs-rich-record", "rs-rich-interact", "rs-rich-micro",
                  "rs-rich-diagram", "rs-rich-data", "rs-rich-ratatui", "rs-rich-intuituive", "rs-rich-web", "rs-rich-embed",
-                 "rs-rich-marketplace"):
+                 "rs-rich-marketplace", "rs-rich-acp"):
         key = name.removeprefix("rs-")
         dependency = requirements.get(key, {})
         expected = packages[name]["version"]
