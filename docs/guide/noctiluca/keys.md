@@ -65,9 +65,10 @@ noctiluca keys [--site HOST] [--config PATH]
 | `--profile NAME` | Keep a profile, with its cookies and storage, between runs (opt-in). A name of letters, digits, `-` and `_` |
 | `--chrome PATH` | The browser to run (default: [the one found](getting-started.md#the-chrome-it-needs)) |
 | `--images MODE` | How images reach the terminal: `ansi`, `kitty`, `sixel`, `iterm2` or `none` (default: the config's, else detected). See [images](media.md#images) |
-| `--fps N` | The most frames a second a moving picture (a GIF, a video) shows, 1 to 60: a ceiling, not a target; video never goes above 8 |
+| `--fps N` | The most frames a second a moving picture (a GIF, a video) shows, 1 to 60: a ceiling, not a target (default 30); video never goes above 30 |
 | `--adapt LIST` | Switch [terminal adaptations](adaptations.md#terminal-adaptations) off (`-name`) or on (`+name`) for this run: `--adapt=-collapse-nav,+text-over-pictures` |
 | `--no-adapt` | Every adaptation off: the faithful projection |
+| `--no-mouse` | Leave the mouse to the terminal: no clicks or wheel in Noctiluca, and the terminal's own selection and scrollback. See [the mouse](#the-mouse) |
 | `--dump HOW` | Print the page's model and exit: `text`, `ax` (its controls) or `json` (all of it). Needs a page |
 | `--no-js` | Turn the page's script off |
 | `--config PATH` | Read another config file |
@@ -91,6 +92,27 @@ loaded and stayed still for a moment (up to a minute), prints, and exits:
 **`noctiluca keys`** prints every action with its keys, after your
 config, and then your site keys. `noctiluca keys --site github.com` prints
 only the keys of the site tables that match that host.
+
+## The mouse
+
+Noctiluca takes the mouse while it runs full-screen:
+
+| Where | Click | Wheel |
+|---|---|---|
+| A link, a button, a check box, a radio, a tab | Uses it, as its link hint does (a real click in Chrome) | |
+| A field, a select, a slider | Gives it its widget: focused in reader mode, in a box over the page in the projection | |
+| A video's region | Plays or pauses it | |
+| Anywhere on the page | | Scrolls three rows a notch |
+| The header's `◀` `▶` `↻` | Back, forward, reload | |
+| The address row | Edits the address, as `Ctrl+L` does | |
+| A key in the status bar's second row (`f1 actions`, `r reader`, …) | Runs its action | |
+| A row of a list (bookmarks, site keys, the binding picker) | Selects it; a click on the selected row chooses it, as Enter does | Moves the selection |
+| An action in `F1`'s list | Runs it | Moves the selection |
+
+A click on plain text does nothing, so a drag over text selects it and
+copies it to the clipboard. Most terminals also select with `Shift` held
+while an app has the mouse. `--no-mouse` leaves the mouse to the terminal
+altogether. Clicks land on whole cells.
 
 ## The key presets
 

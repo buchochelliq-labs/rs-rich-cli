@@ -153,6 +153,7 @@ fn motion_plays_pauses_and_seeks_and_its_frames_change() {
     w.tab.send(Command::Regions {
         on_screen: vec![w.node()],
         intervals: Vec::new(),
+        scale: 1.0,
     });
     w.until("frames", |w| w.frames.len() >= 4);
     let first = w.frames.first().unwrap().clone();
@@ -232,6 +233,7 @@ fn pace(pacing: &mut Pacing, seconds: f64) -> (NodeId, u64, Vec<u64>) {
     w.tab.send(Command::Regions {
         on_screen: vec![w.node()],
         intervals: Vec::new(),
+        scale: 1.0,
     });
     w.media(MediaOp::Play);
     let node = w.node();
@@ -385,6 +387,7 @@ fn the_video_keeps_playing_while_the_log_updates_within_its_cap() {
     w.tab.send(Command::Regions {
         on_screen: vec![node],
         intervals: Vec::new(),
+        scale: 1.0,
     });
     // The region's first frame: the start (the screencast turning on, the
     // stills of a page just read) is not what this measures.

@@ -268,7 +268,7 @@ impl Default for Config {
             home: None,
             view: View::Projection,
             audio: false,
-            fps: 8,
+            fps: 30,
             images: Images::Auto,
             bandwidth: None,
             profile: None,
@@ -370,7 +370,7 @@ impl Config {
         let mut preset = Preset::Vim;
         let mut keys = Vec::new();
         let (mut home, mut view) = (None, View::Projection);
-        let (mut audio, mut fps, mut images) = (false, 8u32, Images::Auto);
+        let (mut audio, mut fps, mut images) = (false, 30u32, Images::Auto);
         let mut bandwidth = None;
         let mut profile = None;
         let mut sites = Vec::new();

@@ -830,6 +830,10 @@ impl Engine for ChromeBackend {
         self.engine.set_screencast(on)
     }
 
+    fn set_screencast_scale(&mut self, _tab: TabId, scale: f64) -> io::Result<()> {
+        self.engine.set_screencast_scale(scale)
+    }
+
     fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {
         self.engine.take_screencast()
     }

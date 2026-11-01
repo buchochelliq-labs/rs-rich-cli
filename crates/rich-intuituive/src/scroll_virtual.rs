@@ -205,8 +205,18 @@ impl VirtualScroll {
     }
 
     /// Move the view by `rows`.
+    /// Move the offset `rows` on from where it is: from one set since the
+    /// last layout (a wheel notch or a key before the frame that draws it)
+    /// rather than from the top laid out, so a burst of them, handled
+    /// before one frame, moves by all of them.
     fn by(&self, rows: i64) {
-        let to = (self.top as i64).saturating_add(rows).max(0) as u64;
+        let offset = self.offset.get_untracked();
+        let from = if self.derived.is_some_and(|d| d != offset) {
+            offset.min(self.max_top())
+        } else {
+            self.top
+        };
+        let to = (from as i64).saturating_add(rows).max(0) as u64;
         self.offset.set(to.min(self.max_top()));
     }
 

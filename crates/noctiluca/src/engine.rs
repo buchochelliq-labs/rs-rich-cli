@@ -277,6 +277,12 @@ pub trait Engine: Send {
             "no screencast here",
         ))
     }
+    /// Ask for screencast frames `scale` (above 0, at most 1) of the
+    /// viewport's size: no more pixels than the regions are drawn in.
+    /// Backends that cannot scale ignore it.
+    fn set_screencast_scale(&mut self, _tab: TabId, _scale: f64) -> io::Result<()> {
+        Ok(())
+    }
     /// The newest screencast frame since the last call, with where it was
     /// taken. Taking it lets the browser send the next.
     fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {

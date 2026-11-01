@@ -636,8 +636,15 @@ rate instead of `ByteBudget::guess`.
   (`ScreencastFrame::crop`). A region Chrome's viewport does not hold is
   captured on its own; a paused region whose time moved (a seek) gets one
   new frame.
-- **The frame budget.** Frames are cut at most eight a second a region,
-  or as the pacing asks. The app runs one rs-rich-art `Pacer` per region
+- **The frame budget.** Frames are cut at most thirty a second a region
+  (`video::MAX_FPS`), or as the pacing asks, on even slots a frame apart:
+  the tab sleeps until the next is due (`Frames::next_due`) instead of
+  polling on a tick, and the pacers keep to slots too, so a frame a few
+  milliseconds early is not dropped for a whole frame more. The pixel
+  protocols' escapes are made on `video::Encoder`'s thread, not by the
+  painter; character art asks Chrome for a scaled screencast
+  (`set_screencast_scale`); on demand, rs-rich-embed keeps Chrome one
+  frame ahead of the takes. The app runs one rs-rich-art `Pacer` per region
   (`video::Pacing`): equal shares of the `ByteBudget`, paced ten percent
   under the share since a frame can cost more than the ones before it,
   each frame's cost read from the painter's `picture_bytes`, and the step

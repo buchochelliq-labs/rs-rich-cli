@@ -299,3 +299,24 @@ fn a_tables_rows_keep_their_order_among_blocks_on_the_same_terminal_row() {
         last = at;
     }
 }
+
+#[test]
+fn a_cell_belongs_to_the_control_its_span_is() {
+    use noctiluca::layout::{Line, Span, control_at};
+    let link = Span {
+        control: Some(3),
+        ..Span::new("open sea", "underline")
+    };
+    let line = Line {
+        spans: vec![Span::new("the ", ""), link, Span::new(" — 海", "")],
+    };
+    assert_eq!(control_at(&line, 3), None);
+    assert_eq!(
+        (control_at(&line, 4), control_at(&line, 11)),
+        (Some(3), Some(3))
+    );
+    assert_eq!(control_at(&line, 12), None);
+    // Wide characters count their cells; past the end is nothing.
+    assert_eq!(control_at(&line, 16), None);
+    assert_eq!(control_at(&line, 40), None);
+}

@@ -3,18 +3,29 @@
 //!
 //! - **Only while something plays on screen.** The tab turns Chrome's
 //!   screencast on when a video plays in a region the view shows, and off
-//!   when none does. It runs on demand: Chrome paints the next frame only
-//!   once the last was taken, so it encodes no more than are used.
+//!   when none does. It runs on demand: Chrome is kept one frame ahead
+//!   of what is taken, so a take finds a fresh frame and Chrome encodes
+//!   about as many as are used. Drawn as character art, a region asks for
+//!   a scaled screencast: no more pixels than it is drawn in.
 //! - **Cropped per region.** Each frame is the viewport; each playing
 //!   region's rectangle is cut from it by the frame's own scroll position
 //!   ([`ScreencastFrame::crop`]). A region Chrome's viewport does not hold
 //!   (our scroll is in rows, Chrome's follows when the view rests) is
 //!   captured on its own instead.
-//! - **At most [`MAX_FPS`] a region.** Frames are taken no faster than
-//!   that, or than the app's pacing asks. How many of them reach the
-//!   terminal, in which protocol, within the terminal's byte budget, is
-//!   rs-rich-art's frame pacing ([`Pacer`]), which [`Pacing`] runs per
-//!   region on the app's side.
+//! - **At most [`MAX_FPS`] a region, evenly spaced.** Frames are taken
+//!   no faster than that, or than the app's pacing asks, on even slots a
+//!   frame's time apart ([`Frames::next_due`] says when the next is due,
+//!   so the tab wakes for it rather than on a coarse tick). How many of
+//!   them reach the terminal, in which protocol, within the terminal's
+//!   byte budget, is rs-rich-art's frame pacing ([`Pacer`]), which
+//!   [`Pacing`] runs per region on the app's side; a fast terminal on
+//!   this machine gets the full rate, an SSH link fewer frames, or a
+//!   cheaper protocol.
+//!
+//! - **Encoded off the thread that draws.** A frame the pacing lets
+//!   through in Kitty, iTerm2 or Sixel is encoded on [`Encoder`]'s thread
+//!   before it is shown, so the painter finds its escape made and the keys
+//!   never wait on it.
 //!
 //! Nothing here looks at a site: any `<video>` with a playing state is a
 //! moving region.
@@ -27,8 +38,9 @@ use rich_embed::ScreencastFrame;
 
 use crate::engine::{NodeId, Rect};
 
-/// The most frames a second a region is given: the PoC's rate, a ceiling.
-pub const MAX_FPS: u32 = 8;
+/// The most frames a second a region is given: a ceiling, not a target.
+/// The byte budget decides how many of them a terminal is sent.
+pub const MAX_FPS: u32 = 30;
 
 /// How far under its share a region is paced: what a frame costs is
 /// learned from the frames before it, and one can cost more.
@@ -74,12 +86,28 @@ impl Region {
 pub struct Frames {
     /// Whether the screencast is on.
     pub on: bool,
-    /// Each moving region's last frame: when, and its number.
-    last: Vec<(NodeId, Instant, u64)>,
+    /// Each moving region's last frame.
+    last: Vec<Last>,
     /// The last frame's number, over every region and every stop, so a
     /// region that moves again goes on from where it stopped: its painter
     /// side keeps the number it last drew.
     seq: u64,
+}
+
+/// A moving region's last frame: the slot it was taken for (frames keep
+/// to slots a frame's time apart), when it was taken, and the spacing it
+/// was due at.
+#[derive(Clone, Copy, Debug)]
+struct Last {
+    node: NodeId,
+    slot: Instant,
+    taken: Instant,
+    every: Duration,
+}
+
+/// The spacing `region`'s frames keep to.
+fn every(region: &Region) -> Duration {
+    region.interval.unwrap_or(MIN_INTERVAL).max(MIN_INTERVAL)
 }
 
 /// What [`Frames::plan`] asks the tab to do.
@@ -103,10 +131,10 @@ impl Frames {
             self.on = want;
             plan.screencast = Some(want);
         }
-        self.last.retain(|(node, ..)| {
-            let keep = moving.iter().any(|r| r.node == *node);
+        self.last.retain(|last| {
+            let keep = moving.iter().any(|r| r.node == last.node);
             if !keep {
-                plan.stopped.push(*node);
+                plan.stopped.push(last.node);
             }
             keep
         });
@@ -114,12 +142,31 @@ impl Frames {
         plan
     }
 
+    /// Whether `region`'s next slot has come (an eighth of a frame early
+    /// is on time: the tab wakes for it, give or take its clock), and half
+    /// a frame has gone since the last was taken.
     fn due(&self, region: &Region, now: Instant) -> bool {
-        let interval = region.interval.unwrap_or(MIN_INTERVAL).max(MIN_INTERVAL);
-        self.last
+        self.wait(region, now).is_zero()
+    }
+
+    /// How long until `region`'s next frame is due: zero when it is.
+    fn wait(&self, region: &Region, now: Instant) -> Duration {
+        let every = every(region);
+        let Some(last) = self.last.iter().find(|l| l.node == region.node) else {
+            return Duration::ZERO;
+        };
+        let slot = (last.slot + every - every / 8).max(last.taken + every / 2);
+        slot.saturating_duration_since(now)
+    }
+
+    /// How long until a moving region's next frame is due, if any moves:
+    /// how long the tab may sleep before it looks again.
+    pub fn next_due(&self, regions: &[Region], now: Instant) -> Option<Duration> {
+        regions
             .iter()
-            .find(|(n, ..)| *n == region.node)
-            .is_none_or(|(_, at, _)| now.duration_since(*at) >= interval)
+            .filter(|r| r.moving())
+            .map(|r| self.wait(r, now))
+            .min()
     }
 
     /// Cut the due regions out of `frame`. Regions the frame does not hold
@@ -141,7 +188,7 @@ impl Frames {
                 // Wholly in the frame: cut. Partly in: the rest is not
                 // painted there, so it is captured as missing ones are.
                 Some(pixels) if whole(&pixels, frame, r) => {
-                    cut.push(self.stamp(region.node, pixels, now));
+                    cut.push(self.stamp_every(region.node, every(region), pixels, now));
                 }
                 _ => missing.push(*region),
             }
@@ -151,11 +198,39 @@ impl Frames {
 
     /// A frame of `node` taken some other way (a capture of its region).
     pub fn stamp(&mut self, node: NodeId, pixels: rich_embed::Pixels, now: Instant) -> VideoFrame {
+        let every = self
+            .last
+            .iter()
+            .find(|l| l.node == node)
+            .map_or(MIN_INTERVAL, |l| l.every);
+        self.stamp_every(node, every, pixels, now)
+    }
+
+    /// A frame of `node`, due every `every`, taken at `now`: on the next
+    /// slot when it is near, else (a first frame, a pause) on a new run of
+    /// slots from now.
+    fn stamp_every(
+        &mut self,
+        node: NodeId,
+        every: Duration,
+        pixels: rich_embed::Pixels,
+        now: Instant,
+    ) -> VideoFrame {
         self.seq += 1;
         let seq = self.seq;
-        match self.last.iter_mut().find(|(n, ..)| *n == node) {
-            Some(entry) => *entry = (node, now, seq),
-            None => self.last.push((node, now, seq)),
+        let at = |slot: Option<Instant>| match slot.map(|s| s + every) {
+            Some(next) if now + every / 4 >= next && now < next + every => next,
+            _ => now,
+        };
+        let entry = |slot| Last {
+            node,
+            slot,
+            taken: now,
+            every,
+        };
+        match self.last.iter_mut().find(|l| l.node == node) {
+            Some(last) => *last = entry(at(Some(last.slot))),
+            None => self.last.push(entry(at(None))),
         }
         VideoFrame { node, pixels, seq }
     }
@@ -308,6 +383,12 @@ impl Pacing {
         self.regions.remove(&node);
     }
 
+    /// Whether `node` is a region it paces (it has had a frame since the
+    /// document opened, and is not gone).
+    pub fn has(&self, node: NodeId) -> bool {
+        self.regions.contains_key(&node)
+    }
+
     /// The protocol `node`'s frames are drawn in now.
     pub fn pixels(&self, node: NodeId) -> Pixels {
         self.regions
@@ -342,6 +423,90 @@ impl Pacing {
             .collect();
         out.sort_by_key(|(node, _)| *node);
         out
+    }
+}
+
+/// A frame to encode: its region's picture, the protocol and the cells it
+/// is drawn in.
+#[derive(Clone, Debug)]
+pub struct Job {
+    pub node: NodeId,
+    pub picture: Picture,
+    pub pixels: Pixels,
+    pub cols: usize,
+    pub rows: usize,
+}
+
+/// Video frames encoded off the thread that draws: each [`Job`]'s escape
+/// is made ahead ([`Picture::prepare`]) on a thread of its own, and the
+/// job handed to `done` once it is, so the painter finds it made. Only a
+/// region's newest frame waits: one that comes while an older is waiting
+/// takes its place.
+///
+/// A Sixel frame takes tens of milliseconds to encode and a Kitty one
+/// several: on the thread that draws, that is time the keys and the rest
+/// of the screen wait, every frame.
+pub struct Encoder {
+    queue: std::sync::Arc<(std::sync::Mutex<Queue>, std::sync::Condvar)>,
+}
+
+#[derive(Default)]
+struct Queue {
+    waiting: Vec<Job>,
+    closed: bool,
+}
+
+impl Encoder {
+    /// An encoder whose thread hands each job, encoded, to `done`. The
+    /// thread ends when the encoder is dropped.
+    pub fn spawn(done: impl Fn(Job) + Send + 'static) -> Encoder {
+        let queue = std::sync::Arc::new((
+            std::sync::Mutex::new(Queue::default()),
+            std::sync::Condvar::new(),
+        ));
+        let shared = queue.clone();
+        std::thread::spawn(move || {
+            loop {
+                let job = {
+                    let (lock, ready) = &*shared;
+                    let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
+                    while queue.waiting.is_empty() && !queue.closed {
+                        queue = ready.wait(queue).unwrap_or_else(|e| e.into_inner());
+                    }
+                    if queue.closed {
+                        return;
+                    }
+                    queue.waiting.remove(0)
+                };
+                job.picture
+                    .prepare(crate::pictures::view(job.pixels), job.cols, job.rows);
+                done(job);
+            }
+        });
+        Encoder { queue }
+    }
+
+    /// Encode `job`, in place of any frame of its region still waiting.
+    pub fn encode(&self, job: Job) {
+        let (lock, ready) = &*self.queue;
+        let mut queue = lock.lock().unwrap_or_else(|e| e.into_inner());
+        queue.waiting.retain(|waiting| waiting.node != job.node);
+        queue.waiting.push(job);
+        ready.notify_one();
+    }
+}
+
+impl Drop for Encoder {
+    fn drop(&mut self) {
+        let (lock, ready) = &*self.queue;
+        lock.lock().unwrap_or_else(|e| e.into_inner()).closed = true;
+        ready.notify_one();
+    }
+}
+
+impl std::fmt::Debug for Encoder {
+    fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
+        f.debug_struct("Encoder").finish_non_exhaustive()
     }
 }
 
@@ -411,32 +576,56 @@ mod tests {
     }
 
     #[test]
-    fn regions_are_cut_at_most_eight_times_a_second() {
+    fn regions_are_cut_at_most_thirty_times_a_second() {
         let mut frames = Frames::default();
         let start = Instant::now();
         let playing = [region(1, 10.0, true, true)];
         let mut count = 0;
-        // Offered a frame every 10 ms for two seconds.
-        for tick in 0..200 {
-            let now = start + Duration::from_millis(tick * 10);
+        // Offered a frame every 5 ms for two seconds.
+        for tick in 0..400 {
+            let now = start + Duration::from_millis(tick * 5);
             let (cut, missing) = frames.cut(&playing, Some(&frame(0.0)), now);
             assert!(missing.is_empty());
             count += cut.len();
         }
-        assert!((15..=17).contains(&count), "{count}");
-        // The pacing asks for two a second: four in two seconds.
+        assert!((59..=61).contains(&count), "{count}");
+        // The pacing asks for two a second: four in 1.9 seconds (the fifth
+        // is due at two, an eighth of a frame early at most).
         let mut frames = Frames::default();
         let slow = [Region {
             interval: Some(Duration::from_millis(500)),
             ..playing[0]
         }];
-        let count: usize = (0..200)
+        let count: usize = (0..190)
             .map(|tick| {
                 let now = start + Duration::from_millis(tick * 10);
                 frames.cut(&slow, Some(&frame(0.0)), now).0.len()
             })
             .sum();
         assert_eq!(count, 4);
+    }
+
+    #[test]
+    fn the_next_frame_is_due_on_its_slot() {
+        let mut frames = Frames::default();
+        let start = Instant::now();
+        let playing = [region(1, 10.0, true, true)];
+        let paused = [region(1, 10.0, false, true)];
+        // Nothing moves: no wake. A new region is due at once.
+        assert_eq!(frames.next_due(&paused, start), None);
+        assert_eq!(frames.next_due(&playing, start), Some(Duration::ZERO));
+        frames.cut(&playing, Some(&frame(0.0)), start);
+        // Then a frame's time on, give or take an eighth of one.
+        let wait = frames.next_due(&playing, start).unwrap();
+        assert!(
+            wait <= MIN_INTERVAL && wait >= MIN_INTERVAL * 7 / 8,
+            "{wait:?}"
+        );
+        // Taken a little late, the next keeps to the slot: no drift.
+        let late = start + MIN_INTERVAL + Duration::from_millis(3);
+        assert_eq!(frames.cut(&playing, Some(&frame(0.0)), late).0.len(), 1);
+        let wait = frames.next_due(&playing, late).unwrap();
+        assert!(wait < MIN_INTERVAL - Duration::from_millis(2), "{wait:?}");
     }
 
     #[test]
@@ -455,6 +644,51 @@ mod tests {
         let (cut, missing) = frames.cut(&regions[..1], Some(&frame(20.0)), now);
         assert!(cut.is_empty());
         assert_eq!(missing.len(), 1);
+    }
+
+    #[test]
+    fn the_encoder_makes_the_escape_ahead_and_keeps_the_newest_waiting() {
+        let (send, done) = std::sync::mpsc::channel();
+        let encoder = Encoder::spawn(move |job| drop(send.send(job)));
+        let first = Picture::from_rgba(8, 8, vec![9; 8 * 8 * 4]).unwrap();
+        let job = |picture: &Picture| Job {
+            node: 1,
+            picture: picture.clone(),
+            pixels: Pixels::Sixel,
+            cols: 4,
+            rows: 2,
+        };
+        encoder.encode(job(&first));
+        let made = done.recv_timeout(Duration::from_secs(10)).unwrap();
+        assert_eq!(made.picture, first);
+        // Made with the region's view: what the painter asks for is it.
+        let tag = rich_art::picture::PictureTag {
+            id: first.id(),
+            version: first.version(),
+            cols: 4,
+            rows: 2,
+            row: 0,
+            pixels: Pixels::Sixel,
+            fit: Some(rich_art::ImageFit::Cover),
+            anchor: rich_art::ImageAnchor::Center,
+        };
+        assert!(first.encode_tag(&tag, 0, 2).is_some());
+        // Frames of one region queued faster than they encode: the
+        // newest reaches `done`, and the last one handed back is it.
+        let frames: Vec<Picture> = (0..20u8)
+            .scan(first.clone(), |last, k| {
+                *last = last.next_rgba(8, 8, vec![k; 8 * 8 * 4])?;
+                Some(last.clone())
+            })
+            .collect();
+        for frame in &frames {
+            encoder.encode(job(frame));
+        }
+        let mut last = None;
+        while let Ok(job) = done.recv_timeout(Duration::from_millis(500)) {
+            last = Some(job.picture);
+        }
+        assert_eq!(last.as_ref(), frames.last());
     }
 
     #[test]
