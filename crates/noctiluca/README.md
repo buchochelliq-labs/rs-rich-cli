@@ -30,8 +30,8 @@ as a normal user, never as root.
   intuiTUIve widgets. A field's edit is a draft until Enter; if the page
   changed the value meanwhile, it is a conflict, never overwritten.
 - **Video**: a playing video plays in its region, from Chrome's own
-  frames, within what your terminal can take (at most eight frames a
-  second; Kitty, iTerm2, Sixel, then character art when it is short, and
+  frames, within what your terminal can take (up to thirty frames a
+  second, evenly spaced; Kitty, iTerm2, Sixel, then character art when it is short, and
   character art first over SSH). `p` plays or pauses, `[` and `]` seek
   five seconds, `alt+m` mutes, `F4` freezes moving pictures. A paused
   video shows its poster with a play mark. `about:noctiluca` lists the

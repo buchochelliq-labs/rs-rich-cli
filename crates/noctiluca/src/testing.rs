@@ -38,6 +38,8 @@ pub struct FakeState {
     pub not_loaded: std::collections::HashSet<i64>,
     /// Whether the screencast is on.
     pub screencast: bool,
+    /// The screencast's scale, as last asked for (0 until it is).
+    pub screencast_scale: f64,
     /// Screencast frames waiting to be taken, oldest first: a test pushes
     /// them.
     pub frames: Vec<ScreencastFrame>,
@@ -607,6 +609,11 @@ impl Engine for FakeEngine {
 
     fn set_screencast(&mut self, _tab: TabId, on: bool) -> io::Result<()> {
         self.lock().screencast = on;
+        Ok(())
+    }
+
+    fn set_screencast_scale(&mut self, _tab: TabId, scale: f64) -> io::Result<()> {
+        self.lock().screencast_scale = scale;
         Ok(())
     }
 

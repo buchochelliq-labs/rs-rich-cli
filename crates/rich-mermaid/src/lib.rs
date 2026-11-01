@@ -147,7 +147,11 @@ impl Mermaid {
         let diagram = match chart.draw(ascii) {
             Ok(diagram) => diagram,
             Err(reason) => {
-                return self.source_block(console, options, &format!("too large to draw: {reason}"));
+                return self.source_block(
+                    console,
+                    options,
+                    &format!("too large to draw: {reason}"),
+                );
             }
         };
         let width = options.max_width;

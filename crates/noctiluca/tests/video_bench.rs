@@ -203,10 +203,12 @@ fn run(images: Images, link: (&'static str, Option<u64>), fps: u32, seconds: f64
     let state: Arc<Mutex<FakeState>> = engine.state.clone();
     let page = build(&state.lock().unwrap().pages["video"], &mut Revisions::new());
     let rect = page.media.iter().find(|m| m.node == VIDEO).unwrap().rect;
-    let mut config = Config::default();
     // The frame rate asked for: as much as the run offers.
-    config.fps = fps;
-    config.bandwidth = link.1;
+    let config = Config {
+        fps,
+        bandwidth: link.1,
+        ..Config::default()
+    };
     let options = Options {
         config,
         bookmarks: Bookmarks::default(),
@@ -445,8 +447,12 @@ fn profile() -> Vec<String> {
     ));
     for protocol in [Protocol::Kitty, Protocol::Sixel, Protocol::Iterm] {
         let mut size = 0;
+        // A new frame each time: a frame's escape is made once.
         let ms = time(10, || {
-            size = picture.encode(protocol, cols, rows).map_or(0, |s| s.len());
+            let fresh = picture
+                .next_rgba(cut.width, cut.height, rgba.clone())
+                .unwrap();
+            size = fresh.encode(protocol, cols, rows).map_or(0, |s| s.len());
         });
         out.push(format!(
             "encode {} ({cols}x{rows} cells): {ms:.2} ms, {} kB",

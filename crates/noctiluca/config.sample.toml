@@ -34,13 +34,15 @@ preset = "vim"
 # Pages' sound plays on the machine Chrome runs on. Off by default.
 audio = false
 # The most frames a second a moving picture (a GIF, a video) shows: a
-# ceiling, not a target; video never goes above 8.
-fps = 8
+# ceiling, not a target (the byte budget decides how many your terminal
+# is sent); video never goes above 30.
+fps = 30
 # auto, ansi (half blocks), kitty, sixel, iterm2, or none (alt text only).
 images = "auto"
 # Bytes a second moving pictures may send the terminal, shared by those in
 # view; short of it, a picture steps down Kitty, iTerm2, Sixel, then half
-# blocks. Unset: 4M on this machine, 256K over SSH.
+# blocks. Unset: 4M on this machine, 256K over SSH, then what the terminal
+# is measured taking (here up to 32M; over SSH only ever lower).
 # bandwidth = "4M"
 
 [adapt]

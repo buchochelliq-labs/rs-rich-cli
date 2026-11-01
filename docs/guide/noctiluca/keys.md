@@ -65,7 +65,7 @@ noctiluca keys [--site HOST] [--config PATH]
 | `--profile NAME` | Keep a profile, with its cookies and storage, between runs (opt-in). A name of letters, digits, `-` and `_` |
 | `--chrome PATH` | The browser to run (default: [the one found](getting-started.md#the-chrome-it-needs)) |
 | `--images MODE` | How images reach the terminal: `ansi`, `kitty`, `sixel`, `iterm2` or `none` (default: the config's, else detected). See [images](media.md#images) |
-| `--fps N` | The most frames a second a moving picture (a GIF, a video) shows, 1 to 60: a ceiling, not a target; video never goes above 8 |
+| `--fps N` | The most frames a second a moving picture (a GIF, a video) shows, 1 to 60: a ceiling, not a target (default 30); video never goes above 30 |
 | `--adapt LIST` | Switch [terminal adaptations](adaptations.md#terminal-adaptations) off (`-name`) or on (`+name`) for this run: `--adapt=-collapse-nav,+text-over-pictures` |
 | `--no-adapt` | Every adaptation off: the faithful projection |
 | `--dump HOW` | Print the page's model and exit: `text`, `ax` (its controls) or `json` (all of it). Needs a page |

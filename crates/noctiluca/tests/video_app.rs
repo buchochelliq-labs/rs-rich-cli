@@ -153,6 +153,11 @@ fn a_playing_video_shows_its_frames_and_the_keys_seek() {
     // Playing on screen: the screencast runs, and its frames show in the
     // region in place of the play mark.
     state_is(&mut driver, &state, "the screencast", |s| s.screencast);
+    // Drawn as character art, two pixels a cell: Chrome is asked for a
+    // fraction of the page's pixels (an eighth of 8 x 18 pixel cells).
+    state_is(&mut driver, &state, "a scaled screencast", |s| {
+        s.screencast_scale == 0.125
+    });
     state.lock().unwrap().frames.push(frame([255, 0, 0]));
     // The region's middle row, at its column: half blocks of the frame.
     let row = 2 + ((rect.y + rect.height / 2.0) / 18.0) as usize;

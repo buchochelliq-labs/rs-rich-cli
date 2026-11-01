@@ -119,6 +119,9 @@ enum Request {
     Forward,
     Reload,
     Screencast(bool),
+    /// Frames this fraction of the viewport's size (`maxWidth`,
+    /// `maxHeight`).
+    ScreencastScale(f64),
     /// Acknowledge the screencast frame with this session id: Chrome sends
     /// the next one only after it.
     Ack(i64),
@@ -196,9 +199,30 @@ impl ScreencastFrame {
     }
 }
 
-/// A frame Chrome sent and the engine has not yet decoded nor acknowledged
-/// (on-demand screencast): base64 image data, metadata, session id.
-type RawFrame = (String, FrameMeta, i64);
+/// A frame Chrome sent and the engine has not yet decoded (on-demand
+/// screencast): base64 image data, metadata, and the session id to
+/// acknowledge when it is taken (`None`: acknowledged as it came).
+type RawFrame = (String, FrameMeta, Option<i64>);
+
+/// Keep `frame` (whose session id is `ack`) as the newest waiting to be
+/// taken, in place of any other; the id to acknowledge now, if any.
+///
+/// When none was waiting (the last was taken), it is acknowledged at once,
+/// so Chrome paints the next while this one waits: the app takes a frame
+/// at most one paint old, not one painted a round trip after its last
+/// take. When one was waiting, this one waits unacknowledged in its place
+/// and is acknowledged when taken: Chrome is at most one frame ahead of
+/// the app, so it encodes no more than about two frames a take.
+fn keep_frame(
+    waiting: &mut Option<RawFrame>,
+    data: String,
+    meta: FrameMeta,
+    ack: i64,
+) -> Option<i64> {
+    let ahead = waiting.is_none();
+    *waiting = Some((data, meta, (!ahead).then_some(ack)));
+    ahead.then_some(ack)
+}
 
 #[derive(Default)]
 struct Shared {
@@ -362,6 +386,8 @@ pub struct ChromeEngine {
     wire: Wire,
     screencast: bool,
     on_demand: bool,
+    /// The screencast's frames as a fraction of the viewport's size.
+    scale: f64,
 }
 
 impl fmt::Debug for ChromeEngine {
@@ -397,6 +423,7 @@ impl ChromeEngine {
             wire: Wire::DEFAULT,
             screencast: true,
             on_demand: false,
+            scale: 1.0,
         }
     }
 
@@ -471,22 +498,51 @@ impl ChromeEngine {
     }
 
     /// Screencast frames on demand: each frame is kept as Chrome sent it,
-    /// and decoded and acknowledged only when the app takes it
+    /// and decoded only when the app takes it
     /// ([`take_screencast`](Self::take_screencast)). Chrome sends the next
-    /// frame only after an acknowledgement, so the browser encodes no more
-    /// frames than the app takes: an app that wants a few frames a second
-    /// of a video costs a few. Off by default: each frame is decoded and
-    /// acknowledged as it comes, for [`WebEngine::poll`].
+    /// frame only after an acknowledgement, and the engine keeps it at
+    /// most one frame ahead of the app: a frame that comes when the last
+    /// was taken is acknowledged at once (so the next is painted while it
+    /// waits, and the app's next take finds a fresh one), one that comes
+    /// while another waits is acknowledged when taken. So the browser
+    /// encodes about as many frames as the app takes: an app that wants a
+    /// few frames a second of a video costs a few. Off by default: each
+    /// frame is decoded and acknowledged as it comes, for
+    /// [`WebEngine::poll`].
     #[must_use]
     pub fn screencast_on_demand(mut self, on: bool) -> ChromeEngine {
         self.on_demand = on;
         self
     }
 
+    /// The screencast's frames as `scale` (above 0, at most 1) of the
+    /// viewport's size, through `maxWidth` and `maxHeight`: an app that
+    /// draws a region in fewer pixels than the page has (character art,
+    /// two pixels a cell) asks for no more, and Chrome encodes and the
+    /// engine decodes a fraction of the bytes.
+    /// [`ScreencastFrame::crop`] maps through the frame's own size, so a
+    /// region is cut the same at any scale. Taking effect restarts the
+    /// screencast; frames come again from the next Chrome paints.
+    pub fn set_screencast_scale(&mut self, scale: f64) -> io::Result<()> {
+        let scale = if scale.is_finite() {
+            scale.clamp(0.01, 1.0)
+        } else {
+            1.0
+        };
+        if (scale - self.scale).abs() < f64::EPSILON {
+            return Ok(());
+        }
+        self.scale = scale;
+        if self.commands.is_none() {
+            return Ok(());
+        }
+        self.send(Request::ScreencastScale(scale))
+    }
+
     /// The newest screencast frame since the last call, with where it was
     /// taken (its scroll position, for [`ScreencastFrame::crop`]). On
-    /// demand, it is decoded and acknowledged now, which lets Chrome send
-    /// the next.
+    /// demand, it is decoded now, and acknowledged if it was not as it
+    /// came, which lets Chrome send the next.
     pub fn take_screencast(&mut self) -> Option<ScreencastFrame> {
         let (raw, decoded) = {
             let mut shared = lock(&self.shared);
@@ -494,7 +550,9 @@ impl ChromeEngine {
             (shared.raw.take(), shared.frame.take().map(|p| (p, meta)))
         };
         if let Some((data, meta, ack)) = raw {
-            let _ = self.send(Request::Ack(ack));
+            if let Some(ack) = ack {
+                let _ = self.send(Request::Ack(ack));
+            }
             return decode_frame(&data).map(|pixels| ScreencastFrame { pixels, meta });
         }
         decoded.map(|(pixels, meta)| ScreencastFrame { pixels, meta })
@@ -647,6 +705,7 @@ impl ChromeEngine {
             listeners: Arc::clone(&self.listeners),
             screencast: self.screencast,
             on_demand: self.on_demand,
+            scale: self.scale,
         };
         thread::spawn(move || {
             if let Err(error) = run(connect, stderr, receiver, called, &shared, cell, wiring) {
@@ -936,6 +995,12 @@ pub(crate) fn launch_args(
 /// The page's size in CSS pixels for a pane of `columns` x `rows` cells.
 fn viewport(columns: u16, rows: u16, (cw, ch): (u32, u32)) -> (u32, u32) {
     (columns.max(1) as u32 * cw, rows.max(1) as u32 * ch)
+}
+
+/// `size` times `scale`, rounded up, at least a pixel.
+fn scaled((width, height): (u32, u32), scale: f64) -> (u32, u32) {
+    let by = |n: u32| ((f64::from(n) * scale).ceil() as u32).clamp(1, n.max(1));
+    (by(width), by(height))
 }
 
 /// The DevTools address in a line of the browser's standard error.
@@ -1294,8 +1359,10 @@ struct Session {
     listeners: Listeners,
     /// Whether frames stream in.
     screencast: bool,
-    /// Whether frames wait, undecoded and unacknowledged, to be taken.
+    /// Whether frames wait, undecoded, to be taken.
     on_demand: bool,
+    /// The frames as a fraction of the viewport's size.
+    scale: f64,
 }
 
 /// What the engine's thread is set up with besides its channels.
@@ -1304,6 +1371,7 @@ struct Wiring {
     listeners: Listeners,
     screencast: bool,
     on_demand: bool,
+    scale: f64,
 }
 
 /// The `Browser.setDownloadBehavior` parameters for `downloads`.
@@ -1350,10 +1418,11 @@ impl Session {
         if !self.screencast {
             return Ok(());
         }
+        let (max_width, max_height) = scaled((width, height), self.scale);
         self.page(
             "Page.startScreencast",
-            json!({"format": "jpeg", "quality": 70, "maxWidth": width, "maxHeight": height,
-                   "everyNthFrame": 1}),
+            json!({"format": "jpeg", "quality": 70, "maxWidth": max_width,
+                   "maxHeight": max_height, "everyNthFrame": 1}),
         )
     }
 
@@ -1402,6 +1471,10 @@ impl Session {
             Request::Reload => self.page("Page.reload", json!({})),
             Request::Screencast(on) => {
                 self.screencast = on;
+                self.screencast()
+            }
+            Request::ScreencastScale(scale) => {
+                self.scale = scale;
                 self.screencast()
             }
             Request::Ack(id) => self.page("Page.screencastFrameAck", json!({"sessionId": id})),
@@ -1505,10 +1578,14 @@ impl Session {
                 let meta = FrameMeta::of(&params["metadata"]);
                 let ack = params["sessionId"].as_i64();
                 if self.on_demand {
-                    // Kept as sent, acknowledged when taken. Without an id
-                    // there is nothing to wait for.
+                    // Kept as sent, at most one frame ahead of the app
+                    // ([`keep_frame`]). Without an id there is nothing to
+                    // wait for.
                     if let (Some(data), Some(ack)) = (params["data"].as_str(), ack) {
-                        lock(shared).raw = Some((data.to_string(), meta, ack));
+                        let now = keep_frame(&mut lock(shared).raw, data.to_string(), meta, ack);
+                        if let Some(ack) = now {
+                            self.page("Page.screencastFrameAck", json!({"sessionId": ack}))?;
+                        }
                         notify(shared);
                         return Ok(());
                     }
@@ -1589,6 +1666,7 @@ fn run(
         listeners: wiring.listeners,
         screencast: wiring.screencast,
         on_demand: wiring.on_demand,
+        scale: wiring.scale,
     };
     session.send(
         "Browser.setDownloadBehavior",
@@ -1863,6 +1941,43 @@ mod tests {
         let last = taken.last().unwrap();
         assert_eq!((last.pixels.width, last.pixels.height), (80, 80));
         assert_eq!(last.meta.scroll_y, 40.0);
+    }
+
+    #[test]
+    fn on_demand_frames_stay_at_most_one_ahead() {
+        let meta = FrameMeta::default();
+        let mut waiting = None;
+        // The first comes with nothing waiting: acknowledged at once, so
+        // Chrome paints the next while it waits.
+        assert_eq!(keep_frame(&mut waiting, "a".into(), meta, 1), Some(1));
+        // The next comes before the first was taken: it takes its place,
+        // and waits unacknowledged (Chrome sends no more meanwhile).
+        assert_eq!(keep_frame(&mut waiting, "b".into(), meta, 2), None);
+        let (data, _, ack) = waiting.take().unwrap();
+        assert_eq!((data.as_str(), ack), ("b", Some(2)));
+        // Taken (and acknowledged then): the one after comes to an empty
+        // slot, and is acknowledged as it comes.
+        assert_eq!(keep_frame(&mut waiting, "c".into(), meta, 3), Some(3));
+        assert_eq!(waiting.unwrap().2, None);
+    }
+
+    #[test]
+    fn a_scaled_screencast_asks_for_fewer_pixels() {
+        assert_eq!(scaled((800, 720), 1.0), (800, 720));
+        assert_eq!(scaled((800, 720), 0.125), (100, 90));
+        assert_eq!(scaled((800, 720), 0.001), (1, 1));
+        // A frame at an eighth of the device is cut where a full one is.
+        let frame = ScreencastFrame {
+            pixels: Pixels::new(100, 90, vec![0; 100 * 90 * 3]).unwrap(),
+            meta: FrameMeta {
+                page_scale: 1.0,
+                device_width: 800.0,
+                device_height: 720.0,
+                ..FrameMeta::default()
+            },
+        };
+        let cut = frame.crop(80.0, 160.0, 480.0, 270.0).unwrap();
+        assert_eq!((cut.width, cut.height), (60, 34));
     }
 
     #[test]

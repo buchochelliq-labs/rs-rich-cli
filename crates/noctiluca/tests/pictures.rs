@@ -127,7 +127,12 @@ fn an_animated_gif_moves_within_its_budget() {
     let frames: Vec<&str> = out.split("\x1bP").skip(1).collect();
     let distinct: std::collections::HashSet<&str> = frames.iter().copied().collect();
     assert!(distinct.len() >= 2, "{} frames", frames.len());
-    assert!(frames.len() <= 9, "{} frames in a second", frames.len());
+    let ceiling = noctiluca::config::Config::default().fps as usize;
+    assert!(
+        frames.len() <= ceiling + 1,
+        "{} frames in a second",
+        frames.len()
+    );
     // Within its byte budget, counted over two seconds.
     let out = written_for(&mut driver, Duration::from_secs(2));
     assert!(
