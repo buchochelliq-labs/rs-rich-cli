@@ -73,6 +73,24 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   take the focus: Tab moves through the links, Enter or a click calls
   `.on_link(|url, cx| ..)`; `.code_theme(name)` picks the code theme.
 
+### The marketplace's signer pushes with a GitHub App (wave 1, WS8)
+
+- **`docs/marketplace-repo/.github/workflows/sign-index.yml`** pushes the
+  signed index with a short-lived installation token from
+  `actions/create-github-app-token` (pinned to v3.3.0's commit), not a
+  deploy key: the token is minted from the `marketplace-signing`
+  environment's `SIGNER_APP_CLIENT_ID` variable and `SIGNER_APP_PRIVATE_KEY`
+  secret, scoped to `contents: write` on the marketplace repository,
+  checked out with but not left in `.git/config`, and revoked when the
+  job ends. The commit is the App's bot user's, `<app-slug>[bot]` with its
+  noreply address. A first step names every missing secret or variable
+  before anything runs. How the index is signed is unchanged.
+- The mirror's README gives the maintainer's steps (create the App with
+  Contents: read and write only, install it on the marketplace repository
+  alone, add its id and key to the environment, put it on main's ruleset
+  bypass, then delete the deploy key and `MARKETPLACE_DEPLOY_KEY`); the
+  marketplace design note, PLUGINS and the 1.0.0 plan follow.
+
 ### Animated banners and Noctiluca's start page
 
 - **rs-rich-art:** `animate::AnimatedBanner`, FIGlet text with an effect

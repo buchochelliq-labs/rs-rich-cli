@@ -482,7 +482,7 @@ of the marketplace signed with a throwaway key, with no secrets.
 **Signing** happens in the marketplace repository, not here: when a listing
 pull request merges, its workflow rebuilds `index.json`, bumps the serial
 and signs it with the main key, held in the protected
-`marketplace-signing` environment, and pushes it with a deploy key. The workflow and its setup are kept in
+`marketplace-signing` environment, and pushes it with a short-lived token of the signer's GitHub App. The workflow and its setup are kept in
 [`docs/marketplace-repo/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/docs/marketplace-repo)
 to hand over.
 

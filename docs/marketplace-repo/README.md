@@ -35,7 +35,7 @@ listing with rs-rich-cli's `scripts/validate_marketplace.py`, rebuilds
 `index.json` with the serial one higher and a 30-day expiry, signs it with
 the main key, checks the signature against the newest `keys/keys-N.json`,
 and commits `index.json` and `index.json.minisig` to `main`, pushing with
-a deploy key. It also runs every Monday, so the index is re-signed before
+a short-lived token of the signer's GitHub App. It also runs every Monday, so the index is re-signed before
 it expires, and can be run by hand.
 
 `check-listings.yml` checks every pull request, with no secrets and a
@@ -130,37 +130,59 @@ after it, with no secret:
      - `MARKETPLACE_MINISIGN_KEY`: the whole of `main.key`, as the file
        reads (two lines: the untrusted comment and the encrypted key).
      - `MARKETPLACE_MINISIGN_PASSWORD`: its password.
-     - `MARKETPLACE_DEPLOY_KEY`: the deploy key's private half (step 4).
+     - `SIGNER_APP_PRIVATE_KEY`: the signer App's private key (step 4).
+   - **Environment variables:**
+     - `SIGNER_APP_CLIENT_ID`: the signer App's client id (step 4).
 
    Do not add the secrets at repository level: there, any workflow on any
    branch could read them.
 
-4. **Give the workflow a deploy key to push to `main`.** The signing job
+4. **Give the workflow a GitHub App to push to `main`.** The signing job
    reads the repository with the workflow's token (`contents: read`) and
-   pushes the signed index over SSH with a deploy key, which main's
-   ruleset lets bypass it:
+   pushes the signed index with an installation token of a GitHub App,
+   which main's ruleset lets bypass it. The token is minted for each run
+   by `actions/create-github-app-token`, scoped to this repository and to
+   `contents: write`, and revoked when the job ends; the commit is the
+   App's bot user's (`<app-slug>[bot]`). In order:
 
-   ```bash
-   ssh-keygen -t ed25519 -N "" -C rs-rich-marketplace-signer -f marketplace-deploy
-   ```
+   1. **Create the App.** Your account's (or the organization's)
+      Settings, Developer settings, GitHub Apps, New GitHub App:
+      - **Name:** say `rs-rich-marketplace-signer`. Its slug names the
+        bot user that signs the commits.
+      - **Homepage URL:** the marketplace repository.
+      - **Webhook:** untick **Active**; the App receives no events.
+      - **Repository permissions:** **Contents: Read and write**, and
+        nothing else (Metadata: read-only is added by GitHub and cannot
+        be removed). No organization or account permissions.
+      - **Where can this GitHub App be installed?** Only on this account.
+   2. **Make its private key.** On the App's page, Private keys, Generate
+      a private key; a `.pem` file downloads. Note the **Client ID** at
+      the top of the page.
+   3. **Install it on the marketplace repository only.** Install App,
+      **Only select repositories**, `rs-rich-marketplace`.
+   4. **Add it to the `marketplace-signing` environment** (step 3): the
+      client id as the variable `SIGNER_APP_CLIENT_ID`, and the whole of
+      the `.pem` file as the secret `SIGNER_APP_PRIVATE_KEY`. Keep a copy
+      of the `.pem` in the password manager, then delete the local file.
+   5. **Let it bypass main's ruleset.** Settings, Rules, main's ruleset,
+      Bypass list, Add bypass: the App, **Always allow**.
 
-   - Settings, Deploy keys, Add deploy key: paste `marketplace-deploy.pub`
-     and tick **Allow write access**.
-   - Settings, Rules, main's ruleset: add that deploy key to the bypass
-     list.
-   - In the `marketplace-signing` environment, add the whole private file
-     `marketplace-deploy` as the secret `MARKETPLACE_DEPLOY_KEY`.
-   - Keep a copy of the private file in the password manager, then delete
-     both local files.
-
-   This is planned to become a GitHub App before 1.0 (its tokens are
-   short-lived and scoped; see the 1.0.0 plan's Track B).
-
-   A push by a deploy key starts workflows (one by the workflow's own
+   A push with an App's token starts workflows (one by the workflow's own
    token would not), but the signer's commit changes only `index.json`
    and `index.json.minisig`: the signing workflow's push trigger is
    limited to `packages/**` and `keys/**`, and `check-listings.yml` runs
    on pull requests only, so the commit starts neither.
+
+   **Moving from the deploy key** (an installation set up before 0.0.24):
+   do steps 4.1 to 4.5, merge the new `sign-index.yml`, run "Sign the
+   index" by hand and approve it. Once its commit is on `main`, authored
+   by `<app-slug>[bot]`:
+   - Settings, Rules, main's ruleset: remove the deploy key from the
+     bypass list.
+   - Settings, Deploy keys: delete `rs-rich-marketplace-signer`.
+   - The `marketplace-signing` environment: delete the secret
+     `MARKETPLACE_DEPLOY_KEY`.
+   - Delete the deploy key's private half from the password manager.
 
 5. **Pin the validator.** Set the repository variable `RS_RICH_CLI_REF` to
    the rs-rich-cli tag whose `scripts/validate_marketplace.py` and
