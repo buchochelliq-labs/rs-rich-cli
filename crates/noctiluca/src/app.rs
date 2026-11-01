@@ -127,7 +127,7 @@ pub struct Browser {
 
 impl Browser {
     fn send(&self, command: Command) -> u64 {
-        if matches!(command, Command::Open(_) | Command::History(_)) && self.start.get_untracked() {
+        if self.start.get_untracked() && crate::start::leaves(&command) {
             self.start.set(false);
         }
         self.tab.with_untracked(|t| t.send(command))

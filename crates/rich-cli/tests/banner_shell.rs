@@ -220,6 +220,149 @@ mod banner {
         // `rich -p banner` still prints the word.
         assert_eq!(ok(&["-p", "banner"]), "banner\n");
     }
+
+    #[test]
+    fn an_animated_banner_off_a_terminal_prints_its_still_frame() {
+        let out = ok(&["banner", "--wave", "--specks", "--seed", "3", "Hi"]);
+        let rows: Vec<&str> = out.lines().collect();
+        // A row of specks, the letters, the wave.
+        assert_eq!(rows.len(), 7, "{out}");
+        assert!(rows[2].starts_with("| | | (_)"), "{out}");
+        assert!(rows[6].chars().all(|c| "_.-~'".contains(c)), "{out}");
+        assert!(!out.contains('\u{1b}'), "{out:?}");
+        // The same seed, the same specks.
+        assert_eq!(
+            ok(&["banner", "--wave", "--specks", "--seed", "3", "Hi"]),
+            out
+        );
+        // Forced colour: coloured, still one frame.
+        let forced = ok(&["banner", "--force-terminal", "--effect", "glow", "Hi"]);
+        assert!(forced.contains("\u{1b}["), "{forced:?}");
+        assert_eq!(forced.lines().count(), 5);
+        for (args, needle) in [
+            (
+                &["banner", "--effect", "sparkle", "x"][..],
+                "--effect takes",
+            ),
+            (&["banner", "--duration", "0", "x"], "--duration"),
+            (
+                &["banner", "--wave", "--gradient", "ocean", "x"],
+                "own colours",
+            ),
+        ] {
+            let err = usage_error(args);
+            assert!(err.contains(needle), "{args:?}: {err}");
+        }
+    }
+
+    #[cfg(unix)]
+    mod terminal {
+        use std::io::{Read, Write};
+        use std::sync::{Arc, Mutex};
+        use std::time::{Duration, Instant};
+
+        use portable_pty::{CommandBuilder, PtySize, native_pty_system};
+
+        /// Run `rich ARGS` on a terminal, sending `key` after `after`
+        /// (if any); its output, exit code and how long it ran.
+        fn on_terminal(
+            args: &[&str],
+            env: &[(&str, &str)],
+            key: Option<(Duration, &str)>,
+        ) -> (String, u32, Duration) {
+            let pty = native_pty_system()
+                .openpty(PtySize {
+                    rows: 24,
+                    cols: 80,
+                    pixel_width: 0,
+                    pixel_height: 0,
+                })
+                .unwrap();
+            let mut command = CommandBuilder::new(env!("CARGO_BIN_EXE_rich"));
+            command.args(args);
+            command.env("TERM", "xterm-256color");
+            command.env("COLORTERM", "truecolor");
+            command.env_remove("NO_COLOR");
+            command.env_remove("RICH_A11Y");
+            command.env_remove("RICH_ANIMATION");
+            for (k, v) in env {
+                command.env(k, v);
+            }
+            let started = Instant::now();
+            let mut child = pty.slave.spawn_command(command).unwrap();
+            drop(pty.slave);
+            let mut reader = pty.master.try_clone_reader().unwrap();
+            let mut writer = pty.master.take_writer().unwrap();
+            let output = Arc::new(Mutex::new(Vec::new()));
+            let sink = Arc::clone(&output);
+            std::thread::spawn(move || {
+                let mut buffer = [0u8; 4096];
+                while let Ok(read) = reader.read(&mut buffer) {
+                    if read == 0 {
+                        break;
+                    }
+                    sink.lock().unwrap().extend_from_slice(&buffer[..read]);
+                }
+            });
+            let mut key = key;
+            let end = Instant::now() + Duration::from_secs(30);
+            let status = loop {
+                if let Some(status) = child.try_wait().unwrap() {
+                    break status;
+                }
+                if let Some((after, k)) = key
+                    && started.elapsed() >= after
+                {
+                    writer.write_all(k.as_bytes()).unwrap();
+                    writer.flush().unwrap();
+                    key = None;
+                }
+                assert!(Instant::now() < end, "rich banner did not finish");
+                std::thread::sleep(Duration::from_millis(10));
+            };
+            let ran = started.elapsed();
+            std::thread::sleep(Duration::from_millis(200));
+            drop(pty.master);
+            let text = String::from_utf8_lossy(&output.lock().unwrap()).into_owned();
+            (text, status.exit_code(), ran)
+        }
+
+        #[test]
+        fn on_a_terminal_it_plays_then_holds_the_still_frame() {
+            let (out, code, ran) = on_terminal(&["banner", "--duration", "0.5", "Hi"], &[], None);
+            assert_eq!(code, 0, "{out:?}");
+            // Frames drawn over each other: the cursor goes up between them.
+            assert!(out.matches("\x1b[4A").count() > 3, "{out:?}");
+            assert!(ran >= Duration::from_millis(450), "{ran:?}");
+            // The cursor is shown again.
+            assert!(out.contains("\x1b[?25h"), "{out:?}");
+        }
+
+        #[test]
+        fn a_key_skips_to_the_still_frame() {
+            let (out, code, ran) = on_terminal(
+                &["banner", "--loop", "Hi"],
+                &[],
+                Some((Duration::from_millis(400), "x")),
+            );
+            assert_eq!(code, 0, "{out:?}");
+            assert!(ran < Duration::from_secs(5), "{ran:?}");
+            assert!(out.contains("\x1b[?25h"), "{out:?}");
+        }
+
+        #[test]
+        fn reduced_motion_draws_the_still_frame_once() {
+            let (out, code, _) = on_terminal(
+                &["banner", "--wave", "Hi"],
+                &[("RICH_A11Y", "reduced-motion")],
+                None,
+            );
+            assert_eq!(code, 0, "{out:?}");
+            assert!(!out.contains("\x1b[5A"), "{out:?}");
+            // One frame, in the still frame's colours: the first letter lit.
+            assert!(out.contains("38;2;63;240;224m|"), "{out:?}");
+        }
+    }
 }
 
 #[cfg(feature = "art")]

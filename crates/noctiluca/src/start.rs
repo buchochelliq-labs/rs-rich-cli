@@ -19,7 +19,8 @@
 //! otherwise: it never squeezes the title or the bookmarks ([`fish_place`]).
 //!
 //! Opening a bookmark or an address leaves the page; the app hides it on
-//! the first page it opens.
+//! the first page it opens ([`leaves`]). The about page opens in a box
+//! over it, and Esc comes back to it.
 //!
 //! What is generic lives in the libraries (the frames, the effects, the
 //! wave and specks in rs-rich-art; the play clock and the banner node in
@@ -68,6 +69,18 @@ const MIN_LIST: u16 = 3;
 
 /// The tagline and version under the banner.
 const TAG_ROWS: u16 = 1;
+
+/// Whether the app sending `command` leaves the start page: opening an
+/// address or moving in the history does. The about page is a box over
+/// it, so opening that does not: Esc comes back to it.
+pub fn leaves(command: &crate::tab::Command) -> bool {
+    use crate::tab::Command;
+    match command {
+        Command::Open(url) => url != crate::about::ADDRESS,
+        Command::History(_) => true,
+        _ => false,
+    }
+}
 
 /// What the start page needs from the app.
 #[derive(Clone)]
@@ -349,6 +362,16 @@ mod tests {
         // The marks on the belly do not pulse.
         let belly = |s: &PixelSprite| s.frame(0)[26 * 32 + 8];
         assert_eq!(belly(&lanternfish(0.0)), belly(&fish));
+    }
+
+    #[test]
+    fn opening_a_page_leaves_it_and_the_about_box_does_not() {
+        use crate::engine::HistoryStep;
+        use crate::tab::Command;
+        assert!(leaves(&Command::Open("https://example.org/".into())));
+        assert!(leaves(&Command::History(HistoryStep::Back)));
+        assert!(!leaves(&Command::Open(crate::about::ADDRESS.into())));
+        assert!(!leaves(&Command::Resize(80, 24)));
     }
 
     #[test]

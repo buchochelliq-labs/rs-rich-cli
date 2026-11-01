@@ -172,7 +172,10 @@ fn the_fish_opens_about_from_the_keyboard() {
     driver.assert_focused("About Noctiluca");
     driver.press("enter");
     wait_for(&mut driver, "Codecs");
-    assert!(!screen(&driver).contains("a web browser for the terminal"));
+    // A box over the start page: Esc comes back to it.
+    driver.press("esc");
+    wait_for(&mut driver, "a web browser for the terminal");
+    assert!(!screen(&driver).contains("Codecs"));
 }
 
 #[test]
