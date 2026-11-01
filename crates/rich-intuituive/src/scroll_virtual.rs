@@ -95,6 +95,8 @@ pub(crate) struct VirtualScroll {
     last_move: Option<Duration>,
     /// Whether the last layout asked for another, for the bar.
     rebar: bool,
+    /// Whether it follows its end ([`Node::follow_end`]).
+    pub(crate) follow: Option<Signal<bool>>,
 }
 
 impl VirtualScroll {
@@ -395,7 +397,18 @@ impl Widget for VirtualScroll {
         };
         // Set to the end or past it, the view stays at the end as the
         // heights there are corrected.
-        let to_end = moved_by.is_some() && offset >= self.max_top();
+        let mut to_end = moved_by.is_some() && offset >= self.max_top();
+        // Following the end: a move sets whether it follows (it does when
+        // it reached the end); while it follows, the view keeps to the end
+        // as items arrive and the last one grows.
+        if let Some(follow) = self.follow {
+            let following = follow.get();
+            if moved_by.is_some() && following != to_end {
+                runtime.untracked(|| follow.set(to_end));
+            } else if following {
+                to_end = true;
+            }
+        }
         if self.derived != Some(offset) {
             (self.anchor, self.within) = self.index_at(offset.min(self.max_top()));
         }
@@ -643,11 +656,73 @@ pub fn scroll_virtual_with(
         moved: 0,
         last_move: None,
         rebar: false,
+        follow: None,
     };
     Node::from_widget(Box::new(view), "scroll_virtual").focusable()
 }
 
 impl Node {
+    /// On a [`scroll`](crate::scroll) or a [`scroll_virtual`]: follow the
+    /// end. The view stays on the last row while the content grows, the
+    /// last item growing included (an answer streaming in). A scroll up
+    /// (a key, the wheel, the bar, or an offset set from code) stops it
+    /// following, and the view then stays where the reader left it; End,
+    /// or a scroll that reaches the end, follows again. A chat, a
+    /// transcript, a log. Textual's `anchor()`.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let lines = signal(3usize);
+    ///     scroll_virtual(move || lines.get(), |_| 1, |i| label(format!("line {i}")))
+    ///         .follow_end()
+    ///         .on_key("a", move |_| lines.update(|n| *n += 1))
+    ///         .on_key("q", |cx| cx.quit())
+    /// });
+    /// let screen = app.render_with(&["a", "a", "q"], 12, 2).unwrap();
+    /// assert!(screen[1].starts_with("line 4"));
+    /// ```
+    pub fn follow_end(self) -> Node {
+        self.follow_end_with(crate::reactive::signal(true))
+    }
+
+    /// [`follow_end`](Node::follow_end), with whether it follows in
+    /// `follow`: read it to show that new content waits below ("↓ 3
+    /// new"), or set it to `true` to jump back to the end. It starts as
+    /// `follow` is.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let lines = signal(10usize);
+    ///     let follow = signal(true);
+    ///     column([
+    ///         text(move || if follow.get() { "following" } else { "paused" }.to_string())
+    ///             .fixed(1),
+    ///         scroll_virtual(move || lines.get(), |_| 1, |i| label(format!("line {i}")))
+    ///             .follow_end_with(follow)
+    ///             .flex(1),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(12, 3);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "following");
+    /// assert!(driver.screen().plain()[2].starts_with("line 9"));
+    /// driver.press("up");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "paused");
+    /// ```
+    pub fn follow_end_with(self, follow: Signal<bool>) -> Node {
+        let done = self
+            .widget_mut(|view: &mut crate::builtin::ScrollView| view.follow = Some(follow))
+            .is_some();
+        if !done {
+            self.widget_mut(|view: &mut VirtualScroll| view.follow = Some(follow));
+        }
+        self
+    }
+
     /// On a [`scroll_virtual`]: call `load` once the view comes within
     /// `threshold` rows of the end, and not again until its `len` grows,
     /// so one load is in flight at a time. The forever-scroll hook: `load`

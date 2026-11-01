@@ -19,7 +19,7 @@ use crate::widget::{Canvas, DrawCx, MeasureCx, Widget};
 type Condition = Rc<dyn Fn() -> bool>;
 
 /// A spinner's frames, turned on the app's clock.
-struct Turn {
+pub(crate) struct Turn {
     frames: &'static [&'static str],
     interval: Duration,
     /// Written when the next frame is due: reading it draws again then.
@@ -31,7 +31,7 @@ struct Turn {
 impl Turn {
     /// Spinner `name`'s frames (rich's spinners: `dots`, `line`, `arc`, …;
     /// `dots` for a name it does not know).
-    fn new(name: &str) -> Turn {
+    pub(crate) fn new(name: &str) -> Turn {
         let (interval, frames) = rich::spinner::spinner_frames(name)
             .or_else(|| rich::spinner::spinner_frames("dots"))
             .expect("the dots spinner exists");
@@ -44,7 +44,7 @@ impl Turn {
     }
 
     /// The widest frame's cells.
-    fn width(&self) -> u16 {
+    pub(crate) fn width(&self) -> u16 {
         self.frames
             .iter()
             .map(|f| rich::cells::cell_len(f))
@@ -56,7 +56,7 @@ impl Turn {
     /// The frame to draw now, and a frame asked for when the next is due.
     /// In text mode a still `*`: a glyph that keeps changing is read out
     /// again and again.
-    fn frame(&self, cx: &DrawCx) -> &'static str {
+    pub(crate) fn frame(&self, cx: &DrawCx) -> &'static str {
         if crate::a11y::text_mode() {
             return "*";
         }

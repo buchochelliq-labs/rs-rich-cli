@@ -1994,6 +1994,11 @@ pub(crate) struct ScrollView {
     bars: (Option<Rect>, Option<Rect>),
     /// Its own size, as last laid out.
     size: (u16, u16),
+    /// Whether it follows its end ([`Node::follow_end`]), and the first
+    /// row in view as last laid out: an offset that differs was moved by
+    /// the reader or by code.
+    pub(crate) follow: Option<Signal<bool>>,
+    derived: Option<u16>,
 }
 
 impl ScrollView {
@@ -2023,7 +2028,31 @@ impl ScrollView {
             )),
             bars: (None, None),
             size: (0, 0),
+            follow: None,
+            derived: None,
         }
+    }
+
+    /// Following the end: a move since the last layout sets whether it
+    /// follows (it does when the move reached the end), and while it
+    /// follows the view is at the end however the content grew.
+    fn follow_end(&mut self) {
+        let Some(follow) = self.follow else {
+            return;
+        };
+        let max = self.content.1.saturating_sub(self.view.1);
+        let offset = self.offset.get_untracked();
+        let runtime = Runtime::current();
+        if self.derived.is_some_and(|d| d != offset) {
+            let at_end = offset >= max;
+            if follow.get_untracked() != at_end {
+                runtime.untracked(|| follow.set(at_end));
+            }
+        }
+        if follow.get() && offset != max {
+            runtime.untracked(|| self.offset.set(max));
+        }
+        self.derived = Some(self.offset.get_untracked());
     }
 
     /// Draw the bar down (a bar on the left or right) or the bar across (on
@@ -2165,6 +2194,7 @@ impl Widget for ScrollView {
                 view_h
             },
         );
+        self.follow_end();
         vec![Rect::new(0, 0, self.content.0, self.content.1)]
     }
 

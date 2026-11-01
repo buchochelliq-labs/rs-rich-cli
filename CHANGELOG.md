@@ -27,6 +27,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   on crates.io) and removed; its test now accepts an empty list, as the
   check itself does.
 
+### intuiTUIve: Cornacai's parity items (wave 1, WS2)
+
+- **`Node::follow_end` and `follow_end_with(signal)`** (#798), on `scroll`
+  and `scroll_virtual`: the view keeps to the end while content arrives
+  and the last item grows, stops following when the reader scrolls up,
+  and follows again at the end. Textual's `anchor()`.
+
 ### Animated banners and Noctiluca's start page
 
 - **rs-rich-art:** `animate::AnimatedBanner`, FIGlet text with an effect
