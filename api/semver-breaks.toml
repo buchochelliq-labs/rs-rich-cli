@@ -21,3 +21,24 @@ version = "0.0.3"
 lint = "enum_struct_variant_field_added"
 items = ["field scale of variant Command::Regions"]
 why = "video at up to 30 fps asks Chrome for a screencast scaled to the regions' needs (0.0.24 plan)"
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.3"
+lint = "constructible_struct_adds_field"
+items = ["field Args.transparent", "field ChromeOptions.transparent", "field Config.transparent"]
+why = "--transparent lets the terminal's background show where a page sets none (#821, 0.0.24 plan)"
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.3"
+lint = "constructible_struct_adds_field"
+items = ["field Page.background"]
+why = "the model reads the page's own background colour, which --transparent keeps (#821, 0.0.24 plan)"
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.3"
+lint = "enum_variant_added"
+items = ["variant Rule:CollapseGaps"]
+why = "the collapse-gaps adaptation collapses rows blank in every column (#786, #789, 0.0.24 plan)"

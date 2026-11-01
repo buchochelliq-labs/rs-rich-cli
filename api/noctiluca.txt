@@ -60,6 +60,7 @@ pub enum noctiluca::adapt::Rule
 pub noctiluca::adapt::Rule::Bandwidth
 pub noctiluca::adapt::Rule::CapPictures
 pub noctiluca::adapt::Rule::Captions
+pub noctiluca::adapt::Rule::CollapseGaps
 pub noctiluca::adapt::Rule::CollapseNav
 pub noctiluca::adapt::Rule::DecorativeImages
 pub noctiluca::adapt::Rule::IconButtons
@@ -156,6 +157,7 @@ pub fn noctiluca::adapt::backdrop(noctiluca::adapt::Background) -> &'static str
 pub fn noctiluca::adapt::background() -> noctiluca::adapt::Background
 pub fn noctiluca::adapt::decorative(&noctiluca::model::Media) -> bool
 pub fn noctiluca::adapt::is_decorative(f64, f64, bool) -> bool
+pub fn noctiluca::adapt::page_backdrop(core::option::Option<&str>, bool, noctiluca::adapt::Background) -> core::option::Option<alloc::string::String>
 pub fn noctiluca::adapt::page_color(&str, noctiluca::adapt::Background) -> core::option::Option<alloc::string::String>
 pub fn noctiluca::adapt::picture_cells(noctiluca::engine::Rect, usize, f64, noctiluca::adapt::Adapt, usize) -> (usize, usize)
 pub fn noctiluca::adapt::picture_of_text(&noctiluca::model::Media, f64) -> bool
@@ -336,6 +338,7 @@ pub noctiluca::args::Args::no_js: bool
 pub noctiluca::args::Args::no_mouse: bool
 pub noctiluca::args::Args::profile: core::option::Option<alloc::string::String>
 pub noctiluca::args::Args::target: alloc::vec::Vec<alloc::string::String>
+pub noctiluca::args::Args::transparent: bool
 pub noctiluca::args::Args::view: core::option::Option<noctiluca::config::View>
 impl core::clone::Clone for noctiluca::args::Args
 pub fn noctiluca::args::Args::clone(&self) -> noctiluca::args::Args
@@ -452,6 +455,7 @@ pub noctiluca::cdp::ChromeOptions::no_js: bool
 pub noctiluca::cdp::ChromeOptions::profile: core::option::Option<std::path::PathBuf>
 pub noctiluca::cdp::ChromeOptions::quarantine: core::option::Option<std::path::PathBuf>
 pub noctiluca::cdp::ChromeOptions::rows: u16
+pub noctiluca::cdp::ChromeOptions::transparent: bool
 impl core::clone::Clone for noctiluca::cdp::ChromeOptions
 pub fn noctiluca::cdp::ChromeOptions::clone(&self) -> noctiluca::cdp::ChromeOptions
 impl core::default::Default for noctiluca::cdp::ChromeOptions
@@ -617,6 +621,7 @@ pub noctiluca::config::Config::profile: core::option::Option<alloc::string::Stri
 pub noctiluca::config::Config::search: alloc::string::String
 pub noctiluca::config::Config::shortcuts: alloc::collections::btree::map::BTreeMap<alloc::string::String, noctiluca::config::Shortcut>
 pub noctiluca::config::Config::sites: alloc::vec::Vec<noctiluca::config::Site>
+pub noctiluca::config::Config::transparent: bool
 pub noctiluca::config::Config::view: noctiluca::config::View
 pub noctiluca::config::Config::warnings: alloc::vec::Vec<alloc::string::String>
 impl noctiluca::config::Config
@@ -1673,6 +1678,7 @@ impl core::marker::UnsafeUnpin for noctiluca::model::Media
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::model::Media
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::model::Media
 pub struct noctiluca::model::Page
+pub noctiluca::model::Page::background: core::option::Option<alloc::string::String>
 pub noctiluca::model::Page::blocks: alloc::vec::Vec<noctiluca::model::Block>
 pub noctiluca::model::Page::controls: alloc::vec::Vec<noctiluca::model::Control>
 pub noctiluca::model::Page::document: u64
@@ -2044,6 +2050,8 @@ impl core::marker::UnsafeUnpin for noctiluca::tab::Tab
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::tab::Tab
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::tab::Tab
 pub const noctiluca::tab::DEBOUNCE: core::time::Duration
+pub const noctiluca::tab::SETTLE_MAX: core::time::Duration
+pub const noctiluca::tab::SETTLE_STEP: core::time::Duration
 pub fn noctiluca::tab::describe(&noctiluca::model::Control) -> alloc::string::String
 pub fn noctiluca::tab::stop_all(core::time::Duration)
 pub mod noctiluca::testing
@@ -2117,6 +2125,22 @@ impl core::marker::Unpin for noctiluca::testing::FakeState
 impl core::marker::UnsafeUnpin for noctiluca::testing::FakeState
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::testing::FakeState
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::testing::FakeState
+pub struct noctiluca::testing::PageBuilder
+impl noctiluca::testing::PageBuilder
+pub fn noctiluca::testing::PageBuilder::body(&self) -> usize
+pub fn noctiluca::testing::PageBuilder::element(&mut self, usize, &str, &[(&str, &str)], &[(&str, &str)], core::option::Option<noctiluca::engine::Rect>) -> usize
+pub fn noctiluca::testing::PageBuilder::image(&mut self, usize, &str, &str, noctiluca::engine::Rect) -> usize
+pub fn noctiluca::testing::PageBuilder::new(&str, &str, f64, f64) -> noctiluca::testing::PageBuilder
+pub fn noctiluca::testing::PageBuilder::set_style(&mut self, usize, &str, &str)
+pub fn noctiluca::testing::PageBuilder::snapshot(&self) -> noctiluca::engine::PageSnapshot
+pub fn noctiluca::testing::PageBuilder::text(&mut self, usize, &str, noctiluca::engine::Rect) -> usize
+impl core::marker::Freeze for noctiluca::testing::PageBuilder
+impl core::marker::Send for noctiluca::testing::PageBuilder
+impl core::marker::Sync for noctiluca::testing::PageBuilder
+impl core::marker::Unpin for noctiluca::testing::PageBuilder
+impl core::marker::UnsafeUnpin for noctiluca::testing::PageBuilder
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::testing::PageBuilder
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::testing::PageBuilder
 pub fn noctiluca::testing::feed_snapshot(&str, usize) -> noctiluca::engine::PageSnapshot
 pub fn noctiluca::testing::feed_snapshot_of(&str, i64, i64) -> noctiluca::engine::PageSnapshot
 pub fn noctiluca::testing::follow(&noctiluca::engine::PageAction, &mut noctiluca::testing::FakeState)

@@ -27,6 +27,41 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   on crates.io) and removed; its test now accepts an empty list, as the
   check itself does.
 
+### Noctiluca's fixes from the real-site gallery
+
+- **Captions** (#785): a picture's `Image:` caption wraps to its box's
+  final width; a snapped grid that narrowed the item cut it at its edge.
+- **Hidden text** (#788): text is not drawn when a box conceals it:
+  `opacity: 0` on an ancestor, positioned and clipped to no area, a
+  `clip-path` inset of 50%, or a box at most a pixel wide or tall that
+  hides its overflow (a visually hidden class). Kept only as the name of
+  a link with nothing else to show. The snapshot asks for `clip`,
+  `clip-path` and `position` too.
+- **Blank rows** (#786, #789): a new adaptation, `collapse-gaps` (on),
+  collapses rows blank in every column (an empty ad slot, a hidden menu, a
+  spacer) to one blank row, none at the top; rows blank beside a sidebar
+  stay. An inline `<svg>` drawing takes Chrome's pixels of its box instead
+  of a grey placeholder.
+- **Settling** (#787): a new document is read again every 250 ms until its
+  boxes hold still (at most 3 s), and the isolated world pings on font
+  loads, root and body resizes and layout shifts, so a first reading taken
+  mid-layout (a header over the code) is replaced.
+- **Lazy pictures** (#784): stills come eight at a time and the next batch
+  follows on the next tick, with no new reading, and after every scroll;
+  pictures Chrome loaded before the reader reached them no longer stay
+  placeholders.
+- **`--transparent`** (#821), or `[startup] transparent = true`: where a
+  page sets no background, the terminal's own shows, in the faithful
+  projection (which drew a white or black backdrop) and in Chrome's
+  pixels (`Emulation.setDefaultBackgroundColorOverride`). `Page::background`
+  is the page's own background colour.
+- **AVIF** (#792): an off-by-default `avif` feature in rs-rich-art
+  (`image`'s `avif-native`, which links libdav1d), the CLI and Noctiluca;
+  Noctiluca then decodes AVIF from the page's own bytes. A CI job installs
+  libdav1d and tests both crates with it; the `--all-features` jobs
+  install it too. `testing::PageBuilder` writes Chrome-shaped snapshots of
+  reduced fixture pages by hand.
+
 ### Animated banners and Noctiluca's start page
 
 - **rs-rich-art:** `animate::AnimatedBanner`, FIGlet text with an effect
