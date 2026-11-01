@@ -1,0 +1,11 @@
+error: `#[inspect]` records an inherent impl's methods; a trait impl's are not supported
+ --> tests/ui/inspect_trait_impl.rs:4:6
+  |
+4 | impl Clone for Point {
+  |      ^^^^^
+
+error: `#[inspect]` on an impl block takes no arguments
+  --> tests/ui/inspect_trait_impl.rs:10:21
+   |
+10 | #[rich_ext::inspect(extra)]
+   |                     ^^^^^

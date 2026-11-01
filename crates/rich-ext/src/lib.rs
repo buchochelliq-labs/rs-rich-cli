@@ -18,7 +18,8 @@
 //!   (JSON Schema trees and diffs, and the format-neutral schema model), all
 //!   behind the `data` feature;
 //!   [`derive`](mod@derive), [`macros`] (the
-//!   `macros` feature re-exports `richf!` and `#[derive(Rich)]`), [`cli_doc`]
+//!   `macros` feature re-exports `richf!` and `#[derive(Rich)]`),
+//!   [`inspect`](mod@inspect) (`rich.inspect` from `#[derive(Inspect)]`), [`cli_doc`]
 //!   (`clap` feature for `clap::Command`).
 //! - Diffs and testing: [`diff`], `testing` and `qa` (`testing` feature).
 //! - Terminals: [`capabilities`], [`fidelity`], [`a11y`], [`target`],
@@ -178,6 +179,13 @@ pub mod macros;
 
 #[cfg(feature = "macros")]
 pub use rich_macros::{Rich, markup, richf, style, theme_key};
+
+// `rich.inspect` from compile-time data (#796): the report is always here;
+// `#[derive(Inspect)]` and `#[inspect]` on impl blocks need `macros`.
+pub mod inspect;
+pub use inspect::{Inspect, Inspectable, inspect};
+#[cfg(feature = "macros")]
+pub use rich_macros::{Inspect, inspect};
 
 /// Paths the macros expand to. Not a public API.
 #[doc(hidden)]
