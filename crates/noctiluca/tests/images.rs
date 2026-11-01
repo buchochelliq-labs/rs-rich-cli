@@ -347,3 +347,69 @@ fn an_inline_svg_drawing_gets_chromes_pixels() {
     });
     assert!(page.is_some(), "the drawings were never given pictures");
 }
+
+#[test]
+fn every_picture_of_a_long_page_gets_its_still_with_no_more_pings() {
+    // tests/fixtures/many-pictures.html as Chrome lays it out: thirty
+    // stories down the page, each with a picture, all loaded. One batch
+    // of stills follows each reading; the rest follow on their own.
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new(
+        "file:///noctiluca/fixtures/many-pictures.html",
+        "Many pictures fixture",
+        800.0,
+        6000.0,
+    );
+    let body = p.body();
+    for k in 0..30 {
+        let y = 200.0 * k as f64;
+        let article = p.element(
+            body,
+            "ARTICLE",
+            &[],
+            &[],
+            Some(Rect::new(0.0, y, 800.0, 200.0)),
+        );
+        let src = format!("file:///noctiluca/fixtures/media/field.jpg?{}", k + 1);
+        p.image(
+            article,
+            &src,
+            &format!("Field {}", k + 1),
+            Rect::new(0.0, y, 160.0, 120.0),
+        );
+        let para = p.element(
+            article,
+            "P",
+            &[],
+            &[],
+            Some(Rect::new(0.0, y + 136.0, 800.0, 18.0)),
+        );
+        p.text(
+            para,
+            &format!("Story {}", k + 1),
+            Rect::new(0.0, y + 136.0, 70.0, 18.0),
+        );
+    }
+    let dir = std::env::temp_dir().join(format!("noctiluca-many-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let engine = FakeEngine::from_dir(&dir).unwrap();
+    engine
+        .state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("many-pictures".into(), p.snapshot());
+    let (send, updates) = mpsc::channel();
+    let tab = Tab::spawn(Box::new(engine), move |u| {
+        let _ = send.send(u);
+    });
+    tab.send(Command::Open("many-pictures.html".into()));
+    let page = wait_for(&updates, Duration::from_secs(10), |p| {
+        p.media.len() == 30 && p.media.iter().all(|m| m.still.is_some())
+    });
+    assert!(
+        page.is_some(),
+        "pictures past the first batches never got stills"
+    );
+}

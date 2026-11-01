@@ -491,6 +491,10 @@ to one row. The algorithm:
   scroll. So lazy loading and infinite scroll fire, and near the end of
   the projection Chrome is scrolled to its bottom and the page read again
   on its change ping.
+  Pictures get their stills eight at a time, nearest Chrome's view
+  first; the next batch follows on the next tick, with no new reading, and
+  a scroll starts one, so a picture Chrome loaded before the reader got to
+  it (no ping comes then) still arrives (0.0.24, `tests/images.rs`).
 
 A test can check the invariants on every fixture page: no two text runs
 share a cell, reading order is kept within a column band, and every

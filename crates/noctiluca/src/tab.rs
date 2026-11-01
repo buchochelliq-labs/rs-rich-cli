@@ -396,6 +396,10 @@ struct Worker<'a> {
     /// A new document whose layout may still move: when to read it
     /// again, when to stop looking, and its last layout's key.
     settle: Option<(Instant, Instant, u64)>,
+    /// Pictures are still waiting for their stills: more were ready than
+    /// one batch takes, or Chrome's view moved. The next tick takes the
+    /// next batch, with no new reading.
+    stills_pending: bool,
 }
 
 /// A key of where the page's boxes are: it changes when its layout moves.
@@ -631,8 +635,10 @@ impl Worker<'_> {
             .collect();
         candidates.sort_by(|a, b| (a.rect.y - view).abs().total_cmp(&(b.rect.y - view).abs()));
         let mut wanted = Vec::new();
+        self.stills_pending = false;
         for m in candidates {
             if wanted.len() == STILLS_PER_READ {
+                self.stills_pending = true;
                 break;
             }
             if self.engine.image_ready(TabId(0), m.node).unwrap_or(true) {
@@ -725,6 +731,8 @@ impl Worker<'_> {
     /// soon.
     fn scroll(&mut self, action: PageAction) -> std::io::Result<()> {
         self.engine.act(TabId(0), &action)?;
+        // Pictures near the new view, loaded already, are captured first.
+        self.stills_pending = true;
         if let Ok(metrics) = self.engine.metrics(TabId(0)) {
             let read = self.page.as_ref().map_or(0.0, |p| p.height);
             if metrics.content_height > read + 1.0 {
@@ -1068,6 +1076,7 @@ fn run(
         live: HashMap::new(),
         appended: HashSet::new(),
         settle: None,
+        stills_pending: false,
     };
     let mut live_due = false;
     // Read once at the start, then whenever something says to.
@@ -1142,6 +1151,8 @@ fn run(
             // The isolated world debounced it already: read the logs now.
             live_due = false;
             worker.read_live();
+        } else if worker.stills_pending {
+            worker.capture_stills();
         }
     }
 }
