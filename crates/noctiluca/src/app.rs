@@ -120,10 +120,16 @@ pub struct Browser {
     tab: Signal<Tab>,
     waiting: Signal<HashMap<u64, Then>>,
     controls: Signal<HashMap<NodeId, Rc<WebControl>>>,
+    /// Whether the start page shows: started with no address, until the
+    /// first page is opened ([`crate::start`]).
+    pub start: Signal<bool>,
 }
 
 impl Browser {
     fn send(&self, command: Command) -> u64 {
+        if matches!(command, Command::Open(_) | Command::History(_)) && self.start.get_untracked() {
+            self.start.set(false);
+        }
         self.tab.with_untracked(|t| t.send(command))
     }
 
@@ -2064,6 +2070,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         view,
         images,
     } = options;
+    let start_page = url.is_none() && config.home.is_none();
     let start = url
         .or_else(|| config.home.clone())
         .unwrap_or_else(|| "about:blank".into());
@@ -2168,6 +2175,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             videos: signal(Rc::new(HashMap::new())),
             pacing: signal(Rc::new(RefCell::new(pacing))),
             regions_sent: signal((Vec::new(), Vec::new())),
+            start: signal(false),
         };
         spawn_stream(move |stream| {
             let proxy = stream.proxy().clone();
@@ -2190,6 +2198,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             },
         );
         b.send(Command::Open(start.clone()));
+        b.start.set(start_page);
         // The tab hears which video regions the view shows, so only those
         // get frames.
         watch(move || regions_on_screen(b), move |_, _| send_regions(b));
@@ -2211,8 +2220,20 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                 _ => projection_view(b),
             },
         )
-        .flex(1);
-        let mut root = column([address, body, status]);
+        .flex(1)
+        .hidden_when(move || b.start.get());
+        let start = crate::start::page(crate::start::StartPage {
+            keymap: keymap.clone(),
+            bookmarks: b.bookmarks,
+            open: Rc::new(move |url, _| {
+                b.send(Command::Open(url));
+            }),
+            about: Rc::new(move |cx| run(b, "about", cx)),
+            chrome_rows: CHROME_ROWS,
+        })
+        .flex(1)
+        .shown_when(move || b.start.get());
+        let mut root = column([address, start, body, status]);
         for action in ACTIONS {
             let Some((keys, sequence)) = actions::keys_of(&keymap, action.id) else {
                 continue;

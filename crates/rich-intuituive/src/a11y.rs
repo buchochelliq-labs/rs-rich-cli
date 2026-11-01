@@ -365,8 +365,28 @@ pub(crate) fn screen_text(screen: &Screen, rect: Rect, hidden: &[Rect]) -> Strin
 /// `screen-reader`, or `NO_COLOR` is set. Animations that honour it
 /// ([`banner::Play`](crate::banner::Play)) hold their still final frame
 /// instead; text mode ([`text_mode`]) holds them still too.
+/// [`set_motion`] overrides it for the process.
 pub fn motion_allowed() -> bool {
-    motion_allowed_in(&rich_ext::capabilities::SystemEnvironment)
+    match MOTION.load(std::sync::atomic::Ordering::Relaxed) {
+        1 => true,
+        2 => false,
+        _ => motion_allowed_in(&rich_ext::capabilities::SystemEnvironment),
+    }
+}
+
+/// What [`set_motion`] set: 0 none, 1 on, 2 off.
+static MOTION: std::sync::atomic::AtomicU8 = std::sync::atomic::AtomicU8::new(0);
+
+/// Override [`motion_allowed`] for the whole process (`None`: ask the
+/// environment again): for tests and recordings that must move, or must
+/// hold still, whatever the machine's variables say.
+pub fn set_motion(on: Option<bool>) {
+    let value = match on {
+        None => 0,
+        Some(true) => 1,
+        Some(false) => 2,
+    };
+    MOTION.store(value, std::sync::atomic::Ordering::Relaxed);
 }
 
 /// [`motion_allowed`] for the variables of `env`.
