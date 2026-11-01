@@ -1,4 +1,4 @@
- NOCTILUCA   PROJECTION + SIXEL   ◀▶   The bloom from the air - Fixture Video
+ NOCTILUCA   PROJECTION + SIXEL   ◀ ▶ ↻   The bloom from the air - Fixture Video
  file:///noctiluca/fixtures/media-grid.html
  Fixture Video  Search videos [_]      [Search]                                                    ┃
                                                                                                    ┃

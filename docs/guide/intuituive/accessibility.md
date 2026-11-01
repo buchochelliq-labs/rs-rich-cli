@@ -172,3 +172,12 @@ mode:
 | Text mode | Linear mode |
 |---|---|
 | ![Blank boxes, no colour, > on the selected items](../../media/tapes/access/text-mode.png) | ![The app as lines of text, the focus moving as →](../../media/tapes/access/linear.png) |
+
+## Reduced motion
+
+`a11y::motion_allowed()` (0.0.24) is whether animations may move:
+`RICH_ANIMATION` when set (`0` or `1`), else not when `RICH_A11Y` names
+`reduced-motion`, `no-animation` or `screen-reader`, or `NO_COLOR` is set.
+The [animated banner](timers.md#an-animated-banner) honours it and holds
+its still frame; a widget of your own can ask it too.
+`a11y::set_motion(Some(on))` overrides it for the process.

@@ -91,6 +91,7 @@ gets a short label of home-row letters. Type a label to use it:
 - a field, a select or a slider gets its widget: focused in reader mode,
   or in a box over the page in the projection (Esc closes the box).
 
+A click with the mouse on a link or a control does the same as its label.
 Backspace takes back a letter, and Esc puts the hints away. A letter that
 starts no label puts them away too, and says so.
 

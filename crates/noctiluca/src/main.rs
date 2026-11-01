@@ -245,6 +245,9 @@ fn browse(args: Args) -> std::io::Result<()> {
             images: args.images,
         },
     )
+    // `--no-mouse`: never captured; else captured full-screen, intuiTUIve's
+    // rule (a drag over text still selects and copies it).
+    .mouse(args.no_mouse.then_some(false))
     .run()
 }
 

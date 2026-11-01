@@ -64,6 +64,20 @@ impl Line {
     }
 }
 
+/// The control the cell at `column` of `line` belongs to, if any: what a
+/// click there uses.
+pub fn control_at(line: &Line, column: usize) -> Option<usize> {
+    let mut at = 0;
+    for span in &line.spans {
+        let width = cell_len(&span.text);
+        if column < at + width {
+            return span.control;
+        }
+        at += width;
+    }
+    None
+}
+
 /// What the views are asked to mark.
 #[derive(Clone, Debug, Default)]
 pub struct Marks {

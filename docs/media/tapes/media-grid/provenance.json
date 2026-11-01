@@ -1,9 +1,9 @@
 {
   "tape": "docs/tapes/media-grid.tape",
   "tape_fnv1a64": "c35452b03053fdd0",
-  "recorder": "rs-rich-record 0.0.11",
+  "recorder": "rs-rich-record 0.0.12",
   "rich": null,
-  "commit": "ef9235a0e50b6521c03d46649e70bb9df83bd2b0",
+  "commit": "27f3ec95b5df6c327dbe5996022524981f5a0788",
   "screenshots": [
     "watch",
     "playing",

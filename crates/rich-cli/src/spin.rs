@@ -195,7 +195,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
 
 /// Whether animation may run: `RICH_ANIMATION` when set, else not when
 /// `RICH_A11Y` asks for reduced motion, no animation or a screen reader.
-fn animation_allowed(env: &dyn Environment) -> bool {
+pub(super) fn animation_allowed(env: &dyn Environment) -> bool {
     if let Some(on) = env
         .var("RICH_ANIMATION")
         .and_then(|value| rich_ext::capabilities::parse_bool(&value))

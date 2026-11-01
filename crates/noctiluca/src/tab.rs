@@ -24,8 +24,9 @@
 //!   published again with them.
 //! - **Frames**: while a video plays in a region the view shows, the
 //!   screencast runs and each playing region's frames are cut from it
-//!   ([`crate::video`]), at most eight a second, or as the app's pacing
-//!   asks ([`Command::Regions`]). A video's still is its poster.
+//!   ([`crate::video`]), at most thirty a second, or as the app's pacing
+//!   asks ([`Command::Regions`]), each when its slot comes, at the scale
+//!   the regions are drawn in. A video's still is its poster.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -56,6 +57,9 @@ const PLAYBACK: Duration = Duration::from_millis(500);
 /// How long without a screencast frame before playing regions are
 /// captured on their own.
 const QUIET: Duration = Duration::from_millis(400);
+/// How often the tab looks for the browser's next frame while one is due
+/// and has not come.
+const FRAME_POLL: Duration = Duration::from_millis(3);
 
 /// What an action does to its control.
 #[derive(Clone, Debug, PartialEq)]
@@ -113,11 +117,14 @@ pub enum Command {
     Resize(u16, u16),
     /// Read the page again now.
     Refresh,
-    /// The media regions the view shows now, and how long the app's pacing
-    /// wants between two frames of each (none: [`crate::video::MAX_FPS`]).
+    /// The media regions the view shows now, how long the app's pacing
+    /// wants between two frames of each (none: [`crate::video::MAX_FPS`]),
+    /// and the screencast's scale: the fraction of the page's pixels the
+    /// regions are drawn in (character art needs two pixels a cell).
     Regions {
         on_screen: Vec<NodeId>,
         intervals: Vec<(NodeId, Duration)>,
+        scale: f64,
     },
 }
 
@@ -367,6 +374,12 @@ struct Worker<'a> {
     intervals: HashMap<NodeId, Duration>,
     /// When the last screencast frame came.
     last_frame: Option<Instant>,
+    /// A frame was due and the browser had none yet: look again soon.
+    starved: bool,
+    /// The screencast's scale the app asks for, and the one the engine
+    /// was last given.
+    scale: f64,
+    scale_given: f64,
     /// A paused region's time when its frame was last taken: a seek while
     /// paused takes one more.
     shown_time: HashMap<NodeId, f64>,
@@ -705,6 +718,11 @@ impl Worker<'_> {
         let regions = self.regions();
         let now = Instant::now();
         let plan = self.frames.plan(&regions, now);
+        // The scale first, so the screencast starts at it.
+        if self.scale != self.scale_given && (self.frames.on || plan.screencast == Some(true)) {
+            self.scale_given = self.scale;
+            let _ = self.engine.set_screencast_scale(TabId(0), self.scale);
+        }
         if let Some(on) = plan.screencast {
             let _ = self.engine.set_screencast(TabId(0), on);
             self.last_frame = on.then_some(now);
@@ -725,7 +743,8 @@ impl Worker<'_> {
         let quiet = self
             .last_frame
             .is_none_or(|at| now.duration_since(at) >= QUIET);
-        if frame.is_none() && !quiet {
+        self.starved = frame.is_none() && !quiet;
+        if self.starved {
             return;
         }
         let (cut, missing) = self.frames.cut(&regions, frame.as_ref(), now);
@@ -749,6 +768,22 @@ impl Worker<'_> {
         } else {
             self.capture_regions(&missing, now);
         }
+    }
+
+    /// How long the tab may wait for a command before it looks at its
+    /// engine again: until the next video frame is due (so frames are
+    /// taken on their slots, not on the tick after), a moment while a due
+    /// frame has not come, else the tick.
+    fn wait(&self) -> Duration {
+        if !self.frames.on {
+            return TICK;
+        }
+        if self.starved {
+            return FRAME_POLL;
+        }
+        self.frames
+            .next_due(&self.regions(), Instant::now())
+            .map_or(TICK, |due| due.min(TICK))
     }
 
     /// Frames of regions taken with a capture of each.
@@ -823,9 +858,11 @@ impl Worker<'_> {
             Command::Regions {
                 on_screen,
                 intervals,
+                scale,
             } => {
                 self.on_screen = on_screen.into_iter().collect();
                 self.intervals = intervals.into_iter().collect();
+                self.scale = scale;
                 Ok(())
             }
 
@@ -982,6 +1019,9 @@ fn run(
         on_screen: HashSet::new(),
         intervals: HashMap::new(),
         last_frame: None,
+        starved: false,
+        scale: 1.0,
+        scale_given: 1.0,
         shown_time: HashMap::new(),
         live: HashMap::new(),
         appended: HashSet::new(),
@@ -994,7 +1034,7 @@ fn run(
         if stop.load(Ordering::SeqCst) {
             return;
         }
-        match commands.recv_timeout(TICK) {
+        match commands.recv_timeout(worker.wait()) {
             Ok((id, command)) => {
                 let acts = matches!(
                     command,

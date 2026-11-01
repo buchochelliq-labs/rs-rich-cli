@@ -144,6 +144,9 @@ pub trait intuituive::a11y::Announcer
 pub fn intuituive::a11y::Announcer::announce(&mut self, &intuituive::a11y::Announcement)
 impl<F: core::ops::function::FnMut(&intuituive::a11y::Announcement)> intuituive::a11y::Announcer for F
 pub fn F::announce(&mut self, &intuituive::a11y::Announcement)
+pub fn intuituive::a11y::motion_allowed() -> bool
+pub fn intuituive::a11y::motion_allowed_in(&dyn rich_ext::capabilities::Environment) -> bool
+pub fn intuituive::a11y::set_motion(core::option::Option<bool>)
 pub fn intuituive::a11y::text_mode() -> bool
 pub mod intuituive::app
 pub enum intuituive::app::Anchor
@@ -345,11 +348,15 @@ impl intuituive::app::Driver
 pub fn intuituive::app::Driver::accessibility(&self) -> alloc::vec::Vec<intuituive::a11y::AccessNode>
 pub fn intuituive::app::Driver::advance(&mut self, core::time::Duration)
 pub fn intuituive::app::Driver::assert_focused(&self, &str)
+pub fn intuituive::app::Driver::button(&mut self, rich_interact::event::Button, u16, u16)
 pub fn intuituive::app::Driver::check_focused(&self, &str) -> core::result::Result<(), alloc::string::String>
+pub fn intuituive::app::Driver::click(&mut self, u16, u16)
+pub fn intuituive::app::Driver::click_text(&mut self, &str) -> bool
 pub fn intuituive::app::Driver::copied(&mut self, &str)
 pub fn intuituive::app::Driver::cursor(&self) -> core::option::Option<(u16, u16)>
 pub fn intuituive::app::Driver::damage_since(&self, u64) -> core::option::Option<alloc::vec::Vec<rich_ext::surface::screen::Rect>>
 pub fn intuituive::app::Driver::event(&mut self, rich_interact::event::Event)
+pub fn intuituive::app::Driver::find_text(&self, &str) -> core::option::Option<(u16, u16)>
 pub fn intuituive::app::Driver::finish(self) -> alloc::string::String
 pub fn intuituive::app::Driver::focused(&self) -> core::option::Option<intuituive::reactive::NodeId>
 pub fn intuituive::app::Driver::focused_name(&self) -> core::option::Option<alloc::string::String>
@@ -383,6 +390,7 @@ pub fn intuituive::app::Driver::take_printed(&mut self) -> alloc::vec::Vec<alloc
 pub fn intuituive::app::Driver::timeout(&self, core::time::Duration) -> core::time::Duration
 pub fn intuituive::app::Driver::type_text(&mut self, &str)
 pub fn intuituive::app::Driver::update(&mut self, core::time::Duration)
+pub fn intuituive::app::Driver::wheel(&mut self, u16, u16, i32)
 impl intuituive::testing::ScreenRows for intuituive::app::Driver
 pub fn intuituive::app::Driver::plain_rows(&self) -> alloc::vec::Vec<alloc::string::String>
 impl intuituive::testing::StyledRows for intuituive::app::Driver
@@ -1042,6 +1050,31 @@ pub fn intuituive::audio::record(intuituive::reactive::Signal<core::option::Opti
 pub fn intuituive::audio::wav(impl core::convert::AsRef<std::path::Path>, usize) -> core::result::Result<intuituive::audio::Wav, intuituive::audio::AudioError>
 pub fn intuituive::audio::wav_writer(impl core::convert::AsRef<std::path::Path>, u32, u16) -> core::result::Result<intuituive::audio::WavWriter, intuituive::audio::AudioError>
 pub type intuituive::audio::Matrix = alloc::vec::Vec<alloc::vec::Vec<f64>>
+pub mod intuituive::banner
+pub struct intuituive::banner::Play(_)
+impl intuituive::banner::Play
+pub fn intuituive::banner::Play::duration(&self) -> core::time::Duration
+pub fn intuituive::banner::Play::elapsed(&self) -> core::time::Duration
+pub fn intuituive::banner::Play::is_still(&self) -> bool
+pub fn intuituive::banner::Play::looping(self, bool) -> intuituive::banner::Play
+pub fn intuituive::banner::Play::motion(self, bool) -> intuituive::banner::Play
+pub fn intuituive::banner::Play::new(core::time::Duration) -> intuituive::banner::Play
+pub fn intuituive::banner::Play::progress(&self) -> f64
+pub fn intuituive::banner::Play::restart(&self)
+pub fn intuituive::banner::Play::skip(&self)
+pub fn intuituive::banner::Play::skip_on_key(&self, intuituive::node::Node) -> intuituive::node::Node
+impl core::clone::Clone for intuituive::banner::Play
+pub fn intuituive::banner::Play::clone(&self) -> intuituive::banner::Play
+impl core::marker::Freeze for intuituive::banner::Play
+impl !core::marker::Send for intuituive::banner::Play
+impl !core::marker::Sync for intuituive::banner::Play
+impl core::marker::Unpin for intuituive::banner::Play
+impl core::marker::UnsafeUnpin for intuituive::banner::Play
+impl !core::panic::unwind_safe::RefUnwindSafe for intuituive::banner::Play
+impl !core::panic::unwind_safe::UnwindSafe for intuituive::banner::Play
+pub const intuituive::banner::FRAME: core::time::Duration
+pub const intuituive::banner::LOOP_HOLD: core::time::Duration
+pub fn intuituive::banner::banner(rich_art::animate::AnimatedBanner, intuituive::banner::Play) -> intuituive::node::Node
 pub mod intuituive::border
 #[non_exhaustive] pub enum intuituive::border::Border
 pub intuituive::border::Border::Ascii
@@ -2897,6 +2930,7 @@ pub fn intuituive::node::Node::no_wrap(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_blur(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_cancel(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_click(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::on_click_at(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx, u16, u16) -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_drop<T: 'static>(self, impl core::ops::function::FnMut(&T, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_focus(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_key(self, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
@@ -4176,6 +4210,7 @@ pub fn intuituive::node::Node::no_wrap(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_blur(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_cancel(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_click(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::on_click_at(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx, u16, u16) -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_drop<T: 'static>(self, impl core::ops::function::FnMut(&T, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_focus(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_key(self, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
@@ -7658,11 +7693,15 @@ impl intuituive::app::Driver
 pub fn intuituive::app::Driver::accessibility(&self) -> alloc::vec::Vec<intuituive::a11y::AccessNode>
 pub fn intuituive::app::Driver::advance(&mut self, core::time::Duration)
 pub fn intuituive::app::Driver::assert_focused(&self, &str)
+pub fn intuituive::app::Driver::button(&mut self, rich_interact::event::Button, u16, u16)
 pub fn intuituive::app::Driver::check_focused(&self, &str) -> core::result::Result<(), alloc::string::String>
+pub fn intuituive::app::Driver::click(&mut self, u16, u16)
+pub fn intuituive::app::Driver::click_text(&mut self, &str) -> bool
 pub fn intuituive::app::Driver::copied(&mut self, &str)
 pub fn intuituive::app::Driver::cursor(&self) -> core::option::Option<(u16, u16)>
 pub fn intuituive::app::Driver::damage_since(&self, u64) -> core::option::Option<alloc::vec::Vec<rich_ext::surface::screen::Rect>>
 pub fn intuituive::app::Driver::event(&mut self, rich_interact::event::Event)
+pub fn intuituive::app::Driver::find_text(&self, &str) -> core::option::Option<(u16, u16)>
 pub fn intuituive::app::Driver::finish(self) -> alloc::string::String
 pub fn intuituive::app::Driver::focused(&self) -> core::option::Option<intuituive::reactive::NodeId>
 pub fn intuituive::app::Driver::focused_name(&self) -> core::option::Option<alloc::string::String>
@@ -7696,6 +7735,7 @@ pub fn intuituive::app::Driver::take_printed(&mut self) -> alloc::vec::Vec<alloc
 pub fn intuituive::app::Driver::timeout(&self, core::time::Duration) -> core::time::Duration
 pub fn intuituive::app::Driver::type_text(&mut self, &str)
 pub fn intuituive::app::Driver::update(&mut self, core::time::Duration)
+pub fn intuituive::app::Driver::wheel(&mut self, u16, u16, i32)
 impl intuituive::testing::ScreenRows for intuituive::app::Driver
 pub fn intuituive::app::Driver::plain_rows(&self) -> alloc::vec::Vec<alloc::string::String>
 impl intuituive::testing::StyledRows for intuituive::app::Driver
@@ -8238,6 +8278,7 @@ pub fn intuituive::node::Node::no_wrap(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_blur(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_cancel(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_click(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::on_click_at(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx, u16, u16) -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_drop<T: 'static>(self, impl core::ops::function::FnMut(&T, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_focus(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_key(self, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node

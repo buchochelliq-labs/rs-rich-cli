@@ -182,6 +182,7 @@ pub noctiluca::app::Browser::message: intuituive::reactive::Signal<alloc::string
 pub noctiluca::app::Browser::page: intuituive::reactive::Signal<core::option::Option<alloc::sync::Arc<noctiluca::model::Page>>>
 pub noctiluca::app::Browser::pixels: intuituive::reactive::Memo<rich_art::picture::Pixels>
 pub noctiluca::app::Browser::scroll: intuituive::reactive::Signal<u64>
+pub noctiluca::app::Browser::start: intuituive::reactive::Signal<bool>
 pub noctiluca::app::Browser::state: intuituive::reactive::Signal<rich_embed::web::PageState>
 pub noctiluca::app::Browser::videos: intuituive::reactive::Signal<alloc::rc::Rc<std::collections::hash::map::HashMap<noctiluca::engine::NodeId, noctiluca::pictures::Live>>>
 pub noctiluca::app::Browser::view: intuituive::reactive::Signal<noctiluca::config::View>
@@ -270,11 +271,13 @@ impl core::marker::UnsafeUnpin for noctiluca::app::OutputRate
 impl !core::panic::unwind_safe::RefUnwindSafe for noctiluca::app::OutputRate
 impl !core::panic::unwind_safe::UnwindSafe for noctiluca::app::OutputRate
 pub const noctiluca::app::CHROME_ROWS: u16
+pub const noctiluca::app::LOCAL_CEILING: u64
 pub fn noctiluca::app::app(alloc::boxed::Box<dyn noctiluca::engine::Engine>, noctiluca::app::Options) -> intuituive::app::App
 pub fn noctiluca::app::availability(noctiluca::app::Browser, &str) -> core::result::Result<(), alloc::string::String>
 pub fn noctiluca::app::byte_budget(noctiluca::app::Browser) -> rich_art::picture::ByteBudget
 pub fn noctiluca::app::current_log(noctiluca::app::Browser) -> core::option::Option<(noctiluca::engine::NodeId, usize)>
 pub fn noctiluca::app::current_media(noctiluca::app::Browser) -> core::option::Option<(noctiluca::engine::NodeId, noctiluca::engine::Playback)>
+pub fn noctiluca::app::measured_budget(u64, u64, bool) -> u64
 pub fn noctiluca::app::overlay_actions(noctiluca::app::Browser) -> alloc::vec::Vec<intuituive::actions::Action>
 pub fn noctiluca::app::run(noctiluca::app::Browser, &str, &mut intuituive::app::Ctx)
 pub mod noctiluca::args
@@ -330,6 +333,7 @@ pub noctiluca::args::Args::fps: core::option::Option<u32>
 pub noctiluca::args::Args::images: core::option::Option<noctiluca::config::Images>
 pub noctiluca::args::Args::no_adapt: bool
 pub noctiluca::args::Args::no_js: bool
+pub noctiluca::args::Args::no_mouse: bool
 pub noctiluca::args::Args::profile: core::option::Option<alloc::string::String>
 pub noctiluca::args::Args::target: alloc::vec::Vec<alloc::string::String>
 pub noctiluca::args::Args::view: core::option::Option<noctiluca::config::View>
@@ -356,6 +360,7 @@ pub fn noctiluca::args::parse_args(&[alloc::string::String]) -> core::result::Re
 pub mod noctiluca::bars
 pub fn noctiluca::bars::clock(f64) -> alloc::string::String
 pub fn noctiluca::bars::header(noctiluca::app::Browser) -> intuituive::node::Node
+pub fn noctiluca::bars::header_button(noctiluca::app::Browser, usize) -> core::option::Option<&'static str>
 pub fn noctiluca::bars::media_state(&noctiluca::engine::Playback) -> alloc::string::String
 pub fn noctiluca::bars::pixels_name(noctiluca::config::Images, rich_art::picture::Pixels) -> alloc::string::String
 pub fn noctiluca::bars::status(noctiluca::app::Browser) -> intuituive::node::Node
@@ -429,6 +434,7 @@ pub fn noctiluca::cdp::ChromeBackend::resize(&mut self, u16, u16) -> std::io::er
 pub fn noctiluca::cdp::ChromeBackend::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::cdp::ChromeBackend::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 pub fn noctiluca::cdp::ChromeBackend::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::set_screencast_scale(&mut self, noctiluca::engine::TabId, f64) -> std::io::error::Result<()>
 pub fn noctiluca::cdp::ChromeBackend::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub fn noctiluca::cdp::ChromeBackend::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
 impl core::marker::Freeze for noctiluca::cdp::ChromeBackend
@@ -1072,6 +1078,7 @@ pub fn noctiluca::engine::Engine::resize(&mut self, u16, u16) -> std::io::error:
 pub fn noctiluca::engine::Engine::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::engine::Engine::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 pub fn noctiluca::engine::Engine::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::engine::Engine::set_screencast_scale(&mut self, noctiluca::engine::TabId, f64) -> std::io::error::Result<()>
 pub fn noctiluca::engine::Engine::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub fn noctiluca::engine::Engine::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
 impl noctiluca::engine::Engine for noctiluca::cdp::ChromeBackend
@@ -1093,6 +1100,7 @@ pub fn noctiluca::cdp::ChromeBackend::resize(&mut self, u16, u16) -> std::io::er
 pub fn noctiluca::cdp::ChromeBackend::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::cdp::ChromeBackend::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 pub fn noctiluca::cdp::ChromeBackend::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::cdp::ChromeBackend::set_screencast_scale(&mut self, noctiluca::engine::TabId, f64) -> std::io::error::Result<()>
 pub fn noctiluca::cdp::ChromeBackend::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub fn noctiluca::cdp::ChromeBackend::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
 impl noctiluca::engine::Engine for noctiluca::testing::FakeEngine
@@ -1114,6 +1122,7 @@ pub fn noctiluca::testing::FakeEngine::resize(&mut self, u16, u16) -> std::io::e
 pub fn noctiluca::testing::FakeEngine::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::testing::FakeEngine::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 pub fn noctiluca::testing::FakeEngine::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::set_screencast_scale(&mut self, noctiluca::engine::TabId, f64) -> std::io::error::Result<()>
 pub fn noctiluca::testing::FakeEngine::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub fn noctiluca::testing::FakeEngine::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
 pub type noctiluca::engine::NodeId = i64
@@ -1287,6 +1296,7 @@ impl core::marker::Unpin for noctiluca::layout::Span
 impl core::marker::UnsafeUnpin for noctiluca::layout::Span
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::layout::Span
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::layout::Span
+pub fn noctiluca::layout::control_at(&noctiluca::layout::Line, usize) -> core::option::Option<usize>
 pub fn noctiluca::layout::face(&noctiluca::model::Control) -> alloc::string::String
 pub fn noctiluca::layout::face_in(&noctiluca::model::Control, noctiluca::adapt::Adapt, usize) -> alloc::string::String
 pub fn noctiluca::layout::hint_labels(usize) -> alloc::vec::Vec<alloc::string::String>
@@ -1857,6 +1867,55 @@ pub fn noctiluca::pictures::on_backdrop(alloc::vec::Vec<rich::segment::Segment>,
 pub fn noctiluca::pictures::pixels(noctiluca::config::Images) -> rich_art::picture::Pixels
 pub fn noctiluca::pictures::splice(&rich::console::Console, &noctiluca::pictures::Cells, alloc::vec::Vec<rich::segment::Segment>, usize, usize, &[noctiluca::layout::Region], impl core::ops::function::Fn(&noctiluca::layout::Region) -> core::option::Option<(rich_art::picture::Picture, rich_art::picture::Pixels)>) -> alloc::vec::Vec<rich::segment::Segment>
 pub fn noctiluca::pictures::view(rich_art::picture::Pixels) -> rich_art::picture::ImageView
+pub mod noctiluca::start
+pub enum noctiluca::start::FishPlace
+pub noctiluca::start::FishPlace::Above
+pub noctiluca::start::FishPlace::Beside
+pub noctiluca::start::FishPlace::None
+impl core::clone::Clone for noctiluca::start::FishPlace
+pub fn noctiluca::start::FishPlace::clone(&self) -> noctiluca::start::FishPlace
+impl core::cmp::Eq for noctiluca::start::FishPlace
+impl core::cmp::PartialEq for noctiluca::start::FishPlace
+pub fn noctiluca::start::FishPlace::eq(&self, &noctiluca::start::FishPlace) -> bool
+impl core::fmt::Debug for noctiluca::start::FishPlace
+pub fn noctiluca::start::FishPlace::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for noctiluca::start::FishPlace
+pub fn noctiluca::start::FishPlace::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for noctiluca::start::FishPlace
+impl core::marker::StructuralPartialEq for noctiluca::start::FishPlace
+impl core::marker::Freeze for noctiluca::start::FishPlace
+impl core::marker::Send for noctiluca::start::FishPlace
+impl core::marker::Sync for noctiluca::start::FishPlace
+impl core::marker::Unpin for noctiluca::start::FishPlace
+impl core::marker::UnsafeUnpin for noctiluca::start::FishPlace
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::start::FishPlace
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::start::FishPlace
+pub struct noctiluca::start::StartPage
+pub noctiluca::start::StartPage::about: alloc::rc::Rc<dyn core::ops::function::Fn(&mut intuituive::app::Ctx)>
+pub noctiluca::start::StartPage::bookmarks: intuituive::reactive::Signal<noctiluca::bookmarks::Bookmarks>
+pub noctiluca::start::StartPage::chrome_rows: u16
+pub noctiluca::start::StartPage::keymap: rich_interact::keymap::Keymap
+pub noctiluca::start::StartPage::open: noctiluca::start::Opener
+impl core::clone::Clone for noctiluca::start::StartPage
+pub fn noctiluca::start::StartPage::clone(&self) -> noctiluca::start::StartPage
+impl core::marker::Freeze for noctiluca::start::StartPage
+impl !core::marker::Send for noctiluca::start::StartPage
+impl !core::marker::Sync for noctiluca::start::StartPage
+impl core::marker::Unpin for noctiluca::start::StartPage
+impl core::marker::UnsafeUnpin for noctiluca::start::StartPage
+impl !core::panic::unwind_safe::RefUnwindSafe for noctiluca::start::StartPage
+impl !core::panic::unwind_safe::UnwindSafe for noctiluca::start::StartPage
+pub const noctiluca::start::FISH_CELLS: (u16, u16)
+pub const noctiluca::start::FISH_NAME: &str
+pub const noctiluca::start::LANTERNFISH: &str
+pub const noctiluca::start::TAGLINE: &str
+pub const noctiluca::start::TITLE: &str
+pub fn noctiluca::start::duration() -> core::time::Duration
+pub fn noctiluca::start::fish_place(u16, u16, (u16, u16)) -> noctiluca::start::FishPlace
+pub fn noctiluca::start::lanternfish(f64) -> intuituive::pixels::PixelSprite
+pub fn noctiluca::start::leaves(&noctiluca::tab::Command) -> bool
+pub fn noctiluca::start::page(noctiluca::start::StartPage) -> intuituive::node::Node
+pub type noctiluca::start::Opener = alloc::rc::Rc<dyn core::ops::function::Fn(alloc::string::String, &mut intuituive::app::Ctx)>
 pub mod noctiluca::tab
 pub enum noctiluca::tab::Command
 pub noctiluca::tab::Command::Act
@@ -1877,6 +1936,7 @@ pub noctiluca::tab::Command::Refresh
 pub noctiluca::tab::Command::Regions
 pub noctiluca::tab::Command::Regions::intervals: alloc::vec::Vec<(noctiluca::engine::NodeId, core::time::Duration)>
 pub noctiluca::tab::Command::Regions::on_screen: alloc::vec::Vec<noctiluca::engine::NodeId>
+pub noctiluca::tab::Command::Regions::scale: f64
 pub noctiluca::tab::Command::Resize(u16, u16)
 pub noctiluca::tab::Command::Scroll(f64)
 pub noctiluca::tab::Command::Wheel(f64)
@@ -2012,6 +2072,7 @@ pub fn noctiluca::testing::FakeEngine::resize(&mut self, u16, u16) -> std::io::e
 pub fn noctiluca::testing::FakeEngine::resource(&mut self, noctiluca::engine::TabId, &str) -> std::io::error::Result<alloc::vec::Vec<u8>>
 pub fn noctiluca::testing::FakeEngine::screencast_frame(&mut self, noctiluca::engine::TabId) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 pub fn noctiluca::testing::FakeEngine::set_screencast(&mut self, noctiluca::engine::TabId, bool) -> std::io::error::Result<()>
+pub fn noctiluca::testing::FakeEngine::set_screencast_scale(&mut self, noctiluca::engine::TabId, f64) -> std::io::error::Result<()>
 pub fn noctiluca::testing::FakeEngine::snapshot(&mut self, noctiluca::engine::TabId) -> std::io::error::Result<noctiluca::engine::PageSnapshot>
 pub fn noctiluca::testing::FakeEngine::state(&self, noctiluca::engine::TabId) -> rich_embed::web::PageState
 impl core::marker::Freeze for noctiluca::testing::FakeEngine
@@ -2037,6 +2098,7 @@ pub noctiluca::testing::FakeState::recorded: core::option::Option<std::path::Pat
 pub noctiluca::testing::FakeState::resource_root: core::option::Option<std::path::PathBuf>
 pub noctiluca::testing::FakeState::resources: std::collections::hash::map::HashMap<alloc::string::String, alloc::vec::Vec<u8>>
 pub noctiluca::testing::FakeState::screencast: bool
+pub noctiluca::testing::FakeState::screencast_scale: f64
 pub noctiluca::testing::FakeState::scroll_y: f64
 pub noctiluca::testing::FakeState::viewport_height: f64
 pub noctiluca::testing::FakeState::viewport_width: f64
@@ -2070,10 +2132,26 @@ pub fn noctiluca::url::looks_like_address(&str) -> bool
 pub fn noctiluca::url::resolve(&str, &str) -> alloc::string::String
 pub fn noctiluca::url::scheme(&str) -> core::option::Option<&str>
 pub mod noctiluca::video
+pub struct noctiluca::video::Encoder
+impl noctiluca::video::Encoder
+pub fn noctiluca::video::Encoder::encode(&self, noctiluca::video::Job)
+pub fn noctiluca::video::Encoder::spawn(impl core::ops::function::Fn(noctiluca::video::Job) + core::marker::Send + 'static) -> noctiluca::video::Encoder
+impl core::fmt::Debug for noctiluca::video::Encoder
+pub fn noctiluca::video::Encoder::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for noctiluca::video::Encoder
+pub fn noctiluca::video::Encoder::drop(&mut self)
+impl core::marker::Freeze for noctiluca::video::Encoder
+impl core::marker::Send for noctiluca::video::Encoder
+impl core::marker::Sync for noctiluca::video::Encoder
+impl core::marker::Unpin for noctiluca::video::Encoder
+impl core::marker::UnsafeUnpin for noctiluca::video::Encoder
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::video::Encoder
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::video::Encoder
 pub struct noctiluca::video::Frames
 pub noctiluca::video::Frames::on: bool
 impl noctiluca::video::Frames
 pub fn noctiluca::video::Frames::cut(&mut self, &[noctiluca::video::Region], core::option::Option<&rich_embed::chrome::ScreencastFrame>, std::time::Instant) -> (alloc::vec::Vec<noctiluca::video::VideoFrame>, alloc::vec::Vec<noctiluca::video::Region>)
+pub fn noctiluca::video::Frames::next_due(&self, &[noctiluca::video::Region], std::time::Instant) -> core::option::Option<core::time::Duration>
 pub fn noctiluca::video::Frames::plan(&mut self, &[noctiluca::video::Region], std::time::Instant) -> noctiluca::video::Plan
 pub fn noctiluca::video::Frames::stamp(&mut self, noctiluca::engine::NodeId, rich_embed::pixels::Pixels, std::time::Instant) -> noctiluca::video::VideoFrame
 impl core::default::Default for noctiluca::video::Frames
@@ -2087,6 +2165,23 @@ impl core::marker::Unpin for noctiluca::video::Frames
 impl core::marker::UnsafeUnpin for noctiluca::video::Frames
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::video::Frames
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::video::Frames
+pub struct noctiluca::video::Job
+pub noctiluca::video::Job::cols: usize
+pub noctiluca::video::Job::node: noctiluca::engine::NodeId
+pub noctiluca::video::Job::picture: rich_art::picture::Picture
+pub noctiluca::video::Job::pixels: rich_art::picture::Pixels
+pub noctiluca::video::Job::rows: usize
+impl core::clone::Clone for noctiluca::video::Job
+pub fn noctiluca::video::Job::clone(&self) -> noctiluca::video::Job
+impl core::fmt::Debug for noctiluca::video::Job
+pub fn noctiluca::video::Job::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for noctiluca::video::Job
+impl core::marker::Send for noctiluca::video::Job
+impl core::marker::Sync for noctiluca::video::Job
+impl core::marker::Unpin for noctiluca::video::Job
+impl core::marker::UnsafeUnpin for noctiluca::video::Job
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::video::Job
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::video::Job
 pub struct noctiluca::video::Pacing
 pub noctiluca::video::Pacing::budget: rich_art::picture::ByteBudget
 pub noctiluca::video::Pacing::others: usize
@@ -2095,6 +2190,7 @@ impl noctiluca::video::Pacing
 pub fn noctiluca::video::Pacing::cap(&self) -> f64
 pub fn noctiluca::video::Pacing::clear(&mut self)
 pub fn noctiluca::video::Pacing::forget(&mut self, noctiluca::engine::NodeId)
+pub fn noctiluca::video::Pacing::has(&self, noctiluca::engine::NodeId) -> bool
 pub fn noctiluca::video::Pacing::intervals(&self) -> alloc::vec::Vec<(noctiluca::engine::NodeId, core::time::Duration)>
 pub fn noctiluca::video::Pacing::moving(&self) -> usize
 pub fn noctiluca::video::Pacing::new(rich_art::picture::ByteBudget, rich_art::picture::Pixels) -> noctiluca::video::Pacing

@@ -1,4 +1,4 @@
- NOCTILUCA   PROJECTION + SIXEL   ◀▶   Stream with log
+ NOCTILUCA   PROJECTION + SIXEL   ◀ ▶ ↻   Stream with log
  file:///noctiluca/fixtures/stream-with-log.html
        Lanternfish Lab
  ▄▀▀▀▄

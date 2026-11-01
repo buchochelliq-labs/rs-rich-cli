@@ -636,8 +636,15 @@ rate instead of `ByteBudget::guess`.
   (`ScreencastFrame::crop`). A region Chrome's viewport does not hold is
   captured on its own; a paused region whose time moved (a seek) gets one
   new frame.
-- **The frame budget.** Frames are cut at most eight a second a region,
-  or as the pacing asks. The app runs one rs-rich-art `Pacer` per region
+- **The frame budget.** Frames are cut at most thirty a second a region
+  (`video::MAX_FPS`), or as the pacing asks, on even slots a frame apart:
+  the tab sleeps until the next is due (`Frames::next_due`) instead of
+  polling on a tick, and the pacers keep to slots too, so a frame a few
+  milliseconds early is not dropped for a whole frame more. The pixel
+  protocols' escapes are made on `video::Encoder`'s thread, not by the
+  painter; character art asks Chrome for a scaled screencast
+  (`set_screencast_scale`); on demand, rs-rich-embed keeps Chrome one
+  frame ahead of the takes. The app runs one rs-rich-art `Pacer` per region
   (`video::Pacing`): equal shares of the `ByteBudget`, paced ten percent
   under the share since a frame can cost more than the ones before it,
   each frame's cost read from the painter's `picture_bytes`, and the step
@@ -770,6 +777,27 @@ plays them.
   short label; type it to act, Shift to open in a new tab. Hints come from
   the action registry, so they follow the same availability rules.
 - **The mouse** works throughout: click, wheel, and drag-select in text.
+
+### The start page: what is generic and what is Noctiluca's (0.0.24)
+
+Started with no address and no `home`, Noctiluca shows a start page
+(`crates/noctiluca/src/start.rs`) while Chrome starts behind it. Following
+AGENTS.md's rule that core components are generic, each piece went where
+another app could reuse it, or stayed in Noctiluca when it names
+Noctiluca's own things:
+
+| Piece | Where | Why |
+|---|---|---|
+| Frames of animated FIGlet text, the effects (glow, shimmer, typewriter, fade), the wave line and seeded specks, `pulse` | rs-rich-art, `animate` | Generic: text, time and a seed in, a frame out; no terminal, usable by the CLI and any app |
+| The play clock (`Play`: once, looping, skip, skip on a key) and the `banner` node | intuiTUIve, `banner` (`art` feature) | Generic: plays any `AnimatedBanner`, and anything else can keep time with it |
+| Whether animations may move (`a11y::motion_allowed`, `set_motion`) | intuiTUIve, `a11y` | Generic: reads rs-rich's `RICH_A11Y`, `RICH_ANIMATION` and `NO_COLOR` |
+| A half-block pixel sprite, a stage, a click on a sprite | intuiTUIve, `pixels` and `sprite` (already there) | Generic, reused as is |
+| The NOCTILUCA title, the tagline, the lanternfish's art and its lure's pulse, the fish opening `about:noctiluca`, the layout and its fallbacks, the bookmarks list, the key hints | Noctiluca, `start` | Domain: Noctiluca's name, mascot, action and data |
+| `rich banner --effect`, `--wave`, `--specks`, `--loop` | rich-cli, `banner.rs` | A binary-boundary convenience composing rs-rich-art's public API |
+
+The about page opens as a box over the start page, so Esc returns to it;
+opening an address or moving in the history leaves it
+(`start::leaves`, checked in the one place commands are sent).
 
 ### Going places: shortcuts, switches and keys
 

@@ -817,10 +817,12 @@ them, and a compact comment list with small avatars.
 
 [Tape](tapes/media-grid.tape) · [Cast](media/tapes/media-grid/media-grid.cast) · [GIF](media/tapes/media-grid/media-grid.gif) · [Page](media/tapes/media-grid/media-grid.html)
 
-Three more tapes over the same saved pages show
+Four more tapes over the same saved pages show
 [forms and controls](tapes/noctiluca-forms.tape),
-[reading, find and media](tapes/noctiluca-reading.tape), and
-[keywords and site keys](tapes/noctiluca-keys.tape). One more,
+[reading, find and media](tapes/noctiluca-reading.tape),
+[keywords and site keys](tapes/noctiluca-keys.tape), and
+[the start page](tapes/noctiluca-start.tape) (0.0.24: the animated banner,
+the lanternfish and the bookmarks). One more,
 [`tapes/live/noctiluca-chrome.tape`](tapes/live/noctiluca-chrome.tape),
 runs a real Chrome on the crate's test pages, served from `127.0.0.1`. The
 tape job runs no browser, so that one is recorded by hand and not checked;

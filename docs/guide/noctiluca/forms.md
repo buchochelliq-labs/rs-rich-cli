@@ -124,8 +124,6 @@ disabled."), and nothing is sent.
 - **Choosing a file** to upload.
 - **Custom widgets** that do not say what they are in the accessibility
   tree read as text, not as controls.
-- **Clicking the page with the mouse.** A link or a control in the
-  projection is used by its link hint.
 - **Signing in** is not tested yet: a login form, and every widget through
   the same guarded commit as text fields, come in the forms and tables
   phase. See [what's next](status.md).

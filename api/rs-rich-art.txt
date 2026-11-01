@@ -1,5 +1,145 @@
 pub mod rich_art
 pub use rich_art::image
+pub mod rich_art::animate
+pub enum rich_art::animate::Effect
+pub rich_art::animate::Effect::Fade
+pub rich_art::animate::Effect::Glow
+pub rich_art::animate::Effect::Shimmer
+pub rich_art::animate::Effect::Still
+pub rich_art::animate::Effect::Typewriter
+impl rich_art::animate::Effect
+pub const rich_art::animate::Effect::ALL: [rich_art::animate::Effect; 5]
+pub fn rich_art::animate::Effect::from_name(&str) -> core::option::Option<rich_art::animate::Effect>
+pub fn rich_art::animate::Effect::name(self) -> &'static str
+impl core::clone::Clone for rich_art::animate::Effect
+pub fn rich_art::animate::Effect::clone(&self) -> rich_art::animate::Effect
+impl core::cmp::Eq for rich_art::animate::Effect
+impl core::cmp::PartialEq for rich_art::animate::Effect
+pub fn rich_art::animate::Effect::eq(&self, &rich_art::animate::Effect) -> bool
+impl core::default::Default for rich_art::animate::Effect
+pub fn rich_art::animate::Effect::default() -> rich_art::animate::Effect
+impl core::fmt::Debug for rich_art::animate::Effect
+pub fn rich_art::animate::Effect::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_art::animate::Effect
+pub fn rich_art::animate::Effect::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_art::animate::Effect
+impl core::marker::StructuralPartialEq for rich_art::animate::Effect
+impl core::marker::Freeze for rich_art::animate::Effect
+impl core::marker::Send for rich_art::animate::Effect
+impl core::marker::Sync for rich_art::animate::Effect
+impl core::marker::Unpin for rich_art::animate::Effect
+impl core::marker::UnsafeUnpin for rich_art::animate::Effect
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::animate::Effect
+impl core::panic::unwind_safe::UnwindSafe for rich_art::animate::Effect
+pub struct rich_art::animate::AnimatedBanner
+impl rich_art::animate::AnimatedBanner
+pub fn rich_art::animate::AnimatedBanner::duration(self, core::time::Duration) -> rich_art::animate::AnimatedBanner
+pub fn rich_art::animate::AnimatedBanner::duration_of(&self) -> core::time::Duration
+pub fn rich_art::animate::AnimatedBanner::effect(self, rich_art::animate::Effect) -> rich_art::animate::AnimatedBanner
+pub fn rich_art::animate::AnimatedBanner::effect_of(&self) -> rich_art::animate::Effect
+pub fn rich_art::animate::AnimatedBanner::frame(&self, core::time::Duration) -> rich_art::animate::BannerFrame
+pub fn rich_art::animate::AnimatedBanner::from_lines<S: core::convert::AsRef<str>>(impl core::iter::traits::collect::IntoIterator<Item = S>) -> rich_art::animate::AnimatedBanner
+pub fn rich_art::animate::AnimatedBanner::new(&str, &rich_art::figlet::FigletFont) -> rich_art::animate::AnimatedBanner
+pub fn rich_art::animate::AnimatedBanner::palette(self, rich_art::animate::BannerPalette) -> rich_art::animate::AnimatedBanner
+pub fn rich_art::animate::AnimatedBanner::palette_of(&self) -> rich_art::animate::BannerPalette
+pub fn rich_art::animate::AnimatedBanner::progress(&self, core::time::Duration) -> f64
+pub fn rich_art::animate::AnimatedBanner::pulse(&self, core::time::Duration) -> f64
+pub fn rich_art::animate::AnimatedBanner::seed(self, u64) -> rich_art::animate::AnimatedBanner
+pub fn rich_art::animate::AnimatedBanner::size(&self) -> (usize, usize)
+pub fn rich_art::animate::AnimatedBanner::specks(self, bool) -> rich_art::animate::AnimatedBanner
+pub fn rich_art::animate::AnimatedBanner::still(&self) -> rich_art::animate::BannerFrame
+pub fn rich_art::animate::AnimatedBanner::wave(self, bool) -> rich_art::animate::AnimatedBanner
+impl core::clone::Clone for rich_art::animate::AnimatedBanner
+pub fn rich_art::animate::AnimatedBanner::clone(&self) -> rich_art::animate::AnimatedBanner
+impl core::cmp::PartialEq for rich_art::animate::AnimatedBanner
+pub fn rich_art::animate::AnimatedBanner::eq(&self, &rich_art::animate::AnimatedBanner) -> bool
+impl core::fmt::Debug for rich_art::animate::AnimatedBanner
+pub fn rich_art::animate::AnimatedBanner::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_art::animate::AnimatedBanner
+impl core::marker::Freeze for rich_art::animate::AnimatedBanner
+impl core::marker::Send for rich_art::animate::AnimatedBanner
+impl core::marker::Sync for rich_art::animate::AnimatedBanner
+impl core::marker::Unpin for rich_art::animate::AnimatedBanner
+impl core::marker::UnsafeUnpin for rich_art::animate::AnimatedBanner
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::animate::AnimatedBanner
+impl core::panic::unwind_safe::UnwindSafe for rich_art::animate::AnimatedBanner
+pub struct rich_art::animate::BannerCell
+pub rich_art::animate::BannerCell::ch: char
+pub rich_art::animate::BannerCell::fg: core::option::Option<rich_art::animate::Rgb>
+impl core::clone::Clone for rich_art::animate::BannerCell
+pub fn rich_art::animate::BannerCell::clone(&self) -> rich_art::animate::BannerCell
+impl core::cmp::Eq for rich_art::animate::BannerCell
+impl core::cmp::PartialEq for rich_art::animate::BannerCell
+pub fn rich_art::animate::BannerCell::eq(&self, &rich_art::animate::BannerCell) -> bool
+impl core::fmt::Debug for rich_art::animate::BannerCell
+pub fn rich_art::animate::BannerCell::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_art::animate::BannerCell
+pub fn rich_art::animate::BannerCell::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_art::animate::BannerCell
+impl core::marker::StructuralPartialEq for rich_art::animate::BannerCell
+impl core::marker::Freeze for rich_art::animate::BannerCell
+impl core::marker::Send for rich_art::animate::BannerCell
+impl core::marker::Sync for rich_art::animate::BannerCell
+impl core::marker::Unpin for rich_art::animate::BannerCell
+impl core::marker::UnsafeUnpin for rich_art::animate::BannerCell
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::animate::BannerCell
+impl core::panic::unwind_safe::UnwindSafe for rich_art::animate::BannerCell
+pub struct rich_art::animate::BannerFrame
+impl rich_art::animate::BannerFrame
+pub fn rich_art::animate::BannerFrame::cell(&self, usize, usize) -> core::option::Option<rich_art::animate::BannerCell>
+pub fn rich_art::animate::BannerFrame::height(&self) -> usize
+pub fn rich_art::animate::BannerFrame::plain(&self) -> alloc::vec::Vec<alloc::string::String>
+pub fn rich_art::animate::BannerFrame::rows(&self) -> &[alloc::vec::Vec<rich_art::animate::BannerCell>]
+pub fn rich_art::animate::BannerFrame::width(&self) -> usize
+impl core::clone::Clone for rich_art::animate::BannerFrame
+pub fn rich_art::animate::BannerFrame::clone(&self) -> rich_art::animate::BannerFrame
+impl core::cmp::Eq for rich_art::animate::BannerFrame
+impl core::cmp::PartialEq for rich_art::animate::BannerFrame
+pub fn rich_art::animate::BannerFrame::eq(&self, &rich_art::animate::BannerFrame) -> bool
+impl core::fmt::Debug for rich_art::animate::BannerFrame
+pub fn rich_art::animate::BannerFrame::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_art::animate::BannerFrame
+pub fn rich_art::animate::BannerFrame::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_art::animate::BannerFrame
+impl rich::protocol::Renderable for rich_art::animate::BannerFrame
+pub fn rich_art::animate::BannerFrame::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl core::marker::Freeze for rich_art::animate::BannerFrame
+impl core::marker::Send for rich_art::animate::BannerFrame
+impl core::marker::Sync for rich_art::animate::BannerFrame
+impl core::marker::Unpin for rich_art::animate::BannerFrame
+impl core::marker::UnsafeUnpin for rich_art::animate::BannerFrame
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::animate::BannerFrame
+impl core::panic::unwind_safe::UnwindSafe for rich_art::animate::BannerFrame
+pub struct rich_art::animate::BannerPalette
+pub rich_art::animate::BannerPalette::crest: rich_art::animate::Rgb
+pub rich_art::animate::BannerPalette::dark: rich_art::animate::Rgb
+pub rich_art::animate::BannerPalette::lit: rich_art::animate::Rgb
+pub rich_art::animate::BannerPalette::lit_end: rich_art::animate::Rgb
+pub rich_art::animate::BannerPalette::speck: rich_art::animate::Rgb
+pub rich_art::animate::BannerPalette::wave: rich_art::animate::Rgb
+impl core::clone::Clone for rich_art::animate::BannerPalette
+pub fn rich_art::animate::BannerPalette::clone(&self) -> rich_art::animate::BannerPalette
+impl core::cmp::Eq for rich_art::animate::BannerPalette
+impl core::cmp::PartialEq for rich_art::animate::BannerPalette
+pub fn rich_art::animate::BannerPalette::eq(&self, &rich_art::animate::BannerPalette) -> bool
+impl core::default::Default for rich_art::animate::BannerPalette
+pub fn rich_art::animate::BannerPalette::default() -> Self
+impl core::fmt::Debug for rich_art::animate::BannerPalette
+pub fn rich_art::animate::BannerPalette::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_art::animate::BannerPalette
+pub fn rich_art::animate::BannerPalette::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_art::animate::BannerPalette
+impl core::marker::StructuralPartialEq for rich_art::animate::BannerPalette
+impl core::marker::Freeze for rich_art::animate::BannerPalette
+impl core::marker::Send for rich_art::animate::BannerPalette
+impl core::marker::Sync for rich_art::animate::BannerPalette
+impl core::marker::Unpin for rich_art::animate::BannerPalette
+impl core::marker::UnsafeUnpin for rich_art::animate::BannerPalette
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::animate::BannerPalette
+impl core::panic::unwind_safe::UnwindSafe for rich_art::animate::BannerPalette
+pub const rich_art::animate::DEFAULT_DURATION: core::time::Duration
+pub fn rich_art::animate::mix(rich_art::animate::Rgb, rich_art::animate::Rgb, f64) -> rich_art::animate::Rgb
+pub type rich_art::animate::Rgb = [u8; 3]
 pub mod rich_art::ascii
 pub struct rich_art::ascii::AsciiArt
 impl rich_art::ascii::AsciiArt
@@ -784,6 +924,7 @@ pub fn rich_art::picture::Picture::lines(&self, &rich::console::Console, rich_ar
 pub fn rich_art::picture::Picture::new(image::images::dynimage::DynamicImage) -> rich_art::picture::Picture
 pub fn rich_art::picture::Picture::next(&self, image::images::dynimage::DynamicImage) -> rich_art::picture::Picture
 pub fn rich_art::picture::Picture::next_rgba(&self, u32, u32, alloc::vec::Vec<u8>) -> core::option::Option<rich_art::picture::Picture>
+pub fn rich_art::picture::Picture::prepare(&self, rich_art::picture::ImageView, usize, usize) -> bool
 pub fn rich_art::picture::Picture::release(u32) -> alloc::string::String
 pub fn rich_art::picture::Picture::still(&self) -> rich_art::picture::Picture
 pub fn rich_art::picture::Picture::version(&self) -> u32

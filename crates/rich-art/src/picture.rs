@@ -220,10 +220,19 @@ struct Shown {
     version: u32,
     image: Arc<DynamicImage>,
     animation: Option<Arc<[AnimationFrame]>>,
-    /// Sent to Kitty as raw RGBA (`f=32`), not PNG: a live frame, where a
-    /// PNG encode per frame costs more than the bytes it saves.
+    /// Sent to Kitty as raw pixels (`f=32`, or `f=24` when opaque), not
+    /// PNG: a live frame, where a PNG encode per frame costs more than the
+    /// bytes it saves.
     raw: bool,
+    /// The last escape made of the whole picture, and what it was made
+    /// for: [`Picture::prepare`] makes it ahead, on a thread of the app's,
+    /// so the painter finds it made.
+    encoded: Mutex<Option<(Encoding, String)>>,
 }
+
+/// What an escape of a whole picture was made for: the protocol, the
+/// cells, and how it was fitted to them.
+type Encoding = (Pixels, usize, usize, Option<ImageFit>, ImageAnchor);
 
 impl PartialEq for Picture {
     fn eq(&self, other: &Self) -> bool {
@@ -348,6 +357,7 @@ impl Picture {
             image,
             animation,
             raw,
+            encoded: Mutex::new(None),
         });
         let mut pictures = PICTURES.lock().unwrap_or_else(|e| e.into_inner());
         pictures.retain(|_, weak| weak.strong_count() > 0);
@@ -590,7 +600,37 @@ impl Picture {
         }
     }
 
+    /// Make the escape that draws the whole picture in `cols` x `rows`
+    /// cells as `view` says (its protocol, fit and anchor) now, and keep
+    /// it, so drawing the picture later in those cells finds it made: a
+    /// live frame encoded on a thread of the app's rather than by the
+    /// painter, on the thread that draws. Cells keep nothing (their
+    /// characters are made as they are drawn). Whether there is an escape.
+    pub fn prepare(&self, view: ImageView, cols: usize, rows: usize) -> bool {
+        self.encode_fitted(view.pixels, cols, rows, view.fit, view.anchor)
+            .is_some()
+    }
+
     fn encode_fitted(
+        &self,
+        pixels: Pixels,
+        cols: usize,
+        rows: usize,
+        fit: Option<ImageFit>,
+        anchor: ImageAnchor,
+    ) -> Option<String> {
+        let key = (pixels, cols, rows, fit, anchor);
+        if let Some((made, escape)) = &*self.shown.encoded.lock().unwrap_or_else(|e| e.into_inner())
+            && *made == key
+        {
+            return Some(escape.clone());
+        }
+        let escape = self.encode_new(pixels, cols, rows, fit, anchor)?;
+        *self.shown.encoded.lock().unwrap_or_else(|e| e.into_inner()) = Some((key, escape.clone()));
+        Some(escape)
+    }
+
+    fn encode_new(
         &self,
         pixels: Pixels,
         cols: usize,
@@ -616,6 +656,18 @@ impl Picture {
                 let fitted = fitted(&self.shown.image);
                 if self.shown.raw {
                     let (width, height) = fitted.dimensions();
+                    // A video's frames are opaque: three bytes a pixel.
+                    if fitted.pixels().all(|p| p[3] == 255) {
+                        let rgb = DynamicImage::ImageRgba8(fitted).into_rgb8();
+                        return Some(crate::kitty::transmit_rgb(
+                            self.id(),
+                            rgb.as_raw(),
+                            width,
+                            height,
+                            cols,
+                            rows,
+                        ));
+                    }
                     return Some(crate::kitty::transmit_rgba(
                         self.id(),
                         fitted.as_raw(),
@@ -1019,6 +1071,11 @@ pub struct Pacer {
     stepped: Option<Instant>,
     /// What a frame costs at this protocol, measured; else estimated.
     measured: Option<f64>,
+    /// The time the last frame was due at, on the even spacing frames
+    /// keep to, and that spacing: a frame that comes a little early or
+    /// late (a thread's hop on its way) keeps to its slot.
+    slot: Option<Instant>,
+    spacing: Duration,
 }
 
 #[cfg(feature = "frames")]
@@ -1032,6 +1089,8 @@ impl Pacer {
             sent: VecDeque::new(),
             stepped: None,
             measured: None,
+            slot: None,
+            spacing: Duration::ZERO,
         }
     }
 
@@ -1077,9 +1136,16 @@ impl Pacer {
         (allowed / self.bytes_per_frame()).min(budget.max_fps)
     }
 
-    /// Whether a frame may be sent at `now`: a frame's time at that rate
-    /// has gone since the last, and the bytes sent in the last two seconds
-    /// leave room for one more.
+    /// Whether a frame may be sent at `now`: its slot at that rate has
+    /// come, and the bytes sent in the last two seconds leave room for one
+    /// more.
+    ///
+    /// Frames keep to even slots a frame's time apart, not to a frame's
+    /// time after the last one sent: one that comes up to a quarter of a
+    /// frame early is on time for its slot, so frames that come at the
+    /// rate with a little jitter are all sent, instead of each early one
+    /// waiting a whole frame more. Two are never less than half a frame
+    /// apart, and the rate stays at most the ceiling.
     pub fn due(&mut self, now: Instant, budget: &ByteBudget, share: f64) -> bool {
         self.forget(now);
         let per_second = budget.bytes_per_second as f64 * share.clamp(0.0, 1.0);
@@ -1090,10 +1156,13 @@ impl Pacer {
         // come in a burst that fills the window and then a gap.
         let next = self.next_frame();
         let fps = (per_second / next).min(budget.max_fps);
-        if let Some((last, _)) = self.sent.back()
-            && now.duration_since(*last) < Duration::from_secs_f64(1.0 / fps)
-        {
-            return false;
+        let spacing = Duration::from_secs_f64(1.0 / fps.max(f64::MIN_POSITIVE)).min(WINDOW);
+        self.spacing = spacing;
+        if let Some((last, _)) = self.sent.back() {
+            let slot = self.slot.unwrap_or(*last) + spacing;
+            if now + spacing / 4 < slot || now.duration_since(*last) < spacing / 2 {
+                return false;
+            }
         }
         let used: u64 = self.sent.iter().map(|(_, b)| b).sum();
         used as f64 + next <= per_second * WINDOW.as_secs_f64()
@@ -1118,6 +1187,13 @@ impl Pacer {
     /// [`picture_bytes`], or `None` to take the estimate).
     pub fn sent(&mut self, now: Instant, bytes: Option<u64>) {
         let bytes = bytes.unwrap_or_else(|| self.bytes_per_frame() as u64);
+        // The slot it was sent for: the next on the spacing when it is
+        // near, else (a pause, a first frame) a new run of slots from now.
+        let next = self.slot.map(|slot| slot + self.spacing);
+        self.slot = Some(match next {
+            Some(slot) if now + self.spacing / 4 >= slot && now < slot + self.spacing => slot,
+            _ => now,
+        });
         self.measured = Some(match self.measured {
             Some(before) => before * 0.7 + bytes as f64 * 0.3,
             None => bytes as f64,
@@ -1231,10 +1307,49 @@ mod tests {
                 .contains("f=100")
         );
         assert!(picture.encode(Pixels::Cells, 4, 2).is_none());
-        // A raw frame goes to Kitty as RGBA, not PNG.
+        // A raw frame goes to Kitty as raw pixels, not PNG: RGB when it is
+        // opaque, RGBA when it is not.
         let raw = Picture::from_rgba(2, 2, vec![255; 16]).unwrap();
-        assert!(raw.encode(Pixels::Kitty, 4, 2).unwrap().contains("f=32"));
+        assert!(raw.encode(Pixels::Kitty, 4, 2).unwrap().contains("f=24"));
+        let clear = Picture::from_rgba(2, 2, [255, 0, 0, 128].repeat(4)).unwrap();
+        assert!(clear.encode(Pixels::Kitty, 4, 2).unwrap().contains("f=32"));
         assert!(Picture::from_rgba(2, 2, vec![0; 3]).is_none());
+    }
+
+    #[test]
+    fn a_prepared_escape_is_what_drawing_finds() {
+        let picture = Picture::from_rgba(8, 8, vec![200; 8 * 8 * 4]).unwrap();
+        let view = ImageView::new().fit(ImageFit::Cover).pixels(Pixels::Sixel);
+        assert!(picture.prepare(view, 4, 2));
+        let made = picture.shown.encoded.lock().unwrap().clone().unwrap();
+        assert_eq!(
+            made.0,
+            (
+                Pixels::Sixel,
+                4,
+                2,
+                Some(ImageFit::Cover),
+                ImageAnchor::Center
+            )
+        );
+        // The painter's call for the whole picture in those cells is it.
+        let tag = PictureTag {
+            id: picture.id(),
+            version: picture.version(),
+            cols: 4,
+            rows: 2,
+            row: 0,
+            pixels: Pixels::Sixel,
+            fit: Some(ImageFit::Cover),
+            anchor: ImageAnchor::Center,
+        };
+        assert_eq!(picture.encode_tag(&tag, 0, 2), Some(made.1));
+        // Other cells make another; cells keep nothing.
+        assert_ne!(
+            picture.encode(Pixels::Sixel, 2, 1),
+            picture.encode(Pixels::Sixel, 4, 2)
+        );
+        assert!(!picture.prepare(view.pixels(Pixels::Cells), 4, 2));
     }
 
     #[test]
@@ -1412,6 +1527,44 @@ mod tests {
                 .sum();
             assert!(window <= 200_000, "{window} by {at:?}");
         }
+    }
+
+    #[cfg(feature = "frames")]
+    #[test]
+    fn frames_that_come_with_jitter_keep_the_rate() {
+        // Thirty a second allowed, frames coming thirty a second, each up
+        // to 5 ms early or late: every one is sent, none closer than half
+        // a frame, and never more than the ceiling.
+        let mut budget = ByteBudget::new(u64::MAX / 4);
+        budget.max_fps = 30.0;
+        let mut pacer = Pacer::new(Pixels::Cells, 10, 5);
+        let start = Instant::now();
+        let jitter = [0i64, 5, -5, 3, -4, 1, -2, 5, -5, 0];
+        let mut sent = Vec::new();
+        for k in 0..300i64 {
+            let at = k * 1000 / 30 + jitter[k as usize % jitter.len()] + 10;
+            let now = start + Duration::from_millis(at as u64);
+            if pacer.due(now, &budget, 1.0) {
+                pacer.sent(now, Some(100));
+                sent.push(at);
+            }
+        }
+        assert!(sent.len() >= 298, "{} of 300 sent", sent.len());
+        let gaps: Vec<i64> = sent.windows(2).map(|w| w[1] - w[0]).collect();
+        assert!(gaps.iter().all(|g| *g >= 16), "{gaps:?}");
+        // Twice as many coming: still thirty a second.
+        let mut pacer = Pacer::new(Pixels::Cells, 10, 5);
+        let count = (0..600u64)
+            .filter(|k| {
+                let now = start + Duration::from_millis(k * 1000 / 60);
+                let due = pacer.due(now, &budget, 1.0);
+                if due {
+                    pacer.sent(now, Some(100));
+                }
+                due
+            })
+            .count();
+        assert!((295..=302).contains(&count), "{count} in 10 s");
     }
 
     #[cfg(feature = "frames")]

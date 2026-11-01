@@ -22,8 +22,9 @@ terminal for. The phases and their tests are in
 - **No fixed or sticky layer** and no paint order in the projection.
 - **An inline SVG drawing, a canvas and a frame** show as their alt text.
 - **The byte budget starts as a guess** (4 MB a second, 256 kB over
-  SSH), lowered to the rate your terminal takes output at once measured,
-  unless `[media] bandwidth` sets it. A site's `fps` is read but not
+  SSH), then follows the rate your terminal takes output at once measured
+  (lowered to it, and on this machine raised to it, up to 32 MB a
+  second), unless `[media] bandwidth` sets it. A site's `fps` is read but not
   applied.
 
 ### Checking on real sites

@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use rich_embed::PageState;
 use rich_intuituive::interact::keymap::{Keymap, try_keys};
-use rich_intuituive::interact::{Key, KeyCode};
+use rich_intuituive::interact::{Key, KeyCode, MouseKind};
 use rich_intuituive::prelude::*;
 use rich_intuituive::{
     Action, ImageView, Picture, Pixels, button_of, image_graphics, picture_bytes, picture_of,
@@ -34,12 +34,12 @@ use crate::layout::{
 use crate::model::{Binding, MediaKind, Page, Role};
 use crate::pictures::{self, Live};
 use crate::tab::{Command, Intent, Refusal, Tab, Update};
-use crate::video::{Pacing, VideoFrame};
+use crate::video::{Encoder, Job, Pacing, VideoFrame};
 use crate::widgets::{WebControl, web_widget};
 
 /// The video regions on screen and the pacing's intervals, as told to the
 /// tab.
-type RegionsSent = (Vec<NodeId>, Vec<(NodeId, Duration)>);
+type RegionsSent = (Vec<NodeId>, Vec<(NodeId, Duration)>, f64);
 
 /// What happens when an action of the tab's is answered.
 type Then = Box<dyn FnOnce(Result<(), Refusal>, &mut Ctx)>;
@@ -101,6 +101,9 @@ pub struct Browser {
     pub videos: Signal<Rc<HashMap<NodeId, Live>>>,
     /// The frames' pacing within the terminal's byte budget.
     pacing: Signal<Rc<RefCell<Pacing>>>,
+    /// Encodes the frames the pacing lets through, off the thread that
+    /// draws.
+    encoder: Signal<Rc<Encoder>>,
     /// The regions on screen and the pacing's intervals, as last told to
     /// the tab.
     regions_sent: Signal<RegionsSent>,
@@ -120,10 +123,16 @@ pub struct Browser {
     tab: Signal<Tab>,
     waiting: Signal<HashMap<u64, Then>>,
     controls: Signal<HashMap<NodeId, Rc<WebControl>>>,
+    /// Whether the start page shows: started with no address, until the
+    /// first page is opened ([`crate::start`]).
+    pub start: Signal<bool>,
 }
 
 impl Browser {
     fn send(&self, command: Command) -> u64 {
+        if self.start.get_untracked() && crate::start::leaves(&command) {
+            self.start.set(false);
+        }
         self.tab.with_untracked(|t| t.send(command))
     }
 
@@ -729,17 +738,64 @@ fn video_frame(b: Browser, frame: &VideoFrame) {
         let picture = pacing.offer(frame, cols, rows, Instant::now(), picture_bytes);
         (picture, pacing.pixels(frame.node))
     });
-    if let Some(picture) = picture {
-        let live = Live { picture, pixels };
-        let mut videos = (*b.videos.get_untracked()).clone();
-        videos.insert(frame.node, live.clone());
-        b.videos.set(Rc::new(videos));
-        // Shown at once, with the moving GIFs.
-        let mut shown = (*b.live.get_untracked()).clone();
-        shown.insert(frame.node, live);
-        b.live.set(Rc::new(shown));
+    match picture {
+        // Cells are made as they are drawn, and cheaply.
+        Some(picture) if pixels == Pixels::Cells => {
+            show_frame(b, frame.node, Live { picture, pixels })
+        }
+        // Pixels are encoded on the encoder's thread first, in the cells
+        // the region is drawn in, so the painter finds the escape made.
+        Some(picture) => {
+            let (cols, rows) = drawn_cells(b, frame.node).unwrap_or((cols, rows));
+            b.encoder.with_untracked(|e| {
+                e.encode(Job {
+                    node: frame.node,
+                    picture,
+                    pixels,
+                    cols,
+                    rows,
+                })
+            });
+        }
+        None => {}
     }
     send_regions(b);
+}
+
+/// The cells a video region is drawn in, where the projection placed it.
+fn drawn_cells(b: Browser, node: NodeId) -> Option<(usize, usize)> {
+    b.layout.with_untracked(|l| {
+        b.page.with_untracked(|p| {
+            let page = p.as_ref()?;
+            l.regions
+                .iter()
+                .find(|r| page.media.get(r.media).is_some_and(|m| m.node == node))
+                .map(|r| (r.cols, r.rows))
+        })
+    })
+}
+
+/// Show a video's frame in its region, with the moving GIFs: unless the
+/// region is gone (a new document) or shows a newer frame already.
+fn show_frame(b: Browser, node: NodeId, live: Live) {
+    if !b.pacing.with_untracked(|p| p.borrow().has(node)) {
+        return;
+    }
+    let newer = b.videos.with_untracked(|v| {
+        v.get(&node).is_some_and(|shown| {
+            shown.picture.id() == live.picture.id()
+                && shown.picture.version() > live.picture.version()
+        })
+    });
+    if newer {
+        return;
+    }
+    let mut videos = (*b.videos.get_untracked()).clone();
+    videos.insert(node, live.clone());
+    b.videos.set(Rc::new(videos));
+    let mut shown = (*b.live.get_untracked()).clone();
+    shown.insert(node, live);
+    b.live.set(Rc::new(shown));
 }
 
 /// The video regions the view shows: those whose box meets the page's
@@ -770,6 +826,19 @@ fn regions_on_screen(b: Browser) -> Vec<NodeId> {
     })
 }
 
+/// `interval` as a whole number of frames a second, rounded down (whole
+/// seconds below one a second), so a small change in the pacing's
+/// estimate does not tell the tab again, and the tab never cuts frames
+/// faster than the pacing takes them.
+fn whole_rate(interval: Duration) -> Duration {
+    let fps = 1.0 / interval.as_secs_f64().max(f64::MIN_POSITIVE);
+    if fps >= 1.0 {
+        Duration::from_secs_f64(1.0 / fps.floor())
+    } else {
+        Duration::from_secs(interval.as_secs_f64().ceil() as u64)
+    }
+}
+
 /// Tell the tab which video regions are on screen and how often each may
 /// have a frame, when that changed.
 fn send_regions(b: Browser) {
@@ -783,19 +852,51 @@ fn send_regions(b: Browser) {
         p.borrow()
             .intervals()
             .into_iter()
-            // In steps of 25 ms, so a small change in the estimate does
-            // not send again.
-            .map(|(node, d)| (node, Duration::from_millis(d.as_millis() as u64 / 25 * 25)))
+            .map(|(node, d)| (node, whole_rate(d)))
             .collect()
     });
-    let next = (on_screen, intervals);
+    let scale = screencast_scale(b, &on_screen);
+    let next = (on_screen, intervals, scale);
     if b.regions_sent.with_untracked(|sent| *sent != next) {
         b.regions_sent.set(next.clone());
         b.send(Command::Regions {
             on_screen: next.0,
             intervals: next.1,
+            scale: next.2,
         });
     }
+}
+
+/// The screencast's scale the regions on screen need: the most of the
+/// page's pixels any is drawn in, as a power of two (so a small change in
+/// a region's size does not restart the screencast), from a sixteenth to
+/// all of them. Character art draws two pixels a cell, far fewer than the
+/// page has; the pixel protocols draw about as many as it has.
+fn screencast_scale(b: Browser, on_screen: &[NodeId]) -> f64 {
+    let need = b.page.with_untracked(|p| {
+        let Some(page) = p.as_ref() else {
+            return 1.0;
+        };
+        b.pacing.with_untracked(|pacing| {
+            let pacing = pacing.borrow();
+            on_screen
+                .iter()
+                .filter_map(|node| page.media.iter().find(|m| m.node == *node))
+                .map(|m| {
+                    if pacing.pixels(m.node) != Pixels::Cells {
+                        return 1.0;
+                    }
+                    let cols = (m.rect.width / CELL.0 as f64).ceil().max(1.0);
+                    let rows = (m.rect.height / CELL.1 as f64).ceil().max(1.0);
+                    (cols / m.rect.width.max(1.0)).max(2.0 * rows / m.rect.height.max(1.0))
+                })
+                .fold(0.0, f64::max)
+        })
+    });
+    if need <= 0.0 {
+        return 1.0;
+    }
+    2f64.powi(need.log2().ceil() as i32).clamp(1.0 / 16.0, 1.0)
 }
 
 /// A video's region in reader mode: its newest frame while it has played,
@@ -1165,6 +1266,43 @@ fn chooser(
             out.join("\n")
         })
         .live();
+        // A click on a row selects it; a click on the selected row chooses
+        // it, as the first of `keys` (Enter) does. The wheel moves.
+        let clicked = items.clone();
+        let first_choice = keys.first().map(|(_, choose)| choose.clone());
+        let list = list
+            .on_click_at(move |cx, _, row| {
+                let n = clicked().len();
+                let at = selected.get_untracked().min(n.saturating_sub(1));
+                let first = at.saturating_sub(room.saturating_sub(2));
+                let index = first + usize::from(row);
+                if index >= n {
+                    return false;
+                }
+                if index == at {
+                    if let Some(choose) = &first_choice {
+                        choose(index, cx);
+                    }
+                } else {
+                    selected.set(index);
+                }
+                true
+            })
+            .on_mouse({
+                let count = items.clone();
+                move |_, mouse| match mouse.kind {
+                    MouseKind::ScrollUp => {
+                        selected.update(|s| *s = s.saturating_sub(1));
+                        true
+                    }
+                    MouseKind::ScrollDown => {
+                        let n = count().len();
+                        selected.update(|s| *s = (*s + 1).min(n.saturating_sub(1)));
+                        true
+                    }
+                    _ => false,
+                }
+            });
         let count = items.clone();
         let mut node = column([list.flex(1), label(format!("[dim]{}[/]", hint)).fixed(1)])
             .focusable()
@@ -1779,6 +1917,19 @@ fn reader_view(b: Browser) -> Node {
                         }
                     })
                 })
+                // A link in the text is used as its hint would use it.
+                .on_click_at(move |cx, column, row| {
+                    let control = reading.with_untracked(|(d, _)| match d.get(i) {
+                        Some(Piece::Text(lines)) => lines
+                            .get(usize::from(row))
+                            .and_then(|line| layout::control_at(line, usize::from(column))),
+                        _ => None,
+                    });
+                    control.is_some_and(|index| {
+                        click_control(b, index, cx);
+                        true
+                    })
+                })
                 .fixed(rows)
             }
             PieceKey::Media(node, rows)
@@ -1859,6 +2010,58 @@ fn load_more(b: Browser) {
     if b.page.with_untracked(Option::is_some) {
         b.send(Command::LoadMore);
     }
+}
+
+/// A click at `column` of the projection's row `row`: the control there
+/// is used as its link hint would use it ([`activate`]), and a video region
+/// there plays or pauses. A click on anything else is not used, so a drag
+/// from it selects text.
+fn click_row(b: Browser, row: usize, column: usize, cx: &mut Ctx) -> bool {
+    let (control, video) = b.layout.with_untracked(|l| {
+        let control = l
+            .lines
+            .get(row)
+            .and_then(|line| layout::control_at(line, column));
+        let video = l
+            .regions
+            .iter()
+            .find(|r| r.on(row) && (r.column..r.column + r.cols).contains(&column))
+            .map(|r| r.media);
+        (control, video)
+    });
+    if let Some(index) = control {
+        click_control(b, index, cx);
+        return true;
+    }
+    let video = video.and_then(|media| {
+        b.page.with_untracked(|p| {
+            let m = p.as_ref()?.media.get(media)?;
+            (m.kind == MediaKind::Video).then_some((m.node, m.playback))
+        })
+    });
+    match video {
+        Some((node, playback)) => {
+            let paused = playback.is_none_or(|p| p.paused || p.ended);
+            media_op(
+                b,
+                node,
+                if paused {
+                    MediaOp::Play
+                } else {
+                    MediaOp::Pause
+                },
+            );
+            true
+        }
+        None => false,
+    }
+}
+
+/// A click on the page's control `index`: what a link hint does.
+fn click_control(b: Browser, index: usize, cx: &mut Ctx) {
+    b.hints.set(None);
+    b.message.set(String::new());
+    activate(b, index, cx);
 }
 
 fn projection_view(b: Browser) -> Node {
@@ -1949,6 +2152,12 @@ fn projection_view(b: Browser) -> Node {
                 None => drawn,
             }
         })
+        .on_click_at(move |cx, column, _| {
+            let row = b
+                .layout
+                .with_untracked(|l| l.rows.get(&key).copied().unwrap_or(i));
+            click_row(b, row, usize::from(column), cx)
+        })
         .fixed(1)
     };
     scroll_virtual_with(
@@ -1970,10 +2179,14 @@ fn projection_view(b: Browser) -> Node {
 pub const CHROME_ROWS: u16 = 4;
 
 /// The byte budget moving pictures (GIFs and videos) share: the config's
-/// `bandwidth`, else rs-rich-art's guess, lowered to the terminal's
-/// measured output rate ([`OutputRate`]), at most the config's frame rate
-/// and never more than eight a second. With the bandwidth rule off (the
-/// faithful projection), no budget: every frame, never a step down.
+/// `bandwidth`, else rs-rich-art's guess moved to the terminal's measured
+/// output rate ([`OutputRate`]): lowered to it always, and on this machine
+/// raised to it too, up to [`LOCAL_CEILING`] (a terminal here that takes
+/// frames fast gets them; over SSH what was written may wait in a buffer
+/// on the way, so the guess is only ever lowered). At most the config's
+/// frame rate and never more than [`MAX_FPS`](crate::video::MAX_FPS) a
+/// second. With the bandwidth rule off (the faithful projection), no
+/// budget: every frame, never a step down.
 pub fn byte_budget(b: Browser) -> rich_art::picture::ByteBudget {
     let adapt = b.effective_adapt();
     let measured = OUTPUT.with(|o| o.borrow_mut().rate());
@@ -1981,10 +2194,12 @@ pub fn byte_budget(b: Browser) -> rich_art::picture::ByteBudget {
         let mut budget = c.bandwidth.map_or_else(
             || {
                 let mut guess = rich_art::picture::ByteBudget::guess();
-                // The painter's measured rate, when it is lower: a terminal
-                // that takes output slower than the guess.
                 if let Some(rate) = measured {
-                    guess.bytes_per_second = guess.bytes_per_second.min(rate);
+                    guess.bytes_per_second = measured_budget(
+                        guess.bytes_per_second,
+                        rate,
+                        rich_art::picture::over_ssh(),
+                    );
                 }
                 guess
             },
@@ -1997,6 +2212,20 @@ pub fn byte_budget(b: Browser) -> rich_art::picture::ByteBudget {
         }
         budget
     })
+}
+
+/// The most bytes a second the measured output rate raises the budget to
+/// on this machine.
+pub const LOCAL_CEILING: u64 = 32 << 20;
+
+/// The budget from the `guess` and the `measured` output rate: the lower
+/// of the two over SSH, the measured one here (at most [`LOCAL_CEILING`]).
+pub fn measured_budget(guess: u64, measured: u64, over_ssh: bool) -> u64 {
+    if over_ssh {
+        guess.min(measured)
+    } else {
+        measured.min(LOCAL_CEILING.max(guess))
+    }
 }
 
 thread_local! {
@@ -2044,7 +2273,7 @@ impl OutputRate {
 }
 
 /// The frames' pacing: within the guessed byte budget, at most the
-/// config's frame rate and never more than eight a second, starting at
+/// config's frame rate and never more than thirty a second, starting at
 /// the protocol the user asked for, else character art over SSH, else
 /// what the terminal speaks. [`step_motion`] replaces the budget with
 /// [`byte_budget`]'s on its first look.
@@ -2064,6 +2293,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         view,
         images,
     } = options;
+    let start_page = url.is_none() && config.home.is_none();
     let start = url
         .or_else(|| config.home.clone())
         .unwrap_or_else(|| "about:blank".into());
@@ -2131,6 +2361,8 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             })
         });
         let pacing = video_pacing(&config, images);
+        let (prepared, ready) = mpsc::channel::<Job>();
+        let encoder = Encoder::spawn(move |job| drop(prepared.send(job)));
         let b = Browser {
             page,
             state: signal(PageState::default()),
@@ -2167,12 +2399,27 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             controls: signal(HashMap::new()),
             videos: signal(Rc::new(HashMap::new())),
             pacing: signal(Rc::new(RefCell::new(pacing))),
-            regions_sent: signal((Vec::new(), Vec::new())),
+            encoder: signal(Rc::new(encoder)),
+            regions_sent: signal((Vec::new(), Vec::new(), 1.0)),
+            start: signal(false),
         };
         spawn_stream(move |stream| {
             let proxy = stream.proxy().clone();
             while let Ok(update) = receive.recv() {
                 if !proxy.run_with(move |cx| apply(b, update, cx)) {
+                    break;
+                }
+            }
+        });
+        // Video frames, once encoded, are shown.
+        spawn_stream(move |stream| {
+            let proxy = stream.proxy().clone();
+            while let Ok(job) = ready.recv() {
+                let live = Live {
+                    picture: job.picture,
+                    pixels: job.pixels,
+                };
+                if !proxy.run_with(move |_| show_frame(b, job.node, live)) {
                     break;
                 }
             }
@@ -2190,6 +2437,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             },
         );
         b.send(Command::Open(start.clone()));
+        b.start.set(start_page);
         // The tab hears which video regions the view shows, so only those
         // get frames.
         watch(move || regions_on_screen(b), move |_, _| send_regions(b));
@@ -2211,8 +2459,20 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
                 _ => projection_view(b),
             },
         )
-        .flex(1);
-        let mut root = column([address, body, status]);
+        .flex(1)
+        .hidden_when(move || b.start.get());
+        let start = crate::start::page(crate::start::StartPage {
+            keymap: keymap.clone(),
+            bookmarks: b.bookmarks,
+            open: Rc::new(move |url, _| {
+                b.send(Command::Open(url));
+            }),
+            about: Rc::new(move |cx| run(b, "about", cx)),
+            chrome_rows: CHROME_ROWS,
+        })
+        .flex(1)
+        .shown_when(move || b.start.get());
+        let mut root = column([address, start, body, status]);
         for action in ACTIONS {
             let Some((keys, sequence)) = actions::keys_of(&keymap, action.id) else {
                 continue;

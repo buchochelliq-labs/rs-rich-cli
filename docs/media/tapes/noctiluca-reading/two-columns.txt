@@ -1,4 +1,4 @@
- NOCTILUCA   PROJECTION + CELLS   ◀▶   Noctiluca fixture
+ NOCTILUCA   PROJECTION + CELLS   ◀ ▶ ↻   Noctiluca fixture
  https://fixture.example/page.html
 
  Sea

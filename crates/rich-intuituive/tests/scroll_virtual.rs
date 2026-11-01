@@ -95,6 +95,15 @@ fn keys_and_the_wheel_scroll_it() {
     assert_eq!(rows(&driver)[0], "item 10");
     driver.press("up");
     assert_eq!(rows(&driver)[0], "item 9");
+    // A burst of notches handled before one frame moves by all of them,
+    // as the run loop handles the events waiting before it draws.
+    for _ in 0..3 {
+        driver.event(Event::Mouse(Mouse::new(MouseKind::ScrollDown, 3, 3)));
+    }
+    driver.settle();
+    assert_eq!(rows(&driver)[0], "item 18");
+    driver.wheel(3, 3, -2);
+    assert_eq!(rows(&driver)[0], "item 12");
     // Set from code: past the end is the end.
     at.set(u64::MAX);
     driver.settle();

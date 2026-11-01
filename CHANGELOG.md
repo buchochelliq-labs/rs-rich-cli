@@ -27,6 +27,29 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   on crates.io) and removed; its test now accepts an empty list, as the
   check itself does.
 
+### Animated banners and Noctiluca's start page
+
+- **rs-rich-art:** `animate::AnimatedBanner`, FIGlet text with an effect
+  as frames: `frame(t)` is a pure function of the banner and the time,
+  `still()` the final frame. Effects `glow` (the default: a blue-green
+  band travelling through dark letters), `shimmer`, `typewriter`, `fade`
+  and `still`; a wave line and seeded specks of light as decoration;
+  `pulse(t)` for a light that keeps time with it; colours from a
+  `BannerPalette`, reduced by the console's colour system.
+- **intuiTUIve:** `banner::banner(art, play)` and `banner::Play` (the
+  `art` feature) play it on the app's clock, once or looping, any key
+  skipping to the still frame; `a11y::motion_allowed()` (from
+  `RICH_ANIMATION`, `RICH_A11Y` and `NO_COLOR`) and `a11y::set_motion`.
+- **Noctiluca:** started with no address and no `home`, a start page:
+  the animated NOCTILUCA banner, the lanternfish swimming in beside it
+  (its lure pulsing with the glow; Enter or a click opens
+  `about:noctiluca`), the tagline and version, key hints from the keymap,
+  and the bookmarks to pick from. Chrome starts behind it; opening an
+  address leaves it.
+- **CLI:** `rich banner --effect E`, `--once`/`--loop`, `--duration SECS`,
+  `--wave`, `--specks`, `--seed N` animate a banner on a terminal (the
+  still frame off one, with no colour or reduced motion).
+
 ## 0.0.23 cohort — published 2026-10-27
 
 Published on 2026-10-27 from `2624ce5` by one `release.yml` run (tag
