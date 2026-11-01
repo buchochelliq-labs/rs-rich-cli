@@ -359,6 +359,28 @@ pub(crate) fn screen_text(screen: &Screen, rect: Rect, hidden: &[Rect]) -> Strin
     out.join(" ")
 }
 
+/// Whether animations may move, by the environment: `RICH_ANIMATION`
+/// when set (`0`/`false` or `1`/`true`), else not when rs-rich's
+/// `RICH_A11Y` asks for `reduced-motion`, `no-animation` or
+/// `screen-reader`, or `NO_COLOR` is set. Animations that honour it
+/// ([`banner::Play`](crate::banner::Play)) hold their still final frame
+/// instead; text mode ([`text_mode`]) holds them still too.
+pub fn motion_allowed() -> bool {
+    motion_allowed_in(&rich_ext::capabilities::SystemEnvironment)
+}
+
+/// [`motion_allowed`] for the variables of `env`.
+pub fn motion_allowed_in(env: &dyn rich_ext::capabilities::Environment) -> bool {
+    if let Some(on) = env
+        .var("RICH_ANIMATION")
+        .and_then(|value| rich_ext::capabilities::parse_bool(&value))
+    {
+        return on;
+    }
+    let policy = rich_ext::a11y::AccessibilityPolicy::from_env(env);
+    !(policy.no_animation || policy.reduced_motion || policy.screen_reader || policy.monochrome)
+}
+
 /// What the environment asks for: (accessible, linear). See [`modes`].
 pub(crate) fn from_env() -> (bool, bool) {
     let get = |name: &str| std::env::var(name).ok();
@@ -392,6 +414,24 @@ pub(crate) fn modes(intuituive: Option<&str>, rich: Option<&str>) -> (bool, bool
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn the_environment_says_whether_animations_move() {
+        use rich_ext::capabilities::MapEnvironment;
+        let env = MapEnvironment::tty;
+        assert!(motion_allowed_in(&env()));
+        assert!(!motion_allowed_in(
+            &env().var("RICH_A11Y", "reduced-motion")
+        ));
+        assert!(!motion_allowed_in(&env().var("RICH_A11Y", "no-animation")));
+        assert!(!motion_allowed_in(&env().var("NO_COLOR", "1")));
+        assert!(!motion_allowed_in(&env().var("RICH_ANIMATION", "0")));
+        assert!(motion_allowed_in(
+            &env()
+                .var("RICH_A11Y", "reduced-motion")
+                .var("RICH_ANIMATION", "1")
+        ));
+    }
 
     #[test]
     fn the_environment_picks_the_mode() {
