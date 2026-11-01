@@ -27,6 +27,22 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   on crates.io) and removed; its test now accepts an empty list, as the
   check itself does.
 
+### The docs on Zensical
+
+- Both docs sites build with [Zensical](https://zensical.org/) 0.0.74,
+  Material for MkDocs' successor, from the same `mkdocs.yml` and
+  `mkdocs-python.yml` (with Zensical's `classic` look, Material's), pinned
+  in the new `requirements-docs.txt`. The theme override, the self-hosted
+  fonts and the no-outside-requests rule are unchanged. The versioned
+  site builds 0.0.24's docs on with Zensical and 0.0.23's and older with
+  MkDocs, as they were built.
+- Zensical rebases raw HTML's URLs like Markdown links', so the raw
+  `<video>`, `<img>` and `<a>` URLs (the recordings, the demos, the
+  Noctiluca pages, the parity chart) are now relative to their source
+  file, and `scripts/check_site_links.py` checks every relative URL in
+  the built sites. Six anchors to em-dash headings, broken under MkDocs
+  too, are fixed.
+
 ### Animated banners and Noctiluca's start page
 
 - **rs-rich-art:** `animate::AnimatedBanner`, FIGlet text with an effect

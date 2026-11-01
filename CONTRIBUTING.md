@@ -111,6 +111,25 @@ under `mypy --strict`: `python scripts/check_python_stubs.py`, with `rs_rich`
 installed. A new class, function or parameter in the bindings needs its stub
 in `_native.pyi`.
 
+### When you change the docs
+
+The docs sites build with [Zensical](https://zensical.org/), pinned in
+`requirements-docs.txt`; the docs job builds both strictly and fails on a
+broken link:
+
+```bash
+pip install -r requirements-docs.txt
+zensical build --strict -f mkdocs.yml          # the main site, into site/
+zensical build --strict -f mkdocs-python.yml   # the Python site, into site/python/
+python scripts/check_site_links.py site        # the raw HTML's URLs too
+```
+
+A URL in raw HTML (a `<video>`'s `<source>`, an `<img>` in a `<figure>`, an
+`<a>`) is written as a Markdown link's would be, relative to the `.md` file:
+Zensical rebases every `href` and `src` in a page from its source file to the
+built page. `poster` is the exception, left as written, so it is relative to
+the built page's URL.
+
 ## Deviations
 
 If you must deviate from upstream in core, it goes behind an off-by-default Cargo
