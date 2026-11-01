@@ -588,6 +588,9 @@ struct Dom {
     checked: HashSet<usize>,
     selected: HashSet<usize>,
     source: HashMap<usize, String>,
+    /// Whether each node is visually hidden by itself or an ancestor
+    /// (see [`conceals`]): its text is not drawn.
+    concealed: Vec<bool>,
     url: String,
     title: String,
     width: f64,
@@ -714,7 +717,7 @@ impl Dom {
                     .collect()
             })
             .unwrap_or_default();
-        Dom {
+        let mut dom = Dom {
             parent,
             kind,
             name,
@@ -735,7 +738,20 @@ impl Dom {
             title: string(&document["title"]),
             width: document["contentWidth"].as_f64().unwrap_or(0.0),
             height: document["contentHeight"].as_f64().unwrap_or(0.0),
+            concealed: Vec::new(),
+        };
+        // Parents come before their children in a snapshot's order; a
+        // parent after its child is read as not concealing.
+        let mut concealed = vec![false; n];
+        for i in 0..n {
+            let from_parent = usize::try_from(dom.parent[i])
+                .ok()
+                .filter(|&p| p < i)
+                .is_some_and(|p| concealed[p]);
+            concealed[i] = from_parent || conceals(&dom, i);
         }
+        dom.concealed = concealed;
+        dom
     }
 
     fn attr(&self, i: usize, name: &str) -> Option<&str> {
@@ -831,6 +847,135 @@ impl Dom {
         }
         out
     }
+}
+
+/// Whether element `i` hides what is in it from sight, though it is laid
+/// out (text for screen readers only, a tooltip waiting for a hover):
+/// - it is fully transparent (`opacity: 0`, which its children do not
+///   inherit as a computed style);
+/// - it is positioned and clipped to no area (`clip: rect(0 0 0 0)`, or
+///   `rect(1px, 1px, 1px, 1px)`);
+/// - its `clip-path` is an inset of half its size or more
+///   (`inset(50%)`), or a circle or ellipse of no radius;
+/// - it hides its overflow and is at most a pixel wide or tall (the
+///   1 x 1 box of a "visually hidden" class, a collapsed panel).
+///
+/// `visibility: hidden` needs no rule: it is inherited, so each hidden
+/// text node says so itself.
+fn conceals(dom: &Dom, i: usize) -> bool {
+    if !dom.is_element(i) || dom.layout[i].is_none() {
+        return false;
+    }
+    if number(Some(dom.style(i, 8))).is_some_and(|o| o <= 0.0) {
+        return true;
+    }
+    let positioned = matches!(dom.style(i, 14), "absolute" | "fixed");
+    if positioned && clipped_to_nothing(dom.style(i, 12)) {
+        return true;
+    }
+    if clip_path_hides(dom.style(i, 13)) {
+        return true;
+    }
+    let display = dom.style(i, 0);
+    let boxed = !display.is_empty() && display != "inline" && display != "contents";
+    if boxed
+        && matches!(dom.style(i, 10), "hidden" | "clip")
+        && let Some(rect) = dom.rect(i)
+        && (rect.width <= 1.0 || rect.height <= 1.0)
+    {
+        return true;
+    }
+    false
+}
+
+/// Whether anything in node `i` shows that is not visually hidden: text,
+/// or a picture or other media.
+fn shows_anything(dom: &Dom, i: usize) -> bool {
+    dom.descendants(i).into_iter().any(|d| {
+        dom.layout[d].is_some()
+            && dom.shows(d)
+            && !dom.concealed[d]
+            && match dom.kind[d] {
+                3 => dom.text[d].as_deref().is_some_and(|t| !t.trim().is_empty()),
+                1 => {
+                    matches!(
+                        dom.name[d].as_str(),
+                        "IMG" | "SVG" | "VIDEO" | "CANVAS" | "PICTURE"
+                    ) || background_picture(dom, d).is_some()
+                }
+                _ => false,
+            }
+    })
+}
+
+/// Whether a computed `clip` (`rect(top, right, bottom, left)`) has no
+/// area.
+fn clipped_to_nothing(clip: &str) -> bool {
+    let Some(inner) = clip
+        .trim()
+        .strip_prefix("rect(")
+        .and_then(|r| r.strip_suffix(')'))
+    else {
+        return false;
+    };
+    let sides: Vec<Option<f64>> = inner
+        .split(|c: char| c == ',' || c.is_whitespace())
+        .filter(|p| !p.is_empty())
+        .map(|p| {
+            if p == "auto" {
+                None
+            } else {
+                p.trim_end_matches("px").parse::<f64>().ok()
+            }
+        })
+        .collect();
+    let [top, right, bottom, left] = sides.as_slice() else {
+        return false;
+    };
+    // `auto` is the box's own edge: an edge clipped to nothing needs both
+    // of its sides given.
+    let empty = |a: Option<f64>, b: Option<f64>| matches!((a, b), (Some(a), Some(b)) if b <= a);
+    empty(*top, *bottom) || empty(*left, *right)
+}
+
+/// Whether a computed `clip-path` leaves nothing to see: an inset of 50%
+/// or more from every side, or a circle or ellipse of no radius.
+fn clip_path_hides(path: &str) -> bool {
+    let path = path.trim();
+    let args = |name: &str| {
+        path.strip_prefix(name)
+            .and_then(|r| r.strip_prefix('('))
+            .and_then(|r| r.split(')').next())
+            .map(str::to_string)
+    };
+    if let Some(inset) = args("inset") {
+        let lengths: Vec<&str> = inset
+            .split(" round ")
+            .next()
+            .unwrap_or_default()
+            .split_whitespace()
+            .collect();
+        return !lengths.is_empty()
+            && lengths.iter().all(|l| {
+                l.strip_suffix('%')
+                    .and_then(|p| p.parse::<f64>().ok())
+                    .is_some_and(|p| p >= 50.0)
+            });
+    }
+    for shape in ["circle", "ellipse"] {
+        if let Some(radii) = args(shape) {
+            let before_at = radii.split(" at ").next().unwrap_or_default();
+            let mut radii = before_at.split_whitespace().peekable();
+            return radii.peek().is_some()
+                && radii.all(|r| {
+                    r.trim_end_matches("px")
+                        .trim_end_matches('%')
+                        .parse::<f64>()
+                        .is_ok_and(|r| r <= 0.0)
+                });
+        }
+    }
+    false
 }
 
 /// The address of node `i`'s CSS background picture, when it has one and
@@ -975,6 +1120,9 @@ struct Context {
     region: Option<usize>,
     /// Hidden from assistive technology by an ancestor.
     aria_hidden: bool,
+    /// Inside a link with nothing else to show: its visually hidden text
+    /// is its name, and is read.
+    name_only: bool,
 }
 
 /// Tags whose content is never page text.
@@ -1092,7 +1240,7 @@ impl Walker<'_> {
         let dom = self.dom;
         match dom.kind[i] {
             3 => {
-                if context.silent || !dom.shows(i) {
+                if context.silent || !dom.shows(i) || dom.concealed[i] && !context.name_only {
                     return;
                 }
                 let Some(text) = dom.text[i].clone() else {
@@ -1173,7 +1321,7 @@ impl Walker<'_> {
             _ => None,
         };
         if let Some(kind) = media {
-            if laid_out && dom.shows(i) {
+            if laid_out && dom.shows(i) && !dom.concealed[i] {
                 self.media(i, kind, context);
             }
             return;
@@ -1196,13 +1344,14 @@ impl Walker<'_> {
         // Controls: an interactive role in the AX tree, or a form element.
         let role = self.ax.role(backend).or_else(|| dom_role(dom, i));
         if let Some(role) = role {
-            if !laid_out || !dom.shows(i) && role != Role::Link {
+            if !laid_out || !dom.shows(i) && role != Role::Link || dom.concealed[i] {
                 return;
             }
             let index = self.control(i, role.clone());
             if role == Role::Link {
                 let inner = Context {
                     control: Some(index),
+                    name_only: !shows_anything(dom, i),
                     ..context.clone()
                 };
                 for &child in &dom.children[i] {
@@ -2008,6 +2157,7 @@ pub fn build_with(
         silent: false,
         region: None,
         aria_hidden: false,
+        name_only: false,
     };
     if !dom.parent.is_empty() {
         walker.walk(0, &top);

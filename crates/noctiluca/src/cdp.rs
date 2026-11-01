@@ -51,6 +51,9 @@ pub const SNAPSHOT_STYLES: &[&str] = &[
     "background-image",
     "overflow-y",
     "flex-wrap",
+    "clip",
+    "clip-path",
+    "position",
 ];
 
 /// The script of the isolated world. It reports only that something
