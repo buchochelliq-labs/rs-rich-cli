@@ -25,6 +25,7 @@
 // result drops the value (CONTRIBUTING.md, "API conventions").
 #![warn(clippy::return_self_not_must_use)]
 
+pub mod animate;
 pub mod figlet;
 
 #[cfg(feature = "image")]
