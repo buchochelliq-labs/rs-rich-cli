@@ -226,6 +226,22 @@ pub const PING_SCRIPT: &str = r#"(function start(tries) {
   for (const type of ['input', 'change', 'load', 'toggle', 'play', 'playing', 'pause', 'ended',
                       'volumechange', 'seeked', 'loadedmetadata'])
     document.addEventListener(type, event, true);
+  // The layout can move with no change to the DOM: web fonts arriving, a
+  // box resized by a script's styles, content shifted by what loaded
+  // above it. Each says so too.
+  try {
+    if (document.fonts) {
+      document.fonts.addEventListener('loadingdone', changed);
+      document.fonts.ready.then(changed, () => {});
+    }
+    if (typeof ResizeObserver === 'function') {
+      const sizes = new ResizeObserver(changed);
+      sizes.observe(document.documentElement);
+      if (document.body) sizes.observe(document.body);
+    }
+    if (typeof PerformanceObserver === 'function')
+      new PerformanceObserver(changed).observe({ type: 'layout-shift', buffered: true });
+  } catch (e) {}
   let last = '';
   setInterval(() => {
     const fields = document.querySelectorAll('input,select,textarea');

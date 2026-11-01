@@ -48,6 +48,12 @@ use rich_intuituive::Picture;
 
 /// How long after the first change ping the page is read again.
 pub const DEBOUNCE: Duration = Duration::from_millis(100);
+/// How long after a new document's reading it is read again, to see
+/// whether its layout has settled (web fonts, a sticky header put in
+/// place, a script's rendering move boxes without changing the DOM).
+pub const SETTLE_STEP: Duration = Duration::from_millis(250);
+/// How long a new document is watched for its layout to settle.
+pub const SETTLE_MAX: Duration = Duration::from_secs(3);
 /// How often the tab looks at its engine when nothing happens.
 const TICK: Duration = Duration::from_millis(25);
 /// At most this many stills are captured per reading.
@@ -387,6 +393,23 @@ struct Worker<'a> {
     live: HashMap<NodeId, HashMap<u64, Vec<Run>>>,
     /// The scroll boxes the page appends to, as the engine last said.
     appended: HashSet<NodeId>,
+    /// A new document whose layout may still move: when to read it
+    /// again, when to stop looking, and its last layout's key.
+    settle: Option<(Instant, Instant, u64)>,
+}
+
+/// A key of where the page's boxes are: it changes when its layout moves.
+fn layout_key(page: &Page) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let rect = |r: &Rect| [r.x, r.y, r.width, r.height].map(|v| v.round() as i64);
+    for block in &page.blocks {
+        std::hash::Hash::hash(&(block.node, rect(&block.rect)), &mut hasher);
+    }
+    for media in &page.media {
+        std::hash::Hash::hash(&(media.node, rect(&media.rect)), &mut hasher);
+    }
+    std::hash::Hash::hash(&(page.height.round() as i64), &mut hasher);
+    std::hash::Hasher::finish(&hasher)
 }
 
 impl Worker<'_> {
@@ -411,6 +434,21 @@ impl Worker<'_> {
             media.picture = self.pictures.get(&key).cloned();
         }
         self.probe(&mut page);
+        // A new document is read again until its layout holds still: the
+        // first reading can come from a layout still moving, and nothing
+        // in the DOM may say when it stops.
+        let now = Instant::now();
+        let key = layout_key(&page);
+        let new_document = self.page.as_ref().map(|p| p.document) != Some(page.document);
+        self.settle = match self.settle {
+            _ if new_document => Some((now + SETTLE_STEP, now + SETTLE_MAX, key)),
+            // It moved: look again a step later.
+            Some((_, end, last)) if last != key && now < end => Some((now + SETTLE_STEP, end, key)),
+            // Read early (a ping): the step still counts from the move.
+            Some((next, end, last)) if now < next && now < end => Some((next, end, last)),
+            // A step with no move: settled.
+            _ => None,
+        };
         let page = Arc::new(page);
         if self.page.as_deref() != Some(&*page) {
             (self.update)(Update::Page(page.clone()));
@@ -1029,6 +1067,7 @@ fn run(
         shown_time: HashMap::new(),
         live: HashMap::new(),
         appended: HashSet::new(),
+        settle: None,
     };
     let mut live_due = false;
     // Read once at the start, then whenever something says to.
@@ -1086,7 +1125,10 @@ fn run(
         worker.video();
         let due = worker
             .dirty
-            .is_some_and(|since| since.elapsed() >= DEBOUNCE);
+            .is_some_and(|since| since.elapsed() >= DEBOUNCE)
+            || worker
+                .settle
+                .is_some_and(|(next, _, _)| Instant::now() >= next);
         if read_now || due {
             // A refused reading stays due, and is tried at the next tick.
             if worker.read().is_some() {

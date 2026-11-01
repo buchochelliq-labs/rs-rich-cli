@@ -389,6 +389,16 @@ The script also samples the form fields' values every 500 ms (passwords
 left out), as the PoC did, so a value a page script sets with no event
 is still seen.
 
+A layout can move with no DOM change: web fonts arriving, a header a
+script puts in place with a stylesheet rule, content shifted by what
+loaded above it. The script pings for those too (`document.fonts`, a
+`ResizeObserver` on the root and the body, `layout-shift` entries), and
+the tab reads a new document again every `SETTLE_STEP` (250 ms) until two
+readings in a row put its boxes in the same places, for at most
+`SETTLE_MAX` (3 s). So a first reading taken while the layout still moved
+(a header drawn over the code under it) is replaced (built in 0.0.24,
+`tests/settle.rs`).
+
 The lead's direction asked for `Runtime.addBinding` with a
 MutationObserver. Doing that in the page's main world would bring back the
 PoC's exposure, since the binding would be a global the page can call or
