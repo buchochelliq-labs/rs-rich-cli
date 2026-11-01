@@ -1,4 +1,4 @@
- NOCTILUCA   PROJECTION + SIXEL   ◀▶   Fixture News - Home
+ NOCTILUCA   PROJECTION + SIXEL   ◀ ▶ ↻   Fixture News - Home
  file:///noctiluca/fixtures/news.html
  Fixture News  Home World Science Weather                                                          ┃
  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                                          ┃

@@ -1,4 +1,4 @@
- NOCTILUCA   READER + CELLS   ◀▶   glow::Lamp - docs
+ NOCTILUCA   READER + CELLS   ◀ ▶ ↻   glow::Lamp - docs
  https://fixture.example/docs.html
 • new
 • shine

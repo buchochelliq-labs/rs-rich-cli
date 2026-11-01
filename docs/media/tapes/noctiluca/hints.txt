@@ -1,4 +1,4 @@
- NOCTILUCA   READER + CELLS   ◀▶   Reader fixture
+ NOCTILUCA   READER + CELLS   ◀ ▶ ↻   Reader fixture
  file:///noctiluca/fixtures/reader.html
 Plankton                                                                                           ┃
                                                                                                    ┃
