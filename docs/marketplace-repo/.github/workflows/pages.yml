@@ -14,7 +14,7 @@
 #
 # It runs on a push to main that touches the site, the index, its
 # signature or the keys, and by hand. The signer's commit to main
-# (sign-index.yml, pushed with a deploy key) changes index.json, so it
+# (sign-index.yml, pushed with its GitHub App's token) changes index.json, so it
 # starts this workflow and the site follows the new index: that is
 # intended. This workflow pushes nothing and makes no release, tag or
 # discussion, so it starts no other workflow; it needs no secret and no
