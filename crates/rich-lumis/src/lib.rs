@@ -35,7 +35,7 @@ use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
 use lumis::highlight::highlight_iter;
-use lumis::languages::{available_languages, language_id_for_filename, Language};
+use lumis::languages::{Language, available_languages, language_id_for_filename};
 use lumis::themes::{self, Theme, UnderlineStyle};
 use rich::color::Color;
 use rich::protocol::{

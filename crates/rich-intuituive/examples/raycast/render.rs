@@ -5,8 +5,8 @@
 //! (<https://lodev.org/cgtutor/raycasting.html>, parts 1 to 3): the same
 //! camera plane, DDA, floor casting and sprite projection.
 
-use super::art::{Textures, TEX};
-use super::game::{Game, Hit, Kind, Wall, PLANE};
+use super::art::{TEX, Textures};
+use super::game::{Game, Hit, Kind, PLANE, Wall};
 
 /// A rendered frame: `width` × `height` pixels, three bytes each.
 #[derive(Clone, Debug, PartialEq)]

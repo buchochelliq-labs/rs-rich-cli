@@ -674,11 +674,7 @@ impl Text {
     /// even line indents, or 1. Port of `Text.detect_indentation`.
     pub fn detect_indentation(&self) -> usize {
         fn gcd(a: usize, b: usize) -> usize {
-            if b == 0 {
-                a
-            } else {
-                gcd(b, a % b)
-            }
+            if b == 0 { a } else { gcd(b, a % b) }
         }
         let mut indents: Vec<usize> = self
             .plain
@@ -832,25 +828,25 @@ impl Text {
         let mut count = 0;
         for captures in regex.captures_iter(&plain) {
             let Ok(captures) = captures else { break };
-            if let (Some(style), Some(whole)) = (style.as_ref(), captures.get(0)) {
-                if whole.end() > whole.start() {
-                    self.spans.push(Span {
-                        start: whole.start(),
-                        end: whole.end(),
-                        style: style.clone(),
-                    });
-                }
+            if let (Some(style), Some(whole)) = (style.as_ref(), captures.get(0))
+                && whole.end() > whole.start()
+            {
+                self.spans.push(Span {
+                    start: whole.start(),
+                    end: whole.end(),
+                    style: style.clone(),
+                });
             }
             count += 1;
             for (index, name) in &names {
-                if let Some(group) = captures.get(*index) {
-                    if group.end() > group.start() {
-                        self.spans.push(Span {
-                            start: group.start(),
-                            end: group.end(),
-                            style: StyleType::Name(format!("{style_prefix}{name}")),
-                        });
-                    }
+                if let Some(group) = captures.get(*index)
+                    && group.end() > group.start()
+                {
+                    self.spans.push(Span {
+                        start: group.start(),
+                        end: group.end(),
+                        style: StyleType::Name(format!("{style_prefix}{name}")),
+                    });
                 }
             }
         }
@@ -1045,10 +1041,10 @@ impl Text {
             let content = Text::strip_control_codes(&content);
             let start = self.plain.len();
             self.plain.push_str(&content);
-            if let Some(style) = style.map(Into::into) {
-                if !is_falsy_style(&style) {
-                    self.spans.push(Span::new(start, self.plain.len(), style));
-                }
+            if let Some(style) = style.map(Into::into)
+                && !is_falsy_style(&style)
+            {
+                self.spans.push(Span::new(start, self.plain.len(), style));
             }
         }
         self

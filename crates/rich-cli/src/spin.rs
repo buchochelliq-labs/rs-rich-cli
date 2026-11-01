@@ -177,7 +177,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                 json,
                 ExitClass::Usage,
                 &format!("{message} (try `rich spin --help`)"),
-            )
+            );
         }
     };
     let env = SystemEnvironment;
@@ -374,19 +374,27 @@ mod tests {
 
     #[test]
     fn refuses_a_missing_command_and_an_unknown_spinner() {
-        assert!(parsed(&["spin", "--title", "x"])
-            .unwrap_err()
-            .contains("no command"));
+        assert!(
+            parsed(&["spin", "--title", "x"])
+                .unwrap_err()
+                .contains("no command")
+        );
         assert!(parsed(&["spin", "--"]).unwrap_err().contains("no command"));
-        assert!(parsed(&["spin", "--spinner", "nope", "--", "true"])
-            .unwrap_err()
-            .contains("no spinner named \"nope\""));
-        assert!(parsed(&["spin", "--title"])
-            .unwrap_err()
-            .contains("needs a value"));
-        assert!(parsed(&["spin", "--bogus", "--", "true"])
-            .unwrap_err()
-            .contains("unknown option --bogus"));
+        assert!(
+            parsed(&["spin", "--spinner", "nope", "--", "true"])
+                .unwrap_err()
+                .contains("no spinner named \"nope\"")
+        );
+        assert!(
+            parsed(&["spin", "--title"])
+                .unwrap_err()
+                .contains("needs a value")
+        );
+        assert!(
+            parsed(&["spin", "--bogus", "--", "true"])
+                .unwrap_err()
+                .contains("unknown option --bogus")
+        );
     }
 
     #[test]

@@ -14,10 +14,10 @@ mod dashboard;
 
 use std::time::Instant;
 
-use intuituive::interact::{Event, Key};
-use intuituive::pixels::{pixels_fit, PixelMode};
-use intuituive::prelude::*;
 use intuituive::Driver;
+use intuituive::interact::{Event, Key};
+use intuituive::pixels::{PixelMode, pixels_fit};
+use intuituive::prelude::*;
 
 /// A small, fast generator: the same noise on every run.
 struct Noise(u64);

@@ -10,8 +10,8 @@ use std::sync::Arc;
 
 use rich::json::JsonOptions;
 use rich::markdown::Markdown;
-use rich::pretty::{pretty_repr, Pretty, ReprLimits};
-use rich::scope::{render_scope, ScopeOptions};
+use rich::pretty::{Pretty, ReprLimits, pretty_repr};
+use rich::scope::{ScopeOptions, render_scope};
 use rich::table::Cell;
 use rich::{ColorSystem, Console, Json, Justify, Overflow, Panel, Renderable, Syntax, Table};
 use serde_json::Value;

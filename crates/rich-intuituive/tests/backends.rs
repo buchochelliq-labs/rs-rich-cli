@@ -15,7 +15,7 @@ use std::time::{Duration, Instant};
 
 use intuituive::interact::BackendKind;
 use intuituive::prelude::*;
-use support::{assert_restored, suspends_and_resumes, Pty};
+use support::{Pty, assert_restored, suspends_and_resumes};
 
 fn app() -> App {
     let head = format!("child ready pid {}.", std::process::id());

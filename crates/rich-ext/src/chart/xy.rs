@@ -5,8 +5,8 @@
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, HorizontalAlign, Renderable, Segment, Style};
 
-use super::plot_canvas::{is_ascii, raster_into, spec_style, CellGrid, Marker, Op, View};
-use super::{cell_units, cells, lines_to_segments, series_key, Scale, ValueFormat};
+use super::plot_canvas::{CellGrid, Marker, Op, View, is_ascii, raster_into, spec_style};
+use super::{Scale, ValueFormat, cell_units, cells, lines_to_segments, series_key};
 use crate::fidelity::ascii_text;
 
 mod stacked;
@@ -1233,10 +1233,10 @@ impl Chart {
                 GraphType::Scatter => {}
                 GraphType::Line => {
                     for pair in mapped.windows(2) {
-                        if let [Some(a), Some(b)] = pair {
-                            if keep(*a, *b) {
-                                ops.push(Op::Line(*a, *b, style.clone()));
-                            }
+                        if let [Some(a), Some(b)] = pair
+                            && keep(*a, *b)
+                        {
+                            ops.push(Op::Line(*a, *b, style.clone()));
                         }
                     }
                 }
@@ -1252,10 +1252,10 @@ impl Chart {
                 GraphType::Area => {
                     let level = self.y_axis.map(dataset.fill_to).unwrap_or(y.scale.min());
                     for pair in mapped.windows(2) {
-                        if let [Some(a), Some(b)] = pair {
-                            if keep(*a, *b) {
-                                ops.push(Op::Area(*a, *b, level, style.clone()));
-                            }
+                        if let [Some(a), Some(b)] = pair
+                            && keep(*a, *b)
+                        {
+                            ops.push(Op::Area(*a, *b, level, style.clone()));
                         }
                     }
                 }
@@ -1587,9 +1587,11 @@ mod tests {
              dataset 2, points: 1 point, min 2, max 2, last 2"
         );
         // Without bounds, the data's range; a log axis says so.
-        let log = Chart::new(vec![Dataset::new([(1.0, 1.0), (2.0, 100.0)])
-            .name("hz")
-            .graph_type(GraphType::Area)])
+        let log = Chart::new(vec![
+            Dataset::new([(1.0, 1.0), (2.0, 100.0)])
+                .name("hz")
+                .graph_type(GraphType::Area),
+        ])
         .y_axis(Axis::default().scale(AxisScale::Log));
         assert_eq!(
             log.accessible_text(80),
@@ -1683,7 +1685,7 @@ mod tests {
     #[test]
     fn bars_rise_from_zero() {
         let chart = Chart::new(vec![
-            dot(&[(0.0, 2.0), (2.0, 4.0), (4.0, -1.0)]).graph_type(GraphType::Bar)
+            dot(&[(0.0, 2.0), (2.0, 4.0), (4.0, -1.0)]).graph_type(GraphType::Bar),
         ])
         .x_axis(Axis::default().bounds(0.0, 4.0))
         .y_axis(Axis::default().bounds(-1.0, 4.0))
@@ -1707,15 +1709,17 @@ mod tests {
 
     #[test]
     fn lines_break_at_points_the_axes_cannot_show() {
-        let chart = Chart::new(vec![dot(&[
-            (0.0, 0.0),
-            (1.0, 0.0),
-            (f64::NAN, 0.0),
-            (3.0, f64::INFINITY),
-            (4.0, 0.0),
-            (5.0, 0.0),
+        let chart = Chart::new(vec![
+            dot(&[
+                (0.0, 0.0),
+                (1.0, 0.0),
+                (f64::NAN, 0.0),
+                (3.0, f64::INFINITY),
+                (4.0, 0.0),
+                (5.0, 0.0),
+            ])
+            .graph_type(GraphType::Line),
         ])
-        .graph_type(GraphType::Line)])
         .x_axis(Axis::default().bounds(0.0, 5.0))
         .y_axis(Axis::default().bounds(0.0, 1.0))
         .height(1)
@@ -1756,9 +1760,11 @@ mod tests {
             rows(&legend_chart(LegendPosition::Right), 9)[1],
             "    ┌───┐"
         );
-        assert!(rows(&legend_chart(LegendPosition::None), 9)
-            .iter()
-            .all(|r| r.trim().is_empty()));
+        assert!(
+            rows(&legend_chart(LegendPosition::None), 9)
+                .iter()
+                .all(|r| r.trim().is_empty())
+        );
     }
 
     #[test]
@@ -1993,9 +1999,11 @@ mod tests {
 
     #[test]
     fn tiny_charts_drop_labels_then_titles() {
-        let chart = Chart::new(vec![dot(&[(0.0, 0.0), (1.0, 1.0)])
-            .name("series")
-            .graph_type(GraphType::Line)])
+        let chart = Chart::new(vec![
+            dot(&[(0.0, 0.0), (1.0, 1.0)])
+                .name("series")
+                .graph_type(GraphType::Line),
+        ])
         .x_axis(
             Axis::default()
                 .bounds(0.0, 1.0)
@@ -2048,9 +2056,11 @@ mod tests {
             .color_system(None)
             .ascii_only(true)
             .build();
-        let chart = Chart::new(vec![Dataset::new([(0.0, 0.0), (1.0, 1.0)])
-            .name("é")
-            .graph_type(GraphType::Line)])
+        let chart = Chart::new(vec![
+            Dataset::new([(0.0, 0.0), (1.0, 1.0)])
+                .name("é")
+                .graph_type(GraphType::Line),
+        ])
         .x_axis(
             Axis::default()
                 .bounds(0.0, 1.0)
@@ -2080,10 +2090,12 @@ mod tests {
     fn area_charts_fill_to_their_level() {
         let points = [(0.0, 1.0), (2.0, 3.0), (4.0, 2.0), (6.0, 4.0)];
         let area = |fill: f64| {
-            Chart::new(vec![Dataset::new(points)
-                .graph_type(GraphType::Area)
-                .marker(Marker::Ascii('#'))
-                .fill_to(fill)])
+            Chart::new(vec![
+                Dataset::new(points)
+                    .graph_type(GraphType::Area)
+                    .marker(Marker::Ascii('#'))
+                    .fill_to(fill),
+            ])
             .x_axis(Axis::default().bounds(0.0, 6.0))
             .y_axis(Axis::default().bounds(0.0, 4.0))
             .height(5)
@@ -2100,9 +2112,11 @@ mod tests {
             vec!["      #", "  #  ##", "#######", "#      ", "       "]
         );
         // On a log axis, a level it cannot show fills to the bottom.
-        let log = Chart::new(vec![Dataset::new([(0.0, 10.0), (2.0, 10.0)])
-            .graph_type(GraphType::Area)
-            .marker(Marker::Ascii('#'))])
+        let log = Chart::new(vec![
+            Dataset::new([(0.0, 10.0), (2.0, 10.0)])
+                .graph_type(GraphType::Area)
+                .marker(Marker::Ascii('#')),
+        ])
         .x_axis(Axis::default().bounds(0.0, 2.0))
         .y_axis(Axis::default().bounds(1.0, 100.0).scale(AxisScale::Log))
         .height(3)
@@ -2212,7 +2226,7 @@ mod tests {
     #[test]
     fn a_chart_fills_the_height_it_is_given() {
         let chart = Chart::new(vec![
-            dot(&[(0.0, 0.0), (1.0, 1.0)]).graph_type(GraphType::Line)
+            dot(&[(0.0, 0.0), (1.0, 1.0)]).graph_type(GraphType::Line),
         ])
         .x_axis(Axis::default().bounds(0.0, 1.0).labels(Labels::Auto(2)))
         .y_axis(Axis::default().bounds(0.0, 1.0).labels(Labels::Auto(2)));

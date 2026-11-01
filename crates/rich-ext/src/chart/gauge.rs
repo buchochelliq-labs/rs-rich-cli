@@ -5,8 +5,8 @@ use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
 use super::{
-    cell_units, cells, has_colour, lines_to_segments, theme_style, truncate, user_style,
-    wrap_entries, BarChart, Charset, Line, Scale, ValueFormat,
+    BarChart, Charset, Line, Scale, ValueFormat, cell_units, cells, has_colour, lines_to_segments,
+    theme_style, truncate, user_style, wrap_entries,
 };
 
 /// Bar cells in the compact form when [`Gauge::bar_width`] is not set.

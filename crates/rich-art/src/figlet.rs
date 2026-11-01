@@ -376,10 +376,10 @@ impl<'a> Builder<'a> {
                 continue;
             };
             let smushed = self.smush_chars(left, Some(right));
-            if let (Some(smushed), true) = (smushed, idx >= 0) {
-                if (idx as usize) < add_left.len() {
-                    add_left[idx as usize] = smushed;
-                }
+            if let (Some(smushed), true) = (smushed, idx >= 0)
+                && (idx as usize) < add_left.len()
+            {
+                add_left[idx as usize] = smushed;
             }
         }
 

@@ -65,9 +65,15 @@ impl Sink {
             ),
         )
         .unwrap();
-        std::env::set_var("ALSA_CONFIG_PATH", &conf);
-        // No PulseAudio server: Chrome uses ALSA.
-        std::env::set_var("PULSE_SERVER", "unix:/nonexistent");
+        // SAFETY: each test holds `ALSA` while it points the process at its
+        // sink, and only the Chrome it then starts (a child, with a copy of
+        // the environment) reads these.
+        #[allow(unsafe_code)]
+        unsafe {
+            std::env::set_var("ALSA_CONFIG_PATH", &conf);
+            // No PulseAudio server: Chrome uses ALSA.
+            std::env::set_var("PULSE_SERVER", "unix:/nonexistent");
+        }
         let pcm = Arc::new(Mutex::new(Vec::new()));
         let kept = pcm.clone();
         std::thread::spawn(move || {
@@ -140,19 +146,18 @@ fn without_the_switch_chrome_stays_silent() {
     let start = Instant::now();
     let mut playing = false;
     while start.elapsed() < Duration::from_secs(30) && !playing {
-        if let Ok(Update::Page(p)) = updates.recv_timeout(Duration::from_millis(100)) {
-            if p.url == url {
-                if let Some(b) = playback(&p) {
-                    if b.paused {
-                        tab.send(Command::Media {
-                            document: p.document,
-                            node: p.media[0].node,
-                            op: MediaOp::Play,
-                        });
-                    } else {
-                        playing = b.time > 0.3;
-                    }
-                }
+        if let Ok(Update::Page(p)) = updates.recv_timeout(Duration::from_millis(100))
+            && p.url == url
+            && let Some(b) = playback(&p)
+        {
+            if b.paused {
+                tab.send(Command::Media {
+                    document: p.document,
+                    node: p.media[0].node,
+                    op: MediaOp::Play,
+                });
+            } else {
+                playing = b.time > 0.3;
             }
         }
     }
@@ -189,10 +194,10 @@ fn sound_plays_mutes_and_changes_volume() {
     let mut wait = |what: &str, ok: &dyn Fn(&Page) -> bool| -> Arc<Page> {
         let start = Instant::now();
         loop {
-            if let Some(p) = &page {
-                if ok(p) {
-                    return p.clone();
-                }
+            if let Some(p) = &page
+                && ok(p)
+            {
+                return p.clone();
             }
             assert!(
                 start.elapsed() < Duration::from_secs(30),

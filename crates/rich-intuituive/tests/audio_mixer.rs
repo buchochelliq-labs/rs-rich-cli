@@ -4,7 +4,7 @@
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
-use intuituive::audio::{clip, output, Clip, Mixer, OutputOptions};
+use intuituive::audio::{Clip, Mixer, OutputOptions, clip, output};
 
 /// `frames` frames of a mixer's output, in blocks of 256.
 fn mixed(mixer: &Mixer, frames: usize) -> Vec<f32> {

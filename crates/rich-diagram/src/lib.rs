@@ -63,7 +63,7 @@ pub use diagram::Diagram;
 pub use dot::{Dot, DotError, DotGraph};
 pub use er::{ErDiagram, ErModel};
 pub use graph::{
-    Cluster, Direction, Edge, Graph, Head, Node, Shape, Stroke, MAX_EDGES, MAX_EDGE_LENGTH,
-    MAX_NODES, MAX_SOURCE,
+    Cluster, Direction, Edge, Graph, Head, MAX_EDGE_LENGTH, MAX_EDGES, MAX_NODES, MAX_SOURCE, Node,
+    Shape, Stroke,
 };
-pub use layout::{draw, DrawError, Drawing};
+pub use layout::{DrawError, Drawing, draw};

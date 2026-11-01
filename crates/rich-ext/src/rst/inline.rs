@@ -380,10 +380,11 @@ impl Misses {
         if !chars.get(start).copied().is_some_and(is_word) {
             return None;
         }
-        if let Some((from, end)) = self.1 {
-            if from <= start && start < end {
-                return Some(end);
-            }
+        if let Some((from, end)) = self.1
+            && from <= start
+            && start < end
+        {
+            return Some(end);
         }
         let end = simplename(chars, start)?;
         self.1 = Some((start, end));
@@ -393,10 +394,11 @@ impl Misses {
     /// The first `]` at or after `from`, reusing the last search: nothing
     /// between where it started and what it found is a `]`.
     fn close_bracket(&mut self, chars: &[char], from: usize) -> Option<usize> {
-        if let Some((searched, found)) = self.2 {
-            if searched <= from && found.is_none_or(|found| from <= found) {
-                return found;
-            }
+        if let Some((searched, found)) = self.2
+            && searched <= from
+            && found.is_none_or(|found| from <= found)
+        {
+            return found;
         }
         let found = (from..chars.len()).find(|&j| chars[j] == ']');
         self.2 = Some((from, found));
@@ -555,13 +557,12 @@ fn interpreted_end(chars: &[char], j: usize) -> Option<(usize, usize, Option<Str
     }
     let mut k = j + 1;
     let mut suffix_role = None;
-    if chars.get(k) == Some(&':') {
-        if let Some(name_end) = simplename(chars, k + 1) {
-            if chars.get(name_end) == Some(&':') {
-                suffix_role = Some(chars[k + 1..name_end].iter().collect::<String>());
-                k = name_end + 1;
-            }
-        }
+    if chars.get(k) == Some(&':')
+        && let Some(name_end) = simplename(chars, k + 1)
+        && chars.get(name_end) == Some(&':')
+    {
+        suffix_role = Some(chars[k + 1..name_end].iter().collect::<String>());
+        k = name_end + 1;
     }
     let mut refend = 0;
     while refend < 2 && chars.get(k) == Some(&'_') {
@@ -574,46 +575,46 @@ fn interpreted_end(chars: &[char], j: usize) -> Option<(usize, usize, Option<Str
 /// `` `text`_ `` and `` `text <uri>`_ ``.
 fn phrase_reference(body: &[char], anonymous: bool) -> Vec<Inline> {
     // An embedded URI or alias: `<...>` at the end, after whitespace or alone.
-    if body.last() == Some(&'>') {
-        if let Some(open) = body.iter().rposition(|&c| c == '<') {
-            let before_ok = open == 0 || matches!(body[open - 1], ' ' | '\n');
-            let inner = &body[open + 1..body.len() - 1];
-            let inner_ok = !inner.is_empty()
-                && !matches!(inner[0], ' ' | '\n')
-                && !matches!(inner[inner.len() - 1], ' ' | '\n' | ESCAPE);
-            if before_ok && inner_ok {
-                let alias = unescape(&body[..open]).trim().to_string();
-                let target = unescape(inner);
-                let text_or = |fallback: &str| {
-                    if alias.is_empty() {
-                        fallback.to_string()
-                    } else {
-                        alias.clone()
-                    }
-                };
-                if target.ends_with('_') && inner.get(inner.len() - 2) != Some(&ESCAPE) {
-                    // An alias of another name: `` `text <name_>`_ ``.
-                    let name = &target[..target.len() - 1];
-                    return vec![Inline::Reference {
-                        text: text_or(name),
-                        uri: None,
-                        name: Some(normalize_name(name)),
-                        anonymous,
-                        raw: String::new(),
-                    }];
+    if body.last() == Some(&'>')
+        && let Some(open) = body.iter().rposition(|&c| c == '<')
+    {
+        let before_ok = open == 0 || matches!(body[open - 1], ' ' | '\n');
+        let inner = &body[open + 1..body.len() - 1];
+        let inner_ok = !inner.is_empty()
+            && !matches!(inner[0], ' ' | '\n')
+            && !matches!(inner[inner.len() - 1], ' ' | '\n' | ESCAPE);
+        if before_ok && inner_ok {
+            let alias = unescape(&body[..open]).trim().to_string();
+            let target = unescape(inner);
+            let text_or = |fallback: &str| {
+                if alias.is_empty() {
+                    fallback.to_string()
+                } else {
+                    alias.clone()
                 }
-                let uri: String = target.split_whitespace().collect();
-                let text = text_or(&uri);
-                // A named embedded URI is also a target for that name.
-                let name = (!anonymous).then(|| normalize_name(&text));
+            };
+            if target.ends_with('_') && inner.get(inner.len() - 2) != Some(&ESCAPE) {
+                // An alias of another name: `` `text <name_>`_ ``.
+                let name = &target[..target.len() - 1];
                 return vec![Inline::Reference {
-                    text,
-                    uri: Some(uri),
-                    name,
+                    text: text_or(name),
+                    uri: None,
+                    name: Some(normalize_name(name)),
                     anonymous,
                     raw: String::new(),
                 }];
             }
+            let uri: String = target.split_whitespace().collect();
+            let text = text_or(&uri);
+            // A named embedded URI is also a target for that name.
+            let name = (!anonymous).then(|| normalize_name(&text));
+            return vec![Inline::Reference {
+                text,
+                uri: Some(uri),
+                name,
+                anonymous,
+                raw: String::new(),
+            }];
         }
     }
     let text = unescape(body);
@@ -970,16 +971,16 @@ fn implicit(chars: &[char], inlines: &mut Vec<Inline>) {
     let mut i = 0;
     while i < chars.len() {
         let prev = i.checked_sub(1).map(|p| chars[p]);
-        if start_prefix(prev) && chars[i].is_ascii_alphanumeric() {
-            if let Some((node, end)) =
+        if start_prefix(prev)
+            && chars[i].is_ascii_alphanumeric()
+            && let Some((node, end)) =
                 uri_at(chars, i, &mut runs).or_else(|| email_at(chars, i, &mut runs))
-            {
-                inlines.push(Inline::Text(unescape(&chars[plain_start..i])));
-                inlines.push(node);
-                i = end;
-                plain_start = end;
-                continue;
-            }
+        {
+            inlines.push(Inline::Text(unescape(&chars[plain_start..i])));
+            inlines.push(node);
+            i = end;
+            plain_start = end;
+            continue;
         }
         i += 1;
     }
@@ -1001,10 +1002,11 @@ fn run_end(
     start: usize,
     pred: impl Fn(char) -> bool,
 ) -> usize {
-    if let Some((from, end)) = *last {
-        if from <= start && start <= end {
-            return end;
-        }
+    if let Some((from, end)) = *last
+        && from <= start
+        && start <= end
+    {
+        return end;
     }
     let mut end = start;
     while chars.get(end).is_some_and(|&c| pred(c)) {

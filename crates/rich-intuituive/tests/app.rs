@@ -13,8 +13,8 @@ fn run(app: App, script: Script, width: u16, height: u16) -> Record {
     let record = backend.record();
     app.run_on(&mut backend)
         .expect("the app runs to the end of its script");
-    let record = record.borrow().clone();
-    record
+
+    record.borrow().clone()
 }
 
 fn screen(record: &Record) -> Vec<String> {

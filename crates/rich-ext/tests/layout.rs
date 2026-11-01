@@ -1,5 +1,5 @@
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Text, Theme};
-use rich_ext::layout::{fit_segments, Alignment, Axis, Constraint, LayoutNode, OverflowPolicy};
+use rich_ext::layout::{Alignment, Axis, Constraint, LayoutNode, OverflowPolicy, fit_segments};
 fn strings(lines: Vec<Vec<Segment>>) -> Vec<String> {
     lines
         .into_iter()
@@ -72,15 +72,17 @@ fn composition_is_bounded_and_alignment_positions_content() {
                 &console.options().update_dimensions(width, height),
             ));
             assert!(rows.len() <= height);
-            assert!(rows
-                .iter()
-                .all(|r| r.iter().map(Segment::cell_length).sum::<usize>() <= width));
+            assert!(
+                rows.iter()
+                    .all(|r| r.iter().map(Segment::cell_length).sum::<usize>() <= width)
+            );
         }
     }
     let zero = LayoutNode::leaf(Box::new(PanicChild));
-    assert!(zero
-        .rich_render(&console, &console.options().update_dimensions(0, 8))
-        .is_empty());
+    assert!(
+        zero.rich_render(&console, &console.options().update_dimensions(0, 8))
+            .is_empty()
+    );
     let bad = LayoutNode::leaf(Box::new(Text::new("bad"))).width(Constraint {
         min: 8,
         max: Some(2),
@@ -122,9 +124,11 @@ fn cross_axis_constraints_bound_children_and_nested_intrinsic_content_survives()
     let c = Console::builder().width(10).height(3).build();
     let vertical = LayoutNode::split(
         Axis::Vertical,
-        vec![LayoutNode::leaf(Box::new(Text::new("ABCDEFGHIJ")))
-            .width(Constraint::fixed(3))
-            .overflow(OverflowPolicy::Crop)],
+        vec![
+            LayoutNode::leaf(Box::new(Text::new("ABCDEFGHIJ")))
+                .width(Constraint::fixed(3))
+                .overflow(OverflowPolicy::Crop),
+        ],
     );
     let rows = strings(Segment::split_lines(
         &vertical.rich_render(&c, &c.options().update_dimensions(10, 2)),
@@ -265,9 +269,10 @@ fn nested_panels_compose_inside_and_around_layouts() {
                 &console.options().update_dimensions(width, height),
             ));
             assert!(rows.len() <= height);
-            assert!(rows
-                .iter()
-                .all(|r| r.iter().map(Segment::cell_length).sum::<usize>() <= width));
+            assert!(
+                rows.iter()
+                    .all(|r| r.iter().map(Segment::cell_length).sum::<usize>() <= width)
+            );
         }
     }
 }

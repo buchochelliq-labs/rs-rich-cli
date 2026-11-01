@@ -3,7 +3,7 @@
 //! raises. Byte parity for the values rich defines lives in
 //! `golden_audit_edges.rs`.
 
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use rich::syntax::Syntax;
 use rich::{
@@ -238,9 +238,11 @@ fn layout_huge_sizes_resolve() {
     layout.split_row(vec![leaf("a").size(usize::MAX), leaf("b").size(5)]);
     let regions = layout.region_map(10, 3);
     assert_eq!(regions.len(), 3);
-    assert!(regions
-        .iter()
-        .any(|(_, r)| r.x == usize::MAX && r.width == 5));
+    assert!(
+        regions
+            .iter()
+            .any(|(_, r)| r.x == usize::MAX && r.width == 5)
+    );
 
     let mut layout = Layout::new();
     layout.split_column(vec![leaf("a").minimum_size(usize::MAX), leaf("b")]);

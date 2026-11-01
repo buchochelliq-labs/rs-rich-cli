@@ -14,8 +14,8 @@ use intuituive::interact::{Button, Event, Key, KeyCode, Mouse, MouseKind};
 use intuituive::layout::split;
 use intuituive::node::Axis;
 use intuituive::screen::Rect;
-use intuituive::{assert_screen, Driver, StackLayout};
-use layout::{layout_app, size_examples, Block, Kind, Options, BLOCKS, TABS};
+use intuituive::{Driver, StackLayout, assert_screen};
+use layout::{BLOCKS, Block, Kind, Options, TABS, layout_app, size_examples};
 
 const WIDTH: u16 = 100;
 const HEIGHT: u16 = 30;

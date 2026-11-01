@@ -447,11 +447,15 @@ mod tests {
         let actions = Actions::from_registry(&registry);
         let found = actions.for_target(&target(TargetKind::File, "a.txt"), &[]);
         assert_eq!(found, [Action::new("reveal", "Reveal", Key::ctrl('r'))]);
-        assert!(actions
-            .for_target(&target(TargetKind::File, ".env"), &[])
-            .is_empty());
-        assert!(actions
-            .for_target(&target(TargetKind::Item, "a.txt"), &[])
-            .is_empty());
+        assert!(
+            actions
+                .for_target(&target(TargetKind::File, ".env"), &[])
+                .is_empty()
+        );
+        assert!(
+            actions
+                .for_target(&target(TargetKind::Item, "a.txt"), &[])
+                .is_empty()
+        );
     }
 }

@@ -48,7 +48,7 @@ use crate::builtin::{
 pub use crate::layout::Size;
 use crate::layout::{Align, AlignContent, Justify, StackLayout, TextAlign, Track};
 pub use crate::list::list;
-use crate::reactive::{next_node, NodeId, Runtime, Signal};
+use crate::reactive::{NodeId, Runtime, Signal, next_node};
 use crate::screen::{Rect, Screen};
 use crate::sheet::{Dock, Element, Layout, States, Stylesheet};
 use crate::widget::{Canvas, DrawCx, MeasureCx, ScrollCx, Watchers, Widget};
@@ -157,11 +157,7 @@ impl KeyBinding {
     /// Its keys while it applies; none while it does not, so a key passes
     /// it by (to another binding of the key, on this node or above).
     pub(crate) fn live_keys(&self) -> &[Key] {
-        if self.active() {
-            &self.keys
-        } else {
-            &[]
-        }
+        if self.active() { &self.keys } else { &[] }
     }
 }
 /// Which of `bindings` takes `key`, those in `skip` left out: one that
@@ -2737,11 +2733,7 @@ impl Node {
             let sheet = self.sheet.borrow();
             let layout = &sheet.layout;
             fn pick<T>(set: bool, own: T, from: Option<T>) -> T {
-                if set {
-                    own
-                } else {
-                    from.unwrap_or(own)
-                }
+                if set { own } else { from.unwrap_or(own) }
             }
             (
                 pick(self.set[SET_SIZE], self.own_size(), layout.size),
@@ -3009,10 +3001,10 @@ impl Node {
     /// Not shown this frame: no rectangle (so no clicks reach it or
     /// anything inside it), and it draws afresh when it comes back.
     pub(crate) fn hide(&self) {
-        if let Some(handle) = *self.rect_slot.borrow() {
-            if handle.get_untracked().is_some() {
-                handle.set(None);
-            }
+        if let Some(handle) = *self.rect_slot.borrow()
+            && handle.get_untracked().is_some()
+        {
+            handle.set(None);
         }
         self.rect.set(Rect::default());
         self.inner.set(Rect::default());
@@ -3417,10 +3409,10 @@ impl Node {
                     frame.damage.push(inner);
                     frame.composing += 1;
                     for (i, child) in widget.children().iter().enumerate() {
-                        if let Some(area) = areas.get(i).map(|area| area.intersection(inner)) {
-                            if !area.is_empty() {
-                                child.draw(frame, area, screen, true);
-                            }
+                        if let Some(area) = areas.get(i).map(|area| area.intersection(inner))
+                            && !area.is_empty()
+                        {
+                            child.draw(frame, area, screen, true);
                         }
                     }
                     frame.composing -= 1;
@@ -3437,10 +3429,10 @@ impl Node {
                     screen.clear(inner);
                     frame.damage.push(inner);
                     for (i, child) in widget.children().iter().enumerate() {
-                        if let Some(area) = areas.get(i).map(|area| area.intersection(inner)) {
-                            if !area.is_empty() {
-                                child.draw(frame, area, screen, true);
-                            }
+                        if let Some(area) = areas.get(i).map(|area| area.intersection(inner))
+                            && !area.is_empty()
+                        {
+                            child.draw(frame, area, screen, true);
                         }
                     }
                 }

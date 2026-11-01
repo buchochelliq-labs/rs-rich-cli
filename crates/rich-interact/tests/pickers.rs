@@ -5,9 +5,9 @@ use std::path::{Path, PathBuf};
 use rich_interact::headless::{self, Script};
 use rich_interact::policy::{Fallback, Reason, ScriptedLineIo};
 use rich_interact::{
-    degrade, AssetKind, AssetPicker, ColorFormat, ColorPicker, Component, Confirm, Context, Error,
-    Event, FileMode, FilePicker, Input, Key, NotInteractive, Outcome, PreviewLayout, Select,
-    TextArea,
+    AssetKind, AssetPicker, ColorFormat, ColorPicker, Component, Confirm, Context, Error, Event,
+    FileMode, FilePicker, Input, Key, NotInteractive, Outcome, PreviewLayout, Select, TextArea,
+    degrade,
 };
 
 /// The last view before the component collapsed to its answer.

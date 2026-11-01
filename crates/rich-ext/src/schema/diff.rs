@@ -252,15 +252,16 @@ impl Differ {
         // Nullability, where the type in words does not carry it (model
         // fields; JSON Schema writes `| null` in the type). A field that also
         // became (or stopped being) required is listed once, as that.
-        if let (Some(x), Some(y)) = (old.nullable(), new.nullable()) {
-            if x != y && old.required_flag() == new.required_flag() {
-                let detail = if y {
-                    "became nullable"
-                } else {
-                    "no longer nullable"
-                };
-                self.push(ChangeKind::Changed, path, detail.into(), !y);
-            }
+        if let (Some(x), Some(y)) = (old.nullable(), new.nullable())
+            && x != y
+            && old.required_flag() == new.required_flag()
+        {
+            let detail = if y {
+                "became nullable"
+            } else {
+                "no longer nullable"
+            };
+            self.push(ChangeKind::Changed, path, detail.into(), !y);
         }
         let (old_constraints, new_constraints) = (old.constraints(), new.constraints());
         self.compare_enum(&old_constraints, &new_constraints, path);
@@ -406,11 +407,11 @@ impl Differ {
                 _ => {}
             }
             // A schema for other fields is compared as a branch.
-            if key == "additionalProperties" {
-                if let (Some(x), Some(y)) = (old_node.additional(), new_node.additional()) {
-                    self.compare(&x, &y, &join(path, "[other properties]"), depth + 1);
-                    continue;
-                }
+            if key == "additionalProperties"
+                && let (Some(x), Some(y)) = (old_node.additional(), new_node.additional())
+            {
+                self.compare(&x, &y, &join(path, "[other properties]"), depth + 1);
+                continue;
             }
             let informational = matches!(
                 key.as_str(),

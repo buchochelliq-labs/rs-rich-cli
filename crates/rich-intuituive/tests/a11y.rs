@@ -10,7 +10,7 @@ use std::time::Duration;
 use intuituive::a11y::{AccessNode, AccessState, Announcement, Role};
 use intuituive::interact::{Event, Key};
 use intuituive::prelude::*;
-use intuituive::widgets::{table, tabs, tree, Column, TreeItem};
+use intuituive::widgets::{Column, TreeItem, table, tabs, tree};
 
 fn frame(driver: &mut intuituive::Driver, event: Option<Event>) -> String {
     if let Some(event) = event {
@@ -298,9 +298,9 @@ fn tree_items_are_expanded_or_collapsed() {
 
 #[test]
 fn a_lazy_tree_is_busy_while_a_level_loads() {
-    use std::sync::{mpsc, Arc, Mutex};
+    use std::sync::{Arc, Mutex, mpsc};
 
-    use intuituive::widgets::{tree_lazy, LazyItem};
+    use intuituive::widgets::{LazyItem, tree_lazy};
 
     let (send, wait) = mpsc::channel::<()>();
     let wait = Arc::new(Mutex::new(wait));
@@ -329,7 +329,7 @@ fn a_lazy_tree_is_busy_while_a_level_loads() {
 
 #[test]
 fn menus_count_their_items_without_separators() {
-    use intuituive::menu::{menu_bar, Menu, MenuItem};
+    use intuituive::menu::{Menu, MenuItem, menu_bar};
 
     let app = App::new(|| {
         let item = |name: &str| MenuItem::new(name, |_| {});
@@ -358,7 +358,7 @@ fn menus_count_their_items_without_separators() {
 
 #[test]
 fn a_calendar_puts_the_cursor_on_the_selected_day() {
-    use intuituive::widgets::{calendar, Date};
+    use intuituive::widgets::{Date, calendar};
 
     let app = App::new(|| calendar(signal(Date::new(2026, 10, 8))).label("Due")).accessible(true);
     let mut driver = app.driver(24, 9);

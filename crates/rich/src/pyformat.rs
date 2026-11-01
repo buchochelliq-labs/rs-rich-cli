@@ -161,11 +161,7 @@ pub fn float_repr(value: f64) -> String {
 }
 
 fn exp_sign(exponent: i32) -> char {
-    if exponent < 0 {
-        '-'
-    } else {
-        '+'
-    }
+    if exponent < 0 { '-' } else { '+' }
 }
 
 /// Which thousands separator a spec asked for (CPython's `LT_*` locale kinds).

@@ -32,8 +32,8 @@ use crate::model::MicroAsset;
 use crate::name::is_valid_name;
 use crate::registry::MicroRegistry;
 use crate::render::{
-    fallback_cells, is_sentinel, placeholder_with, FallbackPreference, MicroMeta, PAD_CELL,
-    SENTINEL_BASE, SENTINEL_LAST,
+    FallbackPreference, MicroMeta, PAD_CELL, SENTINEL_BASE, SENTINEL_LAST, fallback_cells,
+    is_sentinel, placeholder_with,
 };
 
 /// What opens a token.
@@ -111,11 +111,11 @@ fn scan(s: &str, skip_tags: bool) -> Vec<Token> {
                 .is_some_and(|b| b.is_ascii_lowercase() || matches!(b, b'#' | b'/' | b'@'));
             if backslashes % 2 == 0 && opens_tag {
                 // Core's tag: `[` ... the first `]`, with no `[` between.
-                if let Some(close) = s[at + 1..].find([']', '[']) {
-                    if bytes[at + 1 + close] == b']' {
-                        at += close + 2;
-                        continue;
-                    }
+                if let Some(close) = s[at + 1..].find([']', '['])
+                    && bytes[at + 1 + close] == b']'
+                {
+                    at += close + 2;
+                    continue;
                 }
             }
         }
@@ -444,10 +444,11 @@ fn markdown_literal(source: &str) -> Vec<Range<usize>> {
             }
             _ => {}
         }
-        if let Some(open) = links.last_mut() {
-            if !range.is_empty() && range.end <= open.0.end {
-                open.1 = open.1.max(range.end);
-            }
+        if let Some(open) = links.last_mut()
+            && !range.is_empty()
+            && range.end <= open.0.end
+        {
+            open.1 = open.1.max(range.end);
         }
     }
     ranges

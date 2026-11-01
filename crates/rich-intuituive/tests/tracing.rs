@@ -8,9 +8,9 @@ mod example;
 use std::time::Duration;
 
 use example::{dispatch, tracing_app, worker};
-use intuituive::log::{tracing_layer, LogLine, Severity, TracingFeed};
-use intuituive::prelude::*;
 use intuituive::Driver;
+use intuituive::log::{LogLine, Severity, TracingFeed, tracing_layer};
+use intuituive::prelude::*;
 use tracing_subscriber::prelude::*;
 
 fn rows(driver: &Driver) -> Vec<String> {
@@ -85,9 +85,11 @@ fn a_worker_threads_events_arrive_and_the_level_keys_filter_them() {
         .filter(|row| row.contains("ERROR") && row.contains("failed"))
         .count();
     assert!(errors > 0);
-    assert!(rows(&driver)
-        .iter()
-        .all(|row| !row.contains("WARN  worker")));
+    assert!(
+        rows(&driver)
+            .iter()
+            .all(|row| !row.contains("WARN  worker"))
+    );
 }
 
 #[test]

@@ -863,11 +863,7 @@ impl Console {
     /// console, else `"utf-8"`. Port of the `Console.encoding` property (which
     /// reads the output file's encoding; this port has no file to ask).
     pub fn encoding(&self) -> &'static str {
-        if self.ascii_only {
-            "ascii"
-        } else {
-            "utf-8"
-        }
+        if self.ascii_only { "ascii" } else { "utf-8" }
     }
 
     /// Render a value to an ANSI string (no trailing newline). Primarily for
@@ -1579,10 +1575,10 @@ impl Console {
         } else {
             if !links {
                 for segment in &mut segments {
-                    if let Some(style) = segment.style.as_mut() {
-                        if style.link().is_some() {
-                            *style = style.update_link(None);
-                        }
+                    if let Some(style) = segment.style.as_mut()
+                        && style.link().is_some()
+                    {
+                        *style = style.update_link(None);
                     }
                 }
             }
@@ -3774,8 +3770,8 @@ mod tests {
                     c.print_str("[bold link=https://x.io]hi[/] there")
                 })
                 .unwrap();
-            let out = recorder.0.lock().unwrap().clone();
-            out
+
+            recorder.0.lock().unwrap().clone()
         };
         assert_eq!(linked(false), "\x1b[1mhi\x1b[0m there\n");
         assert_eq!(

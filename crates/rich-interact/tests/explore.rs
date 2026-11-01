@@ -6,7 +6,7 @@ use std::sync::mpsc;
 use std::time::Duration;
 
 use rich::{Style, Theme};
-use rich_ext::data::{parse, Format};
+use rich_ext::data::{Format, parse};
 use rich_interact::clipboard::{self, ClipboardError, CopyFormat};
 use rich_interact::components::json_path;
 use rich_interact::headless::{self, Headless, Script};
@@ -104,14 +104,18 @@ fn ctrl_y_copies_the_path_and_alt_y_the_value() {
             "{\n  \"host\": \"localhost\",\n  \"port\": 8080\n}"
         ]
     );
-    assert!(record
-        .frames
-        .iter()
-        .any(|frame| frame.contains("copied path")));
-    assert!(record
-        .frames
-        .iter()
-        .any(|frame| frame.contains("copied value")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("copied path"))
+    );
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("copied value"))
+    );
 }
 
 #[test]
@@ -125,10 +129,12 @@ fn without_a_terminal_clipboard_a_copy_says_why() {
     assert_eq!(handle.take(), Some(Outcome::Cancelled));
     let record = record.borrow();
     assert!(record.copies.is_empty());
-    assert!(record
-        .frames
-        .iter()
-        .any(|frame| frame.contains("cannot copy path: no terminal clipboard")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("cannot copy path: no terminal clipboard"))
+    );
 }
 
 #[test]

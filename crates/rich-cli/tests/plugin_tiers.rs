@@ -12,7 +12,7 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn keys_dir() -> PathBuf {
     PathBuf::from(env!("CARGO_MANIFEST_DIR")).join("../rich-marketplace/tests/fixtures/keys")

@@ -34,16 +34,14 @@ impl<'theme, 'code> CachedHighlighter<'theme, 'code> {
         syntaxes: &SyntaxSet,
     ) -> Result<Vec<(Style, &'code str)>, syntect::Error> {
         let at_reference = self.reference_state.as_ref() == Some(&self.parse_state);
-        if at_reference {
-            if let Some(ops) = self.cache.get(line) {
-                return Ok(HighlightIterator::new(
-                    &mut self.highlight_state,
-                    ops,
-                    line,
-                    &self.highlighter,
-                )
-                .collect());
-            }
+        if at_reference && let Some(ops) = self.cache.get(line) {
+            return Ok(HighlightIterator::new(
+                &mut self.highlight_state,
+                ops,
+                line,
+                &self.highlighter,
+            )
+            .collect());
         }
         let candidate = at_reference && line.len() <= 4096 && self.cache.len() < 64;
         let first_line = std::mem::replace(&mut self.first_line, false);
@@ -67,7 +65,7 @@ impl<'theme, 'code> CachedHighlighter<'theme, 'code> {
 
 #[cfg(test)]
 mod tests {
-    use super::super::syntect_adapter::{syntax_set, theme_set, DEFAULT_THEME};
+    use super::super::syntect_adapter::{DEFAULT_THEME, syntax_set, theme_set};
     use super::*;
     use syntect::util::LinesWithEndings;
     #[test]

@@ -9,7 +9,7 @@ mod todo;
 
 use intuituive::prelude::*;
 use intuituive::{assert_screen, assert_screen_styled};
-use todo::{todo_app, Todo};
+use todo::{Todo, todo_app};
 
 // --8<-- [start:component]
 /// A component: a node and the state behind it, built by a function.

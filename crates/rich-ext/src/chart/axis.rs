@@ -9,7 +9,7 @@
 //! (`2015` would read `2.0k`) are all written in full instead.
 
 use super::cells;
-use super::scale::{along, clean, Scale, ValueFormat};
+use super::scale::{Scale, ValueFormat, along, clean};
 
 /// Where an axis's labels go and what every position is worth.
 #[derive(Clone, Debug, PartialEq)]

@@ -328,12 +328,12 @@ impl<'a> EventLoop<'a> {
         }
         // The cursor was placed on the rendered cells; shown controls take
         // one each, so it moves with them.
-        if let Some((row, column)) = view.cursor {
-            if let Some(line) = view.lines.get(row) {
-                let shown = crate::paint::sanitized_column(line, column);
-                let last = context.width.saturating_sub(1).max(column);
-                view.cursor = Some((row, shown.min(last)));
-            }
+        if let Some((row, column)) = view.cursor
+            && let Some(line) = view.lines.get(row)
+        {
+            let shown = crate::paint::sanitized_column(line, column);
+            let last = context.width.saturating_sub(1).max(column);
+            view.cursor = Some((row, shown.min(last)));
         }
         // A line wider than the terminal would wrap and shift every row
         // below it: crop, once controls are shown as the characters the
@@ -371,10 +371,10 @@ impl<'a> EventLoop<'a> {
         if let (MouseKind::Down(_), None) = (mouse.kind, inside) {
             return None;
         }
-        if let (MouseKind::Down(Button::Left), Some(row)) = (mouse.kind, inside) {
-            if let Some(url) = link_at(&self.shown[row], mouse.column as usize) {
-                return Some(Event::Link(url));
-            }
+        if let (MouseKind::Down(Button::Left), Some(row)) = (mouse.kind, inside)
+            && let Some(url) = link_at(&self.shown[row], mouse.column as usize)
+        {
+            return Some(Event::Link(url));
         }
         let row = region_row.map_or(0, |row| row.saturating_sub(start));
         Some(Event::Mouse(Mouse {
@@ -608,10 +608,10 @@ impl<'a> EventLoop<'a> {
                 self.resized(columns, rows)?;
             }
             Some(Event::Mouse(mouse)) => {
-                if let Some(index) = self.mouse_target(mouse) {
-                    if let Some(event) = self.locate(index, mouse) {
-                        self.deliver(index, &event)?;
-                    }
+                if let Some(index) = self.mouse_target(mouse)
+                    && let Some(event) = self.locate(index, mouse)
+                {
+                    self.deliver(index, &event)?;
                 }
             }
             Some(event) => {

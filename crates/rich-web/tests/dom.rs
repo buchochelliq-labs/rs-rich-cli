@@ -7,13 +7,13 @@ mod common;
 
 use std::time::Duration;
 
-use common::{connect_with, get, read_close, read_until, TOKEN};
+use common::{TOKEN, connect_with, get, read_close, read_until};
 use rich_web::dom::{self, Dom};
+use rich_web::intuituive::Driver;
 use rich_web::intuituive::interact::{Event, Input, Key};
 use rich_web::intuituive::prelude::*;
-use rich_web::intuituive::Driver;
 use rich_web::{Isolation, Renderer, Server};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tungstenite::Message;
 
 /// A heading, a list of three files and a Save button; F5 announces, F6

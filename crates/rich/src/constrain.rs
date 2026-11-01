@@ -47,9 +47,9 @@ impl Renderable for Constrain {
 #[cfg(test)]
 mod tests {
     use super::*;
+    use crate::r#box::SQUARE;
     use crate::color::ColorSystem;
     use crate::panel::Panel;
-    use crate::r#box::SQUARE;
     use crate::text::Text;
 
     #[test]

@@ -70,9 +70,9 @@ pub use browsh::BrowshEngine;
 #[cfg(feature = "chrome")]
 pub use chrome::{ChromeEngine, DevTools, DevToolsEvent, Downloads, FrameMeta, ScreencastFrame};
 pub use host::{Command, ExitStatus, LocalPty, Notify, PtyHost, ReplayHandle, ReplayHost};
-pub use pane::{terminal, terminal_with, TerminalPane, DEFAULT_SCROLLBACK};
-pub use pixels::{half_blocks, Pixels};
-pub use program::{ProgramEngine, BROWSER_VARIABLE, KNOWN_BROWSERS};
+pub use pane::{DEFAULT_SCROLLBACK, TerminalPane, terminal, terminal_with};
+pub use pixels::{Pixels, half_blocks};
+pub use program::{BROWSER_VARIABLE, KNOWN_BROWSERS, ProgramEngine};
 pub use web::{
-    web_view, web_view_with, PageState, WebEngine, WebFrame, WebHandle, WebInput, WebView,
+    PageState, WebEngine, WebFrame, WebHandle, WebInput, WebView, web_view, web_view_with,
 };

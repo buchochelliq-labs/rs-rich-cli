@@ -18,7 +18,7 @@ use std::time::Duration;
 
 use rich::Segment;
 use rich_art::graphics::{
-    decode_animation, encode_png, fit_to_cells, AnimationFrame, CellPixels, FrameBudget,
+    AnimationFrame, CellPixels, FrameBudget, decode_animation, encode_png, fit_to_cells,
 };
 use rich_art::image::{self, DynamicImage};
 
@@ -242,16 +242,14 @@ impl ImageCache {
             &[u8::from(animated)],
         ]);
         let key = u64::from_le_bytes(digest[..8].try_into().expect("8 bytes"));
-        if !animated {
-            if let Some(fitted) = self.disk_get(&digest, cols, rows, identity.cell) {
-                return Some(Prepared::new(
-                    key,
-                    cols,
-                    rows,
-                    identity.cell,
-                    vec![still(fitted)],
-                ));
-            }
+        if !animated && let Some(fitted) = self.disk_get(&digest, cols, rows, identity.cell) {
+            return Some(Prepared::new(
+                key,
+                cols,
+                rows,
+                identity.cell,
+                vec![still(fitted)],
+            ));
         }
         let budget = FrameBudget {
             max_bytes: usize::try_from(limits.max_decoded_bytes).unwrap_or(usize::MAX),
@@ -346,12 +344,11 @@ fn pick(asset: &MicroAsset, animate: bool) -> Option<(&ImageRef, bool)> {
             ImageFormat::Png | ImageFormat::Apng | ImageFormat::Gif | ImageFormat::WebP
         )
     };
-    if animate {
-        if let Some(animation) = variants.animation.as_ref().filter(decodable) {
-            if animation.info.frames > 1 {
-                return Some((animation, true));
-            }
-        }
+    if animate
+        && let Some(animation) = variants.animation.as_ref().filter(decodable)
+        && animation.info.frames > 1
+    {
+        return Some((animation, true));
     }
     variants
         .static_image

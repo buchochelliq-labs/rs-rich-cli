@@ -13,8 +13,8 @@ use guide_support::Shots;
 // --8<-- [start:imports]
 use rich::r#box::ROUNDED;
 use rich::{
-    export, svg, ColorSystem, Console, Justify, Table, DEFAULT_TERMINAL_THEME, MONOKAI,
-    NIGHT_OWLISH, SVG_EXPORT_THEME,
+    ColorSystem, Console, DEFAULT_TERMINAL_THEME, Justify, MONOKAI, NIGHT_OWLISH, SVG_EXPORT_THEME,
+    Table, export, svg,
 };
 // --8<-- [end:imports]
 

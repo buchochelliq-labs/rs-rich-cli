@@ -156,7 +156,7 @@ fn spinners(console: &Console) {
     ] {
         let spinner = Spinner::new(name).style("green");
         spinner.render(0.0); // the first render starts the animation clock
-                             // Six frames, 0.1 s apart, then the name.
+        // Six frames, 0.1 s apart, then the name.
         let mut row = Text::new("");
         for step in 0..6 {
             row = row.append_text(&spinner.render(step as f64 * 0.1));

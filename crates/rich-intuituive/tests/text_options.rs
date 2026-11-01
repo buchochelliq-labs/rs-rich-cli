@@ -1,7 +1,7 @@
 //! Text alignment, wrapping and overflow (0.0.19 gap A3).
 
 use intuituive::prelude::*;
-use intuituive::{assert_screen, Driver};
+use intuituive::{Driver, assert_screen};
 
 fn shown(app: App, width: u16, height: u16) -> Driver {
     let mut driver = app.driver(width, height);

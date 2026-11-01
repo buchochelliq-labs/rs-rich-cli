@@ -15,10 +15,10 @@ use std::rc::Rc;
 use rich_interact::caret::CaretShape;
 use rich_interact::edit::{Search, WrapMode};
 use rich_interact::edit_keys::{self, KeyMode};
-use rich_interact::keymap::{keys, Keymap};
+use rich_interact::keymap::{Keymap, keys};
 
 use crate::node::Node;
-use crate::reactive::{signal, Signal};
+use crate::reactive::{Signal, signal};
 use crate::text_area::TextArea;
 
 /// What validates an input: its text in, a message out when it is wrong.

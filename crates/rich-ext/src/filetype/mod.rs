@@ -739,17 +739,23 @@ mod tests {
     #[test]
     fn the_tables_are_sorted_for_their_binary_searches() {
         for table in [icons::DIRS, icons::FILES, icons::EXTS] {
-            assert!(table
-                .windows(2)
-                .all(|w| w[0].0.as_bytes() < w[1].0.as_bytes()));
-            assert!(table
-                .iter()
-                .all(|(_, _, dark, light)| dark.len() == 7 && light.len() == 7));
+            assert!(
+                table
+                    .windows(2)
+                    .all(|w| w[0].0.as_bytes() < w[1].0.as_bytes())
+            );
+            assert!(
+                table
+                    .iter()
+                    .all(|(_, _, dark, light)| dark.len() == 7 && light.len() == 7)
+            );
         }
         assert!(BY_EXTENSION.windows(2).all(|w| w[0].0 < w[1].0));
-        assert!(BY_EXTENSION
-            .iter()
-            .all(|(e, _)| *e == e.to_ascii_lowercase()));
+        assert!(
+            BY_EXTENSION
+                .iter()
+                .all(|(e, _)| *e == e.to_ascii_lowercase())
+        );
         // Every colour is a style rich reads.
         for (_, _, dark, light) in icons::EXTS.iter().chain(icons::CONDS) {
             assert!(rich::Style::parse(dark).is_ok() && rich::Style::parse(light).is_ok());

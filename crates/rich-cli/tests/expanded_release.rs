@@ -20,7 +20,7 @@ fn target(kind: TargetKind, width: usize, height: usize) -> RenderTarget {
 #[test]
 fn nested_transformed_image_respects_capture_target_and_layout_bounds() {
     use rich::Segment;
-    use rich_art::{image, ImageArt, ImageTransforms, Rotation};
+    use rich_art::{ImageArt, ImageTransforms, Rotation, image};
     use rich_ext::layout::{Axis, Constraint, LayoutNode};
     let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_pixel(
         3,
@@ -41,14 +41,17 @@ fn nested_transformed_image_respects_capture_target_and_layout_bounds() {
     );
     let segments = target(TargetKind::Capture, 12, 5).segments(&node);
     assert!(!segments.is_empty());
-    assert!(segments
-        .iter()
-        .all(|s| !s.control && !s.text.contains('\x1b')));
+    assert!(
+        segments
+            .iter()
+            .all(|s| !s.control && !s.text.contains('\x1b'))
+    );
     let rows = Segment::split_lines(&segments);
     assert!(rows.len() <= 5);
-    assert!(rows
-        .iter()
-        .all(|r| r.iter().map(Segment::cell_length).sum::<usize>() <= 12));
+    assert!(
+        rows.iter()
+            .all(|r| r.iter().map(Segment::cell_length).sum::<usize>() <= 12)
+    );
 }
 #[test]
 fn typed_diagnostic_event_exports_with_order_and_no_terminal_controls() {

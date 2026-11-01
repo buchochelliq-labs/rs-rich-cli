@@ -10,7 +10,7 @@ use rich::table::Cell;
 use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Table, Text};
 
 use super::table::cell_text;
-use super::{escape_controls, quote_str, style, summary, Explorer, Node, Path, PathSegment};
+use super::{Explorer, Node, Path, PathSegment, escape_controls, quote_str, style, summary};
 use super::{Redactor, Value};
 
 /// A view that opens and closes branches of a document by path: the hook

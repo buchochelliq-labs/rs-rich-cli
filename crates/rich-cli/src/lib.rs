@@ -82,28 +82,28 @@ mod tools;
 mod viewers;
 mod watch;
 use batch::run_batch;
-use config::{config_args, ConfigRoots};
+use config::{ConfigRoots, config_args};
 use marketplace::spec as marketplace_spec;
 
+use rich::r#box::{Box as BoxSet, DOUBLE, HEAVY_HEAD, SQUARE};
 use rich::cells::cell_len;
 use rich::markdown::Markdown;
 use rich::measure::Measurement;
 use rich::protocol::{LineRenderable, OwnedTableRows};
-use rich::r#box::{Box as BoxSet, DOUBLE, HEAVY_HEAD, SQUARE};
 use rich::text::Text;
 use rich::{
-    filesize, Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, ConsoleOptions, Constrain,
-    Control, Highlighter, HorizontalAlign, ISO8601Highlighter, Json, Justify, Layout, Live,
-    LiveRender, LogLevel, LogRender, Padding, Panel, Pretty, Progress, ProgressBar, ProgressColumn,
-    Renderable, Rule, Segment, Spinner, Status, Style, Styled, Syntax, Table, Traceback, Tree,
-    DEFAULT_TERMINAL_THEME,
+    Align, AnsiDecoder, Bar, ColorSystem, Columns, Console, ConsoleOptions, Constrain, Control,
+    DEFAULT_TERMINAL_THEME, Highlighter, HorizontalAlign, ISO8601Highlighter, Json, Justify,
+    Layout, Live, LiveRender, LogLevel, LogRender, Padding, Panel, Pretty, Progress, ProgressBar,
+    ProgressColumn, Renderable, Rule, Segment, Spinner, Status, Style, Styled, Syntax, Table,
+    Traceback, Tree, filesize,
 };
-use rich_data::csv::{has_header, read_rows, sniff, Dialect};
+use rich_data::csv::{Dialect, has_header, read_rows, sniff};
 use rich_data::infer::{InferredType, Inferrer};
-use rich_ext::cli::CliExtensions;
-use rich_ext::encoding::{has_utf16_bom, Encoding};
-use rich_ext::sanitize_terminal_controls;
 use rich_ext::ConsoleExt;
+use rich_ext::cli::CliExtensions;
+use rich_ext::encoding::{Encoding, has_utf16_bom};
+use rich_ext::sanitize_terminal_controls;
 
 /// Boxed `Text` helper to cut down on `Box::new(Text::new(...))` noise.
 fn text(content: &str) -> Box<dyn Renderable> {
@@ -378,8 +378,7 @@ const MODE_SPECS: &[ModeSpec] = &[
     },
 ];
 
-const RENDER_MODE_FLAGS: &str =
-    "--print/--markdown/--rst/--org/--asciidoc/--man/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect/--ansi-explain";
+const RENDER_MODE_FLAGS: &str = "--print/--markdown/--rst/--org/--asciidoc/--man/--json/--syntax/--csv/--ipynb/--rule/--gif/--diff/--image/--jsonl/--log/--inspect/--ansi-explain";
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 enum ReportFormat {
@@ -1163,14 +1162,14 @@ fn dispatch(args: Vec<String>) -> ExitCode {
             if cli.batch && cfg!(target_os = "wasi") {
                 return fail(&cli, ExitClass::Usage, host::unavailable("--batch"));
             }
-            if cli.batch {
-                if let Err(error) = batch::install_interrupt_handler() {
-                    return fail(
-                        &cli,
-                        ExitClass::Input,
-                        format!("cannot install batch interruption handler: {error}"),
-                    );
-                }
+            if cli.batch
+                && let Err(error) = batch::install_interrupt_handler()
+            {
+                return fail(
+                    &cli,
+                    ExitClass::Input,
+                    format!("cannot install batch interruption handler: {error}"),
+                );
             }
             run_cli(cli)
         }
@@ -2685,10 +2684,10 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     }
     // `--depth` is `rich deps`'s flag and `rich profile`'s too: deps' options
     // parse it, and hand it over here.
-    if mode == Mode::Profile {
-        if let Some(depth) = graph_sources.take_depth() {
-            profile_options.set_depth(depth)?;
-        }
+    if mode == Mode::Profile
+        && let Some(depth) = graph_sources.take_depth()
+    {
+        profile_options.set_depth(depth)?;
     }
     for (flag, commands) in viewer_options
         .given()
@@ -3403,7 +3402,10 @@ fn read_resource_limited(
                 return encoding.decode(&bytes).map(normalize_newlines);
             }
             if has_utf16_bom(&bytes) {
-                eprintln!("rich: {} has a UTF-16 BOM; use --encoding utf-16 to decode it (default remains UTF-8 replacement)", controls::shown(path));
+                eprintln!(
+                    "rich: {} has a UTF-16 BOM; use --encoding utf-16 to decode it (default remains UTF-8 replacement)",
+                    controls::shown(path)
+                );
             }
             match String::from_utf8(bytes) {
                 Ok(text) => text,
@@ -3416,7 +3418,7 @@ fn read_resource_limited(
                         std::io::ErrorKind::InvalidData,
                         "looks like an image; use `rich --image <path>` to view it, or \
                          `rich --diff <before> <after>` to compare two images",
-                    ))
+                    ));
                 }
                 Err(err) => String::from_utf8_lossy(err.as_bytes()).into_owned(),
             }
@@ -3907,10 +3909,10 @@ fn decorate_and_emit_with(
     fit: Option<usize>,
     finish: impl FnOnce(&Cli, Result<(), String>) -> ExitCode,
 ) -> ExitCode {
-    if cli.panel.is_some() {
-        if let Err(err) = validate_labels(cli) {
-            return fail(cli, ExitClass::Data, err);
-        }
+    if cli.panel.is_some()
+        && let Err(err) = validate_labels(cli)
+    {
+        return fail(cli, ExitClass::Data, err);
     }
     let max_width = console.width();
     // `if width > 0: expand = True` — a fixed width is a width to fill.
@@ -4391,14 +4393,13 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
         return fail(&cli, ExitClass::Usage, message);
     }
     // A compressed man page (`ls.1.gz`) would print as binary noise.
-    if matches!(cli.mode, Mode::Auto | Mode::Man) {
-        if let Some(message) = cli
+    if matches!(cli.mode, Mode::Auto | Mode::Man)
+        && let Some(message) = cli
             .resource
             .as_deref()
             .and_then(documents::compressed_man_page)
-        {
-            return fail(&cli, ExitClass::Input, message);
-        }
+    {
+        return fail(&cli, ExitClass::Input, message);
     }
 
     // `view` decides what to show from the resource itself: an existing
@@ -4518,12 +4519,11 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     plugins::install_highlighters(&mut console);
     apply_code_highlighting(&mut console, &cli);
 
-    if mode == Mode::Rule {
-        if let Some(title) = &cli.resource {
-            if let Err(err) = Text::from_markup(title) {
-                return fail(&cli, ExitClass::Data, err.to_string());
-            }
-        }
+    if mode == Mode::Rule
+        && let Some(title) = &cli.resource
+        && let Err(err) = Text::from_markup(title)
+    {
+        return fail(&cli, ExitClass::Data, err.to_string());
     }
 
     // SVG export needs a title (the resource's basename, else "rich") and a
@@ -4671,7 +4671,7 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
                         &cli,
                         ExitClass::Input,
                         format!("cannot write {path}: {err}"),
-                    )
+                    );
                 }
             },
             None => None,
@@ -4849,18 +4849,18 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     // extension) — or, with a named format, any input — to a renderer.
     let mut routed_language = None;
     let mut routed = false;
-    if let Some(format) = cli.data.format.filter(|_| cli.mode == Mode::Auto) {
-        if mode == Mode::Auto || matches!(format, inspect::InputFormat::Named(_)) {
-            routed = true;
-            mode = match inspect::route(format, &content, cli.resource.as_deref()) {
-                inspect::Route::Json => Mode::Json,
-                inspect::Route::Syntax(lexer) => {
-                    routed_language = Some(lexer);
-                    Mode::Syntax
-                }
-                inspect::Route::Text => Mode::Auto,
-            };
-        }
+    if let Some(format) = cli.data.format.filter(|_| cli.mode == Mode::Auto)
+        && (mode == Mode::Auto || matches!(format, inspect::InputFormat::Named(_)))
+    {
+        routed = true;
+        mode = match inspect::route(format, &content, cli.resource.as_deref()) {
+            inspect::Route::Json => Mode::Json,
+            inspect::Route::Syntax(lexer) => {
+                routed_language = Some(lexer);
+                Mode::Syntax
+            }
+            inspect::Route::Text => Mode::Auto,
+        };
     }
 
     // Documents by content (documents.rs): a man page named for its section
@@ -4951,10 +4951,10 @@ fn run_once_with_fetch(mut cli: Cli, prefetched: Option<(String, Option<String>)
     // Markup comes from the user in Print mode, so a mistake in it should be
     // reported rather than printed literally (upstream raises `MarkupError`).
     // Checked up front because the render closure below cannot fail.
-    if mode == Mode::Print {
-        if let Err(err) = console.try_build_text(&content) {
-            return fail(&cli, ExitClass::Data, err.to_string());
-        }
+    if mode == Mode::Print
+        && let Err(err) = console.try_build_text(&content)
+    {
+        return fail(&cli, ExitClass::Data, err.to_string());
     }
 
     // The highlighting language comes from the resource extension, falling back
@@ -6025,8 +6025,12 @@ fn open_image_path(path: &str) -> Result<rich_art::image::DynamicImage, String> 
             use rich_art::image::error::{ImageFormatHint, UnsupportedErrorKind};
             let hint = match &err {
                 rich_art::image::ImageError::Unsupported(error) => match error.kind() {
-                    UnsupportedErrorKind::Format(ImageFormatHint::PathExtension(ext)) =>
-                        Some(format!("unsupported image extension {}; use a supported image format such as PNG, JPEG, GIF or WebP", ext.display())),
+                    UnsupportedErrorKind::Format(ImageFormatHint::PathExtension(ext)) => {
+                        Some(format!(
+                            "unsupported image extension {}; use a supported image format such as PNG, JPEG, GIF or WebP",
+                            ext.display()
+                        ))
+                    }
                     _ => None,
                 },
                 _ => None,
@@ -6087,7 +6091,7 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
                     cli,
                     ExitClass::Input,
                     format!("cannot decode image from stdin: {err}"),
-                )
+                );
             }
         }
     } else {
@@ -6222,7 +6226,7 @@ fn run_image(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
 #[cfg(feature = "art")]
 fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
     use rich::Table;
-    use rich_art::imagediff::{diff, DiffSettings};
+    use rich_art::imagediff::{DiffSettings, diff};
     use rich_art::{AsciiArt, BlockArt, BrailleArt, SixelArt};
 
     let (before_path, after_path) = (&cli.resources[0], &cli.resources[1]);
@@ -6272,7 +6276,9 @@ fn run_diff(cli: &Cli, console: &Console, export: &Export) -> ExitCode {
         let mut mode = cli.image_mode;
         if mode == ImageMode::Auto {
             if !has_color && !for_export && cli.report_format == ReportFormat::Human {
-                eprintln!("rich: auto image mode has no terminal colour, drawing the diff as ASCII instead");
+                eprintln!(
+                    "rich: auto image mode has no terminal colour, drawing the diff as ASCII instead"
+                );
             }
             mode = if !has_color {
                 ImageMode::Ascii
@@ -6713,10 +6719,10 @@ fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> Res
             first_error.get_or_insert_with(|| format!("failed to save SVG: {err}"));
         }
     }
-    if let Some(path) = export.png_path {
-        if let Err(message) = save_png(path, segments, export.svg_title, console.width()) {
-            first_error.get_or_insert(message);
-        }
+    if let Some(path) = export.png_path
+        && let Err(message) = save_png(path, segments, export.svg_title, console.width())
+    {
+        first_error.get_or_insert(message);
     }
     first_error.map_or(Ok(()), Err)
 }
@@ -6726,7 +6732,7 @@ fn save_exports(console: &Console, export: &Export, segments: &[Segment]) -> Res
 /// as the console (#723).
 #[cfg(feature = "png")]
 fn save_png(path: &str, segments: &[Segment], title: &str, width: usize) -> Result<(), String> {
-    use rich_record::render::png::{segments_png, PngOptions};
+    use rich_record::render::png::{PngOptions, segments_png};
     let options = PngOptions {
         title,
         columns: Some(width),
@@ -7620,10 +7626,12 @@ mod tests {
             vec![s("--watch-poll"), s("a.md")],
             vec![s("--watch-exit-on-error"), s("a.md")],
         ] {
-            assert!(parse(&orphan)
-                .err()
-                .unwrap()
-                .contains("only has an effect with --watch"));
+            assert!(
+                parse(&orphan)
+                    .err()
+                    .unwrap()
+                    .contains("only has an effect with --watch")
+            );
         }
         for bad in ["-0.1", "nan", "inf", "soon", "3601"] {
             assert!(parse(&[s("--watch"), s("--watch-debounce"), s(bad), s("a.md")]).is_err());
@@ -7729,9 +7737,11 @@ mod tests {
         )
         .unwrap();
         assert!(merged.windows(1).any(|arg| arg[0] == "--json"));
-        assert!(merged
-            .windows(2)
-            .any(|pair| pair[0] == "--jobs" && pair[1] == "4"));
+        assert!(
+            merged
+                .windows(2)
+                .any(|pair| pair[0] == "--jobs" && pair[1] == "4")
+        );
 
         let bad = root.join("bad.toml");
         std::fs::write(&bad, "[defaults]\nnot-a-setting = true\n").unwrap();

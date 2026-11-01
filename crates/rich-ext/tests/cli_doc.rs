@@ -282,15 +282,19 @@ fn flag_typos_are_compared_with_flags_of_the_same_kind() {
         CliError::unknown_in(&spec, "--dry-rn").suggestions,
         ["--dry-run"]
     );
-    assert!(CliError::unknown_in(&spec, "--r")
-        .suggestions
-        .iter()
-        .all(|s| s.starts_with("--")));
+    assert!(
+        CliError::unknown_in(&spec, "--r")
+            .suggestions
+            .iter()
+            .all(|s| s.starts_with("--"))
+    );
     // A short-flag typo is compared with short flags only.
-    assert!(CliError::unknown_in(&spec, "-x")
-        .suggestions
-        .iter()
-        .all(|s| s.len() == 2 && !s.starts_with("--")));
+    assert!(
+        CliError::unknown_in(&spec, "-x")
+            .suggestions
+            .iter()
+            .all(|s| s.len() == 2 && !s.starts_with("--"))
+    );
     // Subcommands with subcommands.
     assert_eq!(CliError::unknown_in(&spec, "reprt").suggestions, ["report"]);
 }
@@ -572,10 +576,12 @@ fn catalog_lists_every_word() {
             ("validate", CompletionKind::Subcommand, "Commands"),
         ]
     );
-    assert!(!catalog
-        .items
-        .iter()
-        .any(|i| i.word == "--secret" || i.word == "internal"));
+    assert!(
+        !catalog
+            .items
+            .iter()
+            .any(|i| i.word == "--secret" || i.word == "internal")
+    );
     let table = render(&catalog, 100);
     assert!(
         table.contains("│ rich config │ --json    │ option     │ Options        │ Print JSON"),
@@ -679,7 +685,9 @@ fn man_page_passes_lint() {
     assert_eq!(root, &to_man(&sample(), "1", Some("2026-09-23")));
     assert!(root.starts_with(".TH \"RICH\" \"1\" \"2026-09-23\" \"rich 1.0.0\" \"User Commands\"\n.SH NAME\nrich \\- Render rich text in the terminal\n"));
     assert!(root.contains(".SH ENVIRONMENT\n.TP\n\\fBRICH_WIDTH\\fR\nSets \\fB\\-\\-width\\fR.\n"));
-    assert!(root.contains(".SH \"SEE ALSO\"\n\\fBrich\\-config\\fR(1),\n\\fBrich\\-print\\fR(1)\n"));
+    assert!(
+        root.contains(".SH \"SEE ALSO\"\n\\fBrich\\-config\\fR(1),\n\\fBrich\\-print\\fR(1)\n")
+    );
     assert!(pages[1].1.contains(".SH \"SEE ALSO\"\n\\fBrich\\fR(1),\n"));
     // Deterministic, and dated only when asked.
     assert_eq!(to_man(&sample(), "1", None), to_man(&sample(), "1", None));
@@ -891,9 +899,11 @@ width = 120
   ✗ defaults               80   overridden by project"
     );
     let ascii = Console::builder().width(80).ascii_only(true).build();
-    assert!(ascii
-        .render_to_string(&explanation)
-        .contains("  * command line"));
+    assert!(
+        ascii
+            .render_to_string(&explanation)
+            .contains("  * command line")
+    );
 }
 
 // ---------------------------------------------------------------- clap
@@ -992,9 +1002,10 @@ mod clap_adapter {
     fn help_and_version_render_through_rich() {
         let exit = try_parse_with(&console(), app(), ["tool", "-h"]).unwrap_err();
         assert_eq!((exit.code, exit.use_stderr), (0, false));
-        assert!(exit
-            .output
-            .starts_with("Usage: tool [OPTIONS] [input] [COMMAND]\n\nA tool\n\nLayout:\n"));
+        assert!(
+            exit.output
+                .starts_with("Usage: tool [OPTIONS] [input] [COMMAND]\n\nA tool\n\nLayout:\n")
+        );
         assert!(
             exit.output.contains(
                 "  -w, --width <SIZE>             Output width [default: 80] [env: TOOL_WIDTH]\n"
@@ -1002,12 +1013,14 @@ mod clap_adapter {
             "{}",
             exit.output
         );
-        assert!(exit
-            .output
-            .contains("      --color, --colour <color>  When to colour\n"));
-        assert!(exit
-            .output
-            .contains("  -v                             Louder\n"));
+        assert!(
+            exit.output
+                .contains("      --color, --colour <color>  When to colour\n")
+        );
+        assert!(
+            exit.output
+                .contains("  -v                             Louder\n")
+        );
         assert!(exit.output.ends_with("See the manual for more.\n"));
         let exit = try_parse_with(&console(), app(), ["tool", "init", "--help"]).unwrap_err();
         assert!(
@@ -1028,9 +1041,10 @@ mod clap_adapter {
         // A spec can add what clap cannot express.
         let spec = CommandSpec::from_clap(&app()).example("tool -w 60 in.txt", "Narrow");
         let exit = try_parse_with_spec(&console(), app(), &spec, ["tool", "--help"]).unwrap_err();
-        assert!(exit
-            .output
-            .contains("Examples:\n  Narrow\n    $ tool -w 60 in.txt\n"));
+        assert!(
+            exit.output
+                .contains("Examples:\n  Narrow\n    $ tool -w 60 in.txt\n")
+        );
         assert!(try_parse_with(&console(), app(), ["tool", "-vv", "x"]).is_ok());
     }
 

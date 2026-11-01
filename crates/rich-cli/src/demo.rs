@@ -73,18 +73,28 @@ fn options(args: &[String]) -> Result<Options, String> {
             "--no-config" => {}
             "--no-color" => no_color = true,
             "--demo-section" => {
-                let value = iter.next().ok_or("--demo-section requires core, workflows, art")?;
+                let value = iter
+                    .next()
+                    .ok_or("--demo-section requires core, workflows, art")?;
                 if !matches!(value.as_str(), "core" | "workflows" | "art") {
-                    return Err(format!("unknown demo section {value:?}; choose core, workflows, art"));
+                    return Err(format!(
+                        "unknown demo section {value:?}; choose core, workflows, art"
+                    ));
                 }
                 group = Some(value.clone());
             }
             "--demo-delay" => {
-                seconds = iter.next().and_then(|value| value.parse::<f64>().ok())
+                seconds = iter
+                    .next()
+                    .and_then(|value| value.parse::<f64>().ok())
                     .filter(|value| value.is_finite() && (0.0..=60.0).contains(value))
                     .ok_or("--demo-delay expects seconds between 0 and 60")?;
             }
-            _ => return Err(format!("demo accepts only --demo, --demo-list, --demo-section NAME, --demo-delay SECONDS, --no-color and --no-config; unexpected {arg}")),
+            _ => {
+                return Err(format!(
+                    "demo accepts only --demo, --demo-list, --demo-section NAME, --demo-delay SECONDS, --no-color and --no-config; unexpected {arg}"
+                ));
+            }
         }
     }
     if list && (play || group.is_some()) {
@@ -133,10 +143,10 @@ fn command(
     }
     full.extend(args);
     let cli = parse(&full).map_err(std::io::Error::other)?;
-    if let Some(cli) = cli {
-        if run_cli(cli) != ExitCode::SUCCESS {
-            return Err(std::io::Error::other(format!("example failed: {label}")));
-        }
+    if let Some(cli) = cli
+        && run_cli(cli) != ExitCode::SUCCESS
+    {
+        return Err(std::io::Error::other(format!("example failed: {label}")));
     }
     Ok(())
 }
@@ -173,11 +183,11 @@ fn tour(no_color: bool, delay: Duration, group: Option<&str>) -> std::io::Result
     let cleanup = root.path().to_owned();
     let child = Arc::clone(&watch_child);
     crate::host::on_interrupt(move || {
-        if let Ok(mut slot) = child.lock() {
-            if let Some(mut child) = slot.take() {
-                let _ = child.kill();
-                let _ = child.wait();
-            }
+        if let Ok(mut slot) = child.lock()
+            && let Some(mut child) = slot.take()
+        {
+            let _ = child.kill();
+            let _ = child.wait();
         }
         let _ = std::fs::remove_dir_all(&cleanup);
         if let Some(terminal) = terminal.as_mut() {
@@ -199,13 +209,30 @@ fn tour(no_color: bool, delay: Duration, group: Option<&str>) -> std::io::Result
             env!("CARGO_PKG_VERSION")
         );
         for (name, contents) in [
-        ("first.json", release_json.as_str()),
-        ("second.json", "{\"features\":[\"config\",\"batch\",\"art\"]}"),
-        ("events.jsonl", "{\"event\":\"start\",\"count\":1}\n{\"event\":\"finish\",\"count\":2}\n"),
-        ("logs.jsonl", "{\"level\":\"info\",\"message\":\"Tour started\"}\n{\"level\":\"warn\",\"message\":\"Example warning\"}\n"),
-        ("notes.ipynb", r##"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"markdown","metadata":{},"source":["# Notebook\n","Rich renders notebook cells."]},{"cell_type":"code","metadata":{},"execution_count":1,"source":["print('vroom vroom')"],"outputs":[{"output_type":"stream","name":"stdout","text":["vroom vroom\n"]}]}]}"##),
-        ("demo.toml", "[defaults]\nwidth = 60\n[profiles.preview]\npanel = 'rounded'\n"),
-    ] { std::fs::write(file(name), contents)?; }
+            ("first.json", release_json.as_str()),
+            (
+                "second.json",
+                "{\"features\":[\"config\",\"batch\",\"art\"]}",
+            ),
+            (
+                "events.jsonl",
+                "{\"event\":\"start\",\"count\":1}\n{\"event\":\"finish\",\"count\":2}\n",
+            ),
+            (
+                "logs.jsonl",
+                "{\"level\":\"info\",\"message\":\"Tour started\"}\n{\"level\":\"warn\",\"message\":\"Example warning\"}\n",
+            ),
+            (
+                "notes.ipynb",
+                r##"{"nbformat":4,"nbformat_minor":5,"metadata":{},"cells":[{"cell_type":"markdown","metadata":{},"source":["# Notebook\n","Rich renders notebook cells."]},{"cell_type":"code","metadata":{},"execution_count":1,"source":["print('vroom vroom')"],"outputs":[{"output_type":"stream","name":"stdout","text":["vroom vroom\n"]}]}]}"##,
+            ),
+            (
+                "demo.toml",
+                "[defaults]\nwidth = 60\n[profiles.preview]\npanel = 'rounded'\n",
+            ),
+        ] {
+            std::fs::write(file(name), contents)?;
+        }
 
         for (title, mode, name) in [
             ("JSON Lines", "--jsonl", "events.jsonl"),
@@ -360,7 +387,10 @@ fn tools(console: &Console, no_color: bool, delay: Duration, root: &Path) -> std
             "service: api\nreplicas: 3\nimage:\n  name: rs-rich\n  tag: \"0.0.11\"\nports: [8080, 8443]\n",
         ),
         ("old.toml", "retries = 2\ntimeout = 30\nmode = \"fast\"\n"),
-        ("new.toml", "retries = 3\ntimeout = 30\nmode = \"safe\"\nlog = true\n"),
+        (
+            "new.toml",
+            "retries = 3\ntimeout = 30\nmode = \"safe\"\nlog = true\n",
+        ),
         ("text.txt", "café 👩‍👩‍👧\n"),
         ("codes.txt", "\x1b[1;31mError\x1b[0m done\n"),
         ("demo.theme", "[styles]\nrelease = bold magenta\n"),
@@ -515,7 +545,7 @@ fn additions_013(
     )?;
     #[cfg(feature = "interact")]
     {
-        use rich_interact::{headless, Select};
+        use rich_interact::{Select, headless};
         section(console, delay, "Ask in a script");
         console.print(&Text::new(
             "$ fruit=$(rich choose apple banana cherry)   # ↓ then Enter",
@@ -645,10 +675,47 @@ fn art(console: &Console, no_color: bool, delay: Duration, root: &Path) -> std::
         ("ASCII", "ascii"),
     ] {
         section(console, delay, label);
-        command(console, no_color, &format!("--image art.png --image-mode {mode} --width {width} --height 12 --image-background '#142032'"), vec!["--image".into(), source.clone(), "--image-mode".into(), mode.into(), "--width".into(), width.clone(), "--height".into(), "12".into(), "--image-background".into(), "#142032".into()])?;
+        command(
+            console,
+            no_color,
+            &format!(
+                "--image art.png --image-mode {mode} --width {width} --height 12 --image-background '#142032'"
+            ),
+            vec![
+                "--image".into(),
+                source.clone(),
+                "--image-mode".into(),
+                mode.into(),
+                "--width".into(),
+                width.clone(),
+                "--height".into(),
+                "12".into(),
+                "--image-background".into(),
+                "#142032".into(),
+            ],
+        )?;
     }
     section(console, delay, "Rotation, grayscale and Bayer dithering");
-    command(console, no_color, "--image art.png --image-rotate 90 --image-grayscale --image-color ansi256 --image-dither bayer4x4", vec!["--image".into(), source.clone(), "--image-mode".into(), "blocks".into(), "--width".into(), width.clone(), "--image-rotate".into(), "90".into(), "--image-grayscale".into(), "--image-color".into(), "ansi256".into(), "--image-dither".into(), "bayer4x4".into()])?;
+    command(
+        console,
+        no_color,
+        "--image art.png --image-rotate 90 --image-grayscale --image-color ansi256 --image-dither bayer4x4",
+        vec![
+            "--image".into(),
+            source.clone(),
+            "--image-mode".into(),
+            "blocks".into(),
+            "--width".into(),
+            width.clone(),
+            "--image-rotate".into(),
+            "90".into(),
+            "--image-grayscale".into(),
+            "--image-color".into(),
+            "ansi256".into(),
+            "--image-dither".into(),
+            "bayer4x4".into(),
+        ],
+    )?;
     section(
         console,
         delay,

@@ -7,8 +7,8 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 use super::axis::{self, AxisFit, AxisRequest};
 use super::canvas::bresenham;
 use super::{
-    cells, has_colour, lines_to_segments, series_key, theme_style, truncate, user_style, Charset,
-    DotCanvas, Line, Scale, ValueFormat,
+    Charset, DotCanvas, Line, Scale, ValueFormat, cells, has_colour, lines_to_segments, series_key,
+    theme_style, truncate, user_style,
 };
 
 /// Markers per series at cell resolution, in order; they cycle.

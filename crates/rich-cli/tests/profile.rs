@@ -399,9 +399,11 @@ fn depth_max_paths_columns_and_flat_shape_the_paths() {
     let shallow = json(&["--depth", "1"]);
     assert_eq!(shallow["paths"]["depth"], 1);
     assert_eq!(names(&shallow).len(), 9);
-    assert!(names(&shallow)
-        .iter()
-        .all(|n| !n.contains('.') || n.starts_with("[\"")));
+    assert!(
+        names(&shallow)
+            .iter()
+            .all(|n| !n.contains('.') || n.starts_with("[\""))
+    );
     // The cap: the first three paths, and a note naming the rest.
     let capped = json(&["--max-paths", "3"]);
     assert_eq!(names(&capped), ["id", "ts", "level"]);

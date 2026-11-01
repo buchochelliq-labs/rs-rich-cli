@@ -5,7 +5,7 @@ use std::path::Path;
 
 use rich::markup::escape;
 use rich_ext::filetype;
-use rich_ext::listing::{owner, readable_size, Entry};
+use rich_ext::listing::{Entry, owner, readable_size};
 
 use super::row::coloured_permissions;
 use crate::facts::facts;

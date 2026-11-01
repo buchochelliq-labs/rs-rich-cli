@@ -44,12 +44,12 @@ use std::time::Duration;
 use rich::cells::cell_len;
 use rich::{Segment, Style};
 
-use crate::chrome::{key_hint, Breadcrumbs, StatusBar};
+use crate::chrome::{Breadcrumbs, StatusBar, key_hint};
 use crate::component::{Component, Context, Flow, View};
 use crate::compose::{ComponentExt, Layer, LayerHandle, Layers, Rect};
 use crate::event::{Event, Key, KeyCode, MouseKind};
 use crate::item::{Action, ActionTarget, Actions, TargetKind};
-use crate::keymap::{keys, Binding, Keymap};
+use crate::keymap::{Binding, Keymap, keys};
 use crate::kit::{self, ActionMenu, FilterState, ListState, MenuReply, ScrollState, Theme};
 use crate::policy::{LineIo, NotInteractive};
 

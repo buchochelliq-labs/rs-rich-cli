@@ -1,5 +1,5 @@
 [workspace]
-resolver = "2"
+resolver = "3"
 members = ["crates/rich", "crates/rich-plugin-api", "crates/rich-macros", "crates/rich-ext", "crates/rich-cli", "crates/rich-art", "crates/rich-mermaid", "crates/rich-lumis", "crates/rich-record", "crates/rich-interact", "crates/rich-micro", "crates/rich-diagram", "crates/rich-data", "crates/rich-ratatui", "crates/rich-intuituive", "crates/rich-web", "crates/rich-embed", "crates/rich-marketplace", "crates/noctiluca"]
 # The Python bindings build with maturin and need a Python interpreter; they
 # have their own workspace and CI workflow (`python.yml`).
@@ -9,7 +9,7 @@ exclude = ["crates/rich-py"]
 # SemVer. A `vX.Y.Z` tag selects the coordinated workspace; a
 # `<crate>-vX.Y.Z` tag selects only that crate (see docs/BRANCHING.md).
 [workspace.package]
-edition = "2021"
+edition = "2024"
 license = "MIT"
 repository = "https://github.com/buchochelliq-labs/rs-rich-cli"
 homepage = "https://github.com/buchochelliq-labs/rs-rich-cli"

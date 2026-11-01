@@ -28,7 +28,7 @@ use super::model::{
     Align, Block, CodeBlock, Definition, Document, Heading, Inline, List, ListItem, ListKind,
     TableBlock,
 };
-use super::scan::{normalize, sample, MAX_NESTING};
+use super::scan::{MAX_NESTING, normalize, sample};
 use super::{Diagnostic, Parsed, Severity};
 
 /// How far `.RS` and an untagged `.IP` indent, in cells.
@@ -322,14 +322,14 @@ impl Man {
             });
         }
         blocks.append(&mut self.frames[0].blocks);
-        if let Some(title) = &self.title {
-            if !title.source.is_empty() || !title.date.is_empty() {
-                blocks.push(Block::Banner {
-                    left: title.source.clone(),
-                    center: title.date.clone(),
-                    right: page_name(title),
-                });
-            }
+        if let Some(title) = &self.title
+            && (!title.source.is_empty() || !title.date.is_empty())
+        {
+            blocks.push(Block::Banner {
+                left: title.source.clone(),
+                center: title.date.clone(),
+                right: page_name(title),
+            });
         }
         Parsed {
             document: Document { blocks },
@@ -451,14 +451,14 @@ impl Man {
         if frames < 2 {
             return;
         }
-        if let Some(Block::Definitions(definitions)) = self.frames[frames - 2].blocks.last_mut() {
-            if let Some(definition) = definitions.last_mut() {
-                if more && !definition.term.is_empty() {
-                    definition.term.push(Inline::LineBreak);
-                    definition.term.extend(term);
-                } else {
-                    definition.term = term;
-                }
+        if let Some(Block::Definitions(definitions)) = self.frames[frames - 2].blocks.last_mut()
+            && let Some(definition) = definitions.last_mut()
+        {
+            if more && !definition.term.is_empty() {
+                definition.term.push(Inline::LineBreak);
+                definition.term.extend(term);
+            } else {
+                definition.term = term;
             }
         }
     }
@@ -1043,14 +1043,14 @@ impl Man {
         let mut tab = '\t';
         let mut lines = body.iter().peekable();
         // Options: a line ending in `;`.
-        if let Some(first) = lines.peek() {
-            if first.trim_end().ends_with(';') {
-                let options = first.to_ascii_lowercase();
-                if let Some(at) = options.find("tab(") {
-                    tab = first[at + 4..].chars().next().unwrap_or('\t');
-                }
-                lines.next();
+        if let Some(first) = lines.peek()
+            && first.trim_end().ends_with(';')
+        {
+            let options = first.to_ascii_lowercase();
+            if let Some(at) = options.find("tab(") {
+                tab = first[at + 4..].chars().next().unwrap_or('\t');
             }
+            lines.next();
         }
         // Format lines, up to one ending in `.`.
         let mut bold_header = false;
@@ -1663,13 +1663,15 @@ impl Man {
                         .get(&name)
                         .cloned()
                         .or_else(|| predefined_string(&name).map(str::to_string));
-                    if let Some(value) = value {
-                        if stack.len() < 8 && !stack.contains(&name) && value.len() <= *budget {
-                            *budget -= value.len();
-                            stack.push(name);
-                            self.expand(&value, pieces, current, stack, budget);
-                            stack.pop();
-                        }
+                    if let Some(value) = value
+                        && stack.len() < 8
+                        && !stack.contains(&name)
+                        && value.len() <= *budget
+                    {
+                        *budget -= value.len();
+                        stack.push(name);
+                        self.expand(&value, pieces, current, stack, budget);
+                        stack.pop();
                     }
                 }
                 'n' | 'g' | 'V' | 'Y' | '$' | 'm' | 'M' | 'F' | 'k' => {
@@ -1857,10 +1859,10 @@ fn split_args(arguments: &str) -> Vec<String> {
                 }
                 chars.next();
                 argument.push(ch);
-                if ch == '\\' {
-                    if let Some(next) = chars.next() {
-                        argument.push(next);
-                    }
+                if ch == '\\'
+                    && let Some(next) = chars.next()
+                {
+                    argument.push(next);
                 }
             }
         }
@@ -1920,12 +1922,13 @@ fn take_delimited(chars: &mut Chars<'_>, delimiter: char, depth: usize) -> Strin
             };
             out.push('\\');
             out.push(escape);
-            if depth < 8 && "hvwxXNDlLbSHABRZo".contains(escape) {
-                if let Some((_, inner)) = chars.next() {
-                    out.push(inner);
-                    out.push_str(&take_delimited(chars, inner, depth + 1));
-                    out.push(inner);
-                }
+            if depth < 8
+                && "hvwxXNDlLbSHABRZo".contains(escape)
+                && let Some((_, inner)) = chars.next()
+            {
+                out.push(inner);
+                out.push_str(&take_delimited(chars, inner, depth + 1));
+                out.push(inner);
             }
             continue;
         }
@@ -2172,10 +2175,10 @@ fn special(name: &str) -> String {
             return c.to_string();
         }
     }
-    if let Some(decimal) = name.strip_prefix("char") {
-        if let Some(c) = decimal.parse::<u32>().ok().and_then(char::from_u32) {
-            return c.to_string();
-        }
+    if let Some(decimal) = name.strip_prefix("char")
+        && let Some(c) = decimal.parse::<u32>().ok().and_then(char::from_u32)
+    {
+        return c.to_string();
     }
     SPECIALS
         .iter()

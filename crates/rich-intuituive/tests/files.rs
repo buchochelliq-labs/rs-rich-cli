@@ -13,8 +13,8 @@ use std::path::{Path, PathBuf};
 
 use common::{row_of, run, run_open, screen};
 use files::files_app;
-use intuituive::interact::{Button, MouseKind};
 use intuituive::App;
+use intuituive::interact::{Button, MouseKind};
 use rich_interact::headless::Script;
 
 /// root/
@@ -51,8 +51,14 @@ fn state_dir() -> PathBuf {
 fn trash_here() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
-        std::env::set_var("XDG_DATA_HOME", trash_dir());
-        std::env::set_var("XDG_STATE_HOME", state_dir());
+        // SAFETY: set once, and everything in this binary reads the
+        // environment through `std` (`std::env`, `std::process`), which
+        // holds std's environment lock.
+        #[allow(unsafe_code)]
+        unsafe {
+            std::env::set_var("XDG_DATA_HOME", trash_dir());
+            std::env::set_var("XDG_STATE_HOME", state_dir());
+        }
     });
 }
 
@@ -632,9 +638,11 @@ fn overwriting_asks_first() {
         80,
         24,
     );
-    assert!(std::fs::read_to_string(root.join("alpha/notes.md"))
-        .unwrap()
-        .contains("hello notes"));
+    assert!(
+        std::fs::read_to_string(root.join("alpha/notes.md"))
+            .unwrap()
+            .contains("hello notes")
+    );
 }
 
 #[cfg(feature = "watch")]

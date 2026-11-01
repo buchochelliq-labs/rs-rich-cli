@@ -5,8 +5,8 @@ use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
 use super::{
-    cells, has_colour, lines_to_segments, theme_style, user_style, Charset, Line, Scale,
-    ValueFormat,
+    Charset, Line, Scale, ValueFormat, cells, has_colour, lines_to_segments, theme_style,
+    user_style,
 };
 use crate::fidelity::ascii_text;
 
@@ -260,11 +260,7 @@ impl Sparkline {
 
     /// Values per cell for a charset.
     fn per_cell(charset: Charset) -> usize {
-        if charset == Charset::Braille {
-            2
-        } else {
-            1
-        }
+        if charset == Charset::Braille { 2 } else { 1 }
     }
 
     /// The text after the line, as (text, theme key) parts.

@@ -298,10 +298,10 @@ impl ConflictFile {
             lines.iter().map(|line| marker(line)).collect();
         let mut longer = LongerMarkers::new();
         for (index, found) in markers.iter().enumerate() {
-            if let Some((kind @ ('<' | '=' | '>'), length, _)) = *found {
-                if length != MARKER_SIZE {
-                    longer.entry(length).or_default().push((index, kind));
-                }
+            if let Some((kind @ ('<' | '=' | '>'), length, _)) = *found
+                && length != MARKER_SIZE
+            {
+                longer.entry(length).or_default().push((index, kind));
             }
         }
 
@@ -371,7 +371,7 @@ impl ConflictFile {
                             "`<<<<<<<` inside the conflict opened at line {start}; \
                              it has no `>>>>>>>`"
                         ),
-                    ))
+                    ));
                 }
                 (State::Ours { start, label: ours }, '|') => State::Base {
                     ours: ConflictSide {
@@ -414,7 +414,7 @@ impl ConflictFile {
                             "a second `|||||||` in the conflict opened at line {}",
                             ours.marker_line
                         ),
-                    ))
+                    ));
                 }
                 (State::Ours { start, .. }, _) => {
                     return Err(ConflictError::at(
@@ -422,7 +422,7 @@ impl ConflictFile {
                         format!(
                             "`>>>>>>>` before `=======` in the conflict opened at line {start}"
                         ),
-                    ))
+                    ));
                 }
                 (State::Base { ours, .. }, _) => {
                     return Err(ConflictError::at(
@@ -431,7 +431,7 @@ impl ConflictFile {
                             "`>>>>>>>` before `=======` in the conflict opened at line {}",
                             ours.marker_line
                         ),
-                    ))
+                    ));
                 }
                 (State::Theirs { ours, base, start }, '>') => {
                     conflicts.push(Conflict {
@@ -454,7 +454,7 @@ impl ConflictFile {
                             "a second `=======` in the conflict opened at line {}",
                             ours.marker_line
                         ),
-                    ))
+                    ));
                 }
                 (State::Theirs { ours, .. }, _) => {
                     return Err(ConflictError::at(
@@ -463,7 +463,7 @@ impl ConflictFile {
                             "`|||||||` after `=======` in the conflict opened at line {}",
                             ours.marker_line
                         ),
-                    ))
+                    ));
                 }
             };
         }

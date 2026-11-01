@@ -52,7 +52,9 @@ pub(crate) fn validate_theme_name(name: &str) -> Result<(), String> {
     {
         Ok(())
     } else {
-        Err(format!("invalid theme or style name {name:?}: expected letters, digits, underscores, dots or hyphens"))
+        Err(format!(
+            "invalid theme or style name {name:?}: expected letters, digits, underscores, dots or hyphens"
+        ))
     }
 }
 
@@ -430,10 +432,10 @@ fn decode_configuration(text: &str, selected: Option<&str>) -> Result<Configurat
     }
     // Validate references in every layer, including profiles not selected now.
     for settings in std::iter::once(&defaults).chain(profiles.values()) {
-        if let Some(name) = settings.get("theme").and_then(Value::as_str) {
-            if !themes.contains_key(name) {
-                return Err(format!("unknown theme {name:?}"));
-            }
+        if let Some(name) = settings.get("theme").and_then(Value::as_str)
+            && !themes.contains_key(name)
+        {
+            return Err(format!("unknown theme {name:?}"));
         }
     }
     let base = defaults.clone();
@@ -588,18 +590,18 @@ fn load(args: &Arguments, roots: &ConfigRoots) -> Result<(Configuration, Option<
             .chain(std::iter::once(&mut settings.base))
             .chain(settings.profile.as_mut().map(|(_, table)| table))
         {
-            if let Some(Value::String(file)) = table.get_mut("theme_file") {
-                if PathBuf::from(&*file).is_relative() {
-                    *file = dir.join(&*file).to_string_lossy().into_owned();
-                }
+            if let Some(Value::String(file)) = table.get_mut("theme_file")
+                && PathBuf::from(&*file).is_relative()
+            {
+                *file = dir.join(&*file).to_string_lossy().into_owned();
             }
             // Plugin paths too.
             if let Some(Value::Array(paths)) = table.get_mut("plugins") {
                 for path in paths {
-                    if let Value::String(file) = path {
-                        if PathBuf::from(&*file).is_relative() {
-                            *file = dir.join(&*file).to_string_lossy().into_owned();
-                        }
+                    if let Value::String(file) = path
+                        && PathBuf::from(&*file).is_relative()
+                    {
+                        *file = dir.join(&*file).to_string_lossy().into_owned();
                     }
                 }
             }
@@ -1190,8 +1192,7 @@ fn explain(layers: &Layers, key: Option<&str>) -> String {
 }
 
 /// Why a working-directory `rich.toml`'s `theme_file` has no effect.
-pub(crate) const UNTRUSTED_THEME_FILE: &str =
-    "theme_file in ./rich.toml is ignored: a project's config may not name a file for every \
+pub(crate) const UNTRUSTED_THEME_FILE: &str = "theme_file in ./rich.toml is ignored: a project's config may not name a file for every \
      command to read; pass --theme-file, or set it in ~/.config/rich/config.toml or a file \
      given with --config";
 
@@ -1209,34 +1210,29 @@ fn untrusted_export(key: &str) -> String {
 }
 
 /// Why a working-directory `rich.toml`'s `sanitize = false` has no effect.
-const UNTRUSTED_SANITIZE: &str =
-    "sanitize = false in ./rich.toml is ignored: a project's config may not let input control \
+const UNTRUSTED_SANITIZE: &str = "sanitize = false in ./rich.toml is ignored: a project's config may not let input control \
      the terminal; pass --no-sanitize, or set it in ~/.config/rich/config.toml";
 
 /// Why a working-directory `rich.toml`'s `mermaid_backend = "mmdc"` has no
 /// effect.
-const UNTRUSTED_MMDC: &str =
-    "mermaid_backend = \"mmdc\" in ./rich.toml is ignored: a project's config may not start a \
+const UNTRUSTED_MMDC: &str = "mermaid_backend = \"mmdc\" in ./rich.toml is ignored: a project's config may not start a \
      browser; pass --mermaid-backend mmdc, or set it in ~/.config/rich/config.toml or a file \
      given with --config";
 
 /// Why a working-directory `rich.toml`'s `dot_backend = "graphviz"` has no
 /// effect.
-const UNTRUSTED_GRAPHVIZ: &str =
-    "dot_backend = \"graphviz\" in ./rich.toml is ignored: a project's config may not run \
+const UNTRUSTED_GRAPHVIZ: &str = "dot_backend = \"graphviz\" in ./rich.toml is ignored: a project's config may not run \
      programs; pass --dot-backend graphviz, or set it in ~/.config/rich/config.toml or a file \
      given with --config";
 
 /// Why a working-directory `rich.toml`'s `plugins` have no effect.
-pub(crate) const UNTRUSTED_PLUGINS: &str =
-    "plugins in ./rich.toml are ignored: a project's config may not load plugins, which run \
+pub(crate) const UNTRUSTED_PLUGINS: &str = "plugins in ./rich.toml are ignored: a project's config may not load plugins, which run \
      their own code; pass --plugin PATH, or list them in ~/.config/rich/config.toml or a file \
      given with --config";
 
 /// Why a working-directory `rich.toml`'s `micro_project = true` has no
 /// effect.
-pub(crate) const UNTRUSTED_MICRO_PROJECT: &str =
-    "micro_project = true in ./rich.toml is ignored: a project may not trust its own micro \
+pub(crate) const UNTRUSTED_MICRO_PROJECT: &str = "micro_project = true in ./rich.toml is ignored: a project may not trust its own micro \
      assets (they could restyle status/success or draw images); pass --micro-project, or set \
      it in ~/.config/rich/config.toml or a file given with --config";
 
@@ -1316,9 +1312,11 @@ mod tests {
         ] {
             assert!(decode(text, None).is_err(), "accepted {text}");
         }
-        assert!(decode("[defaults]\nwidth = 2", Some("missing"))
-            .unwrap_err()
-            .contains("unknown profile"));
+        assert!(
+            decode("[defaults]\nwidth = 2", Some("missing"))
+                .unwrap_err()
+                .contains("unknown profile")
+        );
     }
 
     #[test]
@@ -1377,12 +1375,16 @@ mod tests {
         assert_eq!(output["settings"]["pager"], true);
         assert_eq!(output["settings"]["width"], 40);
         assert_eq!(output["profile"], "ci");
-        assert!(inspect(&strings(&["--title", "config", "input"]), &roots)
-            .unwrap()
-            .is_none());
-        assert!(inspect(&strings(&["--", "config", "show"]), &roots)
-            .unwrap()
-            .is_none());
+        assert!(
+            inspect(&strings(&["--title", "config", "input"]), &roots)
+                .unwrap()
+                .is_none()
+        );
+        assert!(
+            inspect(&strings(&["--", "config", "show"]), &roots)
+                .unwrap()
+                .is_none()
+        );
         std::fs::remove_dir_all(root).unwrap();
     }
 
@@ -1399,14 +1401,18 @@ mod tests {
             if flag == "--title" {
                 args.push("value".into());
             }
-            assert!(inspect(&args, &roots)
-                .unwrap_err()
-                .contains("unknown config inspection option"));
+            assert!(
+                inspect(&args, &roots)
+                    .unwrap_err()
+                    .contains("unknown config inspection option")
+            );
         }
-        assert!(inspect(&strings(&["config", "show", "--image"]), &roots)
-            .unwrap()
-            .unwrap()
-            .contains("image"));
+        assert!(
+            inspect(&strings(&["config", "show", "--image"]), &roots)
+                .unwrap()
+                .unwrap()
+                .contains("image")
+        );
         for mode in ["image", "gif", "diff"] {
             assert!(decode(&format!("[defaults]\nmode = '{mode}'"), None).is_ok());
         }
@@ -1571,9 +1577,11 @@ mod tests {
         ] {
             let mut args = strings(&["config", "validate"]);
             args.extend(strings(&flags));
-            assert!(inspect(&args, &roots)
-                .unwrap_err()
-                .contains("requires --watch"));
+            assert!(
+                inspect(&args, &roots)
+                    .unwrap_err()
+                    .contains("requires --watch")
+            );
             let result = config_args(&strings(&flags), &roots)
                 .and_then(|merged| super::super::parse_inner(&merged).map(|_| ()));
             assert!(result.unwrap_err().contains("requires --watch"));
@@ -1785,8 +1793,10 @@ mod tests {
             .unwrap()
             .unwrap();
         assert!(help.contains("reference"), "{help}");
-        assert!(inspect(&strings(&["config"]), &roots)
-            .unwrap_err()
-            .contains("explain"));
+        assert!(
+            inspect(&strings(&["config"]), &roots)
+                .unwrap_err()
+                .contains("explain")
+        );
     }
 }

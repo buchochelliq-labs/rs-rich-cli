@@ -84,9 +84,11 @@ fn batch_uses_profile_defaults_but_explicit_mode_and_collision_win() {
         std::fs::read_to_string(w.0.join("a.html")).unwrap(),
         "keep me"
     );
-    assert!(std::fs::read_to_string(w.0.join("a-2.html"))
-        .unwrap()
-        .contains("First document"));
+    assert!(
+        std::fs::read_to_string(w.0.join("a-2.html"))
+            .unwrap()
+            .contains("First document")
+    );
 
     let output = w.run(&[
         "--profile",
@@ -103,9 +105,11 @@ fn batch_uses_profile_defaults_but_explicit_mode_and_collision_win() {
     ]);
     assert!(output.status.success(), "{output:?}");
     assert_eq!(report(&output)["result"]["completed"], 2);
-    assert!(std::fs::read_to_string(w.0.join("a.html"))
-        .unwrap()
-        .contains("First document"));
+    assert!(
+        std::fs::read_to_string(w.0.join("a.html"))
+            .unwrap()
+            .contains("First document")
+    );
     assert!(!w.0.join("a-3.html").exists());
 }
 
@@ -146,9 +150,11 @@ fn batch_continues_after_export_and_data_failures_with_one_aggregate_report() {
     assert_eq!(result["failures"][1]["resource"], "b.json");
     assert_eq!(result["failures"][1]["code"], "data");
     assert_eq!(result["failures"][1]["exit_code"], 4);
-    assert!(std::fs::read_to_string(w.0.join("c.html"))
-        .unwrap()
-        .contains("survived"));
+    assert!(
+        std::fs::read_to_string(w.0.join("c.html"))
+            .unwrap()
+            .contains("survived")
+    );
     assert!(!w.0.join("b.html").exists());
 }
 

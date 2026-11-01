@@ -7,16 +7,16 @@
 use std::sync::Arc;
 
 use rich::ansi::AnsiDecoder;
-use rich::color::{blend_rgb, parse_rgb_hex, ColorType, Palette};
+use rich::color::{ColorType, Palette, blend_rgb, parse_rgb_hex};
 use rich::containers::{Lines, Renderables};
 use rich::errors::RichError;
 use rich::markdown::Markdown;
 use rich::markup::{self, Tag};
-use rich::measure::{measure_renderables, Measurement};
+use rich::measure::{Measurement, measure_renderables};
 use rich::protocol::Highlighter;
 use rich::style::{MetaValue, StyleStack, StyleType};
 use rich::terminal_theme::{
-    TerminalTheme, DEFAULT_TERMINAL_THEME, DIMMED_MONOKAI, MONOKAI, NIGHT_OWLISH, SVG_EXPORT_THEME,
+    DEFAULT_TERMINAL_THEME, DIMMED_MONOKAI, MONOKAI, NIGHT_OWLISH, SVG_EXPORT_THEME, TerminalTheme,
 };
 use rich::{
     Color, ColorSystem, ColorTriplet, Columns, Console, ISO8601Highlighter, JSONHighlighter,
@@ -49,11 +49,7 @@ fn pair(m: Measurement) -> String {
 }
 
 fn py_bool(value: bool) -> &'static str {
-    if value {
-        "True"
-    } else {
-        "False"
-    }
+    if value { "True" } else { "False" }
 }
 
 fn py_opt_bool(value: Option<bool>) -> &'static str {

@@ -7,8 +7,8 @@ use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
 use super::{
-    cells, has_colour, lines_to_segments, series_key, truncate, user_style, Charset, Line,
-    ValueFormat,
+    Charset, Line, ValueFormat, cells, has_colour, lines_to_segments, series_key, truncate,
+    user_style,
 };
 
 /// Rows for the disc when neither [`PieChart::height`] nor the height it is
@@ -319,10 +319,11 @@ impl PieChart {
             .unwrap_or(DEFAULT_ROWS)
             .clamp(1, MAX_ROWS);
         let beside = legend_w > 0 && width >= rows * 2 + 2 + legend_w;
-        if !beside && self.rows.is_none() {
-            if let Some(h) = height {
-                rows = h.saturating_sub(legend_rows).max(1).min(rows);
-            }
+        if !beside
+            && self.rows.is_none()
+            && let Some(h) = height
+        {
+            rows = h.saturating_sub(legend_rows).max(1).min(rows);
         }
         rows = rows.min((width / 2).max(1));
         (rows, beside)
@@ -429,11 +430,11 @@ impl PieChart {
                             for dx in 0..2 {
                                 let u = at(col * 2 + dx, cols * 2);
                                 let v = at(row * 4 + dy, rows * 4);
-                                if let (Pixel::Slice(i), edge) = self.pixel(&ends, u, v) {
-                                    if edge >= gap {
-                                        bits |= braille_bit(dx, dy);
-                                        votes[i] += 1;
-                                    }
+                                if let (Pixel::Slice(i), edge) = self.pixel(&ends, u, v)
+                                    && edge >= gap
+                                {
+                                    bits |= braille_bit(dx, dy);
+                                    votes[i] += 1;
                                 }
                             }
                         }
@@ -545,11 +546,11 @@ impl PieChart {
                 .map(|row| {
                     let mut line = disc.next().unwrap_or_default();
                     line.pad(rows * 2 - line.width());
-                    if row >= top {
-                        if let Some(entry) = legend.next() {
-                            line.pad(2);
-                            line.append(entry);
-                        }
+                    if row >= top
+                        && let Some(entry) = legend.next()
+                    {
+                        line.pad(2);
+                        line.append(entry);
                     }
                     line
                 })

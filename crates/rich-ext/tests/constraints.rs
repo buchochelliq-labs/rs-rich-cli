@@ -1,4 +1,4 @@
-use rich_ext::layout::{allocate, Constraint};
+use rich_ext::layout::{Constraint, allocate};
 fn fixed(n: usize) -> Constraint {
     Constraint {
         min: 0,

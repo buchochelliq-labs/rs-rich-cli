@@ -27,8 +27,8 @@ pub mod graphics;
 pub mod regions;
 
 pub use export::{HtmlOptions, SvgOptions};
-pub use graphics::{plan as plan_graphics, Graphic, GraphicsPlan, Placement, PlacementSource};
-pub use regions::{render_frame, role_name, Rect, Region, RegionRecorder, Span};
+pub use graphics::{Graphic, GraphicsPlan, Placement, PlacementSource, plan as plan_graphics};
+pub use regions::{Rect, Region, RegionRecorder, Span, render_frame, role_name};
 
 use std::collections::HashMap;
 use std::hash::{BuildHasherDefault, Hasher};

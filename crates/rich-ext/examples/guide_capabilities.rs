@@ -9,12 +9,12 @@ use rich::{
     AnsiDecoder, ColorSystem, Console, ConsoleOptions, Panel, Renderable, Segment, Table, Text,
     Theme,
 };
+use rich_ext::ConsoleExt;
 use rich_ext::capabilities::{
     Capabilities, CapabilityReport, ColorDepth, MapEnvironment, Origin, Overrides, Report,
 };
 use rich_ext::fidelity::{Adaptive, Degradable, Degrade, Fidelity, FidelityFacts, Policy};
 use rich_ext::target::{RenderTarget, TargetKind};
-use rich_ext::ConsoleExt;
 
 // --8<-- [start:system]
 fn system_report(console: &Console) {

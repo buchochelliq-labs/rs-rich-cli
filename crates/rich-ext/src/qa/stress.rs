@@ -31,8 +31,8 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Table, Text};
 use serde::{Deserialize, Serialize};
 
 use super::{
-    content_chars, is_ellipsis, max_width, measure_shortfall, plain_lines, plural, table_then_line,
-    visible_width, Probe,
+    Probe, content_chars, is_ellipsis, max_width, measure_shortfall, plain_lines, plural,
+    table_then_line, visible_width,
 };
 
 /// What [`stress`] renders.

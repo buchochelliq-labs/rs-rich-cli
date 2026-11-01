@@ -252,10 +252,10 @@ impl AnsiDecoder {
                 if let Some(color) = read_extended_color(&mut iter) {
                     self.style = self.style.combine(&Style::from_color(Some(color), None));
                 }
-            } else if code == 48 {
-                if let Some(color) = read_extended_color(&mut iter) {
-                    self.style = self.style.combine(&Style::from_color(None, Some(color)));
-                }
+            } else if code == 48
+                && let Some(color) = read_extended_color(&mut iter)
+            {
+                self.style = self.style.combine(&Style::from_color(None, Some(color)));
             }
         }
     }

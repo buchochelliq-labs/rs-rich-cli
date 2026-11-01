@@ -1455,8 +1455,10 @@ fn progress_and_live_log_name_their_caller() {
 
     // Malformed markup is an error, from the refresh thread too.
     let progress = rich::Progress::new().start(console(), Vec::<u8>::new(), 1e-9);
-    assert!(progress
-        .log(&[LogObject::Str("[/bold]")], &LogOptions::default())
-        .is_err());
+    assert!(
+        progress
+            .log(&[LogObject::Str("[/bold]")], &LogOptions::default())
+            .is_err()
+    );
     progress.stop();
 }

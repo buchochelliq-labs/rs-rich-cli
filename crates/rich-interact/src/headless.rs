@@ -254,7 +254,7 @@ impl Backend for Headless {
                     return Err(io::Error::new(
                         io::ErrorKind::UnexpectedEof,
                         "the headless script ended before the components finished",
-                    ))
+                    ));
                 }
                 Some(Step::Wait(left)) => match timeout {
                     Some(timeout) if timeout <= *left => {
@@ -272,7 +272,7 @@ impl Backend for Headless {
                 },
                 // Not here yet: it comes after what the loop does now.
                 Some(Step::Event(_)) if timeout == Some(Duration::ZERO) && !self.queued => {
-                    return Ok(None)
+                    return Ok(None);
                 }
                 Some(Step::Event(_)) => {
                     let Some(Step::Event(event)) = self.script.pop_front() else {

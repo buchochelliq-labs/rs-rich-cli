@@ -5,7 +5,7 @@ use std::borrow::Cow;
 use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Table, Text};
 
 use super::table::cell_text;
-use super::{escape_controls, style, Node, Path, Redactor, Value};
+use super::{Node, Path, Redactor, Value, escape_controls, style};
 
 /// A config file as a table: one row per key, grouped by section.
 ///

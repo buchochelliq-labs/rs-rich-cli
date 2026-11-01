@@ -1,10 +1,10 @@
 //! Compile-time plugins: `export_plugin!` in this test binary, collected at
 //! link time and added in a fixed order, sorted by plugin id.
 
-use rich_ext::plugin::{
-    linked_plugins, Capability, Plugin, PluginError, PluginMetadata, PluginRegistrar,
-};
 use rich_ext::ExtensionRegistry;
+use rich_ext::plugin::{
+    Capability, Plugin, PluginError, PluginMetadata, PluginRegistrar, linked_plugins,
+};
 
 struct Named(&'static str);
 

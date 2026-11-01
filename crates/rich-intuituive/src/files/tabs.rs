@@ -5,10 +5,10 @@ use std::path::PathBuf;
 
 use super::miller::Miller;
 use crate::node::Node;
-use crate::reactive::{signal, watch, Signal};
+use crate::reactive::{Signal, signal, watch};
 use crate::select::MultiSelect;
-use crate::signals::{history, History};
-use crate::tab_set::{tab_set, tabs_for, TabSet};
+use crate::signals::{History, history};
+use crate::tab_set::{TabSet, tab_set, tabs_for};
 
 /// A tab of [`FileTabs`]: its directory and where it has been.
 #[derive(Clone, Copy)]

@@ -43,10 +43,10 @@ use rich_interact::{
 
 use crate::inspect::{Handled, Inspector, Names, NodeTiming, Probe, TraceEntry, Traced};
 use crate::layout::Size;
-use crate::node::{with_node, Axis, FrameState, Node};
+use crate::node::{Axis, FrameState, Node, with_node};
 use crate::notify::{Corner, Level, Note};
 use crate::place::{Offset, Origin};
-use crate::reactive::{signal, Memo, NodeId, Proxy, Runtime, Signal};
+use crate::reactive::{Memo, NodeId, Proxy, Runtime, Signal, signal};
 use crate::screen::{PaintStats, PaintStrategy, Painter, Rect, Screen};
 use crate::widget::{Used, WidgetEvent};
 
@@ -3727,7 +3727,7 @@ impl App {
     /// The accessibility tree of the top screen (see
     /// [`Driver::accessibility`]).
     fn accessibility(&self, screen: &Screen) -> Vec<crate::a11y::AccessNode> {
-        use crate::a11y::{screen_text, AccessNode, Role};
+        use crate::a11y::{AccessNode, Role, screen_text};
         let focus = self.focus();
         let top = self.top();
         let text_mode = self.text_mode();
@@ -5384,12 +5384,11 @@ impl App {
                     && node.body.borrow().widget.role() == crate::a11y::Role::TextBox;
             });
         }
-        if text_box {
-            if let Some(quit) =
+        if text_box
+            && let Some(quit) =
                 self.give_to_widget(focused.expect("a focused text box"), &WidgetEvent::Key(key))
-            {
-                return quit;
-            }
+        {
+            return quit;
         }
         // Containers that asked see the key first, outermost first: their
         // widgets, and nodes' own bindings ([`Node::previews_keys`]). A
@@ -5401,15 +5400,15 @@ impl App {
                     previews = (node.body.borrow().widget.previews_keys(), node.previews);
                 }
             });
-            if previews.0 {
-                if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Preview(key)) {
-                    return quit;
-                }
+            if previews.0
+                && let Some(quit) = self.give_to_widget(id, &WidgetEvent::Preview(key))
+            {
+                return quit;
             }
-            if previews.1 {
-                if let Some(quit) = self.node_keys(id, key) {
-                    return quit;
-                }
+            if previews.1
+                && let Some(quit) = self.node_keys(id, key)
+            {
+                return quit;
             }
         }
         for &id in path.iter().rev() {
@@ -5423,15 +5422,13 @@ impl App {
             }
             // A text box offered its typed key already.
             let offered = text_box && Some(id) == focused;
-            if !offered {
-                if let Some(quit) = self.give_to_widget(id, &WidgetEvent::Key(key)) {
-                    return quit;
-                }
+            if !offered && let Some(quit) = self.give_to_widget(id, &WidgetEvent::Key(key)) {
+                return quit;
             }
-            if !skip.1 {
-                if let Some(quit) = self.node_keys(id, key) {
-                    return quit;
-                }
+            if !skip.1
+                && let Some(quit) = self.node_keys(id, key)
+            {
+                return quit;
             }
         }
         if key == Key::new(KeyCode::F(1)) && self.show_focus_tip() {
@@ -5518,10 +5515,10 @@ impl App {
                     return;
                 }
                 drop(sequences);
-                if let Some(handler) = node.any_key.borrow_mut().as_mut() {
-                    if handler(&mut cx, key) {
-                        used = Some("on_any_key");
-                    }
+                if let Some(handler) = node.any_key.borrow_mut().as_mut()
+                    && handler(&mut cx, key)
+                {
+                    used = Some("on_any_key");
                 }
             });
         });
@@ -5905,13 +5902,13 @@ impl App {
         if let Some(quit) = self.drag_mouse(&path, mouse) {
             return Some(quit);
         }
-        if let Some((id, shift)) = self.capture {
-            if matches!(mouse.kind, MouseKind::Drag(_) | MouseKind::Up(_)) {
-                if matches!(mouse.kind, MouseKind::Up(_)) {
-                    self.capture = None;
-                }
-                return Some(self.send_mouse(id, shift, mouse).unwrap_or(false));
+        if let Some((id, shift)) = self.capture
+            && matches!(mouse.kind, MouseKind::Drag(_) | MouseKind::Up(_))
+        {
+            if matches!(mouse.kind, MouseKind::Up(_)) {
+                self.capture = None;
             }
+            return Some(self.send_mouse(id, shift, mouse).unwrap_or(false));
         }
         if matches!(mouse.kind, MouseKind::Down(_))
             && self.top().is_popup()
@@ -6111,12 +6108,13 @@ impl App {
                 if let Some(handler) = node.mouse.borrow_mut().as_mut() {
                     used = handler(&mut cx, local);
                 }
-                if !used && mouse.kind == MouseKind::Down(Button::Left) {
-                    if let Some(handler) = node.click.borrow_mut().as_mut() {
-                        handler(&mut cx);
-                        used = true;
-                        how = "on_click";
-                    }
+                if !used
+                    && mouse.kind == MouseKind::Down(Button::Left)
+                    && let Some(handler) = node.click.borrow_mut().as_mut()
+                {
+                    handler(&mut cx);
+                    used = true;
+                    how = "on_click";
                 }
             });
         });
@@ -6457,17 +6455,18 @@ impl Driver {
         if app.toasts.len() != shown {
             app.restack = true;
         }
-        if let Some(tip) = app.tip.as_mut().filter(|tip| !tip.shown) {
-            if now >= tip.since + TOOLTIP_DELAY {
-                tip.shown = true;
-                app.restack = true;
-            }
+        if let Some(tip) = app.tip.as_mut().filter(|tip| !tip.shown)
+            && now >= tip.since + TOOLTIP_DELAY
+        {
+            tip.shown = true;
+            app.restack = true;
         }
         // A key sequence that waited long enough shows its which-key.
-        if let (Some(delay), Some(pending)) = (app.which_key, &app.pending) {
-            if !pending.shown && now >= pending.since + delay {
-                app.restack = true;
-            }
+        if let (Some(delay), Some(pending)) = (app.which_key, &app.pending)
+            && !pending.shown
+            && now >= pending.since + delay
+        {
+            app.restack = true;
         }
         // The inspector's redraw flash, over: it comes off the app.
         if app
@@ -7859,10 +7858,10 @@ fn modal_rect(console: &Console, root: &Node, area: Rect, width: Size, height: S
 
 /// Set every rect handle in `node`, and in everything inside it, to `None`.
 fn clear_rect_handles(node: &crate::node::Node) {
-    if let Some(handle) = *node.rect_slot.borrow() {
-        if handle.get_untracked().is_some() {
-            handle.set(None);
-        }
+    if let Some(handle) = *node.rect_slot.borrow()
+        && handle.get_untracked().is_some()
+    {
+        handle.set(None);
     }
     node.each_child(&mut |child| clear_rect_handles(child));
 }
@@ -7874,7 +7873,7 @@ mod tests {
     use rich_interact::{Event, Key, Mouse, MouseKind};
 
     use crate::prelude::*;
-    use crate::widget::{widget, Canvas, DrawCx, Widget};
+    use crate::widget::{Canvas, DrawCx, Widget, widget};
 
     struct Hoverable;
 

@@ -6,7 +6,7 @@ use std::collections::VecDeque;
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
-use super::{has_colour, lines_to_segments, theme_style, AxisScale, Charset, Line, Scale};
+use super::{AxisScale, Charset, Line, Scale, has_colour, lines_to_segments, theme_style};
 
 /// Levels for blocks, lowest first (as a [`Heatmap`](super::Heatmap)'s).
 const SHADES: [char; 5] = [' ', '░', '▒', '▓', '█'];
@@ -307,8 +307,8 @@ impl Renderable for Spectrogram {
 /// then where the newest spectrum is loudest (`Newest peaks at 440 Hz`).
 impl crate::a11y::AccessibleText for Spectrogram {
     fn accessible_text(&self, _width: usize) -> String {
-        use super::describe::{counted, extent, range};
         use super::ValueFormat;
+        use super::describe::{counted, extent, range};
         if self.rows.is_empty() {
             return "Spectrogram, no spectra".to_string();
         }

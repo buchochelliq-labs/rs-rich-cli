@@ -3,8 +3,8 @@
 //! graphics source, and Kitty ids released when a view closes.
 mod common;
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use rich::{ColorSystem, Console, Renderable, Segment, Table};
@@ -13,8 +13,8 @@ use rich_ext::frame::Frame;
 use rich_ext::graphics::GraphicsEnvironment;
 use rich_micro::package::load_package;
 use rich_micro::{
-    render_markup, select, FallbackPreference, Layer, Limits, MicroGraphics, MicroMode,
-    MicroRegistry, Selection,
+    FallbackPreference, Layer, Limits, MicroGraphics, MicroMode, MicroRegistry, Selection,
+    render_markup, select,
 };
 
 use rich_art::graphics::CellPixels;
@@ -300,9 +300,11 @@ fn kitty_placeholders_come_after_markup_substitution_and_are_never_reparsed() {
         &registry,
         FallbackPreference::Emoji,
     );
-    assert!(diagnostics
-        .iter()
-        .any(|d| d.kind == rich_micro::DiagnosticKind::Reserved));
+    assert!(
+        diagnostics
+            .iter()
+            .any(|d| d.kind == rich_micro::DiagnosticKind::Reserved)
+    );
     assert!(again.plain().contains(rich_art::kitty::PLACEHOLDER));
 }
 

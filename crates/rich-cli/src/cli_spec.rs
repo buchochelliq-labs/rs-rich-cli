@@ -426,23 +426,25 @@ fn viewer_options() -> Vec<ArgSpec> {
 }
 
 fn input_options() -> Vec<ArgSpec> {
-    let mut args = vec![option(
-        "format",
-        "F",
-        INPUT,
-        "Input format. With --inspect, the parser (default auto-detect); otherwise `auto` \
+    let mut args = vec![
+        option(
+            "format",
+            "F",
+            INPUT,
+            "Input format. With --inspect, the parser (default auto-detect); otherwise `auto` \
          detects piped or extensionless input and routes it (JSON to --json, other formats \
          to highlighting, likely Markdown, reStructuredText, Org, AsciiDoc and man pages to \
          their renderers, anything else to plain text), and a named format overrides the \
          extension. A document format (markdown, rst, org, asciidoc, man) is the same as its \
          mode flag",
-    )
-    .choices([
-        "auto", "json", "yaml", "toml", "xml", "ini", "env", "markdown", "rst", "org", "asciidoc",
-        "man",
-    ])
-    .default_value("auto")
-    .config_key("format")];
+        )
+        .choices([
+            "auto", "json", "yaml", "toml", "xml", "ini", "env", "markdown", "rst", "org",
+            "asciidoc", "man",
+        ])
+        .default_value("auto")
+        .config_key("format"),
+    ];
     args.extend(
         rich_ext::cli::arg_specs()
             .into_iter()
@@ -1570,14 +1572,16 @@ fn config_keys() -> Vec<String> {
 }
 
 fn root_args() -> Vec<ArgSpec> {
-    let mut args = vec![ArgSpec::positional("resource")
-        .value(ValueHint::Path)
-        .multiple(true)
-        .heading(ARGUMENTS)
-        .help(
-            "A file path, an http(s) URL, or `-` for stdin (several with --batch, --watch \
+    let mut args = vec![
+        ArgSpec::positional("resource")
+            .value(ValueHint::Path)
+            .multiple(true)
+            .heading(ARGUMENTS)
+            .help(
+                "A file path, an http(s) URL, or `-` for stdin (several with --batch, --watch \
              or --gif)",
-        )];
+            ),
+    ];
     for group in [
         render_modes(),
         input_options(),
@@ -2174,7 +2178,7 @@ mod tests {
     //! whole literal, so no exclusions are needed. The spec side is every
     //! short, long and alias of every argument, including subcommands.
     use super::*;
-    use crate::config::{config_args, ConfigRoots};
+    use crate::config::{ConfigRoots, config_args};
     use std::collections::BTreeSet;
 
     const MAIN: &str = include_str!("lib.rs");

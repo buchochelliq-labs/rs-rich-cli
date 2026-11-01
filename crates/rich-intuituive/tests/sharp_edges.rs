@@ -4,7 +4,7 @@
 
 mod common;
 
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::time::Duration;
 
 use common::{row_of, run_open, screen};

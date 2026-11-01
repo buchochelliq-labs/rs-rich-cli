@@ -9,8 +9,8 @@ mod disk;
 use std::path::{Path, PathBuf};
 
 use disk::*;
-use intuituive::focus::Direction;
 use intuituive::Driver;
+use intuituive::focus::Direction;
 
 const W: u16 = 80;
 const H: u16 = 24;
@@ -174,10 +174,12 @@ fn items_too_small_for_a_tile_share_one_block() {
     let zoomed = treemap(&children(&root, 1), 79, 20, 1);
     assert_covers(&zoomed, 79, 20);
     assert!(zoomed.tiles.len() > 10, "{zoomed:#?}");
-    assert!(zoomed
-        .tiles
-        .iter()
-        .all(|t| t.w >= MIN_WIDTH && t.h >= MIN_HEIGHT));
+    assert!(
+        zoomed
+            .tiles
+            .iter()
+            .all(|t| t.w >= MIN_WIDTH && t.h >= MIN_HEIGHT)
+    );
 }
 
 #[test]

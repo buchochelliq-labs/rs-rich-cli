@@ -4,7 +4,7 @@
 
 use intuituive::prelude::*;
 use intuituive::widgets::{
-    table_optional, table_with, virtual_table_with, Column, HighlightSpacing, TableOptions,
+    Column, HighlightSpacing, TableOptions, table_optional, table_with, virtual_table_with,
 };
 use intuituive::{assert_screen, assert_screen_styled};
 

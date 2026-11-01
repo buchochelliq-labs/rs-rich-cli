@@ -47,7 +47,7 @@ use std::collections::BTreeMap;
 
 use rich::{Console, ConsoleOptions, Renderable, Segment, Text, Tree};
 
-use super::{clean, compare_versions, theme_style, DepGraph, DepKind};
+use super::{DepGraph, DepKind, clean, compare_versions, theme_style};
 
 /// The most dependents listed beside one version; the rest are counted.
 pub const MAX_LISTED: usize = 8;
@@ -464,8 +464,10 @@ mod tests {
         let graph = DepGraph::from_json(&metadata()).unwrap();
         let view = Consolidation::new(&graph).kinds(&[]);
         let console = Console::builder().width(80).color_system(None).build();
-        assert!(console
-            .render_to_string(&view)
-            .contains("no crate is resolved at more than one version"));
+        assert!(
+            console
+                .render_to_string(&view)
+                .contains("no crate is resolved at more than one version")
+        );
     }
 }

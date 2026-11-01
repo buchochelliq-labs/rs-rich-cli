@@ -7,14 +7,14 @@ use std::path::{Path, PathBuf};
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
-use super::source::{open_source, Source};
-#[cfg(feature = "audio")]
-use super::source::{Decoder, Event};
 use super::AudioError;
 #[cfg(feature = "audio")]
+use super::source::{Decoder, Event};
+use super::source::{Source, open_source};
+#[cfg(feature = "audio")]
 use crate::reactive::Proxy;
-use crate::reactive::{signal, Runtime, Signal};
-use crate::transport::{transport, Transport};
+use crate::reactive::{Runtime, Signal, signal};
+use crate::transport::{Transport, transport};
 
 /// What opens a track: a path to a [`Source`].
 type Opener = Arc<dyn Fn(&Path) -> Result<Box<dyn Source>, AudioError> + Send + Sync>;
@@ -412,10 +412,10 @@ impl Player {
 
     /// The next track (nothing after the last).
     pub fn next(&self) {
-        if let Some(at) = self.track.get_untracked() {
-            if at + 1 < self.tracks.with_untracked(Vec::len) {
-                self.play_track(at + 1);
-            }
+        if let Some(at) = self.track.get_untracked()
+            && at + 1 < self.tracks.with_untracked(Vec::len)
+        {
+            self.play_track(at + 1);
         }
     }
 

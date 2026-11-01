@@ -12,8 +12,8 @@
 //! - `about:noctiluca`'s codec table says what `canPlayType` says.
 
 use std::path::Path;
-use std::sync::mpsc::{self, Receiver};
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use noctiluca::about;
@@ -23,7 +23,7 @@ use noctiluca::file_url;
 use noctiluca::model::Page;
 use noctiluca::tab::{Command, Tab, Update};
 use noctiluca::video::{Pacing, VideoFrame};
-use rich_art::picture::{count_picture_bytes, picture_bytes, ByteBudget, Pixels};
+use rich_art::picture::{ByteBudget, Pixels, count_picture_bytes, picture_bytes};
 
 fn fixture(name: &str) -> String {
     file_url(

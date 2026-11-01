@@ -101,9 +101,9 @@ use std::sync::{Mutex, PoisonError};
 
 use rich::{Console, ConsoleOptions, LineRenderable, Overflow, Renderable, Segment, Table, Text};
 
-use super::data::{normalize, TableData};
-use super::sort::{compare_rows, SortKey};
-use super::{frame_builders, headers, style, Column, Frame, Value};
+use super::data::{TableData, normalize};
+use super::sort::{SortKey, compare_rows};
+use super::{Column, Frame, Value, frame_builders, headers, style};
 
 /// Which rows a [`StreamingTable`] shows.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]

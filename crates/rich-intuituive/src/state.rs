@@ -10,7 +10,7 @@ use std::io::{self, Write};
 use std::path::{Path, PathBuf};
 use std::time::Duration;
 
-use crate::reactive::{signal, Signal};
+use crate::reactive::{Signal, signal};
 
 /// Where app `app` keeps its state between sessions:
 /// `$XDG_STATE_HOME/app` (else `~/.local/state/app`) on Linux and the
@@ -358,10 +358,10 @@ impl FrecencyStore {
 
     /// Read the file again: what other sessions wrote since.
     pub fn reload(&self) {
-        if let Some(file) = self.file.get_untracked() {
-            if let Ok(Some(bytes)) = read_file(&file) {
-                self.visits.set(parse(&String::from_utf8_lossy(&bytes)));
-            }
+        if let Some(file) = self.file.get_untracked()
+            && let Ok(Some(bytes)) = read_file(&file)
+        {
+            self.visits.set(parse(&String::from_utf8_lossy(&bytes)));
         }
     }
 

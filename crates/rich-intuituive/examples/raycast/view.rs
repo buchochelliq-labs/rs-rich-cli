@@ -8,7 +8,7 @@ use std::cell::Cell;
 use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 
-use intuituive::pixels::{pixels_fit, PixelMode};
+use intuituive::pixels::{PixelMode, pixels_fit};
 use intuituive::prelude::*;
 use intuituive::screen::Rect;
 use intuituive::widget::{Canvas, DrawCx, EventCx, Used, WidgetEvent};

@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use noctiluca::app::{app, Options};
+use noctiluca::app::{Options, app};
 use noctiluca::bookmarks::Bookmarks;
 use noctiluca::config::{Config, View};
 use noctiluca::engine::{

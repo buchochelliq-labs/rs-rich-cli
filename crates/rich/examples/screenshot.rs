@@ -13,8 +13,8 @@
 //! animated images are built: frames are rendered individually and stitched into
 //! one animated SVG by `scripts/build_animation.py`.
 
-use rich::markdown::Markdown;
 use rich::r#box::{HEAVY_HEAD, ROUNDED};
+use rich::markdown::Markdown;
 use rich::{
     Align, ColorSystem, Columns, Console, HorizontalAlign, Json, Justify, Padding, Panel, Pretty,
     Progress, ProgressBar, ProgressColumn, Renderable, Rule, Spinner, Style, Syntax, Table, Text,

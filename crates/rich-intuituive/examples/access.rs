@@ -19,8 +19,8 @@
 use std::time::Duration;
 
 use intuituive::prelude::*;
-use intuituive::widgets::{tabs, tree, TreeItem};
-use intuituive::{button, checkbox, spinner, switch_toggle, ButtonVariant};
+use intuituive::widgets::{TreeItem, tabs, tree};
+use intuituive::{ButtonVariant, button, checkbox, spinner, switch_toggle};
 
 fn delete(cx: &mut Ctx) {
     cx.modal(Size::Auto, Size::Auto, || {

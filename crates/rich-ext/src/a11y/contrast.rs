@@ -21,8 +21,8 @@
 use crate::fidelity::style_without_color;
 use rich::terminal_theme::blend_rgb;
 use rich::{
-    ColorTriplet, Console, ConsoleOptions, Renderable, Segment, Style, Table, TerminalTheme, Text,
-    Theme, DEFAULT_TERMINAL_THEME, MONOKAI,
+    ColorTriplet, Console, ConsoleOptions, DEFAULT_TERMINAL_THEME, MONOKAI, Renderable, Segment,
+    Style, Table, TerminalTheme, Text, Theme,
 };
 
 /// sRGB channel (0–255) to linear light.
@@ -189,11 +189,7 @@ pub fn ciede2000(lab1: [f64; 3], lab2: [f64; 3]) -> f64 {
             0.0
         } else {
             let h = deg(b.atan2(a));
-            if h < 0.0 {
-                h + 360.0
-            } else {
-                h
-            }
+            if h < 0.0 { h + 360.0 } else { h }
         }
     };
     let (h1p, h2p) = (hue(b1, a1p), hue(b2, a2p));

@@ -38,7 +38,7 @@
 use serde_json::Value;
 
 use super::licenses::{LicenseReport, LicensedPackage};
-use super::{check_count, check_size, clean, DepsError};
+use super::{DepsError, check_count, check_size, clean};
 
 /// The deepest CycloneDX components nest before the reader stops.
 pub const MAX_NESTING: usize = 32;

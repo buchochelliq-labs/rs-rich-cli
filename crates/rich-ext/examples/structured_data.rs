@@ -4,8 +4,8 @@
 //! Run with `cargo run -p rs-rich-ext --example structured_data --features data`.
 use rich::Console;
 use rich_ext::data::{
-    parse, parse_dotenv, print_table, ConfigFileView, Explorer, Format, Redaction, SearchQuery,
-    SearchResults,
+    ConfigFileView, Explorer, Format, Redaction, SearchQuery, SearchResults, parse, parse_dotenv,
+    print_table,
 };
 
 #[derive(serde::Serialize)]

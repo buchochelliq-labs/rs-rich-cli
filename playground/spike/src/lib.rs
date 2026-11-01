@@ -9,7 +9,7 @@ use rich::{ColorSystem, Console, Panel, Table, Text};
 use wasm_bindgen::prelude::*;
 
 #[wasm_bindgen]
-extern "C" {
+unsafe extern "C" {
     #[wasm_bindgen(js_namespace = console)]
     fn error(message: &str);
 }

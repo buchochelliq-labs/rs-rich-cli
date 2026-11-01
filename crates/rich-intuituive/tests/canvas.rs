@@ -9,9 +9,9 @@ mod canvas;
 
 use std::time::Duration;
 
-use canvas::{canvas_app, Ball, Options, FRAME, MARKERS};
+use canvas::{Ball, FRAME, MARKERS, Options, canvas_app};
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
-use intuituive::{assert_screen, Driver};
+use intuituive::{Driver, assert_screen};
 
 const WIDTH: u16 = 80;
 const HEIGHT: u16 = 24;

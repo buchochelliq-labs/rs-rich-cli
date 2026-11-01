@@ -9,8 +9,8 @@ use intuituive::interact::headless::Script;
 use intuituive::interact::{Button, Event, Key, MouseKind};
 use intuituive::prelude::*;
 use intuituive::widgets::{
-    calendar_options, datetime_picker, time_picker, time_picker_with, CalendarOptions, Date,
-    DateTime, DateTimeOptions, Move, Time, TimeOptions,
+    CalendarOptions, Date, DateTime, DateTimeOptions, Move, Time, TimeOptions, calendar_options,
+    datetime_picker, time_picker, time_picker_with,
 };
 
 // ---- Reorderable lists ----

@@ -125,15 +125,21 @@ mod tests {
         assert!(check("[repr.number]1[/repr.number]", &keys, None).is_ok());
         assert!(check("[app.title]t[/]", &keys, None).is_ok());
         assert!(check("[link=https://x.io]x[/link]", &keys, None).is_ok());
-        assert!(check("[bodl]x[/]", &keys, None)
-            .unwrap_err()
-            .contains("unknown style"));
-        assert!(check("[bold]x", &keys, None)
-            .unwrap_err()
-            .contains("unclosed"));
-        assert!(check("x[/bold]", &keys, None)
-            .unwrap_err()
-            .contains("invalid markup"));
+        assert!(
+            check("[bodl]x[/]", &keys, None)
+                .unwrap_err()
+                .contains("unknown style")
+        );
+        assert!(
+            check("[bold]x", &keys, None)
+                .unwrap_err()
+                .contains("unclosed")
+        );
+        assert!(
+            check("x[/bold]", &keys, None)
+                .unwrap_err()
+                .contains("invalid markup")
+        );
         assert!(check("[bold]x[/italic]", &keys, None).is_err());
         assert!(check("[x\u{E000}]x[/]", &keys, Some('\u{E000}')).is_ok());
     }

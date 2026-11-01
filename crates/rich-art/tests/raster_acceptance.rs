@@ -34,18 +34,22 @@ fn bayer_matches_fixed_palette_indices_and_rejects_unsupported_modes() {
     assert_eq!(lower, [245, 243, 245, 244, 245, 244, 245, 243]);
     assert_eq!(segments, art.render(&c, &c.options()).unwrap());
     for mode in [ImageMode::Braille, ImageMode::Sixel] {
-        assert!(ImageArt::new(image.clone())
-            .mode(mode)
-            .color_mode(ImageColorMode::Ansi256)
+        assert!(
+            ImageArt::new(image.clone())
+                .mode(mode)
+                .color_mode(ImageColorMode::Ansi256)
+                .dither(Dither::Bayer4x4)
+                .render(&c, &c.options())
+                .is_err()
+        );
+    }
+    assert!(
+        ImageArt::new(image)
+            .mode(ImageMode::Blocks)
             .dither(Dither::Bayer4x4)
             .render(&c, &c.options())
-            .is_err());
-    }
-    assert!(ImageArt::new(image)
-        .mode(ImageMode::Blocks)
-        .dither(Dither::Bayer4x4)
-        .render(&c, &c.options())
-        .is_err());
+            .is_err()
+    );
 }
 #[test]
 fn every_braille_dot_has_the_correct_unicode_bit_and_alpha_is_empty() {
@@ -69,11 +73,13 @@ fn every_braille_dot_has_the_correct_unicode_bit_and_alpha_is_empty() {
         );
     }
     let image = RgbaImage::from_pixel(1, 3, Rgba([255, 255, 255, 0]));
-    assert!(BrailleArt::new(DynamicImage::ImageRgba8(image))
-        .width(1)
-        .to_text(1)
-        .chars()
-        .all(|c| c == '\u{2800}' || c == '\n'));
+    assert!(
+        BrailleArt::new(DynamicImage::ImageRgba8(image))
+            .width(1)
+            .to_text(1)
+            .chars()
+            .all(|c| c == '\u{2800}' || c == '\n')
+    );
 }
 #[test]
 fn odd_block_heights_and_transparency_keep_visible_backgrounds() {

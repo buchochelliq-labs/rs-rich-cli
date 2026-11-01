@@ -20,10 +20,10 @@
 //! assert!(out.starts_with("1 │ fn main() {"));
 //! ```
 
-use rich::cells::cell_len;
-use rich::measure::Measurement;
 #[cfg(feature = "syntax")]
 use rich::Syntax;
+use rich::cells::cell_len;
+use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Justify, Overflow, Renderable, Segment, Style, Text, Theme};
 
 /// Source text with line numbers and optional search highlighting.

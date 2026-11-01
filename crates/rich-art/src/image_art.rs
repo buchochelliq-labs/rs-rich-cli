@@ -26,7 +26,7 @@
 
 use std::sync::Arc;
 
-use image::{imageops::FilterType, DynamicImage, GenericImageView, Rgb, RgbImage, Rgba, RgbaImage};
+use image::{DynamicImage, GenericImageView, Rgb, RgbImage, Rgba, RgbaImage, imageops::FilterType};
 
 use rich::console::{Console, ConsoleOptions};
 use rich::protocol::{ConsoleEnvironment, RenderEnvironment, Renderable, Support};
@@ -334,8 +334,14 @@ pub enum ImageArtError {
 impl std::fmt::Display for ImageArtError {
     fn fmt(&self, f: &mut std::fmt::Formatter<'_>) -> std::fmt::Result {
         match self {
-            Self::UnsupportedColorOptions => write!(f, "Braille images are monochrome, so they take no color mode; dithering and color distance require ansi256, ansi16 or grayscale"),
-            Self::InvalidAdjustment => write!(f, "image brightness and contrast must be finite and non-negative, and gamma finite and positive"),
+            Self::UnsupportedColorOptions => write!(
+                f,
+                "Braille images are monochrome, so they take no color mode; dithering and color distance require ansi256, ansi16 or grayscale"
+            ),
+            Self::InvalidAdjustment => write!(
+                f,
+                "image brightness and contrast must be finite and non-negative, and gamma finite and positive"
+            ),
             Self::FeatureNotEnabled { mode, feature } => write!(
                 f,
                 "image mode {mode:?} is not available in this build; \
@@ -345,19 +351,34 @@ impl std::fmt::Display for ImageArtError {
                 write!(f, "could not encode this image as Sixel graphics")
             }
             Self::InvalidFitDimensions => {
-                write!(f, "image fit requires positive width and height, a nonempty image and destination, and at most 16 megapixels")
+                write!(
+                    f,
+                    "image fit requires positive width and height, a nonempty image and destination, and at most 16 megapixels"
+                )
             }
             Self::NonTerminalDestination => {
-                write!(f, "Sixel graphics require a terminal destination; use ASCII, Braille, or blocks when redirecting output")
+                write!(
+                    f,
+                    "Sixel graphics require a terminal destination; use ASCII, Braille, or blocks when redirecting output"
+                )
             }
             Self::SixelTooLarge => {
-                write!(f, "the Sixel image would exceed 16 megapixels at this size; set a smaller width or a height")
+                write!(
+                    f,
+                    "the Sixel image would exceed 16 megapixels at this size; set a smaller width or a height"
+                )
             }
             Self::TooLarge => {
-                write!(f, "the image would exceed {MAX_CELLS} cells at this size; set a smaller width or height")
+                write!(
+                    f,
+                    "the image would exceed {MAX_CELLS} cells at this size; set a smaller width or height"
+                )
             }
             Self::SixelNotSupported => {
-                write!(f, "this terminal is not known to support Sixel graphics; set RICH_SIXEL=1 or RICH_GRAPHICS=sixel to force it, or use ASCII, Braille, blocks or quadrants")
+                write!(
+                    f,
+                    "this terminal is not known to support Sixel graphics; set RICH_SIXEL=1 or RICH_GRAPHICS=sixel to force it, or use ASCII, Braille, blocks or quadrants"
+                )
             }
         }
     }
@@ -1282,12 +1303,13 @@ mod tests {
             .fit(ImageFit::Contain)
             .width(4)
             .height(1);
-        assert!(art
-            .prepare_image(ImageMode::Blocks, 8)
-            .unwrap()
-            .to_rgb8()
-            .pixels()
-            .all(|p| p.0 == [20, 40, 60]));
+        assert!(
+            art.prepare_image(ImageMode::Blocks, 8)
+                .unwrap()
+                .to_rgb8()
+                .pixels()
+                .all(|p| p.0 == [20, 40, 60])
+        );
     }
 
     /// Columns and lines of a text-mode render.

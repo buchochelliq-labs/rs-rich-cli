@@ -30,8 +30,8 @@ use std::io::Cursor;
 
 use rich::{Console, ConsoleOptions, Renderable, Segment};
 use rich_art::graphics::{
-    adjust, decode_animation, encode_gif, encode_png, fill_pixels, reduce_colors, resample,
-    sharpen, threshold_alpha, AnimationFrame, CellPixels, FrameBudget,
+    AnimationFrame, CellPixels, FrameBudget, adjust, decode_animation, encode_gif, encode_png,
+    fill_pixels, reduce_colors, resample, sharpen, threshold_alpha,
 };
 use rich_art::image::{self, DynamicImage, ImageReader, RgbaImage};
 use rich_art::{
@@ -136,12 +136,12 @@ impl Pipeline {
                     .into(),
             ));
         }
-        if let Some(sigma) = self.sharpen {
-            if !sigma.is_finite() || sigma <= 0.0 || sigma > 10.0 {
-                return Err(MicroError::Image(format!(
-                    "sharpen radius {sigma} is not between 0 and 10 pixels"
-                )));
-            }
+        if let Some(sigma) = self.sharpen
+            && (!sigma.is_finite() || sigma <= 0.0 || sigma > 10.0)
+        {
+            return Err(MicroError::Image(format!(
+                "sharpen radius {sigma} is not between 0 and 10 pixels"
+            )));
         }
         Ok(())
     }
@@ -444,8 +444,10 @@ mod tests {
         let console = Console::builder().width(40).build();
         let lines = console.render_lines(&processed.preview(), &console.options(), false);
         assert_eq!(lines.len(), 8);
-        assert!(lines
-            .iter()
-            .all(|line| line.iter().map(Segment::cell_length).sum::<usize>() == 16));
+        assert!(
+            lines
+                .iter()
+                .all(|line| line.iter().map(Segment::cell_length).sum::<usize>() == 16)
+        );
     }
 }

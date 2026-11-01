@@ -7,8 +7,8 @@ use std::hash::Hash;
 use std::rc::Rc;
 
 use crate::node::Node;
-use crate::reactive::{memo, signal, watch, Signal};
-use crate::widgets::{table_with, Column, TableOptions};
+use crate::reactive::{Signal, memo, signal, watch};
+use crate::widgets::{Column, TableOptions, table_with};
 
 /// One row of a [`tree_table`]: what identifies it (`key`), its cells
 /// (console markup, one a column), and the rows under it.

@@ -10,9 +10,9 @@ use serde_json::json;
 
 use crate::audio::{self, Audio};
 use crate::keyboard::{Event as KeyEvent, Press};
-use crate::render::{cast, html, raster, svg, video, Look};
+use crate::render::{Look, cast, html, raster, svg, video};
 use crate::screen::{Snapshot, Theme};
-use crate::session::{Session, Timeline, FRAME_RATE, MAX_VIDEO};
+use crate::session::{FRAME_RATE, MAX_VIDEO, Session, Timeline};
 use crate::tape::{Format, Output, Pattern, Shell, Step, Tape, TapeError};
 
 /// The prompt the recorded shell shows; `run` waits for it.
@@ -1000,17 +1000,18 @@ pub fn write_selected(
     let mut paths = write(recording, dir, stem, encode, fonts, theme, provenance)?;
     // A video that could not be made, with nothing else to put its sound
     // beside: the WAV takes its place.
-    if let Some(audio) = &recording.audio {
-        if formats.mp4 && !encode.mp4 && wav_path(recording, stem, encode, false).is_none() {
-            if let Some(name) = wav_path(recording, stem, formats, false) {
-                let path = dir.join(name);
-                if let Some(parent) = path.parent() {
-                    std::fs::create_dir_all(parent)?;
-                }
-                std::fs::write(&path, audio.wav(true))?;
-                paths.push(path);
-            }
+    if let Some(audio) = &recording.audio
+        && formats.mp4
+        && !encode.mp4
+        && wav_path(recording, stem, encode, false).is_none()
+        && let Some(name) = wav_path(recording, stem, formats, false)
+    {
+        let path = dir.join(name);
+        if let Some(parent) = path.parent() {
+            std::fs::create_dir_all(parent)?;
         }
+        std::fs::write(&path, audio.wav(true))?;
+        paths.push(path);
     }
     let mut skipped = Vec::new();
     if formats.mp4 {
@@ -1165,10 +1166,10 @@ pub fn write(
         )?;
     }
     let mp4_path = dir.join(recording.output_path(Format::Mp4, stem));
-    if formats.mp4 {
-        if let Some(parent) = mp4_path.parent() {
-            std::fs::create_dir_all(parent)?;
-        }
+    if formats.mp4
+        && let Some(parent) = mp4_path.parent()
+    {
+        std::fs::create_dir_all(parent)?;
     }
     let encode_mp4 = formats.mp4 && video::ffmpeg_available();
     // The MP4's sound track, from a WAV FFmpeg reads beside the frames.
@@ -1250,10 +1251,10 @@ pub fn write(
     }
     drop(sound);
     // The other outputs have no sound of their own: a WAV beside them.
-    if let Some(audio) = &recording.audio {
-        if let Some(path) = wav_path(recording, stem, formats, mp4_written) {
-            save(&mut written, path, &audio.wav(true))?;
-        }
+    if let Some(audio) = &recording.audio
+        && let Some(path) = wav_path(recording, stem, formats, mp4_written)
+    {
+        save(&mut written, path, &audio.wav(true))?;
     }
     if let Some(apng) = apng {
         apng.finish()?;

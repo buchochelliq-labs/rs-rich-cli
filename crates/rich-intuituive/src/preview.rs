@@ -6,8 +6,8 @@ use std::sync::{Arc, Mutex};
 use std::time::Duration;
 
 use crate::node::Node;
-use crate::reactive::{memo, on_write_ref, signal, watch, Signal};
-use crate::task::{resource_for, Load};
+use crate::reactive::{Signal, memo, on_write_ref, signal, watch};
+use crate::task::{Load, resource_for};
 
 type OnChange<K> = Rc<dyn Fn(Option<&K>)>;
 type OnLoaded<K, T> = Rc<dyn Fn(&K, &T)>;

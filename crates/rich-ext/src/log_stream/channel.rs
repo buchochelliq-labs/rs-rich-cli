@@ -2,9 +2,9 @@
 //! [`Record`], down a bounded channel, so a log view on another thread
 //! can show what `tracing` or `log` reports.
 
-use std::sync::atomic::{AtomicU64, Ordering};
-use std::sync::mpsc::{sync_channel, Receiver, SyncSender, TrySendError};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
+use std::sync::mpsc::{Receiver, SyncSender, TrySendError, sync_channel};
 
 use super::Record;
 use crate::adapters::EventSink;

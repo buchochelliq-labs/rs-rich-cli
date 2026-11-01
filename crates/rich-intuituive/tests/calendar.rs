@@ -10,10 +10,10 @@
 #[allow(dead_code)]
 mod calendar;
 
-use calendar::{calendar_app, date_at, day_name, season, Options, LOOKS};
+use calendar::{LOOKS, Options, calendar_app, date_at, day_name, season};
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::widgets::Date;
-use intuituive::{assert_screen, assert_screen_styled, Driver};
+use intuituive::{Driver, assert_screen, assert_screen_styled};
 
 const WIDTH: u16 = 88;
 const HEIGHT: u16 = 26;

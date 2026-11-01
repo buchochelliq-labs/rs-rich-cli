@@ -107,7 +107,7 @@ mod pty {
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
 
-    use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+    use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
     /// Run `rich ARGS` on a terminal; its output and exit code.
     fn on_terminal(args: &[&str], env: &[(&str, &str)]) -> (String, u32) {

@@ -35,8 +35,8 @@ use rich::{
 };
 use serde::{Deserialize, Serialize};
 
-use super::stress::{stress, IssueKind, StressOptions};
-use super::{depth_key, plain_lines, plural, table_then_line, Probe};
+use super::stress::{IssueKind, StressOptions, stress};
+use super::{Probe, depth_key, plain_lines, plural, table_then_line};
 use crate::capabilities::ColorDepth;
 use crate::fidelity::style_without_color;
 
@@ -404,13 +404,12 @@ pub fn lint_segments(
     }
     let mut checked = BTreeSet::new();
     for (line, url, text) in &links_seen {
-        if checked.insert(url.clone()) {
-            if let Some((severity, message)) = check_url(url) {
-                findings.push(
-                    LintFinding::new(Rule::BrokenHyperlink, severity, message)
-                        .at(width, Some(*line)),
-                );
-            }
+        if checked.insert(url.clone())
+            && let Some((severity, message)) = check_url(url)
+        {
+            findings.push(
+                LintFinding::new(Rule::BrokenHyperlink, severity, message).at(width, Some(*line)),
+            );
         }
         if text.trim().is_empty() {
             findings.push(

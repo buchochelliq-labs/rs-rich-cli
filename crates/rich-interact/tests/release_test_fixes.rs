@@ -7,7 +7,7 @@ use rich_interact::datetime::{Date, DateTime, Time};
 use rich_interact::headless::{self, Script};
 use rich_interact::policy::{Fallback, Reason, ScriptedLineIo};
 use rich_interact::{
-    degrade, DatePicker, DateTimePicker, Outcome, Pager, Reorder, TimePicker, Viewport,
+    DatePicker, DateTimePicker, Outcome, Pager, Reorder, TimePicker, Viewport, degrade,
 };
 
 fn before_answer(record: &headless::Record) -> &str {
@@ -206,10 +206,12 @@ fn without_seconds_the_range_is_to_the_minute() {
     let script = Script::new().keys("enter right up enter");
     let (outcome, record) = headless::run(picker, script, 40, 6);
     assert_eq!(outcome.unwrap(), Outcome::Done(Time::new(9, 1, 0)));
-    assert!(record
-        .frames
-        .iter()
-        .any(|frame| frame.contains("✗ the earliest is 09:01")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("✗ the earliest is 09:01"))
+    );
     // Seconds turned on after the limits keep them.
     let picker = TimePicker::new("At")
         .value(Time::new(14, 30, 45))

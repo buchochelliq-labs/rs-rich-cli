@@ -7,10 +7,10 @@ mod support;
 
 use rich_interact::plugin::PluginView;
 use rich_interact::policy::Policy;
-use rich_interact::{run, Component, Context, Event, Flow, Key, RunOptions, View};
-use rich_plugin_api::component::{ComponentContext, ComponentEvent, ComponentFlow, ComponentView};
+use rich_interact::{Component, Context, Event, Flow, Key, RunOptions, View, run};
 use rich_plugin_api::PluginComponent;
-use support::{assert_restored, Pty};
+use rich_plugin_api::component::{ComponentContext, ComponentEvent, ComponentFlow, ComponentView};
+use support::{Pty, assert_restored};
 
 /// Whether the controlling terminal is in raw (non-canonical) mode now.
 fn tty_mode() -> &'static str {

@@ -35,12 +35,12 @@ use std::time::SystemTime;
 
 use rich_ext::plugin_loading::{RuntimeKind, RuntimePlugin};
 use rich_marketplace::{
-    resolve, verify_index, AcceptedIndex, ArtifactChecker, CheckError, FetchError, Host,
-    IndexError, InstallError, Installer, KeyChainError, KeySet, Kind, ListedVersion, Listing,
-    ListingError, LockEntry, Lockfile, LockfileError, Request, Requires, ResolveError, Rotation,
-    RotationKind, Tier, Transport, VerifiedIndex, WasmExpectation, LOCKFILE_NAME,
+    AcceptedIndex, ArtifactChecker, CheckError, FetchError, Host, IndexError, InstallError,
+    Installer, KeyChainError, KeySet, Kind, LOCKFILE_NAME, ListedVersion, Listing, ListingError,
+    LockEntry, Lockfile, LockfileError, Request, Requires, ResolveError, Rotation, RotationKind,
+    Tier, Transport, VerifiedIndex, WasmExpectation, resolve, verify_index,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 #[path = "marketplace_publish.rs"]
 mod publish;
@@ -457,7 +457,7 @@ fn parse(args: &[String]) -> Outcome<Options> {
                     other => {
                         return Err(usage(format!(
                             "unknown report format {other:?} (human, json)"
-                        )))
+                        )));
                     }
                 }
             }
@@ -476,7 +476,7 @@ fn parse(args: &[String]) -> Outcome<Options> {
                         return Err(usage(format!(
                             "unexpected argument {:?}; see `rich plugin --help`",
                             controls::shown(other)
-                        )))
+                        )));
                     }
                 }
             }
@@ -484,7 +484,7 @@ fn parse(args: &[String]) -> Outcome<Options> {
                 return Err(usage(format!(
                     "unexpected argument {:?}; see `rich plugin --help`",
                     controls::shown(other)
-                )))
+                )));
             }
             _ => words.push(arg.clone()),
         }
@@ -524,15 +524,15 @@ fn parse(args: &[String]) -> Outcome<Options> {
     if options.recommended && options.command != "search" {
         return Err(usage("--recommended only applies to `rich plugin search`"));
     }
-    if options.command == "search" {
-        if let Some(name) = options.publish.remove("tier").and_then(|mut v| v.pop()) {
-            options.tier = Some(Tier::parse(&name).ok_or_else(|| {
-                usage(format!(
-                    "unknown tier {:?} (official, reviewed, community)",
-                    controls::shown(&name)
-                ))
-            })?);
-        }
+    if options.command == "search"
+        && let Some(name) = options.publish.remove("tier").and_then(|mut v| v.pop())
+    {
+        options.tier = Some(Tier::parse(&name).ok_or_else(|| {
+            usage(format!(
+                "unknown tier {:?} (official, reviewed, community)",
+                controls::shown(&name)
+            ))
+        })?);
     }
     if options.command != "publish" && !options.publish.is_empty() {
         let names: Vec<String> = options.publish.keys().map(|k| format!("--{k}")).collect();
@@ -686,15 +686,15 @@ pub(crate) fn plugin_dir(explicit: Option<&Path>) -> Option<PathBuf> {
     if let Some(dir) = env("RICH_PLUGIN_DIR") {
         return Some(PathBuf::from(dir));
     }
-    if cfg!(windows) {
-        if let Some(local) = env("LOCALAPPDATA") {
-            return Some(PathBuf::from(local).join("rich").join("plugins"));
-        }
+    if cfg!(windows)
+        && let Some(local) = env("LOCALAPPDATA")
+    {
+        return Some(PathBuf::from(local).join("rich").join("plugins"));
     }
-    if let Some(data) = env("XDG_DATA_HOME").map(PathBuf::from) {
-        if data.is_absolute() {
-            return Some(data.join("rich").join("plugins"));
-        }
+    if let Some(data) = env("XDG_DATA_HOME").map(PathBuf::from)
+        && data.is_absolute()
+    {
+        return Some(data.join("rich").join("plugins"));
     }
     env("HOME")
         .or_else(|| env("USERPROFILE"))
@@ -996,12 +996,13 @@ fn percent_decode(text: &str) -> String {
     let mut out = Vec::with_capacity(bytes.len());
     let mut i = 0;
     while i < bytes.len() {
-        if bytes[i] == b'%' && i + 2 < bytes.len() {
-            if let (Some(high), Some(low)) = (hex(bytes[i + 1]), hex(bytes[i + 2])) {
-                out.push(high << 4 | low);
-                i += 3;
-                continue;
-            }
+        if bytes[i] == b'%'
+            && i + 2 < bytes.len()
+            && let (Some(high), Some(low)) = (hex(bytes[i + 1]), hex(bytes[i + 2]))
+        {
+            out.push(high << 4 | low);
+            i += 3;
+            continue;
         }
         out.push(bytes[i]);
         i += 1;
@@ -1020,7 +1021,7 @@ fn read_bounded(path: &Path, max: u64) -> Result<Option<Vec<u8>>, FetchError> {
             return Err(FetchError::Transport {
                 url,
                 message: e.to_string(),
-            })
+            });
         }
     };
     let mut bytes = Vec::new();
@@ -1618,10 +1619,10 @@ pub(crate) fn publisher(listing: &Listing) -> String {
 /// A grid or preview row's value as markup: escaped, with the `Tier` row's
 /// leading [`tier_label`] coloured as [`tier_marker`].
 pub(crate) fn row_markup(key: &str, value: &str) -> String {
-    if key == "Recommended" {
-        if let Some(rest) = value.strip_prefix(RECOMMENDED_LABEL) {
-            return format!("[bold magenta]{RECOMMENDED_LABEL}[/]{}", escape(rest));
-        }
+    if key == "Recommended"
+        && let Some(rest) = value.strip_prefix(RECOMMENDED_LABEL)
+    {
+        return format!("[bold magenta]{RECOMMENDED_LABEL}[/]{}", escape(rest));
     }
     if key == "Tier" {
         for tier in [Tier::Official, Tier::Reviewed, Tier::Community] {
@@ -1729,10 +1730,10 @@ pub(crate) fn cargo_add(listing: &Listing, version: &ListedVersion) -> String {
         .as_ref()
         .map_or(listing.id.as_str(), |c| c.name.as_str());
     let mut command = format!("cargo add {name}@={}", version.version);
-    if let Some(features) = listing.crate_info.as_ref().map(|c| &c.features) {
-        if !features.is_empty() {
-            command.push_str(&format!(" --features {}", features.join(",")));
-        }
+    if let Some(features) = listing.crate_info.as_ref().map(|c| &c.features)
+        && !features.is_empty()
+    {
+        command.push_str(&format!(" --features {}", features.join(",")));
     }
     command
 }
@@ -2189,15 +2190,14 @@ fn install(options: &Options) -> Outcome<Done> {
         }
         let version = resolve(&listing, &host, &request).map_err(resolve_failure)?;
         let current = lockfile(&dir)?;
-        if let Some(entry) = current.get(&id) {
-            if entry.version == version.version.to_string()
-                && entry.sha256 == version.artifact.sha256
-                && entry.verify(&dir).is_ok()
-            {
-                text.push_str(&format!("{id} {} is already installed\n", entry.version));
-                installed.push(entry_json(entry));
-                continue;
-            }
+        if let Some(entry) = current.get(&id)
+            && entry.version == version.version.to_string()
+            && entry.sha256 == version.artifact.sha256
+            && entry.verify(&dir).is_ok()
+        {
+            text.push_str(&format!("{id} {} is already installed\n", entry.version));
+            installed.push(entry_json(entry));
+            continue;
         }
         match install_version(options, &dir, &market, &listing, version, "Install")? {
             Some(entry) => {

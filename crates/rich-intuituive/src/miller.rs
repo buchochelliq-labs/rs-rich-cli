@@ -7,10 +7,10 @@ use std::rc::Rc;
 
 use rich::markup::escape;
 
-use crate::list::{list_lazy, RowRects};
+use crate::list::{RowRects, list_lazy};
 use crate::node::Node;
 use crate::place::RectHandle;
-use crate::reactive::{memo, signal, watch, Memo, Signal};
+use crate::reactive::{Memo, Signal, memo, signal, watch};
 use crate::screen::Rect;
 use crate::split::hsplit;
 

@@ -42,10 +42,10 @@ use std::cell::Cell;
 use rich::{Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{fit, pad, pasted, plain, question, text, PreviewLayout, Theme};
+use crate::components::{PreviewLayout, Theme, fit, pad, pasted, plain, question, text};
 use crate::event::{Button, Event, KeyCode, MouseKind};
 use crate::item::Item;
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::kit::{ListState, TextBuffer};
 use crate::policy::{LineIo, NotInteractive};
 
@@ -449,10 +449,11 @@ impl<T> ApprovalQueue<T> {
         if targets.len() > 1 {
             self.status = Some(format!("{} {} items", verdict.as_str(), targets.len()));
         }
-        if self.advance && verdict != Verdict::Pending {
-            if let Some(next) = self.next_pending(self.list.cursor()) {
-                self.list.select_row(next, self.rows());
-            }
+        if self.advance
+            && verdict != Verdict::Pending
+            && let Some(next) = self.next_pending(self.list.cursor())
+        {
+            self.list.select_row(next, self.rows());
         }
     }
 

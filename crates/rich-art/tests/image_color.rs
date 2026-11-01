@@ -1,8 +1,8 @@
 #![cfg(feature = "image")]
-use rich::{color::ColorSystem, Console};
+use rich::{Console, color::ColorSystem};
 use rich_art::{
-    image::{DynamicImage, Rgb, RgbImage, Rgba, RgbaImage},
     ColorDistance, Dither, ImageArt, ImageColorMode, ImageFit, ImageMode,
+    image::{DynamicImage, Rgb, RgbImage, Rgba, RgbaImage},
 };
 
 fn console() -> Console {
@@ -104,16 +104,20 @@ fn unsupported_combinations_are_strict_errors() {
         );
     }
     // Dithering and a colour distance only mean something with a palette.
-    assert!(ImageArt::new(source())
-        .mode(ImageMode::Ascii)
-        .dither(Dither::FloydSteinberg)
-        .render(&c, &c.options())
-        .is_err());
-    assert!(ImageArt::new(source())
-        .mode(ImageMode::Blocks)
-        .color_distance(ColorDistance::Oklab)
-        .render(&c, &c.options())
-        .is_err());
+    assert!(
+        ImageArt::new(source())
+            .mode(ImageMode::Ascii)
+            .dither(Dither::FloydSteinberg)
+            .render(&c, &c.options())
+            .is_err()
+    );
+    assert!(
+        ImageArt::new(source())
+            .mode(ImageMode::Blocks)
+            .color_distance(ColorDistance::Oklab)
+            .render(&c, &c.options())
+            .is_err()
+    );
 }
 
 #[cfg(feature = "sixel")]

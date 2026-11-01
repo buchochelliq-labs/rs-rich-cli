@@ -579,7 +579,7 @@ fn read_package(
         Some(_) => {
             return Err(MicroError::Manifest(format!(
                 "{what}: fallback must be an object with \"emoji\" and/or \"text\""
-            )))
+            )));
         }
     }
     for alias in strings(&map, "aliases", &what)? {

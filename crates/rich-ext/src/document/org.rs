@@ -27,8 +27,8 @@ use super::model::{
     Keyword, List, ListItem, ListKind, TableBlock,
 };
 use super::scan::{
-    char_at, char_before, dedent, indent_of, join_lines, normalize, sample, trim_inlines, url_end,
-    InlineBuf, Positions, BLOCK_WEIGHT, MAX_NESTING,
+    BLOCK_WEIGHT, InlineBuf, MAX_NESTING, Positions, char_at, char_before, dedent, indent_of,
+    join_lines, normalize, sample, trim_inlines, url_end,
 };
 use super::{Diagnostic, Parsed, Severity};
 
@@ -292,23 +292,21 @@ impl Org {
                 i += 1;
                 continue;
             }
-            if after_headline {
-                if let Some(entries) = planning(trimmed) {
-                    blocks.push(Block::Properties {
-                        name: None,
-                        entries,
-                    });
-                    i += 1;
-                    continue;
-                }
+            if after_headline && let Some(entries) = planning(trimmed) {
+                blocks.push(Block::Properties {
+                    name: None,
+                    entries,
+                });
+                i += 1;
+                continue;
             }
             after_headline = false;
-            if let Some(name) = drawer_name(trimmed) {
-                if let Some(end) = ends.drawer_end(i) {
-                    blocks.push(self.drawer(name, &lines[i + 1..end]));
-                    i = end + 1;
-                    continue;
-                }
+            if let Some(name) = drawer_name(trimmed)
+                && let Some(end) = ends.drawer_end(i)
+            {
+                blocks.push(self.drawer(name, &lines[i + 1..end]));
+                i = end + 1;
+                continue;
             }
             if let Some((name, parameters)) = block_start(trimmed) {
                 let end = ends.block_end(&name, i);
@@ -519,15 +517,14 @@ impl Org {
             title = rest;
         }
         let mut priority = None;
-        if let Some(after) = title.strip_prefix("[#") {
-            if let Some(end) = after.find(']') {
-                let cookie = &after[..end];
-                if (1..=3).contains(&cookie.len())
-                    && cookie.chars().all(|c| c.is_ascii_alphanumeric())
-                {
-                    priority = Some(cookie.to_string());
-                    title = after[end + 1..].trim_start();
-                }
+        if let Some(after) = title.strip_prefix("[#")
+            && let Some(end) = after.find(']')
+        {
+            let cookie = &after[..end];
+            if (1..=3).contains(&cookie.len()) && cookie.chars().all(|c| c.is_ascii_alphanumeric())
+            {
+                priority = Some(cookie.to_string());
+                title = after[end + 1..].trim_start();
             }
         }
         let (title, tags) = split_tags(title);
@@ -1099,13 +1096,12 @@ fn bullet(line: &str, top: bool) -> Option<Bullet> {
     let mut rest = after.trim_start();
     let spaces = after.len() - rest.len();
     let mut counter = None;
-    if let Some(after_at) = rest.strip_prefix("[@") {
-        if let Some(end) = after_at.find(']') {
-            if let Ok(value) = after_at[..end].parse::<u64>() {
-                counter = Some(value);
-                rest = after_at[end + 1..].trim_start();
-            }
-        }
+    if let Some(after_at) = rest.strip_prefix("[@")
+        && let Some(end) = after_at.find(']')
+        && let Ok(value) = after_at[..end].parse::<u64>()
+    {
+        counter = Some(value);
+        rest = after_at[end + 1..].trim_start();
     }
     let mut checkbox = None;
     for (prefix, state) in [
@@ -1114,22 +1110,22 @@ fn bullet(line: &str, top: bool) -> Option<Bullet> {
         ("[x]", Checkbox::Checked),
         ("[-]", Checkbox::Partial),
     ] {
-        if let Some(after_box) = rest.strip_prefix(prefix) {
-            if after_box.is_empty() || after_box.starts_with(char::is_whitespace) {
-                checkbox = Some(state);
-                rest = after_box.trim_start();
-                break;
-            }
+        if let Some(after_box) = rest.strip_prefix(prefix)
+            && (after_box.is_empty() || after_box.starts_with(char::is_whitespace))
+        {
+            checkbox = Some(state);
+            rest = after_box.trim_start();
+            break;
         }
     }
     let mut term = None;
-    if number.is_none() {
-        if let Some(at) = rest.find(" ::") {
-            let after_tag = &rest[at + 3..];
-            if after_tag.is_empty() || after_tag.starts_with(char::is_whitespace) {
-                term = Some(rest[..at].trim().to_string());
-                rest = after_tag.trim_start();
-            }
+    if number.is_none()
+        && let Some(at) = rest.find(" ::")
+    {
+        let after_tag = &rest[at + 3..];
+        if after_tag.is_empty() || after_tag.starts_with(char::is_whitespace) {
+            term = Some(rest[..at].trim().to_string());
+            rest = after_tag.trim_start();
         }
     }
     Some(Bullet {
@@ -1258,10 +1254,10 @@ impl<'a> Inliner<'a> {
     fn new(text: &'a str) -> Self {
         let mut closers: [Vec<usize>; 6] = Default::default();
         for (at, byte) in text.bytes().enumerate() {
-            if let Some(index) = MARKERS.iter().position(|&marker| marker == byte) {
-                if can_close(text, at) {
-                    closers[index].push(at);
-                }
+            if let Some(index) = MARKERS.iter().position(|&marker| marker == byte)
+                && can_close(text, at)
+            {
+                closers[index].push(at);
             }
         }
         Inliner {
@@ -1319,12 +1315,12 @@ impl<'a> Inliner<'a> {
                 }
                 _ => {}
             }
-            if let Some(index) = MARKERS.iter().position(|&marker| marker == byte) {
-                if let Some((inline, next)) = self.emphasis(index, i, end, depth) {
-                    out.inline(inline);
-                    i = next;
-                    continue;
-                }
+            if let Some(index) = MARKERS.iter().position(|&marker| marker == byte)
+                && let Some((inline, next)) = self.emphasis(index, i, end, depth)
+            {
+                out.inline(inline);
+                i = next;
+                continue;
             }
             if let Some(url_end) = url_end(text, i).filter(|&url_end| url_end <= end) {
                 let url = &text[i..url_end];
@@ -1573,10 +1569,11 @@ fn timestamp(text: &str, open: char, close: char, range: bool) -> Option<&str> {
     }
     let mut end = 1 + close_at + 1;
     // A range: `<…>--<…>`.
-    if range && text[end..].starts_with("--") {
-        if let Some(second) = timestamp(&text[end + 2..], open, close, false) {
-            end += 2 + second.len();
-        }
+    if range
+        && text[end..].starts_with("--")
+        && let Some(second) = timestamp(&text[end + 2..], open, close, false)
+    {
+        end += 2 + second.len();
     }
     Some(&text[..end])
 }

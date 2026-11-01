@@ -10,7 +10,7 @@ use std::io::{BufRead, BufReader};
 use std::net::{SocketAddr, TcpStream};
 use std::process::{Child, Command, Stdio};
 
-use common::{connect, read_close_reason, read_until, running, wait_for, TOKEN};
+use common::{TOKEN, connect, read_close_reason, read_until, running, wait_for};
 use tungstenite::{Message, WebSocket};
 
 /// The `isolated` example, serving on a free port.

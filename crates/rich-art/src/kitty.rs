@@ -27,7 +27,7 @@ use std::time::Duration;
 
 use rich::color::Color;
 
-use crate::graphics::{base64, encode_png, AnimationFrame};
+use crate::graphics::{AnimationFrame, base64, encode_png};
 
 /// The placeholder character (Supplementary Private Use Area-B).
 pub const PLACEHOLDER: char = '\u{10EEEE}';

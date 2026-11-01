@@ -120,12 +120,16 @@ fn answer(mut tcp: TcpStream, config: Arc<rustls::ServerConfig>, port: u16) -> s
 #[test]
 fn the_system_store_is_trusted_and_redirects_survive_fragmented_headers() {
     // The test CA is the whole "system" store; no proxy in the way.
-    std::env::set_var("SSL_CERT_FILE", fixture("ca.pem"));
-    std::env::remove_var("SSL_CERT_DIR");
-    for proxy in ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"] {
-        std::env::remove_var(proxy);
+    // SAFETY: this binary's only test, before it starts any thread.
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::set_var("SSL_CERT_FILE", fixture("ca.pem"));
+        std::env::remove_var("SSL_CERT_DIR");
+        for proxy in ["HTTPS_PROXY", "https_proxy", "ALL_PROXY", "all_proxy"] {
+            std::env::remove_var(proxy);
+        }
+        std::env::set_var("NO_PROXY", "127.0.0.1,localhost");
     }
-    std::env::set_var("NO_PROXY", "127.0.0.1,localhost");
 
     // The bundled roots alone refuse the server, as they refuse a company
     // proxy's certificates.

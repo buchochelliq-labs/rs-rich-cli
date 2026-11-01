@@ -48,7 +48,7 @@ fn parse_formats(value: &str) -> Result<Formats, String> {
                     return Err(format!(
                         "unknown --format {other:?} (choose from png, svg, cast, gif, apng, \
                          mp4, html, all)"
-                    ))
+                    ));
                 }
             },
         }
@@ -184,7 +184,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                 json,
                 ExitClass::Usage,
                 &format!("{message} (try `rich record --help`)"),
-            )
+            );
         }
     };
     let fonts = match &args.font {
@@ -198,7 +198,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                     json,
                     ExitClass::Input,
                     &format!("cannot load --font {}: {error}", path.display()),
-                )
+                );
             }
         },
         None => Fonts::embedded(),
@@ -240,7 +240,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                     json,
                     ExitClass::Input,
                     &format!("cannot read {shown}: {error}"),
-                )
+                );
             }
         };
         let parsed = match tape::parse(&String::from_utf8_lossy(&source)) {
@@ -317,7 +317,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                     json,
                     ExitClass::Data,
                     &format!("cannot write {}: {error}", dir.display()),
-                )
+                );
             }
         }
     }

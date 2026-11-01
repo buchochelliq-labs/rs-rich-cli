@@ -1,14 +1,14 @@
 use rich::r#box::Box as BoxSet;
 use rich::{ColorTriplet, Console, Panel, Renderable, Rule, Style, Table, Text, Theme, Tree};
 use rich_ext::a11y::contrast::{
-    check_theme, ciede2000, contrast_ratio, delta_e, relative_luminance, simulate, suggest_color,
-    CheckOptions, ContrastReport, Deficiency, FindingKind, Severity,
+    CheckOptions, ContrastReport, Deficiency, FindingKind, Severity, check_theme, ciede2000,
+    contrast_ratio, delta_e, relative_luminance, simulate, suggest_color,
 };
 use rich_ext::a11y::policy::{AccessibilityPolicy, Status, SymbolSet};
-use rich_ext::a11y::{semantic_text, AccessibleText};
+use rich_ext::a11y::{AccessibleText, semantic_text};
 use rich_ext::capabilities::MapEnvironment;
 use rich_ext::diagnostic::{Diagnostic, Location, Suggestion};
-use rich_ext::fidelity::{ascii_fallback, ascii_text, Degrade, Fidelity};
+use rich_ext::fidelity::{Degrade, Fidelity, ascii_fallback, ascii_text};
 
 fn plain(r: &dyn Renderable, width: usize) -> String {
     let c = Console::builder()
@@ -435,9 +435,11 @@ fn default_theme_check_is_stable() {
 
     // The extended theme adds error/warning/info/success, which are checked too.
     let extended = check_theme(&rich_ext::theme::extended_theme(), &CheckOptions::default());
-    assert!(extended
-        .iter()
-        .any(|f| f.describe() == "warning and info differ only by colour"));
+    assert!(
+        extended
+            .iter()
+            .any(|f| f.describe() == "warning and info differ only by colour")
+    );
 
     let c = Console::builder().width(120).no_color(true).build();
     let out = c.segments_to_string(&ContrastReport::new(&findings).rich_render(&c, &c.options()));

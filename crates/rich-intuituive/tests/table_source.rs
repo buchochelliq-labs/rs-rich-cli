@@ -1,12 +1,12 @@
 //! A table over a source, and a view of one filtered, sorted and searched
 //! on a task (round 6).
 
-use std::sync::atomic::{AtomicUsize, Ordering as Atomic};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering as Atomic};
 
 use intuituive::prelude::*;
 use intuituive::widgets::{
-    source_table, view_of, Column, Order, RowCount, TableOptions, TableSource, ViewQuery,
+    Column, Order, RowCount, TableOptions, TableSource, ViewQuery, source_table, view_of,
 };
 
 /// A source of `total` rows, `found` of them known yet, read by `len` on

@@ -13,13 +13,13 @@ use std::rc::{Rc, Weak};
 
 use rich::{Segment, Style};
 use rich_intuituive::interact::{Button, Key, KeyCode, Mouse, MouseKind};
-use rich_intuituive::widget::{widget, Canvas, DrawCx, EventCx, Used, Widget, WidgetEvent};
-use rich_intuituive::{signal, watch, Ctx, Node, Signal};
+use rich_intuituive::widget::{Canvas, DrawCx, EventCx, Used, Widget, WidgetEvent, widget};
+use rich_intuituive::{Ctx, Node, Signal, signal, watch};
 
 use crate::host::Notify;
-use crate::pixels::{half_blocks, Pixels};
+use crate::pixels::{Pixels, half_blocks};
 use crate::program::ProgramEngine;
-use crate::wake::{connect, Fed};
+use crate::wake::{Fed, connect};
 
 /// Input for the page, in the page's own cells.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -181,10 +181,10 @@ impl ViewState {
         // An engine that failed at once may never call `notify`; call it
         // here, so the next turn copies the failure into the signals (this
         // may run while the view draws, where signals are not written).
-        if self.failure.is_some() {
-            if let Some(notify) = &self.notify {
-                notify();
-            }
+        if self.failure.is_some()
+            && let Some(notify) = &self.notify
+        {
+            notify();
         }
     }
 

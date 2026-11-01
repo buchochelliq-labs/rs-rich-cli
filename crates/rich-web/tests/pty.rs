@@ -7,11 +7,11 @@ mod common;
 
 use std::io::{Read, Write};
 use std::net::TcpStream;
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::Duration;
 
-use common::{connect, get, read_close_reason, read_program, upgrade, wait_for, TOKEN};
+use common::{TOKEN, connect, get, read_close_reason, read_program, upgrade, wait_for};
 use rich_embed::ReplayHost;
 use rich_web::{ExitStatus, Server};
 use tungstenite::Message;

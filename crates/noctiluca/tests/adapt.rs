@@ -3,10 +3,10 @@
 //! the rule on and off: no browser needed. Every rule is generic: the
 //! fixture is ordinary HTML, and nothing here names a site.
 
-use noctiluca::adapt::{decorative, Adapt, Rule, MAX_PICTURE_ROWS};
-use noctiluca::args::{adapt_of, parse_args, Run};
-use noctiluca::layout::{project, Line, Marks, Projection};
-use noctiluca::model::{build, Page, Revisions};
+use noctiluca::adapt::{Adapt, MAX_PICTURE_ROWS, Rule, decorative};
+use noctiluca::args::{Run, adapt_of, parse_args};
+use noctiluca::layout::{Line, Marks, Projection, project};
+use noctiluca::model::{Page, Revisions, build};
 use noctiluca::testing::snapshot_file;
 
 fn page(name: &str) -> Page {
@@ -80,9 +80,11 @@ fn navigation_collapses_to_a_row_on_a_narrow_terminal() {
     assert!(off[0].starts_with("News "), "{off:#?}");
     assert!(off.iter().all(|l| !l.contains('≡')));
     // A wide terminal keeps its sidebar.
-    assert!(lines(&page, 120, only(Rule::CollapseNav))
-        .iter()
-        .all(|l| !l.contains('≡')));
+    assert!(
+        lines(&page, 120, only(Rule::CollapseNav))
+            .iter()
+            .all(|l| !l.contains('≡'))
+    );
 }
 
 #[test]

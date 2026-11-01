@@ -7,8 +7,8 @@ use std::str::FromStr;
 
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Text};
 
-use super::{display, format_offset, lookup_fields, Record};
-use crate::event::{theme_style, Severity, StructuredEvent, Value};
+use super::{Record, display, format_offset, lookup_fields};
+use crate::event::{Severity, StructuredEvent, Value, theme_style};
 
 /// What records are grouped by.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
@@ -111,15 +111,14 @@ impl GroupBy {
     /// `correlation_id` first; then its fields, and its spans' fields from
     /// the innermost.
     pub fn key_of_event(self, event: &StructuredEvent) -> Option<String> {
-        if self == GroupBy::Correlation {
-            if let Some(id) = event
+        if self == GroupBy::Correlation
+            && let Some(id) = event
                 .context
                 .correlation_id
                 .as_ref()
                 .filter(|id| !id.is_empty())
-            {
-                return Some(id.clone());
-            }
+        {
+            return Some(id.clone());
         }
         self.key_in(&event.fields).or_else(|| {
             event
@@ -687,9 +686,9 @@ mod tests {
             GroupBy::Correlation.key_of_event(&event).as_deref(),
             Some("c9")
         );
-        let spanned = StructuredEvent::new(crate::event::Message::Literal("x".into()))
-            .spans(vec![crate::event::SpanContext::new("request")
-                .field("trace_id", Value::String("t2".into()))]);
+        let spanned = StructuredEvent::new(crate::event::Message::Literal("x".into())).spans(vec![
+            crate::event::SpanContext::new("request").field("trace_id", Value::String("t2".into())),
+        ]);
         assert_eq!(GroupBy::Trace.key_of_event(&spanned).as_deref(), Some("t2"));
         assert_eq!("span".parse::<GroupBy>(), Ok(GroupBy::Span));
         assert!("host".parse::<GroupBy>().is_err());

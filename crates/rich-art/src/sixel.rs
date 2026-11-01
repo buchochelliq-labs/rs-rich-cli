@@ -23,7 +23,7 @@
 
 use crate::image_color::{palette_rgb, preprocess};
 use crate::{ColorDistance, Dither, ImageColorMode};
-use image::{imageops::FilterType, DynamicImage, GenericImageView};
+use image::{DynamicImage, GenericImageView, imageops::FilterType};
 use rich::console::{Console, ConsoleOptions};
 use rich::protocol::Renderable;
 use rich::segment::Segment;
@@ -243,10 +243,10 @@ pub fn encode_rgba(rgba: &[u8], width: usize, height: usize, max_colors: u16) ->
         .iter()
         .map(|&[r, g, b, a]| [r, g, b, if a < 128 { 0 } else { 255 }])
         .collect();
-    if let Some((indices, palette)) = index_exact(&pixels) {
-        if palette.len() <= usize::from(max_colors) {
-            return encode_palette(&indices, &palette, width, height);
-        }
+    if let Some((indices, palette)) = index_exact(&pixels)
+        && palette.len() <= usize::from(max_colors)
+    {
+        return encode_palette(&indices, &palette, width, height);
     }
     let opts = icy_sixel::EncodeOptions {
         max_colors,
@@ -766,10 +766,12 @@ mod tests {
         assert!(sixel.contains("!65535~!4465~"), "split runs");
         let image = decode(&sixel);
         assert_eq!((image.width, image.height), (w, h));
-        assert!(image
-            .pixels
-            .chunks(4)
-            .all(|p| p == [171, 0, 0, 255].as_slice()));
+        assert!(
+            image
+                .pixels
+                .chunks(4)
+                .all(|p| p == [171, 0, 0, 255].as_slice())
+        );
     }
 
     /// The per-colour, full-row encoder the single-pass one replaced, kept

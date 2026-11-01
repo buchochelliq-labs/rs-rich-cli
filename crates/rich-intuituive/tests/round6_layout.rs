@@ -9,9 +9,9 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use intuituive::Driver;
 use intuituive::prelude::*;
 use intuituive::widget::{Canvas, DrawCx};
-use intuituive::Driver;
 
 fn rows(driver: &Driver) -> Vec<String> {
     driver
@@ -532,7 +532,7 @@ fn squarify_groups_what_is_too_small_into_the_rest() {
 
 #[test]
 fn a_treemap_builds_a_tile_per_key_and_rebuilds_only_what_changed() {
-    use intuituive::{treemap_with, TreemapOptions};
+    use intuituive::{TreemapOptions, treemap_with};
     let built = Rc::new(Cell::new(0));
     let b = built.clone();
     let app = App::new(move || {
@@ -628,7 +628,7 @@ fn truncate_middle_keeps_both_ends_of_wide_text() {
 
 #[test]
 fn a_footer_greys_what_cannot_run_now_and_lights_it_when_it_can() {
-    use intuituive::widgets::{key_hints_with, KeyHintsOptions};
+    use intuituive::widgets::{KeyHintsOptions, key_hints_with};
     let app = App::new(|| {
         let staged = signal(false);
         column([
@@ -665,8 +665,8 @@ fn a_footer_greys_what_cannot_run_now_and_lights_it_when_it_can() {
 
 #[test]
 fn a_footer_says_keys_in_vim_notation() {
-    use intuituive::widgets::{key_hints_with, KeyHintsOptions};
     use intuituive::KeyFormat;
+    use intuituive::widgets::{KeyHintsOptions, key_hints_with};
     let app = App::new(|| {
         column([
             label("x").bind("ctrl+u", "up", |_| {}).autofocus(),

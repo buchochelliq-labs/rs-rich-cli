@@ -39,7 +39,7 @@ use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Style, Text};
 
 use super::sizes::Sizes;
 use super::timings::Timings;
-use super::{clean, stack, stack_measure, theme_style, DepsError};
+use super::{DepsError, clean, stack, stack_measure, theme_style};
 use crate::format;
 
 /// What the reports measure.
@@ -180,12 +180,12 @@ impl Thresholds {
             (Threshold::Seconds(_), Quantity::Bytes) => {
                 return Err(DepsError::new(
                     "a time threshold applies to build times, not sizes",
-                ))
+                ));
             }
             (Threshold::Bytes(_), Quantity::Seconds) => {
                 return Err(DepsError::new(
                     "a size threshold applies to sizes, not build times",
-                ))
+                ));
             }
         }
         Ok(self)
@@ -645,12 +645,16 @@ mod tests {
     #[test]
     fn a_threshold_must_fit_the_quantity() {
         let sizes = Thresholds::SIZES;
-        assert!(sizes
-            .with(Threshold::Seconds(1.0), Quantity::Bytes)
-            .is_err());
-        assert!(Thresholds::TIMINGS
-            .with(Threshold::Bytes(1), Quantity::Seconds)
-            .is_err());
+        assert!(
+            sizes
+                .with(Threshold::Seconds(1.0), Quantity::Bytes)
+                .is_err()
+        );
+        assert!(
+            Thresholds::TIMINGS
+                .with(Threshold::Bytes(1), Quantity::Seconds)
+                .is_err()
+        );
         let set = sizes
             .with(Threshold::Percent(5.0), Quantity::Bytes)
             .unwrap()

@@ -50,20 +50,20 @@ use std::rc::Rc;
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
 use intuituive::command_line::Mode;
-use intuituive::complete::{word_before, Completion};
+use intuituive::complete::{Completion, word_before};
 use intuituive::prelude::*;
 use intuituive::query::{self, Grammar, Kind, Query, Record, TextMatch, Value};
 use intuituive::reactive::NodeId;
 use intuituive::rich::markup::escape;
 use intuituive::widgets::{
-    table_with, tabs, tree_table, year_view_with, CalendarOptions, Column, Date, HighlightSpacing,
-    MonthTitle, TableLayout, TableOptions, TreeRow, TreeTableOptions, Weekday, YearOptions,
+    CalendarOptions, Column, Date, HighlightSpacing, MonthTitle, TableLayout, TableOptions,
+    TreeRow, TreeTableOptions, Weekday, YearOptions, table_with, tabs, tree_table, year_view_with,
 };
 use intuituive::{
-    command_line_with, dates, keyed, multi_select, CommandLine, CommandLineOptions, HelpOptions,
-    MultiSelect,
+    CommandLine, CommandLineOptions, HelpOptions, MultiSelect, command_line_with, dates, keyed,
+    multi_select,
 };
-use rich_ext::data::{parse_json, Node as Json, Value as JsonValue};
+use rich_ext::data::{Node as Json, Value as JsonValue, parse_json};
 use rich_interact::dates::DateOptions;
 use rich_interact::datetime::{DateTime, Zone};
 
@@ -450,10 +450,10 @@ pub fn virtual_tags(task: &Task, now: Time, zone: &Zone) -> Vec<&'static str> {
     if !task.tags.is_empty() {
         tags.push("TAGGED");
     }
-    if let (Some(due), true) = (task.due, pending) {
-        if local(due, zone).0 == local(now, zone).0 {
-            tags.push("TODAY");
-        }
+    if let (Some(due), true) = (task.due, pending)
+        && local(due, zone).0 == local(now, zone).0
+    {
+        tags.push("TODAY");
     }
     tags.push("UNBLOCKED");
     tags
@@ -1061,11 +1061,7 @@ fn sort_tasks(tasks: &mut [Task], sort: &[(Sort, bool)], now: Time) {
             // A task without the value goes last either way.
             let order = ka.0.cmp(&kb.0).then_with(|| {
                 let o = ka.1.total_cmp(&kb.1).then_with(|| ka.2.cmp(&kb.2));
-                if descending {
-                    o.reverse()
-                } else {
-                    o
-                }
+                if descending { o.reverse() } else { o }
             });
             if order.is_ne() {
                 return order;
@@ -1278,15 +1274,15 @@ pub fn timesheet_text(tasks: &[Task], now: Time, zone: &Zone) -> String {
         let (from, to) = (midnight(first, zone), midnight(first.add_days(7), zone));
         let mut events: Vec<(Time, &Task, &str)> = Vec::new();
         for t in tasks {
-            if let (Some(end), Status::Completed) = (t.end, t.status) {
-                if (from..to).contains(&end) {
-                    events.push((end, t, "Completed"));
-                }
+            if let (Some(end), Status::Completed) = (t.end, t.status)
+                && (from..to).contains(&end)
+            {
+                events.push((end, t, "Completed"));
             }
-            if let Some(start) = t.start.filter(|s| (from..to).contains(s)) {
-                if t.is_pending() {
-                    events.push((start, t, "Started"));
-                }
+            if let Some(start) = t.start.filter(|s| (from..to).contains(s))
+                && t.is_pending()
+            {
+                events.push((start, t, "Started"));
             }
         }
         events.sort_by_key(|e| e.0);

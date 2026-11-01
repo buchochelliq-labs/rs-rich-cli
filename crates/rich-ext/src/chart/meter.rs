@@ -7,7 +7,7 @@ use std::time::{Duration, Instant};
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
-use super::{cells, lines_to_segments, theme_style, truncate, Charset, Line, Orientation, Scale};
+use super::{Charset, Line, Orientation, Scale, cells, lines_to_segments, theme_style, truncate};
 
 /// Eighths of a cell, across.
 const ACROSS: [char; 8] = ['▏', '▎', '▍', '▌', '▋', '▊', '▉', '█'];

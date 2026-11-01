@@ -5,7 +5,7 @@
 use rich::{Console, Renderable};
 use rich_ext::chart::Charset;
 use rich_ext::schema::{
-    self, json, sql, Constraint, DataType, FieldKind, SchemaDiff, SchemaTimeline, SchemaTree,
+    self, Constraint, DataType, FieldKind, SchemaDiff, SchemaTimeline, SchemaTree, json, sql,
 };
 
 fn plain(width: usize, r: &dyn Renderable) -> String {
@@ -247,7 +247,9 @@ fn json_schema_versions_on_a_timeline() {
         .push_json("2024-06", v2)
         .at(5.0)
         .charset(Charset::Ascii);
-    assert_eq!(plain(90, &timeline), concat!(
+    assert_eq!(
+        plain(90, &timeline),
+        concat!(
             "id       ########################################=========================================\n",
             "status   ########################################=========================================\n",
             "customer ########################################=========================================\n",

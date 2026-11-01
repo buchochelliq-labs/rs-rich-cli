@@ -252,11 +252,13 @@ fn doctor_reports_the_highlighters_and_the_active_one() {
     assert!(names.contains(&"syntect"));
     assert_eq!(names.contains(&"lumis"), cfg!(feature = "lumis"));
     let syntect = &highlighters["available"][names.iter().position(|n| *n == "syntect").unwrap()];
-    assert!(syntect["themes"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .any(|t| t == "ansi_light"));
+    assert!(
+        syntect["themes"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|t| t == "ansi_light")
+    );
 
     let text = run_in(root.path(), &["doctor", "--no-config"]);
     let text = String::from_utf8_lossy(&text.stdout);

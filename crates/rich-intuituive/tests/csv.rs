@@ -7,11 +7,11 @@
 mod csv;
 
 use std::path::{Path, PathBuf};
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 use std::time::{Duration, Instant};
 
-use csv::{csv_app, parse_record, sniff, Options, Source};
+use csv::{Options, Source, csv_app, parse_record, sniff};
 use intuituive::rich::Style;
 use intuituive::{App, Driver};
 
@@ -340,7 +340,9 @@ fn it_resizes_wraps_and_marks() {
     d.press("ctrl+e");
     assert_eq!(
         d.take_exit::<String>().as_deref(),
-        Some("City,State,Population,Note\nReading,PA,95000,\"quoted, with comma\"\nRegina,SA,226000,capital")
+        Some(
+            "City,State,Population,Note\nReading,PA,95000,\"quoted, with comma\"\nRegina,SA,226000,capital"
+        )
     );
 }
 
@@ -552,8 +554,11 @@ fn it_takes_csvlens_options_for_the_first_view() {
     d.settle();
     assert_eq!(rows(&d)[1], "      City       Note");
     assert_eq!(numbers(&d), ["2", "5"]);
-    assert!(status(&d)
-        .ends_with("[Row 2/5, Col 1/2] [Filter \"PA|NV\": 1/2] [Filter \"City|Note\": 2/4 cols]"));
+    assert!(
+        status(&d).ends_with(
+            "[Row 2/5, Col 1/2] [Filter \"PA|NV\": 1/2] [Filter \"City|Note\": 2/4 cols]"
+        )
+    );
     let mut opened = options(&path);
     opened.find = Some("capital".into());
     let mut d = app_with(opened).driver(100, 10);

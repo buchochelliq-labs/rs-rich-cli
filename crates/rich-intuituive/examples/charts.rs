@@ -533,11 +533,13 @@ fn charts(ticks: Signal<u64>) -> Node {
                 (x, 4.0 + 3.0 * ((x - 6.0) / 4.0).sin().max(-0.6))
             })
             .collect();
-        Chart::new(vec![Dataset::new(rain)
-            .name("rain")
-            .graph_type(GraphType::Area)
-            .marker(Marker::HalfBlock)
-            .style("blue")])
+        Chart::new(vec![
+            Dataset::new(rain)
+                .name("rain")
+                .graph_type(GraphType::Area)
+                .marker(Marker::HalfBlock)
+                .style("blue"),
+        ])
         .x_axis(
             Axis::default()
                 .bounds(0.0, 24.0)
@@ -562,11 +564,13 @@ fn charts(ticks: Signal<u64>) -> Node {
             .enumerate()
             .map(|(i, v)| (i as f64 + 1.0, *v))
             .collect();
-        Chart::new(vec![Dataset::new(points)
-            .name("load")
-            .graph_type(GraphType::Bar)
-            .marker(Marker::Block)
-            .style("green")])
+        Chart::new(vec![
+            Dataset::new(points)
+                .name("load")
+                .graph_type(GraphType::Bar)
+                .marker(Marker::Block)
+                .style("green"),
+        ])
         .x_axis(
             Axis::default()
                 .bounds(0.0, 8.0)

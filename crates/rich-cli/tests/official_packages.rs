@@ -330,7 +330,7 @@ fn every_theme_renders_through_theme_file() {
 #[cfg(feature = "wasm-plugins")]
 mod wasm {
     use super::*;
-    use rich_ext::plugin_loading::{load_wasm_bytes, RuntimePlugin, WasmLimits};
+    use rich_ext::plugin_loading::{RuntimePlugin, WasmLimits, load_wasm_bytes};
 
     fn load(id: &str, version: &str) -> RuntimePlugin {
         let bytes = official::official_wasm(id, version);

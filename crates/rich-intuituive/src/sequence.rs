@@ -21,8 +21,8 @@ use rich::{Console, Segment};
 use rich_interact::Key;
 
 use crate::app::{Ctx, Theme};
-use crate::node::{parse_keys, KeyBinding, KeyHandler, Node};
-use crate::place::{place, Offset, Origin};
+use crate::node::{KeyBinding, KeyHandler, Node, parse_keys};
+use crate::place::{Offset, Origin, place};
 use crate::reactive::NodeId;
 use crate::screen::{Rect, Screen};
 

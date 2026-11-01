@@ -3,16 +3,16 @@
 
 use std::cell::RefCell;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use rich_ext::cancel::CancelToken;
 use rich_ext::file_ops::{self, Op, Progress, Report};
 
 use crate::app::Ctx;
-use crate::jobs::{jobs, jobs_panel_with, JobOutcome, JobProgress, Jobs};
+use crate::jobs::{JobOutcome, JobProgress, Jobs, jobs, jobs_panel_with};
 use crate::node::Node;
-use crate::reactive::{signal, Signal};
+use crate::reactive::{Signal, signal};
 
 pub use crate::jobs::{JobState, JobsPanelOptions};
 

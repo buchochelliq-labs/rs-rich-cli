@@ -3,10 +3,10 @@
 
 use std::time::Duration;
 
-use intuituive::inspect::{TraceKind, TRACE_LIMIT};
+use intuituive::Driver;
+use intuituive::inspect::{TRACE_LIMIT, TraceKind};
 use intuituive::interact::{Button, Event, Key, Mouse, MouseKind};
 use intuituive::prelude::*;
-use intuituive::Driver;
 
 /// 100 columns: the app lays out in the left 60, the panel takes 40.
 const WIDTH: u16 = 100;
@@ -437,9 +437,11 @@ fn the_trace_says_what_happened_and_what_took_it() {
         .iter()
         .position(|e| e.kind == TraceKind::Task)
         .unwrap();
-    assert!(trace[done + 1..]
-        .iter()
-        .any(|e| e.kind == TraceKind::Signal && e.text.contains("→ status")));
+    assert!(
+        trace[done + 1..]
+            .iter()
+            .any(|e| e.kind == TraceKind::Signal && e.text.contains("→ status"))
+    );
     // A timer.
     driver.update(Duration::from_millis(1000));
     driver.settle();

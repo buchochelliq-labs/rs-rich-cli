@@ -54,7 +54,7 @@ use rich_interact::{Key, KeyCode};
 
 use crate::node::{Axis, Node};
 use crate::query::{self, Grammar, Kind, Query, QueryError, TextMatch};
-use crate::reactive::{signal, Signal};
+use crate::reactive::{Signal, signal};
 use crate::screen::Rect;
 use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, MouseExt, Used, Widget, WidgetEvent};
 
@@ -63,7 +63,7 @@ mod from_tracing;
 mod targets;
 
 #[cfg(feature = "tracing")]
-pub use from_tracing::{install_tracing, tracing_layer, TracingFeed};
+pub use from_tracing::{TracingFeed, install_tracing, tracing_layer};
 /// How serious a line is, from rs-rich-ext's events: `Trace` up to
 /// `Fatal`, in that order.
 pub use rich_ext::event::Severity;

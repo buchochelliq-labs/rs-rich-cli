@@ -69,12 +69,14 @@ impl Encoding {
             None
         };
         let endian = match (self, bom) {
-            (Self::Utf16, None) => return Err(invalid(
-                "UTF-16 needs a BOM; select --encoding utf-16le or utf-16be for headerless input",
-            )),
+            (Self::Utf16, None) => {
+                return Err(invalid(
+                    "UTF-16 needs a BOM; select --encoding utf-16le or utf-16be for headerless input",
+                ));
+            }
             (Self::Utf16, Some(endian)) => endian,
             (selected, Some(endian)) if selected != endian => {
-                return Err(invalid("UTF-16 BOM conflicts with the selected encoding"))
+                return Err(invalid("UTF-16 BOM conflicts with the selected encoding"));
             }
             (selected, _) => selected,
         };

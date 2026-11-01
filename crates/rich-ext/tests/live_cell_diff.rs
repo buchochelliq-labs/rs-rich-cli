@@ -39,8 +39,7 @@ fn fresh(content: &[Vec<Segment>]) -> Vec<String> {
         live.add(region.clone()).unwrap();
     }
     live.refresh().unwrap();
-    let lines = screen.borrow().lines();
-    lines
+    screen.borrow().lines()
 }
 
 struct Rng(u64);

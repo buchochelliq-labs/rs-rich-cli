@@ -38,7 +38,7 @@ use std::collections::HashMap;
 use rich::cells::cell_len;
 use rich_diagram::{Direction, Drawing, Edge, Graph, Head, Node, Shape, Stroke};
 
-use crate::flowchart::{clean_label, printable, ParseError};
+use crate::flowchart::{ParseError, clean_label, printable};
 use crate::sequence::statements;
 
 /// The most entities a diagram may have ([`rich_diagram::MAX_NODES`]).
@@ -490,7 +490,7 @@ impl Parser {
                                 "unknown direction `{}`: use TB, BT, LR or RL",
                                 printable(other, 20)
                             ),
-                        ))
+                        ));
                     }
                 };
                 return Ok(());
@@ -673,10 +673,10 @@ fn split_name(text: &str) -> (&str, &str) {
             }
         }
     }
-    if text[end..].starts_with('[') {
-        if let Some(close) = text[end..].find(']') {
-            end += close + 1;
-        }
+    if text[end..].starts_with('[')
+        && let Some(close) = text[end..].find(']')
+    {
+        end += close + 1;
     }
     (&text[..end], &text[end..])
 }

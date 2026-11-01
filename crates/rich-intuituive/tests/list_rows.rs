@@ -7,12 +7,12 @@
 use std::cell::Cell;
 use std::rc::Rc;
 
+use intuituive::Driver;
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::prelude::*;
 use intuituive::widgets::{
-    cell, list_lazy, table_with, virtual_list, Column, RowRects, TableOptions,
+    Column, RowRects, TableOptions, cell, list_lazy, table_with, virtual_list,
 };
-use intuituive::Driver;
 
 fn names() -> Vec<String> {
     ["Cargo.toml", "README.md", "src", "target"]

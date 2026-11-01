@@ -21,7 +21,7 @@ use std::time::Duration;
 use rich_embed::{
     ChromeEngine, DevTools, DevToolsEvent, Downloads, PageState, ScreencastFrame, WebEngine,
 };
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::engine::{
     Engine, EngineEvent, Format, Frame, HistoryStep, LiveRead, MediaOp, Metrics, PageAction,
@@ -248,13 +248,11 @@ pub const SEEK_SCRIPT: &str = "function(d) { \
 
 /// What the browser can play: `canPlayType` for each of `TYPES` (a JSON
 /// array), on a video element that is never added to the page.
-pub const CAN_PLAY_SCRIPT: &str =
-    "(() => { const v = document.createElement('video'); return TYPES.map(t => v.canPlayType(t)); })()";
+pub const CAN_PLAY_SCRIPT: &str = "(() => { const v = document.createElement('video'); return TYPES.map(t => v.canPlayType(t)); })()";
 
 /// Read a live log's entries in the isolated world, with the log's node
 /// as `this` (see [`PING_SCRIPT`]).
-pub const LIVE_READ: &str =
-    "function(full) { const live = globalThis.__noctilucaLive; return live ? live.read(this, full) : null; }";
+pub const LIVE_READ: &str = "function(full) { const live = globalThis.__noctilucaLive; return live ? live.read(this, full) : null; }";
 
 /// The object group of a live read's handles, released after each.
 const LIVE_GROUP: &str = "noctiluca-live";

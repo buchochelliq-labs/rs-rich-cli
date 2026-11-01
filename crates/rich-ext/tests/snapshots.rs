@@ -200,8 +200,8 @@ fn schema_2_round_trips_through_json() {
 }
 #[test]
 fn schema_3_records_regions_and_reads_older_schemas() {
-    use rich::panel::Panel;
     use rich::Table;
+    use rich::panel::Panel;
     let t = target();
     let table = || {
         let mut table = Table::new();
@@ -241,7 +241,7 @@ impl rich::Renderable for ShiftsEachRender {
         console: &rich::Console,
         _options: &rich::ConsoleOptions,
     ) -> Vec<rich::Segment> {
-        use rich::protocol::{report_region, RegionInfo, RegionRole};
+        use rich::protocol::{RegionInfo, RegionRole, report_region};
         let n = self.0.fetch_add(1, std::sync::atomic::Ordering::SeqCst);
         let mut segments = vec![rich::Segment::new("-".repeat(n), None)];
         segments.extend(report_region(

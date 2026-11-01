@@ -86,8 +86,7 @@ fn row_and_column_targets_and_rule_files() {
     assert!(!line(&out, "web").contains("41m"), "{out:?}");
     // The same rules from a file, in TOML rule tables; a column rule styles
     // every cell of a column when any cell matches.
-    let rules =
-        "[[rules]]\ncolumn = 'status'\nvalue = 'failed'\nstyle = 'on red'\ntarget = 'row'\n\
+    let rules = "[[rules]]\ncolumn = 'status'\nvalue = 'failed'\nstyle = 'on red'\ntarget = 'row'\n\
                  [[rules]]\ncolumn = 'service'\nop = 'starts_with'\nvalue = 'd'\nstyle = 'italic'\n\
                  target = 'column'\n";
     let out = stdout(&run_with(

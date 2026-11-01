@@ -35,12 +35,12 @@ use std::collections::BTreeMap;
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use intuituive::focus::{neighbour, Direction};
+use intuituive::focus::{Direction, neighbour};
 use intuituive::layout::squarify;
 use intuituive::prelude::*;
 use intuituive::rich::markup::escape;
 use intuituive::screen::Rect;
-use intuituive::{fit_text, spawn_stream, ModalOptions};
+use intuituive::{ModalOptions, fit_text, spawn_stream};
 use rich_ext::listing::walk;
 
 // ---------------------------------------------------------------------

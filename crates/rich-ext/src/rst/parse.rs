@@ -403,12 +403,12 @@ fn parse_body(lines: &[String], titles: bool) -> Vec<Node> {
             i = next;
             continue;
         }
-        if is_simple_table_border(line) {
-            if let Some((nodes, next)) = simple_table(lines, i) {
-                out.extend(nodes);
-                i = next;
-                continue;
-            }
+        if is_simple_table_border(line)
+            && let Some((nodes, next)) = simple_table(lines, i)
+        {
+            out.extend(nodes);
+            i = next;
+            continue;
         }
         if line == ".." || line.starts_with(".. ") {
             let (nodes, next) = explicit_markup(lines, i);
@@ -607,23 +607,24 @@ fn split_attribution(lines: &[String]) -> (&[String], Option<String>, &[String])
             blank_at = Some(i);
             continue;
         }
-        if nonblank_seen && blank_at.is_some_and(|at| at + 1 == i) {
-            if let Some(marker) = attribution_marker(line) {
-                if let Some((end, indent)) = attribution_shape(lines, i) {
-                    let text =
-                        std::iter::once(&line[marker..])
-                            .chain(lines[i + 1..end].iter().map(|line| {
-                                line.get(indent.min(self::indent(line))..).unwrap_or("")
-                            }))
-                            .collect::<Vec<_>>()
-                            .join("\n");
-                    return (
-                        &lines[..i],
-                        Some(text.trim_end().to_string()),
-                        &lines[end..],
-                    );
-                }
-            }
+        if nonblank_seen
+            && blank_at.is_some_and(|at| at + 1 == i)
+            && let Some(marker) = attribution_marker(line)
+            && let Some((end, indent)) = attribution_shape(lines, i)
+        {
+            let text = std::iter::once(&line[marker..])
+                .chain(
+                    lines[i + 1..end]
+                        .iter()
+                        .map(|line| line.get(indent.min(self::indent(line))..).unwrap_or("")),
+                )
+                .collect::<Vec<_>>()
+                .join("\n");
+            return (
+                &lines[..i],
+                Some(text.trim_end().to_string()),
+                &lines[end..],
+            );
         }
         nonblank_seen = true;
     }
@@ -1418,10 +1419,9 @@ fn code_block(d: &Directive) -> Element {
     if let Some(start) = d
         .option("lineno-start")
         .or_else(|| d.option("number-lines"))
+        && start.parse::<i64>().is_ok()
     {
-        if start.parse::<i64>().is_ok() {
-            block = block.with("start_line", start);
-        }
+        block = block.with("start_line", start);
     }
     if let Some(lines) = d.option("emphasize-lines") {
         let mut highlight: Vec<i64> = Vec::new();
@@ -1465,20 +1465,24 @@ fn body_directive(d: &Directive) -> Vec<Node> {
     }
     match d.name {
         "code" | "code-block" | "sourcecode" => vec![code_block(d).into()],
-        "seealso" => vec![Element::new("seealso")
-            .children(d.body_with_argument())
-            .into()],
+        "seealso" => vec![
+            Element::new("seealso")
+                .children(d.body_with_argument())
+                .into(),
+        ],
         "versionadded" | "versionchanged" | "deprecated" => version_directive(d),
         "admonition" => {
             if d.argument.is_empty() {
                 return d.missing_argument();
             }
             let class = format!("admonition-{}", make_id(&d.argument));
-            vec![Element::new("admonition")
-                .class(class)
-                .child(inlines("title", &d.argument))
-                .children(d.content_body())
-                .into()]
+            vec![
+                Element::new("admonition")
+                    .class(class)
+                    .child(inlines("title", &d.argument))
+                    .children(d.content_body())
+                    .into(),
+            ]
         }
         "image" => vec![image(d).into()],
         "figure" => vec![figure(d).into()],
@@ -1504,10 +1508,12 @@ fn body_directive(d: &Directive) -> Vec<Node> {
             if d.argument.is_empty() {
                 return d.missing_argument();
             }
-            vec![Element::new("topic")
-                .child(inlines("title", &d.argument))
-                .children(d.content_body())
-                .into()]
+            vec![
+                Element::new("topic")
+                    .child(inlines("title", &d.argument))
+                    .children(d.content_body())
+                    .into(),
+            ]
         }
         "rubric" => vec![inlines("rubric", &d.argument).into()],
         "math" => {
@@ -1543,9 +1549,11 @@ fn body_directive(d: &Directive) -> Vec<Node> {
                 .collect::<Vec<_>>()
                 .join(" ")
                 .to_lowercase();
-            vec![Element::text("raw", d.content.join("\n"))
-                .with("format", format)
-                .into()]
+            vec![
+                Element::text("raw", d.content.join("\n"))
+                    .with("format", format)
+                    .into(),
+            ]
         }
         "parsed-literal" => {
             let mut block = Element::new("literal_block")
@@ -1585,9 +1593,11 @@ fn body_directive(d: &Directive) -> Vec<Node> {
                 "File access is disabled; not including {} (see allow_file_access)",
                 python_repr(&d.argument)
             );
-            vec![Element::new("warning")
-                .child(Element::text("paragraph", text))
-                .into()]
+            vec![
+                Element::new("warning")
+                    .child(Element::text("paragraph", text))
+                    .into(),
+            ]
         }
         "table" => d
             .content_body()

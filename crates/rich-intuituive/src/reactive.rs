@@ -24,7 +24,7 @@ use std::marker::PhantomData;
 use std::panic::Location;
 use std::rc::Rc;
 use std::sync::atomic::AtomicUsize;
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 
 use crate::app::Ctx;
 
@@ -357,10 +357,10 @@ impl Runtime {
         }
         if let Some(old) = graph.foreign_reads.remove(&observer) {
             for (other, slot) in old {
-                if let Some(other) = Runtime::try_get(other) {
-                    if let Some(readers) = other.graph.borrow_mut().foreign.get_mut(&slot) {
-                        readers.remove(&(id, observer));
-                    }
+                if let Some(other) = Runtime::try_get(other)
+                    && let Some(readers) = other.graph.borrow_mut().foreign.get_mut(&slot)
+                {
+                    readers.remove(&(id, observer));
                 }
             }
         }
@@ -1016,12 +1016,14 @@ pub(crate) fn on_write_map<T: 'static, U: 'static>(
         .push((id, keep));
     runtime.watches.borrow_mut().insert(
         id,
-        Box::new(move |cx: &mut Ctx| loop {
-            // Taken one at a time: the callback may write the signal again.
-            let next = written.borrow_mut().pop_front();
-            match next {
-                Some(value) => on_write(value, cx),
-                None => break,
+        Box::new(move |cx: &mut Ctx| {
+            loop {
+                // Taken one at a time: the callback may write the signal again.
+                let next = written.borrow_mut().pop_front();
+                match next {
+                    Some(value) => on_write(value, cx),
+                    None => break,
+                }
             }
         }),
     );

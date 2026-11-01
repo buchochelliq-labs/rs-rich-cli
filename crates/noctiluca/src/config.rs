@@ -23,7 +23,7 @@ use std::collections::BTreeMap;
 use std::io;
 use std::path::{Path, PathBuf};
 
-use crate::adapt::{Adapt, Rule, RULES};
+use crate::adapt::{Adapt, RULES, Rule};
 use crate::url::{complete_address, encode_query, host, looks_like_address};
 
 /// A view of a page.
@@ -478,14 +478,20 @@ impl Config {
                     for (key, value) in body {
                         match (key.as_str(), value) {
                             ("audio", toml::Value::Boolean(b)) => audio = *b,
-                            ("fps", toml::Value::Integer(n)) if (1..=60).contains(n) => fps = *n as u32,
+                            ("fps", toml::Value::Integer(n)) if (1..=60).contains(n) => {
+                                fps = *n as u32
+                            }
                             ("images", toml::Value::String(s)) => match Images::parse(s) {
                                 Some(i) => images = i,
-                                None => warn(format!("media.images: {s:?} is not auto, ansi, kitty, sixel, iterm2 or none")),
+                                None => warn(format!(
+                                    "media.images: {s:?} is not auto, ansi, kitty, sixel, iterm2 or none"
+                                )),
                             },
                             ("bandwidth", value) => match parse_bytes(value) {
                                 Some(b) => bandwidth = Some(b),
-                                None => warn(format!("media.bandwidth: {value} is not a byte count (512K, 4M)")),
+                                None => warn(format!(
+                                    "media.bandwidth: {value} is not a byte count (512K, 4M)"
+                                )),
                             },
                             _ => warn(format!("media.{key}: unknown key or value")),
                         }
@@ -570,13 +576,13 @@ impl Config {
             Some((w, r)) => (w, r.trim()),
             None => (input, ""),
         };
-        if let Some(site) = self.site(url) {
-            if site.keyword.as_deref() == Some(word) && !rest.is_empty() {
-                if let Some(host) = host(url) {
-                    let query = format!("site:{host} {rest}");
-                    return Destination::Search(self.search.replace("{}", &encode_query(&query)));
-                }
-            }
+        if let Some(site) = self.site(url)
+            && site.keyword.as_deref() == Some(word)
+            && !rest.is_empty()
+            && let Some(host) = host(url)
+        {
+            let query = format!("site:{host} {rest}");
+            return Destination::Search(self.search.replace("{}", &encode_query(&query)));
         }
         let expand = |shortcut: &Shortcut| match (&shortcut.template, rest.is_empty()) {
             (Some(template), false) => template.replace("{}", &encode_query(rest)),
@@ -1028,9 +1034,11 @@ mod tests {
         let site = config.site("https://github.com/").unwrap();
         assert_eq!(site.keys.len(), 2);
         assert!(remove_site_key(&path, "github.com", "]").unwrap());
-        assert!(!std::fs::read_to_string(&path)
-            .unwrap()
-            .contains("Next page"));
+        assert!(
+            !std::fs::read_to_string(&path)
+                .unwrap()
+                .contains("Next page")
+        );
         std::fs::remove_dir_all(&dir).ok();
     }
 }

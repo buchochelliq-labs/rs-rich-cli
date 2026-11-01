@@ -12,10 +12,10 @@
 
 use std::error::Error;
 
+use crate::r#box::HEAVY;
 use crate::console::{Console, ConsoleOptions};
 use crate::panel::Panel;
 use crate::protocol::Renderable;
-use crate::r#box::HEAVY;
 use crate::segment::Segment;
 use crate::style::Style;
 use crate::text::Text;

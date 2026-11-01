@@ -32,11 +32,11 @@ use std::sync::{Arc, Mutex, Weak};
 use std::time::{Duration, Instant};
 
 use image::{DynamicImage, RgbaImage};
+use rich::Style;
 use rich::segment::Segment;
 use rich::style::{Meta, MetaValue};
-use rich::Style;
 
-use crate::graphics::{encode_png, fit_to_cells, AnimationFrame, CellPixels};
+use crate::graphics::{AnimationFrame, CellPixels, encode_png, fit_to_cells};
 use crate::{ImageAnchor, ImageArt, ImageBackground, ImageFit, ImageMode};
 
 /// The longest side a decoded picture is kept at. Cells hold at most a few
@@ -289,16 +289,16 @@ impl Picture {
                 max_frames: ANIMATION_FRAMES,
                 min_delay: Duration::from_millis(20),
             };
-            if let Ok(frames) = crate::graphics::decode_animation(bytes, budget) {
-                if frames.len() > 1 {
-                    let (w, h) = frames[0].image.dimensions();
-                    let scale = (f64::from(ANIMATION_SIDE) / f64::from(w.max(h).max(1))).min(1.0);
-                    let width = ((f64::from(w) * scale).round() as u32).max(1);
-                    let height = ((f64::from(h) * scale).round() as u32).max(1);
-                    let frames = crate::graphics::resample(&frames, width, height, budget);
-                    if let Some(picture) = Picture::animated(frames) {
-                        return Ok(picture);
-                    }
+            if let Ok(frames) = crate::graphics::decode_animation(bytes, budget)
+                && frames.len() > 1
+            {
+                let (w, h) = frames[0].image.dimensions();
+                let scale = (f64::from(ANIMATION_SIDE) / f64::from(w.max(h).max(1))).min(1.0);
+                let width = ((f64::from(w) * scale).round() as u32).max(1);
+                let height = ((f64::from(h) * scale).round() as u32).max(1);
+                let frames = crate::graphics::resample(&frames, width, height, budget);
+                if let Some(picture) = Picture::animated(frames) {
+                    return Ok(picture);
                 }
             }
         }
@@ -1090,10 +1090,10 @@ impl Pacer {
         // come in a burst that fills the window and then a gap.
         let next = self.next_frame();
         let fps = (per_second / next).min(budget.max_fps);
-        if let Some((last, _)) = self.sent.back() {
-            if now.duration_since(*last) < Duration::from_secs_f64(1.0 / fps) {
-                return false;
-            }
+        if let Some((last, _)) = self.sent.back()
+            && now.duration_since(*last) < Duration::from_secs_f64(1.0 / fps)
+        {
+            return false;
         }
         let used: u64 = self.sent.iter().map(|(_, b)| b).sum();
         used as f64 + next <= per_second * WINDOW.as_secs_f64()
@@ -1196,30 +1196,40 @@ mod tests {
         assert_eq!(tag.picture(), Some(picture.clone()));
         // Cells only: no tags.
         let plain = picture.lines(&console, ImageView::new(), 4, 2);
-        assert!(plain[0]
-            .iter()
-            .all(|s| s.style.as_ref().and_then(PictureTag::of).is_none()));
+        assert!(
+            plain[0]
+                .iter()
+                .all(|s| s.style.as_ref().and_then(PictureTag::of).is_none())
+        );
     }
 
     #[test]
     fn encodes_each_protocol_and_rows_shown() {
         let picture = Picture::new(solid(200));
-        assert!(picture
-            .encode(Pixels::Sixel, 4, 2)
-            .unwrap()
-            .starts_with("\x1b7\x1bP"));
-        assert!(picture
-            .encode(Pixels::Iterm, 4, 2)
-            .unwrap()
-            .contains("height=2;"));
-        assert!(picture
-            .encode_rows(Pixels::Iterm, 4, 4, 1, 2)
-            .unwrap()
-            .contains("height=2;"));
-        assert!(picture
-            .encode(Pixels::Kitty, 4, 2)
-            .unwrap()
-            .contains("f=100"));
+        assert!(
+            picture
+                .encode(Pixels::Sixel, 4, 2)
+                .unwrap()
+                .starts_with("\x1b7\x1bP")
+        );
+        assert!(
+            picture
+                .encode(Pixels::Iterm, 4, 2)
+                .unwrap()
+                .contains("height=2;")
+        );
+        assert!(
+            picture
+                .encode_rows(Pixels::Iterm, 4, 4, 1, 2)
+                .unwrap()
+                .contains("height=2;")
+        );
+        assert!(
+            picture
+                .encode(Pixels::Kitty, 4, 2)
+                .unwrap()
+                .contains("f=100")
+        );
         assert!(picture.encode(Pixels::Cells, 4, 2).is_none());
         // A raw frame goes to Kitty as RGBA, not PNG.
         let raw = Picture::from_rgba(2, 2, vec![255; 16]).unwrap();

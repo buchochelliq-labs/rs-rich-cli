@@ -4,7 +4,7 @@
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Text};
 
-use crate::node::{described, Node};
+use crate::node::{Node, described};
 
 /// The rows a glyph takes.
 const ROWS: usize = 3;

@@ -28,10 +28,10 @@ use std::fmt;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use rich::Console;
 use rich::color::ColorSystem;
 use rich::protocol::{CodeHighlighter, HighlightError, HighlightedCode};
 use rich::syntax::Syntax;
-use rich::Console;
 
 /// Sources every check runs over: names describe what each exercises.
 const SOURCES: &[(&str, &str)] = &[
@@ -220,10 +220,10 @@ pub fn check_with(
         }
     }
 
-    if options.scaling {
-        if let Some(detail) = scaling(highlighter.as_ref(), &default) {
-            fail("scaling", detail);
-        }
+    if options.scaling
+        && let Some(detail) = scaling(highlighter.as_ref(), &default)
+    {
+        fail("scaling", detail);
     }
 
     if failures.is_empty() {

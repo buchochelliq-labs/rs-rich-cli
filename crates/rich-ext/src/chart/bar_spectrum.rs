@@ -5,7 +5,7 @@ use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
 use super::plot_canvas::spec_style;
-use super::{lines_to_segments, Charset, Line};
+use super::{Charset, Line, lines_to_segments};
 
 /// A column's top, in eighths of a cell, lowest first.
 const EIGHTHS: [char; 8] = [' ', '▁', '▂', '▃', '▄', '▅', '▆', '▇'];
@@ -161,11 +161,7 @@ impl BarSpectrum {
                 .copied()
                 .filter(|v| v.is_finite())
                 .fold(0.0, f64::max);
-            if loudest > 0.0 {
-                loudest
-            } else {
-                1.0
-            }
+            if loudest > 0.0 { loudest } else { 1.0 }
         })
     }
 
@@ -283,8 +279,8 @@ impl Renderable for BarSpectrum {
 /// channel's.
 impl crate::a11y::AccessibleText for BarSpectrum {
     fn accessible_text(&self, _width: usize) -> String {
-        use super::describe::{counted, extent, range};
         use super::ValueFormat;
+        use super::describe::{counted, extent, range};
         if self.left.is_empty() && self.right.as_ref().is_none_or(Vec::is_empty) {
             return "Bar spectrum, no bands".to_string();
         }

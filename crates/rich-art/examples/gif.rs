@@ -6,8 +6,8 @@
 //!
 //! Requires the `gif` feature.
 
-use rich::color::ColorSystem;
 use rich::Console;
+use rich::color::ColorSystem;
 use rich_art::gif::{AnimatedArt, Repeat};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {

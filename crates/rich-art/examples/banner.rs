@@ -4,9 +4,9 @@
 //! cargo run -p rs-rich-art --example banner -- "Hello"
 //! ```
 
+use rich::Console;
 use rich::color::ColorSystem;
 use rich::style::Style;
-use rich::Console;
 use rich_art::{Figlet, Justify};
 
 fn main() {

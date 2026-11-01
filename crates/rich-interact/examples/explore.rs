@@ -8,9 +8,9 @@
 //! path and Alt+Y its value (where the terminal takes OSC 52), Enter prints
 //! the path. Without a file it explores a small sample.
 
-use rich_ext::data::{parse, Format};
+use rich_ext::data::{Format, parse};
 use rich_interact::components::json_path;
-use rich_interact::{run, DataExplorer, Outcome, RunOptions};
+use rich_interact::{DataExplorer, Outcome, RunOptions, run};
 
 const SAMPLE: &str = r#"{
   "name": "demo",

@@ -19,14 +19,14 @@
 use std::collections::HashMap;
 use std::fmt::Write as _;
 
-use rich::export::{format_template, ExportFormatError, CONSOLE_HTML_FORMAT};
+use rich::Segment;
+use rich::export::{CONSOLE_HTML_FORMAT, ExportFormatError, format_template};
 use rich::protocol::RegionRole;
 use rich::svg::CONSOLE_SVG_FORMAT;
-use rich::terminal_theme::{TerminalTheme, DEFAULT_TERMINAL_THEME, SVG_EXPORT_THEME};
-use rich::Segment;
+use rich::terminal_theme::{DEFAULT_TERMINAL_THEME, SVG_EXPORT_THEME, TerminalTheme};
 
-use super::regions::{role_name, Region};
-use super::{Frame, StyleId, NEWLINE};
+use super::regions::{Region, role_name};
+use super::{Frame, NEWLINE, StyleId};
 
 /// Options for [`Frame::to_html`].
 #[derive(Clone, Debug)]
@@ -631,11 +631,7 @@ fn fmt_str(v: f64) -> String {
         return py_exponent(mantissa, exp);
     }
     let s = format!("{v}");
-    if s.contains('.') {
-        s
-    } else {
-        format!("{s}.0")
-    }
+    if s.contains('.') { s } else { format!("{s}.0") }
 }
 
 fn py_non_finite(v: f64) -> String {

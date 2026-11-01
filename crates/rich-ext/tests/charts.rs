@@ -781,11 +781,13 @@ fn ratatui_charts() -> Vec<(&'static str, Box<dyn Renderable>)> {
         (
             "area-chart",
             Box::new(
-                Chart::new(vec![Dataset::new(wave.clone())
-                    .name("wave 波")
-                    .graph_type(GraphType::Area)
-                    .fill_to(-2.0)
-                    .marker(Marker::Octant)])
+                Chart::new(vec![
+                    Dataset::new(wave.clone())
+                        .name("wave 波")
+                        .graph_type(GraphType::Area)
+                        .fill_to(-2.0)
+                        .marker(Marker::Octant),
+                ])
                 .x_axis(
                     Axis::default()
                         .bounds(0.0, 40.0)

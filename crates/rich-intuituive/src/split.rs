@@ -7,7 +7,7 @@ use rich_interact::{Button, KeyCode, MouseKind};
 use crate::node::{Axis, Node};
 use crate::reactive::Signal;
 use crate::screen::Rect;
-use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
+use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, widget};
 
 struct Split {
     axis: Axis,

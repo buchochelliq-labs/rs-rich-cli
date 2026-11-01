@@ -17,9 +17,9 @@ use rich::cells::cell_len;
 use rich::{Renderable, Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{fit, plain, text, Theme};
+use crate::components::{Theme, fit, plain, text};
 use crate::event::{Event, Key, KeyCode};
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::policy::{LineIo, NotInteractive};
 use crate::viewport::Viewport;
 
@@ -200,12 +200,12 @@ impl Pager {
     /// Render the source at `width` if it has not been yet at that width.
     fn render_at(&mut self, context: &Context<'_>) {
         let width = context.width;
-        if let Some(source) = &self.source {
-            if self.rendered_at != Some(width) {
-                let lines = context.lines_at(&**source, width);
-                self.rendered_at = Some(width);
-                self.set(lines);
-            }
+        if let Some(source) = &self.source
+            && self.rendered_at != Some(width)
+        {
+            let lines = context.lines_at(&**source, width);
+            self.rendered_at = Some(width);
+            self.set(lines);
         }
     }
 

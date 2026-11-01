@@ -275,9 +275,11 @@ fn templates_read_profile_fields_and_name_the_unknown() {
         "Unknown field `nope`"
     );
     let looped = vec![("a".to_string(), "{{ a }}".to_string())];
-    assert!(render("{{ a }}", &looped)
-        .unwrap_err()
-        .contains("refers to itself"));
+    assert!(
+        render("{{ a }}", &looped)
+            .unwrap_err()
+            .contains("refers to itself")
+    );
 }
 
 #[test]

@@ -2,8 +2,8 @@
 //! `tests/snapshots`; set `UPDATE_SNAPSHOTS=1` to rewrite them after a
 //! deliberate change, then review the diff.
 
-use rich::cells::cell_len;
 use rich::Console;
+use rich::cells::cell_len;
 use rich_diagram::dot::{self, Dot};
 use rich_diagram::{Diagram, Direction, Graph, Shape, Stroke};
 
@@ -147,9 +147,9 @@ fn narrow_widths_crop_and_say_so() {
 
 #[test]
 fn it_measures_to_its_drawing_and_fits_a_panel() {
+    use rich::Renderable;
     use rich::measure::Measurement;
     use rich::panel::Panel;
-    use rich::Renderable;
     let console = Console::builder().width(80).color_system(None).build();
     let dot = Dot::new("digraph { rankdir=LR; a -> b }");
     let width = rich_diagram::draw(&dot.parsed().unwrap().graph, false)
@@ -177,11 +177,11 @@ fn labels_cannot_carry_escape_sequences() {
 
 #[cfg(feature = "plugin")]
 mod plugin {
-    use rich::markdown::Markdown;
     use rich::Console;
+    use rich::markdown::Markdown;
     use rich_diagram::plugin::DotPlugin;
-    use rich_ext::plugin::Capability;
     use rich_ext::ExtensionRegistry;
+    use rich_ext::plugin::Capability;
 
     #[test]
     fn registers_fence_renderers_and_a_source_renderer() {
@@ -228,7 +228,7 @@ mod plugin {
 
 #[cfg(feature = "graphviz")]
 mod graphviz {
-    use rich_diagram::graphviz::{render_svg, GraphvizError, GraphvizOptions};
+    use rich_diagram::graphviz::{GraphvizError, GraphvizOptions, render_svg};
 
     #[test]
     fn a_missing_program_is_reported() {

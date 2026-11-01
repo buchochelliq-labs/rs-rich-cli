@@ -631,7 +631,7 @@ pub fn peak_hz(spectrum: &[(f64, f64)]) -> Option<f64> {
         .iter()
         .enumerate()
         .filter(|(_, (hz, level))| *hz > 0.0 && level.is_finite())
-        .max_by(|a, b| a.1 .1.total_cmp(&b.1 .1))?;
+        .max_by(|a, b| a.1.1.total_cmp(&b.1.1))?;
     if level <= 0.0 {
         return None;
     }

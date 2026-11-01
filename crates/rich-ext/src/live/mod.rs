@@ -7,16 +7,16 @@
 //! when the coordinator finishes. Without a terminal no graphics are drawn.
 mod region;
 use crate::{
-    frame::{plan_graphics, Change, Frame, Placement, PlacementSource},
-    layout::{fit_segments, OverflowPolicy},
+    frame::{Change, Frame, Placement, PlacementSource, plan_graphics},
+    layout::{OverflowPolicy, fit_segments},
     target::RenderTarget,
 };
 use region::Region;
 pub use region::RegionId;
 use rich::{
+    Console, Segment,
     control::{Control, ControlType},
     protocol::RenderEnvironment,
-    Console, Segment,
 };
 use std::{io::Write, sync::Arc};
 #[derive(Debug)]
@@ -473,16 +473,16 @@ impl<W: Write> LiveCoordinator<W> {
         }
         if self.hidden {
             self.hidden = false;
-            if let Err(e) = self.control(&[ControlType::ShowCursor]) {
-                if error.is_none() {
-                    error = Some(e);
-                }
-            }
-        }
-        if let Err(e) = self.writer.flush() {
-            if error.is_none() {
+            if let Err(e) = self.control(&[ControlType::ShowCursor])
+                && error.is_none()
+            {
                 error = Some(e);
             }
+        }
+        if let Err(e) = self.writer.flush()
+            && error.is_none()
+        {
+            error = Some(e);
         }
         error.map_or(Ok(()), |e| Err(LiveError::Io(e)))
     }

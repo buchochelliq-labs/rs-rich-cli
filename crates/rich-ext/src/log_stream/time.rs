@@ -26,15 +26,15 @@ use crate::event::Value;
 /// ```
 pub fn parse_timestamp(text: &str) -> Option<i64> {
     let text = text.trim();
-    if let Some((micros, used)) = iso_prefix(text) {
-        if used == text.len() {
-            return Some(micros);
-        }
+    if let Some((micros, used)) = iso_prefix(text)
+        && used == text.len()
+    {
+        return Some(micros);
     }
-    if let Some((micros, used)) = clf_prefix(text) {
-        if used == text.len() {
-            return Some(micros);
-        }
+    if let Some((micros, used)) = clf_prefix(text)
+        && used == text.len()
+    {
+        return Some(micros);
     }
     if super::filter::is_number(text) {
         if let Ok(integer) = text.parse::<i128>() {

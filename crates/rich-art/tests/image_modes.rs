@@ -2,10 +2,10 @@
 //! 0.0.10 image options: ANSI16/grayscale (#125), stretch, caps and tone
 //! adjustments (#126), and quadrant blocks (#199).
 use rich::segment::Segment;
-use rich::{color::ColorSystem, Console};
+use rich::{Console, color::ColorSystem};
 use rich_art::{
-    image::{DynamicImage, Rgb, RgbImage, Rgba, RgbaImage},
     Dither, ImageArt, ImageArtError, ImageColorMode, ImageFit, ImageMode, ImageTransforms,
+    image::{DynamicImage, Rgb, RgbImage, Rgba, RgbaImage},
 };
 
 fn console(width: usize) -> Console {

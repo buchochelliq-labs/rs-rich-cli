@@ -8,7 +8,7 @@ use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::Duration;
 
 use super::{Frame, Matrix};
-use crate::feed::{latest_feed, Feed, FeedState, FeedTeller};
+use crate::feed::{Feed, FeedState, FeedTeller, latest_feed};
 #[cfg(feature = "audio")]
 use crate::log::Log;
 use crate::reactive::{Proxy, Runtime, Signal};
@@ -187,10 +187,11 @@ impl Shared {
             }
             let frame = latest.take();
             drop(latest);
-            if let Some(frame) = frame {
-                if !self.quiet.load(Ordering::SeqCst) && !tx.send(frame) {
-                    return Ok(());
-                }
+            if let Some(frame) = frame
+                && !self.quiet.load(Ordering::SeqCst)
+                && !tx.send(frame)
+            {
+                return Ok(());
             }
             if let Some(why) = lock(&self.failed).clone() {
                 return Err(why);

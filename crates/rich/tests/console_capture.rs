@@ -3,7 +3,7 @@
 //! swallowed, concurrent captures never mix, clones are independent, and a
 //! panicking capture still ends.
 
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use rich::{ColorSystem, Console, Control};
 

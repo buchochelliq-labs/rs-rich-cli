@@ -72,16 +72,16 @@ impl Tree {
                 }
             }
             node[v] = best;
-            if let Some(best) = best {
-                if let Some(&other) = listed[v].iter().find(|c| !chain[best].contains(c)) {
-                    notes.push(format!(
-                        "node `{}` is in clusters that do not nest ({} and {}); it is framed in {}",
-                        graph.nodes()[v].id,
-                        name(best),
-                        name(other),
-                        name(best)
-                    ));
-                }
+            if let Some(best) = best
+                && let Some(&other) = listed[v].iter().find(|c| !chain[best].contains(c))
+            {
+                notes.push(format!(
+                    "node `{}` is in clusters that do not nest ({} and {}); it is framed in {}",
+                    graph.nodes()[v].id,
+                    name(best),
+                    name(other),
+                    name(best)
+                ));
             }
         }
         let mut alive = vec![false; clusters.len()];

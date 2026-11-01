@@ -8,19 +8,19 @@ use std::time::Duration;
 
 use rich::protocol::{Support, TargetCapabilities};
 use rich::{ColorSystem, Console, Panel, Renderable, Table, Text, Theme};
+use rich_ext::ConsoleExt;
 use rich_ext::capabilities::ColorDepth;
 use rich_ext::qa::bench::{
-    bench_renderable, compare, BenchRun, CompareOptions, ComparisonView, Measurement,
+    BenchRun, CompareOptions, ComparisonView, Measurement, bench_renderable, compare,
 };
-use rich_ext::qa::explain::{explain, ExplanationView};
-use rich_ext::qa::fuzz::{fuzz_with, Case, GenOptions, Invariants, Rendered};
-use rich_ext::qa::lint::{lint, lint_markup, LintOptions, LintReport};
+use rich_ext::qa::explain::{ExplanationView, explain};
+use rich_ext::qa::fuzz::{Case, GenOptions, Invariants, Rendered, fuzz_with};
+use rich_ext::qa::lint::{LintOptions, LintReport, lint, lint_markup};
 use rich_ext::qa::matrix::{self, CapabilityProfile, Fixture};
-use rich_ext::qa::profile::{profile, AllocStats, Profile, ProfileOptions, ProfileReport, Timing};
-use rich_ext::qa::stress::{stress, StressOptions};
+use rich_ext::qa::profile::{AllocStats, Profile, ProfileOptions, ProfileReport, Timing, profile};
+use rich_ext::qa::stress::{StressOptions, stress};
 use rich_ext::qa::{Approvals, Matrix, Screenshot};
 use rich_ext::target::{RenderTarget, TargetKind};
-use rich_ext::ConsoleExt;
 
 // --8<-- [start:allocator]
 use rich_ext::qa::profile::CountingAllocator;
@@ -291,7 +291,11 @@ fn main() {
     let _ = std::fs::remove_dir_all(&scratch);
 
     // Plain, deterministic diffs in the approval report (see RICH_ASSERT_COLOR).
-    std::env::set_var("RICH_ASSERT_COLOR", "0");
+    // SAFETY: `main` has started no other thread yet.
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::set_var("RICH_ASSERT_COLOR", "0")
+    };
     let report = approval_workflow(&scratch.join("screenshots"));
     shots.shot("approvals", 72, "Approvals::check", |c| {
         c.print(&Text::new(report.trim_end()))

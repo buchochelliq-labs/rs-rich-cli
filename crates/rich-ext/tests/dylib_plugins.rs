@@ -6,9 +6,9 @@ use std::path::PathBuf;
 use std::sync::OnceLock;
 
 use rich::{Console, Text};
-use rich_ext::plugin::abi::{AbiError, CapabilityKind};
-use rich_ext::plugin_loading::{load, load_native, LoadError, LoadOptions, RuntimeKind};
 use rich_ext::ExtensionRegistry;
+use rich_ext::plugin::abi::{AbiError, CapabilityKind};
+use rich_ext::plugin_loading::{LoadError, LoadOptions, RuntimeKind, load, load_native};
 
 include!("../../rich-plugin-api/examples/dylib-plugin/build_fixture.rs");
 
@@ -90,9 +90,11 @@ fn the_example_dylib_loads_and_its_capabilities_work() {
     let segments = fences
         .render_fence("red", "stop", &console, &options)
         .unwrap();
-    assert!(segments
-        .iter()
-        .any(|s| s.text == "stop" && s.style.as_ref().is_some_and(|st| st.color().is_some())));
+    assert!(
+        segments
+            .iter()
+            .any(|s| s.text == "stop" && s.style.as_ref().is_some_and(|st| st.color().is_some()))
+    );
 }
 
 #[test]

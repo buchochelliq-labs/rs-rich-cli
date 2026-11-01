@@ -68,15 +68,15 @@ mod time;
 
 pub use channel::ChannelSink;
 pub use collapse::{Collapser, Push, Repeat};
-pub use filter::{severity_of, Filter, FilterError, LevelFilter, Op, Predicate};
+pub use filter::{Filter, FilterError, LevelFilter, Op, Predicate, severity_of};
 pub use group::{Group, GroupBy, GroupHeader, Groups, LevelCounts, Summary};
 #[cfg(feature = "data")]
 pub use parse::JsonParser;
 pub use parse::{
-    logfmt_pairs, AccessLog, Assembled, Assembler, LevelLine, LineParser, Logfmt, Parsers,
-    Timestamped,
+    AccessLog, Assembled, Assembler, LevelLine, LineParser, Logfmt, Parsers, Timestamped,
+    logfmt_pairs,
 };
-pub use time::{format_offset, parse_timestamp, Clock, TimeMode};
+pub use time::{Clock, TimeMode, format_offset, parse_timestamp};
 
 /// The keys a record's message is read from, in order.
 pub const MESSAGE_KEYS: &[&str] = &["message", "msg"];
@@ -388,10 +388,10 @@ pub(crate) fn lookup_fields<'a>(fields: &'a [(String, Value)], path: &str) -> Op
         return Some(value);
     }
     for group in [MESSAGE_KEYS, LEVEL_KEYS, TIME_KEYS] {
-        if group.contains(&path) {
-            if let Some(value) = group.iter().find_map(|key| get(key)) {
-                return Some(value);
-            }
+        if group.contains(&path)
+            && let Some(value) = group.iter().find_map(|key| get(key))
+        {
+            return Some(value);
         }
     }
     if !path.contains('.') {

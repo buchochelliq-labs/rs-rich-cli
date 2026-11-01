@@ -28,9 +28,10 @@ fn source_spans_validate_utf8_without_reading_paths() {
     for width in [1, 2, 20, 80] {
         let c = Console::builder().width(width).build();
         let rows = Segment::split_lines(&d.rich_render(&c, &c.options()));
-        assert!(rows
-            .iter()
-            .all(|r| r.iter().map(Segment::cell_length).sum::<usize>() <= width));
+        assert!(
+            rows.iter()
+                .all(|r| r.iter().map(Segment::cell_length).sum::<usize>() <= width)
+        );
     }
 }
 #[derive(Debug)]

@@ -13,7 +13,7 @@ use intuituive::node::Axis;
 use intuituive::prelude::*;
 use intuituive::screen::Rect;
 use intuituive::widget::{
-    widget, Canvas, DrawCx, EventCx, MeasureCx, MouseExt, Used, Widget, WidgetEvent,
+    Canvas, DrawCx, EventCx, MeasureCx, MouseExt, Used, Widget, WidgetEvent, widget,
 };
 
 /// Records the events it gets, and shows the last one.

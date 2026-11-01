@@ -100,9 +100,11 @@ fn a_program_that_plays_sound_gives_a_wav_and_an_mp4_with_its_track() {
     }
     let dir = scratch("on");
     let recording = record::record(&tape(&dir, true), "audio", &Options::default()).unwrap();
-    assert!(recording
-        .text_grid(&recording.shots[0].1)
-        .contains("AUDIO set"));
+    assert!(
+        recording
+            .text_grid(&recording.shots[0].1)
+            .contains("AUDIO set")
+    );
     let audio = recording.audio.clone().expect("the tone was recorded");
     assert_eq!((audio.rate, audio.channels), (8000, 1));
     // The tone starts with the frame that says so, within a frame (1/12 s).
@@ -241,9 +243,11 @@ fn without_audio_the_program_is_not_asked_and_nothing_changes() {
     }
     let dir = scratch("off");
     let recording = record::record(&tape(&dir, false), "quiet", &Options::default()).unwrap();
-    assert!(recording
-        .text_grid(&recording.shots[0].1)
-        .contains("AUDIO unset"));
+    assert!(
+        recording
+            .text_grid(&recording.shots[0].1)
+            .contains("AUDIO unset")
+    );
     assert!(recording.audio.is_none());
     let out = dir.join("out");
     let written = record::write(
@@ -256,9 +260,11 @@ fn without_audio_the_program_is_not_asked_and_nothing_changes() {
         None,
     )
     .unwrap();
-    assert!(written
-        .iter()
-        .all(|p| p.extension().is_none_or(|e| e != "wav")));
+    assert!(
+        written
+            .iter()
+            .all(|p| p.extension().is_none_or(|e| e != "wav"))
+    );
     // `Options::audio` turns it on for a tape that does not.
     let options = Options {
         audio: true,

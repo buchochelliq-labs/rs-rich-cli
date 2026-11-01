@@ -3,7 +3,7 @@
 
 use rich::cells::cell_len;
 use rich::{ColorSystem, Console, Panel, Segment, Style, Text};
-use rich_ext::redact::{is_secret_key, Detector, Redacted, Redactor, SECRET_KEYS};
+use rich_ext::redact::{Detector, Redacted, Redactor, SECRET_KEYS, is_secret_key};
 
 const GHP: &str = "ghp_0123456789abcdefghijklmnopqrstuvwxyzAB";
 const JWT: &str = "eyJhbGciOiJIUzI1NiJ9.eyJzdWIiOiIxMjM0In0.c2lnbmF0dXJlLWJ5dGVz";

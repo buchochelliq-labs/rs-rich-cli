@@ -8,11 +8,11 @@
 
 use std::time::{Duration, Instant};
 
-use noctiluca::app::{app, Options};
+use noctiluca::app::{Options, app};
 use noctiluca::bookmarks::Bookmarks;
 use noctiluca::config::{Config, View};
 use noctiluca::engine::{EngineEvent, PageAction};
-use noctiluca::testing::{feed_snapshot, feed_snapshot_of, FakeEngine, FakeState};
+use noctiluca::testing::{FakeEngine, FakeState, feed_snapshot, feed_snapshot_of};
 use rich_intuituive::Driver;
 
 const URL: &str = "https://fixture.example/feed.html";

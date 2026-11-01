@@ -173,10 +173,12 @@ fn command_endings_have_their_own_headers() {
         plain(70, &failed).lines().nth(1),
         Some("error: `deploy --env 'prod eu'` could not start: not found")
     );
-    assert!(base()
-        .status(CommandStatus::Cancelled)
-        .diagnostic()
-        .is_none());
+    assert!(
+        base()
+            .status(CommandStatus::Cancelled)
+            .diagnostic()
+            .is_none()
+    );
     assert_eq!(
         CommandRecord::new("echo", ["it's", ""]).command_line(),
         r#"echo 'it'\''s' ''"#
@@ -375,17 +377,21 @@ fn runner_captures_both_streams_and_the_exit_code() {
     let position = |text: &str| record.lines.iter().position(|l| l.text == text);
     assert!(position("out one") < position("out two"));
     assert!(!updates.is_empty());
-    assert!(updates
-        .iter()
-        .all(|status| *status == CommandStatus::Running));
-    assert!(record.program.ends_with(
-        std::env::current_exe()
-            .unwrap()
-            .file_name()
-            .unwrap()
-            .to_str()
-            .unwrap()
-    ));
+    assert!(
+        updates
+            .iter()
+            .all(|status| *status == CommandStatus::Running)
+    );
+    assert!(
+        record.program.ends_with(
+            std::env::current_exe()
+                .unwrap()
+                .file_name()
+                .unwrap()
+                .to_str()
+                .unwrap()
+        )
+    );
     assert_eq!(record.args[0], "helper_process");
     assert_eq!(record.state(), State::Failed);
 }

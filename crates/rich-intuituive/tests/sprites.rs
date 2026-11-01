@@ -9,11 +9,11 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
-use intuituive::pixels::{pixels, PixelBuf, PixelMode, PixelSprite, Rgba};
+use intuituive::pixels::{PixelBuf, PixelMode, PixelSprite, Rgba, pixels};
 use intuituive::prelude::*;
 use intuituive::sprite::{
-    bounds_overlap, overlaps, overlaps_at, stage, stage_with, tween, Placed, Sprite, SpriteCell,
-    StageOptions,
+    Placed, Sprite, SpriteCell, StageOptions, bounds_overlap, overlaps, overlaps_at, stage,
+    stage_with, tween,
 };
 use intuituive::{Driver, Easing};
 

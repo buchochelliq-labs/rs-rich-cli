@@ -163,7 +163,11 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
             "--config" | "--profile" | "--width" | "-w" | "--height" | "--highlighter"
             | "--code-theme" => {
                 inspect_args.push(arg.clone());
-                inspect_args.push(iter.next().ok_or_else(|| format!("{arg} requires a value"))?.clone());
+                inspect_args.push(
+                    iter.next()
+                        .ok_or_else(|| format!("{arg} requires a value"))?
+                        .clone(),
+                );
             }
             "--image-mode" => {
                 let value = iter.next().ok_or("--image-mode requires a value")?;
@@ -171,10 +175,17 @@ fn report(args: &[String]) -> Result<(serde_json::Value, Report, bool), String> 
                 image_mode = format!("{parsed:?}").to_lowercase();
             }
             "--report" => {
-                if iter.next().map(String::as_str) != Some("json") { return Err("--report requires json".into()); }
+                if iter.next().map(String::as_str) != Some("json") {
+                    return Err("--report requires json".into());
+                }
             }
-            "--no-config" | "--no-color" | "--color" | "--pager" | "--no-pager" | "--auto-pager" | "--no-auto-pager" => inspect_args.push(arg.clone()),
-            _ => return Err(format!("unexpected argument {arg:?}; use doctor [--report json] [--config PATH] [--profile NAME] [--highlighter NAME] [--code-theme NAME] [--no-config] [--no-color]")),
+            "--no-config" | "--no-color" | "--color" | "--pager" | "--no-pager"
+            | "--auto-pager" | "--no-auto-pager" => inspect_args.push(arg.clone()),
+            _ => {
+                return Err(format!(
+                    "unexpected argument {arg:?}; use doctor [--report json] [--config PATH] [--profile NAME] [--highlighter NAME] [--code-theme NAME] [--no-config] [--no-color]"
+                ));
+            }
         }
     }
     let config = config::inspect(&inspect_args, &ConfigRoots::default())?

@@ -77,21 +77,21 @@ pub(crate) fn parse(content: &str) -> Result<Node, DataError> {
             continue;
         }
         let column = indent(line) + 1;
-        if column > 1 {
-            if let Some((section, key)) = &last_key {
-                let entries = match section {
-                    Some(i) => &mut sections[*i].entries,
-                    None => &mut root,
-                };
-                if let Some(Node {
-                    value: Value::String(value),
-                    ..
-                }) = entries.get_mut(key)
-                {
-                    value.push('\n');
-                    value.push_str(trimmed);
-                    continue;
-                }
+        if column > 1
+            && let Some((section, key)) = &last_key
+        {
+            let entries = match section {
+                Some(i) => &mut sections[*i].entries,
+                None => &mut root,
+            };
+            if let Some(Node {
+                value: Value::String(value),
+                ..
+            }) = entries.get_mut(key)
+            {
+                value.push('\n');
+                value.push_str(trimmed);
+                continue;
             }
         }
         if trimmed.starts_with('[') {
@@ -110,7 +110,9 @@ pub(crate) fn parse(content: &str) -> Result<Node, DataError> {
             // section; one would silently replace the other.
             if root.contains(name) {
                 return Err(error(
-                    format!("section `[{name}]` has the same name as the key `{name}` before the first section"),
+                    format!(
+                        "section `[{name}]` has the same name as the key `{name}` before the first section"
+                    ),
                     number,
                     column,
                 ));

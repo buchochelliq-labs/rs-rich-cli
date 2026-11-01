@@ -22,10 +22,10 @@
 use std::cell::Cell;
 
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{fit, plain, question, text, Theme};
+use crate::components::{Theme, fit, plain, question, text};
 use crate::event::{Button, Event, Key, MouseKind};
 use crate::item::Item;
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::policy::{LineIo, NotInteractive};
 
 /// The keys of a [`Reorder`], in context `reorder`.

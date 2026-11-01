@@ -99,7 +99,7 @@ pub fn format_template(
             '}' => {
                 return Err(ExportFormatError(
                     "Single '}' encountered in format string".to_string(),
-                ))
+                ));
             }
             c => out.push(c),
         }

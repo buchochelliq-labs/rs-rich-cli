@@ -259,7 +259,7 @@ impl Color {
                         return Err(RichError::ColorParse(format!(
                             "color components must be <= 255 in {}",
                             py_repr_str(original)
-                        )))
+                        )));
                     }
                 }
             }
@@ -431,15 +431,13 @@ impl Color {
                 }
             }
             ColorSystem::Windows => {
-                if !is_truecolor {
-                    if let Some(number) = self.number.filter(|&number| number < 16) {
-                        return Color {
-                            name: self.name.clone(),
-                            kind: ColorType::Windows,
-                            number: Some(number),
-                            triplet: None,
-                        };
-                    }
+                if !is_truecolor && let Some(number) = self.number.filter(|&number| number < 16) {
+                    return Color {
+                        name: self.name.clone(),
+                        kind: ColorType::Windows,
+                        number: Some(number),
+                        triplet: None,
+                    };
                 }
                 let Some(triplet) = source_triplet() else {
                     return self.clone();

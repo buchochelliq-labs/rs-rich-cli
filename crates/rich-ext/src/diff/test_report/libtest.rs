@@ -13,7 +13,7 @@ use std::collections::HashMap;
 
 use serde_json::Value;
 
-use super::{duration, Case, Status, Suite, TestAdapter, TestParseError, TestRun};
+use super::{Case, Status, Suite, TestAdapter, TestParseError, TestRun, duration};
 
 /// The libtest JSON adapter.
 #[derive(Clone, Copy, Debug, Default)]
@@ -79,10 +79,10 @@ fn panic_message(stdout: &str) -> Option<String> {
     let header = lines[at];
     let mut message: Vec<&str> = Vec::new();
     // Old format: `panicked at 'message', src/lib.rs:1:2`.
-    if let Some(rest) = header.split("panicked at '").nth(1) {
-        if let Some(end) = rest.rfind("', ") {
-            message.push(&rest[..end]);
-        }
+    if let Some(rest) = header.split("panicked at '").nth(1)
+        && let Some(end) = rest.rfind("', ")
+    {
+        message.push(&rest[..end]);
     }
     for l in &lines[at + 1..] {
         let t = l.trim_start();
@@ -128,7 +128,7 @@ pub fn parse(input: &str) -> Result<TestRun, TestParseError> {
                 return Err(TestParseError {
                     format: "libtest",
                     message: format!("line {}: {e}", index + 1),
-                })
+                });
             }
         };
         let kind = event.get("type").and_then(Value::as_str);

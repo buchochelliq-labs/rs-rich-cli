@@ -10,22 +10,22 @@
 //! See docs/PLUGINS.md and docs/design/plugin-loading.md.
 
 use std::collections::BTreeMap;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::sync::Arc;
 
-use rich::console::ConsoleOptions;
-use rich::r#box::Box as BoxStyle;
-use rich::segment::Segment;
 #[cfg(feature = "syntax")]
 use rich::SyntectHighlighter;
+use rich::r#box::Box as BoxStyle;
+use rich::console::ConsoleOptions;
+use rich::segment::Segment;
 use rich::{
     CodeHighlighter, CodeHighlighting, Console, ConsoleCodeHighlighting, FenceRenderer,
     Highlighter, Text, Theme,
 };
 use rich_plugin_api::{
-    is_supported_api_version, is_valid_name, Capability, ComponentFactory, CustomAction,
-    HighlighterFactory, Plugin, PluginComponent, PluginError, PluginMetadata, PluginRegistrar,
-    SourceRenderer, TextTransform, PLUGIN_API_VERSION,
+    Capability, ComponentFactory, CustomAction, HighlighterFactory, PLUGIN_API_VERSION, Plugin,
+    PluginComponent, PluginError, PluginMetadata, PluginRegistrar, SourceRenderer, TextTransform,
+    is_supported_api_version, is_valid_name,
 };
 
 use crate::transform::Pipeline;
@@ -248,7 +248,7 @@ impl ExtensionRegistry {
                 return Err(PluginError::Failed {
                     plugin: id,
                     message: format!("register panicked: {}", panic_message(&*panic)),
-                })
+                });
             }
         }
         if let Some(name) = staged.invalid_names.into_iter().next() {
@@ -379,13 +379,13 @@ impl ExtensionRegistry {
                     .collect(),
             }
         })?;
-        if let Some(theme) = theme {
-            if !highlighter.themes().iter().any(|t| t == theme) {
-                return Err(HighlighterChoiceError::UnknownTheme {
-                    highlighter: name.to_string(),
-                    theme: theme.to_string(),
-                });
-            }
+        if let Some(theme) = theme
+            && !highlighter.themes().iter().any(|t| t == theme)
+        {
+            return Err(HighlighterChoiceError::UnknownTheme {
+                highlighter: name.to_string(),
+                theme: theme.to_string(),
+            });
         }
         self.default_code_highlighter = Some((name.to_string(), theme.map(str::to_string)));
         Ok(())

@@ -12,7 +12,7 @@ use std::path::PathBuf;
 use std::rc::Rc;
 
 use crate::node::Node;
-use crate::reactive::{signal, Runtime, Signal};
+use crate::reactive::{Runtime, Signal, signal};
 use crate::text_area::TextArea;
 
 /// A candidate for completing an input: put `text` in place of the bytes

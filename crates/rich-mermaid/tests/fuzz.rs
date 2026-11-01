@@ -2,7 +2,7 @@
 //! random Mermaid-like input.
 
 use rich::Console;
-use rich_mermaid::{parse, Mermaid};
+use rich_mermaid::{Mermaid, parse};
 
 /// A small deterministic generator (xorshift), so failures reproduce.
 struct Rng(u64);

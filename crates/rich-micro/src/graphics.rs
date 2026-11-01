@@ -80,17 +80,17 @@ use std::sync::{Arc, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
 use rich::{ColorSystem, Console, Renderable, Segment, Style};
-use rich_art::graphics::{overlay, CellPixels};
+use rich_art::graphics::{CellPixels, overlay};
 use rich_ext::capabilities::{ColorDepth, Environment, Graphics, SystemEnvironment};
 use rich_ext::frame::{Frame, Graphic, Placement as FramePlacement, PlacementSource};
 use rich_ext::graphics::GraphicsEnvironment;
 
-use crate::cache::{user_cache_dir, ImageCache, Prepared};
+use crate::cache::{ImageCache, Prepared, user_cache_dir};
 use crate::model::MicroAsset;
 use crate::package::Limits;
 use crate::registry::MicroRegistry;
 use crate::render::{
-    fallback_row, FallbackPreference, MicroMeta, MicroRenderer, MicroView, Placement, PAD_CELL,
+    FallbackPreference, MicroMeta, MicroRenderer, MicroView, PAD_CELL, Placement, fallback_row,
 };
 
 /// How micro assets are drawn on one terminal.

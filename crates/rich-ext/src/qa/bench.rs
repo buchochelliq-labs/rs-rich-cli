@@ -37,7 +37,7 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Table, Text};
 use serde::{Deserialize, Serialize};
 
 use super::profile::format_nanos;
-use super::{plural, table_then_line, Probe};
+use super::{Probe, plural, table_then_line};
 
 /// The shortest span one timed sample covers.
 pub const MIN_SAMPLE: Duration = Duration::from_micros(20);
@@ -243,10 +243,10 @@ impl BenchRun {
         Ok(run)
     }
     pub fn save(&self, path: impl AsRef<Path>) -> io::Result<()> {
-        if let Some(parent) = path.as_ref().parent() {
-            if !parent.as_os_str().is_empty() {
-                fs::create_dir_all(parent)?;
-            }
+        if let Some(parent) = path.as_ref().parent()
+            && !parent.as_os_str().is_empty()
+        {
+            fs::create_dir_all(parent)?;
         }
         fs::write(path, self.to_json() + "\n")
     }

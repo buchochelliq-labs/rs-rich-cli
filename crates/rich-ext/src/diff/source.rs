@@ -7,11 +7,11 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Text};
 #[cfg(feature = "syntax")]
 use rich::{Style, StyleType, Syntax};
 
+use super::Layout;
 use super::engine::split_lines_inclusive;
 #[cfg(feature = "syntax")]
 use super::view::text_lines;
 use super::view::{DiffView, LineLinks, Side};
-use super::Layout;
 use crate::hyperlink::Hyperlinker;
 
 /// The language name to hand core [`Syntax`] for `path`: its extension, or
@@ -243,10 +243,10 @@ impl SourceDiff {
         .wrap(self.wrap)
         .context(self.context)
         .links(links);
-        if self.titles {
-            if let (Some(old), Some(new)) = (&self.old_path, &self.new_path) {
-                view = view.titles(old.clone(), new.clone());
-            }
+        if self.titles
+            && let (Some(old), Some(new)) = (&self.old_path, &self.new_path)
+        {
+            view = view.titles(old.clone(), new.clone());
         }
         view
     }

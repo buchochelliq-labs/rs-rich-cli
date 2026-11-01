@@ -203,10 +203,12 @@ fn the_palette_lists_only_active_contexts_and_runs_commands() {
     let (outcome, record) = headless::run(app, script, 80, 20);
     assert_eq!(outcome.unwrap(), Outcome::Done("src/lib.rs"));
     assert_eq!(*ran.borrow(), 2);
-    assert!(record
-        .frames
-        .iter()
-        .any(|f| f.contains("app") && f.contains("count something")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|f| f.contains("app") && f.contains("count something"))
+    );
 }
 
 #[test]
@@ -220,10 +222,12 @@ fn shortcuts_follow_rebinding() {
         .keys("enter enter");
     let (outcome, record) = headless::run(Overlays::new(select), script, 80, 20);
     assert_eq!(outcome.unwrap(), Outcome::Done("src/main.rs"));
-    assert!(record
-        .frames
-        .iter()
-        .any(|f| f.contains("move down") && f.contains("ctrl+j")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|f| f.contains("move down") && f.contains("ctrl+j"))
+    );
     // The overlays' own keys rebind too.
     let app = Overlays::new(Select::new("File", files())).rebind("help", keys("f5"));
     let (_, record) = headless::run(app, Script::new().keys("f1 f5"), 80, 20);
@@ -428,10 +432,12 @@ fn the_example_opens_every_overlay() {
         assert!(opened(&record, title), "{title}");
     }
     assert!(record.frames.iter().any(|f| f.contains("refreshed")));
-    assert!(record
-        .frames
-        .iter()
-        .any(|f| f.contains("Show hidden files · Files")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|f| f.contains("Show hidden files · Files"))
+    );
     // The quit command cancels.
     let script = Script::new().keys("ctrl+o").text("quit").keys("enter");
     let (outcome, _) = headless::run(example::app(), script, 100, 26);

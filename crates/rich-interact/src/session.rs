@@ -44,8 +44,8 @@ use std::fmt;
 use std::io::{self, Write};
 use std::panic::UnwindSafe;
 use std::process::Command;
-use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::sync::Once;
+use std::sync::atomic::{AtomicBool, AtomicU8, Ordering};
 use std::time::{Duration, Instant};
 
 #[cfg(target_arch = "wasm32")]
@@ -690,7 +690,7 @@ fn ask_terminal(query: &str, done: impl Fn(&[u8]) -> bool) -> Option<Asked> {
             Ok(0) => break,
             Ok(_) => {}
             Err(filedescriptor::Error::Poll(e)) if e.kind() == io::ErrorKind::Interrupted => {
-                continue
+                continue;
             }
             Err(_) => break,
         }
@@ -1110,7 +1110,7 @@ fn input_before_wake(
     wake: std::os::unix::io::RawFd,
     wait: Duration,
 ) -> io::Result<bool> {
-    use filedescriptor::{poll, pollfd, POLLIN};
+    use filedescriptor::{POLLIN, poll, pollfd};
     let mut ready = [
         pollfd {
             fd: tty,

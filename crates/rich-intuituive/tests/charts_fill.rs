@@ -22,9 +22,11 @@ fn in_a_node(chart: impl Fn() -> Node + 'static, width: u16, rows: u16) -> Vec<S
 }
 
 fn line_chart() -> Chart {
-    Chart::new(vec![Dataset::new([(0.0, 0.0), (1.0, 1.0)])
-        .graph_type(GraphType::Line)
-        .marker(Marker::Ascii('*'))])
+    Chart::new(vec![
+        Dataset::new([(0.0, 0.0), (1.0, 1.0)])
+            .graph_type(GraphType::Line)
+            .marker(Marker::Ascii('*')),
+    ])
     .x_axis(
         Axis::default()
             .bounds(0.0, 1.0)

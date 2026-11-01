@@ -324,10 +324,10 @@ fn normalize(raw: Vec<Raw>) -> Vec<Op> {
         }
         if let Some(mut i) = i.take() {
             // After the deletions, inserts apply at the end of the deleted run.
-            if let Some(last) = merged.last() {
-                if last.0 == Tag::Delete {
-                    i.1 = last.1.end..last.1.end;
-                }
+            if let Some(last) = merged.last()
+                && last.0 == Tag::Delete
+            {
+                i.1 = last.1.end..last.1.end;
             }
             merged.push(i);
         }
@@ -449,17 +449,17 @@ pub(crate) fn group_ranges(
         .enumerate()
         .map(|(i, (_, a, b))| (i, a.clone(), b.clone()))
         .collect();
-    if let Some(first) = codes.first_mut() {
-        if runs[first.0].0 {
-            first.1.start = first.1.start.max(first.1.end.saturating_sub(context));
-            first.2.start = first.2.start.max(first.2.end.saturating_sub(context));
-        }
+    if let Some(first) = codes.first_mut()
+        && runs[first.0].0
+    {
+        first.1.start = first.1.start.max(first.1.end.saturating_sub(context));
+        first.2.start = first.2.start.max(first.2.end.saturating_sub(context));
     }
-    if let Some(last) = codes.last_mut() {
-        if runs[last.0].0 {
-            last.1.end = last.1.end.min(last.1.start + context);
-            last.2.end = last.2.end.min(last.2.start + context);
-        }
+    if let Some(last) = codes.last_mut()
+        && runs[last.0].0
+    {
+        last.1.end = last.1.end.min(last.1.start + context);
+        last.2.end = last.2.end.min(last.2.start + context);
     }
     let mut hunks = Vec::new();
     let mut group: Vec<Grouped> = Vec::new();

@@ -25,10 +25,10 @@ use std::time::Duration;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Text};
 
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{text, PreviewLayout, Select, Theme};
+use crate::components::{PreviewLayout, Select, Theme, text};
 use crate::event::{Event, Key};
 use crate::item::{Actions, Item, Preview, TargetKind};
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::policy::{LineIo, NotInteractive};
 
 /// The actions the picker handles itself, in context `file`.
@@ -586,10 +586,11 @@ impl Component for FilePicker {
     type Output = PathBuf;
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<PathBuf> {
-        if let Some(key) = event.key() {
-            if !self.select.menu_open() && self.key(key) {
-                return Flow::Continue;
-            }
+        if let Some(key) = event.key()
+            && !self.select.menu_open()
+            && self.key(key)
+        {
+            return Flow::Continue;
         }
         match self.select.event(event, context) {
             Some(Flow::Done(indices)) => {
@@ -734,10 +735,10 @@ fn open_nonblocking(path: &Path) -> std::io::Result<std::fs::File> {
 
 /// Read what [`FilePreview`] shows for `path`.
 fn read(path: &Path, jail: Option<&Path>) -> Shown {
-    if let Some(jail) = jail {
-        if !path.canonicalize().is_ok_and(|real| real.starts_with(jail)) {
-            return Shown::Note("outside the root".into());
-        }
+    if let Some(jail) = jail
+        && !path.canonicalize().is_ok_and(|real| real.starts_with(jail))
+    {
+        return Shown::Note("outside the root".into());
     }
     let metadata = match std::fs::metadata(path) {
         Ok(metadata) => metadata,
@@ -753,11 +754,7 @@ fn read(path: &Path, jail: Option<&Path>) -> Shown {
             .map(|entry| {
                 let dir = entry.file_type().is_ok_and(|kind| kind.is_dir());
                 let name = display_name(&entry.file_name());
-                if dir {
-                    format!("{name}/")
-                } else {
-                    name
-                }
+                if dir { format!("{name}/") } else { name }
             })
             .collect();
         names.sort_by_key(|name| name.to_lowercase());

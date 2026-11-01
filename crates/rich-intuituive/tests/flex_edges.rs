@@ -4,8 +4,8 @@
 mod common;
 
 use common::{run, screen};
-use intuituive::prelude::*;
 use intuituive::AlignContent;
+use intuituive::prelude::*;
 use rich_interact::headless::Script;
 
 fn show(app: App, width: u16, height: u16) -> Vec<String> {

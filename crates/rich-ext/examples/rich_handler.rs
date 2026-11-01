@@ -3,8 +3,8 @@
 use std::sync::Arc;
 
 use rich_ext::{
-    adapters::{EventLayer, LogAdapter},
     RichHandler,
+    adapters::{EventLayer, LogAdapter},
 };
 use tracing_subscriber::prelude::*;
 

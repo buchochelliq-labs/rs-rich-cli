@@ -12,16 +12,16 @@ use rich::{
 };
 use rich_ext::capabilities::{Capabilities, ColorDepth, MapEnvironment, Overrides};
 use rich_ext::qa::bench::{
-    bench_renderable_with, compare, Bench, BenchRun, CompareOptions, ComparisonView, Measurement,
-    Verdict,
+    Bench, BenchRun, CompareOptions, ComparisonView, Measurement, Verdict, bench_renderable_with,
+    compare,
 };
-use rich_ext::qa::explain::{explain, explain_with_report, EventKind, ExplanationView};
-use rich_ext::qa::fuzz::{fuzz, fuzz_with, Case, GenOptions, Invariants, Node, Rendered};
-use rich_ext::qa::lint::{lint, lint_markup, LintOptions, LintReport, Rule, Severity};
+use rich_ext::qa::explain::{EventKind, ExplanationView, explain, explain_with_report};
+use rich_ext::qa::fuzz::{Case, GenOptions, Invariants, Node, Rendered, fuzz, fuzz_with};
+use rich_ext::qa::lint::{LintOptions, LintReport, Rule, Severity, lint, lint_markup};
 use rich_ext::qa::matrix::{self, CapabilityProfile, CellStatus, Fixture};
-use rich_ext::qa::profile::{profile, CountingAllocator, ProfileOptions, ProfileReport};
-use rich_ext::qa::screenshot::{assert_screenshots_with, Encoding};
-use rich_ext::qa::stress::{stress, IssueKind, StressOptions};
+use rich_ext::qa::profile::{CountingAllocator, ProfileOptions, ProfileReport, profile};
+use rich_ext::qa::screenshot::{Encoding, assert_screenshots_with};
+use rich_ext::qa::stress::{IssueKind, StressOptions, stress};
 use rich_ext::qa::{Approvals, Matrix, Screenshot};
 use rich_ext::target::{RenderTarget, TargetKind};
 
@@ -299,10 +299,12 @@ fn stress_finds_broken_renderables() {
     let report = stress(&Clipper, &StressOptions::widths([5, 10, 40]));
     let clipped: Vec<usize> = report.of(IssueKind::Clipping).map(|i| i.width).collect();
     assert_eq!(clipped, [5, 10]);
-    assert!(report
-        .issues
-        .iter()
-        .any(|i| i.detail.contains("7 characters lost")));
+    assert!(
+        report
+            .issues
+            .iter()
+            .any(|i| i.detail.contains("7 characters lost"))
+    );
 
     // Wider than it measures is fine (an expanding panel is); failing to fit
     // at its own measured maximum is not.
@@ -483,9 +485,11 @@ fn lint_finds_each_rule() {
     assert_eq!(rules(&findings), [(Rule::NonAsciiGlyph, Severity::Warning)]);
 
     let findings = lint(&WidthIgnorer, &LintOptions::default());
-    assert!(findings
-        .iter()
-        .any(|f| f.rule == Rule::Overflow && f.severity == Severity::Error));
+    assert!(
+        findings
+            .iter()
+            .any(|f| f.rule == Rule::Overflow && f.severity == Severity::Error)
+    );
 }
 
 #[test]
@@ -496,11 +500,13 @@ fn lint_is_quiet_on_clean_input() {
     assert!(lint(&panel, &LintOptions::default()).is_empty());
     assert!(lint(&small_table(), &LintOptions::default()).is_empty());
     let theme = Theme::default_theme();
-    assert!(lint_markup(
-        "[bold]hi[/] [repr.number]1[/] [link=https://x.org]x[/]",
-        &theme
-    )
-    .is_empty());
+    assert!(
+        lint_markup(
+            "[bold]hi[/] [repr.number]1[/] [link=https://x.org]x[/]",
+            &theme
+        )
+        .is_empty()
+    );
 }
 
 #[test]
@@ -547,9 +553,11 @@ fn explain_reports_wrapping_and_truncation() {
     assert_eq!(e.natural_width, 45);
     let wrapped: Vec<&rich_ext::qa::explain::Event> = e.of(EventKind::Wrapped).collect();
     assert_eq!(wrapped.len(), 1);
-    assert!(wrapped[0]
-        .summary
-        .starts_with("source line 1 wrapped onto lines 1–"));
+    assert!(
+        wrapped[0]
+            .summary
+            .starts_with("source line 1 wrapped onto lines 1–")
+    );
     assert!(wrapped[0].lines.len() >= 4);
     assert!(!e.has(EventKind::Truncated));
 
@@ -639,9 +647,10 @@ fn explain_reports_colour_unicode_links_and_capabilities() {
         caps.iter().any(|c| c.starts_with("color = 256")),
         "{caps:?}"
     );
-    assert!(e
-        .of(EventKind::Capability)
-        .any(|c| c.summary.starts_with("width") && c.reason.contains("override")));
+    assert!(
+        e.of(EventKind::Capability)
+            .any(|c| c.summary.starts_with("width") && c.reason.contains("override"))
+    );
 
     let out = render(&ExplanationView::new(&e), 120);
     assert!(
@@ -751,19 +760,21 @@ fn fuzz_minimizes_a_failing_invariant() {
             assert!(small.node.to_rust().len() < f.case.node.to_rust().len());
             // The shrunk case still fails, and its reproduction says so.
             assert!(no_a.check(&small.node, small.width).is_some());
-            assert!(f
-                .minimized
-                .as_ref()
-                .unwrap()
-                .contains(&small.node.to_rust()));
+            assert!(
+                f.minimized
+                    .as_ref()
+                    .unwrap()
+                    .contains(&small.node.to_rust())
+            );
         }
     }
     assert!(shrunk * 2 >= report.failures.len(), "{shrunk}");
     // Shrinking usually gets to the single character that fails.
-    assert!(report.failures.iter().any(|f| f
-        .minimized_case
-        .as_ref()
-        .is_some_and(|m| matches!(&m.node, Node::Text(t) if t.markup() == "a"))));
+    assert!(report.failures.iter().any(|f| {
+        f.minimized_case
+            .as_ref()
+            .is_some_and(|m| matches!(&m.node, Node::Text(t) if t.markup() == "a"))
+    }));
 }
 
 fn widest(renderable: &dyn Renderable, width: usize) -> usize {

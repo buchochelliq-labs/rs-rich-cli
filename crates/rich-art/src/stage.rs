@@ -24,10 +24,10 @@
 use std::io::Write;
 use std::time::{Duration, Instant};
 
+use rich::Live;
 use rich::console::{Console, ConsoleOptions};
 use rich::protocol::Renderable;
 use rich::segment::Segment;
-use rich::Live;
 
 use crate::gif::{AnimatedArt, GifFrame};
 
@@ -84,13 +84,13 @@ impl Track {
         if self.frame >= count {
             self.frame = 0;
             self.passes += 1;
-            if let Some(total) = self.art.passes() {
-                if self.passes >= total {
-                    // Hold the last frame rather than snapping back to the first.
-                    self.frame = count - 1;
-                    self.finished = true;
-                    return false;
-                }
+            if let Some(total) = self.art.passes()
+                && self.passes >= total
+            {
+                // Hold the last frame rather than snapping back to the first.
+                self.frame = count - 1;
+                self.finished = true;
+                return false;
             }
         }
         let delay = self
@@ -302,8 +302,8 @@ impl Renderable for Row {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::gif::tests_support::make_gif;
     use crate::gif::Repeat;
+    use crate::gif::tests_support::make_gif;
 
     #[test]
     fn a_stage_composes_animations_side_by_side() {

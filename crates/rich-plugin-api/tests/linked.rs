@@ -1,7 +1,7 @@
 //! `export_plugin!` as a third-party crate uses it: the plugin is listed by
 //! `linked_plugins`, and each call makes a fresh instance.
 
-use rich_plugin_api::{linked_plugins, Plugin, PluginError, PluginMetadata, PluginRegistrar};
+use rich_plugin_api::{Plugin, PluginError, PluginMetadata, PluginRegistrar, linked_plugins};
 
 struct Greeter {
     greeting: &'static str,

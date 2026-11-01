@@ -16,7 +16,7 @@ use crate::node::{Axis, Node};
 use crate::reactive::Signal;
 use crate::screen::Rect;
 use crate::widget::{
-    markup_width, widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent,
+    Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, markup_width, widget,
 };
 
 /// How long a pause ends what was typed: the next letter starts afresh.

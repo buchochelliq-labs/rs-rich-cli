@@ -7,7 +7,7 @@ use rich::cells::cell_len;
 use rich::{Console, Justify, Overflow, Segment, Style, Text};
 
 use super::engine::diff_words;
-use super::{style, Layout};
+use super::{Layout, style};
 use crate::diagnostic::Level;
 
 /// What a displayed line is.
@@ -324,10 +324,12 @@ impl Gutter {
             for n in numbers {
                 let text = cell(n);
                 let mut st = ln.clone();
-                if first && n.is_some() && n == linked {
-                    if let Some(url) = &row.link {
-                        st = st.with_link(url.clone());
-                    }
+                if first
+                    && n.is_some()
+                    && n == linked
+                    && let Some(url) = &row.link
+                {
+                    st = st.with_link(url.clone());
                 }
                 out.push(Segment::new(text, Some(st)));
                 out.push(Segment::new(" ", None));

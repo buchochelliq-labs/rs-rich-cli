@@ -53,9 +53,11 @@ fn narrow_typed_events_preserve_values_without_hidden_clock() {
     for width in [1, 2, 20, 80] {
         let c = Console::builder().width(width).height(80).build();
         let lines = Segment::split_lines(&e.rich_render(&c, &c.options()));
-        assert!(lines
-            .iter()
-            .all(|r| r.iter().map(Segment::cell_length).sum::<usize>() <= width));
+        assert!(
+            lines
+                .iter()
+                .all(|r| r.iter().map(Segment::cell_length).sum::<usize>() <= width)
+        );
     }
 }
 

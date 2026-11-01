@@ -218,10 +218,10 @@ fn restrict_windows_acl(file: &cap_std::fs::File) -> io::Result<()> {
     use std::os::windows::io::AsRawHandle;
     use windows_sys::Win32::Foundation::LocalFree;
     use windows_sys::Win32::Security::Authorization::{
-        ConvertStringSecurityDescriptorToSecurityDescriptorW, SetSecurityInfo, SE_FILE_OBJECT,
+        ConvertStringSecurityDescriptorToSecurityDescriptorW, SE_FILE_OBJECT, SetSecurityInfo,
     };
     use windows_sys::Win32::Security::{
-        GetSecurityDescriptorDacl, DACL_SECURITY_INFORMATION, PROTECTED_DACL_SECURITY_INFORMATION,
+        DACL_SECURITY_INFORMATION, GetSecurityDescriptorDacl, PROTECTED_DACL_SECURITY_INFORMATION,
     };
     // OW is the Owner Rights SID; P disables inherited grants.
     let sddl: Vec<u16> = "D:P(A;;FA;;;OW)\0".encode_utf16().collect();

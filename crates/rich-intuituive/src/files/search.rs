@@ -8,10 +8,10 @@ use std::time::Duration;
 
 use crate::clock::Instant;
 
-use rich_ext::listing::{smart_contains, walk, Entry};
+use rich_ext::listing::{Entry, smart_contains, walk};
 
-use crate::reactive::{signal, Signal};
-use crate::task::{spawn_stream, Stream, Task};
+use crate::reactive::{Signal, signal};
+use crate::task::{Stream, Task, spawn_stream};
 
 /// The most results a search collects.
 const LIMIT: usize = 100_000;

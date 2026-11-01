@@ -85,10 +85,12 @@ fn completions_print_a_script_and_reject_unknown_shells() {
     assert!(output.stdout.is_empty());
     let report: serde_json::Value = serde_json::from_slice(&output.stderr).unwrap();
     assert_eq!(report["code"], "usage");
-    assert!(report["message"]
-        .as_str()
-        .unwrap()
-        .contains("unknown shell"));
+    assert!(
+        report["message"]
+            .as_str()
+            .unwrap()
+            .contains("unknown shell")
+    );
 }
 
 #[test]
@@ -146,10 +148,12 @@ fn config_explain_and_reference_run_without_a_config() {
     let output = run(&["config", "explain", "jbos", "--report", "json"]);
     assert_eq!(output.status.code(), Some(2));
     let report: serde_json::Value = serde_json::from_slice(&output.stderr).unwrap();
-    assert!(report["message"]
-        .as_str()
-        .unwrap()
-        .contains("did you mean jobs"));
+    assert!(
+        report["message"]
+            .as_str()
+            .unwrap()
+            .contains("did you mean jobs")
+    );
 
     let output = run(&["config", "reference"]);
     assert_eq!(output.status.code(), Some(0));

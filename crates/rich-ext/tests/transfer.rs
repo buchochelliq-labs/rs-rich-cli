@@ -9,8 +9,8 @@ use rich::{ColorSystem, Console, Progress};
 use rich_ext::a11y::SymbolSet;
 use rich_ext::cancel::CancelToken;
 use rich_ext::transfer::{
-    is_cancelled, transfer_columns, Clock, Direction, Transfer, TransferReader, TransferState,
-    TransferWriter, Transfers,
+    Clock, Direction, Transfer, TransferReader, TransferState, TransferWriter, Transfers,
+    is_cancelled, transfer_columns,
 };
 
 fn secs(n: u64) -> Duration {

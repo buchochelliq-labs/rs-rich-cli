@@ -8,7 +8,7 @@
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Overflow, Renderable, Segment, Style};
 
-use super::overflow::{fit_segments, OverflowPolicy};
+use super::overflow::{OverflowPolicy, fit_segments};
 
 /// Widths at or beyond this are treated as "no intrinsic width": the default
 /// `Renderable::measure` echoes whatever width it is offered.

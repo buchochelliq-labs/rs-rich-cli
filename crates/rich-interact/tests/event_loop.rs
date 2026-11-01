@@ -10,8 +10,8 @@ use rich::Segment;
 use rich_interact::headless::{self, Headless, Script};
 use rich_interact::policy::{Fallback, LineIo, NotInteractive, Reason, ScriptedLineIo};
 use rich_interact::{
-    degrade, Component, Context, Error, Event, EventLoop, Flow, KeyCode, LoopOptions, Outcome,
-    View, Viewport,
+    Component, Context, Error, Event, EventLoop, Flow, KeyCode, LoopOptions, Outcome, View,
+    Viewport, degrade,
 };
 
 /// Counts Up presses and ticks; Enter returns the count, Escape cancels,

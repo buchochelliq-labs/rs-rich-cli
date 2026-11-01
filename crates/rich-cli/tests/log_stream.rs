@@ -294,7 +294,9 @@ fn fields_and_times_change_how_a_record_shows() {
         .collect();
     assert_eq!(
         starts,
-        ["+0.000s", "+0.250s", "+1.100s", "+1.900s", "+2.000s", "+3.000s", "+4.000s", "+5.000s"]
+        [
+            "+0.000s", "+0.250s", "+1.100s", "+1.900s", "+2.000s", "+3.000s", "+4.000s", "+5.000s"
+        ]
     );
     let none = ok(&["--time", "none"], first);
     assert_eq!(
@@ -679,7 +681,7 @@ mod live {
     use std::sync::{Arc, Mutex};
     use std::time::{Duration, Instant};
 
-    use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+    use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 
     struct Pty {
         output: Arc<Mutex<Vec<u8>>>,

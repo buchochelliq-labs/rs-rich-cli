@@ -4,12 +4,12 @@
 use std::path::PathBuf;
 
 use rich::{ColorSystem, Console};
-use rich_ext::cli_doc::{
-    generate, markdown_view, suggest, to_man, to_man_pages, to_markdown, ArgSpec, CliError,
-    CommandSpec, CompletionCatalog, ConfigEntry, ConfigReference, HelpView, Layer, Precedence,
-    Shell, ValueHint,
-};
 use rich_ext::ConsoleExt;
+use rich_ext::cli_doc::{
+    ArgSpec, CliError, CommandSpec, CompletionCatalog, ConfigEntry, ConfigReference, HelpView,
+    Layer, Precedence, Shell, ValueHint, generate, markdown_view, suggest, to_man, to_man_pages,
+    to_markdown,
+};
 
 // --8<-- [start:spec]
 fn deploy_spec() -> CommandSpec {

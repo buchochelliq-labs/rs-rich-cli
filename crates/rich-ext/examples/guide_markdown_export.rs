@@ -5,7 +5,7 @@
 
 use rich::{Justify, Panel, Rule, Table, Text, Tree};
 use rich_ext::markdown_export::{
-    fit_github_comment, GfmDocument, GfmExporter, GfmOptions, PanelStyle,
+    GfmDocument, GfmExporter, GfmOptions, PanelStyle, fit_github_comment,
 };
 
 fn report() -> String {

@@ -36,11 +36,11 @@ use std::sync::Arc;
 use rich::{Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{fit, plain, question, text, Theme};
+use crate::components::{Theme, fit, plain, question, text};
 use crate::compose::{FOCUS_NEXT, FOCUS_PREVIOUS};
 use crate::datetime::{Date, DateTime, Time};
 use crate::event::{Button, Event, Key, KeyCode, MouseKind};
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::policy::{LineIo, NotInteractive};
 
 /// The keys of the date and time pickers, in context `date`. Tab and
@@ -287,26 +287,26 @@ impl Chooser {
     /// to the minute when the picker works to the minute.
     fn refusal(&self, at: DateTime) -> Option<String> {
         let at = self.shown(at);
-        if let (Some(earliest), Some(latest)) = (self.earliest(), self.latest()) {
-            if self.key_of(earliest) > self.key_of(latest) {
-                return Some(format!(
-                    "the range is empty: the earliest, {}, is after the latest, {}",
-                    self.earliest_text().unwrap_or_default(),
-                    self.format(latest)
-                ));
-            }
+        if let (Some(earliest), Some(latest)) = (self.earliest(), self.latest())
+            && self.key_of(earliest) > self.key_of(latest)
+        {
+            return Some(format!(
+                "the range is empty: the earliest, {}, is after the latest, {}",
+                self.earliest_text().unwrap_or_default(),
+                self.format(latest)
+            ));
         }
         let at_key = self.key_of(at);
-        if let Some(min) = self.min {
-            if at_key < self.key_of(min) {
-                let earliest = self.earliest_text().unwrap_or_default();
-                return Some(format!("the earliest is {earliest}"));
-            }
+        if let Some(min) = self.min
+            && at_key < self.key_of(min)
+        {
+            let earliest = self.earliest_text().unwrap_or_default();
+            return Some(format!("the earliest is {earliest}"));
         }
-        if let Some(max) = self.latest() {
-            if at_key > self.key_of(max) {
-                return Some(format!("the latest is {}", self.format(max)));
-            }
+        if let Some(max) = self.latest()
+            && at_key > self.key_of(max)
+        {
+            return Some(format!("the latest is {}", self.format(max)));
         }
         self.check.as_ref().and_then(|check| check(at).err())
     }
@@ -513,11 +513,7 @@ impl Chooser {
 
     /// Where the time row is, under the question (and the grid).
     fn time_row(&self) -> usize {
-        if self.has_date() {
-            GRID_TOP + WEEKS
-        } else {
-            1
-        }
+        if self.has_date() { GRID_TOP + WEEKS } else { 1 }
     }
 
     /// The day under a click at `column`, `row`, if a day is there.
@@ -566,11 +562,12 @@ impl Chooser {
                     }
                     self.value.date = day;
                     self.clicked = Some(day);
-                } else if self.has_time() && row == self.time_row() {
-                    if let Some(part) = self.field_at(column) {
-                        self.part = part;
-                        self.typed.clear();
-                    }
+                } else if self.has_time()
+                    && row == self.time_row()
+                    && let Some(part) = self.field_at(column)
+                {
+                    self.part = part;
+                    self.typed.clear();
                 }
             }
             MouseKind::ScrollUp | MouseKind::ScrollDown => {
@@ -603,11 +600,7 @@ impl Chooser {
 
     /// The text before the time fields.
     fn time_label(&self) -> &'static str {
-        if self.has_date() {
-            "  Time "
-        } else {
-            "  "
-        }
+        if self.has_date() { "  Time " } else { "  " }
     }
 
     /// The time's fields and their widths, with brackets round the
@@ -839,7 +832,7 @@ impl Chooser {
                         "no answer given ({})",
                         self.shape()
                     ))),
-                }
+                };
             }
         };
         let at = self.parse(&line).map_err(NotInteractive::Invalid)?;

@@ -47,12 +47,12 @@
 
 use arrow_array::cast::AsArray;
 use arrow_array::types::{
-    Date32Type, Date64Type, Decimal128Type, Decimal256Type, Decimal32Type, Decimal64Type,
+    Date32Type, Date64Type, Decimal32Type, Decimal64Type, Decimal128Type, Decimal256Type,
     DurationMicrosecondType, DurationMillisecondType, DurationNanosecondType, DurationSecondType,
-    Float16Type, Float32Type, Float64Type, Int16Type, Int32Type, Int64Type, Int8Type,
+    Float16Type, Float32Type, Float64Type, Int8Type, Int16Type, Int32Type, Int64Type,
     Time32MillisecondType, Time32SecondType, Time64MicrosecondType, Time64NanosecondType,
     TimestampMicrosecondType, TimestampMillisecondType, TimestampNanosecondType,
-    TimestampSecondType, UInt16Type, UInt32Type, UInt64Type, UInt8Type,
+    TimestampSecondType, UInt8Type, UInt16Type, UInt32Type, UInt64Type,
 };
 use arrow_array::{Array, RecordBatch};
 use arrow_schema::{DataType as Arrow, Field as ArrowField, TimeUnit};

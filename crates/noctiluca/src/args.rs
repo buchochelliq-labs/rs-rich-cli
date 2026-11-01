@@ -280,24 +280,32 @@ mod tests {
             panic!()
         };
         assert!(args.no_adapt);
-        assert!(parse(&["--adapt", "-sparkles"])
-            .unwrap_err()
-            .contains("not an adaptation"));
+        assert!(
+            parse(&["--adapt", "-sparkles"])
+                .unwrap_err()
+                .contains("not an adaptation")
+        );
     }
 
     #[test]
     fn bad_switches_say_what_is_wrong() {
-        assert!(parse(&["--reader", "--raster"])
-            .unwrap_err()
-            .contains("choose one"));
-        assert!(parse(&["--images", "png"])
-            .unwrap_err()
-            .contains("ansi, kitty"));
+        assert!(
+            parse(&["--reader", "--raster"])
+                .unwrap_err()
+                .contains("choose one")
+        );
+        assert!(
+            parse(&["--images", "png"])
+                .unwrap_err()
+                .contains("ansi, kitty")
+        );
         assert!(parse(&["--fps", "0"]).is_err());
         assert!(parse(&["--profile", "../x"]).is_err());
-        assert!(parse(&["--dump", "text"])
-            .unwrap_err()
-            .contains("needs a page"));
+        assert!(
+            parse(&["--dump", "text"])
+                .unwrap_err()
+                .contains("needs a page")
+        );
         assert!(parse(&["--nope"]).unwrap_err().contains("unknown switch"));
         let Run::Browse(args) = parse(&["--", "--reader"]).unwrap() else {
             panic!()

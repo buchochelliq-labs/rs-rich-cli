@@ -7,15 +7,15 @@
 use std::fmt;
 use std::rc::Rc;
 
-use rich::style::StyleType;
 use rich::Style;
+use rich::style::StyleType;
 use rich_interact::{Button, KeyCode, MouseKind};
 
 pub use rich_interact::datetime::{Date, DateTime, Time};
 
 use crate::node::{Axis, Node};
 use crate::reactive::Signal;
-use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
+use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, widget};
 
 /// A day of the week, for [`CalendarOptions::first_weekday`].
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]
@@ -1009,11 +1009,7 @@ impl YearOptions {
 
     /// The rows above the months.
     fn top(&self) -> u16 {
-        if self.heading {
-            2
-        } else {
-            0
-        }
+        if self.heading { 2 } else { 0 }
     }
 
     /// The height of the year `across` months across.

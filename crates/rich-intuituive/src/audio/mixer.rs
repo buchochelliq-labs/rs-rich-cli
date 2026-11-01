@@ -330,10 +330,10 @@ impl std::fmt::Debug for Voice {
 impl Voice {
     fn with(&self, f: impl FnOnce(&mut Option<Playing>)) {
         let mut core = lock(&self.core);
-        if let Some(slot) = core.voices.get_mut(self.channel) {
-            if slot.as_ref().is_some_and(|v| v.serial == self.serial) {
-                f(slot);
-            }
+        if let Some(slot) = core.voices.get_mut(self.channel)
+            && slot.as_ref().is_some_and(|v| v.serial == self.serial)
+        {
+            f(slot);
         }
     }
 

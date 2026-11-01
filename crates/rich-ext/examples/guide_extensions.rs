@@ -200,7 +200,7 @@ fn main() {
         |b| b.highlight(false).build(),
         |console| {
             // --8<-- [start:encoding]
-            use rich_ext::encoding::{has_utf16_bom, Encoding};
+            use rich_ext::encoding::{Encoding, has_utf16_bom};
 
             let bytes = [0xff, 0xfe, b'h', 0, b'i', 0]; // UTF-16LE with a BOM
             assert!(has_utf16_bom(&bytes));

@@ -7,10 +7,10 @@ use rich::measure::Measurement;
 use rich::{AnsiDecoder, Console, ConsoleOptions, Renderable, Segment, Style, Text, Theme};
 
 use super::engine::{
-    diff_lines, group_ranges, hunk_header, split_lines_inclusive, strip_eol, Op, TextDiff,
+    Op, TextDiff, diff_lines, group_ranges, hunk_header, split_lines_inclusive, strip_eol,
 };
 use super::render::{self, Block, Kind, Options, Row};
-use super::{style, Layout};
+use super::{Layout, style};
 
 /// Which side of a diff.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

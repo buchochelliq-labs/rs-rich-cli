@@ -31,7 +31,7 @@ use std::sync::Arc;
 use std::time::Duration;
 
 use intuituive::prelude::*;
-use intuituive::widgets::{table_optional, Column, TableOptions};
+use intuituive::widgets::{Column, TableOptions, table_optional};
 
 /// A pull request.
 #[derive(Clone, Debug, PartialEq, Eq)]

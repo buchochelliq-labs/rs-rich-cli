@@ -86,10 +86,10 @@ impl Emoji {
     /// retried without variation selectors, else its first character.
     fn glyph(face: &Face<'_>, text: &str) -> Option<GlyphId> {
         let glyphs: Option<Vec<GlyphId>> = text.chars().map(|c| face.glyph_index(c)).collect();
-        if let Some(glyphs) = glyphs.filter(|g| g.len() > 1) {
-            if let Some(ligature) = Self::ligature(face, &glyphs) {
-                return Some(ligature);
-            }
+        if let Some(glyphs) = glyphs.filter(|g| g.len() > 1)
+            && let Some(ligature) = Self::ligature(face, &glyphs)
+        {
+            return Some(ligature);
         }
         let bare: String = text.chars().filter(|c| *c != '\u{fe0f}').collect();
         if bare != text {

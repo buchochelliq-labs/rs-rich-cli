@@ -5,8 +5,8 @@ use std::time::{Duration, Instant};
 
 use rich::{ColorSystem, Console, Renderable, Segment};
 use rich_ext::capabilities::{Capabilities, CapabilityReport, ColorDepth, MapEnvironment};
-use rich_ext::diff::git::{parse_unified, LinkProvider, PatchHunk, PatchView, TemplateLinks};
-use rich_ext::env_inspect::{is_secret_name, EnvView};
+use rich_ext::diff::git::{LinkProvider, PatchHunk, PatchView, TemplateLinks, parse_unified};
+use rich_ext::env_inspect::{EnvView, is_secret_name};
 use rich_ext::hex::HexView;
 use rich_ext::source_view::SourceView;
 use rich_ext::unicode_inspect::{Kind, UnicodeView};
@@ -326,7 +326,7 @@ fn capability_report_escapes_environment_values() {
 #[cfg(feature = "test-report")]
 mod reports {
     use super::*;
-    use rich_ext::diff::test_report::{junit, libtest, TestReport};
+    use rich_ext::diff::test_report::{TestReport, junit, libtest};
 
     #[test]
     fn junit_decoded_controls_render_inert() {

@@ -11,7 +11,7 @@
 //! w3m is not part of this crate: install it (`apt install w3m`,
 //! `brew install w3m`) or name another browser in `RICH_EMBED_BROWSER`.
 
-use rich_embed::{terminal, web_view_with, ProgramEngine, BROWSER_VARIABLE};
+use rich_embed::{BROWSER_VARIABLE, ProgramEngine, terminal, web_view_with};
 use rich_intuituive as intuituive;
 
 use intuituive::prelude::*;

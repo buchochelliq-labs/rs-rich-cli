@@ -203,10 +203,12 @@ mod tests {
             .adjustment_table()
         };
         let identity = table(1.0, 1.0, 1.0);
-        assert!(identity
-            .iter()
-            .enumerate()
-            .all(|(i, &v)| usize::from(v) == i));
+        assert!(
+            identity
+                .iter()
+                .enumerate()
+                .all(|(i, &v)| usize::from(v) == i)
+        );
         assert_eq!(table(2.0, 1.0, 1.0)[100], 200);
         assert_eq!(table(2.0, 1.0, 1.0)[200], 255);
         assert_eq!(table(0.0, 1.0, 1.0)[200], 0);

@@ -1,7 +1,7 @@
 //! The demo loop's seventh round's bugs (0.0.21 workstream 1): each test is
 //! the minimal failing case from its clone's report in `docs/design/gaps/`.
 
-use intuituive::command_line::{command_line, CommandLine, Mode};
+use intuituive::command_line::{CommandLine, Mode, command_line};
 use intuituive::prelude::*;
 
 /// tasks: a `cx.focus(x)` just before `cx.modal(..)` is where the focus

@@ -14,13 +14,13 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::rc::Rc;
 use std::sync::atomic::{AtomicBool, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
 use notify::{EventKind, RecursiveMode, Watcher};
 
 use crate::app::Ctx;
-use crate::reactive::{signal, Runtime};
+use crate::reactive::{Runtime, signal};
 
 /// What happened to a path.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]

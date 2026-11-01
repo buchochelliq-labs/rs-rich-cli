@@ -24,17 +24,17 @@
 use std::fmt::Write as _;
 use std::sync::Arc;
 
-use rich::cells::cell_len;
 use rich::r#box::{
-    Box as BoxSet, ASCII, DOUBLE, HEAVY, HEAVY_HEAD, MINIMAL, ROUNDED, SIMPLE, SQUARE,
+    ASCII, Box as BoxSet, DOUBLE, HEAVY, HEAVY_HEAD, MINIMAL, ROUNDED, SIMPLE, SQUARE,
 };
+use rich::cells::cell_len;
 use rich::{
     Align, ColumnOptions, Columns, Console, ConsoleOptions, Justify, Overflow, Padding, Panel,
     Renderable, Segment, Table, Text, Tree,
 };
 
 use super::{
-    measure_shortfall, panic_message, plain_lines, plural, table_then_line, visible_width, Probe,
+    Probe, measure_shortfall, panic_message, plain_lines, plural, table_then_line, visible_width,
 };
 
 /// SplitMix64: small, fast and good enough for test-case generation.
@@ -1045,18 +1045,20 @@ impl Invariants {
             }
         };
         let lines = plain_lines(&segments);
-        if self.fits_width && width >= node.floor() && !node.allows_overflow() {
-            if let Some((i, l)) = lines.iter().enumerate().find(|(_, l)| cell_len(l) > width) {
-                return Some((
-                    "fits_width".into(),
-                    format!(
-                        "line {} is {} cells wide at width {width}: {:?}",
-                        i + 1,
-                        cell_len(l),
-                        l.trim_end()
-                    ),
-                ));
-            }
+        if self.fits_width
+            && width >= node.floor()
+            && !node.allows_overflow()
+            && let Some((i, l)) = lines.iter().enumerate().find(|(_, l)| cell_len(l) > width)
+        {
+            return Some((
+                "fits_width".into(),
+                format!(
+                    "line {} is {} cells wide at width {width}: {:?}",
+                    i + 1,
+                    cell_len(l),
+                    l.trim_end()
+                ),
+            ));
         }
         if self.deterministic {
             match render() {
@@ -1065,13 +1067,13 @@ impl Invariants {
                     return Some((
                         "deterministic".into(),
                         "a second render differs from the first".into(),
-                    ))
+                    ));
                 }
                 Err(message) => {
                     return Some((
                         "deterministic".into(),
                         format!("a second render panicked: {message}"),
-                    ))
+                    ));
                 }
             }
         }
@@ -1088,13 +1090,13 @@ impl Invariants {
                     return Some((
                         "measure_bounds".into(),
                         format!("measure panicked: {}", panic_message(payload)),
-                    ))
+                    ));
                 }
                 Ok(m) if m.minimum > m.maximum => {
                     return Some((
                         "measure_bounds".into(),
                         format!("measure minimum {} > maximum {}", m.minimum, m.maximum),
-                    ))
+                    ));
                 }
                 Ok(m) => {
                     // Wider than it measures is fine for an expanding panel or

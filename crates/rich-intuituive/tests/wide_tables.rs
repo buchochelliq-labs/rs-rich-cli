@@ -8,7 +8,7 @@ use std::time::Duration;
 use intuituive::interact::headless::{Headless, Script};
 use intuituive::interact::{Event, Modifiers, Mouse, MouseKind};
 use intuituive::prelude::*;
-use intuituive::widgets::{table, table_with, virtual_table_with, Column, TableOptions};
+use intuituive::widgets::{Column, TableOptions, table, table_with, virtual_table_with};
 
 /// Natural widths 2, 12, 8, 14 and 16: `id` at 0, `name` 3, `city` 16,
 /// `country` 25 and `notes` 40, 56 cells in all.

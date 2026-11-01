@@ -32,7 +32,7 @@ const RATE: f64 = 8.0;
 /// Record the first video's frames of `page` into `out`.
 fn frames(out: &std::path::Path, page: &std::path::Path) -> std::io::Result<()> {
     use noctiluca::engine::{MediaOp, PageAction};
-    use noctiluca::model::{build, MediaKind, Revisions};
+    use noctiluca::model::{MediaKind, Revisions, build};
     let mut engine = ChromeBackend::start(ChromeOptions {
         binary: std::env::var_os("RICH_EMBED_CHROME").map(PathBuf::from),
         columns: 100,
@@ -45,13 +45,12 @@ fn frames(out: &std::path::Path, page: &std::path::Path) -> std::io::Result<()> 
         std::thread::sleep(Duration::from_millis(200));
         if let Ok(snapshot) = engine.snapshot(TabId(0)) {
             let model = build(&snapshot, &mut Revisions::new());
-            if let Some(v) = model.media.iter().find(|m| m.kind == MediaKind::Video) {
-                if engine
+            if let Some(v) = model.media.iter().find(|m| m.kind == MediaKind::Video)
+                && engine
                     .playback(TabId(0), v.node)
                     .is_ok_and(|p| p.ready >= 2)
-                {
-                    break v.clone();
-                }
+            {
+                break v.clone();
             }
         }
         if start.elapsed() > Duration::from_secs(30) {
@@ -164,7 +163,9 @@ fn main() -> std::io::Result<()> {
         ..ChromeOptions::default()
     })?;
     if cost {
-        println!("page | snapshot ms | DOM nodes | layout boxes | snapshot KiB | AX ms | AX nodes | AX KiB");
+        println!(
+            "page | snapshot ms | DOM nodes | layout boxes | snapshot KiB | AX ms | AX nodes | AX KiB"
+        );
     }
     for page in args {
         let page = PathBuf::from(page);

@@ -212,7 +212,7 @@ impl RichHandler {
     pub fn level_text(severity: Severity) -> Text {
         let name = match severity {
             Severity::Trace => {
-                return Text::styled(format!("{:<8}", "TRACE"), "logging.level.notset")
+                return Text::styled(format!("{:<8}", "TRACE"), "logging.level.notset");
             }
             Severity::Debug => "DEBUG",
             Severity::Info => "INFO",
@@ -416,25 +416,24 @@ fn neutralise(segments: &[Segment]) -> Vec<Segment> {
             {
                 segment.text = crate::sanitize_terminal_controls(&segment.text).into();
             }
-            if let Some(style) = &segment.style {
-                if let Some(link) = style
+            if let Some(style) = &segment.style
+                && let Some(link) = style
                     .link()
                     .filter(|link| link.chars().any(char::is_control))
-                {
-                    use std::fmt::Write as _;
-                    let mut encoded = String::with_capacity(link.len());
-                    for c in link.chars() {
-                        if c.is_control() {
-                            let mut bytes = [0; 4];
-                            for byte in c.encode_utf8(&mut bytes).bytes() {
-                                let _ = write!(encoded, "%{byte:02X}");
-                            }
-                        } else {
-                            encoded.push(c);
+            {
+                use std::fmt::Write as _;
+                let mut encoded = String::with_capacity(link.len());
+                for c in link.chars() {
+                    if c.is_control() {
+                        let mut bytes = [0; 4];
+                        for byte in c.encode_utf8(&mut bytes).bytes() {
+                            let _ = write!(encoded, "%{byte:02X}");
                         }
+                    } else {
+                        encoded.push(c);
                     }
-                    segment.style = Some(style.update_link(Some(encoded)));
                 }
+                segment.style = Some(style.update_link(Some(encoded)));
             }
             segment
         })
@@ -443,11 +442,7 @@ fn neutralise(segments: &[Segment]) -> Vec<Segment> {
 
 /// One tree level: `│ ` (or `| ` in ASCII).
 fn guide(ascii: bool) -> &'static str {
-    if ascii {
-        "| "
-    } else {
-        "│ "
-    }
+    if ascii { "| " } else { "│ " }
 }
 
 /// `name{a=1 b=2}` (or `name a=1 b=2`, with `open` = `" "` and `close` = `""`),

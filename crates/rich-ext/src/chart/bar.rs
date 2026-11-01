@@ -8,8 +8,8 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 use super::axis::exact_labels;
 use super::scale::{along, clean};
 use super::{
-    cell_units, cells, has_colour, lines_to_segments, theme_style, truncate, user_style, Charset,
-    Line, Scale, ValueFormat,
+    Charset, Line, Scale, ValueFormat, cell_units, cells, has_colour, lines_to_segments,
+    theme_style, truncate, user_style,
 };
 
 mod stacked;

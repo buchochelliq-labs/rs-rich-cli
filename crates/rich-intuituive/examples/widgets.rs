@@ -43,15 +43,15 @@
 //! - **Only what changes redraws:** a key in a tab draws that tab's widget,
 //!   not the tab strip or the rest (`tests/widgets_gallery.rs` checks it).
 
-use rich_ext::palette::tailwind::{Palette, BLUE, EMERALD, INDIGO, RED, SLATE};
+use rich_ext::palette::tailwind::{BLUE, EMERALD, INDIGO, Palette, RED, SLATE};
 
 use intuituive::border::Shadow as ShadowKind;
 use intuituive::prelude::*;
 use intuituive::widgets::{
-    month, table_with, tabs, CalendarOptions, Column, Date, ListDirection, Scrollbar,
-    ScrollbarSymbols, Show, Side, TableOptions, Weekday,
+    CalendarOptions, Column, Date, ListDirection, Scrollbar, ScrollbarSymbols, Show, Side,
+    TableOptions, Weekday, month, table_with, tabs,
 };
-use intuituive::{scroll_both_with, ModalOptions, Sides};
+use intuituive::{ModalOptions, Sides, scroll_both_with};
 
 /// The tabs, in order: 1 to 9, then 0 for the tenth.
 pub const TABS: [&str; 10] = [

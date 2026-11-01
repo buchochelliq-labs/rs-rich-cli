@@ -332,7 +332,7 @@ fn parse_args(args: &[String]) -> Result<Command, String> {
                     other => {
                         return Err(format!(
                             "--symbols takes unicode, ascii or words, not {other:?}"
-                        ))
+                        ));
                     }
                 });
                 "--symbols"
@@ -353,7 +353,7 @@ fn parse_args(args: &[String]) -> Result<Command, String> {
                     other => {
                         return Err(format!(
                             "--links takes auto, always or never, not {other:?}"
-                        ))
+                        ));
                     }
                 };
                 "--links"
@@ -400,7 +400,7 @@ fn parse_args(args: &[String]) -> Result<Command, String> {
         Some(other) => {
             return Err(format!(
                 "unknown shell command {other:?}; use init, status or link"
-            ))
+            ));
         }
     };
     if let Some(flag) = flags.iter().find(|flag| !allowed.contains(flag)) {
@@ -955,7 +955,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                 json,
                 ExitClass::Usage,
                 &format!("{message} (try `rich shell --help`)"),
-            )
+            );
         }
     };
     let text = match command {

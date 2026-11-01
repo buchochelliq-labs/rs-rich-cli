@@ -282,9 +282,11 @@ mod tests {
 
     #[test]
     fn explain_is_none_for_an_unknown_key() {
-        assert!(Precedence::new()
-            .layer(Layer::new("a"))
-            .explain("nope")
-            .is_none());
+        assert!(
+            Precedence::new()
+                .layer(Layer::new("a"))
+                .explain("nope")
+                .is_none()
+        );
     }
 }

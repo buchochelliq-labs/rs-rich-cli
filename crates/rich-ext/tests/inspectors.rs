@@ -5,10 +5,10 @@ use std::path::Path;
 use rich::cells::cell_len;
 use rich::{ColorSystem, Console, Renderable};
 use rich_ext::env_inspect::{
-    is_path_like, is_secret_name, name_matches, EnvView, PathKind, PathStatus, PathView,
+    EnvView, PathKind, PathStatus, PathView, is_path_like, is_secret_name, name_matches,
 };
-use rich_ext::hex::{find_all, parse_needle, ByteClass, HexView};
-use rich_ext::unicode_inspect::{classify, control_picture, Kind, UnicodeView};
+use rich_ext::hex::{ByteClass, HexView, find_all, parse_needle};
+use rich_ext::unicode_inspect::{Kind, UnicodeView, classify, control_picture};
 
 fn render(r: &dyn Renderable, width: usize, ascii: bool) -> String {
     let c = Console::builder()

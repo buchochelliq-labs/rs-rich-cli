@@ -8,7 +8,7 @@
 //! The field names and rounding deliberately match the oracle's `*.json`
 //! sidecar so the two can be diffed directly.
 
-use rich_art::imagediff::{diff, DiffSettings};
+use rich_art::imagediff::{DiffSettings, diff};
 
 fn main() {
     let args: Vec<String> = std::env::args().skip(1).collect();

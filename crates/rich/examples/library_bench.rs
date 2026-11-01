@@ -3,7 +3,7 @@ use std::hash::{Hash, Hasher};
 use std::hint::black_box;
 use std::time::Instant;
 
-use rich::{r#box::SQUARE, ColorSystem, Console, Justify, Panel, Style, Table, Text};
+use rich::{ColorSystem, Console, Justify, Panel, Style, Table, Text, r#box::SQUARE};
 use serde_json::json;
 
 fn digest(text: &str) -> String {

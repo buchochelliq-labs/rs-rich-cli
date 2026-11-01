@@ -8,8 +8,8 @@
 //! upstream reads to detect a dumb terminal.
 
 use std::io::Write;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use rich::color::ColorSystem;
 use rich::console::Console;
@@ -272,9 +272,14 @@ fn parity_live() {
             serde_json::from_str(parts.next().expect("expected")).expect("expected json");
 
         let term = std::env::var_os("TERM");
-        match case["term"].as_str() {
-            Some(value) => std::env::set_var("TERM", value),
-            None => std::env::set_var("TERM", "xterm-256color"),
+        // SAFETY: this binary's only test; the cases run one after another,
+        // and each display has stopped before `TERM` changes again.
+        #[allow(unsafe_code)]
+        unsafe {
+            match case["term"].as_str() {
+                Some(value) => std::env::set_var("TERM", value),
+                None => std::env::set_var("TERM", "xterm-256color"),
+            }
         }
         let now = Arc::new(AtomicU64::new(0f64.to_bits()));
         let clock = now.clone();
@@ -296,9 +301,13 @@ fn parity_live() {
             "status" => run_status(&case, console, &mut files, &now),
             other => panic!("unknown kind {other:?}"),
         };
-        match term {
-            Some(value) => std::env::set_var("TERM", value),
-            None => std::env::remove_var("TERM"),
+        // SAFETY: as above.
+        #[allow(unsafe_code)]
+        unsafe {
+            match term {
+                Some(value) => std::env::set_var("TERM", value),
+                None => std::env::remove_var("TERM"),
+            }
         }
         let got = vec![
             String::from_utf8(output).expect("utf-8"),

@@ -99,12 +99,12 @@ pub(crate) use player::play;
 #[cfg(feature = "art")]
 mod player {
     use super::AnimationControls;
+    use rich::Live;
     use rich::console::{Console, ConsoleOptions};
     use rich::protocol::Renderable;
     use rich::segment::Segment;
-    use rich::Live;
-    use rich_art::gif::GifFrame;
     use rich_art::AnimatedArt;
+    use rich_art::gif::GifFrame;
     use std::io::Write;
     use std::time::{Duration, Instant};
 

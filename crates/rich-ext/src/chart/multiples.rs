@@ -5,8 +5,8 @@ use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment};
 
 use super::{
-    has_colour, lines_to_segments, theme_style, truncate, wrap_entries, BarChart, Charset, Chart,
-    Line, LineChart, Scale, Sparkline, ValueFormat,
+    BarChart, Charset, Chart, Line, LineChart, Scale, Sparkline, ValueFormat, has_colour,
+    lines_to_segments, theme_style, truncate, wrap_entries,
 };
 
 /// The narrowest cell [`SmallMultiples`] picks its columns by, by default.

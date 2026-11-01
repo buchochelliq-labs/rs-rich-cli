@@ -46,15 +46,15 @@ use std::rc::Rc;
 use std::sync::atomic::{AtomicUsize, Ordering as Atomic};
 use std::sync::{Arc, Mutex, RwLock};
 
-use intuituive::command_line::{command_line, CommandLine, Mode as Line};
+use intuituive::command_line::{CommandLine, Mode as Line, command_line};
 use intuituive::prelude::*;
 use intuituive::rich::markup::escape;
 use intuituive::rich::{Style, Text};
 use intuituive::widgets::{
-    view_of, virtual_table_with, Column, Order, RowCount, Scrollbar, Show, TableLayout,
-    TableOptions, TableSource, View, ViewQuery,
+    Column, Order, RowCount, Scrollbar, Show, TableLayout, TableOptions, TableSource, View,
+    ViewQuery, view_of, virtual_table_with,
 };
-use intuituive::{rule, spawn_stream, HelpOptions};
+use intuituive::{HelpOptions, rule, spawn_stream};
 use rich_ext::transform::{HighlightMatches, KeepLines, Pattern, TextTransform};
 
 // ---------------------------------------------------------------------
@@ -426,7 +426,10 @@ fn pattern(re: &str, ignore_case: bool) -> String {
 }
 
 /// A row test for the view: a match of `re` in a cell.
-fn row_test(re: &str, ignore_case: bool) -> Option<impl Fn(&[String]) -> bool + Send + Sync> {
+fn row_test(
+    re: &str,
+    ignore_case: bool,
+) -> Option<impl Fn(&[String]) -> bool + Send + Sync + use<>> {
     let pattern = Pattern::new(&pattern(re, ignore_case)).ok()?;
     Some(move |cells: &[String]| {
         // A cell at a time, each one line, so a match never runs from one
@@ -1389,7 +1392,7 @@ fn main() -> io::Result<()> {
         None => {
             return Err(invalid(
                 "usage: csv [OPTIONS] FILE (or pipe a CSV in)".into(),
-            ))
+            ));
         }
     };
     options.name = if stdin {

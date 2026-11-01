@@ -26,12 +26,12 @@
 
 use std::time::Duration;
 
+use intuituive::Easing;
 use intuituive::interact::{Key, KeyCode};
 use intuituive::node::Axis;
 use intuituive::prelude::*;
 use intuituive::screen::Rect;
-use intuituive::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
-use intuituive::Easing;
+use intuituive::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, widget};
 
 /// One meter's data, shared by the clock that feeds it and the widget that
 /// draws it.

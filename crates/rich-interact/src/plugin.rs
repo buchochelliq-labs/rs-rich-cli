@@ -72,10 +72,10 @@ use std::panic::AssertUnwindSafe;
 use std::time::Duration;
 
 use rich::Style;
+use rich_ext::plugin::PluginComponent;
 use rich_ext::plugin::component::{
     ComponentBinding, ComponentContext, ComponentEvent, ComponentFlow,
 };
-use rich_ext::plugin::PluginComponent;
 use rich_ext::registry::ExtensionRegistry;
 
 use crate::component::{Component, Context, Flow, View};

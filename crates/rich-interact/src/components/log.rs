@@ -43,13 +43,13 @@ use rich::cells::cell_len;
 use rich::{Segment, Style};
 use rich_ext::event::{Severity, Value};
 use rich_ext::log_stream::{
-    format_offset, Assembler, Predicate, Record, TimeMode, LEVEL_KEYS, MESSAGE_KEYS, TIME_KEYS,
+    Assembler, LEVEL_KEYS, MESSAGE_KEYS, Predicate, Record, TIME_KEYS, TimeMode, format_offset,
 };
 
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{fit, plain, text, Theme};
+use crate::components::{Theme, fit, plain, text};
 use crate::event::{Event, KeyCode};
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::kit::TextBuffer;
 use crate::policy::{LineIo, NotInteractive};
 
@@ -353,15 +353,15 @@ impl LogView {
     }
 
     fn add_row(&mut self, entry: usize) {
-        if self.collapse {
-            if let Some(last) = self.rows.last().map(|row| row.entry) {
-                let repeats = self.entry(last).record.same_as(&self.entry(entry).record);
-                if repeats {
-                    if let Some(row) = self.rows.last_mut() {
-                        row.count += 1;
-                    }
-                    return;
+        if self.collapse
+            && let Some(last) = self.rows.last().map(|row| row.entry)
+        {
+            let repeats = self.entry(last).record.same_as(&self.entry(entry).record);
+            if repeats {
+                if let Some(row) = self.rows.last_mut() {
+                    row.count += 1;
                 }
+                return;
             }
         }
         self.rows.push(Row { entry, count: 1 });
@@ -1011,8 +1011,8 @@ fn words(filter: &str) -> Vec<String> {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::headless::{self, Script};
     use crate::Outcome;
+    use crate::headless::{self, Script};
     use std::sync::mpsc;
 
     fn record(level: &str, message: &str, second: u32) -> Record {

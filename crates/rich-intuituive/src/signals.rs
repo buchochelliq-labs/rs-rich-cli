@@ -9,7 +9,7 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use crate::app::Ctx;
-use crate::reactive::{on_write_map, signal, watch, Memo, Runtime, Signal};
+use crate::reactive::{Memo, Runtime, Signal, on_write_map, signal, watch};
 
 /// Back and forward through the values a signal has had, as a browser's
 /// history, a pager's or a file manager's: [`history`] makes one. A `Copy`

@@ -449,11 +449,7 @@ fn sorting_is_stable_for_any_keys() {
                 } else {
                     SortKey::desc(column)
                 };
-                if rng.next(4) == 0 {
-                    key.lexical()
-                } else {
-                    key
-                }
+                if rng.next(4) == 0 { key.lexical() } else { key }
             })
             .collect();
         let order = sorted_indices(&rows, &keys);

@@ -414,10 +414,12 @@ fn a_view_action_key_picks_directly_and_the_menu_opens_on_a_chosen_key() {
         .actions(actions)
         .menu_key(Key::parse("f2").unwrap());
     let (_, record) = headless::run(&mut select, Script::new().keys("f2 esc esc"), 60, 12);
-    assert!(record
-        .frames
-        .iter()
-        .any(|frame| frame.contains("enter run")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("enter run"))
+    );
 }
 
 #[test]

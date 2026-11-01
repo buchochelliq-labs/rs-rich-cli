@@ -10,8 +10,8 @@ pub fn run(app: App, script: Script, width: u16, height: u16) -> Record {
     let record = backend.record();
     app.run_on(&mut backend)
         .expect("the app runs to the end of its script");
-    let record = record.borrow().clone();
-    record
+
+    record.borrow().clone()
 }
 
 /// Run until the script runs out, with the app still open.
@@ -20,8 +20,8 @@ pub fn run_open(app: App, script: Script, width: u16, height: u16) -> Record {
     let record = backend.record();
     let ended = app.run_on(&mut backend).expect_err("the app is still open");
     assert_eq!(ended.kind(), std::io::ErrorKind::UnexpectedEof);
-    let record = record.borrow().clone();
-    record
+
+    record.borrow().clone()
 }
 
 /// The last frame's rows, without trailing spaces.

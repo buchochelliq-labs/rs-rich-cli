@@ -13,7 +13,7 @@
 #![allow(unsafe_code)]
 
 use std::collections::VecDeque;
-use std::ffi::{c_char, c_int, CStr};
+use std::ffi::{CStr, c_char, c_int};
 use std::sync::Mutex;
 
 use alsa_sys::{__va_list_tag, snd_lib_error_set_local, snd_local_error_handler_t};

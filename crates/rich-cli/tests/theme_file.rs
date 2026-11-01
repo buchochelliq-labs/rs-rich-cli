@@ -86,7 +86,9 @@ fn config_themes_and_theme_style_override_the_theme_file() {
     };
     assert!(render(&[]).contains("color: #800000"));
     assert!(render(&["--theme", "cool"]).contains("color: #000080"));
-    assert!(render(&["--theme", "cool", "--theme-style", "alert=green"]).contains("color: #008000"));
+    assert!(
+        render(&["--theme", "cool", "--theme-style", "alert=green"]).contains("color: #008000")
+    );
     assert!(render(&["--theme-style", "alert=green"]).contains("color: #008000"));
 }
 

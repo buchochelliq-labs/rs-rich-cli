@@ -6,7 +6,7 @@ use rich::measure::Measurement;
 use rich::{Color, Console, ConsoleOptions, Renderable, Segment, Style};
 
 use super::{
-    cell_units, cells, has_colour, lines_to_segments, theme_style, user_style, Charset, Line,
+    Charset, Line, cell_units, cells, has_colour, lines_to_segments, theme_style, user_style,
 };
 use crate::fidelity::ascii_text;
 

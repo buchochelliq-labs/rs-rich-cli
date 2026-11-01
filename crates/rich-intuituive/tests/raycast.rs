@@ -8,8 +8,8 @@ mod raycast;
 
 use std::time::Duration;
 
-use intuituive::interact::{Event, Key, Releases};
 use intuituive::Driver;
+use intuituive::interact::{Event, Key, Releases};
 use raycast::*;
 
 const W: u16 = 80;
@@ -425,10 +425,11 @@ fn a_shot_into_a_wall_hits_nothing() {
     driver.advance(tics(20));
     let game = probe.game.borrow();
     assert_eq!(game.player.ammo, 49);
-    assert!(game
-        .things
-        .iter()
-        .all(|t| t.kind != Kind::Enemy || t.health == 30));
+    assert!(
+        game.things
+            .iter()
+            .all(|t| t.kind != Kind::Enemy || t.health == 30)
+    );
 }
 
 #[test]

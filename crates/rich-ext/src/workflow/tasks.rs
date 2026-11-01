@@ -50,7 +50,7 @@ use std::time::Duration;
 
 use rich::{Console, ConsoleOptions, Overflow, Renderable, Segment, Text};
 
-use super::{render_texts, span, Clock, Look, State, SystemClock};
+use super::{Clock, Look, State, SystemClock, render_texts, span};
 use crate::a11y::{AccessibilityPolicy, SymbolSet};
 use crate::cancel::CancelToken;
 

@@ -14,7 +14,7 @@ use std::path::PathBuf;
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use common::{connect, read_until, running, wait_for, TOKEN};
+use common::{TOKEN, connect, read_until, running, wait_for};
 use tungstenite::{Message, WebSocket};
 
 /// An example, built next to the test binaries, in `examples/`.

@@ -150,12 +150,7 @@ impl DiagnosticsDashboard {
         }
         let mut rows: Vec<_> = by_code.into_iter().collect();
         // Most frequent first; ties by level, then code.
-        rows.sort_by(|a, b| {
-            b.1 .0
-                .cmp(&a.1 .0)
-                .then(a.1 .1.cmp(&b.1 .1))
-                .then(a.0.cmp(b.0))
-        });
+        rows.sort_by(|a, b| b.1.0.cmp(&a.1.0).then(a.1.1.cmp(&b.1.1)).then(a.0.cmp(b.0)));
         let mut table = Table::new().title("Top codes");
         table.add_column("Code");
         table.add_column_justify("Count", Justify::Right);

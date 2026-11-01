@@ -6,10 +6,10 @@ use std::process::ExitCode;
 use std::time::Duration;
 
 use noctiluca::actions::{self, ACTIONS};
-use noctiluca::args::{parse_args, Args, Run, USAGE};
+use noctiluca::args::{Args, Run, USAGE, parse_args};
 use noctiluca::bookmarks::{self, Bookmarks};
 use noctiluca::cdp::{ChromeBackend, ChromeOptions};
-use noctiluca::config::{data_dir, Config, View};
+use noctiluca::config::{Config, View, data_dir};
 use noctiluca::engine::Engine;
 use noctiluca::file_url;
 

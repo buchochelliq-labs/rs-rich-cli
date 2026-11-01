@@ -2,8 +2,8 @@
 //! `UPDATE_SNAPSHOTS=1` to rewrite them after a deliberate change, then
 //! review the diff.
 
-use rich::cells::cell_len;
 use rich::Console;
+use rich::cells::cell_len;
 use rich_diagram::er::{Cardinality, Column, Entity, ErDiagram, ErModel, Group, Relationship};
 use rich_diagram::{Direction, Shape};
 

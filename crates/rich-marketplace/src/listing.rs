@@ -560,11 +560,7 @@ fn abi_number(text: &str) -> Option<u32> {
         && text.len() <= 9
         && text.bytes().all(|b| b.is_ascii_digit())
         && (text == "0" || !text.starts_with('0'));
-    if valid {
-        text.parse().ok()
-    } else {
-        None
-    }
+    if valid { text.parse().ok() } else { None }
 }
 
 fn requires(kind: Kind, value: Option<&Value>, at: &str) -> Result<Requires, ListingError> {
@@ -623,13 +619,13 @@ fn artifact(kind: Kind, value: Option<&Value>, at: &str) -> Result<Artifact, Lis
     }
     let size_at = format!("{at}.size");
     let size = positive_integer(map.get("size"), &size_at)?;
-    if let Some(max) = kind.max_artifact_bytes() {
-        if size > max {
-            return Err(invalid(
-                &size_at,
-                &format!("larger than the {max} bytes a {kind} may be"),
-            ));
-        }
+    if let Some(max) = kind.max_artifact_bytes()
+        && size > max
+    {
+        return Err(invalid(
+            &size_at,
+            &format!("larger than the {max} bytes a {kind} may be"),
+        ));
     }
     Ok(Artifact {
         url: url.to_string(),
@@ -771,7 +767,7 @@ fn version(kind: Kind, value: &Value, at: &str) -> Result<ListedVersion, Listing
             return Err(invalid(
                 &format!("{at}.source_revision"),
                 "not a full Git commit (40 or 64 lowercase hex digits)",
-            ))
+            ));
         }
     };
     if kind == Kind::WasmPlugin && source_revision.is_none() {
@@ -788,14 +784,14 @@ fn version(kind: Kind, value: &Value, at: &str) -> Result<ListedVersion, Listing
             return Err(invalid(
                 &format!("{at}.yank_reason"),
                 "required when yanked",
-            ))
+            ));
         }
         (Some(Value::Bool(false)) | None, None) => None,
         (Some(Value::Bool(false)) | None, Some(_)) => {
             return Err(invalid(
                 &format!("{at}.yank_reason"),
                 "only for a yanked version",
-            ))
+            ));
         }
         (Some(_), _) => return Err(invalid(&format!("{at}.yanked"), "not a boolean")),
     };

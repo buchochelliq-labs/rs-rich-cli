@@ -1,12 +1,12 @@
 //! `stepped_worker`: a worker thread stepped by the app's clock, exactly
 //! under the driver.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use intuituive::prelude::*;
-use intuituive::{stepped_worker, stepped_worker_with, Lockstep};
+use intuituive::{Lockstep, stepped_worker, stepped_worker_with};
 
 const TIC: Duration = Duration::from_nanos(1_000_000_000 / 35);
 

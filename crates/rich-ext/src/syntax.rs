@@ -24,8 +24,8 @@ use std::sync::Arc;
 use std::thread::JoinHandle;
 use std::time::{Duration, Instant};
 
-use rich::protocol::CodeHighlighter;
 use rich::SyntectHighlighter;
+use rich::protocol::CodeHighlighter;
 
 /// A few lines of code-like text: enough to try the main patterns of most
 /// grammars (keywords, strings, numbers, comments, brackets).

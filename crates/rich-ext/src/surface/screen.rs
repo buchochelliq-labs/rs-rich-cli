@@ -980,21 +980,22 @@ impl Screen {
             if simple && !controls {
                 // A character a grapheme: straight into cells.
                 let mut chars = text.chars();
-                if !lead.is_empty() && !cut {
-                    if let Some(c) = chars.next() {
-                        lead.push(c);
-                        let piece = std::mem::take(&mut lead);
-                        self.put_grapheme(
-                            rect,
-                            &mut x,
-                            y,
-                            &piece,
-                            char_width(c),
-                            id,
-                            &mut last,
-                            &mut cut,
-                        );
-                    }
+                if !lead.is_empty()
+                    && !cut
+                    && let Some(c) = chars.next()
+                {
+                    lead.push(c);
+                    let piece = std::mem::take(&mut lead);
+                    self.put_grapheme(
+                        rect,
+                        &mut x,
+                        y,
+                        &piece,
+                        char_width(c),
+                        id,
+                        &mut last,
+                        &mut cut,
+                    );
                 }
                 for c in chars {
                     if cut {
@@ -1906,10 +1907,10 @@ impl Painter {
     /// terminal if the region would pass its bottom, and clear them.
     fn reserve(&mut self, height: u16) -> String {
         let mut out = String::from("\x1b[0m");
-        if let Some((_, y)) = self.cursor {
-            if y > 0 {
-                out.push_str(&format!("\x1b[{y}A"));
-            }
+        if let Some((_, y)) = self.cursor
+            && y > 0
+        {
+            out.push_str(&format!("\x1b[{y}A"));
         }
         out.push('\r');
         if height > 1 {
@@ -2071,15 +2072,15 @@ impl Painter {
             for (start, end) in spans {
                 // A span the same as what was sent is passed over whole: a
                 // row of cells compares as one slice.
-                if !self.force {
-                    if let Some(previous) = &self.previous {
-                        let width = screen.width as usize;
-                        let row = y as usize * width;
-                        let span = row + start as usize..row + end as usize;
-                        if previous.cells[span.clone()] == screen.cells[span] {
-                            self.stats.compared += usize::from(end - start);
-                            continue;
-                        }
+                if !self.force
+                    && let Some(previous) = &self.previous
+                {
+                    let width = screen.width as usize;
+                    let row = y as usize * width;
+                    let span = row + start as usize..row + end as usize;
+                    if previous.cells[span.clone()] == screen.cells[span] {
+                        self.stats.compared += usize::from(end - start);
+                        continue;
                     }
                 }
                 self.paint_span(screen, y, start, end, &mut pen, out);
@@ -2353,20 +2354,20 @@ impl Painter {
         }
         while x < end {
             // Past the cells the same as what was sent, a run at a time.
-            if !self.force {
-                if let Some(previous) = &self.previous {
-                    let row = y as usize * screen.width as usize;
-                    let (from, to) = (row + x as usize, row + end as usize);
-                    let same = previous.cells[from..to]
-                        .iter()
-                        .zip(&screen.cells[from..to])
-                        .take_while(|(sent, now)| sent == now)
-                        .count();
-                    self.stats.compared += same;
-                    x += same as u16;
-                    if x >= end {
-                        break;
-                    }
+            if !self.force
+                && let Some(previous) = &self.previous
+            {
+                let row = y as usize * screen.width as usize;
+                let (from, to) = (row + x as usize, row + end as usize);
+                let same = previous.cells[from..to]
+                    .iter()
+                    .zip(&screen.cells[from..to])
+                    .take_while(|(sent, now)| sent == now)
+                    .count();
+                self.stats.compared += same;
+                x += same as u16;
+                if x >= end {
+                    break;
                 }
             }
             let mut x0 = x;
@@ -2379,12 +2380,14 @@ impl Painter {
             if self.erase && !self.inline && self.plain_blank(screen, x0, y) {
                 // Blanks the pen would skip on its way here join the run,
                 // so the erase starts where the pen is.
-                if let Some((fx, fy)) = pen.at {
-                    if fy == y && fx < x0 && (fx..x0).all(|gx| self.plain_blank(screen, gx, y)) {
-                        self.stats.compared += usize::from(x0 - fx);
-                        x = fx;
-                        x0 = fx;
-                    }
+                if let Some((fx, fy)) = pen.at
+                    && fy == y
+                    && fx < x0
+                    && (fx..x0).all(|gx| self.plain_blank(screen, gx, y))
+                {
+                    self.stats.compared += usize::from(x0 - fx);
+                    x = fx;
+                    x0 = fx;
                 }
                 let mut run = 1;
                 while x0 + run < end && self.plain_blank(screen, x0 + run, y) {
@@ -2539,17 +2542,16 @@ impl Painter {
         }
         // A colour pair (no link) in true colour while no link is open:
         // straight to the colours.
-        if pen.link.is_none() {
-            if let (Some(pair), Some(ColorSystem::Truecolor), Some(old)) =
+        if pen.link.is_none()
+            && let (Some(pair), Some(ColorSystem::Truecolor), Some(old)) =
                 (screen.styles.rgb(style), self.system, pen.rgb)
-            {
-                if old != pair {
-                    rgb_delta(old, pair, self.rgb_codes.get(style, pair), out);
-                }
-                pen.rgb = Some(pair);
-                pen.style = Some(style);
-                return;
+        {
+            if old != pair {
+                rgb_delta(old, pair, self.rgb_codes.get(style, pair), out);
             }
+            pen.rgb = Some(pair);
+            pen.style = Some(style);
+            return;
         }
         let resolved = screen.style(style);
         // A URL holding a control would end the OSC early and drive the

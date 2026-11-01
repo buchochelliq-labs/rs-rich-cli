@@ -10,8 +10,8 @@
 mod widgets;
 
 use intuituive::interact::{Button, Event, Key, KeyCode, Mouse, MouseKind};
-use intuituive::{assert_screen, assert_screen_styled, Driver};
-use widgets::{widgets_app, Options, LINK, SECRET, TABS};
+use intuituive::{Driver, assert_screen, assert_screen_styled};
+use widgets::{LINK, Options, SECRET, TABS, widgets_app};
 
 const WIDTH: u16 = 80;
 const HEIGHT: u16 = 24;

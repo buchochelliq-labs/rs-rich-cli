@@ -6,7 +6,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::{Duration, Instant};
 
-use rich_embed::{terminal, ExitStatus, LocalPty, PtyHost};
+use rich_embed::{ExitStatus, LocalPty, PtyHost, terminal};
 use rich_intuituive::prelude::*;
 
 #[test]

@@ -10,7 +10,7 @@ use std::fmt;
 use guide_support::Shots;
 
 // --8<-- [start:imports]
-use rich::{level_text, Console, LogLevel, LogRecord, LogRender, Text, Traceback};
+use rich::{Console, LogLevel, LogRecord, LogRender, Text, Traceback, level_text};
 // --8<-- [end:imports]
 
 fn main() {

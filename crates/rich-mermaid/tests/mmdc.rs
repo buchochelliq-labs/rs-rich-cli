@@ -6,10 +6,10 @@ use std::path::PathBuf;
 use std::sync::Arc;
 use std::time::{Duration, Instant};
 
+use rich::Console;
 use rich::color::ColorSystem;
 use rich::protocol::{ConsoleEnvironment, RenderEnvironment, Support, TargetCapabilities};
-use rich::Console;
-use rich_mermaid::mmdc::{render_png, MmdcError, MmdcOptions};
+use rich_mermaid::mmdc::{MmdcError, MmdcOptions, render_png};
 use rich_mermaid::{Backend, Mermaid, MermaidOptions};
 
 const FLOWCHART: &str = "graph LR\n  A --> B";
@@ -378,7 +378,7 @@ mod interrupt {
     use std::process::Command;
     use std::time::{Duration, Instant};
 
-    use rich_mermaid::mmdc::{render_png, MmdcOptions};
+    use rich_mermaid::mmdc::{MmdcOptions, render_png};
 
     const CHILD: &str = "RICH_MERMAID_INTERRUPT_CHILD";
 

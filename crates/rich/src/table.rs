@@ -24,10 +24,10 @@
 
 use std::sync::Arc;
 
+use crate::r#box::{Box as BoxSet, HEAVY_HEAD, RowLevel};
 use crate::console::{Console, ConsoleOptions, Justify, Overflow};
 use crate::measure::Measurement;
 use crate::protocol::{LineRenderable, Renderable};
-use crate::r#box::{Box as BoxSet, RowLevel, HEAVY_HEAD};
 use crate::ratio::{ratio_distribute, ratio_reduce};
 use crate::segment::Segment;
 use crate::style::{Style, StyleType};
@@ -1409,11 +1409,9 @@ impl Table {
                 .unwrap_or_else(|| column.map(|c| c.no_wrap).unwrap_or(false));
             // Header content carries its own style span over `header_style`; the
             // justify/edge padding stays `header_style` (matches upstream).
-            if is_header {
-                if let Some(span) = column.and_then(|c| c.header_content_style.clone()) {
-                    let len = text.plain().len();
-                    text.stylize(span, 0, len);
-                }
+            if is_header && let Some(span) = column.and_then(|c| c.header_content_style.clone()) {
+                let len = text.plain().len();
+                text.stylize(span, 0, len);
             }
             // Upstream renders the cell as `Padding(renderable, …)` through
             // `render_lines`: a zero-width content area renders no lines
@@ -1868,7 +1866,7 @@ fn collapse_widths(mut widths: Vec<i64>, wrapable: &[bool], max_width: i64) -> V
             let max_column = widths
                 .iter()
                 .zip(wrapable)
-                .filter(|(_, &w)| w)
+                .filter(|&(_, &w)| w)
                 .map(|(&x, _)| x)
                 .max()
                 .unwrap_or(0);
@@ -1918,8 +1916,8 @@ mod tests {
     }
 
     use super::*;
-    use crate::color::ColorSystem;
     use crate::r#box::SQUARE;
+    use crate::color::ColorSystem;
 
     #[test]
     fn text_cells_are_never_markup() {

@@ -40,7 +40,7 @@ use rich::table::Table;
 use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Text};
 use serde_json::Value;
 
-use super::{check_count, clean, compare_versions, stack, stack_measure, theme_style, DepsError};
+use super::{DepsError, check_count, clean, compare_versions, stack, stack_measure, theme_style};
 
 pub use super::policy::{Conflict, ConflictMode, Finding, Policy, PolicyReport};
 pub use super::sbom::Sbom;

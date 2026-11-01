@@ -12,7 +12,7 @@ mod git;
 use std::path::{Path, PathBuf};
 use std::process::Command;
 
-use git::{git_app, hunk_patch, FileTree, Git, Kind};
+use git::{FileTree, Git, Kind, git_app, hunk_patch};
 use intuituive::{App, Driver};
 
 /// No global or system git configuration: what the tests see is the
@@ -20,9 +20,15 @@ use intuituive::{App, Driver};
 fn isolate() {
     static ONCE: std::sync::Once = std::sync::Once::new();
     ONCE.call_once(|| {
-        std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
-        std::env::set_var("GIT_CONFIG_GLOBAL", "/dev/null");
-        std::env::set_var("GIT_EDITOR", "true");
+        // SAFETY: set once, and the tests read the environment only
+        // through `std::process`, which holds std's environment lock while
+        // it copies it for git.
+        #[allow(unsafe_code)]
+        unsafe {
+            std::env::set_var("GIT_CONFIG_NOSYSTEM", "1");
+            std::env::set_var("GIT_CONFIG_GLOBAL", "/dev/null");
+            std::env::set_var("GIT_EDITOR", "true");
+        }
     });
 }
 
@@ -156,10 +162,12 @@ fn the_status_tab_shows_both_trees_and_the_diff() {
     assert!(screen_has(&d, "┌@@ -0,0 +1 @@"));
     assert!(screen_has(&d, "└+a note"));
     // The key bar, in gitui's look: the focused list's keys first.
-    assert!(rows(&d)
-        .last()
-        .unwrap()
-        .starts_with("Stage [⏎] Stage All [a] Reset [D]"));
+    assert!(
+        rows(&d)
+            .last()
+            .unwrap()
+            .starts_with("Stage [⏎] Stage All [a] Reset [D]")
+    );
 }
 
 #[test]

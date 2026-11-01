@@ -6,13 +6,13 @@
 
 use std::time::{Duration, Instant};
 
-use intuituive::finder::{fuzzy_list_with, FuzzyOptions, FuzzySource};
+use intuituive::finder::{FuzzyOptions, FuzzySource, fuzzy_list_with};
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::miller::{MillerOptions, MillerSource, Move};
 use intuituive::prelude::*;
-use intuituive::widgets::{seg, seg_gauge, status_bar, tabs, HighlightLayer};
+use intuituive::widgets::{HighlightLayer, seg, seg_gauge, status_bar, tabs};
 use intuituive::{
-    digits, facts, list_search, miller_of, multi_select, tab_set, tabs_for, Driver, Mark,
+    Driver, Mark, digits, facts, list_search, miller_of, multi_select, tab_set, tabs_for,
 };
 
 fn rows(driver: &Driver) -> Vec<String> {
@@ -574,8 +574,7 @@ fn m_remembered() -> Option<String> {
     driver.press("x");
     driver.press("y");
     driver.press("z");
-    let value = out.borrow().clone();
-    value
+    out.borrow().clone()
 }
 
 /// A fuzzy list on the first screen leaves Esc to the app: there is no

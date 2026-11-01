@@ -5,7 +5,7 @@
 
 use std::process::Command;
 use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::time::{Duration, Instant};
 
 use intuituive::interact::headless::{Headless, Script};

@@ -220,11 +220,7 @@ impl Literal {
             && text
                 .chars()
                 .all(|c| c.is_ascii_digit() || matches!(c, '-' | '+' | '.' | 'e' | 'E'));
-        if numeric {
-            text.parse().ok()
-        } else {
-            None
-        }
+        if numeric { text.parse().ok() } else { None }
     }
 
     /// The text, cut to 40 characters with `…`.

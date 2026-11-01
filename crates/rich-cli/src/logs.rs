@@ -23,7 +23,7 @@ use rich_ext::log_stream::{
 };
 use rich_ext::redact::Redactor;
 
-use super::{fail, fs_path, structured_log, success, viewers, Cli, ExitClass, ExitCode};
+use super::{Cli, ExitClass, ExitCode, fail, fs_path, structured_log, success, viewers};
 
 /// `--output`'s value.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -271,15 +271,15 @@ pub(super) fn run(cli: &Cli, console: &Console) -> ExitCode {
     if viewers::redact_preview(&cli.viewers) {
         return preview(cli, console, path, redactor.as_ref());
     }
-    if options.interactive {
-        if let Some(code) = interactive(cli, console, redactor.clone()) {
-            return code;
-        }
+    if options.interactive
+        && let Some(code) = interactive(cli, console, redactor.clone())
+    {
+        return code;
     }
     let mut stream = Stream::new(cli, console, redactor);
     let read = match path {
         Some(_) if options.follow && cfg!(target_os = "wasi") => {
-            return fail(cli, ExitClass::Usage, crate::host::unavailable("--follow"))
+            return fail(cli, ExitClass::Usage, crate::host::unavailable("--follow"));
         }
         Some(path) if options.follow => return follow(cli, path, stream),
         Some(path) => read_file(&fs_path(path), &mut stream),
@@ -733,10 +733,10 @@ fn interactive(cli: &Cli, console: &Console, redactor: Option<Redactor>) -> Opti
     // A worker reading standard input may wait on it for good: it is
     // joined only once it has finished. One reading or following a file
     // stops on its own (the view is gone, or `done` is set).
-    if !from_stdin || worker.is_finished() {
-        if let Ok((_, Some(summary))) = worker.join() {
-            console.print(&summary);
-        }
+    if (!from_stdin || worker.is_finished())
+        && let Ok((_, Some(summary))) = worker.join()
+    {
+        console.print(&summary);
     }
     Some(code)
 }
@@ -977,17 +977,16 @@ impl<'a> Stream<'a> {
         if let Some(record) = self.assembler.flush() {
             self.record(record)?;
         }
-        if self.terminal {
-            if let Some(repeat) = self.collapser.as_ref().and_then(Collapser::current) {
-                if self.live_repeat != Some(repeat.count) {
-                    if self.live_repeat.is_some() {
-                        // Up one line and clear it: the count grows in place.
-                        self.out.write_all(b"\x1b[1A\x1b[2K")?;
-                    }
-                    self.live_repeat = Some(repeat.count);
-                    self.repeat(&repeat, self.indent())?;
-                }
+        if self.terminal
+            && let Some(repeat) = self.collapser.as_ref().and_then(Collapser::current)
+            && self.live_repeat != Some(repeat.count)
+        {
+            if self.live_repeat.is_some() {
+                // Up one line and clear it: the count grows in place.
+                self.out.write_all(b"\x1b[1A\x1b[2K")?;
             }
+            self.live_repeat = Some(repeat.count);
+            self.repeat(&repeat, self.indent())?;
         }
         self.out.flush()
     }
@@ -1044,11 +1043,7 @@ impl<'a> Stream<'a> {
 
     /// The indent of a record: under a group header, two.
     fn indent(&self) -> usize {
-        if self.live_group.is_some() {
-            2
-        } else {
-            0
-        }
+        if self.live_group.is_some() { 2 } else { 0 }
     }
 
     /// A repeat run ended: its count, unless it was written in place
@@ -1136,10 +1131,10 @@ impl<'a> Stream<'a> {
     fn write_record(&mut self, record: &Record, indent: usize) -> io::Result<()> {
         if self.jsonl {
             let mut json = structured_log::to_json(record);
-            if !record.continuation.is_empty() {
-                if let Some(object) = json.as_object_mut() {
-                    object.insert("continuation".into(), record.continuation.clone().into());
-                }
+            if !record.continuation.is_empty()
+                && let Some(object) = json.as_object_mut()
+            {
+                object.insert("continuation".into(), record.continuation.clone().into());
             }
             serde_json::to_writer(&mut self.out, &json)?;
             return self.out.write_all(b"\n");
@@ -1527,15 +1522,21 @@ mod tests {
     fn options_parse_and_check() {
         let options = parse(&["--level", "warn+", "--level", "debug", "--where", "a=1"]).unwrap();
         assert_eq!(options.levels.unwrap().to_string(), "warn+,debug");
-        assert!(parse(&["--level", "loud"])
-            .unwrap_err()
-            .contains("unknown level"));
-        assert!(parse(&["--where", "=x"])
-            .unwrap_err()
-            .starts_with("--where:"));
-        assert!(parse(&["--group", "host"])
-            .unwrap_err()
-            .contains("trace, span"));
+        assert!(
+            parse(&["--level", "loud"])
+                .unwrap_err()
+                .contains("unknown level")
+        );
+        assert!(
+            parse(&["--where", "=x"])
+                .unwrap_err()
+                .starts_with("--where:")
+        );
+        assert!(
+            parse(&["--group", "host"])
+                .unwrap_err()
+                .contains("trace, span")
+        );
         // A number is `rich hex`'s.
         assert_eq!(parse(&["--group", "4"]).unwrap_err(), "not mine: --group");
         assert_eq!(
@@ -1547,10 +1548,12 @@ mod tests {
         assert!(parse(&["--time", "soon"]).is_err());
         assert!(parse(&["--output", "csv"]).is_err());
         let jsonl = parse(&["--output", "jsonl", "--fields"]).unwrap();
-        assert!(jsonl
-            .validate(Some("a.log"))
-            .unwrap_err()
-            .contains("--output jsonl"));
+        assert!(
+            jsonl
+                .validate(Some("a.log"))
+                .unwrap_err()
+                .contains("--output jsonl")
+        );
         let follow = parse(&["-f"]).unwrap();
         assert!(follow.validate(None).is_err());
         assert!(follow.validate(Some("-")).is_err());
@@ -1558,13 +1561,17 @@ mod tests {
         assert!(follow.collapses() && !follow.summarises());
         let grouped = parse(&["--group", "trace"]).unwrap();
         assert!(grouped.summarises() && !grouped.collapses());
-        assert!(!parse(&["--group", "trace", "--no-summary"])
-            .unwrap()
-            .summarises());
-        assert!(parse(&["-i", "--group", "trace"])
-            .unwrap()
-            .validate(None)
-            .is_err());
+        assert!(
+            !parse(&["--group", "trace", "--no-summary"])
+                .unwrap()
+                .summarises()
+        );
+        assert!(
+            parse(&["-i", "--group", "trace"])
+                .unwrap()
+                .validate(None)
+                .is_err()
+        );
         assert_eq!(
             parse(&["--where", "a=1"]).unwrap().given(),
             [("--where", &["log"][..])]

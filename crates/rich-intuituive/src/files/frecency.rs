@@ -6,7 +6,7 @@ use std::path::{Path, PathBuf};
 
 use super::miller::Miller;
 use crate::reactive::watch;
-use crate::state::{frecency_session, frecency_store, FrecencyStore};
+use crate::state::{FrecencyStore, frecency_session, frecency_store};
 
 /// The app name intuiTUIve's own state is kept under ([`state_dir`]).
 const APP: &str = "intuituive";

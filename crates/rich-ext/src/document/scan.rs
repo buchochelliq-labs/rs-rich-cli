@@ -133,7 +133,7 @@ pub(crate) fn dedent(line: &str, columns: usize) -> String {
                     "{}{}",
                     " ".repeat(column.saturating_sub(columns)),
                     &line[index..]
-                )
+                );
             }
         }
     }

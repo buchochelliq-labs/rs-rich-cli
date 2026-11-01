@@ -7,8 +7,8 @@ use std::time::Duration;
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::prelude::*;
 use intuituive::{
-    button, checkbox, collapsible, radio, select_field, slider, spinner, switch_toggle,
-    ButtonVariant, Driver,
+    ButtonVariant, Driver, button, checkbox, collapsible, radio, select_field, slider, spinner,
+    switch_toggle,
 };
 
 fn rows(driver: &Driver) -> Vec<String> {

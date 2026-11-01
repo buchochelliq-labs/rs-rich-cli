@@ -20,10 +20,10 @@ use std::time::{Duration, Instant};
 
 use rich_interact::policy::Policy;
 use rich_interact::{
-    run, BackendKind, Button, Component, Context, Event, Flow, Key, Modifiers, Mouse, MouseKind,
-    Output, RunOptions, SessionOptions, View,
+    BackendKind, Button, Component, Context, Event, Flow, Key, Modifiers, Mouse, MouseKind, Output,
+    RunOptions, SessionOptions, View, run,
 };
-use support::{assert_restored, suspends_and_resumes, Pty};
+use support::{Pty, assert_restored, suspends_and_resumes};
 
 /// Reports each event on standard error. `d` finishes, `p` panics, `e`
 /// hands the terminal to `sh -c 'echo handed-off'`.

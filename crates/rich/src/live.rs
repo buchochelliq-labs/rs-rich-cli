@@ -1621,9 +1621,9 @@ mod tests {
         // Route through a shared buffer so we can inspect it after the drop.
         let auto = Live::spawn(Box::new(Text::new("only")), console, Vec::<u8>::new(), 0.1);
         drop(auto); // no explicit stop
-                    // If Drop didn't join the thread, this test would still pass
-                    // but leak the thread; the assertion is simply that drop
-                    // returns without panicking / deadlocking.
+        // If Drop didn't join the thread, this test would still pass
+        // but leak the thread; the assertion is simply that drop
+        // returns without panicking / deadlocking.
     }
     /// One sink shared across threads, as nested displays share a terminal.
     #[derive(Clone, Default)]

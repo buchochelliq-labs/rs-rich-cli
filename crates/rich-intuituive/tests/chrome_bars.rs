@@ -11,8 +11,8 @@ use std::time::Duration;
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::prelude::*;
 use intuituive::widgets::{
-    breadcrumb, cell, cells, key_hints, list_lazy, list_rows, live, seg, status_bar, tabs, Caps,
-    HighlightLayer, ListRow,
+    Caps, HighlightLayer, ListRow, breadcrumb, cell, cells, key_hints, list_lazy, list_rows, live,
+    seg, status_bar, tabs,
 };
 use intuituive::{Driver, Solver};
 

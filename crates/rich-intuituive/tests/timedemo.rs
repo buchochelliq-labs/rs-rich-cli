@@ -109,11 +109,12 @@ fn a_timedemo_replays_a_tape() {
     let demo = slow_app().timedemo(script, w, h);
     // The first frame and four presses; the app quit before the last.
     assert_eq!(demo.frames.len(), 5, "{demo}");
-    assert!(demo
-        .frames
-        .iter()
-        .skip(1)
-        .all(|f| f.draw >= Duration::from_millis(5)));
+    assert!(
+        demo.frames
+            .iter()
+            .skip(1)
+            .all(|f| f.draw >= Duration::from_millis(5))
+    );
     let text = demo.to_string();
     assert!(text.starts_with("5 frames in "), "{text}");
 }

@@ -1047,7 +1047,7 @@ impl Reader {
                         return Err(SqlError::new(
                             token.line,
                             format!("{table}.{}: REFERENCES needs a table", name.value),
-                        ))
+                        ));
                     }
                 }
                 at = skip_reference(part, at);

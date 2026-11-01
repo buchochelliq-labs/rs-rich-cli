@@ -13,7 +13,7 @@
 use rich_intuituive::prelude::*;
 
 use crate::actions::keys_label;
-use crate::app::{current_media, Browser};
+use crate::app::{Browser, current_media};
 use crate::clean::{markup, truncate};
 use crate::config::Images;
 use crate::engine::Playback;

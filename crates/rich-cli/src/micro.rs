@@ -21,7 +21,7 @@ use super::*;
 use std::sync::Arc;
 
 use rich_ext::cli_doc::{ArgSpec, CommandSpec};
-use rich_micro::create::{package_path, write_package, PackageSpec};
+use rich_micro::create::{PackageSpec, package_path, write_package};
 use rich_micro::package::{self as micro_package, Loaded};
 use rich_micro::pipeline::{Magnified, Pipeline, Transparency};
 use rich_micro::{
@@ -387,7 +387,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
     let request = match request(args) {
         Ok(request) => request,
         Err(message) => {
-            return emit_error(json, ExitClass::Usage, &format!("{message} (try --help)"))
+            return emit_error(json, ExitClass::Usage, &format!("{message} (try --help)"));
         }
     };
     let roots = ConfigRoots::default();
@@ -655,7 +655,7 @@ fn list(context: &Context, request: &Request) -> Result<(), Failure> {
         Some(other) => {
             return Err(usage(format!(
                 "--layer: {other:?} is not built-in, user or project"
-            )))
+            )));
         }
     };
     let (registry, report) = context.registry();
@@ -832,7 +832,7 @@ fn pipeline(request: &Request) -> Result<Pipeline, Failure> {
             other => {
                 return Err(usage(format!(
                     "--fit: {other:?} is not contain, cover or stretch"
-                )))
+                )));
             }
         };
     }
@@ -891,7 +891,7 @@ fn pipeline(request: &Request) -> Result<Pipeline, Failure> {
             other => {
                 return Err(usage(format!(
                     "--colors: {other:?} is not truecolor, 256, 16 or grayscale"
-                )))
+                )));
             }
         };
     }
@@ -1166,7 +1166,7 @@ fn add(context: &Context, request: &Request) -> Result<(), Failure> {
                 "{} is a pack ({}); use `rich micro install`",
                 source.display(),
                 pack.name
-            )))
+            )));
         }
     };
     let (registry, _) = MicroRegistry::load(
@@ -1556,10 +1556,10 @@ fn markup_registry(trusted: bool) -> Arc<MicroRegistry> {
     static LOADED: std::sync::Mutex<Option<(bool, Arc<MicroRegistry>)>> =
         std::sync::Mutex::new(None);
     let mut loaded = LOADED.lock().unwrap_or_else(|e| e.into_inner());
-    if let Some((was, registry)) = loaded.as_ref() {
-        if *was == trusted {
-            return Arc::clone(registry);
-        }
+    if let Some((was, registry)) = loaded.as_ref()
+        && *was == trusted
+    {
+        return Arc::clone(registry);
     }
     let roots = ConfigRoots::default();
     let context = Context {

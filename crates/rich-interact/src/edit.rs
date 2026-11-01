@@ -795,12 +795,14 @@ impl Buffer {
             removed,
             inserted: text.to_string(),
         };
-        if let Some(step) = self.undo.back_mut() {
-            if run.is_some() && step.run == run && step.after.0 == before.0 {
-                step.changes.push(change);
-                step.after = (after, None);
-                return;
-            }
+        if let Some(step) = self.undo.back_mut()
+            && run.is_some()
+            && step.run == run
+            && step.after.0 == before.0
+        {
+            step.changes.push(change);
+            step.after = (after, None);
+            return;
         }
         self.undo.push_back(Step {
             changes: vec![change],

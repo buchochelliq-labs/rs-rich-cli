@@ -10,8 +10,8 @@
 use super::*;
 
 use rich::{Color, Segment, Style};
-use rich_art::figlet::{self, FigletFont};
 use rich_art::Justify as FigletJustify;
+use rich_art::figlet::{self, FigletFont};
 use rich_ext::cli_doc::{ArgSpec, CommandSpec};
 
 /// The largest font file read: real FIGfonts are tens of kilobytes.
@@ -250,7 +250,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
                     other => {
                         return Err(format!(
                             "--direction takes horizontal, vertical or diagonal, not {other:?}"
-                        ))
+                        ));
                     }
                 }
             }
@@ -262,7 +262,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
                     other => {
                         return Err(format!(
                             "--align takes left, center or right, not {other:?}"
-                        ))
+                        ));
                     }
                 }
             }
@@ -273,7 +273,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
                     _ => {
                         return Err(format!(
                             "--width takes a column count from 1 to {MAX_WIDTH}, not {text:?}"
-                        ))
+                        ));
                     }
                 }
             }
@@ -496,7 +496,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                 json,
                 ExitClass::Usage,
                 &format!("{message} (try `rich banner --help`)"),
-            )
+            );
         }
     };
     if parsed.help {

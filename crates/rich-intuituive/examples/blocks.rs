@@ -34,8 +34,8 @@ use std::rc::Rc;
 use std::time::Duration;
 
 use intuituive::prelude::*;
-use intuituive::sprite::{stage_with, Placed, Sprite, StageOptions};
-use intuituive::{state_file, write_atomic, Ctx};
+use intuituive::sprite::{Placed, Sprite, StageOptions, stage_with};
+use intuituive::{Ctx, state_file, write_atomic};
 
 // The model: no framework in it.
 
@@ -458,10 +458,10 @@ impl Game {
     fn game_over(&mut self) {
         self.state = State::GameOver;
         self.board = [[None; WIDTH]; HEIGHT];
-        if self.score > self.top {
-            if let Some(file) = &self.score_file {
-                let _ = save_top(file, self.score);
-            }
+        if self.score > self.top
+            && let Some(file) = &self.score_file
+        {
+            let _ = save_top(file, self.score);
         }
     }
 

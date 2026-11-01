@@ -7,11 +7,11 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use common::{run, run_open, screen};
+use intuituive::Placement;
 use intuituive::interact::headless::Script;
 use intuituive::interact::{Button, MouseKind};
 use intuituive::prelude::*;
-use intuituive::widgets::{table, tabs, virtual_table, Column};
-use intuituive::Placement;
+use intuituive::widgets::{Column, table, tabs, virtual_table};
 
 fn numbered(n: usize) -> Node {
     column((0..n).map(|i| label(format!("line {i}")).fixed(1)))

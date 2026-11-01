@@ -6,7 +6,7 @@
 use std::path::PathBuf;
 
 use rich::{ColorSystem, Console};
-use rich_ext::{markup, rich_panel, rich_table, rich_tree, richf, style, theme_key, Rich};
+use rich_ext::{Rich, markup, rich_panel, rich_table, rich_tree, richf, style, theme_key};
 
 /// Where shots go: the terminal, or one SVG per shot.
 struct Shots {

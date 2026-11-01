@@ -5,8 +5,8 @@
 mod support;
 
 use rich_interact::policy::{Fallback, Policy};
-use rich_interact::{run, Confirm, Form, Input, Item, MultiSelect, Pager, RunOptions, Select};
-use support::{assert_restored, Pty};
+use rich_interact::{Confirm, Form, Input, Item, MultiSelect, Pager, RunOptions, Select, run};
+use support::{Pty, assert_restored};
 
 #[test]
 fn child() {

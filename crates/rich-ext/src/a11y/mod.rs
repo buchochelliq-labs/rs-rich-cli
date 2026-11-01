@@ -5,6 +5,6 @@ pub mod contrast;
 pub mod policy;
 pub mod semantic;
 
-pub use contrast::{check_theme, CheckOptions, ContrastReport, Finding};
+pub use contrast::{CheckOptions, ContrastReport, Finding, check_theme};
 pub use policy::{AccessibilityPolicy, Status, SymbolSet};
-pub use semantic::{semantic_text, AccessibleText};
+pub use semantic::{AccessibleText, semantic_text};

@@ -133,12 +133,12 @@ pub mod workflow;
 
 pub use highlighter::NumberHighlighter;
 pub use registry::{
-    install_defaults, BuiltinPlugin, ExtensionRegistry, HighlighterChoiceError, RegisteredPlugin,
+    BuiltinPlugin, ExtensionRegistry, HighlighterChoiceError, RegisteredPlugin, install_defaults,
 };
 /// The plugin contract, re-exported so a host needs only `rich_ext`.
 pub use rich_plugin_api as plugin;
 pub use sanitize::sanitize_terminal_controls;
-pub use theme::{extended_theme, EXTRA_STYLES};
+pub use theme::{EXTRA_STYLES, extended_theme};
 
 use rich::Console;
 
@@ -177,7 +177,7 @@ pub mod derive;
 pub mod macros;
 
 #[cfg(feature = "macros")]
-pub use rich_macros::{markup, richf, style, theme_key, Rich};
+pub use rich_macros::{Rich, markup, richf, style, theme_key};
 
 /// Paths the macros expand to. Not a public API.
 #[doc(hidden)]

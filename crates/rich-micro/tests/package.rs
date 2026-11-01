@@ -4,7 +4,7 @@
 mod common;
 
 use common::*;
-use rich_micro::package::{load, load_pack, load_package, Loaded};
+use rich_micro::package::{Loaded, load, load_pack, load_package};
 use rich_micro::{AssetKind, ImageFormat, Layer, Limits, MicroError, PackageLocation};
 use serde_json::json;
 
@@ -357,10 +357,12 @@ fn packs_from_directories_and_archives() {
     assert_eq!(loaded.name, "status");
     let names: Vec<&str> = loaded.assets.iter().map(|a| a.name()).collect();
     assert_eq!(names, ["status/ok", "status/warn"]);
-    assert!(loaded
-        .assets
-        .iter()
-        .all(|a| a.origin().pack.as_deref() == Some("status")));
+    assert!(
+        loaded
+            .assets
+            .iter()
+            .all(|a| a.origin().pack.as_deref() == Some("status"))
+    );
     let rejected: Vec<&str> = loaded.rejected.iter().map(|(p, _)| p.as_str()).collect();
     assert_eq!(rejected, ["bad", "../escape", "missing"]);
     assert!(matches!(loaded.rejected[1].1, MicroError::UnsafePath(_)));

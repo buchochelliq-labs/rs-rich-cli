@@ -13,13 +13,13 @@ use rich::{ColorSystem, Console, Renderable, Segment, Text};
 use rich_art::graphics::{AnimationFrame, CellPixels};
 use rich_art::image::{DynamicImage, Rgba, RgbaImage};
 use rich_ext::frame::Frame;
-use rich_micro::create::{write_package, PackageSpec};
+use rich_micro::create::{PackageSpec, write_package};
 use rich_micro::package::load_package;
 use rich_micro::pipeline::Pipeline;
 use rich_micro::{
-    render_markup, reserve_rows, CellSize, FallbackPreference, Layer, Limits, MicroAsset,
-    MicroAssetRef, MicroGraphics, MicroMeta, MicroMode, MicroRegistry, MicroRows, Selection,
-    PAD_CELL,
+    CellSize, FallbackPreference, Layer, Limits, MicroAsset, MicroAssetRef, MicroGraphics,
+    MicroMeta, MicroMode, MicroRegistry, MicroRows, PAD_CELL, Selection, render_markup,
+    reserve_rows,
 };
 
 const BLANK: &str = "\u{2800}";

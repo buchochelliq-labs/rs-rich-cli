@@ -97,8 +97,8 @@ pub fn query_cell_pixels(timeout: Duration) -> Option<CellPixels> {
 
 #[cfg(unix)]
 fn query_unix(timeout: Duration) -> Option<CellPixels> {
-    use rustix::fs::{open, Mode, OFlags};
-    use rustix::termios::{tcgetattr, tcsetattr, OptionalActions};
+    use rustix::fs::{Mode, OFlags, open};
+    use rustix::termios::{OptionalActions, tcgetattr, tcsetattr};
 
     let tty = open(
         "/dev/tty",
@@ -395,11 +395,9 @@ impl GraphicsEnvironment {
             && environment.interactive
             && std::io::stdin().is_terminal()
             && environment.graphics.value != Graphics::None
+            && let Some(cell) = query_cell_pixels(Duration::from_millis(500))
         {
-            if let Some(cell) = query_cell_pixels(Duration::from_millis(500)) {
-                environment.cell_pixels =
-                    Field::new(Some(cell), Origin::Inferred, "CSI 16 t reply");
-            }
+            environment.cell_pixels = Field::new(Some(cell), Origin::Inferred, "CSI 16 t reply");
         }
         environment
     }

@@ -190,7 +190,9 @@ fn tokens_and_word_diffs_use_byte_ranges() {
     let tokens: Vec<&str> = tokenize(s).into_iter().map(|r| &s[r]).collect();
     assert_eq!(
         tokens,
-        ["let", " ", "x_1", " ", "=", " ", "foo", "(", "été", ")", ";"]
+        [
+            "let", " ", "x_1", " ", "=", " ", "foo", "(", "été", ")", ";"
+        ]
     );
     let old = "let x = 1;";
     let new = "let x = 22;";
@@ -463,10 +465,12 @@ fn emphasis_styles_land_on_changed_tokens() {
     assert_eq!(find("1").style.as_ref().unwrap().color(), red.color());
     assert_eq!(find("2").style.as_ref().unwrap().color(), green.color());
     // Unrelated lines are not emphasised.
-    assert!(segments
-        .iter()
-        .filter(|s| s.text.contains("done"))
-        .all(|s| s.style.as_ref().and_then(|st| st.attr(3)) != Some(true)));
+    assert!(
+        segments
+            .iter()
+            .filter(|s| s.text.contains("done"))
+            .all(|s| s.style.as_ref().and_then(|st| st.attr(3)) != Some(true))
+    );
 }
 
 #[test]
@@ -558,16 +562,20 @@ fn source_diffs_highlight_both_sides() {
         let comment = colour_of("   comment */").expect("the comment's second line is highlighted");
         assert_ne!(keyword, comment);
         // No syntax background bleeds through the diff styles.
-        assert!(segments.iter().filter(|s| s.text == "fn").all(|s| s
-            .style
-            .as_ref()
-            .unwrap()
-            .bgcolor()
-            .is_none()));
+        assert!(
+            segments.iter().filter(|s| s.text == "fn").all(|s| s
+                .style
+                .as_ref()
+                .unwrap()
+                .bgcolor()
+                .is_none())
+        );
         // Emphasis layers on top of highlighting.
-        assert!(segments
-            .iter()
-            .any(|s| s.text == "2" && s.style.as_ref().and_then(|st| st.attr(3)) == Some(true)));
+        assert!(
+            segments
+                .iter()
+                .any(|s| s.text == "2" && s.style.as_ref().and_then(|st| st.attr(3)) == Some(true))
+        );
         // Line numbers link through the template.
         let linked = SourceDiff::new(old, new)
             .path("src/lib.rs")
@@ -861,9 +869,11 @@ modified src/lib.rs  +2 -1
     assert!(links.contains(&"https://example.test/demo/blob/abc123/src/lib.rs".into()));
     // Annotations take their level's style.
     let warning = Level::Warning.style(&Console::new());
-    assert!(segments
-        .iter()
-        .any(|s| s.text == "warning: " && s.style.as_ref() == Some(&warning)));
+    assert!(
+        segments
+            .iter()
+            .any(|s| s.text == "warning: " && s.style.as_ref() == Some(&warning))
+    );
     let sbs = plain(
         &parse_unified(FIXTURE)
             .map(PatchView::new)
@@ -987,11 +997,13 @@ Received: 5
         assert_eq!(divides.expected.as_deref(), Some("2"));
         assert_eq!(divides.actual.as_deref(), Some("3"));
         assert_eq!(divides.stdout.as_deref(), Some("dividing 6 by 3"));
-        assert!(divides
-            .details
-            .as_deref()
-            .unwrap()
-            .contains("CalcTest.java:14"));
+        assert!(
+            divides
+                .details
+                .as_deref()
+                .unwrap()
+                .contains("CalcTest.java:14")
+        );
         assert_eq!(
             run.suites[0].cases[2].duration,
             Some(Duration::from_millis(2))
@@ -1009,11 +1021,12 @@ Received: 5
         );
         let bad = &run.suites[0].cases[1];
         assert_eq!(bad.message.as_deref(), Some("assert 1 == 2"));
-        assert!(bad
-            .details
-            .as_deref()
-            .unwrap()
-            .contains(">       assert 1 == 2"));
+        assert!(
+            bad.details
+                .as_deref()
+                .unwrap()
+                .contains(">       assert 1 == 2")
+        );
         assert_eq!(run.suites[0].cases[2].message.as_deref(), Some("not on CI"));
 
         let run = junit::parse(JEST).unwrap();
@@ -1161,8 +1174,11 @@ mod assertions {
     fn assertion_macros_panic_with_a_diff() {
         // SAFETY: the only reader of these variables in this binary is the
         // assertion code under test, which runs on this thread.
-        std::env::set_var("RICH_ASSERT_COLOR", "0");
-        std::env::remove_var("RICH_ASSERT_LAYOUT");
+        #[allow(unsafe_code)]
+        unsafe {
+            std::env::set_var("RICH_ASSERT_COLOR", "0");
+            std::env::remove_var("RICH_ASSERT_LAYOUT");
+        }
 
         assert_rich_eq!("same\n", String::from("same\n"));
         let message = panic_message(|| assert_rich_eq!("a\nb\n", "a\nc\n"));
@@ -1217,13 +1233,21 @@ mod assertions {
             "{message}"
         );
 
-        std::env::set_var("RICH_ASSERT_LAYOUT", "side-by-side");
+        // SAFETY: as above, this test binary's environment writes all run here.
+        #[allow(unsafe_code)]
+        unsafe {
+            std::env::set_var("RICH_ASSERT_LAYOUT", "side-by-side");
+        }
         let message = panic_message(|| assert_rich_eq!("a\nb\n", "a\nc\n"));
         assert!(
             message.contains("2 - b") && message.contains(" | 2 + c"),
             "{message}"
         );
-        std::env::remove_var("RICH_ASSERT_LAYOUT");
+        // SAFETY: as above.
+        #[allow(unsafe_code)]
+        unsafe {
+            std::env::remove_var("RICH_ASSERT_LAYOUT");
+        }
     }
 
     #[test]

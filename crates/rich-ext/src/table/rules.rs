@@ -540,7 +540,7 @@ fn unquote(text: &str) -> Result<(String, &str), String> {
                 Some((_, other)) => {
                     return Err(format!(
                         "unknown escape `\\{other}` in quotes (use \\\" \\\\ \\n \\t or \\r)"
-                    ))
+                    ));
                 }
                 None => break,
             },
@@ -574,12 +574,11 @@ fn spec_operand(text: &str) -> Value {
     if let Ok(n) = text.parse::<i64>() {
         return Value::Int(n);
     }
-    if text.bytes().any(|b| b.is_ascii_digit()) {
-        if let Ok(n) = text.parse::<f64>() {
-            if n.is_finite() {
-                return Value::Float(n);
-            }
-        }
+    if text.bytes().any(|b| b.is_ascii_digit())
+        && let Ok(n) = text.parse::<f64>()
+        && n.is_finite()
+    {
+        return Value::Float(n);
     }
     Value::Str(text.to_string())
 }
@@ -614,11 +613,7 @@ fn spec_value(value: &Value) -> Option<String> {
                 && !text.starts_with('"')
                 && !text.contains(|c: char| c == ':' || c.is_control())
                 && matches!(spec_operand(&text), Value::Str(_));
-            if bare {
-                text
-            } else {
-                quote(&text)
-            }
+            if bare { text } else { quote(&text) }
         }
     })
 }
@@ -827,10 +822,10 @@ impl ResolvedRules<'_> {
             if rule.target != Target::Row {
                 continue;
             }
-            if let Some(value) = column.and_then(|c| row.get(c)) {
-                if rule.matches(value) {
-                    combine(&mut style, &rule.style);
-                }
+            if let Some(value) = column.and_then(|c| row.get(c))
+                && rule.matches(value)
+            {
+                combine(&mut style, &rule.style);
             }
         }
         style
@@ -1137,9 +1132,11 @@ mod tests {
         let rule = StyleRule::parse("latency>500:red").unwrap();
         assert!(rule.matches(&Value::from("612")));
         assert!(!rule.matches(&Value::Int(500)));
-        assert!(StyleRule::parse("code=\"200\":red")
-            .unwrap()
-            .matches(&Value::from("200")));
+        assert!(
+            StyleRule::parse("code=\"200\":red")
+                .unwrap()
+                .matches(&Value::from("200"))
+        );
     }
 
     #[test]

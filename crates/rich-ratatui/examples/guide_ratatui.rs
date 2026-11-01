@@ -19,7 +19,7 @@ use rich::markdown::Markdown;
 use rich::{ColorSystem, Console, ConsoleOptions, Renderable, Segment, Table};
 use rich_interact::headless::{self, Script, Step};
 use rich_interact::{Component, Context, Event, Flow, KeyCode, Outcome};
-use rich_ratatui::{buffer_to_lines, RatatuiComponent, RichWidget};
+use rich_ratatui::{RatatuiComponent, RichWidget, buffer_to_lines};
 
 // --8<-- [start:widget]
 fn widget() -> Buffer {

@@ -24,7 +24,7 @@ use std::fmt;
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
-use crate::chart::{has_colour, user_style, Charset};
+use crate::chart::{Charset, has_colour, user_style};
 
 /// The quiet zone the QR specification asks for, in modules.
 const SPEC_QUIET_ZONE: usize = 4;

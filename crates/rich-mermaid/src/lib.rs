@@ -43,8 +43,8 @@ pub mod layout;
 pub mod mmdc;
 pub mod sequence;
 
-pub use flowchart::{parse, Flowchart, ParseError};
-pub use layout::{draw, Diagram};
+pub use flowchart::{Flowchart, ParseError, parse};
+pub use layout::{Diagram, draw};
 
 /// Which renderer to try first.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -115,7 +115,7 @@ impl Mermaid {
                     console,
                     options,
                     Some("this build has no mmdc backend".into()),
-                )
+                );
             }
         }
         self.render_text(parsed, console, options, None)
@@ -132,7 +132,7 @@ impl Mermaid {
     ) -> Vec<Segment> {
         let chart = match parsed {
             Ok(chart) if chart.is_empty() => {
-                return self.source_block(console, options, chart.empty_reason())
+                return self.source_block(console, options, chart.empty_reason());
             }
             Ok(chart) => chart,
             Err(error) => {
@@ -147,7 +147,7 @@ impl Mermaid {
         let diagram = match chart.draw(ascii) {
             Ok(diagram) => diagram,
             Err(reason) => {
-                return self.source_block(console, options, &format!("too large to draw: {reason}"))
+                return self.source_block(console, options, &format!("too large to draw: {reason}"));
             }
         };
         let width = options.max_width;
@@ -215,7 +215,7 @@ impl Mermaid {
         let png = match mmdc::render_png(&self.source, &self.options.mmdc) {
             Ok(png) => png,
             Err(error) => {
-                return self.render_text(parsed, console, options, Some(error.to_string()))
+                return self.render_text(parsed, console, options, Some(error.to_string()));
             }
         };
         let mode = if graphics {
@@ -233,7 +233,7 @@ impl Mermaid {
                     console,
                     options,
                     Some(format!("mmdc wrote an unreadable image: {error}")),
-                )
+                );
             }
         };
         match art.render(console, options) {
@@ -337,12 +337,11 @@ fn trim_final_newline(mut segments: Vec<Segment>) -> Vec<Segment> {
     if let Some(index) = segments
         .iter()
         .rposition(|segment| !segment.text.is_empty())
+        && segments[index].text.ends_with('\n')
     {
-        if segments[index].text.ends_with('\n') {
-            segments[index].text.pop();
-            if segments[index].text.is_empty() {
-                segments.remove(index);
-            }
+        segments[index].text.pop();
+        if segments[index].text.is_empty() {
+            segments.remove(index);
         }
     }
     segments

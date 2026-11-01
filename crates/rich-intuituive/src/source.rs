@@ -9,12 +9,12 @@ use std::collections::HashSet;
 use std::fmt;
 use std::ops::Range;
 use std::rc::Rc;
-use std::sync::atomic::{AtomicU64, Ordering as Atomic};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering as Atomic};
 
 use crate::node::Node;
-use crate::reactive::{signal, watch, Signal};
-use crate::widgets::{virtual_table_with, Column, Order, TableOptions};
+use crate::reactive::{Signal, signal, watch};
+use crate::widgets::{Column, Order, TableOptions, virtual_table_with};
 
 /// How many rows a [`TableSource`] has: all of them, or as many as it has
 /// found so far (a file still being indexed).
@@ -423,15 +423,15 @@ fn run<S: TableSource + ?Sized>(
             return None;
         }
         source.rows(start..(start + 1024).min(n), &mut |i, mut row| {
-            if let Some(keep) = &query.keep {
-                if !keep(&row) {
-                    return true;
-                }
+            if let Some(keep) = &query.keep
+                && !keep(&row)
+            {
+                return true;
             }
-            if let Some(find) = &query.find {
-                if find(&row) {
-                    hits.insert(i);
-                }
+            if let Some(find) = &query.find
+                && find(&row)
+            {
+                hits.insert(i);
             }
             if let Some((column, _)) = query.sort {
                 let cell = match column < row.len() {

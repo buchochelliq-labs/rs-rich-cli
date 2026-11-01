@@ -8,8 +8,8 @@ use std::sync::Arc;
 use rich::style::StyleType;
 use rich::{Console, Text};
 use rich_micro::{
-    expand, markup_text, render_markup, DiagnosticKind, FallbackPreference, Layer, Limits,
-    MicroAsset, MicroError, MicroExt, MicroMeta, MicroRegistry, MicroTransform, PAD_CELL,
+    DiagnosticKind, FallbackPreference, Layer, Limits, MicroAsset, MicroError, MicroExt, MicroMeta,
+    MicroRegistry, MicroTransform, PAD_CELL, expand, markup_text, render_markup,
 };
 
 /// The fixtures as the built-in layer: `status/check` (alias `check`, ✅ or
@@ -39,10 +39,10 @@ fn parse(markup: &str) -> (Text, Vec<rich_micro::Diagnostic>) {
 fn placements(text: &Text) -> Vec<(String, MicroMeta)> {
     let mut out: Vec<(String, MicroMeta)> = Vec::new();
     for span in text.spans() {
-        if let StyleType::Style(style) = &span.style {
-            if let Some(meta) = MicroMeta::from_style(style) {
-                out.push((text.plain()[span.start..span.end].to_string(), meta));
-            }
+        if let StyleType::Style(style) = &span.style
+            && let Some(meta) = MicroMeta::from_style(style)
+        {
+            out.push((text.plain()[span.start..span.end].to_string(), meta));
         }
     }
     out
@@ -131,9 +131,11 @@ fn unknown_and_malformed_names_stay_literal() {
     );
     assert_eq!(diagnostics[0].offset, 0);
     assert_eq!(diagnostics[0].token, ":micro:nope:");
-    assert!(diagnostics[0]
-        .to_string()
-        .contains("unknown micro asset \"nope\""));
+    assert!(
+        diagnostics[0]
+            .to_string()
+            .contains("unknown micro asset \"nope\"")
+    );
     assert!(placements(&text).is_empty());
 }
 

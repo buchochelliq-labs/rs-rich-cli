@@ -30,7 +30,7 @@ use std::task::{Context, Poll, Waker};
 use std::time::Duration;
 
 use crate::app::Ctx;
-use crate::reactive::{signal, watch, Runtime, Signal};
+use crate::reactive::{Runtime, Signal, signal, watch};
 
 /// A running piece of background work.
 #[derive(Clone, Debug)]

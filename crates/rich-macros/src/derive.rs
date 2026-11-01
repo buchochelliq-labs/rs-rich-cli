@@ -233,7 +233,7 @@ pub fn rich(input: DeriveInput) -> syn::Result<TokenStream> {
             return Err(syn::Error::new(
                 name.span(),
                 "cannot derive Rich for a union",
-            ))
+            ));
         }
     };
 

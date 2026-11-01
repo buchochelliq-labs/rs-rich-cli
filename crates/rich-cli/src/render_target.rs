@@ -1,9 +1,9 @@
 //! CLI boundary: observe the selected console once, then attach immutable policy.
-use rich::protocol::{ConsoleEnvironment, Support};
 use rich::Console;
+use rich::protocol::{ConsoleEnvironment, Support};
 use rich_ext::target::{
-    resolve_capabilities, DetectedCapabilities, RenderTarget, TargetKind, TargetObservations,
-    TargetOverrides,
+    DetectedCapabilities, RenderTarget, TargetKind, TargetObservations, TargetOverrides,
+    resolve_capabilities,
 };
 use std::sync::Arc;
 
@@ -42,10 +42,12 @@ pub(super) fn observe(console: &Console, overrides: TargetOverrides) -> Detected
             .ok()
             .and_then(|v| v.parse::<usize>().ok())
             .filter(|v| *v > 0);
-        if configured.is_none() && environment_size.is_none() && terminal.is_none() {
-            if let Some((_, origin)) = resolved.origins.iter_mut().find(|(key, _)| key == name) {
-                *origin = rich_ext::target::CapabilityOrigin::Default;
-            }
+        if configured.is_none()
+            && environment_size.is_none()
+            && terminal.is_none()
+            && let Some((_, origin)) = resolved.origins.iter_mut().find(|(key, _)| key == name)
+        {
+            *origin = rich_ext::target::CapabilityOrigin::Default;
         }
     }
     resolved

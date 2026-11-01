@@ -17,7 +17,7 @@ use std::time::Duration;
 
 use intuituive::prelude::*;
 use intuituive::rich::markup::escape;
-use intuituive::widgets::{tree_lazy, LazyItem};
+use intuituive::widgets::{LazyItem, tree_lazy};
 
 /// A card on the board.
 #[derive(Clone, Debug, PartialEq)]

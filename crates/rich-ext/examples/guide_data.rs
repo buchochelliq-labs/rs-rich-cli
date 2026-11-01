@@ -4,13 +4,13 @@
 use std::path::PathBuf;
 
 use rich::{ColorSystem, Console, Justify};
-use rich_ext::data::{
-    diff, flatten, parse, parse_ini, print_table_to, print_tree_to, unflatten, ConfigFileView,
-    DataError, DiffView, Explorer, FlatView, Format, JsonPathSelector, Node, Path, RecordView,
-    Redaction, SearchQuery, SearchResults, SelectError, Selector, SelectorBackend, Selectors,
-    TableOptions, TableView, Value, View,
-};
 use rich_ext::ConsoleExt;
+use rich_ext::data::{
+    ConfigFileView, DataError, DiffView, Explorer, FlatView, Format, JsonPathSelector, Node, Path,
+    RecordView, Redaction, SearchQuery, SearchResults, SelectError, Selector, SelectorBackend,
+    Selectors, TableOptions, TableView, Value, View, diff, flatten, parse, parse_ini,
+    print_table_to, print_tree_to, unflatten,
+};
 
 // --8<-- [start:explorer]
 const DEPLOY_YAML: &str = "\

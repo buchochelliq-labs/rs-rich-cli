@@ -7,7 +7,7 @@ use rich_interact::components::{
 };
 use rich_interact::headless::{self, Script};
 use rich_interact::policy::{Reason, ScriptedLineIo};
-use rich_interact::{degrade, Component, Context, Fallback, Item, Outcome, Preview};
+use rich_interact::{Component, Context, Fallback, Item, Outcome, Preview, degrade};
 
 fn queue() -> ApprovalQueue<&'static str> {
     ApprovalQueue::new(
@@ -96,10 +96,12 @@ fn marked_items_are_decided_together() {
             .text("freeze")
             .keys("enter enter"),
     );
-    assert!(report
-        .decisions
-        .iter()
-        .all(|d| d.verdict == Rejected && d.reason.as_deref() == Some("freeze")));
+    assert!(
+        report
+            .decisions
+            .iter()
+            .all(|d| d.verdict == Rejected && d.reason.as_deref() == Some("freeze"))
+    );
 }
 
 #[test]
@@ -342,10 +344,12 @@ fn no_matches_says_so_and_picks_nothing() {
         20,
     );
     assert_eq!(outcome.unwrap(), Outcome::Cancelled);
-    assert!(record
-        .frames
-        .iter()
-        .any(|frame| frame.contains("no matches")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("no matches"))
+    );
 }
 
 #[test]
@@ -375,13 +379,15 @@ fn without_a_terminal_the_best_match_answers() {
     assert_eq!(found.value, "cargo build");
     // Nothing typed is no default.
     let mut jump = self::jump();
-    assert!(degrade(
-        &mut jump,
-        Fallback::Default,
-        Reason::StdinNotTerminal,
-        &mut ScriptedLineIo::default()
-    )
-    .is_err());
+    assert!(
+        degrade(
+            &mut jump,
+            Fallback::Default,
+            Reason::StdinNotTerminal,
+            &mut ScriptedLineIo::default()
+        )
+        .is_err()
+    );
 }
 
 #[test]

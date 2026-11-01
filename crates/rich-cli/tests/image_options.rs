@@ -63,7 +63,7 @@ fn jobs_help_states_parallel_export_requirement() {
 #[cfg(feature = "art")]
 #[test]
 fn image_fit_cli_routes_to_library_and_background_is_applied() {
-    use rich_art::{image, ImageArt, ImageFit, ImageMode};
+    use rich_art::{ImageArt, ImageFit, ImageMode, image};
     let image = image::DynamicImage::ImageRgba8(image::RgbaImage::from_fn(8, 2, |x, _| {
         if x < 3 {
             image::Rgba([0, 0, 0, 255])
@@ -430,8 +430,8 @@ fn reduced_palettes_are_accepted_for_sixel_and_gif() {
 #[test]
 fn new_image_options_route_to_the_library_exactly() {
     use rich_art::{
-        image, ColorDistance, Dither, ImageArt, ImageBackground, ImageColorMode, ImageFit,
-        ImageMode, ImageTransforms,
+        ColorDistance, Dither, ImageArt, ImageBackground, ImageColorMode, ImageFit, ImageMode,
+        ImageTransforms, image,
     };
     let temp = tempfile::tempdir().unwrap();
     let path = temp.path().join("source.png");

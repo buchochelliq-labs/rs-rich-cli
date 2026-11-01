@@ -4,8 +4,8 @@ use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment};
 
 use super::{
-    cells, has_colour, lines_to_segments, theme_style, truncate, Charset, Line, Sparkline, Status,
-    ValueFormat,
+    Charset, Line, Sparkline, Status, ValueFormat, cells, has_colour, lines_to_segments,
+    theme_style, truncate,
 };
 
 /// The narrowest card that keeps its border.

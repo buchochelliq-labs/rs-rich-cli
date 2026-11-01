@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use intuituive::prelude::*;
-use intuituive::sprite::{stage, Placed};
+use intuituive::sprite::{Placed, stage};
 use intuituive::sprite_sheet::{sprite_sheet, sprite_sheet_bytes};
 use rich_art::image::{ImageFormat, Rgba, RgbaImage};
 
@@ -103,7 +103,7 @@ fn sheet_tiles_draw_on_a_stage_in_half_blocks_and_animate() {
 mod micro {
     use intuituive::micro_sprite::{micro_pixels, micro_sprite};
     use intuituive::prelude::*;
-    use intuituive::sprite::{stage, Placed};
+    use intuituive::sprite::{Placed, stage};
     use rich_micro::{Limits, MicroAsset, MicroRegistry};
 
     #[test]

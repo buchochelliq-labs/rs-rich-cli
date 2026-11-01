@@ -6,7 +6,7 @@ use std::collections::HashMap;
 use std::rc::Rc;
 
 use crate::node::Node;
-use crate::reactive::{signal, Signal};
+use crate::reactive::{Signal, signal};
 
 /// What makes a new tab's state.
 type Make<T> = Rc<dyn Fn() -> T>;
@@ -261,7 +261,10 @@ impl<T: 'static> TabSet<T> {
     /// The tabs' titles, `title` of each state, as a closure for a
     /// [`tabs`](crate::widgets::tabs) strip; it reads the set (and whatever
     /// `title` reads).
-    pub fn titles(&self, title: impl Fn(&T) -> String + 'static) -> impl Fn() -> Vec<String> {
+    pub fn titles<F: Fn(&T) -> String + 'static>(
+        &self,
+        title: F,
+    ) -> impl Fn() -> Vec<String> + use<T, F> {
         let tabs = self.tabs;
         move || tabs.with(|tabs| tabs.iter().map(&title).collect())
     }

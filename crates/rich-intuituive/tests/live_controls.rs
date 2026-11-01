@@ -6,8 +6,8 @@
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::prelude::*;
 use intuituive::{
-    button_of, checkbox, checkbox_of, checkbox_tri, radio, radio_keyed, select_field,
-    select_field_keyed, CheckState, Driver, SelectOption,
+    CheckState, Driver, SelectOption, button_of, checkbox, checkbox_of, checkbox_tri, radio,
+    radio_keyed, select_field, select_field_keyed,
 };
 
 fn rows(driver: &Driver) -> Vec<String> {
@@ -168,9 +168,11 @@ fn three_states_are_drawn_and_described() {
     let mixed = &driver.accessibility()[2];
     assert!(mixed.state.mixed);
     assert_eq!(mixed.state.checked, None);
-    assert!(mixed
-        .aria_attributes()
-        .contains(&("aria-checked", "mixed".to_string())));
+    assert!(
+        mixed
+            .aria_attributes()
+            .contains(&("aria-checked", "mixed".to_string()))
+    );
 }
 
 /// A three-state box and what it holds, with `m` to make it mixed and `d`

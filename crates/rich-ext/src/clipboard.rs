@@ -41,7 +41,7 @@
 use std::fmt;
 use std::io::Write;
 
-use crate::capabilities::{parse_bool, Environment, Field, Origin, SystemEnvironment};
+use crate::capabilities::{Environment, Field, Origin, SystemEnvironment, parse_bool};
 
 /// The variable that turns OSC 52 on (`1`) or off (`0`), whatever the
 /// terminal.
@@ -87,10 +87,10 @@ pub fn detect(env: &dyn Environment) -> Field<bool> {
     if !env.is_terminal() {
         return field(false, Origin::Inferred, "not a terminal".into());
     }
-    if let Some(raw) = get(CLIPBOARD_VAR) {
-        if let Some(value) = parse_bool(&raw) {
-            return field(value, var(CLIPBOARD_VAR), format!("{CLIPBOARD_VAR}={raw}"));
-        }
+    if let Some(raw) = get(CLIPBOARD_VAR)
+        && let Some(value) = parse_bool(&raw)
+    {
+        return field(value, var(CLIPBOARD_VAR), format!("{CLIPBOARD_VAR}={raw}"));
     }
     let term = get("TERM").unwrap_or_default();
     let lower = term.to_ascii_lowercase();
@@ -109,10 +109,10 @@ pub fn detect(env: &dyn Environment) -> Field<bool> {
     if get("WT_SESSION").is_some() {
         return field(true, var("WT_SESSION"), "Windows Terminal".into());
     }
-    if let Some(program) = get("TERM_PROGRAM") {
-        if PROGRAMS.iter().any(|p| program.eq_ignore_ascii_case(p)) {
-            return field(true, var("TERM_PROGRAM"), format!("TERM_PROGRAM={program}"));
-        }
+    if let Some(program) = get("TERM_PROGRAM")
+        && PROGRAMS.iter().any(|p| program.eq_ignore_ascii_case(p))
+    {
+        return field(true, var("TERM_PROGRAM"), format!("TERM_PROGRAM={program}"));
     }
     if TERMS.iter().any(|t| lower.starts_with(t)) {
         return field(true, var("TERM"), format!("TERM={term}"));

@@ -7,10 +7,10 @@
 use std::io::Write;
 use std::process::{Child, Command, Stdio};
 
-use crate::render::raster::{self, Canvas, Fonts};
 use crate::render::Look;
+use crate::render::raster::{self, Canvas, Fonts};
 use crate::screen::{Snapshot, Theme};
-use crate::session::{Timeline, FRAME_RATE};
+use crate::session::{FRAME_RATE, Timeline};
 
 /// How long the last frame holds, in seconds.
 const HOLD: f64 = 2.5;
@@ -444,9 +444,10 @@ mod tests {
         .unwrap();
         assert_eq!(all, streamed);
         let (width, height) = size(&timeline, &sampled, &fonts, &look);
-        assert!(all
-            .iter()
-            .all(|(c, _)| (c.width, c.height) == (width, height)));
+        assert!(
+            all.iter()
+                .all(|(c, _)| (c.width, c.height) == (width, height))
+        );
     }
 
     #[test]

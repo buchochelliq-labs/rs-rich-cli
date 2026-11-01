@@ -1,5 +1,5 @@
 //! Typed, ordered events. Time and context are supplied by the caller.
-use crate::layout::{fit_segments, OverflowPolicy};
+use crate::layout::{OverflowPolicy, fit_segments};
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Text};
 #[derive(Clone, Debug, PartialEq)]
 pub enum Value {
@@ -301,10 +301,10 @@ impl Renderable for StructuredEvent {
         text = text.append_text(&message);
         let mut selected = Vec::new();
         for name in &self.order {
-            if let Some(index) = self.fields.iter().position(|(k, _)| k == name) {
-                if !selected.contains(&index) {
-                    selected.push(index);
-                }
+            if let Some(index) = self.fields.iter().position(|(k, _)| k == name)
+                && !selected.contains(&index)
+            {
+                selected.push(index);
             }
         }
         for index in 0..self.fields.len() {

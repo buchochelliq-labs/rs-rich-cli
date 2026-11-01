@@ -20,8 +20,8 @@ use std::collections::VecDeque;
 use std::io;
 use std::time::Instant;
 
-use bench::{best, swatch_grid, wave, Feed, Measured};
-use dashboard::{log_line, service, SERVICES};
+use bench::{Feed, Measured, best, swatch_grid, wave};
+use dashboard::{SERVICES, log_line, service};
 use ratatui::backend::{ClearType, CrosstermBackend, WindowSize};
 use ratatui::buffer::Cell;
 use ratatui::layout::{Constraint, Layout, Position, Rect, Size};

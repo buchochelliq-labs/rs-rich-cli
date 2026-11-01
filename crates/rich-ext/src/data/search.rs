@@ -7,7 +7,7 @@ use rich::{Console, ConsoleOptions, Overflow, Renderable, Segment, Style, Text};
 
 use super::explorer::fit_quoted;
 use super::{
-    escape_controls, scalar_text, segment_text, style, summary, Node, Path, PathSegment, Value,
+    Node, Path, PathSegment, Value, escape_controls, scalar_text, segment_text, style, summary,
 };
 use crate::event::flatten as join_lines;
 
@@ -269,11 +269,10 @@ pub fn search<'a>(node: &'a Node, query: &SearchQuery) -> Vec<SearchMatch<'a>> {
         if path.is_root() {
             return;
         }
-        if let Some(glob) = &glob {
-            if !glob_match(glob, path.segments(), ci) {
+        if let Some(glob) = &glob
+            && !glob_match(glob, path.segments(), ci) {
                 return;
             }
-        }
         if let Some(pattern) = &query.key {
             let Some(PathSegment::Key(key)) = path.last() else {
                 return;
@@ -282,11 +281,10 @@ pub fn search<'a>(node: &'a Node, query: &SearchQuery) -> Vec<SearchMatch<'a>> {
                 return;
             }
         }
-        if let Some(pattern) = &query.value {
-            if !value_text(node).is_some_and(|text| find(&text, pattern, ci).is_some()) {
+        if let Some(pattern) = &query.value
+            && !value_text(node).is_some_and(|text| find(&text, pattern, ci).is_some()) {
                 return;
             }
-        }
         let mut text_on = None;
         if let Some(pattern) = &query.text {
             if value_text(node).is_some_and(|text| find(&text, pattern, ci).is_some()) {

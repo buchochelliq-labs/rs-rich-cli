@@ -2,7 +2,7 @@
 //! the line where it leaves and reaches a node, in every direction, clear of
 //! the other lines.
 
-use rich_diagram::{dot, draw, Direction, Graph};
+use rich_diagram::{Direction, Graph, dot, draw};
 
 fn lines(graph: &Graph, ascii: bool) -> String {
     let mut out = draw(graph, ascii).unwrap().lines.join("\n");

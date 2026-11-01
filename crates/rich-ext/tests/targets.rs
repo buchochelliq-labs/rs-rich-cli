@@ -73,9 +73,11 @@ impl Renderable for NestedContext {
 #[test]
 fn target_context_is_attached_without_changing_legacy_console() {
     assert!(Console::new().render_environment().is_none());
-    assert!(target(TargetKind::Capture, 80, 25)
-        .text(&NestedContext)
-        .contains("nested"));
+    assert!(
+        target(TargetKind::Capture, 80, 25)
+            .text(&NestedContext)
+            .contains("nested")
+    );
     fn assert_send<T: Send>() {}
     assert_send::<Console>();
 }
@@ -108,7 +110,7 @@ fn explicit_target_ignores_ambient_terminal_settings() {
 #[test]
 fn capability_overrides_keep_configuration_and_inference_distinct() {
     use rich_ext::target::{
-        resolve_capabilities, CapabilityOrigin, TargetObservations, TargetOverrides,
+        CapabilityOrigin, TargetObservations, TargetOverrides, resolve_capabilities,
     };
     let result = resolve_capabilities(
         TargetObservations {
@@ -129,13 +131,19 @@ fn capability_overrides_keep_configuration_and_inference_distinct() {
     assert_eq!(result.capabilities.width, 42);
     assert_eq!(result.capabilities.height, 25);
     assert_eq!(result.capabilities.color_system, None);
-    assert!(result
-        .origins
-        .contains(&("width".into(), CapabilityOrigin::Configured)));
-    assert!(result
-        .origins
-        .contains(&("height".into(), CapabilityOrigin::Default)));
-    assert!(result
-        .origins
-        .contains(&("sixel".into(), CapabilityOrigin::Inferred)));
+    assert!(
+        result
+            .origins
+            .contains(&("width".into(), CapabilityOrigin::Configured))
+    );
+    assert!(
+        result
+            .origins
+            .contains(&("height".into(), CapabilityOrigin::Default))
+    );
+    assert!(
+        result
+            .origins
+            .contains(&("sixel".into(), CapabilityOrigin::Inferred))
+    );
 }

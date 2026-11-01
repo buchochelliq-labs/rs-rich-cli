@@ -520,7 +520,7 @@ fn read_block(reader: &mut impl Read, block: &mut [u8; 512]) -> io::Result<bool>
                 return Err(io::Error::new(
                     io::ErrorKind::UnexpectedEof,
                     "a tar header cut short",
-                ))
+                ));
             }
             n => filled += n,
         }

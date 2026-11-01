@@ -377,18 +377,18 @@ impl AnimatedArt {
             for index in 0..self.frames.len() {
                 // The first frame of the first pass is already on screen from
                 // `start()`; sleep through its delay, then move on.
-                if !(pass == 0 && index == 0) {
-                    if let Some(art) = self.render_frame(index) {
-                        live.update(Box::new(art));
-                    }
+                if !(pass == 0 && index == 0)
+                    && let Some(art) = self.render_frame(index)
+                {
+                    live.update(Box::new(art));
                 }
                 std::thread::sleep(self.delay_of(&self.frames[index]));
             }
             pass += 1;
-            if let Some(total) = self.passes() {
-                if pass >= total {
-                    break;
-                }
+            if let Some(total) = self.passes()
+                && pass >= total
+            {
+                break;
             }
         }
 
@@ -421,10 +421,10 @@ impl GifFrame {
     }
 
     pub(crate) fn columns(&self, console: &Console, available: usize) -> usize {
-        if self.use_blocks(console) {
-            if let Some(blocks) = &self.blocks {
-                return blocks.grid(available).0;
-            }
+        if self.use_blocks(console)
+            && let Some(blocks) = &self.blocks
+        {
+            return blocks.grid(available).0;
         }
         self.ascii.columns(available)
     }
@@ -432,10 +432,10 @@ impl GifFrame {
 
 impl Renderable for GifFrame {
     fn rich_render(&self, console: &Console, options: &rich::ConsoleOptions) -> Vec<rich::Segment> {
-        if self.use_blocks(console) {
-            if let Some(blocks) = &self.blocks {
-                return blocks.rich_render(console, options);
-            }
+        if self.use_blocks(console)
+            && let Some(blocks) = &self.blocks
+        {
+            return blocks.rich_render(console, options);
         }
         self.ascii.rich_render(console, options)
     }
@@ -653,9 +653,11 @@ mod tests {
             let second = console.render_to_string(&art.render_frame(1).unwrap());
             assert!(first.contains('▀'));
             assert_ne!(first, second);
-            assert!(!console
-                .render_to_string(&art.frame(0).unwrap())
-                .contains('▀'));
+            assert!(
+                !console
+                    .render_to_string(&art.frame(0).unwrap())
+                    .contains('▀')
+            );
         }
         for terminal in [false, true] {
             let console = Console::builder()

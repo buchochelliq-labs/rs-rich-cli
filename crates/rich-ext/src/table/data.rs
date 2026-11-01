@@ -5,8 +5,8 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Table, Text};
 
 use super::group::{Aggregate, GroupBy};
 use super::rules::{ResolvedRules, StyleRules};
-use super::sort::{sorted_indices, SortKey};
-use super::{frame_builders, headers, style, Column, Frame, Value};
+use super::sort::{SortKey, sorted_indices};
+use super::{Column, Frame, Value, frame_builders, headers, style};
 
 /// Rows of [`Value`]s under [`Column`]s, optionally sorted, grouped and
 /// totalled, rendered as one core [`Table`].
@@ -189,10 +189,10 @@ impl TableData {
                             .get(group.column())
                             .map_or_else(|| g.key.to_text(), |c| c.cell(&g.key))
                     };
-                    if group.column() != 0 {
-                        if let Some(column) = self.columns.get(group.column()) {
-                            label = Text::new(format!("{}: ", column.header())).append_text(&label);
-                        }
+                    if group.column() != 0
+                        && let Some(column) = self.columns.get(group.column())
+                    {
+                        label = Text::new(format!("{}: ", column.header())).append_text(&label);
                     }
                     let len = label.plain().len();
                     label.stylize(group_style.clone(), 0, len);

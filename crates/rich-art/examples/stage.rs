@@ -11,8 +11,8 @@
 
 use std::time::Duration;
 
-use rich::color::ColorSystem;
 use rich::Console;
+use rich::color::ColorSystem;
 use rich_art::{AnimatedArt, Stage, Until};
 
 /// GIFs embedded as assets, straight from the source tree.

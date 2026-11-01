@@ -22,7 +22,7 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Text};
 
 use super::render::{self, Block, Kind, Options, Row};
 use super::source::{highlight_lines, language_for_path};
-use super::{style, Layout};
+use super::{Layout, style};
 use crate::diagnostic::Level;
 use crate::hyperlink::Hyperlinker;
 
@@ -361,7 +361,7 @@ pub fn parse_unified(input: &str) -> Result<Patch, ParseError> {
                             message: format!(
                                 "hunk ended early: expected {old_left} more old and {new_left} more new lines"
                             ),
-                        })
+                        });
                     }
                 };
                 let (old_line, new_line) = match kind {
@@ -526,16 +526,16 @@ pub fn parse_unified(input: &str) -> Result<Patch, ParseError> {
             in_binary_literal = true;
         }
     }
-    if let Some((h, old_left, new_left, ..)) = &hunk {
-        if *old_left > 0 || *new_left > 0 {
-            return Err(ParseError {
-                line: input.lines().count(),
-                message: format!(
-                    "hunk {} ended early: expected {old_left} more old and {new_left} more new lines",
-                    shown(&h.header())
-                ),
-            });
-        }
+    if let Some((h, old_left, new_left, ..)) = &hunk
+        && (*old_left > 0 || *new_left > 0)
+    {
+        return Err(ParseError {
+            line: input.lines().count(),
+            message: format!(
+                "hunk {} ended early: expected {old_left} more old and {new_left} more new lines",
+                shown(&h.header())
+            ),
+        });
     }
     finish_hunk(&mut file, &mut hunk);
     finish_file(&mut patch, &mut file);

@@ -23,10 +23,10 @@ use rich::Segment;
 
 use crate::component::{Component, Context, Flow, View};
 use crate::components::{
-    display_path, fit, plain, question, text, FilePicker, Input, Paginator, PaginatorStyle, Theme,
+    FilePicker, Input, Paginator, PaginatorStyle, Theme, display_path, fit, plain, question, text,
 };
 use crate::event::{Event, Key, KeyCode};
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::policy::{LineIo, NotInteractive};
 
 /// A field's answer.
@@ -783,12 +783,11 @@ impl Form {
             limit,
             ..
         } = &mut self.fields[self.focus].kind
+            && let Some(on) = chosen.get(*cursor).copied()
         {
-            if let Some(on) = chosen.get(*cursor).copied() {
-                let count = chosen.iter().filter(|c| **c).count();
-                if on || limit.is_none_or(|limit| count < limit) {
-                    chosen[*cursor] = !on;
-                }
+            let count = chosen.iter().filter(|c| **c).count();
+            if on || limit.is_none_or(|limit| count < limit) {
+                chosen[*cursor] = !on;
             }
         }
     }
@@ -1070,21 +1069,21 @@ impl Form {
         // its own: `complete` and `up` and `down` (Tab and the arrows), and
         // `submit` (Enter) with one selected.
         let field = &mut self.fields[self.focus];
-        if let (Some(key), Kind::Text(input)) = (event.key(), &mut field.kind) {
-            if input.suggesting() {
-                match input.keymap().action(key) {
-                    Some("complete" | "up" | "down") => {
-                        input.handle(event, context);
-                        field.error = None;
-                        return Flow::Continue;
-                    }
-                    Some("submit") if input.has_selection() => {
-                        input.accept_selected();
-                        field.error = None;
-                        return Flow::Continue;
-                    }
-                    _ => {}
+        if let (Some(key), Kind::Text(input)) = (event.key(), &mut field.kind)
+            && input.suggesting()
+        {
+            match input.keymap().action(key) {
+                Some("complete" | "up" | "down") => {
+                    input.handle(event, context);
+                    field.error = None;
+                    return Flow::Continue;
                 }
+                Some("submit") if input.has_selection() => {
+                    input.accept_selected();
+                    field.error = None;
+                    return Flow::Continue;
+                }
+                _ => {}
             }
         }
         if let Some(key) = event.key() {
@@ -1410,7 +1409,7 @@ impl Component for Form {
                         other => {
                             return Err(NotInteractive::Invalid(format!(
                                 "not yes or no: {other:?}"
-                            )))
+                            )));
                         }
                     })
                 }

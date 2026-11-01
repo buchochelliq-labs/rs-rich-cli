@@ -16,11 +16,11 @@ use std::fmt;
 use std::io::{self, Read, Write};
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicUsize, Ordering};
-use std::sync::{mpsc, Arc, Mutex, MutexGuard, PoisonError};
+use std::sync::{Arc, Mutex, MutexGuard, PoisonError, mpsc};
 use std::thread;
 use std::time::{Duration, Instant};
 
-use portable_pty::{native_pty_system, ChildKiller, CommandBuilder, MasterPty, PtySize};
+use portable_pty::{ChildKiller, CommandBuilder, MasterPty, PtySize, native_pty_system};
 
 /// Called by a host, from any thread, when output arrives or the program
 /// exits. It only schedules work: the pane reads the host on the app's
@@ -354,10 +354,10 @@ impl PtyHost for LocalPty {
         thread::spawn(move || {
             let mut chunk = [0u8; 65536];
             loop {
-                if let Some(limit) = limit {
-                    if !wait_for_room(&shared, limit) {
-                        break;
-                    }
+                if let Some(limit) = limit
+                    && !wait_for_room(&shared, limit)
+                {
+                    break;
                 }
                 let read = match reader.read(&mut chunk) {
                     Ok(0) | Err(_) => break,

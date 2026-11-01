@@ -16,9 +16,9 @@ use std::process::Command;
 
 use rich_interact::policy::Policy;
 use rich_interact::{
-    run, Component, Context, Event, Flow, KeyCode, Output, RunOptions, SessionOptions, View,
+    Component, Context, Event, Flow, KeyCode, Output, RunOptions, SessionOptions, View, run,
 };
-use support::{assert_restored, child_pid, suspends_and_resumes, Pty};
+use support::{Pty, assert_restored, child_pid, suspends_and_resumes};
 
 /// The child's component: `enter` (or `d`) finishes, `p` panics, `e` hands the
 /// terminal to `sh -c 'echo handed-off'`, `n` runs another component from

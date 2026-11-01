@@ -90,9 +90,10 @@ fn replaced_subdirectory_is_rejected_before_missing_parents_are_created() {
     let root = batch_output::OutputRoot::capture(&out).unwrap();
     std::fs::remove_dir(out.join("nested")).unwrap();
     std::os::unix::fs::symlink(&outside, out.join("nested")).unwrap();
-    assert!(root
-        .destination(&out.join("nested/new/export.html"), true)
-        .is_err());
+    assert!(
+        root.destination(&out.join("nested/new/export.html"), true)
+            .is_err()
+    );
     assert_eq!(std::fs::read_dir(outside).unwrap().count(), 0);
 }
 
@@ -182,9 +183,10 @@ fn junction_below_acquired_root_is_rejected() {
         .output()
         .unwrap();
     assert!(result.status.success(), "{result:?}");
-    assert!(root
-        .destination(&out.join("nested/new/export.html"), true)
-        .is_err());
+    assert!(
+        root.destination(&out.join("nested/new/export.html"), true)
+            .is_err()
+    );
     assert_eq!(std::fs::read_dir(outside).unwrap().count(), 0);
 }
 

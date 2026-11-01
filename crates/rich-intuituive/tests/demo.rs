@@ -8,9 +8,9 @@ mod demo;
 
 use std::time::Duration;
 
-use demo::{demo_app, Options, FROZEN_TICKS, TASKS};
+use demo::{FROZEN_TICKS, Options, TASKS, demo_app};
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
-use intuituive::{assert_screen, assert_screen_styled, Driver};
+use intuituive::{Driver, assert_screen, assert_screen_styled};
 
 const WIDTH: u16 = 100;
 const HEIGHT: u16 = 32;

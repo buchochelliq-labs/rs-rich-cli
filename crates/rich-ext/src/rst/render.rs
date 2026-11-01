@@ -453,17 +453,16 @@ fn merge_bullet_markers(items: Vec<Item>) -> Vec<Item> {
     let mut merged = Vec::new();
     let mut iter = items.into_iter().peekable();
     while let Some(item) = iter.next() {
-        if let Item::Text(marker) = &item {
-            if ["•", "∘", "▪"].contains(&marker.plain().trim()) {
-                if let Some(Item::Text(next)) = iter.peek() {
-                    let mut combined = Text::new("");
-                    append_text(&mut combined, marker);
-                    append_text(&mut combined, next);
-                    iter.next();
-                    merged.push(Item::Text(combined));
-                    continue;
-                }
-            }
+        if let Item::Text(marker) = &item
+            && ["•", "∘", "▪"].contains(&marker.plain().trim())
+            && let Some(Item::Text(next)) = iter.peek()
+        {
+            let mut combined = Text::new("");
+            append_text(&mut combined, marker);
+            append_text(&mut combined, next);
+            iter.next();
+            merged.push(Item::Text(combined));
+            continue;
         }
         merged.push(item);
     }
@@ -938,10 +937,10 @@ impl<'a> Visitor<'a> {
         match element.tag {
             "paragraph" => {
                 let in_item = ancestors.last().is_some_and(|a| a.tag == "list_item");
-                if let Some(last) = self.last_text() {
-                    if !last.plain().is_empty() {
-                        append(last, if in_item { "\n" } else { "\n\n" }, None);
-                    }
+                if let Some(last) = self.last_text()
+                    && !last.plain().is_empty()
+                {
+                    append(last, if in_item { "\n" } else { "\n\n" }, None);
                 }
             }
             "docinfo" => self.in_docinfo = false,
@@ -1502,31 +1501,31 @@ impl<'a> Visitor<'a> {
     fn sidebar(&mut self, sidebar: &Element, ancestors: &[Ancestor]) {
         let mut body: &[Node] = &sidebar.children;
         let mut title = String::new();
-        if let Some(Node::Element(first)) = body.first() {
-            if first.tag == "title" {
-                title = first.astext();
-                body = &body[1..];
-            }
+        if let Some(Node::Element(first)) = body.first()
+            && first.tag == "title"
+        {
+            title = first.astext();
+            body = &body[1..];
         }
         let mut subtitle = String::new();
-        if let Some(Node::Element(first)) = body.first() {
-            if first.tag == "subtitle" {
-                subtitle = first.astext();
-                body = &body[1..];
-            }
+        if let Some(Node::Element(first)) = body.first()
+            && first.tag == "subtitle"
+        {
+            subtitle = first.astext();
+            body = &body[1..];
         }
-        if let Some(Node::Element(first)) = body.first() {
-            if first.tag == "field_list" {
-                for field in first.elements() {
-                    let mut parts = field.elements();
-                    if let (Some(name), Some(value)) = (parts.next(), parts.next()) {
-                        if name.astext().trim().to_lowercase() == "subtitle" {
-                            subtitle = value.astext().trim().to_string();
-                        }
-                    }
+        if let Some(Node::Element(first)) = body.first()
+            && first.tag == "field_list"
+        {
+            for field in first.elements() {
+                let mut parts = field.elements();
+                if let (Some(name), Some(value)) = (parts.next(), parts.next())
+                    && name.astext().trim().to_lowercase() == "subtitle"
+                {
+                    subtitle = value.astext().trim().to_string();
                 }
-                body = &body[1..];
             }
+            body = &body[1..];
         }
         let mut items = Vec::new();
         for child in body {
@@ -2033,14 +2032,14 @@ impl Visitor<'_> {
         }
         for row in grid {
             for (c, cell) in row.iter().enumerate() {
-                if let Some((content, more_cols, _)) = cell {
-                    if *more_cols > 0 {
-                        let available: usize =
-                            widths[c..=c + more_cols].iter().sum::<usize>() + 3 * more_cols;
-                        let needed = plain_width(content);
-                        if needed > available {
-                            widths[c + more_cols] += needed - available;
-                        }
+                if let Some((content, more_cols, _)) = cell
+                    && *more_cols > 0
+                {
+                    let available: usize =
+                        widths[c..=c + more_cols].iter().sum::<usize>() + 3 * more_cols;
+                    let needed = plain_width(content);
+                    if needed > available {
+                        widths[c + more_cols] += needed - available;
                     }
                 }
             }
@@ -2104,10 +2103,13 @@ fn spanning_table(
     let origin = |r: usize, c: usize| -> Option<(usize, usize)> {
         for rr in (0..=r).rev() {
             for cc in (0..=c).rev() {
-                if let Some((_, csp, rsp)) = &grid[rr][cc] {
-                    if rr <= r && r <= rr + rsp && cc <= c && c <= cc + csp {
-                        return Some((rr, cc));
-                    }
+                if let Some((_, csp, rsp)) = &grid[rr][cc]
+                    && rr <= r
+                    && r <= rr + rsp
+                    && cc <= c
+                    && c <= cc + csp
+                {
+                    return Some((rr, cc));
                 }
             }
         }
@@ -2119,10 +2121,13 @@ fn spanning_table(
         }
         for rr in (0..=above).rev() {
             for cc in (0..=c).rev() {
-                if let Some((_, csp, rsp)) = &grid[rr][cc] {
-                    if cc <= c && c <= cc + csp && rr <= above && above <= rr + rsp {
-                        return above < rr + rsp;
-                    }
+                if let Some((_, csp, rsp)) = &grid[rr][cc]
+                    && cc <= c
+                    && c <= cc + csp
+                    && rr <= above
+                    && above <= rr + rsp
+                {
+                    return above < rr + rsp;
                 }
             }
         }
@@ -2169,10 +2174,10 @@ fn spanning_table(
             {
                 let parts: Vec<&str> = segment.text.split('\n').collect();
                 for (index, part) in parts.iter().enumerate() {
-                    if !part.is_empty() {
-                        if let Some(last) = current.last_mut() {
-                            append(last, part, segment.style.clone());
-                        }
+                    if !part.is_empty()
+                        && let Some(last) = current.last_mut()
+                    {
+                        append(last, part, segment.style.clone());
                     }
                     if index + 1 < parts.len() {
                         current.push(Text::new(""));
@@ -2587,10 +2592,10 @@ fn char_reference(text: &str) -> Option<(String, usize)> {
     // The longest known prefix, as the standard reads a reference.
     let mut cut = name.len() - 1;
     while cut > 1 {
-        if name.is_char_boundary(cut) {
-            if let Some(value) = entity(&name[..cut]) {
-                return Some((format!("{value}{}", &name[cut..]), name.len()));
-            }
+        if name.is_char_boundary(cut)
+            && let Some(value) = entity(&name[..cut])
+        {
+            return Some((format!("{value}{}", &name[cut..]), name.len()));
         }
         cut -= 1;
     }

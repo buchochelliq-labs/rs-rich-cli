@@ -184,7 +184,7 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
                 cli,
                 ExitClass::Input,
                 format!("cannot acquire export directory: {error}"),
-            )
+            );
         }
     };
     let mut taken = std::collections::BTreeSet::new();
@@ -292,17 +292,17 @@ pub(super) fn run_batch(cli: &Cli) -> ExitCode {
                         if let Some(parent) = planned
                             .parent()
                             .filter(|parent| !parent.as_os_str().is_empty())
+                            && !parent.is_dir()
+                            && !cli.batch_paths.preserve_dirs
                         {
-                            if !parent.is_dir() && !cli.batch_paths.preserve_dirs {
-                                errors.push((
-                                    input.clone(),
-                                    ExitClass::Input,
-                                    Some(format!(
-                                        "output parent is not an existing directory: {}",
-                                        parent.display()
-                                    )),
-                                ));
-                            }
+                            errors.push((
+                                input.clone(),
+                                ExitClass::Input,
+                                Some(format!(
+                                    "output parent is not an existing directory: {}",
+                                    parent.display()
+                                )),
+                            ));
                         }
                     }
                     *slot = Some(path);

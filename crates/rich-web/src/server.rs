@@ -9,14 +9,14 @@ use std::io::{self, Write};
 use std::net::{
     IpAddr, Ipv4Addr, Ipv6Addr, Shutdown, SocketAddr, TcpListener, TcpStream, ToSocketAddrs,
 };
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread::{self, JoinHandle};
 use std::time::{Duration, Instant};
 
 use intuituive::App;
-use tungstenite::protocol::{Role, WebSocketConfig};
 use tungstenite::WebSocket;
+use tungstenite::protocol::{Role, WebSocketConfig};
 
 use crate::http::{self, Head};
 use crate::{isolate, pty, session};

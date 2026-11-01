@@ -6,9 +6,9 @@
 
 use std::io;
 use std::path::{Path, PathBuf};
+use std::sync::Arc;
 use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::mpsc::{self, Receiver};
-use std::sync::Arc;
 use std::time::{Duration, Instant};
 
 use noctiluca::cdp::{ChromeBackend, ChromeOptions};
@@ -17,7 +17,7 @@ use noctiluca::engine::{
     Rect, TabId,
 };
 use noctiluca::file_url;
-use noctiluca::layout::{project, Line, Marks};
+use noctiluca::layout::{Line, Marks, project};
 use noctiluca::model::{Entry, Page, Role};
 use noctiluca::tab::{Command, Intent, Tab, Update};
 use rich_embed::{DevTools, PageState};
@@ -135,10 +135,10 @@ impl Live {
     ) -> Option<Arc<Page>> {
         let start = Instant::now();
         loop {
-            if let Some(page) = &self.page {
-                if ok(page) {
-                    return Some(page.clone());
-                }
+            if let Some(page) = &self.page
+                && ok(page)
+            {
+                return Some(page.clone());
             }
             if start.elapsed() > limit {
                 eprintln!("timed out waiting for {what}");
@@ -207,14 +207,16 @@ fn new_entries_come_within_the_budget_without_a_full_read() {
         let last = page.logs[0].entries.last().unwrap();
         assert_eq!(last.text(), format!("moderator dee: {words} :glow:"));
         // The author keeps the colour the page gave it.
-        assert!(last
-            .runs
-            .iter()
-            .any(|r| r.text == "dee" && r.color.as_deref() == Some("rgb(255, 215, 0)")));
-        assert!(last.runs.iter().any(|r| r
-            .picture
-            .as_ref()
-            .is_some_and(|p| p.alt == ":glow:" && !p.decorative)));
+        assert!(
+            last.runs
+                .iter()
+                .any(|r| r.text == "dee" && r.color.as_deref() == Some("rgb(255, 215, 0)"))
+        );
+        assert!(last.runs.iter().any(|r| {
+            r.picture
+                .as_ref()
+                .is_some_and(|p| p.alt == ":glow:" && !p.decorative)
+        }));
     }
     assert_eq!(
         live.snapshots.load(Ordering::SeqCst),

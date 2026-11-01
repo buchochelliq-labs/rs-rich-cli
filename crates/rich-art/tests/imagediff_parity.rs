@@ -25,7 +25,7 @@
 //! than pretending it is exact.
 #![cfg(feature = "image")]
 
-use rich_art::imagediff::{diff, DiffSettings};
+use rich_art::imagediff::{DiffSettings, diff};
 
 fn fixture(name: &str) -> image::DynamicImage {
     let path = std::path::Path::new(env!("CARGO_MANIFEST_DIR"))

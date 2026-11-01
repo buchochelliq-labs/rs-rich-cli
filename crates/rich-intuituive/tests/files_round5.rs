@@ -7,9 +7,9 @@
 
 use std::path::{Path, PathBuf};
 
+use intuituive::Driver;
 use intuituive::files::*;
 use intuituive::prelude::*;
-use intuituive::Driver;
 
 /// root/
 ///   alpha/a.txt  beta/  notes.md  z.txt

@@ -2,11 +2,11 @@
 //! Every string in it comes from the model, so it is cleaned already.
 
 use std::io;
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use crate::args::Dump;
 use crate::engine::Engine;

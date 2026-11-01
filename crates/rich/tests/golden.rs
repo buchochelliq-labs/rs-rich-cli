@@ -6,12 +6,12 @@
 //! drift from upstream fails loudly. This is the backbone of the "stay in sync"
 //! guarantee described in AGENTS.md.
 
-use rich::markdown::Markdown;
-use rich::measure::Measurement;
 use rich::r#box::{
-    Box as BoxSet, ASCII_DOUBLE_HEAD, DOUBLE_EDGE, HEAVY_HEAD, MINIMAL_HEAVY_HEAD, SIMPLE, SQUARE,
+    ASCII_DOUBLE_HEAD, Box as BoxSet, DOUBLE_EDGE, HEAVY_HEAD, MINIMAL_HEAVY_HEAD, SIMPLE, SQUARE,
     SQUARE_DOUBLE_HEAD,
 };
+use rich::markdown::Markdown;
+use rich::measure::Measurement;
 use std::sync::Arc;
 
 use rich::segment::Segment;
@@ -1299,7 +1299,7 @@ fn terminal_theme_parity() {
 #[test]
 fn pure_function_parity() {
     use rich::cells::{cell_len, chop_cells, set_cell_size};
-    use rich::ratio::{ratio_resolve, Edge};
+    use rich::ratio::{Edge, ratio_resolve};
     use serde_json::Value;
 
     let data = include_str!("golden/functions.tsv");
@@ -1638,8 +1638,8 @@ fn column_options(options: &serde_json::Value) -> rich::ColumnOptions {
 #[test]
 fn progress_time_parity() {
     use rich::{Progress, TaskId, TaskUpdate};
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     let data = include_str!("golden/progress_time.tsv");
     let mut checked = 0;
@@ -2249,8 +2249,8 @@ fn progress_bar_parity() {
 #[test]
 fn progress_live_parity() {
     use rich::Progress;
-    use std::sync::atomic::{AtomicU64, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicU64, Ordering};
 
     let data = include_str!("golden/progress_live.tsv");
     let mut checked = 0;
@@ -2330,7 +2330,7 @@ fn progress_live_parity() {
 /// its records through one render, so repeated times are blanked.
 #[test]
 fn log_render_parity() {
-    use rich::{level_text, LogRender};
+    use rich::{LogRender, level_text};
     let data = include_str!("golden/log_render.tsv");
     let mut checked = 0;
     for (index, raw) in data.lines().enumerate() {
@@ -2386,8 +2386,8 @@ fn log_render_parity() {
 /// Run one `theme_stack.tsv` step list. Keep in sync with `run_theme_steps` in
 /// scripts/capture_golden.py.
 fn run_theme_steps(console: &mut Console, steps: &[serde_json::Value], out: &mut String) {
-    use rich::errors::RichError;
     use rich::Theme;
+    use rich::errors::RichError;
 
     fn theme_of(styles: &serde_json::Value, inherit: bool) -> Theme {
         let pairs = styles
@@ -2532,7 +2532,7 @@ fn markdown_links_parity() {
 /// against a few thousand cases swept through CPython.
 #[test]
 fn pyformat_parity() {
-    use rich::pyformat::{format_value, FormatValue};
+    use rich::pyformat::{FormatValue, format_value};
     let rows = tsv_rows(include_str!("golden/pyformat.tsv"), 3);
     let mut failures = Vec::new();
     for (line, columns) in &rows {

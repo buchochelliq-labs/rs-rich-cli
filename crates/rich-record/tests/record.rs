@@ -124,9 +124,11 @@ fn records_writes_and_checks() {
     std::fs::write(dir.join("notes.txt"), "mine\n").unwrap();
     std::fs::write(&outside, "outside\n").unwrap();
     let problems = record::check(&recording, &dir);
-    assert!(problems
-        .iter()
-        .any(|p| matches!(p, Problem::Differs { name, .. } if name == "first")));
+    assert!(
+        problems
+            .iter()
+            .any(|p| matches!(p, Problem::Differs { name, .. } if name == "first"))
+    );
     let orphaned: Vec<_> = problems
         .iter()
         .filter_map(|p| match p {

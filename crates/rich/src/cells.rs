@@ -96,10 +96,10 @@ pub fn cell_len(text: &str) -> usize {
         if c == ZERO_WIDTH_JOINER {
             index += 1; // skip the joined character entirely
         } else if c == VARIATION_SELECTOR_16 {
-            if let Some(previous) = last_measured.take() {
-                if NARROW_TO_WIDE.contains(&previous) {
-                    total += 1;
-                }
+            if let Some(previous) = last_measured.take()
+                && NARROW_TO_WIDE.contains(&previous)
+            {
+                total += 1;
             }
         } else {
             let width = char_cell_width(c);

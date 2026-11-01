@@ -146,11 +146,7 @@ fn modes_list_and_apply_only_the_shown_modes_bindings() {
         let view = switch(
             move || mode.get() == Mode::Osc,
             |osc| {
-                if osc {
-                    label("osc")
-                } else {
-                    label("spec")
-                }
+                if osc { label("osc") } else { label("spec") }
             },
         );
         column([view.fixed(1), text!("{peaks} {log}").fixed(1)])

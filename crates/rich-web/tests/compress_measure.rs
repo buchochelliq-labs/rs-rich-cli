@@ -13,8 +13,8 @@
 use std::time::{Duration, Instant};
 
 use rich_web::dom::Dom;
-use rich_web::intuituive::prelude::*;
 use rich_web::intuituive::Driver;
+use rich_web::intuituive::prelude::*;
 
 fn deflate(bytes: &[u8]) -> (usize, Duration) {
     use std::io::Write;

@@ -1277,10 +1277,12 @@ mod tests {
         let error = parse("Type \"ok\"\nFrobnicate\n").unwrap_err();
         assert_eq!(error.line, 2);
         assert!(error.message.contains("Frobnicate"));
-        assert!(parse("Sleep soon")
-            .unwrap_err()
-            .message
-            .contains("duration"));
+        assert!(
+            parse("Sleep soon")
+                .unwrap_err()
+                .message
+                .contains("duration")
+        );
         assert!(parse("Screenshot ../x").is_err());
         assert!(parse("Type \"open").is_err());
     }

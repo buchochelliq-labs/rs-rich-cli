@@ -3,11 +3,11 @@
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
-use super::axis::{exact_label, exact_labels, fit, AxisRequest};
+use super::axis::{AxisRequest, exact_label, exact_labels, fit};
 use super::scale::{along, units_past};
 use super::{
-    cell_units, cells, has_colour, lines_to_segments, series_key, theme_style, truncate,
-    user_style, Charset, Line, Scale, ValueFormat,
+    Charset, Line, Scale, ValueFormat, cell_units, cells, has_colour, lines_to_segments,
+    series_key, theme_style, truncate, user_style,
 };
 
 /// Columns an elided gap takes.
@@ -396,10 +396,11 @@ impl Timeline {
         let fixed = self.min.is_some() || self.max.is_some();
         let (lo, hi) = self.data().unwrap_or((0.0, 1.0));
         let data = Scale::new(lo, hi).bounds(self.min, self.max);
-        if !fixed && self.compress {
-            if let Some(mapping) = self.compressed(data, plot) {
-                return mapping;
-            }
+        if !fixed
+            && self.compress
+            && let Some(mapping) = self.compressed(data, plot)
+        {
+            return mapping;
         }
         let cells = plot.saturating_sub(1);
         let axis = fit(&AxisRequest {

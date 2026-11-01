@@ -23,8 +23,8 @@
 //! assert!(other.is_cancelled());
 //! ```
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 /// A cloneable, thread-safe cancellation flag. See the [module docs](self).
 #[derive(Clone, Default)]

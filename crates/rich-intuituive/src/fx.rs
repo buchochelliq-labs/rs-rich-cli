@@ -52,11 +52,11 @@ use std::time::Duration;
 
 use rich::{Color, ColorTriplet, Style};
 
-use crate::app::{after, Easing, Timer};
+use crate::app::{Easing, Timer, after};
 use crate::effect::effect;
 use crate::focus::Direction;
-use crate::node::{column, label, switch, Node};
-use crate::reactive::{signal, watch, Signal};
+use crate::node::{Node, column, label, switch};
+use crate::reactive::{Signal, signal, watch};
 use crate::widget::{Canvas, DrawCx};
 
 /// How often a running effect draws: about 60 times a second.
@@ -369,11 +369,7 @@ impl Run {
             length.map_or(at, |l| if at >= l - NEAR { l } else { at })
         } else {
             let at = self.from - moved;
-            if at <= NEAR {
-                0.0
-            } else {
-                at
-            }
+            if at <= NEAR { 0.0 } else { at }
         }
     }
 

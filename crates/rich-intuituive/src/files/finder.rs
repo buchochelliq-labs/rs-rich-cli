@@ -6,7 +6,7 @@ use std::path::PathBuf;
 use rich_ext::listing::Walk;
 
 use crate::app::Ctx;
-use crate::finder::{fuzzy_list_with, FuzzyOptions, FuzzySource};
+use crate::finder::{FuzzyOptions, FuzzySource, fuzzy_list_with};
 use crate::node::Node;
 
 /// The most paths a finder collects from its walk.

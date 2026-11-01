@@ -68,9 +68,9 @@ use rich::table::Table;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Text};
 use serde_json::Value;
 
-use super::licenses::{identifier, parse as parse_expression, Expr, LicenseClass};
+use super::licenses::{Expr, LicenseClass, identifier, parse as parse_expression};
 use super::licenses::{LicenseReport, LicensedPackage};
-use super::{clean, compare_versions, stack, stack_measure, theme_style, DepsError};
+use super::{DepsError, clean, compare_versions, stack, stack_measure, theme_style};
 
 /// A licence identifier as the policy matches it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -275,15 +275,15 @@ impl Policy {
     /// Let one crate use more licences.
     #[must_use]
     pub fn exception(mut self, exception: PolicyException) -> Self {
-        if let Some(requirement) = &exception.version {
-            if meets("0.0.0", requirement).is_none() {
-                self.notes.push(format!(
-                    "exceptions: {:?} for {} is not a version requirement; the exception \
+        if let Some(requirement) = &exception.version
+            && meets("0.0.0", requirement).is_none()
+        {
+            self.notes.push(format!(
+                "exceptions: {:?} for {} is not a version requirement; the exception \
                      applies to no version",
-                    clean(requirement),
-                    clean(&exception.name)
-                ));
-            }
+                clean(requirement),
+                clean(&exception.name)
+            ));
         }
         let allowed = exception
             .allow
@@ -539,7 +539,7 @@ impl Policy {
                     Some(_) => {
                         return Err(DepsError::new(format!(
                             "`{prefix}private.ignore` is not true or false"
-                        )))
+                        )));
                     }
                 }
                 if let Some(registries) = private.get("registries") {
@@ -561,7 +561,7 @@ impl Policy {
                         return Err(DepsError::new(format!(
                             "`conflicts` is {:?}: warn, deny or ignore",
                             clean(mode)
-                        )))
+                        )));
                     }
                 },
                 Some(_) => return Err(DepsError::new("`conflicts` is not a string")),
@@ -792,7 +792,9 @@ fn pair(root: (&str, Option<&str>), dep: (&str, Option<&str>)) -> (Severity, Str
             format!("{shown}: a licence this reader does not know"),
         ),
         Kind::Permissive => {
-            if gpl2_only() && d.base == "apache-2.0" && d.exception.as_deref() != Some("llvm-exception")
+            if gpl2_only()
+                && d.base == "apache-2.0"
+                && d.exception.as_deref() != Some("llvm-exception")
             {
                 (
                     Severity::Conflict,
@@ -838,7 +840,9 @@ fn pair(root: (&str, Option<&str>), dep: (&str, Option<&str>)) -> (Severity, Str
             ),
             Kind::Weak => (
                 Severity::Conflict,
-                format!("strong copyleft in a weak-copyleft crate: the combined work falls under {shown}"),
+                format!(
+                    "strong copyleft in a weak-copyleft crate: the combined work falls under {shown}"
+                ),
             ),
             Kind::Strong if r.is_gnu() && d.is_gnu() => {
                 if gpl2_only() && d.is_gnu3() {
@@ -858,7 +862,9 @@ fn pair(root: (&str, Option<&str>), dep: (&str, Option<&str>)) -> (Severity, Str
             Kind::Strong if r.base == d.base => fine,
             Kind::Strong => (
                 Severity::Check,
-                format!("two different copyleft licences: check that {shown} combines with the root's"),
+                format!(
+                    "two different copyleft licences: check that {shown} combines with the root's"
+                ),
             ),
         },
     }

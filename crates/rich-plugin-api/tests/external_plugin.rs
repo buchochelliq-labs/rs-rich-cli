@@ -4,17 +4,17 @@
 
 use std::sync::Arc;
 
+use rich::r#box::ROUNDED;
 use rich::console::ConsoleOptions;
 use rich::protocol::{HighlightError, HighlightedCode};
-use rich::r#box::ROUNDED;
 use rich::segment::Segment;
 use rich::{CodeHighlighter, Console, FenceRenderer, Highlighter, Renderable, Text, Theme};
 use rich_plugin_api::component::{
     ComponentBinding, ComponentContext, ComponentEvent, ComponentFlow, ComponentView,
 };
 use rich_plugin_api::{
-    Capability, ComponentFactory, Plugin, PluginComponent, PluginError, PluginMetadata,
-    PluginRegistrar, SourceRenderer, TextTransform, PLUGIN_API_VERSION,
+    Capability, ComponentFactory, PLUGIN_API_VERSION, Plugin, PluginComponent, PluginError,
+    PluginMetadata, PluginRegistrar, SourceRenderer, TextTransform,
 };
 
 /// A component: Up counts, Enter answers with the count.

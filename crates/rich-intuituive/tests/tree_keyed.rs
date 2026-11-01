@@ -6,7 +6,7 @@ use std::collections::HashSet;
 
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::prelude::*;
-use intuituive::widgets::{tree_keyed, TreeItem, TreeKeys};
+use intuituive::widgets::{TreeItem, TreeKeys, tree_keyed};
 
 fn plain(driver: &intuituive::Driver) -> Vec<String> {
     driver
@@ -90,9 +90,11 @@ fn collapsing_moves_a_selection_inside_up_to_the_item() {
 fn a_prefix_and_a_symbol_come_before_the_indent_and_the_arrow_still_toggles() {
     let app = App::new(|| {
         let items = || {
-            vec![TreeItem::keyed("src", "src")
-                .prefix("  ")
-                .child(TreeItem::keyed("src/lib.rs", "lib.rs").prefix("M "))]
+            vec![
+                TreeItem::keyed("src", "src")
+                    .prefix("  ")
+                    .child(TreeItem::keyed("src/lib.rs", "lib.rs").prefix("M ")),
+            ]
         };
         tree_keyed(items, signal(None), signal(HashSet::new())).symbol("> ")
     });
@@ -134,7 +136,7 @@ fn keys_the_tree_does_not_take_reach_its_ancestors() {
 fn a_reloaded_lazy_level_shows_what_it_holds_now() {
     use std::sync::{Arc, Mutex};
 
-    use intuituive::widgets::{tree_lazy_with, LazyItem, LazyTree};
+    use intuituive::widgets::{LazyItem, LazyTree, tree_lazy_with};
 
     let files = Arc::new(Mutex::new(vec!["a.txt", "b.txt"]));
     let disk = files.clone();

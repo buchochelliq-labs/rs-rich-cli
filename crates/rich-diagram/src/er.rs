@@ -64,7 +64,7 @@ use rich::segment::Segment;
 
 use crate::dot::{prefixed_note, trim_final_newline};
 use crate::graph::{Cluster, Direction, Edge, Graph, Head, Node, Shape};
-use crate::layout::{draw, DrawError, Drawing};
+use crate::layout::{DrawError, Drawing, draw};
 
 /// A column of an [`Entity`].
 #[derive(Clone, Debug, Default, PartialEq, Eq)]

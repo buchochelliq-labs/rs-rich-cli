@@ -666,11 +666,7 @@ impl<'a, M> Breadcrumbs<'a, M> {
         let mut first = 0;
         let total = |from: usize| -> usize {
             let shown: usize = widths[from..].iter().sum::<usize>() + gap * (path.len() - from - 1);
-            if from > 0 {
-                shown + 1 + gap
-            } else {
-                shown
-            }
+            if from > 0 { shown + 1 + gap } else { shown }
         };
         while first + 1 < path.len() && total(first) > width {
             first += 1;

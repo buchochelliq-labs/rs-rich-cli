@@ -183,7 +183,7 @@ pub fn parse_with(text: &str, now: DateTime, options: DateOptions) -> Result<Dat
             return named_day(&word, today)
                 .map(start)
                 .or_else(|| other(&word, now))
-                .ok_or_else(bad)
+                .ok_or_else(bad);
         }
     };
     Ok(at)

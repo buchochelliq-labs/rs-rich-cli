@@ -185,8 +185,8 @@ mod tests {
     use super::*;
     use crate::buffer::buffer_to_lines;
     use ratatui_core::style::{Color as RColor, Style as RStyle};
-    use rich::color::ColorType;
     use rich::Panel;
+    use rich::color::ColorType;
 
     /// A console like the default one, but fixed at `width` for the
     /// reference renderings.

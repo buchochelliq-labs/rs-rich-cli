@@ -18,9 +18,9 @@ use rich_ext::chart::{
 use rich_ext::dsp::Reading;
 
 use crate::digits::digits;
-use crate::node::{column, described, drawn_described, leaf, text, Axis, Node};
+use crate::node::{Axis, Node, column, described, drawn_described, leaf, text};
 use crate::screen::Rect;
-use crate::widget::{widget, Canvas, DrawCx, MeasureCx, Widget};
+use crate::widget::{Canvas, DrawCx, MeasureCx, Widget, widget};
 
 /// A level meter: rs-rich-ext's [`LevelMeter`] showing `level` with a mark
 /// at `peak`, both closures that may read signals, as a VU or peak meter

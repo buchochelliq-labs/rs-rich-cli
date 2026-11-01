@@ -5,8 +5,8 @@
 //! script). Each row is `name<TAB>width<TAB>justify<TAB>text<TAB>output`, with
 //! the text and output backslash-escaped.
 
-use rich_art::figlet::{self, FigletFont};
 use rich_art::Justify;
+use rich_art::figlet::{self, FigletFont};
 
 /// Reverse the escaping applied by the capture script.
 fn unescape(value: &str) -> String {

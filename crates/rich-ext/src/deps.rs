@@ -702,11 +702,11 @@ fn label(
         &format!("v{}", clean(&info.version)),
         Some(version_style.into()),
     );
-    if let Some(origin) = info.origin() {
-        if !(origin == "(path)" && graph.is_member(package)) {
-            text.append(" ", None);
-            text.append(origin, Some(theme_style(console, "deps.source").into()));
-        }
+    if let Some(origin) = info.origin()
+        && !(origin == "(path)" && graph.is_member(package))
+    {
+        text.append(" ", None);
+        text.append(origin, Some(theme_style(console, "deps.source").into()));
     }
     if duplicate {
         text.append(
@@ -1329,15 +1329,19 @@ mod tests {
 
     #[test]
     fn bad_input_says_why() {
-        assert!(DepGraph::from_json("[]")
-            .unwrap_err()
-            .to_string()
-            .contains("no `packages`"));
+        assert!(
+            DepGraph::from_json("[]")
+                .unwrap_err()
+                .to_string()
+                .contains("no `packages`")
+        );
         let no_deps = r#"{"packages": [], "workspace_members": [], "resolve": null}"#;
-        assert!(DepGraph::from_json(no_deps)
-            .unwrap_err()
-            .to_string()
-            .contains("--no-deps"));
+        assert!(
+            DepGraph::from_json(no_deps)
+                .unwrap_err()
+                .to_string()
+                .contains("--no-deps")
+        );
         let graph = DepGraph::from_json(&metadata()).unwrap();
         assert!(WhyTree::new(graph, "nope").is_err());
     }

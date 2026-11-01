@@ -483,19 +483,19 @@ impl Widget for VirtualScroll {
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         self.bar_rect = None;
         let (view_w, view_h) = self.view;
-        if view_w < canvas.width() {
-            if let Some(look) = &self.bar.look {
-                let rect = Rect::new(canvas.width() - 1, 0, 1, view_h);
-                look.paint(
-                    cx.console(),
-                    canvas,
-                    rect,
-                    self.top as usize,
-                    self.total as usize,
-                    view_h as usize,
-                );
-                self.bar_rect = Some(rect);
-            }
+        if view_w < canvas.width()
+            && let Some(look) = &self.bar.look
+        {
+            let rect = Rect::new(canvas.width() - 1, 0, 1, view_h);
+            look.paint(
+                cx.console(),
+                canvas,
+                rect,
+                self.top as usize,
+                self.total as usize,
+                view_h as usize,
+            );
+            self.bar_rect = Some(rect);
         }
     }
 

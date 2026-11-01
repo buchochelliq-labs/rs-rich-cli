@@ -1,12 +1,12 @@
 #![cfg(feature = "image")]
 //! Alpha backgrounds (#126): the terminal's own background, and a
 //! checkerboard preview.
+use rich::Console;
 use rich::color::{Color, ColorSystem};
 use rich::segment::Segment;
-use rich::Console;
 use rich_art::{
-    image::{DynamicImage, Rgb, RgbImage, Rgba, RgbaImage},
     ImageArt, ImageBackground, ImageColorMode, ImageFit, ImageMode,
+    image::{DynamicImage, Rgb, RgbImage, Rgba, RgbaImage},
 };
 
 fn console() -> Console {
@@ -149,9 +149,10 @@ fn terminal_default_contain_padding_is_transparent() {
     assert_eq!(row.len(), 4);
     assert_eq!(row[0], (" ".into(), None, None));
     assert_eq!(row[3], (" ".into(), None, None));
-    assert!(row
-        .iter()
-        .any(|cell| cell.1 == Some(Color::from_rgb(255, 0, 0))));
+    assert!(
+        row.iter()
+            .any(|cell| cell.1 == Some(Color::from_rgb(255, 0, 0)))
+    );
 }
 
 #[test]
@@ -207,9 +208,11 @@ fn checkerboard_shows_through_partial_alpha_and_not_under_opaque_pixels() {
         .width(16)
         .background_mode(ImageBackground::Checkerboard);
     let row = &cells(&render(&art))[0];
-    assert!(row[..8]
-        .iter()
-        .all(|cell| cell.1 == Some(Color::from_rgb(255, 0, 0))));
+    assert!(
+        row[..8]
+            .iter()
+            .all(|cell| cell.1 == Some(Color::from_rgb(255, 0, 0)))
+    );
     // Half-transparent blue over the light square, then the dark one.
     assert_eq!(row[8].1, Some(Color::from_rgb(76, 76, 204)));
     assert_eq!(row[9].1, Some(Color::from_rgb(51, 51, 179)));

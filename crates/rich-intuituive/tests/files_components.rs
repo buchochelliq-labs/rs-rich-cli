@@ -7,9 +7,9 @@ use std::path::PathBuf;
 
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
 
+use intuituive::Driver;
 use intuituive::files::*;
 use intuituive::prelude::*;
-use intuituive::Driver;
 
 /// root/
 ///   alpha/a.txt  beta/  .hidden  notes.md  data.bin  z.txt

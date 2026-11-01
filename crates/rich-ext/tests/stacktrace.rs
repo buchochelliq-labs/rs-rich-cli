@@ -60,10 +60,12 @@ fn node_traces_skip_the_excerpt_and_follow_cause() {
         trace.frames[0].library,
         "node: internals are library frames"
     );
-    assert!(trace
-        .frames
-        .iter()
-        .any(|frame| frame.metadata.iter().any(|(key, _)| key == "elided")));
+    assert!(
+        trace
+            .frames
+            .iter()
+            .any(|frame| frame.metadata.iter().any(|(key, _)| key == "elided"))
+    );
     let cause = trace.cause.as_deref().expect("[cause]");
     assert_eq!(cause.kind.as_deref(), Some("Error"));
     assert_eq!(cause.message.as_deref(), Some("disk full"));

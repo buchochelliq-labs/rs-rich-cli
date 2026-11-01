@@ -11,7 +11,7 @@
 use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
-use rich_ext::data::{parse, Format};
+use rich_ext::data::{Format, parse};
 use rich_interact::components::json_path;
 use rich_interact::headless::{self, Script};
 use rich_interact::{DataExplorer, TreeSelect};

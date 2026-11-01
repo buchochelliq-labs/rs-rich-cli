@@ -65,7 +65,7 @@ use serde::{Deserialize, Serialize};
 use serde_json::Value as Json;
 
 use super::{
-    describe, grouped, percent, plural, MissingBucket, MissingMap, Profile, ProfileOptions, Rules,
+    MissingBucket, MissingMap, Profile, ProfileOptions, Rules, describe, grouped, percent, plural,
 };
 use crate::infer::Inferrer;
 use crate::jsonl::Lines;
@@ -986,9 +986,11 @@ mod tests {
             },
         )
         .unwrap_err();
-        assert!(error
-            .message()
-            .starts_with("no path \"k0500\"; the paths are id, k0000"));
+        assert!(
+            error
+                .message()
+                .starts_with("no path \"k0500\"; the paths are id, k0000")
+        );
         assert!(
             error.message().contains("max_paths 5 was reached"),
             "{error}"

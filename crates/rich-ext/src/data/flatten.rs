@@ -7,7 +7,7 @@ use std::fmt;
 use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Table, Text};
 
 use super::table::cell_text;
-use super::{escape_controls, style, Node, Path, PathSegment, Value};
+use super::{Node, Path, PathSegment, Value, escape_controls, style};
 
 /// Every leaf of `node` with its path, in document order. Scalars and
 /// *empty* containers are leaves, so [`unflatten`] rebuilds the same shape.

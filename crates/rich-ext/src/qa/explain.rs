@@ -28,7 +28,7 @@ use rich::{Color, ColorSystem, Console, ConsoleOptions, Renderable, Segment, Tab
 use serde::{Deserialize, Serialize};
 
 use super::stress::lost_chars;
-use super::{content_chars, is_ellipsis, plain_lines, plural, table_then_line, Probe};
+use super::{Probe, content_chars, is_ellipsis, plain_lines, plural, table_then_line};
 use crate::capabilities::{ColorDepth, Report};
 use crate::fidelity::{Fidelity, FidelitySource, Policy};
 use crate::target::RenderTarget;
@@ -158,15 +158,15 @@ pub fn downgrade_chain(color: &Color, depth: ColorDepth) -> Option<String> {
         return None;
     }
     let mut chain = vec![label];
-    if color.kind == ColorType::Truecolor {
-        if let Some(n) = color.downgrade(ColorSystem::EightBit).number {
-            chain.push(n.to_string());
-        }
+    if color.kind == ColorType::Truecolor
+        && let Some(n) = color.downgrade(ColorSystem::EightBit).number
+    {
+        chain.push(n.to_string());
     }
-    if target == 0 {
-        if let Some(n) = color.downgrade(ColorSystem::Standard).number {
-            chain.push(STANDARD_NAMES[usize::from(n % 16)].to_owned());
-        }
+    if target == 0
+        && let Some(n) = color.downgrade(ColorSystem::Standard).number
+    {
+        chain.push(STANDARD_NAMES[usize::from(n % 16)].to_owned());
     }
     Some(chain.join(" → "))
 }

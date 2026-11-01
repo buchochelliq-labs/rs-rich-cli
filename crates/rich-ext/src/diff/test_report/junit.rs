@@ -15,10 +15,10 @@
 
 use std::time::Duration;
 
-use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
+use quick_xml::events::{BytesStart, Event};
 
-use super::{expected_actual, Case, Status, Suite, TestAdapter, TestParseError, TestRun};
+use super::{Case, Status, Suite, TestAdapter, TestParseError, TestRun, expected_actual};
 
 /// The JUnit XML adapter.
 #[derive(Clone, Copy, Debug, Default)]
@@ -204,10 +204,10 @@ pub fn parse(input: &str) -> Result<TestRun, TestParseError> {
                 *capture = Capture::None;
             }
             "skipped" => {
-                if let Some(c) = case.as_mut() {
-                    if c.message.is_none() {
-                        c.message = body;
-                    }
+                if let Some(c) = case.as_mut()
+                    && c.message.is_none()
+                {
+                    c.message = body;
                 }
                 *capture = Capture::None;
             }

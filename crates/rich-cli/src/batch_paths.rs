@@ -57,7 +57,7 @@ impl FilenameTemplate {
                         Some('}') => break,
                         Some(c) => name.push(c),
                         None => {
-                            return Err(PathPlanError::InvalidTemplate("unclosed token".into()))
+                            return Err(PathPlanError::InvalidTemplate("unclosed token".into()));
                         }
                     }
                 }

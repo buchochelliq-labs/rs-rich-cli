@@ -8,10 +8,10 @@ use rich::Segment;
 use rich_interact::{Button, Key, KeyCode, MouseKind};
 
 use crate::node::{Axis, Node};
-use crate::reactive::{signal, Signal};
+use crate::reactive::{Signal, signal};
 use crate::screen::Rect;
 use crate::scrollbar::Bar;
-use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
+use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, widget};
 use crate::widgets::{cell_line, over};
 
 /// An item of a [`tree`]: a line of markup and the items under it, with
@@ -1011,7 +1011,7 @@ pub fn tree_lazy_with<E: std::fmt::Display>(
     use std::sync::Arc;
 
     use crate::reactive::watch;
-    use crate::task::{spawn, Load};
+    use crate::task::{Load, spawn};
 
     let LazyTree { loaded, generation } = loads;
     let path = signal(Vec::<usize>::new());

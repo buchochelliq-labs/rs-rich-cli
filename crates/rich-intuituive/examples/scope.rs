@@ -48,7 +48,7 @@ use intuituive::audio::{self, Capture, Format, Pcm};
 use intuituive::interact::BackendKind;
 use intuituive::prelude::*;
 use intuituive::widgets::cells;
-use intuituive::{latest_iter, on_write_ref, recent, FeedState, Pace};
+use intuituive::{FeedState, Pace, latest_iter, on_write_ref, recent};
 use rich_ext::chart::{
     Axis, AxisScale, Chart, Dataset, GraphType, Labels, Layering, LegendPosition, Marker,
     OutOfBounds,
@@ -465,11 +465,7 @@ pub fn spectroscope(g: &Graph, s: &Spectroscope, history: &VecDeque<Matrix>) -> 
     // scope-tui's phase: atan2 with its arguments as it passes them.
     let phase = |(re, im): &dsp::Complex| {
         let p = re.atan2(*im);
-        if p.is_normal() {
-            p
-        } else {
-            0.0
-        }
+        if p.is_normal() { p } else { 0.0 }
     };
     let mut phases = Vec::new();
     let channels = history.back().map_or(0, Vec::len);
@@ -1100,7 +1096,7 @@ pub fn parse(args: &[String]) -> Result<Command, String> {
                 *server_buffer = number(arg, args.next())?.max(1.0) as u32
             }
             ("demo" | "file" | "audio" | "pulse", Some(_)) => {
-                return Err(format!("unexpected {arg:?}: there is one source"))
+                return Err(format!("unexpected {arg:?}: there is one source"));
             }
             ("demo", None) => source = Some(Source::Demo { still: false }),
             ("file", None) => {
@@ -1195,7 +1191,7 @@ pub fn input(source: &Source, options: &Options) -> std::io::Result<Input> {
                 "audio and pulse need the audio feature: cargo run -p rs-rich-intuituive \
                  --example scope --features audio -- audio; or pipe PCM into `file -`, as in \
                  parec --format=s16le --rate=48000 --channels=2 | scope file -",
-            ))
+            ));
         }
     })
 }

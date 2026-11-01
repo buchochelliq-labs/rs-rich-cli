@@ -9,7 +9,7 @@
 use rich::Console;
 use rich_ext::redact::{Preview, Redactor};
 
-use super::{authoring, viewers, Cli, ExitClass, ExitCode, ReportFormat};
+use super::{Cli, ExitClass, ExitCode, ReportFormat, authoring, viewers};
 
 /// `rich capture`'s previews: the command line (as
 /// [`Redactor::redact_args`] masks it) and the output (as the ANSI

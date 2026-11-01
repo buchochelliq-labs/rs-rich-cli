@@ -3,17 +3,17 @@ use std::io::{self, BufRead};
 #[path = "../tests/support/pyvalue.rs"]
 mod pyvalue;
 
+use rich::r#box::{ASCII, DOUBLE, HEAVY, HEAVY_HEAD, MINIMAL, ROUNDED, SQUARE};
 use rich::json::JsonOptions;
 use rich::markdown::Markdown;
 use rich::panel::Panel;
 use rich::pretty::Pretty;
-use rich::r#box::{ASCII, DOUBLE, HEAVY, HEAVY_HEAD, MINIMAL, ROUNDED, SQUARE};
 use rich::{
     Align, ColorSystem, Console, HorizontalAlign, Justify, Overflow, Padding, Rule, Style, Table,
     Text,
 };
 use rich::{Columns, Json, ProgressColumn, Tree};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 fn box_set(name: &str) -> Result<rich::r#box::Box, String> {
     match name {

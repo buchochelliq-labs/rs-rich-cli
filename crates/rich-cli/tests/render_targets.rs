@@ -67,9 +67,11 @@ mod images {
         for kind in [TargetKind::Capture, TargetKind::Html, TargetKind::Svg] {
             let t = target(kind);
             let c = t.console();
-            assert!(image(ImageMode::Sixel)
-                .render_with_environment(&c, &c.options(), &t)
-                .is_err());
+            assert!(
+                image(ImageMode::Sixel)
+                    .render_with_environment(&c, &c.options(), &t)
+                    .is_err()
+            );
             assert_eq!(t.capabilities().sixel, Support::Unsupported);
             let s = t.segments(&Panel::new(Box::new(image(ImageMode::Auto))));
             assert!(s.iter().all(|s| !s.control));

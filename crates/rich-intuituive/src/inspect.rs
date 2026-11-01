@@ -940,7 +940,7 @@ impl Inspector {
                 return Handled {
                     used: true,
                     ..Handled::default()
-                }
+                };
             }
         }
         Handled::used()
@@ -1167,11 +1167,11 @@ impl Inspector {
         }
         // The tree's rows, which the arrows move through on any pane.
         let tree = self.tree(report);
-        if let Some(id) = self.selected {
-            if !self.rows.iter().any(|row| row.id == id) {
-                // It left the tree.
-                self.selected = None;
-            }
+        if let Some(id) = self.selected
+            && !self.rows.iter().any(|row| row.id == id)
+        {
+            // It left the tree.
+            self.selected = None;
         }
         let title = if self.pick.is_some() {
             "[b]inspector[/] [reverse] pick [/]".to_string()

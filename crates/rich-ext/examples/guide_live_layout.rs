@@ -9,7 +9,7 @@ use std::path::PathBuf;
 use rich::protocol::{RenderEnvironment, Support, TargetCapabilities};
 use rich::{ColorSystem, Console, Panel, Renderable, Syntax, Table, Text, Theme};
 use rich_ext::layout::{
-    allocate, Alignment, Axis, Constraint, LayoutNode, OverflowPolicy, Overflowing,
+    Alignment, Axis, Constraint, LayoutNode, OverflowPolicy, Overflowing, allocate,
 };
 use rich_ext::live::{LiveCoordinator, LiveError};
 use rich_ext::target::{RenderTarget, TargetKind};

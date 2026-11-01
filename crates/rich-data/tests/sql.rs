@@ -8,7 +8,7 @@ use rich_data::csv::CsvReader;
 use rich_data::infer::Inferrer;
 use rich_data::sql::ResultSet;
 use rich_data::window::RowWindow;
-use rich_data::{jsonl, DataError, Row, RowSource, Value};
+use rich_data::{DataError, Row, RowSource, Value, jsonl};
 
 const CSV: &str = include_str!("fixtures/services.csv");
 const JSONL: &str = include_str!("fixtures/services.jsonl");

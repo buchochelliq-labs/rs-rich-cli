@@ -4,10 +4,10 @@
 
 use std::cell::RefCell;
 use std::rc::{Rc, Weak};
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
-use rich_intuituive::{signal, watch, Ctx};
+use rich_intuituive::{Ctx, signal, watch};
 
 use crate::host::Notify;
 

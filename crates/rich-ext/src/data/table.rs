@@ -5,7 +5,7 @@ use std::collections::HashMap;
 
 use rich::{Cell, Console, ConsoleOptions, Justify, Renderable, Segment, Table, Text};
 
-use super::{escape_controls, scalar_text, style, truncate_chars, Node, Value};
+use super::{Node, Value, escape_controls, scalar_text, style, truncate_chars};
 use crate::table::{StyleRules, Value as CellValue};
 
 /// How nested values are cut in a cell when no `max_string` is set.

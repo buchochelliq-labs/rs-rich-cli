@@ -39,7 +39,7 @@
 
 use std::cell::RefCell;
 
-pub use rich_ext::clipboard::{ClipboardError, CopyFormat, CLIPBOARD_VAR, MAX_BYTES};
+pub use rich_ext::clipboard::{CLIPBOARD_VAR, ClipboardError, CopyFormat, MAX_BYTES};
 
 #[derive(Default)]
 struct State {

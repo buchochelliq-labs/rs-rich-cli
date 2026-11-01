@@ -6,13 +6,13 @@ use std::path::PathBuf;
 
 use rich::protocol::{Support, TargetCapabilities};
 use rich::{ColorSystem, Console, Text, Theme};
+use rich_ext::ConsoleExt;
 use rich_ext::diagnostic::Level;
-use rich_ext::diff::git::{parse_unified, Annotation, PatchView, TemplateLinks};
-use rich_ext::diff::test_report::{junit, libtest, TestReport};
+use rich_ext::diff::git::{Annotation, PatchView, TemplateLinks, parse_unified};
+use rich_ext::diff::test_report::{TestReport, junit, libtest};
 use rich_ext::diff::{ConflictFile, ConflictView, DiffView, Layout, SourceDiff, TextDiff};
 use rich_ext::target::{RenderTarget, TargetKind};
 use rich_ext::testing::RenderSnapshot;
-use rich_ext::ConsoleExt;
 
 const OLD: &str = "\
 [server]
@@ -239,7 +239,11 @@ fn assertion_message() -> String {
 
 fn main() {
     // Plain, deterministic assertion output (see RICH_ASSERT_COLOR).
-    std::env::set_var("RICH_ASSERT_COLOR", "0");
+    // SAFETY: the start of `main`, before any other thread exists.
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::set_var("RICH_ASSERT_COLOR", "0")
+    };
     let shots = Shots::from_args();
     if !shots.svg() {
         text_diff();

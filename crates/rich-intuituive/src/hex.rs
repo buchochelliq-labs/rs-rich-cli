@@ -2,7 +2,7 @@
 
 use rich_ext::hex::HexView;
 
-use crate::node::{renderable, scroll_with, Node};
+use crate::node::{Node, renderable, scroll_with};
 use crate::reactive::Signal;
 
 /// The bytes `bytes` gives (which may read signals) as a hex dump,

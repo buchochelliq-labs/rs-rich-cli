@@ -842,11 +842,13 @@ fn item_lines(console: &Console, markup: &str, width: u16, wrap: bool) -> Vec<Ve
     }
     options.no_wrap = Some(true);
     options.overflow = Some(rich::Overflow::Ellipsis);
-    vec![console
-        .render_lines(&text, &options, false)
-        .into_iter()
-        .next()
-        .unwrap_or_default()]
+    vec![
+        console
+            .render_lines(&text, &options, false)
+            .into_iter()
+            .next()
+            .unwrap_or_default(),
+    ]
 }
 
 /// `line` with `style` under its own styles, filled to `width` cells in it.
@@ -1161,28 +1163,28 @@ impl Widget for List {
             selected,
         );
         let mut bar_rect = None;
-        if let Some(look) = &bar {
-            if look.wanted(len, laid.items.len()) {
-                let (rest, at) = look.split(width, height);
-                area = rest;
-                bar_rect = Some(at);
-                laid = self.lay(
-                    console,
-                    &items,
-                    text_width(area),
-                    area.height,
-                    first,
-                    selected,
-                );
-            }
+        if let Some(look) = &bar
+            && look.wanted(len, laid.items.len())
+        {
+            let (rest, at) = look.split(width, height);
+            area = rest;
+            bar_rect = Some(at);
+            laid = self.lay(
+                console,
+                &items,
+                text_width(area),
+                area.height,
+                first,
+                selected,
+            );
         }
         self.first.set(laid.first);
         self.rows.set(laid.items.len().max(1));
-        if let Some(offset) = offset {
-            if self.seen.get() != Some(laid.first) {
-                self.seen.set(Some(laid.first));
-                Runtime::current().untracked(|| offset.set(laid.first));
-            }
+        if let Some(offset) = offset
+            && self.seen.get() != Some(laid.first)
+        {
+            self.seen.set(Some(laid.first));
+            Runtime::current().untracked(|| offset.set(laid.first));
         }
         let options = self.options.borrow();
         let carrying = self.carried.get().is_some_and(|carried| carried.get());

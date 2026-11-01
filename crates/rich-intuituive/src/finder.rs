@@ -14,8 +14,8 @@ use crate::app::Ctx;
 use crate::border::Border;
 use crate::input::input;
 use crate::list::list_lazy;
-use crate::node::{column, row, text, Node};
-use crate::reactive::{memo, signal, watch, Memo, Signal};
+use crate::node::{Node, column, row, text};
+use crate::reactive::{Memo, Signal, memo, signal, watch};
 use crate::task::spawn_stream;
 
 /// The most matches a finder lists (the count says how many there are).

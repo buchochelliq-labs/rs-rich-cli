@@ -11,7 +11,7 @@ use std::time::Duration;
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment};
 use rich_ext::data::{
-    copy_text, display_value, Explorer, Node, OpenBranch, Path, PathSegment, Value,
+    Explorer, Node, OpenBranch, Path, PathSegment, Value, copy_text, display_value,
 };
 
 use crate::clipboard;
@@ -19,7 +19,7 @@ use crate::component::{Component, Context, Flow, View};
 use crate::components::{PreviewLayout, Theme, TreeSelect};
 use crate::event::{Event, Key};
 use crate::item::{Item, Preview};
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::policy::{LineIo, NotInteractive};
 
 /// The keys a [`DataExplorer`] adds to its tree's, in context `explore`.
@@ -423,12 +423,13 @@ impl Component for DataExplorer {
     }
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<Path> {
-        if let Some(key) = event.key() {
-            if self.keymap.is(key, "copy-value") && self.tree.select().menu().is_none() {
-                self.tree.set_status(None);
-                self.copy_value();
-                return Flow::Continue;
-            }
+        if let Some(key) = event.key()
+            && self.keymap.is(key, "copy-value")
+            && self.tree.select().menu().is_none()
+        {
+            self.tree.set_status(None);
+            self.copy_value();
+            return Flow::Continue;
         }
         match self.tree.handle(event, context) {
             Flow::Done(index) => Flow::Done(self.shape.path(index)),

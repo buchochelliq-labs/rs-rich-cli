@@ -37,9 +37,11 @@ fn show_plain(console: &Console) {
     let plain = Console::builder().width(60).color_system(None).build();
     console.print(&Text::new(plain.render_to_string(&release_badges())));
     // The same text for screen readers and logs.
-    assert!(release_badges()
-        .plain()
-        .starts_with("[OK build] [ERROR tests]"));
+    assert!(
+        release_badges()
+            .plain()
+            .starts_with("[OK build] [ERROR tests]")
+    );
 }
 // --8<-- [end:plain]
 

@@ -10,7 +10,7 @@ use ratatui_core::layout::{Constraint, Layout};
 use ratatui_core::terminal::Terminal;
 use rich::markdown::Markdown;
 use rich::{Console, Segment, Table};
-use rich_ratatui::{buffer_to_lines, RichWidget};
+use rich_ratatui::{RichWidget, buffer_to_lines};
 
 const NOTES: &str = "\
 # Release notes

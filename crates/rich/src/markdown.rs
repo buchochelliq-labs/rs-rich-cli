@@ -17,11 +17,11 @@ use pulldown_cmark::{
     Alignment, CodeBlockKind, CowStr, Event, HeadingLevel, LinkType, Options, Parser, Tag, TagEnd,
 };
 
+use crate::r#box::SIMPLE;
 use crate::cells::cell_len;
 use crate::console::{Console, ConsoleOptions, Justify, Overflow};
 use crate::markdown_url::{normalize_link, normalize_link_text, validate_link};
 use crate::protocol::{CodeHighlighter, FenceRenderer, Renderable};
-use crate::r#box::SIMPLE;
 use crate::segment::Segment;
 use crate::style::Style;
 use crate::syntax::Syntax;
@@ -1026,20 +1026,20 @@ fn pair_strikethrough<'a>(
                 let bytes = source.as_bytes();
                 let mut literal_from = range.start;
                 let mut at = range.start;
-                if let Some(Piece::Literal(previous)) = pieces.last() {
-                    if previous.end == range.start {
-                        literal_from = previous.start;
-                        // The previous literal holds no run of two or more
-                        // tildes (those became pieces), so only a run at its
-                        // very end can continue into this event. Rescanning
-                        // the whole literal made `[` * 20000 — one text
-                        // event per bracket — quadratic.
-                        at = previous.end;
-                        while at > previous.start && bytes[at - 1] == b'~' {
-                            at -= 1;
-                        }
-                        pieces.pop();
+                if let Some(Piece::Literal(previous)) = pieces.last()
+                    && previous.end == range.start
+                {
+                    literal_from = previous.start;
+                    // The previous literal holds no run of two or more
+                    // tildes (those became pieces), so only a run at its
+                    // very end can continue into this event. Rescanning
+                    // the whole literal made `[` * 20000 — one text
+                    // event per bracket — quadratic.
+                    at = previous.end;
+                    while at > previous.start && bytes[at - 1] == b'~' {
+                        at -= 1;
                     }
+                    pieces.pop();
                 }
                 let end = range.end;
                 while at < end {
@@ -1141,10 +1141,10 @@ fn pair_strikethrough<'a>(
             if let Piece::Tilde(range) = &pieces[closer] {
                 pieces[closer] = Piece::Close(range.clone());
             }
-            if let Some(Piece::Literal(range)) = closer.checked_sub(1).map(|i| &pieces[i]) {
-                if &source[range.clone()] == "~" {
-                    lone_markers.push(closer - 1);
-                }
+            if let Some(Piece::Literal(range)) = closer.checked_sub(1).map(|i| &pieces[i])
+                && &source[range.clone()] == "~"
+            {
+                lone_markers.push(closer - 1);
             }
         }
     }
@@ -1659,19 +1659,17 @@ fn parse(source: &str, md: &MarkdownOptions, styles: &MarkdownStyles) -> Vec<Blo
                 } else if let Some(Frame::Item {
                     blocks: item_blocks,
                 }) = stack.pop()
-                {
-                    if let Some(Frame::List {
+                    && let Some(Frame::List {
                         ordered,
                         start,
                         entries,
                     }) = stack.last_mut()
-                    {
-                        let number = ordered.then(|| *start + entries.len() as u64);
-                        entries.push(ListEntry {
-                            number,
-                            blocks: item_blocks,
-                        });
-                    }
+                {
+                    let number = ordered.then(|| *start + entries.len() as u64);
+                    entries.push(ListEntry {
+                        number,
+                        blocks: item_blocks,
+                    });
                 }
             }
             Event::Start(Tag::Paragraph) => {
@@ -2431,8 +2429,10 @@ mod tests {
     #[test]
     fn a_code_only_list_item_keeps_the_bullet_on_its_padding_row() {
         let console = Console::builder().width(30).color_system(None).build();
-        assert_eq!(console.render_export(&Markdown::new("- ```\n  code\n  ```")),
-            "\n •                            \n    code                      \n                              \n");
+        assert_eq!(
+            console.render_export(&Markdown::new("- ```\n  code\n  ```")),
+            "\n •                            \n    code                      \n                              \n"
+        );
     }
 
     #[test]

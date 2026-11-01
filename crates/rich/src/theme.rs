@@ -384,13 +384,13 @@ mod config_file {
                 // dropping them is equivalent.
                 continue;
             }
-            if let Some((section, option, first_indent)) = open {
-                if indent > first_indent {
-                    let value = &mut sections[section].1[option].1;
-                    value.push('\n');
-                    value.push_str(stripped);
-                    continue;
-                }
+            if let Some((section, option, first_indent)) = open
+                && indent > first_indent
+            {
+                let value = &mut sections[section].1[option].1;
+                value.push('\n');
+                value.push_str(stripped);
+                continue;
             }
             if stripped.starts_with('[') && stripped.ends_with(']') {
                 let name = stripped[1..stripped.len() - 1].to_string();

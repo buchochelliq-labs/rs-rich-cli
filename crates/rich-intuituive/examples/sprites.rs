@@ -16,9 +16,9 @@
 
 use std::time::Duration;
 
-use intuituive::pixels::{pixels, PixelSprite};
+use intuituive::pixels::{PixelSprite, pixels};
 use intuituive::prelude::*;
-use intuituive::sprite::{stage_with, Placed, Sprite, StageOptions};
+use intuituive::sprite::{Placed, Sprite, StageOptions, stage_with};
 
 const TICK: Duration = Duration::from_millis(50);
 

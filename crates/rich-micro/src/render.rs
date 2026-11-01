@@ -40,8 +40,8 @@
 //! [`crate::graphics::MicroGraphics::renderer`].
 
 use std::collections::HashMap;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 
 use rich::cells::cell_len;
 use rich::measure::Measurement;
@@ -139,17 +139,18 @@ impl MicroMeta {
             _ => return None,
         };
         match head {
-            [MetaValue::Str(name), MetaValue::Int(cols), MetaValue::Int(rows), MetaValue::Int(id)]
-                if *cols > 0 && *rows > 0 && (0..*rows).contains(&row) =>
-            {
-                Some(MicroMeta {
-                    name: name.clone(),
-                    cols: *cols as usize,
-                    rows: *rows as usize,
-                    id: *id as u64,
-                    row: row as usize,
-                })
-            }
+            [
+                MetaValue::Str(name),
+                MetaValue::Int(cols),
+                MetaValue::Int(rows),
+                MetaValue::Int(id),
+            ] if *cols > 0 && *rows > 0 && (0..*rows).contains(&row) => Some(MicroMeta {
+                name: name.clone(),
+                cols: *cols as usize,
+                rows: *rows as usize,
+                id: *id as u64,
+                row: row as usize,
+            }),
             _ => None,
         }
     }

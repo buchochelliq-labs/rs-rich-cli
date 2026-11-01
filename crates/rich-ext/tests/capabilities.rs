@@ -4,7 +4,7 @@ use rich_ext::capabilities::{
     Capabilities, CapabilityReport, ColorDepth, Graphics, MapEnvironment, Origin, Overrides,
 };
 use rich_ext::fidelity::{Adaptive, Degradable, Degrade, Fidelity, FidelityFacts, Policy};
-use rich_ext::target::{resolve_capabilities, CapabilityOrigin, TargetOverrides};
+use rich_ext::target::{CapabilityOrigin, TargetOverrides, resolve_capabilities};
 
 fn env(name: &str) -> Origin {
     Origin::Environment(name.into())
@@ -359,12 +359,16 @@ fn report_converts_to_core_capabilities_and_the_older_api() {
     );
     let detected = r.to_detected();
     assert_eq!(detected.capabilities, caps);
-    assert!(detected
-        .origins
-        .contains(&("color_system".into(), CapabilityOrigin::Detected)));
-    assert!(detected
-        .origins
-        .contains(&("width".into(), CapabilityOrigin::Inferred)));
+    assert!(
+        detected
+            .origins
+            .contains(&("color_system".into(), CapabilityOrigin::Detected))
+    );
+    assert!(
+        detected
+            .origins
+            .contains(&("width".into(), CapabilityOrigin::Inferred))
+    );
     let resolved = resolve_capabilities(r.observations(), TargetOverrides::default());
     assert_eq!(resolved.capabilities, caps);
     let target = rich_ext::target::RenderTarget::new(

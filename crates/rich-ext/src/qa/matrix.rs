@@ -24,7 +24,7 @@ use rich::cells::cell_len;
 use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Table, Text};
 
 use super::screenshot::{Approvals, Outcome, Shot};
-use super::{panic_message, plain_lines, plural, table_then_line, NoHeight, Probe};
+use super::{NoHeight, Probe, panic_message, plain_lines, plural, table_then_line};
 use crate::a11y::policy::{AccessibilityPolicy, Status, SymbolSet};
 use crate::a11y::semantic_text;
 use crate::capabilities::{ColorDepth, Overrides};

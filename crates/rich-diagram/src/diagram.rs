@@ -10,7 +10,7 @@ use rich::style::Style;
 use rich::text::Text;
 
 use crate::graph::Graph;
-use crate::layout::{draw, DrawError, Drawing};
+use crate::layout::{DrawError, Drawing, draw};
 
 /// A graph drawn with box-drawing characters, or ASCII.
 ///

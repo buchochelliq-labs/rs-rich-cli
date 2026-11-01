@@ -141,4 +141,4 @@ mod session;
 #[cfg(feature = "server")]
 pub use server::*;
 #[cfg(feature = "server")]
-pub(crate) use server::{random_token, MAX_MESSAGE};
+pub(crate) use server::{MAX_MESSAGE, random_token};

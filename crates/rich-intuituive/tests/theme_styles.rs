@@ -1,7 +1,7 @@
 //! Theme styles for a subtree (0.0.19 gap A9).
 
 use intuituive::prelude::*;
-use intuituive::{assert_screen_styled, Driver};
+use intuituive::{Driver, assert_screen_styled};
 
 fn shown(app: App, width: u16, height: u16) -> Driver {
     let mut driver = app.driver(width, height);
@@ -89,7 +89,7 @@ fn nested_overrides_and_the_frameworks_own_parts() {
 
 #[test]
 fn widgets_inside_take_their_styles_from_the_override() {
-    use intuituive::widgets::{table, Column};
+    use intuituive::widgets::{Column, table};
     let app = App::new(|| {
         let selected = signal(0usize);
         table(

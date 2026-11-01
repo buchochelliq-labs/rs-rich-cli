@@ -5,9 +5,9 @@
 
 use std::sync::Arc;
 
-use rich::cells::cell_len;
-use rich::protocol::{enter_region, RegionInfo, RegionRole};
 use rich::r#box::{ROUNDED, SIMPLE};
+use rich::cells::cell_len;
+use rich::protocol::{RegionInfo, RegionRole, enter_region};
 use rich::table::Table;
 use rich::{
     Console, ConsoleOptions, FenceRenderer, Justify, Overflow, Panel, Renderable, Segment, Style,
@@ -15,8 +15,8 @@ use rich::{
 };
 
 use super::model::{
-    inlines_text, Align, Block, Checkbox, CodeBlock, Definition, Document, Heading, Inline, List,
-    ListItem, ListKind, TableBlock,
+    Align, Block, Checkbox, CodeBlock, Definition, Document, Heading, Inline, List, ListItem,
+    ListKind, TableBlock, inlines_text,
 };
 use super::{Diagnostic, Parsed, STYLES};
 
@@ -349,10 +349,10 @@ impl Painter<'_> {
             if lines.is_empty() {
                 continue;
             }
-            if let Some(previous) = previous {
-                if !self.joins(previous, block, container) {
-                    out.push(Vec::new());
-                }
+            if let Some(previous) = previous
+                && !self.joins(previous, block, container)
+            {
+                out.push(Vec::new());
             }
             out.extend(lines);
             previous = Some(block);

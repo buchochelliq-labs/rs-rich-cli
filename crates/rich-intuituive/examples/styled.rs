@@ -15,7 +15,7 @@
 //! pointer over a service is `:hover` · q quits.
 
 use intuituive::prelude::*;
-use intuituive::widgets::{table, Column};
+use intuituive::widgets::{Column, table};
 
 /// The sheet used when no file is given: the one beside this example.
 const SHEET: &str = include_str!("styled.tcss");

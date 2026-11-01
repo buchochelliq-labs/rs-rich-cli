@@ -56,10 +56,12 @@ fn long_lines_wrap_under_a_blank_gutter() {
 fn search_is_case_insensitive_and_reports_matches() {
     let view = SourceView::new("Total\nnone\ntotal total\n", "txt").search("TOTAL");
     assert_eq!(view.matches(), vec![(1, 1), (3, 2)]);
-    assert!(SourceView::new(CODE, "rust")
-        .search("")
-        .matches()
-        .is_empty());
+    assert!(
+        SourceView::new(CODE, "rust")
+            .search("")
+            .matches()
+            .is_empty()
+    );
     // Matches are highlighted and their line numbers marked.
     let console = Console::builder()
         .width(40)
@@ -90,9 +92,11 @@ fn tabs_crlf_empty_files_and_ascii() {
         .color_system(None)
         .ascii_only(true)
         .build();
-    assert!(ascii
-        .render_to_string(&SourceView::new("x\n", "txt"))
-        .starts_with("1 | x"));
+    assert!(
+        ascii
+            .render_to_string(&SourceView::new("x\n", "txt"))
+            .starts_with("1 | x")
+    );
 }
 
 #[test]

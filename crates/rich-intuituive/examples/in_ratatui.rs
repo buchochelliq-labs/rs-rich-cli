@@ -17,8 +17,8 @@
 use std::io;
 use std::time::Instant;
 
-use intuituive::interact::event::from_crossterm;
 use intuituive::interact::Event;
+use intuituive::interact::event::from_crossterm;
 use intuituive::prelude::*;
 use ratatui::crossterm::event;
 use ratatui::layout::{Constraint, Layout};

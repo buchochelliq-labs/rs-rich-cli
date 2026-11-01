@@ -7,9 +7,9 @@
 #[allow(dead_code)]
 mod form;
 
-use form::{age_problem, form_app, name_problem, Person};
+use form::{Person, age_problem, form_app, name_problem};
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
-use intuituive::{assert_screen, assert_screen_styled, Driver};
+use intuituive::{Driver, assert_screen, assert_screen_styled};
 
 const WIDTH: u16 = 80;
 const HEIGHT: u16 = 24;

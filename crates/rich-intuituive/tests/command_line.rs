@@ -1,9 +1,9 @@
 //! The command line, input completion and history (round 6): the
 //! taskwarrior-tui and slumber clones' command bars and query boxes.
 
-use intuituive::command_line::{command_line, command_line_with, CommandLine, Mode};
+use intuituive::command_line::{CommandLine, Mode, command_line, command_line_with};
 use intuituive::prelude::*;
-use intuituive::{complete_words, history_file, history_session, CommandLineOptions, Completion};
+use intuituive::{CommandLineOptions, Completion, complete_words, history_file, history_session};
 
 fn rows(driver: &intuituive::Driver) -> Vec<String> {
     driver

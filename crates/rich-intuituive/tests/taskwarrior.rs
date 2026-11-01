@@ -8,8 +8,8 @@ mod tasks;
 
 use std::path::PathBuf;
 
-use intuituive::widgets::Date;
 use intuituive::Driver;
+use intuituive::widgets::Date;
 use rich_interact::datetime::Zone;
 use tasks::*;
 
@@ -73,8 +73,8 @@ fn report(d: &Driver) -> Vec<String> {
         .take_while(|r| !r.is_empty() && !r.starts_with('─'))
         .map(|r| {
             let text: String = r.chars().skip(at).collect();
-            let text = text.split("  ").next().unwrap_or("").trim().to_string();
-            text
+
+            text.split("  ").next().unwrap_or("").trim().to_string()
         })
         .collect()
 }
@@ -394,11 +394,13 @@ fn an_empty_add_is_an_error_and_a_key_closes_it() {
     assert_eq!(rows(&d)[28], "Error");
     assert_eq!(rows(&d)[29], "Press any key to continue.");
     let styled = intuituive::testing::styled(&d);
-    assert!(styled
-        .lines()
-        .nth(28)
-        .unwrap()
-        .starts_with("[bold red]Error[/]"));
+    assert!(
+        styled
+            .lines()
+            .nth(28)
+            .unwrap()
+            .starts_with("[bold red]Error[/]")
+    );
     d.press("space");
     assert!(!has(&d, "Additional text"));
     assert_eq!(rows(&d)[28], "Filter Tasks");
@@ -531,9 +533,11 @@ fn t_and_the_priority_keys_change_the_selected_task() {
             .count(),
         2
     );
-    assert!(tasks
-        .iter()
-        .all(|t| t.description != "Fix the garden fence" || t.priority.is_none()));
+    assert!(
+        tasks
+            .iter()
+            .all(|t| t.description != "Fix the garden fence" || t.priority.is_none())
+    );
 }
 
 #[test]
@@ -551,15 +555,21 @@ fn v_marks_tasks_and_actions_take_the_marked() {
     d.type_text("+urgent");
     d.press("enter");
     let tasks = stored(&dir);
-    assert!(find(&tasks, "Pay the rent")
-        .tags
-        .contains(&"urgent".to_string()));
-    assert!(find(&tasks, "Write the quarterly report")
-        .tags
-        .contains(&"urgent".to_string()));
-    assert!(!find(&tasks, "Review pull requests")
-        .tags
-        .contains(&"urgent".to_string()));
+    assert!(
+        find(&tasks, "Pay the rent")
+            .tags
+            .contains(&"urgent".to_string())
+    );
+    assert!(
+        find(&tasks, "Write the quarterly report")
+            .tags
+            .contains(&"urgent".to_string())
+    );
+    assert!(
+        !find(&tasks, "Review pull requests")
+            .tags
+            .contains(&"urgent".to_string())
+    );
     // The marks are cleared after an action; V marks every task.
     assert!(line(&d, "Pay the rent").starts_with("• 1"));
     d.press("V");

@@ -9,7 +9,7 @@ use std::time::Duration;
 
 use intuituive::interact::{Event, Key};
 use intuituive::prelude::*;
-use intuituive::widgets::{tree, TreeItem};
+use intuituive::widgets::{TreeItem, tree};
 
 /// The transcript the screen reader guide shows
 /// (docs/guide/intuituive/screen-readers.md): each key, then what is

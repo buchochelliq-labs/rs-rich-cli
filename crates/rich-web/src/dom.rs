@@ -53,10 +53,10 @@
 
 use std::collections::HashMap;
 
+use intuituive::Driver;
 use intuituive::a11y::{AccessNode, Announcement, Role};
 use intuituive::rich::{Color, ColorTriplet, Style, TerminalTheme};
-use intuituive::Driver;
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 /// The protocol's version, sent in `hello`.
 pub const PROTOCOL: u32 = 1;
@@ -433,10 +433,12 @@ mod tests {
                 ["aria-setsize", "3"]
             ])
         );
-        assert!(json["attrs"]
-            .as_array()
-            .unwrap()
-            .contains(&json!(["aria-expanded", "false"])));
+        assert!(
+            json["attrs"]
+                .as_array()
+                .unwrap()
+                .contains(&json!(["aria-expanded", "false"]))
+        );
         // A button keeps its own attributes and reads by its label.
         let button = AccessNode {
             role: Role::Button,

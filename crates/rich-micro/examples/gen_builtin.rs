@@ -24,9 +24,9 @@ use std::time::Duration;
 
 use rich_art::graphics::AnimationFrame;
 use rich_art::image::{Rgba, RgbaImage};
-use rich_micro::create::{package_files, PackageSpec};
-use rich_micro::pipeline::Pipeline;
 use rich_micro::CellSize;
+use rich_micro::create::{PackageSpec, package_files};
+use rich_micro::pipeline::Pipeline;
 
 /// Every built-in asset is under this licence: the project's own.
 pub const LICENSE: &str = "MIT";

@@ -9,10 +9,10 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Text};
 use rich_plugin_api::{Plugin, PluginError, PluginMetadata, PluginRegistrar};
 
 use crate::error::MicroError;
-use crate::markup::{expand, Diagnostic, MicroTransform};
+use crate::markup::{Diagnostic, MicroTransform, expand};
 use crate::model::MicroAsset;
 use crate::registry::MicroRegistry;
-use crate::render::{placeholder, FallbackPreference};
+use crate::render::{FallbackPreference, placeholder};
 use crate::rows::reserve_rows;
 
 /// Micro assets on [`Text`].

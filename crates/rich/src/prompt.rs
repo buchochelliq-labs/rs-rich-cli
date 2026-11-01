@@ -98,20 +98,20 @@ impl PromptBase {
         // The style *names* go on the spans, as upstream passes them
         // (`prompt.append(choices, "prompt.choices")`), so a console with a
         // custom theme restyles the question without the prompt knowing.
-        if self.show_choices {
-            if let Some(choices) = &self.choices {
-                text.append(" ", None);
-                text.append(
-                    &format!("[{}]", choices.join("/")),
-                    Some("prompt.choices".into()),
-                );
-            }
+        if self.show_choices
+            && let Some(choices) = &self.choices
+        {
+            text.append(" ", None);
+            text.append(
+                &format!("[{}]", choices.join("/")),
+                Some("prompt.choices".into()),
+            );
         }
-        if self.show_default {
-            if let Some(default) = default {
-                text.append(" ", None);
-                text.append(&format!("({default})"), Some("prompt.default".into()));
-            }
+        if self.show_default
+            && let Some(default) = default
+        {
+            text.append(" ", None);
+            text.append(&format!("({default})"), Some("prompt.default".into()));
         }
         text.append(&self.suffix, None);
         text
@@ -248,10 +248,10 @@ impl Prompt {
             let Some(value) = self.base.ask_once(console, input, default)? else {
                 return Ok(default.unwrap_or_default().to_string());
             };
-            if value.is_empty() {
-                if let Some(default) = default {
-                    return Ok(default.to_string());
-                }
+            if value.is_empty()
+                && let Some(default) = default
+            {
+                return Ok(default.to_string());
             }
             match self.process_response(&value) {
                 Ok(value) => return Ok(value),
@@ -319,10 +319,10 @@ impl Confirm {
             let Some(value) = self.base.ask_once(console, input, rendered)? else {
                 return Ok(default.unwrap_or(false));
             };
-            if value.is_empty() {
-                if let Some(default) = default {
-                    return Ok(default);
-                }
+            if value.is_empty()
+                && let Some(default) = default
+            {
+                return Ok(default);
             }
             match self.process_response(&value) {
                 Ok(value) => return Ok(value),
@@ -519,19 +519,27 @@ mod tests {
     fn confirm_reads_y_and_n() {
         let console = console();
         let confirm = Confirm::new("Sure");
-        assert!(confirm
-            .ask_from(&console, &mut ScriptedInput::new(["Y"]), None)
-            .unwrap());
-        assert!(!confirm
-            .ask_from(&console, &mut ScriptedInput::new(["n"]), None)
-            .unwrap());
+        assert!(
+            confirm
+                .ask_from(&console, &mut ScriptedInput::new(["Y"]), None)
+                .unwrap()
+        );
+        assert!(
+            !confirm
+                .ask_from(&console, &mut ScriptedInput::new(["n"]), None)
+                .unwrap()
+        );
         // Empty takes the default; a junk answer is re-asked.
-        assert!(confirm
-            .ask_from(&console, &mut ScriptedInput::new([""]), Some(true))
-            .unwrap());
-        assert!(!confirm
-            .ask_from(&console, &mut ScriptedInput::new(["what", "n"]), None)
-            .unwrap());
+        assert!(
+            confirm
+                .ask_from(&console, &mut ScriptedInput::new([""]), Some(true))
+                .unwrap()
+        );
+        assert!(
+            !confirm
+                .ask_from(&console, &mut ScriptedInput::new(["what", "n"]), None)
+                .unwrap()
+        );
     }
 
     #[test]

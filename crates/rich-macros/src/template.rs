@@ -4,7 +4,7 @@ use proc_macro2::TokenStream;
 use quote::{format_ident, quote, quote_spanned};
 use syn::parse::{Parse, ParseStream};
 use syn::punctuated::Punctuated;
-use syn::{bracketed, Expr, Ident, LitStr, Token};
+use syn::{Expr, Ident, LitStr, Token, bracketed};
 
 use crate::markup as checks;
 
@@ -111,7 +111,7 @@ fn pieces(template: &str) -> Result<Vec<Piece>, String> {
                         None => {
                             return Err(
                                 "unclosed `{` in template; write `{{` for a literal brace".into()
-                            )
+                            );
                         }
                     }
                 }
@@ -313,7 +313,7 @@ pub fn richf(input: TokenStream) -> syn::Result<TokenStream> {
                         ArgRef::Name(name) => {
                             return Err(error(format!(
                                 "`{name}` in `{{:{spec}}}` is not a valid identifier"
-                            )))
+                            )));
                         }
                     };
                     let bound = resolve(&reference)?;
