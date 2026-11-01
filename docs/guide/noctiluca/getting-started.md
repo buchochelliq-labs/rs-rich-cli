@@ -61,7 +61,39 @@ The screen has three parts:
 ![A local page in Noctiluca's reader mode](../../media/tapes/noctiluca/reader.png)
 
 With no page on the command line, Noctiluca opens the home page from the
-config (`[startup] home`), or an empty page if there is none.
+config (`[startup] home`), or, if there is none, its start page.
+
+## The start page
+
+Started with no address and no home page, Noctiluca shows its start page
+while Chrome starts behind it:
+
+- the NOCTILUCA banner, a glow travelling through the letters like the
+  sea sparkle it is named after, a wave under it and specks of light
+  rising, for about two seconds, then still;
+- the lanternfish, the mascot, swimming in from the right to settle
+  beside the title, its lure pulsing with the glow and then glowing
+  steadily. It is a button, "About Noctiluca": Tab to it and press Enter,
+  or click it, to open the about page (as `?` does); Esc comes back;
+- "a web browser for the terminal" and the version;
+- a line of key hints, read from your keymap (so a rebound key shows as
+  rebound): open an address, the bookmarks, all actions, about, quit;
+- your bookmarks: ↑ and ↓ pick one, Enter opens it.
+
+Any key ends the animation at once, then does what it does. With
+reduced motion (`RICH_A11Y=reduced-motion`, `RICH_ANIMATION=0`) or
+`NO_COLOR` it starts still. The fish goes beside the title when the
+terminal is wide enough (about 100 columns), above it when it is tall
+enough instead, and is left out otherwise: it never squeezes the title or
+the bookmarks. Opening a bookmark or an address leaves the start page.
+
+<div class="tape-player" data-cast="../../media/tapes/noctiluca-start/noctiluca-start.cast" data-poster="npt:0:3">
+  <img src="../../media/tapes/noctiluca-start/noctiluca-start.gif" alt="Noctiluca's start page: the NOCTILUCA banner glowing over a wave, the lanternfish swimming in beside it, the key hints and the bookmarks">
+</div>
+
+| The start page | About, from the lanternfish |
+|---|---|
+| ![The start page with the lanternfish and the bookmarks](../../media/tapes/noctiluca-start/start.png) | ![The about page over the start page](../../media/tapes/noctiluca-start/about.png) |
 
 ## Opening pages
 

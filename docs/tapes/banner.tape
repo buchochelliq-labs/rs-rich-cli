@@ -1,7 +1,9 @@
 # rich banner (0.0.19, #708): a FIGlet banner in a colour gradient,
 # centred, then a vertical preset with a bold style, then plain text when
 # the banner does not fit; and `rich shell status` (#715), the line the
-# shell integration prints after a failed command.
+# shell integration prints after a failed command. Then (0.0.24) an
+# animated banner: the glow travelling through the letters over a wave,
+# specks of light rising (a fixed seed), then its still frame.
 Set Title "rich banner · FIGlet banners"
 Set Size 100x30
 Set TypingDelay 40ms
@@ -29,3 +31,11 @@ Enter
 Wait /error \$ cargo test/
 Sleep 500ms
 Screenshot fit-and-status
+Type "clear"
+Enter
+Wait /❯\s*$/
+Type "rich banner --wave --specks --seed 7 'rs-rich'"
+Enter
+Wait /❯\s*$/
+Sleep 500ms
+Screenshot animated

@@ -2516,6 +2516,36 @@ banner row. Colour follows the terminal: a pipe gets the plain banner,
 terminal with fewer colours shows each gradient colour as its nearest one.
 A missing font exits 3, one that is not a FIGfont exits 4.
 
+### Animated (0.0.24)
+
+With `--effect`, `--wave`, `--specks`, `--loop` or `--duration` the banner
+is animated, by rs-rich-art's `animate` frames: by default the glow, a
+band of blue-green light travelling through dark letters and leaving them
+lit. It plays once, about two seconds, then holds the still final frame;
+any key skips to it (Ctrl+C too, exiting 130).
+
+```bash
+rich banner --wave --specks Noctiluca
+rich banner --effect typewriter --loop "On air"   # until a key
+rich banner --effect shimmer --duration 1 Done
+```
+
+| Option | What it does |
+|---|---|
+| `--effect E` | `glow` (the default), `shimmer`, `typewriter`, `fade` or `still` |
+| `--once` / `--loop` | Play once and hold still (the default), or again and again until a key |
+| `--duration SECS` | One play's length, more than 0 and up to 60 (default 2) |
+| `--wave` | A wave line under the banner |
+| `--specks` | Specks of light (`·∘°`) rising around the letters, and a row above them |
+| `--seed N` | Where the specks start: the same seed draws the same specks |
+
+Only on a terminal, with colour and motion allowed, does it move: a pipe
+or a file gets the still frame alone (so does `--force-terminal`, in
+colour), and so do `NO_COLOR`, `--no-color`, `RICH_ANIMATION=0` and
+`RICH_A11Y=reduced-motion` (or `no-animation`, `screen-reader`).
+`--style` and `--gradient` colour a still banner and are refused with an
+animated one, which has its own colours.
+
 ## Shell integration (0.0.19)
 
 `rich shell init SHELL` prints a script for a shell's startup file. It sets

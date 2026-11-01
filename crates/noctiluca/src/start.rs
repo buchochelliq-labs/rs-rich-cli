@@ -294,7 +294,7 @@ fn hints(keymap: &Keymap) -> Node {
     })
     .collect();
     label(format!(
-        "{}  [dim]· Tab: the lanternfish[/]",
+        "{} [dim]· Tab: the lanternfish[/]",
         parts.join(" · ")
     ))
 }
