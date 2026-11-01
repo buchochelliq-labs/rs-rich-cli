@@ -57,6 +57,7 @@ captions = true
 icon-buttons = true
 snap-grids = true
 collapse-nav = true
+collapse-gaps = true
 text-over-pictures = false
 live-tail = true
 # Off: the page's own colours, on white on a light terminal, lightness

@@ -57,6 +57,11 @@ pub enum Rule {
     /// made readable on the terminal's background. Off, text has no page
     /// colour at all.
     PageColors,
+    /// Rows that are blank in every column (the place of a box that draws
+    /// nothing: an empty ad slot, a hidden menu, a spacer) collapse to one
+    /// blank row between what is above and what is below, as a reader
+    /// collapses margins.
+    CollapseGaps,
 }
 
 /// What a rule is, for the config, the command line and the about page.
@@ -114,6 +119,12 @@ pub const RULES: &[RuleInfo] = &[
         rule: Rule::CollapseNav,
         name: "collapse-nav",
         what: "collapse navigation and sidebars to a row on narrow terminals",
+        default: true,
+    },
+    RuleInfo {
+        rule: Rule::CollapseGaps,
+        name: "collapse-gaps",
+        what: "collapse rows blank across the page to one blank row",
         default: true,
     },
     RuleInfo {
@@ -556,7 +567,7 @@ mod tests {
         assert!(adapt.on(Rule::DecorativeImages) && adapt.on(Rule::LiveTail));
         assert!(!adapt.on(Rule::TextOverPictures));
         assert!(Adapt::none().is_none());
-        assert_eq!(RULES.len(), 11);
+        assert_eq!(RULES.len(), 12);
         for info in RULES {
             assert_eq!(Rule::parse(info.name), Some(info.rule));
         }

@@ -1578,11 +1578,25 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
     // after it); an empty string is the second cell of a wide character.
     let mut grid: Vec<Vec<Option<(String, usize)>>> = Vec::new();
     let mut styles: Vec<(String, Option<usize>)> = Vec::new();
+    // Rows taken out so far by collapsed gaps: every box after one moves
+    // up by them, so what is beside it keeps its place.
+    let collapse = adapt.on(Rule::CollapseGaps);
+    let mut lifted = 0usize;
     for (top, _, x0, x1, lines, node, media, table_row) in boxes {
         // A page can place a block millions of pixels down: blank rows
         // past a few screens tell the reader nothing, so the gap is capped
         // and the grid grows with the content, not the coordinates.
-        let y0 = ((top / ch).round().max(0.0) as usize).min(grid.len() + MAX_GAP_ROWS);
+        let mut y0 = ((top / ch).round().max(0.0) as usize)
+            .saturating_sub(lifted)
+            .min(grid.len() + MAX_GAP_ROWS);
+        // Rows blank in every column (no box drew on them: the place of
+        // an empty slot, a hidden menu, a spacer) collapse to one, none at
+        // the top of the page.
+        let keep = grid.len() + usize::from(!grid.is_empty());
+        if collapse && y0 > keep {
+            lifted += y0 - keep;
+            y0 = keep;
+        }
         let mut y = skyline[x0..x1].iter().copied().max().unwrap_or(0).max(y0);
         // A table row's cells start together: a cell that wrapped onto two
         // rows pushes the next row's cells down, all of them, not only the

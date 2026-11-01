@@ -279,3 +279,71 @@ fn an_animated_webp_keeps_its_frames() {
     assert!(picture.is_animated());
     assert_eq!(picture.frames().map(<[_]>::len), Some(16));
 }
+
+#[test]
+fn an_inline_svg_drawing_gets_chromes_pixels() {
+    // tests/fixtures/svg-logo.html as Chrome lays it out: two inline
+    // <svg> drawings in the header (a logo and a wordmark), a link.
+    use noctiluca::engine::Rect;
+    use noctiluca::model::MediaKind;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new(
+        "file:///noctiluca/fixtures/svg-logo.html",
+        "SVG logo fixture",
+        800.0,
+        100.0,
+    );
+    let body = p.body();
+    let header = p.element(
+        body,
+        "HEADER",
+        &[],
+        &[("display", "flex")],
+        Some(Rect::new(0.0, 0.0, 800.0, 48.0)),
+    );
+    for (x, width, label) in [(8.0, 96.0, "Glow"), (120.0, 80.0, "News")] {
+        p.element(
+            header,
+            "svg",
+            &[("role", "img"), ("aria-label", label)],
+            &[("display", "inline")],
+            Some(Rect::new(x, 10.0, width, 28.0)),
+        );
+    }
+    let a = p.element(
+        header,
+        "A",
+        &[("href", "#live")],
+        &[("display", "inline")],
+        Some(Rect::new(216.0, 15.0, 88.0, 18.0)),
+    );
+    p.text(a, "Watch Live", Rect::new(216.0, 15.0, 88.0, 18.0));
+    let para = p.element(body, "P", &[], &[], Some(Rect::new(0.0, 64.0, 800.0, 18.0)));
+    p.text(para, "The first story.", Rect::new(0.0, 64.0, 130.0, 18.0));
+    let engine = FakeEngine::from_dir(&std::env::temp_dir().join("noctiluca-no-snapshots"))
+        .unwrap_or_else(|_| {
+            let dir = std::env::temp_dir().join(format!("noctiluca-svg-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            FakeEngine::from_dir(&dir).unwrap()
+        });
+    engine
+        .state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("svg-logo".into(), p.snapshot());
+    let (send, updates) = mpsc::channel();
+    let tab = Tab::spawn(Box::new(engine), move |u| {
+        let _ = send.send(u);
+    });
+    tab.send(Command::Open("svg-logo.html".into()));
+    let page = wait_for(&updates, Duration::from_secs(10), |p| {
+        let drawings: Vec<_> = p
+            .media
+            .iter()
+            .filter(|m| m.kind == MediaKind::Svg)
+            .collect();
+        drawings.len() == 2 && drawings.iter().all(|m| m.picture.is_some())
+    });
+    assert!(page.is_some(), "the drawings were never given pictures");
+}

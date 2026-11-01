@@ -580,11 +580,15 @@ impl Worker<'_> {
         // at the reading after.
         let view = self.metrics.map_or(0.0, |m| m.scroll_y);
         // A video with no poster to fetch shows what Chrome paints in its
-        // region: its poster, or its first frame.
+        // region: its poster, or its first frame. An inline `<svg>` is a
+        // drawing Noctiluca does not decode: Chrome's pixels of it too.
         let mut candidates: Vec<_> = page
             .media
             .iter()
-            .filter(|m| matches!(m.kind, MediaKind::Image | MediaKind::Video) && m.still.is_none())
+            .filter(|m| {
+                matches!(m.kind, MediaKind::Image | MediaKind::Video | MediaKind::Svg)
+                    && m.still.is_none()
+            })
             .filter(|m| m.rect.width >= 4.0 && m.rect.height >= 4.0)
             .collect();
         candidates.sort_by(|a, b| (a.rect.y - view).abs().total_cmp(&(b.rect.y - view).abs()));

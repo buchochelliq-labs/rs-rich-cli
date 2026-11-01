@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<meta charset="utf-8">
+<title>SVG logo fixture</title>
+<!-- Written for Noctiluca's corpus, reduced from a news site's header: the
+     site's logo and its section's wordmark are inline <svg> drawings, with
+     a link beside them. Noctiluca does not draw SVG itself: like a picture
+     it cannot decode, each drawing takes Chrome's own pixels of its box,
+     not a grey placeholder. -->
+<style>
+  body { font: 16px sans-serif; margin: 0; }
+  header { display: flex; align-items: center; gap: 16px; height: 48px; padding: 0 8px; }
+</style>
+<header>
+  <svg width="96" height="28" viewBox="0 0 96 28" role="img" aria-label="Glow">
+    <rect width="28" height="28" fill="#000"/><rect x="34" width="28" height="28" fill="#000"/>
+    <rect x="68" width="28" height="28" fill="#000"/></svg>
+  <svg width="80" height="28" viewBox="0 0 80 28" role="img" aria-label="News">
+    <text x="0" y="22" font-size="24" fill="#b80000">News</text></svg>
+  <a href="#live">Watch Live</a>
+</header>
+<p>The first story.</p>
