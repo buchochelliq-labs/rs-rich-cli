@@ -320,3 +320,121 @@ fn a_cell_belongs_to_the_control_its_span_is() {
     assert_eq!(control_at(&line, 16), None);
     assert_eq!(control_at(&line, 40), None);
 }
+
+/// The page in `tests/fixtures/caption-grid.html` as Chrome lays it out
+/// at 800 CSS pixels (100 columns): a grid of a wide story (528 pixels)
+/// and a narrow one (264), the wide one's picture 297 pixels tall with
+/// long alt text and no caption of the page's.
+fn caption_grid() -> Page {
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new(
+        "file:///noctiluca/fixtures/caption-grid.html",
+        "Caption grid fixture",
+        800.0,
+        400.0,
+    );
+    let body = p.body();
+    let row = p.element(
+        body,
+        "DIV",
+        &[("class", "row")],
+        &[("display", "grid")],
+        Some(Rect::new(0.0, 0.0, 800.0, 333.0)),
+    );
+    let lead = p.element(
+        row,
+        "DIV",
+        &[("class", "lead")],
+        &[],
+        Some(Rect::new(0.0, 0.0, 528.0, 333.0)),
+    );
+    p.image(
+        lead,
+        "file:///noctiluca/fixtures/media/harbour.jpg",
+        "Boats rest in the harbour at dusk while the tide turns and the first lights of the town come on along the sea wall",
+        Rect::new(0.0, 0.0, 528.0, 297.0),
+    );
+    let h2 = p.element(
+        lead,
+        "H2",
+        &[],
+        &[("font-weight", "700")],
+        Some(Rect::new(0.0, 297.0, 528.0, 36.0)),
+    );
+    p.text(
+        h2,
+        "The harbour at night",
+        Rect::new(0.0, 306.0, 190.0, 18.0),
+    );
+    let side = p.element(
+        row,
+        "DIV",
+        &[("class", "side")],
+        &[],
+        Some(Rect::new(536.0, 0.0, 264.0, 80.0)),
+    );
+    let h3 = p.element(
+        side,
+        "H3",
+        &[],
+        &[("font-weight", "700")],
+        Some(Rect::new(536.0, 0.0, 264.0, 18.0)),
+    );
+    p.text(h3, "Tides this week", Rect::new(536.0, 0.0, 130.0, 18.0));
+    let para = p.element(
+        side,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(536.0, 34.0, 264.0, 36.0)),
+    );
+    p.text(
+        para,
+        "High water comes an hour later each day.",
+        Rect::new(536.0, 34.0, 250.0, 36.0),
+    );
+    let under = p.element(
+        body,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 349.0, 800.0, 18.0)),
+    );
+    p.text(under, "Under the row.", Rect::new(0.0, 349.0, 110.0, 18.0));
+    build(&p.snapshot(), &mut Revisions::new())
+}
+
+#[test]
+fn a_pictures_caption_in_a_narrowed_grid_item_wraps_and_shows_in_full() {
+    let page = caption_grid();
+    let lines: Vec<String> = projection(&page, 100, (8.0, 18.0), &Marks::default())
+        .iter()
+        .map(Line::plain)
+        .collect();
+    // The caption's words, in order, over as many rows as it takes: none
+    // cut at the narrowed item's edge.
+    let caption: String = lines
+        .iter()
+        .filter(|l| !l.contains('░'))
+        .map(|l| l.split("  ").next().unwrap_or_default().trim())
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        caption.contains(
+            "Image: Boats rest in the harbour at dusk while the tide turns and the first \
+             lights of the town come on along the sea wall"
+        ),
+        "{lines:#?}"
+    );
+    // The story beside it keeps its column, and what is under the row
+    // comes after the caption.
+    let at = |text: &str| {
+        lines
+            .iter()
+            .position(|l| l.contains(text))
+            .unwrap_or_else(|| panic!("{text}: {lines:#?}"))
+    };
+    assert!(at("Tides this week") < at("sea wall"));
+    assert!(at("sea wall") < at("Under the row."));
+}

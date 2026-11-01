@@ -958,6 +958,10 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         /// A table cell's row (the table's node, the row's index): the
         /// cells of a row start on one terminal row.
         row: Option<(crate::engine::NodeId, usize)>,
+        /// A picture's `Image:` caption, wrapped under it to the box's
+        /// width once the box has its final columns (a snapped grid can
+        /// narrow it).
+        caption: Option<Vec<Span>>,
     }
     let mut items: Vec<Item> = Vec::new();
     let snap = |left: f64, right: f64| -> (usize, usize) {
@@ -987,6 +991,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             media: None,
             one_line: false,
             row: None,
+            caption: None,
         }
     };
     let adapt = marks.adapt;
@@ -1080,6 +1085,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
             media: None,
             one_line: false,
             row: None,
+            caption: None,
         });
         if !side {
             shrunk.push((items.len() - 1, region.rect.height, x0, x1));
@@ -1166,6 +1172,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     media: None,
                     one_line: false,
                     row: None,
+                    caption: None,
                 });
             }
             BlockKind::Media(index)
@@ -1233,14 +1240,8 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     *last = mark;
                 }
                 let x1 = if captioned { wide.max(m1) } else { m1 };
-                if captioned {
-                    lines.extend(wrap(
-                        &[Span::new(format!("Image: {}", media.alt), "italic")],
-                        (x1 - m0).max(1),
-                        &[],
-                        &[],
-                    ));
-                }
+                let caption =
+                    captioned.then(|| vec![Span::new(format!("Image: {}", media.alt), "italic")]);
                 items.push(Item {
                     top: media.rect.y,
                     bottom: media.rect.y + rows as f64 * ch,
@@ -1254,6 +1255,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     media: Some((*index, rows, w)),
                     one_line: false,
                     row: None,
+                    caption,
                 });
                 if rows < full {
                     let (o0, o1) = snap(media.rect.x, media.rect.right());
@@ -1319,6 +1321,7 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     media: None,
                     one_line: false,
                     row: None,
+                    caption: None,
                 });
             }
             kind => {
@@ -1487,6 +1490,10 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
         placed[n].2 = start;
     }
     for item in items.iter_mut() {
+        if let Some(caption) = &item.caption {
+            item.lines
+                .extend(wrap(caption, (item.x1 - item.x0).max(1), &[], &[]));
+        }
         let Some((spans, first)) = &item.wrap else {
             continue;
         };

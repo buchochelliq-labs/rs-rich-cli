@@ -219,6 +219,243 @@ pub fn feed_snapshot_of(url: &str, first: i64, last: i64) -> PageSnapshot {
     }
 }
 
+/// A page's snapshot written by hand, in the shape Chrome gives one: for
+/// a reduced fixture page whose layout a test states (each box's place
+/// in CSS pixels), when no browser can capture it. Elements take their
+/// computed styles by name (any of [`SNAPSHOT_STYLES`](crate::cdp::SNAPSHOT_STYLES)),
+/// the inherited ones from their parent as CSS does; a text node takes
+/// its parent's, as Chrome reports a text's style. Nodes are in document
+/// order, each `backendNodeId` its index plus one.
+pub struct PageBuilder {
+    url: String,
+    title: String,
+    width: f64,
+    height: f64,
+    parent: Vec<i64>,
+    kind: Vec<i64>,
+    name: Vec<String>,
+    value: Vec<Option<String>>,
+    attrs: Vec<Vec<(String, String)>>,
+    /// Each node's computed styles (in [`SNAPSHOT_STYLES`](crate::cdp::SNAPSHOT_STYLES)'s order) and
+    /// box, when it has a layout box.
+    layout: Vec<Option<(Vec<String>, Rect)>>,
+    current_source: Vec<(usize, String)>,
+}
+
+/// The computed styles CSS inherits, among the snapshot's.
+const INHERITED: &[&str] = &[
+    "visibility",
+    "color",
+    "font-weight",
+    "font-style",
+    "white-space",
+];
+
+/// A style's initial value, as Chrome computes it.
+fn initial(name: &str) -> &'static str {
+    match name {
+        "display" => "block",
+        "visibility" => "visible",
+        "color" => "rgb(0, 0, 0)",
+        "background-color" => "rgba(0, 0, 0, 0)",
+        "font-weight" => "400",
+        "font-style" | "white-space" => "normal",
+        "text-decoration-line" | "background-image" => "none",
+        "opacity" => "1",
+        "overflow-y" | "overflow-x" => "visible",
+        "flex-wrap" => "nowrap",
+        "clip" => "auto",
+        "clip-path" => "none",
+        "position" => "static",
+        _ => "",
+    }
+}
+
+impl PageBuilder {
+    /// A page at `url`, `width` by `height` CSS pixels: the document, its
+    /// `<html>` and its `<body>` (see [`body`](Self::body)), both the
+    /// page's size.
+    pub fn new(url: &str, title: &str, width: f64, height: f64) -> PageBuilder {
+        let mut page = PageBuilder {
+            url: url.to_string(),
+            title: title.to_string(),
+            width,
+            height,
+            parent: Vec::new(),
+            kind: Vec::new(),
+            name: Vec::new(),
+            value: Vec::new(),
+            attrs: Vec::new(),
+            layout: Vec::new(),
+            current_source: Vec::new(),
+        };
+        let all = Rect::new(0.0, 0.0, width, height);
+        page.push(-1, 9, "#document", None, &[], Some(all));
+        page.element(0, "HTML", &[], &[], Some(all));
+        page.element(1, "BODY", &[], &[], Some(all));
+        page
+    }
+
+    /// The `<body>`'s node.
+    pub fn body(&self) -> usize {
+        2
+    }
+
+    fn push(
+        &mut self,
+        parent: i64,
+        kind: i64,
+        name: &str,
+        value: Option<&str>,
+        styles: &[(&str, &str)],
+        rect: Option<Rect>,
+    ) -> usize {
+        let at = self.parent.len();
+        let from = usize::try_from(parent)
+            .ok()
+            .and_then(|p| self.layout.get(p).cloned().flatten())
+            .map(|(s, _)| s);
+        let computed = crate::cdp::SNAPSHOT_STYLES
+            .iter()
+            .enumerate()
+            .map(|(k, &style)| {
+                if let Some((_, v)) = styles.iter().find(|(n, _)| *n == style) {
+                    return v.to_string();
+                }
+                match &from {
+                    Some(from) if kind == 3 || INHERITED.contains(&style) => from[k].clone(),
+                    _ => initial(style).to_string(),
+                }
+            })
+            .collect();
+        self.parent.push(parent);
+        self.kind.push(kind);
+        self.name.push(name.to_string());
+        self.value.push(value.map(str::to_string));
+        self.attrs.push(Vec::new());
+        self.layout.push(rect.map(|r| (computed, r)));
+        at
+    }
+
+    /// An element under `parent`: its tag, attributes, the computed
+    /// styles that are not their initial or inherited values (`display`
+    /// is `block` unless given), and its box; `None` for no layout box
+    /// (`display: none`).
+    pub fn element(
+        &mut self,
+        parent: usize,
+        tag: &str,
+        attrs: &[(&str, &str)],
+        styles: &[(&str, &str)],
+        rect: Option<Rect>,
+    ) -> usize {
+        // A box under a parent with none has none either.
+        let rect = rect.filter(|_| self.layout[parent].is_some());
+        let at = self.push(parent as i64, 1, tag, None, styles, rect);
+        self.attrs[at] = attrs
+            .iter()
+            .map(|(k, v)| (k.to_string(), v.to_string()))
+            .collect();
+        at
+    }
+
+    /// A text node under `parent`, laid out in `rect` (the union of its
+    /// line boxes) unless its parent has no box.
+    pub fn text(&mut self, parent: usize, text: &str, rect: Rect) -> usize {
+        let rect = self.layout[parent].is_some().then_some(rect);
+        self.push(parent as i64, 3, "#text", Some(text), &[], rect)
+    }
+
+    /// An `<img>` under `parent`: its `src`, `alt` and box.
+    pub fn image(&mut self, parent: usize, src: &str, alt: &str, rect: Rect) -> usize {
+        let at = self.element(
+            parent,
+            "IMG",
+            &[("src", src), ("alt", alt)],
+            &[("display", "inline")],
+            Some(rect),
+        );
+        self.current_source.push((at, src.to_string()));
+        at
+    }
+
+    /// The snapshot, as `DOMSnapshot.captureSnapshot` shapes it, with no
+    /// accessibility tree.
+    pub fn snapshot(&self) -> PageSnapshot {
+        use serde_json::json;
+        let mut strings: Vec<String> = Vec::new();
+        let mut index: HashMap<String, i64> = HashMap::new();
+        let mut s = |text: &str| -> i64 {
+            if let Some(&i) = index.get(text) {
+                return i;
+            }
+            strings.push(text.to_string());
+            index.insert(text.to_string(), strings.len() as i64 - 1);
+            strings.len() as i64 - 1
+        };
+        let url = s(&self.url);
+        let title = s(&self.title);
+        let names: Vec<i64> = self.name.iter().map(|n| s(n)).collect();
+        let values: Vec<i64> = self
+            .value
+            .iter()
+            .map(|v| v.as_deref().map_or(-1, &mut s))
+            .collect();
+        let attrs: Vec<Vec<i64>> = self
+            .attrs
+            .iter()
+            .map(|list| list.iter().flat_map(|(k, v)| [s(k), s(v)]).collect())
+            .collect();
+        let (mut node_index, mut styles, mut bounds, mut text) =
+            (Vec::new(), Vec::new(), Vec::new(), Vec::new());
+        for (i, layout) in self.layout.iter().enumerate() {
+            let Some((computed, rect)) = layout else {
+                continue;
+            };
+            node_index.push(i as i64);
+            styles.push(computed.iter().map(|v| s(v)).collect::<Vec<_>>());
+            bounds.push(json!([rect.x, rect.y, rect.width, rect.height]));
+            text.push(if self.kind[i] == 3 { values[i] } else { -1 });
+        }
+        let source = (
+            self.current_source
+                .iter()
+                .map(|(i, _)| *i as i64)
+                .collect::<Vec<_>>(),
+            self.current_source
+                .iter()
+                .map(|(_, u)| s(u))
+                .collect::<Vec<_>>(),
+        );
+        let n = self.parent.len();
+        let empty = || json!({"index": [], "value": []});
+        let dom = json!({
+            "documents": [{
+                "documentURL": url, "title": title, "baseURL": url,
+                "contentWidth": self.width, "contentHeight": self.height,
+                "scrollOffsetX": 0, "scrollOffsetY": 0,
+                "nodes": {
+                    "parentIndex": self.parent, "nodeType": self.kind,
+                    "nodeName": names, "nodeValue": values,
+                    "backendNodeId": (1..=n as i64).collect::<Vec<_>>(),
+                    "attributes": attrs,
+                    "textValue": empty(), "inputValue": empty(),
+                    "inputChecked": {"index": []}, "optionSelected": {"index": []},
+                    "currentSourceURL": {"index": source.0, "value": source.1},
+                },
+                "layout": {
+                    "nodeIndex": node_index, "styles": styles, "bounds": bounds, "text": text,
+                },
+            }],
+            "strings": strings,
+        });
+        PageSnapshot {
+            dom,
+            ax: Value::Null,
+        }
+    }
+}
+
 /// What a test does when an action runs.
 pub type OnAct = Box<dyn FnMut(&PageAction, &mut FakeState) + Send>;
 
