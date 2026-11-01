@@ -261,10 +261,10 @@ impl<T: 'static> TabSet<T> {
     /// The tabs' titles, `title` of each state, as a closure for a
     /// [`tabs`](crate::widgets::tabs) strip; it reads the set (and whatever
     /// `title` reads).
-    pub fn titles<F: Fn(&T) -> String + 'static>(
+    pub fn titles(
         &self,
-        title: F,
-    ) -> impl Fn() -> Vec<String> + use<T, F> {
+        title: impl Fn(&T) -> String + 'static,
+    ) -> impl Fn() -> Vec<String> + 'static {
         let tabs = self.tabs;
         move || tabs.with(|tabs| tabs.iter().map(&title).collect())
     }
