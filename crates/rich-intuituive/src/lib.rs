@@ -92,6 +92,8 @@ mod actions;
 pub mod app;
 #[cfg(feature = "pcm")]
 pub mod audio;
+#[cfg(feature = "art")]
+pub mod banner;
 mod bars;
 #[cfg(feature = "art")]
 mod big_text;

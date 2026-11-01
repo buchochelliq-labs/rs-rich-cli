@@ -1,0 +1,225 @@
+<svg class="rich-terminal" viewBox="0 0 506 391.59999999999997" xmlns="http://www.w3.org/2000/svg">
+    <!-- Generated with Rich https://www.textualize.io -->
+    <style>
+
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Regular"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Regular.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Regular.woff") format("woff");
+        font-style: normal;
+        font-weight: 400;
+    }
+    @font-face {
+        font-family: "Fira Code";
+        src: local("FiraCode-Bold"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff2/FiraCode-Bold.woff2") format("woff2"),
+                url("https://cdnjs.cloudflare.com/ajax/libs/firacode/6.2.0/woff/FiraCode-Bold.woff") format("woff");
+        font-style: bold;
+        font-weight: 700;
+    }
+
+    .guide_banners-animated-matrix {
+        font-family: Fira Code, monospace;
+        font-size: 20px;
+        line-height: 24.4px;
+        font-variant-east-asian: full-width;
+    }
+
+    .guide_banners-animated-title {
+        font-size: 18px;
+        font-weight: bold;
+        font-family: arial;
+    }
+
+    .guide_banners-animated-r1 { fill: #c5c8c6 }
+.guide_banners-animated-r2 { fill: #3eebe0 }
+.guide_banners-animated-r3 { fill: #3fd4dd }
+.guide_banners-animated-r4 { fill: #c9dfe1 }
+.guide_banners-animated-r5 { fill: #b2c8cc }
+.guide_banners-animated-r6 { fill: #3ff0e0 }
+.guide_banners-animated-r7 { fill: #3ee5df }
+.guide_banners-animated-r8 { fill: #40d6da }
+.guide_banners-animated-r9 { fill: #4eb2bf }
+.guide_banners-animated-r10 { fill: #80adb7 }
+.guide_banners-animated-r11 { fill: #a1bfc6 }
+.guide_banners-animated-r12 { fill: #bed5d8 }
+.guide_banners-animated-r13 { fill: #cbe1e2 }
+.guide_banners-animated-r14 { fill: #a8bfc4 }
+.guide_banners-animated-r15 { fill: #607986 }
+.guide_banners-animated-r16 { fill: #2f4a5c }
+.guide_banners-animated-r17 { fill: #243f52 }
+.guide_banners-animated-r18 { fill: #1f3a4d }
+.guide_banners-animated-r19 { fill: #3fe5df }
+.guide_banners-animated-r20 { fill: #40dfde }
+.guide_banners-animated-r21 { fill: #43ced3 }
+.guide_banners-animated-r22 { fill: #5aabb8 }
+.guide_banners-animated-r23 { fill: #74aab5 }
+.guide_banners-animated-r24 { fill: #b4ced2 }
+.guide_banners-animated-r25 { fill: #c8dee0 }
+.guide_banners-animated-r26 { fill: #92aab1 }
+.guide_banners-animated-r27 { fill: #4d6675 }
+.guide_banners-animated-r28 { fill: #365061 }
+.guide_banners-animated-r29 { fill: #203b4f }
+.guide_banners-animated-r30 { fill: #1c374b }
+.guide_banners-animated-r31 { fill: #3fe0df }
+.guide_banners-animated-r32 { fill: #72a9c1 }
+.guide_banners-animated-r33 { fill: #51b0bd }
+.guide_banners-animated-r34 { fill: #a5c2c8 }
+.guide_banners-animated-r35 { fill: #c0d8da }
+.guide_banners-animated-r36 { fill: #a4bbc1 }
+.guide_banners-animated-r37 { fill: #5c7582 }
+.guide_banners-animated-r38 { fill: #2e485a }
+.guide_banners-animated-r39 { fill: #233e51 }
+.guide_banners-animated-r40 { fill: #1e394d }
+.guide_banners-animated-r41 { fill: #1b364a }
+.guide_banners-animated-r42 { fill: #3de5df }
+.guide_banners-animated-r43 { fill: #3ddade }
+.guide_banners-animated-r44 { fill: #3fd2db }
+.guide_banners-animated-r45 { fill: #42c2d0 }
+.guide_banners-animated-r46 { fill: #4cb0c0 }
+.guide_banners-animated-r47 { fill: #5ea6b6 }
+.guide_banners-animated-r48 { fill: #7baab6 }
+.guide_banners-animated-r49 { fill: #9dbcc3 }
+.guide_banners-animated-r50 { fill: #bbd3d6 }
+.guide_banners-animated-r51 { fill: #cae0e2 }
+.guide_banners-animated-r52 { fill: #c5dbdd }
+.guide_banners-animated-r53 { fill: #adc3c8 }
+.guide_banners-animated-r54 { fill: #89a1a9 }
+.guide_banners-animated-r55 { fill: #647d8a }
+.guide_banners-animated-r56 { fill: #46606f }
+.guide_banners-animated-r57 { fill: #314c5d }
+.guide_banners-animated-r58 { fill: #254053 }
+.guide_banners-animated-r59 { fill: #1f3a4e }
+.guide_banners-animated-r60 { fill: #1d5fad }
+.guide_banners-animated-r61 { fill: #1d5fae }
+.guide_banners-animated-r62 { fill: #1d5eaa }
+.guide_banners-animated-r63 { fill: #1e5ca4 }
+.guide_banners-animated-r64 { fill: #1f599c }
+.guide_banners-animated-r65 { fill: #225995 }
+.guide_banners-animated-r66 { fill: #295c92 }
+.guide_banners-animated-r67 { fill: #366596 }
+.guide_banners-animated-r68 { fill: #4976a0 }
+.guide_banners-animated-r69 { fill: #628cb1 }
+.guide_banners-animated-r70 { fill: #7ca3c3 }
+.guide_banners-animated-r71 { fill: #91b5d1 }
+.guide_banners-animated-r72 { fill: #98bdd9 }
+.guide_banners-animated-r73 { fill: #91b8d8 }
+.guide_banners-animated-r74 { fill: #7daad2 }
+.guide_banners-animated-r75 { fill: #6396c9 }
+.guide_banners-animated-r76 { fill: #4a81bc }
+.guide_banners-animated-r77 { fill: #3770ae }
+.guide_banners-animated-r78 { fill: #2a62a1 }
+.guide_banners-animated-r79 { fill: #1e538c }
+.guide_banners-animated-r80 { fill: #1d5087 }
+.guide_banners-animated-r81 { fill: #85c4dc }
+.guide_banners-animated-r82 { fill: #3ad5de }
+.guide_banners-animated-r83 { fill: #33afdb }
+.guide_banners-animated-r84 { fill: #31a5db }
+.guide_banners-animated-r85 { fill: #3bdade }
+.guide_banners-animated-r86 { fill: #39d0de }
+.guide_banners-animated-r87 { fill: #37c5dd }
+.guide_banners-animated-r88 { fill: #36c0dd }
+.guide_banners-animated-r89 { fill: #35badc }
+.guide_banners-animated-r90 { fill: #34b5dc }
+.guide_banners-animated-r91 { fill: #32aadb }
+.guide_banners-animated-r92 { fill: #309fda }
+.guide_banners-animated-r93 { fill: #2e95da }
+.guide_banners-animated-r94 { fill: #2d8fd9 }
+.guide_banners-animated-r95 { fill: #2c8ad9 }
+.guide_banners-animated-r96 { fill: #3ce0df }
+.guide_banners-animated-r97 { fill: #71a8bf }
+.guide_banners-animated-r98 { fill: #38cadd }
+.guide_banners-animated-r99 { fill: #2f9ada }
+.guide_banners-animated-r100 { fill: #2b84d8 }
+.guide_banners-animated-r101 { fill: #57869d }
+.guide_banners-animated-r102 { fill: #2a7fd8 }
+.guide_banners-animated-r103 { fill: #1d5ba5 }
+.guide_banners-animated-r104 { fill: #1d589c }
+.guide_banners-animated-r105 { fill: #1c5494 }
+.guide_banners-animated-r106 { fill: #1c518c }
+.guide_banners-animated-r107 { fill: #1c4f87 }
+.guide_banners-animated-r108 { fill: #1c4f86 }
+.guide_banners-animated-r109 { fill: #1c5089 }
+.guide_banners-animated-r110 { fill: #1c528f }
+.guide_banners-animated-r111 { fill: #1d5698 }
+.guide_banners-animated-r112 { fill: #1d59a1 }
+.guide_banners-animated-r113 { fill: #1d5da8 }
+.guide_banners-animated-r114 { fill: #1d5eab }
+.guide_banners-animated-r115 { fill: #1c5493 }
+.guide_banners-animated-r116 { fill: #1c5390 }
+    </style>
+
+    <defs>
+    <clipPath id="guide_banners-animated-clip-terminal">
+      <rect x="0" y="0" width="487.0" height="340.59999999999997" />
+    </clipPath>
+    <clipPath id="guide_banners-animated-line-0">
+    <rect x="0" y="1.5" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_banners-animated-line-1">
+    <rect x="0" y="25.9" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_banners-animated-line-2">
+    <rect x="0" y="50.3" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_banners-animated-line-3">
+    <rect x="0" y="74.7" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_banners-animated-line-4">
+    <rect x="0" y="99.1" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_banners-animated-line-5">
+    <rect x="0" y="123.5" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_banners-animated-line-6">
+    <rect x="0" y="147.9" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_banners-animated-line-7">
+    <rect x="0" y="172.3" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_banners-animated-line-8">
+    <rect x="0" y="196.7" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_banners-animated-line-9">
+    <rect x="0" y="221.1" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_banners-animated-line-10">
+    <rect x="0" y="245.5" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_banners-animated-line-11">
+    <rect x="0" y="269.9" width="488" height="24.65"/>
+            </clipPath>
+<clipPath id="guide_banners-animated-line-12">
+    <rect x="0" y="294.3" width="488" height="24.65"/>
+            </clipPath>
+    </defs>
+
+    <rect fill="#292929" stroke="rgba(255,255,255,0.35)" stroke-width="1" x="1" y="1" width="504" height="389.6" rx="8"/><text class="guide_banners-animated-title" fill="#c5c8c6" text-anchor="middle" x="252" y="27">Animated</text>
+            <g transform="translate(26,22)">
+            <circle cx="0" cy="0" r="7" fill="#ff5f57"/>
+            <circle cx="22" cy="0" r="7" fill="#febc2e"/>
+            <circle cx="44" cy="0" r="7" fill="#28c840"/>
+            </g>
+        
+    <g transform="translate(9, 41)" clip-path="url(#guide_banners-animated-clip-terminal)">
+    
+    <g class="guide_banners-animated-matrix">
+    <text class="guide_banners-animated-r1" x="488" y="20" textLength="12.2" clip-path="url(#guide_banners-animated-line-0)">
+</text><text class="guide_banners-animated-r2" x="12.2" y="44.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-1)">_</text><text class="guide_banners-animated-r3" x="61" y="44.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-1)">_</text><text class="guide_banners-animated-r4" x="146.4" y="44.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-1)">_</text><text class="guide_banners-animated-r5" x="170.8" y="44.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-1)">_</text><text class="guide_banners-animated-r1" x="488" y="44.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-1)">
+</text><text class="guide_banners-animated-r6" x="0" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">|</text><text class="guide_banners-animated-r7" x="24.4" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">|</text><text class="guide_banners-animated-r8" x="48.8" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">|</text><text class="guide_banners-animated-r9" x="73.2" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">|</text><text class="guide_banners-animated-r10" x="97.6" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">_</text><text class="guide_banners-animated-r11" x="109.8" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">_</text><text class="guide_banners-animated-r12" x="122" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">_</text><text class="guide_banners-animated-r13" x="134.2" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">|</text><text class="guide_banners-animated-r14" x="158.6" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">|</text><text class="guide_banners-animated-r15" x="183" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">|</text><text class="guide_banners-animated-r16" x="207.4" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">_</text><text class="guide_banners-animated-r17" x="219.6" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">_</text><text class="guide_banners-animated-r18" x="231.8" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">_</text><text class="guide_banners-animated-r1" x="488" y="68.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-2)">
+</text><text class="guide_banners-animated-r6" x="0" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">|</text><text class="guide_banners-animated-r19" x="24.4" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">|</text><text class="guide_banners-animated-r20" x="36.6" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">_</text><text class="guide_banners-animated-r21" x="48.8" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">|</text><text class="guide_banners-animated-r22" x="73.2" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">|</text><text class="guide_banners-animated-r23" x="85.4" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">/</text><text class="guide_banners-animated-r24" x="109.8" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">_</text><text class="guide_banners-animated-r25" x="134.2" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">\</text><text class="guide_banners-animated-r26" x="158.6" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">|</text><text class="guide_banners-animated-r27" x="183" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">|</text><text class="guide_banners-animated-r28" x="195.2" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">/</text><text class="guide_banners-animated-r29" x="219.6" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">_</text><text class="guide_banners-animated-r30" x="244" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">\</text><text class="guide_banners-animated-r1" x="488" y="93.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-3)">
+</text><text class="guide_banners-animated-r6" x="0" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">|</text><text class="guide_banners-animated-r31" x="36.6" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">_</text><text class="guide_banners-animated-r32" x="61" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">.</text><text class="guide_banners-animated-r33" x="73.2" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">|</text><text class="guide_banners-animated-r34" x="109.8" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">_</text><text class="guide_banners-animated-r35" x="122" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">_</text><text class="guide_banners-animated-r13" x="134.2" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">/</text><text class="guide_banners-animated-r36" x="158.6" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">|</text><text class="guide_banners-animated-r37" x="183" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">|</text><text class="guide_banners-animated-r38" x="207.4" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">(</text><text class="guide_banners-animated-r39" x="219.6" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">_</text><text class="guide_banners-animated-r40" x="231.8" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">)</text><text class="guide_banners-animated-r41" x="256.2" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">|</text><text class="guide_banners-animated-r1" x="488" y="117.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-4)">
+</text><text class="guide_banners-animated-r6" x="0" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">|</text><text class="guide_banners-animated-r2" x="12.2" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">_</text><text class="guide_banners-animated-r42" x="24.4" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">|</text><text class="guide_banners-animated-r43" x="48.8" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">|</text><text class="guide_banners-animated-r44" x="61" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">_</text><text class="guide_banners-animated-r45" x="73.2" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">|</text><text class="guide_banners-animated-r46" x="85.4" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">\</text><text class="guide_banners-animated-r47" x="97.6" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">_</text><text class="guide_banners-animated-r48" x="109.8" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">_</text><text class="guide_banners-animated-r49" x="122" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">_</text><text class="guide_banners-animated-r50" x="134.2" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">|</text><text class="guide_banners-animated-r51" x="146.4" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">_</text><text class="guide_banners-animated-r52" x="158.6" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">|</text><text class="guide_banners-animated-r53" x="170.8" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">_</text><text class="guide_banners-animated-r54" x="183" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">|</text><text class="guide_banners-animated-r55" x="195.2" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">\</text><text class="guide_banners-animated-r56" x="207.4" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">_</text><text class="guide_banners-animated-r57" x="219.6" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">_</text><text class="guide_banners-animated-r58" x="231.8" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">_</text><text class="guide_banners-animated-r59" x="244" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">/</text><text class="guide_banners-animated-r1" x="488" y="142" textLength="12.2" clip-path="url(#guide_banners-animated-line-5)">
+</text><text class="guide_banners-animated-r60" x="0" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">&#x27;</text><text class="guide_banners-animated-r61" x="12.2" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">&#x27;</text><text class="guide_banners-animated-r62" x="24.4" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">&#x27;</text><text class="guide_banners-animated-r63" x="36.6" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">~</text><text class="guide_banners-animated-r64" x="48.8" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">-</text><text class="guide_banners-animated-r65" x="61" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">.</text><text class="guide_banners-animated-r66" x="73.2" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">.</text><text class="guide_banners-animated-r67" x="85.4" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">_</text><text class="guide_banners-animated-r68" x="97.6" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">_</text><text class="guide_banners-animated-r69" x="109.8" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">_</text><text class="guide_banners-animated-r70" x="122" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">.</text><text class="guide_banners-animated-r71" x="134.2" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">-</text><text class="guide_banners-animated-r72" x="146.4" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">~</text><text class="guide_banners-animated-r73" x="158.6" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">&#x27;</text><text class="guide_banners-animated-r74" x="170.8" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">&#x27;</text><text class="guide_banners-animated-r75" x="183" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">&#x27;</text><text class="guide_banners-animated-r76" x="195.2" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">&#x27;</text><text class="guide_banners-animated-r77" x="207.4" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">~</text><text class="guide_banners-animated-r78" x="219.6" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">-</text><text class="guide_banners-animated-r65" x="231.8" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">.</text><text class="guide_banners-animated-r79" x="244" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">_</text><text class="guide_banners-animated-r80" x="256.2" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">_</text><text class="guide_banners-animated-r1" x="488" y="166.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-6)">
+</text><text class="guide_banners-animated-r81" x="146.4" y="190.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-7)">°</text><text class="guide_banners-animated-r1" x="488" y="190.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-7)">
+</text><text class="guide_banners-animated-r2" x="12.2" y="215.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-8)">_</text><text class="guide_banners-animated-r82" x="61" y="215.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-8)">_</text><text class="guide_banners-animated-r83" x="146.4" y="215.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-8)">_</text><text class="guide_banners-animated-r84" x="170.8" y="215.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-8)">_</text><text class="guide_banners-animated-r1" x="488" y="215.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-8)">
+</text><text class="guide_banners-animated-r6" x="0" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">|</text><text class="guide_banners-animated-r42" x="24.4" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">|</text><text class="guide_banners-animated-r85" x="48.8" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">|</text><text class="guide_banners-animated-r86" x="73.2" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">|</text><text class="guide_banners-animated-r87" x="97.6" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">_</text><text class="guide_banners-animated-r88" x="109.8" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">_</text><text class="guide_banners-animated-r89" x="122" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">_</text><text class="guide_banners-animated-r90" x="134.2" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">|</text><text class="guide_banners-animated-r91" x="158.6" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">|</text><text class="guide_banners-animated-r92" x="183" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">|</text><text class="guide_banners-animated-r93" x="207.4" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">_</text><text class="guide_banners-animated-r94" x="219.6" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">_</text><text class="guide_banners-animated-r95" x="231.8" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">_</text><text class="guide_banners-animated-r1" x="488" y="239.6" textLength="12.2" clip-path="url(#guide_banners-animated-line-9)">
+</text><text class="guide_banners-animated-r6" x="0" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">|</text><text class="guide_banners-animated-r42" x="24.4" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">|</text><text class="guide_banners-animated-r96" x="36.6" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">_</text><text class="guide_banners-animated-r85" x="48.8" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">|</text><text class="guide_banners-animated-r97" x="61" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">.</text><text class="guide_banners-animated-r86" x="73.2" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">|</text><text class="guide_banners-animated-r98" x="85.4" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">/</text><text class="guide_banners-animated-r88" x="109.8" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">_</text><text class="guide_banners-animated-r90" x="134.2" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">\</text><text class="guide_banners-animated-r91" x="158.6" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">|</text><text class="guide_banners-animated-r92" x="183" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">|</text><text class="guide_banners-animated-r99" x="195.2" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">/</text><text class="guide_banners-animated-r94" x="219.6" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">_</text><text class="guide_banners-animated-r100" x="244" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">\</text><text class="guide_banners-animated-r1" x="488" y="264" textLength="12.2" clip-path="url(#guide_banners-animated-line-10)">
+</text><text class="guide_banners-animated-r6" x="0" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">|</text><text class="guide_banners-animated-r101" x="24.4" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">.</text><text class="guide_banners-animated-r96" x="36.6" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">_</text><text class="guide_banners-animated-r86" x="73.2" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">|</text><text class="guide_banners-animated-r88" x="109.8" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">_</text><text class="guide_banners-animated-r89" x="122" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">_</text><text class="guide_banners-animated-r90" x="134.2" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">/</text><text class="guide_banners-animated-r91" x="158.6" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">|</text><text class="guide_banners-animated-r92" x="183" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">|</text><text class="guide_banners-animated-r93" x="207.4" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">(</text><text class="guide_banners-animated-r94" x="219.6" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">_</text><text class="guide_banners-animated-r95" x="231.8" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">)</text><text class="guide_banners-animated-r102" x="256.2" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">|</text><text class="guide_banners-animated-r1" x="488" y="288.4" textLength="12.2" clip-path="url(#guide_banners-animated-line-11)">
+</text><text class="guide_banners-animated-r6" x="0" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">|</text><text class="guide_banners-animated-r2" x="12.2" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">_</text><text class="guide_banners-animated-r42" x="24.4" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">|</text><text class="guide_banners-animated-r85" x="48.8" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">|</text><text class="guide_banners-animated-r82" x="61" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">_</text><text class="guide_banners-animated-r86" x="73.2" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">|</text><text class="guide_banners-animated-r98" x="85.4" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">\</text><text class="guide_banners-animated-r87" x="97.6" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">_</text><text class="guide_banners-animated-r88" x="109.8" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">_</text><text class="guide_banners-animated-r89" x="122" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">_</text><text class="guide_banners-animated-r90" x="134.2" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">|</text><text class="guide_banners-animated-r83" x="146.4" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">_</text><text class="guide_banners-animated-r91" x="158.6" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">|</text><text class="guide_banners-animated-r84" x="170.8" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">_</text><text class="guide_banners-animated-r92" x="183" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">|</text><text class="guide_banners-animated-r99" x="195.2" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">\</text><text class="guide_banners-animated-r93" x="207.4" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">_</text><text class="guide_banners-animated-r94" x="219.6" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">_</text><text class="guide_banners-animated-r95" x="231.8" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">_</text><text class="guide_banners-animated-r100" x="244" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">/</text><text class="guide_banners-animated-r1" x="488" y="312.8" textLength="12.2" clip-path="url(#guide_banners-animated-line-12)">
+</text><text class="guide_banners-animated-r103" x="0" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">~</text><text class="guide_banners-animated-r104" x="12.2" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">-</text><text class="guide_banners-animated-r105" x="24.4" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">.</text><text class="guide_banners-animated-r106" x="36.6" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">.</text><text class="guide_banners-animated-r107" x="48.8" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">_</text><text class="guide_banners-animated-r108" x="61" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">_</text><text class="guide_banners-animated-r109" x="73.2" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">_</text><text class="guide_banners-animated-r110" x="85.4" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">.</text><text class="guide_banners-animated-r111" x="97.6" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">-</text><text class="guide_banners-animated-r112" x="109.8" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">~</text><text class="guide_banners-animated-r113" x="122" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">~</text><text class="guide_banners-animated-r60" x="134.2" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">&#x27;</text><text class="guide_banners-animated-r61" x="146.4" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">&#x27;</text><text class="guide_banners-animated-r114" x="158.6" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">&#x27;</text><text class="guide_banners-animated-r103" x="170.8" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">~</text><text class="guide_banners-animated-r104" x="183" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">-</text><text class="guide_banners-animated-r115" x="195.2" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">.</text><text class="guide_banners-animated-r106" x="207.4" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">.</text><text class="guide_banners-animated-r107" x="219.6" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">_</text><text class="guide_banners-animated-r108" x="231.8" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">_</text><text class="guide_banners-animated-r109" x="244" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">_</text><text class="guide_banners-animated-r116" x="256.2" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">.</text><text class="guide_banners-animated-r1" x="488" y="337.2" textLength="12.2" clip-path="url(#guide_banners-animated-line-13)">
+</text>
+    </g>
+    </g>
+</svg>

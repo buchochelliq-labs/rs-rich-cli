@@ -76,6 +76,23 @@ fn plain_text(console: &Console) {
     // --8<-- [end:font]
 }
 
+fn animated(console: &Console) {
+    // --8<-- [start:animated]
+    use rich_art::animate::{AnimatedBanner, Effect};
+    use std::time::Duration;
+
+    let banner = AnimatedBanner::new("Hello", &FigletFont::standard())
+        .effect(Effect::Glow) // the default
+        .wave(true) // a wave line under the letters
+        .specks(true) // specks of light rising around them
+        .seed(7); // the same seed, the same specks
+    // Halfway: the glow is in the letters. A frame is a renderable.
+    console.print(&banner.frame(Duration::from_millis(1000)));
+    // The still final frame: every frame at and after the end.
+    console.print(&banner.still());
+    // --8<-- [end:animated]
+}
+
 type Shot = (&'static str, &'static str, usize, fn(&Console));
 
 const SHOTS: &[Shot] = &[
@@ -85,6 +102,7 @@ const SHOTS: &[Shot] = &[
     ("wrap", "Wrapping", 40, wrap),
     ("panel", "In a panel", 50, panel),
     ("font", "Fonts", 50, plain_text),
+    ("animated", "Animated", 40, animated),
 ];
 
 fn main() {
