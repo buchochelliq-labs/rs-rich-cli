@@ -80,6 +80,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/cells.svg){ .tui-icon width="20" } | [cells](widgets.md#bars-for-an-apps-chrome) | `cells` | One row of fixed-width cells |
 | ![](../../assets/intuituive/widgets/scrollbar.svg){ .tui-icon width="20" } | [scrollbar](tables.md#scrollbars) | `scrollbar`, `.scrollbar()` | A scrollbar beside any scrolled node |
 | ![](../../assets/intuituive/widgets/log.svg){ .tui-icon width="20" } | [log](lists.md#logs) | `Log::new(..).view()` | Lines appended at the bottom, kept to a capacity |
+| ![](../../assets/intuituive/widgets/renderable.svg){ .tui-icon width="20" } | [markdown](components.md#markdown-that-streams) | `markdown`, `MarkdownStream` | Markdown kept as blocks, which streams in: only the last block renders and draws again; links to Tab to and click |
 | ![](../../assets/intuituive/widgets/log_targets.svg){ .tui-icon width="20" } | [log sources](lists.md#levels-targets-and-filters) | `log.targets_view()` | A log's sources, each with its own level |
 
 ## Navigation and chrome

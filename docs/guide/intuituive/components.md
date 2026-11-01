@@ -241,6 +241,52 @@ text_area(prompt)
   over the paths a walk finds, relative to its root, fuzzy-matched as the
   finder matches them: `@src/ma` offers `src/main.rs`.
 
+## Markdown that streams
+
+New in 0.0.24: `markdown(doc)` draws the Markdown a `Signal<String>`
+holds, and keeps up as it grows: an agent's answer arriving.
+
+```rust
+use intuituive::{markdown, MarkdownStream};
+
+let doc = signal(String::new());
+let stream = MarkdownStream::new(doc);   // Clone + Send
+std::thread::spawn(move || {
+    for fragment in reply() {
+        stream.append(&fragment);       // joined, delivered once a turn
+    }
+    stream.finish();
+});
+scroll(
+    markdown(doc)
+        .on_link(|url, cx| cx.copy(url.to_string()))
+        .code_theme("ansi_dark"),
+)
+.follow_end()
+```
+
+- **Blocks.** The document is kept as blocks, each a node: the runs of
+  lines between blank lines, outside fenced code. Each is rs-rich's
+  Markdown port (headings, lists, quotes, tables, highlighted code),
+  rendered at the node's width and kept until its source or the width
+  changes.
+- **Streaming.** When the document grows, it is split again only from its
+  last block. The blocks above neither render nor draw again: an append
+  damages only the last block's rows. A fence still open draws as code,
+  as CommonMark reads it, so nothing jumps when it closes. Streamed in
+  one-byte fragments, an answer ends exactly as it does set at once.
+- **`MarkdownStream::new(doc)`**, made on the app's thread, is a `Clone +
+  Send` handle: `append(fragment)` from any thread, fragments arriving
+  faster than the app's loop turns joined into one update.
+- **Links.** A block with links takes the focus. Tab and Shift+Tab go
+  through its links, then on, the focused one drawn in
+  `markdown.link.focus` (else `reverse`); Enter or a click calls
+  `.on_link(|url, cx| ..)`.
+- **Limits.** A reference-style link whose definition sits in another
+  block is not resolved, and list items separated by blank lines draw as
+  lists of one item each (a line indented under an item stays with it).
+  A table draws as a table once its delimiter row arrives.
+
 ## Calendars and dates
 
 ```rust

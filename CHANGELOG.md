@@ -48,6 +48,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `files` feature's `files::path_completer(walk)` completes paths for `@`
   mentions. `InputHistory::push` keeps entries of more than one line in
   a history kept for the session.
+- **`markdown(doc)` and `MarkdownStream`** (#797, the default `syntax`
+  feature): Markdown kept as blocks, each rs-rich's Markdown port
+  rendered once per source and width; when the document grows only its
+  last block is split, rendered and drawn again, and an open fence draws
+  as code. `MarkdownStream::new(doc)` is a `Clone + Send` handle whose
+  `append` batches fragments into one update a turn. Blocks with links
+  take the focus: Tab moves through the links, Enter or a click calls
+  `.on_link(|url, cx| ..)`; `.code_theme(name)` picks the code theme.
 
 ### Animated banners and Noctiluca's start page
 
