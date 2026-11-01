@@ -3,7 +3,20 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-10-27, evening)
+## Where things stand (2026-11-01)
+
+- **0.0.24 is planned** ([plan](../plans/0.0.24.md)), with the maintainer's
+  calls of 2026-11-01: everything ready on the apps track, lumis 0.17
+  waiting, edition 2024 first, and the docs moving to Zensical.
+- **Wave 0 is in flight:** the plan's pull request (with the live Chrome
+  test's fix), then edition 2024 in a pull request of its own. Waves 1 to 3
+  branch from the 2024 tree.
+- **Waiting on the maintainer:**
+  - approving the marketplace's signing run for the 0.0.23 listings;
+  - moving `RS_RICH_CLI_REF` to `release-0.0.23`;
+  - Memo's reference pictures.
+
+## Where things stood (2026-10-27, evening)
 
 - **0.0.23 is published** (19 crates from `main` at `2624ce5` by one
   release run, `release-0.0.23`, on 2026-10-27, every one through Trusted

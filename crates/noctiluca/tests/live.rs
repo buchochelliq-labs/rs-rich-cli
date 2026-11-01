@@ -240,12 +240,17 @@ fn a_form_fills_submits_and_its_echo_reads_back() {
 fn a_value_the_page_sets_without_an_event_is_seen_and_conflicts() {
     let Some(binary) = chrome() else { return };
     let mut live = Live::start(binary);
-    let page = live.open_form("form.html");
+    live.open_form("form.html");
     // A page can arrive mid-load without its controls, so waits look up
     // with `value` and only a settled page unwraps.
     let control = |page: &Page, name: &str| page.controls.iter().find(|c| c.name == name).cloned();
     let find = |page: &Page, name: &str| control(page, name).unwrap();
     let value = |page: &Page, name: &str| control(page, name).and_then(|c| c.value);
+    // `open_form` returns once any control has arrived; the button is the
+    // form's last, so wait for it too.
+    let page = live.wait("the remote button", |p| {
+        control(p, "Schedule remote update").is_some()
+    });
     let remote = find(&page, "Schedule remote update");
     let id = live.tab.send(Command::Act {
         binding: remote.binding(&page),
