@@ -1,0 +1,12 @@
+{"note": "Errors: session/new needs authentication first, the client authenticates, then the prompt fails with an internal error; a response to a request never made is reported and skipped."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "authMethods": [{"id": "api-key", "name": "API key", "description": "Uses the key in the environment"}, {"id": "login", "name": "Log in", "type": "terminal", "args": ["--login"]}]}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "error": {"code": -32000, "message": "Authentication required"}}}
+{"client": {"id": 2, "method": "authenticate", "params": {"methodId": "api-key"}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {}}}
+{"client": {"id": 3, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 99, "result": {"sessionId": "nobody asked"}}}
+{"agent": {"jsonrpc": "2.0", "id": 3, "result": {"sessionId": "sess_err"}}}
+{"client": {"id": 4, "method": "session/prompt"}}
+{"agent": {"jsonrpc": "2.0", "id": 4, "error": {"code": -32603, "message": "Internal error", "data": {"details": "model overloaded"}}}}

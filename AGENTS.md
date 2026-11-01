@@ -75,6 +75,9 @@ rich-cli ─ ─ ▶ rich-web ──▶ rich-intuituive, rich-embed   (serving t
                                                  against the host's plugin API and ABI, verified HTTPS
                                                  installs and the lockfile; no terminal code. ureq
                                                  behind its default `http` feature)
+             rich-acp                            (the Agent Client Protocol client, Cornacai's protocol layer:
+                                                 JSON-RPC over stdio, typed messages, a sandboxed workspace;
+                                                 serde only, no crate of ours and no terminal code)
 rich-py  ──▶ rich, rich-ext, rich-art, rich-mermaid, rich-diagram, rich-micro, rich-interact, rich-cli,
              rich-intuituive, rich-web, rich-embed
                            (Python bindings; outside the workspace, released to PyPI only)
@@ -110,6 +113,7 @@ possible, and keep the boundary free of core back-dependencies.
 | `rs-rich-web`  | independent SemVer | whenever we ship anything              |
 | `rs-rich-embed` | independent SemVer | whenever we ship anything             |
 | `rs-rich-marketplace` | independent SemVer | whenever we ship anything       |
+| `rs-rich-acp`  | independent SemVer | whenever we ship anything              |
 | `noctiluca`    | independent SemVer | whenever we ship anything              |
 | `rs-rich-macros` | independent SemVer | whenever we ship anything            |
 | `rs-rich-art`  | independent SemVer | whenever we ship anything              |

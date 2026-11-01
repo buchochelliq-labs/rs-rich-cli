@@ -126,6 +126,32 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   bypass, then delete the deploy key and `MARKETPLACE_DEPLOY_KEY`); the
   marketplace design note, PLUGINS and the 1.0.0 plan follow.
 
+### Cornacai's protocol layer: rs-rich-acp (#794, phases 1 and 2)
+
+- **Design note:** [Cornacai](docs/design/cornacai.md), a terminal client
+  for coding agents on the Agent Client Protocol: the scope by phase, ACP
+  version 1, the split between `rs-rich-acp` and the `cornacai` app, how the
+  app maps onto intuiTUIve (#797, #798, #800, #804, #799) and rs-rich-embed's
+  `PtyHost`, the security model, the marketplace's `agent` kind and the
+  first run. Clean room: written from the public specification; Toad's
+  (AGPL) source is never read.
+- **rs-rich-acp 0.0.1 (new crate, `rich_acp`):** an ACP v1 client with no
+  terminal code and no crate of ours below it. `Connection` spawns an agent
+  (its standard error goes to the client's log) or runs over any streams,
+  and calls `initialize`, `authenticate`, `session/new`, `session/load`,
+  `session/set_mode`, `session/prompt` and `session/cancel`; the app's
+  `Client` gets the streamed `session/update`s (chunks, thoughts, tool calls
+  and updates, plans, commands, modes, usage) and answers
+  `session/request_permission`, `fs/*` and `terminal/*`, each request on a
+  thread of its own. Messages are typed and tolerant (unknown fields
+  ignored, unknown variants kept as `Unknown` with their JSON).
+  Capabilities are opt-in, and a file or terminal request the client did
+  not offer is refused before the app sees it; `cancel` answers open
+  permission requests `cancelled` itself. `Workspace`, `fs` and `Terminals`
+  answer inside the session's root set. Tests replay transcripts through a
+  fake agent; `examples/agent.rs` drives a real agent named by
+  `RICH_ACP_AGENT` and skips otherwise.
+
 ### Animated banners and Noctiluca's start page
 
 - **rs-rich-art:** `animate::AnimatedBanner`, FIGlet text with an effect

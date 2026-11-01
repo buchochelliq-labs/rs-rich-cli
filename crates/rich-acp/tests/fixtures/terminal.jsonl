@@ -1,0 +1,21 @@
+{"note": "A command run through terminal/*: create, wait for exit, read the output, release; then a terminal that no longer exists, and a cwd outside the workspace."}
+{"client": {"id": 0, "method": "initialize", "params": {"clientCapabilities": {"terminal": true}}}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1}}}
+{"agent": {"jsonrpc": "2.0", "id": 20, "method": "terminal/create", "params": {"sessionId": "s", "command": "sh", "args": ["-c", "printf 'hello '; printf 'world' >&2; exit 3"], "env": [{"name": "ACP_TEST", "value": "1"}], "cwd": "$WORKSPACE", "outputByteLimit": 1048576}}}
+{"client": {"id": 20, "result": {"terminalId": "term_1"}}}
+{"agent": {"jsonrpc": "2.0", "id": 21, "method": "terminal/wait_for_exit", "params": {"sessionId": "s", "terminalId": "term_1"}}}
+{"client": {"id": 21, "result": {"exitCode": 3, "signal": null}}}
+{"agent": {"jsonrpc": "2.0", "id": 22, "method": "terminal/output", "params": {"sessionId": "s", "terminalId": "term_1"}}}
+{"client": {"id": 22, "result": {"truncated": false, "exitStatus": {"exitCode": 3, "signal": null}}}}
+{"agent": {"jsonrpc": "2.0", "id": 23, "method": "terminal/release", "params": {"sessionId": "s", "terminalId": "term_1"}}}
+{"client": {"id": 23, "result": {}}}
+{"agent": {"jsonrpc": "2.0", "id": 24, "method": "terminal/output", "params": {"sessionId": "s", "terminalId": "term_1"}}}
+{"client": {"id": 24, "error": {"code": -32002}}}
+{"agent": {"jsonrpc": "2.0", "id": 25, "method": "terminal/create", "params": {"sessionId": "s", "command": "true", "cwd": "/"}}}
+{"client": {"id": 25, "error": {"code": -32602}}}
+{"agent": {"jsonrpc": "2.0", "id": 26, "method": "terminal/create", "params": {"sessionId": "s", "command": "sh", "args": ["-c", "sleep 30"]}}}
+{"client": {"id": 26, "result": {"terminalId": "term_2"}}}
+{"agent": {"jsonrpc": "2.0", "id": 27, "method": "terminal/kill", "params": {"sessionId": "s", "terminalId": "term_2"}}}
+{"client": {"id": 27, "result": {}}}
+{"agent": {"jsonrpc": "2.0", "id": 28, "method": "terminal/wait_for_exit", "params": {"sessionId": "s", "terminalId": "term_2"}}}
+{"client": {"id": 28, "result": {"exitCode": null, "signal": "SIGKILL"}}}

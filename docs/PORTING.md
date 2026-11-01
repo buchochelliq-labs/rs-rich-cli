@@ -364,3 +364,14 @@ and installs packages, and has no terminal code. Core is unchanged (it only
 calls `Theme::from_file` to check a theme) and no golden fixture covers it.
 See [the design note](design/marketplace.md) and
 [Extending](PLUGINS.md#the-marketplace-client-0022).
+
+### The Agent Client Protocol client (rs-rich-acp, not upstream)
+
+`rs-rich-acp` (`crates/rich-acp`, 0.0.1) has no upstream module to port:
+Python `rich` has no agents. It is a client for the Agent Client Protocol
+(version 1), written clean-room from the public specification: JSON-RPC
+over an agent's standard input and output, typed messages, and the
+workspace, file and terminal helpers a client answers the agent with. It
+depends on no crate of ours and has no terminal code; Cornacai (#794)
+builds on it. Core is unchanged and no golden fixture covers it. See
+[the design note](design/cornacai.md).
