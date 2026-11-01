@@ -87,6 +87,12 @@ pub(crate) struct Options {
     /// The keys, the search, the caret and the rest:
     /// [`text_edit`](crate::text_edit).
     pub editing: crate::text_edit::Editing,
+    /// A text area's keys that submit and that add a line:
+    /// [`Node::submit_on`], [`Node::newline_on`].
+    pub submit_keys: Option<Vec<Key>>,
+    pub newline_keys: Option<Vec<Key>>,
+    /// Its height follows its rows: [`Node::grow`].
+    pub grow: bool,
 }
 
 /// Where the caret of an [`input`](crate::input) or a
@@ -655,6 +661,8 @@ impl TextArea {
                 | KeyCode::PageDown => return false,
                 _ => {}
             }
+        } else if let Some(used) = self.prompt_key(cx, key) {
+            return used;
         }
         // A modal preset sees the key first.
         if let Some(mode) = self.options.editing.mode.clone() {
@@ -740,25 +748,57 @@ impl TextArea {
         self.buffer.selection()
     }
 
-    /// The caret's byte in the (single-line) text.
+    /// The caret's byte in its line (the text, for an input).
     fn caret_byte(&self) -> usize {
         self.buffer.caret().at
     }
 
-    /// The candidates for what is typed now.
+    /// The caret's line: what completion looks at.
+    fn caret_line(&self) -> String {
+        self.buffer.line(self.buffer.caret().line).to_string()
+    }
+
+    /// The candidates for what is typed now, on the caret's line.
     fn candidates(&self) -> Vec<crate::complete::Completion> {
-        (self.assist).candidates(&self.buffer.text(), self.caret_byte())
+        (self.assist).candidates(&self.caret_line(), self.caret_byte())
     }
 
     /// Put `completion` in, the caret after it.
     fn take(&mut self, completion: &crate::complete::Completion) {
         let range = &completion.replace;
-        self.buffer.set_caret(Pos::new(0, range.start), false);
+        let line = self.buffer.caret().line;
+        self.buffer.set_caret(Pos::new(line, range.start), false);
         if range.end > range.start {
-            self.buffer.set_caret(Pos::new(0, range.end), true);
+            self.buffer.set_caret(Pos::new(line, range.end), true);
         }
         self.buffer.insert(&completion.text);
         self.assist.popup = None;
+    }
+
+    /// A text area's own keys before the editing keys: the completion's
+    /// and the history's, then the keys that submit and add a line.
+    fn prompt_key(&mut self, cx: &mut EventCx, key: Key) -> Option<bool> {
+        if let Some(used) = self.assist_key(key) {
+            return Some(used);
+        }
+        let submits = (self.options.submit_keys.as_ref()).is_some_and(|keys| keys.contains(&key));
+        if submits {
+            if let Some(history) = self.assist.history() {
+                history.push(&self.buffer.text());
+            }
+            let submit = self.on_submit.as_mut()?;
+            submit(&self.buffer.text(), cx.app());
+            return Some(true);
+        }
+        let newline = match &self.options.newline_keys {
+            Some(keys) => keys.contains(&key),
+            None => false,
+        };
+        if newline && !self.options.read_only {
+            self.buffer.insert("\n");
+            return Some(true);
+        }
+        None
     }
 
     /// The candidate the ghost and → take: the selected one in the pop-up,
@@ -768,7 +808,7 @@ impl TextArea {
         if !self.assist.options.ghost || self.buffer.selection().is_some() {
             return None;
         }
-        let text = self.buffer.text();
+        let text = self.caret_line();
         if self.caret_byte() != text.len() {
             return None;
         }
@@ -824,12 +864,16 @@ impl TextArea {
                         None => self.assist.popup = None,
                     }
                 }
-                KeyCode::Escape => self.assist.popup = None,
+                KeyCode::Escape => {
+                    self.assist.popup = None;
+                    let (line, caret) = (self.caret_line(), self.caret_byte());
+                    self.assist.dismiss(&line, caret);
+                }
                 _ => return None,
             }
             return Some(true);
         }
-        if self.assist.completer.is_some() && plain && !self.options.read_only {
+        if self.assist.completes() && plain && !self.options.read_only {
             match key.code {
                 KeyCode::Tab if !key.modifiers.shift => {
                     let mut items = self.candidates();
@@ -856,9 +900,13 @@ impl TextArea {
             }
         }
         if let (Some(history), true) = (self.assist.history(), plain) {
+            // In a text area, ↑ on the first line starts browsing; once
+            // browsing, ↑ and ↓ go through it.
+            let browsing = self.assist.browse.is_some();
+            let first = self.options.single_line || self.buffer.caret().line == 0;
             let older = match key.code {
-                KeyCode::Up => true,
-                KeyCode::Down if self.assist.browse.is_some() => false,
+                KeyCode::Up if browsing || first => true,
+                KeyCode::Down if browsing => false,
                 _ => return None,
             };
             let (at, typed) = self
@@ -866,7 +914,14 @@ impl TextArea {
                 .browse
                 .clone()
                 .unwrap_or_else(|| (0, self.buffer.text()));
-            let found = history.matching(&typed);
+            // An input goes through the entries that start with what was
+            // typed; a text area (a prompt), through them all.
+            let prefix = if self.options.single_line {
+                typed.as_str()
+            } else {
+                ""
+            };
+            let found = history.matching(prefix);
             if found.is_empty() {
                 return None;
             }
@@ -898,10 +953,14 @@ impl TextArea {
     /// What is typed changed: the pop-up follows it (closing when nothing
     /// is left), or opens as you type.
     fn edited(&mut self) {
-        if self.assist.completer.is_none() {
+        if !self.assist.completes() {
             return;
         }
-        if self.assist.popup.is_some() || self.assist.options.auto {
+        let (line, caret) = (self.caret_line(), self.caret_byte());
+        if self.assist.popup.is_some()
+            || self.assist.options.auto
+            || self.assist.at_trigger(&line, caret)
+        {
             let items = self.candidates();
             self.assist.popup = (!items.is_empty()).then_some(crate::complete::Popup {
                 items,
@@ -936,7 +995,7 @@ impl TextArea {
 
     /// Draw the ghost after the caret, and set the pop-up's float.
     fn draw_assist(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
-        if !self.options.single_line || self.assist.completer.is_none() {
+        if !self.assist.completes() {
             return;
         }
         let focused = cx.focused();
@@ -1004,22 +1063,22 @@ impl TextArea {
             line.push(Segment::new(" ", Some(look.clone())));
             lines.push(line);
         }
-        // Under the start of the text it replaces.
+        // Under the start of the text it replaces: as far left of the
+        // caret as the text between them.
         let start = popup.items[popup.selected.min(popup.items.len() - 1)]
             .replace
             .start;
-        let text = self.buffer.text();
-        let left = if self.options.soft_wrap {
-            0
-        } else {
-            self.left.get()
-        };
-        let column = self
-            .shown_cells(&text[..start.min(text.len())])
-            .saturating_sub(left)
+        let (line, caret) = (self.caret_line(), self.caret_byte());
+        let (start, caret) = (start.min(caret).min(line.len()), caret.min(line.len()));
+        let between = line
+            .get(start..caret)
+            .map_or(0, |between| self.shown_cells(between));
+        let (caret_x, row) = self.caret.get().unwrap_or((self.origin.get(), 0));
+        let column = (caret_x as usize)
+            .saturating_sub(between)
+            .max(self.origin.get() as usize)
             .min(canvas.width() as usize) as u16;
-        let row = self.caret.get().map_or(0, |(_, y)| y);
-        let (x, y) = cx.to_screen(self.origin.get() + column, row);
+        let (x, y) = cx.to_screen(column, row);
         let (ax, _) = cx.to_screen(0, row);
         cx.float(Some(crate::float::Float {
             anchor: Rect::new(ax, y, canvas.width(), 1),
@@ -1052,11 +1111,28 @@ impl Widget for TextArea {
                 1 + u16::from(self.options.editing.validate.is_some())
             }
             Axis::Vertical => {
+                // Growing, the parent lays out again as lines come and go.
+                if self.options.grow {
+                    self.text.with(|_| ());
+                }
                 let room = self.room(width.max(1));
-                (0..self.buffer.line_count())
-                    .map(|i| self.line_rows(i, room).len())
-                    .sum::<usize>()
-                    .min(u16::MAX as usize) as u16
+                // Text set on the signal since the last draw is what will
+                // be drawn.
+                let set = self.options.grow && self.text.with_untracked(|text| *text != self.seen);
+                let rows: usize = if set {
+                    self.text.with_untracked(|text| {
+                        (text.split('\n'))
+                            .map(|line| {
+                                wrap_line(line, room, self.buffer.tab_width(), self.wrap()).len()
+                            })
+                            .sum()
+                    })
+                } else {
+                    (0..self.buffer.line_count())
+                        .map(|i| self.line_rows(i, room).len())
+                        .sum()
+                };
+                rows.min(u16::MAX as usize) as u16
             }
         }
     }
@@ -1443,7 +1519,8 @@ impl Node {
 
     /// For an [`input`](crate::input): call `submit` with the text on Enter,
     /// which it then uses, so Enter does not bubble to a binding. Without
-    /// one, Enter goes on to the app (a form's own binding).
+    /// one, Enter goes on to the app (a form's own binding). For a
+    /// [`text_area`]: on the keys [`submit_on`](Node::submit_on) names.
     pub fn on_submit(self, submit: impl FnMut(&str, &mut crate::app::Ctx) + 'static) -> Node {
         self.widget_mut(|area: &mut TextArea| area.on_submit = Some(Box::new(submit)));
         self
@@ -1489,6 +1566,90 @@ impl Node {
             area.place_caret();
         });
         self
+    }
+
+    /// For a [`text_area`]: as tall as its rows (wrapped lines counted),
+    /// at least `min` and at most `max`, then it scrolls. The rows around
+    /// it lay out again as it grows and shrinks: a chat's prompt.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let prompt = signal(String::new());
+    ///     column([text_area(prompt).grow(1, 3), label("below")])
+    /// });
+    /// let mut driver = app.driver(20, 5);
+    /// driver.settle();
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "below");
+    /// driver.type_text("one");
+    /// driver.press("enter");
+    /// driver.type_text("two");
+    /// assert_eq!(driver.screen().plain()[2].trim_end(), "below");
+    /// ```
+    pub fn grow(self, min: u16, max: u16) -> Node {
+        let node = self.text_area_options(|options| options.grow = true);
+        node.auto()
+            .min_size(min.max(1))
+            .max_size(max.max(min).max(1))
+    }
+
+    /// For a [`text_area`]: the keys (names separated by spaces, as
+    /// [`on_key`](Node::on_key) takes them) that call its
+    /// [`on_submit`](Node::on_submit) with the text, after adding it to
+    /// its [history](Node::history). A prompt's `"enter"`. Unless
+    /// [`newline_on`](Node::newline_on) says otherwise, Shift+Enter and
+    /// Alt+Enter then add a line (a terminal that cannot tell Shift+Enter
+    /// from Enter still reports Alt+Enter). With the completion's pop-up
+    /// open, Enter takes the candidate instead.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let prompt = signal(String::new());
+    ///     let sent = signal(String::new());
+    ///     column([
+    ///         text_area(prompt)
+    ///             .grow(1, 4)
+    ///             .submit_on("enter")
+    ///             .on_submit(move |text, _| {
+    ///                 sent.set(text.replace('\n', "/"));
+    ///                 prompt.set(String::new());
+    ///             }),
+    ///         text!("sent: {sent}"),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(20, 4);
+    /// driver.type_text("hi");
+    /// driver.press("alt+enter");
+    /// driver.type_text("there");
+    /// driver.press("enter");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "");
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "sent: hi/there");
+    /// ```
+    ///
+    /// # Panics
+    /// On a name that is not a key, as [`on_key`](Node::on_key) does.
+    pub fn submit_on(self, keys: &str) -> Node {
+        let keys = crate::node::parse_keys(keys);
+        self.text_area_options(|options| {
+            options.submit_keys = Some(keys);
+            if options.newline_keys.is_none() {
+                options.newline_keys = Some(crate::node::parse_keys("shift+enter alt+enter"));
+            }
+        })
+    }
+
+    /// For a [`text_area`]: the keys that add a line, over
+    /// [`submit_on`](Node::submit_on)'s Shift+Enter and Alt+Enter. Enter
+    /// adds one too while no key submits on it.
+    ///
+    /// # Panics
+    /// On a name that is not a key, as [`on_key`](Node::on_key) does.
+    pub fn newline_on(self, keys: &str) -> Node {
+        let keys = crate::node::parse_keys(keys);
+        self.text_area_options(|options| options.newline_keys = Some(keys))
     }
 
     fn text_area_options(self, f: impl FnOnce(&mut Options)) -> Node {

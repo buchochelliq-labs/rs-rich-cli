@@ -38,6 +38,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   markup) at the right of the header, `.summary(|| line)` under it while
   closed and `.symbols(closed, open)`: a tool call's card. The header is
   busy while its spinner turns, and says a markup status after its title.
+- **A prompt editor on `text_area`** (#800): `.grow(min, max)` rows,
+  `.submit_on(keys)` and `.newline_on(keys)` (Shift+Enter and Alt+Enter
+  add a line by default once a key submits), `.history(h)` in a text
+  area (↑ on the first line, ↓ back to the draft, every entry), and
+  `Node::complete_at(trigger, source)`, the completion pop-up after `@`
+  or `/` at a word's start, on a text area or an input. The completion
+  pop-up and ghost now work in a text area, on the caret's line. The
+  `files` feature's `files::path_completer(walk)` completes paths for `@`
+  mentions. `InputHistory::push` keeps entries of more than one line in
+  a history kept for the session.
 
 ### Animated banners and Noctiluca's start page
 

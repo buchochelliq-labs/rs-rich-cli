@@ -197,6 +197,50 @@ so linear mode reads the line the caret moves to.
 `text_area(text, language="rust", line_numbers=True)` takes the options as
 keywords.
 
+### A prompt editor
+
+New in 0.0.24: the parts of a chat's prompt, on `text_area`.
+
+```rust
+use intuituive::complete::{Completion, history_session};
+use intuituive::files::path_completer; // the `files` feature
+use rich_ext::listing::walk;
+
+text_area(prompt)
+    .grow(1, 10)                                   // rows: at least 1, at most 10, then it scrolls
+    .submit_on("enter")                            // Shift+Enter and Alt+Enter add a line
+    .placeholder("Ask anything")
+    .history("prompt")                             // ↑ on the first line, ↓ back to the draft
+    .complete_at('@', path_completer(walk(&root).skip_dir("target")))
+    .complete_at('/', |query| commands(query))     // a Vec<Completion>
+    .on_submit(move |text, cx| send(text, cx))
+```
+
+- **`.grow(min, max)`** makes it as tall as its rows (wrapped lines
+  counted), from `min` to `max`, then it scrolls to the caret. The rows
+  around it lay out again as it grows and shrinks, and when the app
+  clears it.
+- **`.submit_on(keys)`** names the keys (as `on_key` takes them) that
+  call `on_submit` with the text, after adding it to the history.
+  Shift+Enter and Alt+Enter then add a line; a terminal that cannot tell
+  Shift+Enter from Enter still sends Alt+Enter. **`.newline_on(keys)`**
+  names other keys for that.
+- **`.history(h)`**, as on an input: ↑ on the first line recalls the
+  newest entry, ↑ again goes back, and ↓ forward to the draft. A text
+  area goes through every entry (an input, through those that start with
+  what was typed). A history for the session keeps entries of more than
+  one line; one kept in a file (one entry a line) leaves them out.
+- **`.complete_at(trigger, source)`** opens the completion pop-up once a
+  word starts with `trigger`: `source(query)` gives the candidates for
+  what is typed from the trigger to the caret, each `Completion`'s range
+  counted in the query's bytes (`0..query.len()` for all of it). Typing
+  narrows it, ↑/↓ and Tab move, Enter takes the candidate and a space
+  after it, and Esc closes it until the next trigger. It works on an
+  input too, and beside `.complete(..)`.
+- **`files::path_completer(walk)`** (the `files` feature) is such a source
+  over the paths a walk finds, relative to its root, fuzzy-matched as the
+  finder matches them: `@src/ma` offers `src/main.rs`.
+
 ## Calendars and dates
 
 ```rust
