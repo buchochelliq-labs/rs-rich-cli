@@ -1,11 +1,14 @@
 //! A fuzzy finder over a directory walk, whose results stream in: the
 //! core's generic [`fuzzy_list`](crate::finder::fuzzy_list) over rs-rich-ext's walk.
 
+use std::cell::RefCell;
 use std::path::PathBuf;
 
 use rich_ext::listing::Walk;
+use rich_interact::fuzzy::fuzzy;
 
 use crate::app::Ctx;
+use crate::complete::Completion;
 use crate::finder::{FuzzyOptions, FuzzySource, fuzzy_list_with};
 use crate::node::Node;
 
@@ -110,4 +113,69 @@ pub fn finder_with(
         move |rel, cx| on_pick(root.join(rel), cx),
         options,
     )
+}
+
+/// The most paths a [`path_completer`] offers at once.
+const OFFERED: usize = 50;
+
+/// A source for [`Node::complete_at`](crate::Node::complete_at) over the
+/// paths `walk` finds, relative to its root with `/` between their parts
+/// (a directory's ending in `/`): `@` file mentions in a prompt. The
+/// paths that fuzzy-match the query (as the [`finder`]'s do), best first
+/// and shorter first among equals, fifty at most. The walk runs once, the
+/// first time a query comes, and stops at 100 000 paths; leave the big
+/// directories out with [`Walk::skip_dir`].
+///
+/// ```
+/// use intuituive::files::path_completer;
+/// use intuituive::prelude::*;
+/// use rich_ext::listing::walk;
+///
+/// let dir = std::env::temp_dir().join(format!("intuituive-mention-doc-{}", std::process::id()));
+/// std::fs::create_dir_all(dir.join("src")).unwrap();
+/// std::fs::write(dir.join("src/main.rs"), "").unwrap();
+/// std::fs::write(dir.join("README.md"), "").unwrap();
+/// let root = dir.clone();
+/// let app = App::new(move || {
+///     let prompt = signal(String::new());
+///     text_area(prompt).complete_at('@', path_completer(walk(&root)))
+/// });
+/// let mut driver = app.driver(30, 4);
+/// driver.type_text("see @src/ma");
+/// driver.press("enter");
+/// driver.type_text("now");
+/// assert_eq!(driver.screen().plain()[0].trim_end(), "see @src/main.rs now");
+/// # std::fs::remove_dir_all(&dir).ok();
+/// ```
+pub fn path_completer(walk: Walk) -> impl Fn(&str) -> Vec<Completion> + 'static {
+    let pending = RefCell::new(Some(walk));
+    let paths: RefCell<Vec<String>> = RefCell::new(Vec::new());
+    move |query| {
+        if let Some(walk) = pending.borrow_mut().take() {
+            let root = walk.root().to_path_buf();
+            let found = walk.take(LIMIT).filter_map(|path| {
+                let rel = path.strip_prefix(&root).ok()?;
+                let mut shown = rel.to_string_lossy().replace('\\', "/");
+                if path.is_dir() {
+                    shown.push('/');
+                }
+                Some(shown)
+            });
+            *paths.borrow_mut() = found.collect();
+        }
+        let paths = paths.borrow();
+        let mut hits: Vec<(i64, &String)> = paths
+            .iter()
+            .filter_map(|path| fuzzy(query, path).map(|m| (m.score, path)))
+            .collect();
+        hits.sort_by(|a, b| {
+            (b.0.cmp(&a.0))
+                .then(a.1.len().cmp(&b.1.len()))
+                .then(a.1.cmp(b.1))
+        });
+        hits.into_iter()
+            .take(OFFERED)
+            .map(|(_, path)| Completion::new(0..query.len(), path.clone()))
+            .collect()
+    }
 }

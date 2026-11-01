@@ -43,6 +43,36 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   the built sites. Six anchors to em-dash headings, broken under MkDocs
   too, are fixed.
 
+### intuiTUIve: Cornacai's parity items (wave 1, WS2)
+
+- **`Node::follow_end` and `follow_end_with(signal)`** (#798), on `scroll`
+  and `scroll_virtual`: the view keeps to the end while content arrives
+  and the last item grows, stops following when the reader scrolls up,
+  and follows again at the end. Textual's `anchor()`.
+- **`collapsible_with(title, open, child)`** (#804), a title that follows
+  state, with `.status(|| Status)` (a spinner on the app's clock, or
+  markup) at the right of the header, `.summary(|| line)` under it while
+  closed and `.symbols(closed, open)`: a tool call's card. The header is
+  busy while its spinner turns, and says a markup status after its title.
+- **A prompt editor on `text_area`** (#800): `.grow(min, max)` rows,
+  `.submit_on(keys)` and `.newline_on(keys)` (Shift+Enter and Alt+Enter
+  add a line by default once a key submits), `.history(h)` in a text
+  area (↑ on the first line, ↓ back to the draft, every entry), and
+  `Node::complete_at(trigger, source)`, the completion pop-up after `@`
+  or `/` at a word's start, on a text area or an input. The completion
+  pop-up and ghost now work in a text area, on the caret's line. The
+  `files` feature's `files::path_completer(walk)` completes paths for `@`
+  mentions. `InputHistory::push` keeps entries of more than one line in
+  a history kept for the session.
+- **`markdown(doc)` and `MarkdownStream`** (#797, the default `syntax`
+  feature): Markdown kept as blocks, each rs-rich's Markdown port
+  rendered once per source and width; when the document grows only its
+  last block is split, rendered and drawn again, and an open fence draws
+  as code. `MarkdownStream::new(doc)` is a `Clone + Send` handle whose
+  `append` batches fragments into one update a turn. Blocks with links
+  take the focus: Tab moves through the links, Enter or a click calls
+  `.on_link(|url, cx| ..)`; `.code_theme(name)` picks the code theme.
+
 ### Animated banners and Noctiluca's start page
 
 - **rs-rich-art:** `animate::AnimatedBanner`, FIGlet text with an effect

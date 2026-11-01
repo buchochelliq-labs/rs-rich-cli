@@ -1983,6 +1983,7 @@ pub fn intuituive::files::miller(impl core::convert::Into<std::path::PathBuf>) -
 pub fn intuituive::files::open_with(&mut intuituive::app::Ctx, &rich_ext::open::Opener, alloc::vec::Vec<std::path::PathBuf>, impl core::ops::function::FnOnce(&mut intuituive::app::Ctx) + core::marker::Send + 'static)
 pub fn intuituive::files::open_with_tasks(&mut intuituive::app::Ctx, &rich_ext::open::Opener, alloc::vec::Vec<std::path::PathBuf>, intuituive::files::Tasks, impl core::ops::function::FnOnce(&mut intuituive::app::Ctx) + core::marker::Send + 'static)
 pub fn intuituive::files::opener_rules() -> rich_ext::open::Rules
+pub fn intuituive::files::path_completer(rich_ext::listing::Walk) -> impl core::ops::function::Fn(&str) -> alloc::vec::Vec<intuituive::complete::Completion> + 'static
 pub fn intuituive::files::path_crumb(impl core::ops::function::Fn() -> std::path::PathBuf + 'static) -> intuituive::node::Node
 pub fn intuituive::files::path_crumb_at(impl core::ops::function::Fn() -> std::path::PathBuf + 'static, core::option::Option<std::path::PathBuf>) -> intuituive::node::Node
 pub fn intuituive::files::path_parts(&std::path::Path, core::option::Option<&std::path::Path>) -> alloc::vec::Vec<alloc::string::String>
@@ -3006,15 +3007,18 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::caps(self, intuituive::widgets::Caps) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::caret(self, intuituive::Caret) -> intuituive::node::Node
+pub fn intuituive::node::Node::grow(self, u16, u16) -> intuituive::node::Node
 pub fn intuituive::node::Node::language(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::line_numbers(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::mask(self, char) -> intuituive::node::Node
 pub fn intuituive::node::Node::max_length(self, usize) -> intuituive::node::Node
+pub fn intuituive::node::Node::newline_on(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_submit(self, impl core::ops::function::FnMut(&str, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::placeholder(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::read_only(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::select(self, core::ops::range::Range<usize>) -> intuituive::node::Node
 pub fn intuituive::node::Node::soft_wrap(self, bool) -> intuituive::node::Node
+pub fn intuituive::node::Node::submit_on(self, &str) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::caret_shape(self, rich_interact::caret::CaretShape) -> intuituive::node::Node
 pub fn intuituive::node::Node::cursor_line(self) -> intuituive::node::Node
@@ -3031,7 +3035,11 @@ pub fn intuituive::node::Node::undo_limit(self, core::option::Option<usize>) -> 
 pub fn intuituive::node::Node::validate(self, impl core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String> + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::wrap_mode(self, rich_interact::edit::WrapMode) -> intuituive::node::Node
 impl intuituive::node::Node
+pub fn intuituive::node::Node::code_theme(self, &str) -> intuituive::node::Node
+pub fn intuituive::node::Node::on_link(self, impl core::ops::function::FnMut(&str, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+impl intuituive::node::Node
 pub fn intuituive::node::Node::complete(self, impl core::ops::function::Fn(&str, usize) -> alloc::vec::Vec<intuituive::complete::Completion> + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::complete_at(self, char, impl core::ops::function::Fn(&str) -> alloc::vec::Vec<intuituive::complete::Completion> + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::complete_with(self, impl core::ops::function::Fn(&str, usize) -> alloc::vec::Vec<intuituive::complete::Completion> + 'static, intuituive::complete::CompleteOptions) -> intuituive::node::Node
 pub fn intuituive::node::Node::history(self, impl core::convert::Into<intuituive::complete::InputHistory>) -> intuituive::node::Node
 impl intuituive::node::Node
@@ -3057,11 +3065,13 @@ pub fn intuituive::node::Node::symbol(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::trailing(self, impl core::ops::function::Fn(usize) -> alloc::string::String + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::wheel_step(self, usize) -> intuituive::node::Node
 impl intuituive::node::Node
-pub fn intuituive::node::Node::hold(self, core::time::Duration) -> intuituive::node::Node
-impl intuituive::node::Node
+pub fn intuituive::node::Node::follow_end(self) -> intuituive::node::Node
+pub fn intuituive::node::Node::follow_end_with(self, intuituive::reactive::Signal<bool>) -> intuituive::node::Node
 pub fn intuituive::node::Node::item_key(self, impl core::ops::function::Fn(usize) -> u64 + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_near_end(self, u64, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::stand_in(self, impl core::ops::function::Fn(usize) -> intuituive::node::Node + 'static) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::hold(self, core::time::Duration) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::key_style(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::value_style(self, &str) -> intuituive::node::Node
@@ -3084,6 +3094,10 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::reorderable(self, impl core::ops::function::FnMut(intuituive::widgets::Move, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::scrollbar(self, intuituive::widgets::Scrollbar) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::status(self, impl core::ops::function::Fn() -> intuituive::Status + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::summary(self, impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::symbols(self, &str, &str) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::step(self, i64) -> intuituive::node::Node
 impl intuituive::node::Node
@@ -4286,15 +4300,18 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::caps(self, intuituive::widgets::Caps) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::caret(self, intuituive::Caret) -> intuituive::node::Node
+pub fn intuituive::node::Node::grow(self, u16, u16) -> intuituive::node::Node
 pub fn intuituive::node::Node::language(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::line_numbers(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::mask(self, char) -> intuituive::node::Node
 pub fn intuituive::node::Node::max_length(self, usize) -> intuituive::node::Node
+pub fn intuituive::node::Node::newline_on(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_submit(self, impl core::ops::function::FnMut(&str, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::placeholder(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::read_only(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::select(self, core::ops::range::Range<usize>) -> intuituive::node::Node
 pub fn intuituive::node::Node::soft_wrap(self, bool) -> intuituive::node::Node
+pub fn intuituive::node::Node::submit_on(self, &str) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::caret_shape(self, rich_interact::caret::CaretShape) -> intuituive::node::Node
 pub fn intuituive::node::Node::cursor_line(self) -> intuituive::node::Node
@@ -4311,7 +4328,11 @@ pub fn intuituive::node::Node::undo_limit(self, core::option::Option<usize>) -> 
 pub fn intuituive::node::Node::validate(self, impl core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String> + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::wrap_mode(self, rich_interact::edit::WrapMode) -> intuituive::node::Node
 impl intuituive::node::Node
+pub fn intuituive::node::Node::code_theme(self, &str) -> intuituive::node::Node
+pub fn intuituive::node::Node::on_link(self, impl core::ops::function::FnMut(&str, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+impl intuituive::node::Node
 pub fn intuituive::node::Node::complete(self, impl core::ops::function::Fn(&str, usize) -> alloc::vec::Vec<intuituive::complete::Completion> + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::complete_at(self, char, impl core::ops::function::Fn(&str) -> alloc::vec::Vec<intuituive::complete::Completion> + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::complete_with(self, impl core::ops::function::Fn(&str, usize) -> alloc::vec::Vec<intuituive::complete::Completion> + 'static, intuituive::complete::CompleteOptions) -> intuituive::node::Node
 pub fn intuituive::node::Node::history(self, impl core::convert::Into<intuituive::complete::InputHistory>) -> intuituive::node::Node
 impl intuituive::node::Node
@@ -4337,11 +4358,13 @@ pub fn intuituive::node::Node::symbol(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::trailing(self, impl core::ops::function::Fn(usize) -> alloc::string::String + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::wheel_step(self, usize) -> intuituive::node::Node
 impl intuituive::node::Node
-pub fn intuituive::node::Node::hold(self, core::time::Duration) -> intuituive::node::Node
-impl intuituive::node::Node
+pub fn intuituive::node::Node::follow_end(self) -> intuituive::node::Node
+pub fn intuituive::node::Node::follow_end_with(self, intuituive::reactive::Signal<bool>) -> intuituive::node::Node
 pub fn intuituive::node::Node::item_key(self, impl core::ops::function::Fn(usize) -> u64 + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_near_end(self, u64, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::stand_in(self, impl core::ops::function::Fn(usize) -> intuituive::node::Node + 'static) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::hold(self, core::time::Duration) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::key_style(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::value_style(self, &str) -> intuituive::node::Node
@@ -4364,6 +4387,10 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::reorderable(self, impl core::ops::function::FnMut(intuituive::widgets::Move, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::scrollbar(self, intuituive::widgets::Scrollbar) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::status(self, impl core::ops::function::Fn() -> intuituive::Status + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::summary(self, impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::symbols(self, &str, &str) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::step(self, i64) -> intuituive::node::Node
 impl intuituive::node::Node
@@ -7357,6 +7384,27 @@ impl core::marker::Unpin for intuituive::Solver
 impl core::marker::UnsafeUnpin for intuituive::Solver
 impl core::panic::unwind_safe::RefUnwindSafe for intuituive::Solver
 impl core::panic::unwind_safe::UnwindSafe for intuituive::Solver
+#[non_exhaustive] pub enum intuituive::Status
+pub intuituive::Status::Markup(alloc::string::String)
+pub intuituive::Status::None
+pub intuituive::Status::Spinner(&'static str)
+impl core::clone::Clone for intuituive::Status
+pub fn intuituive::Status::clone(&self) -> intuituive::Status
+impl core::cmp::Eq for intuituive::Status
+impl core::cmp::PartialEq for intuituive::Status
+pub fn intuituive::Status::eq(&self, &intuituive::Status) -> bool
+impl core::default::Default for intuituive::Status
+pub fn intuituive::Status::default() -> intuituive::Status
+impl core::fmt::Debug for intuituive::Status
+pub fn intuituive::Status::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for intuituive::Status
+impl core::marker::Freeze for intuituive::Status
+impl core::marker::Send for intuituive::Status
+impl core::marker::Sync for intuituive::Status
+impl core::marker::Unpin for intuituive::Status
+impl core::marker::UnsafeUnpin for intuituive::Status
+impl core::panic::unwind_safe::RefUnwindSafe for intuituive::Status
+impl core::panic::unwind_safe::UnwindSafe for intuituive::Status
 pub enum intuituive::TextAlign
 pub intuituive::TextAlign::Center
 pub intuituive::TextAlign::Justify
@@ -8141,6 +8189,20 @@ impl core::marker::Unpin for intuituive::log::Log
 impl core::marker::UnsafeUnpin for intuituive::log::Log
 impl core::panic::unwind_safe::RefUnwindSafe for intuituive::log::Log
 impl core::panic::unwind_safe::UnwindSafe for intuituive::log::Log
+pub struct intuituive::MarkdownStream
+impl intuituive::MarkdownStream
+pub fn intuituive::MarkdownStream::append(&self, &str) -> bool
+pub fn intuituive::MarkdownStream::finish(self)
+pub fn intuituive::MarkdownStream::new(intuituive::reactive::Signal<alloc::string::String>) -> intuituive::MarkdownStream
+impl core::clone::Clone for intuituive::MarkdownStream
+pub fn intuituive::MarkdownStream::clone(&self) -> intuituive::MarkdownStream
+impl core::marker::Freeze for intuituive::MarkdownStream
+impl core::marker::Send for intuituive::MarkdownStream
+impl core::marker::Sync for intuituive::MarkdownStream
+impl core::marker::Unpin for intuituive::MarkdownStream
+impl core::marker::UnsafeUnpin for intuituive::MarkdownStream
+impl core::panic::unwind_safe::RefUnwindSafe for intuituive::MarkdownStream
+impl core::panic::unwind_safe::UnwindSafe for intuituive::MarkdownStream
 pub struct intuituive::Memo<T>
 impl<T: 'static> intuituive::reactive::Memo<T>
 pub fn intuituive::reactive::Memo<T>::with<R>(&self, impl core::ops::function::FnOnce(&T) -> R) -> R
@@ -8354,15 +8416,18 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::caps(self, intuituive::widgets::Caps) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::caret(self, intuituive::Caret) -> intuituive::node::Node
+pub fn intuituive::node::Node::grow(self, u16, u16) -> intuituive::node::Node
 pub fn intuituive::node::Node::language(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::line_numbers(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::mask(self, char) -> intuituive::node::Node
 pub fn intuituive::node::Node::max_length(self, usize) -> intuituive::node::Node
+pub fn intuituive::node::Node::newline_on(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_submit(self, impl core::ops::function::FnMut(&str, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::placeholder(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::read_only(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::select(self, core::ops::range::Range<usize>) -> intuituive::node::Node
 pub fn intuituive::node::Node::soft_wrap(self, bool) -> intuituive::node::Node
+pub fn intuituive::node::Node::submit_on(self, &str) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::caret_shape(self, rich_interact::caret::CaretShape) -> intuituive::node::Node
 pub fn intuituive::node::Node::cursor_line(self) -> intuituive::node::Node
@@ -8379,7 +8444,11 @@ pub fn intuituive::node::Node::undo_limit(self, core::option::Option<usize>) -> 
 pub fn intuituive::node::Node::validate(self, impl core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String> + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::wrap_mode(self, rich_interact::edit::WrapMode) -> intuituive::node::Node
 impl intuituive::node::Node
+pub fn intuituive::node::Node::code_theme(self, &str) -> intuituive::node::Node
+pub fn intuituive::node::Node::on_link(self, impl core::ops::function::FnMut(&str, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+impl intuituive::node::Node
 pub fn intuituive::node::Node::complete(self, impl core::ops::function::Fn(&str, usize) -> alloc::vec::Vec<intuituive::complete::Completion> + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::complete_at(self, char, impl core::ops::function::Fn(&str) -> alloc::vec::Vec<intuituive::complete::Completion> + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::complete_with(self, impl core::ops::function::Fn(&str, usize) -> alloc::vec::Vec<intuituive::complete::Completion> + 'static, intuituive::complete::CompleteOptions) -> intuituive::node::Node
 pub fn intuituive::node::Node::history(self, impl core::convert::Into<intuituive::complete::InputHistory>) -> intuituive::node::Node
 impl intuituive::node::Node
@@ -8405,11 +8474,13 @@ pub fn intuituive::node::Node::symbol(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::trailing(self, impl core::ops::function::Fn(usize) -> alloc::string::String + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::wheel_step(self, usize) -> intuituive::node::Node
 impl intuituive::node::Node
-pub fn intuituive::node::Node::hold(self, core::time::Duration) -> intuituive::node::Node
-impl intuituive::node::Node
+pub fn intuituive::node::Node::follow_end(self) -> intuituive::node::Node
+pub fn intuituive::node::Node::follow_end_with(self, intuituive::reactive::Signal<bool>) -> intuituive::node::Node
 pub fn intuituive::node::Node::item_key(self, impl core::ops::function::Fn(usize) -> u64 + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_near_end(self, u64, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::stand_in(self, impl core::ops::function::Fn(usize) -> intuituive::node::Node + 'static) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::hold(self, core::time::Duration) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::key_style(self, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::value_style(self, &str) -> intuituive::node::Node
@@ -8432,6 +8503,10 @@ impl intuituive::node::Node
 pub fn intuituive::node::Node::reorderable(self, impl core::ops::function::FnMut(intuituive::widgets::Move, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::scrollbar(self, intuituive::widgets::Scrollbar) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::status(self, impl core::ops::function::Fn() -> intuituive::Status + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::summary(self, impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::symbols(self, &str, &str) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::step(self, i64) -> intuituive::node::Node
 impl intuituive::node::Node
@@ -9218,6 +9293,7 @@ pub fn intuituive::checkbox(impl core::convert::Into<alloc::string::String>, int
 pub fn intuituive::checkbox_of(impl core::ops::function::Fn() -> alloc::string::String + 'static, intuituive::reactive::Signal<intuituive::CheckState>) -> intuituive::node::Node
 pub fn intuituive::checkbox_tri(impl core::convert::Into<alloc::string::String>, intuituive::reactive::Signal<intuituive::CheckState>) -> intuituive::node::Node
 pub fn intuituive::collapsible(impl core::convert::Into<alloc::string::String>, intuituive::reactive::Signal<bool>, intuituive::node::Node) -> intuituive::node::Node
+pub fn intuituive::collapsible_with(impl core::ops::function::Fn() -> alloc::string::String + 'static, intuituive::reactive::Signal<bool>, intuituive::node::Node) -> intuituive::node::Node
 pub fn intuituive::column(impl core::iter::traits::collect::IntoIterator<Item = intuituive::node::Node>) -> intuituive::node::Node
 pub fn intuituive::command_line(intuituive::command_line::CommandLine) -> intuituive::node::Node
 pub fn intuituive::command_line_with(intuituive::command_line::CommandLine, intuituive::command_line::CommandLineOptions) -> intuituive::node::Node
@@ -9270,6 +9346,7 @@ pub fn intuituive::leaf(impl core::ops::function::Fn(&rich::console::Console, u1
 pub fn intuituive::list(impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String> + 'static, intuituive::reactive::Signal<usize>) -> intuituive::node::Node
 pub fn intuituive::list_optional(impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String> + 'static, intuituive::reactive::Signal<core::option::Option<usize>>) -> intuituive::node::Node
 pub fn intuituive::list_search(impl core::ops::function::Fn() -> alloc::string::String + 'static, impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String> + 'static, intuituive::reactive::Signal<usize>) -> intuituive::select::ListSearch
+pub fn intuituive::markdown(intuituive::reactive::Signal<alloc::string::String>) -> intuituive::node::Node
 pub fn intuituive::memo<T: core::cmp::PartialEq + 'static>(impl core::ops::function::Fn() -> T + 'static) -> intuituive::reactive::Memo<T>
 pub fn intuituive::meter(impl core::ops::function::Fn() -> f64 + 'static, impl core::ops::function::Fn() -> f64 + 'static) -> intuituive::node::Node
 pub fn intuituive::meter_with(impl core::ops::function::Fn() -> f64 + 'static, impl core::ops::function::Fn() -> f64 + 'static, impl core::ops::function::Fn(rich_ext::chart::meter::LevelMeter) -> rich_ext::chart::meter::LevelMeter + 'static) -> intuituive::node::Node

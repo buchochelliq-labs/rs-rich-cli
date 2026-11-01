@@ -129,6 +129,8 @@ pub mod layout;
 mod list;
 mod lockstep;
 pub mod log;
+#[cfg(feature = "syntax")]
+mod markdown;
 pub mod menu;
 #[cfg(feature = "micro")]
 pub mod micro_sprite;
@@ -196,7 +198,7 @@ pub use app::{
 pub use big_text::big_text;
 pub use bindings::{ModePage, Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
-pub use collapsible::collapsible;
+pub use collapsible::{Status, collapsible, collapsible_with};
 pub use command_line::{CommandLine, CommandLineOptions, command_line, command_line_with};
 pub use complete::{
     CompleteOptions, Completion, InputHistory, complete_words, history_file, history_in,
@@ -231,6 +233,8 @@ pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use list::list_optional;
 pub use lockstep::{Lockstep, Steps, stepped_worker, stepped_worker_with};
 pub use log::Log;
+#[cfg(feature = "syntax")]
+pub use markdown::{MarkdownStream, markdown};
 pub use miller::{MillerSource, miller_in, miller_of};
 pub use node::{
     Node, column, component, each, fit_text, grid, keyed, label, layers, leaf, list, renderable,

@@ -15,7 +15,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/grid.svg){ .tui-icon width="20" } | [grid](layout.md#grids) | `grid` | Children placed on row and column tracks |
 | ![](../../assets/intuituive/widgets/layers.svg){ .tui-icon width="20" } | [layers](layout.md#layers) | `layers` | Children drawn over each other |
 | ![](../../assets/intuituive/widgets/scroll.svg){ .tui-icon width="20" } | [scroll](tables.md#tables-tabs-and-scrolling) | `scroll`, `scroll_x`, `scroll_both` | A viewport onto a child laid out at its full size |
-| ![](../../assets/intuituive/widgets/scroll.svg){ .tui-icon width="20" } | [scroll_virtual](tables.md#long-and-endless-content-scroll_virtual) | `scroll_virtual`, `scroll_virtual_with` | A scroll view over items that builds only those near the view; loads more near the end |
+| ![](../../assets/intuituive/widgets/scroll.svg){ .tui-icon width="20" } | [scroll_virtual](tables.md#long-and-endless-content-scroll_virtual) | `scroll_virtual`, `scroll_virtual_with` | A scroll view over items that builds only those near the view; loads more near the end; follows its end (`follow_end`) |
 | ![](../../assets/intuituive/widgets/split.svg){ .tui-icon width="20" } | [split](lists.md#trees-split-panes-and-virtual-lists) | `hsplit`, `vsplit`, `split` | Two panes with a divider you can drag |
 | ![](../../assets/intuituive/widgets/treemap.svg){ .tui-icon width="20" } | [treemap](layout.md#treemaps) | `treemap` | Rectangles sized by weight |
 | ![](../../assets/intuituive/widgets/switch.svg){ .tui-icon width="20" } | [switch](layout.md#nodes) | `switch`, `keyed` | One child at a time, chosen by a key; the others are kept |
@@ -39,7 +39,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/facts.svg){ .tui-icon width="20" } | [facts](widgets.md#bars-for-an-apps-chrome) | `facts`, `facts_of` | A description list of keys and values |
 | ![](../../assets/intuituive/widgets/input.svg){ .tui-icon width="20" } | [input](components.md#inputs-bound-to-signals) | `input` | A one-line input bound to a String signal |
 | ![](../../assets/intuituive/widgets/number_input.svg){ .tui-icon width="20" } | [number_input](components.md#inputs-bound-to-signals) | `number_input` | A number in a range, stepped with keys |
-| ![](../../assets/intuituive/widgets/text_area.svg){ .tui-icon width="20" } | [text_area](components.md#text-areas) | `text_area` | Multi-line text editing |
+| ![](../../assets/intuituive/widgets/text_area.svg){ .tui-icon width="20" } | [text_area](components.md#text-areas) | `text_area` | Multi-line text editing; a prompt editor (`grow`, `submit_on`, `complete_at`, `history`) |
 | ![](../../assets/intuituive/widgets/search_bar.svg){ .tui-icon width="20" } | [search_bar](text-editing.md#search-and-the-find-bar) | `search_bar` | A find bar over a text area's search: the pattern, where it is, regex and case flags |
 | ![](../../assets/intuituive/widgets/command_line.svg){ .tui-icon width="20" } | [command_line](components.md#completion-history-and-a-command-line) | `command_line` | A vim-style command line, with completion and history |
 | ![](../../assets/intuituive/widgets/calendar.svg){ .tui-icon width="20" } | [calendar](components.md#calendars-and-dates) | `calendar` | A month to pick a date from |
@@ -60,7 +60,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/radio.svg){ .tui-icon width="20" } | [radio group](controls.md#radio-groups) | `radio`, `radio_keyed` | One choice of several, shown at once; by index or by key |
 | ![](../../assets/intuituive/widgets/slider.svg){ .tui-icon width="20" } | [slider](controls.md#sliders) | `slider` | A number in a range, by keys, click, drag or wheel |
 | ![](../../assets/intuituive/widgets/select_field.svg){ .tui-icon width="20" } | [select field](controls.md#select-fields) | `select_field`, `select_field_keyed` | One choice of several, from a menu that opens under it; by index or by key |
-| ![](../../assets/intuituive/widgets/collapsible.svg){ .tui-icon width="20" } | [collapsible](controls.md#collapsible-sections) | `collapsible` | A titled section that opens and closes |
+| ![](../../assets/intuituive/widgets/collapsible.svg){ .tui-icon width="20" } | [collapsible](controls.md#collapsible-sections) | `collapsible`, `collapsible_with` | A titled section that opens and closes; a status beside the title and a summary while closed |
 | ![](../../assets/intuituive/widgets/spinner.svg){ .tui-icon width="20" } | [spinner](controls.md#spinners-and-loading) | `spinner`, `.loading_when` | An animated busy sign; a node dimmed while it loads |
 
 ## Lists and data
@@ -80,6 +80,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/cells.svg){ .tui-icon width="20" } | [cells](widgets.md#bars-for-an-apps-chrome) | `cells` | One row of fixed-width cells |
 | ![](../../assets/intuituive/widgets/scrollbar.svg){ .tui-icon width="20" } | [scrollbar](tables.md#scrollbars) | `scrollbar`, `.scrollbar()` | A scrollbar beside any scrolled node |
 | ![](../../assets/intuituive/widgets/log.svg){ .tui-icon width="20" } | [log](lists.md#logs) | `Log::new(..).view()` | Lines appended at the bottom, kept to a capacity |
+| ![](../../assets/intuituive/widgets/renderable.svg){ .tui-icon width="20" } | [markdown](components.md#markdown-that-streams) | `markdown`, `MarkdownStream` | Markdown kept as blocks, which streams in: only the last block renders and draws again; links to Tab to and click |
 | ![](../../assets/intuituive/widgets/log_targets.svg){ .tui-icon width="20" } | [log sources](lists.md#levels-targets-and-filters) | `log.targets_view()` | A log's sources, each with its own level |
 
 ## Navigation and chrome

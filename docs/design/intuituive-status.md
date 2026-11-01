@@ -11,6 +11,14 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
 - **Wave 0 is in flight:** the plan's pull request (with the live Chrome
   test's fix), then edition 2024 in a pull request of its own. Waves 1 to 3
   branch from the 2024 tree.
+- **Wave 1, WS2 (Cornacai's parity items) is done** on
+  `claude/next-priority-items-3c5p8e-wip-ws2`: #798 `follow_end`, #804
+  `collapsible_with` with a status and a summary, #800 the prompt editor
+  (`grow`, `submit_on`, `complete_at`, `history`; `files::path_completer`
+  in the plugin), #797 `markdown(doc)` and `MarkdownStream`. Left for a
+  later round: a tape of a streamed answer (no media recorded), a
+  `timedemo` measurement of 10 000 appends, and `scroll`'s viewport
+  reporting its whole view as damaged when anything inside changes.
 - **Waiting on the maintainer:**
   - approving the marketplace's signing run for the 0.0.23 listings;
   - moving `RS_RICH_CLI_REF` to `release-0.0.23`;
