@@ -1,0 +1,34 @@
+# crates/rich-acp — a client for the Agent Client Protocol (ACP): JSON-RPC
+# 2.0 over stdio to a coding agent, typed messages, and the helpers a client
+# needs to answer the agent safely (a workspace sandbox, file reads and
+# writes, terminals). Cornacai's protocol layer (#794, 0.0.24 workstream 1).
+#
+# Not a port of anything upstream: an rs-rich addition. The contract is
+# docs/design/cornacai.md, written clean-room from the public ACP
+# specification. No terminal code: the app draws, prompts and decides.
+# Independent SemVer from 0.0.1. See AGENTS.md → Versioning.
+[package]
+name = "rs-rich-acp"
+version = "0.0.1"
+description = "A client for the Agent Client Protocol (ACP): drive coding agents over JSON-RPC on stdio, with typed messages, permission requests and sandboxed file and terminal capabilities"
+edition.workspace = true
+license.workspace = true
+repository.workspace = true
+homepage.workspace = true
+authors.workspace = true
+rust-version.workspace = true
+readme = "README.md"
+documentation = "https://docs.rs/rs-rich-acp"
+keywords = ["acp", "agent", "json-rpc", "llm", "client"]
+categories = ["development-tools", "api-bindings"]
+include = ["src/**/*", "README.md", "LICENSE", "Cargo.toml"]
+
+[lib]
+name = "rich_acp"
+
+[lints]
+workspace = true
+
+[dependencies]
+serde = { version = "1", features = ["derive"] }
+serde_json.workspace = true

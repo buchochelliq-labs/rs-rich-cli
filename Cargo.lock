@@ -3040,6 +3040,14 @@ dependencies = [
 ]
 
 [[package]]
+name = "rs-rich-acp"
+version = "0.0.1"
+dependencies = [
+ "serde",
+ "serde_json",
+]
+
+[[package]]
 name = "rs-rich-art"
 version = "0.0.17"
 dependencies = [

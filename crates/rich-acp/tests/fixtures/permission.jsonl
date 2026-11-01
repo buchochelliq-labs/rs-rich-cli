@@ -1,0 +1,11 @@
+{"note": "A tool call that needs the user's permission: the agent asks with a string id, the client chooses allow-once, the call completes."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_perm"}}}
+{"client": {"id": 2, "method": "session/prompt", "params": {"sessionId": "sess_perm", "prompt": [{"type": "text", "text": "Fix the config"}]}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_perm", "update": {"sessionUpdate": "tool_call", "toolCallId": "call_002", "title": "Editing config.json", "kind": "edit", "status": "pending"}}}}
+{"agent": {"jsonrpc": "2.0", "id": "perm-1", "method": "session/request_permission", "params": {"sessionId": "sess_perm", "toolCall": {"toolCallId": "call_002", "title": "Editing config.json", "kind": "edit", "locations": [{"path": "/home/user/project/config.json"}]}, "options": [{"optionId": "allow-once", "name": "Allow once", "kind": "allow_once"}, {"optionId": "allow-always", "name": "Always allow edits in this project", "kind": "allow_always"}, {"optionId": "reject-once", "name": "Reject", "kind": "reject_once"}]}}}
+{"client": {"jsonrpc": "2.0", "id": "perm-1", "result": {"outcome": {"outcome": "selected", "optionId": "allow-once"}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_perm", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call_002", "status": "completed"}}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {"stopReason": "end_turn"}}}
