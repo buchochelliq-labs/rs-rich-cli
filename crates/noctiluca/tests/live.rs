@@ -106,6 +106,15 @@ impl Live {
         self.wait(name, |p| p.url == url && !p.blocks.is_empty())
     }
 
+    /// Opens a fixture and waits until its text holds `text`.
+    fn wait_open(&mut self, name: &str, text: &str) -> Arc<Page> {
+        let url = fixture(name);
+        self.tab.send(Command::Open(url.clone()));
+        self.wait(name, |p| {
+            p.url == url && p.blocks.iter().any(|b| b.text().contains(text))
+        })
+    }
+
     /// Opens a fixture with a form, and waits for its controls too: a page
     /// can arrive with its text before its controls.
     fn open_form(&mut self, name: &str) -> Arc<Page> {
@@ -423,4 +432,85 @@ fn a_lazy_image_loads_and_gets_its_still_when_scrolled_near() {
                 .any(|m| m.node == node && m.still.is_some())
         );
     }
+}
+
+/// The projection of `page` at the live browser's 100 columns, as text.
+fn projected(page: &Page) -> Vec<String> {
+    use noctiluca::layout::{Line, Marks, projection};
+    projection(page, 100, (8.0, 18.0), &Marks::default())
+        .iter()
+        .map(Line::plain)
+        .collect()
+}
+
+#[test]
+fn a_narrowed_grid_items_picture_caption_shows_in_full() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let page = live.open("caption-grid.html");
+    let lines = projected(&page);
+    let text = lines
+        .join(" ")
+        .split_whitespace()
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(text.contains("come on along the sea wall"), "{lines:#?}");
+}
+
+#[test]
+fn visually_hidden_hints_are_not_read() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let page = live.wait_open("hidden-text.html", "Night Swim");
+    let all: String = page.blocks.iter().map(|b| b.text() + "\n").collect();
+    assert!(!all.contains("Right Arrow"), "{all}");
+    assert!(all.contains("Search channels"), "{all}");
+}
+
+#[test]
+fn an_empty_slot_takes_one_row() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let page = live.wait_open("gaps.html", "After the spacer");
+    let lines = projected(&page);
+    let at = |t: &str| lines.iter().position(|l| l.contains(t)).unwrap();
+    assert!(at("The first story") <= at("Open menu") + 3, "{lines:#?}");
+}
+
+#[test]
+fn inline_svg_drawings_get_pictures() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    live.open("svg-logo.html");
+    live.wait("the drawings' pictures", |p| {
+        let svg: Vec<_> = p
+            .media
+            .iter()
+            .filter(|m| m.kind == noctiluca::model::MediaKind::Svg)
+            .collect();
+        svg.len() == 2 && svg.iter().all(|m| m.picture.is_some())
+    });
+}
+
+#[test]
+fn a_header_a_script_moves_with_no_dom_change_is_read_where_it_settles() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    live.open("settle.html");
+    live.wait("the header in its own rows", |p| {
+        p.blocks
+            .iter()
+            .find(|b| matches!(b.kind, BlockKind::Heading(_)))
+            .is_some_and(|b| b.rect.y < 40.0)
+    });
+}
+
+#[test]
+fn a_pages_own_background_is_read() {
+    let Some(binary) = chrome() else { return };
+    let mut live = Live::start(binary);
+    let page = live.open("no-background.html");
+    assert_eq!(page.background, None);
+    let page = live.open("with-background.html");
+    assert_eq!(page.background.as_deref(), Some("rgb(255, 250, 230)"));
 }
