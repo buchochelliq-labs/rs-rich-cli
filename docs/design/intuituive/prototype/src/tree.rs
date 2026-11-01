@@ -824,9 +824,11 @@ mod review_tests {
         for width in 2..6 {
             let app: App<()> = App::new(bordered("Title", text(|| "x".into())), |_| Flow::Continue);
             let lines = app.frame(&c, width, 3);
-            assert!(lines
-                .iter()
-                .all(|l| l.iter().map(Segment::cell_length).sum::<usize>() == width));
+            assert!(
+                lines
+                    .iter()
+                    .all(|l| l.iter().map(Segment::cell_length).sum::<usize>() == width)
+            );
         }
     }
 

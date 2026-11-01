@@ -373,11 +373,12 @@ fn strip_codes(content: &str, styles: bool, links: bool) -> String {
                 continue;
             }
         }
-        if (!styles || !links) && tail.starts_with("\x1b]8;") {
-            if let Some(end) = tail.find("\x1b\\") {
-                rest = &tail[end + 2..];
-                continue;
-            }
+        if (!styles || !links)
+            && tail.starts_with("\x1b]8;")
+            && let Some(end) = tail.find("\x1b\\")
+        {
+            rest = &tail[end + 2..];
+            continue;
         }
         out.push('\x1b');
         rest = &tail[1..];

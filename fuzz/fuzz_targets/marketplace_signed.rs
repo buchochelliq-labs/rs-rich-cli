@@ -6,9 +6,9 @@
 use std::sync::OnceLock;
 
 use libfuzzer_sys::fuzz_target;
-use rich_fuzz::{now, take_byte, test_keys, MAX_PARSE_INPUT};
+use rich_fuzz::{MAX_PARSE_INPUT, now, take_byte, test_keys};
 use rich_marketplace::{
-    verify_index, AcceptedIndex, KeySet, Rotation, INDEX_COMMENT_PREFIX, KEYS_COMMENT_PREFIX,
+    AcceptedIndex, INDEX_COMMENT_PREFIX, KEYS_COMMENT_PREFIX, KeySet, Rotation, verify_index,
 };
 
 fn keys() -> &'static KeySet {

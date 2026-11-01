@@ -16,17 +16,17 @@ use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyString;
 
+use rich::Text as CoreText;
 use rich::color::Color as CoreColor;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::measure::Measurement as CoreMeasurement;
 use rich::protocol::{CodeHighlighter, Renderable};
 use rich::segment::Segment as CoreSegment;
 use rich::style::StyleType;
-use rich::Text as CoreText;
 
 use super::highlighter::new_text;
 use crate::convert;
-use crate::limits::{check_alloc, MAX_CONSOLE_WIDTH, MAX_TAB_SIZE};
+use crate::limits::{MAX_CONSOLE_WIDTH, MAX_TAB_SIZE, check_alloc};
 use crate::renderable::{self, AsRenderable};
 use crate::style::style_type;
 use crate::text::Text;
@@ -294,14 +294,14 @@ impl Spec {
     /// Core's `Syntax` with every option (the code dedented if asked).
     fn full_core(&self) -> rich::Syntax {
         let mut code = self.code.clone();
-        if self.dedent {
-            if let Ok((_, dedented)) = Python::attach(|py| self.process_code(py)) {
-                code = if self.code.ends_with('\n') {
-                    dedented
-                } else {
-                    dedented.trim_end_matches('\n').to_string()
-                };
-            }
+        if self.dedent
+            && let Ok((_, dedented)) = Python::attach(|py| self.process_code(py))
+        {
+            code = if self.code.ends_with('\n') {
+                dedented
+            } else {
+                dedented.trim_end_matches('\n').to_string()
+            };
         }
         self.core_with(&code)
     }
@@ -392,10 +392,10 @@ fn lexer_name(lexer: &Bound<'_, PyAny>) -> PyResult<String> {
         return Ok(name.to_string());
     }
     // A Pygments lexer object: use its first alias.
-    if let Some(aliases) = lexer.getattr_opt("aliases")? {
-        if let Ok(Some(first)) = aliases.try_iter().map(|mut i| i.next()) {
-            return first?.extract();
-        }
+    if let Some(aliases) = lexer.getattr_opt("aliases")?
+        && let Ok(Some(first)) = aliases.try_iter().map(|mut i| i.next())
+    {
+        return first?.extract();
     }
     Err(PyTypeError::new_err("lexer must be a lexer name"))
 }

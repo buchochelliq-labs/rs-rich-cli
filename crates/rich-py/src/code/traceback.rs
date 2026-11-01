@@ -21,9 +21,9 @@ use rich::style::StyleType;
 use rich::table::{Cell, ColumnOptions, Table};
 use rich::{Justify, Text as CoreText};
 
-use super::highlighter::{highlight_regex, Highlight};
-use super::layout::{join_lines, split_keep, Blank, NamedPanel, Stack};
-use super::pretty::{shared_repr, traverse, Layout, Limits, PyNode};
+use super::highlighter::{Highlight, highlight_regex};
+use super::layout::{Blank, NamedPanel, Stack, join_lines, split_keep};
+use super::pretty::{Layout, Limits, PyNode, shared_repr, traverse};
 use super::syntax::{Render as SyntaxRender, Spec};
 use crate::console::Console;
 use crate::convert;
@@ -245,32 +245,32 @@ fn extract(
     loop {
         let exceptions = PyList::empty(py);
         let mut is_group = false;
-        if let Some(base_group) = &base_group {
-            if exc_value.is_instance(base_group)? {
-                is_group = true;
-                for exception in exc_value.getattr("exceptions")?.try_iter()? {
-                    let exception = exception?;
-                    if grouped.contains(&exception)? {
-                        continue;
-                    }
-                    grouped.call_method1("add", (&exception,))?;
-                    let sub = extract(
-                        py,
-                        exception.get_type().as_any(),
-                        &exception,
-                        &exception.getattr("__traceback__")?,
-                        LocalsOptions {
-                            limits: Limits {
-                                max_string: Some(LOCALS_MAX_STRING),
-                                max_depth: None,
-                                ..locals.limits
-                            },
-                            ..locals
-                        },
-                        Some(&grouped),
-                    )?;
-                    exceptions.append(sub)?;
+        if let Some(base_group) = &base_group
+            && exc_value.is_instance(base_group)?
+        {
+            is_group = true;
+            for exception in exc_value.getattr("exceptions")?.try_iter()? {
+                let exception = exception?;
+                if grouped.contains(&exception)? {
+                    continue;
                 }
+                grouped.call_method1("add", (&exception,))?;
+                let sub = extract(
+                    py,
+                    exception.get_type().as_any(),
+                    &exception,
+                    &exception.getattr("__traceback__")?,
+                    LocalsOptions {
+                        limits: Limits {
+                            max_string: Some(LOCALS_MAX_STRING),
+                            max_depth: None,
+                            ..locals.limits
+                        },
+                        ..locals
+                    },
+                    Some(&grouped),
+                )?;
+                exceptions.append(sub)?;
             }
         }
         let syntax_error = if exc_value.is_instance(&syntax_error_class)? {
@@ -396,14 +396,15 @@ fn extract(
         )?)?;
 
         if !grouped.is_truthy()? {
-            if let Some(cause) = exc_value.getattr_opt("__cause__")? {
-                if !cause.is_none() && !cause.is(&exc_value) {
-                    exc_type = cause.get_type().into_any();
-                    traceback = cause.getattr("__traceback__")?;
-                    exc_value = cause;
-                    is_cause = true;
-                    continue;
-                }
+            if let Some(cause) = exc_value.getattr_opt("__cause__")?
+                && !cause.is_none()
+                && !cause.is(&exc_value)
+            {
+                exc_type = cause.get_type().into_any();
+                traceback = cause.getattr("__traceback__")?;
+                exc_value = cause;
+                is_cause = true;
+                continue;
             }
             let context = exc_value.getattr("__context__")?;
             let suppress = exc_value
@@ -706,11 +707,11 @@ impl View {
         let mut excluded = false;
         for (index, frame) in frames.iter().enumerate() {
             let frame = frame.borrow();
-            if let Some(range) = &exclude {
-                if range.contains(&index) {
-                    excluded = true;
-                    continue;
-                }
+            if let Some(range) = &exclude
+                && range.contains(&index)
+            {
+                excluded = true;
+                continue;
             }
             if excluded {
                 let hidden = exclude.as_ref().map_or(0, |r| r.len());

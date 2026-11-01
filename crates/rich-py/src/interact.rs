@@ -71,7 +71,7 @@ fn fallback(name: &str) -> PyResult<Fallback> {
         other => {
             return Err(PyValueError::new_err(format!(
                 "invalid fallback {other:?}; expected prompt, default or error"
-            )))
+            )));
         }
     })
 }
@@ -83,7 +83,7 @@ fn output(name: &str) -> PyResult<Output> {
         other => {
             return Err(PyValueError::new_err(format!(
                 "invalid output {other:?}; expected stdout or stderr"
-            )))
+            )));
         }
     })
 }

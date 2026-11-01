@@ -12,8 +12,8 @@ use pyo3::exceptions::{PyIndexError, PyKeyError, PyRecursionError, PyTypeError, 
 use pyo3::prelude::*;
 use pyo3::types::{PyBool, PyDict, PyFloat, PyInt, PyList, PyString, PyTuple, PyType};
 
-use rich::protocol::Renderable;
 use rich::Justify;
+use rich::protocol::Renderable;
 use rich_ext::data::transform::{
     Document as CoreDocument, Filter as CoreFilter, Highlight as CoreHighlight,
     Redact as CoreRedact, Select as CoreSelect,
@@ -26,7 +26,7 @@ use rich_ext::data::{
 };
 use rich_ext::transform::Transform;
 
-use super::common::{self, names, DataError, SelectError, TransformError};
+use super::common::{self, DataError, SelectError, TransformError, names};
 use super::diagnostic::Diagnostic;
 use crate::renderable::{self, AsRenderable, Nesting};
 

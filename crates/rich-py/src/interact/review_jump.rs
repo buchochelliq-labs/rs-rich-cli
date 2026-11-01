@@ -15,9 +15,9 @@ use rich_interact::components::{
 };
 use rich_interact::{Item as CoreItem, PreviewLayout};
 
-use super::components::{core_items, item_values, items, preview_layout, Item};
+use super::components::{Item, core_items, item_values, items, preview_layout};
 use super::compose::{self, Node};
-use super::{execute, record, Build, Mode, Record};
+use super::{Build, Mode, Record, execute, record};
 
 // ---------------------------------------------------------------------------
 // ApprovalQueue

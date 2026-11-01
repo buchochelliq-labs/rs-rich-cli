@@ -7,17 +7,17 @@
 //! renders renders through the bridge (`renderable::render_object`,
 //! `PyRenderable`), inside the scope of the print that reached it.
 
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use pyo3::exceptions::{PyNotImplementedError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple, PyType};
 
+use rich::Text as CoreText;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::protocol::{FenceRenderer as CoreFenceRenderer, Highlighter, Renderable};
 use rich::segment::Segment as CoreSegment;
-use rich::Text as CoreText;
 use rich_ext::transform::Pipeline;
 use rich_plugin_api::{
     HighlighterFactory, PluginError as CorePluginError, SourceRenderer as CoreSourceRenderer,
@@ -155,10 +155,10 @@ impl CoreTextTransform for PyTextTransform {
 
 /// A transform argument as Rust's: a handle's own, or a Python one.
 pub(crate) fn transform_arg(value: &Bound<'_, PyAny>) -> PyResult<Arc<dyn CoreTextTransform>> {
-    if let Ok(handle) = value.extract::<PyRef<'_, TextTransform>>() {
-        if let Some(inner) = &handle.inner {
-            return Ok(inner.clone());
-        }
+    if let Ok(handle) = value.extract::<PyRef<'_, TextTransform>>()
+        && let Some(inner) = &handle.inner
+    {
+        return Ok(inner.clone());
     }
     if let Ok(pipeline) = value.extract::<PyRef<'_, TextPipeline>>() {
         return Ok(Arc::new(PipelineTransform(pipeline.inner.clone())));
@@ -318,10 +318,10 @@ impl CoreSourceRenderer for PySourceRenderer {
 
 /// A renderer argument as Rust's: a handle's own, or a Python one.
 pub(crate) fn renderer_arg(value: &Bound<'_, PyAny>) -> PyResult<Arc<dyn CoreSourceRenderer>> {
-    if let Ok(handle) = value.extract::<PyRef<'_, SourceRenderer>>() {
-        if let Some(inner) = &handle.inner {
-            return Ok(inner.clone());
-        }
+    if let Ok(handle) = value.extract::<PyRef<'_, SourceRenderer>>()
+        && let Some(inner) = &handle.inner
+    {
+        return Ok(inner.clone());
     }
     let has_method = value
         .getattr_opt("render")?
@@ -469,10 +469,10 @@ impl CoreFenceRenderer for PyFenceRenderer {
 
 /// A fence renderer argument as Rust's: a handle's own, or a Python one.
 pub(crate) fn fence_renderer_arg(value: &Bound<'_, PyAny>) -> PyResult<Arc<dyn CoreFenceRenderer>> {
-    if let Ok(handle) = value.extract::<PyRef<'_, FenceRenderer>>() {
-        if let Some(inner) = &handle.inner {
-            return Ok(inner.clone());
-        }
+    if let Ok(handle) = value.extract::<PyRef<'_, FenceRenderer>>()
+        && let Some(inner) = &handle.inner
+    {
+        return Ok(inner.clone());
     }
     let has_method = value
         .getattr_opt("render_fence")?

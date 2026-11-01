@@ -9,13 +9,13 @@ use pyo3::prelude::*;
 use pyo3::types::{PyString, PyTuple};
 
 use rich_intuituive as intuituive;
+use rich_intuituive::Signal;
 use rich_intuituive::menu::{Menu as CoreMenu, MenuItem as CoreMenuItem};
 use rich_intuituive::widgets::{self as core, LazyItem as CoreLazy, TreeItem as CoreTreeItem};
-use rich_intuituive::Signal;
 
-use super::node::{string_source, strings, take_node, PyNode};
-use super::reactive::{call_with_ctx, date_arg, signal_arg, PySignal};
-use super::{axis_arg, placement_arg, size_arg, Callback, PySize};
+use super::node::{PyNode, string_source, strings, take_node};
+use super::reactive::{PySignal, call_with_ctx, date_arg, signal_arg};
+use super::{Callback, PySize, axis_arg, placement_arg, size_arg};
 
 // ---------------------------------------------------------------------------
 // Tables
@@ -418,7 +418,7 @@ impl PyScrollbar {
             other => {
                 return Err(PyValueError::new_err(format!(
                     "{other:?}: expected 'right', 'left', 'bottom' or 'top'"
-                )))
+                )));
             }
         };
         Ok(PyScrollbar(self.0.clone().side(side)))
@@ -432,7 +432,7 @@ impl PyScrollbar {
             other => {
                 return Err(PyValueError::new_err(format!(
                     "{other:?}: expected 'auto', 'always' or 'never'"
-                )))
+                )));
             }
         };
         Ok(PyScrollbar(self.0.clone().show(show)))
@@ -451,7 +451,7 @@ impl PyScrollbar {
                 return Err(PyValueError::new_err(format!(
                     "{other:?}: expected 'thin', 'thin_horizontal', 'vertical', \
                      'double_vertical', 'horizontal' or 'double_horizontal'"
-                )))
+                )));
             }
         };
         Ok(PyScrollbar(self.0.clone().symbols(set)))
@@ -917,10 +917,10 @@ fn tui_calendar_with(
     options.today = date(today)?;
     options.min = date(min)?;
     options.max = date(max)?;
-    if let (Some(min), Some(max)) = (options.min, options.max) {
-        if min > max {
-            return Err(pyo3::exceptions::PyValueError::new_err("min is after max"));
-        }
+    if let (Some(min), Some(max)) = (options.min, options.max)
+        && min > max
+    {
+        return Err(pyo3::exceptions::PyValueError::new_err("min is after max"));
     }
     Ok(PyNode::new(core::calendar_options(selected, options)))
 }
@@ -951,10 +951,10 @@ fn tui_time_picker(
         min: time(min)?,
         max: time(max)?,
     };
-    if let (Some(min), Some(max)) = (options.min, options.max) {
-        if min > max {
-            return Err(pyo3::exceptions::PyValueError::new_err("min is after max"));
-        }
+    if let (Some(min), Some(max)) = (options.min, options.max)
+        && min > max
+    {
+        return Err(pyo3::exceptions::PyValueError::new_err("min is after max"));
     }
     Ok(PyNode::new(core::time_picker_with(selected, options)))
 }
@@ -988,10 +988,10 @@ fn tui_datetime_picker(
         seconds,
         twelve_hour,
     };
-    if let (Some(min), Some(max)) = (options.min, options.max) {
-        if min > max {
-            return Err(pyo3::exceptions::PyValueError::new_err("min is after max"));
-        }
+    if let (Some(min), Some(max)) = (options.min, options.max)
+        && min > max
+    {
+        return Err(pyo3::exceptions::PyValueError::new_err("min is after max"));
     }
     Ok(PyNode::new(core::datetime_picker(selected, options)))
 }

@@ -9,15 +9,15 @@ use pyo3::prelude::*;
 use pyo3::types::{PyList, PyString, PyTuple};
 use pyo3::{PyTraverseError, PyVisit};
 
+use rich::Columns as CoreColumns;
 use rich::align::HorizontalAlign;
 use rich::protocol::Renderable;
 use rich::table::Cell;
-use rich::Columns as CoreColumns;
 
 use crate::renderable::{self, AsRenderable, PyRenderable};
 use crate::text::Text;
 
-use super::align::{horizontal, Horizontal};
+use super::align::{Horizontal, horizontal};
 use super::padding::unpack;
 use super::{text_markup, unmeasured};
 

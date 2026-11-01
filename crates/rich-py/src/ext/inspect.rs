@@ -16,7 +16,7 @@ use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
 use rich_ext::derive::{self as derive, Field as CoreField, Presentation, RichRecord};
 use rich_ext::env_inspect::{
-    self as env, EnvView as CoreEnvView, PathKind, PathView as CorePathView, OS_PATH_SEPARATOR,
+    self as env, EnvView as CoreEnvView, OS_PATH_SEPARATOR, PathKind, PathView as CorePathView,
 };
 use rich_ext::hex::{self, ByteClass, HexView as CoreHexView};
 use rich_ext::source_view::SourceView as CoreSourceView;

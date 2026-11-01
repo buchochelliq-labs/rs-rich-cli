@@ -22,7 +22,7 @@ use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::measure::Measurement as CoreMeasurement;
 use rich::panel::Panel as CorePanel;
 use rich::protocol::{Highlighter, Renderable};
-use rich::ratio::{ratio_resolve, Edge};
+use rich::ratio::{Edge, ratio_resolve};
 use rich::segment::Segment as CoreSegment;
 use rich::style::{Style as CoreStyle, StyleType};
 use rich::table::{Cell, Table as CoreTable};

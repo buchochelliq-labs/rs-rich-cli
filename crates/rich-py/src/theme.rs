@@ -7,11 +7,11 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
 
-use rich::theme::{Theme as CoreTheme, DEFAULT_STYLES};
 use rich::Style as CoreStyle;
+use rich::theme::{DEFAULT_STYLES, Theme as CoreTheme};
 
 use crate::errors::ThemeStackError;
-use crate::style::{parse_style, Style};
+use crate::style::{Style, parse_style};
 
 /// `rich.theme.Theme`: style names mapped to styles.
 #[pyclass(name = "Theme", module = "rs_rich.theme", frozen, skip_from_py_object)]

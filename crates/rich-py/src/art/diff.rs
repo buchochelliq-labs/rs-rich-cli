@@ -7,8 +7,8 @@ use pyo3::prelude::*;
 
 use rich_art::imagediff::{DiffError, DiffReport as CoreReport, DiffSettings as CoreSettings};
 
-use super::image::{load_image, ArtImage};
-use super::{kinded, repr_float, ImageDiffError};
+use super::image::{ArtImage, load_image};
+use super::{ImageDiffError, kinded, repr_float};
 
 /// Tuning for `image_diff` (the defaults match the reference oracle's).
 #[pyclass(name = "DiffSettings", module = "rs_rich.art")]

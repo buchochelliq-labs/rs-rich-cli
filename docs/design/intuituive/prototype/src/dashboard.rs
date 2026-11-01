@@ -16,14 +16,14 @@
 //! The code between the `// app:` markers is what an author writes; the
 //! benchmark counts its lines.
 
+use ratatui::Frame;
 use ratatui::layout::{Constraint, Layout};
 use ratatui::style::{Color, Modifier, Style as RStyle};
 use ratatui::text::{Line, Span};
 use ratatui::widgets::{Block, BorderType, List, ListItem, ListState, Paragraph};
-use ratatui::Frame;
 
-use crate::reactive::{signal, Signal};
-use crate::tree::{bordered, column, keyed, leaf, row, text, App, Size};
+use crate::reactive::{Signal, signal};
+use crate::tree::{App, Size, bordered, column, keyed, leaf, row, text};
 
 pub const SERVICES: usize = 20;
 

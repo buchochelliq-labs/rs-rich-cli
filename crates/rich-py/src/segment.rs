@@ -9,10 +9,10 @@ use pyo3::prelude::*;
 use pyo3::types::PyTuple;
 use pyo3::{PyTraverseError, PyVisit};
 
-use rich::segment::Segment as CoreSegment;
 use rich::Style as CoreStyle;
+use rich::segment::Segment as CoreSegment;
 
-use crate::style::{resolved_style, Style};
+use crate::style::{Style, resolved_style};
 
 /// `rich.segment.Segment(text, style=None, control=None)`.
 ///
@@ -154,9 +154,11 @@ impl Segment {
     /// Rich's `rich_repr`: `Segment('x')`, `Segment('x', Style(...))`, and
     /// the style and control codes for a control segment.
     fn __repr__(&self, py: Python<'_>) -> PyResult<String> {
-        let mut parts = vec![pyo3::types::PyString::new(py, &self.text)
-            .repr()?
-            .to_string()];
+        let mut parts = vec![
+            pyo3::types::PyString::new(py, &self.text)
+                .repr()?
+                .to_string(),
+        ];
         let style = |py: Python<'_>| -> PyResult<String> {
             match self.style_object() {
                 Some(style) => Ok(Py::new(py, style)?.bind(py).repr()?.to_string()),

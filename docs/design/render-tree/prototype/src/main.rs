@@ -14,9 +14,9 @@ use std::sync::atomic::{AtomicIsize, Ordering};
 use std::time::Instant;
 
 use frame::{Frame, Runs};
+use rich::r#box::SQUARE;
 use rich::markdown::Markdown;
 use rich::protocol::Renderable;
-use rich::r#box::SQUARE;
 use rich::segment::Segment;
 use rich::syntax::Syntax;
 use rich::{ColorSystem, Console, Json, Justify, Panel, Style, Table, Text};

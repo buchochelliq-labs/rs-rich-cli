@@ -534,7 +534,7 @@ fn split(input: &str) -> Result<(&str, &str), String> {
 }
 
 fn document(input: &str, options: &Options) -> Result<rich_ext::data::Node, String> {
-    use rich_ext::data::{parse, Format};
+    use rich_ext::data::{Format, parse};
     let format = match options.format.as_deref() {
         Some("json") => Format::Json,
         Some("yaml") => Format::Yaml,

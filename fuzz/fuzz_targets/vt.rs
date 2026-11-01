@@ -12,10 +12,10 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use rich_fuzz::{take_byte, MAX_PARSE_INPUT};
+use rich_fuzz::{MAX_PARSE_INPUT, take_byte};
+use rich_record::Theme;
 use rich_record::tape::{MAX_COLUMNS, MAX_ROWS, MIN_COLUMNS, MIN_ROWS};
 use rich_record::terminal::Terminal;
-use rich_record::Theme;
 
 fuzz_target!(|data: &[u8]| {
     let (rows, rest) = take_byte(data);

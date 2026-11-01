@@ -5,12 +5,12 @@ use pyo3::exceptions::{PyException, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyType;
 
+use rich::StyleType;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::emoji::EmojiVariant;
 use rich::measure::Measurement as CoreMeasurement;
 use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
-use rich::StyleType;
 
 use crate::renderable::{self, AsRenderable};
 

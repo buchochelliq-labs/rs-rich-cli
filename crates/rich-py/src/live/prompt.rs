@@ -232,7 +232,7 @@ impl PromptBase {
         let return_value = match response_type.call1((value,)) {
             Ok(converted) => converted,
             Err(error) if error.is_instance_of::<PyValueError>(py) => {
-                return Err(invalid("validate_error_message")?)
+                return Err(invalid("validate_error_message")?);
             }
             Err(error) => return Err(error),
         };

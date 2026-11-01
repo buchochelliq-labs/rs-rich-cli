@@ -13,9 +13,9 @@ use pyo3::exceptions::{PyNotImplementedError, PyRuntimeError, PyTypeError, PyVal
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyTuple};
 
-use rich::protocol::{CodeHighlighter as CoreCodeHighlighter, FenceRenderer as CoreFenceRenderer};
-use rich::r#box::Box as BoxStyle;
 use rich::Theme as CoreTheme;
+use rich::r#box::Box as BoxStyle;
+use rich::protocol::{CodeHighlighter as CoreCodeHighlighter, FenceRenderer as CoreFenceRenderer};
 use rich_plugin_api::{
     HighlighterFactory, Plugin as CorePlugin, PluginError as CorePluginError,
     PluginMetadata as CoreMetadata, PluginRegistrar as CoreRegistrar,
@@ -287,7 +287,7 @@ impl MermaidPlugin {
             other => {
                 return Err(PyValueError::new_err(format!(
                     "backend must be \"text\" or \"mmdc\", not {other:?}"
-                )))
+                )));
             }
         };
         // With the `mmdc` feature the options have one more field.
@@ -354,7 +354,7 @@ impl PyPlugin {
                 return Err(PyTypeError::new_err(format!(
                     "a plugin needs metadata() and register(registrar); got {}",
                     object.repr()?
-                )))
+                )));
             }
         };
         let metadata = metadata
@@ -406,10 +406,10 @@ impl CorePlugin for PyPlugin {
 /// The Rust plugin for a Python plugin argument: a built-in's own, or the
 /// adapter.
 pub(crate) fn plugin_arg(value: &Bound<'_, PyAny>) -> PyResult<Arc<dyn CorePlugin>> {
-    if let Ok(plugin) = value.extract::<PyRef<'_, Plugin>>() {
-        if let Some(native) = &plugin.native {
-            return Ok(native.clone());
-        }
+    if let Ok(plugin) = value.extract::<PyRef<'_, Plugin>>()
+        && let Some(native) = &plugin.native
+    {
+        return Ok(native.clone());
     }
     Ok(Arc::new(PyPlugin::new(value)?))
 }

@@ -10,7 +10,7 @@ use rich_ext::log_stream::{Parsers, Record as CoreRecord, TimeMode};
 use rich_interact::LogView as CoreLogView;
 
 use super::compose::{self, Node};
-use super::{execute, record, Build, Mode, Record};
+use super::{Build, Mode, Record, execute, record};
 use crate::ext::common;
 use crate::ext::log_stream::LogRecord;
 

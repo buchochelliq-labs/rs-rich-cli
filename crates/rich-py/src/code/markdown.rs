@@ -10,12 +10,12 @@ use std::sync::Arc;
 
 use pyo3::prelude::*;
 
+use rich::Justify;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::measure::Measurement as CoreMeasurement;
 use rich::protocol::{CodeHighlighter, FenceRenderer, Renderable};
 use rich::segment::Segment as CoreSegment;
 use rich::style::StyleType;
-use rich::Justify;
 
 use super::syntax::code_highlighter_value;
 use crate::convert;
@@ -45,10 +45,10 @@ impl Spec {
         if let Some(justify) = self.justify {
             markdown = markdown.justify(justify);
         }
-        if let Some(style) = &self.style {
-            if let Ok(style) = console.get_style(style) {
-                markdown = markdown.style(style);
-            }
+        if let Some(style) = &self.style
+            && let Ok(style) = console.get_style(style)
+        {
+            markdown = markdown.style(style);
         }
         if let Some(lexer) = &self.inline_code_lexer {
             markdown = markdown.inline_code_lexer(lexer.as_str());

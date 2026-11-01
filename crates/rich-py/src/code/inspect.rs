@@ -14,8 +14,8 @@ use rich::table::{Cell, ColumnOptions, Table};
 use rich::{Justify, Text as CoreText};
 
 use super::highlighter::Highlight;
-use super::layout::{to_markup, Blank, NamedPanel, Stack};
-use super::pretty::{shared_repr, traverse, type_repr, Layout, Limits};
+use super::layout::{Blank, NamedPanel, Stack, to_markup};
+use super::pretty::{Layout, Limits, shared_repr, traverse, type_repr};
 use crate::renderable::{self, AsRenderable};
 
 fn named(style: &str) -> Option<StyleType> {
@@ -84,10 +84,10 @@ impl<'py> Inspector<'py> {
         }
         let docs: String = self.inspect.call_method1("cleandoc", (docs,))?.extract()?;
         let mut docs = docs.trim().to_string();
-        if !self.options.help {
-            if let Some(end) = docs.find("\n\n") {
-                docs.truncate(end);
-            }
+        if !self.options.help
+            && let Some(end) = docs.find("\n\n")
+        {
+            docs.truncate(end);
         }
         Ok(Some(escape_control_codes(&docs)))
     }
@@ -101,7 +101,7 @@ impl<'py> Inspector<'py> {
                 "(...)".to_string()
             }
             Err(error) if error.is_instance_of::<pyo3::exceptions::PyTypeError>(py) => {
-                return Ok(None)
+                return Ok(None);
             }
             Err(error) => return Err(error),
         };
@@ -183,21 +183,21 @@ impl<'py> Inspector<'py> {
 
         let is_class = self.is_class(object)?;
         let is_module = self.is_module(object)?;
-        if object.is_callable() {
-            if let Some(signature) = self.signature("", object)? {
-                parts.push(Box::new(signature));
-                parts.push(Box::new(Blank));
-            }
+        if object.is_callable()
+            && let Some(signature) = self.signature("", object)?
+        {
+            parts.push(Box::new(signature));
+            parts.push(Box::new(Blank));
         }
-        if self.options.docs {
-            if let Some(doc) = self.formatted_doc(object)? {
-                let doc = Highlight::Repr.apply(
-                    py,
-                    CoreText::styled(doc, StyleType::Name("inspect.help".to_string())),
-                )?;
-                parts.push(Box::new(doc));
-                parts.push(Box::new(Blank));
-            }
+        if self.options.docs
+            && let Some(doc) = self.formatted_doc(object)?
+        {
+            let doc = Highlight::Repr.apply(
+                py,
+                CoreText::styled(doc, StyleType::Name("inspect.help".to_string())),
+            )?;
+            parts.push(Box::new(doc));
+            parts.push(Box::new(Blank));
         }
         if self.options.value && !(is_class || object.is_callable() || is_module) {
             let limits = Limits {
@@ -260,15 +260,14 @@ impl<'py> Inspector<'py> {
                 match self.signature(&key, &value)? {
                     None => self.pretty(&value, Limits::default(), false)?,
                     Some(mut signature) => {
-                        if self.options.docs {
-                            if let Some(docs) = self.formatted_doc(&value)? {
-                                signature
-                                    .append(if docs.contains('\n') { "\n" } else { " " }, None);
-                                let mut doc = repr_text(py, &docs)?;
-                                let length = doc.plain().len();
-                                doc.stylize(StyleType::Name("inspect.doc".to_string()), 0, length);
-                                signature = signature.append_text(&doc);
-                            }
+                        if self.options.docs
+                            && let Some(docs) = self.formatted_doc(&value)?
+                        {
+                            signature.append(if docs.contains('\n') { "\n" } else { " " }, None);
+                            let mut doc = repr_text(py, &docs)?;
+                            let length = doc.plain().len();
+                            doc.stylize(StyleType::Name("inspect.doc".to_string()), 0, length);
+                            signature = signature.append_text(&doc);
                         }
                         Cell::Text(signature)
                     }

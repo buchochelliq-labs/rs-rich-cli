@@ -12,9 +12,9 @@ use pyo3::types::{PyDict, PyType};
 
 use rich::protocol::Renderable;
 use rich_ext::diff::git::{
-    parse_unified, Annotation as CoreAnnotation, FilePatch as CoreFilePatch, FileStatus, LineKind,
-    LinkProvider, Patch as CorePatch, PatchView as CorePatchView,
-    TemplateLinks as CoreTemplateLinks,
+    Annotation as CoreAnnotation, FilePatch as CoreFilePatch, FileStatus, LineKind, LinkProvider,
+    Patch as CorePatch, PatchView as CorePatchView, TemplateLinks as CoreTemplateLinks,
+    parse_unified,
 };
 use rich_ext::diff::test_report::{
     self as reports, Case as CoreCase, Status, Suite as CoreSuite, TestReport as CoreReport,
@@ -27,7 +27,7 @@ use rich_ext::diff::{
 };
 use rich_ext::transform::Transform;
 
-use super::common::{self, names, PatchParseError, TestParseError, TransformError};
+use super::common::{self, PatchParseError, TestParseError, TransformError, names};
 use super::diagnostic::{self, hyperlinker_arg};
 use crate::renderable::{self, AsRenderable};
 
@@ -86,7 +86,7 @@ fn op_arg(value: &Bound<'_, PyAny>) -> PyResult<Op> {
         other => {
             return Err(PyValueError::new_err(format!(
                 "invalid op tag {other:?}; expected equal, delete or insert"
-            )))
+            )));
         }
     })
 }

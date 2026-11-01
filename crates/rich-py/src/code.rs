@@ -35,7 +35,7 @@ pub(crate) use pretty::Pretty;
 mod syntax;
 mod traceback;
 
-pub(crate) use syntax::{code_highlighter_value, Syntax};
+pub(crate) use syntax::{Syntax, code_highlighter_value};
 
 /// What `Console.print` renders for a container, dataclass or other
 /// object Rich pretty-prints (`rich.pretty.Pretty(obj, highlighter=...)`).

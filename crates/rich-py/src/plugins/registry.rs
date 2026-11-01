@@ -16,10 +16,10 @@ use rich_plugin_api::{
 };
 
 use super::adapters::{
-    highlighter_factory_arg, transform_arg, FenceRenderer, SourceRenderer, TextPipeline,
-    TextTransform,
+    FenceRenderer, SourceRenderer, TextPipeline, TextTransform, highlighter_factory_arg,
+    transform_arg,
 };
-use super::code::{code_highlighter_arg, CodeHighlighter};
+use super::code::{CodeHighlighter, code_highlighter_arg};
 use super::errors::{self, HighlighterChoiceError};
 use super::plugin::plugin_arg;
 use super::types::{Capability, RegisteredPlugin};
@@ -433,10 +433,10 @@ impl ExtensionRegistry {
         };
         let module = py.import("rs_rich._native")?;
         for (_, value) in module.dict().iter() {
-            if let Ok(candidate) = value.extract::<PyRef<'_, PyBox>>() {
-                if candidate.inner == style {
-                    return Ok(Some(value.clone().unbind()));
-                }
+            if let Ok(candidate) = value.extract::<PyRef<'_, PyBox>>()
+                && candidate.inner == style
+            {
+                return Ok(Some(value.clone().unbind()));
             }
         }
         Err(pyo3::exceptions::PyNotImplementedError::new_err(

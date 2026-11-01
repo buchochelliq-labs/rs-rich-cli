@@ -9,12 +9,12 @@ use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyBytes, PyDict, PyList};
 
+use rich::ColorSystem;
 use rich::color::ColorTriplet;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::protocol::{Renderable, Support, TargetCapabilities};
 use rich::segment::Segment as CoreSegment;
 use rich::theme::Theme as CoreTheme;
-use rich::ColorSystem;
 use rich_ext::a11y::contrast::{self, CheckOptions, Deficiency, Finding, FindingKind};
 use rich_ext::a11y::policy::{AccessibilityPolicy as CorePolicy, Status, SymbolSet};
 use rich_ext::ansi_explain::{self as ansi, Explanation as CoreExplanation, Token, ViewMode};
@@ -25,11 +25,11 @@ use rich_ext::capabilities::{
 use rich_ext::encoding::Encoding;
 use rich_ext::fidelity::{self, Fidelity, FidelityFacts, Policy};
 use rich_ext::target::{
-    resolve_capabilities, CapabilityOrigin, RenderTarget as CoreTarget, TargetKind,
-    TargetObservations, TargetOverrides,
+    CapabilityOrigin, RenderTarget as CoreTarget, TargetKind, TargetObservations, TargetOverrides,
+    resolve_capabilities,
 };
 
-use super::common::{self, names, EncodingError};
+use super::common::{self, EncodingError, names};
 use crate::renderable::{self, AsRenderable};
 use crate::segment::Segment;
 
@@ -88,7 +88,7 @@ pub(crate) fn color_system(value: Option<&str>) -> PyResult<Option<ColorSystem>>
         Some(other) => {
             return Err(PyValueError::new_err(format!(
                 "invalid color_system {other:?}; expected truecolor, 256, standard, windows or None"
-            )))
+            )));
         }
     })
 }
@@ -997,7 +997,7 @@ impl ExplanationView {
             other => {
                 return Err(PyValueError::new_err(format!(
                     "invalid mode {other:?}; expected table or inline"
-                )))
+                )));
             }
         };
         Ok(ExplanationView {

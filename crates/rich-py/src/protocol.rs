@@ -103,7 +103,7 @@ impl ConsoleOptions {
     }
 
     pub(crate) fn to_core(&self) -> PyResult<CoreOptions> {
-        use crate::limits::{check_size, MAX_CONSOLE_HEIGHT, MAX_CONSOLE_WIDTH};
+        use crate::limits::{MAX_CONSOLE_HEIGHT, MAX_CONSOLE_WIDTH, check_size};
         for (what, value, limit) in [
             ("min_width", self.min_width, MAX_CONSOLE_WIDTH),
             ("max_width", self.max_width, MAX_CONSOLE_WIDTH),
@@ -232,7 +232,7 @@ impl ConsoleOptions {
                 other => {
                     return Err(PyTypeError::new_err(format!(
                         "update() got an unexpected keyword argument '{other}'"
-                    )))
+                    )));
                 }
             }
         }
@@ -294,11 +294,7 @@ impl ConsoleOptions {
 }
 
 fn py_bool(value: bool) -> &'static str {
-    if value {
-        "True"
-    } else {
-        "False"
-    }
+    if value { "True" } else { "False" }
 }
 
 fn py_opt_bool(value: Option<bool>) -> &'static str {

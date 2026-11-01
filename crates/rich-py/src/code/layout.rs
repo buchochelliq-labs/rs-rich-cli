@@ -2,12 +2,12 @@
 //! lines (upstream's `Segments`), a vertical stack (upstream's `Group`) and a
 //! blank line (upstream's `""` in a render result).
 
+use rich::Text as CoreText;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::measure::Measurement as CoreMeasurement;
 use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
 use rich::style::StyleType;
-use rich::Text as CoreText;
 
 /// Lines to core's convention: a newline between lines, none after the last.
 pub(crate) fn join_lines(lines: Vec<Vec<CoreSegment>>) -> Vec<CoreSegment> {

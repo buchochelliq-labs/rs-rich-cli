@@ -3,7 +3,7 @@
 
 use intuituive::Stylesheet;
 use libfuzzer_sys::fuzz_target;
-use rich_fuzz::{text, MAX_PARSE_INPUT};
+use rich_fuzz::{MAX_PARSE_INPUT, text};
 
 fuzz_target!(|data: &[u8]| {
     let _ = Stylesheet::parse(&text(data, MAX_PARSE_INPUT));

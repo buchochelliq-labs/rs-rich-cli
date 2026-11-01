@@ -22,11 +22,11 @@ use rich::{Spinner as CoreSpinner, Table as CoreTable, Text as CoreText};
 
 use super::live_display::{self, Live};
 use super::progress_bar::ProgressBar;
-use super::util::{self, hold, Arg};
+use super::util::{self, Arg, hold};
 use crate::convert;
 use crate::errors::NotRenderableError;
 use crate::renderable::{self, PyRenderable};
-use crate::style::{style_type, Style};
+use crate::style::{Style, style_type};
 
 fn lock<T>(mutex: &Mutex<T>) -> MutexGuard<'_, T> {
     mutex
@@ -648,10 +648,10 @@ impl ProgressColumn {
             let cached = lock(&slf.get().cache)
                 .get(&id)
                 .map(|(t, r)| (t.clone_ref(py), r.clone_ref(py)));
-            if let Some((timestamp, renderable)) = cached {
-                if timestamp.bind(py).add(&max_refresh)?.gt(&current_time)? {
-                    return Ok(renderable);
-                }
+            if let Some((timestamp, renderable)) = cached
+                && timestamp.bind(py).add(&max_refresh)?.gt(&current_time)?
+            {
+                return Ok(renderable);
             }
         }
         let renderable = slf.call_method1("render", (task,))?.unbind();
@@ -668,10 +668,10 @@ impl ProgressColumn {
     }
 
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
-        if let Ok(column) = self.table_column.try_lock() {
-            if let Some(column) = column.as_ref() {
-                visit.call(column)?;
-            }
+        if let Ok(column) = self.table_column.try_lock()
+            && let Some(column) = column.as_ref()
+        {
+            visit.call(column)?;
         }
         if let Ok(cache) = self.cache.try_lock() {
             for (time, renderable) in cache.values() {
@@ -1440,11 +1440,11 @@ fn column_options(
     if let Some(value) = get("no_wrap")? {
         options.no_wrap = value.is_truthy()?;
     }
-    if let Some(style) = get("style")? {
-        if style.is_truthy()? {
-            let resolved = console.call_method1("get_style", (style,))?;
-            options.style = resolved.extract::<PyRef<'_, Style>>()?.inner.clone();
-        }
+    if let Some(style) = get("style")?
+        && style.is_truthy()?
+    {
+        let resolved = console.call_method1("get_style", (style,))?;
+        options.style = resolved.extract::<PyRef<'_, Style>>()?.inner.clone();
     }
     Ok(options)
 }
@@ -1982,11 +1982,11 @@ impl Progress {
             let task = slf.get().task(py, task_id)?;
             let task = task.get();
             let completed_start = task.completed(py).into_bound(py);
-            if let Some(total) = total.filter(|t| !t.is_none(py)) {
-                if total.bind(py).ne(task.total(py))? {
-                    task.st().total = total;
-                    task.reset_progress(py);
-                }
+            if let Some(total) = total.filter(|t| !t.is_none(py))
+                && total.bind(py).ne(task.total(py))?
+            {
+                task.st().total = total;
+                task.reset_progress(py);
             }
             if let Some(advance) = advance.filter(|a| !a.is_none(py)) {
                 let sum = task.completed(py).into_bound(py).add(advance)?.unbind();
@@ -2266,32 +2266,32 @@ impl Progress {
     }
 
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
-        if let Ok(state) = self.state.try_lock() {
-            if let Some(state) = state.as_ref() {
-                visit.call(&state.columns)?;
-                visit.call(&state.console)?;
-                visit.call(&state.lock)?;
-                for (_, task) in &state.tasks {
-                    visit.call(task)?;
-                }
-                if let Some(live) = &state.live {
-                    visit.call(live)?;
-                }
-                if let Some(get_time) = &state.get_time {
-                    visit.call(get_time)?;
-                }
+        if let Ok(state) = self.state.try_lock()
+            && let Some(state) = state.as_ref()
+        {
+            visit.call(&state.columns)?;
+            visit.call(&state.console)?;
+            visit.call(&state.lock)?;
+            for (_, task) in &state.tasks {
+                visit.call(task)?;
+            }
+            if let Some(live) = &state.live {
+                visit.call(live)?;
+            }
+            if let Some(get_time) = &state.get_time {
+                visit.call(get_time)?;
             }
         }
         Ok(())
     }
 
     fn __clear__(&self) {
-        if let Ok(mut state) = self.state.try_lock() {
-            if let Some(state) = state.as_mut() {
-                state.live = None;
-                state.get_time = None;
-                state.tasks.clear();
-            }
+        if let Ok(mut state) = self.state.try_lock()
+            && let Some(state) = state.as_mut()
+        {
+            state.live = None;
+            state.get_time = None;
+            state.tasks.clear();
         }
     }
 }

@@ -116,7 +116,7 @@ impl PyServer {
             _ => {
                 return Err(PyValueError::new_err(
                     "isolation is \"processes\" or \"threads\"",
-                ))
+                ));
             }
         };
         slf.borrow().map(|s| s.isolation(isolation))?;
@@ -286,10 +286,10 @@ fn session_command(py: Python<'_>) -> PyResult<Option<(String, Vec<String>)>> {
     // The script by its absolute path (`__main__.__file__`), so a program
     // that changed directory before serving still finds it.
     let file: Option<String> = main.getattr("__file__").ok().and_then(|f| f.extract().ok());
-    if let (Some(file), Some(at)) = (file, args.len().checked_sub(argv.len())) {
-        if args.get(at) == argv.first() {
-            args[at] = file;
-        }
+    if let (Some(file), Some(at)) = (file, args.len().checked_sub(argv.len()))
+        && args.get(at) == argv.first()
+    {
+        args[at] = file;
     }
     Ok(Some((executable, args)))
 }

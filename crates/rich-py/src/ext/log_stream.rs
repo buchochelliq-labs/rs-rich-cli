@@ -11,13 +11,13 @@ use pyo3::types::{PyDict, PyList, PyString};
 
 use rich::protocol::Renderable;
 use rich_ext::log_stream::{
-    format_offset, parse_timestamp, Assembled, Assembler, Collapser as CoreCollapser,
-    Filter as CoreFilter, Group, GroupBy, GroupHeader, LevelFilter as CoreLevelFilter, Parsers,
-    Predicate as CorePredicate, Record as CoreRecord, Repeat, Summary as CoreSummary,
+    Assembled, Assembler, Collapser as CoreCollapser, Filter as CoreFilter, Group, GroupBy,
+    GroupHeader, LevelFilter as CoreLevelFilter, Parsers, Predicate as CorePredicate,
+    Record as CoreRecord, Repeat, Summary as CoreSummary, format_offset, parse_timestamp,
 };
 
 use super::common;
-use super::diagnostic::{severity, severity_name, StructuredEvent};
+use super::diagnostic::{StructuredEvent, severity, severity_name};
 use super::widgets::Redactor;
 use crate::renderable::{self, AsRenderable};
 

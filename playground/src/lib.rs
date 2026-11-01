@@ -17,7 +17,7 @@ pub mod render;
 use rich::{ColorSystem, Console, SVG_EXPORT_THEME};
 use wasm_bindgen::prelude::*;
 
-use crate::options::{Options, MAX_INPUT};
+use crate::options::{MAX_INPUT, Options};
 
 #[cfg(target_arch = "wasm32")]
 #[wasm_bindgen]

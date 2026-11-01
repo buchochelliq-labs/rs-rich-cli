@@ -201,10 +201,10 @@ impl StatusSpinner {
     }
 
     fn __traverse__(&self, visit: PyVisit<'_>) -> Result<(), PyTraverseError> {
-        if let Ok(state) = self.state.try_lock() {
-            if let Some(text) = &state.text {
-                visit.call(text)?;
-            }
+        if let Ok(state) = self.state.try_lock()
+            && let Some(text) = &state.text
+        {
+            visit.call(text)?;
         }
         Ok(())
     }
