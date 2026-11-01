@@ -22,6 +22,7 @@ on:
       - mkdocs.yml
       - .github/workflows/docs.yml
       - mkdocs-python.yml
+      - requirements-docs.txt
       - scripts/gen_python_api.py
       - scripts/build_versioned_docs.py
       - docs-versions.toml
@@ -43,6 +44,7 @@ on:
       - crates/rich-web/**
       - scripts/check_playground_*.mjs
       - scripts/check_marketplace_page.mjs
+      - scripts/check_site_links.py
       - scripts/test_build_versioned_docs.py
   pull_request:
     paths:
@@ -50,6 +52,7 @@ on:
       - mkdocs.yml
       - .github/workflows/docs.yml
       - mkdocs-python.yml
+      - requirements-docs.txt
       - scripts/gen_python_api.py
       - scripts/build_versioned_docs.py
       - docs-versions.toml
@@ -71,6 +74,7 @@ on:
       - crates/rich-web/**
       - scripts/check_playground_*.mjs
       - scripts/check_marketplace_page.mjs
+      - scripts/check_site_links.py
       - scripts/test_build_versioned_docs.py
   workflow_dispatch:
 
@@ -108,9 +112,10 @@ jobs:
         with:
           python-version: "3.12"
 
-      - name: Install MkDocs
-        # MkDocs 2 drops the plugins and theme overrides the site uses.
-        run: pip install "mkdocs<2" mkdocs-material "mkdocstrings[python]>=1,<2"
+      - name: Install Zensical
+        # Pinned: Zensical builds both sites; MkDocs and Material build the
+        # releases whose docs predate the move (build_versioned_docs.py).
+        run: pip install -r requirements-docs.txt
 
       # The docs playground (docs/design/docs-playground.md): main's wasm
       # modules, built into docs/assets/playground/ (never committed), so the
@@ -157,7 +162,7 @@ jobs:
       # --strict turns broken internal links into failures. A docs site whose
       # links rot is worse than no docs site.
       - name: Build
-        run: mkdocs build --strict
+        run: zensical build --strict -f mkdocs.yml
 
       # The playground page and a guide block in headless Chromium.
       - name: Check the playground in a browser
@@ -172,7 +177,13 @@ jobs:
         run: python scripts/gen_python_api.py --check
 
       - name: Build the Python site
-        run: mkdocs build --strict -f mkdocs-python.yml
+        run: zensical build --strict -f mkdocs-python.yml
+
+      # --strict checks the Markdown links; this checks the raw HTML's too (a
+      # video's source, a GIF in a figure, the parity chart's links), which
+      # Zensical rebases from the source file like a Markdown link's.
+      - name: Check every relative URL in the built sites resolves
+        run: python scripts/check_site_links.py site
 
       # The Marketplace page in headless Chromium, against the fixture
       # marketplace (docs/tapes/fixtures/marketplace), and its logic under

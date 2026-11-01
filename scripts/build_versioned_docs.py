@@ -20,6 +20,12 @@ the whole site is rebuilt and deployed as one Pages artifact.
 GitHub Pages takes at most 1 GB, so the oldest releases are left out until the
 site fits under --budget-mb.
 
+Each version is built with the tool its own tree used: Zensical when the
+tree's `requirements-docs.txt` names it (0.0.24's docs on), else MkDocs and
+Material, as the releases before the move were. Zensical does not build those
+older trees unchanged: it rebases the raw HTML's URLs (their videos, GIFs and
+the parity chart's links), which those trees wrote for MkDocs.
+
 The docs playground (docs/design/docs-playground.md) needs each version's own
 wasm module in `<version>/assets/playground/`. Main's is built by docs.yml into
 docs/assets/playground/ before this runs, so it is copied with main's docs. A
@@ -51,6 +57,10 @@ ROOT = Path(__file__).resolve().parents[1]
 OVERRIDES = ROOT / "scripts" / "docs_overrides"
 TAG = re.compile(r"rs-rich-cli-v(\d+)\.(\d+)\.(\d+)")
 WRAPPER = ".mkdocs-versioned.yml"
+PYTHON_WRAPPER = ".mkdocs-python-versioned.yml"
+# Where a Zensical build writes inside the tree it builds (Zensical keeps
+# site_dir inside the project), before the site is moved to its place.
+STAGING = ".versioned-site"
 PINS = "docs-versions.toml"
 
 
@@ -132,15 +142,26 @@ def extract(commit, into):
         tar.extractall(into, filter="data")
 
 
+def builder(source):
+    """"zensical" when the tree at `source` builds its docs with Zensical (its
+    requirements-docs.txt names it), else "mkdocs"."""
+    pins = source / "requirements-docs.txt"
+    if pins.exists() and re.search(r"^zensical\b", pins.read_text(encoding="utf-8"), re.M):
+        return "zensical"
+    return "mkdocs"
+
+
 def build(source, out, version, url, strict):
     """One version's site: the main docs at `out`, the Python site at out/python."""
+    zensical = builder(source) == "zensical"
     wrapper = source / WRAPPER
     # INHERIT merges this over the version's own mkdocs.yml; the wrapper sits
     # beside it so the relative docs_dir resolves the same.
     wrapper.write_text(
         "INHERIT: mkdocs.yml\n"
         f"site_url: {url}{version}/\n"
-        "theme:\n"
+        + (f"site_dir: {STAGING}\n" if zensical else "")
+        + "theme:\n"
         f"  custom_dir: {json.dumps(str(OVERRIDES))}\n"
         "extra:\n"
         "  version:\n"
@@ -149,12 +170,31 @@ def build(source, out, version, url, strict):
         "    alias: true\n",
         encoding="utf-8",
     )
+    python = (source / "mkdocs-python.yml").exists()
     try:
+        if zensical:
+            # Zensical has no -d: the wrappers point site_dir into the tree,
+            # and the built site is moved to `out` after.
+            staging = source / STAGING
+            if staging.exists():
+                shutil.rmtree(staging)
+            command = [sys.executable, "-m", "zensical", "build"] + (["--strict"] if strict else [])
+            subprocess.run(command + ["-f", WRAPPER], cwd=source, check=True)
+            if python:
+                (source / PYTHON_WRAPPER).write_text(
+                    f"INHERIT: mkdocs-python.yml\nsite_dir: {STAGING}/python\n", encoding="utf-8")
+                subprocess.run(command + ["-f", PYTHON_WRAPPER], cwd=source, check=True)
+            if out.exists():
+                shutil.rmtree(out)
+            out.parent.mkdir(parents=True, exist_ok=True)
+            shutil.move(str(staging), str(out))
+            return
         command = [sys.executable, "-m", "mkdocs", "build", "-q", "-f", WRAPPER, "-d", str(out)]
         subprocess.run(command + (["--strict"] if strict else []), cwd=source, check=True)
     finally:
         wrapper.unlink()
-    if (source / "mkdocs-python.yml").exists():
+        (source / PYTHON_WRAPPER).unlink(missing_ok=True)
+    if python:
         command = [sys.executable, "-m", "mkdocs", "build", "-q", "-f", "mkdocs-python.yml",
                    "-d", str(out / "python")]
         subprocess.run(command + (["--strict"] if strict else []), cwd=source, check=True)
