@@ -15,7 +15,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/grid.svg){ .tui-icon width="20" } | [grid](layout.md#grids) | `grid` | Children placed on row and column tracks |
 | ![](../../assets/intuituive/widgets/layers.svg){ .tui-icon width="20" } | [layers](layout.md#layers) | `layers` | Children drawn over each other |
 | ![](../../assets/intuituive/widgets/scroll.svg){ .tui-icon width="20" } | [scroll](tables.md#tables-tabs-and-scrolling) | `scroll`, `scroll_x`, `scroll_both` | A viewport onto a child laid out at its full size |
-| ![](../../assets/intuituive/widgets/scroll.svg){ .tui-icon width="20" } | [scroll_virtual](tables.md#long-and-endless-content-scroll_virtual) | `scroll_virtual`, `scroll_virtual_with` | A scroll view over items that builds only those near the view; loads more near the end |
+| ![](../../assets/intuituive/widgets/scroll.svg){ .tui-icon width="20" } | [scroll_virtual](tables.md#long-and-endless-content-scroll_virtual) | `scroll_virtual`, `scroll_virtual_with` | A scroll view over items that builds only those near the view; loads more near the end; follows its end (`follow_end`) |
 | ![](../../assets/intuituive/widgets/split.svg){ .tui-icon width="20" } | [split](lists.md#trees-split-panes-and-virtual-lists) | `hsplit`, `vsplit`, `split` | Two panes with a divider you can drag |
 | ![](../../assets/intuituive/widgets/treemap.svg){ .tui-icon width="20" } | [treemap](layout.md#treemaps) | `treemap` | Rectangles sized by weight |
 | ![](../../assets/intuituive/widgets/switch.svg){ .tui-icon width="20" } | [switch](layout.md#nodes) | `switch`, `keyed` | One child at a time, chosen by a key; the others are kept |
@@ -60,7 +60,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/radio.svg){ .tui-icon width="20" } | [radio group](controls.md#radio-groups) | `radio`, `radio_keyed` | One choice of several, shown at once; by index or by key |
 | ![](../../assets/intuituive/widgets/slider.svg){ .tui-icon width="20" } | [slider](controls.md#sliders) | `slider` | A number in a range, by keys, click, drag or wheel |
 | ![](../../assets/intuituive/widgets/select_field.svg){ .tui-icon width="20" } | [select field](controls.md#select-fields) | `select_field`, `select_field_keyed` | One choice of several, from a menu that opens under it; by index or by key |
-| ![](../../assets/intuituive/widgets/collapsible.svg){ .tui-icon width="20" } | [collapsible](controls.md#collapsible-sections) | `collapsible` | A titled section that opens and closes |
+| ![](../../assets/intuituive/widgets/collapsible.svg){ .tui-icon width="20" } | [collapsible](controls.md#collapsible-sections) | `collapsible`, `collapsible_with` | A titled section that opens and closes; a status beside the title and a summary while closed |
 | ![](../../assets/intuituive/widgets/spinner.svg){ .tui-icon width="20" } | [spinner](controls.md#spinners-and-loading) | `spinner`, `.loading_when` | An animated busy sign; a node dimmed while it loads |
 
 ## Lists and data

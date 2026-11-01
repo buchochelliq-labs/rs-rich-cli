@@ -33,6 +33,11 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and `scroll_virtual`: the view keeps to the end while content arrives
   and the last item grows, stops following when the reader scrolls up,
   and follows again at the end. Textual's `anchor()`.
+- **`collapsible_with(title, open, child)`** (#804), a title that follows
+  state, with `.status(|| Status)` (a spinner on the app's clock, or
+  markup) at the right of the header, `.summary(|| line)` under it while
+  closed and `.symbols(closed, open)`: a tool call's card. The header is
+  busy while its spinner turns, and says a markup status after its title.
 
 ### Animated banners and Noctiluca's start page
 
