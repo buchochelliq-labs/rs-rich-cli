@@ -345,11 +345,15 @@ impl intuituive::app::Driver
 pub fn intuituive::app::Driver::accessibility(&self) -> alloc::vec::Vec<intuituive::a11y::AccessNode>
 pub fn intuituive::app::Driver::advance(&mut self, core::time::Duration)
 pub fn intuituive::app::Driver::assert_focused(&self, &str)
+pub fn intuituive::app::Driver::button(&mut self, rich_interact::event::Button, u16, u16)
 pub fn intuituive::app::Driver::check_focused(&self, &str) -> core::result::Result<(), alloc::string::String>
+pub fn intuituive::app::Driver::click(&mut self, u16, u16)
+pub fn intuituive::app::Driver::click_text(&mut self, &str) -> bool
 pub fn intuituive::app::Driver::copied(&mut self, &str)
 pub fn intuituive::app::Driver::cursor(&self) -> core::option::Option<(u16, u16)>
 pub fn intuituive::app::Driver::damage_since(&self, u64) -> core::option::Option<alloc::vec::Vec<rich_ext::surface::screen::Rect>>
 pub fn intuituive::app::Driver::event(&mut self, rich_interact::event::Event)
+pub fn intuituive::app::Driver::find_text(&self, &str) -> core::option::Option<(u16, u16)>
 pub fn intuituive::app::Driver::finish(self) -> alloc::string::String
 pub fn intuituive::app::Driver::focused(&self) -> core::option::Option<intuituive::reactive::NodeId>
 pub fn intuituive::app::Driver::focused_name(&self) -> core::option::Option<alloc::string::String>
@@ -383,6 +387,7 @@ pub fn intuituive::app::Driver::take_printed(&mut self) -> alloc::vec::Vec<alloc
 pub fn intuituive::app::Driver::timeout(&self, core::time::Duration) -> core::time::Duration
 pub fn intuituive::app::Driver::type_text(&mut self, &str)
 pub fn intuituive::app::Driver::update(&mut self, core::time::Duration)
+pub fn intuituive::app::Driver::wheel(&mut self, u16, u16, i32)
 impl intuituive::testing::ScreenRows for intuituive::app::Driver
 pub fn intuituive::app::Driver::plain_rows(&self) -> alloc::vec::Vec<alloc::string::String>
 impl intuituive::testing::StyledRows for intuituive::app::Driver
@@ -2897,6 +2902,7 @@ pub fn intuituive::node::Node::no_wrap(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_blur(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_cancel(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_click(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::on_click_at(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx, u16, u16) -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_drop<T: 'static>(self, impl core::ops::function::FnMut(&T, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_focus(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_key(self, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
@@ -4176,6 +4182,7 @@ pub fn intuituive::node::Node::no_wrap(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_blur(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_cancel(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_click(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::on_click_at(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx, u16, u16) -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_drop<T: 'static>(self, impl core::ops::function::FnMut(&T, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_focus(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_key(self, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
@@ -5278,7 +5285,7 @@ pub fn intuituive::tab_set::TabSet<T>::scoped<S: core::clone::Clone + 'static>(&
 pub fn intuituive::tab_set::TabSet<T>::swap(&self, isize)
 pub fn intuituive::tab_set::TabSet<T>::switch(&self, usize)
 pub fn intuituive::tab_set::TabSet<T>::tabs(&self) -> intuituive::reactive::Signal<alloc::vec::Vec<T>>
-pub fn intuituive::tab_set::TabSet<T>::titles(&self, impl core::ops::function::Fn(&T) -> alloc::string::String + 'static) -> impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String>
+pub fn intuituive::tab_set::TabSet<T>::titles<F: core::ops::function::Fn(&T) -> alloc::string::String + 'static>(&self, F) -> impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String> + use<T, F>
 pub fn intuituive::tab_set::TabSet<T>::update(&self, usize, impl core::ops::function::FnOnce(&mut T))
 pub fn intuituive::tab_set::TabSet<T>::update_active(&self, impl core::ops::function::FnOnce(&mut T))
 pub fn intuituive::tab_set::TabSet<T>::with_active<R>(&self, impl core::ops::function::FnOnce(&T) -> R) -> R
@@ -6316,7 +6323,7 @@ pub fn intuituive::tab_set::TabSet<T>::scoped<S: core::clone::Clone + 'static>(&
 pub fn intuituive::tab_set::TabSet<T>::swap(&self, isize)
 pub fn intuituive::tab_set::TabSet<T>::switch(&self, usize)
 pub fn intuituive::tab_set::TabSet<T>::tabs(&self) -> intuituive::reactive::Signal<alloc::vec::Vec<T>>
-pub fn intuituive::tab_set::TabSet<T>::titles(&self, impl core::ops::function::Fn(&T) -> alloc::string::String + 'static) -> impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String>
+pub fn intuituive::tab_set::TabSet<T>::titles<F: core::ops::function::Fn(&T) -> alloc::string::String + 'static>(&self, F) -> impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String> + use<T, F>
 pub fn intuituive::tab_set::TabSet<T>::update(&self, usize, impl core::ops::function::FnOnce(&mut T))
 pub fn intuituive::tab_set::TabSet<T>::update_active(&self, impl core::ops::function::FnOnce(&mut T))
 pub fn intuituive::tab_set::TabSet<T>::with_active<R>(&self, impl core::ops::function::FnOnce(&T) -> R) -> R
@@ -7658,11 +7665,15 @@ impl intuituive::app::Driver
 pub fn intuituive::app::Driver::accessibility(&self) -> alloc::vec::Vec<intuituive::a11y::AccessNode>
 pub fn intuituive::app::Driver::advance(&mut self, core::time::Duration)
 pub fn intuituive::app::Driver::assert_focused(&self, &str)
+pub fn intuituive::app::Driver::button(&mut self, rich_interact::event::Button, u16, u16)
 pub fn intuituive::app::Driver::check_focused(&self, &str) -> core::result::Result<(), alloc::string::String>
+pub fn intuituive::app::Driver::click(&mut self, u16, u16)
+pub fn intuituive::app::Driver::click_text(&mut self, &str) -> bool
 pub fn intuituive::app::Driver::copied(&mut self, &str)
 pub fn intuituive::app::Driver::cursor(&self) -> core::option::Option<(u16, u16)>
 pub fn intuituive::app::Driver::damage_since(&self, u64) -> core::option::Option<alloc::vec::Vec<rich_ext::surface::screen::Rect>>
 pub fn intuituive::app::Driver::event(&mut self, rich_interact::event::Event)
+pub fn intuituive::app::Driver::find_text(&self, &str) -> core::option::Option<(u16, u16)>
 pub fn intuituive::app::Driver::finish(self) -> alloc::string::String
 pub fn intuituive::app::Driver::focused(&self) -> core::option::Option<intuituive::reactive::NodeId>
 pub fn intuituive::app::Driver::focused_name(&self) -> core::option::Option<alloc::string::String>
@@ -7696,6 +7707,7 @@ pub fn intuituive::app::Driver::take_printed(&mut self) -> alloc::vec::Vec<alloc
 pub fn intuituive::app::Driver::timeout(&self, core::time::Duration) -> core::time::Duration
 pub fn intuituive::app::Driver::type_text(&mut self, &str)
 pub fn intuituive::app::Driver::update(&mut self, core::time::Duration)
+pub fn intuituive::app::Driver::wheel(&mut self, u16, u16, i32)
 impl intuituive::testing::ScreenRows for intuituive::app::Driver
 pub fn intuituive::app::Driver::plain_rows(&self) -> alloc::vec::Vec<alloc::string::String>
 impl intuituive::testing::StyledRows for intuituive::app::Driver
@@ -8238,6 +8250,7 @@ pub fn intuituive::node::Node::no_wrap(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_blur(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_cancel(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_click(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::on_click_at(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx, u16, u16) -> bool + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_drop<T: 'static>(self, impl core::ops::function::FnMut(&T, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_focus(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_key(self, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
@@ -8877,7 +8890,7 @@ pub fn intuituive::tab_set::TabSet<T>::scoped<S: core::clone::Clone + 'static>(&
 pub fn intuituive::tab_set::TabSet<T>::swap(&self, isize)
 pub fn intuituive::tab_set::TabSet<T>::switch(&self, usize)
 pub fn intuituive::tab_set::TabSet<T>::tabs(&self) -> intuituive::reactive::Signal<alloc::vec::Vec<T>>
-pub fn intuituive::tab_set::TabSet<T>::titles(&self, impl core::ops::function::Fn(&T) -> alloc::string::String + 'static) -> impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String>
+pub fn intuituive::tab_set::TabSet<T>::titles<F: core::ops::function::Fn(&T) -> alloc::string::String + 'static>(&self, F) -> impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String> + use<T, F>
 pub fn intuituive::tab_set::TabSet<T>::update(&self, usize, impl core::ops::function::FnOnce(&mut T))
 pub fn intuituive::tab_set::TabSet<T>::update_active(&self, impl core::ops::function::FnOnce(&mut T))
 pub fn intuituive::tab_set::TabSet<T>::with_active<R>(&self, impl core::ops::function::FnOnce(&T) -> R) -> R

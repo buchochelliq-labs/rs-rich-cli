@@ -784,6 +784,7 @@ pub fn rich_art::picture::Picture::lines(&self, &rich::console::Console, rich_ar
 pub fn rich_art::picture::Picture::new(image::images::dynimage::DynamicImage) -> rich_art::picture::Picture
 pub fn rich_art::picture::Picture::next(&self, image::images::dynimage::DynamicImage) -> rich_art::picture::Picture
 pub fn rich_art::picture::Picture::next_rgba(&self, u32, u32, alloc::vec::Vec<u8>) -> core::option::Option<rich_art::picture::Picture>
+pub fn rich_art::picture::Picture::prepare(&self, rich_art::picture::ImageView, usize, usize) -> bool
 pub fn rich_art::picture::Picture::release(u32) -> alloc::string::String
 pub fn rich_art::picture::Picture::still(&self) -> rich_art::picture::Picture
 pub fn rich_art::picture::Picture::version(&self) -> u32

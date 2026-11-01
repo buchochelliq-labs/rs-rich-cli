@@ -63,6 +63,7 @@ pub fn rich_embed::chrome::ChromeEngine::profile(self, impl core::convert::Into<
 pub fn rich_embed::chrome::ChromeEngine::screencast(self, bool) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::screencast_on_demand(self, bool) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::set_screencast(&mut self, bool) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::set_screencast_scale(&mut self, f64) -> std::io::error::Result<()>
 pub fn rich_embed::chrome::ChromeEngine::take_screencast(&mut self) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 impl core::default::Default for rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::default() -> Self
@@ -270,6 +271,7 @@ pub fn rich_embed::chrome::ChromeEngine::profile(self, impl core::convert::Into<
 pub fn rich_embed::chrome::ChromeEngine::screencast(self, bool) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::screencast_on_demand(self, bool) -> rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::set_screencast(&mut self, bool) -> std::io::error::Result<()>
+pub fn rich_embed::chrome::ChromeEngine::set_screencast_scale(&mut self, f64) -> std::io::error::Result<()>
 pub fn rich_embed::chrome::ChromeEngine::take_screencast(&mut self) -> core::option::Option<rich_embed::chrome::ScreencastFrame>
 impl core::default::Default for rich_embed::chrome::ChromeEngine
 pub fn rich_embed::chrome::ChromeEngine::default() -> Self
