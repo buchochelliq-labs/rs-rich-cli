@@ -5,8 +5,8 @@
 //! a normal user (CI runs them as one; as root Chrome refuses to start).
 
 use std::path::{Path, PathBuf};
-use std::sync::mpsc::{self, Receiver};
 use std::sync::Arc;
+use std::sync::mpsc::{self, Receiver};
 use std::time::{Duration, Instant};
 
 use noctiluca::cdp::{ChromeBackend, ChromeOptions};
@@ -64,10 +64,10 @@ impl Live {
     fn wait(&mut self, what: &str, ok: impl Fn(&Page) -> bool) -> Arc<Page> {
         let start = Instant::now();
         loop {
-            if let Some(page) = &self.page {
-                if ok(page) {
-                    return page.clone();
-                }
+            if let Some(page) = &self.page
+                && ok(page)
+            {
+                return page.clone();
             }
             assert!(
                 start.elapsed() < Duration::from_secs(30),
@@ -127,11 +127,13 @@ fn a_page_reads_links_follow_and_history_returns() {
     let page = live.wait("a still", |p| {
         p.media.first().is_some_and(|m| m.still.is_some())
     });
-    assert!(page.media[0]
-        .still
-        .as_ref()
-        .unwrap()
-        .starts_with(b"\x89PNG"));
+    assert!(
+        page.media[0]
+            .still
+            .as_ref()
+            .unwrap()
+            .starts_with(b"\x89PNG")
+    );
     // Follow the first link by its binding, as a hint does.
     let link = page.controls.iter().find(|c| c.role == Role::Link).unwrap();
     let id = live.tab.send(Command::Act {
@@ -415,9 +417,10 @@ fn a_lazy_image_loads_and_gets_its_still_when_scrolled_near() {
         p.media.iter().any(|m| m.still.is_some())
     });
     if let Some(node) = image {
-        assert!(page
-            .media
-            .iter()
-            .any(|m| m.node == node && m.still.is_some()));
+        assert!(
+            page.media
+                .iter()
+                .any(|m| m.node == node && m.still.is_some())
+        );
     }
 }

@@ -6,10 +6,10 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use rich_embed::{terminal_with, ExitStatus, ReplayHandle, ReplayHost};
+use rich_embed::{ExitStatus, ReplayHandle, ReplayHost, terminal_with};
+use rich_intuituive::Driver;
 use rich_intuituive::interact::{Button, Event, Key, Mouse, MouseKind};
 use rich_intuituive::prelude::*;
-use rich_intuituive::Driver;
 
 /// Turn the app's loop once: results from other threads, then a frame.
 fn turn(driver: &mut Driver) {

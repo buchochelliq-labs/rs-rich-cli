@@ -4,15 +4,14 @@
 use std::path::PathBuf;
 
 use rich::{ColorSystem, Console};
-use rich_ext::ansi_explain::{
-    escape_visible, explain, explain_bytes, sgr_effects, ExplanationView, Token, ViewMode,
-};
 use rich_ext::ConsoleExt;
+use rich_ext::ansi_explain::{
+    ExplanationView, Token, ViewMode, escape_visible, explain, explain_bytes, sgr_effects,
+};
 
 /// Output as a program might write it: a title, colours, a link, a cursor
 /// move and a truncated escape at the end.
-const CAPTURE: &str =
-    "\x1b]0;build\x07\x1b[1;32m✔\x1b[0m compiled \x1b[38;5;208m3 crates\x1b[39m\n\
+const CAPTURE: &str = "\x1b]0;build\x07\x1b[1;32m✔\x1b[0m compiled \x1b[38;5;208m3 crates\x1b[39m\n\
 \x1b]8;;https://ci.example/42\x1b\\log\x1b]8;;\x1b\\ \x1b[2K\x1b[1A\x1b[";
 
 // --8<-- [start:explain]

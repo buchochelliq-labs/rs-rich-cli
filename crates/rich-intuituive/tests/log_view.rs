@@ -2,12 +2,12 @@
 //! filters, keys and the wheel, the targets panel, and what a screen
 //! reader hears.
 
+use intuituive::Driver;
 use intuituive::a11y::Role;
 use intuituive::interact::{Event, Mouse, MouseKind};
 use intuituive::log::{LogLine, Severity, TargetLevel};
 use intuituive::prelude::*;
 use intuituive::widgets::Scrollbar;
-use intuituive::Driver;
 
 /// An app of a focusable log `rows` tall holding `lines` numbered lines,
 /// and the log.

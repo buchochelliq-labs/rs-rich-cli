@@ -9,7 +9,7 @@ use rich::protocol::Renderable;
 use rich::style::Style as CoreStyle;
 use rich_art::figlet::{FigletFont as CoreFont, FontError, Justify};
 
-use super::{bad_choice, path_arg, read_file, repr_str, FigletFontError, Shared};
+use super::{FigletFontError, Shared, bad_choice, path_arg, read_file, repr_str};
 use crate::renderable::{self, AsRenderable};
 use crate::style::resolved_style;
 

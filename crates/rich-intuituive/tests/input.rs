@@ -3,7 +3,7 @@
 use intuituive::a11y::Role;
 use intuituive::interact::Event;
 use intuituive::prelude::*;
-use intuituive::{assert_screen, Driver};
+use intuituive::{Driver, assert_screen};
 
 fn rows(driver: &Driver) -> Vec<String> {
     driver

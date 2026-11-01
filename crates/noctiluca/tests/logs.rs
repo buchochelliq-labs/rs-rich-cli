@@ -4,8 +4,8 @@
 //! ones come. No browser needed (`tests/live_logs.rs` runs them live).
 
 use noctiluca::adapt::{Adapt, Rule};
-use noctiluca::layout::{log_lines, project, scroll_log, Line, LogScroll, Marks};
-use noctiluca::model::{build, Entry, LogKind, Page, Revisions, Run};
+use noctiluca::layout::{Line, LogScroll, Marks, log_lines, project, scroll_log};
+use noctiluca::model::{Entry, LogKind, Page, Revisions, Run, build};
 use noctiluca::testing::snapshot_file;
 
 fn page(name: &str) -> Page {

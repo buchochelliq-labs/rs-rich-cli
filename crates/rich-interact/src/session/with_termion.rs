@@ -19,7 +19,7 @@ use std::time::Duration;
 use termion::raw::{IntoRawMode, RawTerminal};
 
 use super::WakeFd;
-use crate::event::{from_termion, Event, HeldButton};
+use crate::event::{Event, HeldButton, from_termion};
 
 /// termion's raw mode on the terminal, kept where the panic hook and the
 /// signal thread reach it.
@@ -196,7 +196,7 @@ impl Reader {
 
     /// Wait up to `wait` for input or a resize: (input, resized).
     fn wait(&self, wait: Duration, wake: Option<WakeFd>) -> io::Result<(bool, bool)> {
-        use filedescriptor::{poll, pollfd, POLLIN};
+        use filedescriptor::{POLLIN, poll, pollfd};
         let fd = |fd| pollfd {
             fd,
             events: POLLIN,
@@ -246,10 +246,10 @@ impl Reader {
             };
             let used = match cut {
                 Cut::Event(n) => {
-                    if let Some(event) = parse(&self.pending[..n]) {
-                        if let Some(event) = from_termion(event, &mut self.held) {
-                            self.events.push_back(event);
-                        }
+                    if let Some(event) = parse(&self.pending[..n])
+                        && let Some(event) = from_termion(event, &mut self.held)
+                    {
+                        self.events.push_back(event);
                     }
                     n
                 }

@@ -8,14 +8,14 @@ use pyo3::types::{PyString, PyTuple};
 use pyo3::{PyTraverseError, PyVisit};
 
 use rich::align::HorizontalAlign;
-use rich::protocol::Renderable;
 use rich::r#box::Box as CoreBox;
+use rich::protocol::Renderable;
 use rich::style::StyleType;
 use rich::{Panel as CorePanel, Style as CoreStyle};
 
 use crate::boxes::BoxArg;
 use crate::convert;
-use crate::limits::{check_size, MAX_CONSOLE_HEIGHT, MAX_CONSOLE_WIDTH};
+use crate::limits::{MAX_CONSOLE_HEIGHT, MAX_CONSOLE_WIDTH, check_size};
 use crate::renderable::{self, AsRenderable};
 use crate::style::{py_style_type, resolved_style, style_type};
 use crate::text::Text;
@@ -144,10 +144,10 @@ impl Panel {
         // Rich parses a `str` title with `Text.from_markup`, whatever the
         // console's `markup`, and raises on bad markup.
         for title in [&self.title, &self.subtitle] {
-            if let Some(Title::Markup(markup)) = title {
-                if markup.contains('[') {
-                    rich::Text::from_markup(markup).map_err(crate::color::markup::markup_error)?;
-                }
+            if let Some(Title::Markup(markup)) = title
+                && markup.contains('[')
+            {
+                rich::Text::from_markup(markup).map_err(crate::color::markup::markup_error)?;
             }
         }
         // `__clear__` (garbage collection) is the only thing that empties it.

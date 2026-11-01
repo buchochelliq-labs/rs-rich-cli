@@ -4,7 +4,7 @@
 use rich_interact::headless::{self, Script};
 use rich_interact::policy::{Fallback, Reason, ScriptedLineIo};
 use rich_interact::{
-    degrade, Answers, Component, FilePicker, Form, Input, Outcome, Paginator, PaginatorStyle, Value,
+    Answers, Component, FilePicker, Form, Input, Outcome, Paginator, PaginatorStyle, Value, degrade,
 };
 
 /// The last view before the form collapsed to its answers.
@@ -219,10 +219,12 @@ fn a_file_field_picks_with_the_file_picker() {
         Some(dir.path().join("b.txt").as_path())
     );
     assert!(record.frames[0].contains("❯ Source  (space to browse)"));
-    assert!(record
-        .frames
-        .iter()
-        .any(|frame| frame.contains("✗ nothing picked yet")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("✗ nothing picked yet"))
+    );
     let browsing = record
         .frames
         .iter()
@@ -334,13 +336,15 @@ fn every_new_field_degrades_to_lines() {
     // An option that is not offered is an error.
     let mut form = Form::new("X").multi("tags", "Tags", ["a"]);
     let mut io = ScriptedLineIo::new(["z"]);
-    assert!(degrade(
-        &mut form,
-        Fallback::Prompt,
-        Reason::StdinNotTerminal,
-        &mut io
-    )
-    .is_err());
+    assert!(
+        degrade(
+            &mut form,
+            Fallback::Prompt,
+            Reason::StdinNotTerminal,
+            &mut io
+        )
+        .is_err()
+    );
 }
 
 #[test]
@@ -375,10 +379,12 @@ fn a_paginator_pages_through_items() {
         "? Letters\n  a\n  b\n  ● ○ ○\n  ←/→ page · enter choose · esc cancel"
     );
     // The last page has one item.
-    assert!(record
-        .frames
-        .iter()
-        .any(|frame| frame.starts_with("? Letters\n  e\n  ○ ○ ●\n")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.starts_with("? Letters\n  e\n  ○ ○ ●\n"))
+    );
     assert_eq!(record.last_frame(), "? Letters › page 2 of 3");
 }
 
@@ -443,12 +449,14 @@ fn a_paginator_degrades_to_a_page_number() {
     assert_eq!(page, Some(2));
     assert_eq!(io.written, "P\n  a\n  b\n  c\nPage (1-3) [1]: ");
     let mut io = ScriptedLineIo::new(["9"]);
-    assert!(degrade(
-        &mut paginator,
-        Fallback::Prompt,
-        Reason::StdinNotTerminal,
-        &mut io
-    )
-    .is_err());
+    assert!(
+        degrade(
+            &mut paginator,
+            Fallback::Prompt,
+            Reason::StdinNotTerminal,
+            &mut io
+        )
+        .is_err()
+    );
     assert_eq!(paginator.default_value(), Some(2));
 }

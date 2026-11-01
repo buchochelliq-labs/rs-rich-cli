@@ -8,14 +8,19 @@
 
 use std::time::{Duration, SystemTime, UNIX_EPOCH};
 
-use intuituive::audio::{output, OutputOptions, RECORD_AUDIO_ENV};
+use intuituive::audio::{OutputOptions, RECORD_AUDIO_ENV, output};
 
 #[test]
 fn an_output_under_the_recorder_writes_its_sound_there_timed() {
     let dir = std::env::temp_dir().join(format!("intuituive-record-audio-{}", std::process::id()));
     let _ = std::fs::remove_dir_all(&dir);
     std::fs::create_dir_all(&dir).unwrap();
-    std::env::set_var(RECORD_AUDIO_ENV, &dir);
+    // SAFETY: this binary's only test, so no other thread touches the
+    // environment.
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::set_var(RECORD_AUDIO_ENV, &dir)
+    };
     let before = SystemTime::now();
     // A device output; under the recorder it opens even with no device.
     let speaker = output(OutputOptions::new().rate(8000).channels(1)).unwrap();
@@ -27,7 +32,11 @@ fn an_output_under_the_recorder_writes_its_sound_there_timed() {
     std::thread::sleep(Duration::from_millis(300));
     let after = SystemTime::now();
     drop(speaker);
-    std::env::remove_var(RECORD_AUDIO_ENV);
+    // SAFETY: as above; the output and its threads have ended.
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::remove_var(RECORD_AUDIO_ENV)
+    };
 
     let files: Vec<_> = std::fs::read_dir(&dir)
         .unwrap()

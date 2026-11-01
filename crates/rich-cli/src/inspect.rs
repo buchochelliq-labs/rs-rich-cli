@@ -6,6 +6,7 @@
 //! text exactly as upstream's does; detection is something a user asks for.
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Text};
+use rich_ext::ExtensionRegistry;
 use rich_ext::data::transform::{Document, Filter, Highlight, Redact, Select};
 use rich_ext::data::{
     self, DiffView, Explorer, FlatView, Format, Node, Redaction, SearchQuery, SearchResults,
@@ -13,7 +14,6 @@ use rich_ext::data::{
 };
 use rich_ext::table::StyleRules;
 use rich_ext::transform::{HighlightMatches, KeepLines, Pipeline, PipelineError};
-use rich_ext::ExtensionRegistry;
 use std::borrow::Cow;
 
 /// `--format`'s value: a named format, or `auto` to detect one.
@@ -527,10 +527,12 @@ mod tests {
             text.text_pipeline(&registry).unwrap().names(),
             ["--filter", "--highlight"]
         );
-        assert!(DataOptions::default()
-            .document_pipeline()
-            .unwrap()
-            .is_empty());
+        assert!(
+            DataOptions::default()
+                .document_pipeline()
+                .unwrap()
+                .is_empty()
+        );
     }
 
     struct Upper;
@@ -573,10 +575,12 @@ mod tests {
         assert_eq!(pipeline.apply(Text::new("x\ny")).unwrap().plain(), "X");
         // Checked without the registry before plugins load.
         assert!(options.check_transforms(false).is_ok());
-        assert!(options
-            .check_transforms(true)
-            .unwrap_err()
-            .contains("not --inspect"));
+        assert!(
+            options
+                .check_transforms(true)
+                .unwrap_err()
+                .contains("not --inspect")
+        );
 
         let unknown = parsed(&["--transform", "lower"]).unwrap();
         assert_eq!(
@@ -709,13 +713,17 @@ mod tests {
 
     #[test]
     fn view_options_are_exclusive() {
-        assert!(parsed(&["--flatten", "--table"])
-            .unwrap()
-            .validate()
-            .is_err());
-        assert!(parsed(&["--flatten", "--select", "$.a"])
-            .unwrap()
-            .validate()
-            .is_ok());
+        assert!(
+            parsed(&["--flatten", "--table"])
+                .unwrap()
+                .validate()
+                .is_err()
+        );
+        assert!(
+            parsed(&["--flatten", "--select", "$.a"])
+                .unwrap()
+                .validate()
+                .is_ok()
+        );
     }
 }

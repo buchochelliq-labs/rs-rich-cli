@@ -14,8 +14,8 @@ use rich_interact::{Component, Context, Event, Flow, KeyCode, MouseKind};
 use crate::app::Ctx;
 use crate::border::{Border, Edge, Lattice, Shadow, Sides, Title};
 use crate::layout::{
-    grow_for_span, offsets, place, solve, Align, AlignContent, Justify, Size, StackLayout,
-    TextAlign, Track,
+    Align, AlignContent, Justify, Size, StackLayout, TextAlign, Track, grow_for_span, offsets,
+    place, solve,
 };
 use crate::node::{Axis, Handler, Node};
 use crate::reactive::{NodeId, Runtime, Signal};

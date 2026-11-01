@@ -9,7 +9,7 @@ use std::rc::Rc;
 use intuituive::multi_select;
 use intuituive::prelude::*;
 use intuituive::widgets::{
-    table_with, virtual_table_with, Column, HighlightLayer, Order, TableLayout, TableOptions,
+    Column, HighlightLayer, Order, TableLayout, TableOptions, table_with, virtual_table_with,
 };
 
 fn plain(driver: &intuituive::Driver) -> Vec<String> {
@@ -189,9 +189,11 @@ fn priorities_drop_whole_columns_and_keep_a_flexible_one() {
                 Column::new("W/s", Size::Fixed(4)).priority(1),
             ];
             let rows = || {
-                vec![["1", "systemd", "0.3", "1K", "2K"]
-                    .map(String::from)
-                    .to_vec()]
+                vec![
+                    ["1", "systemd", "0.3", "1K", "2K"]
+                        .map(String::from)
+                        .to_vec(),
+                ]
             };
             table_with(columns, rows, signal(0), TableOptions::default())
         });
@@ -268,10 +270,9 @@ fn rows_of_their_own_heights_in_a_virtual_table() {
             count.set(count.get() + 1);
             vec![format!("row {i} is long enough to wrap")]
         };
-        let options =
-            TableOptions::default()
-                .multiline()
-                .row_height_for(|i| if i % 2 == 0 { 1 } else { 2 });
+        let options = TableOptions::default()
+            .multiline()
+            .row_height_for(|i| if i % 2 == 0 { 1 } else { 2 });
         let columns = vec![Column::new("Text", Size::Flex(1))];
         virtual_table_with(columns, || 1_000_000, row, signal(0), options)
             .on_key("q", |cx| cx.quit())

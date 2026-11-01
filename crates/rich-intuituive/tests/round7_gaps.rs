@@ -4,8 +4,8 @@
 //! disk), focus-scope cycling past hidden panes (http, top), and a tree
 //! table (top, tasks).
 
-use intuituive::prelude::*;
 use intuituive::Driver;
+use intuituive::prelude::*;
 
 fn rows(driver: &Driver) -> Vec<String> {
     driver.screen().plain()
@@ -213,9 +213,9 @@ fn a_hidden_pane_that_cannot_be_revealed_is_passed_by() {
 mod tree_tables {
     use std::collections::HashSet;
 
-    use intuituive::prelude::*;
-    use intuituive::widgets::{tree_table, Column, TreeRow, TreeTableOptions};
     use intuituive::Driver;
+    use intuituive::prelude::*;
+    use intuituive::widgets::{Column, TreeRow, TreeTableOptions, tree_table};
 
     fn rows(driver: &Driver) -> Vec<String> {
         driver
@@ -358,8 +358,10 @@ mod tree_tables {
         let app = App::new(|| {
             let collapsed = signal(HashSet::from([2u32]));
             let rows = || {
-                vec![TreeRow::new(1, ["a"])
-                    .children([TreeRow::new(2, ["b"]).children([TreeRow::new(3, ["c"])])])]
+                vec![
+                    TreeRow::new(1, ["a"])
+                        .children([TreeRow::new(2, ["b"]).children([TreeRow::new(3, ["c"])])]),
+                ]
             };
             tree_table(
                 vec![Column::new("", Size::Auto)],

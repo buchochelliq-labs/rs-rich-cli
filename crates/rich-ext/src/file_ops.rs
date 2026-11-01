@@ -223,10 +223,10 @@ pub fn run(op: &Op, cancel: &CancelToken, progress: &mut dyn FnMut(&Progress)) -
                 ..
             } => runner.link(path, into, *kind, *conflict),
         };
-        if let Err(error) = done {
-            if error.kind() != io::ErrorKind::Interrupted {
-                runner.report.errors.push(format!("{name}: {error}"));
-            }
+        if let Err(error) = done
+            && error.kind() != io::ErrorKind::Interrupted
+        {
+            runner.report.errors.push(format!("{name}: {error}"));
         }
     }
     runner.progress.current = None;

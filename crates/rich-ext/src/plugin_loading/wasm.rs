@@ -12,13 +12,13 @@
 use std::path::Path;
 use std::sync::Arc;
 
-use rich_plugin_api::abi::{wasm as names, PluginAbi};
+use rich_plugin_api::abi::{PluginAbi, wasm as names};
 use wasmi::{
     Config, EnforcedLimits, Engine, ExternType, Instance, Linker, Memory, Module, Store,
     StoreLimits, StoreLimitsBuilder, TrapCode,
 };
 
-use super::{AbiBackend, LoadError, RuntimeKind, RuntimePlugin, WasmLimits, MAX_OUTPUT_BYTES};
+use super::{AbiBackend, LoadError, MAX_OUTPUT_BYTES, RuntimeKind, RuntimePlugin, WasmLimits};
 
 /// Bytes in a WASM page.
 const PAGE: u64 = 64 * 1024;

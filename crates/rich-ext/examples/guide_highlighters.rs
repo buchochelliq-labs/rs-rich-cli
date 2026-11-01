@@ -11,8 +11,8 @@ use rich::protocol::{
     CodeHighlighter, HighlightError, HighlightSpan, HighlightedCode, HighlightedLine,
 };
 use rich::{ColorSystem, Console, Style, Syntax, SyntectHighlighter};
-use rich_ext::testing::conformance;
 use rich_ext::ExtensionRegistry;
+use rich_ext::testing::conformance;
 
 // --8<-- [start:adapter]
 /// Highlights a handful of Rust keywords, and nothing else.

@@ -13,7 +13,7 @@ use rich::cells::cell_len;
 use rich::text::Text;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
-use super::{control_free, scan_line, secret_flag, Detector, Match, Redactor, Rule};
+use super::{Detector, Match, Redactor, Rule, control_free, scan_line, secret_flag};
 
 /// One span a [`Redactor`] would mask, found by a preview.
 #[derive(Clone, Debug, PartialEq, Eq)]

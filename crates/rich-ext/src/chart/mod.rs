@@ -114,7 +114,7 @@ mod xy;
 pub use bar::{Bar, BarChart, BarGroup, Histogram, Orientation};
 pub use bar_spectrum::BarSpectrum;
 pub use canvas::DotCanvas;
-pub use distribution::{quantile, Distribution, DistributionSet, Summary};
+pub use distribution::{Distribution, DistributionSet, Summary, quantile};
 pub use gauge::{Band, BulletChart, Gauge};
 pub use heatmap::Heatmap;
 pub use kpi::KpiCard;
@@ -283,11 +283,11 @@ impl Line {
             return;
         }
         self.width += text.chars().map(char_cell_width).sum::<usize>();
-        if let Some((last, last_style)) = self.spans.last_mut() {
-            if *last_style == style {
-                last.push_str(text);
-                return;
-            }
+        if let Some((last, last_style)) = self.spans.last_mut()
+            && *last_style == style
+        {
+            last.push_str(text);
+            return;
         }
         self.spans.push((text.to_string(), style));
     }

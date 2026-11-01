@@ -27,11 +27,11 @@ use std::time::Duration;
 use rich::Segment;
 
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{fit, highlight, pad, plain, question, text, Theme};
+use crate::components::{Theme, fit, highlight, pad, plain, question, text};
 use crate::event::{Button, Event, Key, KeyCode, Modifiers, Mouse, MouseKind};
 use crate::fuzzy::rank;
 use crate::item::{Action, ActionTarget, Actions, Item, TargetKind};
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::kit::{ActionMenu, Divider, FilterState, ListState, MenuReply};
 use crate::policy::{LineIo, NotInteractive};
 

@@ -44,7 +44,7 @@ use crate::app::{Anchor, Ctx, Placement};
 use crate::layout::Size;
 use crate::node::{Axis, Node};
 use crate::screen::Rect;
-use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
+use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, widget};
 
 type Action = Rc<RefCell<dyn FnMut(&mut Ctx)>>;
 
@@ -531,7 +531,7 @@ impl Widget for MenuBar {
                     self.selected.get() + 1
                 }),
                 KeyCode::Enter | KeyCode::Down | KeyCode::Char(' ') => {
-                    return self.open(cx, self.selected.get())
+                    return self.open(cx, self.selected.get());
                 }
                 _ => return Used::No,
             },

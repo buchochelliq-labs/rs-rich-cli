@@ -771,9 +771,11 @@ fn bench_compare_reports_success_neutralises_names_and_flags_zero_baselines() {
     );
     assert!(out.status.success(), "{out:?}");
     assert!(!has_esc(&out.stdout), "{:?}", text(&out.stdout));
-    assert!(text(&out.stdout)
-        .lines()
-        .all(|line| line.chars().count() <= 60));
+    assert!(
+        text(&out.stdout)
+            .lines()
+            .all(|line| line.chars().count() <= 60)
+    );
     let report: serde_json::Value = serde_json::from_slice(&out.stderr).unwrap();
     assert_eq!(report["ok"], true, "{report}");
     assert_eq!(report["exit_code"], 0, "{report}");
@@ -865,11 +867,7 @@ fn sixel_on_an_unrecognised_terminal_says_how_to_force_it() {
 /// `EILSEQ`, which a filesystem that only stores UTF-8 names returns.
 #[cfg(unix)]
 fn libc_eilseq() -> i32 {
-    if cfg!(target_os = "linux") {
-        84
-    } else {
-        92
-    }
+    if cfg!(target_os = "linux") { 84 } else { 92 }
 }
 
 /// A file named by an argument that is not valid Unicode is opened by its

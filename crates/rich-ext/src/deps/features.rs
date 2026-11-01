@@ -66,7 +66,7 @@ use std::collections::{BTreeMap, BTreeSet, HashMap};
 use rich::{Console, ConsoleOptions, Renderable, Segment, Text, Tree};
 use serde_json::Value;
 
-use super::{check_count, clean, compare_versions, stack, stack_measure, theme_style, DepsError};
+use super::{DepsError, check_count, clean, compare_versions, stack, stack_measure, theme_style};
 
 /// A dependency as a package's `Cargo.toml` declares it.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -367,10 +367,10 @@ impl FeatureGraph {
             let mut via = Vec::new();
             for feature in &krate.enabled {
                 for entry in krate.definitions.get(feature).into_iter().flatten() {
-                    if let Some((key, turns_on)) = entry.split_once('/') {
-                        if keys.contains(key.trim_end_matches('?')) {
-                            via.push((feature.clone(), turns_on.to_string()));
-                        }
+                    if let Some((key, turns_on)) = entry.split_once('/')
+                        && keys.contains(key.trim_end_matches('?'))
+                    {
+                        via.push((feature.clone(), turns_on.to_string()));
                     }
                 }
             }
@@ -745,9 +745,11 @@ mod tests {
         assert!(FeatureTree::new(graph, Some("nope")).is_err());
         let unknown = r#"{"packages": [], "workspace_members": [],
             "resolve": {"nodes": [{"id": "x 1.0.0"}]}}"#;
-        assert!(FeatureGraph::from_json(unknown)
-            .unwrap_err()
-            .to_string()
-            .contains("unknown package"));
+        assert!(
+            FeatureGraph::from_json(unknown)
+                .unwrap_err()
+                .to_string()
+                .contains("unknown package")
+        );
     }
 }

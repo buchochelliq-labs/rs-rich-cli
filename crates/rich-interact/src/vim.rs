@@ -582,16 +582,17 @@ impl Vim {
             return if busy { ModeKey::Used } else { ModeKey::Unused };
         }
         // A count.
-        if let Some(d @ '0'..='9') = char {
-            if (d != '0' || self.count.is_some()) && self.pending.is_none() {
-                let n = d.to_digit(10).unwrap_or(0) as usize;
-                self.count = Some(self.count.unwrap_or(0).saturating_mul(10).saturating_add(n));
-                self.count_given = true;
-                if self.operator.is_none() {
-                    self.count_keys.push(key);
-                }
-                return ModeKey::Used;
+        if let Some(d @ '0'..='9') = char
+            && (d != '0' || self.count.is_some())
+            && self.pending.is_none()
+        {
+            let n = d.to_digit(10).unwrap_or(0) as usize;
+            self.count = Some(self.count.unwrap_or(0).saturating_mul(10).saturating_add(n));
+            self.count_given = true;
+            if self.operator.is_none() {
+                self.count_keys.push(key);
             }
+            return ModeKey::Used;
         }
         if key == Key::ctrl('r') {
             if cx.editable {
@@ -930,20 +931,17 @@ impl KeyMode for Vim {
         } else {
             self.command(key, cx)
         };
-        if recording {
-            if let Some(keys) = self.recording.as_mut() {
-                keys.push(key);
-            }
+        if recording && let Some(keys) = self.recording.as_mut() {
+            keys.push(key);
         }
         // A change ends back in normal mode with nothing waiting.
         if self.mode == VimMode::Normal
             && self.operator.is_none()
             && self.pending.is_none()
             && !self.replaying
+            && let Some(keys) = self.recording.take()
         {
-            if let Some(keys) = self.recording.take() {
-                self.last_change = keys;
-            }
+            self.last_change = keys;
         }
         out
     }

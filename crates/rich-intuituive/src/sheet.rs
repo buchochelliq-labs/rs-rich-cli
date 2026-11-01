@@ -784,8 +784,8 @@ fn parse_media(query: &str) -> Result<Media, String> {
             "max-height" => &mut media.max_height,
             other => {
                 return Err(format!(
-                "unknown media feature `{other}`: min-width, max-width, min-height or max-height"
-            ))
+                    "unknown media feature `{other}`: min-width, max-width, min-height or max-height"
+                ));
             }
         };
         *slot = Some(cells);
@@ -943,10 +943,10 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
                 }
                 _ => {
                     return Err(format!(
-                    "`{value}`: a border is none, round, square, heavy, double, ascii, a dashed \
+                        "`{value}`: a border is none, round, square, heavy, double, ascii, a dashed \
                          kind (dashed, light-triple-dashed, ...) or quadrant-inside or \
                          quadrant-outside, then a colour"
-                ))
+                    ));
                 }
             };
             let color = words.next().map(paint).transpose()?;
@@ -989,7 +989,7 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
                     _ => {
                         return Err(format!(
                             "`{word}`: border-sides names top, right, bottom and left (or all, or none)"
-                        ))
+                        ));
                     }
                 };
             }
@@ -1002,7 +1002,7 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
                 _ => {
                     return Err(format!(
                         "`{value}`: border-collapse is collapse or separate"
-                    ))
+                    ));
                 }
             })
         }
@@ -1015,7 +1015,7 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
                 _ => {
                     return Err(format!(
                         "`{value}`: text-align is left, center, right or justify"
-                    ))
+                    ));
                 }
             })
         }
@@ -1034,7 +1034,7 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
                 _ => {
                     return Err(format!(
                         "`{value}`: text-overflow is clip, ellipsis or fold"
-                    ))
+                    ));
                 }
             })
         }
@@ -1099,7 +1099,7 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
                     return Err(format!(
                         "`{value}`: justify-content is flex-start, center, flex-end, \
                          space-between, space-around or space-evenly"
-                    ))
+                    ));
                 }
             })
         }
@@ -1123,7 +1123,7 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
                     return Err(format!(
                         "`{value}`: align-content is flex-start, center, flex-end, \
                          space-between, space-around, space-evenly or stretch"
-                    ))
+                    ));
                 }
             })
         }
@@ -1146,7 +1146,7 @@ fn align(value: &str, auto: bool) -> Result<Option<Align>, String> {
                 "`{value}`: {} is flex-start, center, flex-end or stretch{}",
                 if auto { "align-self" } else { "align-items" },
                 if auto { " (or auto)" } else { "" }
-            ))
+            ));
         }
     }))
 }
@@ -1441,9 +1441,11 @@ mod tests {
             focus: &[],
             hover: &[],
         };
-        assert!(sheet
-            .style(std::slice::from_ref(&field), &states, &no_vars, WIDE)
-            .is_none());
+        assert!(
+            sheet
+                .style(std::slice::from_ref(&field), &states, &no_vars, WIDE)
+                .is_none()
+        );
         field.error = true;
         let style = sheet.style(&[field], &states, &no_vars, WIDE).unwrap();
         assert_eq!(style, Style::parse("bold red").unwrap());

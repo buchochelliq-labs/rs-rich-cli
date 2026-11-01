@@ -5,7 +5,7 @@ use std::collections::{HashMap, HashSet};
 use rich::{Console, ConsoleOptions, Overflow, Renderable, Segment, Style, Text};
 
 use super::explorer::fit_quoted;
-use super::{flatten, scalar_text, style, summary, value_eq, Node, Path, Value};
+use super::{Node, Path, Value, flatten, scalar_text, style, summary, value_eq};
 use crate::event::flatten as join_lines;
 
 /// What happened to a leaf.

@@ -23,7 +23,7 @@ use std::rc::Rc;
 use std::time::Instant;
 
 use rich::segment::Segment;
-use rich_art::picture::{picture_bytes, ByteBudget, Pacer, Player};
+use rich_art::picture::{ByteBudget, Pacer, Player, picture_bytes};
 use rich_intuituive::{ImageFit, ImageView, Picture, Pixels};
 
 use crate::config::Images;
@@ -317,18 +317,16 @@ impl Motion {
         now: Instant,
     ) -> &mut Moving {
         let stale = self.playing.get(&node).is_none_or(|m| m.of != *animation);
-        if stale {
-            if let Some(player) = Player::new(animation, now) {
-                self.playing.insert(
-                    node,
-                    Moving {
-                        of: animation.clone(),
-                        bytes: picture_bytes(animation.id()),
-                        player,
-                        pacer: Pacer::new(pixels, region.cols, region.rows),
-                    },
-                );
-            }
+        if stale && let Some(player) = Player::new(animation, now) {
+            self.playing.insert(
+                node,
+                Moving {
+                    of: animation.clone(),
+                    bytes: picture_bytes(animation.id()),
+                    player,
+                    pacer: Pacer::new(pixels, region.cols, region.rows),
+                },
+            );
         }
         let moving = self.playing.get_mut(&node).expect("made above");
         moving.pacer.resize(region.cols, region.rows);
@@ -421,9 +419,11 @@ mod tests {
             assert_eq!(shown[&7].picture, held);
         }
         // Out of view: not stepped, not shown.
-        assert!(motion
-            .step(&page, &[REGION], 20..30, Pixels::Sixel, false, start)
-            .is_empty());
+        assert!(
+            motion
+                .step(&page, &[REGION], 20..30, Pixels::Sixel, false, start)
+                .is_empty()
+        );
     }
 
     #[test]

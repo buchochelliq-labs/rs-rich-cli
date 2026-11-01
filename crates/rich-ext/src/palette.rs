@@ -50,20 +50,12 @@ use rich::Color;
 
 /// `x` clamped to `0..=1`; NaN is 0.
 fn unit(x: f64) -> f64 {
-    if x.is_nan() {
-        0.0
-    } else {
-        x.clamp(0.0, 1.0)
-    }
+    if x.is_nan() { 0.0 } else { x.clamp(0.0, 1.0) }
 }
 
 /// `x`, or 0 when it is not finite.
 fn finite(x: f64) -> f64 {
-    if x.is_finite() {
-        x
-    } else {
-        0.0
-    }
+    if x.is_finite() { x } else { 0.0 }
 }
 
 /// A hue in degrees, wrapped to `0..360`; not finite is 0.

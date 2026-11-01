@@ -54,8 +54,8 @@ use rich_interact::MouseKind;
 
 use crate::app::{Ctx, Easing};
 use crate::node::{Axis, Node};
-use crate::pixels::{half_block, PixelSprite, Rgba};
-use crate::reactive::{signal, Runtime, Signal};
+use crate::pixels::{PixelSprite, Rgba, half_block};
+use crate::reactive::{Runtime, Signal, signal};
 use crate::screen::{Rect, Screen};
 use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
 
@@ -1145,11 +1145,11 @@ impl<K: Clone + PartialEq + 'static> Widget for Stage<K> {
             if p.tween.is_some_and(|t| !t.done(now)) {
                 wake = Some(wake.map_or(now + FRAME, |w| w.min(now + FRAME)));
             }
-            if p.frame.is_none() {
-                if let Some(left) = p.sprite.next_change(now.saturating_sub(p.start)) {
-                    let at = now.max(p.start) + left;
-                    wake = Some(wake.map_or(at, |w| w.min(at)));
-                }
+            if p.frame.is_none()
+                && let Some(left) = p.sprite.next_change(now.saturating_sub(p.start))
+            {
+                let at = now.max(p.start) + left;
+                wake = Some(wake.map_or(at, |w| w.min(at)));
             }
             self.drawn.push((p.id.clone(), r.x, r.y, r.raster));
         }

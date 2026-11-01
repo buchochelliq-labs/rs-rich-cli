@@ -3,10 +3,10 @@
 
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Text};
-use rich_art::figlet::{self, FigletFont};
 use rich_art::Justify;
+use rich_art::figlet::{self, FigletFont};
 
-use crate::node::{described, Node};
+use crate::node::{Node, described};
 
 /// Console markup in FIGlet letters (rs-rich-art's bundled `standard`
 /// font, six rows a line), from a closure that may read signals: a large
@@ -199,10 +199,12 @@ mod tests {
         assert_eq!(rows.len(), 6);
         assert_eq!(rows[0].len(), 2);
         let plain = Console::builder().width(3).color_system(None).build();
-        assert!(plain
-            .render_export(&big)
-            .lines()
-            .all(|l| l.chars().count() <= 3));
+        assert!(
+            plain
+                .render_export(&big)
+                .lines()
+                .all(|l| l.chars().count() <= 3)
+        );
     }
 
     #[test]

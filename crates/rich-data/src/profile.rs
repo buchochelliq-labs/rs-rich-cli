@@ -72,15 +72,15 @@ use rich_ext::sanitize::sanitize_single_line;
 use rich_ext::table::StyleRules;
 use serde::{Deserialize, Serialize};
 
-use crate::infer::{parse_float, Inferrer, DEFAULT_NULL_TOKENS};
-use crate::stats::{number, ColumnStats, Stats, StatsOptions};
+use crate::infer::{DEFAULT_NULL_TOKENS, Inferrer, parse_float};
+use crate::stats::{ColumnStats, Stats, StatsOptions, number};
 use crate::{DataError, Row, RowSource, Rows, Value};
 
 pub mod nested;
 
 pub use nested::{
-    path_key, JsonProfiler, PathSummary, TypeCounts, DEFAULT_DEPTH, DEFAULT_MAX_PATHS,
-    MAX_MALFORMED_LINES,
+    DEFAULT_DEPTH, DEFAULT_MAX_PATHS, JsonProfiler, MAX_MALFORMED_LINES, PathSummary, TypeCounts,
+    path_key,
 };
 
 /// The rows a profile keeps by default.
@@ -909,24 +909,24 @@ impl Renderable for Profile {
                 None if container => {}
                 None => text(Text::styled("no values", note.clone()), 2, &mut lines),
             }
-            if let Distribution::Top { values, other } = &c.distribution {
-                if *other > 0 {
-                    let more = c.distinct.saturating_sub(values.len()) as u64;
-                    text(
-                        Text::styled(
-                            format!(
-                                "+ {} other {} ({} {})",
-                                grouped(more),
-                                plural(more, "value", "values"),
-                                grouped(*other as u64),
-                                plural(*other as u64, "cell", "cells"),
-                            ),
-                            note.clone(),
+            if let Distribution::Top { values, other } = &c.distribution
+                && *other > 0
+            {
+                let more = c.distinct.saturating_sub(values.len()) as u64;
+                text(
+                    Text::styled(
+                        format!(
+                            "+ {} other {} ({} {})",
+                            grouped(more),
+                            plural(more, "value", "values"),
+                            grouped(*other as u64),
+                            plural(*other as u64, "cell", "cells"),
                         ),
-                        2,
-                        &mut lines,
-                    );
-                }
+                        note.clone(),
+                    ),
+                    2,
+                    &mut lines,
+                );
             }
         }
 
@@ -1364,11 +1364,7 @@ fn grouped(n: u64) -> String {
 }
 
 fn plural(n: u64, one: &'static str, many: &'static str) -> &'static str {
-    if n == 1 {
-        one
-    } else {
-        many
-    }
+    if n == 1 { one } else { many }
 }
 
 #[cfg(test)]

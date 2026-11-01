@@ -17,8 +17,8 @@
 
 use std::collections::HashMap;
 
-use rich::cells::cell_len;
 use rich::Text;
+use rich::cells::cell_len;
 
 use crate::adapt::{Adapt, Rule};
 use crate::engine::NodeId;
@@ -226,14 +226,14 @@ fn run_style(run: &Run, base: &str, page: &Page, adapt: Adapt) -> String {
     if run.picture.is_some() {
         parts.push("italic bright_black");
     }
-    if let Some(control) = run.control.and_then(|i| page.controls.get(i)) {
-        if control.role == Role::Link {
-            parts.push(if raw && color.is_some() {
-                "underline"
-            } else {
-                "underline bright_blue"
-            });
-        }
+    if let Some(control) = run.control.and_then(|i| page.controls.get(i))
+        && control.role == Role::Link
+    {
+        parts.push(if raw && color.is_some() {
+            "underline"
+        } else {
+            "underline bright_blue"
+        });
     }
     parts.join(" ")
 }
@@ -251,15 +251,16 @@ fn spans(runs: &[Run], base: &str, page: &Page, marks: &Marks) -> Vec<Span> {
         {
             continue;
         }
-        if run.control.is_some() && run.control != last {
-            if let Some(label) = run.control.and_then(|c| marks.hints.get(&c)) {
-                out.push(Span {
-                    text: format!("[{label}]"),
-                    style: "bold black on yellow".into(),
-                    control: run.control,
-                    picture: None,
-                });
-            }
+        if run.control.is_some()
+            && run.control != last
+            && let Some(label) = run.control.and_then(|c| marks.hints.get(&c))
+        {
+            out.push(Span {
+                text: format!("[{label}]"),
+                style: "bold black on yellow".into(),
+                control: run.control,
+                picture: None,
+            });
         }
         last = run.control;
         // A small picture in the line keeps its cells, its alt text
@@ -357,10 +358,10 @@ pub fn wrap(spans: &[Span], width: usize, first: &[Span], rest: &[Span]) -> Vec<
         let w = cell_len(&word);
         if used + w > width && !start_of_line {
             // Drop the trailing space before breaking.
-            if let Some(last) = line.spans.last_mut() {
-                if last.text.ends_with(' ') {
-                    last.text.pop();
-                }
+            if let Some(last) = line.spans.last_mut()
+                && last.text.ends_with(' ')
+            {
+                last.text.pop();
             }
             lines.push(std::mem::replace(
                 &mut line,
@@ -1212,10 +1213,10 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                 // A picture the page does not caption gets its alt text
                 // under it, as the PoC showed it; not a small one (an
                 // avatar, an icon), whose alt text is noise.
-                if let Some(mark) = play_mark(media, w) {
-                    if let Some(last) = lines.last_mut() {
-                        *last = mark;
-                    }
+                if let Some(mark) = play_mark(media, w)
+                    && let Some(last) = lines.last_mut()
+                {
+                    *last = mark;
                 }
                 let x1 = if captioned { wide.max(m1) } else { m1 };
                 if captioned {
@@ -1314,10 +1315,10 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     _ => "",
                 };
                 let mut first = Vec::new();
-                if let BlockKind::ListItem { marker, .. } = kind {
-                    if !marker.is_empty() {
-                        first.push(Span::new(format!("{marker} "), "bright_black"));
-                    }
+                if let BlockKind::ListItem { marker, .. } = kind
+                    && !marker.is_empty()
+                {
+                    first.push(Span::new(format!("{marker} "), "bright_black"));
                 }
                 items.push(text_item(
                     block.node,
@@ -1630,19 +1631,19 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     }
                     x += w;
                 }
-                if let Some(src) = &span.picture {
-                    if x > start {
-                        inline.push((
-                            Region {
-                                row,
-                                column: start,
-                                cols: x - start,
-                                rows: 1,
-                                media: usize::MAX,
-                            },
-                            src.clone(),
-                        ));
-                    }
+                if let Some(src) = &span.picture
+                    && x > start
+                {
+                    inline.push((
+                        Region {
+                            row,
+                            column: start,
+                            cols: x - start,
+                            rows: 1,
+                            media: usize::MAX,
+                        },
+                        src.clone(),
+                    ));
                 }
             }
         }
@@ -1703,11 +1704,11 @@ pub fn project(page: &Page, columns: u16, cell: (f64, f64), marks: &Marks) -> Pr
                     }),
                 }
             }
-            if let Some(last) = line.spans.last_mut() {
-                if last.style.is_empty() {
-                    let trimmed = last.text.trim_end().len();
-                    last.text.truncate(trimmed);
-                }
+            if let Some(last) = line.spans.last_mut()
+                && last.style.is_empty()
+            {
+                let trimmed = last.text.trim_end().len();
+                last.text.truncate(trimmed);
             }
             line.spans.retain(|s| !s.text.is_empty());
             line

@@ -95,21 +95,21 @@ mod wav;
 
 #[cfg(feature = "audio")]
 pub use capture::{
-    devices, devices_on, input, messages, open, AudioOptions, Device, DeviceConfig, Host,
+    AudioOptions, Device, DeviceConfig, Host, devices, devices_on, input, messages, open,
 };
 pub use live::Capture;
 pub use mixer::{Mixer, Voice};
 #[cfg(feature = "audio")]
 pub use output::{
-    output, output_devices, output_with, Output, OutputOptions, Tap, RECORD_AUDIO_ENV,
+    Output, OutputOptions, RECORD_AUDIO_ENV, Tap, output, output_devices, output_with,
 };
-pub use pcm::{deinterleave, pcm, play, Format, Pcm};
+pub use pcm::{Format, Pcm, deinterleave, pcm, play};
 #[cfg(feature = "audio")]
 pub use picker::picker;
-pub use player::{player, Player, PlayerOptions};
-pub use source::{clip, open_source, Clip, Source};
+pub use player::{Player, PlayerOptions, player};
+pub use source::{Clip, Source, clip, open_source};
 #[cfg(feature = "wav")]
-pub use wav::{record, wav, wav_writer, Recording, Wav, WavWriter};
+pub use wav::{Recording, Wav, WavWriter, record, wav, wav_writer};
 
 /// One buffer of samples: one row a channel, each sample from -1 to 1.
 pub type Matrix = Vec<Vec<f64>>;

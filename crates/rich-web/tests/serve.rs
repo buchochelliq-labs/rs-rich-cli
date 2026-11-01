@@ -4,7 +4,7 @@
 
 mod common;
 
-use common::{connect, get, read_close, read_until, request, upgrade, wait_for, TOKEN};
+use common::{TOKEN, connect, get, read_close, read_until, request, upgrade, wait_for};
 use rich_web::intuituive::prelude::*;
 use rich_web::{Handle, Isolation, Server};
 use tungstenite::Message;
@@ -82,13 +82,15 @@ fn the_websocket_checks_token_and_origin() {
     // The server's own page, by address and by name.
     assert!(upgrade(addr, TOKEN, Some(&own), &host).contains("101"));
     let localhost = format!("localhost:{port}");
-    assert!(upgrade(
-        addr,
-        TOKEN,
-        Some(&format!("http://{localhost}")),
-        &localhost
-    )
-    .contains("101"));
+    assert!(
+        upgrade(
+            addr,
+            TOKEN,
+            Some(&format!("http://{localhost}")),
+            &localhost
+        )
+        .contains("101")
+    );
 
     // A wrong or missing token.
     assert!(upgrade(addr, "wrong", Some(&own), &host).contains("403"));
@@ -115,13 +117,15 @@ fn an_allowed_origin_may_connect() {
         .spawn()
         .unwrap();
     let addr = server.local_addr();
-    assert!(upgrade(
-        addr,
-        TOKEN,
-        Some("https://term.example.com"),
-        "term.example.com"
-    )
-    .contains("101"));
+    assert!(
+        upgrade(
+            addr,
+            TOKEN,
+            Some("https://term.example.com"),
+            "term.example.com"
+        )
+        .contains("101")
+    );
     assert!(upgrade(addr, TOKEN, Some("https://other.example.com"), "x").contains("403"));
 }
 

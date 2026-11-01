@@ -24,7 +24,7 @@ use rich::Segment;
 use rich_interact::compose::{
     Column, ComponentExt, Label, Layer, Layers, Painted, Size, Split, Tabs,
 };
-use rich_interact::keymap::{keys, Keymap};
+use rich_interact::keymap::{Keymap, keys};
 use rich_interact::kit::{self, FilterState, ListState, Theme};
 use rich_interact::{
     Component, Confirm, Context, Event, Flow, Input, KeyCode, Outcome, RunOptions, Select, View,

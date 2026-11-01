@@ -5,9 +5,9 @@
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::prelude::*;
 use intuituive::widgets::{
-    scrollbar, table, tree, Column, Scrollbar, ScrollbarSymbols, Show, Side, TreeItem,
+    Column, Scrollbar, ScrollbarSymbols, Show, Side, TreeItem, scrollbar, table, tree,
 };
-use intuituive::{assert_screen, Driver};
+use intuituive::{Driver, assert_screen};
 
 fn numbered(n: usize) -> Vec<String> {
     (0..n).map(|i| format!("line {i}")).collect()

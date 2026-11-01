@@ -10,7 +10,7 @@ use rich_interact::{Button, Key, KeyCode, Modifiers, MouseKind};
 use crate::app::Ctx;
 use crate::list::Selection;
 use crate::node::{Axis, Node};
-use crate::reactive::{signal, Signal};
+use crate::reactive::{Signal, signal};
 use crate::screen::Rect;
 use crate::widget::{EventCx, MeasureCx, Used, Widget, WidgetEvent};
 

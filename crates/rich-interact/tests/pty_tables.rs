@@ -5,8 +5,8 @@
 mod support;
 
 use rich_interact::policy::Policy;
-use rich_interact::{run, Pager, RunOptions, TableSelect};
-use support::{assert_restored, Pty};
+use rich_interact::{Pager, RunOptions, TableSelect, run};
+use support::{Pty, assert_restored};
 
 #[test]
 fn child() {

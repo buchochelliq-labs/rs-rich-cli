@@ -263,7 +263,7 @@ fn kind_from_number(number: i64) -> PyResult<Kind> {
         other => {
             return Err(PyValueError::new_err(format!(
                 "{other} is not a valid ColorType"
-            )))
+            )));
         }
     })
 }
@@ -278,7 +278,7 @@ pub(crate) fn core_system(value: &Bound<'_, PyAny>) -> PyResult<CoreSystem> {
         other => {
             return Err(PyValueError::new_err(format!(
                 "{other} is not a valid ColorSystem"
-            )))
+            )));
         }
     })
 }

@@ -121,11 +121,7 @@ impl Scale {
     /// overflow it; it is then `f64::MAX`.
     pub fn span(&self) -> f64 {
         let span = self.max - self.min;
-        if span.is_finite() {
-            span
-        } else {
-            f64::MAX
-        }
+        if span.is_finite() { span } else { f64::MAX }
     }
 
     /// Where `value` falls, from 0 (at `min`) to 1 (at `max`), clamped.
@@ -239,11 +235,7 @@ pub(crate) fn clean(v: f64) -> f64 {
         return v;
     }
     let rounded: f64 = format!("{v:.11e}").parse().unwrap_or(v);
-    if rounded == 0.0 {
-        0.0
-    } else {
-        rounded
-    }
+    if rounded == 0.0 { 0.0 } else { rounded }
 }
 
 /// How a chart writes values on axes, bars and summaries.
@@ -406,10 +398,12 @@ mod tests {
         let neg = Scale::from_values([-4.0, -9.0]).include_zero();
         assert_eq!((neg.min(), neg.max()), (-9.0, 0.0));
         // No "-0" ticks.
-        assert!(Scale::new(-1.0, 1.0)
-            .ticks(5)
-            .iter()
-            .all(|t| t.to_string() != "-0"));
+        assert!(
+            Scale::new(-1.0, 1.0)
+                .ticks(5)
+                .iter()
+                .all(|t| t.to_string() != "-0")
+        );
     }
 
     #[test]

@@ -7,8 +7,8 @@ use std::path::Path;
 use std::rc::Rc;
 use std::time::Duration;
 
-use super::{error, AudioError, Frame, Matrix};
-use crate::reactive::{watch, Signal};
+use super::{AudioError, Frame, Matrix, error};
+use crate::reactive::{Signal, watch};
 
 /// Read a WAV file as buffers of `buffer` frames, a row a channel, each
 /// sample from -1 to 1, as [`pcm`](super::pcm) reads raw PCM: an iterator

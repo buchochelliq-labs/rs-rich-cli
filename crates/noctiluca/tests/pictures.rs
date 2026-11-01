@@ -8,7 +8,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use noctiluca::app::{app, Options};
+use noctiluca::app::{Options, app};
 use noctiluca::bookmarks::Bookmarks;
 use noctiluca::config::{Config, Images, View};
 use noctiluca::testing::FakeEngine;
@@ -247,7 +247,7 @@ fn tall_picture() -> noctiluca::model::Page {
 #[test]
 fn a_capped_pictures_caption_wraps_to_its_box_and_the_rule_switches_it_off() {
     use noctiluca::adapt::{Adapt, Rule};
-    use noctiluca::layout::{project, Marks};
+    use noctiluca::layout::{Marks, project};
     let page = tall_picture();
     let marks = Marks::default();
     let projection = project(&page, 100, (8.0, 18.0), &marks);
@@ -354,7 +354,7 @@ fn both_fixture_videos_have_recorded_frames_and_the_generated_one_autoplays() {
 #[test]
 fn a_replayed_video_shows_the_frame_at_its_clock() {
     use noctiluca::engine::{Engine, MediaOp, PageAction, TabId};
-    use noctiluca::model::{build, MediaKind, Revisions};
+    use noctiluca::model::{MediaKind, Revisions, build};
     // Four recorded frames over the five seconds, one colour each.
     let dir = std::env::temp_dir().join(format!("noctiluca-replay-{}", std::process::id()));
     std::fs::create_dir_all(&dir).unwrap();

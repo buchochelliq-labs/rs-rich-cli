@@ -12,14 +12,14 @@
 use std::collections::VecDeque;
 use std::path::PathBuf;
 use std::sync::atomic::{AtomicBool, AtomicU32, AtomicU64, Ordering};
-use std::sync::{mpsc, Arc, Condvar, Mutex, MutexGuard, Weak};
+use std::sync::{Arc, Condvar, Mutex, MutexGuard, Weak, mpsc};
 use std::time::{Duration, Instant, SystemTime, UNIX_EPOCH};
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, OutputStreamTimestamp, SampleFormat, SizedSample};
 
 use super::capture::{id_of, quiet, quiet_stream_thread};
-use super::{error, AudioError, Device, Host, Matrix};
+use super::{AudioError, Device, Host, Matrix, error};
 
 /// What [`output`] opens, and how.
 #[derive(Clone, Debug, PartialEq)]
@@ -301,10 +301,10 @@ impl Shared {
         });
         drop(taps);
         let mut recording = lock(&self.recording);
-        if let Some(recorder) = recording.as_mut() {
-            if recorder.block(out, at, SystemTime::now()).is_err() {
-                *recording = None;
-            }
+        if let Some(recorder) = recording.as_mut()
+            && recorder.block(out, at, SystemTime::now()).is_err()
+        {
+            *recording = None;
         }
         drop(recording);
         self.room.notify_all();

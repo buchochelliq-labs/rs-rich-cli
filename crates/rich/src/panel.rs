@@ -7,14 +7,14 @@
 //! padding, `expand` (and [`Panel::fit`]) and a fixed `width`.
 
 use crate::align::HorizontalAlign;
+use crate::r#box::{Box as BoxSet, ROUNDED};
 use crate::console::{Console, ConsoleOptions};
 use crate::measure::Measurement;
 use crate::padding::join_rows;
 use crate::protocol::Renderable;
-use crate::r#box::{Box as BoxSet, ROUNDED};
 use crate::segment::Segment;
 use crate::style::{Style, StyleType};
-use crate::text::{Text, DEFAULT_TAB_SIZE};
+use crate::text::{DEFAULT_TAB_SIZE, Text};
 
 /// A bordered box around a renderable. Mirrors `rich.panel.Panel`.
 pub struct Panel {
@@ -541,11 +541,7 @@ mod tests {
         let render = |panel: Panel, width| {
             let console = Console::builder().width(width).color_system(None).build();
             let out = console.render_to_string(&panel);
-            if out.is_empty() {
-                out
-            } else {
-                out + "\n"
-            }
+            if out.is_empty() { out } else { out + "\n" }
         };
         for width in [0, 1, 2] {
             let expected = ["", "╭\n╰\n", "╭╮\n╰╯\n"][width];

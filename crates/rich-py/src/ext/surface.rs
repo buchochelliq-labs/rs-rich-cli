@@ -15,7 +15,7 @@ use rich::{Console as CoreConsole, Segment as CoreSegment};
 use rich_ext::surface::{Rect, Surface as CoreSurface, Viewport};
 
 use super::terminal::color_system;
-use crate::tui::{node::draw_object, rect_arg, PyRect};
+use crate::tui::{PyRect, node::draw_object, rect_arg};
 
 /// What a `Drawing` was asked to do, in order.
 enum Op {

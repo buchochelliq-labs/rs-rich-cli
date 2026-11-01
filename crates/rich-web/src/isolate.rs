@@ -41,16 +41,16 @@ use std::io::{self, ErrorKind, Read, Write};
 use std::net::{Shutdown, TcpListener, TcpStream};
 use std::path::PathBuf;
 use std::process::{Child, Command, Stdio};
-use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, AtomicUsize, Ordering};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use intuituive::App;
-use tungstenite::protocol::{Role, WebSocketConfig};
 use tungstenite::WebSocket;
+use tungstenite::protocol::{Role, WebSocketConfig};
 
-use crate::{session, Renderer};
+use crate::{Renderer, session};
 
 /// The variable a session's process is started with: what it needs to
 /// connect back and run its session. Not for setting by hand.
@@ -200,7 +200,7 @@ fn own_spec() -> Option<Spec> {
     let spec = Spec::decode(&std::env::var(SESSION_ENV).ok()?)?;
     #[cfg(unix)]
     {
-        use rustix::process::{getpgrp, getpid, getppid, Pid};
+        use rustix::process::{Pid, getpgrp, getpid, getppid};
         if Pid::as_raw(getppid()) as u32 != spec.parent {
             if getpgrp() == getpid() {
                 eprintln!("rich-web: the session's server has gone");
@@ -220,7 +220,13 @@ pub(crate) fn run_child(spec: Spec, app: impl FnOnce() -> App) -> i32 {
     // variable. (Windows guards its environment, so this is safe beside
     // other threads; on Unix, `own_spec`'s group check does it.)
     #[cfg(windows)]
-    std::env::remove_var(SESSION_ENV);
+    // SAFETY: Windows guards its environment block, so removing a variable
+    // beside other threads is sound there (std reads it through the same
+    // API); this runs on Windows only.
+    #[allow(unsafe_code)]
+    unsafe {
+        std::env::remove_var(SESSION_ENV)
+    };
     // Should the server die without ending it, this process ends its whole
     // group. (Not Linux's parent-death signal: that would kill this process
     // alone, before it could end the rest.) On Windows the job object the
@@ -300,14 +306,16 @@ const WATCH: Duration = Duration::from_millis(50);
 /// process that left the group (`setsid`, a daemon) is not reached.
 #[cfg(unix)]
 fn watch_server(server: u32) {
-    use rustix::process::{getpid, getppid, kill_process_group, Pid, Signal};
-    thread::spawn(move || loop {
-        let parent = Pid::as_raw(getppid()) as u32;
-        if parent != server {
-            let _ = kill_process_group(getpid(), Signal::KILL);
-            std::process::exit(1);
+    use rustix::process::{Pid, Signal, getpid, getppid, kill_process_group};
+    thread::spawn(move || {
+        loop {
+            let parent = Pid::as_raw(getppid()) as u32;
+            if parent != server {
+                let _ = kill_process_group(getpid(), Signal::KILL);
+                std::process::exit(1);
+            }
+            thread::sleep(WATCH);
         }
-        thread::sleep(WATCH);
     });
 }
 
@@ -657,7 +665,7 @@ fn hello(stream: &TcpStream, line: &mut Vec<u8>, secret: &str) -> Option<bool> {
                 return Some(
                     std::str::from_utf8(line)
                         .is_ok_and(|line| crate::http::same_token(line, secret)),
-                )
+                );
             }
             Ok(1) if line.len() < secret.len() => line.push(byte[0]),
             Err(e) if e.kind() == ErrorKind::WouldBlock => return None,
@@ -900,7 +908,7 @@ fn end(child: &mut Child, tree: Tree) -> Option<std::process::ExitStatus> {
 /// Kill what is left of the process group the session's process led.
 #[cfg(unix)]
 fn kill_group(leader: u32) {
-    use rustix::process::{kill_process_group, Pid, Signal};
+    use rustix::process::{Pid, Signal, kill_process_group};
     if let Some(pid) = i32::try_from(leader).ok().and_then(Pid::from_raw) {
         let _ = kill_process_group(pid, Signal::KILL);
     }

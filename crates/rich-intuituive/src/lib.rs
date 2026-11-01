@@ -185,85 +185,84 @@ pub use rich_interact as interact;
 /// Dates as people type them (`tomorrow`, `eow`, `3d`): rs-rich-interact's.
 pub use rich_interact::dates;
 
-pub use actions::{action_overlay, Action};
+pub use actions::{Action, action_overlay};
 pub use app::{
-    after, every, fixed_step, held_keys, plain_key, rate, Anchor, App, Ctx, Driver, Easing,
-    FrameStats, Handoff, Holds, ModalOptions, Placement, StatsHandle, Theme, Timer,
+    Anchor, App, Ctx, Driver, Easing, FrameStats, Handoff, Holds, ModalOptions, Placement,
+    StatsHandle, Theme, Timer, after, every, fixed_step, held_keys, plain_key, rate,
 };
 #[cfg(feature = "art")]
 pub use big_text::big_text;
 pub use bindings::{ModePage, Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use collapsible::collapsible;
-pub use command_line::{command_line, command_line_with, CommandLine, CommandLineOptions};
+pub use command_line::{CommandLine, CommandLineOptions, command_line, command_line_with};
 pub use complete::{
-    complete_words, history_file, history_in, history_session, CompleteOptions, Completion,
-    InputHistory,
+    CompleteOptions, Completion, InputHistory, complete_words, history_file, history_in,
+    history_session,
 };
 pub use controls::{
-    button, button_of, checkbox, checkbox_of, checkbox_tri, radio, radio_keyed, slider, switch_of,
-    switch_toggle, ButtonVariant, CheckState,
+    ButtonVariant, CheckState, button, button_of, checkbox, checkbox_of, checkbox_tri, radio,
+    radio_keyed, slider, switch_of, switch_toggle,
 };
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use digits::digits;
 pub use effect::{effect, fill};
 pub use facts::{facts, facts_of};
 pub use feed::{
-    latest_feed, latest_iter, latest_with_state, Feed, FeedEnd, FeedState, FeedTeller, Pace, Play,
+    Feed, FeedEnd, FeedState, FeedTeller, Pace, Play, latest_feed, latest_iter, latest_with_state,
 };
-pub use finder::{finder_of, fuzzy_list, fuzzy_list_with, FuzzyOptions, FuzzySource};
+pub use finder::{FuzzyOptions, FuzzySource, finder_of, fuzzy_list, fuzzy_list_with};
 pub use focus::Direction;
 pub use fx::Fx;
 pub use help::{HelpOptions, KeyFormat, KeyHintsOptions};
 #[cfg(feature = "art")]
 pub use image::{
-    image, image_bytes, image_bytes_of, image_graphics, image_of, image_with, picture_bytes,
-    picture_of, ImageAnchor, ImageFit, ImageMode, ImageView, Picture, Pixels,
+    ImageAnchor, ImageFit, ImageMode, ImageView, Picture, Pixels, image, image_bytes,
+    image_bytes_of, image_graphics, image_of, image_with, picture_bytes, picture_of,
 };
 pub use input::{input, number_input};
 pub use jobs::{
-    jobs, jobs_panel, jobs_panel_with, Job, JobOutcome, JobProgress, JobState, Jobs,
-    JobsPanelOptions, ProcessOutcome, ProcessOutput,
+    Job, JobOutcome, JobProgress, JobState, Jobs, JobsPanelOptions, ProcessOutcome, ProcessOutput,
+    jobs, jobs_panel, jobs_panel_with,
 };
 pub use layout::{Align, AlignContent, Justify, Size, StackLayout, TextAlign};
 pub use list::list_optional;
-pub use lockstep::{stepped_worker, stepped_worker_with, Lockstep, Steps};
+pub use lockstep::{Lockstep, Steps, stepped_worker, stepped_worker_with};
 pub use log::Log;
-pub use miller::{miller_in, miller_of, MillerSource};
+pub use miller::{MillerSource, miller_in, miller_of};
 pub use node::{
-    column, component, each, fit_text, grid, keyed, label, layers, leaf, list, renderable,
+    Node, column, component, each, fit_text, grid, keyed, label, layers, leaf, list, renderable,
     repeating, row, scroll, scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text,
-    Node,
 };
 pub use node::{described, drawn, drawn_described};
 pub use notify::{Corner, Level};
 pub use place::{Offset, Origin, RectHandle};
-pub use preview::{preview_of, preview_of_with, PreviewOfOptions};
-pub use reactive::{memo, on_write, on_write_ref, signal, viewport, watch, Memo, Proxy, Signal};
+pub use preview::{PreviewOfOptions, preview_of, preview_of_with};
+pub use reactive::{Memo, Proxy, Signal, memo, on_write, on_write_ref, signal, viewport, watch};
 /// What a text does with what does not fit a line: rich's.
 pub use rich::Overflow;
 pub use rule::rule;
 pub use screen::{PaintStats, PaintStrategy};
 pub use scroll_virtual::{scroll_virtual, scroll_virtual_with};
-pub use select::{list_search, multi_select, ListSearch, Mark, MultiSelect};
-pub use select_field::{select_field, select_field_keyed, SelectOption};
+pub use select::{ListSearch, Mark, MultiSelect, list_search, multi_select};
+pub use select_field::{SelectOption, select_field, select_field_keyed};
 pub use sheet::{SheetError, Stylesheet};
-pub use signals::{falling, history, recent, recent_of, recent_timed, smoothed, Count, History};
+pub use signals::{Count, History, falling, history, recent, recent_of, recent_timed, smoothed};
 pub use solver::Solver;
 pub use spinner::spinner;
 pub use state::{
-    frecency_in, frecency_session, frecency_store, read_state, state_dir, state_file, update_file,
-    update_state, write_atomic, write_state, FrecencyStore,
+    FrecencyStore, frecency_in, frecency_session, frecency_store, read_state, state_dir,
+    state_file, update_file, update_state, write_atomic, write_state,
 };
-pub use tab_set::{tab_set, tabs_for, tabs_for_indexed, Scoped, TabSet};
+pub use tab_set::{Scoped, TabSet, tab_set, tabs_for, tabs_for_indexed};
 pub use task::{
-    latest, latest_every, resource, resource_for, spawn, spawn_future, spawn_stream, spawn_then,
-    Latest, Load, Notifier, Resource, Stream, Task,
+    Latest, Load, Notifier, Resource, Stream, Task, latest, latest_every, resource, resource_for,
+    spawn, spawn_future, spawn_stream, spawn_then,
 };
 pub use text_area::Caret;
-pub use text_edit::{search_bar, TextSearch};
-pub use transport::{transport, Transport};
-pub use treemap::{treemap, treemap_with, TreemapOptions};
+pub use text_edit::{TextSearch, search_bar};
+pub use transport::{Transport, transport};
+pub use treemap::{TreemapOptions, treemap, treemap_with};
 #[cfg(feature = "viz")]
 pub use viz::{
     bar_spectrum, bar_spectrum_with, meter, meter_with, persistence, persistence_with, sparkline,
@@ -271,22 +270,22 @@ pub use viz::{
 };
 #[cfg(feature = "watch")]
 pub use watch::{
-    watch_path, watch_path_with, ChangeKind, PathChange, PathEvent, PathWatch, WatchOptions,
+    ChangeKind, PathChange, PathEvent, PathWatch, WatchOptions, watch_path, watch_path_with,
 };
-pub use widget::{widget, Widget};
+pub use widget::{Widget, widget};
 pub use widgets::text_area;
 
 /// Everything an app usually needs.
 pub mod prelude {
     // `text` is both the function and the `text!` macro.
     pub use crate::{
-        after, column, component, each, effect, every, fill, fixed_step, grid, input, keyed, label,
-        latest, latest_every, layers, leaf, list, list_optional, memo, number_input, on_write,
+        Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node, Overflow, Proxy, Resource,
+        Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Timer, Widget, after, column,
+        component, each, effect, every, fill, fixed_step, grid, input, keyed, label, latest,
+        latest_every, layers, leaf, list, list_optional, memo, number_input, on_write,
         on_write_ref, rate, renderable, repeating, resource, resource_for, row, scroll,
         scroll_both, scroll_virtual, scroll_with, scroll_x, signal, spawn, switch, text, text_area,
-        viewport, watch, widget, Align, App, Border, Ctx, Edge, Justify, Load, Log, Memo, Node,
-        Overflow, Proxy, Resource, Shadow, Sides, Signal, Size, Task, TextAlign, Theme, Timer,
-        Widget,
+        viewport, watch, widget,
     };
     pub use crate::{described, drawn, drawn_described};
 }

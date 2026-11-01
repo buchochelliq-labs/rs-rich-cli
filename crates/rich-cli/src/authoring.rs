@@ -4,8 +4,8 @@
 //! `config.rs` next to `config show|validate`.
 
 use super::cli_spec;
-use super::{emit_error, mode_flag_alias, wants_json_report, ExitClass, VALUE_OPTIONS};
-use rich_ext::cli_doc::{generate, suggest, to_man, to_man_pages, to_markdown, Shell};
+use super::{ExitClass, VALUE_OPTIONS, emit_error, mode_flag_alias, wants_json_report};
+use rich_ext::cli_doc::{Shell, generate, suggest, to_man, to_man_pages, to_markdown};
 use std::path::{Path, PathBuf};
 
 /// A parsed authoring command.
@@ -217,9 +217,11 @@ mod tests {
             parsed(&["completions", "pwsh"]),
             Ok(Some(Command::Completions(Shell::PowerShell)))
         );
-        assert!(parsed(&["completions", "tcsh"])
-            .unwrap_err()
-            .contains("unknown shell"));
+        assert!(
+            parsed(&["completions", "tcsh"])
+                .unwrap_err()
+                .contains("unknown shell")
+        );
         assert!(parsed(&["completions"]).is_err());
         assert!(parsed(&["completions", "bash", "zsh"]).is_err());
         assert_eq!(
@@ -230,12 +232,16 @@ mod tests {
             parsed(&["docs", "config"]),
             Ok(Some(Command::ConfigMarkdown))
         );
-        assert!(parsed(&["docs", "mark"])
-            .unwrap_err()
-            .contains("did you mean markdown"));
-        assert!(parsed(&["docs", "markdown", "--outpt", "x"])
-            .unwrap_err()
-            .contains("unknown option"));
+        assert!(
+            parsed(&["docs", "mark"])
+                .unwrap_err()
+                .contains("did you mean markdown")
+        );
+        assert!(
+            parsed(&["docs", "markdown", "--outpt", "x"])
+                .unwrap_err()
+                .contains("unknown option")
+        );
         assert!(parsed(&["docs", "markdown", "--output", "x"]).is_err());
         assert_eq!(
             parsed(&["docs", "man", "--help"]),

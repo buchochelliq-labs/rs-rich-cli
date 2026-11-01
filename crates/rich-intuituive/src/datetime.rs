@@ -3,11 +3,11 @@
 
 use rich_interact::{Button, KeyCode, MouseKind};
 
-use crate::calendar::{empty, into_range, moment_calendar, set_moment, CalendarOptions, DaySource};
-use crate::calendar::{Date, DateTime, Time, EMPTY};
-use crate::node::{column, label, row, text, Axis, Node};
-use crate::reactive::{signal, Signal};
-use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
+use crate::calendar::{CalendarOptions, DaySource, empty, into_range, moment_calendar, set_moment};
+use crate::calendar::{Date, DateTime, EMPTY, Time};
+use crate::node::{Axis, Node, column, label, row, text};
+use crate::reactive::{Signal, signal};
+use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, widget};
 
 /// How a [`time_picker_with`] shows and limits the time.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq)]
@@ -285,14 +285,14 @@ impl TimeField {
             max,
             message,
         } = self.source
+            && moved != time
+            && message.get_untracked().is_none()
         {
-            if moved != time && message.get_untracked().is_none() {
-                let at = DateTime {
-                    time,
-                    ..value.get_untracked()
-                };
-                message.set(into_range(min, max, at).1);
-            }
+            let at = DateTime {
+                time,
+                ..value.get_untracked()
+            };
+            message.set(into_range(min, max, at).1);
         }
     }
 

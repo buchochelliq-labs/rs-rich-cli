@@ -13,8 +13,8 @@ use intuituive::interact::{Button, MouseKind};
 use intuituive::node::Axis;
 use intuituive::prelude::*;
 use intuituive::widgets::{
-    calendar, calendar_with, split, split_with, tree, tree_with, virtual_list, vsplit, Date,
-    TreeItem,
+    Date, TreeItem, calendar, calendar_with, split, split_with, tree, tree_with, virtual_list,
+    vsplit,
 };
 
 fn items() -> Vec<TreeItem> {

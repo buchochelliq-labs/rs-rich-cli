@@ -11,10 +11,10 @@
 mod common;
 
 use std::io::Read;
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::{Duration, Instant};
 
-use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+use portable_pty::{CommandBuilder, PtySize, native_pty_system};
 use rich::protocol::{Support, TargetCapabilities};
 use rich::{ColorSystem, Console, Renderable, Segment, Table, Text, Theme};
 use rich_art::graphics::CellPixels;
@@ -22,8 +22,8 @@ use rich_ext::live::LiveCoordinator;
 use rich_ext::target::{RenderTarget, TargetKind};
 use rich_micro::package::load_package;
 use rich_micro::{
-    render_markup, CellSize, FallbackPreference, Layer, Limits, MicroAsset, MicroGraphics,
-    MicroMode, MicroRegistry, MicroRows, Selection,
+    CellSize, FallbackPreference, Layer, Limits, MicroAsset, MicroGraphics, MicroMode,
+    MicroRegistry, MicroRows, Selection, render_markup,
 };
 
 const COLS: u16 = 24;
@@ -318,8 +318,7 @@ fn live(graphics: Option<&MicroGraphics>) -> Vec<u8> {
     live.update(id, render("last :micro:check: row")).unwrap();
     live.refresh().unwrap();
     drop(live);
-    let bytes = out.0.lock().unwrap().clone();
-    bytes
+    out.0.lock().unwrap().clone()
 }
 
 #[test]

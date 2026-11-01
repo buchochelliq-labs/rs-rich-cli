@@ -7,10 +7,10 @@
 
 use std::sync::Arc;
 
+use rich::r#box::{self as boxes, Box as BoxSet};
 use rich::containers::Renderables;
 use rich::measure::Measurement;
-use rich::r#box::{self as boxes, Box as BoxSet};
-use rich::ratio::{ratio_distribute, ratio_reduce, ratio_resolve, Edge};
+use rich::ratio::{Edge, ratio_distribute, ratio_reduce, ratio_resolve};
 use rich::table::Cell;
 use rich::{
     Align, Bar, Color, ColorSystem, Console, ConsoleOptions, Constrain, HorizontalAlign, Justify,

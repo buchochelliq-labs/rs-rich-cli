@@ -15,7 +15,7 @@ use std::io::BufReader;
 
 use rich_data::csv::{CsvReader, Header};
 use rich_data::profile::{Profile, ProfileOptions as DataProfileOptions};
-use rich_data::{jsonl, RowSource};
+use rich_data::{RowSource, jsonl};
 
 /// The options of `rich profile`.
 #[derive(Debug, Clone, Default, PartialEq, Eq)]
@@ -385,8 +385,10 @@ mod tests {
         let zero = ["0".to_string()];
         assert!(options.parse_option("--top", &mut zero.iter()).is_err());
         let empty = [",".to_string()];
-        assert!(options
-            .parse_option("--columns", &mut empty.iter())
-            .is_err());
+        assert!(
+            options
+                .parse_option("--columns", &mut empty.iter())
+                .is_err()
+        );
     }
 }

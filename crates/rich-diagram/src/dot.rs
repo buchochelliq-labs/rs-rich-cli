@@ -50,7 +50,7 @@ use rich::text::Text;
 
 use crate::graph::{Direction, Edge, Graph, Head, Node, Shape, Stroke};
 pub use crate::graph::{MAX_EDGES, MAX_NODES, MAX_SOURCE};
-use crate::layout::{draw, DrawError, Drawing};
+use crate::layout::{DrawError, Drawing, draw};
 
 /// The deepest `{ … }` groups and subgraphs may nest. Each level is a
 /// recursive step of the parser, so deeper sources are refused rather than
@@ -224,7 +224,7 @@ impl<'a> Lexer<'a> {
                                         return Err(DotError::syntax(
                                             start,
                                             "a /* comment is never closed",
-                                        ))
+                                        ));
                                     }
                                 }
                             }
@@ -298,7 +298,7 @@ impl<'a> Lexer<'a> {
                         }
                         Some(_) => {}
                         None => {
-                            return Err(DotError::syntax(line, "an HTML string is never closed"))
+                            return Err(DotError::syntax(line, "an HTML string is never closed"));
                         }
                     }
                 }
@@ -726,14 +726,14 @@ impl<'a> Parser<'a> {
         } else {
             (from.min(to), from.max(to))
         };
-        if self.strict {
-            if let Some(&index) = self.edge_index.get(&key) {
-                let existing = &mut self.edges[index].2;
-                for (key, value) in attrs {
-                    set(existing, key, value);
-                }
-                return Ok(());
+        if self.strict
+            && let Some(&index) = self.edge_index.get(&key)
+        {
+            let existing = &mut self.edges[index].2;
+            for (key, value) in attrs {
+                set(existing, key, value);
             }
+            return Ok(());
         }
         if self.edges.len() >= MAX_EDGES {
             return Err(DotError::unsupported(
@@ -839,14 +839,14 @@ impl<'a> Parser<'a> {
             Some(rank) => self.ignore_rank(&format!("rank={rank}")),
             None => {}
         }
-        if let Some(index) = index {
-            if let Some(label) = get(&scope.graph, "label") {
-                let names = Names {
-                    graph: Some(&name),
-                    ..Names::default()
-                };
-                self.clusters[index].label = Some(label_text(label, &names));
-            }
+        if let Some(index) = index
+            && let Some(label) = get(&scope.graph, "label")
+        {
+            let names = Names {
+                graph: Some(&name),
+                ..Names::default()
+            };
+            self.clusters[index].label = Some(label_text(label, &names));
         }
         Ok(members)
     }
@@ -1369,7 +1369,7 @@ impl Dot {
         let drawing = match self.drawing(&parsed.graph, ascii) {
             Ok(drawing) => drawing,
             Err(error) => {
-                return self.source_block(&format!("too large to draw: {error}"), console, options)
+                return self.source_block(&format!("too large to draw: {error}"), console, options);
             }
         };
         let width = options.max_width;
@@ -1431,12 +1431,11 @@ pub(crate) fn trim_final_newline(mut segments: Vec<Segment>) -> Vec<Segment> {
     if let Some(index) = segments
         .iter()
         .rposition(|segment| !segment.text.is_empty())
+        && segments[index].text.ends_with('\n')
     {
-        if segments[index].text.ends_with('\n') {
-            segments[index].text.pop();
-            if segments[index].text.is_empty() {
-                segments.remove(index);
-            }
+        segments[index].text.pop();
+        if segments[index].text.is_empty() {
+            segments.remove(index);
         }
     }
     segments

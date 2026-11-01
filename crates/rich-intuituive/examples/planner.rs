@@ -17,10 +17,10 @@
 
 use std::collections::HashSet;
 
-use intuituive::menu::{menu_bar, Menu, MenuItem};
+use intuituive::menu::{Menu, MenuItem, menu_bar};
 use intuituive::prelude::*;
 use intuituive::rich::markup::escape;
-use intuituive::widgets::{calendar_with, hsplit, tree_with, virtual_list, vsplit, Date, TreeItem};
+use intuituive::widgets::{Date, TreeItem, calendar_with, hsplit, tree_with, virtual_list, vsplit};
 
 /// A task, with its due date.
 #[derive(Clone, Debug, PartialEq)]

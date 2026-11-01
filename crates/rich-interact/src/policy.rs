@@ -319,7 +319,7 @@ fn read_hidden(shown: impl FnOnce()) -> Result<Option<String>, NotInteractive> {
                     KeyCode::Escape => return Ok(None),
                     KeyCode::Char('c') if ctrl => return Err(NotInteractive::Interrupted),
                     KeyCode::Char('d') if ctrl && line.is_empty() => {
-                        return Err(NotInteractive::Ended)
+                        return Err(NotInteractive::Ended);
                     }
                     KeyCode::Char('u') if ctrl => line.clear(),
                     KeyCode::Backspace => {

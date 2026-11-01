@@ -10,8 +10,8 @@ mod downloads;
 
 use std::time::{Duration, Instant};
 
-use downloads::{downloads, downloads_app, finished_line, Job, Options, ROWS};
-use intuituive::{assert_screen, Driver};
+use downloads::{Job, Options, ROWS, downloads, downloads_app, finished_line};
+use intuituive::{Driver, assert_screen};
 
 const WIDTH: u16 = 80;
 const TICK: Duration = Duration::from_millis(100);

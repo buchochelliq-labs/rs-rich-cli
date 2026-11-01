@@ -4,8 +4,8 @@ use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
 use super::{
-    cell_units, cells, entries_width, has_colour, lines_to_segments, theme_style, truncate,
-    wrap_entries, Charset, Line, Scale, ValueFormat,
+    Charset, Line, Scale, ValueFormat, cell_units, cells, entries_width, has_colour,
+    lines_to_segments, theme_style, truncate, wrap_entries,
 };
 
 /// Levels for blocks, lowest first.
@@ -186,13 +186,14 @@ impl Heatmap {
             };
         }
         let keep = l.min(3);
-        if let Some(label) = width.checked_sub(n + 1) {
-            if label >= keep && label > 0 {
-                return Grid {
-                    label: label.min(l),
-                    ..each(1)
-                };
-            }
+        if let Some(label) = width.checked_sub(n + 1)
+            && label >= keep
+            && label > 0
+        {
+            return Grid {
+                label: label.min(l),
+                ..each(1)
+            };
         }
         // Merge columns into as many as fit.
         let label = if width > part(keep) + 1 { keep } else { 0 };

@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use intuituive::prelude::*;
-use intuituive::{history, latest_iter, latest_with_state, recent, smoothed, Pace};
+use intuituive::{Pace, history, latest_iter, latest_with_state, recent, smoothed};
 
 fn first(driver: &intuituive::Driver) -> String {
     driver.screen().plain()[0].trim_end().to_string()

@@ -6,8 +6,8 @@
 //! the same on every run.
 
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
 use rich::protocol::{Support, TargetCapabilities};
@@ -19,7 +19,7 @@ use rich_ext::live::LiveCoordinator;
 use rich_ext::notify::{Notification, Notifications, ToastStyle};
 use rich_ext::target::{RenderTarget, TargetKind};
 use rich_ext::theme::extended_theme;
-use rich_ext::transfer::{transfer_columns, Transfer, Transfers};
+use rich_ext::transfer::{Transfer, Transfers, transfer_columns};
 
 /// Where shots go: the terminal, or one SVG per shot.
 struct Shots {

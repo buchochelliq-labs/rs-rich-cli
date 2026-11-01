@@ -9,7 +9,7 @@ use intuituive::interact::headless::{Headless, Script};
 use intuituive::interact::{Event, Key};
 use intuituive::node::Axis;
 use intuituive::prelude::*;
-use intuituive::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
+use intuituive::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, widget};
 
 fn key(name: &str) -> Key {
     Key::parse(name).expect("a key name")

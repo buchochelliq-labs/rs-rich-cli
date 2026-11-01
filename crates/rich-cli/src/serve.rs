@@ -143,7 +143,7 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
                     _ => {
                         return Err(format!(
                             "--max-sessions takes a number from 1, not {text:?}"
-                        ))
+                        ));
                     }
                 }
             }
@@ -188,7 +188,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                 json,
                 ExitClass::Usage,
                 &format!("{message} (try `rich serve --help`)"),
-            )
+            );
         }
     };
     // `--help` before the program: the program's own `--help` is its own.
@@ -212,7 +212,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
                 json,
                 ExitClass::Input,
                 &format!("cannot listen on {addr}: {error}"),
-            )
+            );
         }
     };
     if let Some(n) = args.max_sessions {

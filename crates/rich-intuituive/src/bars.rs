@@ -9,9 +9,9 @@ use rich::{Console, Renderable, Segment, Style};
 
 use crate::help::KeyHintsOptions;
 use crate::layout::Size;
-use crate::node::{leaf, row, Axis, Node};
+use crate::node::{Axis, Node, leaf, row};
 use crate::reactive::{Runtime, Signal};
-use crate::widget::{theme_style, Canvas, DrawCx, MeasureCx, Widget};
+use crate::widget::{Canvas, DrawCx, MeasureCx, Widget, theme_style};
 
 /// The glyphs between a [`status_bar`]'s segments.
 #[derive(Clone, Copy, Debug, Default, PartialEq, Eq, Hash)]

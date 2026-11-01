@@ -2,8 +2,8 @@
 //! whatever order the linker put them in. (Its own test binary, since every
 //! test in a binary sees the same linked plugins.)
 
-use rich_ext::plugin::{Plugin, PluginError, PluginMetadata, PluginRegistrar};
 use rich_ext::ExtensionRegistry;
+use rich_ext::plugin::{Plugin, PluginError, PluginMetadata, PluginRegistrar};
 
 struct Same;
 

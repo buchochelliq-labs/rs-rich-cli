@@ -44,8 +44,8 @@ use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Text};
 use serde_json::Value;
 
 use super::{
-    check_count, check_size, clean, saved_report, stack, stack_measure, theme_style, DepsError,
-    SAVED_FORMAT, SAVED_VERSION,
+    DepsError, SAVED_FORMAT, SAVED_VERSION, check_count, check_size, clean, saved_report, stack,
+    stack_measure, theme_style,
 };
 use crate::chart::{BarChart, ValueFormat};
 
@@ -113,7 +113,7 @@ impl Timings {
                         return Err(DepsError::new(format!(
                             "a saved {} report, not timings",
                             clean(other)
-                        )))
+                        )));
                     }
                     None => {}
                 }

@@ -4,7 +4,7 @@
 use rich::{Console, Renderable, Style};
 use rich_ext::derive::{self, Field, RichRecord};
 use rich_ext::{
-    markup, rich_dbg, rich_panel, rich_table, rich_tree, richf, style, theme_key, Rich,
+    Rich, markup, rich_dbg, rich_panel, rich_table, rich_tree, richf, style, theme_key,
 };
 
 fn plain(renderable: &dyn Renderable) -> String {

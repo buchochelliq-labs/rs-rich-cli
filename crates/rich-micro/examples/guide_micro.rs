@@ -11,8 +11,8 @@ use std::sync::Arc;
 use rich::table::Cell;
 use rich::{ColorSystem, Console, Table};
 use rich_micro::{
-    render_markup, CellPixels, FallbackPreference, MicroAssetRef, MicroGraphics, MicroMode,
-    MicroRegistry, MicroRows, Selection,
+    CellPixels, FallbackPreference, MicroAssetRef, MicroGraphics, MicroMode, MicroRegistry,
+    MicroRows, Selection, render_markup,
 };
 
 // --8<-- [start:table]

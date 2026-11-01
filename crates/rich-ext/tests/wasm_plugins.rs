@@ -6,11 +6,11 @@ use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
 use rich::{Console, Text};
-use rich_ext::plugin::abi::{is_supported, AbiError, CapabilityKind, ABI_MAJOR, ABI_MINOR};
-use rich_ext::plugin_loading::{
-    load, load_wasm, load_wasm_bytes, LoadError, LoadOptions, RuntimeKind, WasmLimits,
-};
 use rich_ext::ExtensionRegistry;
+use rich_ext::plugin::abi::{ABI_MAJOR, ABI_MINOR, AbiError, CapabilityKind, is_supported};
+use rich_ext::plugin_loading::{
+    LoadError, LoadOptions, RuntimeKind, WasmLimits, load, load_wasm, load_wasm_bytes,
+};
 
 const SHOUT: &str = include_str!("../../rich-plugin-api/examples/wasm/shout.wat");
 
@@ -73,9 +73,11 @@ fn the_example_module_loads_and_its_capabilities_work() {
         .unwrap();
     let rendered: String = segments.iter().map(|s| s.text.as_str()).collect();
     assert_eq!(rendered.trim_end(), "loud");
-    assert!(segments
-        .iter()
-        .any(|s| s.text == "loud" && s.style == Some(rich::Style::parse("bold").unwrap())));
+    assert!(
+        segments
+            .iter()
+            .any(|s| s.text == "loud" && s.style == Some(rich::Style::parse("bold").unwrap()))
+    );
 
     // An unknown capability number is the plugin's error, not a crash.
     let error = plugin.call(7, "x", 0).unwrap_err();

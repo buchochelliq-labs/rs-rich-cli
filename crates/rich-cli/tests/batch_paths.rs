@@ -131,10 +131,12 @@ fn serial_suffix_never_writes_through_output_aliases() {
     let b = std::fs::read_to_string(out.join("b/report.html")).unwrap();
     assert!(a.contains("from a") && !a.contains("from b"), "{a}");
     assert!(b.contains("from b") && !b.contains("from a"), "{b}");
-    assert!(!std::fs::symlink_metadata(out.join("b/report.html"))
-        .unwrap()
-        .file_type()
-        .is_symlink());
+    assert!(
+        !std::fs::symlink_metadata(out.join("b/report.html"))
+            .unwrap()
+            .file_type()
+            .is_symlink()
+    );
 }
 
 #[test]

@@ -158,7 +158,7 @@ fn the_pager_steps_as_it_runs() {
 #[cfg(feature = "data")]
 #[test]
 fn explore_steps_as_it_runs() {
-    use rich_ext::data::{parse, Format};
+    use rich_ext::data::{Format, parse};
     use rich_interact::DataExplorer;
     let source = r#"{"server": {"host": "localhost", "port": 8080}, "users": [{"name": "ada"}], "debug": true}"#;
     same(
@@ -175,14 +175,18 @@ fn steps_after_the_end_are_dropped() {
     let port = backend.port();
     let mut event_loop = EventLoop::new(backend, LoopOptions::default());
     let handle = event_loop.mount(Select::new("Pick", colours()));
-    assert!(!event_loop
-        .step(Event::Key(rich_interact::Key::parse("enter").unwrap()))
-        .unwrap());
+    assert!(
+        !event_loop
+            .step(Event::Key(rich_interact::Key::parse("enter").unwrap()))
+            .unwrap()
+    );
     let shown = port.take_output();
     assert!(shown.contains("red"));
-    assert!(!event_loop
-        .step(Event::Key(rich_interact::Key::parse("down").unwrap()))
-        .unwrap());
+    assert!(
+        !event_loop
+            .step(Event::Key(rich_interact::Key::parse("down").unwrap()))
+            .unwrap()
+    );
     assert!(!event_loop.pump().unwrap());
     assert_eq!(port.take_output(), "");
     assert_eq!(handle.take(), Some(Outcome::Done("red".to_string())));

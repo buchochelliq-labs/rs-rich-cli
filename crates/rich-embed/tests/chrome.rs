@@ -11,9 +11,9 @@ use std::rc::Rc;
 use std::time::{Duration, Instant};
 
 use rich::Color;
-use rich_embed::{web_view_with, ChromeEngine, WebHandle};
-use rich_intuituive::prelude::*;
+use rich_embed::{ChromeEngine, WebHandle, web_view_with};
 use rich_intuituive::Driver;
+use rich_intuituive::prelude::*;
 
 /// A web view of an all-red page in a 20 x 6 app, driven until the page
 /// draws (or a minute passes), and its handle.

@@ -37,12 +37,12 @@ mod spec;
 #[cfg(feature = "clap")]
 pub mod clap;
 
-pub use completion::{generate, CompletionCatalog, CompletionItem, CompletionKind, Shell};
+pub use completion::{CompletionCatalog, CompletionItem, CompletionKind, Shell, generate};
 pub use config::{ConfigEntry, ConfigReference, ConfigSource};
 #[cfg(feature = "markdown")]
 pub use docs::markdown_view;
 pub use docs::{to_man, to_man_pages, to_markdown};
-pub use error::{suggest, CliError, CliErrorKind};
+pub use error::{CliError, CliErrorKind, suggest};
 pub use help::{HelpView, STACK_BELOW};
 pub use precedence::{Explanation, Layer, Precedence, PrecedenceView, Resolved};
 pub use spec::{ArgSpec, Choice, CommandSpec, Example, HeadingNote, Section, ValueHint};

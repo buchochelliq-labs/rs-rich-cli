@@ -11,7 +11,7 @@ use super::crumb::path_crumb;
 use super::miller::miller;
 use crate::app::Ctx;
 use crate::layout::Size;
-use crate::node::{column, label, Node};
+use crate::node::{Node, column, label};
 use crate::notify::Level;
 
 /// What [`pick_file`] runs with the file picked.

@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use rich_interact::headless::{self, Script};
 use rich_interact::policy::{Fallback, Reason, ScriptedLineIo};
-use rich_interact::{degrade, Choice, Confirm, Input, Outcome, Suggestion};
+use rich_interact::{Choice, Confirm, Input, Outcome, Suggestion, degrade};
 
 fn before_answer(record: &headless::Record) -> &str {
     &record.frames[record.frames.len() - 2]
@@ -277,8 +277,8 @@ fn confirm_degrades_to_a_line() {
 
 #[test]
 fn a_slow_provider_runs_one_lookup_at_a_time_for_the_latest_text() {
-    use std::sync::atomic::{AtomicUsize, Ordering};
     use std::sync::Arc;
+    use std::sync::atomic::{AtomicUsize, Ordering};
 
     let calls = Arc::new(AtomicUsize::new(0));
     let running = Arc::new(AtomicUsize::new(0));

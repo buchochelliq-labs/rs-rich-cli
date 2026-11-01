@@ -15,9 +15,9 @@ use std::io::Cursor;
 use std::time::Duration;
 
 use common::{row_of, run, screen};
+use intuituive::App;
 use intuituive::audio::{self, Capture, Format};
 use intuituive::interact::BackendKind;
-use intuituive::App;
 use ratatui::layout::{Constraint, Flex, Layout, Rect};
 use rich::Console;
 use rich_interact::headless::Script;
@@ -278,11 +278,13 @@ fn the_command_line_reads_as_scope_tuis() {
         }
     );
     assert!(parse(&args("--list")).is_err(), "--list belongs to audio");
-    assert!(parse(&args("--help"))
-        .unwrap()
-        .print
-        .unwrap()
-        .contains("--palette-color"));
+    assert!(
+        parse(&args("--help"))
+            .unwrap()
+            .print
+            .unwrap()
+            .contains("--palette-color")
+    );
     assert!(parse(&args("-V")).unwrap().print.unwrap().contains("0.3.5"));
     assert!(parse(&args("--bogus")).is_err());
     // The backend, by name; crossterm is in every build.
@@ -331,9 +333,11 @@ fn it_opens_on_the_oscilloscope_with_its_header_and_legend() {
     assert!(rows[1].starts_with("| amplitude"), "{:?}", rows[1]);
     assert_eq!(rows.len(), 24);
     assert!(rows[23].ends_with("time -"), "{rows:#?}");
-    assert!(!rows
-        .iter()
-        .any(|r| r.starts_with('│') || r.starts_with('└')));
+    assert!(
+        !rows
+            .iter()
+            .any(|r| r.starts_with('│') || r.starts_with('└'))
+    );
     // The legend lists R then L, boxed at the top right.
     assert!(rows[1].trim_end().ends_with('┐'));
     assert!(rows[2].trim_end().ends_with("│R│"), "{:?}", rows[2]);

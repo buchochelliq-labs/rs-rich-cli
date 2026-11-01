@@ -5,8 +5,8 @@
 
 use std::collections::HashMap;
 
-use quick_xml::events::{BytesStart, Event};
 use quick_xml::Reader;
+use quick_xml::events::{BytesStart, Event};
 
 use super::{DataError, Format, LineIndex, Meta, Node, Position, Value, XmlKind};
 

@@ -12,7 +12,7 @@ use rich::ColorSystem;
 use rich::Console;
 use rich_data::er;
 use rich_ext::schema::{
-    sql, Constraint, DataType, Field, Schema, SchemaDiff, SchemaTimeline, SchemaTree,
+    Constraint, DataType, Field, Schema, SchemaDiff, SchemaTimeline, SchemaTree, sql,
 };
 // --8<-- [end:imports]
 

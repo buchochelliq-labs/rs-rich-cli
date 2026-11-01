@@ -2,8 +2,8 @@
 //! measure, wrapping, cropping, tables and panels, whatever draws it; and
 //! the renderer seam only ever swaps cells for cells of the same width.
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
 use rich::cells::cell_len;
 use rich::measure::Measurement;
@@ -12,7 +12,7 @@ use rich::table::{Cell, Table};
 use rich::{Console, Overflow, Renderable, Segment, Text};
 use rich_micro::{
     CellSize, FallbackPreference, FallbackRenderer, Layer, MicroAsset, MicroAssetRef, MicroExt,
-    MicroMeta, MicroRegistry, MicroRenderer, MicroView, Placement, PAD_CELL,
+    MicroMeta, MicroRegistry, MicroRenderer, MicroView, PAD_CELL, Placement,
 };
 
 fn registry() -> MicroRegistry {
@@ -213,9 +213,11 @@ fn renderers_swap_cells_for_cells() {
     let width = |segments: &[Segment]| segments.iter().map(Segment::cell_length).sum::<usize>();
     assert_eq!(width(&segments), width(&plain));
     // Visible cells still carry the tag.
-    assert!(segments
-        .iter()
-        .any(|s| !s.control && s.style.as_ref().and_then(MicroMeta::from_style).is_some()));
+    assert!(
+        segments
+            .iter()
+            .any(|s| !s.control && s.style.as_ref().and_then(MicroMeta::from_style).is_some())
+    );
 
     // Without renderers, or with the plain fallback renderer, nothing changes
     // but the chosen fallback.
@@ -257,7 +259,9 @@ fn exports_hold_the_fallback_only() {
     assert_eq!(console.export_text(|c| c.print(&text)), "deploy 🚀\n");
     // Unstyled text on a terminal: no escape sequences at all.
     assert_eq!(console.capture(|c| c.print(&text)), "deploy 🚀\n");
-    assert!(console
-        .export_html(|c| c.print(&text))
-        .contains("deploy 🚀"));
+    assert!(
+        console
+            .export_html(|c| c.print(&text))
+            .contains("deploy 🚀")
+    );
 }

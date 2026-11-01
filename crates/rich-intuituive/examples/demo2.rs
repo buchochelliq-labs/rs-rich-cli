@@ -42,15 +42,15 @@
 use std::path::PathBuf;
 use std::time::Duration;
 
+use intuituive::Easing;
 use intuituive::prelude::*;
 use intuituive::rich::markup::escape;
 use intuituive::rich::{Color, Segment, Style};
 use intuituive::screen::Rect;
 use intuituive::widget::{Canvas as WidgetCanvas, DrawCx, MeasureCx};
 use intuituive::widgets::{
-    month, table_with, tabs, CalendarOptions, Column, Date, Scrollbar, Side, TableOptions,
+    CalendarOptions, Column, Date, Scrollbar, Side, TableOptions, month, table_with, tabs,
 };
-use intuituive::Easing;
 use rich_ext::chart::{
     Bar, BarChart, Canvas, LineGauge, LineSet, MapResolution, Marker, Orientation, Sparkline,
 };

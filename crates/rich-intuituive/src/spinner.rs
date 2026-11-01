@@ -12,7 +12,7 @@ use std::time::Duration;
 use rich::Style;
 
 use crate::node::{Axis, Node};
-use crate::reactive::{signal, Signal};
+use crate::reactive::{Signal, signal};
 use crate::screen::Rect;
 use crate::widget::{Canvas, DrawCx, MeasureCx, Widget};
 

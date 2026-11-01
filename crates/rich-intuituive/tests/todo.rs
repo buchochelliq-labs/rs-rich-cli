@@ -8,7 +8,7 @@ mod todo;
 
 use common::{row_of, run, screen};
 use rich_interact::headless::Script;
-use todo::{todo_app, Todo};
+use todo::{Todo, todo_app};
 
 #[test]
 fn typing_and_enter_adds_a_todo_and_the_entry_clears() {

@@ -389,7 +389,7 @@ fn sixel(console: &Console) {
 #[cfg(feature = "sixel")]
 fn sixel_direct(console: &Console) {
     // --8<-- [start:sixel-direct]
-    use rich_art::sixel::{is_probably_supported, SixelArt};
+    use rich_art::sixel::{SixelArt, is_probably_supported};
     // A guess from environment variables (RICH_GRAPHICS or RICH_SIXEL override it).
     if console.is_terminal() && is_probably_supported() {
         console.print(&SixelArt::new(test_card()).width(40).max_colors(64));

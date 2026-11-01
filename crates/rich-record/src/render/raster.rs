@@ -286,7 +286,7 @@ fn blocks(c: char) -> Option<(Vec<[u8; 4]>, u8)> {
         0x2589..=0x258f => vec![[0, 0, (0x2590 - code) as u8, 8]],
         0x2590 => vec![[4, 0, 8, 8]],
         0x2591..=0x2593 => {
-            return Some((vec![[0, 0, 8, 8]], [64, 128, 191][(code - 0x2591) as usize]))
+            return Some((vec![[0, 0, 8, 8]], [64, 128, 191][(code - 0x2591) as usize]));
         }
         0x2594 => vec![[0, 0, 8, 1]],
         0x2595 => vec![[7, 0, 8, 8]],
@@ -403,11 +403,7 @@ impl Fonts {
     }
 
     fn face(&self, bold: bool) -> &Font {
-        if bold {
-            &self.bold
-        } else {
-            &self.regular
-        }
+        if bold { &self.bold } else { &self.regular }
     }
 
     /// The width of one cell and the ascent, at `size` pixels.

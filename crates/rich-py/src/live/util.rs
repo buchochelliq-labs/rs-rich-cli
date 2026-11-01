@@ -7,11 +7,11 @@ use pyo3::exceptions::PyTypeError;
 use pyo3::prelude::*;
 use pyo3::types::{PyList, PyString};
 
+use rich::Text as CoreText;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::measure::Measurement as CoreMeasurement;
 use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
-use rich::Text as CoreText;
 
 use crate::renderable::{self, AsRenderable};
 use crate::segment::Segment;

@@ -7,20 +7,20 @@ use std::rc::Rc;
 
 use rich::markup::escape;
 use rich_ext::git::GitStatus;
-use rich_ext::listing::{read_dir, Entry, Sort};
+use rich_ext::listing::{Entry, Sort, read_dir};
 
-use super::model::{dir_model_with, DirModel};
-use super::preview::{preview, BinaryPreview, Preview, PreviewOptions, PreviewSettings, Previewer};
-use super::row::{file_list, FileListOptions, Linemode, Marker, MarkerFn};
+use super::model::{DirModel, dir_model_with};
+use super::preview::{BinaryPreview, Preview, PreviewOptions, PreviewSettings, Previewer, preview};
+use super::row::{FileListOptions, Linemode, Marker, MarkerFn, file_list};
 use super::search::Search;
 use super::tabs::FileTab;
 use crate::app::Ctx;
 use crate::list::RowRects;
-use crate::miller::{miller_in, MillerSource, Move};
-use crate::node::{label, row, Node};
-use crate::reactive::{memo, signal, watch, Memo, Signal};
+use crate::miller::{MillerSource, Move, miller_in};
+use crate::node::{Node, label, row};
+use crate::reactive::{Memo, Signal, memo, signal, watch};
 use crate::screen::Rect;
-use crate::select::{list_search, MultiSelect};
+use crate::select::{MultiSelect, list_search};
 use crate::tab_set::TabSet;
 
 /// A directory tree as the core's Miller columns browse it: the current

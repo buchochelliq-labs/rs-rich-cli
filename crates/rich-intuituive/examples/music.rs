@@ -45,9 +45,9 @@ use intuituive::audio;
 use intuituive::prelude::*;
 use intuituive::rich::Style;
 use intuituive::widgets::{
-    table_with, tree_keyed, tree_reveal, Column, TableOptions, TreeItem, TreeKeys,
+    Column, TableOptions, TreeItem, TreeKeys, table_with, tree_keyed, tree_reveal,
 };
-use intuituive::{image_of, transport, HelpOptions, ImageFit, ImageView, Level, Transport};
+use intuituive::{HelpOptions, ImageFit, ImageView, Level, Transport, image_of, transport};
 use rich_ext::chart::FillGauge;
 
 /// termusic's seek step for short tracks.
@@ -959,11 +959,11 @@ fn library_view(m: Player) -> Node {
             m.show_dir(m.roots.with(|r| r[at].clone()), None);
         })
         .bind("a", "Add new root folder", move |cx| {
-            if let Some(dir) = m.selected().filter(|e| e.is_dir) {
-                if m.roots.with(|r| !r.contains(&dir.path)) {
-                    m.roots.update(|r| r.push(dir.path.clone()));
-                    cx.toast(format!("Added root {}", dir.path.display()));
-                }
+            if let Some(dir) = m.selected().filter(|e| e.is_dir)
+                && m.roots.with(|r| !r.contains(&dir.path))
+            {
+                m.roots.update(|r| r.push(dir.path.clone()));
+                cx.toast(format!("Added root {}", dir.path.display()));
             }
         })
         .bind(

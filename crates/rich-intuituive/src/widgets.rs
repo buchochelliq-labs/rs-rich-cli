@@ -15,42 +15,42 @@ use std::rc::Rc;
 use rich::{Console, Overflow, Segment, Style};
 use rich_interact::{Button, Key, KeyCode, Modifiers, MouseKind};
 
-use crate::layout::{solve, Align, Size, Track};
+use crate::layout::{Align, Size, Track, solve};
 use crate::list::Selection;
 use crate::node::{Axis, Node};
 use crate::reactive::Signal;
 use crate::scrollbar::Bar;
-use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
+use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, widget};
 
 pub use crate::bars::{
-    breadcrumb, cells, key_hints, key_hints_with, live, seg, seg_gauge, status_bar, Caps,
-    StatusSegment,
+    Caps, StatusSegment, breadcrumb, cells, key_hints, key_hints_with, live, seg, seg_gauge,
+    status_bar,
 };
 pub use crate::calendar::{
-    agenda, calendar, calendar_options, calendar_options_with, calendar_with, month, month_with,
-    year_view, year_view_with, CalendarOptions, Date, DateTime, MonthTitle, Time, Weekday,
-    YearOptions,
+    CalendarOptions, Date, DateTime, MonthTitle, Time, Weekday, YearOptions, agenda, calendar,
+    calendar_options, calendar_options_with, calendar_with, month, month_with, year_view,
+    year_view_with,
 };
 pub use crate::datetime::{
-    datetime_picker, time_picker, time_picker_with, DateTimeOptions, TimeOptions,
+    DateTimeOptions, TimeOptions, datetime_picker, time_picker, time_picker_with,
 };
 pub use crate::help::KeyHintsOptions;
 pub use crate::hex::hex_view;
 pub use crate::list::{
-    list_lazy, list_optional, list_rows, HighlightLayer, HighlightSpacing, ListDirection, ListRow,
-    RowRects,
+    HighlightLayer, HighlightSpacing, ListDirection, ListRow, RowRects, list_lazy, list_optional,
+    list_rows,
 };
 pub use crate::reorder::Move;
-pub use crate::scrollbar::{scrollbar, Scrollbar, ScrollbarSymbols, Show, Side};
-pub use crate::source::{source_table, view_of, RowCount, TableSource, View, ViewQuery};
+pub use crate::scrollbar::{Scrollbar, ScrollbarSymbols, Show, Side, scrollbar};
+pub use crate::source::{RowCount, TableSource, View, ViewQuery, source_table, view_of};
 pub use crate::split::{hsplit, split, split_with, vsplit};
-pub use crate::tab_set::{tab_set, tabs_for, TabSet};
+pub use crate::tab_set::{TabSet, tab_set, tabs_for};
 pub use crate::text_area::text_area;
 pub use crate::tree::{
-    tree, tree_keyed, tree_lazy, tree_lazy_with, tree_reveal, tree_with, LazyItem, LazyTree,
-    TreeItem, TreeKeys,
+    LazyItem, LazyTree, TreeItem, TreeKeys, tree, tree_keyed, tree_lazy, tree_lazy_with,
+    tree_reveal, tree_with,
 };
-pub use crate::tree_table::{tree_table, tree_table_rows, ShownRow, TreeRow, TreeTableOptions};
+pub use crate::tree_table::{ShownRow, TreeRow, TreeTableOptions, tree_table, tree_table_rows};
 
 /// A table column: its title, how wide it is (cells, a percentage, a
 /// flexible share, or [`Size::Auto`]: as wide as its title and the cells
@@ -1965,26 +1965,26 @@ impl Widget for Table {
         };
         // The bar keeps a column once the rows do not all fit.
         let mut bar_rect = None;
-        if let Some(look) = self.bar.look.clone() {
-            if look.wanted(len, in_view(&mut fetch, first, &widths)) {
-                let (rest, at) = look.split(width, height);
-                content_width = rest.width.saturating_sub(gutter);
-                let at = crate::screen::Rect::new(at.x, top, at.width, body as u16);
-                bar_rect = Some((rest.x, at));
-                if !single {
-                    widths = widths_at(&mut fetch, content_width);
-                    first = first_at(&mut fetch, &widths);
-                }
+        if let Some(look) = self.bar.look.clone()
+            && look.wanted(len, in_view(&mut fetch, first, &widths))
+        {
+            let (rest, at) = look.split(width, height);
+            content_width = rest.width.saturating_sub(gutter);
+            let at = crate::screen::Rect::new(at.x, top, at.width, body as u16);
+            bar_rect = Some((rest.x, at));
+            if !single {
+                widths = widths_at(&mut fetch, content_width);
+                first = first_at(&mut fetch, &widths);
             }
         }
         let gutter_x = bar_rect.map_or(0, |(x, _)| x);
         let left = gutter_x + gutter;
         self.first.set(first);
-        if let Some(offset) = self.options.offset {
-            if self.seen.get() != Some(first) {
-                self.seen.set(Some(first));
-                crate::reactive::Runtime::current().untracked(|| offset.set(first));
-            }
+        if let Some(offset) = self.options.offset
+            && self.seen.get() != Some(first)
+        {
+            self.seen.set(Some(first));
+            crate::reactive::Runtime::current().untracked(|| offset.set(first));
         }
         // The rows in view, and their heights.
         let mut placed: Vec<(usize, u16, u16)> = Vec::new();
@@ -2260,25 +2260,25 @@ impl Widget for Table {
                 }
             }
             // The cell cursor, over the selected row's cell.
-            if let (true, Some(column)) = (is_selected, cell) {
-                if let Some(&(x, w)) = self.spans.borrow().get(column) {
-                    let style = cx.style("selected.cell", "reverse bold");
-                    canvas.restyle(x, *y, w, shown, &style);
-                }
+            if let (true, Some(column)) = (is_selected, cell)
+                && let Some(&(x, w)) = self.spans.borrow().get(column)
+            {
+                let style = cx.style("selected.cell", "reverse bold");
+                canvas.restyle(x, *y, w, shown, &style);
             }
         }
         // The cursor's column, down the rows, under the cell cursor.
-        if let (true, Some(column)) = (self.options.column_highlight, cell) {
-            if let Some(&(x, w)) = self.spans.borrow().get(column) {
-                let style = cx.style("selected.column", "bold");
-                for (i, y, h) in &placed {
-                    let lines = h.saturating_sub(self.options.row_gap).max(1);
-                    let lines = lines.min(height.saturating_sub(*y + footer_lines));
+        if let (true, Some(column)) = (self.options.column_highlight, cell)
+            && let Some(&(x, w)) = self.spans.borrow().get(column)
+        {
+            let style = cx.style("selected.column", "bold");
+            for (i, y, h) in &placed {
+                let lines = h.saturating_sub(self.options.row_gap).max(1);
+                let lines = lines.min(height.saturating_sub(*y + footer_lines));
+                canvas.restyle(x, *y, w, lines, &style);
+                if selected == Some(*i) {
+                    let style = cx.style("selected.cell", "reverse bold");
                     canvas.restyle(x, *y, w, lines, &style);
-                    if selected == Some(*i) {
-                        let style = cx.style("selected.cell", "reverse bold");
-                        canvas.restyle(x, *y, w, lines, &style);
-                    }
                 }
             }
         }

@@ -446,7 +446,7 @@ fn tokenize_check(source: &str) -> std::result::Result<(), LiteralError> {
                     None => {
                         return syntax(
                             "unterminated string literal (detected at line 1)".to_string(),
-                        )
+                        );
                     }
                     Some('\\') => {
                         chars.next();
@@ -985,7 +985,7 @@ mod tests {
         assert_eq!(escape("back\\slash"), "back\\slash");
         assert_eq!(escape("trailing\\"), "trailing\\\\");
         assert_eq!(escape("[Hello]"), "[Hello]"); // not a tag → unchanged
-                                                  // Escaped markup round-trips to the literal text.
+        // Escaped markup round-trips to the literal text.
         assert_eq!(render(&escape("[bold]")).unwrap().plain(), "[bold]");
     }
 }

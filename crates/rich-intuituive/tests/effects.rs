@@ -7,7 +7,7 @@ use intuituive::interact::{Event, Key};
 use intuituive::prelude::*;
 use intuituive::screen::Rect;
 use intuituive::widget::{Canvas, DrawCx, MeasureCx};
-use intuituive::{assert_screen, Driver};
+use intuituive::{Driver, assert_screen};
 
 fn shown(app: App, width: u16, height: u16) -> Driver {
     let mut driver = app.driver(width, height);

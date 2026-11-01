@@ -17,7 +17,7 @@
 
 use crate::error::MicroError;
 use crate::model::Layer;
-use crate::package::{load_embedded_pack, Limits, Pack};
+use crate::package::{Limits, Pack, load_embedded_pack};
 
 /// Every file of the built-in library: `(path under builtin/, bytes)`.
 static FILES: &[(&str, &[u8])] = include!("../builtin/files.rs");

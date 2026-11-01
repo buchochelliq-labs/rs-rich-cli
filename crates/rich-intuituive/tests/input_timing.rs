@@ -72,7 +72,7 @@ fn a_sent_event_settles_as_a_press_does() {
 /// `shift+up` binding never fired while one had the focus.
 #[test]
 fn a_table_leaves_shift_arrows_to_its_ancestors() {
-    use intuituive::widgets::{table, Column};
+    use intuituive::widgets::{Column, table};
     let app = App::new(|| {
         let (selected, moved) = (signal(1usize), signal(0));
         column([

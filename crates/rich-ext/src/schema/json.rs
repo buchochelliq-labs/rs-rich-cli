@@ -482,21 +482,20 @@ impl<'a> Walk<'a> {
             }
         }
         for keyword in ["not", "if", "then", "else"] {
-            if let Some(branch) = schema.get(keyword) {
-                if let Some(mut child) =
+            if let Some(branch) = schema.get(keyword)
+                && let Some(mut child) =
                     self.node(branch, keyword, false, next, FieldKind::Condition)
-                {
-                    // A condition's line is the keyword, then the type and
-                    // constraints of the schema it names.
-                    let target = branch
-                        .get("$ref")
-                        .and_then(Value::as_str)
-                        .and_then(|r| self.resolver.resolve(r).ok())
-                        .unwrap_or(branch);
-                    child = child.with_native_type(type_of(target));
-                    *child.constraints_mut() = constraints(target);
-                    out.push(child);
-                }
+            {
+                // A condition's line is the keyword, then the type and
+                // constraints of the schema it names.
+                let target = branch
+                    .get("$ref")
+                    .and_then(Value::as_str)
+                    .and_then(|r| self.resolver.resolve(r).ok())
+                    .unwrap_or(branch);
+                child = child.with_native_type(type_of(target));
+                *child.constraints_mut() = constraints(target);
+                out.push(child);
             }
         }
         out
@@ -607,10 +606,10 @@ fn follow<'v>(resolver: Resolver<'v>, schema: Cow<'v, Value>) -> (Cow<'v, Value>
         _ => return (schema, false, own),
     };
     let mut siblings: Vec<Map<String, Value>> = Vec::new();
-    if let Value::Object(map) = schema.as_ref() {
-        if map.len() > 1 {
-            siblings.push(map.clone());
-        }
+    if let Value::Object(map) = schema.as_ref()
+        && map.len() > 1
+    {
+        siblings.push(map.clone());
     }
     let mut target: &'v Value = resolved;
     for _ in 1..DEPTH {
@@ -619,10 +618,10 @@ fn follow<'v>(resolver: Resolver<'v>, schema: Cow<'v, Value>) -> (Cow<'v, Value>
         };
         match resolver.resolve(reference) {
             Ok(resolved) if !std::ptr::eq(resolved, target) => {
-                if let Value::Object(map) = target {
-                    if map.len() > 1 {
-                        siblings.push(map.clone());
-                    }
+                if let Value::Object(map) = target
+                    && map.len() > 1
+                {
+                    siblings.push(map.clone());
                 }
                 target = resolved;
             }

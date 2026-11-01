@@ -11,8 +11,8 @@ pub use rich_ext::cancel::CancelToken;
 use crate::app::Ctx;
 use crate::layout::TextAlign;
 use crate::list::list_lazy;
-use crate::node::{switch, text, Node};
-use crate::reactive::{signal, Signal};
+use crate::node::{Node, switch, text};
+use crate::reactive::{Signal, signal};
 use crate::task::spawn_stream;
 
 /// How far a job has got, as a [`jobs_panel`] shows it.

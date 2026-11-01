@@ -9,7 +9,7 @@ use std::sync::Arc;
 
 use rich::{Cell, ColorSystem, Console, Justify, Rule, Table, Text};
 use rich_art::image::{DynamicImage, Rgb, RgbImage};
-use rich_art::imagediff::{diff, DiffError, DiffSettings};
+use rich_art::imagediff::{DiffError, DiffSettings, diff};
 use rich_art::{ImageArt, ImageMode};
 
 // --8<-- [start:pair]
@@ -21,10 +21,11 @@ fn screenshot(badge: Option<[u8; 3]>) -> DynamicImage {
         if dx * dx + dy * dy <= 28.0 * 28.0 {
             return Rgb([250, 205, 40]); // the disc: identical in both
         }
-        if let Some(colour) = badge {
-            if (100..140).contains(&x) && (30..70).contains(&y) {
-                return Rgb(colour); // the badge
-            }
+        if let Some(colour) = badge
+            && (100..140).contains(&x)
+            && (30..70).contains(&y)
+        {
+            return Rgb(colour); // the badge
         }
         Rgb([
             (20 + x * 60 / 159) as u8,

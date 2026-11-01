@@ -22,7 +22,7 @@ use std::fs;
 use std::io::Write;
 use std::path::{Component, Path, PathBuf};
 
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 use crate::error::LockfileError;
 use crate::listing::{Kind, Tier};
@@ -67,7 +67,7 @@ impl LockEntry {
                 return Err(LockfileError::Missing {
                     id: self.id.clone(),
                     path: path.display().to_string(),
-                })
+                });
             }
             Err(e) => return Err(io_error(&path, e)),
         };

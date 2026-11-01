@@ -9,9 +9,9 @@ mod colors;
 
 use std::time::Duration;
 
-use colors::{colors_app, Options, FRAME};
+use colors::{FRAME, Options, colors_app};
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
-use intuituive::{assert_screen, assert_screen_styled, Driver};
+use intuituive::{Driver, assert_screen, assert_screen_styled};
 
 const WIDTH: u16 = 100;
 const HEIGHT: u16 = 32;

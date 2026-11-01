@@ -7,7 +7,7 @@
 [package]
 name = "rs-rich-py"
 version = "0.0.12"
-edition = "2021"
+edition = "2024"
 license = "MIT"
 repository = "https://github.com/buchochelliq-labs/rs-rich-cli"
 description = "Python bindings for rs-rich (the rs-rich wheel on PyPI)"

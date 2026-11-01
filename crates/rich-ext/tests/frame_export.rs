@@ -10,7 +10,7 @@ use rich::markdown::Markdown;
 use rich::panel::Panel;
 use rich::terminal_theme::{DEFAULT_TERMINAL_THEME, SVG_EXPORT_THEME};
 use rich::{ColorSystem, Console, Renderable, Rule, Segment, Table, Text, Tree};
-use rich_ext::frame::{render_frame, role_name, Frame, HtmlOptions, SvgOptions};
+use rich_ext::frame::{Frame, HtmlOptions, SvgOptions, render_frame, role_name};
 
 fn console(width: usize) -> Console {
     Console::builder()

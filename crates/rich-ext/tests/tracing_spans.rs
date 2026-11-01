@@ -4,6 +4,7 @@
 use rich::protocol::{Support, TargetCapabilities};
 use rich::{Console, Theme};
 use rich_ext::{
+    RichHandler, SpanView,
     adapters::{EventLayer, EventSink},
     event::{
         EventContext, Message, Severity, SourceLocation, SpanContext, SpanEvent, StructuredEvent,
@@ -12,7 +13,6 @@ use rich_ext::{
     hyperlink::Hyperlinker,
     live::LiveCoordinator,
     target::{RenderTarget, TargetKind},
-    RichHandler, SpanView,
 };
 use std::io::Write;
 use std::sync::{Arc, Mutex};

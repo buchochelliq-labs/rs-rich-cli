@@ -111,11 +111,7 @@ fn fmt_str(v: f64) -> String {
         return py_exponent(mantissa, exp);
     }
     let s = format!("{v}");
-    if s.contains('.') {
-        s
-    } else {
-        format!("{s}.0")
-    }
+    if s.contains('.') { s } else { format!("{s}.0") }
 }
 
 /// `inf`, `-inf` or `nan`, as Python formats them.

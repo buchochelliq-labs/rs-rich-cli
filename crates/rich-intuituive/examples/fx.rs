@@ -10,9 +10,9 @@
 
 use std::time::Duration;
 
+use intuituive::Direction;
 use intuituive::fx::{self, Fx};
 use intuituive::prelude::*;
-use intuituive::Direction;
 
 fn ms(n: u64) -> Duration {
     Duration::from_millis(n)

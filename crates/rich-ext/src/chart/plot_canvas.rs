@@ -10,8 +10,8 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 use super::canvas::{bresenham, octant, quadrant, sextant};
 use super::world::MapResolution;
 use super::{
-    cell_units, cells, draw_grid, lines_to_segments, theme_style, user_style, Charset, DotCanvas,
-    Line,
+    Charset, DotCanvas, Line, cell_units, cells, draw_grid, lines_to_segments, theme_style,
+    user_style,
 };
 use crate::fidelity::ascii_text;
 use crate::frame::{StyleId, StyleTable};
@@ -662,10 +662,10 @@ impl<'a> Styles<'a> {
 
     fn id(&mut self, spec: &str) -> usize {
         // The last spec again (a dataset's thousand steps share one).
-        if let Some(last) = self.specs.last() {
-            if last == spec {
-                return self.specs.len() - 1;
-            }
+        if let Some(last) = self.specs.last()
+            && last == spec
+        {
+            return self.specs.len() - 1;
         }
         if let Some(i) = self.specs.iter().position(|s| s == spec) {
             return i;

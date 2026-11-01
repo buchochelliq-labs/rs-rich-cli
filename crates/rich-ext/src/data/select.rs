@@ -128,7 +128,7 @@ mod jsonpath {
     use std::cmp::Ordering;
 
     use super::{SelectError, Selector, SelectorBackend};
-    use crate::data::{value_eq, Node, Path, PathSegment, Value};
+    use crate::data::{Node, Path, PathSegment, Value, value_eq};
 
     /// The built-in JSONPath backend (`jsonpath`).
     ///
@@ -657,11 +657,7 @@ mod jsonpath {
     }
 
     fn normalize(index: i64, len: usize) -> i64 {
-        if index < 0 {
-            len as i64 + index
-        } else {
-            index
-        }
+        if index < 0 { len as i64 + index } else { index }
     }
 
     fn resolve<'a>(root: &'a Node, keys: &[PathSegment], negatives: &[i64]) -> Option<&'a Node> {
@@ -755,10 +751,10 @@ mod jsonpath {
     ) {
         match sel {
             Sel::Name(name) => {
-                if let Value::Map(entries) = &node.value {
-                    if let Some((k, v)) = entries.iter().rev().find(|(k, _)| k == name) {
-                        out.push((path.child_key(k), v));
-                    }
+                if let Value::Map(entries) = &node.value
+                    && let Some((k, v)) = entries.iter().rev().find(|(k, _)| k == name)
+                {
+                    out.push((path.child_key(k), v));
                 }
             }
             Sel::Wildcard => out.extend(children(path, node)),

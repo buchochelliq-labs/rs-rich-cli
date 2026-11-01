@@ -16,7 +16,7 @@ use std::time::{Duration, Instant};
 use intuituive::interact::Event;
 use intuituive::miller::MillerSource;
 use intuituive::prelude::*;
-use intuituive::{miller_of, Driver, Notifier};
+use intuituive::{Driver, Notifier, miller_of};
 
 fn rows(driver: &Driver) -> Vec<String> {
     driver
@@ -317,7 +317,7 @@ fn a_hidden_binding_works_is_left_out_of_the_help_and_runs_by_name() {
 
 #[test]
 fn a_played_feed_ends_when_its_values_run_out_while_its_tail_plays_on() {
-    use intuituive::{latest_iter, Pace};
+    use intuituive::{Pace, latest_iter};
     let app = App::new(|| {
         let (frame, state) = latest_iter(vec![1, 2, 3], Pace::Free)
             .then_at(Pace::Every(Duration::from_millis(100)), 10..)
@@ -344,7 +344,7 @@ fn a_played_feed_ends_when_its_values_run_out_while_its_tail_plays_on() {
 
 #[test]
 fn a_played_feed_stalls_between_slow_values_and_runs_again() {
-    use intuituive::{latest_iter, Pace};
+    use intuituive::{Pace, latest_iter};
     let app = App::new(|| {
         let (frame, state) = latest_iter(1..=3, Pace::Every(Duration::from_millis(500)))
             .stall_after(Duration::from_millis(300))
@@ -506,7 +506,7 @@ fn an_overlay_lists_other_items_at_a_level_until_the_columns_leave_it() {
 
 #[test]
 fn marks_by_key_show_a_selection_in_another_list_visual_range_too() {
-    use intuituive::{multi_select, Mark};
+    use intuituive::{Mark, multi_select};
     let app = App::new(|| {
         let items = signal(names(&["a", "b", "c"]));
         let cursor = signal(0usize);
@@ -566,7 +566,7 @@ fn find_from_the_hovered_item_stays_on_a_match() {
 
 #[test]
 fn numbered_tabs_and_a_segment_that_shows_only_while_it_should() {
-    use intuituive::widgets::{seg, status_bar, Caps};
+    use intuituive::widgets::{Caps, seg, status_bar};
     use intuituive::{tab_set, tabs_for_indexed};
     let app = App::new(|| {
         let set = tab_set(|| "src".to_string());
@@ -704,7 +704,7 @@ fn update_state_reads_changes_and_writes_a_state_file() {
 #[cfg(unix)]
 #[test]
 fn a_job_runs_a_process_reads_its_progress_and_cancelling_kills_it() {
-    use intuituive::{jobs, ProcessOutcome};
+    use intuituive::{ProcessOutcome, jobs};
     let app = App::new(|| {
         let list = jobs::<f64>();
         let said = signal(String::new());

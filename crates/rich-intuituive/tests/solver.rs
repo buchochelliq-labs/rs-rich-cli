@@ -1,7 +1,7 @@
 //! `Solver::Ratatui`: rows and columns laid out as ratatui's `Layout` lays
 //! them out, checked against ratatui itself over many widths.
 
-use intuituive::layout::{split, Track};
+use intuituive::layout::{Track, split};
 use intuituive::node::Axis;
 use intuituive::screen::Rect;
 use intuituive::{Justify, Size, Solver, StackLayout};

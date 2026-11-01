@@ -15,7 +15,7 @@ use intuituive::node::Axis;
 use intuituive::prelude::*;
 use intuituive::screen::Rect;
 use intuituive::widget::{
-    markup_width, widget, Canvas, DrawCx, EventCx, MeasureCx, ScrollCx, Used, Widget, WidgetEvent,
+    Canvas, DrawCx, EventCx, MeasureCx, ScrollCx, Used, Widget, WidgetEvent, markup_width, widget,
 };
 
 type Log = Rc<RefCell<Vec<String>>>;

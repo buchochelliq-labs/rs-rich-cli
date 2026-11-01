@@ -194,7 +194,7 @@ fn justify_padding_runs() -> String {
     table.add_column("hhhhhhh");
     table.add_row_text(vec![Text::from_markup("[red]a[/][red]b[/]").unwrap()]);
     table.add_row_text(vec![
-        Text::styled("c", Style::parse("green").unwrap()).justify(Justify::Center)
+        Text::styled("c", Style::parse("green").unwrap()).justify(Justify::Center),
     ]);
     out.push_str(&print(&console, &table));
     out

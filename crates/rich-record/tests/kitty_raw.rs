@@ -1,9 +1,9 @@
 //! rs-rich-art's raw Kitty transmissions (`f=24`, `f=32`, `o=z`, chunked)
 //! decode in the emulator to the pixels sent.
 
-use rich_art::kitty::{placeholder_row, transmit_raw, RawFormat, RawImage, Transmit};
-use rich_record::terminal::Terminal;
+use rich_art::kitty::{RawFormat, RawImage, Transmit, placeholder_row, transmit_raw};
 use rich_record::Theme;
+use rich_record::terminal::Terminal;
 
 /// The pixels of the one image `escape` sends, shown in 4x2 placeholder
 /// cells, as RGBA.

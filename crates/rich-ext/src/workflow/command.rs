@@ -48,7 +48,7 @@ use std::time::{Duration, Instant};
 
 use rich::{AnsiDecoder, Console, ConsoleOptions, Renderable, Segment, Text};
 
-use super::{render_texts, span, style, Look, State};
+use super::{Look, State, render_texts, span, style};
 use crate::a11y::{AccessibilityPolicy, SymbolSet};
 use crate::cancel::CancelToken;
 use crate::diagnostic::Diagnostic;
@@ -240,7 +240,7 @@ impl CommandRecord {
         let command = format!("`{}`", self.command_line());
         let message = match &self.status {
             CommandStatus::Exited(0) | CommandStatus::Running | CommandStatus::Cancelled => {
-                return None
+                return None;
             }
             CommandStatus::Exited(code) => format!("{command} exited with code {code}"),
             CommandStatus::Signalled(signal) => {
@@ -442,13 +442,13 @@ impl<'a> CommandView<'a> {
 impl Renderable for CommandView<'_> {
     fn rich_render(&self, console: &Console, options: &ConsoleOptions) -> Vec<Segment> {
         let mut lines = vec![self.header(console)];
-        if self.show_cwd {
-            if let Some(cwd) = &self.record.cwd {
-                lines.push(Text::styled(
-                    format!("  in {}", cwd.display()),
-                    style(console, "workflow.cwd"),
-                ));
-            }
+        if self.show_cwd
+            && let Some(cwd) = &self.record.cwd
+        {
+            lines.push(Text::styled(
+                format!("  in {}", cwd.display()),
+                style(console, "workflow.cwd"),
+            ));
         }
         lines.extend(self.output(console));
         let mut segments = render_texts(console, options, &lines);

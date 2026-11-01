@@ -197,11 +197,7 @@ fn reversed(driver: &intuituive::Driver) -> Vec<String> {
                     let rev = screen
                         .style(cell.style)
                         .is_some_and(|s| s.attr(6) == Some(true));
-                    if rev {
-                        '#'
-                    } else {
-                        '.'
-                    }
+                    if rev { '#' } else { '.' }
                 })
                 .collect()
         })

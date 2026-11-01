@@ -63,16 +63,15 @@ impl Host {
                         host: (self.abi_major, self.abi_minor),
                     });
                 }
-                if kind == Kind::WasmPlugin {
-                    if let Some(unknown) = version
+                if kind == Kind::WasmPlugin
+                    && let Some(unknown) = version
                         .capabilities
                         .iter()
                         .find(|c| CapabilityKind::parse(&c.kind).is_none())
-                    {
-                        return Err(Incompatibility::UnknownCapability {
-                            kind: unknown.kind.clone(),
-                        });
-                    }
+                {
+                    return Err(Incompatibility::UnknownCapability {
+                        kind: unknown.kind.clone(),
+                    });
                 }
             }
             Requires::PluginApi(required) => {
@@ -92,13 +91,13 @@ impl Host {
                 return Err(Incompatibility::MicroSchema {
                     required,
                     host: self.micro_schema,
-                })
+                });
             }
             Requires::ThemeFormat(required) if required != self.theme_format => {
                 return Err(Incompatibility::ThemeFormat {
                     required,
                     host: self.theme_format,
-                })
+                });
             }
             _ => {}
         }

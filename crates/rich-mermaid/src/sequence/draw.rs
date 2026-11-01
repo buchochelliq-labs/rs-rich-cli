@@ -11,8 +11,8 @@
 //! takes no width; [`Drawing::cropped`] fits it to one.
 
 use rich::cells::{cell_len, char_cell_width};
-use rich_diagram::layout::MAX_CELLS;
 use rich_diagram::Drawing;
+use rich_diagram::layout::MAX_CELLS;
 
 use super::{BlockKind, Event, LineStyle, NotePlacement, ParticipantKind, Sequence, Tip};
 
@@ -733,10 +733,10 @@ impl Canvas {
                 }
                 width => {
                     self.glyph(at, y, &c.to_string());
-                    if width == 2 {
-                        if let Some(cell) = self.get(at + 1, y) {
-                            *cell = Cell::Wide;
-                        }
+                    if width == 2
+                        && let Some(cell) = self.get(at + 1, y)
+                    {
+                        *cell = Cell::Wide;
                     }
                     at += width as i64;
                 }

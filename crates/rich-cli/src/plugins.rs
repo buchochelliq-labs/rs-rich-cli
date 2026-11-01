@@ -9,10 +9,10 @@
 //! feature; native loading (`dylib-plugins`) is not. A project's
 //! `./rich.toml` may not list plugins (see `config::UNTRUSTED_PLUGINS`).
 use super::*;
-use rich_ext::plugin::abi::ABI_MAJOR;
-use rich_ext::plugin::PLUGIN_API_VERSION;
-use rich_ext::plugin_loading::{self, LoadError, LoadOptions, RuntimeKind, RuntimePlugin};
 use rich_ext::ExtensionRegistry;
+use rich_ext::plugin::PLUGIN_API_VERSION;
+use rich_ext::plugin::abi::ABI_MAJOR;
+use rich_ext::plugin_loading::{self, LoadError, LoadOptions, RuntimeKind, RuntimePlugin};
 
 /// The runtime plugins loaded for this run, added to every registry the
 /// binary builds ([`add_to`]).
@@ -223,7 +223,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
     let request = match request(args) {
         Ok(request) => request,
         Err(message) => {
-            return emit_error(json, ExitClass::Usage, &format!("{message} (try --help)"))
+            return emit_error(json, ExitClass::Usage, &format!("{message} (try --help)"));
         }
     };
     let merged = match config_args(args, &ConfigRoots::default()) {

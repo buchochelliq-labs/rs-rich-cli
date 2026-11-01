@@ -244,14 +244,12 @@ impl CustomColumn {
     fn call(&self, task: &Task) -> Cell {
         let now = task.now();
         let max_refresh = self.column.max_refresh();
-        if let Some(max_refresh) = max_refresh {
-            if task.completed == 0.0 {
-                if let Some((timestamp, cell)) = self.cache.borrow().get(&task.id) {
-                    if timestamp + max_refresh > now {
-                        return cell.clone();
-                    }
-                }
-            }
+        if let Some(max_refresh) = max_refresh
+            && task.completed == 0.0
+            && let Some((timestamp, cell)) = self.cache.borrow().get(&task.id)
+            && timestamp + max_refresh > now
+        {
+            return cell.clone();
         }
         let cell = self.column.render(task);
         self.cache.borrow_mut().insert(task.id, (now, cell.clone()));
@@ -489,12 +487,11 @@ impl TimeRemainingColumn {
         // `ProgressColumn.__call__`: reuse a render younger than max_refresh,
         // but only while the task has completed nothing (`not task.completed`).
         let now = task.now();
-        if task.completed == 0.0 {
-            if let Some((timestamp, text)) = self.cache.borrow().get(&task.id) {
-                if timestamp + 0.5 > now {
-                    return text.clone();
-                }
-            }
+        if task.completed == 0.0
+            && let Some((timestamp, text)) = self.cache.borrow().get(&task.id)
+            && timestamp + 0.5 > now
+        {
+            return text.clone();
         }
         let (task_time, style) = if self.elapsed_when_finished && task.finished() {
             (task.finished_time, "progress.elapsed")
@@ -1056,11 +1053,11 @@ impl Progress {
             return;
         };
         let completed_start = task.completed;
-        if let Some(total) = update.total {
-            if Some(total) != task.total {
-                task.total = Some(total);
-                task.clear_progress();
-            }
+        if let Some(total) = update.total
+            && Some(total) != task.total
+        {
+            task.total = Some(total);
+            task.clear_progress();
         }
         if let Some(advance) = update.advance {
             task.completed += advance;

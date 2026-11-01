@@ -1,6 +1,6 @@
 //! Images rendered with Unicode Braille cells.
 
-use image::{imageops::FilterType, DynamicImage, GenericImageView};
+use image::{DynamicImage, GenericImageView, imageops::FilterType};
 use rich::console::{Console, ConsoleOptions};
 use rich::protocol::Renderable;
 use rich::segment::Segment;
@@ -63,12 +63,12 @@ impl BrailleArt {
         let mut columns = self.width.unwrap_or(available).max(1);
         let mut rows = ((ih as f64 * columns as f64) / (iw.max(1) as f64 * 2.0)).ceil() as usize;
         rows = rows.max(1);
-        if let Some(cap) = self.height {
-            if rows > cap.max(1) {
-                let factor = cap.max(1) as f64 / rows as f64;
-                columns = ((columns as f64 * factor).round() as usize).max(1);
-                rows = cap.max(1);
-            }
+        if let Some(cap) = self.height
+            && rows > cap.max(1)
+        {
+            let factor = cap.max(1) as f64 / rows as f64;
+            columns = ((columns as f64 * factor).round() as usize).max(1);
+            rows = cap.max(1);
         }
         crate::image_art::bound_grid(columns, rows, true, max_rows)
     }

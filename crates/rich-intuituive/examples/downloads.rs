@@ -264,22 +264,24 @@ fn start_threads(proxy: Proxy, state: State, queue: Vec<Download>, tick: Duratio
     let queue = Arc::new(Mutex::new(VecDeque::from(queue)));
     for w in 0..WORKERS {
         let (proxy, queue) = (proxy.clone(), queue.clone());
-        std::thread::spawn(move || loop {
-            let Some(download) = queue.lock().ok().and_then(|mut q| q.pop_front()) else {
-                return;
-            };
-            let mut job = Job::new(download);
-            let mut complete = false;
-            while !complete {
-                std::thread::sleep(tick);
-                let before = job.done;
-                complete = job.step();
-                let report = job;
-                let sent =
-                    proxy.run_with(move |cx| state.report(cx, w, before, report, complete, tick));
-                if !sent {
-                    // The app has ended.
+        std::thread::spawn(move || {
+            loop {
+                let Some(download) = queue.lock().ok().and_then(|mut q| q.pop_front()) else {
                     return;
+                };
+                let mut job = Job::new(download);
+                let mut complete = false;
+                while !complete {
+                    std::thread::sleep(tick);
+                    let before = job.done;
+                    complete = job.step();
+                    let report = job;
+                    let sent = proxy
+                        .run_with(move |cx| state.report(cx, w, before, report, complete, tick));
+                    if !sent {
+                        // The app has ended.
+                        return;
+                    }
                 }
             }
         });
@@ -329,10 +331,10 @@ pub fn downloads_app(options: Options) -> App {
     })
     .inline(ROWS)
     .help_key("?");
-    if options.threads {
-        if let Some(state) = made {
-            start_threads(app.proxy(), state, files, options.tick);
-        }
+    if options.threads
+        && let Some(state) = made
+    {
+        start_threads(app.proxy(), state, files, options.tick);
     }
     app
 }

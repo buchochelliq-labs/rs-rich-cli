@@ -6,8 +6,8 @@ use rich::{Console, ConsoleOptions, Renderable, Segment};
 
 use super::describe::count;
 use super::{
-    cells, has_colour, lines_to_segments, theme_style, truncate, user_style, Charset, Line, Scale,
-    ValueFormat,
+    Charset, Line, Scale, ValueFormat, cells, has_colour, lines_to_segments, theme_style, truncate,
+    user_style,
 };
 
 /// Strip cells when [`Distribution::strip_width`] is not set.
@@ -856,7 +856,9 @@ mod tests {
         assert!(empty.min.is_nan() && empty.p50.is_nan() && empty.mean.is_nan());
         let one = Summary::of([7.0]);
         assert_eq!(
-            (one.count, one.min, one.p25, one.p50, one.p95, one.max, one.mean),
+            (
+                one.count, one.min, one.p25, one.p50, one.p95, one.max, one.mean
+            ),
             (1, 7.0, 7.0, 7.0, 7.0, 7.0, 7.0)
         );
         let nan = Summary::of([f64::NAN, 2.0, f64::INFINITY, 4.0, f64::NEG_INFINITY]);

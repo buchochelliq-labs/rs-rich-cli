@@ -195,17 +195,17 @@ impl Json {
     pub fn with_options(text: &str, options: &JsonOptions) -> Result<Self> {
         let value = Parser::new(text).parse_document()?;
         // `json.dumps(allow_nan=False)` raises here, at construction.
-        if !options.allow_nan {
-            if let Some(literal) = first_non_finite(&value) {
-                return Err(RichError::Json(format!(
-                    "Out of range float values are not JSON compliant: {}",
-                    match literal {
-                        "NaN" => "nan",
-                        "Infinity" => "inf",
-                        _ => "-inf",
-                    }
-                )));
-            }
+        if !options.allow_nan
+            && let Some(literal) = first_non_finite(&value)
+        {
+            return Err(RichError::Json(format!(
+                "Out of range float values are not JSON compliant: {}",
+                match literal {
+                    "NaN" => "nan",
+                    "Infinity" => "inf",
+                    _ => "-inf",
+                }
+            )));
         }
         Ok(Json {
             value,
@@ -790,11 +790,12 @@ fn decode_with_surrogates(token: &str) -> Option<PyStr> {
                 let mut unit = hex4(&mut chars)?;
                 if (0xD800..0xDC00).contains(&unit) {
                     let mut lookahead = chars.clone();
-                    if lookahead.next() == Some('\\') && lookahead.next() == Some('u') {
-                        if let Some(low @ 0xDC00..=0xDFFF) = hex4(&mut lookahead) {
-                            unit = 0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00);
-                            chars = lookahead;
-                        }
+                    if lookahead.next() == Some('\\')
+                        && lookahead.next() == Some('u')
+                        && let Some(low @ 0xDC00..=0xDFFF) = hex4(&mut lookahead)
+                    {
+                        unit = 0x10000 + ((unit - 0xD800) << 10) + (low - 0xDC00);
+                        chars = lookahead;
                     }
                 }
                 match char::from_u32(unit) {
@@ -870,14 +871,14 @@ impl<'a> Parser<'a> {
             self.skip_whitespace();
             // CPython's scanner enters a recursive call per container, empty
             // ones included, and raises once the recursion limit is reached.
-            if let Some(kind @ (b'[' | b'{')) = self.peek() {
-                if stack.len() >= MAX_DEPTH {
-                    let what = if kind == b'[' { "array" } else { "object" };
-                    return Err(self.error(&format!(
-                        "maximum recursion depth exceeded while decoding a JSON {what} \
+            if let Some(kind @ (b'[' | b'{')) = self.peek()
+                && stack.len() >= MAX_DEPTH
+            {
+                let what = if kind == b'[' { "array" } else { "object" };
+                return Err(self.error(&format!(
+                    "maximum recursion depth exceeded while decoding a JSON {what} \
                          from a unicode string"
-                    )));
-                }
+                )));
             }
             match self.peek() {
                 Some(b'[') => {
@@ -1034,7 +1035,7 @@ impl<'a> Parser<'a> {
                         None => {
                             return Err(
                                 self.error_at(self.bytes.len(), "EOF while parsing a string")
-                            )
+                            );
                         }
                     }
                 }
@@ -1376,9 +1377,11 @@ mod tests {
                 .build()
                 .render_to_string(&Json::new(payload).unwrap().escape_safe(true));
             assert_eq!(output.replace('\n', ""), wide, "width {width}");
-            assert!(output
-                .lines()
-                .all(|line| crate::cells::cell_len(line) <= width));
+            assert!(
+                output
+                    .lines()
+                    .all(|line| crate::cells::cell_len(line) <= width)
+            );
         }
     }
 

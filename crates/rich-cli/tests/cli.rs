@@ -400,9 +400,11 @@ fn json_width_never_splits_an_escape_sequence() {
                         index + 6 <= bytes.len(),
                         "split Unicode escape at width {width}: {output:?}"
                     );
-                    assert!(bytes[index + 2..index + 6]
-                        .iter()
-                        .all(u8::is_ascii_hexdigit));
+                    assert!(
+                        bytes[index + 2..index + 6]
+                            .iter()
+                            .all(u8::is_ascii_hexdigit)
+                    );
                     index += 6;
                 }
                 b'"' | b'\\' | b'/' | b'b' | b'f' | b'n' | b'r' | b't' => index += 2,
@@ -1942,16 +1944,20 @@ fn batch_json_report_is_a_single_envelope_that_keeps_child_exit_classes() {
     assert_eq!(result["skipped"], 0);
     let failures = result["failures"].as_array().unwrap();
     assert_eq!(failures.len(), 1);
-    assert!(failures[0]["resource"]
-        .as_str()
-        .unwrap()
-        .ends_with("b.json"));
+    assert!(
+        failures[0]["resource"]
+            .as_str()
+            .unwrap()
+            .ends_with("b.json")
+    );
     assert_eq!(failures[0]["code"], "data");
     assert_eq!(failures[0]["exit_code"], 4);
-    assert!(failures[0]["message"]
-        .as_str()
-        .unwrap()
-        .contains("invalid JSON"));
+    assert!(
+        failures[0]["message"]
+            .as_str()
+            .unwrap()
+            .contains("invalid JSON")
+    );
 
     let _ = std::fs::remove_dir_all(&root);
 }
@@ -2347,9 +2353,11 @@ fn image_export_flags_write_a_real_document() {
     );
     assert!(ok, "{err}");
     assert!(!out.is_empty());
-    assert!(std::fs::read_to_string(&out_path)
-        .unwrap()
-        .contains("<html>"));
+    assert!(
+        std::fs::read_to_string(&out_path)
+            .unwrap()
+            .contains("<html>")
+    );
     std::fs::remove_file(out_path).unwrap();
 }
 

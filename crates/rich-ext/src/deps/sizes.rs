@@ -54,11 +54,11 @@ use std::time::SystemTime;
 use rich::cells::cell_len;
 use rich::table::Table;
 use rich::{Console, ConsoleOptions, Justify, Renderable, Segment, Text};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 use super::{
-    check_count, check_size, clean, saved_report, stack, stack_measure, theme_style, DepsError,
-    SAVED_FORMAT, SAVED_VERSION,
+    DepsError, SAVED_FORMAT, SAVED_VERSION, check_count, check_size, clean, saved_report, stack,
+    stack_measure, theme_style,
 };
 use crate::chart::BarChart;
 use crate::format;
@@ -1093,16 +1093,16 @@ impl SizeReport {
             line.push_str(&format!(", {} of source", format::bytes_binary(source)));
         }
         let mut text = Text::styled(line, theme_style(console, "deps.root"));
-        if let SizeSource::TargetDir { unmatched, .. } = &self.sizes.source {
-            if *unmatched > 0 {
-                text.append(
-                    &format!(
-                        "\n{} in the directory matched no package (left from an older build?)",
-                        plural(*unmatched, "crate")
-                    ),
-                    Some(theme_style(console, "deps.section").into()),
-                );
-            }
+        if let SizeSource::TargetDir { unmatched, .. } = &self.sizes.source
+            && *unmatched > 0
+        {
+            text.append(
+                &format!(
+                    "\n{} in the directory matched no package (left from an older build?)",
+                    plural(*unmatched, "crate")
+                ),
+                Some(theme_style(console, "deps.section").into()),
+            );
         }
         text
     }

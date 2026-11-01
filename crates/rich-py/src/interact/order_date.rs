@@ -17,9 +17,9 @@ use rich_interact::{
     TimePicker as CoreTime,
 };
 
-use super::components::{core_items, item_values, items, Item};
+use super::components::{Item, core_items, item_values, items};
 use super::compose::{self, Node};
-use super::{execute, record, Build, Mode, Record};
+use super::{Build, Mode, Record, execute, record};
 use crate::renderable;
 
 // ---------------------------------------------------------------------------
@@ -319,10 +319,10 @@ impl DateConfig {
     /// a picker with a time has no seconds). The picker would refuse a
     /// default outside them, so it is no default.
     fn check(&self, to_the_minute: bool) -> PyResult<()> {
-        if let (Some(min), Some(max)) = (self.min, self.max) {
-            if min > max {
-                return Err(PyValueError::new_err("min is after max"));
-            }
+        if let (Some(min), Some(max)) = (self.min, self.max)
+            && min > max
+        {
+            return Err(PyValueError::new_err("min is after max"));
         }
         if let Some(mut default) = self.default {
             if to_the_minute {

@@ -6,7 +6,7 @@
 use std::time::Duration;
 
 use intuituive::prelude::*;
-use intuituive::{action_overlay, input, Action, Driver, Size};
+use intuituive::{Action, Driver, Size, action_overlay, input};
 
 fn shown(driver: &Driver) -> String {
     driver.screen().plain().join("\n")

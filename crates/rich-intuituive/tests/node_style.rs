@@ -4,7 +4,7 @@ use std::time::Duration;
 
 use intuituive::interact::{Event, Key};
 use intuituive::prelude::*;
-use intuituive::{assert_screen_styled, Driver};
+use intuituive::{Driver, assert_screen_styled};
 
 fn shown(app: App, width: u16, height: u16) -> Driver {
     let mut driver = app.driver(width, height);

@@ -8,34 +8,34 @@
 use std::cell::RefCell;
 use std::collections::HashMap;
 use std::rc::Rc;
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use rich_embed::PageState;
-use rich_intuituive::interact::keymap::{try_keys, Keymap};
+use rich_intuituive::interact::keymap::{Keymap, try_keys};
 use rich_intuituive::interact::{Key, KeyCode};
 use rich_intuituive::prelude::*;
 use rich_intuituive::{
-    button_of, image_graphics, picture_bytes, picture_of, scroll_virtual_with, slider,
-    spawn_stream, Action, ImageView, Picture, Pixels,
+    Action, ImageView, Picture, Pixels, button_of, image_graphics, picture_bytes, picture_of,
+    scroll_virtual_with, slider, spawn_stream,
 };
 
-use crate::actions::{self, keys_label, ACTIONS};
+use crate::actions::{self, ACTIONS, keys_label};
 use crate::adapt::{Adapt, RULES};
 use crate::bookmarks::{Bookmark, Bookmarks};
 use crate::cdp::CELL;
 use crate::clean::{markup, truncate};
-use crate::config::{remove_site_key, save_site_key, Config, Images, Site, Target, View};
+use crate::config::{Config, Images, Site, Target, View, remove_site_key, save_site_key};
 use crate::engine::{Engine, HistoryStep, MediaOp, NodeId, Playback};
 use crate::layout::{
-    self, hint_labels, matches, scroll_log, to_text, Line, LogScroll, Marks, Piece, Projection,
+    self, Line, LogScroll, Marks, Piece, Projection, hint_labels, matches, scroll_log, to_text,
 };
 use crate::model::{Binding, MediaKind, Page, Role};
 use crate::pictures::{self, Live};
 use crate::tab::{Command, Intent, Refusal, Tab, Update};
 use crate::video::{Pacing, VideoFrame};
-use crate::widgets::{web_widget, WebControl};
+use crate::widgets::{WebControl, web_widget};
 
 /// The video regions on screen and the pacing's intervals, as told to the
 /// tab.
@@ -846,10 +846,10 @@ fn player(b: Browser, node: NodeId) -> Node {
     watch(
         move || playback().map(|p| (p.volume * 100.0).round() as i64),
         move |v, _| {
-            if let Some(v) = v {
-                if volume.get_untracked() != v as f64 {
-                    volume.set(v as f64);
-                }
+            if let Some(v) = v
+                && volume.get_untracked() != v as f64
+            {
+                volume.set(v as f64);
             }
         },
     );
@@ -1009,11 +1009,11 @@ fn activate(b: Browser, index: usize, cx: &mut Ctx) {
         });
         return;
     }
-    if b.view.get_untracked() == View::Reader {
-        if let Some(id) = b.web_control(&control).widget.get() {
-            cx.focus(id);
-            return;
-        }
+    if b.view.get_untracked() == View::Reader
+        && let Some(id) = b.web_control(&control).widget.get()
+    {
+        cx.focus(id);
+        return;
     }
     let node = control.node;
     let title = markup(&crate::tab::describe(&control));

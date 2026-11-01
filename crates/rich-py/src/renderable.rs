@@ -64,17 +64,17 @@ use std::cell::{Cell, RefCell};
 use std::rc::Rc;
 use std::sync::{Arc, RwLock};
 
+use pyo3::PyClass;
 use pyo3::exceptions::{PyRecursionError, PyRuntimeError};
 use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyString, PyTuple, PyType};
-use pyo3::PyClass;
 
+use rich::Text as CoreText;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::measure::Measurement as CoreMeasurement;
 use rich::protocol::{Highlighter, Renderable};
 use rich::segment::Segment as CoreSegment;
-use rich::Text as CoreText;
 
 use crate::errors::NotRenderableError;
 pub(crate) use crate::limits::FRAMES_PER_LEVEL;
@@ -758,12 +758,13 @@ pub(crate) fn unterminated(segments: Vec<CoreSegment>) -> Vec<CoreSegment> {
     if segments.is_empty() {
         return segments;
     }
-    if let Some(last) = segments.last_mut() {
-        if !last.control && last.text.ends_with('\n') {
-            last.text.pop();
-            if last.text.is_empty() {
-                segments.pop();
-            }
+    if let Some(last) = segments.last_mut()
+        && !last.control
+        && last.text.ends_with('\n')
+    {
+        last.text.pop();
+        if last.text.is_empty() {
+            segments.pop();
         }
     }
     if segments.is_empty() {
@@ -811,30 +812,30 @@ pub(crate) fn render_object(
         }
         return Ok(terminated(segments));
     }
-    if !value.is_instance_of::<PyType>() {
-        if let Some(method) = value.getattr_opt("__rich_console__")? {
-            let ambient = ambient()?;
-            let python_options = ConsoleOptions::from_core(options, &ambient.base);
-            let result = method.call1((ambient.console.bind(py), python_options))?;
-            let items = result.try_iter().map_err(|_| {
-                NotRenderableError::new_err(format!(
-                    "object {} is not renderable",
-                    result.repr().map(|r| r.to_string()).unwrap_or_default()
-                ))
-            })?;
-            let mut child_options = options.clone();
-            child_options.height = None;
-            let mut segments = Vec::new();
-            for item in items {
-                let item = item?;
-                if let Ok(segment) = item.extract::<PyRef<'_, Segment>>() {
-                    segments.push(segment.to_core());
-                } else {
-                    segments.extend(render_object(&item, console, &child_options)?);
-                }
+    if !value.is_instance_of::<PyType>()
+        && let Some(method) = value.getattr_opt("__rich_console__")?
+    {
+        let ambient = ambient()?;
+        let python_options = ConsoleOptions::from_core(options, &ambient.base);
+        let result = method.call1((ambient.console.bind(py), python_options))?;
+        let items = result.try_iter().map_err(|_| {
+            NotRenderableError::new_err(format!(
+                "object {} is not renderable",
+                result.repr().map(|r| r.to_string()).unwrap_or_default()
+            ))
+        })?;
+        let mut child_options = options.clone();
+        child_options.height = None;
+        let mut segments = Vec::new();
+        for item in items {
+            let item = item?;
+            if let Ok(segment) = item.extract::<PyRef<'_, Segment>>() {
+                segments.push(segment.to_core());
+            } else {
+                segments.extend(render_object(&item, console, &child_options)?);
             }
-            return Ok(segments);
         }
+        return Ok(segments);
     }
     if let Ok(string) = value.cast::<PyString>() {
         let ambient = ambient()?;

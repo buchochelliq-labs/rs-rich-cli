@@ -6,8 +6,8 @@ use std::sync::Arc;
 
 use rich::{ColorSystem, Console, Table, Text};
 use rich_ext::document::{
+    CERTAIN, DocumentFormat, DocumentRegistry, DocumentView, RenderOptions, Severity,
     model::{Block, Document, Inline},
-    DocumentFormat, DocumentRegistry, DocumentView, RenderOptions, Severity, CERTAIN,
 };
 
 const ORG: &str = "\

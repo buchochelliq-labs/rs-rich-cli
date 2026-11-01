@@ -6,7 +6,7 @@
 //!
 //! Requires the non-default `image` feature.
 
-use crate::{image_color::preprocess, ColorDistance, Dither, ImageColorMode};
+use crate::{ColorDistance, Dither, ImageColorMode, image_color::preprocess};
 use image::imageops::FilterType;
 use image::{DynamicImage, GenericImageView, ImageError, Rgba};
 

@@ -273,13 +273,13 @@ impl Renderable for Columns {
                     return Cell::Markup(String::new());
                 };
                 let mut cell = renderables[index].clone();
-                if self.equal {
-                    if let Cell::Renderable(renderable) = &cell {
-                        cell = Cell::Renderable(Arc::new(ConstrainCell {
-                            renderable: renderable.clone(),
-                            width: equal_width,
-                        }));
-                    }
+                if self.equal
+                    && let Cell::Renderable(renderable) = &cell
+                {
+                    cell = Cell::Renderable(Arc::new(ConstrainCell {
+                        renderable: renderable.clone(),
+                        width: equal_width,
+                    }));
                 }
                 if let Some(align) = self.align {
                     let child: Arc<dyn Renderable + Send + Sync> = match cell {

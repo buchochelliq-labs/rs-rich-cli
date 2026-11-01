@@ -726,10 +726,10 @@ fn table_gfm(table: &Table, exporter: &GfmExporter) -> Option<String> {
     let console = &exporter.console;
     let row_line = |cells: Vec<String>| format!("| {} |", cells.join(" | "));
     let mut out = String::new();
-    if let Some(title) = table.get_title().map(|title| exporter.label(title)) {
-        if !title.is_empty() {
-            out.push_str(&format!("**{title}**\n\n"));
-        }
+    if let Some(title) = table.get_title().map(|title| exporter.label(title))
+        && !title.is_empty()
+    {
+        out.push_str(&format!("**{title}**\n\n"));
     }
     out.push_str(&row_line(if table.get_show_header() {
         columns
@@ -785,10 +785,10 @@ fn table_gfm(table: &Table, exporter: &GfmExporter) -> Option<String> {
                 .collect(),
         ));
     }
-    if let Some(caption) = table.get_caption().map(|caption| exporter.label(caption)) {
-        if !caption.is_empty() {
-            out.push_str(&format!("\n\n*{caption}*"));
-        }
+    if let Some(caption) = table.get_caption().map(|caption| exporter.label(caption))
+        && !caption.is_empty()
+    {
+        out.push_str(&format!("\n\n*{caption}*"));
     }
     Some(out)
 }
@@ -1090,10 +1090,10 @@ impl ToGfm for MarkdownSource<'_> {
 #[cfg(feature = "syntax")]
 mod syntax_export {
     use super::*;
+    use rich::Syntax;
     use rich::protocol::{
         CodeHighlighter, CodeHighlighting, ConsoleCodeHighlighting, HighlightError, HighlightedCode,
     };
-    use rich::Syntax;
     use std::sync::{Arc, Mutex};
 
     /// Records the code and language `Syntax` highlights.

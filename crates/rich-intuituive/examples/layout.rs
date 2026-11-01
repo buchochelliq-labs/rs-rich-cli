@@ -31,7 +31,7 @@
 //! scrolls the Flex tab; and a key draws only the explorer, not the rest
 //! (`tests/layout_explorer.rs` checks it).
 
-use intuituive::layout::{split_with_spacers, Track};
+use intuituive::layout::{Track, split_with_spacers};
 use intuituive::node::Axis;
 use intuituive::prelude::*;
 use intuituive::screen::Rect;

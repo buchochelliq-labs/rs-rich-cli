@@ -44,8 +44,8 @@ use crate::protocol::{
 };
 use crate::segment::Segment;
 use crate::style::{Style, StyleType};
-use crate::text::python_splitlines;
 use crate::text::Text;
+use crate::text::python_splitlines;
 
 /// Upstream's `Syntax(tab_size=4)`.
 const DEFAULT_TAB_SIZE: usize = 4;
@@ -1191,7 +1191,10 @@ mod tests {
             "╭────╮\n│ ab │\n│ cd │\n╰────╯\n"
         );
         assert_eq!(
-            render(&crate::markdown::Markdown::new("```python\nab\rcd\n```"), 20),
+            render(
+                &crate::markdown::Markdown::new("```python\nab\rcd\n```"),
+                20
+            ),
             "                    \n ab                 \n cd                 \n                    \n"
         );
     }
@@ -1559,16 +1562,22 @@ mod tests {
         };
         let syntax = || Syntax::new("x = 1", "python");
 
-        assert!(with(None)
-            .render_to_string(&syntax())
-            .contains("\x1b[1mx = 1"));
-        assert!(with(Some("underline"))
-            .render_to_string(&syntax())
-            .contains("\x1b[4mx = 1"));
+        assert!(
+            with(None)
+                .render_to_string(&syntax())
+                .contains("\x1b[1mx = 1")
+        );
+        assert!(
+            with(Some("underline"))
+                .render_to_string(&syntax())
+                .contains("\x1b[4mx = 1")
+        );
         // The Syntax's own theme beats the console's.
-        assert!(with(Some("underline"))
-            .render_to_string(&syntax().theme("bold"))
-            .contains("\x1b[1mx = 1"));
+        assert!(
+            with(Some("underline"))
+                .render_to_string(&syntax().theme("bold"))
+                .contains("\x1b[1mx = 1")
+        );
         // The Syntax's own highlighter beats the console's, and the console's
         // theme (a name of another engine) does not follow it.
         #[cfg(feature = "syntax")]
@@ -1580,9 +1589,11 @@ mod tests {
         #[cfg(feature = "markdown")]
         {
             let markdown = crate::markdown::Markdown::new("```python\nx = 1\n```");
-            assert!(with(None)
-                .render_to_string(&markdown)
-                .contains("\x1b[1mx = 1"));
+            assert!(
+                with(None)
+                    .render_to_string(&markdown)
+                    .contains("\x1b[1mx = 1")
+            );
         }
         // `highlight_for` sees the console; `highlight` does not.
         assert!(!syntax().highlight_for(&with(None)).spans().is_empty());

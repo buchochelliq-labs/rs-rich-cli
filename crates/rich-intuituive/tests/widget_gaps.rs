@@ -68,7 +68,7 @@ fn a_focused_cell_far_to_the_right_is_scrolled_into_view() {
     assert!(row_of(&rows, "target").is_some(), "{rows:?}");
 }
 
-use intuituive::widgets::{table_with, Column, Order, TableOptions};
+use intuituive::widgets::{Column, Order, TableOptions, table_with};
 
 fn files() -> Vec<Vec<String>> {
     vec![
@@ -204,10 +204,10 @@ fn dragging_the_gap_after_a_header_resizes_the_column() {
     assert_eq!(rows[0].trim_end(), "Name       Size");
 }
 
-use std::sync::atomic::{AtomicUsize, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicUsize, Ordering};
 
-use intuituive::widgets::{tree_lazy, LazyItem};
+use intuituive::widgets::{LazyItem, tree_lazy};
 
 fn dirs() -> Vec<LazyItem> {
     vec![

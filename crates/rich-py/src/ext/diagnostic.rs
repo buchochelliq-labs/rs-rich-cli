@@ -31,7 +31,7 @@ use rich_ext::stacktrace::{
     CauseKind, Frame as CoreFrame, Language, Parsers, StackTrace as CoreTrace, TraceParser,
 };
 
-use super::common::{self, names, DiagnosticSpanError};
+use super::common::{self, DiagnosticSpanError, names};
 use crate::renderable::{self, AsRenderable};
 use crate::text::Text;
 
@@ -1090,10 +1090,8 @@ impl Diagnostic {
         if let Some(level) = level {
             d = d.level(self::level(level)?);
         }
-        if trace {
-            if let Some(trace) = StackTrace::from_exception(exception)? {
-                d = d.trace(trace.inner);
-            }
+        if trace && let Some(trace) = StackTrace::from_exception(exception)? {
+            d = d.trace(trace.inner);
         }
         let view = self::view(view)?;
         Ok(Diagnostic::from_core(d.view(view), view))
@@ -1520,7 +1518,7 @@ impl StructuredEvent {
             Some(other) => {
                 return Err(PyValueError::new_err(format!(
                     "invalid span_event {other:?}; expected open or close"
-                )))
+                )));
             }
         }
         if let Some(items) = diagnostics {

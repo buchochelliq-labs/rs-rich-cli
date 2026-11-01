@@ -7,13 +7,13 @@
 
 use std::sync::Arc;
 
+use rich::Console;
 use rich::cells::cell_len;
 use rich::measure::Measurement;
 use rich::panel::Panel;
 use rich::table::{Cell, Table};
-use rich::Console;
 use rich_diagram::{
-    draw, Diagram, Direction, Edge, Graph, Head, Node, Shape, Stroke, MAX_EDGE_LENGTH,
+    Diagram, Direction, Edge, Graph, Head, MAX_EDGE_LENGTH, Node, Shape, Stroke, draw,
 };
 
 fn console(width: usize) -> Console {

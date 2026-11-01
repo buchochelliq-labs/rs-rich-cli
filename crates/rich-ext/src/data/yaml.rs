@@ -60,7 +60,7 @@ pub(crate) fn resolve_plain(text: &str) -> Value {
         "true" | "True" | "TRUE" => return Value::Bool(true),
         "false" | "False" | "FALSE" => return Value::Bool(false),
         ".inf" | ".Inf" | ".INF" | "+.inf" | "+.Inf" | "+.INF" => {
-            return Value::Float(f64::INFINITY)
+            return Value::Float(f64::INFINITY);
         }
         "-.inf" | "-.Inf" | "-.INF" => return Value::Float(f64::NEG_INFINITY),
         ".nan" | ".NaN" | ".NAN" => return Value::Float(f64::NAN),
@@ -76,34 +76,34 @@ pub(crate) fn resolve_plain(text: &str) -> Value {
             })
             .flatten()
     };
-    if let Some(hex) = text.strip_prefix("0x") {
-        if let Some(value) = radix(hex, 16, char::is_ascii_hexdigit) {
-            return value;
-        }
+    if let Some(hex) = text.strip_prefix("0x")
+        && let Some(value) = radix(hex, 16, char::is_ascii_hexdigit)
+    {
+        return value;
     }
-    if let Some(octal) = text.strip_prefix("0o") {
-        if let Some(value) = radix(octal, 8, |c| ('0'..='7').contains(c)) {
-            return value;
-        }
+    if let Some(octal) = text.strip_prefix("0o")
+        && let Some(value) = radix(octal, 8, |c| ('0'..='7').contains(c))
+    {
+        return value;
     }
     let unsigned = text.strip_prefix(['-', '+']).unwrap_or(text);
     if !unsigned.is_empty() && unsigned.chars().all(|c| c.is_ascii_digit()) {
         if let Ok(i) = text.parse::<i64>() {
             return Value::Int(i);
         }
-        if let Ok(u) = unsigned.parse::<u64>() {
-            if !text.starts_with('-') {
-                return Value::UInt(u);
-            }
+        if let Ok(u) = unsigned.parse::<u64>()
+            && !text.starts_with('-')
+        {
+            return Value::UInt(u);
         }
         if let Ok(f) = text.parse::<f64>() {
             return Value::Float(f);
         }
     }
-    if is_core_float(unsigned) {
-        if let Ok(f) = text.parse::<f64>() {
-            return Value::Float(f);
-        }
+    if is_core_float(unsigned)
+        && let Ok(f) = text.parse::<f64>()
+    {
+        return Value::Float(f);
     }
     Value::String(text.to_string())
 }

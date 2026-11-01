@@ -14,7 +14,7 @@
 use std::sync::Arc;
 
 use rich::{ColorSystem, Segment};
-use rich_ext::frame::{plan_graphics, Change, Frame, PlacementSource};
+use rich_ext::frame::{Change, Frame, PlacementSource, plan_graphics};
 
 use crate::component::View;
 

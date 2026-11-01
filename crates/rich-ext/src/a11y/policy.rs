@@ -10,7 +10,7 @@
 //!   listed in [`AccessibilityPolicy::warnings`].
 
 use crate::capabilities::Environment;
-use crate::fidelity::{style_without_color, Fidelity, ATTR_NAMES};
+use crate::fidelity::{ATTR_NAMES, Fidelity, style_without_color};
 use rich::color::ColorType;
 use rich::console::ConsoleBuilder;
 use rich::{Color, Style, Theme};

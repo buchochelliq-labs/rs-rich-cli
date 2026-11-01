@@ -18,8 +18,8 @@ use std::time::Duration;
 
 use intuituive::prelude::*;
 use intuituive::{
-    button, checkbox, collapsible, radio, select_field, slider, spinner, switch_toggle,
-    ButtonVariant,
+    ButtonVariant, button, checkbox, collapsible, radio, select_field, slider, spinner,
+    switch_toggle,
 };
 
 /// The themes on offer.

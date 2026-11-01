@@ -37,9 +37,9 @@ mod types;
 #[allow(unused_imports)] // for other areas (`Syntax`, `Markdown`)
 pub(crate) use adapters::fence_renderer_arg;
 #[allow(unused_imports)] // for other areas (`Syntax`, `Markdown`)
-pub(crate) use code::{code_highlighter_arg, CodeHighlighter};
+pub(crate) use code::{CodeHighlighter, code_highlighter_arg};
 #[allow(unused_imports)] // for `console.rs`
-pub(crate) use registry::{installed, Installed};
+pub(crate) use registry::{Installed, installed};
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {
     types::register(m)?;

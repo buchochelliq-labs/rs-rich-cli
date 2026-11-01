@@ -20,10 +20,10 @@ use rich::{Segment, Style};
 
 use crate::clipboard::{self, CopyFormat};
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{fit, pad, plain, shown, text, PreviewLayout, Select, Theme};
+use crate::components::{PreviewLayout, Select, Theme, fit, pad, plain, shown, text};
 use crate::event::{Event, Key, KeyCode, MouseKind};
 use crate::item::{Actions, Item, TargetKind};
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::policy::{LineIo, NotInteractive};
 
 /// The builder methods both views pass on to their [`Select`].
@@ -546,10 +546,11 @@ impl<T: Clone> Component for TableSelect<T> {
         // The labels follow the pointer's two cells.
         let span = self.select.list_width(context.width).saturating_sub(2);
         self.span.set(span);
-        if let Some(key) = event.key() {
-            if !self.select.menu_open() && self.table_key(key, span) {
-                return Flow::Continue;
-            }
+        if let Some(key) = event.key()
+            && !self.select.menu_open()
+            && self.table_key(key, span)
+        {
+            return Flow::Continue;
         }
         // Shift with the wheel scrolls across.
         if let Event::Mouse(mouse) = event {

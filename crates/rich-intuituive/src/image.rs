@@ -33,15 +33,15 @@ use std::collections::HashMap;
 use std::path::{Path, PathBuf};
 use std::sync::{Arc, Mutex};
 
-use rich::segment::Segment;
 use rich::Style;
-use rich_art::picture::{count_picture_bytes, PictureTag};
-pub use rich_art::picture::{picture_bytes, ImageView, Picture, Pixels};
+use rich::segment::Segment;
+pub use rich_art::picture::{ImageView, Picture, Pixels, picture_bytes};
+use rich_art::picture::{PictureTag, count_picture_bytes};
 pub use rich_art::{ImageAnchor, ImageFit, ImageMode};
 use rich_ext::frame::{Frame, Graphic, Placement, PlacementSource};
 
-use crate::node::{leaf, Node};
-use crate::reactive::{signal, watch, Signal};
+use crate::node::{Node, leaf};
+use crate::reactive::{Signal, signal, watch};
 use crate::task::spawn;
 
 /// What an image node has to draw.
@@ -203,10 +203,11 @@ fn draw_cached(
     width: u16,
     height: u16,
 ) -> Vec<Vec<Segment>> {
-    if let Some((last, w, h, lines)) = drawn.borrow().as_ref() {
-        if last == picture && (*w, *h) == (width, height) {
-            return lines.clone();
-        }
+    if let Some((last, w, h, lines)) = drawn.borrow().as_ref()
+        && last == picture
+        && (*w, *h) == (width, height)
+    {
+        return lines.clone();
     }
     let lines = picture.lines(console, view, width, height);
     *drawn.borrow_mut() = Some((picture.clone(), width, height, lines.clone()));

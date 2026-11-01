@@ -9,7 +9,7 @@ use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::miller::MillerSource;
 use intuituive::prelude::*;
 use intuituive::{
-    finder_of, jobs, jobs_panel, miller_of, preview_of, preview_of_with, Driver, PreviewOfOptions,
+    Driver, PreviewOfOptions, finder_of, jobs, jobs_panel, miller_of, preview_of, preview_of_with,
 };
 
 fn rows(driver: &Driver) -> Vec<String> {

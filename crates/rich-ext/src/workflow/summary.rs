@@ -46,7 +46,7 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Text};
 
 use super::command::CommandRecord;
 use super::tasks::TaskTree;
-use super::{render_texts, span, Look, State};
+use super::{Look, State, render_texts, span};
 use crate::a11y::{AccessibilityPolicy, SymbolSet};
 
 /// One line of a [`CompletionSummary`].

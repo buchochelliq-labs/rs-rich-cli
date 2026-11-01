@@ -54,23 +54,24 @@ pub(super) fn run(options: &Options) -> Outcome<Done> {
         .and_then(|e| e.to_str())
         .map(str::to_ascii_lowercase)
         .unwrap_or_default();
-    let kind =
-        match extension.as_str() {
-            "wasm" => Kind::WasmPlugin,
-            "zip" | "richmicro" => Kind::MicroPack,
-            "ini" | "theme" => Kind::Theme,
-            "crate" => return Err(usage(
+    let kind = match extension.as_str() {
+        "wasm" => Kind::WasmPlugin,
+        "zip" | "richmicro" => Kind::MicroPack,
+        "ini" | "theme" => Kind::Theme,
+        "crate" => {
+            return Err(usage(
                 "a crate is listed from crates.io, not published from a file; write its listing \
                  by hand (docs/design/marketplace.md shows one)",
-            )),
-            _ => {
-                return Err(usage(format!(
+            ));
+        }
+        _ => {
+            return Err(usage(format!(
                 "{}: expected a WASM plugin (.wasm), a micro pack (.zip, .richmicro) or a theme \
                  (.ini, .theme)",
                 file.display()
-            )))
-            }
-        };
+            )));
+        }
+    };
     let limit = kind.max_artifact_bytes().unwrap_or(u64::MAX);
     let bytes = read_bounded(&file, limit)
         .map_err(|error| match error {
@@ -97,12 +98,12 @@ pub(super) fn run(options: &Options) -> Outcome<Done> {
 
     let described = describe(kind, &file, &bytes, options)?;
     for (flag, value) in [("id", &described.id), ("version", &described.version)] {
-        if let Some(given) = option(options, flag) {
-            if given != value {
-                return Err(data(format!(
-                    "--{flag} {given:?}, but the package says {value:?}"
-                )));
-            }
+        if let Some(given) = option(options, flag)
+            && given != value
+        {
+            return Err(data(format!(
+                "--{flag} {given:?}, but the package says {value:?}"
+            )));
         }
     }
     let number = Version::parse(&described.version).map_err(|e| {
@@ -210,15 +211,17 @@ pub(super) fn run(options: &Options) -> Outcome<Done> {
             return Err(usage(
                 "a WASM plugin's listing needs --source-revision COMMIT, the full Git commit it \
                  was built from",
-            ))
+            ));
         }
         None => {}
     }
-    version["capabilities"] = json!(described
-        .capabilities
-        .iter()
-        .map(|(kind, name)| json!({"kind": kind, "name": name}))
-        .collect::<Vec<_>>());
+    version["capabilities"] = json!(
+        described
+            .capabilities
+            .iter()
+            .map(|(kind, name)| json!({"kind": kind, "name": name}))
+            .collect::<Vec<_>>()
+    );
     version["permissions"] = json!(described.permissions);
 
     let versions = listing["versions"]
@@ -354,7 +357,7 @@ fn describe_wasm(_: &Path, _: &[u8]) -> Outcome<Described> {
 #[cfg(feature = "art")]
 fn describe_pack(file: &Path, bytes: &[u8]) -> Outcome<Described> {
     use rich_micro::model::Layer;
-    use rich_micro::package::{load_pack, Limits};
+    use rich_micro::package::{Limits, load_pack};
     let pack = load_pack(file, Layer::User, &Limits::default())
         .map_err(|e| data(format!("{}: {e}", file.display())))?;
     if let Some((package, why)) = pack.rejected.first() {

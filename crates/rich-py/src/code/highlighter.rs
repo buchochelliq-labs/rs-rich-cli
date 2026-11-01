@@ -14,9 +14,9 @@ use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyDict, PyList, PyString, PyTuple};
 
+use rich::Text as CoreText;
 use rich::protocol::Highlighter as _;
 use rich::style::StyleType;
-use rich::Text as CoreText;
 
 use crate::text::Text;
 

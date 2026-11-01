@@ -162,7 +162,7 @@ impl SqlHighlighter {
         let inner: Arc<dyn CoreCodeHighlighter> = match code_highlighter_value(fallback)? {
             Some(fallback) => Arc::new(CoreSqlHighlighter::with_fallback(fallback)),
             None if fallback.is_some_and(|f| !f.is_none()) => {
-                return Err(PyValueError::new_err("the fallback highlighter is unknown"))
+                return Err(PyValueError::new_err("the fallback highlighter is unknown"));
             }
             None => CoreSqlHighlighter::shared(),
         };

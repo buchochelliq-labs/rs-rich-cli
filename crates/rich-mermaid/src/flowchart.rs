@@ -233,7 +233,7 @@ impl Parser {
                         "unknown direction `{}`: use TD, TB, BT, LR or RL",
                         printable(other, 20)
                     ),
-                })
+                });
             }
         };
         self.chart.direction = direction.unwrap_or_default();
@@ -481,18 +481,18 @@ impl Cursor<'_> {
             while self.chars.get(probe).is_some_and(|c| c.is_whitespace()) {
                 probe += 1;
             }
-            if self.chars.get(probe) == Some(&'"') {
-                if let Some(close) = self.chars[probe + 1..].iter().position(|&c| c == '"') {
-                    quoted_end = Some(probe + 1 + close + 1);
-                }
+            if self.chars.get(probe) == Some(&'"')
+                && let Some(close) = self.chars[probe + 1..].iter().position(|&c| c == '"')
+            {
+                quoted_end = Some(probe + 1 + close + 1);
             }
             let search_from = quoted_end.unwrap_or(text_start);
             let mut best: Option<(usize, &str, Shape)> = None;
             for (close, shape) in closers.iter() {
-                if let Some(found) = self.find(close, search_from) {
-                    if best.is_none_or(|(at, _, _)| found < at) {
-                        best = Some((found, close, *shape));
-                    }
+                if let Some(found) = self.find(close, search_from)
+                    && best.is_none_or(|(at, _, _)| found < at)
+                {
+                    best = Some((found, close, *shape));
                 }
             }
             let Some((found, close, shape)) = best else {
@@ -569,11 +569,7 @@ impl Cursor<'_> {
             }
             Some(c @ ('o' | 'x')) => {
                 self.at += 1;
-                if c == 'o' {
-                    Head::Circle
-                } else {
-                    Head::Cross
-                }
+                if c == 'o' { Head::Circle } else { Head::Cross }
             }
             _ => Head::None,
         }
@@ -687,22 +683,22 @@ pub fn clean_label(text: &str) -> String {
                 continue;
             }
         }
-        if c == '#' {
-            if let Some(end) = rest[1..].find(';').filter(|&end| end <= 8) {
-                let name = &rest[1..1 + end];
-                let decoded = match name {
-                    "quot" => Some('"'),
-                    "amp" => Some('&'),
-                    "lt" => Some('<'),
-                    "gt" => Some('>'),
-                    "nbsp" => Some(' '),
-                    _ => name.parse::<u32>().ok().and_then(char::from_u32),
-                };
-                if let Some(decoded) = decoded {
-                    out.push(decoded);
-                    rest = &rest[end + 2..];
-                    continue;
-                }
+        if c == '#'
+            && let Some(end) = rest[1..].find(';').filter(|&end| end <= 8)
+        {
+            let name = &rest[1..1 + end];
+            let decoded = match name {
+                "quot" => Some('"'),
+                "amp" => Some('&'),
+                "lt" => Some('<'),
+                "gt" => Some('>'),
+                "nbsp" => Some(' '),
+                _ => name.parse::<u32>().ok().and_then(char::from_u32),
+            };
+            if let Some(decoded) = decoded {
+                out.push(decoded);
+                rest = &rest[end + 2..];
+                continue;
             }
         }
         out.push(c);

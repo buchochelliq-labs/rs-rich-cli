@@ -81,7 +81,7 @@ fn the_pack_versions_are_the_pack_json_versions() {
 #[test]
 fn every_micro_pack_archive_is_the_built_in_pack() {
     use rich_micro::model::Layer;
-    use rich_micro::package::{load_pack, Limits};
+    use rich_micro::package::{Limits, load_pack};
     let dir = tempfile::tempdir().unwrap();
     let builtin = rich_micro::builtin::packs(Layer::BuiltIn);
     for ((name, version), expected) in official::PACKS.into_iter().zip(builtin) {

@@ -18,12 +18,12 @@
 
 use std::time::Duration;
 
+use intuituive::Driver;
 use intuituive::interact::{
     Event, EventLoop, Key, LoopOptions, MultiSelect, Outcome, Pager, PushBackend, PushPort, Select,
 };
-use intuituive::Driver;
 use rich::Text;
-use rich_ext::data::{parse, Format};
+use rich_ext::data::{Format, parse};
 use wasm_bindgen::prelude::*;
 
 // The intuiTUIve examples the page offers, unchanged: the tutorial's to-do

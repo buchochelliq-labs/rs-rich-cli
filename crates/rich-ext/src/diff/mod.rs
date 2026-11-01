@@ -36,12 +36,12 @@ pub mod assert;
 pub mod test_report;
 
 pub use conflict::{
-    Conflict, ConflictError, ConflictFile, ConflictLayout, ConflictSide, ConflictView, Pick,
-    MAX_CONFLICTS, MAX_CONFLICT_SOURCE,
+    Conflict, ConflictError, ConflictFile, ConflictLayout, ConflictSide, ConflictView,
+    MAX_CONFLICT_SOURCE, MAX_CONFLICTS, Pick,
 };
 pub use engine::{
-    diff_chars, diff_lines, diff_slices, diff_words, group_hunks, hunk_header, tokenize, Hunk, Op,
-    TextDiff,
+    Hunk, Op, TextDiff, diff_chars, diff_lines, diff_slices, diff_words, group_hunks, hunk_header,
+    tokenize,
 };
 pub use source::SourceDiff;
 pub use view::{DiffView, Side};

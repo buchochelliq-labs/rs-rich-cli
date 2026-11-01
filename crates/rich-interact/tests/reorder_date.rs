@@ -4,8 +4,8 @@ use rich_interact::datetime::{Date, DateTime, Time};
 use rich_interact::headless::{self, Script};
 use rich_interact::policy::{Fallback, Reason, ScriptedLineIo};
 use rich_interact::{
-    degrade, Button, DatePicker, DateTimePicker, Event, Item, Key, MouseKind, NotInteractive,
-    Outcome, Reorder, TimePicker,
+    Button, DatePicker, DateTimePicker, Event, Item, Key, MouseKind, NotInteractive, Outcome,
+    Reorder, TimePicker, degrade,
 };
 
 fn before_answer(record: &headless::Record) -> &str {
@@ -335,10 +335,12 @@ fn a_validator_refuses_with_a_message() {
     let script = Script::new().keys("enter left enter");
     let (outcome, record) = headless::run(picker, script, 40, 16);
     assert_eq!(outcome.unwrap(), Outcome::Done(Date::new(2026, 10, 16)));
-    assert!(record
-        .frames
-        .iter()
-        .any(|frame| frame.contains("✗ not on a weekend")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("✗ not on a weekend"))
+    );
 }
 
 #[test]
@@ -463,10 +465,12 @@ fn a_time_outside_the_range_is_refused_on_enter() {
     let script = Script::new().keys("enter up enter");
     let (outcome, record) = headless::run(picker, script, 40, 6);
     assert_eq!(outcome.unwrap(), Outcome::Done(Time::new(9, 0, 0)));
-    assert!(record
-        .frames
-        .iter()
-        .any(|frame| frame.contains("✗ the earliest is 09:00")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("✗ the earliest is 09:00"))
+    );
 }
 
 #[test]
@@ -550,10 +554,12 @@ fn the_range_counts_the_time_on_its_first_and_last_days() {
     let script = Script::new().keys("left enter tab up enter");
     let (outcome, record) = headless::run(picker(), script, 40, 16);
     assert_eq!(outcome.unwrap(), Outcome::Done(at(17, 9, 0)));
-    assert!(record
-        .frames
-        .iter()
-        .any(|frame| frame.contains("✗ the earliest is 2026-10-17 09:00")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("✗ the earliest is 2026-10-17 09:00"))
+    );
     // Before the 17th cannot be reached.
     let script = Script::new().keys("pageup tab up enter");
     let (outcome, _) = headless::run(picker(), script, 40, 16);

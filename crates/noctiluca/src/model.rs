@@ -1178,12 +1178,14 @@ impl Walker<'_> {
             }
             return;
         }
-        if laid_out && dom.shows(i) && !context.silent {
-            if let Some(kind) = self.log_kind(i) {
-                self.flush(context);
-                self.log(i, kind, context);
-                return;
-            }
+        if laid_out
+            && dom.shows(i)
+            && !context.silent
+            && let Some(kind) = self.log_kind(i)
+        {
+            self.flush(context);
+            self.log(i, kind, context);
+            return;
         }
         // A CSS background picture on a box with no text of its own (a
         // thumbnail, an avatar, a banner): a picture region, under what

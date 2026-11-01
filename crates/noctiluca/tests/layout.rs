@@ -1,8 +1,8 @@
 //! Reader mode and the projection, on snapshots Chrome made of the
 //! fixture pages: no browser needed.
 
-use noctiluca::layout::{projection, reader, Line, Marks, Piece};
-use noctiluca::model::{build, Page, Revisions};
+use noctiluca::layout::{Line, Marks, Piece, projection, reader};
+use noctiluca::model::{Page, Revisions, build};
 use noctiluca::testing::snapshot_file;
 
 fn page(name: &str) -> Page {

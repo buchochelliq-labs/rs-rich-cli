@@ -3,11 +3,11 @@
 //! console-wide default highlighter reaching inline code. Expected layouts were
 //! captured from rich 15.0.0.
 
-use rich::markdown::Markdown;
 use rich::r#box::{
     ASCII_DOUBLE_HEAD, HEAVY_HEAD, MINIMAL_DOUBLE_HEAD, MINIMAL_HEAVY_HEAD, ROUNDED,
     SQUARE_DOUBLE_HEAD,
 };
+use rich::markdown::Markdown;
 use rich::{Console, Syntax, Table};
 
 fn plain(width: usize) -> Console {

@@ -49,12 +49,12 @@ use std::ops::Range;
 use std::path::Path;
 use std::sync::{Arc, OnceLock};
 
+use rich::Text;
 use rich::color::Color;
 use rich::protocol::{
     CodeHighlighter, HighlightError, HighlightSpan, HighlightedCode, HighlightedLine,
 };
 use rich::style::Style;
-use rich::Text;
 use rich_plugin_api::{Plugin, PluginError, PluginMetadata, PluginRegistrar};
 
 /// The language names this highlighter answers to.
@@ -1064,10 +1064,10 @@ impl CodeHighlighter for SqlHighlighter {
     }
 
     fn token_style(&self, theme: &str, token: &str) -> Option<Style> {
-        if !THEMES.contains(&theme) {
-            if let Some(fallback) = &self.fallback {
-                return fallback.token_style(theme, token);
-            }
+        if !THEMES.contains(&theme)
+            && let Some(fallback) = &self.fallback
+        {
+            return fallback.token_style(theme, token);
         }
         let theme = known_theme(theme);
         match token {

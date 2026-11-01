@@ -29,7 +29,7 @@ use std::path::{Path, PathBuf};
 
 use rich::Renderable;
 
-use super::{depth_key, NoHeight, Probe};
+use super::{NoHeight, Probe, depth_key};
 use crate::capabilities::ColorDepth;
 use crate::diff::DiffView;
 use crate::testing::RenderSnapshot;

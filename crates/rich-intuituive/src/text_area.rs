@@ -21,7 +21,7 @@ use crate::clock::Instant;
 use rich::protocol::ConsoleCodeHighlighting;
 use rich::{Console, Segment, Style};
 use rich_interact::caret::CaretShape;
-use rich_interact::edit::{graphemes, wrap_line, Buffer, Pos, WrapMode};
+use rich_interact::edit::{Buffer, Pos, WrapMode, graphemes, wrap_line};
 use rich_interact::edit_keys::{self, Act, ModeCx, ModeKey, Outcome};
 use rich_interact::{Button, Key, KeyCode, MouseKind};
 
@@ -29,7 +29,7 @@ use crate::node::{Axis, Node};
 use crate::reactive::Signal;
 use crate::screen::Rect;
 use crate::scrollbar::Bar;
-use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
+use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, widget};
 
 /// Two clicks this close together, on the same place, are a double click.
 const DOUBLE_CLICK: Duration = Duration::from_millis(400);
@@ -805,10 +805,10 @@ impl TextArea {
     fn assist_key(&mut self, key: Key) -> Option<bool> {
         let plain = !key.modifiers.ctrl && !key.modifiers.alt;
         // Any key but ↑ and ↓ ends browsing the history, where it is.
-        if !matches!(key.code, KeyCode::Up | KeyCode::Down) {
-            if let (Some(_), Some(history)) = (self.assist.browse.take(), self.assist.history()) {
-                history.set_status(None);
-            }
+        if !matches!(key.code, KeyCode::Up | KeyCode::Down)
+            && let (Some(_), Some(history)) = (self.assist.browse.take(), self.assist.history())
+        {
+            history.set_status(None);
         }
         let rows = self.assist.options.rows as usize;
         if let Some(popup) = self.assist.popup.as_mut() {
@@ -1098,13 +1098,12 @@ impl Widget for TextArea {
             self.follow_caret(width, height as usize);
         }
         let rows = self.view(width, height as usize);
-        if let (Some(first), Some(last)) = (rows.first(), rows.last()) {
-            if self
+        if let (Some(first), Some(last)) = (rows.first(), rows.last())
+            && self
                 .highlighted(cx.console(), first.line..last.line + 1)
                 .is_none()
-            {
-                *self.highlight.borrow_mut() = None;
-            }
+        {
+            *self.highlight.borrow_mut() = None;
         }
         let first_line = rows.first().map_or(0, |row| row.line);
         let gutter = self.gutter();

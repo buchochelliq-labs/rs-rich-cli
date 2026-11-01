@@ -8,8 +8,8 @@
 //! q quits. The test card keeps to the end of its line with `align_self`,
 //! whatever align-items says.
 
-use intuituive::prelude::*;
 use intuituive::AlignContent;
+use intuituive::prelude::*;
 
 const ALIGNS: [Align; 4] = [Align::Stretch, Align::Start, Align::Center, Align::End];
 const JUSTIFIES: [Justify; 6] = [

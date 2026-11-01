@@ -78,11 +78,7 @@ pub fn remaining_label(left: Duration) -> String {
 }
 
 fn dash(console: &Console) -> &'static str {
-    if console.ascii_only() {
-        " - "
-    } else {
-        " — "
-    }
+    if console.ascii_only() { " - " } else { " — " }
 }
 
 /// When to try again: exponential backoff with a cap, an optional attempt

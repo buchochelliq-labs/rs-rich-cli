@@ -3,7 +3,7 @@
 use rich::{Console, Segment, Style};
 
 use crate::node::{Axis, Node};
-use crate::widget::{markup_line, markup_width, theme_style, Canvas, DrawCx, MeasureCx, Widget};
+use crate::widget::{Canvas, DrawCx, MeasureCx, Widget, markup_line, markup_width, theme_style};
 
 /// What [`facts`] draws.
 struct Facts {

@@ -409,10 +409,12 @@ mod tests {
     #[test]
     fn lists_micro_assets_with_their_icons_and_previews() {
         let picker = AssetPicker::new("Micro", AssetKind::Micro);
-        assert!(picker
-            .items()
-            .iter()
-            .any(|item| item.label == "status/success"));
+        assert!(
+            picker
+                .items()
+                .iter()
+                .any(|item| item.label == "status/success")
+        );
         let item = picker
             .items()
             .iter()

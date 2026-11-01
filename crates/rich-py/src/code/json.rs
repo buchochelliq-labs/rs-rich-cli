@@ -4,8 +4,8 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyType};
 
-use rich::protocol::Renderable;
 use rich::Text as CoreText;
+use rich::protocol::Renderable;
 
 use super::highlighter::new_text;
 use crate::renderable::{self, AsRenderable};

@@ -4,14 +4,14 @@
 use std::path::Path;
 use std::sync::Arc;
 
+use rich::Console;
 use rich::color::ColorSystem;
 use rich::markdown::Markdown;
 use rich::protocol::{CodeHighlighter, HighlightError, HighlightedCode};
 use rich::syntax::Syntax;
-use rich::Console;
-use rich_ext::plugin::Capability;
 use rich_ext::ExtensionRegistry;
-use rich_lumis::{LumisHighlighter, LumisPlugin, DEFAULT_THEME};
+use rich_ext::plugin::Capability;
+use rich_lumis::{DEFAULT_THEME, LumisHighlighter, LumisPlugin};
 
 const RUST: &str =
     "/// Docs\nfn main() {\n    let s = \"multi\nline\";\n    println!(\"{s}\"); // é 日本\n}\n";

@@ -35,11 +35,11 @@ use std::time::{Duration, Instant, SystemTime};
 use intuituive::prelude::*;
 use intuituive::reactive::NodeId;
 use intuituive::widgets::{
-    table_with, tabs, tree_keyed, tree_reveal, vsplit, Column, RowRects, TableOptions, TreeItem,
+    Column, RowRects, TableOptions, TreeItem, table_with, tabs, tree_keyed, tree_reveal, vsplit,
 };
 use intuituive::{Offset, Origin, PromptOptions};
-use rich::markup::escape;
 use rich::Style;
+use rich::markup::escape;
 use rich_ext::data::{self, Format, Selectors, Value};
 
 type Doc = rich_ext::data::Node;
@@ -240,7 +240,7 @@ fn entries(node: &Doc) -> Result<Vec<Entry>, String> {
                     Body::Form(body.get("data").map_or(Ok(Vec::new()), pairs)?)
                 }
                 (_, other) => {
-                    return Err(format!("recipe `{id}`: body type {other:?} is not read"))
+                    return Err(format!("recipe `{id}`: body type {other:?} is not read"));
                 }
             },
         };
@@ -557,7 +557,9 @@ pub fn send(request: &Built, conn: &Conn) -> Result<Response, String> {
     let rest = match request.url.split_once("://") {
         Some(("http", rest)) => rest,
         Some(("https", _)) => {
-            return Err("https needs TLS, which this clone's std::net client does not speak".into())
+            return Err(
+                "https needs TLS, which this clone's std::net client does not speak".into(),
+            );
         }
         Some((scheme, _)) => return Err(format!("unsupported scheme `{scheme}`")),
         None => return Err(format!("`{}` is not a URL: it has no scheme", request.url)),

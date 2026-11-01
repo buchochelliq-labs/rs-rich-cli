@@ -5,7 +5,7 @@
 //! background — onto concrete RGB values, so styled output can be exported to
 //! HTML/SVG. [`DEFAULT_TERMINAL_THEME`] mirrors upstream's default.
 
-use crate::color::{Color, ColorTriplet, ColorType, ANSI_BASE_PALETTE};
+use crate::color::{ANSI_BASE_PALETTE, Color, ColorTriplet, ColorType};
 
 /// A concrete palette for exporting styled output. Mirrors
 /// `rich.terminal_theme.TerminalTheme` (the fields the exporters use).

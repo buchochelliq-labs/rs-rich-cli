@@ -9,7 +9,7 @@ use crate::node::{Axis, Node};
 use crate::reactive::Signal;
 use crate::screen::Rect;
 use crate::text_area::{Options, TextArea};
-use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
+use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, widget};
 
 /// A single-line text box bound to `text`, both ways: what is typed is set
 /// on the signal, and text set on the signal from elsewhere replaces what

@@ -32,7 +32,7 @@ pub mod profile;
 pub mod screenshot;
 pub mod stress;
 
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use rich::cells::cell_len;
 use rich::protocol::{Support, TargetCapabilities};
@@ -41,7 +41,7 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Theme};
 use crate::capabilities::ColorDepth;
 use crate::target::{RenderTarget, TargetKind};
 
-pub use screenshot::{assert_screenshots, Approvals, Matrix, Outcome, Screenshot, Shot};
+pub use screenshot::{Approvals, Matrix, Outcome, Screenshot, Shot, assert_screenshots};
 
 /// Height given to a target when a probe sets none: large enough that no
 /// ordinary renderable is cut, while `options.height` itself stays unset.
@@ -153,15 +153,15 @@ pub(crate) fn measure_shortfall(
         Err(message) => {
             return Some(format!(
                 "a render at the measured maximum {at} panicked: {message}"
-            ))
-        }
-    };
-    if overflow_counts {
-        if let Some(wide) = lines.iter().map(|l| cell_len(l)).max().filter(|&w| w > at) {
-            return Some(format!(
-                "measure maximum is {at} but a render at that width is {wide} cells wide"
             ));
         }
+    };
+    if overflow_counts
+        && let Some(wide) = lines.iter().map(|l| cell_len(l)).max().filter(|&w| w > at)
+    {
+        return Some(format!(
+            "measure maximum is {at} but a render at that width is {wide} cells wide"
+        ));
     }
     if lines.len() <= full.len() {
         return None;

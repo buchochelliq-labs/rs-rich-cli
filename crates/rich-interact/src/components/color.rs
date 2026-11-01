@@ -14,10 +14,10 @@ use rich::color::ColorType;
 use rich::{Color, ColorTriplet, Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{fit, highlight, plain, question, text, Theme};
+use crate::components::{Theme, fit, highlight, plain, question, text};
 use crate::event::{Button, Event, Key, KeyCode, Modifiers, MouseKind};
 use crate::fuzzy::rank;
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::names::COLORS;
 use crate::policy::{LineIo, NotInteractive};
 
@@ -441,7 +441,7 @@ impl Component for ColorPicker {
         if let Event::Mouse(mouse) = event {
             match mouse.kind {
                 MouseKind::Down(Button::Left) => {
-                    return self.click(mouse.column as usize, mouse.row as usize)
+                    return self.click(mouse.column as usize, mouse.row as usize);
                 }
                 MouseKind::ScrollUp if self.grid => self.move_cell(0, -1),
                 MouseKind::ScrollDown if self.grid => self.move_cell(0, 1),

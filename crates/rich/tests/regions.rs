@@ -5,10 +5,10 @@
 use std::sync::{Arc, Mutex};
 
 #[cfg(feature = "markdown")]
-use rich::markdown::Markdown;
-use rich::protocol::{region_of, ConsoleRegions, RegionId, RegionInfo, RegionRole, RegionSink};
-#[cfg(feature = "markdown")]
 use rich::Rule;
+#[cfg(feature = "markdown")]
+use rich::markdown::Markdown;
+use rich::protocol::{ConsoleRegions, RegionId, RegionInfo, RegionRole, RegionSink, region_of};
 use rich::{ColorSystem, Console, Panel, Renderable, Segment, Table};
 
 #[derive(Default)]
@@ -96,9 +96,11 @@ fn a_sink_leaves_the_bytes_alone_and_sees_nesting() {
         .position(|(info, _)| info.role == RegionRole::TableCell { row: 1, column: 0 })
         .expect("a body cell");
     assert_eq!(regions[cell].1, Some(table as u64));
-    assert!(regions
-        .iter()
-        .any(|(info, _)| info.role == RegionRole::TableHeader { column: 1 }));
+    assert!(
+        regions
+            .iter()
+            .any(|(info, _)| info.role == RegionRole::TableHeader { column: 1 })
+    );
     // Every drawn segment carries the innermost region that drew it.
     let tagged: Vec<u64> = segments
         .iter()

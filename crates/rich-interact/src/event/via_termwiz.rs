@@ -4,7 +4,7 @@ use ::termwiz::input::{
     InputEvent, KeyCode as K, KeyEvent, Modifiers as M, MouseButtons, MouseEvent,
 };
 
-use super::{char_key, Button, Event, HeldButton, Key, KeyCode, Modifiers, Mouse, MouseKind};
+use super::{Button, Event, HeldButton, Key, KeyCode, Modifiers, Mouse, MouseKind, char_key};
 
 /// Translate a termwiz event, for a loop of your own that reads the
 /// terminal with termwiz, in its legacy mode: a key may be another the

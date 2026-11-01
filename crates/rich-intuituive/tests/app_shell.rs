@@ -7,10 +7,10 @@ mod common;
 use std::io;
 
 use common::{run, screen};
-use intuituive::interact::headless::{Headless, Script};
 use intuituive::interact::BackendKind;
+use intuituive::interact::headless::{Headless, Script};
 use intuituive::prelude::*;
-use intuituive::{assert_screen_styled, ModalOptions};
+use intuituive::{ModalOptions, assert_screen_styled};
 
 fn with_modal(look: ModalOptions) -> intuituive::Driver {
     let app = App::new(move || {

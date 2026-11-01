@@ -7,8 +7,8 @@ use rich::cells::{cell_len, char_cell_width};
 use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Justify, Overflow, Renderable, Segment, Style, Table, Text};
 
-use super::table::{cell_text, TableOptions, TableView};
-use super::{quote_str, scalar_text, style, summary, Node, Path, Value, XmlKind};
+use super::table::{TableOptions, TableView, cell_text};
+use super::{Node, Path, Value, XmlKind, quote_str, scalar_text, style, summary};
 use crate::event::flatten as join_lines;
 use crate::table::StyleRules;
 
@@ -276,12 +276,12 @@ impl<'a> Explorer<'a> {
         let mut text = head;
         text.append(separator, None);
         if let Some((mut value, value_style, is_string)) = value {
-            if is_string && fixed + cell_len(&value) > available {
-                if let (Some(budget), Value::String(s)) =
+            if is_string
+                && fixed + cell_len(&value) > available
+                && let (Some(budget), Value::String(s)) =
                     (available.checked_sub(fixed), &node.value)
-                {
-                    value = fit_quoted(s, self.max_string, Some(budget));
-                }
+            {
+                value = fit_quoted(s, self.max_string, Some(budget));
             }
             text.append(&value, Some(style(console, value_style).into()));
         }

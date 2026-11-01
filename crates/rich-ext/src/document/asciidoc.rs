@@ -32,8 +32,8 @@ use super::model::{
     Inline, List, ListItem, ListKind, TableBlock,
 };
 use super::scan::{
-    char_at, char_before, normalize, prefix, sample, trim_inlines, url_end, InlineBuf, Positions,
-    BLOCK_WEIGHT, MAX_NESTING,
+    BLOCK_WEIGHT, InlineBuf, MAX_NESTING, Positions, char_at, char_before, normalize, prefix,
+    sample, trim_inlines, url_end,
 };
 use super::{Diagnostic, Parsed, Severity};
 
@@ -448,12 +448,12 @@ impl AsciiDoc {
                 i += 1;
                 continue;
             }
-            if let Some((name, value)) = attribute_entry(text) {
-                if context == Context::Body {
-                    self.set_attribute(lines[i].no, name, value);
-                    i += 1;
-                    continue;
-                }
+            if let Some((name, value)) = attribute_entry(text)
+                && context == Context::Body
+            {
+                self.set_attribute(lines[i].no, name, value);
+                i += 1;
+                continue;
             }
             if let Some(title) = block_title(text) {
                 pending.title = Some(title.to_string());
@@ -788,10 +788,10 @@ impl AsciiDoc {
             block,
             Some(Block::Admonition { .. } | Block::Aside { .. } | Block::Table(_))
         );
-        if let (Some(caption), false) = (caption, titled_inside) {
-            if block.is_some() {
-                out.push(Block::Caption(caption));
-            }
+        if let (Some(caption), false) = (caption, titled_inside)
+            && block.is_some()
+        {
+            out.push(Block::Caption(caption));
         }
         out.extend(block);
         (out, next)
@@ -907,12 +907,12 @@ impl AsciiDoc {
                     ("[X]", Checkbox::Checked),
                     ("[*]", Checkbox::Checked),
                 ] {
-                    if let Some(rest) = body.strip_prefix(prefix) {
-                        if rest.is_empty() || rest.starts_with(char::is_whitespace) {
-                            checkbox = Some(state);
-                            body = rest.trim_start();
-                            break;
-                        }
+                    if let Some(rest) = body.strip_prefix(prefix)
+                        && (rest.is_empty() || rest.starts_with(char::is_whitespace))
+                    {
+                        checkbox = Some(state);
+                        body = rest.trim_start();
+                        break;
                     }
                 }
             }
@@ -1130,11 +1130,12 @@ fn split_psv(line: &str, cells: &mut Vec<Cell>) {
     let (lead_start, lead_end) = segments[0];
     let lead = &line[lead_start..lead_end];
     let mut spec = parse_cell_spec(lead.trim());
-    if spec.is_none() && !lead.trim().is_empty() {
-        if let Some(last) = cells.last_mut() {
-            last.text.push('\n');
-            last.text.push_str(&unescape(lead));
-        }
+    if spec.is_none()
+        && !lead.trim().is_empty()
+        && let Some(last) = cells.last_mut()
+    {
+        last.text.push('\n');
+        last.text.push_str(&unescape(lead));
     }
     // Each cell runs from its separator to the next one.
     let mut pieces: Vec<&str> = Vec::new();
@@ -1199,12 +1200,11 @@ fn split_trailing_spec(piece: &str) -> (&str, Option<CellSpec>) {
     let trimmed = piece;
     if let Some(space) = trimmed.rfind(char::is_whitespace) {
         let candidate = &trimmed[space + 1..];
-        if candidate.chars().any(|c| matches!(c, '+' | '*'))
-            || (candidate.len() == 1 && "adehlmsv".contains(candidate))
+        if (candidate.chars().any(|c| matches!(c, '+' | '*'))
+            || (candidate.len() == 1 && "adehlmsv".contains(candidate)))
+            && let Some(spec) = parse_cell_spec(candidate)
         {
-            if let Some(spec) = parse_cell_spec(candidate) {
-                return (&trimmed[..space], Some(spec));
-            }
+            return (&trimmed[..space], Some(spec));
         }
     }
     (piece, None)
@@ -1556,10 +1556,10 @@ fn section_level(line: &str) -> Option<(u8, &str)> {
     let mut title = rest.trim();
     // `== Title ==` closing marks.
     let closing: String = std::iter::repeat_n(marker as char, count).collect();
-    if let Some(stripped) = title.strip_suffix(closing.as_str()) {
-        if stripped.ends_with(' ') {
-            title = stripped.trim_end();
-        }
+    if let Some(stripped) = title.strip_suffix(closing.as_str())
+        && stripped.ends_with(' ')
+    {
+        title = stripped.trim_end();
     }
     if title.is_empty() {
         return None;
@@ -1635,18 +1635,19 @@ fn merge_attributes(pending: &mut Pending, attributes: &str) {
     pending.positional.clear();
     for (index, part) in parts.into_iter().enumerate() {
         let part = part.trim();
-        if let Some((name, value)) = part.split_once('=') {
-            if !name.contains(' ') && !name.is_empty() {
-                pending.named.insert(
-                    name.trim().to_string(),
-                    value
-                        .trim()
-                        .trim_matches('"')
-                        .trim_matches('\'')
-                        .to_string(),
-                );
-                continue;
-            }
+        if let Some((name, value)) = part.split_once('=')
+            && !name.contains(' ')
+            && !name.is_empty()
+        {
+            pending.named.insert(
+                name.trim().to_string(),
+                value
+                    .trim()
+                    .trim_matches('"')
+                    .trim_matches('\'')
+                    .to_string(),
+            );
+            continue;
         }
         if index == 0 {
             // The first positional attribute holds the style, an id (`#id`),
@@ -1731,10 +1732,10 @@ fn is_conditional(line: &str) -> bool {
 /// `NOTE: text`: an admonition paragraph's label and text.
 fn admonition_label(line: &str) -> Option<(&str, &str)> {
     for label in ["NOTE", "TIP", "IMPORTANT", "WARNING", "CAUTION"] {
-        if let Some(rest) = line.strip_prefix(label) {
-            if let Some(rest) = rest.strip_prefix(": ") {
-                return Some((label, rest));
-            }
+        if let Some(rest) = line.strip_prefix(label)
+            && let Some(rest) = rest.strip_prefix(": ")
+        {
+            return Some((label, rest));
         }
     }
     None
@@ -1816,13 +1817,13 @@ fn renumber(inlines: &mut [Inline], numbers: &[Option<usize>]) {
         for inline in inlines {
             match inline {
                 Inline::Styled { style, content } if style == FOOTNOTE_PLACEHOLDER => {
-                    if let [Inline::Text(text)] = content.as_mut_slice() {
-                        if text == "[?]" {
-                            if let Some(Some(number)) = numbers.get(*next) {
-                                *text = format!("[{number}]");
-                            }
-                            *next += 1;
+                    if let [Inline::Text(text)] = content.as_mut_slice()
+                        && text == "[?]"
+                    {
+                        if let Some(Some(number)) = numbers.get(*next) {
+                            *text = format!("[{number}]");
                         }
+                        *next += 1;
                     }
                 }
                 Inline::Emphasis(content)
@@ -2001,19 +2002,19 @@ impl<'a> Inliner<'a> {
                 }
                 _ => {}
             }
-            if let Some(index) = MARKS.iter().position(|(mark, _)| *mark == byte) {
-                if let Some((inline, next)) = self.quote(index, i, end, depth, footnotes) {
-                    out.inline(inline);
-                    i = next;
-                    continue;
-                }
+            if let Some(index) = MARKS.iter().position(|(mark, _)| *mark == byte)
+                && let Some((inline, next)) = self.quote(index, i, end, depth, footnotes)
+            {
+                out.inline(inline);
+                i = next;
+                continue;
             }
-            if byte.is_ascii_alphabetic() {
-                if let Some((inline, next)) = self.inline_macro(i, end, depth, footnotes) {
-                    out.inline(inline);
-                    i = next;
-                    continue;
-                }
+            if byte.is_ascii_alphabetic()
+                && let Some((inline, next)) = self.inline_macro(i, end, depth, footnotes)
+            {
+                out.inline(inline);
+                i = next;
+                continue;
             }
             let ch = char_at(text, i).expect("i is a char boundary");
             out.push(ch);
@@ -2233,22 +2234,23 @@ impl<'a> Inliner<'a> {
         if let Some(url) = url_end(text, at).filter(|&url| url <= end) {
             let target = &text[at..url];
             // `https://example.com[Example]`.
-            if url < end && text.as_bytes()[url] == b'[' {
-                if let Some(close) = self.brackets.at_or_after(url + 1).filter(|&c| c < end) {
-                    let label = link_label(&text[url + 1..close]);
-                    let content = if label.is_empty() || depth >= MAX_NESTING {
-                        Vec::new()
-                    } else {
-                        Inliner::plain_inline(label)
-                    };
-                    return Some((
-                        Inline::Link {
-                            target: target.to_string(),
-                            content,
-                        },
-                        close + 1,
-                    ));
-                }
+            if url < end
+                && text.as_bytes()[url] == b'['
+                && let Some(close) = self.brackets.at_or_after(url + 1).filter(|&c| c < end)
+            {
+                let label = link_label(&text[url + 1..close]);
+                let content = if label.is_empty() || depth >= MAX_NESTING {
+                    Vec::new()
+                } else {
+                    Inliner::plain_inline(label)
+                };
+                return Some((
+                    Inline::Link {
+                        target: target.to_string(),
+                        content,
+                    },
+                    close + 1,
+                ));
             }
             return Some((
                 Inline::Link {
@@ -2456,7 +2458,9 @@ mod tests {
 
     #[test]
     fn the_header_is_a_title_and_byline() {
-        let blocks = blocks("= The Guide\nAda Lovelace <ada@example.com>\nv1.2, 2024-05-01\n:toc:\n\n== Intro\n\nHello {author}.");
+        let blocks = blocks(
+            "= The Guide\nAda Lovelace <ada@example.com>\nv1.2, 2024-05-01\n:toc:\n\n== Intro\n\nHello {author}.",
+        );
         assert!(
             matches!(&blocks[0], Block::Heading(h) if h.level == 1 && inlines_text(&h.content) == "The Guide")
         );
@@ -2491,7 +2495,9 @@ mod tests {
     #[test]
     fn lists_nest_by_marker() {
         // As in Asciidoctor, a line comment keeps lists apart.
-        let blocks = blocks("* one\n** nested\n* [x] two\n\n//\n. first\n. second\n\n//\nCPU:: the brain\nRAM::\n  memory");
+        let blocks = blocks(
+            "* one\n** nested\n* [x] two\n\n//\n. first\n. second\n\n//\nCPU:: the brain\nRAM::\n  memory",
+        );
         let Block::List(list) = &blocks[0] else {
             panic!("{blocks:?}");
         };
@@ -2572,10 +2578,12 @@ mod tests {
         }
         source.push_str("\n{a9}{a9}{a9}\n");
         let parsed = parse(&source);
-        assert!(parsed
-            .diagnostics
-            .iter()
-            .any(|d| d.severity == Severity::Warning && d.message.contains(":a5:")));
+        assert!(
+            parsed
+                .diagnostics
+                .iter()
+                .any(|d| d.severity == Severity::Warning && d.message.contains(":a5:"))
+        );
         let Some(Block::Paragraph(inlines)) = parsed.document.blocks.last() else {
             panic!("{:?}", parsed.document.blocks);
         };

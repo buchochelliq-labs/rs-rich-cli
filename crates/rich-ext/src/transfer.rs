@@ -55,7 +55,7 @@ use rich::{Console, ConsoleOptions, ProgressBar, Renderable, Segment, Style};
 use crate::a11y::{Status, SymbolSet};
 use crate::cancel::CancelToken;
 use crate::format;
-use crate::layout::{fit_segments, OverflowPolicy};
+use crate::layout::{OverflowPolicy, fit_segments};
 
 /// The default styles for transfer keys. [`extended_theme`] includes them;
 /// renderers fall back to them when a theme lacks a key.

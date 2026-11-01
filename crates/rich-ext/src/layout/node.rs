@@ -1,5 +1,5 @@
 //! Nested layout composition using bounded cell allocations.
-use super::{allocate, fit_segments, Constraint, ConstraintError, OverflowPolicy};
+use super::{Constraint, ConstraintError, OverflowPolicy, allocate, fit_segments};
 use rich::{Console, ConsoleOptions, Renderable, Segment};
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]
 pub enum Axis {

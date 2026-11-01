@@ -29,7 +29,10 @@ fn banner(input: &str, width: u32) -> Result<String, String> {
         return Err("an empty banner".into());
     }
     let rule = "=".repeat(width.clamp(1, 200) as usize);
-    Ok(format!("[bold green]{rule}[/]\n{}\n[bold green]{rule}[/]", input.trim_end()))
+    Ok(format!(
+        "[bold green]{rule}[/]\n{}\n[bold green]{rule}[/]",
+        input.trim_end()
+    ))
 }
 
 /// `red` fences: the code in red, as ANSI. The window-title escape shows

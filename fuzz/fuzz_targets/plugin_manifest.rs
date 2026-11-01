@@ -4,7 +4,7 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use rich_fuzz::{text, MAX_PARSE_INPUT};
+use rich_fuzz::{MAX_PARSE_INPUT, text};
 use rich_plugin_api::abi::PluginAbi;
 
 fuzz_target!(|data: &[u8]| {

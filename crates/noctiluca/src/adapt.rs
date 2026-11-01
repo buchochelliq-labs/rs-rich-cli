@@ -250,7 +250,7 @@ impl Adapt {
                         return Err(format!(
                             "{name:?} is not an adaptation (they are {})",
                             RULES.iter().map(|r| r.name).collect::<Vec<_>>().join(", ")
-                        ))
+                        ));
                     }
                 },
             }
@@ -576,10 +576,12 @@ mod tests {
         assert!(Adapt::default().apply("none").unwrap().is_none());
         assert!(Adapt::default().apply("-all").unwrap().is_none());
         assert_eq!(Adapt::none().apply("default").unwrap(), Adapt::default());
-        assert!(Adapt::default()
-            .apply("-nope")
-            .unwrap_err()
-            .contains("decorative-images"));
+        assert!(
+            Adapt::default()
+                .apply("-nope")
+                .unwrap_err()
+                .contains("decorative-images")
+        );
     }
 
     #[test]

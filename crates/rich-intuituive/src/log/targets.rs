@@ -4,7 +4,7 @@
 
 use rich_interact::{Key, KeyCode, MouseKind};
 
-use super::{level_look, Log, Severity, TargetLevel};
+use super::{Log, Severity, TargetLevel, level_look};
 use crate::node::{Axis, Node};
 use crate::screen::Rect;
 use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, MouseExt, Used, Widget, WidgetEvent};

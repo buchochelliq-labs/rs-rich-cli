@@ -174,10 +174,10 @@ impl Data {
         if let Some(index) = self.columns.iter().position(|c| c == name) {
             return Ok(index);
         }
-        if let Ok(n) = name.parse::<usize>() {
-            if (1..=self.columns.len()).contains(&n) {
-                return Ok(n - 1);
-            }
+        if let Ok(n) = name.parse::<usize>()
+            && (1..=self.columns.len()).contains(&n)
+        {
+            return Ok(n - 1);
         }
         let shown: Vec<String> = self.columns.iter().map(|c| format!("{c:?}")).collect();
         Err((
@@ -390,7 +390,7 @@ fn json_lines(
                 return Err(match &whole {
                     Some(whole) if records.is_empty() => format!("not valid JSON: {whole}"),
                     _ => format!("line {}: {err}", n + 1),
-                })
+                });
             }
         }
     }

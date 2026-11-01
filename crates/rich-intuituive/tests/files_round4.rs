@@ -8,10 +8,10 @@
 
 use std::path::{Path, PathBuf};
 
+use intuituive::Driver;
 use intuituive::files::*;
 use intuituive::interact::headless::Script;
 use intuituive::prelude::*;
-use intuituive::Driver;
 
 /// root/
 ///   alpha/a.txt  beta/  .hidden  notes.md  data.bin  z.txt
@@ -448,8 +448,8 @@ fn frecency_file_ranked(file: PathBuf) -> Vec<PathBuf> {
         label("")
     });
     app.render_with(&[], 4, 1).unwrap();
-    let ranked = out.borrow().clone();
-    ranked
+
+    out.borrow().clone()
 }
 
 // 13. The finder, titled, Esc closing its modal.
@@ -551,12 +551,16 @@ fn bulk_rename_renames_what_the_editor_changed_and_reports_conflicts() {
     let screen = rows(&driver).join("\n");
     assert!(screen.contains("2 renamed"), "{screen}");
     assert!(screen.contains("data.bin: alpha is taken"), "{screen}");
-    assert!(std::fs::read_to_string(root.join("z.txt"))
-        .unwrap()
-        .starts_with("# Title"));
-    assert!(std::fs::read_to_string(root.join("notes.md"))
-        .unwrap()
-        .starts_with("zzz"));
+    assert!(
+        std::fs::read_to_string(root.join("z.txt"))
+            .unwrap()
+            .starts_with("# Title")
+    );
+    assert!(
+        std::fs::read_to_string(root.join("notes.md"))
+            .unwrap()
+            .starts_with("zzz")
+    );
     assert!(!names.exists(), "the names file is removed");
 }
 

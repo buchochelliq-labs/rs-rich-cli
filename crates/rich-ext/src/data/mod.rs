@@ -69,9 +69,9 @@ mod xml;
 mod yaml;
 
 pub use config::ConfigFileView;
-pub use diff::{diff, Change, ChangeKind, DiffView};
+pub use diff::{Change, ChangeKind, DiffView, diff};
 pub use explorer::{Explorer, View};
-pub use flatten::{flatten, unflatten, FlatView, UnflattenError};
+pub use flatten::{FlatView, UnflattenError, flatten, unflatten};
 pub use helpers::{
     json, print_json, print_json_to, print_table, print_table_to, print_tree, print_tree_to, table,
     tree,
@@ -79,7 +79,7 @@ pub use helpers::{
 pub use record::{OpenBranch, RecordView};
 pub use redact::SECRET_KEYS;
 pub use redact::{Redaction, Redactor};
-pub use search::{search, MatchKind, SearchMatch, SearchQuery, SearchResults};
+pub use search::{MatchKind, SearchMatch, SearchQuery, SearchResults, search};
 #[cfg(feature = "jsonpath")]
 pub use select::{JsonPath, JsonPathSelector};
 pub use select::{SelectError, Selector, SelectorBackend, Selectors};
@@ -867,10 +867,10 @@ impl Format {
     /// assert_eq!(Format::detect("anything", Some("app.json")), Some(Format::Json));
     /// ```
     pub fn detect(content: &str, name_hint: Option<&str>) -> Option<Format> {
-        if let Some(format) = name_hint.and_then(Format::from_file_name) {
-            if format.is_enabled() {
-                return Some(format);
-            }
+        if let Some(format) = name_hint.and_then(Format::from_file_name)
+            && format.is_enabled()
+        {
+            return Some(format);
         }
         let trimmed = content.trim_start_matches('\u{feff}').trim();
         if trimmed.is_empty() {

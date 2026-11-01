@@ -18,7 +18,7 @@ use crate::limits::MAX_PADDING;
 use crate::renderable::{self, AsRenderable};
 use crate::style::style_type;
 
-use super::{get_style, join_lines, render_lines, Child};
+use super::{Child, get_style, join_lines, render_lines};
 
 pub(crate) type Pad = (usize, usize, usize, usize);
 

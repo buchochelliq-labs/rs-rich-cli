@@ -3,7 +3,7 @@
 //! browser needed.
 
 use noctiluca::engine::PageSnapshot;
-use noctiluca::model::{build, BlockKind, Check, Page, Revisions, Role};
+use noctiluca::model::{BlockKind, Check, Page, Revisions, Role, build};
 
 fn page(name: &str) -> Page {
     let path = format!("{}/tests/snapshots/{name}.json", env!("CARGO_MANIFEST_DIR"));
@@ -95,11 +95,13 @@ fn a_page_reads_in_order_with_hidden_text_left_out() {
         .filter(|c| c.role == Role::Link)
         .collect();
     assert_eq!(links.len(), 2);
-    assert!(links[0]
-        .href
-        .as_deref()
-        .unwrap()
-        .ends_with("/fixtures/second.html"));
+    assert!(
+        links[0]
+            .href
+            .as_deref()
+            .unwrap()
+            .ends_with("/fixtures/second.html")
+    );
     let run = page.blocks[1]
         .runs
         .iter()

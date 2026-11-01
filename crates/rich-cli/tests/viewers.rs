@@ -240,9 +240,11 @@ fn capture_runs_the_command_and_records_a_cast() {
         b"",
         &[],
     ));
-    assert!(std::fs::read_to_string(dir.path().join("run.svg"))
-        .unwrap()
-        .contains("done"));
+    assert!(
+        std::fs::read_to_string(dir.path().join("run.svg"))
+            .unwrap()
+            .contains("done")
+    );
     // `--report json` describes the command's failure, not a success.
     let reported = run(
         dir.path(),

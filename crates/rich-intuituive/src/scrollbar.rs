@@ -16,7 +16,7 @@ use rich_interact::{Button, Mouse, MouseKind};
 use crate::node::{Axis, Node};
 use crate::reactive::Signal;
 use crate::screen::Rect;
-use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
+use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, widget};
 
 /// The edge of its widget a [`Scrollbar`] sits on: [`Right`](Side::Right)
 /// and [`Left`](Side::Left) scroll down, [`Bottom`](Side::Bottom) and

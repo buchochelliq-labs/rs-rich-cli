@@ -4,8 +4,8 @@
 
 use libfuzzer_sys::fuzz_target;
 use rich_data::infer::Inferrer;
-use rich_data::{jsonl, RowSource};
-use rich_fuzz::{text, MAX_PARSE_INPUT};
+use rich_data::{RowSource, jsonl};
+use rich_fuzz::{MAX_PARSE_INPUT, text};
 
 fuzz_target!(|data: &[u8]| {
     let bytes = &data[..data.len().min(MAX_PARSE_INPUT)];

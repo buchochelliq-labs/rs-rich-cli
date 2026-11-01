@@ -118,11 +118,12 @@ impl TermCore {
                 self.set_scroll(self.scroll);
             }
         }
-        if self.exit.is_none() && self.started() {
-            if let Some(status) = self.host.exit_status() {
-                self.exit = Some(status.clone());
-                pumped.exit = Some(status);
-            }
+        if self.exit.is_none()
+            && self.started()
+            && let Some(status) = self.host.exit_status()
+        {
+            self.exit = Some(status.clone());
+            pumped.exit = Some(status);
         }
         pumped
     }

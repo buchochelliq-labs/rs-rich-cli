@@ -8,15 +8,15 @@ use pyo3::prelude::*;
 use pyo3::types::{PyString, PyTuple};
 use pyo3::{PyTraverseError, PyVisit};
 
-use rich::protocol::Renderable;
 use rich::r#box::Box as CoreBox;
+use rich::protocol::Renderable;
 use rich::{Cell, Justify, Overflow, Style as CoreStyle, StyleType};
 use rich::{Table as CoreTable, Text as CoreText};
 
 use crate::boxes::BoxArg;
 use crate::convert;
 use crate::errors::NotRenderableError;
-use crate::limits::{check_alloc, MAX_COLUMN_RATIO, MAX_COLUMN_WIDTH, MAX_CONSOLE_HEIGHT};
+use crate::limits::{MAX_COLUMN_RATIO, MAX_COLUMN_WIDTH, MAX_CONSOLE_HEIGHT, check_alloc};
 use crate::renderable::{self, AsRenderable, PyRenderable};
 use crate::style::{py_style_type, resolved_style, style_type};
 use crate::text::Text;

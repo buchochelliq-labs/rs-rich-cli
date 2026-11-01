@@ -7,7 +7,7 @@
 //!
 //! Each prints its answer. Piped or under CI, each asks line by line.
 
-use rich_interact::{run, Answers, FilePicker, Form, Input, Outcome, Paginator, RunOptions, Value};
+use rich_interact::{Answers, FilePicker, Form, Input, Outcome, Paginator, RunOptions, Value, run};
 
 fn regions(answers: &Answers) -> Vec<String> {
     let names: &[&str] = match answers.text("cloud") {

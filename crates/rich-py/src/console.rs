@@ -48,12 +48,12 @@ fn no_alt_screen() -> PyErr {
     NoAltScreen::new_err("Alt screen must be enabled to call update_screen")
 }
 use crate::limits::{
-    check_size, MAX_CONSOLE_HEIGHT, MAX_CONSOLE_WIDTH, MAX_NEWLINES, MAX_TAB_SIZE,
+    MAX_CONSOLE_HEIGHT, MAX_CONSOLE_WIDTH, MAX_NEWLINES, MAX_TAB_SIZE, check_size,
 };
 use crate::protocol::{self, ConsoleOptions, Measurement, OptionsBase};
 use crate::renderable::{self, Ambient, PyRenderable, TextWithEnd};
 use crate::segment;
-use crate::style::{style_type, Style};
+use crate::style::{Style, style_type};
 use crate::terminal_theme::TerminalTheme;
 use crate::text::Text;
 use crate::theme::Theme;
@@ -521,13 +521,14 @@ impl Shared {
 
 impl Drop for Shared {
     fn drop(&mut self) {
-        if let Some(item) = self.item.take() {
-            if !item.is_portable() && std::thread::current().id() != self.home {
-                lock(&ORPHANS).push(Orphan {
-                    home: self.home,
-                    _item: item,
-                });
-            }
+        if let Some(item) = self.item.take()
+            && !item.is_portable()
+            && std::thread::current().id() != self.home
+        {
+            lock(&ORPHANS).push(Orphan {
+                home: self.home,
+                _item: item,
+            });
         }
     }
 }
@@ -1254,7 +1255,7 @@ impl Console {
             Some(other) => {
                 return Err(PyValueError::new_err(format!(
                     "{other:?} is not a valid color system; expected auto, standard, 256, truecolor, windows or None"
-                )))
+                )));
             }
         };
         if let Some(no_color) = no_color {
@@ -1343,7 +1344,7 @@ impl Console {
             state: Mutex::new(ConsoleState {
                 settings,
                 themes: vec![
-                    theme.map_or_else(CoreTheme::default_theme, |theme| theme.inner.clone())
+                    theme.map_or_else(CoreTheme::default_theme, |theme| theme.inner.clone()),
                 ],
                 recorded: Vec::new(),
                 buffers: Vec::new(),

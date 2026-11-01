@@ -18,9 +18,9 @@
 //! Without a level, labels or suggestions, a diagnostic renders as it did
 //! before these were added: the message in `diagnostic.message`, then plain
 //! rows.
-use crate::event::{flatten, theme_style, EventView, Value};
+use crate::event::{EventView, Value, flatten, theme_style};
 use crate::hyperlink::Hyperlinker;
-use crate::layout::{fit_segments, OverflowPolicy};
+use crate::layout::{OverflowPolicy, fit_segments};
 use crate::stacktrace::StackTrace;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Text};
 use std::ops::Range;

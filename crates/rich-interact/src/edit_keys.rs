@@ -33,7 +33,7 @@
 use crate::caret::CaretShape;
 use crate::edit::Buffer;
 use crate::event::{Key, KeyCode, Modifiers};
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 
 /// The context the editor keymaps put their bindings in: configuration
 /// rebinds them as `text_area.undo = ctrl+z`.

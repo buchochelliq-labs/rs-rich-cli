@@ -15,7 +15,7 @@ use rich::{Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
 use crate::event::{Event, Key};
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::kit::ScrollState;
 
 /// The keys of a [`Viewport`] run as a component, in context `viewport`:

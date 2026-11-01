@@ -23,7 +23,7 @@ use rich::{Console, ConsoleOptions, Renderable, Segment, Style, Table, Text};
 use serde::{Deserialize, Serialize};
 
 use super::render::{banner, join, trim_end, wrap_text};
-use super::{style, DiffView};
+use super::{DiffView, style};
 use crate::sanitize::{sanitize_single_line, sanitize_terminal_and_bidi_controls};
 
 /// Multi-line report text (a message, a trace, captured output), inert.
@@ -233,12 +233,11 @@ pub(crate) fn expected_actual(text: &str) -> Option<(String, String)> {
     if let Some(found) = libtest::left_right(text) {
         return Some(found);
     }
-    if let Some(rest) = text.split("expected:<").nth(1) {
-        if let Some((expected, rest)) = rest.split_once("> but was:<") {
-            if let Some(actual) = rest.rfind('>').map(|i| &rest[..i]) {
-                return Some((expected.to_string(), actual.to_string()));
-            }
-        }
+    if let Some(rest) = text.split("expected:<").nth(1)
+        && let Some((expected, rest)) = rest.split_once("> but was:<")
+        && let Some(actual) = rest.rfind('>').map(|i| &rest[..i])
+    {
+        return Some((expected.to_string(), actual.to_string()));
     }
     let mut expected = None;
     let mut actual = None;
@@ -372,15 +371,15 @@ impl TestReport {
                 r.extend(row);
                 rows.push(trim_end(r));
             }
-        } else if let Some(details) = &case.details {
-            if case.message.as_deref().map(str::trim) != Some(details.trim()) {
-                rows.extend(Self::indented(
-                    console,
-                    &Text::new(inert(details.trim_end())),
-                    width,
-                    2,
-                ));
-            }
+        } else if let Some(details) = &case.details
+            && case.message.as_deref().map(str::trim) != Some(details.trim())
+        {
+            rows.extend(Self::indented(
+                console,
+                &Text::new(inert(details.trim_end())),
+                width,
+                2,
+            ));
         }
         if self.show_output {
             for (label, output) in [("stdout", &case.stdout), ("stderr", &case.stderr)] {

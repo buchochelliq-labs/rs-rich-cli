@@ -155,11 +155,7 @@ impl Posix {
             // The southern hemisphere: summer over the new year.
             !(unix >= end && unix < start)
         };
-        if summer {
-            dst.offset
-        } else {
-            self.std
-        }
+        if summer { dst.offset } else { self.std }
     }
 }
 
@@ -416,7 +412,8 @@ fn fallback() -> &'static Zone {
     target_os = "dragonfly"
 ))]
 mod platform {
-    extern "C" {
+    #[allow(unsafe_code)]
+    unsafe extern "C" {
         fn tzset();
     }
 

@@ -455,12 +455,14 @@ fn show_ratatui_area(console: &Console) {
     let wave: Vec<(f64, f64)> = (0..=60)
         .map(|i| (i as f64, (i as f64 / 6.0).sin() * 4.0 + 5.0))
         .collect();
-    let chart = Chart::new(vec![Dataset::new(wave)
-        .name("load")
-        .graph_type(GraphType::Area)
-        .fill_to(0.0)
-        .marker(Marker::Braille)
-        .style("cyan")])
+    let chart = Chart::new(vec![
+        Dataset::new(wave)
+            .name("load")
+            .graph_type(GraphType::Area)
+            .fill_to(0.0)
+            .marker(Marker::Braille)
+            .style("cyan"),
+    ])
     .x_axis(
         Axis::default()
             .bounds(0.0, 60.0)

@@ -10,8 +10,8 @@ mod example;
 mod support;
 
 use rich_interact::policy::Policy;
-use rich_interact::{run, RunOptions};
-use support::{assert_restored, Pty};
+use rich_interact::{RunOptions, run};
+use support::{Pty, assert_restored};
 
 #[test]
 fn child() {

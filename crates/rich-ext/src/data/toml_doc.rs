@@ -3,8 +3,8 @@
 //! into every other `toml` user in the build), so entries are put back in
 //! document order by their keys' spans.
 
-use toml::de::{DeTable, DeValue};
 use toml::Spanned;
+use toml::de::{DeTable, DeValue};
 
 use super::{DataError, Format, LineIndex, Meta, Node, Value};
 

@@ -536,10 +536,10 @@ impl Engine for FakeEngine {
                 // seek while playing, starts it again from its time.
                 let recorded = state.recorded.is_some();
                 if recorded {
-                    if let Some(time) = state.clock(*node) {
-                        if let Some(p) = state.media.get_mut(node) {
-                            p.time = time;
-                        }
+                    if let Some(time) = state.clock(*node)
+                        && let Some(p) = state.media.get_mut(node)
+                    {
+                        p.time = time;
                     }
                     state.playing_since.remove(node);
                 }

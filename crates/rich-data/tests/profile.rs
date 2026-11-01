@@ -2,12 +2,12 @@
 //! Snapshots live in `tests/snapshots`; set `UPDATE_SNAPSHOTS=1` to rewrite
 //! them after a deliberate change, then review the diff.
 
-use rich::cells::cell_len;
 use rich::Console;
+use rich::cells::cell_len;
 use rich_data::csv::CsvReader;
 use rich_data::profile::{Distribution, Profile, ProfileOptions};
 use rich_data::quality::{self, QualityReport, Status};
-use rich_data::{jsonl, RowSource};
+use rich_data::{RowSource, jsonl};
 
 const ORDERS: &str = include_str!("fixtures/orders.csv");
 const EVENTS: &str = include_str!("fixtures/events.jsonl");

@@ -139,7 +139,7 @@ pub use event::{
     Button, Event, HeldButton, Key, KeyCode, ModifierKey, Modifiers, Mouse, MouseKind, Releases,
 };
 pub use event_loop::{
-    degrade, run, run_with_graphics, Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions,
+    Error, EventLoop, Handle, LoopOptions, Outcome, RunOptions, degrade, run, run_with_graphics,
 };
 pub use item::{Action, ActionFilter, ActionTarget, Actions, Item, Preview, TargetKind};
 pub use keymap::{Binding, Keymap};
@@ -148,7 +148,7 @@ pub use plugin::PluginView;
 pub use policy::{Fallback, LineIo, NotInteractive, Policy, Reason};
 pub use push::{PushBackend, PushPort};
 pub use session::{
-    synchronized_update, Backend, BackendKind, Output, Session, SessionOptions, Waker,
+    Backend, BackendKind, Output, Session, SessionOptions, Waker, synchronized_update,
 };
 pub use viewport::Viewport;
 

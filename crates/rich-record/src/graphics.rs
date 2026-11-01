@@ -903,11 +903,9 @@ impl Graphics {
                 });
                 if placement == 0 {
                     self.virtuals.remove(&id);
-                    if free {
-                        if let Some(old) = self.images.remove(&id) {
-                            self.stored_bytes -= old.kept();
-                            self.stored.retain(|stored| *stored != id);
-                        }
+                    if free && let Some(old) = self.images.remove(&id) {
+                        self.stored_bytes -= old.kept();
+                        self.stored.retain(|stored| *stored != id);
                     }
                 }
             }
@@ -998,12 +996,11 @@ impl Graphics {
         // image column and length.
         let mut run: Option<(u16, u32, u32, u32, u16)> = None;
         let flush = |run: &mut Option<(u16, u32, u32, u32, u16)>, tiles: &mut Vec<Tile>| {
-            if let Some((x, id, image_row, image_column, length)) = run.take() {
-                if let Some(tile) =
+            if let Some((x, id, image_row, image_column, length)) = run.take()
+                && let Some(tile) =
                     self.placeholder_tile(id, (x, y), image_row, image_column, length)
-                {
-                    tiles.push(tile);
-                }
+            {
+                tiles.push(tile);
             }
         };
         for x in 0..columns {

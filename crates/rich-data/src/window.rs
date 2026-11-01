@@ -224,10 +224,10 @@ impl VirtualRows for RowWindow {
             if let Some(row) = self.rows.get(offset) {
                 return Some(row.clone());
             }
-            if offset == self.rows.len() {
-                if let Some(next) = &self.next {
-                    return Some(next.clone());
-                }
+            if offset == self.rows.len()
+                && let Some(next) = &self.next
+            {
+                return Some(next.clone());
             }
         }
         self.head.get(index).cloned()

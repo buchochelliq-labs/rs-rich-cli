@@ -161,7 +161,7 @@ impl Reader {
     /// Whether the terminal has input before `until`; a signal does not cut
     /// the wait short.
     fn readable(&self, until: Instant) -> io::Result<bool> {
-        use filedescriptor::{poll, pollfd, POLLIN};
+        use filedescriptor::{POLLIN, poll, pollfd};
         use std::os::unix::io::AsRawFd;
         loop {
             let mut ready = [pollfd {
@@ -175,7 +175,7 @@ impl Reader {
                 Err(filedescriptor::Error::Poll(e))
                     if e.kind() == io::ErrorKind::Interrupted && Instant::now() < until => {}
                 Err(filedescriptor::Error::Poll(e)) if e.kind() == io::ErrorKind::Interrupted => {
-                    return Ok(false)
+                    return Ok(false);
                 }
                 Err(e) => return Err(other(e)),
             }
@@ -185,7 +185,7 @@ impl Reader {
     /// The next event within `wait` (or a little sooner: a wake on `wake`
     /// ends the wait).
     fn next(&mut self, wait: Duration, wake: Option<WakeFd>) -> io::Result<Option<InputEvent>> {
-        use filedescriptor::{poll, pollfd, POLLIN};
+        use filedescriptor::{POLLIN, poll, pollfd};
         use std::io::Read;
         use std::os::unix::io::AsRawFd;
         if let Some(event) = self.events.pop_front() {
@@ -219,7 +219,7 @@ impl Reader {
             Ok(_) => {}
             // A signal (SIGWINCH, SIGCONT): look again next time.
             Err(filedescriptor::Error::Poll(e)) if e.kind() == io::ErrorKind::Interrupted => {
-                return Ok(None)
+                return Ok(None);
             }
             Err(e) => return Err(other(e)),
         }

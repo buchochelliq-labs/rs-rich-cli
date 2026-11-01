@@ -8,13 +8,13 @@ use std::path::PathBuf;
 use std::sync::Arc;
 
 use rich::{ColorSystem, Console, Style, Text};
+use rich_ext::ExtensionRegistry;
 use rich_ext::data::transform::{Document, Filter, Highlight, Redact, Select};
-use rich_ext::data::{parse, Format, Redaction};
+use rich_ext::data::{Format, Redaction, parse};
 use rich_ext::plugin::{Plugin, PluginError, PluginMetadata, PluginRegistrar, TextTransform};
 use rich_ext::table::transform::Sort;
 use rich_ext::table::{Column, SortKey, TableData, Value};
 use rich_ext::transform::{HighlightMatches, KeepLines, Pipeline};
-use rich_ext::ExtensionRegistry;
 
 // --8<-- [start:plugin]
 /// Masks every digit.

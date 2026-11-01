@@ -12,8 +12,8 @@
 use std::sync::{Arc, Condvar, Mutex, MutexGuard};
 use std::time::{Duration, Instant};
 
-use crate::app::{fixed_step, Timer};
-use crate::reactive::{signal, Signal};
+use crate::app::{Timer, fixed_step};
+use crate::reactive::{Signal, signal};
 
 /// How [`stepped_worker_with`] paces its worker.
 #[derive(Clone, Copy, Debug, PartialEq, Eq)]

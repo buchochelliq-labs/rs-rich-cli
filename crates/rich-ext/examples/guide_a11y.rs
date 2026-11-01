@@ -4,15 +4,15 @@
 use std::path::PathBuf;
 
 use rich::{ColorSystem, Console, Panel, Table, Text, Theme, Tree};
+use rich_ext::ConsoleExt;
 use rich_ext::a11y::contrast::{CheckOptions, FindingKind};
 use rich_ext::a11y::{
-    check_theme, semantic_text, AccessibilityPolicy, AccessibleText, ContrastReport, Status,
-    SymbolSet,
+    AccessibilityPolicy, AccessibleText, ContrastReport, Status, SymbolSet, check_theme,
+    semantic_text,
 };
 use rich_ext::capabilities::MapEnvironment;
 use rich_ext::diagnostic::{Diagnostic, Location};
 use rich_ext::fidelity::Fidelity;
-use rich_ext::ConsoleExt;
 
 fn services() -> Table {
     let mut table = Table::new().title("Services");

@@ -19,8 +19,8 @@
 //! colors with reduced fidelity. With colour off
 //! there is nothing to see, so callers should fall back to `AsciiArt` there.
 
-use crate::{image_color::preprocess, ColorDistance, Dither, ImageColorMode};
-use image::{imageops::FilterType, DynamicImage, GenericImageView};
+use crate::{ColorDistance, Dither, ImageColorMode, image_color::preprocess};
+use image::{DynamicImage, GenericImageView, imageops::FilterType};
 use rich::color::Color;
 use rich::console::{Console, ConsoleOptions};
 use rich::protocol::Renderable;
@@ -118,14 +118,14 @@ impl BlockArt {
         let mut rows = (((ih as f64 * columns as f64) / iw as f64) / 2.0).round() as usize;
         rows = rows.max(1);
 
-        if let Some(cap) = self.height {
-            if rows > cap.max(1) {
-                // Scale the width down to keep the aspect ratio rather than
-                // squashing the image into the cap.
-                let factor = cap.max(1) as f64 / rows as f64;
-                columns = ((columns as f64 * factor).round() as usize).max(1);
-                rows = cap.max(1);
-            }
+        if let Some(cap) = self.height
+            && rows > cap.max(1)
+        {
+            // Scale the width down to keep the aspect ratio rather than
+            // squashing the image into the cap.
+            let factor = cap.max(1) as f64 / rows as f64;
+            columns = ((columns as f64 * factor).round() as usize).max(1);
+            rows = cap.max(1);
         }
         crate::image_art::bound_grid(columns, rows, true, max_rows)
     }
@@ -248,11 +248,7 @@ mod tests {
         // Top half red, bottom half blue: each cell should carry one as the
         // foreground and the other as the background, with no gaps.
         let art = BlockArt::new(image_of(4, 4, |_, y| {
-            if y < 2 {
-                [255, 0, 0]
-            } else {
-                [0, 0, 255]
-            }
+            if y < 2 { [255, 0, 0] } else { [0, 0, 255] }
         }))
         .width(4);
         let rows = art.cells(80, None);
@@ -291,11 +287,7 @@ mod tests {
             .no_color(false)
             .build();
         let art = BlockArt::new(image_of(2, 2, |_, y| {
-            if y == 0 {
-                [255, 0, 0]
-            } else {
-                [0, 0, 255]
-            }
+            if y == 0 { [255, 0, 0] } else { [0, 0, 255] }
         }))
         .width(2);
         let out = console.render_to_string(&art);

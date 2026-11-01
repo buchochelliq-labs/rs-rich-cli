@@ -22,7 +22,7 @@
 use std::collections::HashMap;
 use std::time::{Duration, Instant};
 
-use rich_art::picture::{over_ssh, ByteBudget, Pacer, Picture, Pixels};
+use rich_art::picture::{ByteBudget, Pacer, Picture, Pixels, over_ssh};
 use rich_embed::ScreencastFrame;
 
 use crate::engine::{NodeId, Rect};

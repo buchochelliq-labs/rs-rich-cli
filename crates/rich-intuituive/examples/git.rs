@@ -42,10 +42,10 @@ use intuituive::prelude::*;
 use intuituive::reactive::NodeId;
 use intuituive::rich::markup::escape;
 use intuituive::widgets::{
-    key_hints_with, list_rows, tabs, tree_keyed, KeyHintsOptions, ListRow, TreeItem,
+    KeyHintsOptions, ListRow, TreeItem, key_hints_with, list_rows, tabs, tree_keyed,
 };
-use intuituive::{facts_of, keyed, HelpOptions, ModalOptions, Offset, Origin, PromptOptions};
-use rich_ext::diff::git::{parse_unified, FilePatch, LineKind, Patch};
+use intuituive::{HelpOptions, ModalOptions, Offset, Origin, PromptOptions, facts_of, keyed};
+use rich_ext::diff::git::{FilePatch, LineKind, Patch, parse_unified};
 
 // ---------------------------------------------------------------------
 // The repository, through the git command line.
@@ -579,10 +579,10 @@ impl Git {
         if let Ok(editor) = std::env::var("GIT_EDITOR") {
             return editor;
         }
-        if let Ok(editor) = self.run(&["config", "core.editor"]) {
-            if !editor.trim().is_empty() {
-                return editor.trim().to_string();
-            }
+        if let Ok(editor) = self.run(&["config", "core.editor"])
+            && !editor.trim().is_empty()
+        {
+            return editor.trim().to_string();
         }
         ["VISUAL", "EDITOR"]
             .iter()
@@ -716,10 +716,11 @@ impl FileTree {
         fn fold(child: Child) -> Child {
             match child {
                 Child::Dir(name, mut inner) => {
-                    if inner.len() == 1 && matches!(inner[0], Child::Dir(..)) {
-                        if let Some(Child::Dir(next, rest)) = inner.pop() {
-                            return fold(Child::Dir(format!("{name}/{next}"), rest));
-                        }
+                    if inner.len() == 1
+                        && matches!(inner[0], Child::Dir(..))
+                        && let Some(Child::Dir(next, rest)) = inner.pop()
+                    {
+                        return fold(Child::Dir(format!("{name}/{next}"), rest));
                     }
                     Child::Dir(name, inner.into_iter().map(fold).collect())
                 }

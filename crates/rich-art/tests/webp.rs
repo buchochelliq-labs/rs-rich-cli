@@ -4,7 +4,7 @@
 //! extension, and an animation read like the GIF it was made from.
 use std::path::{Path, PathBuf};
 
-use rich_art::graphics::{decode_animation, FrameBudget};
+use rich_art::graphics::{FrameBudget, decode_animation};
 use rich_art::image::{self, ImageFormat, RgbaImage};
 use rich_art::{AsciiArt, ImageArt};
 

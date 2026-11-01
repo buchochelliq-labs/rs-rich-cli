@@ -51,8 +51,8 @@ pub use command::{CommandRecord, CommandRunner, CommandStatus, CommandView, Outp
 pub use summary::{CompletionSummary, SummaryItem};
 pub use tasks::{TaskId, TaskTree, TaskTreeView};
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::{Duration, Instant};
 
 use rich::{Console, Style, StyleType, Text};
@@ -317,11 +317,7 @@ impl Look {
     }
 
     pub(crate) fn ellipsis(self) -> &'static str {
-        if self.ascii() {
-            "..."
-        } else {
-            "…"
-        }
+        if self.ascii() { "..." } else { "…" }
     }
 }
 

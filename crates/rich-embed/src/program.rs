@@ -237,10 +237,10 @@ impl WebEngine for ProgramEngine {
             return None;
         }
         self.shown |= pumped.output;
-        if let Some(exit) = pumped.exit {
-            if !exit.success() {
-                self.error = Some(format!("the browser {exit}"));
-            }
+        if let Some(exit) = pumped.exit
+            && !exit.success()
+        {
+            self.error = Some(format!("the browser {exit}"));
         }
         Some(WebFrame::Cells {
             lines: core.lines(),

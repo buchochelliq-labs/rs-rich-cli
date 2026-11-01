@@ -62,8 +62,8 @@ use rich_interact::{Key, Mouse, MouseKind};
 
 use crate::app::{Ctx, Theme};
 use crate::layout::{
-    align_cross, break_lines, justify_offsets, offsets, place_lines, solve, Align, Justify, Size,
-    StackLayout, Track,
+    Align, Justify, Size, StackLayout, Track, align_cross, break_lines, justify_offsets, offsets,
+    place_lines, solve,
 };
 use crate::node::{Axis, Node};
 use crate::reactive::{NodeId, Signal};
@@ -365,11 +365,7 @@ pub fn widget(widget: impl Widget) -> Node {
     let focusable = widget.focusable();
     let name = widget.name();
     let node = Node::from_widget(Box::new(widget), name);
-    if focusable {
-        node.focusable()
-    } else {
-        node
-    }
+    if focusable { node.focusable() } else { node }
 }
 
 /// What a widget sees while it measures or lays out.

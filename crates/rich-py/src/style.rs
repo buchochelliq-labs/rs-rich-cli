@@ -281,14 +281,12 @@ fn parse_error_message(definition: &str) -> Option<String> {
             _ => {
                 let known = ATTRIBUTES.contains(&word.as_str())
                     || ["b", "d", "i", "u", "r", "c", "s", "uu", "o"].contains(&word.as_str());
-                if !known {
-                    if let Some(error) = color_error(&word) {
-                        let error = error.trim_start_matches("ColorParseError: ");
-                        return Some(format!(
-                            "unable to parse {} as color; {error}",
-                            python_repr(&word)
-                        ));
-                    }
+                if !known && let Some(error) = color_error(&word) {
+                    let error = error.trim_start_matches("ColorParseError: ");
+                    return Some(format!(
+                        "unable to parse {} as color; {error}",
+                        python_repr(&word)
+                    ));
                 }
             }
         }

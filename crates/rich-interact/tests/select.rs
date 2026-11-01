@@ -3,7 +3,7 @@
 use rich_interact::headless::{self, Script};
 use rich_interact::policy::{Fallback, Reason, ScriptedLineIo};
 use rich_interact::{
-    degrade, Action, Item, Key, MultiSelect, Outcome, Preview, PreviewLayout, Select,
+    Action, Item, Key, MultiSelect, Outcome, Preview, PreviewLayout, Select, degrade,
 };
 
 /// The last view before the component collapsed to its answer.
@@ -86,10 +86,12 @@ fn nothing_matching_says_so_and_enter_waits() {
         12,
     );
     assert_eq!(outcome.unwrap(), Outcome::Done("src/lib.rs"));
-    assert!(record
-        .frames
-        .iter()
-        .any(|frame| frame.contains("  no matches")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("  no matches"))
+    );
 }
 
 #[test]
@@ -308,7 +310,7 @@ fn a_pasted_query_drops_terminal_controls() {
 /// take a caller's parent list as it is.
 #[test]
 fn keep_ancestors_skips_a_parent_past_the_list() {
-    use rich_interact::kit::{keep_ancestors, FilterState};
+    use rich_interact::kit::{FilterState, keep_ancestors};
 
     let (list, context) = keep_ancestors(vec![(1, vec![0])], &[None, Some(7)]);
     assert_eq!(list, [(1, vec![0])]);

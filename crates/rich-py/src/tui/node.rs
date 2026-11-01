@@ -13,18 +13,18 @@ use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::{PyString, PyTuple};
 
+use rich::Segment as CoreSegment;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::measure::Measurement as CoreMeasurement;
 use rich::protocol::Renderable;
-use rich::Segment as CoreSegment;
 use rich_intuituive as intuituive;
+use rich_intuituive::Node;
 use rich_intuituive::interact::{
     Button, Component, Context, Event, Flow, Keymap as CoreKeymap, Mouse, MouseKind, View,
 };
-use rich_intuituive::Node;
 
-use super::reactive::{call_with_ctx, signal_arg, PyValue};
-use super::{current, fail, size_arg, sizes, Building, Callback, Handle, PyRect, PySize};
+use super::reactive::{PyValue, call_with_ctx, signal_arg};
+use super::{Building, Callback, Handle, PyRect, PySize, current, fail, size_arg, sizes};
 use crate::renderable;
 
 // ---------------------------------------------------------------------------
@@ -97,10 +97,10 @@ pub(crate) fn take_nodes(value: &Bound<'_, PyAny>) -> PyResult<Vec<Node>> {
     // Collected first, so a bad child takes none of the others.
     let items: Vec<Bound<'_, PyAny>> = value.try_iter()?.collect::<PyResult<_>>()?;
     for item in &items {
-        if let Ok(node) = item.cast::<PyNode>() {
-            if node.borrow().node.borrow().is_none() {
-                return Err(used());
-            }
+        if let Ok(node) = item.cast::<PyNode>()
+            && node.borrow().node.borrow().is_none()
+        {
+            return Err(used());
         }
     }
     items.iter().map(take_node).collect()
@@ -162,7 +162,7 @@ fn button_arg(name: &str) -> PyResult<Button> {
         other => {
             return Err(PyValueError::new_err(format!(
                 "invalid button {other:?}; expected left, right or middle"
-            )))
+            )));
         }
     })
 }
@@ -180,7 +180,7 @@ pub(crate) fn mouse_from(kind: &str, column: u16, row: u16, button: &str) -> PyR
             return Err(PyValueError::new_err(format!(
                 "invalid mouse kind {other:?}; expected down, up, drag, moved, scroll_up or \
                  scroll_down"
-            )))
+            )));
         }
     };
     Ok(Mouse::new(kind, column, row))
@@ -951,7 +951,7 @@ impl PyNode {
             other => {
                 return Err(PyValueError::new_err(format!(
                     "{other:?}: expected 'top_to_bottom' or 'bottom_to_top'"
-                )))
+                )));
             }
         };
         slf.borrow().map(|n| n.direction(direction))?;
@@ -1091,7 +1091,7 @@ pub(crate) fn spacing_arg(value: &str) -> PyResult<intuituive::widgets::Highligh
         other => {
             return Err(PyValueError::new_err(format!(
                 "{other:?}: expected 'when_selected', 'always' or 'never'"
-            )))
+            )));
         }
     })
 }
@@ -1261,10 +1261,8 @@ struct Hosted<C> {
 impl<C: Component> Hosted<C> {
     fn pending(&self) -> bool {
         let pending = renderable::has_pending();
-        if pending {
-            if let Some(app) = &self.app {
-                app.stop();
-            }
+        if pending && let Some(app) = &self.app {
+            app.stop();
         }
         pending
     }
@@ -1734,7 +1732,7 @@ fn title_align_arg(value: &str) -> PyResult<intuituive::Align> {
         _ => {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "{value:?}: expected 'left', 'center' or 'right'"
-            )))
+            )));
         }
     })
 }
@@ -1749,7 +1747,7 @@ pub(crate) fn align_arg(value: &str) -> PyResult<intuituive::Align> {
         _ => {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "{value:?}: expected 'flex-start', 'center', 'flex-end' or 'stretch'"
-            )))
+            )));
         }
     })
 }
@@ -1767,7 +1765,7 @@ pub(crate) fn justify_arg(value: &str) -> PyResult<intuituive::Justify> {
             return Err(pyo3::exceptions::PyValueError::new_err(format!(
                 "{value:?}: expected 'flex-start', 'center', 'flex-end', 'space-between', \
                  'space-around' or 'space-evenly'"
-            )))
+            )));
         }
     })
 }

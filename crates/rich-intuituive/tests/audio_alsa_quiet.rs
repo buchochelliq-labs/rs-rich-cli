@@ -8,7 +8,7 @@
 use std::process::Command;
 use std::time::Duration;
 
-use intuituive::audio::{messages, output, OutputOptions};
+use intuituive::audio::{OutputOptions, messages, output};
 
 const CHILD: &str = "INTUITUIVE_ALSA_QUIET_CHILD";
 

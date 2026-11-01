@@ -44,7 +44,7 @@ use std::sync::Arc;
 
 use rich::{Console, ConsoleOptions, Renderable, Segment};
 
-use crate::frame::{plan_graphics, Change, Frame, Placement, PlacementSource};
+use crate::frame::{Change, Frame, Placement, PlacementSource, plan_graphics};
 
 pub(crate) use screen::char_width;
 pub use screen::{Cell, PaintStats, PaintStrategy, Painter, Rect, Screen, TextRun};

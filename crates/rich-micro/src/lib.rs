@@ -69,10 +69,10 @@ pub mod rows;
 pub use api::{MicroAssetRef, MicroExt, MicroPlugin};
 pub use cache::{ImageCache, Prepared};
 pub use error::MicroError;
-pub use graphics::{select, MicroGraphics, MicroMode, Selection};
+pub use graphics::{MicroGraphics, MicroMode, Selection, select};
 pub use markup::{
-    expand, markup_text, render_markup, Diagnostic, DiagnosticKind, MarkdownView, MicroTransform,
-    PreparedMarkdown, PreparedMarkup,
+    Diagnostic, DiagnosticKind, MarkdownView, MicroTransform, PreparedMarkdown, PreparedMarkup,
+    expand, markup_text, render_markup,
 };
 pub use model::{
     AssetKind, CellSize, Fallback, ImageFormat, ImageInfo, ImageRef, Layer, MicroAsset, Origin,
@@ -82,9 +82,9 @@ pub use name::is_valid_name;
 pub use package::{Limits, Pack};
 pub use registry::{Collision, LoadReport, MicroRegistry, MicroRoots, Rejected};
 pub use render::{
-    fallback_cells, fallback_row, placeholder, FallbackPreference, FallbackRenderer, MicroMeta,
-    MicroRenderer, MicroView, Placement, MICRO_META_KEY, PAD_CELL,
+    FallbackPreference, FallbackRenderer, MICRO_META_KEY, MicroMeta, MicroRenderer, MicroView,
+    PAD_CELL, Placement, fallback_cells, fallback_row, placeholder,
 };
 /// The size of a terminal cell in pixels, as the cache and pipeline take it.
 pub use rich_art::graphics::CellPixels;
-pub use rows::{reserve_rows, MicroRows};
+pub use rows::{MicroRows, reserve_rows};

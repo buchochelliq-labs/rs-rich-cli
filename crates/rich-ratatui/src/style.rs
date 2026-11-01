@@ -108,7 +108,7 @@ pub fn to_rich_color(color: RColor) -> Color {
                 kind: ColorType::EightBit,
                 number: Some(n),
                 triplet: None,
-            }
+            };
         }
         RColor::Rgb(r, g, b) => return Color::from_rgb(r, g, b),
         RColor::Black => 0,

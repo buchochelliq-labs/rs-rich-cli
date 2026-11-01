@@ -327,7 +327,7 @@ impl Plugin for RuntimePlugin {
                 other => {
                     return Err(PluginError::Other(format!(
                         "unsupported capability kind {other}"
-                    )))
+                    )));
                 }
             }
         }
@@ -552,9 +552,11 @@ mod tests {
         assert!(plugin.call(0, "", 0).unwrap_err().contains("at most"));
         let console = Console::builder().width(20).build();
         let fence = plugin.capability(0);
-        assert!(fence
-            .render_fence("big", "x", &console, &console.options())
-            .is_none());
+        assert!(
+            fence
+                .render_fence("big", "x", &console, &console.options())
+                .is_none()
+        );
     }
 
     #[test]

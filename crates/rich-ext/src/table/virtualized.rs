@@ -75,7 +75,7 @@ use rich::{Console, ConsoleOptions, Justify, Overflow, Renderable, Segment, Tabl
 
 use super::data::normalize;
 use super::stream::table_lines;
-use super::{frame_builders, style, Column, Frame, Value};
+use super::{Column, Frame, Value, frame_builders, style};
 
 /// The most rows one window shows; a larger [`height`](VirtualTable::height)
 /// is cut to this.

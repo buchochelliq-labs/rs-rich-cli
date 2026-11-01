@@ -4,7 +4,7 @@
 use rich::{Console, ConsoleOptions, Renderable, Segment, Text, Tree};
 use serde_json::Value;
 
-use super::{json, theme_style, ChangeKind, Schema, SchemaDiff, STYLES};
+use super::{ChangeKind, STYLES, Schema, SchemaDiff, json, theme_style};
 use crate::chart::{Charset, Span, Timeline};
 
 /// The most field rows drawn; past this the rest are counted on a last

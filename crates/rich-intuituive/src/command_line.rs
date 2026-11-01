@@ -13,10 +13,10 @@ use rich_interact::{Key, KeyCode};
 use crate::app::Ctx;
 use crate::complete::{CompleteOptions, Completer, Completion, InputHistory};
 use crate::node::{Axis, Node};
-use crate::reactive::{signal, NodeId, Runtime, Signal};
+use crate::reactive::{NodeId, Runtime, Signal, signal};
 use crate::screen::Rect;
 use crate::text_area::{Options, TextArea};
-use crate::widget::{widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent};
+use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, widget};
 
 /// What a mode runs on Enter: `Ok` closes the bar, `Err(message)` keeps
 /// it open with the message in red.
@@ -244,10 +244,8 @@ impl CommandLine {
     pub fn close(&self, cx: &mut Ctx) {
         let open = self.is_open_untracked();
         self.bar.set(Bar::Idle);
-        if open {
-            if let Some(before) = self.before.get_untracked() {
-                cx.focus(before);
-            }
+        if open && let Some(before) = self.before.get_untracked() {
+            cx.focus(before);
         }
     }
 
@@ -451,10 +449,10 @@ impl CommandBar {
                 let before = self.state.value.get_untracked();
                 let used = self.area.event(cx, &WidgetEvent::Key(key));
                 let after = self.state.value.get_untracked();
-                if after != before {
-                    if let Some(change) = mode.borrow_mut().change.as_mut() {
-                        change(&after, cx.app());
-                    }
+                if after != before
+                    && let Some(change) = mode.borrow_mut().change.as_mut()
+                {
+                    change(&after, cx.app());
                 }
                 used
             }
@@ -617,10 +615,10 @@ impl Widget for CommandBar {
                 let before = self.state.value.get_untracked();
                 let used = self.area.event(cx, event);
                 let after = self.state.value.get_untracked();
-                if after != before {
-                    if let Some(change) = mode.borrow_mut().change.as_mut() {
-                        change(&after, cx.app());
-                    }
+                if after != before
+                    && let Some(change) = mode.borrow_mut().change.as_mut()
+                {
+                    change(&after, cx.app());
                 }
                 used
             }

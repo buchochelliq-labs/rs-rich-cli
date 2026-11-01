@@ -9,13 +9,13 @@ mod example;
 use std::cell::RefCell;
 use std::rc::Rc;
 
-use example::{app, checklist_keymap, App, Checklist};
+use example::{App, Checklist, app, checklist_keymap};
 use rich_interact::compose::{
-    Column, ComponentExt, Label, Layer, LayerKind, Layers, Placement, Rect, Row, Size, Split, Tabs,
-    FOCUS_NEXT,
+    Column, ComponentExt, FOCUS_NEXT, Label, Layer, LayerKind, Layers, Placement, Rect, Row, Size,
+    Split, Tabs,
 };
 use rich_interact::headless::{self, Script};
-use rich_interact::keymap::{self, keys, Keymap, Overrides};
+use rich_interact::keymap::{self, Keymap, Overrides, keys};
 use rich_interact::{
     Component, Context, Event, Flow, Input, Key, MouseKind, Outcome, Select, View,
 };

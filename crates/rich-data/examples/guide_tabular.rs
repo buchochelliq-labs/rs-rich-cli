@@ -10,12 +10,12 @@ use rich::ColorSystem;
 
 // --8<-- [start:imports]
 use rich::{Console, Style};
+use rich_data::Rows;
 use rich_data::csv::CsvReader;
 use rich_data::infer::Inferrer;
 use rich_data::profile::{Profile, ProfileOptions};
 use rich_data::quality::{self, CheckResult, QualityReport, Status};
 use rich_data::stats::{Stats, StatsOptions};
-use rich_data::Rows;
 use rich_ext::table::{Comparison, StyleRule, StyleRules, Target};
 // --8<-- [end:imports]
 

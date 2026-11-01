@@ -27,7 +27,7 @@ impl PluginComponent for Counter {
         match event {
             ComponentEvent::Key(key) if key == "up" => self.count += 1,
             ComponentEvent::Key(key) if key == "enter" => {
-                return ComponentFlow::Done(self.count.to_string())
+                return ComponentFlow::Done(self.count.to_string());
             }
             ComponentEvent::Key(key) if key == "escape" => return ComponentFlow::Cancel,
             ComponentEvent::Paste(text) => self.typed.push_str(text),
@@ -126,10 +126,12 @@ fn a_linked_plugin_component_composes_with_a_built_in_in_a_split() {
         .event(rich_interact::Event::Paste("hi".into()))
         .keys("enter");
     let (_, record) = headless::run(app(&registry), script, 50, 5);
-    assert!(record
-        .frames
-        .iter()
-        .any(|frame| frame.contains("count 0 hi")));
+    assert!(
+        record
+            .frames
+            .iter()
+            .any(|frame| frame.contains("count 0 hi"))
+    );
 }
 
 #[test]

@@ -332,10 +332,10 @@ impl GraphSourceOptions {
                 }
             }
         }
-        if let Some(save) = &self.save {
-            if save == "-" || save.is_empty() {
-                return usage("--save writes a file: give its path".into());
-            }
+        if let Some(save) = &self.save
+            && (save == "-" || save.is_empty())
+        {
+            return usage("--save writes a file: give its path".into());
         }
         // Standard input can be read once.
         let stdin: Vec<&str> = [

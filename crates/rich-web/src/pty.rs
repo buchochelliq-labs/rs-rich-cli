@@ -23,7 +23,7 @@ use std::time::{Duration, Instant};
 use rich_embed::PtyHost;
 use tungstenite::{Message, WebSocket};
 
-use crate::session::{close, deliver, parse_message, PageMessage};
+use crate::session::{PageMessage, close, deliver, parse_message};
 
 /// How long one turn of the loop waits for the page: the longest a
 /// program's output waits to be sent.
@@ -137,14 +137,14 @@ fn serve(
         if let Some(status) = host.exit_status() {
             return Ok(Some(format!("The program {status}.")));
         }
-        if let Some(input) = waiting.take() {
-            if refused(host.write(&input)) {
-                waiting = Some(input);
-                if page_gone(socket) {
-                    return Ok(None);
-                }
-                continue;
+        if let Some(input) = waiting.take()
+            && refused(host.write(&input))
+        {
+            waiting = Some(input);
+            if page_gone(socket) {
+                return Ok(None);
             }
+            continue;
         }
         let message = match socket.read() {
             Ok(message) => message,

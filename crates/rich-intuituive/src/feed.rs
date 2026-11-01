@@ -6,13 +6,13 @@
 
 use std::cell::Cell;
 use std::fmt::Display;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::app::{after, Ctx};
-use crate::reactive::{on_write_ref, signal, Runtime, Signal};
-use crate::task::{latest, Latest};
+use crate::app::{Ctx, after};
+use crate::reactive::{Runtime, Signal, on_write_ref, signal};
+use crate::task::{Latest, latest};
 
 /// How a thread feeding a signal is doing: [`latest_with_state`]'s second
 /// signal.
@@ -457,16 +457,16 @@ impl<T: Send + 'static> Play<T> {
         } = self;
         let mut first = true;
         for (n, (values, pace)) in std::iter::once((values, pace)).chain(tails).enumerate() {
-            if n == 1 {
-                if let Some(teller) = teller {
-                    teller.tell(FeedState::Ended);
-                }
+            if n == 1
+                && let Some(teller) = teller
+            {
+                teller.tell(FeedState::Ended);
             }
             for value in values {
-                if let (Pace::Every(period), false) = (pace, first) {
-                    if !tx.sleep(period) {
-                        return None;
-                    }
+                if let (Pace::Every(period), false) = (pace, first)
+                    && !tx.sleep(period)
+                {
+                    return None;
                 }
                 first = false;
                 if !tx.send(value) {

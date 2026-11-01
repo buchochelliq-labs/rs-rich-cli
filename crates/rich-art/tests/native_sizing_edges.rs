@@ -2,10 +2,10 @@
 //! `ImageFit::Native` sizing at its edges: the computed grid matches the
 //! rendered one for extreme shapes, widths and caps (0.0.12 release test).
 use rich::segment::Segment;
-use rich::{color::ColorSystem, Console};
+use rich::{Console, color::ColorSystem};
 use rich_art::{
-    image::{DynamicImage, Rgb, RgbImage},
     ImageArt, ImageFit, ImageMode,
+    image::{DynamicImage, Rgb, RgbImage},
 };
 
 fn console(width: usize) -> Console {

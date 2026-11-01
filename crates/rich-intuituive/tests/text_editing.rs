@@ -9,7 +9,7 @@ use intuituive::interact::caret::CaretShape;
 use intuituive::interact::edit::WrapMode;
 use intuituive::interact::{Event, Key};
 use intuituive::prelude::*;
-use intuituive::{search_bar, Driver, TextSearch};
+use intuituive::{Driver, TextSearch, search_bar};
 
 /// A focused text area of `start`, given `options`, over a line showing
 /// the signal's value (its line breaks as `|`); Ctrl+Q, Alt+D and Ctrl+Y
@@ -394,9 +394,10 @@ fn a_validation_message_shows_and_is_read_out() {
     assert!(node.state.invalid);
     assert_eq!(node.error.as_deref(), Some("a number"));
     assert_eq!(node.describe(), "Age, text box: x, invalid: a number");
-    assert!(node
-        .aria_attributes()
-        .contains(&("aria-description", "a number".to_string())));
+    assert!(
+        node.aria_attributes()
+            .contains(&("aria-description", "a number".to_string()))
+    );
     driver.press("backspace");
     driver.type_text("42");
     assert_eq!(rows(&driver), ["42", "", "end"]);

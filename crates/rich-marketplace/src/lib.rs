@@ -55,30 +55,30 @@ mod transport;
 mod util;
 
 pub use check::{
-    check_pack_json, check_theme, check_wasm_header, compare_wasm_manifest, ArtifactChecker,
-    BuiltinChecks, WasmExpectation,
+    ArtifactChecker, BuiltinChecks, WasmExpectation, check_pack_json, check_theme,
+    check_wasm_header, compare_wasm_manifest,
 };
 pub use error::{
     CheckError, FetchError, Incompatibility, IndexError, InstallError, KeyChainError, ListingError,
     LockfileError, ResolveError, SignatureError,
 };
 pub use index::{
-    verify_index, AcceptedIndex, IndexEntry, VerifiedIndex, INDEX_COMMENT_PREFIX,
-    INDEX_SCHEMA_VERSION,
+    AcceptedIndex, INDEX_COMMENT_PREFIX, INDEX_SCHEMA_VERSION, IndexEntry, VerifiedIndex,
+    verify_index,
 };
 pub use install::Installer;
 pub use keys::{
-    KeyId, KeySet, Rotation, RotationKind, TrustedKey, KEYS_COMMENT_PREFIX, KEYS_SCHEMA_VERSION,
+    KEYS_COMMENT_PREFIX, KEYS_SCHEMA_VERSION, KeyId, KeySet, Rotation, RotationKind, TrustedKey,
 };
 pub use listing::{
-    Artifact, Capability, CrateInfo, Kind, ListedVersion, Listing, Recommended, Requires, Tier,
-    LISTING_SCHEMA_VERSION, MAX_RECOMMENDED_NOTE, OFFICIAL_PREFIX,
+    Artifact, Capability, CrateInfo, Kind, LISTING_SCHEMA_VERSION, ListedVersion, Listing,
+    MAX_RECOMMENDED_NOTE, OFFICIAL_PREFIX, Recommended, Requires, Tier,
 };
-pub use lockfile::{LockEntry, Lockfile, LOCKFILE_NAME, LOCKFILE_SCHEMA_VERSION};
-pub use resolve::{resolve, Host, Request, MICRO_SCHEMA_VERSION, THEME_FORMAT};
+pub use lockfile::{LOCKFILE_NAME, LOCKFILE_SCHEMA_VERSION, LockEntry, Lockfile};
+pub use resolve::{Host, MICRO_SCHEMA_VERSION, Request, THEME_FORMAT, resolve};
 #[cfg(feature = "http")]
 pub use transport::HttpsTransport;
-pub use transport::{require_https, MemoryTransport, Transport};
+pub use transport::{MemoryTransport, Transport, require_https};
 
 /// Re-exported so callers name versions with the same type.
 pub use semver;

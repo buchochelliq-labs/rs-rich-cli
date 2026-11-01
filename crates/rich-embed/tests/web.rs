@@ -9,12 +9,12 @@ use std::time::Duration;
 
 use rich::{Color, Segment};
 use rich_embed::{
-    web_view_with, Notify, PageState, Pixels, ProgramEngine, PtyHost, ReplayHandle, ReplayHost,
-    WebEngine, WebFrame, WebHandle, WebInput,
+    Notify, PageState, Pixels, ProgramEngine, PtyHost, ReplayHandle, ReplayHost, WebEngine,
+    WebFrame, WebHandle, WebInput, web_view_with,
 };
+use rich_intuituive::Driver;
 use rich_intuituive::interact::{Button, Event, Key, Mouse, MouseKind};
 use rich_intuituive::prelude::*;
-use rich_intuituive::Driver;
 
 /// What the fake engine was asked, and what it will answer.
 #[derive(Default)]

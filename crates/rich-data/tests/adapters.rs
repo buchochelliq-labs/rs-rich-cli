@@ -6,7 +6,7 @@ use rich::{Console, Style};
 use rich_data::csv::CsvReader;
 use rich_data::infer::{InferredType, Inferrer};
 use rich_data::stats::Stats;
-use rich_data::{jsonl, serialize, RowSource, Rows, Value};
+use rich_data::{RowSource, Rows, Value, jsonl, serialize};
 use rich_ext::table::{Comparison, StyleRule, StyleRules, Target};
 
 const CSV: &str = include_str!("fixtures/services.csv");
@@ -260,8 +260,10 @@ fn the_readme_example_runs() {
         report.contains("│ p99     │ float   │    3/3 │     0 │"),
         "{report}"
     );
-    assert!(console
-        .render_export(&rows.to_table_data())
-        .contains("│ api     │ 35.5 │ false │"));
+    assert!(
+        console
+            .render_export(&rows.to_table_data())
+            .contains("│ api     │ 35.5 │ false │")
+    );
     assert!(console.render_export(&Stats::of(&rows)).contains("│ p99"));
 }

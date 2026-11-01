@@ -1,8 +1,8 @@
 //! Cluster frames and same-rank groups (0.0.16, #240).
 
-use rich::cells::cell_len;
 use rich::Console;
-use rich_diagram::{draw, Cluster, Diagram, Direction, Dot, Graph};
+use rich::cells::cell_len;
+use rich_diagram::{Cluster, Diagram, Direction, Dot, Graph, draw};
 
 fn lines(graph: &Graph, ascii: bool) -> Vec<String> {
     draw(graph, ascii).unwrap().lines
@@ -114,10 +114,12 @@ fn same_rank_groups_share_a_rank() {
     assert!(b < d);
     let (b, d) = ranked(&graph.clone().same_rank(["b", "d"]));
     assert_eq!(b, d);
-    assert!(draw(&graph.same_rank(["b", "d"]), false)
-        .unwrap()
-        .notes
-        .is_empty());
+    assert!(
+        draw(&graph.same_rank(["b", "d"]), false)
+            .unwrap()
+            .notes
+            .is_empty()
+    );
 }
 
 #[test]

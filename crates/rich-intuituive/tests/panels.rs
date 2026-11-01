@@ -1,7 +1,7 @@
 //! Panel titles, borders, sides and shadows (0.0.19 gap A1).
 
 use intuituive::prelude::*;
-use intuituive::{assert_screen, assert_screen_styled, BorderSet, Driver};
+use intuituive::{BorderSet, Driver, assert_screen, assert_screen_styled};
 
 fn shown(app: App, width: u16, height: u16) -> Driver {
     let mut driver = app.driver(width, height);

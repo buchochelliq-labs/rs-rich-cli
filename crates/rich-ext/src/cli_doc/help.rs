@@ -397,11 +397,11 @@ impl Renderable for HelpView {
                 None => text.append(line, None),
             }
             let mut lines = wrap_indented(c, &text, USAGE_LABEL.len(), width);
-            if i == 0 {
-                if let Some(first) = lines.first_mut() {
-                    first[0] = Segment::new(USAGE_LABEL.trim_end(), Some(heading.clone()));
-                    first.insert(1, Segment::new(" ", None));
-                }
+            if i == 0
+                && let Some(first) = lines.first_mut()
+            {
+                first[0] = Segment::new(USAGE_LABEL.trim_end(), Some(heading.clone()));
+                first.insert(1, Segment::new(" ", None));
             }
             rows.extend(lines);
         }

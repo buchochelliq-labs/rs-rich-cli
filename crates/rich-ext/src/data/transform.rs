@@ -223,7 +223,7 @@ impl Transform<Document> for Highlight {
 #[cfg(test)]
 mod tests {
     use super::*;
-    use crate::data::{parse, Format, Redaction};
+    use crate::data::{Format, Redaction, parse};
     use crate::transform::Pipeline;
 
     fn doc(json: &str) -> Document {
@@ -291,11 +291,12 @@ mod tests {
         let out = console.render_to_string(&document.explorer());
         let line = out.lines().find(|l| l.contains('b')).unwrap();
         assert!(line.contains("\x1b[7m"), "{line:?}");
-        assert!(!out
-            .lines()
-            .find(|l| l.contains("a"))
-            .unwrap()
-            .contains("\x1b[7m"));
+        assert!(
+            !out.lines()
+                .find(|l| l.contains("a"))
+                .unwrap()
+                .contains("\x1b[7m")
+        );
         assert!(out.contains("********"));
     }
 }

@@ -5,7 +5,7 @@
 //! Enter or `q` leaves. Piped or under CI, it prints the document instead.
 
 use rich_interact::policy::Policy;
-use rich_interact::{run, Context, Outcome, RunOptions, SessionOptions, Viewport};
+use rich_interact::{Context, Outcome, RunOptions, SessionOptions, Viewport, run};
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
     let path = std::env::args()

@@ -198,6 +198,20 @@ mod tests {
 
     static ENV_LOCK: Mutex<()> = Mutex::new(());
 
+    /// Sets (`Some`) or removes (`None`) one environment variable.
+    #[allow(unsafe_code)]
+    fn set_env(key: &str, value: Option<&str>) {
+        // SAFETY: the environment tests hold `ENV_LOCK` while they write, and
+        // everything else in this test binary reads the environment through
+        // `std::env`, which takes std's own environment lock.
+        unsafe {
+            match value {
+                Some(value) => std::env::set_var(key, value),
+                None => std::env::remove_var(key),
+            }
+        }
+    }
+
     impl EnvGuard {
         fn set(vars: &[(&str, Option<&str>)]) -> Self {
             let lock = ENV_LOCK.lock().unwrap_or_else(|e| e.into_inner());
@@ -206,10 +220,7 @@ mod tests {
                 .map(|(key, _)| ((*key).to_string(), std::env::var(key).ok()))
                 .collect();
             for (key, value) in vars {
-                match value {
-                    Some(value) => std::env::set_var(key, value),
-                    None => std::env::remove_var(key),
-                }
+                set_env(key, value.as_deref());
             }
             EnvGuard {
                 previous,
@@ -221,10 +232,7 @@ mod tests {
     impl Drop for EnvGuard {
         fn drop(&mut self) {
             for (key, value) in &self.previous {
-                match value {
-                    Some(value) => std::env::set_var(key, value),
-                    None => std::env::remove_var(key),
-                }
+                set_env(key, value.as_deref());
             }
         }
     }

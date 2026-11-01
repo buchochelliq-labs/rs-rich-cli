@@ -268,11 +268,13 @@ fn packs_install_and_uninstall() {
     let out = rich(&work, &home, &["micro", "uninstall", "fun"]);
     assert!(out.status.success(), "{}", text(&out.stderr));
     let packs = json(&rich(&work, &home, &["micro", "packs", "--json"]));
-    assert!(packs["packs"]
-        .as_array()
-        .unwrap()
-        .iter()
-        .all(|p| p["layer"] == "built-in"));
+    assert!(
+        packs["packs"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .all(|p| p["layer"] == "built-in")
+    );
 }
 
 #[test]

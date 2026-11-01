@@ -794,11 +794,7 @@ impl Redactor {
             changed = true;
             out.extend(self.mask_line(line, &plain, &matches));
         }
-        if changed {
-            out
-        } else {
-            segments.to_vec()
-        }
+        if changed { out } else { segments.to_vec() }
     }
 
     /// `segment` with its link target, or a control segment's escape
@@ -953,10 +949,11 @@ impl<R: Renderable> Renderable for Redacted<R> {
 /// `mask` fitted to exactly `width` cells.
 fn fit_mask(mask: &str, width: usize) -> String {
     let mut chars = mask.chars();
-    if let Some(first) = chars.next() {
-        if char_cell_width(first) == 1 && chars.all(|c| c == first) {
-            return first.to_string().repeat(width);
-        }
+    if let Some(first) = chars.next()
+        && char_cell_width(first) == 1
+        && chars.all(|c| c == first)
+    {
+        return first.to_string().repeat(width);
     }
     let mut out = String::new();
     let mut used = 0;

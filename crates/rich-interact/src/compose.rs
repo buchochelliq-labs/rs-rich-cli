@@ -66,7 +66,7 @@ use rich::{Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
 use crate::event::{Event, Key, Mouse, MouseKind};
-use crate::keymap::{keys, Binding, Keymap};
+use crate::keymap::{Binding, Keymap, keys};
 use crate::kit::{self, Divider, Theme};
 use crate::policy::{LineIo, NotInteractive};
 
@@ -432,10 +432,10 @@ impl<'a, M> Group<'a, M> {
 
     fn focus_step(&mut self, forward: bool) -> bool {
         let current = self.focused();
-        if let Some(index) = current {
-            if self.children[index].focus_step(forward) {
-                return true;
-            }
+        if let Some(index) = current
+            && self.children[index].focus_step(forward)
+        {
+            return true;
         }
         let count = self.children.len();
         let order: Vec<usize> = if forward {
@@ -912,12 +912,12 @@ fn side_by_side(
         lines.push(line);
     }
     let mut out = View::new(lines);
-    if let Some((view, rect)) = focus.and_then(|index| views.get(index)) {
-        if let Some((row, column)) = view.cursor {
-            if row < rows && column < rect.width.max(1) {
-                out.cursor = Some((rect.y + row, rect.x + column));
-            }
-        }
+    if let Some((view, rect)) = focus.and_then(|index| views.get(index))
+        && let Some((row, column)) = view.cursor
+        && row < rows
+        && column < rect.width.max(1)
+    {
+        out.cursor = Some((rect.y + row, rect.x + column));
     }
     out
 }
@@ -938,12 +938,11 @@ impl<M> Component for Stack<'_, M> {
     }
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<M> {
-        if let Some(key) = event.key() {
-            if let Some(action) = self.bindings.action(key, true) {
-                if let Some(flow) = self.bindings.run(&action) {
-                    return flow;
-                }
-            }
+        if let Some(key) = event.key()
+            && let Some(action) = self.bindings.action(key, true)
+            && let Some(flow) = self.bindings.run(&action)
+        {
+            return flow;
         }
         let rects = self.indexed(context);
         let flow = self.group.route(event, context, &rects, Rect::default());
@@ -989,12 +988,11 @@ impl<M> Component for Stack<'_, M> {
                     let fill = self.sizes[index] != Size::Auto;
                     let top = out.lines.len();
                     out.lines.extend(rows_of(view, *rect, fill));
-                    if Some(index) == focus {
-                        if let Some((row, column)) = view.cursor {
-                            if row < rect.height {
-                                out.cursor = Some((top + row, column));
-                            }
-                        }
+                    if Some(index) == focus
+                        && let Some((row, column)) = view.cursor
+                        && row < rect.height
+                    {
+                        out.cursor = Some((top + row, column));
                     }
                 }
                 out
@@ -1364,23 +1362,23 @@ impl<M> Component for Split<'_, M> {
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<M> {
         let (total, first) = self.extent(context);
-        if let Some(key) = event.key() {
-            if let Some(action) = self.bindings.action(key, true) {
-                let step = match self.axis {
-                    Axis::Horizontal => 2,
-                    Axis::Vertical => 1,
-                };
-                match action.as_str() {
-                    "shrink" => self.divider.nudge(-step, first, total),
-                    "grow" => self.divider.nudge(step, first, total),
-                    _ => {
-                        if let Some(flow) = self.bindings.run(&action) {
-                            return flow;
-                        }
+        if let Some(key) = event.key()
+            && let Some(action) = self.bindings.action(key, true)
+        {
+            let step = match self.axis {
+                Axis::Horizontal => 2,
+                Axis::Vertical => 1,
+            };
+            match action.as_str() {
+                "shrink" => self.divider.nudge(-step, first, total),
+                "grow" => self.divider.nudge(step, first, total),
+                _ => {
+                    if let Some(flow) = self.bindings.run(&action) {
+                        return flow;
                     }
                 }
-                return Flow::Continue;
             }
+            return Flow::Continue;
         }
         if let Event::Mouse(mouse) = event {
             let along = match self.axis {
@@ -1640,38 +1638,38 @@ impl<M> Component for Tabs<'_, M> {
 
     fn handle(&mut self, event: &Event, context: &Context<'_>) -> Flow<M> {
         let count = self.titles.len();
-        if let Some(key) = event.key() {
-            if let Some(action) = self.bindings.action(key, true) {
-                match action.as_str() {
-                    "next" if count > 0 => self.select((self.active + 1) % count),
-                    "previous" if count > 0 => self.select((self.active + count - 1) % count),
-                    number if number.starts_with("tab-") => {
-                        if let Ok(n) = number[4..].parse::<usize>() {
-                            self.select(n.saturating_sub(1));
-                        }
-                    }
-                    _ => {
-                        if let Some(flow) = self.bindings.run(&action) {
-                            return flow;
-                        }
+        if let Some(key) = event.key()
+            && let Some(action) = self.bindings.action(key, true)
+        {
+            match action.as_str() {
+                "next" if count > 0 => self.select((self.active + 1) % count),
+                "previous" if count > 0 => self.select((self.active + count - 1) % count),
+                number if number.starts_with("tab-") => {
+                    if let Ok(n) = number[4..].parse::<usize>() {
+                        self.select(n.saturating_sub(1));
                     }
                 }
-                return Flow::Continue;
+                _ => {
+                    if let Some(flow) = self.bindings.run(&action) {
+                        return flow;
+                    }
+                }
             }
+            return Flow::Continue;
         }
-        if let Event::Mouse(mouse) = event {
-            if mouse.row == 0 && self.group.grab.is_none() {
-                if mouse.is_click() {
-                    let (_, spans) = self.bar(context.width);
-                    let column = mouse.column as usize;
-                    if let Some(index) = spans.iter().position(|(a, b)| (*a..*b).contains(&column))
-                    {
-                        self.select(index);
-                        return Flow::Continue;
-                    }
+        if let Event::Mouse(mouse) = event
+            && mouse.row == 0
+            && self.group.grab.is_none()
+        {
+            if mouse.is_click() {
+                let (_, spans) = self.bar(context.width);
+                let column = mouse.column as usize;
+                if let Some(index) = spans.iter().position(|(a, b)| (*a..*b).contains(&column)) {
+                    self.select(index);
+                    return Flow::Continue;
                 }
-                return Flow::Ignored;
             }
+            return Flow::Ignored;
         }
         let rect = self.content(context);
         self.group.focus = Some(self.active);
@@ -2223,10 +2221,10 @@ impl<'a, M> Layers<'a, M> {
                 .child
                 .handle(event, &inner.context(context));
             let count = self.layers.len();
-            if let Some(flow) = self.after_layer(index, flow) {
-                if decisive(&flow) {
-                    return flow;
-                }
+            if let Some(flow) = self.after_layer(index, flow)
+                && decisive(&flow)
+            {
+                return flow;
             }
             if self.layers.len() == count {
                 index += 1;
@@ -2271,10 +2269,10 @@ impl<M> Component for Layers<'_, M> {
                 .map_or(Rect::default(), |(_, inner)| *inner);
             let flow = self.layers[index].child.start(&inner.context(context));
             let count = self.layers.len();
-            if let Some(flow) = self.after_layer(index, flow) {
-                if decisive(&flow) {
-                    return flow;
-                }
+            if let Some(flow) = self.after_layer(index, flow)
+                && decisive(&flow)
+            {
+                return flow;
             }
             if self.layers.len() == count {
                 index += 1;
@@ -2386,12 +2384,11 @@ impl<M> Component for Layers<'_, M> {
 
 impl<M> Layers<'_, M> {
     fn handle_base(&mut self, event: &Event, context: &Context<'_>) -> Flow<M> {
-        if let Some(key) = event.key() {
-            if let Some(action) = self.bindings.action(key, true) {
-                if let Some(flow) = self.bindings.run(&action) {
-                    return flow;
-                }
-            }
+        if let Some(key) = event.key()
+            && let Some(action) = self.bindings.action(key, true)
+            && let Some(flow) = self.bindings.run(&action)
+        {
+            return flow;
         }
         if let Event::Mouse(mouse) = event {
             if !self.base.mouse() {

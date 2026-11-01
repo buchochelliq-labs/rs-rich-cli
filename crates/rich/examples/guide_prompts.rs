@@ -70,9 +70,11 @@ fn scripted() {
             .unwrap(),
         42
     );
-    assert!(Confirm::new("Sure?")
-        .ask_from(&console, &mut input, None)
-        .unwrap());
+    assert!(
+        Confirm::new("Sure?")
+            .ask_from(&console, &mut input, None)
+            .unwrap()
+    );
     assert_eq!(
         FloatPrompt::new("Ratio")
             .ask_from(&console, &mut input, None)

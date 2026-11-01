@@ -138,11 +138,11 @@ fn docinfo(document: &mut Element) {
             info.children.push(element.into());
             continue;
         }
-        if key == "authors" {
-            if let Some(authors) = authors(&body) {
-                info.children.push(authors.into());
-                continue;
-            }
+        if key == "authors"
+            && let Some(authors) = authors(&body)
+        {
+            info.children.push(authors.into());
+            continue;
         }
         if key == "dedication" || key == "abstract" {
             let title = if key == "dedication" {
@@ -639,10 +639,10 @@ fn contents(document: &mut Element) {
 /// `Transitions`: one ending a section moves after the section.
 fn transitions(element: &mut Element) {
     for child in &mut element.children {
-        if let Node::Element(child) = child {
-            if child.tag == "section" {
-                transitions(child);
-            }
+        if let Node::Element(child) = child
+            && child.tag == "section"
+        {
+            transitions(child);
         }
     }
     let mut index = 0;

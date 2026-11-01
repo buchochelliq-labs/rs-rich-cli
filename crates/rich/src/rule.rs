@@ -14,7 +14,7 @@ use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;
 use crate::style::StyleType;
-use crate::text::{Text, DEFAULT_TAB_SIZE};
+use crate::text::{DEFAULT_TAB_SIZE, Text};
 
 /// A horizontal rule, optionally titled. Mirrors `rich.rule.Rule`.
 pub struct Rule {

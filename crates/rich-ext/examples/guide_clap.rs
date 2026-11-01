@@ -7,11 +7,11 @@ use std::path::PathBuf;
 
 use rich::ansi::AnsiDecoder;
 use rich::{ColorSystem, Console};
-use rich_ext::cli_doc::CommandSpec;
 use rich_ext::ConsoleExt;
+use rich_ext::cli_doc::CommandSpec;
 
 // --8<-- [start:command]
-use clap::{value_parser, Arg, ArgAction, Command};
+use clap::{Arg, ArgAction, Command, value_parser};
 
 fn command() -> Command {
     Command::new("deploy")
@@ -89,9 +89,10 @@ fn render_error(console: &Console) {
     let exit = try_parse_with(console, command(), args).unwrap_err();
     assert_eq!(exit.code, 2);
     assert!(exit.use_stderr);
-    assert!(exit
-        .output
-        .contains("a similar argument exists: '--parallel'"));
+    assert!(
+        exit.output
+            .contains("a similar argument exists: '--parallel'")
+    );
     // `exit.output` is the rendered text; replay it on this console.
     for line in AnsiDecoder::new().decode(exit.output.trim_end_matches('\n')) {
         console.print(&line);

@@ -33,7 +33,7 @@
 
 use intuituive::interact::{Button, MouseKind};
 use intuituive::prelude::*;
-use intuituive::widgets::{month, CalendarOptions, Date};
+use intuituive::widgets::{CalendarOptions, Date, month};
 
 /// The looks `s` goes round, by name.
 pub const LOOKS: [&str; 6] = [

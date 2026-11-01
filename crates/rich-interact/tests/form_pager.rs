@@ -3,7 +3,7 @@
 use rich::Segment;
 use rich_interact::headless::{self, Script};
 use rich_interact::policy::{Fallback, Reason, ScriptedLineIo};
-use rich_interact::{degrade, Answers, Form, Input, Outcome, Pager, Value};
+use rich_interact::{Answers, Form, Input, Outcome, Pager, Value, degrade};
 
 fn form() -> Form {
     Form::new("New service")
@@ -159,9 +159,11 @@ fn searches_and_jumps_between_matches() {
 fn a_search_with_no_match_says_so() {
     let script = Script::new().text("/zebra").keys("enter q");
     let (_, record) = headless::run(Pager::lines(numbered(5)), script, 60, 11);
-    assert!(record
-        .last_frame()
-        .ends_with("all 5 lines · no match for \"zebra\" · / search · q quit"));
+    assert!(
+        record
+            .last_frame()
+            .ends_with("all 5 lines · no match for \"zebra\" · / search · q quit")
+    );
 }
 
 #[test]

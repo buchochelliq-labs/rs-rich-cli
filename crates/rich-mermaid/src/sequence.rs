@@ -38,7 +38,7 @@
 
 use std::collections::HashMap;
 
-use crate::flowchart::{clean_label, printable, strip_comment, ParseError};
+use crate::flowchart::{ParseError, clean_label, printable, strip_comment};
 
 mod draw;
 
@@ -306,12 +306,12 @@ fn split(line: &str) -> Vec<String> {
                     .iter()
                     .take(9)
                     .position(|c| !c.is_ascii_alphanumeric());
-                if let Some(len) = name.filter(|&len| len > 0) {
-                    if chars.get(at + 1 + len) == Some(&';') {
-                        current.extend(&chars[at..at + len + 2]);
-                        at += len + 2;
-                        continue;
-                    }
+                if let Some(len) = name.filter(|&len| len > 0)
+                    && chars.get(at + 1 + len) == Some(&';')
+                {
+                    current.extend(&chars[at..at + len + 2]);
+                    at += len + 2;
+                    continue;
                 }
             }
             ';' if !quoted => {
@@ -516,7 +516,7 @@ impl Parser {
                         return Err(self.error(
                             line,
                             "`create` needs `participant` or `actor` after it".into(),
-                        ))
+                        ));
                     }
                 };
                 self.declaration(rest, kind, line)
@@ -604,7 +604,9 @@ impl Parser {
                     [start] => Some((self.number(start, line)?, 1)),
                     [start, step] => Some((self.number(start, line)?, self.number(step, line)?)),
                     _ => {
-                        return Err(self.error(line, "`autonumber` takes a start and a step".into()))
+                        return Err(
+                            self.error(line, "`autonumber` takes a start and a step".into())
+                        );
                     }
                 };
                 Ok(())

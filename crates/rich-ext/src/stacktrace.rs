@@ -762,14 +762,14 @@ impl StackTraceView<'_> {
             text.append(": ", None);
             text.append(&clean(message), None);
         }
-        if let Some(location) = &trace.location {
-            if let Some(path) = &location.path {
-                text.append("\n  at ", None);
-                let linked =
-                    self.linker
-                        .location(path, location.line, location.column, location_style);
-                *text = std::mem::take(text).append_text(&linked);
-            }
+        if let Some(location) = &trace.location
+            && let Some(path) = &location.path
+        {
+            text.append("\n  at ", None);
+            let linked = self
+                .linker
+                .location(path, location.line, location.column, location_style);
+            *text = std::mem::take(text).append_text(&linked);
         }
     }
 }

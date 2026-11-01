@@ -40,7 +40,7 @@ use crate::engine::{
     Engine, EngineEvent, Format, HistoryStep, MediaOp, Metrics, NodeId, PageAction, Rect, TabId,
 };
 use crate::model::{
-    build_with, live_runs, Binding, Control, Entry, MediaKind, Page, Revisions, Role, Run,
+    Binding, Control, Entry, MediaKind, Page, Revisions, Role, Run, build_with, live_runs,
 };
 use crate::video::{Frames, Region, VideoFrame};
 use rich_intuituive::Picture;
@@ -279,12 +279,12 @@ fn guard(control: &Control, intent: &Intent) -> Result<(), Refusal> {
             }
             // A password's value is never read, so it cannot be checked:
             // it is replaced as typed.
-            if let (Some(base), Some(now)) = (base, &control.value) {
-                if base != now {
-                    return Err(Refusal::Conflict {
-                        remote: now.clone(),
-                    });
-                }
+            if let (Some(base), Some(now)) = (base, &control.value)
+                && base != now
+            {
+                return Err(Refusal::Conflict {
+                    remote: now.clone(),
+                });
             }
         }
         Intent::Select { option } => {
@@ -491,10 +491,10 @@ impl Worker<'_> {
     fn dress_inline(&mut self, page: &mut Page) {
         let mut sources: Vec<String> = Vec::new();
         let mut note = |run: &Run| {
-            if let Some(picture) = run.picture.as_ref().filter(|p| !p.src.is_empty()) {
-                if !sources.contains(&picture.src) {
-                    sources.push(picture.src.clone());
-                }
+            if let Some(picture) = run.picture.as_ref().filter(|p| !p.src.is_empty())
+                && !sources.contains(&picture.src)
+            {
+                sources.push(picture.src.clone());
             }
         };
         for block in &page.blocks {
@@ -925,10 +925,10 @@ fn decoder<K: Send + 'static>() -> (ToDecode<K>, Decoded<K>) {
     let (done, decoded) = mpsc::channel();
     thread::spawn(move || {
         while let Ok((key, bytes)) = jobs.recv() {
-            if let Ok(picture) = Picture::decode_animated(&bytes) {
-                if done.send((key, picture)).is_err() {
-                    return;
-                }
+            if let Ok(picture) = Picture::decode_animated(&bytes)
+                && done.send((key, picture)).is_err()
+            {
+                return;
             }
         }
     });

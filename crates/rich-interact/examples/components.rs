@@ -15,8 +15,8 @@ use std::sync::Arc;
 
 use rich::syntax::Syntax;
 use rich_interact::{
-    run, Choice, Confirm, Form, Input, Item, MultiSelect, Outcome, Pager, Preview, RunOptions,
-    Select, Suggestion,
+    Choice, Confirm, Form, Input, Item, MultiSelect, Outcome, Pager, Preview, RunOptions, Select,
+    Suggestion, run,
 };
 
 const CRATES: [(&str, &str); 8] = [

@@ -27,7 +27,7 @@ use pyo3::prelude::*;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
-use rich_micro::create::{write_package, PackageSpec};
+use rich_micro::create::{PackageSpec, write_package};
 use rich_micro::pipeline::{Pipeline, Transparency};
 use rich_micro::{
     CellSize, FallbackPreference, Layer, Limits, MicroAsset as CoreAsset, MicroAssetRef,
@@ -64,7 +64,7 @@ fn layer(name: &str) -> PyResult<Layer> {
                 "layer",
                 other,
                 "built-in, user, project or inline",
-            ))
+            ));
         }
     })
 }

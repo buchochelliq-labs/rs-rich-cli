@@ -33,7 +33,7 @@
 
 use std::fmt;
 use std::mem::ManuallyDrop;
-use std::panic::{catch_unwind, AssertUnwindSafe};
+use std::panic::{AssertUnwindSafe, catch_unwind};
 
 use crate::is_valid_name;
 
@@ -918,9 +918,11 @@ mod tests {
             (current.abi_major, current.abi_minor),
             (ABI_MAJOR, ABI_MINOR)
         );
-        assert!(current
-            .to_manifest()
-            .starts_with(&format!("rich-plugin-abi {ABI_MAJOR}.{ABI_MINOR}\n")));
+        assert!(
+            current
+                .to_manifest()
+                .starts_with(&format!("rich-plugin-abi {ABI_MAJOR}.{ABI_MINOR}\n"))
+        );
         for (major, minor) in versions_around_the_host() {
             let expected = is_supported(major, minor);
             let manifest = format!("rich-plugin-abi {major}.{minor}\nname shout\nversion 1\n");

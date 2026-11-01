@@ -11,15 +11,15 @@ use rich::markup::escape;
 use rich::{Console, Segment, Syntax};
 use rich_ext::filetype;
 use rich_ext::hex::HexView;
-use rich_ext::listing::{read_dir, readable_size, Entry, Sort};
+use rich_ext::listing::{Entry, Sort, read_dir, readable_size};
 
 use super::model::dir_model_of;
-use super::row::{file_list, FileListOptions};
+use super::row::{FileListOptions, file_list};
 use crate::app::Ctx;
 use crate::layout::TextAlign;
-use crate::node::{leaf, scroll_with, switch, text, Node};
-use crate::preview::{preview_of_with, PreviewOfOptions};
-use crate::reactive::{signal, Signal};
+use crate::node::{Node, leaf, scroll_with, switch, text};
+use crate::preview::{PreviewOfOptions, preview_of_with};
+use crate::reactive::{Signal, signal};
 use crate::scrollbar::{Scrollbar, Show};
 
 /// What a preview pane shows.
@@ -235,7 +235,7 @@ fn run_previewer(
             return Some(Preview::Note(format!(
                 "[red]{}",
                 escape(&error.to_string())
-            )))
+            )));
         }
     };
     let bytes = match &out_file {
@@ -305,7 +305,21 @@ fn image_kind(bytes: &[u8]) -> Option<&'static str> {
         [0xff, 0xd8, 0xff, ..] => "jpg",
         [b'G', b'I', b'F', b'8', ..] => "gif",
         [b'B', b'M', ..] => "bmp",
-        [b'R', b'I', b'F', b'F', _, _, _, _, b'W', b'E', b'B', b'P', ..] => "webp",
+        [
+            b'R',
+            b'I',
+            b'F',
+            b'F',
+            _,
+            _,
+            _,
+            _,
+            b'W',
+            b'E',
+            b'B',
+            b'P',
+            ..,
+        ] => "webp",
         [b'P', b'1'..=b'6', b'\n' | b' ' | b'\r' | b'\t', ..] => "ppm",
         _ => return None,
     })
@@ -445,7 +459,7 @@ fn archive_preview(path: &Path) -> Option<Preview> {
             return Some(Preview::Note(format!(
                 "[red]{}",
                 escape(&error.to_string())
-            )))
+            )));
         }
     };
     let size_style = Style::parse("bright_black").ok();

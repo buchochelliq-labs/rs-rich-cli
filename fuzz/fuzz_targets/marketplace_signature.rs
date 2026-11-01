@@ -5,8 +5,8 @@
 use std::sync::OnceLock;
 
 use libfuzzer_sys::fuzz_target;
-use rich_fuzz::{now, test_keys, text, MAX_PARSE_INPUT};
-use rich_marketplace::{verify_index, KeySet, Rotation};
+use rich_fuzz::{MAX_PARSE_INPUT, now, test_keys, text};
+use rich_marketplace::{KeySet, Rotation, verify_index};
 
 /// A valid generation-1 index, serial 1.
 const INDEX: &[u8] = br#"{"schema_version":1,"serial":1,"generated":"2026-10-26T00:00:00Z","expires":"2099-01-01T00:00:00Z","listings":{}}"#;

@@ -17,7 +17,7 @@ use rich_interact::overlay::{Command, Help, Palette};
 use rich_interact::{Component, Context, Event, Flow, Key, Keymap, View};
 
 use crate::app::Ctx;
-use crate::node::{component, BindingCondition, BindingReason, Node};
+use crate::node::{BindingCondition, BindingReason, Node, component};
 use crate::reactive::untracked;
 
 /// An action an [`action_overlay`] lists: what identifies it (`id`), what

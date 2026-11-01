@@ -24,12 +24,12 @@ use rich::protocol::Renderable;
 use rich::{StyleType, Text as CoreText};
 
 use crate::convert::{self, Index};
-use crate::limits::{check_alloc, check_size, MAX_TAB_SIZE, MAX_TEXT_LENGTH};
+use crate::limits::{MAX_TAB_SIZE, MAX_TEXT_LENGTH, check_alloc, check_size};
 use crate::renderable::{self, AsRenderable};
-use crate::style::{py_style_type, Style};
+use crate::style::{Style, py_style_type};
 
 pub(crate) use lines::Lines;
-use ops::{boundaries, byte_at, char_len, char_spans, CharSpan};
+use ops::{CharSpan, boundaries, byte_at, char_len, char_spans};
 
 /// `rich.text.Text`: a string with styled spans.
 #[pyclass(name = "Text", module = "rs_rich.text", skip_from_py_object)]
@@ -378,10 +378,10 @@ impl Text {
                 Text::append(text.borrow_mut(), &tuple.get_item(0)?, style.as_ref())?;
             }
         }
-        if let Some(meta) = meta.filter(|m| !m.is_none()) {
-            if meta.is_truthy()? {
-                Text::apply_meta(&text, meta, Index(0), None)?;
-            }
+        if let Some(meta) = meta.filter(|m| !m.is_none())
+            && meta.is_truthy()?
+        {
+            Text::apply_meta(&text, meta, Index(0), None)?;
         }
         Ok(text)
     }
@@ -1225,11 +1225,7 @@ fn detect_indentation(plain: &str) -> usize {
         }
         a
     });
-    if gcd == 0 {
-        1
-    } else {
-        gcd
-    }
+    if gcd == 0 { 1 } else { gcd }
 }
 
 pub(crate) fn register(m: &Bound<'_, PyModule>) -> PyResult<()> {

@@ -8,8 +8,8 @@ use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyString;
 
-use rich_interact::keymap::{try_keys, Binding as CoreBinding, Keymap as CoreKeymap};
 use rich_interact::Key;
+use rich_interact::keymap::{Binding as CoreBinding, Keymap as CoreKeymap, try_keys};
 
 use super::components::Event;
 use super::iterable;

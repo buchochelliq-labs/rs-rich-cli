@@ -3,12 +3,12 @@
 //! picture loads, as when Chrome's scroll brings it near.
 
 use std::path::Path;
-use std::sync::mpsc;
 use std::sync::Arc;
+use std::sync::mpsc;
 use std::time::{Duration, Instant};
 
 use noctiluca::engine::EngineEvent;
-use noctiluca::model::{build, Page, Revisions};
+use noctiluca::model::{Page, Revisions, build};
 use noctiluca::tab::{Command, Tab, Update};
 use noctiluca::testing::FakeEngine;
 
@@ -137,13 +137,12 @@ fn a_picture_in_a_format_we_cannot_decode_is_taken_from_chromes_pixels() {
     let harbour = {
         let state = state.lock().unwrap();
         let page = build(&state.pages["news"], &mut Revisions::new());
-        let media = page
-            .media
+
+        page.media
             .iter()
             .find(|m| m.src.ends_with("harbour.jpg"))
             .expect("harbour.jpg")
-            .clone();
-        media
+            .clone()
     };
     // An AVIF file's head: recognised as AVIF, not readable here.
     let mut avif = b"\0\0\0\x1cftypavif\0\0\0\0avifmif1miaf".to_vec();
@@ -195,13 +194,12 @@ fn page_with_resource(name: &str, bytes: Vec<u8>) -> (noctiluca::model::Media, A
     let media = {
         let state = state.lock().unwrap();
         let page = build(&state.pages["news"], &mut Revisions::new());
-        let media = page
-            .media
+
+        page.media
             .iter()
             .find(|m| m.src.ends_with(name))
             .unwrap_or_else(|| panic!("no {name}"))
-            .clone();
-        media
+            .clone()
     };
     state
         .lock()

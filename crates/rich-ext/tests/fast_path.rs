@@ -10,7 +10,7 @@ use rich_ext::chart::{
     GraphType, Heatmap, KpiCard, Labels, LineChart, LineGauge, Marker, PieChart, Series, Sparkline,
     Spectrogram, StatusMatrix, Timeline,
 };
-use rich_ext::surface::{draw_rendered, Draw, Rect, Screen, TextRun};
+use rich_ext::surface::{Draw, Rect, Screen, TextRun, draw_rendered};
 
 /// A screen already drawn on: text, a wide character across the
 /// rectangle's left and right edges, and a style.

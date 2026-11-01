@@ -7,7 +7,7 @@
 //! Windows consoles get upstream's `-` glyphs.
 
 use crate::color::{Color, ColorSystem, ColorTriplet};
-use crate::console::{monotonic, Console, ConsoleOptions};
+use crate::console::{Console, ConsoleOptions, monotonic};
 use crate::measure::Measurement;
 use crate::protocol::Renderable;
 use crate::segment::Segment;

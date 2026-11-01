@@ -150,7 +150,10 @@ impl fmt::Display for IndexError {
         match self {
             IndexError::Signature(source) => write!(f, "index.json.minisig: {source}"),
             IndexError::TrustedComment(found) => {
-                write!(f, "index.json.minisig: unexpected trusted comment {found:?}")
+                write!(
+                    f,
+                    "index.json.minisig: unexpected trusted comment {found:?}"
+                )
             }
             IndexError::Invalid(message) => write!(f, "index.json: {message}"),
             IndexError::UnsupportedSchema(version) => write!(
@@ -170,7 +173,10 @@ impl fmt::Display for IndexError {
                 "index.json has serial {serial} again, with different contents"
             ),
             IndexError::Expired { expires } => {
-                write!(f, "index.json expired at {expires}; refresh the marketplace")
+                write!(
+                    f,
+                    "index.json expired at {expires}; refresh the marketplace"
+                )
             }
         }
     }

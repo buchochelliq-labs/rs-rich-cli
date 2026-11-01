@@ -17,13 +17,13 @@ use std::time::{Duration, Instant};
 
 use intuituive::interact::Event;
 use intuituive::{App, Driver};
-use tungstenite::protocol::frame::coding::CloseCode;
 use tungstenite::protocol::CloseFrame;
+use tungstenite::protocol::frame::coding::CloseCode;
 use tungstenite::{Message, WebSocket};
 
+use crate::Renderer;
 use crate::dom::Dom;
 use crate::input::decode;
-use crate::Renderer;
 
 /// Sent before the first frame: the alternate screen (no scrollback, so a
 /// resize never leaves the view scrolled), report the mouse (clicks, drags,
@@ -65,17 +65,17 @@ pub(crate) fn parse_message(text: &str) -> PageMessage {
     if let Some(input) = text.strip_prefix('d') {
         return PageMessage::Input(decode(input));
     }
-    if let Some(size) = text.strip_prefix('r') {
-        if let Some((columns, rows)) = parse_size(size) {
-            return PageMessage::Resize(columns, rows);
-        }
+    if let Some(size) = text.strip_prefix('r')
+        && let Some((columns, rows)) = parse_size(size)
+    {
+        return PageMessage::Resize(columns, rows);
     }
     // `c` and the copy's number, `:1` when the clipboard took it, `:0`
     // when it did not.
-    if let Some((number, ok)) = text.strip_prefix('c').and_then(|t| t.split_once(':')) {
-        if let (Ok(number), "0" | "1") = (number.parse(), ok) {
-            return PageMessage::Copied(number, ok == "1");
-        }
+    if let Some((number, ok)) = text.strip_prefix('c').and_then(|t| t.split_once(':'))
+        && let (Ok(number), "0" | "1") = (number.parse(), ok)
+    {
+        return PageMessage::Copied(number, ok == "1");
     }
     if let Some(Ok(bytes)) = text.strip_prefix('a').map(str::parse) {
         return PageMessage::Shown(bytes);

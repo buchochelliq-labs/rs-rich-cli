@@ -7,8 +7,8 @@ use rich::{ColorSystem, Console, Renderable, Theme};
 use rich_ext::a11y::{AccessibilityPolicy, Status, SymbolSet};
 use rich_ext::cancel::CancelToken;
 use rich_ext::countdown::{
-    remaining_label, Backoff, CountdownBar, CountdownWait, Motion, RateLimit, RetryStatus,
-    WaitOutcome,
+    Backoff, CountdownBar, CountdownWait, Motion, RateLimit, RetryStatus, WaitOutcome,
+    remaining_label,
 };
 use rich_ext::live::LiveCoordinator;
 use rich_ext::target::{RenderTarget, TargetKind};

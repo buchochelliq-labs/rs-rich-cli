@@ -5,8 +5,8 @@ use rich::measure::Measurement;
 use rich::{Console, ConsoleOptions, Renderable, Segment, Style};
 
 use super::{
-    cells, centre, entries_width, has_colour, lines_to_segments, theme_style, truncate, user_style,
-    wrap_entries, Charset, Line,
+    Charset, Line, cells, centre, entries_width, has_colour, lines_to_segments, theme_style,
+    truncate, user_style, wrap_entries,
 };
 
 /// How healthy a value is, for a [`KpiCard`](super::KpiCard).
@@ -162,11 +162,7 @@ impl State {
 
     /// The symbol, ASCII when `ascii`.
     pub fn symbol(&self, ascii: bool) -> char {
-        if ascii {
-            self.ascii
-        } else {
-            self.symbol
-        }
+        if ascii { self.ascii } else { self.symbol }
     }
 
     /// The style: a theme key or a definition.

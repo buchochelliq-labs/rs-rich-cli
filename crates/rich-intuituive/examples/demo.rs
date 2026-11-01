@@ -43,7 +43,7 @@ use intuituive::prelude::*;
 use intuituive::rich::{Console, ConsoleOptions};
 use intuituive::screen::Rect;
 use intuituive::widget::{Canvas as WidgetCanvas, DrawCx, MeasureCx};
-use intuituive::widgets::{table_optional, tabs, Column, TableOptions};
+use intuituive::widgets::{Column, TableOptions, table_optional, tabs};
 use rich_ext::chart::{
     Axis, BarChart, Canvas, Chart, Dataset, FillGauge, Labels, Levels, LineGauge, LineSet,
     MapResolution, Marker, Orientation, Sparkline,
@@ -252,11 +252,7 @@ pub struct Server {
 
 impl Server {
     pub fn status(&self) -> &'static str {
-        if self.up {
-            "Up"
-        } else {
-            "Failure"
-        }
+        if self.up { "Up" } else { "Failure" }
     }
 }
 

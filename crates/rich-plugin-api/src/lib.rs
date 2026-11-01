@@ -55,7 +55,7 @@ mod linked;
 pub use component::{ComponentFactory, PluginComponent};
 #[doc(hidden)]
 pub use linked::__private;
-pub use linked::{linked_plugins, LinkedPlugin};
+pub use linked::{LinkedPlugin, linked_plugins};
 
 use rich::r#box::Box as BoxStyle;
 use rich::{CodeHighlighter, FenceRenderer, Highlighter, Renderable, Text, Theme};

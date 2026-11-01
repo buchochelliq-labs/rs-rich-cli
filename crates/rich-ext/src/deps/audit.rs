@@ -48,7 +48,7 @@ use rich::table::Table;
 use rich::{ColumnOptions, Console, ConsoleOptions, Renderable, Segment, Style, Text};
 use serde_json::Value;
 
-use super::{check_count, check_size, clean, stack, stack_measure, theme_style, DepsError};
+use super::{DepsError, check_count, check_size, clean, stack, stack_measure, theme_style};
 
 /// What an advisory is about.
 #[derive(Clone, Copy, Debug, PartialEq, Eq, PartialOrd, Ord, Hash)]

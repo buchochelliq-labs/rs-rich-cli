@@ -10,7 +10,7 @@
 [package]
 name = "rich-playground"
 version = "0.0.0"
-edition = "2021"
+edition = "2024"
 publish = false
 license = "MIT"
 description = "rs-rich in the docs site's browser tab (not published)"

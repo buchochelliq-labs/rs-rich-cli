@@ -2,11 +2,11 @@
 
 use std::convert::Infallible;
 
-use super::capture::{devices, Device};
+use super::capture::{Device, devices};
 use crate::app::Ctx;
 use crate::node::Node;
 use crate::reactive::{signal, watch};
-use crate::task::{resource, Load};
+use crate::task::{Load, resource};
 
 /// A list of the inputs, as Bubble Tea's list is in audio TUIs: each row
 /// the device's name with `(default)` after the default, which is selected

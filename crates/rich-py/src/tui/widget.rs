@@ -21,17 +21,17 @@ use pyo3::types::{PyDict, PyString, PyTuple};
 
 use rich::Style as CoreStyle;
 use rich_intuituive as intuituive;
+use rich_intuituive::Node;
 use rich_intuituive::node::Axis as CoreAxis;
 use rich_intuituive::screen::Rect;
 use rich_intuituive::widget::{
     Canvas, DrawCx, EventCx, MeasureCx, ScrollCx, Used, Widget as CoreWidget, WidgetEvent,
 };
-use rich_intuituive::Node;
 
 use super::app::{PyAccessState, PyCtx, PyTheme};
-use super::node::{segment_lines, take_nodes, PyMouse};
+use super::node::{PyMouse, segment_lines, take_nodes};
 use super::{
-    axis_arg, current, invoke, rect_arg, role_arg, Axis, Handle, Lent, LentRef, Loan, PyRect,
+    Axis, Handle, Lent, LentRef, Loan, PyRect, axis_arg, current, invoke, rect_arg, role_arg,
 };
 use crate::ext::common::style;
 use crate::renderable;
@@ -983,11 +983,7 @@ impl CoreWidget for PyWidget {
             )
             .unwrap_or(true);
         drop(loan);
-        if used {
-            Used::Yes
-        } else {
-            Used::No
-        }
+        if used { Used::Yes } else { Used::No }
     }
 
     fn focusable(&self) -> bool {

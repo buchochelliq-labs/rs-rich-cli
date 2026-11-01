@@ -12,9 +12,9 @@ use std::sync::Arc;
 use rich::{Renderable, Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{fit, plain, question, text, Theme};
+use crate::components::{Theme, fit, plain, question, text};
 use crate::event::{Event, Key, KeyCode};
-use crate::keymap::{keys, Binding, Keymap};
+use crate::keymap::{Binding, Keymap, keys};
 use crate::policy::{LineIo, NotInteractive};
 use crate::viewport::Viewport;
 
@@ -188,10 +188,10 @@ impl Component for Confirm {
         }
         let page = self.page(context);
         if let Some(mouse) = event.mouse().filter(|mouse| mouse.is_click()) {
-            if mouse.row as usize == self.buttons_row(context) {
-                if let Some(index) = self.button_at(mouse.column as usize) {
-                    return self.pick(index);
-                }
+            if mouse.row as usize == self.buttons_row(context)
+                && let Some(index) = self.button_at(mouse.column as usize)
+            {
+                return self.pick(index);
             }
             return Flow::Continue;
         }
@@ -358,10 +358,10 @@ impl Component for Confirm {
             };
         };
         let answer = line.trim().to_lowercase();
-        if answer.is_empty() {
-            if let Some(index) = self.default {
-                return Ok(Some(self.choices[index].id.clone()));
-            }
+        if answer.is_empty()
+            && let Some(index) = self.default
+        {
+            return Ok(Some(self.choices[index].id.clone()));
         }
         self.choices
             .iter()

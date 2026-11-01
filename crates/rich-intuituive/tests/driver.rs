@@ -3,9 +3,9 @@
 
 use std::time::Duration;
 
+use intuituive::Easing;
 use intuituive::interact::{Button, Event, Key, Mouse, MouseKind};
 use intuituive::prelude::*;
-use intuituive::Easing;
 
 fn press(key: &str) -> Event {
     Event::Key(Key::parse(key).expect("a key name"))

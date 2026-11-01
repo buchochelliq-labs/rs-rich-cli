@@ -7,11 +7,11 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use noctiluca::app::{app, Options};
+use noctiluca::app::{Options, app};
 use noctiluca::bookmarks::Bookmarks;
 use noctiluca::config::{Config, Images, View};
 use noctiluca::engine::{MediaOp, PageAction, Playback};
-use noctiluca::model::{build, Revisions};
+use noctiluca::model::{Revisions, build};
 use noctiluca::testing::{FakeEngine, FakeState};
 use rich_embed::{FrameMeta, Pixels, ScreencastFrame};
 use rich_intuituive::Driver;

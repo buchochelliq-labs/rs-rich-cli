@@ -26,8 +26,8 @@ use rich_interact::{Fallback, Item, Outcome, Preview};
 use serde_json::Value;
 
 use super::interactive::{
-    read_stdin, report, run_options, write_stdout, Answer, EXIT_CANCELLED, EXIT_INTERRUPTED,
-    MAX_ITEMS,
+    Answer, EXIT_CANCELLED, EXIT_INTERRUPTED, MAX_ITEMS, read_stdin, report, run_options,
+    write_stdout,
 };
 
 const COMMANDS: &[&str] = &["approve", "jump"];

@@ -14,7 +14,7 @@ use std::ops::Range;
 use std::sync::{Arc, Mutex, PoisonError};
 
 use rich::protocol::{
-    region_of, ConsoleRegions, RegionId, RegionInfo, RegionRole, RegionSink, REGION_META_KEY,
+    ConsoleRegions, REGION_META_KEY, RegionId, RegionInfo, RegionRole, RegionSink, region_of,
 };
 use rich::style::Meta;
 use rich::{Console, ConsoleOptions, Renderable, Style};

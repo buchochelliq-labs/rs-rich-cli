@@ -10,7 +10,7 @@ mod panic;
 
 use intuituive::assert_screen;
 use intuituive::interact::headless::{Headless, Script};
-use panic::{panic_app, ERROR, PANIC};
+use panic::{ERROR, PANIC, panic_app};
 
 #[test]
 fn panic_screen() {
@@ -72,7 +72,7 @@ fn child() {
 #[cfg(unix)]
 mod pty {
     use super::panic::PANIC;
-    use super::support::{assert_restored, Pty};
+    use super::support::{Pty, assert_restored};
 
     #[test]
     fn p_gives_the_terminal_back_before_the_message_prints() {

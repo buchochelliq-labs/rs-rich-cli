@@ -164,7 +164,7 @@ fn has_colour(output: &str) -> bool {
 #[cfg(unix)]
 #[test]
 fn plugins_colour_follows_config() {
-    use portable_pty::{native_pty_system, CommandBuilder, PtySize};
+    use portable_pty::{CommandBuilder, PtySize, native_pty_system};
     use std::io::Read;
 
     let (_root, work, home) = dirs();
@@ -453,9 +453,11 @@ mod wasm {
         std::fs::write(work.join("doc.md"), "# Doc\n\n```shout\nhello there\n```\n").unwrap();
         // Without the plugin the fence is a code block (indented by padding).
         let out = rich(&work, &home, &["-m", "doc.md"]);
-        assert!(text(&out.stdout)
-            .lines()
-            .any(|l| l.trim_end() == " hello there"));
+        assert!(
+            text(&out.stdout)
+                .lines()
+                .any(|l| l.trim_end() == " hello there")
+        );
         let out = rich(&work, &home, &["--plugin", "shout.wasm", "-m", "doc.md"]);
         assert!(out.status.success(), "{}", text(&out.stderr));
         assert!(

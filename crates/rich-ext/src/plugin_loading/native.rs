@@ -14,11 +14,11 @@ use std::path::Path;
 use std::sync::Arc;
 
 use rich_plugin_api::abi::{
-    read_descriptor, AbiOutput, AbiStr, PluginDescriptor, PluginFunctions, DYLIB_ENTRY_SYMBOL,
-    STATUS_OK,
+    AbiOutput, AbiStr, DYLIB_ENTRY_SYMBOL, PluginDescriptor, PluginFunctions, STATUS_OK,
+    read_descriptor,
 };
 
-use super::{AbiBackend, LoadError, RuntimeKind, RuntimePlugin, MAX_OUTPUT_BYTES};
+use super::{AbiBackend, LoadError, MAX_OUTPUT_BYTES, RuntimeKind, RuntimePlugin};
 
 /// A loaded library and its functions. The vtable's pointers are only valid
 /// while `_library` is loaded, which is why they live together.

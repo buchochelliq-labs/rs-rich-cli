@@ -1,7 +1,7 @@
 use rich::{Console, Renderable};
 use rich_ext::ansi_explain::{
-    escape_visible, explain, explain_bytes, sgr_effects, ExplanationView, Spanned, StringKind,
-    Terminator, Token, ViewMode,
+    ExplanationView, Spanned, StringKind, Terminator, Token, ViewMode, escape_visible, explain,
+    explain_bytes, sgr_effects,
 };
 
 fn plain(r: &dyn Renderable, width: usize) -> String {
@@ -111,10 +111,15 @@ fn sgr_is_covered_fully() {
 #[test]
 fn csi_osc_esc_and_strings() {
     assert_eq!(
-        meanings("\x1b[?25l\x1b[?1049h\x1b[?2004h\x1b[?25h\x1b[2J\x1b[3;4H\x1b[K\x1b[1K\x1b[5S\x1b[2T\x1b[3A\x1b[B\x1b[10G\x1b[2 q\x1b[?1000;1006h"),
+        meanings(
+            "\x1b[?25l\x1b[?1049h\x1b[?2004h\x1b[?25h\x1b[2J\x1b[3;4H\x1b[K\x1b[1K\x1b[5S\x1b[2T\x1b[3A\x1b[B\x1b[10G\x1b[2 q\x1b[?1000;1006h"
+        ),
         [
             ("CSI", "hide cursor (DECRST)".into()),
-            ("CSI", "enable alternate screen with saved cursor (DECSET)".into()),
+            (
+                "CSI",
+                "enable alternate screen with saved cursor (DECSET)".into()
+            ),
             ("CSI", "enable bracketed paste (DECSET)".into()),
             ("CSI", "show cursor (DECSET)".into()),
             ("CSI", "erase entire screen".into()),
@@ -176,18 +181,48 @@ fn csi_osc_esc_and_strings() {
     );
     assert_eq!(e.visible_text, "link");
     assert_eq!(
-        meanings("\x1b]0;title\x07\x1b]133;A\x07\x1b]133;D;1\x07\x1b]52;c;aGVsbG8=\x07\x1b]52;c;?\x07\x1b]4;1;rgb:ff/00/00;2;?\x07\x1b]10;?\x07\x1b]11;#000\x1b\\\x1b]7;file://h/p\x07\x1b]1337;File=inline=1:AAAA\x07\x1b]999;x\x07"),
+        meanings(
+            "\x1b]0;title\x07\x1b]133;A\x07\x1b]133;D;1\x07\x1b]52;c;aGVsbG8=\x07\x1b]52;c;?\x07\x1b]4;1;rgb:ff/00/00;2;?\x07\x1b]10;?\x07\x1b]11;#000\x1b\\\x1b]7;file://h/p\x07\x1b]1337;File=inline=1:AAAA\x07\x1b]999;x\x07"
+        ),
         [
-            ("OSC", "set window and icon title to \"title\" (BEL-terminated)".into()),
-            ("OSC", "shell integration: prompt start (BEL-terminated)".into()),
-            ("OSC", "shell integration: command finished (exit status 1) (BEL-terminated)".into()),
-            ("OSC", "set clipboard (c) to 8 bytes of base64 (BEL-terminated)".into()),
+            (
+                "OSC",
+                "set window and icon title to \"title\" (BEL-terminated)".into()
+            ),
+            (
+                "OSC",
+                "shell integration: prompt start (BEL-terminated)".into()
+            ),
+            (
+                "OSC",
+                "shell integration: command finished (exit status 1) (BEL-terminated)".into()
+            ),
+            (
+                "OSC",
+                "set clipboard (c) to 8 bytes of base64 (BEL-terminated)".into()
+            ),
             ("OSC", "query clipboard (c) (BEL-terminated)".into()),
-            ("OSC", "set palette colour 1 to rgb:ff/00/00, query palette colour 2 (BEL-terminated)".into()),
-            ("OSC", "query default foreground colour (BEL-terminated)".into()),
-            ("OSC", "set default background colour to #000 (ST-terminated)".into()),
-            ("OSC", "report working directory file://h/p (BEL-terminated)".into()),
-            ("OSC", "iTerm2 inline file (inline=1), 4 bytes of base64 (BEL-terminated)".into()),
+            (
+                "OSC",
+                "set palette colour 1 to rgb:ff/00/00, query palette colour 2 (BEL-terminated)"
+                    .into()
+            ),
+            (
+                "OSC",
+                "query default foreground colour (BEL-terminated)".into()
+            ),
+            (
+                "OSC",
+                "set default background colour to #000 (ST-terminated)".into()
+            ),
+            (
+                "OSC",
+                "report working directory file://h/p (BEL-terminated)".into()
+            ),
+            (
+                "OSC",
+                "iTerm2 inline file (inline=1), 4 bytes of base64 (BEL-terminated)".into()
+            ),
             ("OSC", "unrecognised OSC 999 (BEL-terminated)".into()),
         ]
     );
@@ -237,12 +272,20 @@ fn csi_osc_esc_and_strings() {
     );
     assert!(!table.contains(&"~".repeat(50)));
     assert_eq!(
-        meanings("\x1bP$qm\x1b\\\x1bP+q544e\x1b\\\x1bPtmux;\x1b\x1b[1m\x1b\\\x1b_Ga=T,f=100;AAAA\x1b\\\x1b^pm\x1b\\"),
+        meanings(
+            "\x1bP$qm\x1b\\\x1bP+q544e\x1b\\\x1bPtmux;\x1b\x1b[1m\x1b\\\x1b_Ga=T,f=100;AAAA\x1b\\\x1b^pm\x1b\\"
+        ),
         [
             ("DCS", "request setting \"m\" (DECRQSS)".into()),
-            ("DCS", "request terminfo capabilities 544e (XTGETTCAP)".into()),
+            (
+                "DCS",
+                "request terminfo capabilities 544e (XTGETTCAP)".into()
+            ),
             ("DCS", "tmux passthrough, 5 bytes".into()),
-            ("APC", "kitty graphics command (a=T,f=100), 4 bytes of payload".into()),
+            (
+                "APC",
+                "kitty graphics command (a=T,f=100), 4 bytes of payload".into()
+            ),
             ("PM", "privacy message, 2 bytes".into()),
         ]
     );
@@ -370,9 +413,10 @@ fn real_tool_output() {
     );
 
     let git = explain(include_str!("fixtures/ansi/git-log.ansi"));
-    assert!(git
-        .visible_text
-        .starts_with("c4461c9 n1ckyb Merge pull request #506"));
+    assert!(
+        git.visible_text
+            .starts_with("c4461c9 n1ckyb Merge pull request #506")
+    );
     assert_eq!(
         git.escapes().map(|t| t.token.meaning()).collect::<Vec<_>>(),
         [
@@ -421,13 +465,15 @@ fn real_tool_output() {
     let out = c.render_str_to_string("[bold #ff8700 on blue]hi[/] [link=https://x.y]x[/link]");
     let e = explain(&out);
     assert_eq!(e.visible_text, "hi x");
-    assert!(e
-        .escapes()
-        .any(|t| t.token.meaning() == "bold on, fg #ff8700, bg blue"));
-    assert!(e.escapes().any(|t| t
-        .token
-        .meaning()
-        .starts_with("open hyperlink to https://x.y")));
+    assert!(
+        e.escapes()
+            .any(|t| t.token.meaning() == "bold on, fg #ff8700, bg blue")
+    );
+    assert!(e.escapes().any(|t| {
+        t.token
+            .meaning()
+            .starts_with("open hyperlink to https://x.y")
+    }));
 }
 
 #[test]

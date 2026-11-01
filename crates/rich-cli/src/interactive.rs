@@ -759,27 +759,27 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
     }
     match command {
         "input" if !parsed.positionals.is_empty() => {
-            return Err("`rich input` takes no arguments; the prompt is --prompt".into())
+            return Err("`rich input` takes no arguments; the prompt is --prompt".into());
         }
         "confirm" if parsed.positionals.len() > 1 => {
-            return Err("`rich confirm` takes one QUESTION; quote it".into())
+            return Err("`rich confirm` takes one QUESTION; quote it".into());
         }
         "confirm" => {
-            if let Some(default) = parsed.default.as_deref() {
-                if !matches!(default, "yes" | "no") {
-                    return Err(format!("--default: {default:?} is not yes or no"));
-                }
+            if let Some(default) = parsed.default.as_deref()
+                && !matches!(default, "yes" | "no")
+            {
+                return Err(format!("--default: {default:?} is not yes or no"));
             }
         }
         "pager" if parsed.positionals.len() > 1 => return Err("`rich pager` pages one FILE".into()),
         "explore" if parsed.positionals.len() > 1 => {
-            return Err("`rich explore` explores one FILE".into())
+            return Err("`rich explore` explores one FILE".into());
         }
         "date" => date_values(&parsed).map(|_| ())?,
         "write" | "color" | "asset" if !parsed.positionals.is_empty() => {
             return Err(format!(
                 "`rich {command}` takes no arguments; the prompt is --header"
-            ))
+            ));
         }
         "color"
             if parsed
@@ -791,13 +791,13 @@ fn parse_args(command: &'static str, args: &[String]) -> Result<Args, String> {
             return Err(format!("--default: {default:?} is not a colour"));
         }
         "file" if parsed.positionals.len() > 1 => {
-            return Err("`rich file` starts from one DIR".into())
+            return Err("`rich file` starts from one DIR".into());
         }
         "explore" if parsed.icons && !cfg!(feature = "art") => {
-            return Err("--icons needs a build with the art feature".into())
+            return Err("--icons needs a build with the art feature".into());
         }
         "file" | "asset" if parsed.selected.len() > 1 => {
-            return Err("--selected is given once".into())
+            return Err("--selected is given once".into());
         }
         _ => {}
     }
@@ -1011,13 +1011,14 @@ fn pick(args: &Args) -> Answer {
     if args.multi {
         // Nothing marked is no default: without a terminal, say so (exit 3)
         // rather than answer with nothing.
-        if selected.is_empty() && options.policy.fallback == Fallback::Default {
-            if let Err(reason) = options.policy.detect_for(options.session.output) {
-                return Err((
-                    ExitClass::Input,
-                    RunError::NotInteractive(NotInteractive::NoDefault(reason)).to_string(),
-                ));
-            }
+        if selected.is_empty()
+            && options.policy.fallback == Fallback::Default
+            && let Err(reason) = options.policy.detect_for(options.session.output)
+        {
+            return Err((
+                ExitClass::Input,
+                RunError::NotInteractive(NotInteractive::NoDefault(reason)).to_string(),
+            ));
         }
         let mut select = MultiSelect::new(prompt, entries)
             .marked(selected)
@@ -1642,10 +1643,10 @@ fn date_values(args: &Args) -> Result<DateValues, String> {
         DateKind::Time => (None, Some(at.time)),
         DateKind::DateTime => (Some(at.date), Some(at.time)),
     };
-    if let (Some(min), Some(max)) = (values.min, values.max) {
-        if key(min) > key(max) {
-            return Err("--min is after --max".into());
-        }
+    if let (Some(min), Some(max)) = (values.min, values.max)
+        && key(min) > key(max)
+    {
+        return Err("--min is after --max".into());
     }
     // Without --seconds the picker works to the minute: the default is
     // compared as it is printed, so one before --min only by its seconds

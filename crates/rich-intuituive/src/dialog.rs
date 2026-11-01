@@ -6,11 +6,11 @@ use std::rc::Rc;
 
 use crate::app::Ctx;
 use crate::layout::{Align, Justify, Size, TextAlign};
-use crate::node::{column, label, row, Node};
+use crate::node::{Node, column, label, row};
 use crate::place::{Offset, Origin};
 use crate::reactive::{signal, watch};
-use crate::rich::markup::escape;
 use crate::rich::Overflow;
+use crate::rich::markup::escape;
 use crate::text_area::Caret;
 
 /// What a confirm dialog runs on yes.
@@ -499,10 +499,8 @@ impl PickOptions {
 /// Close the dialog, and run `on_yes` if it was yes.
 fn answer(cx: &mut Ctx, yes: bool, on_yes: &OnYes) {
     cx.pop();
-    if yes {
-        if let Some(on_yes) = on_yes.borrow_mut().take() {
-            on_yes(cx);
-        }
+    if yes && let Some(on_yes) = on_yes.borrow_mut().take() {
+        on_yes(cx);
     }
 }
 

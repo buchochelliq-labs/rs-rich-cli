@@ -54,24 +54,24 @@
 use std::path::{Path, PathBuf};
 
 use intuituive::files::{
-    bulk_rename, coloured_permissions, finder_with, frecency, git_status, home_dir, miller,
-    open_with_tasks, opener_rules, path_crumb, path_parts, search, selection, shell, spot,
-    spot_facts, tabs as file_tabs, tasks, tasks_panel_with, BinaryPreview, FileTabs, Frecency,
-    JobsPanelOptions, Linemode, Miller, MillerOptions, SearchKind, ShellOptions, Sort, SortBy,
-    Tasks, Yank,
+    BinaryPreview, FileTabs, Frecency, JobsPanelOptions, Linemode, Miller, MillerOptions,
+    SearchKind, ShellOptions, Sort, SortBy, Tasks, Yank, bulk_rename, coloured_permissions,
+    finder_with, frecency, git_status, home_dir, miller, open_with_tasks, opener_rules, path_crumb,
+    path_parts, search, selection, shell, spot, spot_facts, tabs as file_tabs, tasks,
+    tasks_panel_with,
 };
-use intuituive::finder::{fuzzy_list_with, FuzzyOptions, FuzzySource};
+use intuituive::finder::{FuzzyOptions, FuzzySource, fuzzy_list_with};
 use intuituive::interact::BackendKind;
-use intuituive::menu::{context_menu, open_menu, MenuItem};
+use intuituive::menu::{MenuItem, context_menu, open_menu};
 use intuituive::prelude::*;
-use intuituive::rich::markup::escape;
 use intuituive::rich::Style;
-use intuituive::widgets::{seg, seg_gauge, status_bar, tabs, Caps};
+use intuituive::rich::markup::escape;
+use intuituive::widgets::{Caps, seg, seg_gauge, status_bar, tabs};
 use intuituive::{
     Caret, ConfirmOptions, Corner, HelpOptions, KeyFormat, Level, MultiSelect, Offset, Origin,
     PickOptions, Placement, PromptOptions,
 };
-use rich_ext::file_ops::{under, Conflict, Op};
+use rich_ext::file_ops::{Conflict, Op, under};
 use rich_ext::filetype;
 use rich_ext::listing::{readable_size, smart_contains, walk};
 use rich_ext::open::Opener;

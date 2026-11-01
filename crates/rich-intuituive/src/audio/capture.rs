@@ -2,14 +2,14 @@
 //! their configurations, and opening a [`Capture`] on one.
 
 use std::sync::atomic::Ordering;
-use std::sync::{mpsc, Arc};
+use std::sync::{Arc, mpsc};
 use std::time::Duration;
 
 use cpal::traits::{DeviceTrait, HostTrait, StreamTrait};
 use cpal::{FromSample, SampleFormat, SizedSample};
 
 use super::live::Shared;
-use super::{error, AudioError, Capture, Frame, Matrix};
+use super::{AudioError, Capture, Frame, Matrix, error};
 use crate::reactive::{Runtime, Signal};
 
 /// The sound system a device is reached through.
@@ -428,10 +428,10 @@ fn start(
         .map(|d| d.name().to_string())
         .unwrap_or_else(|_| id_of(&device).unwrap_or_default());
     let (mut config, format, buffers) = choose(&device, options.rate, options.channels)?;
-    if let (Some(frames), Some((min, max))) = (options.latency, buffers) {
-        if (min..=max).contains(&frames) {
-            config.buffer_size = cpal::BufferSize::Fixed(frames);
-        }
+    if let (Some(frames), Some((min, max))) = (options.latency, buffers)
+        && (min..=max).contains(&frames)
+    {
+        config.buffer_size = cpal::BufferSize::Fixed(frames);
     }
     let shared = Arc::new(Shared::new(name, stall));
     let framer = Framer::new(

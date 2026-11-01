@@ -9,10 +9,10 @@ mod demo2;
 
 use std::time::Duration;
 
-use demo2::{demo2_app, Options, EMAILS, HOPS, INGREDIENTS, SHEET};
+use demo2::{EMAILS, HOPS, INGREDIENTS, Options, SHEET, demo2_app};
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::widgets::Date;
-use intuituive::{assert_screen, assert_screen_styled, Driver, Stylesheet};
+use intuituive::{Driver, Stylesheet, assert_screen, assert_screen_styled};
 
 const WIDTH: u16 = 81;
 const HEIGHT: u16 = 18;

@@ -17,7 +17,7 @@ use rich_ext::redact::{
 };
 use rich_ext::size_bar::{SizeBar as CoreSizeBar, Units};
 
-use super::common::{self, names, RedactPatternError};
+use super::common::{self, RedactPatternError, names};
 use super::terminal::{self, symbol_set};
 use crate::renderable::{self, AsRenderable};
 

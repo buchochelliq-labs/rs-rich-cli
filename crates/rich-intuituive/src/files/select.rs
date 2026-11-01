@@ -9,8 +9,8 @@ use rich_ext::file_ops::{Conflict, LinkKind, Op};
 
 use super::miller::Miller;
 use super::row::Marker;
-use crate::reactive::{watch, Signal};
-use crate::select::{multi_select, MultiSelect};
+use crate::reactive::{Signal, watch};
+use crate::select::{MultiSelect, multi_select};
 
 /// A selection of files for `miller`'s columns, by path: the core's
 /// [`multi_select`] over the current column's entries, its visual range

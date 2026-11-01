@@ -13,7 +13,7 @@ use std::io::Cursor;
 use std::path::{Path, PathBuf};
 use std::process::{Command, Output, Stdio};
 
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 
 const RELEASES: &str = "https://github.com/buchochelliq-labs/rs-rich-marketplace/releases/download";
 

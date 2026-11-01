@@ -8,7 +8,7 @@ mod common;
 use common::{run, screen};
 use intuituive::interact::headless::Script;
 use intuituive::prelude::*;
-use intuituive::widgets::{calendar_options, month, CalendarOptions, Date, Weekday};
+use intuituive::widgets::{CalendarOptions, Date, Weekday, calendar_options, month};
 use intuituive::{assert_screen, assert_screen_styled};
 
 /// December 2026: today on the 9th, Christmas and Boxing Day, weekends.

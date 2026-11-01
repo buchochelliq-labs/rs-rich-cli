@@ -6,12 +6,12 @@
 #[allow(dead_code)]
 mod pulls;
 
-use std::sync::{mpsc, Arc, Mutex};
+use std::sync::{Arc, Mutex, mpsc};
 use std::time::Duration;
 
 use intuituive::interact::{Button, Event, Mouse, MouseKind};
-use intuituive::{assert_screen, Driver};
-use pulls::{fixture, parse, pulls_app, Fetch, PULLS};
+use intuituive::{Driver, assert_screen};
+use pulls::{Fetch, PULLS, fixture, parse, pulls_app};
 
 const WIDTH: u16 = 80;
 const HEIGHT: u16 = 24;

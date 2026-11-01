@@ -38,8 +38,8 @@ use intuituive::prelude::*;
 use intuituive::{big_text, digits, rate};
 
 pub use art::Textures;
-pub use game::{Action, DoorState, Game, Kind, Mode as EnemyMode, State, Tile, Wall, LEVELS, TIC};
-pub use render::{render, Frame, Look};
+pub use game::{Action, DoorState, Game, Kind, LEVELS, Mode as EnemyMode, State, TIC, Tile, Wall};
+pub use render::{Frame, Look, render};
 pub use view::Mode;
 
 /// What the status bar and the overlays show; a tic that changes none of
@@ -146,7 +146,7 @@ impl Options {
                     return Err(format!(
                         "raycast [--mode {}] [--level N] [--flat] [--start] [--uncapped] [--bench SECS] [--seed N]",
                         Mode::NAMES
-                    ))
+                    ));
                 }
                 other => return Err(format!("unknown argument {other}")),
             }

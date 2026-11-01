@@ -14,7 +14,7 @@ use rich_interact::{
 };
 
 use super::compose::{self, Node};
-use super::{execute, record, Build, Mode, Record};
+use super::{Build, Mode, Record, execute, record};
 
 fn key(name: &str) -> PyResult<Key> {
     Key::parse(name).ok_or_else(|| PyValueError::new_err(format!("unknown key name {name:?}")))
@@ -155,7 +155,7 @@ fn file_mode(name: &str) -> PyResult<FileMode> {
         other => {
             return Err(PyValueError::new_err(format!(
                 "invalid mode {other:?}; expected file, directory or both"
-            )))
+            )));
         }
     })
 }
@@ -375,12 +375,12 @@ impl ColorPicker {
                 "invalid format {format:?}; expected hex, name or rgb"
             ))
         })?;
-        if let Some(default) = default.as_deref() {
-            if !CoreColor::is_color(default) {
-                return Err(PyValueError::new_err(format!(
-                    "invalid default {default:?}; expected a colour"
-                )));
-            }
+        if let Some(default) = default.as_deref()
+            && !CoreColor::is_color(default)
+        {
+            return Err(PyValueError::new_err(format!(
+                "invalid default {default:?}; expected a colour"
+            )));
         }
         Ok(ColorPicker {
             prompt,

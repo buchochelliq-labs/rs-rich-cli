@@ -406,7 +406,7 @@ impl DocumentRegistry {
                             format: format.id().to_string(),
                             confidence: 1.0,
                             by: DetectedBy::Name,
-                        })
+                        });
                     }
                     NameMatch::Maybe => maybe.push(format),
                     NameMatch::No => {}
@@ -914,10 +914,10 @@ fn sniff_rst(text: &str) -> f32 {
     let (mut directives, mut adornments, mut roles, mut fields) = (0, 0, 0, 0);
     for (index, line) in lines.iter().enumerate() {
         let trimmed = line.trim_start();
-        if let Some(rest) = trimmed.strip_prefix(".. ") {
-            if rest.contains("::") {
-                directives += 1;
-            }
+        if let Some(rest) = trimmed.strip_prefix(".. ")
+            && rest.contains("::")
+        {
+            directives += 1;
         }
         let first = line.chars().next();
         let adornment = line.len() >= 3

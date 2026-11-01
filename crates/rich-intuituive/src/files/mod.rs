@@ -102,25 +102,25 @@ pub use crate::miller::Move;
 /// The core's [`hex_view`], here too.
 pub use crate::widgets::hex_view;
 pub use crumb::{home_dir, path_crumb, path_crumb_at, path_parts};
-pub use finder::{finder, finder_with, Finder};
-pub use frecency::{frecency, frecency_at, state_dir, Frecency, Visit};
-pub use miller::{miller, Miller, MillerOptions};
-pub use model::{dir_model, dir_model_with, git_status, DirModel};
+pub use finder::{Finder, finder, finder_with};
+pub use frecency::{Frecency, Visit, frecency, frecency_at, state_dir};
+pub use miller::{Miller, MillerOptions, miller};
+pub use model::{DirModel, dir_model, dir_model_with, git_status};
 pub use open::{open_with, open_with_tasks, opener_rules};
 pub use pick::pick_file;
 pub use preview::{
-    load_preview, preview, BinaryPreview, Preview, PreviewOptions, PreviewSettings, Previewer,
+    BinaryPreview, Preview, PreviewOptions, PreviewSettings, Previewer, load_preview, preview,
 };
 pub use row::{
-    coloured_permissions, entry_markup, file_list, linemode_cell, EntryLook, FileListOptions,
-    Linemode, Marker,
+    EntryLook, FileListOptions, Linemode, Marker, coloured_permissions, entry_markup, file_list,
+    linemode_cell,
 };
-pub use search::{search, Search, SearchKind};
-pub use select::{selection, Yank};
-pub use shell::{bulk_rename, shell, shell_command, ShellOptions};
+pub use search::{Search, SearchKind, search};
+pub use select::{Yank, selection};
+pub use shell::{ShellOptions, bulk_rename, shell, shell_command};
 pub use spot::{spot, spot_facts};
-pub use tabs::{tabs, FileTab, FileTabs};
-pub use tasks::{tasks, tasks_panel, tasks_panel_with, Job, JobState, JobsPanelOptions, Tasks};
+pub use tabs::{FileTab, FileTabs, tabs};
+pub use tasks::{Job, JobState, JobsPanelOptions, Tasks, tasks, tasks_panel, tasks_panel_with};
 
 /// What kind of link [`Yank::link`] makes, from rs-rich-ext.
 pub use rich_ext::file_ops::LinkKind;

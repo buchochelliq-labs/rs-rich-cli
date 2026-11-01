@@ -5,8 +5,8 @@ use std::cell::RefCell;
 use std::rc::Rc;
 use std::time::Duration;
 
-use crate::app::{after, Ctx};
-use crate::reactive::{signal, Runtime, Signal};
+use crate::app::{Ctx, after};
+use crate::reactive::{Runtime, Signal, signal};
 
 /// What [`Transport::on_end`] runs.
 type EndHook = Rc<RefCell<dyn FnMut(&mut Ctx)>>;

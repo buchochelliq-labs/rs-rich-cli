@@ -2,7 +2,7 @@
 
 use ::termion::event::{Event as T, Key as K, MouseButton as B, MouseEvent as M};
 
-use super::{char_key, Button, Event, HeldButton, Key, KeyCode, Modifiers, Mouse, MouseKind};
+use super::{Button, Event, HeldButton, Key, KeyCode, Modifiers, Mouse, MouseKind, char_key};
 
 /// Translate a termion event, for a loop of your own that reads the
 /// terminal with termion. termion reads keys as a legacy terminal sends

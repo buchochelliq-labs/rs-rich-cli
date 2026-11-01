@@ -6,9 +6,9 @@
 //! cargo run -p rs-rich-ext --example clap_help --features clap -- completions fish
 //! ```
 use clap::builder::PossibleValue;
-use clap::{value_parser, Arg, ArgAction, Command, ValueHint};
+use clap::{Arg, ArgAction, Command, ValueHint, value_parser};
 use rich_ext::cli_doc::clap::parse_or_exit_with_spec;
-use rich_ext::cli_doc::{generate, CommandSpec, Shell};
+use rich_ext::cli_doc::{CommandSpec, Shell, generate};
 
 fn command() -> Command {
     Command::new("render")

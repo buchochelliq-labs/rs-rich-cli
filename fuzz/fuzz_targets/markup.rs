@@ -6,7 +6,7 @@
 use libfuzzer_sys::fuzz_target;
 use rich::style::Style;
 use rich::text::Text;
-use rich_fuzz::{render, take_byte, text, MAX_RENDER_INPUT};
+use rich_fuzz::{MAX_RENDER_INPUT, render, take_byte, text};
 
 fuzz_target!(|data: &[u8]| {
     let (width, rest) = take_byte(data);

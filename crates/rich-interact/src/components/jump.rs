@@ -47,11 +47,11 @@ use std::cell::Cell;
 use rich::{Segment, Style};
 
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{fit, highlight, pad, pasted, plain, question, text, PreviewLayout, Theme};
+use crate::components::{PreviewLayout, Theme, fit, highlight, pad, pasted, plain, question, text};
 use crate::event::{Button, Event, KeyCode, Modifiers, MouseKind};
 use crate::fuzzy::rank;
 use crate::item::Item;
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::policy::{LineIo, NotInteractive};
 
 /// One source of a [`JumpIndex`]: files, headings, commands.
@@ -160,10 +160,10 @@ impl<T> JumpIndex<T> {
     /// the query: `>bu` is `bu` in the source whose prefix is `>`.
     pub fn scope<'q>(&self, query: &'q str) -> (Option<usize>, &'q str) {
         let mut chars = query.chars();
-        if let Some(first) = chars.next() {
-            if let Some(at) = self.sources.iter().position(|s| s.prefix == Some(first)) {
-                return (Some(at), chars.as_str().trim_start());
-            }
+        if let Some(first) = chars.next()
+            && let Some(at) = self.sources.iter().position(|s| s.prefix == Some(first))
+        {
+            return (Some(at), chars.as_str().trim_start());
         }
         (None, query)
     }
@@ -481,11 +481,11 @@ impl<T> Jump<T> {
             (Some(at), false) if at > 0 => titles.get(at - 1),
             _ => None,
         };
-        if let Some(&title) = target {
-            if let Some(hit) = self.first_hit_from(title, 1) {
-                self.cursor = hit;
-                self.follow();
-            }
+        if let Some(&title) = target
+            && let Some(hit) = self.first_hit_from(title, 1)
+        {
+            self.cursor = hit;
+            self.follow();
         }
     }
 

@@ -10,7 +10,7 @@ use intuituive::interact::{Button, Event, Mouse, MouseKind};
 use intuituive::node::Axis;
 use intuituive::prelude::*;
 use intuituive::widgets::split;
-use intuituive::{assert_screen, assert_screen_styled, Driver, Placement, Stylesheet};
+use intuituive::{Driver, Placement, Stylesheet, assert_screen, assert_screen_styled};
 
 /// An ops dashboard: hosts on the left while there is room, two meters
 /// side by side, or one above the other on a narrow terminal.
@@ -133,11 +133,7 @@ fn code_can_reflow_on_the_viewport() {
             move || size.get().0 < 30,
             |narrow| {
                 let parts = [label("left").auto(), label("right").auto()];
-                if narrow {
-                    column(parts)
-                } else {
-                    row(parts)
-                }
+                if narrow { column(parts) } else { row(parts) }
             },
         )
     });
@@ -207,11 +203,13 @@ fn hide_below_hides_a_split_pane() {
     let mut driver = app.driver(40, 2);
     driver.settle();
     driver.assert_focused("main");
-    assert!(!driver
-        .screen()
-        .plain()
-        .iter()
-        .any(|r| r.contains("SIDEBAR")));
+    assert!(
+        !driver
+            .screen()
+            .plain()
+            .iter()
+            .any(|r| r.contains("SIDEBAR"))
+    );
     // The pane still shown takes the whole split, with no divider.
     assert_eq!(driver.screen().plain()[0].trim_end(), "main");
 }
@@ -229,11 +227,13 @@ fn media_display_none_hides_a_split_pane() {
     .stylesheet("@media (max-width: 59) { #side { display: none; } }");
     let mut driver = app.driver(40, 2);
     driver.settle();
-    assert!(!driver
-        .screen()
-        .plain()
-        .iter()
-        .any(|r| r.contains("SIDEBAR")));
+    assert!(
+        !driver
+            .screen()
+            .plain()
+            .iter()
+            .any(|r| r.contains("SIDEBAR"))
+    );
     driver.resize(80, 2);
     driver.settle();
     assert!(driver.screen().plain()[0].starts_with("SIDEBAR"));
@@ -250,11 +250,7 @@ fn gone(by_sheet: bool) -> Node {
     let node = label("GONE")
         .name("gone")
         .on_click(|_| CLICKS.with(|clicks| clicks.set(clicks.get() + 1)));
-    if by_sheet {
-        node
-    } else {
-        node.hide_below(60)
-    }
+    if by_sheet { node } else { node.hide_below(60) }
 }
 
 fn shown() -> Node {
@@ -527,17 +523,19 @@ fn an_error_is_told_to_assistive_technology() {
     let age = tree.iter().find(|node| node.name == "Age").unwrap();
     assert!(age.state.invalid);
     assert_eq!(age.describe(), "Age, invalid");
-    assert!(age
-        .aria_attributes()
-        .contains(&("aria-invalid", "true".to_string())));
+    assert!(
+        age.aria_attributes()
+            .contains(&("aria-invalid", "true".to_string()))
+    );
     driver.press("f");
     let tree = driver.accessibility();
     let age = tree.iter().find(|node| node.name == "Age").unwrap();
     assert!(!age.state.invalid);
-    assert!(!age
-        .aria_attributes()
-        .iter()
-        .any(|(k, _)| *k == "aria-invalid"));
+    assert!(
+        !age.aria_attributes()
+            .iter()
+            .any(|(k, _)| *k == "aria-invalid")
+    );
 }
 
 #[test]

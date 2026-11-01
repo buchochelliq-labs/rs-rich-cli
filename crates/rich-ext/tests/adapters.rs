@@ -45,13 +45,19 @@ fn scoped_tracing_preserves_primitive_fields_and_debug_strings() {
     );
     let events = sink.0.lock().unwrap();
     assert_eq!(events.len(), 1);
-    assert!(events[0]
-        .fields
-        .contains(&("count".into(), Value::Integer(3))));
-    assert!(events[0]
-        .fields
-        .contains(&("ready".into(), Value::Bool(true))));
-    assert!(events[0]
-        .fields
-        .contains(&("debug".into(), Value::String("[1, 2]".into()))));
+    assert!(
+        events[0]
+            .fields
+            .contains(&("count".into(), Value::Integer(3)))
+    );
+    assert!(
+        events[0]
+            .fields
+            .contains(&("ready".into(), Value::Bool(true)))
+    );
+    assert!(
+        events[0]
+            .fields
+            .contains(&("debug".into(), Value::String("[1, 2]".into())))
+    );
 }

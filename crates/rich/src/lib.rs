@@ -132,15 +132,15 @@ pub use crate::json::Json;
 pub use crate::layout::{Layout, LayoutRender, Splitter};
 pub use crate::live::{AutoLive, Live, LiveHandle, LiveOptions, LivePanic};
 pub use crate::live_render::{LiveRender, VerticalOverflow};
-pub use crate::log_render::{level_text, LogLevel, LogRecord, LogRender};
+pub use crate::log_render::{LogLevel, LogRecord, LogRender, level_text};
 pub use crate::padding::Padding;
 pub use crate::pager::{Pager, SystemPager};
 pub use crate::panel::Panel;
 pub use crate::pretty::{Pretty, PrettyValue};
 pub use crate::progress::{
-    track, BarColumn, CustomColumn, CustomProgressColumn, LiveProgress, Progress, ProgressColumn,
+    BarColumn, CustomColumn, CustomProgressColumn, LiveProgress, Progress, ProgressColumn,
     ProgressReader, SpinnerColumn, Task, TaskId, TaskUpdate, TextColumn, TimeRemainingColumn,
-    Track, TrackStdout,
+    Track, TrackStdout, track,
 };
 pub use crate::progress_bar::ProgressBar;
 pub use crate::protocol::{
@@ -162,7 +162,7 @@ pub use crate::syntax::Syntax;
 pub use crate::syntax::SyntectHighlighter;
 pub use crate::table::{Cell, ColumnOptions, Table};
 pub use crate::terminal_theme::{
-    TerminalTheme, DEFAULT_TERMINAL_THEME, DIMMED_MONOKAI, MONOKAI, NIGHT_OWLISH, SVG_EXPORT_THEME,
+    DEFAULT_TERMINAL_THEME, DIMMED_MONOKAI, MONOKAI, NIGHT_OWLISH, SVG_EXPORT_THEME, TerminalTheme,
 };
 pub use crate::text::Text;
 pub use crate::theme::Theme;

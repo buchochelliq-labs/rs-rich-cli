@@ -44,7 +44,7 @@ use std::collections::{HashMap, HashSet};
 use std::fmt;
 
 use crate::cluster::{Grouping, Tree};
-use crate::graph::{Direction, Graph, Head, Shape, Stroke, MAX_EDGES, MAX_EDGE_LENGTH};
+use crate::graph::{Direction, Graph, Head, MAX_EDGE_LENGTH, MAX_EDGES, Shape, Stroke};
 use rich::cells::{cell_len, char_cell_width, set_cell_size};
 
 /// A drawn graph: lines of text without trailing spaces.
@@ -1463,10 +1463,10 @@ impl Canvas {
                 }
                 width => {
                     self.glyph(at, y, &c.to_string());
-                    if width == 2 {
-                        if let Some(cell) = self.get(at + 1, y) {
-                            *cell = Cell::Wide;
-                        }
+                    if width == 2
+                        && let Some(cell) = self.get(at + 1, y)
+                    {
+                        *cell = Cell::Wide;
                     }
                     at += width as i64;
                 }
@@ -1761,16 +1761,23 @@ fn draw_frame(canvas: &mut Canvas, frame: &FrameGeo) {
         frame.x + frame.w - 1,
         frame.y + frame.h - 1,
     );
-    let [horizontal, vertical, top_left, top_right, bottom_left, bottom_right] = if canvas.ascii {
+    let [
+        horizontal,
+        vertical,
+        top_left,
+        top_right,
+        bottom_left,
+        bottom_right,
+    ] = if canvas.ascii {
         ['-', ':', '+', '+', '+', '+']
     } else {
         ['╌', '╎', '┌', '┐', '└', '┘']
     };
     let mut put = |x: i64, y: i64, c: char| {
-        if let Some(cell) = canvas.get(x, y) {
-            if matches!(cell, Cell::Empty) {
-                *cell = Cell::Frame(c);
-            }
+        if let Some(cell) = canvas.get(x, y)
+            && matches!(cell, Cell::Empty)
+        {
+            *cell = Cell::Frame(c);
         }
     };
     for x in x0 + 1..x1 {

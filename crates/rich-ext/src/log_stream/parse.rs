@@ -21,7 +21,7 @@ use std::fmt;
 
 use super::filter::severity_named;
 use super::time::{clf_prefix, iso_prefix};
-use super::{Record, LEVEL_KEYS, MESSAGE_KEYS, TIME_KEYS};
+use super::{LEVEL_KEYS, MESSAGE_KEYS, Record, TIME_KEYS};
 use crate::event::{Severity, Value};
 
 /// Reads one log format.
@@ -362,11 +362,13 @@ fn after_level(record: &mut Record, rest: &str) {
     // Python's `LEVEL:logger:message`.
     if let Some(after) = rest.strip_prefix(':') {
         rest = after;
-        if let Some((name, message)) = after.split_once(':') {
-            if !name.is_empty() && name.chars().all(target_char) && !name.contains("::") {
-                target = Some(name);
-                rest = message;
-            }
+        if let Some((name, message)) = after.split_once(':')
+            && !name.is_empty()
+            && name.chars().all(target_char)
+            && !name.contains("::")
+        {
+            target = Some(name);
+            rest = message;
         }
     }
     let mut rest = rest.trim_start();
@@ -379,11 +381,12 @@ fn after_level(record: &mut Record, rest: &str) {
     // tracing's `target: message`.
     if target.is_none() {
         let first = rest.split([' ', '\t']).next().unwrap_or_default();
-        if let Some(name) = first.strip_suffix(':') {
-            if name.contains("::") && name.chars().all(target_char) {
-                target = Some(name);
-                rest = rest[first.len()..].trim_start();
-            }
+        if let Some(name) = first.strip_suffix(':')
+            && name.contains("::")
+            && name.chars().all(target_char)
+        {
+            target = Some(name);
+            rest = rest[first.len()..].trim_start();
         }
     }
     if let Some(target) = target {
@@ -469,17 +472,17 @@ impl LineParser for Timestamped {
         if let Some((channel, level)) = first
             .strip_suffix(':')
             .and_then(|name| name.rsplit_once('.'))
+            && severity_named(level).is_some()
+            && !channel.is_empty()
         {
-            if severity_named(level).is_some() && !channel.is_empty() {
-                record.set("level", string(level));
-                record.set("target", string(channel));
-                let (message, pairs) = trailing_pairs(rest[first.len()..].trim_start());
-                record.set("message", string(message));
-                for (key, value) in pairs {
-                    record.set(key, string(value));
-                }
-                return Some(record);
+            record.set("level", string(level));
+            record.set("target", string(channel));
+            let (message, pairs) = trailing_pairs(rest[first.len()..].trim_start());
+            record.set("message", string(message));
+            for (key, value) in pairs {
+                record.set(key, string(value));
             }
+            return Some(record);
         }
         let (message, pairs) = trailing_pairs(rest);
         record.set("message", string(message));
@@ -573,10 +576,10 @@ impl LineParser for AccessLog {
             if referer != "-" {
                 record.set("referer", string(referer));
             }
-            if let Some((agent, _)) = Self::quoted(rest) {
-                if agent != "-" {
-                    record.set("user_agent", string(agent));
-                }
+            if let Some((agent, _)) = Self::quoted(rest)
+                && agent != "-"
+            {
+                record.set("user_agent", string(agent));
             }
         }
         let level = match status {

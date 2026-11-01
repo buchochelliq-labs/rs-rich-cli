@@ -165,7 +165,7 @@ pub(crate) fn core_console(console: &Bound<'_, PyAny>) -> PyResult<CoreConsole> 
                     "color system",
                     other,
                     "a Console's color system",
-                ))
+                ));
             }
         }),
     };

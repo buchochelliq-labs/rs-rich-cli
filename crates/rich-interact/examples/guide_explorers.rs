@@ -7,7 +7,7 @@
 use std::path::PathBuf;
 
 use rich::{ColorSystem, Console, ConsoleOptions, Renderable, Segment, Style, Theme};
-use rich_ext::data::{parse, Format};
+use rich_ext::data::{Format, parse};
 use rich_interact::headless::{Script, Step};
 use rich_interact::{Component, Context, DataExplorer, TableSelect, ThemePicker, TreeSelect};
 

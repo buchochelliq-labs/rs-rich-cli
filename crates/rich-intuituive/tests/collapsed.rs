@@ -1,7 +1,7 @@
 //! Collapsed borders: one frame for a container's panels (0.0.19 gap A6).
 
 use intuituive::prelude::*;
-use intuituive::{assert_screen, Driver};
+use intuituive::{Driver, assert_screen};
 
 fn shown(app: App, width: u16, height: u16) -> Driver {
     let mut driver = app.driver(width, height);

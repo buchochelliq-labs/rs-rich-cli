@@ -1593,9 +1593,11 @@ mod jsonpath_hardening {
     #[test]
     fn extreme_negative_indexes_in_filters_do_not_panic() {
         let node = json("[[1, 2], [3]]");
-        assert!(select(&node, "$[?(@[-9223372036854775808])]")
-            .unwrap()
-            .is_empty());
+        assert!(
+            select(&node, "$[?(@[-9223372036854775808])]")
+                .unwrap()
+                .is_empty()
+        );
         assert_eq!(select(&node, "$[?(@[-2])]").unwrap(), ["[0]"]);
     }
 

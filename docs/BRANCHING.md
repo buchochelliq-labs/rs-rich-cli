@@ -597,6 +597,25 @@ environment under Settings → Environments before the first tag, and protect it
 like `crates-io`: tags only, with a required reviewer if wanted. Uploads are
 permanent: a version can be yanked but never replaced.
 
+## Edition and minimum Rust
+
+Every crate, in the workspace and outside it (the Python bindings, the
+fuzz targets, the playground, the examples, the fixtures and the app
+template), is on **edition 2024**, with the workspace's resolver 3, which
+picks dependency versions that build on each crate's `rust-version`.
+
+The minimum supported Rust version (MSRV) is `rust-version` in the root
+`Cargo.toml`, and a crate that needs more says so in its own manifest
+(rs-rich-lumis, for lumis). The policy, decided for 1.0:
+
+- **The MSRV trails the latest stable by at most six releases.** It moves
+  only when a change needs it (a dependency, a language feature), never on
+  a schedule, and never past "latest stable minus six".
+- **Raising it is a minor release** after 1.0, and is listed in the
+  changelog and the release notes; before 1.0 it is listed the same way.
+- **CI checks it:** the `minimum supported Rust version` job builds on
+  exactly the declared versions.
+
 ## What is enforced, and what is merely written down
 
 Documented discipline decays; these are the mechanisms.

@@ -8,7 +8,7 @@ use std::hash::Hash;
 use std::rc::Rc;
 
 use crate::node::Node;
-use crate::reactive::{signal, Signal};
+use crate::reactive::{Signal, signal};
 
 /// The keys of a list's items, in order.
 type Keys<K> = Rc<dyn Fn() -> Vec<K>>;

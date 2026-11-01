@@ -29,7 +29,7 @@ use std::path::Path;
 
 use rich_art::image::{DynamicImage, GenericImageView};
 
-use crate::pixels::{rgba_pixels, PixelSprite};
+use crate::pixels::{PixelSprite, rgba_pixels};
 use crate::sprite::Sprite;
 
 /// The largest side of a sheet decoded, in pixels: a guard against a

@@ -2,14 +2,14 @@
 
 use std::collections::HashMap;
 use std::path::PathBuf;
-use std::sync::atomic::{AtomicBool, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
 
 use rich_ext::filetype;
 use rich_ext::git::GitStatus;
-use rich_ext::listing::{read_dir, smart_contains, sort_entries, Entry, Sort};
+use rich_ext::listing::{Entry, Sort, read_dir, smart_contains, sort_entries};
 
-use crate::reactive::{memo, signal, Memo, Signal};
+use crate::reactive::{Memo, Signal, memo, signal};
 use crate::task::spawn;
 
 /// The types sniffed for one directory's files, by name.

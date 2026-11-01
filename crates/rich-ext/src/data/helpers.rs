@@ -4,7 +4,7 @@
 use rich::{Console, Json};
 use serde::Serialize;
 
-use super::{from_serialize, DataError, Explorer, Format, TableView};
+use super::{DataError, Explorer, Format, TableView, from_serialize};
 
 /// `value` as core's highlighted [`Json`] renderable.
 ///

@@ -42,7 +42,7 @@ use std::cmp::Ordering;
 use std::fmt;
 use std::str::FromStr;
 
-use super::{display, Record, LEVEL_KEYS};
+use super::{LEVEL_KEYS, Record, display};
 use crate::event::{Severity, Value};
 
 /// Why a [`LevelFilter`] or a [`Predicate`] did not parse.
@@ -100,7 +100,7 @@ pub fn severity_of(value: &Value) -> Option<Severity> {
                     .then(|| name.parse::<f64>().ok())
                     .flatten()
                     .and_then(numbered)
-            })
+            });
         }
         Value::Integer(n) => *n as f64,
         Value::Unsigned(n) => *n as f64,
@@ -461,10 +461,10 @@ impl Predicate {
         if let Some((have, want)) = self.levels(field) {
             return have == want;
         }
-        if let Some(number) = number_value(field) {
-            if let Some(order) = number.compare(&self.value) {
-                return order == Ordering::Equal;
-            }
+        if let Some(number) = number_value(field)
+            && let Some(order) = number.compare(&self.value)
+        {
+            return order == Ordering::Equal;
         }
         display(field) == self.value
     }
@@ -487,13 +487,13 @@ impl Predicate {
             .get(..4)
             .is_some_and(|year| year.iter().all(u8::is_ascii_digit))
             && matches!(value.get(4), Some(b'-' | b'/'));
-        if dated {
-            if let (Some(have), Some(want)) = (
+        if dated
+            && let (Some(have), Some(want)) = (
                 super::parse_timestamp(&text),
                 super::parse_timestamp(&self.value),
-            ) {
-                return Some(have.cmp(&want));
-            }
+            )
+        {
+            return Some(have.cmp(&want));
         }
         match field {
             Value::List(_) | Value::Map(_) => None,

@@ -53,8 +53,8 @@ use crate::reactive::Signal;
 use crate::screen::Rect;
 use crate::select_field::{Choices, SelectOption};
 use crate::widget::{
-    markup_width, named_style, widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget,
-    WidgetEvent,
+    Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, markup_width, named_style,
+    widget,
 };
 
 /// Console `markup` as plain text: what a control's label says.
@@ -380,11 +380,7 @@ pub enum CheckState {
 impl CheckState {
     /// On for `true`, off for `false`.
     pub fn from_bool(on: bool) -> CheckState {
-        if on {
-            CheckState::On
-        } else {
-            CheckState::Off
-        }
+        if on { CheckState::On } else { CheckState::Off }
     }
 
     /// Whether it is [`On`](Self::On).
@@ -598,11 +594,7 @@ impl Toggle {
 
 impl Widget for Toggle {
     fn name(&self) -> &'static str {
-        if self.switch {
-            "switch"
-        } else {
-            "checkbox"
-        }
+        if self.switch { "switch" } else { "checkbox" }
     }
 
     fn describe(&self) -> Option<String> {

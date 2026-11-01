@@ -48,6 +48,8 @@ fn stand_ins_cut_frame_time_on_a_held_page_down() {
     for cheap in [false, true] {
         let (full, f1) = run(false, cheap);
         let (lod, f2) = run(true, cheap);
-        eprintln!("cheap {cheap}: full items: {full:.1} ms ({f1} frames); stand-ins: {lod:.1} ms ({f2} frames)");
+        eprintln!(
+            "cheap {cheap}: full items: {full:.1} ms ({f1} frames); stand-ins: {lod:.1} ms ({f2} frames)"
+        );
     }
 }

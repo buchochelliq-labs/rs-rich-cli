@@ -1,10 +1,10 @@
 //! An output whose device calls a renderer: a synthesizer's.
 
-use std::sync::atomic::{AtomicU64, Ordering};
 use std::sync::Arc;
+use std::sync::atomic::{AtomicU64, Ordering};
 use std::time::Duration;
 
-use intuituive::audio::{output_with, OutputOptions};
+use intuituive::audio::{OutputOptions, output_with};
 
 /// A 440 Hz sine renderer at 44,100 Hz, counting the frames it made.
 fn sine(made: Arc<AtomicU64>) -> impl FnMut(&mut [f32], u16) + Send + 'static {

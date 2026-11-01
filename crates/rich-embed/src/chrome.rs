@@ -46,7 +46,7 @@ use std::time::{Duration, Instant};
 use std::{fmt, io};
 
 use rich_intuituive::interact::{Button, Key, KeyCode, ModifierKey, Modifiers, Mouse, MouseKind};
-use serde_json::{json, Value};
+use serde_json::{Value, json};
 use tungstenite::{Message, WebSocket};
 
 use crate::host::Notify;
@@ -697,10 +697,10 @@ impl Drop for ChromeEngine {
         if let Some(mut child) = child {
             end_browser(&mut child);
         }
-        if let Some(profile) = &self.profile {
-            if self.kept_profile.is_none() {
-                remove_profile(profile);
-            }
+        if let Some(profile) = &self.profile
+            && self.kept_profile.is_none()
+        {
+            remove_profile(profile);
         }
     }
 }
@@ -1905,9 +1905,11 @@ mod tests {
             Wire::DEFAULT,
             false,
         );
-        assert!(!args
-            .iter()
-            .any(|arg| arg.to_ascii_lowercase().contains("sandbox")));
+        assert!(
+            !args
+                .iter()
+                .any(|arg| arg.to_ascii_lowercase().contains("sandbox"))
+        );
         let engine = ChromeEngine::new().args(extra);
         assert_eq!(engine.args, ["--lang=en"]);
     }

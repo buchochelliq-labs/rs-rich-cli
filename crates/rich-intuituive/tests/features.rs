@@ -8,7 +8,7 @@ use std::time::Duration;
 use common::{row_of, run, run_open, screen};
 use intuituive::interact::headless::Script;
 use intuituive::interact::{Button, MouseKind};
-use intuituive::menu::{context_menu, menu_bar, open_menu, Menu, MenuItem};
+use intuituive::menu::{Menu, MenuItem, context_menu, menu_bar, open_menu};
 use intuituive::prelude::*;
 use intuituive::{Easing, Placement};
 

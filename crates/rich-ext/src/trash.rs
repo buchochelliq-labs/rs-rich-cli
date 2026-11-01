@@ -468,8 +468,8 @@ fn send_to_bin(original: &Path) -> io::Result<()> {
 fn send_to_bin(original: &Path) -> io::Result<()> {
     use std::os::windows::ffi::OsStrExt;
     use windows_sys::Win32::UI::Shell::{
-        SHFileOperationW, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, FO_DELETE,
-        SHFILEOPSTRUCTW,
+        FO_DELETE, FOF_ALLOWUNDO, FOF_NOCONFIRMATION, FOF_NOERRORUI, FOF_SILENT, SHFILEOPSTRUCTW,
+        SHFileOperationW,
     };
     // The shell takes no `\\?\` paths.
     let shown = original.to_string_lossy();
@@ -554,10 +554,11 @@ fn mount_trash(original: &Path, device: u64) -> io::Result<Trash> {
     let uid = rustix::process::getuid().as_raw();
     // An administrator's `.Trash`: sticky, and not a link.
     let shared = top.join(".Trash");
-    if let Ok(meta) = std::fs::symlink_metadata(&shared) {
-        if meta.is_dir() && meta.permissions().mode() & 0o1000 != 0 {
-            return Ok(Trash::of_mount(shared.join(uid.to_string()), top));
-        }
+    if let Ok(meta) = std::fs::symlink_metadata(&shared)
+        && meta.is_dir()
+        && meta.permissions().mode() & 0o1000 != 0
+    {
+        return Ok(Trash::of_mount(shared.join(uid.to_string()), top));
     }
     Ok(Trash::of_mount(top.join(format!(".Trash-{uid}")), top))
 }

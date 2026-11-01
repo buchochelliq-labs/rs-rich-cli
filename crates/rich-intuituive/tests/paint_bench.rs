@@ -28,11 +28,11 @@ fn serial() -> std::sync::MutexGuard<'static, ()> {
 
 use std::time::Duration;
 
+use intuituive::PaintStrategy;
 use intuituive::interact::headless::Script;
 use intuituive::prelude::*;
 use intuituive::screen::{PaintStats, Painter, Screen};
 use intuituive::widget::{Canvas, DrawCx};
-use intuituive::PaintStrategy;
 use rich_ext::qa::profile::{AllocStats, CountingAllocator};
 use rich_interact::{Event, Key};
 

@@ -8,9 +8,9 @@
 use std::path::PathBuf;
 
 use rich::{ColorSystem, Console, ConsoleOptions, Renderable, Segment, Table, Text};
-use rich_interact::compose::{Column, ComponentExt, Layer, Layers, Split, Tabs, FOCUS_NEXT};
+use rich_interact::compose::{Column, ComponentExt, FOCUS_NEXT, Layer, Layers, Split, Tabs};
 use rich_interact::headless::{self, Script, Step};
-use rich_interact::keymap::{keys, Keymap};
+use rich_interact::keymap::{Keymap, keys};
 use rich_interact::kit::{self, FilterState, ListState, Theme};
 use rich_interact::{
     Component, Confirm, Context, Event, Flow, Input, KeyCode, Outcome, Select, View,

@@ -37,19 +37,19 @@ use std::rc::Rc;
 use std::sync::{Arc, Mutex};
 use std::time::{Duration, Instant};
 
+use intuituive::Level;
 use intuituive::interact::MouseKind;
 use intuituive::prelude::*;
 use intuituive::query::{
     self, Grammar, Kind as FieldKind, Matcher, QueryError, Record, TextMatch, Value,
 };
 use intuituive::reactive::NodeId;
-use intuituive::rich::markup::escape;
 use intuituive::rich::Style;
+use intuituive::rich::markup::escape;
 use intuituive::widgets::{
-    table_with, tree_table_rows, Column, Order, TableLayout, TableOptions, TreeRow,
-    TreeTableOptions,
+    Column, Order, TableLayout, TableOptions, TreeRow, TreeTableOptions, table_with,
+    tree_table_rows,
 };
-use intuituive::Level;
 use rich_ext::chart::{Axis, Chart, Dataset, GraphType, Labels, LegendPosition, Marker};
 
 // ---------------------------------------------------------------------------
@@ -2322,11 +2322,11 @@ pub fn top_app(options: Options, source: Box<dyn Source>) -> App {
         });
         let interval = options.rate;
         on_write(latest, move |sample, _| {
-            if let Some(sample) = sample {
-                if !state.frozen.get_untracked() {
-                    state.history.update(|h| h.push(&sample, interval));
-                    state.shown.set(sample);
-                }
+            if let Some(sample) = sample
+                && !state.frozen.get_untracked()
+            {
+                state.history.update(|h| h.push(&sample, interval));
+                state.shown.set(sample);
             }
         });
 

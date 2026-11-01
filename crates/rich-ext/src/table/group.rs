@@ -27,8 +27,8 @@ use std::collections::HashMap;
 use std::fmt;
 use std::sync::Arc;
 
-use super::sort::{compare_values, Compare};
 use super::Value;
+use super::sort::{Compare, compare_values};
 
 /// A custom aggregate: the group's cells of one column in, a value out.
 pub type AggregateFn = Arc<dyn Fn(&[&Value]) -> Value + Send + Sync>;

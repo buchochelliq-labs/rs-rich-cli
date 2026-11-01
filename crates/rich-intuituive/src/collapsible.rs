@@ -4,10 +4,10 @@ use rich_interact::{Button as MouseButton, KeyCode, MouseKind};
 
 use crate::a11y::{AccessState, Role};
 use crate::controls::{look, plain};
-use crate::node::{column, Axis, Node};
+use crate::node::{Axis, Node, column};
 use crate::reactive::Signal;
 use crate::widget::{
-    markup_width, widget, Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent,
+    Canvas, DrawCx, EventCx, MeasureCx, Used, Widget, WidgetEvent, markup_width, widget,
 };
 
 /// What a [`collapsible`]'s header is.

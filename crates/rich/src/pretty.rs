@@ -559,14 +559,14 @@ fn traverse_node(value: &PrettyValue, root: bool, depth: usize, limits: ReprLimi
 
 /// The `... +N` node after a container cut to `max_length`.
 fn push_more(children: &mut Vec<Node>, num_items: usize, max_length: Option<usize>) {
-    if let Some(max_length) = max_length {
-        if num_items > max_length {
-            children.push(Node {
-                value_repr: format!("... +{}", num_items - max_length),
-                last: true,
-                ..Node::default()
-            });
-        }
+    if let Some(max_length) = max_length
+        && num_items > max_length
+    {
+        children.push(Node {
+            value_repr: format!("... +{}", num_items - max_length),
+            last: true,
+            ..Node::default()
+        });
     }
 }
 

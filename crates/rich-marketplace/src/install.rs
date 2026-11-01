@@ -8,9 +8,9 @@ use crate::check::{ArtifactChecker, BuiltinChecks, WasmExpectation};
 use crate::error::{InstallError, ListingError, LockfileError, ResolveError};
 use crate::index::VerifiedIndex;
 use crate::listing::{Kind, ListedVersion, Listing, Requires};
-use crate::lockfile::{write_atomically, LockEntry, Lockfile, LOCKFILE_NAME};
+use crate::lockfile::{LOCKFILE_NAME, LockEntry, Lockfile, write_atomically};
 use crate::resolve::Host;
-use crate::transport::{require_https, Transport};
+use crate::transport::{Transport, require_https};
 use crate::util::sha256_hex;
 
 /// Installs packages into one directory: each at `<root>/<id>/<file>`, with
@@ -172,10 +172,10 @@ impl<T: Transport, C: ArtifactChecker> Installer<T, C> {
         };
         let previous = lockfile.insert(entry.clone());
         lockfile.save(&self.lockfile_path())?;
-        if let Some(previous) = previous {
-            if previous.path != entry.path {
-                let _ = fs::remove_file(previous.file(&self.root));
-            }
+        if let Some(previous) = previous
+            && previous.path != entry.path
+        {
+            let _ = fs::remove_file(previous.file(&self.root));
         }
         Ok(entry)
     }

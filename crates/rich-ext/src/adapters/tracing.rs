@@ -5,14 +5,14 @@ use crate::event::{
 use std::sync::Arc;
 use std::time::Instant;
 use tracing::{
+    Event, Metadata, Subscriber,
     field::{Field, Visit},
     span::{Attributes, Id, Record},
-    Event, Metadata, Subscriber,
 };
 use tracing_subscriber::{
+    Layer,
     layer::Context,
     registry::{LookupSpan, SpanRef},
-    Layer,
 };
 
 /// Composable layer. Install with a caller-owned subscriber or scoped dispatcher.
@@ -70,11 +70,11 @@ struct Fields {
 
 impl Fields {
     fn record(&mut self, field: &Field, value: Value) {
-        if field.name() == "message" {
-            if let Value::String(message) = value {
-                self.message = Some(message);
-                return;
-            }
+        if field.name() == "message"
+            && let Value::String(message) = value
+        {
+            self.message = Some(message);
+            return;
         }
         set(&mut self.fields, field.name(), value);
     }

@@ -7,7 +7,7 @@
 use std::path::{Path, PathBuf};
 use std::time::{Duration, Instant};
 
-use noctiluca::app::{app, Options};
+use noctiluca::app::{Options, app};
 use noctiluca::bookmarks::Bookmarks;
 use noctiluca::config::{Config, View};
 use noctiluca::engine::PageAction;
@@ -93,12 +93,14 @@ fn a_hint_follows_a_link_and_history_returns() {
     wait_for(&mut driver, "[a]open sea");
     driver.press("a");
     wait_for(&mut driver, "The second page");
-    assert!(state
-        .lock()
-        .unwrap()
-        .actions
-        .iter()
-        .any(|a| matches!(a, PageAction::Click(_))));
+    assert!(
+        state
+            .lock()
+            .unwrap()
+            .actions
+            .iter()
+            .any(|a| matches!(a, PageAction::Click(_)))
+    );
     driver.press("H");
     wait_for(&mut driver, "Tiny drifters");
     driver.press("L");

@@ -7,10 +7,10 @@ use std::fs;
 
 use rich_marketplace::semver::Version;
 use rich_marketplace::{
-    resolve, verify_index, AcceptedIndex, CheckError, FetchError, Host, Incompatibility,
-    IndexError, InstallError, Installer, KeyChainError, KeySet, Kind, ListingError, Lockfile,
-    LockfileError, MemoryTransport, Request, ResolveError, Rotation, RotationKind, SignatureError,
-    VerifiedIndex, LOCKFILE_NAME,
+    AcceptedIndex, CheckError, FetchError, Host, Incompatibility, IndexError, InstallError,
+    Installer, KeyChainError, KeySet, Kind, LOCKFILE_NAME, ListingError, Lockfile, LockfileError,
+    MemoryTransport, Request, ResolveError, Rotation, RotationKind, SignatureError, VerifiedIndex,
+    resolve, verify_index,
 };
 use support::*;
 
@@ -569,14 +569,16 @@ fn a_planned_rotation_is_signed_by_both_keys() {
     // The index now verifies with the new main key only.
     let market = Marketplace::build();
     let index = market.index(SERIAL);
-    assert!(verify_index(
-        &keys,
-        &index,
-        &sign_index(&main2, &index, SERIAL),
-        None,
-        now()
-    )
-    .is_ok());
+    assert!(
+        verify_index(
+            &keys,
+            &index,
+            &sign_index(&main2, &index, SERIAL),
+            None,
+            now()
+        )
+        .is_ok()
+    );
     let old = verify_index(
         &keys,
         &index,
@@ -688,14 +690,16 @@ fn the_backup_key_alone_replaces_a_lost_main_key() {
         leaked,
         Err(IndexError::Signature(SignatureError::WrongKeyId { .. }))
     ));
-    assert!(verify_index(
-        &keys,
-        &index,
-        &sign_index(&main2, &index, SERIAL),
-        None,
-        now()
-    )
-    .is_ok());
+    assert!(
+        verify_index(
+            &keys,
+            &index,
+            &sign_index(&main2, &index, SERIAL),
+            None,
+            now()
+        )
+        .is_ok()
+    );
 
     // The backup key alone may not skip the revocation…
     let quiet = keys_json(2, &main2, &backup1, &[]);

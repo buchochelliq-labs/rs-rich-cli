@@ -12,17 +12,17 @@
 //! The line is a [`TextBuffer`] from the [kit](crate::kit), and the keys are
 //! a [`Keymap`] (context `input`) that can be rebound and listed.
 
-use std::sync::mpsc::{channel, Receiver, Sender};
 use std::sync::Arc;
+use std::sync::mpsc::{Receiver, Sender, channel};
 use std::time::Duration;
 
 use rich::Segment;
 
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{fit, highlight, plain, question, text, Theme};
+use crate::components::{Theme, fit, highlight, plain, question, text};
 use crate::event::{Event, Key, KeyCode, Modifiers};
 use crate::fuzzy::rank;
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::kit::TextBuffer;
 use crate::policy::{LineIo, NotInteractive};
 
@@ -307,13 +307,11 @@ impl Input {
         let mut latest = None;
         // A moment's wait for a pending lookup, so a fast provider's
         // results show on the next tick rather than the one after.
-        if self.pending {
-            if let Ok((generation, results)) = self.receiver.recv_timeout(Duration::from_millis(5))
-            {
-                if generation == self.generation {
-                    latest = Some(results);
-                }
-            }
+        if self.pending
+            && let Ok((generation, results)) = self.receiver.recv_timeout(Duration::from_millis(5))
+            && generation == self.generation
+        {
+            latest = Some(results);
         }
         while let Ok((generation, results)) = self.receiver.try_recv() {
             if generation == self.generation {
@@ -362,16 +360,16 @@ impl Input {
             self.accept(index);
         }
         let mut answer = self.buffer.text().to_string();
-        if answer.is_empty() {
-            if let Some(default) = &self.default {
-                answer = default.clone();
-            }
+        if answer.is_empty()
+            && let Some(default) = &self.default
+        {
+            answer = default.clone();
         }
-        if let Some(validator) = &self.validator {
-            if let Err(message) = validator(&answer) {
-                self.error = Some(message);
-                return Flow::Continue;
-            }
+        if let Some(validator) = &self.validator
+            && let Err(message) = validator(&answer)
+        {
+            self.error = Some(message);
+            return Flow::Continue;
         }
         self.answer = Some(Some(answer.clone()));
         Flow::Done(answer)
@@ -381,10 +379,10 @@ impl Input {
     /// checked by the validator.
     pub fn resolve(&self) -> Result<String, String> {
         let mut answer = self.buffer.text().to_string();
-        if answer.is_empty() {
-            if let Some(default) = &self.default {
-                answer = default.clone();
-            }
+        if answer.is_empty()
+            && let Some(default) = &self.default
+        {
+            answer = default.clone();
         }
         if let Some(validator) = &self.validator {
             validator(&answer)?;
@@ -627,10 +625,10 @@ impl Component for Input {
             },
             Err(error) => return Err(error),
         };
-        if line.is_empty() {
-            if let Some(default) = &self.default {
-                line = default.clone();
-            }
+        if line.is_empty()
+            && let Some(default) = &self.default
+        {
+            line = default.clone();
         }
         if let Some(validator) = &self.validator {
             validator(&line).map_err(NotInteractive::Invalid)?;

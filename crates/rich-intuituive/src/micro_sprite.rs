@@ -20,9 +20,9 @@
 //! ```
 
 use rich_micro::pipeline::Pipeline;
-use rich_micro::{fallback_cells, CellPixels, FallbackPreference, Limits, MicroAsset, MicroError};
+use rich_micro::{CellPixels, FallbackPreference, Limits, MicroAsset, MicroError, fallback_cells};
 
-use crate::pixels::{rgba_pixels, PixelSprite};
+use crate::pixels::{PixelSprite, rgba_pixels};
 use crate::sprite::Sprite;
 
 /// `asset` as a sprite, its images read under the default [`Limits`].

@@ -8,8 +8,8 @@
 //! and bound on the app with intuiTUIve's `Node::bind` and
 //! `Node::bind_sequence`.
 
-use rich_intuituive::interact::keymap::{try_keys, Binding, Keymap, Overrides};
 use rich_intuituive::interact::Key;
+use rich_intuituive::interact::keymap::{Binding, Keymap, Overrides, try_keys};
 
 use crate::config::Preset;
 

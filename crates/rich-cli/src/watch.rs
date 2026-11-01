@@ -12,7 +12,7 @@
 // Under WASI there are no file events, and `--watch` is refused before it
 // starts, so the event plumbing is unused there.
 #![cfg_attr(target_os = "wasi", allow(dead_code))]
-use super::{render_target, run_once, watch_fingerprint, Cli, ExitClass};
+use super::{Cli, ExitClass, render_target, run_once, watch_fingerprint};
 use rich::protocol::{RenderEnvironment, TargetCapabilities};
 use rich::rule::Rule;
 use rich::{Segment, Style};
@@ -205,13 +205,12 @@ impl Targets {
                 locations.push(real);
             }
             for location in locations {
-                if let Some((dir, name)) = split(&location) {
-                    if !entries
+                if let Some((dir, name)) = split(&location)
+                    && !entries
                         .iter()
                         .any(|(i, d, n)| *i == index && *d == dir && *n == name)
-                    {
-                        entries.push((index, dir, name));
-                    }
+                {
+                    entries.push((index, dir, name));
                 }
             }
         }
@@ -636,10 +635,10 @@ fn run_loop(
 
     for index in 0..count {
         previous.push(fingerprint(index));
-        if let Rendered::Failed(status, message) = presenter.render(cli, index) {
-            if cli.watch_exit_on_error {
-                return stop(presenter, status, &message);
-            }
+        if let Rendered::Failed(status, message) = presenter.render(cli, index)
+            && cli.watch_exit_on_error
+        {
+            return stop(presenter, status, &message);
         }
     }
 
@@ -695,10 +694,10 @@ fn run_loop(
                 continue;
             }
             *last = current;
-            if let Rendered::Failed(status, message) = presenter.render(cli, index) {
-                if cli.watch_exit_on_error {
-                    return stop(presenter, status, &message);
-                }
+            if let Rendered::Failed(status, message) = presenter.render(cli, index)
+                && cli.watch_exit_on_error
+            {
+                return stop(presenter, status, &message);
             }
         }
     }
@@ -762,8 +761,8 @@ mod tests {
 
     #[test]
     fn access_notifications_do_not_count_as_changes() {
-        use notify::event::{AccessKind, AccessMode, CreateKind, ModifyKind, RemoveKind};
         use notify::EventKind;
+        use notify::event::{AccessKind, AccessMode, CreateKind, ModifyKind, RemoveKind};
         assert!(!is_relevant(&EventKind::Access(AccessKind::Open(
             AccessMode::Read
         ))));

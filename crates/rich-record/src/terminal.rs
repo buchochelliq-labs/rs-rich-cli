@@ -788,10 +788,12 @@ mod tests {
             terminal.replies.len()
         );
         // Whole answers only, and once taken, answers come again.
-        assert!(terminal
-            .take_replies()
-            .chunks(6)
-            .all(|reply| reply == b"\x1b[?62c"));
+        assert!(
+            terminal
+                .take_replies()
+                .chunks(6)
+                .all(|reply| reply == b"\x1b[?62c")
+        );
         terminal.process(b"\x1b[c").unwrap();
         assert_eq!(terminal.take_replies(), b"\x1b[?62c");
     }

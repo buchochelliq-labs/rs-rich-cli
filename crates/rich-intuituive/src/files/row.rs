@@ -6,12 +6,12 @@ use std::rc::Rc;
 use rich::markup::escape;
 use rich_ext::filetype::{self, Appearance};
 use rich_ext::git::{Change, GitStatus};
-use rich_ext::listing::{find_ranges, owner, permissions, readable_size, smart_contains, Entry};
+use rich_ext::listing::{Entry, find_ranges, owner, permissions, readable_size, smart_contains};
 
 use super::model::DirModel;
 use crate::layout::TextAlign;
-use crate::list::{list_lazy, RowRects};
-use crate::node::{switch, text, Node};
+use crate::list::{RowRects, list_lazy};
+use crate::node::{Node, switch, text};
 use crate::reactive::Signal;
 
 /// What a file list shows at the right of each entry: Yazi's line modes.

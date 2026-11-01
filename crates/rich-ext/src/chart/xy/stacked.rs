@@ -112,10 +112,10 @@ impl Chart {
                 .datasets
                 .iter()
                 .flat_map(|d| d.points.iter().map(|p| p.1));
-            if let Some((lo, hi)) = extent(ys.chain([base])) {
-                if lo < hi {
-                    view.y_axis.bounds = Some([lo, hi]);
-                }
+            if let Some((lo, hi)) = extent(ys.chain([base]))
+                && lo < hi
+            {
+                view.y_axis.bounds = Some([lo, hi]);
             }
         }
         Cow::Owned(view)

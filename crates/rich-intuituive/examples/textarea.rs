@@ -12,7 +12,7 @@
 use intuituive::interact::caret::CaretShape;
 use intuituive::interact::edit::WrapMode;
 use intuituive::prelude::*;
-use intuituive::{search_bar, TextSearch};
+use intuituive::{TextSearch, search_bar};
 
 const PROSE: &str = "Text areas wrap long lines. With word wrap a line breaks after a \
 space, so the words stay whole; with a character wrap it breaks wherever the room runs out, \

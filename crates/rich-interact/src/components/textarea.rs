@@ -14,10 +14,10 @@ use std::cell::Cell;
 use rich::Segment;
 
 use crate::component::{Component, Context, Flow, View};
-use crate::components::{fit, plain, question, text, Theme};
-use crate::edit::{cells, clean, graphemes, length, Buffer, Pos, TAB};
+use crate::components::{Theme, fit, plain, question, text};
+use crate::edit::{Buffer, Pos, TAB, cells, clean, graphemes, length};
 use crate::event::{Event, Key, KeyCode};
-use crate::keymap::{keys, Keymap};
+use crate::keymap::{Keymap, keys};
 use crate::policy::{LineIo, NotInteractive};
 
 /// One row on screen: a piece of a line.

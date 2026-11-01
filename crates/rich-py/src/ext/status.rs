@@ -17,22 +17,22 @@ use pyo3::types::{PyBytes, PyString};
 use rich::protocol::Renderable;
 use rich_ext::a11y::policy::SymbolSet;
 use rich_ext::countdown::{
-    remaining_label, Backoff as CoreBackoff, CountdownBar as CoreBar, CountdownWait,
-    RateLimit as CoreRateLimit, RetryStatus as CoreRetry, WaitOutcome,
+    Backoff as CoreBackoff, CountdownBar as CoreBar, CountdownWait, RateLimit as CoreRateLimit,
+    RetryStatus as CoreRetry, WaitOutcome, remaining_label,
 };
 use rich_ext::notify::{
     Notification as CoreNotification, NotificationId, Notifications as CoreNotifications,
     ToastStyle,
 };
 use rich_ext::transfer::{
-    is_cancelled, Direction, Transfer as CoreTransfer, TransferReader as CoreReader, TransferState,
-    TransferWriter as CoreWriter, Transfers as CoreTransfers,
+    Direction, Transfer as CoreTransfer, TransferReader as CoreReader, TransferState,
+    TransferWriter as CoreWriter, Transfers as CoreTransfers, is_cancelled,
 };
 use rich_ext::workflow::Clock;
 
 use super::common::{self, names};
 use super::terminal::{self, symbol_set};
-use super::workflow::{token_arg, ManualClock};
+use super::workflow::{ManualClock, token_arg};
 use crate::renderable::{self, AsRenderable};
 
 names!(direction, direction_name, Direction, "direction", {
@@ -594,7 +594,7 @@ impl Backoff {
             (None, None) => {
                 return Err(PyValueError::new_err(
                     "an unbounded backoff needs delays(limit)",
-                ))
+                ));
             }
         };
         Ok(self
@@ -797,10 +797,10 @@ pub(crate) fn countdown_wait(
         if error.borrow().is_some() {
             return;
         }
-        if let Some(callback) = &on_tick {
-            if let Err(e) = callback.bind(py).call1((left.as_secs_f64(),)) {
-                *error.borrow_mut() = Some(e);
-            }
+        if let Some(callback) = &on_tick
+            && let Err(e) = callback.bind(py).call1((left.as_secs_f64(),))
+        {
+            *error.borrow_mut() = Some(e);
         }
     });
     if let Some(error) = error.into_inner() {

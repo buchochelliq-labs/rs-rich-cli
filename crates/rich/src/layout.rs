@@ -17,7 +17,7 @@ use crate::highlighter::ReprHighlighter;
 use crate::measure::Measurement;
 use crate::panel::Panel;
 use crate::protocol::{Highlighter, Renderable};
-use crate::ratio::{ratio_resolve, Edge};
+use crate::ratio::{Edge, ratio_resolve};
 use crate::region::Region;
 use crate::segment::Segment;
 use crate::style::Style;

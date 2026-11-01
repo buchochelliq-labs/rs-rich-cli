@@ -20,8 +20,8 @@ use std::rc::Rc;
 
 use rich_intuituive::prelude::*;
 use rich_intuituive::{
-    button_of, checkbox_of, radio_keyed, select_field_keyed, slider, switch_of, CheckState,
-    SelectOption,
+    CheckState, SelectOption, button_of, checkbox_of, radio_keyed, select_field_keyed, slider,
+    switch_of,
 };
 
 use crate::app::Browser;
@@ -29,7 +29,7 @@ use crate::clean::markup;
 use crate::draft::{DraftField, DraftState};
 use crate::engine::NodeId;
 use crate::model::{Check, Control, Page, Role};
-use crate::tab::{describe, Intent, Refusal};
+use crate::tab::{Intent, Refusal, describe};
 
 // The stock widgets, one function each: intuiTUIve's controls with live
 // labels (C1), the three-state check box (C2) and keyed options (C3).
@@ -154,12 +154,11 @@ impl WebControl {
         if self.key.get_untracked() != key {
             self.key.set(key);
         }
-        if control.role == Role::Slider {
-            if let Some(n) = control.value.as_deref().and_then(|v| v.parse::<f64>().ok()) {
-                if self.number.get_untracked() != n {
-                    self.number.set(n);
-                }
-            }
+        if control.role == Role::Slider
+            && let Some(n) = control.value.as_deref().and_then(|v| v.parse::<f64>().ok())
+            && self.number.get_untracked() != n
+        {
+            self.number.set(n);
         }
     }
 }

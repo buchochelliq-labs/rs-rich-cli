@@ -12,11 +12,11 @@
 //! rows closure reads the signal and sorts the processes, so the status
 //! line can name the selected process and the cell under the cursor.
 
-use intuituive::prelude::*;
-use intuituive::rich::markup::escape;
-use intuituive::rich::Style;
-use intuituive::widgets::{table_with, Column, Order, TableOptions};
 use intuituive::Theme;
+use intuituive::prelude::*;
+use intuituive::rich::Style;
+use intuituive::rich::markup::escape;
+use intuituive::widgets::{Column, Order, TableOptions, table_with};
 
 /// One process.
 #[derive(Clone, Debug, PartialEq)]

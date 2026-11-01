@@ -8,8 +8,8 @@
 use rich::measure::Measurement;
 use rich::text::Text;
 use rich::{Console, ConsoleOptions, Renderable, Segment};
-use rich_ext::ansi_explain::{explain, Explanation, ExplanationView, ViewMode};
-use rich_ext::diff::{git, ConflictLayout, ConflictView, DiffView, Layout, SourceDiff};
+use rich_ext::ansi_explain::{Explanation, ExplanationView, ViewMode, explain};
+use rich_ext::diff::{ConflictLayout, ConflictView, DiffView, Layout, SourceDiff, git};
 
 /// Options for the text diff and `ansi explain`.
 #[derive(Clone, Debug, Default)]
@@ -328,7 +328,7 @@ fn is_bench(args: &[String]) -> bool {
 /// directories) and exit 5 when any benchmark regressed. `Ok(false)` when the
 /// command line is not this command.
 pub(crate) fn bench_dispatch(args: &[String]) -> Result<bool, String> {
-    use rich_ext::qa::bench::{compare, BenchRun, CompareOptions, ComparisonView};
+    use rich_ext::qa::bench::{BenchRun, CompareOptions, ComparisonView, compare};
     if !is_bench(args) {
         return Ok(false);
     }

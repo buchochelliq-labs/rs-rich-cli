@@ -210,7 +210,7 @@ pub(crate) fn detect(ext: Option<&str>, name: Option<&str>, bytes: &[u8]) -> Vie
         Some("ipynb") => return ViewAs::Notebook,
         Some("gif") => return ViewAs::Gif,
         Some("png" | "jpg" | "jpeg" | "bmp" | "webp" | "tif" | "tiff" | "ico") => {
-            return ViewAs::Image
+            return ViewAs::Image;
         }
         Some("diff" | "patch") => return ViewAs::Patch,
         Some("jsonl" | "ndjson") => return ViewAs::Log,
@@ -387,7 +387,7 @@ fn capture_with_limits(
     limit: usize,
     line_limit: usize,
 ) -> Result<Captured, String> {
-    use std::sync::mpsc::{channel, RecvTimeoutError};
+    use std::sync::mpsc::{RecvTimeoutError, channel};
     let (program, args) = command
         .split_first()
         .ok_or("capture needs a command after --")?;
@@ -471,10 +471,10 @@ fn capture_with_limits(
                 break;
             }
         }
-        if exited.is_none() {
-            if let Some(status) = child.try_wait().map_err(wait_error)? {
-                exited = Some((status, Instant::now()));
-            }
+        if exited.is_none()
+            && let Some(status) = child.try_wait().map_err(wait_error)?
+        {
+            exited = Some((status, Instant::now()));
         }
         match exited {
             Some(_) if notice.is_some() => break,
@@ -663,7 +663,7 @@ pub(crate) fn hex(
     bytes: Vec<u8>,
     start: u64,
 ) -> Result<Box<dyn Renderable>, String> {
-    use rich_ext::hex::{parse_needle, HexView};
+    use rich_ext::hex::{HexView, parse_needle};
     let mut view = HexView::new(bytes).offset(start);
     if let Some(per_line) = options.bytes_per_line {
         view = view.bytes_per_line(Some(per_line));
@@ -696,13 +696,12 @@ pub(crate) fn unicode(
 /// `rich env [PATTERN…]`: variables whose names match, redacted unless
 /// `--show-secrets`; a single name of a PATH-like variable checks its entries.
 pub(crate) fn env(options: &ViewerOptions, patterns: &[String]) -> Box<dyn Renderable> {
-    use rich_ext::env_inspect::{is_path_like, name_matches, EnvView, PathView, OS_PATH_SEPARATOR};
-    if let [name] = patterns {
-        if let Ok(value) = std::env::var(name) {
-            if is_path_like(name, &value, OS_PATH_SEPARATOR) {
-                return Box::new(PathView::new(name.clone(), value, OS_PATH_SEPARATOR));
-            }
-        }
+    use rich_ext::env_inspect::{EnvView, OS_PATH_SEPARATOR, PathView, is_path_like, name_matches};
+    if let [name] = patterns
+        && let Ok(value) = std::env::var(name)
+        && is_path_like(name, &value, OS_PATH_SEPARATOR)
+    {
+        return Box::new(PathView::new(name.clone(), value, OS_PATH_SEPARATOR));
     }
     let vars = std::env::vars().filter(|(name, _)| {
         patterns.is_empty() || patterns.iter().any(|pattern| name_matches(pattern, name))
@@ -792,9 +791,11 @@ mod tests {
             [("--offset", &["hex"][..]), ("--length", &["hex"][..])]
         );
         let mut empty = [].iter();
-        assert!(ViewerOptions::default()
-            .parse_option("--group", &mut empty)
-            .is_err());
+        assert!(
+            ViewerOptions::default()
+                .parse_option("--group", &mut empty)
+                .is_err()
+        );
     }
 
     #[test]

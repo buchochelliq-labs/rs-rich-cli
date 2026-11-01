@@ -27,11 +27,11 @@ use std::sync::Arc;
 
 use rich::{FenceRenderer, Renderable};
 use rich_ext::document::{
-    base_name, DocumentFormat, DocumentRegistry, ManFormat, NameMatch, RenderOptions, Severity,
-    CERTAIN, LIKELY,
+    CERTAIN, DocumentFormat, DocumentRegistry, LIKELY, ManFormat, NameMatch, RenderOptions,
+    Severity, base_name,
 };
 
-use super::{controls, Cli, Mode};
+use super::{Cli, Mode, controls};
 
 /// The mode for a document format's id.
 fn mode_for(id: &str) -> Option<Mode> {

@@ -2,10 +2,10 @@
 //! host like any third-party plugin, and its fence renderer draws Markdown
 //! ```` ```mermaid ```` blocks.
 
-use rich::markdown::Markdown;
 use rich::Console;
-use rich_ext::plugin::Capability;
+use rich::markdown::Markdown;
 use rich_ext::ExtensionRegistry;
+use rich_ext::plugin::Capability;
 use rich_mermaid::MermaidPlugin;
 
 #[test]

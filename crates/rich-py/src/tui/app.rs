@@ -16,11 +16,11 @@ use rich_intuituive::interact::headless::{Headless, Script as CoreScript};
 use rich_intuituive::interact::{BackendKind, Event, Key};
 use rich_intuituive::{Anchor, Ctx};
 
-use super::node::{mouse_from, screen_builder, take_node, PyNode};
-use super::reactive::{call_with_ctx, signal_arg, PyProxy, PyValue};
+use super::node::{PyNode, mouse_from, screen_builder, take_node};
+use super::reactive::{PyProxy, PyValue, call_with_ctx, signal_arg};
 use super::{
-    detached, easing_arg, keys, placement_arg, rect_arg, size_arg, Building, Callback, Enter,
-    Handle, Lent, Loan, PyRect, Role, Shared,
+    Building, Callback, Enter, Handle, Lent, Loan, PyRect, Role, Shared, detached, easing_arg,
+    keys, placement_arg, rect_arg, size_arg,
 };
 use crate::ext::common::{scoped, seconds};
 
@@ -1001,12 +1001,12 @@ impl PyApp {
             "termion" | "termwiz" => {
                 return Err(PyValueError::new_err(format!(
                     "the {backend} backend is not built into this wheel; use crossterm"
-                )))
+                )));
             }
             other => {
                 return Err(PyValueError::new_err(format!(
                     "unknown backend {other:?}; expected crossterm"
-                )))
+                )));
             }
         };
         let (app, shared) = self.take()?;

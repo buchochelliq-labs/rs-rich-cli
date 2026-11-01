@@ -5,12 +5,12 @@ use std::rc::Rc;
 
 use rich::Style;
 use rich_intuituive::interact::{Key, KeyCode};
-use rich_intuituive::widget::{widget, Canvas, DrawCx, EventCx, Used, Widget, WidgetEvent};
-use rich_intuituive::{signal, Ctx, Node, Signal};
+use rich_intuituive::widget::{Canvas, DrawCx, EventCx, Used, Widget, WidgetEvent, widget};
+use rich_intuituive::{Ctx, Node, Signal, signal};
 
 use crate::host::{Command, ExitStatus, LocalPty, Notify, PtyHost};
 use crate::term::TermCore;
-use crate::wake::{connect, Fed};
+use crate::wake::{Fed, connect};
 
 /// Rows a pane keeps that scrolled off its top, unless told otherwise.
 pub const DEFAULT_SCROLLBACK: usize = 1000;

@@ -11,7 +11,7 @@ use std::net::{SocketAddr, TcpStream};
 use std::process::{Child, ChildStdin, ChildStdout, Command, Stdio};
 use std::time::{Duration, Instant};
 
-use common::{connect, read_close_reason_within, read_until, running, wait_for, TOKEN};
+use common::{TOKEN, connect, read_close_reason_within, read_until, running, wait_for};
 use tungstenite::{Message, WebSocket};
 
 fn probe_exe() -> std::path::PathBuf {

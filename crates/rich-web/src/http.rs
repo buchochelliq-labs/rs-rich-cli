@@ -270,7 +270,9 @@ mod tests {
 
     #[test]
     fn parses_a_head() {
-        let h = head("GET /ws?token=abc&cols=80&rows=24 HTTP/1.1\r\nHost: 127.0.0.1:9\r\nOrigin: http://127.0.0.1:9\r\n\r\n");
+        let h = head(
+            "GET /ws?token=abc&cols=80&rows=24 HTTP/1.1\r\nHost: 127.0.0.1:9\r\nOrigin: http://127.0.0.1:9\r\n\r\n",
+        );
         assert_eq!(h.method, "GET");
         assert_eq!(h.path, "/ws");
         assert_eq!(h.param("token"), Some("abc"));
