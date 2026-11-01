@@ -6110,6 +6110,15 @@ impl App {
                 }
                 if !used
                     && mouse.kind == MouseKind::Down(Button::Left)
+                    && let Some(handler) = node.click_at.borrow_mut().as_mut()
+                {
+                    used = handler(&mut cx, local.column, local.row);
+                    if used {
+                        how = "on_click_at";
+                    }
+                }
+                if !used
+                    && mouse.kind == MouseKind::Down(Button::Left)
                     && let Some(handler) = node.click.borrow_mut().as_mut()
                 {
                     handler(&mut cx);
@@ -6925,6 +6934,85 @@ impl Driver {
     pub fn send(&mut self, event: Event) {
         self.settle();
         self.event(event);
+        self.settle();
+    }
+
+    /// Click the left button at `column`, `row` of the screen (a press and
+    /// a release there), then [`settle`](Self::settle): a test's click.
+    pub fn click(&mut self, column: u16, row: u16) {
+        self.button(Button::Left, column, row);
+    }
+
+    /// Click `button` at `column`, `row` (a press and a release), then
+    /// [`settle`](Self::settle).
+    pub fn button(&mut self, button: Button, column: u16, row: u16) {
+        self.settle();
+        for kind in [MouseKind::Down(button), MouseKind::Up(button)] {
+            if self.done {
+                return;
+            }
+            self.event(Event::Mouse(rich_interact::Mouse::new(kind, column, row)));
+        }
+        self.settle();
+    }
+
+    /// Click the first cell of the first place `text` shows on the screen
+    /// (reading rows top to bottom), then [`settle`](Self::settle).
+    /// Whether it was found.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let n = signal(0);
+    ///     column([
+    ///         text!("{n}"),
+    ///         label("add one").on_click(move |_| n.update(|n| *n += 1)),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// assert!(driver.click_text("add one"));
+    /// assert!(!driver.click_text("remove"));
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "1");
+    /// ```
+    pub fn click_text(&mut self, text: &str) -> bool {
+        self.settle();
+        let Some((column, row)) = self.find_text(text) else {
+            return false;
+        };
+        self.click(column, row);
+        true
+    }
+
+    /// Where `text` first shows on the screen: the column and row of its
+    /// first cell.
+    pub fn find_text(&self, text: &str) -> Option<(u16, u16)> {
+        self.screen()
+            .plain()
+            .iter()
+            .enumerate()
+            .find_map(|(row, line)| {
+                let at = line.find(text)?;
+                let column = rich::cells::cell_len(&line[..at]);
+                Some((column as u16, row as u16))
+            })
+    }
+
+    /// Turn the mouse wheel `steps` notches at `column`, `row`: down when
+    /// positive, up when negative; then [`settle`](Self::settle).
+    pub fn wheel(&mut self, column: u16, row: u16, steps: i32) {
+        self.settle();
+        let kind = if steps < 0 {
+            MouseKind::ScrollUp
+        } else {
+            MouseKind::ScrollDown
+        };
+        for _ in 0..steps.unsigned_abs() {
+            if self.done {
+                return;
+            }
+            self.event(Event::Mouse(rich_interact::Mouse::new(kind, column, row)));
+        }
         self.settle();
     }
 

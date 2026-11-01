@@ -34,6 +34,9 @@ pub struct Args {
     pub adapt: Option<String>,
     /// `--no-adapt`: the faithful projection, every rule off.
     pub no_adapt: bool,
+    /// `--no-mouse`: leave the mouse to the terminal (its own selection
+    /// and scrollback), so clicks and the wheel do not reach the browser.
+    pub no_mouse: bool,
 }
 
 /// What the command line asks for.
@@ -65,6 +68,8 @@ usage: noctiluca [OPTIONS] [URL | FILE | KEYWORD WORDS…]
   --fps N                              the media frame cap
   --dump text|ax|json                  print the page's model and exit
   --no-js                              turn the page's script off
+  --no-mouse                           leave the mouse to the terminal (no
+                                       clicks; its own text selection)
   --adapt -RULE,+RULE,…                switch terminal adaptations off or on
                                        (decorative-images, collapse-nav, …;
                                        ? while browsing lists them)
@@ -129,6 +134,7 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
             "--raster" => view(View::Raster)?,
             "--audio" => parsed.audio = true,
             "--no-js" => parsed.no_js = true,
+            "--no-mouse" => parsed.no_mouse = true,
             "--no-adapt" => parsed.no_adapt = true,
             "--adapt" => {
                 let value = value_of(name, inline, &mut rest)?;
@@ -241,6 +247,7 @@ mod tests {
         let Run::Browse(args) = parse(&[
             "--audio",
             "--no-js",
+            "--no-mouse",
             "--profile",
             "work",
             "--dump",
@@ -250,7 +257,7 @@ mod tests {
         .unwrap() else {
             panic!()
         };
-        assert!(args.audio && args.no_js);
+        assert!(args.audio && args.no_js && args.no_mouse);
         assert_eq!(
             (args.profile.as_deref(), args.dump),
             (Some("work"), Some(Dump::Ax))

@@ -260,3 +260,59 @@ fn a_handler_copies_text_through_the_same_hand_off() {
     driver.event(press("y"));
     assert_eq!(driver.take_copies(), ["/home/me/notes.txt"]);
 }
+
+#[test]
+fn clicks_at_a_cell_reach_the_node_under_it_and_leave_the_focus() {
+    let app = App::new(|| {
+        let said = signal(String::from("-"));
+        column([
+            input(signal(String::new())).autofocus().name("field"),
+            label("one two")
+                .on_click_at(move |_, column, row| {
+                    // Only the words: the space between is declined.
+                    let word = match column {
+                        0..=2 => "one",
+                        4..=6 => "two",
+                        _ => return false,
+                    };
+                    said.set(format!("{word} at row {row}"));
+                    true
+                })
+                .name("words"),
+            text!("{said}").name("said"),
+        ])
+    });
+    let mut driver = app.driver(20, 3);
+    driver.settle();
+    driver.assert_focused("field");
+    let (column, row) = driver.find_text("two").unwrap();
+    assert_eq!((column, row), (4, 1));
+    driver.click(column + 1, row);
+    assert_eq!(driver.screen().plain()[2].trim_end(), "two at row 0");
+    // The node is not focusable: the field keeps the focus.
+    driver.assert_focused("field");
+    // A declined click changes nothing.
+    driver.click(3, 1);
+    assert_eq!(driver.screen().plain()[2].trim_end(), "two at row 0");
+    // The wheel reaches what scrolls: here nothing does, and nothing breaks.
+    driver.wheel(0, 1, 3);
+    driver.wheel(0, 1, -3);
+    assert!(driver.click_text("one"));
+    assert_eq!(driver.screen().plain()[2].trim_end(), "one at row 0");
+}
+
+#[test]
+fn a_declined_click_can_still_start_a_selection() {
+    let app = App::new(|| label("select me").on_click_at(|_, _, _| false));
+    let mut driver = app.driver(20, 1);
+    driver.set_clipboard(true);
+    driver.settle();
+    for (kind, column) in [
+        (MouseKind::Down(Button::Left), 0),
+        (MouseKind::Drag(Button::Left), 5),
+        (MouseKind::Up(Button::Left), 5),
+    ] {
+        driver.send(Event::Mouse(Mouse::new(kind, column, 0)));
+    }
+    assert_eq!(driver.take_copies(), vec!["select".to_string()]);
+}

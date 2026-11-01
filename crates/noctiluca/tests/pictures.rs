@@ -301,7 +301,8 @@ fn a_video_plays_chromes_recorded_frames_in_its_region() {
     // Paused, its poster's play mark is drawn into the pixels (a cell
     // under a Sixel would be covered), so no mark cell shows.
     assert!(
-        !screen(&driver).lines().any(|l| l.contains(" ▶ ")),
+        // Below the header, whose `◀ ▶ ↻` are buttons.
+        !screen(&driver).lines().skip(2).any(|l| l.contains(" ▶ ")),
         "{}",
         screen(&driver)
     );

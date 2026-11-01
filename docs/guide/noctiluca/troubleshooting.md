@@ -108,8 +108,11 @@ tested yet; they come in the forms and tables phase.
 **Does it work over SSH?** Yes. The page, its text and its pictures reach
 your terminal like any other program's. Sound plays on the server.
 
-**Can I use the mouse?** Clicking the page is not wired up yet. Link
-hints (`f`) reach every link and control.
+**Can I use the mouse?** Yes: click a link or a control, turn the wheel
+to scroll, and click the header's `◀ ▶ ↻`, the address, the keys in the
+status bar and the rows of a list. See [the mouse](keys.md#the-mouse).
+A drag over text still selects and copies it; `--no-mouse` leaves the
+mouse to your terminal instead.
 
 **Why does it need Chrome?** A modern page needs a modern engine to run
 its scripts and lay it out. Noctiluca reads Chrome's layout instead of

@@ -179,6 +179,10 @@ pub(crate) fn pick_binding(key: Key, bindings: &[KeyBinding], skip: &[usize]) ->
 /// it.
 pub(crate) type MouseHandler = Box<dyn FnMut(&mut Ctx, Mouse) -> bool>;
 
+/// A handler of left clicks at a cell: the column and row in the node's
+/// coordinates; whether it used the click.
+pub(crate) type ClickAtHandler = Box<dyn FnMut(&mut Ctx, u16, u16) -> bool>;
+
 /// What a drop target does with a value dropped on it.
 pub(crate) type DropHandler = Box<dyn FnMut(&dyn Any, &mut Ctx)>;
 
@@ -242,6 +246,7 @@ pub struct Node {
     pub(crate) previews: bool,
     pub(crate) click: RefCell<Option<Handler>>,
     pub(crate) mouse: RefCell<Option<MouseHandler>>,
+    pub(crate) click_at: RefCell<Option<ClickAtHandler>>,
     /// Where the widget wants the text caret, on its surface.
     pub(crate) caret: Cell<Option<(u16, u16)>>,
     /// What the inspector calls it: its [`name`](Node::name), else the
@@ -530,6 +535,7 @@ impl Node {
             previews: false,
             click: RefCell::new(None),
             mouse: RefCell::new(None),
+            click_at: RefCell::new(None),
             caret: Cell::new(None),
             name: None,
             what,
@@ -929,6 +935,9 @@ impl Node {
         }
         if self.mouse.borrow().is_some() {
             handlers.push("on_mouse");
+        }
+        if self.click_at.borrow().is_some() {
+            handlers.push("on_click_at");
         }
         if self.drag.is_some() {
             handlers.push("draggable");
@@ -2080,6 +2089,49 @@ impl Node {
     pub fn on_click(mut self, handler: impl FnMut(&mut Ctx) + 'static) -> Node {
         *self.click.borrow_mut() = Some(Box::new(handler));
         self.focusable = true;
+        self
+    }
+
+    /// Run `handler` when this node is clicked with the left button, with
+    /// the cell clicked, in the node's own coordinates (column, row). It
+    /// returns whether it used the click: one it did not use bubbles up to
+    /// the node's ancestors, and, if none uses it, may start selecting
+    /// text. Unlike [`on_click`](Self::on_click), the node does not become
+    /// focusable, so it stays out of the Tab order and a click leaves the
+    /// focus where it is: for a picture or a label that does something
+    /// when clicked, or a row of text with links in it. A node with an
+    /// [`on_mouse`](Self::on_mouse) handler that used the press is not
+    /// asked.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let said = signal(String::new());
+    ///     column([
+    ///         label("ok  cancel").on_click_at(move |_, column, _| match column {
+    ///             0..=1 => {
+    ///                 said.set("ok".into());
+    ///                 true
+    ///             }
+    ///             4..=9 => {
+    ///                 said.set("cancel".into());
+    ///                 true
+    ///             }
+    ///             // Between the two: not used.
+    ///             _ => false,
+    ///         }),
+    ///         text!("{said}"),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(20, 2);
+    /// assert!(driver.click_text("cancel"));
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "cancel");
+    /// driver.click(1, 0);
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "ok");
+    /// ```
+    pub fn on_click_at(self, handler: impl FnMut(&mut Ctx, u16, u16) -> bool + 'static) -> Node {
+        *self.click_at.borrow_mut() = Some(Box::new(handler));
         self
     }
 

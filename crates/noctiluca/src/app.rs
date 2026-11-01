@@ -14,7 +14,7 @@ use std::time::{Duration, Instant};
 
 use rich_embed::PageState;
 use rich_intuituive::interact::keymap::{Keymap, try_keys};
-use rich_intuituive::interact::{Key, KeyCode};
+use rich_intuituive::interact::{Key, KeyCode, MouseKind};
 use rich_intuituive::prelude::*;
 use rich_intuituive::{
     Action, ImageView, Picture, Pixels, button_of, image_graphics, picture_bytes, picture_of,
@@ -1260,6 +1260,43 @@ fn chooser(
             out.join("\n")
         })
         .live();
+        // A click on a row selects it; a click on the selected row chooses
+        // it, as the first of `keys` (Enter) does. The wheel moves.
+        let clicked = items.clone();
+        let first_choice = keys.first().map(|(_, choose)| choose.clone());
+        let list = list
+            .on_click_at(move |cx, _, row| {
+                let n = clicked().len();
+                let at = selected.get_untracked().min(n.saturating_sub(1));
+                let first = at.saturating_sub(room.saturating_sub(2));
+                let index = first + usize::from(row);
+                if index >= n {
+                    return false;
+                }
+                if index == at {
+                    if let Some(choose) = &first_choice {
+                        choose(index, cx);
+                    }
+                } else {
+                    selected.set(index);
+                }
+                true
+            })
+            .on_mouse({
+                let count = items.clone();
+                move |_, mouse| match mouse.kind {
+                    MouseKind::ScrollUp => {
+                        selected.update(|s| *s = s.saturating_sub(1));
+                        true
+                    }
+                    MouseKind::ScrollDown => {
+                        let n = count().len();
+                        selected.update(|s| *s = (*s + 1).min(n.saturating_sub(1)));
+                        true
+                    }
+                    _ => false,
+                }
+            });
         let count = items.clone();
         let mut node = column([list.flex(1), label(format!("[dim]{}[/]", hint)).fixed(1)])
             .focusable()
@@ -1874,6 +1911,19 @@ fn reader_view(b: Browser) -> Node {
                         }
                     })
                 })
+                // A link in the text is used as its hint would use it.
+                .on_click_at(move |cx, column, row| {
+                    let control = reading.with_untracked(|(d, _)| match d.get(i) {
+                        Some(Piece::Text(lines)) => lines
+                            .get(usize::from(row))
+                            .and_then(|line| layout::control_at(line, usize::from(column))),
+                        _ => None,
+                    });
+                    control.is_some_and(|index| {
+                        click_control(b, index, cx);
+                        true
+                    })
+                })
                 .fixed(rows)
             }
             PieceKey::Media(node, rows)
@@ -1954,6 +2004,58 @@ fn load_more(b: Browser) {
     if b.page.with_untracked(Option::is_some) {
         b.send(Command::LoadMore);
     }
+}
+
+/// A click at `column` of the projection's row `row`: the control there
+/// is used as its link hint would use it ([`activate`]), and a video region
+/// there plays or pauses. A click on anything else is not used, so a drag
+/// from it selects text.
+fn click_row(b: Browser, row: usize, column: usize, cx: &mut Ctx) -> bool {
+    let (control, video) = b.layout.with_untracked(|l| {
+        let control = l
+            .lines
+            .get(row)
+            .and_then(|line| layout::control_at(line, column));
+        let video = l
+            .regions
+            .iter()
+            .find(|r| r.on(row) && (r.column..r.column + r.cols).contains(&column))
+            .map(|r| r.media);
+        (control, video)
+    });
+    if let Some(index) = control {
+        click_control(b, index, cx);
+        return true;
+    }
+    let video = video.and_then(|media| {
+        b.page.with_untracked(|p| {
+            let m = p.as_ref()?.media.get(media)?;
+            (m.kind == MediaKind::Video).then_some((m.node, m.playback))
+        })
+    });
+    match video {
+        Some((node, playback)) => {
+            let paused = playback.is_none_or(|p| p.paused || p.ended);
+            media_op(
+                b,
+                node,
+                if paused {
+                    MediaOp::Play
+                } else {
+                    MediaOp::Pause
+                },
+            );
+            true
+        }
+        None => false,
+    }
+}
+
+/// A click on the page's control `index`: what a link hint does.
+fn click_control(b: Browser, index: usize, cx: &mut Ctx) {
+    b.hints.set(None);
+    b.message.set(String::new());
+    activate(b, index, cx);
 }
 
 fn projection_view(b: Browser) -> Node {
@@ -2043,6 +2145,12 @@ fn projection_view(b: Browser) -> Node {
                     .collect(),
                 None => drawn,
             }
+        })
+        .on_click_at(move |cx, column, _| {
+            let row = b
+                .layout
+                .with_untracked(|l| l.rows.get(&key).copied().unwrap_or(i));
+            click_row(b, row, usize::from(column), cx)
         })
         .fixed(1)
     };
