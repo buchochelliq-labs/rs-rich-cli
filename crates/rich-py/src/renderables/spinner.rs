@@ -14,12 +14,12 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyString};
 use pyo3::{PyTraverseError, PyVisit};
 
+use rich::Text as CoreText;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::measure::Measurement as CoreMeasurement;
 use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
 use rich::table::{Cell, Table as CoreTable};
-use rich::Text as CoreText;
 
 use crate::renderable::{self, AsRenderable, PyRenderable};
 use crate::style::style_type;

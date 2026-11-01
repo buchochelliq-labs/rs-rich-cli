@@ -14,8 +14,8 @@ use pyo3::exceptions::{PyTypeError, PyValueError};
 use pyo3::prelude::*;
 use pyo3::types::PyString;
 
-use rich::protocol::Renderable;
 use rich::Text as CoreText;
+use rich::protocol::Renderable;
 use rich_ext::markdown_export::{
     self as gfm, GfmDocument as CoreDocument, GfmExporter as CoreExporter,
     GfmOptions as CoreOptions, MarkdownSource, PanelStyle as CorePanelStyle, ToGfm,

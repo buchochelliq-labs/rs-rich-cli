@@ -44,9 +44,7 @@ pub fn render_markup(markup: &str, width: usize) -> String {
 pub fn render_panel(markup: &str, title: &str, width: usize) -> String {
     let console = console(width);
     let body = Text::from_markup(markup).unwrap_or_else(|e| Text::new(e.to_string()));
-    let panel = Panel::fit(Box::new(body))
-        .title(title)
-        .border_style("cyan");
+    let panel = Panel::fit(Box::new(body)).title(title).border_style("cyan");
     console.capture(|c| c.print(&panel))
 }
 
@@ -121,8 +119,8 @@ mod app {
     use std::cell::RefCell;
     use std::time::Duration;
 
-    use intuituive::interact::Event;
     use intuituive::Driver;
+    use intuituive::interact::Event;
     use wasm_bindgen::prelude::*;
 
     use crate::{input, todo};
@@ -167,7 +165,9 @@ mod app {
     /// The terminal is now `columns` x `rows`.
     #[wasm_bindgen]
     pub fn app_resize(columns: u16, rows: u16, now_ms: f64) -> String {
-        step(now_ms, |driver| driver.event(Event::Resize { columns, rows }))
+        step(now_ms, |driver| {
+            driver.event(Event::Resize { columns, rows })
+        })
     }
 
     /// Timers and animations up to `now_ms`, for a `setTimeout` loop;

@@ -30,14 +30,14 @@ use rich_data::profile::{JsonProfiler, Profile as CoreProfile, ProfileOptions, P
 use rich_data::quality::{
     CheckResult as CoreCheck, FailingRows as CoreFailingRows, QualityReport as CoreReport, Status,
 };
-use rich_data::sql::{typed_columns, ResultSet as CoreResultSet};
+use rich_data::sql::{ResultSet as CoreResultSet, typed_columns};
 use rich_data::stats::{ColumnStats as CoreColumnStats, Stats as CoreStats, StatsOptions};
-use rich_data::{jsonl, DataError as CoreDataError, Row, RowSource, Rows as CoreRows};
+use rich_data::{DataError as CoreDataError, Row, RowSource, Rows as CoreRows, jsonl};
 use rich_ext::table::VirtualTable as CoreVirtualTable;
 
 use crate::art::repr_str;
 use crate::ext::common::{self, names};
-use crate::ext::tables::{value, value_to_py, TableData};
+use crate::ext::tables::{TableData, value, value_to_py};
 use crate::renderable::{self, AsRenderable};
 
 mod views;

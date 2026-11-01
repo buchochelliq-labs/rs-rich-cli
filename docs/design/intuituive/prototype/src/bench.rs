@@ -15,10 +15,10 @@ use ratatui::buffer::Cell;
 use ratatui::layout::{Position, Rect, Size};
 use ratatui::{Terminal, TerminalOptions, Viewport};
 use rich::ColorSystem;
-use rich_interact::paint::Painter;
 use rich_interact::View;
+use rich_interact::paint::Painter;
 
-use crate::dashboard::{author_lines, log_line, prototype, RatatuiDash, SERVICES};
+use crate::dashboard::{RatatuiDash, SERVICES, author_lines, log_line, prototype};
 use crate::paint::RowPainter;
 
 /// Bytes written, shared with the benchmark that counts them.
@@ -297,7 +297,9 @@ pub fn run() {
         author_lines("ratatui"),
         author_lines("prototype")
     );
-    println!("| Size | Scenario | Variant | µs/frame | bytes/frame | first frame (bytes) | nodes rendered/frame |");
+    println!(
+        "| Size | Scenario | Variant | µs/frame | bytes/frame | first frame (bytes) | nodes rendered/frame |"
+    );
     println!("|---|---|---|---:|---:|---:|---:|");
     for (w, h) in [(80, 24), (200, 60)] {
         for scenario in [Scenario::Tick, Scenario::Select, Scenario::Log] {

@@ -24,7 +24,7 @@ pub(crate) fn justify(value: Option<&str>) -> PyResult<Justify> {
         Some(other) => {
             return Err(PyValueError::new_err(format!(
                 "invalid justify {other:?}; expected left, center, right, full or default"
-            )))
+            )));
         }
     })
 }
@@ -61,7 +61,7 @@ pub(crate) fn overflow(value: &str) -> PyResult<Overflow> {
         other => {
             return Err(PyValueError::new_err(format!(
                 "invalid overflow {other:?}; expected fold, crop, ellipsis or ignore"
-            )))
+            )));
         }
     })
 }
@@ -85,7 +85,7 @@ pub(crate) fn align(value: &str) -> PyResult<HorizontalAlign> {
         other => {
             return Err(PyValueError::new_err(format!(
                 "invalid align {other:?}; expected left, center or right"
-            )))
+            )));
         }
     })
 }

@@ -4,10 +4,10 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use rich_data::csv::{has_header, sniff, CsvReader};
-use rich_data::infer::Inferrer;
 use rich_data::RowSource;
-use rich_fuzz::{take_byte, text, MAX_PARSE_INPUT};
+use rich_data::csv::{CsvReader, has_header, sniff};
+use rich_data::infer::Inferrer;
+use rich_fuzz::{MAX_PARSE_INPUT, take_byte, text};
 
 fuzz_target!(|data: &[u8]| {
     let (mode, rest) = take_byte(data);

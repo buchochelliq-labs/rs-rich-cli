@@ -21,8 +21,8 @@ use rich_art::{
 };
 
 use super::{
-    bad_choice, buffer_bytes, core_console, kinded, normalized, path_arg, read_file, repr_str,
-    ImageArtError, ImageDecodeError, Shared,
+    ImageArtError, ImageDecodeError, Shared, bad_choice, buffer_bytes, core_console, kinded,
+    normalized, path_arg, read_file, repr_str,
 };
 use crate::renderable::{self, AsRenderable};
 
@@ -265,7 +265,7 @@ pub(crate) fn image_mode(name: &str) -> PyResult<ImageMode> {
                 "image mode",
                 name,
                 "auto, ascii, blocks, braille, quadrants or sixel",
-            ))
+            ));
         }
     })
 }
@@ -351,7 +351,7 @@ pub(crate) fn color_mode(name: &str) -> PyResult<ImageColorMode> {
                 "color mode",
                 name,
                 "truecolor, ansi256, ansi16 or grayscale",
-            ))
+            ));
         }
     })
 }
@@ -379,7 +379,7 @@ pub(crate) fn dither(name: Option<&str>) -> PyResult<Dither> {
                 "dither",
                 name,
                 "none, floyd-steinberg, bayer4x4 or atkinson",
-            ))
+            ));
         }
     })
 }
@@ -417,7 +417,7 @@ fn rotation(degrees: i64) -> PyResult<Rotation> {
         _ => {
             return Err(PyValueError::new_err(format!(
                 "invalid rotation {degrees}; expected a multiple of 90 degrees (clockwise)"
-            )))
+            )));
         }
     })
 }

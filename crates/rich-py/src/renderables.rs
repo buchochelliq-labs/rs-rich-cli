@@ -20,12 +20,12 @@ use std::sync::Arc;
 
 use pyo3::prelude::*;
 
+use rich::Text as CoreText;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::measure::Measurement as CoreMeasurement;
 use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
 use rich::style::{Style as CoreStyle, StyleType};
-use rich::Text as CoreText;
 
 use crate::renderable;
 
@@ -39,8 +39,8 @@ mod padding;
 mod rule;
 
 pub(crate) use containers::{Group, Renderables};
-pub(crate) use rule::ends_inline as rule_ends_inline;
 pub(crate) use rule::Rule;
+pub(crate) use rule::ends_inline as rule_ends_inline;
 pub(crate) use tree::Tree;
 
 /// The child whose segments end a `Styled`, `Constrain` or `Group` (its last

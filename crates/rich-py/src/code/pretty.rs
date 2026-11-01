@@ -16,13 +16,13 @@ use pyo3::prelude::*;
 use pyo3::sync::PyOnceLock;
 use pyo3::types::{PyBytes, PyDict, PyList, PySlice, PyString, PyTuple, PyType};
 
+use rich::Text as CoreText;
 use rich::cells::cell_len;
 use rich::console::{Console as CoreConsole, ConsoleOptions as CoreOptions};
 use rich::measure::Measurement as CoreMeasurement;
 use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
 use rich::style::StyleType;
-use rich::Text as CoreText;
 
 use super::highlighter::Highlight;
 use crate::convert;
@@ -573,7 +573,7 @@ impl Worker {
                                 return Reply {
                                     node: Err(error),
                                     visited,
-                                }
+                                };
                             }
                         };
                         let mut walker = Walker {
@@ -660,13 +660,13 @@ impl<'py> Walker<'_, 'py> {
     /// `to_repr`: the repr, with long strings cut at `max_string`, and a
     /// failing `__repr__` reported rather than raised.
     fn to_repr(&self, object: &Bound<'py, PyAny>) -> PyResult<String> {
-        if let Some(max_string) = self.limits.max_string {
-            if object.is_instance_of::<PyString>() || object.is_instance_of::<PyBytes>() {
-                let length = object.len()?;
-                if length > max_string {
-                    let head = object.get_item(PySlice::new(self.py, 0, max_string as isize, 1))?;
-                    return Ok(format!("{}+{}", head.repr()?, length - max_string));
-                }
+        if let Some(max_string) = self.limits.max_string
+            && (object.is_instance_of::<PyString>() || object.is_instance_of::<PyBytes>())
+        {
+            let length = object.len()?;
+            if length > max_string {
+                let head = object.get_item(PySlice::new(self.py, 0, max_string as isize, 1))?;
+                return Ok(format!("{}+{}", head.repr()?, length - max_string));
             }
         }
         match object.repr() {
@@ -775,7 +775,7 @@ impl<'py> Walker<'_, 'py> {
                 _ => {
                     return Err(pyo3::exceptions::PyRuntimeError::new_err(
                         "the pretty printer's thread stopped",
-                    ))
+                    ));
                 }
             },
         };
@@ -818,16 +818,13 @@ impl<'py> Walker<'_, 'py> {
             || -> PyResult<String> { object.getattr("__class__")?.getattr("__name__")?.extract() };
 
         let mut rich_repr_result = None;
-        if !fake_attributes {
-            if let Ok(true) = object.hasattr("__rich_repr__") {
-                if !is_class(object) {
-                    if let Ok(result) = object.call_method0("__rich_repr__") {
-                        if !result.is_none() {
-                            rich_repr_result = Some(result);
-                        }
-                    }
-                }
-            }
+        if !fake_attributes
+            && let Ok(true) = object.hasattr("__rich_repr__")
+            && !is_class(object)
+            && let Ok(result) = object.call_method0("__rich_repr__")
+            && !result.is_none()
+        {
+            rich_repr_result = Some(result);
         }
 
         let mut node = if let Some(result) = rich_repr_result {
@@ -1093,14 +1090,14 @@ impl<'py> Walker<'_, 'py> {
                         children.push(child_node);
                     }
                 }
-                if let Some(max_length) = max_length {
-                    if num_items > max_length {
-                        children.push(Node {
-                            value_repr: format!("... +{}", num_items - max_length),
-                            last: true,
-                            ..Node::default()
-                        });
-                    }
+                if let Some(max_length) = max_length
+                    && num_items > max_length
+                {
+                    children.push(Node {
+                        value_repr: format!("... +{}", num_items - max_length),
+                        last: true,
+                        ..Node::default()
+                    });
                 }
                 Node {
                     open_brace,
@@ -1282,20 +1279,20 @@ fn container_depth(object: &Bound<'_, PyAny>, limits: Limits) -> PyResult<usize>
             let key = child.as_ptr() as usize;
             if let Some(&height) = done.get(&key) {
                 top.deepest = top.deepest.max(height);
-            } else if !open.contains(&key) {
-                if let Some(children) = walked_children(&child, limits.max_length)? {
-                    if depth >= deepest_walked {
-                        top.cut = true;
-                    } else {
-                        open.insert(key);
-                        stack.push(Open {
-                            key,
-                            children,
-                            next: 0,
-                            deepest: 0,
-                            cut: false,
-                        });
-                    }
+            } else if !open.contains(&key)
+                && let Some(children) = walked_children(&child, limits.max_length)?
+            {
+                if depth >= deepest_walked {
+                    top.cut = true;
+                } else {
+                    open.insert(key);
+                    stack.push(Open {
+                        key,
+                        children,
+                        next: 0,
+                        deepest: 0,
+                        cut: false,
+                    });
                 }
             }
             continue;
@@ -1896,11 +1893,7 @@ impl PyNode {
 }
 
 fn py_bool(value: bool) -> &'static str {
-    if value {
-        "True"
-    } else {
-        "False"
-    }
+    if value { "True" } else { "False" }
 }
 
 /// Python frames upstream's `traverse` takes before `_traverse(obj, depth=0)`

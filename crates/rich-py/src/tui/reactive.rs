@@ -23,7 +23,7 @@ use rich_intuituive::{Load, Memo, Resource, Signal};
 use super::app::PyCtx;
 use std::sync::Mutex;
 
-use super::{require, Building, Callback, Handle, Home, Loan};
+use super::{Building, Callback, Handle, Home, Loan, require};
 
 // ---------------------------------------------------------------------------
 // Python values in Rust's reactive types
@@ -335,7 +335,7 @@ impl PySignal {
             Slot::Str(s) => write!(s, value.extract::<String>().map_err(|e| typed("a str", e))?),
             Slot::Bool(s) => write!(s, value.extract::<bool>().map_err(|e| typed("a bool", e))?),
             Slot::Exit(_) => {
-                return Err(PyTypeError::new_err("a program's exit status is read only"))
+                return Err(PyTypeError::new_err("a program's exit status is read only"));
             }
             Slot::Maybe(s) => write!(
                 s,

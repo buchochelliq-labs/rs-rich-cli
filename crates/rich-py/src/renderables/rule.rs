@@ -8,11 +8,11 @@ use pyo3::prelude::*;
 use pyo3::types::PyString;
 use pyo3::{PyTraverseError, PyVisit};
 
+use rich::Rule as CoreRule;
 use rich::align::HorizontalAlign;
 use rich::cells::cell_len;
 use rich::protocol::Renderable;
 use rich::style::StyleType;
-use rich::Rule as CoreRule;
 
 use crate::renderable::{self, AsRenderable};
 use crate::style::style_type;

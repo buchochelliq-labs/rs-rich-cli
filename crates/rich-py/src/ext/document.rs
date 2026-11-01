@@ -8,8 +8,8 @@ use pyo3::prelude::*;
 
 use rich::protocol::Renderable;
 use rich_ext::document::{
-    DetectedBy, Diagnostic as CoreDiagnostic, DocumentRegistry, RenderOptions, Severity, CERTAIN,
-    LIKELY,
+    CERTAIN, DetectedBy, Diagnostic as CoreDiagnostic, DocumentRegistry, LIKELY, RenderOptions,
+    Severity,
 };
 
 use crate::art::{repr_float, repr_str};

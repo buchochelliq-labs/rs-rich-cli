@@ -48,7 +48,7 @@ fn value_hint(name: &str) -> PyResult<ValueHint> {
             return Err(PyValueError::new_err(format!(
                 "invalid value hint {other:?}; expected none, any, file, dir, path, command or url \
                  (use choices= for a fixed set)"
-            )))
+            )));
         }
     })
 }
@@ -118,7 +118,7 @@ fn configure_arg(mut arg: CoreArg, kwargs: Option<&Bound<'_, PyDict>>) -> PyResu
             other => {
                 return Err(pyo3::exceptions::PyTypeError::new_err(format!(
                     "ArgSpec got an unexpected keyword argument {other:?}"
-                )))
+                )));
             }
         };
     }

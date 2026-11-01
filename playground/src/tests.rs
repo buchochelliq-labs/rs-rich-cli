@@ -1,6 +1,6 @@
 //! Every kind renders natively, with the same functions the page calls.
 
-use crate::render::{csv_line, KINDS};
+use crate::render::{KINDS, csv_line};
 use crate::{kinds, render, render_html};
 
 fn plain(ansi: &str) -> String {
@@ -71,9 +71,11 @@ fn every_kind_renders_its_sample() {
     let compiled: Vec<serde_json::Value> = serde_json::from_str(&kinds()).unwrap();
     for kind in KINDS {
         if kind.full && !cfg!(feature = "full") {
-            assert!(render(kind.name, "x", "")
-                .unwrap_err()
-                .contains("full module"));
+            assert!(
+                render(kind.name, "x", "")
+                    .unwrap_err()
+                    .contains("full module")
+            );
             assert!(!compiled.iter().any(|k| k["name"] == kind.name));
             continue;
         }
@@ -106,16 +108,22 @@ fn width_is_the_console_width() {
 
 #[test]
 fn errors_are_reported_not_printed() {
-    assert!(render("markup", "[/oops]", "")
-        .unwrap_err()
-        .contains("closing tag"));
+    assert!(
+        render("markup", "[/oops]", "")
+            .unwrap_err()
+            .contains("closing tag")
+    );
     assert!(render("json", "{nope", "").is_err());
-    assert!(render("diff", "no separator", "")
-        .unwrap_err()
-        .contains("======="));
-    assert!(render("table", "a,b", r#"{"box": "WAVY"}"#)
-        .unwrap_err()
-        .contains("WAVY"));
+    assert!(
+        render("diff", "no separator", "")
+            .unwrap_err()
+            .contains("=======")
+    );
+    assert!(
+        render("table", "a,b", r#"{"box": "WAVY"}"#)
+            .unwrap_err()
+            .contains("WAVY")
+    );
     assert!(render("nope", "", "").unwrap_err().contains("unknown kind"));
     assert!(render("markup", &"x".repeat(70_000), "").is_err());
 }

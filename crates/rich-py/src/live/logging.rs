@@ -233,7 +233,7 @@ impl ReprHighlight {
             None => {
                 return Err(pyo3::exceptions::PyTypeError::new_err(
                     "highlight() requires a str or Text",
-                ))
+                ));
             }
         };
         ReprHighlighter::new().highlight(&mut inner);

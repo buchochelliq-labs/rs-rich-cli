@@ -7,7 +7,7 @@ use pyo3::types::{PyList, PySlice};
 
 use rich::Text as CoreText;
 
-use super::{new_text, Text};
+use super::{Text, new_text};
 use crate::convert;
 
 /// `rich.containers.Lines`: a list of `Text`s that renders one per line.

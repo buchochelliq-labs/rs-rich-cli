@@ -23,7 +23,7 @@ use rich::{AnsiDecoder, Text as CoreText};
 
 use super::live_render::LiveRender;
 use super::screen::Screen;
-use super::util::{self, hold, Control, Item};
+use super::util::{self, Control, Item, hold};
 
 // ---------------------------------------------------------------------------
 // The console's live stack (Rich's `Console._live_stack`)
@@ -623,11 +623,9 @@ impl Live {
         console.call_method1("show_cursor", (false,))?;
         Live::install_hook(slf)?;
         Live::enable_redirect_io(slf)?;
-        if refresh {
-            if let Err(error) = slf.call_method0("refresh") {
-                slf.call_method0("stop")?;
-                return Err(error);
-            }
+        if refresh && let Err(error) = slf.call_method0("refresh") {
+            slf.call_method0("stop")?;
+            return Err(error);
         }
         if this.st().auto_refresh {
             Live::start_thread(slf)?;

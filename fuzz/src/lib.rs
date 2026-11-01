@@ -4,9 +4,9 @@
 //! (input length and console width), so a legitimately large input is not
 //! reported as a timeout: the bounds are here, in one place.
 
+use rich::Console;
 use rich::color::ColorSystem;
 use rich::protocol::Renderable;
-use rich::Console;
 
 /// The longest input a rendering target reads, in bytes. Larger inputs are
 /// cut, not skipped, so the fuzzer still learns from their start.

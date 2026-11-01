@@ -16,15 +16,15 @@ use pyo3::exceptions::{PyNotImplementedError, PyTypeError};
 use pyo3::prelude::*;
 use pyo3::types::{PyString, PyTuple};
 
+use rich::Style as CoreStyle;
 use rich::color::Color as CoreColor;
 use rich::protocol::{
     CodeHighlighter as CoreCodeHighlighter, HighlightError as CoreHighlightError,
     HighlightSpan as CoreSpan, HighlightedCode as CoreCode, HighlightedLine as CoreLine,
 };
-use rich::Style as CoreStyle;
 
-use super::errors::{self, callback_failed, UnknownThemeError};
-use crate::style::{resolved_style, Style};
+use super::errors::{self, UnknownThemeError, callback_failed};
+use crate::style::{Style, resolved_style};
 
 // ---------------------------------------------------------------------------
 // The data: spans, lines and the whole result
@@ -639,10 +639,10 @@ impl CoreCodeHighlighter for PyCodeHighlighter {
 pub(crate) fn code_highlighter_arg(
     value: &Bound<'_, PyAny>,
 ) -> PyResult<Arc<dyn CoreCodeHighlighter>> {
-    if let Ok(handle) = value.extract::<PyRef<'_, CodeHighlighter>>() {
-        if let Some(inner) = &handle.inner {
-            return Ok(inner.clone());
-        }
+    if let Ok(handle) = value.extract::<PyRef<'_, CodeHighlighter>>()
+        && let Some(inner) = &handle.inner
+    {
+        return Ok(inner.clone());
     }
     if !value
         .getattr_opt("highlight")?
@@ -661,7 +661,7 @@ pub(crate) fn code_highlighter_arg(
         None => {
             return Err(PyTypeError::new_err(
                 "a code highlighter needs default_theme()",
-            ))
+            ));
         }
     };
     Ok(Arc::new(PyCodeHighlighter {

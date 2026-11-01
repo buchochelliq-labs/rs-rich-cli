@@ -28,9 +28,9 @@ use rich_interact::compose::{
 };
 use rich_interact::{Axis, Component, Context, Flow, Key, Size};
 
-use super::components::{self, flow, Ignored};
-use super::keymap::{keys_arg, Keymap};
-use super::{iterable, Build, Record};
+use super::components::{self, Ignored, flow};
+use super::keymap::{Keymap, keys_arg};
+use super::{Build, Record, iterable};
 use crate::ext::common::scoped;
 use crate::renderable;
 
@@ -442,10 +442,10 @@ impl Map {
     ) -> PyResult<Self> {
         let py = component.py();
         for (callback, what) in [(&done, "done"), (&cancel, "cancel")] {
-            if let Some(callback) = callback {
-                if !callback.bind(py).is_callable() {
-                    return Err(PyTypeError::new_err(format!("{what} must be callable")));
-                }
+            if let Some(callback) = callback
+                && !callback.bind(py).is_callable()
+            {
+                return Err(PyTypeError::new_err(format!("{what} must be callable")));
             }
         }
         Ok(Map {
@@ -1243,7 +1243,7 @@ impl Layer {
             other => {
                 return Err(PyValueError::new_err(format!(
                     "invalid kind {other:?}; expected modal or popover"
-                )))
+                )));
             }
         };
         Layer::make(component, kind, title, size, border, backdrop, dismissable)

@@ -115,20 +115,20 @@ impl Shared {
                 *slot = Some(error);
             }
         }
-        if !self.failed.swap(true, Ordering::SeqCst) {
-            if let Some(proxy) = self.proxy.get() {
-                proxy.run_with(|cx| cx.quit());
-            }
+        if !self.failed.swap(true, Ordering::SeqCst)
+            && let Some(proxy) = self.proxy.get()
+        {
+            proxy.run_with(|cx| cx.quit());
         }
     }
 
     /// Stop the app at its next turn, for an exception kept elsewhere (the
     /// render scope's, which `run()` raises).
     pub(crate) fn stop(&self) {
-        if !self.failed.swap(true, Ordering::SeqCst) {
-            if let Some(proxy) = self.proxy.get() {
-                proxy.run_with(|cx| cx.quit());
-            }
+        if !self.failed.swap(true, Ordering::SeqCst)
+            && let Some(proxy) = self.proxy.get()
+        {
+            proxy.run_with(|cx| cx.quit());
         }
     }
 
@@ -813,8 +813,16 @@ pub(crate) fn border_arg(value: &Bound<'_, PyAny>) -> PyResult<intuituive::Borde
             glyphs.len()
         ))
     })?;
-    let [top_left, top, top_right, left, right, bottom_left, bottom, bottom_right] =
-        glyphs.map(|glyph| widget::intern(&glyph));
+    let [
+        top_left,
+        top,
+        top_right,
+        left,
+        right,
+        bottom_left,
+        bottom,
+        bottom_right,
+    ] = glyphs.map(|glyph| widget::intern(&glyph));
     Ok(intuituive::Border::Custom(intuituive::BorderSet {
         top_left,
         top,

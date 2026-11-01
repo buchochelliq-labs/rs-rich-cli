@@ -11,7 +11,7 @@ use rich::segment::Segment;
 use rich::style::Style;
 use rich_art::image::{DynamicImage, RgbaImage};
 use rich_art::*;
-use serde_json::{json, Map, Value};
+use serde_json::{Map, Value, json};
 
 const ASSETS: &str = concat!(
     env!("CARGO_MANIFEST_DIR"),

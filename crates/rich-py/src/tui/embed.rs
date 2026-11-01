@@ -21,8 +21,8 @@ use rich_embed::{
 use rich_intuituive::Node;
 
 use super::node::PyNode;
-use super::reactive::{call_with_ctx, PySignal, PyValue, Slot};
-use super::{require, Callback};
+use super::reactive::{PySignal, PyValue, Slot, call_with_ctx};
+use super::{Callback, require};
 
 /// `ExitStatus`: how a program ended: its `code` (1 when a signal ended
 /// it), the `signal`'s name if one did, and whether it was a `success`.

@@ -8,7 +8,7 @@ use pyo3::exceptions::PyValueError;
 use pyo3::prelude::*;
 
 use rich_plugin_api::{
-    Capability as CoreCapability, PluginMetadata as CoreMetadata, PLUGIN_API_VERSION,
+    Capability as CoreCapability, PLUGIN_API_VERSION, PluginMetadata as CoreMetadata,
 };
 
 /// Who a plugin is: `PluginMetadata(id, name, version, description=None)`.
@@ -158,7 +158,7 @@ impl Capability {
                 return Err(PyValueError::new_err(format!(
                     "unknown capability kind {other:?}; expected one of {}",
                     KINDS.join(", ")
-                )))
+                )));
             }
         };
         Ok(Capability { inner })

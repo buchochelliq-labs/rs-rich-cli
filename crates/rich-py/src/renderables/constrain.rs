@@ -17,7 +17,7 @@ use rich::style::StyleType;
 use crate::renderable::{self, AsRenderable};
 use crate::style::style_type;
 
-use super::{get_style, render, Child};
+use super::{Child, get_style, render};
 
 pub(crate) struct ConstrainRender<C> {
     pub(crate) child: C,

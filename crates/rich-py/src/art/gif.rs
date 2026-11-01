@@ -13,10 +13,10 @@ use rich_art::gif::{AnimatedArt as CoreAnimated, GifFrame as CoreFrame, Repeat};
 use rich_art::stage::{Stage as CoreStage, Until};
 
 use super::image::{
-    color_distance, color_distance_name, color_mode, color_mode_name, decode_error, dither,
-    dither_name, AsciiArt,
+    AsciiArt, color_distance, color_distance_name, color_mode, color_mode_name, decode_error,
+    dither, dither_name,
 };
-use super::{bad_choice, buffer_bytes, path_arg, play_to_console, read_file, Shared};
+use super::{Shared, bad_choice, buffer_bytes, path_arg, play_to_console, read_file};
 use crate::renderable::{self, AsRenderable};
 
 fn repeat(value: &Bound<'_, PyAny>) -> PyResult<Repeat> {

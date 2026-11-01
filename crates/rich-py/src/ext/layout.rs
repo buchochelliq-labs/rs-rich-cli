@@ -13,16 +13,16 @@ use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
 use rich_ext::countdown::{CountdownWait, Motion};
 use rich_ext::layout::{
-    allocate as core_allocate, fit_segments as core_fit, Alignment, Axis,
-    Constraint as CoreConstraint, ConstraintError as CoreConstraintError, LayoutNode as CoreNode,
-    OverflowPolicy, Overflowing as CoreOverflowing,
+    Alignment, Axis, Constraint as CoreConstraint, ConstraintError as CoreConstraintError,
+    LayoutNode as CoreNode, OverflowPolicy, Overflowing as CoreOverflowing,
+    allocate as core_allocate, fit_segments as core_fit,
 };
 use rich_ext::live::{LiveCoordinator as CoreLive, LiveError, RegionId as CoreRegionId};
 
-use super::common::{self, names, ConstraintError, LiveCoordinatorError};
+use super::common::{self, ConstraintError, LiveCoordinatorError, names};
 use super::diagnostic::overflow_policy;
 use super::status::Notifications;
-use super::terminal::{policy_arg, RenderTarget};
+use super::terminal::{RenderTarget, policy_arg};
 use super::workflow::token_arg;
 use crate::renderable::{self, AsRenderable};
 

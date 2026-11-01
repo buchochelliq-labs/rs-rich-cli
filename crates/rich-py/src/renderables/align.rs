@@ -15,12 +15,12 @@ use rich::protocol::Renderable;
 use rich::segment::Segment as CoreSegment;
 use rich::style::{Style as CoreStyle, StyleType};
 
-use crate::limits::{check_alloc, MAX_CONSOLE_HEIGHT, MAX_CONSOLE_WIDTH};
+use crate::limits::{MAX_CONSOLE_HEIGHT, MAX_CONSOLE_WIDTH, check_alloc};
 use crate::renderable::{self, AsRenderable};
 use crate::style::style_type;
 
 use super::{
-    get_style, join_lines, render, render_lines, screen_height, shape, split_lines, Child,
+    Child, get_style, join_lines, render, render_lines, screen_height, shape, split_lines,
 };
 
 #[derive(Clone, Copy, PartialEq, Eq)]
@@ -44,8 +44,8 @@ pub(crate) fn horizontal(align: &str) -> PyResult<Horizontal> {
         "right" => Horizontal::Right,
         other => {
             return Err(PyValueError::new_err(format!(
-            "invalid value for align, expected \"left\", \"center\", or \"right\" (not '{other}')"
-        )))
+                "invalid value for align, expected \"left\", \"center\", or \"right\" (not '{other}')"
+            )));
         }
     })
 }
@@ -59,7 +59,7 @@ fn vertical(value: Option<&str>) -> PyResult<Option<Vertical>> {
         Some(other) => {
             return Err(PyValueError::new_err(format!(
                 "invalid value for vertical, expected \"top\", \"middle\", or \"bottom\" (not '{other}')"
-            )))
+            )));
         }
     })
 }

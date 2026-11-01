@@ -19,7 +19,7 @@ use rich_interact::{
 };
 
 use super::compose::{self, Node};
-use super::{execute, iterable, record, Build, Mode, Record};
+use super::{Build, Mode, Record, execute, iterable, record};
 use crate::renderable::{self, PyRenderable};
 
 type Shared = Arc<dyn Renderable + Send + Sync>;
@@ -33,7 +33,7 @@ pub(super) fn preview_layout(name: &str) -> PyResult<PreviewLayout> {
         other => {
             return Err(PyValueError::new_err(format!(
                 "invalid preview {other:?}; expected auto, right, below or hidden"
-            )))
+            )));
         }
     })
 }
@@ -351,13 +351,13 @@ impl Select {
         preview_height: usize,
     ) -> PyResult<Self> {
         let items = self::items(py, items)?;
-        if let Some(index) = default {
-            if index >= items.len() {
-                return Err(PyValueError::new_err(format!(
-                    "default {index} is out of range for {} items",
-                    items.len()
-                )));
-            }
+        if let Some(index) = default
+            && index >= items.len()
+        {
+            return Err(PyValueError::new_err(format!(
+                "default {index} is out of range for {} items",
+                items.len()
+            )));
         }
         Ok(Select {
             prompt,
@@ -712,7 +712,7 @@ impl Input {
         };
         let validator = match validate.filter(|v| !v.is_none()) {
             Some(validator) if !validator.is_callable() => {
-                return Err(PyTypeError::new_err("validate must be callable"))
+                return Err(PyTypeError::new_err("validate must be callable"));
             }
             other => other.map(|v| v.clone().unbind()),
         };
@@ -990,10 +990,10 @@ impl Confirm {
                     .collect::<PyResult<Vec<_>>>()?,
             ),
         };
-        if let Some(choices) = &choices {
-            if choices.is_empty() {
-                return Err(PyValueError::new_err("a Confirm needs at least one choice"));
-            }
+        if let Some(choices) = &choices
+            && choices.is_empty()
+        {
+            return Err(PyValueError::new_err("a Confirm needs at least one choice"));
         }
         if let Some(default) = &default {
             let known = match &choices {

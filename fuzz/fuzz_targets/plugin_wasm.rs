@@ -6,7 +6,7 @@
 use std::path::Path;
 
 use libfuzzer_sys::fuzz_target;
-use rich_ext::plugin_loading::{load_wasm_bytes, WasmLimits};
+use rich_ext::plugin_loading::{WasmLimits, load_wasm_bytes};
 
 /// Smaller than the default 50 million so a looping module is stopped in
 /// well under a second; every other limit is the default.

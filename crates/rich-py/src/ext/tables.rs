@@ -256,7 +256,7 @@ impl Aggregate {
             other => {
                 return Err(PyValueError::new_err(format!(
                     "invalid aggregate {other:?}; expected count, sum, min, max or mean"
-                )))
+                )));
             }
         };
         Ok(Aggregate { inner })
@@ -893,10 +893,10 @@ impl StreamingTable {
 // Conditional styles
 
 fn column_ref(value: &Bound<'_, PyAny>) -> PyResult<ColumnRef> {
-    if !value.is_instance_of::<PyBool>() {
-        if let Ok(index) = value.extract::<usize>() {
-            return Ok(ColumnRef::Index(index));
-        }
+    if !value.is_instance_of::<PyBool>()
+        && let Ok(index) = value.extract::<usize>()
+    {
+        return Ok(ColumnRef::Index(index));
     }
     value.extract::<String>().map(ColumnRef::Name).map_err(|_| {
         pyo3::exceptions::PyTypeError::new_err("column is a header (str) or a 0-based index (int)")

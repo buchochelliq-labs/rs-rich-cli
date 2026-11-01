@@ -4,8 +4,8 @@
 #![no_main]
 
 use libfuzzer_sys::fuzz_target;
-use rich_fuzz::{text, MAX_PARSE_INPUT};
-use rich_marketplace::{resolve, Host, KeyId, KeySet, Listing, Lockfile, Request, TrustedKey};
+use rich_fuzz::{MAX_PARSE_INPUT, text};
+use rich_marketplace::{Host, KeyId, KeySet, Listing, Lockfile, Request, TrustedKey, resolve};
 
 fuzz_target!(|data: &[u8]| {
     let data = &data[..data.len().min(MAX_PARSE_INPUT)];
