@@ -485,6 +485,11 @@ struct SheetNode {
     selected: bool,
     disabled: bool,
     error: bool,
+    /// Its place among its parent's children and how many there are, and
+    /// how many children it has, as it was last laid out
+    /// (`:first-child`, `:odd`, `:empty`, …).
+    place: (usize, usize),
+    children: usize,
 }
 
 /// The stylesheet as a frame draws with it.
@@ -494,6 +499,8 @@ pub(crate) struct SheetCx<'a> {
     pub vars: &'a dyn Fn(&str) -> Option<Style>,
     /// The app's [`viewport`](crate::viewport()), for `@media` rules.
     pub viewport: (u16, u16),
+    /// The theme is dark (`:dark`, `:light`).
+    pub dark: bool,
 }
 
 /// A node's widget, and what the framework keeps for it between frames.
@@ -2916,6 +2923,20 @@ impl Node {
             selected: sheet.selected,
             disabled: sheet.disabled,
             error: sheet.error,
+            focusable: self.focusable,
+            index: sheet.place.0,
+            siblings: sheet.place.1.max(1),
+            children: sheet.children,
+        }
+    }
+
+    /// Tell it where it is among its parent's `count` children; a change
+    /// draws it again, for the structural states (`:odd`, `:last-child`).
+    fn place_among(&self, index: usize, count: usize, dirty: &mut HashSet<NodeId>) {
+        let mut sheet = self.sheet.borrow_mut();
+        if sheet.place != (index, count) {
+            sheet.place = (index, count);
+            dirty.insert(self.id);
         }
     }
 
@@ -3267,7 +3288,9 @@ impl Node {
             // The children's layout from the stylesheet, before they are
             // laid out.
             if let Some(sheet) = &frame.sheet {
-                for child in widget.children() {
+                let count = widget.children().len();
+                for (index, child) in widget.children().iter().enumerate() {
+                    child.place_among(index, count, &mut frame.dirty);
                     child.resolve(sheet, &mut frame.chain);
                 }
             }
@@ -3286,7 +3309,10 @@ impl Node {
             // with what that says (`display: none`, a size).
             if let Some(sheet) = &frame.sheet {
                 let mut fresh = false;
-                for child in widget.children() {
+                let count = widget.children().len();
+                self.sheet.borrow_mut().children = count;
+                for (index, child) in widget.children().iter().enumerate() {
+                    child.place_among(index, count, &mut frame.dirty);
                     fresh |= child.resolve(sheet, &mut frame.chain);
                 }
                 if fresh {
@@ -3750,6 +3776,7 @@ impl Node {
             let states = States {
                 focus: &focus_path,
                 hover: &hover_path,
+                dark: cx.dark,
             };
             cx.sheet.style(&frame.chain, &states, cx.vars, cx.viewport)
         } else {

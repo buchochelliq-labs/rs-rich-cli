@@ -1457,6 +1457,29 @@ impl Theme {
         )
     }
 
+    /// Whether it is for a dark terminal, as a stylesheet's `:dark` and
+    /// `:light` read it: by the background its `screen` style (a theme
+    /// [from a palette](Self::from_palette)) or its `button` style gives,
+    /// dark when neither says.
+    pub(crate) fn is_dark(&self) -> bool {
+        let ground = |name: &str| {
+            self.styles
+                .iter()
+                .find(|(n, _)| n == name)
+                .and_then(|(_, style)| style.bgcolor())
+                .and_then(rich::Color::get_truecolor)
+        };
+        match ground("screen").or_else(|| ground("button")) {
+            Some(rgb) => {
+                let luma = 0.299 * f64::from(rgb.red)
+                    + 0.587 * f64::from(rgb.green)
+                    + 0.114 * f64::from(rgb.blue);
+                luma < 128.0
+            }
+            None => true,
+        }
+    }
+
     /// For light terminals.
     pub fn light() -> Theme {
         Theme::preset(
@@ -4673,6 +4696,7 @@ impl App {
                 generation: generation.unwrap_or(source.generation),
                 vars: &vars,
                 viewport,
+                dark: self.theme.is_dark(),
             }),
             chain: Vec::new(),
             announcements: Vec::new(),

@@ -327,7 +327,17 @@ panel table:hover { text-style: underline; }
 - `:selected` and `:disabled`, while `.selected_when(…)` or
   `.disabled_when(…)` holds;
 - `:error` (or CSS's `:invalid`), while `.error_when(…)` holds (see
-  [Errors](#errors)).
+  [Errors](#errors));
+- `:blur` (not focused), `:enabled` (not disabled) and `:can-focus`;
+- `:first-child`, `:last-child`, `:odd`, `:even` (counted from the first,
+  as CSS's `:nth-child(odd)` is) and `:empty` (no children): where the
+  node is among its parent's children, which follows rows an `each` adds
+  or moves;
+- `:dark` and `:light`, by the theme: `:dark #logo` holds while the theme
+  is dark, at the top of the app too.
+
+States, structural and theme ones among them, change colours and text
+styles, not layout.
 
 Spaces separate a node from its ancestors (`panel label`), and `>` from
 its parent only (`#sidebar > list`); `*` is any node. Sibling selectors

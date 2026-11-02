@@ -521,3 +521,56 @@ fn screen_column(driver: &intuituive::Driver, row: usize, text: &str) -> u16 {
     let at = line.find(text).expect("the text is on the row");
     line[..at].chars().count() as u16
 }
+
+#[test]
+fn odd_stripes_the_rows_of_an_each_and_moves_when_a_row_is_inserted() {
+    let app = App::new(|| {
+        let items = signal(vec!["b", "c", "d"]);
+        each(move || items.get(), |item| label(item))
+            .class("rows")
+            .on_key("i", move |_| items.update(|v| v.insert(0, "a")))
+            .on_key("e", move |_| items.update(|v| v.push("e")))
+            .focusable()
+    })
+    .stylesheet(".rows > *:odd { background: grey11; } .rows > :last-child { color: red; }");
+    let mut driver = app.driver(6, 5);
+    frame(&mut driver, None);
+    let backgrounds = |driver: &intuituive::Driver| -> Vec<bool> {
+        (0..5)
+            .map(|y| style_at(driver, 0, y).bgcolor().is_some())
+            .collect()
+    };
+    assert_eq!(backgrounds(&driver), [true, false, true, false, false]);
+    assert_eq!(style_at(&driver, 0, 2), style("red on grey11"));
+    // A row put in front moves the stripes.
+    frame(&mut driver, press("i"));
+    assert_eq!(driver.screen().plain()[0].trim_end(), "a");
+    assert_eq!(backgrounds(&driver), [true, false, true, false, false]);
+    assert_eq!(style_at(&driver, 0, 1), Style::default(), "b is even now");
+    assert_eq!(style_at(&driver, 0, 3), style("red"), "d is last");
+    // One added at the end: the old last row is not last any more.
+    frame(&mut driver, press("e"));
+    assert_eq!(style_at(&driver, 0, 3), Style::default());
+    assert_eq!(style_at(&driver, 0, 4), style("red on grey11"));
+}
+
+#[test]
+fn dark_and_light_follow_the_theme() {
+    let app = App::new(|| {
+        label("logo")
+            .name("logo")
+            .on_key("l", |cx| cx.set_theme(intuituive::Theme::light()))
+            .on_key("n", |cx| {
+                cx.set_theme_named("nord");
+            })
+            .focusable()
+    })
+    .stylesheet(":dark #logo { color: white; } :light #logo { color: black; }");
+    let mut driver = app.driver(6, 1);
+    frame(&mut driver, None);
+    assert_eq!(style_at(&driver, 0, 0), style("white"));
+    frame(&mut driver, press("l"));
+    assert_eq!(style_at(&driver, 0, 0), style("black"));
+    frame(&mut driver, press("n"));
+    assert_eq!(style_at(&driver, 0, 0), style("white"));
+}

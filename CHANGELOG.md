@@ -109,6 +109,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   declares a variable, which later values (and variables) use; a `$name`
   not declared still names a theme style. Sibling combinators (`+`, `~`)
   are still an error, which now says so.
+- **Stylesheets: more pseudo-classes (#812, slice 2).** `:first-child`,
+  `:last-child`, `:odd`, `:even` and `:empty` follow where a node is among
+  its siblings (an `each`'s stripes move when a row is inserted); `:dark`
+  and `:light` follow the theme (`:dark #logo` holds at the top of the app
+  too); `:blur`, `:enabled` and `:can-focus`. Like the other states, they
+  change colours and text styles, not layout.
 
 ### intuiTUIve: maximize, modes, Pilot helpers, screenshots and more (#807 to #815)
 

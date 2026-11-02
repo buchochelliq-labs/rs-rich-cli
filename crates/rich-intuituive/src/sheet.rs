@@ -11,7 +11,10 @@
 //! A selector names a node's kind (`label`, `table`, `panel`, `column`:
 //! what the inspector shows), its [name](crate::Node::name) (`#preview`),
 //! its [classes](crate::Node::class) (`.danger`) and its states (`:focus`,
-//! `:focus-within`, `:hover`, `:selected`, `:disabled`, `:error`), with
+//! `:focus-within`, `:hover`, `:selected`, `:disabled`, `:error`, `:blur`,
+//! `:enabled`, `:can-focus`; where it is among its siblings,
+//! `:first-child`, `:last-child`, `:odd`, `:even`, and `:empty`; and the
+//! theme's `:dark` and `:light`), with
 //! descendants separated by spaces and children by `>`; `*` is any node.
 //! The more specific rule wins, then the later one. A rule may nest rules
 //! (`&:hover { … }`, `& .title { … }`, `.title { … }`), read as their
@@ -111,6 +114,10 @@ struct Selector {
     parts: Vec<Compound>,
     /// How each part after the first relates to the one before it.
     joins: Vec<Combinator>,
+    /// The theme states of an ancestor compound that names nothing else
+    /// (`:dark #logo`): about the app, not a node, so they hold at the
+    /// top as well.
+    theme: Vec<State>,
 }
 
 /// How a compound relates to the one before it in a selector.
@@ -139,6 +146,24 @@ enum State {
     Disabled,
     /// `:error`, or CSS's `:invalid`.
     Error,
+    /// Not focused.
+    Blur,
+    /// Not disabled.
+    Enabled,
+    /// Takes the focus.
+    CanFocus,
+    /// Its parent's first or last child.
+    FirstChild,
+    LastChild,
+    /// At an odd place among its siblings (the first, the third, …), or
+    /// an even one, as CSS's `:nth-child(odd)` counts.
+    Odd,
+    Even,
+    /// With no children.
+    Empty,
+    /// While the theme is dark, or light.
+    Dark,
+    Light,
 }
 
 /// A colour, or a theme style's colour by name (`$accent`).
@@ -279,6 +304,12 @@ pub(crate) struct Element {
     pub selected: bool,
     pub disabled: bool,
     pub error: bool,
+    pub focusable: bool,
+    /// Its place among its parent's children, and how many there are.
+    pub index: usize,
+    pub siblings: usize,
+    /// How many children it has.
+    pub children: usize,
 }
 
 /// How strictly a selector is matched.
@@ -296,6 +327,8 @@ enum Mode<'a> {
 pub(crate) struct States<'a> {
     pub focus: &'a [NodeId],
     pub hover: &'a [NodeId],
+    /// The theme is dark.
+    pub dark: bool,
 }
 
 /// Fetch a theme style by name, for `$name`.
@@ -357,7 +390,7 @@ impl Stylesheet {
                 for state in &part.states {
                     match state {
                         State::Hover => out.2 = true,
-                        State::Focus | State::FocusWithin => out.1 = true,
+                        State::Focus | State::FocusWithin | State::Blur => out.1 = true,
                         _ => {}
                     }
                 }
@@ -480,17 +513,31 @@ fn paint_style(paint: &Paint, vars: Vars) -> Option<(Color, Option<Style>)> {
 
 impl Selector {
     fn specificity(&self) -> (usize, usize, usize) {
-        self.parts.iter().fold((0, 0, 0), |(a, b, c), part| {
-            (
-                a + usize::from(part.name.is_some()),
-                b + part.classes.len() + part.states.len(),
-                c + usize::from(part.kind.is_some()),
-            )
-        })
+        self.parts
+            .iter()
+            .fold((0, self.theme.len(), 0), |(a, b, c), part| {
+                (
+                    a + usize::from(part.name.is_some()),
+                    b + part.classes.len() + part.states.len(),
+                    c + usize::from(part.kind.is_some()),
+                )
+            })
     }
 
     /// Whether this matches the last node of `chain`.
     fn matches(&self, chain: &[Element], states: Mode) -> bool {
+        let theme = self.theme.is_empty()
+            || match states {
+                Mode::Fixed => false,
+                Mode::Loose => true,
+                Mode::Exact(now) => self.theme.iter().all(|state| match state {
+                    State::Dark => now.dark,
+                    _ => !now.dark,
+                }),
+            };
+        if !theme {
+            return false;
+        }
         match (self.parts.len(), chain.len()) {
             (0, _) | (_, 0) => false,
             (parts, nodes) => self.matches_at(parts - 1, nodes - 1, chain, states),
@@ -548,6 +595,16 @@ impl Compound {
             State::Selected => element.selected,
             State::Disabled => element.disabled,
             State::Error => element.error,
+            State::Blur => states.focus.last() != Some(&element.id),
+            State::Enabled => !element.disabled,
+            State::CanFocus => element.focusable,
+            State::FirstChild => element.index == 0,
+            State::LastChild => element.index + 1 >= element.siblings,
+            State::Odd => element.index % 2 == 0,
+            State::Even => element.index % 2 == 1,
+            State::Empty => element.children == 0,
+            State::Dark => states.dark,
+            State::Light => !states.dark,
         })
     }
 }
@@ -977,7 +1034,31 @@ fn parse_selector(text: &str) -> Result<Selector, String> {
     if join.is_some() {
         return Err(format!("`{text}`: a `>` needs a selector on each side"));
     }
-    Ok(Selector { parts, joins })
+    // An ancestor that is only `:dark` or `:light` is the app's theme.
+    let mut theme = Vec::new();
+    let mut i = 0;
+    while i + 1 < parts.len() {
+        let part: &Compound = &parts[i];
+        let only_theme = part.kind.is_none()
+            && part.name.is_none()
+            && part.classes.is_empty()
+            && !part.states.is_empty()
+            && part
+                .states
+                .iter()
+                .all(|state| matches!(state, State::Dark | State::Light));
+        if only_theme {
+            theme.extend(parts.remove(i).states);
+            joins.remove(i);
+        } else {
+            i += 1;
+        }
+    }
+    Ok(Selector {
+        parts,
+        joins,
+        theme,
+    })
 }
 
 fn parse_compound(word: &str) -> Result<Compound, String> {
@@ -1011,6 +1092,16 @@ fn parse_compound(word: &str) -> Result<Compound, String> {
                 "selected" => State::Selected,
                 "disabled" => State::Disabled,
                 "error" | "invalid" => State::Error,
+                "blur" => State::Blur,
+                "enabled" => State::Enabled,
+                "can-focus" => State::CanFocus,
+                "first-child" => State::FirstChild,
+                "last-child" => State::LastChild,
+                "odd" => State::Odd,
+                "even" => State::Even,
+                "empty" => State::Empty,
+                "dark" => State::Dark,
+                "light" => State::Light,
                 _ => return Err(format!("unknown state `:{state}`")),
             });
         } else if piece == "*" {
@@ -1329,6 +1420,10 @@ mod tests {
             selected: false,
             disabled: false,
             error: false,
+            focusable: false,
+            index: 0,
+            siblings: 1,
+            children: 0,
         }
     }
 
@@ -1347,6 +1442,7 @@ mod tests {
         let states = States {
             focus: &[],
             hover: &[],
+            dark: true,
         };
         let style = |chain: &[Element]| sheet.style(chain, &states, &no_vars, WIDE).unwrap();
         let red = Style::parse("red").unwrap();
@@ -1376,11 +1472,13 @@ mod tests {
         let states = States {
             focus: &focus,
             hover: &[],
+            dark: true,
         };
         assert!(sheet.style(&full, &states, &no_vars, WIDE).is_some());
         let states = States {
             focus: &[],
             hover: &[],
+            dark: true,
         };
         assert!(sheet.style(&full, &states, &no_vars, WIDE).is_none());
     }
@@ -1529,6 +1627,7 @@ mod tests {
         States {
             focus: &[],
             hover: &[],
+            dark: true,
         }
     }
 
@@ -1647,6 +1746,7 @@ mod tests {
         let states = States {
             focus: &[],
             hover: &hovered,
+            dark: true,
         };
         let style = nested
             .style(&[hover_card], &states, &no_vars, WIDE)
@@ -1690,6 +1790,93 @@ mod tests {
     }
 
     #[test]
+    fn structural_focus_and_theme_states() {
+        let sheet = Stylesheet::parse(
+            "row > *:odd { color: red; } row > *:even { color: blue; } \
+             :first-child { text-style: bold; } :last-child { text-style: italic; } \
+             column:empty { background: grey11; } :dark #logo { color: white; } \
+             :light #logo { color: black; } input:blur { background: grey15; } \
+             input:can-focus:enabled { text-style: underline; }",
+        )
+        .unwrap();
+        let at = |index: usize, siblings: usize| {
+            let mut e = element("label", None, &[]);
+            (e.index, e.siblings) = (index, siblings);
+            e
+        };
+        let states = plain_states();
+        let style = |chain: &[Element], states: &States| sheet.style(chain, states, &no_vars, WIDE);
+        let row = || element("row", None, &[]);
+        // The first of three: odd, and the first.
+        assert_eq!(
+            style(&[row(), at(0, 3)], &states),
+            Some(Style::parse("bold red").unwrap())
+        );
+        assert_eq!(
+            style(&[row(), at(1, 3)], &states),
+            Some(Style::parse("blue").unwrap())
+        );
+        assert_eq!(
+            style(&[row(), at(2, 3)], &states),
+            Some(Style::parse("italic red").unwrap())
+        );
+        let mut empty = element("column", None, &[]);
+        empty.index = 1;
+        empty.siblings = 3;
+        assert_eq!(
+            style(&[empty], &states),
+            Some(Style::parse("on grey11").unwrap())
+        );
+        let mut full = element("column", None, &[]);
+        (full.index, full.siblings, full.children) = (1, 3, 2);
+        assert_eq!(style(&[full], &states), None);
+        // The theme decides `:dark` and `:light`.
+        let logo = || {
+            [
+                element("column", None, &[]),
+                element("label", Some("logo"), &[]),
+            ]
+        };
+        let light = States {
+            focus: &[],
+            hover: &[],
+            dark: false,
+        };
+        assert_eq!(
+            style(&logo(), &states).unwrap().color(),
+            Style::parse("white").unwrap().color()
+        );
+        assert_eq!(
+            style(&logo(), &light).unwrap().color(),
+            Style::parse("black").unwrap().color()
+        );
+        // `:blur` until focused; `:can-focus` and `:enabled`.
+        let mut input = element("input", None, &[]);
+        input.focusable = true;
+        input.siblings = 3;
+        input.index = 1;
+        let id = [input.id];
+        let focused = States {
+            focus: &id,
+            hover: &[],
+            dark: true,
+        };
+        assert_eq!(
+            style(std::slice::from_ref(&input), &states),
+            Some(Style::parse("underline on grey15").unwrap())
+        );
+        assert_eq!(
+            style(std::slice::from_ref(&input), &focused),
+            Some(Style::parse("underline").unwrap())
+        );
+        input.disabled = true;
+        assert_eq!(style(std::slice::from_ref(&input), &focused), None);
+        // Structural states, like the others, do not lay out.
+        let sheet = Stylesheet::parse(":first-child { size: 3; }").unwrap();
+        assert_eq!(sheet.layout(&[at(0, 2)], &no_vars, WIDE).size, None);
+    }
+
+    #[test]
     fn media_rules_hold_within_their_bounds() {
         let sheet = Stylesheet::parse(
             "#side { size: 20; } \
@@ -1713,6 +1900,7 @@ mod tests {
         let states = States {
             focus: &[],
             hover: &[],
+            dark: true,
         };
         assert!(sheet.style(&main, &states, &no_vars, (70, 10)).is_some());
         assert!(sheet.style(&main, &states, &no_vars, (70, 11)).is_none());
@@ -1766,6 +1954,7 @@ mod tests {
         let states = States {
             focus: &[],
             hover: &[],
+            dark: true,
         };
         assert!(
             sheet
