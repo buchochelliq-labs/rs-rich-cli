@@ -491,3 +491,33 @@ fn comments_and_quoted_values_hold_any_character() {
     let error = intuituive::Stylesheet::parse("label { color: red; }\n  /* open").unwrap_err();
     assert_eq!((error.line, error.column), (2, 3), "{error}");
 }
+
+#[test]
+fn child_combinators_nesting_and_declared_variables_style_an_app() {
+    let app = App::new(|| {
+        column([
+            row([label("direct"), column([label("deep")])]).name("side"),
+            label("title").class("title"),
+        ])
+        .class("card")
+    })
+    .stylesheet(
+        "$panel-bg: #101830;\n\
+         #side > label { color: red; }\n\
+         .card {\n    background: $panel-bg;\n    & .title { text-style: bold; }\n}",
+    );
+    let mut driver = app.driver(20, 2);
+    frame(&mut driver, None);
+    assert_eq!(style_at(&driver, 0, 0), style("red on #101830"));
+    // The label one level further down is not a child of `#side`.
+    let deep = screen_column(&driver, 0, "deep");
+    assert_eq!(style_at(&driver, deep, 0), style("on #101830"));
+    assert_eq!(style_at(&driver, 0, 1), style("bold on #101830"));
+}
+
+/// The column `text` starts at on row `row`.
+fn screen_column(driver: &intuituive::Driver, row: usize, text: &str) -> u16 {
+    let line = &driver.screen().plain()[row];
+    let at = line.find(text).expect("the text is on the row");
+    line[..at].chars().count() as u16
+}

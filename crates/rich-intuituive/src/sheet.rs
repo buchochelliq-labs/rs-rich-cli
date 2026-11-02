@@ -12,8 +12,11 @@
 //! what the inspector shows), its [name](crate::Node::name) (`#preview`),
 //! its [classes](crate::Node::class) (`.danger`) and its states (`:focus`,
 //! `:focus-within`, `:hover`, `:selected`, `:disabled`, `:error`), with
-//! descendants separated by spaces. The more specific rule wins, then the
-//! later one.
+//! descendants separated by spaces and children by `>`; `*` is any node.
+//! The more specific rule wins, then the later one. A rule may nest rules
+//! (`&:hover { … }`, `& .title { … }`, `.title { … }`), read as their
+//! flattened forms, and `$name: value;` at the top level declares a
+//! variable later values use (a `$name` not declared is a theme style).
 //!
 //! Colours and text styles follow the states and
 //! [`class_when`](crate::Node::class_when); layout (sizes, padding, the
@@ -106,6 +109,17 @@ impl Rule {
 #[derive(Clone, Debug)]
 struct Selector {
     parts: Vec<Compound>,
+    /// How each part after the first relates to the one before it.
+    joins: Vec<Combinator>,
+}
+
+/// How a compound relates to the one before it in a selector.
+#[derive(Clone, Copy, Debug, PartialEq, Eq)]
+enum Combinator {
+    /// A space: anywhere inside it.
+    Descendant,
+    /// `>`: directly inside it.
+    Child,
 }
 
 #[derive(Clone, Debug, Default)]
@@ -477,29 +491,28 @@ impl Selector {
 
     /// Whether this matches the last node of `chain`.
     fn matches(&self, chain: &[Element], states: Mode) -> bool {
-        let Some((subject, ancestors)) = self.parts.split_last() else {
-            return false;
-        };
-        let Some((last, above)) = chain.split_last() else {
-            return false;
-        };
-        if !subject.matches(last, states) {
+        match (self.parts.len(), chain.len()) {
+            (0, _) | (_, 0) => false,
+            (parts, nodes) => self.matches_at(parts - 1, nodes - 1, chain, states),
+        }
+    }
+
+    /// Whether part `part` matches node `at` of `chain`, and the parts
+    /// before it the nodes above, as their combinators say: right to left,
+    /// trying each ancestor a descendant combinator could mean.
+    fn matches_at(&self, part: usize, at: usize, chain: &[Element], states: Mode) -> bool {
+        if !self.parts[part].matches(&chain[at], states) {
             return false;
         }
-        // Each ancestor compound, right to left, on some node further up.
-        let mut up = above.len();
-        for part in ancestors.iter().rev() {
-            loop {
-                if up == 0 {
-                    return false;
-                }
-                up -= 1;
-                if part.matches(&above[up], states) {
-                    break;
-                }
-            }
+        if part == 0 {
+            return true;
         }
-        true
+        match self.joins[part - 1] {
+            Combinator::Child => at > 0 && self.matches_at(part - 1, at - 1, chain, states),
+            Combinator::Descendant => (0..at)
+                .rev()
+                .any(|up| self.matches_at(part - 1, up, chain, states)),
+        }
     }
 }
 
@@ -542,11 +555,20 @@ impl Compound {
 struct Parser<'a> {
     text: &'a str,
     at: usize,
+    /// The variables declared so far (`$name: value;`), the latest last.
+    vars: Vec<(String, String)>,
 }
+
+/// The rules parsed so far, each with its specificity and its order.
+type Parsed = Vec<(Rule, (usize, usize, usize), usize)>;
 
 impl<'a> Parser<'a> {
     fn new(text: &'a str) -> Parser<'a> {
-        Parser { text, at: 0 }
+        Parser {
+            text,
+            at: 0,
+            vars: Vec::new(),
+        }
     }
 
     fn error(&self, at: usize, message: impl Into<String>) -> SheetError {
@@ -583,7 +605,7 @@ impl<'a> Parser<'a> {
     /// (`media`, with where it starts), up to the `}` that closes it.
     fn rules(
         &mut self,
-        rules: &mut Vec<(Rule, (usize, usize, usize), usize)>,
+        rules: &mut Parsed,
         media: Option<(Rc<Media>, usize)>,
     ) -> Result<(), SheetError> {
         loop {
@@ -598,6 +620,10 @@ impl<'a> Parser<'a> {
             if media.is_some() && self.rest().starts_with('}') {
                 self.at += 1;
                 return Ok(());
+            }
+            if self.rest().starts_with('$') {
+                self.variable()?;
+                continue;
             }
             if self.rest().starts_with('@') {
                 if media.is_some() {
@@ -636,55 +662,188 @@ impl<'a> Parser<'a> {
             if head.contains('}') {
                 return Err(self.error(start + head.find('}').unwrap_or(0), "a `}` with no rule"));
             }
-            let selectors = head
-                .split(',')
-                .map(|s| parse_selector(s.trim()).map_err(|e| self.error(start, e)))
-                .collect::<Result<Vec<_>, _>>()?;
-            self.at += open + 1;
-            let body_start = self.at;
-            let Some(close) = find_unquoted(self.rest(), '}') else {
+            let selectors: Vec<String> = head.split(',').map(|s| s.trim().to_string()).collect();
+            let body_start = self.at + open + 1;
+            let Some(close) = find_close(&self.text[body_start..]) else {
                 return Err(self.error(start, "a rule with no `}`"));
             };
-            let decls =
-                Rc::new(self.decls(body_start, &self.text[body_start..body_start + close])?);
+            let media_now = media.as_ref().map(|(media, _)| Rc::clone(media));
+            self.rule(
+                rules,
+                start,
+                &selectors,
+                body_start,
+                body_start + close,
+                &media_now,
+            )?;
             self.at = body_start + close + 1;
-            for selector in selectors {
-                let specificity = selector.specificity();
-                let order = rules.len();
-                rules.push((
-                    Rule {
-                        selector,
-                        decls: Rc::clone(&decls),
-                        media: media.as_ref().map(|(media, _)| Rc::clone(media)),
-                    },
-                    specificity,
-                    order,
-                ));
-            }
         }
     }
 
-    fn decls(&self, start: usize, body: &str) -> Result<Decls, SheetError> {
-        let mut decls = Decls::default();
-        let mut offset = 0;
-        for part in split_unquoted(body, ';') {
-            let here = start + offset;
-            offset += part.len() + 1;
-            let line = part.trim();
-            if line.is_empty() {
-                continue;
-            }
-            let at = here
-                + part
-                    .find(line.split(':').next().unwrap_or("").trim())
-                    .unwrap_or(0);
-            let Some((property, value)) = line.split_once(':') else {
-                return Err(self.error(at, format!("`{line}` is not `property: value`")));
-            };
-            declare(&mut decls, property.trim(), value.trim()).map_err(|e| self.error(at, e))?;
+    /// `$name: value;` at the top level: a variable later values use.
+    fn variable(&mut self) -> Result<(), SheetError> {
+        let start = self.at;
+        let end = find_unquoted(self.rest(), ';').unwrap_or(self.rest().len());
+        let line = &self.rest()[..end];
+        let Some((name, value)) = line.split_once(':') else {
+            return Err(self.error(start, format!("`{}` is not `$name: value;`", line.trim())));
+        };
+        let name = name.trim().trim_start_matches('$');
+        if !is_ident(name) {
+            return Err(self.error(start, format!("`${name}` is not a variable name")));
         }
-        Ok(decls)
+        let value = self.substitute(value.trim());
+        if value.is_empty() {
+            return Err(self.error(start, format!("`${name}` has no value")));
+        }
+        self.vars.push((name.to_string(), value));
+        self.at += (end + 1).min(self.rest().len());
+        Ok(())
     }
+
+    /// `value` with each declared `$variable` in it replaced by its value;
+    /// a name not declared stays, for a theme style (`$accent`).
+    fn substitute(&self, value: &str) -> String {
+        if !value.contains('$') {
+            return value.to_string();
+        }
+        let mut out = String::with_capacity(value.len());
+        let mut rest = value;
+        while let Some(at) = rest.find('$') {
+            out.push_str(&rest[..at]);
+            let after = &rest[at + 1..];
+            let len = after
+                .find(|c: char| !(c.is_ascii_alphanumeric() || c == '-' || c == '_'))
+                .unwrap_or(after.len());
+            let name = &after[..len];
+            match self.vars.iter().rev().find(|(known, _)| known == name) {
+                Some((_, known)) => out.push_str(known),
+                None => {
+                    out.push('$');
+                    out.push_str(name);
+                }
+            }
+            rest = &after[len..];
+        }
+        out.push_str(rest);
+        out
+    }
+
+    /// The rule for `selectors` (as written, before nesting is flattened)
+    /// whose body is `body_start..body_end`: its declarations, then the
+    /// rules nested in it (`&:hover { … }`, `.title { … }`), each read as
+    /// its flattened form and ordered after it.
+    fn rule(
+        &self,
+        rules: &mut Parsed,
+        start: usize,
+        selectors: &[String],
+        body_start: usize,
+        body_end: usize,
+        media: &Option<Rc<Media>>,
+    ) -> Result<(), SheetError> {
+        let parsed = selectors
+            .iter()
+            .map(|s| parse_selector(s).map_err(|e| self.error(start, e)))
+            .collect::<Result<Vec<_>, _>>()?;
+        // This rule's place comes before its nested rules'.
+        let first = rules.len();
+        for selector in parsed {
+            let specificity = selector.specificity();
+            let order = rules.len();
+            rules.push((
+                Rule {
+                    selector,
+                    decls: Rc::new(Decls::default()),
+                    media: media.clone(),
+                },
+                specificity,
+                order,
+            ));
+        }
+        let mut decls = Decls::default();
+        let mut at = body_start;
+        while at < body_end {
+            let body = &self.text[at..body_end];
+            let skipped = body.len() - body.trim_start().len();
+            at += skipped;
+            if at >= body_end {
+                break;
+            }
+            let body = &self.text[at..body_end];
+            let semi = find_unquoted(body, ';').unwrap_or(body.len());
+            match find_unquoted(body, '{').filter(|open| *open < semi) {
+                Some(open) => {
+                    // A nested rule.
+                    let head = &body[..open];
+                    let inner = at + open + 1;
+                    let Some(close) = find_close(&self.text[inner..body_end]) else {
+                        return Err(self.error(at, "a nested rule with no `}`"));
+                    };
+                    let nested: Vec<String> = head
+                        .split(',')
+                        .map(str::trim)
+                        .flat_map(|child| {
+                            selectors.iter().map(move |parent| flatten(parent, child))
+                        })
+                        .collect();
+                    self.rule(rules, at, &nested, inner, inner + close, media)?;
+                    at = inner + close + 1;
+                }
+                None => {
+                    let part = &body[..semi];
+                    let line = part.trim();
+                    if line.starts_with('$') {
+                        return Err(self.error(at, "variables are declared at the top level"));
+                    }
+                    let Some((property, value)) = line.split_once(':') else {
+                        return Err(self.error(at, format!("`{line}` is not `property: value`")));
+                    };
+                    let value = self.substitute(value.trim());
+                    declare(&mut decls, property.trim(), &value).map_err(|e| self.error(at, e))?;
+                    at += semi + 1;
+                }
+            }
+        }
+        let decls = Rc::new(decls);
+        let count = selectors.len();
+        for (rule, _, _) in &mut rules[first..first + count] {
+            rule.decls = Rc::clone(&decls);
+        }
+        Ok(())
+    }
+}
+
+/// A nested selector read with its parent's: `&` is the parent (`&:hover`,
+/// `& .title`); without one it is a descendant (`.title`) or, with a
+/// leading `>`, a child.
+fn flatten(parent: &str, child: &str) -> String {
+    if child.contains('&') {
+        child.replace('&', parent)
+    } else {
+        format!("{parent} {child}")
+    }
+}
+
+/// Where the `}` that closes a block opened just before `text` is, past
+/// any blocks nested in it, outside quoted strings.
+fn find_close(text: &str) -> Option<usize> {
+    let mut depth = 0usize;
+    let mut quote = None;
+    for (i, ch) in text.char_indices() {
+        match quote {
+            Some(q) if ch == q => quote = None,
+            Some(_) => {}
+            None if ch == '"' || ch == '\'' => quote = Some(ch),
+            None if ch == '{' => depth += 1,
+            None if ch == '}' => match depth.checked_sub(1) {
+                Some(d) => depth = d,
+                None => return Some(i),
+            },
+            None => {}
+        }
+    }
+    None
 }
 
 /// `css` with each comment blanked to spaces (its line breaks kept), so
@@ -734,18 +893,6 @@ fn find_unquoted(text: &str, c: char) -> Option<usize> {
         }
         None
     })
-}
-
-/// `text` split at each `c` outside a quoted string.
-fn split_unquoted(text: &str, c: char) -> Vec<&str> {
-    let mut parts = Vec::new();
-    let mut rest = text;
-    while let Some(i) = find_unquoted(rest, c) {
-        parts.push(&rest[..i]);
-        rest = &rest[i + c.len_utf8()..];
-    }
-    parts.push(rest);
-    parts
 }
 
 fn is_ident(s: &str) -> bool {
@@ -807,15 +954,30 @@ fn parse_selector(text: &str) -> Result<Selector, String> {
         return Err("an empty selector".into());
     }
     let mut parts = Vec::new();
-    for word in text.split_whitespace() {
-        if word.contains(['>', '+', '~']) {
+    let mut joins = Vec::new();
+    let mut join = None;
+    for word in text.replace('>', " > ").split_whitespace() {
+        if word == ">" {
+            if parts.is_empty() || join.is_some() {
+                return Err(format!("`{text}`: a `>` needs a selector on each side"));
+            }
+            join = Some(Combinator::Child);
+            continue;
+        }
+        if let Some(c) = word.chars().find(|c| matches!(c, '+' | '~')) {
             return Err(format!(
-                "`{word}`: only descendant selectors (spaces) are supported"
+                "`{word}`: `{c}` (a sibling combinator) is not supported; descendants (spaces) and children (`>`) are"
             ));
+        }
+        if !parts.is_empty() {
+            joins.push(join.take().unwrap_or(Combinator::Descendant));
         }
         parts.push(parse_compound(word)?);
     }
-    Ok(Selector { parts })
+    if join.is_some() {
+        return Err(format!("`{text}`: a `>` needs a selector on each side"));
+    }
+    Ok(Selector { parts, joins })
 }
 
 fn parse_compound(word: &str) -> Result<Compound, String> {
@@ -1349,8 +1511,8 @@ mod tests {
             ),
             ("label:active { color: red; }", "unknown state `:active`"),
             (
-                "label > text { color: red; }",
-                "`>`: only descendant selectors (spaces) are supported",
+                "label + text { color: red; }",
+                "`+`: `+` (a sibling combinator) is not supported; descendants (spaces) and children (`>`) are",
             ),
             ("label { color: nope; }", "`nope` is not a colour"),
             ("label { color: red; ", "a rule with no `}`"),
@@ -1363,6 +1525,170 @@ mod tests {
             Stylesheet::parse("a { color: red; }\n\nb {\n  text-style: shiny;\n}").unwrap_err();
         assert_eq!((error.line, error.column), (4, 3));
     }
+    fn plain_states() -> States<'static> {
+        States {
+            focus: &[],
+            hover: &[],
+        }
+    }
+
+    #[test]
+    fn child_combinators_and_the_universal_selector() {
+        let sheet = Stylesheet::parse(
+            "#side > list { color: red; } #side list { size: 4; } .b { color: green; } \
+             #a > .b { color: blue; } row>*{ size: 2; }",
+        )
+        .unwrap();
+        let side = || element("column", Some("side"), &[]);
+        let list = || element("list", None, &[]);
+        let direct = [side(), list()];
+        let deep = [side(), element("panel", None, &[]), list()];
+        let red = Style::parse("red").unwrap();
+        let states = plain_states();
+        assert_eq!(sheet.style(&direct, &states, &no_vars, WIDE), Some(red));
+        assert_eq!(sheet.style(&deep, &states, &no_vars, WIDE), None);
+        // The descendant rule holds either way.
+        assert_eq!(
+            sheet.layout(&deep, &no_vars, WIDE).size,
+            Some(Size::Fixed(4))
+        );
+        // Specificity: `#a > .b` beats `.b`, wherever it is written.
+        let b = [
+            element("column", Some("a"), &[]),
+            element("text", None, &["b"]),
+        ];
+        let blue = Style::parse("blue").unwrap();
+        assert_eq!(sheet.style(&b, &states, &no_vars, WIDE), Some(blue));
+        let alone = [element("column", None, &[]), element("text", None, &["b"])];
+        let green = Style::parse("green").unwrap();
+        assert_eq!(sheet.style(&alone, &states, &no_vars, WIDE), Some(green));
+        // `*` is any node; with no spaces round `>`.
+        let any = [element("row", None, &[]), element("label", None, &[])];
+        assert_eq!(
+            sheet.layout(&any, &no_vars, WIDE).size,
+            Some(Size::Fixed(2))
+        );
+        // A child combinator after a descendant one backtracks: `a b > c`
+        // with an `a`, two `b`s and the `c` under the inner one.
+        let sheet = Stylesheet::parse("x y > z { size: 9; }").unwrap();
+        let chain = [
+            element("x", None, &[]),
+            element("y", None, &[]),
+            element("w", None, &[]),
+            element("y", None, &[]),
+            element("z", None, &[]),
+        ];
+        assert_eq!(
+            sheet.layout(&chain, &no_vars, WIDE).size,
+            Some(Size::Fixed(9))
+        );
+        for (css, message) in [
+            ("> a { color: red; }", "a `>` needs a selector on each side"),
+            ("a > { color: red; }", "a `>` needs a selector on each side"),
+            (
+                "a > > b { color: red; }",
+                "a `>` needs a selector on each side",
+            ),
+            ("a ~ b { color: red; }", "a sibling combinator"),
+        ] {
+            let error = Stylesheet::parse(css).unwrap_err().to_string();
+            assert!(error.contains(message), "{css}: {error}");
+        }
+    }
+
+    #[test]
+    fn nested_rules_resolve_as_their_flattened_form() {
+        let nested = Stylesheet::parse(
+            ".card {\n    padding: 0 1;\n    &:hover { background: blue; }\n    & .title { text-style: bold; }\n    > .foot { size: 1; }\n    .deep { .deeper { size: 7; } }\n}\n",
+        )
+        .unwrap();
+        let flat = Stylesheet::parse(
+            ".card { padding: 0 1; } .card:hover { background: blue; } .card .title { text-style: bold; } \
+             .card > .foot { size: 1; } .card .deep .deeper { size: 7; }",
+        )
+        .unwrap();
+        let card = || element("column", None, &["card"]);
+        let states = plain_states();
+        for chain in [
+            vec![card()],
+            vec![card(), element("label", None, &["title"])],
+            vec![card(), element("label", None, &["foot"])],
+            vec![
+                card(),
+                element("row", None, &[]),
+                element("label", None, &["foot"]),
+            ],
+            vec![
+                card(),
+                element("row", None, &["deep"]),
+                element("label", None, &["deeper"]),
+            ],
+        ] {
+            assert_eq!(
+                nested.layout(&chain, &no_vars, WIDE),
+                flat.layout(&chain, &no_vars, WIDE)
+            );
+            assert_eq!(
+                nested.style(&chain, &states, &no_vars, WIDE),
+                flat.style(&chain, &states, &no_vars, WIDE)
+            );
+        }
+        let deeper = [
+            card(),
+            element("row", None, &["deep"]),
+            element("label", None, &["deeper"]),
+        ];
+        assert_eq!(
+            nested.layout(&deeper, &no_vars, WIDE).size,
+            Some(Size::Fixed(7))
+        );
+        let hover_card = card();
+        let hovered = [hover_card.id];
+        let states = States {
+            focus: &[],
+            hover: &hovered,
+        };
+        let style = nested
+            .style(&[hover_card], &states, &no_vars, WIDE)
+            .unwrap();
+        assert_eq!(style, Style::parse("on blue").unwrap());
+        // A nested rule's mistake says where it is.
+        let error =
+            Stylesheet::parse(".a {\n  color: red;\n  &:active { color: blue; }\n}").unwrap_err();
+        assert_eq!((error.line, error.column), (3, 3), "{error}");
+        assert_eq!(error.message, "unknown state `:active`");
+        let error = Stylesheet::parse(".a { &:hover { color: red; }").unwrap_err();
+        assert_eq!(error.message, "a rule with no `}`");
+    }
+
+    #[test]
+    fn declared_variables_stand_for_their_values() {
+        let sheet = Stylesheet::parse(
+            "$panel-bg: #101830;\n$gap: 2;\n$edge: round $panel-bg;\n\
+             .card { background: $panel-bg; padding: $gap 1; border: $edge; color: $accent; }",
+        )
+        .unwrap();
+        let card = [element("column", None, &["card"])];
+        let accent = |name: &str| (name == "accent").then(|| Style::parse("magenta").unwrap());
+        let style = sheet.style(&card, &plain_states(), &accent, WIDE).unwrap();
+        assert_eq!(style, Style::parse("magenta on #101830").unwrap());
+        let layout = sheet.layout(&card, &accent, WIDE);
+        assert_eq!(layout.padding, [2, 1, 2, 1]);
+        assert_eq!(
+            layout.border,
+            Some((Border::Rounded, Style::parse("#101830").unwrap()))
+        );
+        for (css, message) in [
+            ("$: red;", "`$` is not a variable name"),
+            ("$x red;", "`$x red` is not `$name: value;`"),
+            ("$x: ;", "`$x` has no value"),
+            (".a { $x: red; }", "variables are declared at the top level"),
+        ] {
+            let error = Stylesheet::parse(css).unwrap_err();
+            assert_eq!(error.message, message, "{css}");
+        }
+    }
+
     #[test]
     fn media_rules_hold_within_their_bounds() {
         let sheet = Stylesheet::parse(

@@ -329,9 +329,34 @@ panel table:hover { text-style: underline; }
 - `:error` (or CSS's `:invalid`), while `.error_when(…)` holds (see
   [Errors](#errors)).
 
-Spaces separate a node from its ancestors (`panel label`). Sibling
-selectors and `!important` are not supported. The more specific rule wins,
-then the later one.
+Spaces separate a node from its ancestors (`panel label`), and `>` from
+its parent only (`#sidebar > list`); `*` is any node. Sibling selectors
+(`+`, `~`) and `!important` are not supported. The more specific rule
+wins, then the later one: `#a > .b` beats `.b`.
+
+**Nesting.** A rule may hold rules, as in Textual and CSS: `&` is the rule
+around it, and a nested selector without one is a descendant (or, after a
+`>`, a child). A nested rule reads as its flattened form, after the rule
+around it.
+
+```css
+.card {
+    padding: 0 1;
+    &:hover { background: $panel-bg; }   /* .card:hover */
+    & .title { text-style: bold; }        /* .card .title */
+    > .foot { size: 1; }                  /* .card > .foot */
+}
+```
+
+**Variables.** `$name: value;` at the top level declares a variable, which
+any later value may use (a variable's value may use earlier ones). A `$name`
+not declared is a theme style's colour, as before (`$accent`).
+
+```css
+$panel-bg: #101830;
+$edge: round $panel-bg;
+#help { background: $panel-bg; border: $edge; }
+```
 
 `.class("warn big")` gives a node fixed classes, and
 `.class_when("danger", move || load.get() > 90)` gives it a class while a

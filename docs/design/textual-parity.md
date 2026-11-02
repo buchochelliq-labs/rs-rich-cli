@@ -97,9 +97,9 @@ Modules are under `crates/rich-intuituive/src/`.
 
 | Area | Textual | intuiTUIve | Status | Gap |
 |---|---|---|---|---|
-| **TCSS selectors** | type, `#id`, `.class`, descendant, child `>`, `*`, `&` nesting | `Stylesheet` (`sheet.rs`): kind, `#name`, `.class`, descendant only. The parser rejects `>` `+` `~` | partial | Combinators and nesting |
+| **TCSS selectors** | type, `#id`, `.class`, descendant, child `>`, `*`, `&` nesting | `Stylesheet` (`sheet.rs`): kind, `#name`, `.class`, `*`, descendant, child `>`, nesting with `&` (read as the flattened rule) | ✓ | Sibling combinators (`+`, `~`), which Textual lacks too (#812) |
 | **Pseudo-classes** | `:focus`, `:focus-within`, `:hover`, `:disabled`, `:blur`, `:can-focus`, `:dark`, `:light`, `:first-child`, `:last-child`, `:odd`, `:even`, `:empty`, `:inline`, … | `:focus`, `:focus-within`, `:hover`, `:selected`, `:disabled`, `:error` | partial | Structural (first, last, odd, even, empty) and theme (dark, light) pseudo-classes |
-| **Variables** | `$name: value;` declared in CSS; theme variables | `$name` names a theme style; CSS cannot declare variables | partial | Declared variables |
+| **Variables** | `$name: value;` declared in CSS; theme variables | `$name: value;` declared at the top level (values may use earlier ones); a `$name` not declared names a theme style | ✓ | (#812) |
 | **Properties** | about 90 (width, height, margin, offset, opacity, tint, visibility, outline, scrollbar colours, hatch, keyline, layer, …) | about 30: colours, text style, border (titles, sides, collapse), text align, wrap and overflow, size and its limits, padding, gap, grid tracks, display, dock, flex alignment | partial | Margin, offset, visibility, opacity and tint, outline, scrollbar styles |
 | **@media / responsive** | horizontal and vertical breakpoints that set classes (`-narrow`); no `@media` | `@media (min-width: N) and …`, `.hide_below`, `viewport()` | ✓ | More than Textual |
 | **Live CSS reload** | `textual run --dev` | `App::stylesheet_file`, `App::theme_file` are read again when the file changes | ✓ | |

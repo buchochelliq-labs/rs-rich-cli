@@ -101,6 +101,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   same scroll offset. Links with a scheme go to `.on_link`. The loader is
   the app's and runs off the app's thread; a failure shows in the view.
   `files::markdown_loader(root)` reads files under a directory.
+- **Stylesheets: child combinators, nesting and variables (#812, slice
+  1).** A selector takes `>` (`#sidebar > list`) beside descendants and
+  `*`; `#a > .b` beats `.b`. A rule may nest rules, Textual's and CSS's
+  way (`&:hover { … }`, `& .title { … }`, `.title { … }`, `> .foot { … }`),
+  each read as its flattened form. `$name: value;` at the top level
+  declares a variable, which later values (and variables) use; a `$name`
+  not declared still names a theme style. Sibling combinators (`+`, `~`)
+  are still an error, which now says so.
 
 ### intuiTUIve: maximize, modes, Pilot helpers, screenshots and more (#807 to #815)
 
