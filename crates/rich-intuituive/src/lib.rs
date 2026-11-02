@@ -110,6 +110,7 @@ mod datetime;
 mod dialog;
 mod diff_view;
 mod digits;
+mod editor_theme;
 mod effect;
 mod facts;
 mod feed;
@@ -215,6 +216,7 @@ pub use controls::{
 };
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use digits::digits;
+pub use editor_theme::EditorTheme;
 pub use effect::{effect, fill};
 pub use facts::{facts, facts_of};
 pub use feed::{
