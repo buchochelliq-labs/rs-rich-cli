@@ -3197,6 +3197,7 @@ dependencies = [
  "rs-rich-micro",
  "rs-rich-record",
  "rs-rich-web",
+ "rustls",
  "same-file",
  "serde_json",
  "sha2 0.11.0",

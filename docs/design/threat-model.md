@@ -424,7 +424,7 @@ store and the bundled roots.
 | | Threat | Mitigation | State |
 |---|---|---|---|
 | S | A network attacker serves a forged certificate | rustls through ureq, verification always on; the system's store (the platform verifier), Mozilla's bundled roots only when that store cannot be used ([`tls.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-marketplace/src/tls.rs), `may_be_trust`) | verified |
-| T | A redirect downgrades a marketplace download to `http://` | Marketplace downloads and statistics are HTTPS only, redirects included; ureq's own redirects are off and each hop is checked ([`redirect.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-marketplace/src/redirect.rs), `get_following`) | verified |
+| T | A redirect downgrades a marketplace download, or a `rich URL` fetch, to `http://` | Marketplace downloads and statistics are HTTPS only, redirects included; ureq's own redirects are off and each hop is checked ([`redirect.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-marketplace/src/redirect.rs), `get_following`); `rich URL` refuses `https://` to `http://` (0.0.24) | verified |
 | D | Endless redirects or a slow server | At most five hops for the marketplace (ten for `rich URL`, three for statistics); one overall deadline for the whole chain and its body | verified |
 | D | A decompression bomb | `rich URL` caps the decoded body at 16 MiB; the marketplace reads at most the declared size after decoding | verified |
 | T | TLS-inspecting proxies break verification | Accepted: their root is in the system's store, and the marketplace's trust comes from signatures and hashes, not TLS | documented |
@@ -442,14 +442,20 @@ store and the bundled roots.
   `may_be_trust`; tested in
   [`https_trust.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-marketplace/tests/https_trust.rs)).
   **mitigated** (0.0.24).
-- **`rich URL` follows a redirect from `https://` to `http://`** (as
-  upstream's `requests` does), and accepts `http://` URLs. **gap** (parity;
-  a warning on a downgrade would not change output).
-- **`rich URL` renders fetched content unsanitized** in upstream's modes,
-  so a server can send escape sequences to the user's terminal (titles,
-  OSC 52 clipboard writes, OSC 8 links, on terminals that honour them).
-  `--sanitize` prevents it. Consider sanitizing by default for content
-  fetched from the network, recorded as a divergence. **gap**.
+- **`rich URL` followed a redirect from `https://` to `http://`** (as
+  upstream's `requests` does). It now refuses one before requesting it, with
+  an error naming both addresses; an `http://` URL given as such is still
+  fetched ([`lib.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/src/lib.rs),
+  `fetch_url`; tested in
+  [`url_fetch.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/tests/url_fetch.rs);
+  [DIVERGENCES §50](../DIVERGENCES.md#50-rich-url-no-https-downgrade-and-fetched-content-is-sanitized)).
+  **mitigated** (0.0.24).
+- **`rich URL` rendered fetched content unsanitized** in upstream's modes,
+  so a server could send escape sequences to the user's terminal (titles,
+  OSC 52 clipboard writes, OSC 8 links). Content fetched from a URL is now
+  sanitized by default in every mode, `rich chart` and `rich profile`
+  included; `--no-sanitize` opts out (same links as above). **mitigated**
+  (0.0.24).
 - **No certificate pinning** for the official marketplace. Not needed while
   signatures carry the trust; recorded so the review confirms it.
 

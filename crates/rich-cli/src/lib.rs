@@ -3165,9 +3165,13 @@ fn parse_inner(args: &[String]) -> Result<Option<Cli>, String> {
     // `view`, `schema`, `log` and the text diff are new here, with no
     // upstream output to keep: like `less`, they show terminal controls in
     // what they display instead of letting them act, unless `--no-sanitize`
-    // says otherwise. A log is untrusted input.
+    // says otherwise. A log is untrusted input. So is anything fetched from
+    // a URL, in every mode: a server's escapes (a title, an OSC 52
+    // clipboard write, a hidden OSC 8 link) are shown, not obeyed. That is
+    // a divergence from upstream rich-cli (docs/DIVERGENCES.md).
     let sanitize = sanitize.unwrap_or_else(|| {
-        mode == Mode::View
+        resources.iter().any(|r| is_url(r))
+            || mode == Mode::View
             || mode == Mode::Schema
             || mode == Mode::Log
             || (mode == Mode::Diff
@@ -3569,10 +3573,19 @@ const MAX_BODY_BYTES: u64 = 16 * 1024 * 1024;
 fn fetch_url(url: &str, encoding: Option<Encoding>) -> Result<(String, Option<String>), String> {
     use std::time::Duration;
     // Redirects (ten, as `requests` and ureq allow) are followed one request
-    // at a time: `rich_marketplace::redirect` says why.
+    // at a time: `rich_marketplace::redirect` says why. Once a hop is
+    // `https://`, a redirect to `http://` is refused before it is requested
+    // (`requests` follows it): what was asked for over TLS is not fetched in
+    // the clear. An `http://` URL given as such is still fetched.
     let budget = Duration::from_secs(30);
+    let mut secure = false;
     let mut response =
         rich_marketplace::redirect::get_following(url, 10, false, budget, |hop, deadline| {
+            let https = is_https(hop);
+            if secure && !https {
+                return Err(FetchFailure::Downgrade(hop.to_string()));
+            }
+            secure |= https;
             rich_marketplace::tls::with_fallback(|trust| {
                 ureq::get(hop)
                     .config()
@@ -3586,8 +3599,15 @@ fn fetch_url(url: &str, encoding: Option<Encoding>) -> Result<(String, Option<St
                     .build()
                     .call()
             })
+            .map_err(FetchFailure::Trust)
         })
-        .map_err(|err| format!("cannot fetch {url}: {err}"))?;
+        .map_err(|err| match err {
+            FetchFailure::Trust(err) => format!("cannot fetch {url}: {err}"),
+            FetchFailure::Downgrade(to) => format!(
+                "cannot fetch {url}: refused its redirect from https:// to {to}, which is not \
+                 encrypted (fetch the http:// address itself if that is intended)"
+            ),
+        })?;
     let content_type = response
         .headers()
         .get("content-type")
@@ -3616,6 +3636,30 @@ fn fetch_url(url: &str, encoding: Option<Encoding>) -> Result<(String, Option<St
     let body =
         decode_strict(buffer, encoding).map_err(|err| format!("cannot decode {url}: {err}"))?;
     Ok((body, content_type))
+}
+
+/// Why [`fetch_url`]'s redirect chain stopped.
+#[cfg(feature = "fetch")]
+enum FetchFailure {
+    /// A request failed (with the system's roots, and the bundled ones when
+    /// the system store could not be used).
+    Trust(rich_marketplace::tls::TrustError),
+    /// A redirect from `https://` to this `http://` URL.
+    Downgrade(String),
+}
+
+#[cfg(feature = "fetch")]
+impl From<ureq::Error> for FetchFailure {
+    fn from(error: ureq::Error) -> Self {
+        FetchFailure::Trust(error.into())
+    }
+}
+
+/// Whether `url`'s scheme is `https`, in any case.
+#[cfg(feature = "fetch")]
+fn is_https(url: &str) -> bool {
+    url.get(..8)
+        .is_some_and(|s| s.eq_ignore_ascii_case("https://"))
 }
 
 /// Stub used when the crate is built without the `fetch` feature.

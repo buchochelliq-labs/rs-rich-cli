@@ -18,7 +18,7 @@ open ones are **permanent**, each for the reason in its entry:
 | Resolved earlier | §1 (table), §8, §10, §11, §13, §14 (stack), §27 |
 | Permanent: the language or platform | §1 (`UNICODE_VERSION`), §3, §3a, §6, §14 (per console), §14a, §15, §19 (reflection), §20, §25, §30, §38, §41, §42, §43, §44, §45, §47 |
 | Permanent: another engine | §9 and §18 (syntect, not Pygments), §21 (pulldown-cmark's emphasis) |
-| Permanent: an API or CLI choice | §2, §16 (`f64` counts, byte reads), §17 (a `Live` owns its console; proxy writers, not the process's stdout; nested displays drawn from their last rendering), §31, §32, §34, §40, §46, §48, §49 |
+| Permanent: an API or CLI choice | §2, §16 (`f64` counts, byte reads), §17 (a `Live` owns its console; proxy writers, not the process's stdout; nested displays drawn from their last rendering), §31, §32, §34, §40, §46, §48, §49, §50 (`rich URL`'s downgrade refusal and sanitizing, 0.0.24) |
 | Permanent: ours, opt-in or additive | §22, §23, §26, §35, §36, §37, §39 |
 
 ## Current divergences
@@ -941,6 +941,26 @@ open ones are **permanent**, each for the reason in its entry:
 - **Why:** additive public API (the closure forms keep their names), and
   the Rust form of a subclass override, a context manager or a list.
 - **Remove:** not planned.
+
+### 50. `rich URL`: no HTTPS downgrade, and fetched content is sanitized
+
+- **Differs:** rich-cli 1.8.1 fetches with `requests.get`, which follows a
+  redirect from `https://` to `http://`, and renders the body with its
+  terminal controls intact. This CLI (0.0.24) refuses a redirect from an
+  `https://` hop to an `http://` one, with an error naming both, before
+  that request is made; an `http://` URL given on the command line is still
+  fetched. Content fetched from a URL is sanitized by default in every mode,
+  as `--sanitize` does: ESC, C1 and other controls (window titles, OSC 52
+  clipboard writes, OSC 8 links, cursor moves) are shown as inert text,
+  while `rich`'s own styling is unaffected.
+- **Why:** a server, or anyone on the path of a downgraded hop, controls
+  those bytes; neither should reach the terminal, or be fetched in the
+  clear, without the user asking. Local files and stdin keep upstream's
+  behaviour.
+- **Opt out:** `--no-sanitize` (or `sanitize = false` in the user's own
+  config, not a working-directory `rich.toml`) lets a URL's escapes through.
+  The downgrade has no flag: fetch the `http://` address itself.
+- **Verdict (0.0.24): permanent** (a CLI choice).
 
 ## Feature-flagged divergences
 

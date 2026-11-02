@@ -152,7 +152,7 @@ kind needs the same explicit decision.
 | `--print` / `--markdown` / `--json` / `--syntax` / `--csv` / `--rule`, width + justify, stdin, extension auto-detect | `lib.rs` | 🟡; highlighted with rich's `ReprHighlighter` alone, as upstream (since 0.0.23 rs-rich-ext's example `NumberHighlighter` is not installed on the rendering consoles) |
 | `csv`/`tsv` table render (blue border, numeric-column bold-green, quoted-field parse, `csv.Sniffer`) | `lib.rs` (table) + `rs-rich-data` `csv.rs` (sniffer and reader, moved from the CLI in 0.0.16) | 🟡 sniffer agrees with CPython's on 42/42 samples |
 | HTML export (`--export-html`) + SVG export (`--export-svg`) | `lib.rs` | 🟡 both done |
-| `--panel`/`--padding` decorators (+ title/caption/style), `--ipynb`, URL fetch (`fetch` feature) | `lib.rs` | 🟡 done |
+| `--panel`/`--padding` decorators (+ title/caption/style), `--ipynb`, URL fetch (`fetch` feature) | `lib.rs` | 🟡 done; since 0.0.24 an `https://` to `http://` redirect is refused and a URL's content is sanitized by default (DIVERGENCES §50) |
 | paging (`--pager`) | `pager.rs` + `lib.rs` | 🟡 done |
 | preferred subcommands (`print`, `markdown`, `syntax`, `json`, `csv`/`tsv`, `ipynb`, `jsonl`, `log`, `gif`, `diff`, `image`, `rule`) while preserving flat flags | `lib.rs` | 🟡 done; `image` is a local rich-art convenience, and the tool commands (`inspect`, `ansi explain`, `view`, …) are listed under the conveniences below |
 | stable exit-code classes and `--report json` / `--machine-json` result/error envelopes | `lib.rs` | 🟡 done |

@@ -39,6 +39,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   whose store is present but lacks a root the bundled list has now sees
   the system's refusal; adding the root to the system store, or
   `SSL_CERT_FILE` on Linux, is the fix.
+- **`rich URL`: no HTTPS downgrade, and a URL's content is sanitized.** A
+  redirect from an `https://` hop to an `http://` one is refused before it
+  is requested, with an error naming both (an `http://` URL given as such
+  is still fetched). Content fetched from a URL is sanitized by default in
+  every mode (`rich chart` and `rich profile` too), as `--sanitize` does:
+  its terminal controls are shown as inert text; `--no-sanitize` opts out.
+  Both differ from rich-cli 1.8.1: DIVERGENCES §50.
 
 ### The docs on Zensical
 
