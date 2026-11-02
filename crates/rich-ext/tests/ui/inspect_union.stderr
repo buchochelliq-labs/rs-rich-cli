@@ -1,0 +1,5 @@
+error: cannot derive Inspect for a union: which field holds the value is not known
+ --> tests/ui/inspect_union.rs:4:1
+  |
+4 | union Bits {
+  | ^^^^^

@@ -22,5 +22,10 @@ rs-rich-ext = { version = "0.0.17", features = ["macros"] }
   table row, with `#[rich(skip, label = "…", style = "…", display, format =
   "…", justify = "…", order = N)]` on fields and `#[rich(title = "…", panel,
   table)]` on the type.
+- `#[derive(Inspect)]` records what `rich_ext::inspect` reports on a struct or
+  enum (type, doc comments, fields with their types, visibility and values,
+  variants), with `#[inspect(skip, nested, with = path)]` on fields and
+  `#[inspect(methods)]` on the type; `#[inspect]` on an inherent `impl` block
+  records its methods' signatures and doc comments.
 
 Independent SemVer from `0.0.1`; see the repository's `AGENTS.md`.

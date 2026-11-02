@@ -1,0 +1,17 @@
+╭───────────────────────── <struct 'inspect::Point'> ──────────────────────────╮
+│ A point in the *plane*, with a `label`.                                      │
+│                                                                              │
+│ ╭──────────────────────────────────────────────────────────────────────────╮ │
+│ │ Point { x: 1, y: 2.5, label: "origin", secret: 3, .. }                   │ │
+│ ╰──────────────────────────────────────────────────────────────────────────╯ │
+│                                                                              │
+│     label = "origin" What to call it.                                        │
+│         x = 1 Horizontal position.                                           │
+│         y = 2.5                                                              │
+│      load = pub async fn load(path: &str) -> Option<Self>: Load one from     │
+│             disk.                                                            │
+│      norm = pub fn norm(&self, scale: f64) -> f64: The distance from the     │
+│             origin, times `scale`.                                           │
+│ translate = pub fn translate<T: Into<f64>>(&mut self, dx: i32, dy: T): Move  │
+│             it.                                                              │
+╰──────────────────────────────────────────────────────────────────────────────╯

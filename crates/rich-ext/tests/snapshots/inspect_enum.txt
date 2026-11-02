@@ -1,0 +1,11 @@
+╭────────── <enum 'inspect::Shape2'> ───────────╮
+│ A shape to draw.                              │
+│                                               │
+│ ╭───────────────────────────────────────────╮ │
+│ │ Circle { radius: 1.5 }                    │ │
+│ ╰───────────────────────────────────────────╯ │
+│                                               │
+│  variant = Circle A circle around the origin. │
+│ variants = Circle, Rect, Empty                │
+│   radius = 1.5                                │
+╰───────────────────────────────────────────────╯

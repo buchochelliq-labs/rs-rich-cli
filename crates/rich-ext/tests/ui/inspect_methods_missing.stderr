@@ -1,0 +1,13 @@
+error[E0277]: `Point` has no recorded methods
+ --> tests/ui/inspect_methods_missing.rs:3:10
+  |
+3 | #[derive(Inspect)]
+  |          ^^^^^^^ unsatisfied trait bound
+  |
+help: the trait `InspectMethods` is not implemented for `Point`
+ --> tests/ui/inspect_methods_missing.rs:5:1
+  |
+5 | struct Point {
+  | ^^^^^^^^^^^^
+  = note: put `#[rich_ext::inspect]` on an inherent `impl` block of `Point`, or remove `#[inspect(methods)]`
+  = note: this error originates in the derive macro `Inspect` (in Nightly builds, run with -Z macro-backtrace for more info)

@@ -212,6 +212,10 @@ required-features = ["log", "tracing"]
 name = "guide_macros"
 required-features = ["macros"]
 
+[[example]]
+name = "guide_inspect"
+required-features = ["macros"]
+
 # User-guide examples for docs/guide/ext (data, CLI, diffs, QA, capabilities).
 [[example]]
 name = "guide_data"

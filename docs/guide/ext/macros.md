@@ -229,6 +229,8 @@ cargo run -p rs-rich-ext --example guide_macros --features macros
   with `keys[…]`.
 - [Structured data](structured-data.md): `print_table` and friends for `serde`
   types, when you would rather not derive.
+- [Inspect](inspect.md): `#[derive(Inspect)]`, upstream's `rich.inspect` for
+  Rust values.
 - API: [`rich_ext` macros](https://docs.rs/rs-rich-ext/latest/rich_ext/#macros),
   [`derive`](https://docs.rs/rs-rich-ext/latest/rich_ext/derive/index.html),
   [`rs-rich-macros`](https://docs.rs/rs-rich-macros/latest/rich_macros/).

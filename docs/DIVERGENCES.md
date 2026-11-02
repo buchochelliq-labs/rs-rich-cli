@@ -483,6 +483,32 @@ open ones are **permanent**, each for the reason in its entry:
   Rust-native needs reflection: `Pretty::new` over `Debug`, `inspect`,
   `repr.py`'s decorators, tracebacks with frames and locals, and
   `logging`'s rich tracebacks.
+- **`inspect` from derive data (0.0.24, #796).** `rs-rich-ext`'s
+  `inspect` module renders upstream's `_inspect.py` report (a fitted
+  `scope.border` panel titled with the type, the first paragraph of the
+  doc, the value in an `inspect.value.border` panel, and a grid of
+  right-aligned `name =` rows in upstream's `inspect.*` styles) for Rust
+  values. The facts come from `#[derive(Inspect)]` (`rs-rich-macros`,
+  behind ext's `macros` feature) at compile time, not from runtime
+  reflection: the type's `type_name` and doc comment, each field's name,
+  type as written, doc comment, visibility and `Debug` value, and an
+  enum's variants. Core is unchanged: `_inspect.py` stays ⛔ in the mirror.
+  What differs from upstream:
+  - only a type that derives `Inspect` (or implements `Inspectable` by
+    hand) can be inspected; there is no `inspect` of a type, function or
+    module, so no signature line for a callable;
+  - **methods** are listed only from an inherent `impl` block marked
+    `#[inspect]` (with `#[inspect(methods)]` on the type), with their
+    signatures as written (`pub fn norm(&self, scale: f64) -> f64`);
+    trait methods and associated items are not listed;
+  - **`dunder`** has no counterpart (Rust has no dunder names), and
+    `private` means non-`pub`, not a leading `_`; **`all`** turns on
+    `methods`, `private` and our `types` and `variants`;
+  - titles read `<struct '…'>` / `<enum '…'>`; values are `Debug` output
+    fitted to the width (one line, else `{:#?}`), without `Pretty`'s
+    `max_length`/`max_string` cuts; field doc comments follow their values
+    when `docs` is on; `#[inspect(nested)]` fields are nested panels, cut
+    at `max_depth`; the "not shown" hint names `Inspect::all`.
 
 ### 20. Hyperlinks omit upstream's random `id=` field
 - **Differs:** `Style::with_link` renders an OSC 8 hyperlink as

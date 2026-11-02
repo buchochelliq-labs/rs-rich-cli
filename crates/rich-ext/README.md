@@ -149,6 +149,10 @@ The `macros` feature re-exports `rs-rich-macros`:
   (`#[rich(panel)]`) or a table row (`#[rich(table)]`). Field options are
   `skip`, `label`, `style`, `display`, `format`, `justify` and `order`.
   `derive::table(&records)` lays many records out as rows.
+- `#[derive(Inspect)]` and `Inspect::new(&value)` give upstream's
+  `rich.inspect` report on a Rust value (type, doc comment, value and
+  fields; methods from an `impl` block marked `#[inspect]`), from data the
+  derive collects at compile time. `rich_inspect!(value)` prints it.
 - `rich_println!`, `rich_eprintln!` and `rich_trace!` print checked markup.
 
 Without the feature you still get `rich_table!`, `rich_panel!`, `rich_tree!`,
