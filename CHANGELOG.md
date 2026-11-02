@@ -46,6 +46,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   every mode (`rich chart` and `rich profile` too), as `--sanitize` does:
   its terminal controls are shown as inert text; `--no-sanitize` opts out.
   Both differ from rich-cli 1.8.1: DIVERGENCES §50.
+- **The marketplace signer's supply chain is pinned.**
+  `docs/marketplace-repo`'s `sign-index.yml` pins every action to a full
+  commit SHA, installs `jsonschema` and its dependencies only from the new
+  hash-pinned `.github/requirements-signer.txt` (`--require-hashes`), and
+  defaults `RS_RICH_CLI_REF` to the commit of `release-0.0.23` instead of
+  `main` (`check-listings.yml` too). For the marketplace repository to take.
 
 ### The docs on Zensical
 

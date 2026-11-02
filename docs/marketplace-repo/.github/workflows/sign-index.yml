@@ -51,20 +51,29 @@ concurrency:
 permissions:
   contents: read
 
+# Supply chain: every action is pinned to a full commit SHA (the tag it was
+# taken from in the comment), the Python packages are installed only from
+# .github/requirements-signer.txt, whose every file is pinned by SHA-256,
+# and rs-rich-cli's validator is fetched at a fixed commit, not a branch.
+# Moving any of them is a reviewed change to this repository.
 env:
-  # The rs-rich-cli revision whose validator and schemas apply. Pin it to the
-  # release the marketplace serves (a tag), and move it with that release.
-  RS_RICH_CLI_REF: ${{ vars.RS_RICH_CLI_REF || 'main' }}
+  # The rs-rich-cli revision whose validator and schemas apply: the commit
+  # of rs-rich-cli's release-0.0.23 tag, unless the repository variable
+  # names another. Set the variable to the release the marketplace serves
+  # (a tag, or better its commit), and move it with that release; this
+  # default moves only by a change to this file, never by a push to
+  # rs-rich-cli's main.
+  RS_RICH_CLI_REF: ${{ vars.RS_RICH_CLI_REF || '2624ce5b5d76c092a59033d61ae7db3b50b8c8e9' }}
 
 jobs:
   validate:
     name: listings validate
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
 
       - name: Fetch rs-rich-cli's validator and schemas
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: buchochelliq-labs/rs-rich-cli
           ref: ${{ env.RS_RICH_CLI_REF }}
@@ -74,13 +83,14 @@ jobs:
             schemas/marketplace
           sparse-checkout-cone-mode: false
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
       - name: Every listing is valid
         run: |
-          python3 -m pip install jsonschema
+          python3 -m pip install --require-hashes --only-binary=:all: --no-deps \
+            -r .github/requirements-signer.txt
           python3 .rs-rich-cli/scripts/validate_marketplace.py --jsonschema require packages/*.json
 
   sign:
@@ -131,14 +141,14 @@ jobs:
       # (persist-credentials: false): the steps between here and the push
       # run Python from this repository and from rs-rich-cli, and none of
       # them needs to write. The push step hands git the token itself.
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           ref: main
           token: ${{ steps.app-token.outputs.token }}
           persist-credentials: false
 
       - name: Fetch rs-rich-cli's validator and schemas
-        uses: actions/checkout@v7
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           repository: buchochelliq-labs/rs-rich-cli
           ref: ${{ env.RS_RICH_CLI_REF }}
@@ -148,7 +158,7 @@ jobs:
             schemas/marketplace
           sparse-checkout-cone-mode: false
 
-      - uses: actions/setup-python@v7
+      - uses: actions/setup-python@6d4fd22b20465ccc0f7354476588e8df7c9ca0e0 # v7.1.0
         with:
           python-version: "3.12"
 
@@ -156,7 +166,8 @@ jobs:
         run: |
           sudo apt-get update
           sudo apt-get install -y minisign
-          python3 -m pip install jsonschema
+          python3 -m pip install --require-hashes --only-binary=:all: --no-deps \
+            -r .github/requirements-signer.txt
 
       - name: Rebuild index.json with the next serial
         id: index

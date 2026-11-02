@@ -207,12 +207,20 @@ packages a user believes are official.
 
 **Gaps:**
 
-- **Supply chain of the signing job.** Its actions are pinned by tag, not
-  by commit; `jsonschema` is installed from PyPI unpinned and `minisign`
-  from apt, in the same job that later receives the key; the validator is
-  fetched from rs-rich-cli at `RS_RICH_CLI_REF`, `main` unless the variable
-  is set. Pin actions by commit, pin the Python package with a hash, and set
-  `RS_RICH_CLI_REF` to a tag. **gap**.
+- **Supply chain of the signing job.** Its actions were pinned by tag, not
+  by commit; `jsonschema` was installed from PyPI unpinned, in the same job
+  that later receives the key; the validator was fetched from rs-rich-cli
+  at `RS_RICH_CLI_REF`, `main` unless the variable was set. Now every
+  action in [`sign-index.yml`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/marketplace-repo/.github/workflows/sign-index.yml)
+  is pinned to a full commit SHA, `jsonschema` and its dependencies are
+  installed only from
+  [`requirements-signer.txt`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/docs/marketplace-repo/.github/requirements-signer.txt)
+  with `--require-hashes`, and `RS_RICH_CLI_REF` defaults to the commit of
+  rs-rich-cli's `release-0.0.23` tag (`check-listings.yml` too). Applies
+  once the marketplace repository takes the change. **mitigated**
+  (0.0.24). Left: `minisign` still comes from Ubuntu's signed apt archive,
+  and the other marketplace workflows (no signing secrets) still pin
+  actions by tag.
 - **Revocation needs the client to see the next generation.** Key
   generations are fetched from the same location as the index. A client
   pointed at a location that withholds `keys-N+1.json` (a stale mirror, a

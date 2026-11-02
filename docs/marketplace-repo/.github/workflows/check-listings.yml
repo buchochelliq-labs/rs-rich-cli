@@ -43,7 +43,9 @@ concurrency:
   cancel-in-progress: true
 
 env:
-  RS_RICH_CLI_REF: ${{ vars.RS_RICH_CLI_REF || 'main' }}
+  # As sign-index.yml: rs-rich-cli's release-0.0.23 commit unless the variable
+  # names another.
+  RS_RICH_CLI_REF: ${{ vars.RS_RICH_CLI_REF || '2624ce5b5d76c092a59033d61ae7db3b50b8c8e9' }}
 
 jobs:
   check:
