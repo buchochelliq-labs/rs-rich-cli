@@ -543,3 +543,45 @@ label("scope")
   it in a test. **`bind_hidden(keys, name, handler)`** is both at once
   (Textual's `show=False`). An empty description still hides a binding
   with no name.
+
+### User keymaps
+
+New in 0.0.24: a binding with an id can be remapped by its users, from a
+keys file or from code, without the app being rebuilt (Textual's
+`Binding(id=…)` and `App.set_keymap`).
+
+```rust
+label("editor")
+    .bind_id("editor.save", "ctrl+s", "Save", save)      // or .bind(..).binding_id(..)
+    .bind_sequence("g g", "Top", top)
+    .sequence_id("nav.top");
+App::new(build)
+    .keymap([("editor.save", "ctrl+s f2"), ("app.quit", "ctrl+q")])
+    .keymap_file(state_dir("myapp")?.join("keys.toml"));  // read again on change
+cx.set_keymap([("editor.save", "f2")])?;                 // at run time
+cx.reload_keymap();                                      // read the file now
+```
+
+- **Ids** go on a binding (`bind_id`, or `.binding_id(id)` after `bind`,
+  `bind_in`, `bind_scaled`, `bind_when`, …) or on a sequence
+  (`.sequence_id(id)`, whose keys in the map are the new sequence:
+  `"space t"`). An editor's actions are in the same map as
+  `text_area.<action>` (`text_area.undo`, `text_area.word-left`), for every
+  text area and input. The diff view's keys are `diff.next`,
+  `diff.previous`, `diff.fold`, `diff.accept`, `diff.reject`,
+  `diff.accept_all` and `diff.reject_all`.
+- **The map** gives each id its keys, as `on_key` names them, separated by
+  spaces or commas, or `none` to unbind. The keys file holds one
+  `id = keys` a line, with `#` comments; `[section]` lines are skipped and
+  a quoted list is read inside its quotes, so a TOML file of strings
+  works (`editor.save = "ctrl+s f2"`). The file's entries go over the ones
+  in code. A file that does not parse is reported in a toast and the last
+  good map stays; the file is checked for changes as the app runs, as a
+  theme file is.
+- **Everywhere:** the help, the command palette, a `key_hints` footer and
+  the which-key pop-up show the keys the map gives.
+- **Reports.** After each change of map, one warning toast lists the ids no
+  binding has (on the screens open then) and the keys two ids now share on
+  one path of the tree: the deeper node's binding takes the key, as it
+  does without a map, and on one node the first. `driver.keymap_report()`
+  returns the same lines in a test.

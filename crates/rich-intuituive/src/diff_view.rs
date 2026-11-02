@@ -1197,7 +1197,10 @@ pub fn diff_view(old: Signal<String>, new: Signal<String>) -> Node {
 /// Its keys (listed in the help, under `diff`): `]` or `n` and `[` or `p`
 /// move the hunk cursor (it starts before the first hunk), and with
 /// [`DiffOptions::decide`] `a` and `r` accept or reject the hunk under
-/// it, `A` and `R` every hunk. Up, Down, `j`, `k`, PageUp, PageDown,
+/// it, `A` and `R` every hunk. Their ids, for a
+/// [keymap](crate::App::keymap): `diff.next`, `diff.previous`,
+/// `diff.fold`, `diff.accept`, `diff.reject`, `diff.accept_all` and
+/// `diff.reject_all`. Up, Down, `j`, `k`, PageUp, PageDown,
 /// Home and End scroll, and so does the wheel; a click puts the cursor on
 /// a hunk. Only the rows in view are rendered. [`accepted_text`] applies
 /// the decisions.
@@ -1245,33 +1248,47 @@ pub fn diff_view_with(old: Signal<String>, new: Signal<String>, options: DiffOpt
     };
     let mut node = Node::from_widget(Box::new(widget), "diff_view").focusable();
     let c = core.clone();
-    node = node.bind_in("diff", "] n", "Next hunk", move |_| c.step(true));
+    node = node
+        .bind_in("diff", "] n", "Next hunk", move |_| c.step(true))
+        .binding_id("diff.next");
     let c = core.clone();
-    node = node.bind_in("diff", "[ p", "Previous hunk", move |_| c.step(false));
+    node = node
+        .bind_in("diff", "[ p", "Previous hunk", move |_| c.step(false))
+        .binding_id("diff.previous");
     let c = core.clone();
-    node = node.bind_in(
-        "diff",
-        "enter",
-        "Open or fold the unchanged lines",
-        move |_| c.toggle_folds(),
-    );
+    node = node
+        .bind_in(
+            "diff",
+            "enter",
+            "Open or fold the unchanged lines",
+            move |_| c.toggle_folds(),
+        )
+        .binding_id("diff.fold");
     if decide {
         let c = core.clone();
-        node = node.bind_in("diff", "a", "Accept the hunk", move |cx| {
-            c.decide(cx, false, Decision::Accepted)
-        });
+        node = node
+            .bind_in("diff", "a", "Accept the hunk", move |cx| {
+                c.decide(cx, false, Decision::Accepted)
+            })
+            .binding_id("diff.accept");
         let c = core.clone();
-        node = node.bind_in("diff", "r", "Reject the hunk", move |cx| {
-            c.decide(cx, false, Decision::Rejected)
-        });
+        node = node
+            .bind_in("diff", "r", "Reject the hunk", move |cx| {
+                c.decide(cx, false, Decision::Rejected)
+            })
+            .binding_id("diff.reject");
         let c = core.clone();
-        node = node.bind_in("diff", "A", "Accept every hunk", move |cx| {
-            c.decide(cx, true, Decision::Accepted)
-        });
+        node = node
+            .bind_in("diff", "A", "Accept every hunk", move |cx| {
+                c.decide(cx, true, Decision::Accepted)
+            })
+            .binding_id("diff.accept_all");
         let c = core;
-        node = node.bind_in("diff", "R", "Reject every hunk", move |cx| {
-            c.decide(cx, true, Decision::Rejected)
-        });
+        node = node
+            .bind_in("diff", "R", "Reject every hunk", move |cx| {
+                c.decide(cx, true, Decision::Rejected)
+            })
+            .binding_id("diff.reject_all");
     }
     node
 }

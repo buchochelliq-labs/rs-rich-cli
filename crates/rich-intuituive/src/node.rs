@@ -94,6 +94,12 @@ pub(crate) struct KeyBinding {
     /// ([`repeat`](Node::repeat)).
     pub repeat: Option<(std::time::Duration, std::time::Duration)>,
     pub handler: KeyHandler,
+    /// What a keymap remaps it by ([`binding_id`](Node::binding_id)).
+    pub id: Option<Rc<str>>,
+    /// Its own keys and shown keys, kept once a keymap remaps it.
+    pub declared: Option<(Vec<Key>, Option<Vec<Key>>)>,
+    /// The keymap generation its keys are from.
+    pub keymap_generation: u64,
 }
 
 /// When a binding applies: read untracked, as a key comes and as the help
@@ -121,6 +127,9 @@ impl KeyBinding {
             hidden: false,
             repeat: None,
             handler,
+            id: None,
+            declared: None,
+            keymap_generation: 0,
         }
     }
 

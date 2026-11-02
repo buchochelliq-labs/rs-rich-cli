@@ -50,6 +50,8 @@ use crate::reactive::{Memo, NodeId, Proxy, Runtime, Signal, signal};
 use crate::screen::{PaintStats, PaintStrategy, Painter, Rect, Screen};
 use crate::widget::{Used, WidgetEvent};
 
+mod keymap;
+
 /// The theme style a pop-up's title is drawn in: the palette's, the
 /// help's, a modal's or pop-up's panel, a [confirm](Ctx::confirm) dialog's.
 /// The theme's `title` when it does not name it.
@@ -94,6 +96,8 @@ pub struct Ctx {
     layers: usize,
     /// The handler passed its key on ([`pass_key`](Ctx::pass_key)).
     pub(crate) passed: bool,
+    /// A new keymap, or a reload of the keys file.
+    keymap: Option<keymap::Request>,
 }
 
 /// The user's editor: `$VISUAL` (a program and its arguments), else
@@ -319,6 +323,7 @@ impl Ctx {
             releases: Releases::None,
             layers: 1,
             passed: false,
+            keymap: None,
         }
     }
 
@@ -2108,6 +2113,8 @@ pub struct App {
     /// The theme set in code, before any theme file's styles.
     theme_base: Theme,
     theme_file: Option<ThemeFile>,
+    /// The user keymap ([`App::keymap`], [`App::keymap_file`]).
+    keymap: keymap::KeymapState,
     sheet: Option<SheetSource>,
     /// For assistive technology: whether to draw for it, or write lines
     /// for it (linear mode), where announcements go, those not yet taken,
@@ -2445,6 +2452,7 @@ impl App {
                 .map(|_| Inspector::new(true)),
             theme_base: Theme::default(),
             theme_file: None,
+            keymap: Default::default(),
             sheet: None,
             accessible,
             linear,
@@ -4078,6 +4086,7 @@ impl App {
 
     /// Draw what changed; returns the damage.
     fn frame(&mut self, console: &Console, screen: &mut Screen, full: bool) -> Vec<Rect> {
+        self.check_keymap();
         crate::a11y::set_text_mode(self.text_mode());
         // What the inspector drew over the app comes off first, so the
         // app's cells are its own again before anything draws.
@@ -4580,6 +4589,9 @@ impl App {
         for nav in navs {
             quit |= self.navigate(nav);
         }
+        if let Some(request) = cx.keymap {
+            self.keymap_request(request);
+        }
         if let Some(theme) = cx.theme {
             self.theme_base = theme;
             self.retheme();
@@ -4728,6 +4740,7 @@ impl App {
     /// or not they apply now, each with what decides it: what the help and
     /// the palette list, read again as they are drawn.
     fn candidates_of(&self, ids: &[NodeId], palette: bool) -> Vec<crate::actions::Listed> {
+        self.remap_nodes(ids);
         use crate::actions::Listed;
         let mut out = Vec::new();
         for &id in ids {
@@ -4811,6 +4824,7 @@ impl App {
             .map(|id| self.path_to(id))
             .filter(|p| !p.is_empty())
             .unwrap_or_else(|| vec![self.top().root.id()]);
+        self.remap_nodes(&path);
         let mut shown: Vec<crate::help::Hint> = Vec::new();
         for &id in path.iter().rev() {
             with_node(&self.top().root, id, &mut |node| {
@@ -5456,7 +5470,9 @@ impl App {
     /// [claims](crate::Widget::claims_key) it.
     fn binds(&self, key: Key) -> bool {
         let mut bound = false;
-        for id in self.key_path() {
+        let path = self.key_path();
+        self.remap_nodes(&path);
+        for id in path {
             with_node(&self.top().root, id, &mut |node| {
                 bound |= crate::node::pick_binding(key, &node.keys.borrow(), &[]).is_some()
                     || node
@@ -5504,6 +5520,7 @@ impl App {
     }
 
     fn key(&mut self, key: Key) -> bool {
+        self.remap_nodes(&self.key_path());
         self.repeating_key = self.press_held(key);
         self.hide_tip();
         if key.code == KeyCode::Escape && self.drag.as_ref().is_some_and(|drag| drag.active) {
@@ -6553,6 +6570,7 @@ impl Driver {
         let app = &mut self.app;
         app.reload_theme();
         app.reload_sheet();
+        app.reload_keymap_file(false);
         app.now = now;
         app.runtime.tracer.set_now(now);
         app.runtime.now.set(now);

@@ -79,6 +79,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   from the palette. Textual's 21 themes are built in beside `dark`,
   `light` and `mono`, which are unchanged; their palettes are Textual's
   (MIT), credited in the crate's new `THIRD_PARTY.md`.
+- **User keymaps** (#806): `Node::bind_id(id, ..)`, `.binding_id(id)` and
+  `.sequence_id(id)` give a binding, a scaled binding or a sequence an id;
+  `App::keymap([(id, keys)])`, `App::keymap_file(path)` (one `id = keys` a
+  line, TOML's quoted strings read too, checked for changes as the app
+  runs), `Ctx::set_keymap` and `Ctx::reload_keymap` remap them, and the
+  editors' actions by `text_area.<action>`. The help, the palette,
+  `key_hints` and which-key show the new keys. Unknown ids and keys two ids
+  share on one path are reported once in a warning toast (and by
+  `Driver::keymap_report`); the deeper binding still wins. The diff view's
+  keys have ids (`diff.next`, `diff.accept`, …).
 
 ### intuiTUIve: Cornacai's parity items (wave 1, WS2)
 
