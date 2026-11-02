@@ -72,6 +72,65 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   --allow-host HOST` (repeatable). Reaching the server by a LAN name it does
   not know as its own now needs `--allow-host`.
 
+### intuiTUIve: maximize, modes, Pilot helpers, screenshots and more (#807 to #815)
+
+- **Maximize a pane** (#807): `Node::maximizable()` and
+  `maximizable_when(..)`, `Ctx::maximize()` (the nearest maximizable node
+  on the focus's path), `maximize_node(id)`, `minimize()` and
+  `is_maximized()`, and `App::maximize_key(..)` (off unless set). The node
+  draws over the whole screen with its state and focus; the rest keeps its
+  state but neither draws nor takes clicks, and Tab stays inside. Esc that
+  nothing used restores it. The inspector marks it, and assistive
+  technology hears "maximized" and "restored".
+- **Modes and screen results** (#808): `App::mode(name, build)`,
+  `Ctx::switch_mode(name)` and `Ctx::mode()` keep several stacks of
+  screens, each built on first use and kept with its state while another
+  shows (its timers wait); `DEFAULT_MODE` names the first.
+  `Ctx::push_for::<T>(build, then)`, `modal_for::<T>(..)` and
+  `Ctx::dismiss(value)` hand a value back from a screen of your own:
+  `Some(value)` on a dismiss, `None` on a plain pop.
+- **Pilot-style test helpers** (#810): `Driver::click_on(name)`,
+  `click_on_at(name, offset)`, `double_click_on`, `hover_on`, `scroll_on`,
+  `drag_on`, `rect_of` and `wait_for_animations`. A node is found by its
+  `.name(..)`, then its accessible name; none or several panic listing the
+  named nodes. They sit beside `click(column, row)`, which is unchanged.
+- **Screenshots and SVG snapshots** (#809): rs-rich-ext's
+  `surface::Screen::to_svg(&SvgOptions)` and builder methods on
+  `frame::SvgOptions` (`title`, `theme`, `window`, `width`, `cursor`,
+  `caption`, `unique_id`, `font_aspect_ratio`). In intuiTUIve,
+  `Ctx::screenshot(path)`, the palette's *Screenshot* command into
+  `App::screenshot_dir(..)`, `App::title(..)`, and `assert_screen_svg!`
+  (pass or fail from the styled rows, the SVG kept beside them, an HTML
+  report of both pictures in `target/intuituive-snapshots/` on a
+  difference).
+- **Lists of node rows** (#811): `list_of(len, build_row, selected)`, with
+  `Node::separator_after(..)`, `item_disabled_when(..)` and
+  `on_highlight(..)`; `on_select`, `on_context`, `scroll_padding` and
+  `item_key` reach it too. Rows are any nodes, the selected one matches
+  `:selected`, and a click a node inside the row took does not select.
+- **Small widgets after Textual's** (#813): `link(text, url)`
+  (`.on_activate`, `.open_with`), `progress_bar(done, total)`
+  (`.show_percentage`, `.show_eta`, a pulse with no total), `header()`
+  (`App::title`, `Ctx::set_subtitle`, `.clock()`, `.tall()`),
+  `key_panel()` with `Ctx::toggle_key_panel()`, `masked_input(value,
+  template)` and `placeholder(label)` with `PlaceholderVariant`.
+- **Easings and a directory tree** (#814): `Easing` gains Textual's
+  standard set (sine, quad, cubic, quart, quint, expo, circ, back, elastic
+  and bounce, each in, out and in-out) and `Easing::ALL`, checked against
+  Textual's values; it is `#[non_exhaustive]` from this release (listed in
+  `api/semver-breaks.toml`). The `files` plugin's `dir_tree(root)`
+  (`.filter`, `.on_open`, `.view()`) loads folders off-thread on
+  `tree_lazy`.
+- **A log console in another terminal** (#815): with the `tracing`
+  feature, `log::install_console()` (on when `INTUITUIVE_CONSOLE` is set),
+  `log::console_layer(path)`, `console_socket()`,
+  `default_console_socket()` and `Ctx::log(..)` send an app's `tracing`
+  events, and the inspector's trace, as JSON lines over a Unix socket. The
+  CLI's new `rich console [--socket PATH] [--trace] [-v] [-x TARGET]`
+  listens (socket 0600, never TCP) and prints them as `rich log` does; a
+  binary-boundary convenience (`docs/PORTING.md`). No new dependencies.
+  Windows is a documented no-op for now.
+
 ### The docs on Zensical
 
 - Both docs sites build with [Zensical](https://zensical.org/) 0.0.74,

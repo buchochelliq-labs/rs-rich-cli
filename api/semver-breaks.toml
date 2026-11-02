@@ -70,3 +70,10 @@ version = "0.0.3"
 lint = "constructible_struct_adds_field"
 items = ["field Args.split"]
 why = "--split DIR opens Noctiluca in a new pane beside this one through the terminal host client (#820, 0.0.24 plan)"
+
+[[break]]
+crate = "rs-rich-intuituive"
+version = "0.0.9"
+lint = "enum_marked_non_exhaustive"
+items = ["enum Easing"]
+why = "Textual's easings join Easing (#814, 0.0.24 plan), which is #[non_exhaustive] from this release so later ones are not breaks; the variants it gains are not reported apart"

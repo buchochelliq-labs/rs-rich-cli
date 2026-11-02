@@ -35,6 +35,25 @@ terminal and no clock of its own. For a test it has:
   focus is. `focused()` and `focused_name()` return it;
 - `screen()` (the cells), `accessibility()` and `take_announcements()`.
 
+**By name, as Textual's `Pilot` does.** A click at a cell breaks whenever
+the layout moves; these find the node first, by its `.name("…")`, else by
+its accessible name, as `assert_focused` does:
+
+```rust
+driver.click_on("save");                 // the centre of the node named "save"
+driver.click_on_at("list", (2, 3));      // an offset inside it
+driver.double_click_on("row-4");
+driver.hover_on("help");                 // its tooltip shows after advance(..)
+driver.scroll_on("log", -3);             // the wheel, up when negative
+driver.drag_on("divider", (10, 0));      // press, move a cell at a time, release
+driver.wait_for_animations();            // until no animation or effect runs
+driver.rect_of("save")                   // Option<Rect>
+```
+
+A name that matches nothing, or several shown nodes, panics with a message
+listing the named nodes. `click(column, row)`, `wheel(..)` and
+`click_text(..)` still take a place on the screen.
+
 **Snapshots.** `assert_screen!(driver, "name")` compares the screen with
 `tests/snapshots/name.txt`: plain text, one line a row, trailing spaces
 trimmed, so a review reads it as the screen. A file saved with Windows
@@ -57,6 +76,25 @@ row as console markup (`[bold red]Age: forty[/]`), for a test about
 colours. Both take a `Driver`, a `Screen`, or the rows `render_with`
 returns; `intuituive::testing::assert_snapshot(path, text)` compares any
 text with any file.
+
+**SVG snapshots and screenshots.** `assert_screen_svg!(driver, "name")`
+checks the styled rows against `tests/snapshots/name.styled.txt`, as
+`assert_screen_styled!` does, and keeps the screen's picture as
+`name.svg` beside it for review. Pass or fail comes from the styled text,
+since an SVG's bytes change with fonts and versions. When it differs, the
+message names `target/intuituive-snapshots/report.html` (under
+`$CARGO_TARGET_DIR` when it is set), which shows the kept picture and the
+new one side by side with the diff, as pytest-textual-snapshot's report
+does. `UPDATE_SNAPSHOTS=1` writes both files.
+
+`screen.to_svg(&SvgOptions::default().title("demo"))` turns any screen
+into that picture (`SvgOptions` is rs-rich-ext's `frame::SvgOptions`, with
+builders for its title, theme, window, cursor and caption). An app takes
+one of itself with `cx.screenshot(path)`, written once the next frame is
+drawn, and the command palette's *Screenshot* writes `screenshot-1.svg`
+(then the next free number) into `App::screenshot_dir(..)`, the current
+directory unless set, with a toast naming the file. `App::title(..)` is
+the picture's window title.
 
 A component test builds the component in an app of its own:
 
@@ -87,6 +125,39 @@ due run until they sleep again, so a thread-fed app shows the same thing
 frame by frame on every run, and a script's `wait(..)` moves the threads
 on as far as the app. (A `latest` thread that waits on something else, a
 pipe, holds each step up to 5 seconds.)
+
+## A log console in another terminal
+
+A full-screen app has no room for its own log. With the `tracing` feature,
+it can send its `tracing` events to `rich console` in a second terminal, as
+Textual's `textual console` does:
+
+```rust
+intuituive::log::install_console().ok();   // connects if INTUITUIVE_CONSOLE is set
+// in a handler:
+cx.log(format!("loaded {n} rows"));       // a tracing event at DEBUG, target "app"
+```
+
+```bash
+rich console                              # terminal 1: listens and prints
+INTUITUIVE_CONSOLE=1 cargo run --example demo   # terminal 2
+```
+
+- `INTUITUIVE_CONSOLE=1` uses the default socket, `console.sock` in
+  intuiTUIve's state directory; any other value is the socket's path, and
+  `rich console --socket PATH` listens there. Unset (or `0`), nothing is
+  opened. `log::console_layer(path)` adds the console to a subscriber of
+  your own.
+- The socket is a Unix domain socket, never a TCP port: `rich console`
+  makes it 0600, in a directory only you can enter. Events go through a
+  bounded queue on a thread of their own, so a slow console drops events
+  rather than slowing the app.
+- The inspector's trace (keys, focus, screens, signal writes) goes too,
+  while no inspector shows it: `rich console --trace` prints it.
+  `-x TARGET` leaves a target out, `-v` puts each event's fields on lines
+  of their own.
+- On Windows, `install_console` does nothing (std has no local socket
+  there; a named pipe is a follow-up), and `rich console` says so.
 
 ## Inspector
 

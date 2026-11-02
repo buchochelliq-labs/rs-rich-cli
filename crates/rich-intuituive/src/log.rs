@@ -61,9 +61,18 @@ use crate::screen::Rect;
 use crate::widget::{Canvas, DrawCx, EventCx, MeasureCx, MouseExt, Used, Widget, WidgetEvent};
 
 #[cfg(feature = "tracing")]
+mod console;
+#[cfg(feature = "tracing")]
 mod from_tracing;
 mod targets;
 
+#[cfg(feature = "tracing")]
+pub use console::{
+    CONSOLE_VAR, TRACE_TARGET, console_layer, console_socket, default_console_socket,
+    install_console,
+};
+#[cfg(feature = "tracing")]
+pub(crate) use console::{console_tracing, send_trace};
 #[cfg(feature = "tracing")]
 pub use from_tracing::{TracingFeed, install_tracing, tracing_layer};
 /// How serious a line is, from rs-rich-ext's events: `Trace` up to

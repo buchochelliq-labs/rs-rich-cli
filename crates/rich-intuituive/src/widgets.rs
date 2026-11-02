@@ -2878,7 +2878,14 @@ impl Node {
     /// assert_eq!(driver.screen().plain()[1].trim_end(), "1 after 1");
     /// ```
     pub fn on_select(self, handler: impl FnMut(usize, &mut crate::app::Ctx) + 'static) -> Node {
-        self.widget_mut(|tabs: &mut Tabs| tabs.on_select = Some(Box::new(handler)));
+        let mut handler = Some(handler);
+        self.widget_mut(|tabs: &mut Tabs| {
+            tabs.on_select = handler.take().map(|h| Box::new(h) as _)
+        });
+        if let Some(handler) = handler.take() {
+            // A [`list_of`](crate::list_of): Enter or a click on a row.
+            self.node_list(|list| list.set_on_select(Box::new(handler)));
+        }
         self
     }
 }

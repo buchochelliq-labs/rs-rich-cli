@@ -21,6 +21,15 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   `App::keymap`, `keymap_file`, `cx.set_keymap`), #802 `Log::write`. Left
   for later: the Theme and Keys commands of the palette (#803, wave 3),
   the parity audit's rows, a tape of a review (no media recorded).
+- **Wave 2b** (branch `024-w2b`, backup
+  `claude/next-priority-items-3c5p8e-wip-w2b`): #807 maximize, #808 modes
+  and screen results, #810 Pilot helpers, #809 screenshots (rs-rich-ext's
+  `Screen::to_svg` too), #811 `list_of`, #813 the six small widgets and
+  #815 the log console (`rich console` in the CLI) are done. #814 is in
+  part: easings and `files::dir_tree` done; `freeze_rows` and
+  `match_brackets`/`EditorTheme` left. Also left: `list_of_virtual` (#811's
+  variant on `scroll_virtual`), the key panel's help sections (#813), and
+  #815's Windows named pipe.
 
 ## Where things stood (2026-11-01)
 

@@ -53,6 +53,7 @@ mod batch_races;
 mod chart;
 mod cli_spec;
 mod config;
+mod console;
 mod controls;
 mod demo;
 mod doctor;
@@ -1118,6 +1119,9 @@ fn dispatch(args: Vec<String>) -> ExitCode {
     }
     if spin::requested(&args) {
         return spin::dispatch(&args);
+    }
+    if console::requested(&args) {
+        return console::dispatch(&args);
     }
     #[cfg(feature = "art")]
     if micro::requested(&args) {
@@ -7400,6 +7404,9 @@ mod tests {
             if spin::requested(args) {
                 words.push("spin");
             }
+            if console::requested(args) {
+                words.push("console");
+            }
             #[cfg(feature = "art")]
             if micro::requested(args) {
                 words.push("micro");
@@ -7431,7 +7438,7 @@ mod tests {
         };
         let words = [
             "plugins", "doctor", "record", "serve", "choose", "filter", "input", "confirm",
-            "pager", "date", "bench", "config", "spin",
+            "pager", "date", "bench", "config", "spin", "console",
         ];
         for word in words {
             // Without a mode flag the word is the subcommand (where built).
