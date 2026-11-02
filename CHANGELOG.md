@@ -89,6 +89,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   share on one path are reported once in a warning toast (and by
   `Driver::keymap_report`); the deeper binding still wins. The diff view's
   keys have ids (`diff.next`, `diff.accept`, …).
+- **`Log::write(renderable)` and `Log::write_with(renderable, line)`**
+  (#802): any rich renderable in a log (a `Table`, `Syntax`, a `Panel`),
+  laid out at the view's width and again when it changes, only while in
+  view; it counts as one line for the capacity, and filters match its
+  plain text. A log holding one draws its rows in full and scrolls by
+  entries, and still follows its end.
 
 ### intuiTUIve: Cornacai's parity items (wave 1, WS2)
 

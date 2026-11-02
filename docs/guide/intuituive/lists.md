@@ -408,6 +408,28 @@ Keys reach the log while it has the focus, so make it
 `log.view().focusable()`. A key it cannot use (↑ in a log that fits) goes
 on to its ancestors' bindings.
 
+### Tables, code and panels in a log
+
+New in 0.0.24: `log.write(renderable)` adds any rich renderable, as
+Textual's `RichLog.write` does: a tool's table, an excerpt of a file as
+highlighted code, a panel, a diff.
+
+```rust
+log.write(rich::Syntax::new(code, "rust"));
+log.write_with(table, LogLine::new("").level(Severity::Info).target("tool"));
+```
+
+- An entry is laid out at the view's width when it is drawn, and again
+  when the width changes, only while it is in view. A level, target or
+  markup given with `write_with` goes on a row above it.
+- The capacity counts it as one line, and a filter matches the words of
+  its plain text (laid out 100 columns wide).
+- While the log holds one, the view draws its rows in full rather than
+  moving them up, and the keys scroll by entries: ↑ shows the entry
+  before at the bottom, Home the first at the top. A tall entry arriving
+  at the end is followed, its top cut off when it is taller than the
+  view.
+
 ### Levels, targets and filters
 
 A line may carry a level and a target, the module that wrote it:
