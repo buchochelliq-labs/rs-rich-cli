@@ -66,6 +66,29 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `--wave`, `--specks`, `--seed N` animate a banner on a terminal (the
   still frame off one, with no colour or reduced motion).
 
+### `inspect` for Rust values (ext, macros)
+
+- **rs-rich-ext:** `inspect::Inspect`, upstream's `rich.inspect` report
+  for a Rust value (#796): a fitted panel titled `<struct '…'>` or
+  `<enum '…'>`, the doc comment, the value in a green panel and a grid of
+  `name = value` rows, in upstream's `inspect.*` styles. Upstream's
+  options (`methods`, `docs`, `help`, `private`, `sort`, `value`, `all`,
+  `title`) and our `types`, `variants`, `label` and `max_depth`, on
+  `Inspect` and `InspectOptions`; `inspect(&value, options)` and
+  `rich_inspect!(value, name = option, …)` print it. The data comes from
+  the `Inspectable` trait, which a type can implement by hand.
+- **rs-rich-macros:** `#[derive(Inspect)]` writes `Inspectable` at compile
+  time: the type's name and doc comment, each field's name, type as
+  written, doc comment, visibility and `Debug` value, and an enum's
+  variants. `#[inspect(skip)]`, `#[inspect(with = path)]` and
+  `#[inspect(nested)]` (a nested report, cut at `max_depth`) on fields;
+  generic parameters get bounds on the field types that use them; unions
+  are refused. `#[inspect]` on an inherent `impl` block records its
+  methods' signatures and doc comments for `#[inspect(methods)]`.
+- **Docs:** a guide page, [Inspect](docs/guide/ext/inspect.md), with
+  Python's report next to ours; DIVERGENCES §19 says what differs (no
+  runtime reflection, no `dunder`, methods only from a marked `impl`).
+
 ## 0.0.23 cohort — published 2026-10-27
 
 Published on 2026-10-27 from `2624ce5` by one `release.yml` run (tag

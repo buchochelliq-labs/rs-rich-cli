@@ -56,6 +56,7 @@ always available. The `use` path is `rich_ext::<module>`.
 | `macros` | `rich_table!`, `rich_panel!`, `rich_tree!`, `rich_progress!`, `rich_dbg!`; with `macros`, `rich_println!`, `rich_eprintln!`, `rich_trace!` | none; `macros` for the print macros | [Macros](macros.md) |
 | `richf!`, `style!`, `theme_key!`, `markup!`, `#[derive(Rich)]` | Compile-time checked markup and styles; derive rendering (re-exported from `rs-rich-macros`) | `macros` | [Macros](macros.md) |
 | `derive` | `RichRecord`, `Field`, `render` and `table`: the runtime behind the derive | none | [Macros](macros.md#many-records-as-a-table) |
+| `inspect`, `#[derive(Inspect)]`, `rich_inspect!` | `Inspect`: upstream's `rich.inspect` report on a value, from data the derive collects; `#[inspect]` on an impl block lists methods | none; `macros` for the derive and `#[inspect]` | [Inspect](inspect.md) |
 
 ## Workflows, tables and status
 
@@ -152,6 +153,7 @@ cargo run -p rs-rich-ext --example guide_diagnostics --features anyhow
 cargo run -p rs-rich-ext --example guide_logging --features log,tracing
 cargo run -p rs-rich-ext --example guide_live_layout
 cargo run -p rs-rich-ext --example guide_macros --features macros
+cargo run -p rs-rich-ext --example guide_inspect --features macros
 cargo run -p rs-rich-ext --example guide_charts
 cargo run -p rs-rich-ext --example guide_sources --features data,toml
 cargo run -p rs-rich-ext --example guide_documents

@@ -142,6 +142,7 @@ nav:
           - Files, spectra and warm-ups: guide/ext/files-and-signals.md
           - Dependency graphs and JSON Schemas: guide/ext/sources.md
           - Macros and derive: guide/ext/macros.md
+          - Inspect: guide/ext/inspect.md
           - Structured data: guide/ext/structured-data.md
           - Documents (Org, AsciiDoc, man pages): guide/ext/documents.md
           - Transforms: guide/ext/transforms.md
