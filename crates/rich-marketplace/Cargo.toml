@@ -35,8 +35,8 @@ workspace = true
 default = ["http"]
 # `HttpsTransport`: downloads with ureq, the client the CLI's `fetch` feature
 # already uses (rustls, HTTPS only, redirects too), and the `tls` module that
-# chooses its roots: the system's certificate store first, Mozilla's bundled
-# roots as the fallback. Off, the crate has only the `Transport` trait and
+# chooses its roots: the system's certificate store, Mozilla's bundled roots
+# only when that store cannot be used. Off, the crate has only the `Transport` trait and
 # `MemoryTransport`.
 http = ["dep:ureq"]
 

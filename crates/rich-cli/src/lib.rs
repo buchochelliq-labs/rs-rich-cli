@@ -3563,8 +3563,8 @@ const MAX_BODY_BYTES: u64 = 16 * 1024 * 1024;
 ///
 /// Like `requests.get`, a non-2xx status is **not** an error — the body is
 /// returned so an error page still renders. TLS verification is on (rustls,
-/// trusting the system's certificate store first and the bundled webpki roots
-/// as the fallback: `rich_marketplace::tls`).
+/// trusting the system's certificate store, and the bundled webpki roots only
+/// when that store cannot be used: `rich_marketplace::tls`).
 #[cfg(feature = "fetch")]
 fn fetch_url(url: &str, encoding: Option<Encoding>) -> Result<(String, Option<String>), String> {
     use std::time::Duration;

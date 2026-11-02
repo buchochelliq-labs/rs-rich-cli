@@ -291,7 +291,8 @@ live:
 - **Installing.** `Installer` downloads over HTTPS only, through a
   `Transport` (`HttpsTransport`, ureq, behind the default `http` feature;
   it trusts the system's certificate store first, so a TLS-inspecting
-  proxy's root CA works, and Mozilla's bundled roots as the fallback: see
+  proxy's root CA works, and Mozilla's bundled roots only when that store
+  cannot be used (a certificate the system refuses stays refused): see
   `rich_marketplace::tls`),
   reads at most the declared size, checks the SHA-256, then checks the
   artifact by kind: a WASM module's header (a host with the sandbox passes

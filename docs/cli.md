@@ -243,8 +243,9 @@ to polling at `--watch-interval`. Idle watching does not busy-loop in either
 mode. Recursive directory and glob watching are not supported; name each file.
 
 URLs can be watched when the default `fetch` feature is enabled (a fetched
-`https://` URL trusts the system's certificate store first and the roots
-built into `rich` as the fallback, so a company proxy's root CA works). A
+`https://` URL trusts the system's certificate store, so a company proxy's
+root CA works, and the roots built into `rich` only when that store cannot
+be used; a certificate the system refuses stays refused). A
 URL is always polled, and must be the only watched resource:
 
 ```bash

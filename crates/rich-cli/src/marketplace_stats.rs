@@ -64,7 +64,7 @@ pub(crate) fn load(location: &Location) -> Option<Stats> {
 fn fetch_remote(url: &str) -> Option<Vec<u8>> {
     use std::io::Read;
     rich_marketplace::require_https(url).ok()?;
-    // The system's certificates first, the bundled roots as the fallback;
+    // The system's certificates (the bundled roots only without a store);
     // redirects (three at most) followed one request at a time.
     // STATS_TIMEOUT is for the whole chain, its body included.
     let mut response =

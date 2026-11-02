@@ -44,6 +44,8 @@ Each surface has the same parts:
     enough to confirm it;
   - **unverified:** neither could be confirmed;
   - **gap:** no mitigation, or only a partial one;
+  - **mitigated:** a gap the 0.0.24 hardening round closed, linked to
+    the fix and its test;
   - **planned:** the feature is designed but not built.
 - **Gaps:** what the review should decide on: fix, accept or record.
 
@@ -421,7 +423,7 @@ store and the bundled roots.
 
 | | Threat | Mitigation | State |
 |---|---|---|---|
-| S | A network attacker serves a forged certificate | rustls through ureq, verification always on; the system's store first (the platform verifier), Mozilla's bundled roots as the fallback | verified |
+| S | A network attacker serves a forged certificate | rustls through ureq, verification always on; the system's store (the platform verifier), Mozilla's bundled roots only when that store cannot be used ([`tls.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-marketplace/src/tls.rs), `may_be_trust`) | verified |
 | T | A redirect downgrades a marketplace download to `http://` | Marketplace downloads and statistics are HTTPS only, redirects included; ureq's own redirects are off and each hop is checked ([`redirect.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-marketplace/src/redirect.rs), `get_following`) | verified |
 | D | Endless redirects or a slow server | At most five hops for the marketplace (ten for `rich URL`, three for statistics); one overall deadline for the whole chain and its body | verified |
 | D | A decompression bomb | `rich URL` caps the decoded body at 16 MiB; the marketplace reads at most the declared size after decoding | verified |
@@ -429,12 +431,17 @@ store and the bundled roots.
 
 **Gaps:**
 
-- **The bundled fallback can override the system's decision.** Any TLS or
-  I/O failure with the system's store is retried with the bundled roots. A
-  root the user or an administrator removed from the system store on
-  purpose, or a revocation the platform verifier enforced, is then
-  overridden by webpki-roots. Consider retrying only when the system store
-  is empty or unusable, not when it refused a certificate. **gap**.
+- **The bundled fallback could override the system's decision.** Any TLS
+  or I/O failure with the system's store was retried with the bundled
+  roots, so a root removed from the system store on purpose, or a
+  revocation the platform verifier enforced, could be overridden. The
+  bundled roots are now tried only when the system store cannot be used
+  at all (no CA certificates loaded, or no platform verifier); a
+  certificate the system's verifier refused stays refused
+  ([`tls.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-marketplace/src/tls.rs),
+  `may_be_trust`; tested in
+  [`https_trust.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-marketplace/tests/https_trust.rs)).
+  **mitigated** (0.0.24).
 - **`rich URL` follows a redirect from `https://` to `http://`** (as
   upstream's `requests` does), and accepts `http://` URLs. **gap** (parity;
   a warning on a downgrade would not change output).

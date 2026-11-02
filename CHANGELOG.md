@@ -27,6 +27,19 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   on crates.io) and removed; its test now accepts an empty list, as the
   check itself does.
 
+### Security hardening
+
+- **TLS: the bundled roots no longer override the system.**
+  `rich_marketplace::tls::with_fallback` (marketplace downloads, `rich URL`,
+  download statistics) retries with Mozilla's bundled roots only when the
+  system's certificate store cannot be used at all (no CA certificates
+  loaded, or no platform verifier), never after the system's verifier
+  refused a certificate, so a distrusted root or a revocation the platform
+  enforces is honoured. `may_be_trust` now says exactly that. A machine
+  whose store is present but lacks a root the bundled list has now sees
+  the system's refusal; adding the root to the system store, or
+  `SSL_CERT_FILE` on Linux, is the fix.
+
 ### The docs on Zensical
 
 - Both docs sites build with [Zensical](https://zensical.org/) 0.0.74,
