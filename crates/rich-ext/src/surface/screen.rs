@@ -1237,6 +1237,35 @@ impl Screen {
             .collect()
     }
 
+    /// The screen as an SVG picture of a terminal, through
+    /// [`Frame::to_svg`]: each row's runs of cells in their styles, as wide
+    /// as the screen. A screenshot of an app, or a snapshot to review.
+    ///
+    /// ```
+    /// use rich::{Segment, Style};
+    /// use rich_ext::frame::SvgOptions;
+    /// use rich_ext::surface::{Rect, Screen};
+    ///
+    /// let mut screen = Screen::new(20, 3);
+    /// let red = Style::parse("bold red").unwrap();
+    /// screen.write_lines(Rect::new(0, 0, 20, 1), &[vec![Segment::new("hi", Some(red))]]);
+    /// let svg = screen.to_svg(&SvgOptions::default().title("demo"));
+    /// assert!(svg.starts_with("<svg"));
+    /// assert!(svg.contains("font-weight: bold"));
+    /// ```
+    pub fn to_svg(&self, options: &crate::frame::SvgOptions<'_>) -> String {
+        let mut segments = Vec::new();
+        for (y, line) in self.lines().into_iter().enumerate() {
+            if y > 0 {
+                segments.push(Segment::line());
+            }
+            segments.extend(line);
+        }
+        let mut options = options.clone();
+        options.width.get_or_insert(self.width as usize);
+        Frame::from_segments(&segments).to_svg(&options)
+    }
+
     /// Each row as plain text (continuation cells skipped).
     pub fn plain(&self) -> Vec<String> {
         (0..self.height)

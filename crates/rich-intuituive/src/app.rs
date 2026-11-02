@@ -96,8 +96,10 @@ pub struct Ctx {
     pub(crate) passed: bool,
     /// A node is maximized on the top screen.
     maximized: bool,
-    /// The mode showing.
-    mode: String,
+    /// The mode showing, unless it is [`DEFAULT_MODE`].
+    mode: Option<Rc<str>>,
+    /// Screenshots asked for ([`Ctx::screenshot`]).
+    screenshots: Vec<Option<std::path::PathBuf>>,
 }
 
 /// The user's editor: `$VISUAL` (a program and its arguments), else
@@ -315,6 +317,11 @@ struct Mode {
     stash: Option<Vec<Layer>>,
 }
 
+/// The command palette's *Screenshot* (Textual's name for it; not "Save
+/// screenshot", which an app's own "Save" would have to share a search
+/// with).
+const SCREENSHOT_COMMAND: &str = "app.screenshot";
+
 /// The mode an app starts in ([`Ctx::mode`]).
 pub const DEFAULT_MODE: &str = "default";
 
@@ -360,7 +367,8 @@ impl Ctx {
             layers: 1,
             passed: false,
             maximized: false,
-            mode: DEFAULT_MODE.to_string(),
+            mode: None,
+            screenshots: Vec::new(),
         }
     }
 
@@ -1000,7 +1008,15 @@ impl Ctx {
     /// The mode showing when the handler was called ([`DEFAULT_MODE`] until
     /// a [`switch_mode`](Self::switch_mode)).
     pub fn mode(&self) -> String {
-        self.mode.clone()
+        self.mode.as_deref().unwrap_or(DEFAULT_MODE).to_string()
+    }
+
+    /// Save the screen as an SVG picture to `path` once the next frame is
+    /// drawn, as Textual's `save_screenshot` does. A failure is a toast.
+    /// The command palette's *Screenshot* does the same into the
+    /// [screenshot directory](App::screenshot_dir).
+    pub fn screenshot(&mut self, path: impl Into<std::path::PathBuf>) {
+        self.screenshots.push(Some(path.into()));
     }
 
     /// Replace the top screen with the one `build` makes.
@@ -1998,7 +2014,13 @@ pub struct App {
     /// The named stacks of screens ([`App::mode`]), the first app's among
     /// them, and the one showing.
     modes: Vec<Mode>,
-    mode: String,
+    mode: Rc<str>,
+    /// Screenshots to write after the next frame: a path, or `None` for a
+    /// new file in `screenshot_dir`.
+    screenshots: Vec<Option<std::path::PathBuf>>,
+    screenshot_dir: Option<std::path::PathBuf>,
+    /// The app's title ([`App::title`]).
+    title: Option<String>,
     help_key: Vec<Key>,
     /// Read keys as a legacy terminal sends them, even where the kitty
     /// keyboard protocol could be on.
@@ -2386,7 +2408,10 @@ impl App {
                 build: None,
                 stash: None,
             }],
-            mode: DEFAULT_MODE.to_string(),
+            mode: Rc::from(DEFAULT_MODE),
+            screenshots: Vec::new(),
+            screenshot_dir: None,
+            title: None,
             help_key: Vec::new(),
             legacy_keys: false,
             synchronized_output: None,
@@ -3053,6 +3078,22 @@ impl App {
                 stash: None,
             });
         }
+        self
+    }
+
+    /// Where the command palette's *Screenshot* puts its files
+    /// (`screenshot-1.svg`, then the next free number): the current
+    /// directory unless set.
+    #[must_use]
+    pub fn screenshot_dir(mut self, dir: impl Into<std::path::PathBuf>) -> App {
+        self.screenshot_dir = Some(dir.into());
+        self
+    }
+
+    /// The app's title: a screenshot's window title.
+    #[must_use]
+    pub fn title(mut self, title: impl Into<String>) -> App {
+        self.title = Some(title.into());
         self
     }
 
@@ -4522,7 +4563,49 @@ impl App {
         {
             damage.extend(self.frame(console, screen, true));
         }
+        self.write_screenshots(screen);
         damage
+    }
+
+    /// Write the screenshots asked for since the last frame: `screen` as an
+    /// SVG, to the path asked, or (`None`) to a new file in the
+    /// [screenshot directory](App::screenshot_dir), toasting its name.
+    fn write_screenshots(&mut self, screen: &Screen) {
+        if self.screenshots.is_empty() {
+            return;
+        }
+        let title = self
+            .title
+            .clone()
+            .unwrap_or_else(|| "intuiTUIve".to_string());
+        let svg = screen.to_svg(&rich_ext::frame::SvgOptions::default().title(&title));
+        for path in std::mem::take(&mut self.screenshots) {
+            let told = path.is_none();
+            let path = path.unwrap_or_else(|| {
+                let dir = self
+                    .screenshot_dir
+                    .clone()
+                    .unwrap_or_else(|| std::path::PathBuf::from("."));
+                (1u32..)
+                    .map(|n| dir.join(format!("screenshot-{n}.svg")))
+                    .find(|path| !path.exists())
+                    .expect("a free file name")
+            });
+            let shown = rich::markup::escape(&path.display().to_string());
+            let note = match std::fs::write(&path, &svg) {
+                Ok(()) if told => Some(Note::plain(format!("Saved {shown}"))),
+                Ok(()) => None,
+                Err(error) => Some(Note {
+                    markup: format!("{shown}: {}", rich::markup::escape(&error.to_string())),
+                    notice: Some((Level::Error, "Screenshot".to_string())),
+                }),
+            };
+            if let Some(note) = note {
+                self.push_toast(note, self.now + Duration::from_secs(3));
+                // Drawn in the next frame.
+                self.poke = true;
+            }
+        }
     }
 
     /// Put the one-shot timers [`after`] made since the last turn on the
@@ -4544,7 +4627,7 @@ impl App {
         cx.layers = self.layers.len();
         cx.releases = self.releases;
         cx.maximized = self.top().maximized.is_some();
-        cx.mode.clone_from(&self.mode);
+        cx.mode = (*self.mode != *DEFAULT_MODE).then(|| self.mode.clone());
         cx
     }
 
@@ -4583,6 +4666,10 @@ impl App {
         }
         self.copies.extend(cx.copies);
         self.handoffs.extend(cx.handoffs);
+        if !cx.screenshots.is_empty() {
+            self.screenshots.extend(cx.screenshots);
+            self.poke = true;
+        }
         for (note, duration) in cx.toasts {
             self.push_toast(note, self.now + duration);
         }
@@ -4998,15 +5085,22 @@ impl App {
                 let palette = crate::actions::LivePalette::new(
                     rich_interact::overlay::Palette::new(Vec::new()),
                     Box::new(move || {
-                        crate::actions::listed_now(&listed)
+                        let mut commands: Vec<_> = crate::actions::listed_now(&listed)
                             .iter()
                             .map(rich_interact::overlay::Command::from_binding)
-                            .collect()
+                            .collect();
+                        commands.push(rich_interact::overlay::Command::new(
+                            SCREENSHOT_COMMAND,
+                            "Screenshot",
+                        ));
+                        commands
                     }),
                 );
                 crate::node::component(palette, move |command, cx| {
                     cx.pop();
-                    if let Some((_, id, index, sequence)) =
+                    if command.id == SCREENSHOT_COMMAND {
+                        cx.screenshots.push(None);
+                    } else if let Some((_, id, index, sequence)) =
                         targets.iter().find(|t| t.0 == command.id)
                     {
                         cx.nav.push(Nav::Run(*id, *index, *sequence));
@@ -5108,7 +5202,7 @@ impl App {
 
     /// Show mode `name`'s stack, keeping the one showing.
     fn switch_mode(&mut self, name: &str) {
-        if name == self.mode {
+        if *name == *self.mode {
             return;
         }
         let Some(to) = self.modes.iter().position(|mode| mode.name == name) else {
@@ -5117,13 +5211,13 @@ impl App {
         let from = self
             .modes
             .iter()
-            .position(|mode| mode.name == self.mode)
+            .position(|mode| *mode.name == *self.mode)
             .expect("the mode showing is listed");
         self.pending = None;
         self.hide_tip();
         let showing = std::mem::take(&mut self.layers);
         self.modes[from].stash = Some(showing);
-        self.mode = name.to_string();
+        self.mode = Rc::from(name);
         match self.modes[to].stash.take() {
             Some(layers) => {
                 self.layers = layers;

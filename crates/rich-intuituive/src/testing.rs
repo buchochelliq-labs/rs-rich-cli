@@ -26,6 +26,10 @@
 //! assert_screen!(driver, "counter_after_two");
 //! ```
 //!
+//! [`assert_screen_svg!`](crate::assert_screen_svg!) keeps the screen's
+//! SVG picture, `<name>.svg`, beside its styled rows, and on a difference
+//! writes an HTML report showing both pictures.
+//!
 //! The screen can be a [`Driver`], a [`Screen`], or the rows
 //! [`App::render_with`](crate::App::render_with) returns.
 //! [`assert_snapshot`] compares any text with any file.
@@ -219,6 +223,110 @@ pub fn assert_snapshot(path: impl AsRef<Path>, actual: &str) {
     }
 }
 
+/// Where [`check_svg_snapshot`] writes its report when a snapshot differs:
+/// `intuituive-snapshots` in `$CARGO_TARGET_DIR`, else in the `target`
+/// directory beside the nearest `Cargo.lock` above the current directory
+/// (the workspace's, under `cargo test`).
+pub fn report_dir() -> std::path::PathBuf {
+    let target = std::env::var_os("CARGO_TARGET_DIR")
+        .map(std::path::PathBuf::from)
+        .unwrap_or_else(|| {
+            let here = std::env::current_dir().unwrap_or_default();
+            here.ancestors()
+                .find(|dir| dir.join("Cargo.lock").is_file())
+                .unwrap_or(&here)
+                .join("target")
+        });
+    target.join("intuituive-snapshots")
+}
+
+/// Compare a screen's [styled](styled) rows with `<dir>/<name>.styled.txt`
+/// and keep its SVG picture beside it, `<dir>/<name>.svg`, for review.
+/// Pass or fail comes from the styled text alone, since an SVG's bytes
+/// change with fonts and versions. When it differs, the error names an
+/// HTML report in [`report_dir`] showing the snapshot's SVG and the
+/// screen's side by side. With `UPDATE_SNAPSHOTS` set, both files are
+/// written instead; a missing SVG is written whenever the text matches.
+pub fn check_svg_snapshot(dir: &Path, name: &str, screen: &impl StyledRows) -> Result<(), String> {
+    let text = styled(screen);
+    let svg = screen
+        .screen_cells()
+        .to_svg(&rich_ext::frame::SvgOptions::default().title(name));
+    let (text_path, svg_path) = (
+        dir.join(format!("{name}.styled.txt")),
+        dir.join(format!("{name}.svg")),
+    );
+    let update = std::env::var_os(UPDATE_VAR).is_some();
+    match check(&text_path, &text, update) {
+        Ok(()) => {
+            if update || !svg_path.exists() {
+                std::fs::write(&svg_path, &svg)
+                    .map_err(|e| format!("cannot write {}: {e}", svg_path.display()))?;
+            }
+            Ok(())
+        }
+        Err(message) => {
+            let old = std::fs::read_to_string(&svg_path).ok();
+            match write_report(&report_dir(), name, old.as_deref(), &svg, &message) {
+                Ok(report) => Err(format!("{message}\nsee {}", report.display())),
+                Err(error) => Err(format!("{message}\n(no report: {error})")),
+            }
+        }
+    }
+}
+
+/// [`check_svg_snapshot`], panicking with its message.
+#[track_caller]
+pub fn assert_svg_snapshot(dir: &Path, name: &str, screen: &impl StyledRows) {
+    if let Err(message) = check_svg_snapshot(dir, name, screen) {
+        panic!("{message}");
+    }
+}
+
+/// Write `<name>.part.html` (the two pictures and the difference) into
+/// `dir`, and `report.html` again from every part there. The report's path.
+fn write_report(
+    dir: &Path,
+    name: &str,
+    old: Option<&str>,
+    new: &str,
+    message: &str,
+) -> std::io::Result<std::path::PathBuf> {
+    std::fs::create_dir_all(dir)?;
+    let escape = |text: &str| {
+        text.replace('&', "&amp;")
+            .replace('<', "&lt;")
+            .replace('>', "&gt;")
+    };
+    let old = old.map_or_else(
+        || "<p>no SVG was kept</p>".to_string(),
+        |svg| svg.trim_start_matches('\u{feff}').to_string(),
+    );
+    let part = format!(
+        "<section><h2>{}</h2><div class=\"pair\"><figure>{old}<figcaption>expected</figcaption></figure>\
+         <figure>{new}<figcaption>actual</figcaption></figure></div><pre>{}</pre></section>\n",
+        escape(name),
+        escape(message)
+    );
+    std::fs::write(dir.join(format!("{name}.part.html")), part)?;
+    let mut parts: Vec<std::path::PathBuf> = std::fs::read_dir(dir)?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| path.to_string_lossy().ends_with(".part.html"))
+        .collect();
+    parts.sort();
+    let mut html = String::from(
+        "<!doctype html><meta charset=\"utf-8\"><title>intuiTUIve snapshots</title>\
+         <style>body{font-family:sans-serif}.pair{display:flex;gap:1em;flex-wrap:wrap}\
+         figure{margin:0}svg{max-width:48vw;height:auto}</style><h1>Snapshots that differ</h1>\n",
+    );
+    for part in parts {
+        html.push_str(&std::fs::read_to_string(part)?);
+    }
+    let report = dir.join("report.html");
+    std::fs::write(&report, html)?;
+    Ok(report)
+}
+
 /// Assert that a screen matches its snapshot: `tests/snapshots/<name>.txt`
 /// under the crate being tested, the screen's [plain](crate::testing::plain)
 /// rows. The screen is a [`Driver`](crate::Driver), a
@@ -257,6 +365,23 @@ macro_rules! assert_screen_styled {
             dir.join(::std::format!("{}.styled.txt", $name)),
             &$crate::testing::styled(&$screen),
         );
+    }};
+}
+
+/// Assert that a screen's [styled](crate::testing::styled) rows match
+/// `tests/snapshots/<name>.styled.txt`, keeping its SVG picture as
+/// `<name>.svg` beside it; on a difference, an HTML report shows both
+/// pictures (see [`check_svg_snapshot`](crate::testing::check_svg_snapshot)).
+/// The screen is a [`Driver`](crate::Driver) or a
+/// [`Screen`](crate::screen::Screen). Set `UPDATE_SNAPSHOTS=1` to write both
+/// files.
+#[macro_export]
+macro_rules! assert_screen_svg {
+    ($screen:expr, $name:expr $(,)?) => {{
+        let dir = ::std::path::Path::new(::core::env!("CARGO_MANIFEST_DIR"))
+            .join("tests")
+            .join("snapshots");
+        $crate::testing::assert_svg_snapshot(&dir, &::std::format!("{}", $name), &$screen);
     }};
 }
 

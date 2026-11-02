@@ -49,6 +49,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `drag_on`, `rect_of` and `wait_for_animations`. A node is found by its
   `.name(..)`, then its accessible name; none or several panic listing the
   named nodes. They sit beside `click(column, row)`, which is unchanged.
+- **Screenshots and SVG snapshots** (#809): rs-rich-ext's
+  `surface::Screen::to_svg(&SvgOptions)` and builder methods on
+  `frame::SvgOptions` (`title`, `theme`, `window`, `width`, `cursor`,
+  `caption`, `unique_id`, `font_aspect_ratio`). In intuiTUIve,
+  `Ctx::screenshot(path)`, the palette's *Screenshot* command into
+  `App::screenshot_dir(..)`, `App::title(..)`, and `assert_screen_svg!`
+  (pass or fail from the styled rows, the SVG kept beside them, an HTML
+  report of both pictures in `target/intuituive-snapshots/` on a
+  difference).
 
 ### The docs on Zensical
 

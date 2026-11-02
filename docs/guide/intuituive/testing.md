@@ -77,6 +77,25 @@ colours. Both take a `Driver`, a `Screen`, or the rows `render_with`
 returns; `intuituive::testing::assert_snapshot(path, text)` compares any
 text with any file.
 
+**SVG snapshots and screenshots.** `assert_screen_svg!(driver, "name")`
+checks the styled rows against `tests/snapshots/name.styled.txt`, as
+`assert_screen_styled!` does, and keeps the screen's picture as
+`name.svg` beside it for review. Pass or fail comes from the styled text,
+since an SVG's bytes change with fonts and versions. When it differs, the
+message names `target/intuituive-snapshots/report.html` (under
+`$CARGO_TARGET_DIR` when it is set), which shows the kept picture and the
+new one side by side with the diff, as pytest-textual-snapshot's report
+does. `UPDATE_SNAPSHOTS=1` writes both files.
+
+`screen.to_svg(&SvgOptions::default().title("demo"))` turns any screen
+into that picture (`SvgOptions` is rs-rich-ext's `frame::SvgOptions`, with
+builders for its title, theme, window, cursor and caption). An app takes
+one of itself with `cx.screenshot(path)`, written once the next frame is
+drawn, and the command palette's *Screenshot* writes `screenshot-1.svg`
+(then the next free number) into `App::screenshot_dir(..)`, the current
+directory unless set, with a toast naming the file. `App::title(..)` is
+the picture's window title.
+
 A component test builds the component in an app of its own:
 
 ```rust
