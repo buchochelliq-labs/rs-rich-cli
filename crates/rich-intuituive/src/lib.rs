@@ -134,6 +134,7 @@ mod lockstep;
 pub mod log;
 #[cfg(feature = "syntax")]
 mod markdown;
+#[cfg(feature = "syntax")]
 mod markdown_viewer;
 pub mod menu;
 #[cfg(feature = "micro")]
@@ -245,6 +246,7 @@ pub use lockstep::{Lockstep, Steps, stepped_worker, stepped_worker_with};
 pub use log::Log;
 #[cfg(feature = "syntax")]
 pub use markdown::{MarkdownStream, markdown};
+#[cfg(feature = "syntax")]
 pub use markdown_viewer::{MarkdownHeading, MarkdownViewer, markdown_viewer};
 pub use miller::{MillerSource, miller_in, miller_of};
 pub use node::{
