@@ -2578,6 +2578,106 @@ pub fn C::boxed<'a>(self) -> rich_interact::compose::Child<'a, Self::Output> whe
 pub fn C::map<'a, M>(self, impl core::ops::function::FnMut(Self::Output) -> rich_interact::component::Flow<M> + 'a) -> rich_interact::compose::Map<'a, Self, M> where Self: 'a
 pub fn C::with_overlays<'a>(self) -> rich_interact::overlay::Overlays<'a, Self::Output> where Self: 'a, Self::Output: 'a
 pub type rich_interact::compose::Child<'a, M> = alloc::boxed::Box<(dyn rich_interact::component::Component<Output = M> + 'a)>
+pub mod rich_interact::control
+pub struct rich_interact::control::Closer
+impl rich_interact::control::Closer
+pub fn rich_interact::control::Closer::close(&self)
+pub fn rich_interact::control::Closer::path(&self) -> &std::path::Path
+impl core::clone::Clone for rich_interact::control::Closer
+pub fn rich_interact::control::Closer::clone(&self) -> rich_interact::control::Closer
+impl core::fmt::Debug for rich_interact::control::Closer
+pub fn rich_interact::control::Closer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_interact::control::Closer
+impl core::marker::Send for rich_interact::control::Closer
+impl core::marker::Sync for rich_interact::control::Closer
+impl core::marker::Unpin for rich_interact::control::Closer
+impl core::marker::UnsafeUnpin for rich_interact::control::Closer
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::control::Closer
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::control::Closer
+pub struct rich_interact::control::ControlServer
+impl rich_interact::control::ControlServer
+pub fn rich_interact::control::ControlServer::bind(impl core::convert::AsRef<std::path::Path>, &[rich_interact::control::Verb]) -> std::io::error::Result<rich_interact::control::ControlServer>
+pub fn rich_interact::control::ControlServer::closer(&self) -> rich_interact::control::Closer
+pub fn rich_interact::control::ControlServer::is_read_only(&self) -> bool
+pub fn rich_interact::control::ControlServer::path(&self) -> &std::path::Path
+pub fn rich_interact::control::ControlServer::read_only(self, bool) -> rich_interact::control::ControlServer
+pub fn rich_interact::control::ControlServer::serve(self, impl core::ops::function::Fn(&rich_interact::control::Request) -> rich_interact::control::Reply + core::marker::Send + core::marker::Sync + 'static)
+pub fn rich_interact::control::ControlServer::timeout(self, core::time::Duration) -> rich_interact::control::ControlServer
+pub fn rich_interact::control::ControlServer::verbs(&self) -> &[rich_interact::control::Verb]
+impl core::fmt::Debug for rich_interact::control::ControlServer
+pub fn rich_interact::control::ControlServer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::ops::drop::Drop for rich_interact::control::ControlServer
+pub fn rich_interact::control::ControlServer::drop(&mut self)
+impl core::marker::Freeze for rich_interact::control::ControlServer
+impl core::marker::Send for rich_interact::control::ControlServer
+impl core::marker::Sync for rich_interact::control::ControlServer
+impl core::marker::Unpin for rich_interact::control::ControlServer
+impl core::marker::UnsafeUnpin for rich_interact::control::ControlServer
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::control::ControlServer
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::control::ControlServer
+pub struct rich_interact::control::Request
+pub rich_interact::control::Request::args: serde_json::value::Value
+pub rich_interact::control::Request::verb: alloc::string::String
+impl rich_interact::control::Request
+pub fn rich_interact::control::Request::new(impl core::convert::Into<alloc::string::String>, serde_json::value::Value) -> rich_interact::control::Request
+pub fn rich_interact::control::Request::parse(&str) -> std::io::error::Result<rich_interact::control::Request>
+pub fn rich_interact::control::Request::to_line(&self) -> alloc::string::String
+impl core::clone::Clone for rich_interact::control::Request
+pub fn rich_interact::control::Request::clone(&self) -> rich_interact::control::Request
+impl core::cmp::PartialEq for rich_interact::control::Request
+pub fn rich_interact::control::Request::eq(&self, &rich_interact::control::Request) -> bool
+impl core::fmt::Debug for rich_interact::control::Request
+pub fn rich_interact::control::Request::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_interact::control::Request
+impl core::marker::Freeze for rich_interact::control::Request
+impl core::marker::Send for rich_interact::control::Request
+impl core::marker::Sync for rich_interact::control::Request
+impl core::marker::Unpin for rich_interact::control::Request
+impl core::marker::UnsafeUnpin for rich_interact::control::Request
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::control::Request
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::control::Request
+pub struct rich_interact::control::Verb
+pub rich_interact::control::Verb::about: &'static str
+pub rich_interact::control::Verb::mutates: bool
+pub rich_interact::control::Verb::name: &'static str
+impl rich_interact::control::Verb
+pub const fn rich_interact::control::Verb::read(&'static str, &'static str) -> rich_interact::control::Verb
+pub const fn rich_interact::control::Verb::write(&'static str, &'static str) -> rich_interact::control::Verb
+impl core::clone::Clone for rich_interact::control::Verb
+pub fn rich_interact::control::Verb::clone(&self) -> rich_interact::control::Verb
+impl core::cmp::Eq for rich_interact::control::Verb
+impl core::cmp::PartialEq for rich_interact::control::Verb
+pub fn rich_interact::control::Verb::eq(&self, &rich_interact::control::Verb) -> bool
+impl core::fmt::Debug for rich_interact::control::Verb
+pub fn rich_interact::control::Verb::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_interact::control::Verb
+pub fn rich_interact::control::Verb::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for rich_interact::control::Verb
+impl core::marker::StructuralPartialEq for rich_interact::control::Verb
+impl core::marker::Freeze for rich_interact::control::Verb
+impl core::marker::Send for rich_interact::control::Verb
+impl core::marker::Sync for rich_interact::control::Verb
+impl core::marker::Unpin for rich_interact::control::Verb
+impl core::marker::UnsafeUnpin for rich_interact::control::Verb
+impl core::panic::unwind_safe::RefUnwindSafe for rich_interact::control::Verb
+impl core::panic::unwind_safe::UnwindSafe for rich_interact::control::Verb
+pub const rich_interact::control::IO_TIMEOUT: core::time::Duration
+pub const rich_interact::control::MAX_CONNECTIONS: usize
+pub const rich_interact::control::MAX_REPLY: u64
+pub const rich_interact::control::MAX_REQUEST: u64
+pub fn rich_interact::control::call(&std::path::Path, &rich_interact::control::Request, core::time::Duration) -> std::io::error::Result<rich_interact::control::Reply>
+pub fn rich_interact::control::check_private_dir(&std::path::Path) -> std::io::error::Result<()>
+pub fn rich_interact::control::check_socket(&std::path::Path) -> std::io::error::Result<()>
+pub fn rich_interact::control::current_uid() -> u32
+pub fn rich_interact::control::parse_reply(&str) -> std::io::error::Result<rich_interact::control::Reply>
+pub fn rich_interact::control::peer_allowed(std::io::error::Result<u32>, u32) -> std::io::error::Result<()>
+pub fn rich_interact::control::peer_uid(&std::os::unix::net::stream::UnixStream) -> std::io::error::Result<u32>
+pub fn rich_interact::control::private_dir(&std::path::Path) -> std::io::error::Result<()>
+pub fn rich_interact::control::reply_line(&rich_interact::control::Reply) -> alloc::string::String
+pub fn rich_interact::control::runtime_dir(&str) -> std::io::error::Result<std::path::PathBuf>
+pub fn rich_interact::control::runtime_dir_in(&str, core::option::Option<std::path::PathBuf>) -> std::io::error::Result<std::path::PathBuf>
+pub fn rich_interact::control::sessions(&std::path::Path, &str) -> std::io::error::Result<alloc::vec::Vec<std::path::PathBuf>>
+pub type rich_interact::control::Reply = core::result::Result<serde_json::value::Value, alloc::string::String>
 pub mod rich_interact::dates
 pub struct rich_interact::dates::DateError
 pub rich_interact::dates::DateError::text: alloc::string::String

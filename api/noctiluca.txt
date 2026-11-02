@@ -183,6 +183,10 @@ pub noctiluca::app::Browser::logs: intuituive::reactive::Signal<std::collections
 pub noctiluca::app::Browser::message: intuituive::reactive::Signal<alloc::string::String>
 pub noctiluca::app::Browser::page: intuituive::reactive::Signal<core::option::Option<alloc::sync::Arc<noctiluca::model::Page>>>
 pub noctiluca::app::Browser::pixels: intuituive::reactive::Memo<rich_art::picture::Pixels>
+pub noctiluca::app::Browser::read_only: intuituive::reactive::Signal<bool>
+pub noctiluca::app::Browser::reads: intuituive::reactive::Signal<u64>
+pub noctiluca::app::Browser::screen_stats: intuituive::reactive::Signal<noctiluca::pixel_view::ScreenStats>
+pub noctiluca::app::Browser::screen_tiles: intuituive::reactive::Signal<alloc::vec::Vec<rich_art::tiles::Tile>>
 pub noctiluca::app::Browser::scroll: intuituive::reactive::Signal<u64>
 pub noctiluca::app::Browser::start: intuituive::reactive::Signal<bool>
 pub noctiluca::app::Browser::state: intuituive::reactive::Signal<rich_embed::web::PageState>
@@ -246,6 +250,7 @@ impl core::panic::unwind_safe::UnwindSafe for noctiluca::app::Hints
 pub struct noctiluca::app::Options
 pub noctiluca::app::Options::bookmarks: noctiluca::bookmarks::Bookmarks
 pub noctiluca::app::Options::config: noctiluca::config::Config
+pub noctiluca::app::Options::control: core::option::Option<noctiluca::control::ControlLink>
 pub noctiluca::app::Options::images: core::option::Option<noctiluca::config::Images>
 pub noctiluca::app::Options::tunnel: core::option::Option<noctiluca::ssh::TunnelLink>
 pub noctiluca::app::Options::url: core::option::Option<alloc::string::String>
@@ -276,6 +281,7 @@ impl !core::panic::unwind_safe::RefUnwindSafe for noctiluca::app::OutputRate
 impl !core::panic::unwind_safe::UnwindSafe for noctiluca::app::OutputRate
 pub const noctiluca::app::CHROME_ROWS: u16
 pub const noctiluca::app::LOCAL_CEILING: u64
+pub fn noctiluca::app::agent_text(&noctiluca::model::Page, usize) -> core::option::Option<alloc::string::String>
 pub fn noctiluca::app::app(alloc::boxed::Box<dyn noctiluca::engine::Engine>, noctiluca::app::Options) -> intuituive::app::App
 pub fn noctiluca::app::availability(noctiluca::app::Browser, &str) -> core::result::Result<(), alloc::string::String>
 pub fn noctiluca::app::byte_budget(noctiluca::app::Browser) -> rich_art::picture::ByteBudget
@@ -306,15 +312,18 @@ impl core::marker::UnsafeUnpin for noctiluca::args::Dump
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::args::Dump
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::args::Dump
 pub enum noctiluca::args::Run
+pub noctiluca::args::Run::Action(noctiluca::control::ActionArgs)
 pub noctiluca::args::Run::Browse(noctiluca::args::Args)
+pub noctiluca::args::Run::ControlHelp
 pub noctiluca::args::Run::Help
 pub noctiluca::args::Run::Keys
 pub noctiluca::args::Run::Keys::config: core::option::Option<std::path::PathBuf>
 pub noctiluca::args::Run::Keys::site: core::option::Option<alloc::string::String>
+pub noctiluca::args::Run::Ls
+pub noctiluca::args::Run::Ls::json: bool
 pub noctiluca::args::Run::Version
 impl core::clone::Clone for noctiluca::args::Run
 pub fn noctiluca::args::Run::clone(&self) -> noctiluca::args::Run
-impl core::cmp::Eq for noctiluca::args::Run
 impl core::cmp::PartialEq for noctiluca::args::Run
 pub fn noctiluca::args::Run::eq(&self, &noctiluca::args::Run) -> bool
 impl core::fmt::Debug for noctiluca::args::Run
@@ -332,6 +341,7 @@ pub noctiluca::args::Args::adapt: core::option::Option<alloc::string::String>
 pub noctiluca::args::Args::audio: bool
 pub noctiluca::args::Args::chrome: core::option::Option<std::path::PathBuf>
 pub noctiluca::args::Args::config: core::option::Option<std::path::PathBuf>
+pub noctiluca::args::Args::control: bool
 pub noctiluca::args::Args::dump: core::option::Option<noctiluca::args::Dump>
 pub noctiluca::args::Args::fps: core::option::Option<u32>
 pub noctiluca::args::Args::images: core::option::Option<noctiluca::config::Images>
@@ -339,6 +349,7 @@ pub noctiluca::args::Args::no_adapt: bool
 pub noctiluca::args::Args::no_js: bool
 pub noctiluca::args::Args::no_mouse: bool
 pub noctiluca::args::Args::profile: core::option::Option<alloc::string::String>
+pub noctiluca::args::Args::read_only: bool
 pub noctiluca::args::Args::split: core::option::Option<rich_interact::host::Direction>
 pub noctiluca::args::Args::ssh: core::option::Option<alloc::string::String>
 pub noctiluca::args::Args::ssh_args: alloc::vec::Vec<alloc::string::String>
@@ -563,6 +574,29 @@ impl core::marker::Unpin for noctiluca::config::Preset
 impl core::marker::UnsafeUnpin for noctiluca::config::Preset
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::Preset
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::Preset
+pub enum noctiluca::config::SendTo
+pub noctiluca::config::SendTo::Clipboard
+pub noctiluca::config::SendTo::Neighbor
+pub noctiluca::config::SendTo::Pane(alloc::string::String)
+impl noctiluca::config::SendTo
+pub fn noctiluca::config::SendTo::parse(&str) -> core::option::Option<noctiluca::config::SendTo>
+impl core::clone::Clone for noctiluca::config::SendTo
+pub fn noctiluca::config::SendTo::clone(&self) -> noctiluca::config::SendTo
+impl core::cmp::Eq for noctiluca::config::SendTo
+impl core::cmp::PartialEq for noctiluca::config::SendTo
+pub fn noctiluca::config::SendTo::eq(&self, &noctiluca::config::SendTo) -> bool
+impl core::default::Default for noctiluca::config::SendTo
+pub fn noctiluca::config::SendTo::default() -> noctiluca::config::SendTo
+impl core::fmt::Debug for noctiluca::config::SendTo
+pub fn noctiluca::config::SendTo::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::config::SendTo
+impl core::marker::Freeze for noctiluca::config::SendTo
+impl core::marker::Send for noctiluca::config::SendTo
+impl core::marker::Sync for noctiluca::config::SendTo
+impl core::marker::Unpin for noctiluca::config::SendTo
+impl core::marker::UnsafeUnpin for noctiluca::config::SendTo
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::SendTo
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::SendTo
 pub enum noctiluca::config::Target
 pub noctiluca::config::Target::Action(alloc::string::String)
 pub noctiluca::config::Target::Element
@@ -588,6 +622,7 @@ impl core::marker::UnsafeUnpin for noctiluca::config::Target
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::Target
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::Target
 pub enum noctiluca::config::View
+pub noctiluca::config::View::Pixels
 pub noctiluca::config::View::Projection
 pub noctiluca::config::View::Raster
 pub noctiluca::config::View::Reader
@@ -614,8 +649,30 @@ impl core::marker::Unpin for noctiluca::config::View
 impl core::marker::UnsafeUnpin for noctiluca::config::View
 impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::View
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::View
+pub struct noctiluca::config::Agent
+pub noctiluca::config::Agent::control: bool
+pub noctiluca::config::Agent::read_only: bool
+pub noctiluca::config::Agent::send: noctiluca::config::SendTo
+impl core::clone::Clone for noctiluca::config::Agent
+pub fn noctiluca::config::Agent::clone(&self) -> noctiluca::config::Agent
+impl core::cmp::Eq for noctiluca::config::Agent
+impl core::cmp::PartialEq for noctiluca::config::Agent
+pub fn noctiluca::config::Agent::eq(&self, &noctiluca::config::Agent) -> bool
+impl core::default::Default for noctiluca::config::Agent
+pub fn noctiluca::config::Agent::default() -> noctiluca::config::Agent
+impl core::fmt::Debug for noctiluca::config::Agent
+pub fn noctiluca::config::Agent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::config::Agent
+impl core::marker::Freeze for noctiluca::config::Agent
+impl core::marker::Send for noctiluca::config::Agent
+impl core::marker::Sync for noctiluca::config::Agent
+impl core::marker::Unpin for noctiluca::config::Agent
+impl core::marker::UnsafeUnpin for noctiluca::config::Agent
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::config::Agent
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::config::Agent
 pub struct noctiluca::config::Config
 pub noctiluca::config::Config::adapt: noctiluca::adapt::Adapt
+pub noctiluca::config::Config::agent: noctiluca::config::Agent
 pub noctiluca::config::Config::audio: bool
 pub noctiluca::config::Config::bandwidth: core::option::Option<u64>
 pub noctiluca::config::Config::fps: u32
@@ -722,6 +779,62 @@ pub fn noctiluca::config::default_path() -> core::option::Option<std::path::Path
 pub fn noctiluca::config::remove_site_key(&std::path::Path, &str, &str) -> std::io::error::Result<bool>
 pub fn noctiluca::config::save_site_key(&std::path::Path, &str, &str, &noctiluca::config::Target) -> std::io::error::Result<core::option::Option<alloc::string::String>>
 pub fn noctiluca::config::site_match(&str, &str) -> core::option::Option<(u8, usize)>
+pub mod noctiluca::control
+pub struct noctiluca::control::ActionArgs
+pub noctiluca::control::ActionArgs::args: serde_json::value::Value
+pub noctiluca::control::ActionArgs::json: bool
+pub noctiluca::control::ActionArgs::session: core::option::Option<alloc::string::String>
+pub noctiluca::control::ActionArgs::verb: alloc::string::String
+pub noctiluca::control::ActionArgs::wait: core::time::Duration
+impl core::clone::Clone for noctiluca::control::ActionArgs
+pub fn noctiluca::control::ActionArgs::clone(&self) -> noctiluca::control::ActionArgs
+impl core::cmp::PartialEq for noctiluca::control::ActionArgs
+pub fn noctiluca::control::ActionArgs::eq(&self, &noctiluca::control::ActionArgs) -> bool
+impl core::fmt::Debug for noctiluca::control::ActionArgs
+pub fn noctiluca::control::ActionArgs::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for noctiluca::control::ActionArgs
+impl core::marker::Freeze for noctiluca::control::ActionArgs
+impl core::marker::Send for noctiluca::control::ActionArgs
+impl core::marker::Sync for noctiluca::control::ActionArgs
+impl core::marker::Unpin for noctiluca::control::ActionArgs
+impl core::marker::UnsafeUnpin for noctiluca::control::ActionArgs
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::control::ActionArgs
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::control::ActionArgs
+pub struct noctiluca::control::ControlLink
+impl noctiluca::control::ControlLink
+pub fn noctiluca::control::ControlLink::bind(bool) -> std::io::error::Result<noctiluca::control::ControlLink>
+pub fn noctiluca::control::ControlLink::bind_at(&std::path::Path, bool) -> std::io::error::Result<noctiluca::control::ControlLink>
+pub fn noctiluca::control::ControlLink::close(&self)
+pub fn noctiluca::control::ControlLink::is_read_only(&self) -> bool
+pub fn noctiluca::control::ControlLink::path(&self) -> core::option::Option<&std::path::Path>
+pub fn noctiluca::control::ControlLink::take(&self) -> core::option::Option<rich_interact::control::ControlServer>
+impl core::clone::Clone for noctiluca::control::ControlLink
+pub fn noctiluca::control::ControlLink::clone(&self) -> noctiluca::control::ControlLink
+impl core::default::Default for noctiluca::control::ControlLink
+pub fn noctiluca::control::ControlLink::default() -> noctiluca::control::ControlLink
+impl core::fmt::Debug for noctiluca::control::ControlLink
+pub fn noctiluca::control::ControlLink::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for noctiluca::control::ControlLink
+impl core::marker::Send for noctiluca::control::ControlLink
+impl core::marker::Sync for noctiluca::control::ControlLink
+impl core::marker::Unpin for noctiluca::control::ControlLink
+impl core::marker::UnsafeUnpin for noctiluca::control::ControlLink
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::control::ControlLink
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::control::ControlLink
+pub const noctiluca::control::ACTION_USAGE: &str
+pub const noctiluca::control::PREFIX: &str
+pub const noctiluca::control::SNAPSHOT_WIDTH: u16
+pub const noctiluca::control::VERBS: &[rich_interact::control::Verb]
+pub fn noctiluca::control::action(&noctiluca::control::ActionArgs) -> std::io::error::Result<alloc::string::String>
+pub fn noctiluca::control::call(&std::path::Path, &str, serde_json::value::Value) -> std::io::error::Result<serde_json::value::Value>
+pub fn noctiluca::control::find_rows(&[alloc::string::String], &str) -> alloc::vec::Vec<serde_json::value::Value>
+pub fn noctiluca::control::handle(noctiluca::app::Browser, &str, &serde_json::value::Value, &mut intuituive::app::Ctx) -> core::result::Result<serde_json::value::Value, alloc::string::String>
+pub fn noctiluca::control::ls(bool) -> std::io::error::Result<alloc::string::String>
+pub fn noctiluca::control::parse_action(&[alloc::string::String]) -> core::result::Result<noctiluca::control::ActionArgs, alloc::string::String>
+pub fn noctiluca::control::resolve(&noctiluca::model::Page, &str) -> core::result::Result<usize, alloc::string::String>
+pub fn noctiluca::control::sessions() -> std::io::error::Result<alloc::vec::Vec<std::path::PathBuf>>
+pub fn noctiluca::control::snapshot(&noctiluca::model::Page, bool, u16, noctiluca::adapt::Adapt) -> serde_json::value::Value
+pub fn noctiluca::control::unix_only() -> std::io::error::Error
 pub mod noctiluca::draft
 pub enum noctiluca::draft::DraftState<T>
 pub noctiluca::draft::DraftState::Clean
@@ -889,8 +1002,12 @@ pub noctiluca::engine::PageAction::ClickAt
 pub noctiluca::engine::PageAction::ClickAt::node: noctiluca::engine::NodeId
 pub noctiluca::engine::PageAction::ClickAt::x: f64
 pub noctiluca::engine::PageAction::ClickAt::y: f64
+pub noctiluca::engine::PageAction::ClickPoint
+pub noctiluca::engine::PageAction::ClickPoint::x: f64
+pub noctiluca::engine::PageAction::ClickPoint::y: f64
 pub noctiluca::engine::PageAction::Focus(noctiluca::engine::NodeId)
 pub noctiluca::engine::PageAction::InsertText(alloc::string::String)
+pub noctiluca::engine::PageAction::Key(rich_interact::event::Key)
 pub noctiluca::engine::PageAction::Media
 pub noctiluca::engine::PageAction::Media::node: noctiluca::engine::NodeId
 pub noctiluca::engine::PageAction::Media::op: noctiluca::engine::MediaOp
@@ -1886,6 +2003,55 @@ pub fn noctiluca::pictures::on_backdrop(alloc::vec::Vec<rich::segment::Segment>,
 pub fn noctiluca::pictures::pixels(noctiluca::config::Images) -> rich_art::picture::Pixels
 pub fn noctiluca::pictures::splice(&rich::console::Console, &noctiluca::pictures::Cells, alloc::vec::Vec<rich::segment::Segment>, usize, usize, &[noctiluca::layout::Region], impl core::ops::function::Fn(&noctiluca::layout::Region) -> core::option::Option<(rich_art::picture::Picture, rich_art::picture::Pixels)>) -> alloc::vec::Vec<rich::segment::Segment>
 pub fn noctiluca::pictures::view(rich_art::picture::Pixels) -> rich_art::picture::ImageView
+pub mod noctiluca::pixel_view
+pub struct noctiluca::pixel_view::Screen
+pub noctiluca::pixel_view::Screen::stats: noctiluca::pixel_view::ScreenStats
+impl noctiluca::pixel_view::Screen
+pub fn noctiluca::pixel_view::Screen::new() -> noctiluca::pixel_view::Screen
+pub fn noctiluca::pixel_view::Screen::take(&mut self, &image::images::buffer::RgbaImage, usize, usize, &rich_art::picture::ByteBudget, std::time::Instant) -> core::option::Option<alloc::vec::Vec<usize>>
+pub fn noctiluca::pixel_view::Screen::tiles(&self) -> alloc::vec::Vec<rich_art::tiles::Tile>
+impl core::default::Default for noctiluca::pixel_view::Screen
+pub fn noctiluca::pixel_view::Screen::default() -> noctiluca::pixel_view::Screen
+impl core::fmt::Debug for noctiluca::pixel_view::Screen
+pub fn noctiluca::pixel_view::Screen::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for noctiluca::pixel_view::Screen
+impl core::marker::Send for noctiluca::pixel_view::Screen
+impl core::marker::Sync for noctiluca::pixel_view::Screen
+impl core::marker::Unpin for noctiluca::pixel_view::Screen
+impl core::marker::UnsafeUnpin for noctiluca::pixel_view::Screen
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::pixel_view::Screen
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::pixel_view::Screen
+pub struct noctiluca::pixel_view::ScreenStats
+pub noctiluca::pixel_view::ScreenStats::bytes: u64
+pub noctiluca::pixel_view::ScreenStats::dropped: u64
+pub noctiluca::pixel_view::ScreenStats::frames: u64
+pub noctiluca::pixel_view::ScreenStats::tiles: u64
+impl core::clone::Clone for noctiluca::pixel_view::ScreenStats
+pub fn noctiluca::pixel_view::ScreenStats::clone(&self) -> noctiluca::pixel_view::ScreenStats
+impl core::cmp::Eq for noctiluca::pixel_view::ScreenStats
+impl core::cmp::PartialEq for noctiluca::pixel_view::ScreenStats
+pub fn noctiluca::pixel_view::ScreenStats::eq(&self, &noctiluca::pixel_view::ScreenStats) -> bool
+impl core::default::Default for noctiluca::pixel_view::ScreenStats
+pub fn noctiluca::pixel_view::ScreenStats::default() -> noctiluca::pixel_view::ScreenStats
+impl core::fmt::Debug for noctiluca::pixel_view::ScreenStats
+pub fn noctiluca::pixel_view::ScreenStats::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for noctiluca::pixel_view::ScreenStats
+impl core::marker::StructuralPartialEq for noctiluca::pixel_view::ScreenStats
+impl core::marker::Freeze for noctiluca::pixel_view::ScreenStats
+impl core::marker::Send for noctiluca::pixel_view::ScreenStats
+impl core::marker::Sync for noctiluca::pixel_view::ScreenStats
+impl core::marker::Unpin for noctiluca::pixel_view::ScreenStats
+impl core::marker::UnsafeUnpin for noctiluca::pixel_view::ScreenStats
+impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::pixel_view::ScreenStats
+impl core::panic::unwind_safe::UnwindSafe for noctiluca::pixel_view::ScreenStats
+pub const noctiluca::pixel_view::NEEDS_KITTY: &str
+pub fn noctiluca::pixel_view::available(noctiluca::app::Browser) -> bool
+pub fn noctiluca::pixel_view::frame(noctiluca::app::Browser, &rich_embed::chrome::ScreencastFrame)
+pub fn noctiluca::pixel_view::passes(rich_interact::event::Key) -> bool
+pub fn noctiluca::pixel_view::point(f32, f32) -> (f64, f64)
+pub fn noctiluca::pixel_view::rgba(&rich_embed::chrome::ScreencastFrame) -> core::option::Option<image::images::buffer::RgbaImage>
+pub fn noctiluca::pixel_view::state() -> alloc::rc::Rc<core::cell::RefCell<noctiluca::pixel_view::Screen>>
+pub fn noctiluca::pixel_view::view(noctiluca::app::Browser) -> intuituive::node::Node
 pub mod noctiluca::ssh
 pub enum noctiluca::ssh::TunnelState
 pub noctiluca::ssh::TunnelState::Connecting
@@ -2034,12 +2200,17 @@ pub noctiluca::tab::Command::ClickAt::node: noctiluca::engine::NodeId
 pub noctiluca::tab::Command::ClickAt::x: f64
 pub noctiluca::tab::Command::ClickAt::y: f64
 pub noctiluca::tab::Command::History(noctiluca::engine::HistoryStep)
+pub noctiluca::tab::Command::Key(rich_interact::event::Key)
 pub noctiluca::tab::Command::LoadMore
 pub noctiluca::tab::Command::Media
 pub noctiluca::tab::Command::Media::document: u64
 pub noctiluca::tab::Command::Media::node: noctiluca::engine::NodeId
 pub noctiluca::tab::Command::Media::op: noctiluca::engine::MediaOp
 pub noctiluca::tab::Command::Open(alloc::string::String)
+pub noctiluca::tab::Command::Pixels(bool)
+pub noctiluca::tab::Command::Point
+pub noctiluca::tab::Command::Point::x: f64
+pub noctiluca::tab::Command::Point::y: f64
 pub noctiluca::tab::Command::Refresh
 pub noctiluca::tab::Command::Regions
 pub noctiluca::tab::Command::Regions::intervals: alloc::vec::Vec<(noctiluca::engine::NodeId, core::time::Duration)>
@@ -2047,6 +2218,7 @@ pub noctiluca::tab::Command::Regions::on_screen: alloc::vec::Vec<noctiluca::engi
 pub noctiluca::tab::Command::Regions::scale: f64
 pub noctiluca::tab::Command::Resize(u16, u16)
 pub noctiluca::tab::Command::Scroll(f64)
+pub noctiluca::tab::Command::Type(alloc::string::String)
 pub noctiluca::tab::Command::Wheel(f64)
 impl core::clone::Clone for noctiluca::tab::Command
 pub fn noctiluca::tab::Command::clone(&self) -> noctiluca::tab::Command
@@ -2123,6 +2295,7 @@ pub noctiluca::tab::Update::DownloadDone::path: alloc::string::String
 pub noctiluca::tab::Update::Frame(alloc::sync::Arc<noctiluca::video::VideoFrame>)
 pub noctiluca::tab::Update::Metrics(noctiluca::engine::Metrics)
 pub noctiluca::tab::Update::Page(alloc::sync::Arc<noctiluca::model::Page>)
+pub noctiluca::tab::Update::Screen(alloc::sync::Arc<rich_embed::chrome::ScreencastFrame>)
 pub noctiluca::tab::Update::State(rich_embed::web::PageState)
 pub noctiluca::tab::Update::Still(noctiluca::engine::NodeId)
 impl core::clone::Clone for noctiluca::tab::Update

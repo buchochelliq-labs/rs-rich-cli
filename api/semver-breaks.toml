@@ -77,3 +77,31 @@ version = "0.0.9"
 lint = "enum_marked_non_exhaustive"
 items = ["enum Easing"]
 why = "Textual's easings join Easing (#814, 0.0.24 plan), which is #[non_exhaustive] from this release so later ones are not breaks; the variants it gains are not reported apart"
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.3"
+lint = "constructible_struct_adds_field"
+items = ["field Config.agent", "field Args.control", "field Args.read_only", "field Options.control"]
+why = "agent control (#816): the [agent] table, --control and --read-only, and the app's control socket (0.0.24 plan, wave 3)"
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.3"
+lint = "derive_trait_impl_removed"
+items = ["type Run no longer derives Eq,"]
+why = "Run::Action carries the request's JSON arguments, which are not Eq (#816)"
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.3"
+lint = "enum_variant_added"
+items = ["variant Run:Ls", "variant Run:Action", "variant Run:ControlHelp", "variant PageAction:Key", "variant Command:Key", "variant Command:Type"]
+why = "agent control (#816): noctiluca ls and noctiluca action, and keys and text typed into the page by an agent"
+
+[[break]]
+crate = "noctiluca"
+version = "0.0.3"
+lint = "enum_variant_added"
+items = ["variant View:Pixels", "variant Update:Screen", "variant PageAction:ClickPoint", "variant Command:Pixels", "variant Command:Point"]
+why = "the pixel view (#818): the view, its screencast frames, and clicks at a point of the viewport"

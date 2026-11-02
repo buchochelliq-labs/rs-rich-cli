@@ -9779,6 +9779,7 @@ pub fn intuituive::tabs_for<T: 'static>(&intuituive::tab_set::TabSet<T>, impl co
 pub fn intuituive::tabs_for_indexed<T: 'static>(&intuituive::tab_set::TabSet<T>, impl core::ops::function::Fn(usize, &T) -> alloc::string::String + 'static) -> intuituive::node::Node
 pub fn intuituive::text(impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
 pub fn intuituive::text_area(intuituive::reactive::Signal<alloc::string::String>) -> intuituive::node::Node
+pub fn intuituive::tiles_of(impl core::ops::function::Fn() -> alloc::vec::Vec<rich_art::tiles::Tile> + 'static, rich_art::picture::Pixels) -> intuituive::node::Node
 pub fn intuituive::transport(impl core::convert::Into<core::option::Option<core::time::Duration>>) -> intuituive::transport::Transport
 pub fn intuituive::treemap<K, F>(impl core::ops::function::Fn() -> alloc::vec::Vec<(K, f64)> + 'static, F) -> intuituive::node::Node where K: core::clone::Clone + core::cmp::Eq + core::hash::Hash + 'static, F: core::ops::function::Fn(K, rich_ext::surface::screen::Rect) -> intuituive::node::Node + 'static
 pub fn intuituive::treemap_with<K, F>(impl core::ops::function::Fn() -> alloc::vec::Vec<(K, f64)> + 'static, F, intuituive::TreemapOptions) -> intuituive::node::Node where K: core::clone::Clone + core::cmp::Eq + core::hash::Hash + 'static, F: core::ops::function::Fn(K, rich_ext::surface::screen::Rect) -> intuituive::node::Node + 'static
