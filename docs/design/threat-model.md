@@ -619,7 +619,7 @@ socket's path (`--socket`, `INTUITUIVE_CONSOLE`).
 
 | | Threat | Mitigation | State |
 |---|---|---|---|
-| I, T | Another local user connects to the console, or the app connects to another user's console | The socket's directory must be the user's alone (made 0700 when missing; one others can enter or write is refused, never changed); the socket is created 0600, by the umask at the bind, with no window before a chmod; the console drops a connection whose peer is another user, and the app refuses a path that is not a socket of its own user or a listener of another user (`SO_PEERCRED` on Linux and Android, `getpeereid` on macOS and the BSDs; the directory's mode elsewhere). Never a TCP port | verified (Linux tests: modes, refusals, the user's own peer) |
+| I, T | Another local user connects to the console, or the app connects to another user's console | The socket's directory must be the user's alone (made 0700 when missing; one others can enter or write is refused, never changed); the socket is made 0600 and checked right after the bind, inside that directory, so no one else can reach it before (the process-wide umask is left alone); the console drops a connection whose peer is another user, and the app refuses a path that is not a socket of its own user or a listener of another user (`SO_PEERCRED` on Linux and Android, `getpeereid` on macOS and the BSDs; the directory's mode elsewhere). Never a TCP port | verified (Linux tests: modes, refusals, the user's own peer) |
 | T | A path planted at the socket's place: a symbolic link, or a file the console would delete | A symbolic link at the path, or as the directory, is refused, by both sides; anything at the path but a stale socket of the user's is refused and left alone | verified |
 | T | Event text drives the terminal | The console prints events through rs-rich-ext's structured event presentation, as `rich log` does | documented |
 | D | A slow console stalls the app | Events go through a bounded queue on a thread of their own; a full queue drops them | documented |
@@ -759,8 +759,8 @@ says, not in a public issue.
 ### The log console
 
 - [x] The socket's directory the user's alone, made before the bind and
-      refused (not changed) when others can use it; the socket created
-      0600 at the bind, with no chmod after it (0.0.24, tests in
+      refused (not changed) when others can use it; the socket made 0600
+      in it right after the bind, the umask untouched (0.0.24, tests in
       `console.rs`).
 - [x] The peer's user checked on both sides where the platform says
       (`SO_PEERCRED`, `getpeereid`); a symbolic link or a file at the path

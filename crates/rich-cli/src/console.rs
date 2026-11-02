@@ -304,10 +304,11 @@ fn private_dir(dir: &std::path::Path) -> Result<(), String> {
 
 /// Bind the socket in a [private directory](private_dir): a symbolic link
 /// at the path is refused, and so is anything but a stale socket of the
-/// user's (which is replaced); the socket is created 0600 (the umask is
-/// set for the bind, never a chmod after it), and checked.
+/// user's (which is replaced); the socket is made 0600 and checked. The
+/// directory is checked to be the user's alone first, so no one else can
+/// reach the socket before its mode is set. (The umask is not changed: it
+/// is the whole process's, and other threads create files meanwhile.)
 #[cfg(unix)]
-#[allow(unsafe_code)] // umask has no preconditions; it is put back at once.
 fn bind(path: &std::path::Path) -> Result<std::os::unix::net::UnixListener, String> {
     use std::os::unix::fs::{FileTypeExt, MetadataExt, PermissionsExt};
     use std::os::unix::net::{UnixListener, UnixStream};
@@ -331,13 +332,10 @@ fn bind(path: &std::path::Path) -> Result<std::os::unix::net::UnixListener, Stri
         }
         std::fs::remove_file(path).map_err(|e| format!("cannot replace {shown}: {e}"))?;
     }
-    // The socket is created with the umask's mode: 0600 from the start.
-    // SAFETY: as above; the CLI binds before it starts any thread.
-    let old = unsafe { libc::umask(0o177) };
-    let bound = UnixListener::bind(path);
-    // SAFETY: as above.
-    unsafe { libc::umask(old) };
-    let listener = bound.map_err(|e| format!("cannot listen on {shown}: {e}"))?;
+    let listener =
+        UnixListener::bind(path).map_err(|e| format!("cannot listen on {shown}: {e}"))?;
+    std::fs::set_permissions(path, std::fs::Permissions::from_mode(0o600))
+        .map_err(|e| format!("cannot make {shown} private: {e}"))?;
     let mode = std::fs::symlink_metadata(path)
         .map(|meta| meta.permissions().mode() & 0o777)
         .map_err(|e| format!("cannot read {shown}: {e}"))?;
@@ -390,8 +388,8 @@ fn listen(path: &std::path::Path, args: &ConsoleArgs, no_color: bool) -> Result<
     });
     for stream in listener.incoming() {
         let Ok(stream) = stream else { continue };
-        if let Err(uid) = accepted(&stream) {
-            eprintln!("rich console: refused a connection from another user (uid {uid})");
+        if accepted(&stream).is_err() {
+            eprintln!("rich console: refused a connection from another user");
             continue;
         }
         let (console, args) = (console.clone(), args.clone());
