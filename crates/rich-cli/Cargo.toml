@@ -143,7 +143,7 @@ windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_Securit
 [dev-dependencies]
 # PTY tests for the interactive commands: a real terminal, keys sent to it.
 portable-pty = "0.9"
-vt100 = "0.16"
+vt100 = "0.18"
 # The WASM plugin tests compile the example module from text.
 wat = "1"
 # The official micro packs are zipped by the tests that pin their hashes

@@ -35,7 +35,7 @@ serde_json.workspace = true
 # A PTY on Unix and ConPTY on Windows.
 portable-pty = "0.9"
 # The VT emulator that follows the screen.
-vt100 = "0.16"
+vt100 = "0.18"
 unicode-width = "0.2"
 # PNG and GIF output: glyphs from the embedded DejaVu Sans Mono, emoji from
 # the embedded Twemoji (COLR layers and ZWJ ligatures read with ttf-parser).

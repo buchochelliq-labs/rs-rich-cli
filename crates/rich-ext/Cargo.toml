@@ -105,7 +105,7 @@ wat = "1"
 thiserror = "2"
 trybuild = "1"
 # Surface tests replay what a paint strategy wrote through a VT emulator.
-vt100 = "0.16"
+vt100 = "0.18"
 
 [features]
 # `Syntax` and `Markdown` from core. `code` forwards core's syntect-free code

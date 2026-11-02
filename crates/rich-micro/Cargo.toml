@@ -57,4 +57,4 @@ sha2 = "0.11"
 tempfile = "3"
 # The per-protocol PTY tests: a real pseudo-terminal and an emulator.
 portable-pty = "0.9"
-vt100 = "0.16"
+vt100 = "0.18"

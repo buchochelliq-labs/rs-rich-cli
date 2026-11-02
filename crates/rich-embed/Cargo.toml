@@ -44,7 +44,7 @@ rich-record.workspace = true
 # A PTY on Unix and ConPTY on Windows, as rs-rich-record uses.
 portable-pty = "0.9"
 # The emulator's screen type, and its mouse and cursor modes.
-vt100 = "0.16"
+vt100 = "0.18"
 tungstenite = { version = "0.30", default-features = false, features = ["handshake"], optional = true }
 serde_json = { workspace = true, optional = true }
 # Decoding the screencast's JPEG frames.

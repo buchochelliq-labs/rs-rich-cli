@@ -124,4 +124,4 @@ rich-plugin-api.workspace = true
 tempfile = "3"
 # PTY tests: the terminal is restored after every way out.
 portable-pty = "0.9"
-vt100 = "0.16"
+vt100 = "0.18"
