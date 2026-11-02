@@ -267,6 +267,9 @@ pub fn intuituive::app::App::wait_for_tasks(self, bool) -> intuituive::app::App
 pub fn intuituive::app::App::which_key(self, bool) -> intuituive::app::App
 pub fn intuituive::app::App::which_key_delay(self, core::time::Duration) -> intuituive::app::App
 impl intuituive::app::App
+pub fn intuituive::app::App::keymap<I, A, K>(self, I) -> intuituive::app::App where I: core::iter::traits::collect::IntoIterator<Item = (A, K)>, A: core::convert::AsRef<str>, K: core::convert::AsRef<str>
+pub fn intuituive::app::App::keymap_file(self, impl core::convert::Into<std::path::PathBuf>) -> intuituive::app::App
+impl intuituive::app::App
 pub fn intuituive::app::App::timedemo(self, rich_interact::headless::Script, u16, u16) -> intuituive::timedemo::Timedemo
 impl core::ops::drop::Drop for intuituive::app::App
 pub fn intuituive::app::App::drop(&mut self)
@@ -327,6 +330,7 @@ pub fn intuituive::app::Ctx::quit_with<T: 'static>(&mut self, T)
 pub fn intuituive::app::Ctx::releases_reported(&self) -> rich_interact::event::Releases
 pub fn intuituive::app::Ctx::replace(&mut self, impl core::ops::function::FnOnce() -> intuituive::node::Node + 'static)
 pub fn intuituive::app::Ctx::set_theme(&mut self, intuituive::app::Theme)
+pub fn intuituive::app::Ctx::set_theme_named(&mut self, &str) -> bool
 pub fn intuituive::app::Ctx::toast(&mut self, impl core::convert::Into<alloc::string::String>)
 pub fn intuituive::app::Ctx::toast_for(&mut self, impl core::convert::Into<alloc::string::String>, core::time::Duration)
 impl intuituive::app::Ctx
@@ -336,6 +340,9 @@ pub fn intuituive::app::Ctx::pick(&mut self, impl core::convert::Into<alloc::str
 pub fn intuituive::app::Ctx::pick_with(&mut self, impl core::convert::Into<alloc::string::String>, intuituive::Origin, alloc::vec::Vec<alloc::string::String>, intuituive::PickOptions, impl core::ops::function::FnOnce(usize, &mut intuituive::app::Ctx) + 'static)
 pub fn intuituive::app::Ctx::prompt(&mut self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, impl core::ops::function::FnOnce(alloc::string::String, &mut intuituive::app::Ctx) + 'static)
 pub fn intuituive::app::Ctx::prompt_with(&mut self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, intuituive::PromptOptions, impl core::ops::function::FnOnce(alloc::string::String, &mut intuituive::app::Ctx) + 'static)
+impl intuituive::app::Ctx
+pub fn intuituive::app::Ctx::reload_keymap(&mut self)
+pub fn intuituive::app::Ctx::set_keymap<I, A, K>(&mut self, I) -> core::result::Result<(), alloc::string::String> where I: core::iter::traits::collect::IntoIterator<Item = (A, K)>, A: core::convert::AsRef<str>, K: core::convert::AsRef<str>
 impl core::marker::Freeze for intuituive::app::Ctx
 impl !core::marker::Send for intuituive::app::Ctx
 impl !core::marker::Sync for intuituive::app::Ctx
@@ -391,6 +398,8 @@ pub fn intuituive::app::Driver::timeout(&self, core::time::Duration) -> core::ti
 pub fn intuituive::app::Driver::type_text(&mut self, &str)
 pub fn intuituive::app::Driver::update(&mut self, core::time::Duration)
 pub fn intuituive::app::Driver::wheel(&mut self, u16, u16, i32)
+impl intuituive::app::Driver
+pub fn intuituive::app::Driver::keymap_report(&self) -> &[alloc::string::String]
 impl intuituive::testing::ScreenRows for intuituive::app::Driver
 pub fn intuituive::app::Driver::plain_rows(&self) -> alloc::vec::Vec<alloc::string::String>
 impl intuituive::testing::StyledRows for intuituive::app::Driver
@@ -512,10 +521,14 @@ pub intuituive::app::Theme::border_focused: rich::style::Style
 pub intuituive::app::Theme::styles: alloc::vec::Vec<(alloc::string::String, rich::style::Style)>
 pub intuituive::app::Theme::title: rich::style::Style
 impl intuituive::app::Theme
+pub fn intuituive::app::Theme::builtin() -> alloc::vec::Vec<(&'static str, intuituive::app::Theme)>
+pub fn intuituive::app::Theme::builtin_names() -> alloc::vec::Vec<&'static str>
 pub fn intuituive::app::Theme::dark() -> intuituive::app::Theme
+pub fn intuituive::app::Theme::from_palette(intuituive::Palette) -> intuituive::app::Theme
 pub fn intuituive::app::Theme::light() -> intuituive::app::Theme
 pub fn intuituive::app::Theme::load(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<intuituive::app::Theme, alloc::string::String>
 pub fn intuituive::app::Theme::mono() -> intuituive::app::Theme
+pub fn intuituive::app::Theme::named(&str) -> core::option::Option<intuituive::app::Theme>
 pub fn intuituive::app::Theme::style(self, &str, rich::style::Style) -> intuituive::app::Theme
 pub fn intuituive::app::Theme::with_config(self, &str) -> core::result::Result<intuituive::app::Theme, alloc::string::String>
 impl core::clone::Clone for intuituive::app::Theme
@@ -2619,6 +2632,8 @@ pub fn intuituive::log::Log::targets(&self) -> alloc::vec::Vec<(alloc::string::S
 pub fn intuituive::log::Log::targets_view(&self) -> intuituive::node::Node
 pub fn intuituive::log::Log::unseen(&self) -> usize
 pub fn intuituive::log::Log::view(&self) -> intuituive::node::Node
+pub fn intuituive::log::Log::write(&self, impl rich::protocol::Renderable + 'static)
+pub fn intuituive::log::Log::write_with(&self, impl rich::protocol::Renderable + 'static, impl core::convert::Into<intuituive::log::LogLine>)
 impl core::clone::Clone for intuituive::log::Log
 pub fn intuituive::log::Log::clone(&self) -> intuituive::log::Log
 impl core::marker::Copy for intuituive::log::Log
@@ -2997,6 +3012,10 @@ pub fn intuituive::node::Node::fit(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_select(self, impl core::ops::function::FnMut(usize, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::tab_padding(self, &str, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::titles_align(self, intuituive::layout::Align) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::bind_id(self, &str, &str, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::binding_id(self, &str) -> intuituive::node::Node
+pub fn intuituive::node::Node::sequence_id(self, &str) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::bind_sequence(self, &str, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::bind_sequence_in(self, &str, &str, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
@@ -4032,6 +4051,9 @@ pub fn intuituive::app::App::wait_for_tasks(self, bool) -> intuituive::app::App
 pub fn intuituive::app::App::which_key(self, bool) -> intuituive::app::App
 pub fn intuituive::app::App::which_key_delay(self, core::time::Duration) -> intuituive::app::App
 impl intuituive::app::App
+pub fn intuituive::app::App::keymap<I, A, K>(self, I) -> intuituive::app::App where I: core::iter::traits::collect::IntoIterator<Item = (A, K)>, A: core::convert::AsRef<str>, K: core::convert::AsRef<str>
+pub fn intuituive::app::App::keymap_file(self, impl core::convert::Into<std::path::PathBuf>) -> intuituive::app::App
+impl intuituive::app::App
 pub fn intuituive::app::App::timedemo(self, rich_interact::headless::Script, u16, u16) -> intuituive::timedemo::Timedemo
 impl core::ops::drop::Drop for intuituive::app::App
 pub fn intuituive::app::App::drop(&mut self)
@@ -4092,6 +4114,7 @@ pub fn intuituive::app::Ctx::quit_with<T: 'static>(&mut self, T)
 pub fn intuituive::app::Ctx::releases_reported(&self) -> rich_interact::event::Releases
 pub fn intuituive::app::Ctx::replace(&mut self, impl core::ops::function::FnOnce() -> intuituive::node::Node + 'static)
 pub fn intuituive::app::Ctx::set_theme(&mut self, intuituive::app::Theme)
+pub fn intuituive::app::Ctx::set_theme_named(&mut self, &str) -> bool
 pub fn intuituive::app::Ctx::toast(&mut self, impl core::convert::Into<alloc::string::String>)
 pub fn intuituive::app::Ctx::toast_for(&mut self, impl core::convert::Into<alloc::string::String>, core::time::Duration)
 impl intuituive::app::Ctx
@@ -4101,6 +4124,9 @@ pub fn intuituive::app::Ctx::pick(&mut self, impl core::convert::Into<alloc::str
 pub fn intuituive::app::Ctx::pick_with(&mut self, impl core::convert::Into<alloc::string::String>, intuituive::Origin, alloc::vec::Vec<alloc::string::String>, intuituive::PickOptions, impl core::ops::function::FnOnce(usize, &mut intuituive::app::Ctx) + 'static)
 pub fn intuituive::app::Ctx::prompt(&mut self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, impl core::ops::function::FnOnce(alloc::string::String, &mut intuituive::app::Ctx) + 'static)
 pub fn intuituive::app::Ctx::prompt_with(&mut self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, intuituive::PromptOptions, impl core::ops::function::FnOnce(alloc::string::String, &mut intuituive::app::Ctx) + 'static)
+impl intuituive::app::Ctx
+pub fn intuituive::app::Ctx::reload_keymap(&mut self)
+pub fn intuituive::app::Ctx::set_keymap<I, A, K>(&mut self, I) -> core::result::Result<(), alloc::string::String> where I: core::iter::traits::collect::IntoIterator<Item = (A, K)>, A: core::convert::AsRef<str>, K: core::convert::AsRef<str>
 impl core::marker::Freeze for intuituive::app::Ctx
 impl !core::marker::Send for intuituive::app::Ctx
 impl !core::marker::Sync for intuituive::app::Ctx
@@ -4132,6 +4158,8 @@ pub fn intuituive::log::Log::targets(&self) -> alloc::vec::Vec<(alloc::string::S
 pub fn intuituive::log::Log::targets_view(&self) -> intuituive::node::Node
 pub fn intuituive::log::Log::unseen(&self) -> usize
 pub fn intuituive::log::Log::view(&self) -> intuituive::node::Node
+pub fn intuituive::log::Log::write(&self, impl rich::protocol::Renderable + 'static)
+pub fn intuituive::log::Log::write_with(&self, impl rich::protocol::Renderable + 'static, impl core::convert::Into<intuituive::log::LogLine>)
 impl core::clone::Clone for intuituive::log::Log
 pub fn intuituive::log::Log::clone(&self) -> intuituive::log::Log
 impl core::marker::Copy for intuituive::log::Log
@@ -4290,6 +4318,10 @@ pub fn intuituive::node::Node::fit(self) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_select(self, impl core::ops::function::FnMut(usize, &mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::tab_padding(self, &str, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::titles_align(self, intuituive::layout::Align) -> intuituive::node::Node
+impl intuituive::node::Node
+pub fn intuituive::node::Node::bind_id(self, &str, &str, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::binding_id(self, &str) -> intuituive::node::Node
+pub fn intuituive::node::Node::sequence_id(self, &str) -> intuituive::node::Node
 impl intuituive::node::Node
 pub fn intuituive::node::Node::bind_sequence(self, &str, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::bind_sequence_in(self, &str, &str, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
@@ -4526,10 +4558,14 @@ pub intuituive::prelude::Theme::border_focused: rich::style::Style
 pub intuituive::prelude::Theme::styles: alloc::vec::Vec<(alloc::string::String, rich::style::Style)>
 pub intuituive::prelude::Theme::title: rich::style::Style
 impl intuituive::app::Theme
+pub fn intuituive::app::Theme::builtin() -> alloc::vec::Vec<(&'static str, intuituive::app::Theme)>
+pub fn intuituive::app::Theme::builtin_names() -> alloc::vec::Vec<&'static str>
 pub fn intuituive::app::Theme::dark() -> intuituive::app::Theme
+pub fn intuituive::app::Theme::from_palette(intuituive::Palette) -> intuituive::app::Theme
 pub fn intuituive::app::Theme::light() -> intuituive::app::Theme
 pub fn intuituive::app::Theme::load(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<intuituive::app::Theme, alloc::string::String>
 pub fn intuituive::app::Theme::mono() -> intuituive::app::Theme
+pub fn intuituive::app::Theme::named(&str) -> core::option::Option<intuituive::app::Theme>
 pub fn intuituive::app::Theme::style(self, &str, rich::style::Style) -> intuituive::app::Theme
 pub fn intuituive::app::Theme::with_config(self, &str) -> core::result::Result<intuituive::app::Theme, alloc::string::String>
 impl core::clone::Clone for intuituive::app::Theme
@@ -5818,6 +5854,30 @@ impl core::marker::Unpin for intuituive::widgets::Caps
 impl core::marker::UnsafeUnpin for intuituive::widgets::Caps
 impl core::panic::unwind_safe::RefUnwindSafe for intuituive::widgets::Caps
 impl core::panic::unwind_safe::UnwindSafe for intuituive::widgets::Caps
+pub enum intuituive::widgets::Decision
+pub intuituive::widgets::Decision::Accepted
+pub intuituive::widgets::Decision::Pending
+pub intuituive::widgets::Decision::Rejected
+impl core::clone::Clone for intuituive::widgets::Decision
+pub fn intuituive::widgets::Decision::clone(&self) -> intuituive::widgets::Decision
+impl core::cmp::Eq for intuituive::widgets::Decision
+impl core::cmp::PartialEq for intuituive::widgets::Decision
+pub fn intuituive::widgets::Decision::eq(&self, &intuituive::widgets::Decision) -> bool
+impl core::default::Default for intuituive::widgets::Decision
+pub fn intuituive::widgets::Decision::default() -> intuituive::widgets::Decision
+impl core::fmt::Debug for intuituive::widgets::Decision
+pub fn intuituive::widgets::Decision::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for intuituive::widgets::Decision
+pub fn intuituive::widgets::Decision::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::Copy for intuituive::widgets::Decision
+impl core::marker::StructuralPartialEq for intuituive::widgets::Decision
+impl core::marker::Freeze for intuituive::widgets::Decision
+impl core::marker::Send for intuituive::widgets::Decision
+impl core::marker::Sync for intuituive::widgets::Decision
+impl core::marker::Unpin for intuituive::widgets::Decision
+impl core::marker::UnsafeUnpin for intuituive::widgets::Decision
+impl core::panic::unwind_safe::RefUnwindSafe for intuituive::widgets::Decision
+impl core::panic::unwind_safe::UnwindSafe for intuituive::widgets::Decision
 pub enum intuituive::widgets::HighlightLayer
 pub intuituive::widgets::HighlightLayer::Over
 pub intuituive::widgets::HighlightLayer::Under
@@ -6142,6 +6202,30 @@ impl core::marker::Unpin for intuituive::widgets::DateTimeOptions
 impl core::marker::UnsafeUnpin for intuituive::widgets::DateTimeOptions
 impl core::panic::unwind_safe::RefUnwindSafe for intuituive::widgets::DateTimeOptions
 impl core::panic::unwind_safe::UnwindSafe for intuituive::widgets::DateTimeOptions
+pub struct intuituive::widgets::DiffOptions
+impl intuituive::widgets::DiffOptions
+pub fn intuituive::widgets::DiffOptions::context(self, usize) -> intuituive::widgets::DiffOptions
+pub fn intuituive::widgets::DiffOptions::cursor(self, intuituive::reactive::Signal<core::option::Option<usize>>) -> intuituive::widgets::DiffOptions
+pub fn intuituive::widgets::DiffOptions::decide(self, intuituive::reactive::Signal<alloc::vec::Vec<intuituive::widgets::Decision>>) -> intuituive::widgets::DiffOptions
+pub fn intuituive::widgets::DiffOptions::language(self, impl core::convert::Into<alloc::string::String>) -> intuituive::widgets::DiffOptions
+pub fn intuituive::widgets::DiffOptions::layout(self, rich_ext::diff::Layout) -> intuituive::widgets::DiffOptions
+pub fn intuituive::widgets::DiffOptions::line_numbers(self, bool) -> intuituive::widgets::DiffOptions
+pub fn intuituive::widgets::DiffOptions::new() -> intuituive::widgets::DiffOptions
+pub fn intuituive::widgets::DiffOptions::on_done(self, impl core::ops::function::Fn(&[intuituive::widgets::Decision], &mut intuituive::app::Ctx) + 'static) -> intuituive::widgets::DiffOptions
+pub fn intuituive::widgets::DiffOptions::side_by_side_at(self, u16) -> intuituive::widgets::DiffOptions
+impl core::clone::Clone for intuituive::widgets::DiffOptions
+pub fn intuituive::widgets::DiffOptions::clone(&self) -> intuituive::widgets::DiffOptions
+impl core::default::Default for intuituive::widgets::DiffOptions
+pub fn intuituive::widgets::DiffOptions::default() -> intuituive::widgets::DiffOptions
+impl core::fmt::Debug for intuituive::widgets::DiffOptions
+pub fn intuituive::widgets::DiffOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for intuituive::widgets::DiffOptions
+impl !core::marker::Send for intuituive::widgets::DiffOptions
+impl !core::marker::Sync for intuituive::widgets::DiffOptions
+impl core::marker::Unpin for intuituive::widgets::DiffOptions
+impl core::marker::UnsafeUnpin for intuituive::widgets::DiffOptions
+impl !core::panic::unwind_safe::RefUnwindSafe for intuituive::widgets::DiffOptions
+impl !core::panic::unwind_safe::UnwindSafe for intuituive::widgets::DiffOptions
 pub struct intuituive::widgets::KeyHintsOptions
 impl intuituive::KeyHintsOptions
 pub fn intuituive::KeyHintsOptions::format(self, impl core::ops::function::Fn(&str, &str) -> alloc::string::String + 'static) -> intuituive::KeyHintsOptions
@@ -6711,6 +6795,7 @@ pub fn alloc::sync::Arc<T>::is_empty(&self) -> bool
 pub fn alloc::sync::Arc<T>::len(&self) -> intuituive::source::RowCount
 pub fn alloc::sync::Arc<T>::row(&self, usize) -> alloc::vec::Vec<alloc::string::String>
 pub fn alloc::sync::Arc<T>::rows(&self, core::ops::range::Range<usize>, &mut dyn core::ops::function::FnMut(usize, alloc::vec::Vec<alloc::string::String>) -> bool)
+pub fn intuituive::widgets::accepted_text(&str, &str, &[intuituive::widgets::Decision]) -> alloc::string::String
 pub fn intuituive::widgets::agenda(impl core::ops::function::Fn() -> rich_interact::datetime::Date + 'static, u32, impl core::ops::function::Fn(rich_interact::datetime::Date) -> alloc::vec::Vec<alloc::string::String> + 'static) -> intuituive::node::Node
 pub fn intuituive::widgets::breadcrumb(impl core::ops::function::Fn() -> alloc::vec::Vec<alloc::string::String> + 'static) -> intuituive::node::Node
 pub fn intuituive::widgets::calendar(intuituive::reactive::Signal<rich_interact::datetime::Date>) -> intuituive::node::Node
@@ -6720,6 +6805,8 @@ pub fn intuituive::widgets::calendar_with(intuituive::reactive::Signal<rich_inte
 pub fn intuituive::widgets::cell(impl core::ops::function::Fn() -> alloc::string::String + 'static) -> intuituive::node::Node
 pub fn intuituive::widgets::cells(impl core::iter::traits::collect::IntoIterator<Item = (u16, intuituive::node::Node)>) -> intuituive::node::Node
 pub fn intuituive::widgets::datetime_picker(intuituive::reactive::Signal<rich_interact::datetime::DateTime>, intuituive::widgets::DateTimeOptions) -> intuituive::node::Node
+pub fn intuituive::widgets::diff_view(intuituive::reactive::Signal<alloc::string::String>, intuituive::reactive::Signal<alloc::string::String>) -> intuituive::node::Node
+pub fn intuituive::widgets::diff_view_with(intuituive::reactive::Signal<alloc::string::String>, intuituive::reactive::Signal<alloc::string::String>, intuituive::widgets::DiffOptions) -> intuituive::node::Node
 pub fn intuituive::widgets::hex_view(impl core::ops::function::Fn() -> alloc::vec::Vec<u8> + 'static, intuituive::reactive::Signal<u16>) -> intuituive::node::Node
 pub fn intuituive::widgets::hsplit(intuituive::node::Node, intuituive::node::Node, intuituive::reactive::Signal<f64>) -> intuituive::node::Node
 pub fn intuituive::widgets::key_hints() -> intuituive::node::Node
@@ -7503,6 +7590,9 @@ pub fn intuituive::app::App::wait_for_tasks(self, bool) -> intuituive::app::App
 pub fn intuituive::app::App::which_key(self, bool) -> intuituive::app::App
 pub fn intuituive::app::App::which_key_delay(self, core::time::Duration) -> intuituive::app::App
 impl intuituive::app::App
+pub fn intuituive::app::App::keymap<I, A, K>(self, I) -> intuituive::app::App where I: core::iter::traits::collect::IntoIterator<Item = (A, K)>, A: core::convert::AsRef<str>, K: core::convert::AsRef<str>
+pub fn intuituive::app::App::keymap_file(self, impl core::convert::Into<std::path::PathBuf>) -> intuituive::app::App
+impl intuituive::app::App
 pub fn intuituive::app::App::timedemo(self, rich_interact::headless::Script, u16, u16) -> intuituive::timedemo::Timedemo
 impl core::ops::drop::Drop for intuituive::app::App
 pub fn intuituive::app::App::drop(&mut self)
@@ -7720,6 +7810,7 @@ pub fn intuituive::app::Ctx::quit_with<T: 'static>(&mut self, T)
 pub fn intuituive::app::Ctx::releases_reported(&self) -> rich_interact::event::Releases
 pub fn intuituive::app::Ctx::replace(&mut self, impl core::ops::function::FnOnce() -> intuituive::node::Node + 'static)
 pub fn intuituive::app::Ctx::set_theme(&mut self, intuituive::app::Theme)
+pub fn intuituive::app::Ctx::set_theme_named(&mut self, &str) -> bool
 pub fn intuituive::app::Ctx::toast(&mut self, impl core::convert::Into<alloc::string::String>)
 pub fn intuituive::app::Ctx::toast_for(&mut self, impl core::convert::Into<alloc::string::String>, core::time::Duration)
 impl intuituive::app::Ctx
@@ -7729,6 +7820,9 @@ pub fn intuituive::app::Ctx::pick(&mut self, impl core::convert::Into<alloc::str
 pub fn intuituive::app::Ctx::pick_with(&mut self, impl core::convert::Into<alloc::string::String>, intuituive::Origin, alloc::vec::Vec<alloc::string::String>, intuituive::PickOptions, impl core::ops::function::FnOnce(usize, &mut intuituive::app::Ctx) + 'static)
 pub fn intuituive::app::Ctx::prompt(&mut self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, impl core::ops::function::FnOnce(alloc::string::String, &mut intuituive::app::Ctx) + 'static)
 pub fn intuituive::app::Ctx::prompt_with(&mut self, impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>, intuituive::PromptOptions, impl core::ops::function::FnOnce(alloc::string::String, &mut intuituive::app::Ctx) + 'static)
+impl intuituive::app::Ctx
+pub fn intuituive::app::Ctx::reload_keymap(&mut self)
+pub fn intuituive::app::Ctx::set_keymap<I, A, K>(&mut self, I) -> core::result::Result<(), alloc::string::String> where I: core::iter::traits::collect::IntoIterator<Item = (A, K)>, A: core::convert::AsRef<str>, K: core::convert::AsRef<str>
 impl core::marker::Freeze for intuituive::app::Ctx
 impl !core::marker::Send for intuituive::app::Ctx
 impl !core::marker::Sync for intuituive::app::Ctx
@@ -7784,6 +7878,8 @@ pub fn intuituive::app::Driver::timeout(&self, core::time::Duration) -> core::ti
 pub fn intuituive::app::Driver::type_text(&mut self, &str)
 pub fn intuituive::app::Driver::update(&mut self, core::time::Duration)
 pub fn intuituive::app::Driver::wheel(&mut self, u16, u16, i32)
+impl intuituive::app::Driver
+pub fn intuituive::app::Driver::keymap_report(&self) -> &[alloc::string::String]
 impl intuituive::testing::ScreenRows for intuituive::app::Driver
 pub fn intuituive::app::Driver::plain_rows(&self) -> alloc::vec::Vec<alloc::string::String>
 impl intuituive::testing::StyledRows for intuituive::app::Driver
@@ -8179,6 +8275,8 @@ pub fn intuituive::log::Log::targets(&self) -> alloc::vec::Vec<(alloc::string::S
 pub fn intuituive::log::Log::targets_view(&self) -> intuituive::node::Node
 pub fn intuituive::log::Log::unseen(&self) -> usize
 pub fn intuituive::log::Log::view(&self) -> intuituive::node::Node
+pub fn intuituive::log::Log::write(&self, impl rich::protocol::Renderable + 'static)
+pub fn intuituive::log::Log::write_with(&self, impl rich::protocol::Renderable + 'static, impl core::convert::Into<intuituive::log::LogLine>)
 impl core::clone::Clone for intuituive::log::Log
 pub fn intuituive::log::Log::clone(&self) -> intuituive::log::Log
 impl core::marker::Copy for intuituive::log::Log
@@ -8407,6 +8505,10 @@ pub fn intuituive::node::Node::on_select(self, impl core::ops::function::FnMut(u
 pub fn intuituive::node::Node::tab_padding(self, &str, &str) -> intuituive::node::Node
 pub fn intuituive::node::Node::titles_align(self, intuituive::layout::Align) -> intuituive::node::Node
 impl intuituive::node::Node
+pub fn intuituive::node::Node::bind_id(self, &str, &str, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
+pub fn intuituive::node::Node::binding_id(self, &str) -> intuituive::node::Node
+pub fn intuituive::node::Node::sequence_id(self, &str) -> intuituive::node::Node
+impl intuituive::node::Node
 pub fn intuituive::node::Node::bind_sequence(self, &str, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::bind_sequence_in(self, &str, &str, &str, impl core::ops::function::FnMut(&mut intuituive::app::Ctx) + 'static) -> intuituive::node::Node
 pub fn intuituive::node::Node::on_any_key(self, impl core::ops::function::FnMut(&mut intuituive::app::Ctx, rich_interact::event::Key) -> bool + 'static) -> intuituive::node::Node
@@ -8559,6 +8661,39 @@ impl core::marker::Unpin for intuituive::Offset
 impl core::marker::UnsafeUnpin for intuituive::Offset
 impl core::panic::unwind_safe::RefUnwindSafe for intuituive::Offset
 impl core::panic::unwind_safe::UnwindSafe for intuituive::Offset
+pub struct intuituive::Palette
+impl intuituive::Palette
+pub fn intuituive::Palette::accent(self, rich::color::Color) -> intuituive::Palette
+pub fn intuituive::Palette::background(self, rich::color::Color) -> intuituive::Palette
+pub fn intuituive::Palette::boost(self, rich::color::Color) -> intuituive::Palette
+pub fn intuituive::Palette::colors(&self) -> alloc::vec::Vec<(alloc::string::String, alloc::string::String)>
+pub fn intuituive::Palette::dark(self, bool) -> intuituive::Palette
+pub fn intuituive::Palette::error(self, rich::color::Color) -> intuituive::Palette
+pub fn intuituive::Palette::foreground(self, rich::color::Color) -> intuituive::Palette
+pub fn intuituive::Palette::is_dark(&self) -> bool
+pub fn intuituive::Palette::named(&str) -> core::option::Option<intuituive::Palette>
+pub fn intuituive::Palette::names() -> alloc::vec::Vec<&'static str>
+pub fn intuituive::Palette::new(rich::color::Color) -> intuituive::Palette
+pub fn intuituive::Palette::panel(self, rich::color::Color) -> intuituive::Palette
+pub fn intuituive::Palette::secondary(self, rich::color::Color) -> intuituive::Palette
+pub fn intuituive::Palette::success(self, rich::color::Color) -> intuituive::Palette
+pub fn intuituive::Palette::surface(self, rich::color::Color) -> intuituive::Palette
+pub fn intuituive::Palette::variable(self, &str, &str) -> intuituive::Palette
+pub fn intuituive::Palette::warning(self, rich::color::Color) -> intuituive::Palette
+impl core::clone::Clone for intuituive::Palette
+pub fn intuituive::Palette::clone(&self) -> intuituive::Palette
+impl core::cmp::PartialEq for intuituive::Palette
+pub fn intuituive::Palette::eq(&self, &intuituive::Palette) -> bool
+impl core::fmt::Debug for intuituive::Palette
+pub fn intuituive::Palette::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for intuituive::Palette
+impl core::marker::Freeze for intuituive::Palette
+impl core::marker::Send for intuituive::Palette
+impl core::marker::Sync for intuituive::Palette
+impl core::marker::Unpin for intuituive::Palette
+impl core::marker::UnsafeUnpin for intuituive::Palette
+impl core::panic::unwind_safe::RefUnwindSafe for intuituive::Palette
+impl core::panic::unwind_safe::UnwindSafe for intuituive::Palette
 pub struct intuituive::PathChange
 pub intuituive::PathChange::kind: intuituive::ChangeKind
 pub intuituive::PathChange::path: std::path::PathBuf
@@ -9055,10 +9190,14 @@ pub intuituive::Theme::border_focused: rich::style::Style
 pub intuituive::Theme::styles: alloc::vec::Vec<(alloc::string::String, rich::style::Style)>
 pub intuituive::Theme::title: rich::style::Style
 impl intuituive::app::Theme
+pub fn intuituive::app::Theme::builtin() -> alloc::vec::Vec<(&'static str, intuituive::app::Theme)>
+pub fn intuituive::app::Theme::builtin_names() -> alloc::vec::Vec<&'static str>
 pub fn intuituive::app::Theme::dark() -> intuituive::app::Theme
+pub fn intuituive::app::Theme::from_palette(intuituive::Palette) -> intuituive::app::Theme
 pub fn intuituive::app::Theme::light() -> intuituive::app::Theme
 pub fn intuituive::app::Theme::load(impl core::convert::AsRef<std::path::Path>) -> core::result::Result<intuituive::app::Theme, alloc::string::String>
 pub fn intuituive::app::Theme::mono() -> intuituive::app::Theme
+pub fn intuituive::app::Theme::named(&str) -> core::option::Option<intuituive::app::Theme>
 pub fn intuituive::app::Theme::style(self, &str, rich::style::Style) -> intuituive::app::Theme
 pub fn intuituive::app::Theme::with_config(self, &str) -> core::result::Result<intuituive::app::Theme, alloc::string::String>
 impl core::clone::Clone for intuituive::app::Theme
