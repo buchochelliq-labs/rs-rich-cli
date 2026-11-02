@@ -138,6 +138,7 @@ pub mod miller;
 pub mod node;
 mod node_list;
 mod notify;
+mod parity;
 pub mod pixels;
 mod place;
 pub mod preview;
@@ -245,6 +246,9 @@ pub use node::{
 pub use node::{described, drawn, drawn_described};
 pub use node_list::list_of;
 pub use notify::{Corner, Level};
+pub use parity::{
+    PlaceholderVariant, header, key_panel, link, masked_input, placeholder, progress_bar,
+};
 pub use place::{Offset, Origin, RectHandle};
 pub use preview::{PreviewOfOptions, preview_of, preview_of_with};
 pub use reactive::{Memo, Proxy, Signal, memo, on_write, on_write_ref, signal, viewport, watch};

@@ -100,6 +100,8 @@ pub struct Ctx {
     mode: Option<Rc<str>>,
     /// Screenshots asked for ([`Ctx::screenshot`]).
     screenshots: Vec<Option<std::path::PathBuf>>,
+    /// A subtitle for the screen the handler ran on ([`Ctx::set_subtitle`]).
+    subtitle: Option<String>,
 }
 
 /// The user's editor: `$VISUAL` (a program and its arguments), else
@@ -369,6 +371,7 @@ impl Ctx {
             maximized: false,
             mode: None,
             screenshots: Vec::new(),
+            subtitle: None,
         }
     }
 
@@ -1017,6 +1020,21 @@ impl Ctx {
     /// [screenshot directory](App::screenshot_dir).
     pub fn screenshot(&mut self, path: impl Into<std::path::PathBuf>) {
         self.screenshots.push(Some(path.into()));
+    }
+
+    /// Set the subtitle a [`header`](crate::header) shows under the app's
+    /// [title](App::title) while the screen this handler ran on is on top
+    /// (each screen has its own, as Textual's `Screen.sub_title`).
+    pub fn set_subtitle(&mut self, subtitle: impl Into<String>) {
+        self.subtitle = Some(subtitle.into());
+    }
+
+    /// Show the [`key_panel`](crate::key_panel)s if they are hidden, or
+    /// hide them.
+    pub fn toggle_key_panel(&mut self) {
+        if let Some(shown) = Runtime::current().key_panel.get() {
+            shown.update(|on| *on = !*on);
+        }
     }
 
     /// Replace the top screen with the one `build` makes.
@@ -1705,6 +1723,9 @@ struct Layer {
     maximized: Option<NodeId>,
     /// What it hands its result to when it closes ([`Ctx::push_for`]).
     on_close: Option<OnClose>,
+    /// What a [`header`](crate::header) shows under the title while it is
+    /// on top ([`Ctx::set_subtitle`]).
+    subtitle: Option<String>,
 }
 
 thread_local! {
@@ -2377,6 +2398,7 @@ impl App {
                 fallback: false,
                 maximized: None,
                 on_close: None,
+                subtitle: None,
             }],
             restack: false,
             floats_drawn: Vec::new(),
@@ -3090,7 +3112,8 @@ impl App {
         self
     }
 
-    /// The app's title: a screenshot's window title.
+    /// The app's title: a screenshot's window title, and what a
+    /// [`header`](crate::header) shows.
     #[must_use]
     pub fn title(mut self, title: impl Into<String>) -> App {
         self.title = Some(title.into());
@@ -4666,6 +4689,10 @@ impl App {
         }
         self.copies.extend(cx.copies);
         self.handoffs.extend(cx.handoffs);
+        if let Some(subtitle) = cx.subtitle {
+            let layer = cx.layers.clamp(1, self.layers.len()) - 1;
+            self.layers[layer].subtitle = Some(subtitle);
+        }
         if !cx.screenshots.is_empty() {
             self.screenshots.extend(cx.screenshots);
             self.poke = true;
@@ -5001,6 +5028,23 @@ impl App {
     /// ancestors, innermost first, each keys once. Nothing without one.
     /// Those whose condition does not hold come too, marked disabled, for
     /// a footer that greys them.
+    /// What a [`header`](crate::header) shows: the app's title and the
+    /// top screen's subtitle.
+    fn refresh_heading(&self) {
+        let Some(heading) = self.runtime.heading.get() else {
+            return;
+        };
+        let now = (
+            self.title.clone().unwrap_or_default(),
+            self.top().subtitle.clone().unwrap_or_default(),
+        );
+        self.runtime.enter(|| {
+            if heading.with_untracked(|old| *old != now) {
+                heading.set(now);
+            }
+        });
+    }
+
     fn refresh_hints(&self) {
         let Some(hints) = self.runtime.hints.get() else {
             return;
@@ -5191,6 +5235,7 @@ impl App {
             fallback: false,
             maximized: None,
             on_close: None,
+            subtitle: None,
         });
         self.restack = true;
         self.runtime.layers.set(self.layers.len());
@@ -7008,6 +7053,7 @@ impl Driver {
             return None;
         }
         self.app.refresh_hints();
+        self.app.refresh_heading();
         let out = self.needs_render().then(|| {
             let mut out = String::new();
             if !self.started {

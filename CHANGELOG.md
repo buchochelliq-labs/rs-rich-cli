@@ -63,6 +63,12 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `on_highlight(..)`; `on_select`, `on_context`, `scroll_padding` and
   `item_key` reach it too. Rows are any nodes, the selected one matches
   `:selected`, and a click a node inside the row took does not select.
+- **Small widgets after Textual's** (#813): `link(text, url)`
+  (`.on_activate`, `.open_with`), `progress_bar(done, total)`
+  (`.show_percentage`, `.show_eta`, a pulse with no total), `header()`
+  (`App::title`, `Ctx::set_subtitle`, `.clock()`, `.tall()`),
+  `key_panel()` with `Ctx::toggle_key_panel()`, `masked_input(value,
+  template)` and `placeholder(label)` with `PlaceholderVariant`.
 
 ### The docs on Zensical
 
