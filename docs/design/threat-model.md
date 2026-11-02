@@ -313,13 +313,16 @@ link goes where); the DevTools channel, which controls the whole browser.
 - Noctiluca and the user's terminal;
 - other local processes and users and the DevTools endpoint;
 - (planned) an agent or script and the control socket of
-  [#816](https://github.com/buchochelliq-labs/rs-rich-cli/issues/816).
+  [#816](https://github.com/buchochelliq-labs/rs-rich-cli/issues/816);
+- with `--ssh HOST`: this machine and the SSH server, which carries every
+  request; and other local users and the tunnel's loopback port.
 
 **Entry points:** DOM snapshots and accessibility trees; titles, URLs, link
 targets, alt text, option labels, dialog text, download names; the
 bookmarks file; DevTools events (`Runtime.bindingCalled`,
 `Browser.downloadWillBegin`); the address bar; Chrome's switches; `--chrome`
-and `RICH_EMBED_CHROME`.
+and `RICH_EMBED_CHROME`; `--ssh HOST`, `--ssh-arg` and what ssh writes on
+standard error.
 
 | | Threat | Mitigation | State |
 |---|---|---|---|
@@ -333,6 +336,12 @@ and `RICH_EMBED_CHROME`.
 | I | Password fields reach the screen, the model or `--dump` | Never read; shown as a fixed mask; the change-watcher leaves them out | documented |
 | E | A page navigates to `file://` or `chrome://` | Links are followed by clicking them in the page, so Chrome's own rules apply; only the user's address bar and bookmarks call `Page.navigate` directly | verified (link path), unverified (Chrome's behaviour for every scheme) |
 | I | Noctiluca phones home | No telemetry, update check or account; searches go to the configured engine | documented |
+| E | `--ssh`'s host is read as an ssh option (`-oProxyCommand=…` runs a command) | A host starting with `-`, or with spaces or control characters, is refused; the host goes after `--`; the user's own options only through `--ssh-arg` ([`ssh.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/noctiluca/src/ssh.rs), `check_host`) | verified |
+| I | `--ssh`'s tunnel is reachable from the network | `-D 127.0.0.1:PORT`: loopback only, whatever `GatewayPorts` says; nothing listens on any other address | verified (arguments) |
+| S, I | Another local user's program takes the tunnel's port first and sees every request | `ExitOnForwardFailure=yes`, so ssh fails rather than run without the port; ready only once the port answers SOCKS5 while ssh lives; on Linux the listener's owner in `/proc/net/tcp` must be this user, or Chrome is not started (`listener_uid`) | verified (Linux) |
+| I | Requests leave this machine directly despite `--ssh` (DNS, WebRTC, QUIC, loopback) | Chrome's resolver maps every name to "not found" but the proxy's own address, so names go to the far side (SOCKS5 remote DNS); `<-loopback>` sends loopback through the proxy; WebRTC only over the proxy (`disable_non_proxied_udp`); QUIC off (`chrome_switches`) | verified (switches), unverified (Chrome's behaviour: the live test needs Chrome) |
+| T | ssh's messages corrupt the screen, or carry escapes | ssh's standard error is read on a thread, kept (eight lines) and cleaned (`clean`) before the status bar shows one; prompts go to `/dev/tty` before the browser takes the screen; a reconnect never prompts (`BatchMode=yes`) | verified |
+| D | A killed Noctiluca leaves the tunnel running | The tunnel is a child, killed when the `Tunnel` drops; on Linux `PR_SET_PDEATHSIG` stops it if Noctiluca dies | verified (drop), documented (death signal) |
 
 **Gaps:**
 
@@ -371,8 +380,24 @@ and `RICH_EMBED_CHROME`.
   own control channel (kitty's or WezTerm's remote control, for example),
   which can run commands in the terminal. It should use only the verbs it
   needs, and only on the user's own terminal. **planned**.
-- **`--ssh HOST` (#817):** where Chrome and the profile live, and what
-  crosses the connection. **planned**.
+- **`--ssh HOST` (#817):** Chrome and the profile stay on this machine;
+  the SSH server carries every request and resolves every name, as a
+  network would (HTTPS stays end to end; plain HTTP is readable there).
+  Gaps that remain:
+  - **Other local users can use the tunnel** while it runs: `ssh -D`
+    takes SOCKS5 with no authentication, and Chrome cannot speak SOCKS5's
+    password method, so a user of this machine who finds the port reaches
+    the remote's network as you. Documented in the guide (on a shared
+    machine, run Noctiluca on the remote instead). The fix is a relay of
+    Noctiluca's own on the port that checks each connection's owner (in
+    `/proc/net/tcp` on Linux) and forwards over ssh's control socket
+    (`-W`). **gap** (medium, shared machines only).
+  - **A kept profile mixes the two `localhost`s:** `--profile` with and
+    without `--ssh` shares one site's cookies and storage between this
+    machine's `localhost` and the remote's. Warned on start and
+    documented. **accepted**.
+  - **macOS and Windows** have no listener-owner check (no
+    `/proc/net/tcp`), and no death signal for ssh. **gap** (low).
 - **Bot checks:** the `Runtime` domain is visible to pages; accepted and
   documented, not a security gap.
 
@@ -575,6 +600,9 @@ says, not in a public issue.
 - [ ] Navigation to `file://`, `chrome://` and `javascript:` from a page.
 - [ ] The control socket (#816), `--read-only`, and prompt injection
       through page text, once it lands.
+- [ ] `--ssh`: the host never read as an option, the tunnel on loopback
+      only, the port's owner checked, no direct DNS, WebRTC or QUIC (the
+      live test with Chrome), and the shared-machine gap.
 - [ ] The terminal hosts' API client (#820), once it lands.
 - [ ] The pixel mouse (#819): pixel mode only with a known cell size, and
       `RICH_PIXEL_MOUSE=0` turns it off.

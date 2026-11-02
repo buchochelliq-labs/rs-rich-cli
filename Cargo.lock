@@ -2274,6 +2274,7 @@ name = "noctiluca"
 version = "0.0.3"
 dependencies = [
  "image",
+ "libc",
  "portable-pty",
  "rs-rich",
  "rs-rich-art",

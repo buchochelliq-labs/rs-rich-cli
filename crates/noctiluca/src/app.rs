@@ -62,6 +62,9 @@ pub struct Options {
     pub view: Option<View>,
     /// How images show; else the config's.
     pub images: Option<Images>,
+    /// `--ssh HOST`'s tunnel, which the app watches and reconnects: the
+    /// status bar says when it drops ([`crate::ssh`]).
+    pub tunnel: Option<crate::ssh::TunnelLink>,
 }
 
 /// The app's state, all of it in signals so it can be copied into every
@@ -126,6 +129,11 @@ pub struct Browser {
     /// Whether the start page shows: started with no address, until the
     /// first page is opened ([`crate::start`]).
     pub start: Signal<bool>,
+    /// What the status bar says about `--ssh`'s tunnel, as markup; `None`
+    /// without one.
+    pub tunnel: Signal<Option<String>>,
+    /// Reconnect a dropped tunnel now, not after its wait (reload asks).
+    tunnel_now: Signal<bool>,
 }
 
 impl Browser {
@@ -470,7 +478,11 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
         "hints" => start_hints(b),
         "back" => drop(b.send(Command::History(HistoryStep::Back))),
         "forward" => drop(b.send(Command::History(HistoryStep::Forward))),
-        "reload" => drop(b.send(Command::History(HistoryStep::Reload))),
+        "reload" => {
+            // A dropped tunnel is reconnected first, at once.
+            b.tunnel_now.set(true);
+            b.send(Command::History(HistoryStep::Reload));
+        }
         "media.freeze" => {
             let frozen = !b.frozen.get_untracked();
             b.frozen.set(frozen);
@@ -2379,6 +2391,82 @@ fn video_pacing(config: &Config, images: Images) -> Pacing {
     Pacing::new(budget, Pacing::start_for(asked, Pixels::detect()))
 }
 
+/// How often the app looks at `--ssh`'s tunnel.
+const TUNNEL_LOOK: Duration = Duration::from_millis(500);
+/// The first wait before a dropped tunnel is reconnected, doubled after
+/// each failed try up to [`TUNNEL_WAIT_MAX`].
+const TUNNEL_WAIT: Duration = Duration::from_secs(2);
+const TUNNEL_WAIT_MAX: Duration = Duration::from_secs(30);
+
+/// The app's watch over `--ssh`'s tunnel: it says in the status bar what
+/// the tunnel does, and reconnects a dropped one after a wait that grows
+/// (without prompting: ssh's `BatchMode`), or at once on reload.
+struct TunnelWatch {
+    link: crate::ssh::TunnelLink,
+    host: String,
+    wait: Duration,
+    retry_at: Option<Instant>,
+}
+
+impl TunnelWatch {
+    fn new(link: crate::ssh::TunnelLink) -> TunnelWatch {
+        TunnelWatch {
+            host: link.host(),
+            link,
+            wait: TUNNEL_WAIT,
+            retry_at: None,
+        }
+    }
+
+    /// The status bar's words for `state`.
+    fn says(&self, state: &crate::ssh::TunnelState) -> String {
+        use crate::ssh::TunnelState;
+        let host = markup(&self.host);
+        match state {
+            TunnelState::Up => format!("[dim]via ssh {host}[/]"),
+            TunnelState::Connecting => format!("[yellow]ssh {host}: reconnecting…[/]"),
+            TunnelState::Down(why) => {
+                let left = self.retry_at.map_or(0, |at| {
+                    at.saturating_duration_since(Instant::now()).as_secs()
+                });
+                format!(
+                    "[red]ssh {host} dropped: {}[/] · retrying in {left} s (reload: now)",
+                    markup(why)
+                )
+            }
+        }
+    }
+
+    fn look(&mut self, b: Browser) {
+        use crate::ssh::TunnelState;
+        let mut state = self.link.check();
+        if let TunnelState::Down(_) = &state {
+            let now = Instant::now();
+            let retry_at = *self.retry_at.get_or_insert(now + self.wait);
+            if now >= retry_at || b.tunnel_now.get_untracked() {
+                self.retry_at = None;
+                self.wait = (self.wait * 2).min(TUNNEL_WAIT_MAX);
+                state = match self.link.reconnect() {
+                    Ok(()) => TunnelState::Connecting,
+                    Err(error) => TunnelState::Down(error.to_string()),
+                };
+            }
+        } else if state == TunnelState::Up {
+            self.wait = TUNNEL_WAIT;
+            self.retry_at = None;
+        }
+        if b.tunnel_now.get_untracked() {
+            b.tunnel_now.set(false);
+        }
+        let says = self.says(&state);
+        if b.tunnel
+            .with_untracked(|t| t.as_deref() != Some(says.as_str()))
+        {
+            b.tunnel.set(Some(says));
+        }
+    }
+}
+
 /// The browser app over `engine`.
 pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
     let Options {
@@ -2387,6 +2475,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         url,
         view,
         images,
+        tunnel,
     } = options;
     let start_page = url.is_none() && config.home.is_none();
     let start = url
@@ -2497,7 +2586,14 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             encoder: signal(Rc::new(encoder)),
             regions_sent: signal((Vec::new(), Vec::new(), 1.0)),
             start: signal(false),
+            tunnel: signal(None),
+            tunnel_now: signal(false),
         };
+        if let Some(link) = tunnel.clone() {
+            let mut watch = TunnelWatch::new(link);
+            b.tunnel.set(Some(watch.says(&crate::ssh::TunnelState::Up)));
+            every(TUNNEL_LOOK, move |_| watch.look(b));
+        }
         spawn_stream(move |stream| {
             let proxy = stream.proxy().clone();
             while let Ok(update) = receive.recv() {

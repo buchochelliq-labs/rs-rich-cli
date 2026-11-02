@@ -71,6 +71,7 @@ fn options(view: View) -> Options {
         url: Some("canvas.html".to_string()),
         view: Some(view),
         images: Some(Images::Ansi),
+        tunnel: None,
     }
 }
 

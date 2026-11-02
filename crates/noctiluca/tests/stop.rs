@@ -73,6 +73,7 @@ fn stopping_the_tabs_drops_their_engines_while_the_app_still_holds_them() {
             url: Some("second.html".into()),
             view: Some(View::Reader),
             images: None,
+            tunnel: None,
         },
     )
     .driver(80, 20);

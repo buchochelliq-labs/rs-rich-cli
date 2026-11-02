@@ -40,6 +40,11 @@ pub struct Args {
     /// `--transparent`: where a page sets no background, the terminal's
     /// own shows.
     pub transparent: bool,
+    /// `--ssh HOST`: Chrome runs here, its network goes through HOST
+    /// ([`crate::ssh`]).
+    pub ssh: Option<String>,
+    /// `--ssh-arg ARG`, repeatable: the user's own options for that ssh.
+    pub ssh_args: Vec<String>,
 }
 
 /// What the command line asks for.
@@ -75,6 +80,10 @@ usage: noctiluca [OPTIONS] [URL | FILE | KEYWORD WORDS…]
                                        clicks; its own text selection)
   --transparent                        let the terminal's background show where a
                                        page sets none of its own
+  --ssh [USER@]HOST                    run Chrome here, but make every request
+                                       through HOST (its localhost is localhost)
+  --ssh-arg ARG                        an option for that ssh (repeatable:
+                                       --ssh-arg=-p --ssh-arg=2222)
   --adapt -RULE,+RULE,…                switch terminal adaptations off or on
                                        (decorative-images, collapse-nav, …;
                                        ? while browsing lists them)
@@ -164,6 +173,12 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
                 }
                 parsed.profile = Some(name);
             }
+            "--ssh" => {
+                let host = value_of(name, inline, &mut rest)?;
+                crate::ssh::check_host(&host)?;
+                parsed.ssh = Some(host);
+            }
+            "--ssh-arg" => parsed.ssh_args.push(value_of(name, inline, &mut rest)?),
             "--chrome" => parsed.chrome = Some(PathBuf::from(value_of(name, inline, &mut rest)?)),
             "--config" => parsed.config = Some(PathBuf::from(value_of(name, inline, &mut rest)?)),
             "--images" => {
@@ -202,6 +217,9 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
     }
     if parsed.dump.is_some() && parsed.target.is_empty() {
         return Err("--dump needs a page".into());
+    }
+    if !parsed.ssh_args.is_empty() && parsed.ssh.is_none() {
+        return Err("--ssh-arg needs --ssh HOST".into());
     }
     Ok(Run::Browse(parsed))
 }
@@ -279,6 +297,24 @@ mod tests {
     }
 
     #[test]
+    fn ssh_takes_a_host_and_the_user_s_own_options() {
+        let Run::Browse(args) = parse(&[
+            "--ssh",
+            "me@devbox",
+            "--ssh-arg=-p",
+            "--ssh-arg",
+            "2222",
+            "http://localhost:3000",
+        ])
+        .unwrap() else {
+            panic!()
+        };
+        assert_eq!(args.ssh.as_deref(), Some("me@devbox"));
+        assert_eq!(args.ssh_args, ["-p", "2222"]);
+        assert_eq!(args.target, ["http://localhost:3000"]);
+    }
+
+    #[test]
     fn adaptations_switch_off_one_by_one_or_all() {
         let Run::Browse(args) =
             parse(&["--adapt=-decorative-images,-collapse-nav", "x.html"]).unwrap()
@@ -320,6 +356,16 @@ mod tests {
                 .contains("needs a page")
         );
         assert!(parse(&["--nope"]).unwrap_err().contains("unknown switch"));
+        assert!(
+            parse(&["--ssh", "-oProxyCommand=x"])
+                .unwrap_err()
+                .contains("--ssh-arg")
+        );
+        assert!(
+            parse(&["--ssh-arg", "-p", "x.html"])
+                .unwrap_err()
+                .contains("needs --ssh")
+        );
         let Run::Browse(args) = parse(&["--", "--reader"]).unwrap() else {
             panic!()
         };

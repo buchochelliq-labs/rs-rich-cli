@@ -70,6 +70,8 @@ noctiluca keys [--site HOST] [--config PATH]
 | `--no-adapt` | Every adaptation off: the faithful projection |
 | `--transparent` | Where a page sets no background of its own, the terminal's background shows (a translucent or themed terminal). See [the config](config.md#startup) |
 | `--no-mouse` | Leave the mouse to the terminal: no clicks or wheel in Noctiluca, and the terminal's own selection and scrollback. See [the mouse](#the-mouse) |
+| `--ssh [USER@]HOST` | Run Chrome here, but make every request through HOST over an SSH tunnel: its `localhost` is `localhost`. See [Over SSH](ssh.md) |
+| `--ssh-arg ARG` | One more word for that ssh, repeatable: `--ssh-arg=-p --ssh-arg=2222` |
 | `--dump HOW` | Print the page's model and exit: `text`, `ax` (its controls) or `json` (all of it). Needs a page |
 | `--no-js` | Turn the page's script off |
 | `--config PATH` | Read another config file |

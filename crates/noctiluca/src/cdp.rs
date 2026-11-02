@@ -298,6 +298,10 @@ pub struct ChromeOptions {
     /// Chrome's default background transparent, not white: where a page
     /// sets none, its captured pixels keep their alpha (`--transparent`).
     pub transparent: bool,
+    /// More switches for Chrome: `--ssh`'s proxy ([`crate::ssh`]).
+    /// rs-rich-embed still drops any that would turn the sandbox off or
+    /// open DevTools.
+    pub switches: Vec<String>,
     /// The page's size in cells.
     pub columns: u16,
     pub rows: u16,
@@ -352,6 +356,9 @@ impl ChromeBackend {
         }
         if let Some(dir) = options.quarantine {
             engine = engine.downloads(Downloads::Quarantine(dir));
+        }
+        if !options.switches.is_empty() {
+            engine = engine.args(options.switches.clone());
         }
         engine.resize(options.columns.max(20), options.rows.max(5))?;
         let devtools = engine.devtools()?;

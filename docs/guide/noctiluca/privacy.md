@@ -106,3 +106,6 @@ refuses it, use another browser for that site.
   the config only when you bind or remove a site key, and bookmarks only
   when you add or remove one, each in one atomic step.
 - **Sound** plays on the machine Chrome runs on.
+- **With `--ssh HOST`**, every request goes through HOST, which sees
+  them as your network would, and HOST resolves every name. The tunnel
+  listens on `127.0.0.1` only. See [Over SSH](ssh.md#what-it-means-for-privacy).

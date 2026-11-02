@@ -223,6 +223,18 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   a picture, a canvas, a drawing or a frame to the page at that point of
   it (`PageAction::ClickAt`, `Command::ClickAt`), to the pixel where the
   terminal reports pixels and at the cell's centre elsewhere.
+- **Noctiluca's `--ssh HOST` (#817):** Chrome runs here and every request
+  goes through HOST, so the remote's `localhost` opens as if it were
+  local. Noctiluca runs `ssh -N -D 127.0.0.1:PORT -- HOST` (loopback only,
+  `ExitOnForwardFailure`, keep-alives; `--ssh-arg` passes the user's own
+  options, and `~/.ssh/config` applies), waits for the SOCKS port (and on
+  Linux checks it is the user's own), and gives Chrome a SOCKS5 proxy with
+  names resolved on the far side, loopback through the proxy, and no
+  direct WebRTC or QUIC. The status bar says `via ssh HOST`; a dropped
+  tunnel says so and reconnects without prompting, at once on reload.
+  Errors are one line: no ssh, a refused login, a port taken. The new
+  guide page "Over SSH" says when to use it and when to run Noctiluca on
+  the remote; the threat model has its rows and its gaps.
 
 ## 0.0.23 cohort — published 2026-10-27
 

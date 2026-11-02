@@ -151,7 +151,7 @@ fn start_url(args: &Args, config: &Config, marks: &Bookmarks) -> Option<String> 
 /// feature, a test's saved snapshots when `NOCTILUCA_FAKE_ENGINE` names
 /// their directory (the end-to-end test and the docs tape run the binary
 /// so, with no browser). A release build ignores the variable.
-fn engine(args: &Args, config: &Config) -> std::io::Result<Box<dyn Engine>> {
+fn engine(args: &Args, config: &Config, switches: &[String]) -> std::io::Result<Box<dyn Engine>> {
     #[cfg(feature = "fake-engine")]
     if let Some(dir) = std::env::var_os("NOCTILUCA_FAKE_ENGINE") {
         // Videos play from Chrome's recorded frames, when there are some.
@@ -185,6 +185,7 @@ fn engine(args: &Args, config: &Config) -> std::io::Result<Box<dyn Engine>> {
         quarantine: None,
         no_js: args.no_js,
         transparent: args.transparent || config.transparent,
+        switches: switches.to_vec(),
         columns,
         rows,
     })
@@ -202,6 +203,22 @@ fn engine(args: &Args, config: &Config) -> std::io::Result<Box<dyn Engine>> {
         }
     })?;
     Ok(Box::new(backend))
+}
+
+/// `--ssh HOST`'s tunnel, waited for (ssh may prompt meanwhile).
+fn open_tunnel(host: &str, args: &Args) -> std::io::Result<noctiluca::ssh::TunnelLink> {
+    let mut options = noctiluca::ssh::SshOptions::new(host);
+    options.args = args.ssh_args.clone();
+    if args.profile.is_some() {
+        eprintln!(
+            "noctiluca: note: with --ssh, the kept profile's cookies for localhost are \
+             shared with the far side's localhost"
+        );
+    }
+    eprintln!("noctiluca: connecting to {host} over SSH (Ctrl+C stops)…");
+    let tunnel = noctiluca::ssh::Tunnel::open(options, Duration::from_secs(120))
+        .map_err(|e| std::io::Error::new(e.kind(), format!("--ssh: {e}")))?;
+    Ok(noctiluca::ssh::TunnelLink::new(tunnel))
 }
 
 fn terminal_size() -> (u16, u16) {
@@ -223,20 +240,39 @@ fn browse(args: Args) -> std::io::Result<()> {
         .transpose()?
         .unwrap_or_default();
     let url = start_url(&args, &config, &marks);
+    // `--ssh`: the tunnel first, while the terminal is still the shell's,
+    // so ssh can ask for a password or a host key. It lives until the
+    // browser ends; dropping it stops ssh.
+    let tunnel = args
+        .ssh
+        .as_ref()
+        .map(|host| open_tunnel(host, &args))
+        .transpose()?;
+    let switches = tunnel
+        .as_ref()
+        .map(|t| {
+            t.0.lock()
+                .unwrap_or_else(|e| e.into_inner())
+                .chrome_switches()
+        })
+        .unwrap_or_default();
     if let Some(how) = args.dump {
         for warning in &config.warnings {
             eprintln!("noctiluca: config: {warning}");
         }
         let url = url.unwrap_or_default();
-        let page =
-            noctiluca::dump::read_page(engine(&args, &config)?, &url, Duration::from_secs(60))?;
+        let page = noctiluca::dump::read_page(
+            engine(&args, &config, &switches)?,
+            &url,
+            Duration::from_secs(60),
+        )?;
         println!("{}", noctiluca::dump::dump(&page, how));
         return Ok(());
     }
     if args.view.unwrap_or(config.view) == View::Raster {
-        return raster(&args, url.unwrap_or_else(|| "about:blank".into()));
+        return raster(&args, url.unwrap_or_else(|| "about:blank".into()), switches);
     }
-    let engine = engine(&args, &config)?;
+    let engine = engine(&args, &config, &switches)?;
     noctiluca::app::app(
         engine,
         noctiluca::app::Options {
@@ -245,6 +281,7 @@ fn browse(args: Args) -> std::io::Result<()> {
             url,
             view: args.view,
             images: args.images,
+            tunnel,
         },
     )
     // `--no-mouse`: never captured; else captured full-screen, intuiTUIve's
@@ -255,12 +292,14 @@ fn browse(args: Args) -> std::io::Result<()> {
 
 /// The raster view, for debugging: the page as Chrome paints it, in half
 /// blocks, through rs-rich-embed's web view.
-fn raster(args: &Args, url: String) -> std::io::Result<()> {
+fn raster(args: &Args, url: String, switches: Vec<String>) -> std::io::Result<()> {
     use rich_intuituive::prelude::*;
     let binary = args.chrome.clone().or_else(noctiluca::cdp::find_chrome);
     let audio = args.audio;
     App::new(move || {
-        let mut engine = rich_embed::ChromeEngine::new().audio(audio);
+        let mut engine = rich_embed::ChromeEngine::new()
+            .audio(audio)
+            .args(switches.clone());
         if let Some(binary) = binary {
             engine = engine.binary(binary);
         }
