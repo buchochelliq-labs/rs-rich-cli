@@ -381,3 +381,51 @@ read rest || exit 0"#;
     }
     assert_eq!(*recorder.logs.lock().unwrap(), ["starting up"]);
 }
+
+#[test]
+fn a_turn_recorded_from_a_real_agent_replays() {
+    // tests/fixtures/claude_agent.jsonl was recorded from the Claude Agent
+    // ACP adapter with examples/agent.rs, then trimmed (see its note).
+    let dir = scratch("claude_agent");
+    let recorder = Arc::new(Recorder::new(Answer::Choose("unused")).in_workspace(&dir));
+    let (agent, replay) = start(
+        &fixture("claude_agent.jsonl"),
+        Some(&dir),
+        Arc::clone(&recorder),
+    );
+    let init = init(&agent, ClientCapabilities::none());
+    assert_eq!(init.protocol_version, 1);
+    assert_eq!(
+        init.agent_info.as_ref().unwrap().display_name(),
+        "Claude Agent"
+    );
+    assert!(init.agent_capabilities.load_session);
+
+    let session = agent.new_session(NewSessionRequest::new(&dir)).unwrap();
+    assert_eq!(session.modes.unwrap().current_mode_id.as_str(), "default");
+    let done = agent
+        .prompt(PromptRequest::text(
+            session.session_id,
+            "Reply with the single word: pong",
+        ))
+        .unwrap();
+    assert_eq!(done.stop_reason, StopReason::EndTurn);
+    replay.finish();
+
+    let updates = recorder.updates();
+    let kinds: Vec<&str> = updates.iter().map(SessionUpdate::kind).collect();
+    assert_eq!(
+        kinds,
+        [
+            "available_commands_update",
+            "available_commands_update",
+            "session_info_update",
+            "usage_update",
+            "agent_message_chunk",
+            "usage_update",
+            "usage_update",
+        ]
+    );
+    assert_eq!(recorder.message_text(), "pong");
+    let _ = std::fs::remove_dir_all(dir);
+}
