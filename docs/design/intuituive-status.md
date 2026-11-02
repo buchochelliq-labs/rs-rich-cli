@@ -3,7 +3,19 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-11-01)
+## Where things stand (2026-11-02)
+
+- **Wave 0 is merged** (#828, the plan; #829, edition 2024).
+- **Wave 1 is integrated** on `claude/next-priority-items-3c5p8e-wip-wave1`
+  and goes up as one pull request: WS1 phases 1–2 (`docs/design/cornacai.md`,
+  `rs-rich-acp`), WS2 (below), WS4 (`#[derive(Inspect)]`, `rich_inspect!`),
+  WS5 (Noctiluca's fixes, opt-in AVIF), WS8 (the signer's GitHub App, in
+  the mirror), WS9 (the threat model, `SECURITY.md`), WS12 (Zensical,
+  modern design), and Noctiluca's mouse, 30 fps video, start page and
+  lanternfish with the animated banner.
+- **Next:** wave 2 (the plan's Order of work), once wave 1 merges.
+
+## Where things stood (2026-11-01)
 
 - **0.0.24 is planned** ([plan](../plans/0.0.24.md)), with the maintainer's
   calls of 2026-11-01: everything ready on the apps track, lumis 0.17
