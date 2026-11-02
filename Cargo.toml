@@ -60,7 +60,7 @@ compact_str = "0.9"
 # feature makes parsing bit-for-bit accurate.
 serde_json = { version = "1", features = ["preserve_order", "float_roundtrip"] }
 # fancy-regex supports the lookbehind/backreference features rich's ReprHighlighter uses.
-fancy-regex = "0.19"
+fancy-regex = "0.20"
 # CommonMark parser for the Markdown renderable.
 pulldown-cmark = { version = "0.13", default-features = false }
 # Syntax highlighting engine (Pygments-equivalent). `default-fancy` uses the

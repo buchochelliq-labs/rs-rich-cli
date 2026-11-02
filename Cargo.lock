@@ -1159,9 +1159,9 @@ dependencies = [
 
 [[package]]
 name = "fancy-regex"
-version = "0.19.2"
+version = "0.20.0"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "d301f5bf187b3c295fce6468d3875037a0bccc5f6b151c63cac2f85babf21912"
+checksum = "20ed7f62ce0ae0da1a8b93c3c7104ab7e0760a74491e097c701fff966e945390"
 dependencies = [
  "bit-set 0.8.0",
  "regex-automata",
@@ -3147,7 +3147,7 @@ version = "0.0.14"
 dependencies = [
  "anstyle-query",
  "compact_str",
- "fancy-regex 0.19.2",
+ "fancy-regex 0.20.0",
  "pulldown-cmark",
  "serde_json",
  "syntect",
@@ -3256,7 +3256,7 @@ dependencies = [
  "anyhow",
  "chrono",
  "clap",
- "fancy-regex 0.19.2",
+ "fancy-regex 0.20.0",
  "flate2",
  "libc",
  "libloading",
@@ -3289,7 +3289,7 @@ name = "rs-rich-interact"
 version = "0.0.12"
 dependencies = [
  "crossterm",
- "fancy-regex 0.19.2",
+ "fancy-regex 0.20.0",
  "filedescriptor",
  "libc",
  "portable-pty",
@@ -3418,7 +3418,7 @@ name = "rs-rich-record"
 version = "0.0.12"
 dependencies = [
  "color_quant 2.0.0",
- "fancy-regex 0.19.2",
+ "fancy-regex 0.20.0",
  "flate2",
  "fontdue",
  "gif",
@@ -3546,7 +3546,7 @@ dependencies = [
  "security-framework",
  "security-framework-sys",
  "webpki-root-certs",
- "windows-sys 0.52.0",
+ "windows-sys 0.61.2",
 ]
 
 [[package]]
