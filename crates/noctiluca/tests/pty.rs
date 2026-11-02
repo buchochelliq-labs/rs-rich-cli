@@ -56,6 +56,8 @@ impl Run {
         let _ = std::fs::remove_dir_all(&tmp);
         std::fs::create_dir_all(&tmp).unwrap();
         command.env("TMPDIR", &tmp);
+        // The control socket's private directory, the run's own.
+        command.env("XDG_RUNTIME_DIR", run_dir(&tmp));
         match chrome {
             Some(chrome) => command.env("RICH_EMBED_CHROME", chrome),
             None => command.env(
@@ -124,6 +126,86 @@ impl Run {
         let terminal = self.terminal();
         (bytes, terminal)
     }
+}
+
+/// The run's runtime directory (`XDG_RUNTIME_DIR`), made private.
+fn run_dir(tmp: &Path) -> std::path::PathBuf {
+    let dir = tmp.join("run");
+    if !dir.exists() {
+        std::fs::DirBuilder::new().create(&dir).unwrap();
+        use std::os::unix::fs::PermissionsExt;
+        std::fs::set_permissions(&dir, std::fs::Permissions::from_mode(0o700)).unwrap();
+    }
+    dir
+}
+
+/// `noctiluca ARGS` as a script runs it beside the run: its output and
+/// whether it succeeded.
+fn noctiluca(run: &Run, args: &[&str]) -> (String, bool) {
+    let out = std::process::Command::new(env!("CARGO_BIN_EXE_noctiluca"))
+        .args(args)
+        .env_clear()
+        .env("XDG_RUNTIME_DIR", run_dir(&run.tmp))
+        .env("TMPDIR", &run.tmp)
+        .output()
+        .unwrap();
+    let text = format!(
+        "{}{}",
+        String::from_utf8_lossy(&out.stdout),
+        String::from_utf8_lossy(&out.stderr)
+    );
+    (text, out.status.success())
+}
+
+#[test]
+fn a_script_lists_the_session_reads_it_and_clicks_by_id() {
+    let run = Run::start(
+        &["--control", "https://fixture.example/reader.html"],
+        "xterm-256color",
+    );
+    run.wait_for("Tiny drifters of the open sea");
+    let (ls, ok) = noctiluca(&run, &["ls"]);
+    assert!(ok, "{ls}");
+    assert!(ls.contains("reader.html  Reader fixture"), "{ls}");
+    let (shot, ok) = noctiluca(&run, &["action", "snapshot"]);
+    assert!(ok, "{shot}");
+    assert!(shot.contains("# Reader fixture\n# file://"), "{shot}");
+    assert!(shot.contains("Read [1]the second page next."), "{shot}");
+    let (out, ok) = noctiluca(&run, &["action", "click", "1"]);
+    assert!(ok, "{out}");
+    run.wait_for("You followed the link.");
+    run.wait_for("agent:");
+    let (json, ok) = noctiluca(&run, &["action", "--json", "info"]);
+    assert!(ok && json.contains("second.html"), "{json}");
+    let (out, ok) = noctiluca(&run, &["action", "dance"]);
+    assert!(!ok && out.contains("not a verb"), "{out}");
+    let _ = run.quit();
+}
+
+#[test]
+fn a_read_only_session_refuses_a_script_that_would_change_the_page() {
+    let run = Run::start(
+        &["--read-only", "https://fixture.example/reader.html"],
+        "xterm-256color",
+    );
+    run.wait_for("Tiny drifters of the open sea");
+    let (out, ok) = noctiluca(&run, &["action", "open", "second.html"]);
+    assert!(!ok && out.contains("read-only"), "{out}");
+    let (ls, _) = noctiluca(&run, &["ls"]);
+    assert!(ls.contains("(read-only)"), "{ls}");
+    let sockets = || {
+        std::fs::read_dir(run_dir(&run.tmp).join("noctiluca"))
+            .map(|d| d.count())
+            .unwrap_or(0)
+    };
+    assert_eq!(sockets(), 1);
+    let tmp = run.tmp.clone();
+    let _ = run.quit();
+    // Quitting removes the socket.
+    let left = std::fs::read_dir(run_dir(&tmp).join("noctiluca"))
+        .unwrap()
+        .count();
+    assert_eq!(left, 0);
 }
 
 #[test]

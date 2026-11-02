@@ -53,6 +53,11 @@ termwiz = ["dep:termwiz"]
 # text to a pane, focus one; over terminal-browser's socket protocol, or
 # tmux, kitty, WezTerm and zellij. Off by default.
 host = ["dep:serde_json"]
+# `control`: a control socket (#816), so scripts and agents of the same
+# user can drive a running program: JSON lines over a Unix socket in a
+# private directory, the peer's user checked, read-only sessions, bounded
+# messages and timeouts. Unix only for now. Off by default.
+control = ["dep:serde_json"]
 
 [[example]]
 name = "explore"
@@ -75,6 +80,10 @@ name = "host"
 required-features = ["host"]
 
 [[test]]
+name = "control"
+required-features = ["control"]
+
+[[test]]
 name = "explore_scale"
 required-features = ["data"]
 
@@ -90,7 +99,7 @@ rich-micro = { workspace = true, optional = true }
 # The termwiz backend (MIT), off by default: wezterm's terminal layer, with
 # its own input parser and capability probe.
 termwiz = { version = "0.23", optional = true }
-# `host`: the terminal socket protocol's JSON messages.
+# `host` and `control`: the socket protocols' JSON messages.
 serde_json = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]

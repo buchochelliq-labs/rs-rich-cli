@@ -56,6 +56,7 @@ fn options(view: View) -> Options {
         view: Some(view),
         images: Some(Images::Ansi),
         tunnel: None,
+        control: None,
     }
 }
 

@@ -53,6 +53,7 @@ fn start(
         view: None,
         images: Some(noctiluca::config::Images::Ansi),
         tunnel: None,
+        control: None,
     };
     let mut driver = app(Box::new(engine), options).driver(width, height);
     driver.settle();
@@ -240,6 +241,7 @@ fn a_url_given_skips_the_start_page() {
         view: None,
         images: Some(noctiluca::config::Images::Ansi),
         tunnel: None,
+        control: None,
     };
     let mut driver = app(Box::new(engine()), options).driver(100, 30);
     wait_for(&mut driver, "Tiny drifters");

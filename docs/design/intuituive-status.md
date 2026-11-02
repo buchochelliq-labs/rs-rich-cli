@@ -54,6 +54,16 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   `tint`, `outline`, `hatch`, `keyline`, `layer`, `scrollbar-color-hover`
   and the scrollbar's size, `:inline`, and states that change layout.
 
+- **Wave 3c** (branch `024-w3c`, backup
+  `claude/next-priority-items-3c5p8e-wip-w3c`): Noctiluca's #816 and #818
+  are done. #816: `rich_interact::control` (feature `control`, Unix only),
+  `--control`/`--read-only`, `noctiluca ls`/`action`, `Ctrl+G`
+  (`agent.send`) and the guide page "Scripts and coding agents". #818:
+  `rich_art::tiles`, intuiTUIve's `tiles_of`, and the pixel view
+  (`--pixels`, `Alt+X`) with its benchmark. Left: the Windows named pipe,
+  CSS selectors as `click` targets, an action log, tapes for both, and the
+  pixel view in a real Kitty and against live Chrome.
+
 ## Where things stood (2026-11-01)
 
 - **0.0.24 is planned** ([plan](../plans/0.0.24.md)), with the maintainer's

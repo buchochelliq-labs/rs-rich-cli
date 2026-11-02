@@ -230,7 +230,7 @@ pub use help::{HelpOptions, KeyFormat, KeyHintsOptions};
 #[cfg(feature = "art")]
 pub use image::{
     ImageAnchor, ImageFit, ImageMode, ImageView, Picture, Pixels, image, image_bytes,
-    image_bytes_of, image_graphics, image_of, image_with, picture_bytes, picture_of,
+    image_bytes_of, image_graphics, image_of, image_with, picture_bytes, picture_of, tiles_of,
 };
 pub use input::{input, number_input};
 pub use jobs::{

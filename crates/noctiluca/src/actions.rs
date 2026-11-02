@@ -120,6 +120,13 @@ pub const ACTIONS: &[Action] = &[
         "alt+a",
     ),
     action(
+        "view.pixels",
+        "Pixel view on or off: Chrome's own pixels (Kitty graphics)",
+        "view",
+        "alt+x",
+        "alt+x",
+    ),
+    action(
         "log.older",
         "Scroll the live log up (it holds still)",
         "view",
@@ -180,6 +187,13 @@ pub const ACTIONS: &[Action] = &[
         "ctrl+k",
     ),
     action("site.keys", "Site shortcuts…", "keep", "K", "ctrl+shift+k"),
+    action(
+        "agent.send",
+        "Send an element to the agent: pick it with a hint",
+        "keep",
+        "ctrl+g",
+        "ctrl+g",
+    ),
     action("actions", "Actions (this list)", "help", "f1", "f1"),
     action(
         "about",

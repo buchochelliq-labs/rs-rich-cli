@@ -1085,6 +1085,50 @@ impl core::marker::Unpin for rich_art::stage::Stage
 impl core::marker::UnsafeUnpin for rich_art::stage::Stage
 impl core::panic::unwind_safe::RefUnwindSafe for rich_art::stage::Stage
 impl core::panic::unwind_safe::UnwindSafe for rich_art::stage::Stage
+pub mod rich_art::tiles
+pub struct rich_art::tiles::Tile
+pub rich_art::tiles::Tile::col: usize
+pub rich_art::tiles::Tile::cols: usize
+pub rich_art::tiles::Tile::picture: rich_art::picture::Picture
+pub rich_art::tiles::Tile::row: usize
+pub rich_art::tiles::Tile::rows: usize
+impl core::clone::Clone for rich_art::tiles::Tile
+pub fn rich_art::tiles::Tile::clone(&self) -> rich_art::tiles::Tile
+impl core::cmp::Eq for rich_art::tiles::Tile
+impl core::cmp::PartialEq for rich_art::tiles::Tile
+pub fn rich_art::tiles::Tile::eq(&self, &rich_art::tiles::Tile) -> bool
+impl core::fmt::Debug for rich_art::tiles::Tile
+pub fn rich_art::tiles::Tile::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_art::tiles::Tile
+impl core::marker::Freeze for rich_art::tiles::Tile
+impl core::marker::Send for rich_art::tiles::Tile
+impl core::marker::Sync for rich_art::tiles::Tile
+impl core::marker::Unpin for rich_art::tiles::Tile
+impl core::marker::UnsafeUnpin for rich_art::tiles::Tile
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::tiles::Tile
+impl core::panic::unwind_safe::UnwindSafe for rich_art::tiles::Tile
+pub struct rich_art::tiles::Tiler
+impl rich_art::tiles::Tiler
+pub fn rich_art::tiles::Tiler::encode(&self, &[usize], rich_art::picture::Pixels) -> alloc::vec::Vec<alloc::string::String>
+pub fn rich_art::tiles::Tiler::estimate(&self, &[usize], rich_art::picture::Pixels) -> u64
+pub fn rich_art::tiles::Tiler::new(usize, usize) -> rich_art::tiles::Tiler
+pub fn rich_art::tiles::Tiler::size(&self) -> (usize, usize)
+pub fn rich_art::tiles::Tiler::tiles(&self) -> &[rich_art::tiles::Tile]
+pub fn rich_art::tiles::Tiler::update(&mut self, &image::images::buffer::RgbaImage, usize, usize) -> alloc::vec::Vec<usize>
+impl core::clone::Clone for rich_art::tiles::Tiler
+pub fn rich_art::tiles::Tiler::clone(&self) -> rich_art::tiles::Tiler
+impl core::default::Default for rich_art::tiles::Tiler
+pub fn rich_art::tiles::Tiler::default() -> rich_art::tiles::Tiler
+impl core::fmt::Debug for rich_art::tiles::Tiler
+pub fn rich_art::tiles::Tiler::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_art::tiles::Tiler
+impl core::marker::Send for rich_art::tiles::Tiler
+impl core::marker::Sync for rich_art::tiles::Tiler
+impl core::marker::Unpin for rich_art::tiles::Tiler
+impl core::marker::UnsafeUnpin for rich_art::tiles::Tiler
+impl core::panic::unwind_safe::RefUnwindSafe for rich_art::tiles::Tiler
+impl core::panic::unwind_safe::UnwindSafe for rich_art::tiles::Tiler
+pub const rich_art::tiles::TILE_CELLS: (usize, usize)
 pub enum rich_art::ColorDistance
 pub rich_art::ColorDistance::Oklab
 pub rich_art::ColorDistance::Rgb

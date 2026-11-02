@@ -30,6 +30,7 @@ fn options_with(url: &str, images: Images, config: Config) -> Options {
         view: Some(View::Projection),
         images: Some(images),
         tunnel: None,
+        control: None,
     }
 }
 

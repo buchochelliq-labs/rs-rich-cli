@@ -61,7 +61,7 @@ The command line wins over the file: `--reader` over `[startup] view`,
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `home` | string | none: an empty page | The page to open when none is named on the command line, and when the address bar is left empty |
-| `view` | `"projection"`, `"reader"` or `"raster"` | `"projection"` | The first view. `raster` starts the debugging view |
+| `view` | `"projection"`, `"reader"`, `"pixels"` or `"raster"` | `"projection"` | The first view. `pixels` is [the pixel view](media.md#the-pixel-view) where the terminal has Kitty graphics, else the projection; `raster` starts the debugging view |
 | `transparent` | boolean | `false` | Where a page sets no background of its own, let the terminal's background show: in the faithful projection (a page with a background keeps it), and in Chrome's pixels, whose transparency Kitty keeps. `--transparent` sets it for one run |
 
 ## `[search]`
@@ -121,6 +121,17 @@ Every rule is on by default but `text-over-pictures`, which changes what a page 
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `name` | string: letters, digits, `-` and `_`, up to 64 | none: a temporary profile each run | Keep a browser profile under this name, with its cookies and storage, between runs. See [the browser profile](privacy.md#the-browser-profile) |
+
+## `[agent]`
+
+The control socket for scripts and coding agents, and where `Ctrl+G`
+sends. See [Scripts and coding agents](agents.md).
+
+| Key | Type | Default | Meaning |
+|---|---|---|---|
+| `control` | boolean | `false` | Listen on the control socket, as `--control` does (Unix only for now) |
+| `read_only` | boolean | `false` | When listening, refuse every action that changes anything, as `--read-only` does |
+| `send` | `"clipboard"`, `"pane"` or `"pane:ID"` | `"clipboard"` | Where `Ctrl+G` sends the element you pick: the clipboard, the pane beside this one, or a pane by its id, through the terminal's API |
 
 ## `[site."…"]`: per-site settings
 

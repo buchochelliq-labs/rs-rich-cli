@@ -40,6 +40,13 @@ as a normal user, never as root.
   pages play sound, with Play/Pause, Mute/Unmute and volume controls for
   each video and audio. Sound plays on the machine Chrome runs on, never
   over SSH: run over SSH, it plays on the server.
+- **The pixel view**: in a terminal with Kitty graphics, `Alt+X` (or
+  `--pixels`) shows the page as Chrome paints it, sent as tiles only
+  where it changes; clicks, the wheel and keys go to the page.
+- **Scripts and coding agents**: `--control` (or `--read-only`) listens on
+  a socket of your own user; `noctiluca ls` lists the sessions and
+  `noctiluca action snapshot`, `click 12`, `type --into 3 TEXT`, … drive
+  one. `Ctrl+G` sends an element you pick to an agent. Unix only for now.
 - **Safety**: everything a page says is cleaned before it reaches the
   terminal; no escape sequence passes. Downloads are refused. The
   profile is temporary, removed on the way out, unless you keep one

@@ -517,6 +517,61 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   command line in a new pane beside this one and returns. Tested against a
   fake socket server and a real tmux server.
 
+### Noctiluca's agent control and pixel view (wave 3, WS6 part 2)
+
+- **Scripts and coding agents drive a running Noctiluca (#816).**
+  rs-rich-interact's new, off-by-default `control` feature has
+  `rich_interact::control`, a generic control socket: JSON lines over a
+  Unix socket in a private directory (`runtime_dir`, `private_dir`: the
+  user's own, mode 700, made before the bind), each peer's user checked
+  where the platform tells (`peer_uid`, `peer_allowed`), symbolic links
+  never followed, read-only sessions that refuse every mutating `Verb`
+  before the handler runs, requests and replies bounded (`MAX_REQUEST`,
+  `MAX_REPLY`), timeouts (`IO_TIMEOUT`) and at most `MAX_CONNECTIONS` at
+  once; `ControlServer`, `Closer`, `call` and `sessions`. Unix only for
+  now. Noctiluca listens with `--control`, `--read-only` or `[agent]
+  control = true`, and answers `info`, `snapshot` (the projection's or
+  reader mode's text, each usable control marked `[ID]`, and the controls
+  as JSON), `find`, `open`, `click` (by id or accessible name), `type`
+  (into a field, or where the focus is), `key`, `scroll`, `back` and
+  `forward`; each action shows in the status bar. `noctiluca ls` lists
+  the sessions and `noctiluca action …` drives one, waiting for the page
+  to be read after an action. `Ctrl+G` (`agent.send`) picks an element
+  with a hint and sends its role, name, link and the page's address to
+  the clipboard or, through the terminal host (#820), to the pane beside
+  this one or a named pane (`[agent] send`). A kept profile with a
+  session that may act prints a note. The new guide page "Scripts and
+  coding agents" and the threat model's rows say what is protected and
+  what is not (page text reaching an agent, no action log, no Windows
+  named pipe yet).
+- **The pixel view (#818).** `--pixels`, `--view pixels`, `[startup] view
+  = "pixels"` or `Alt+X` (`view.pixels`) shows the page as Chrome paints
+  it, in Kitty graphics. rs-rich-art's new `tiles` module (`frames`
+  feature) fits each frame to its cells and cuts it into tiles of 8 by 4
+  cells (`Tiler`, `Tile`), each a `Picture` that gets a new version only
+  when its pixels change; intuiTUIve's new `tiles_of` draws them, so with
+  `image_graphics` only the changed tiles reach the terminal (a test shows
+  one changed tile is one Kitty upload). Noctiluca runs the screencast at
+  full scale while the view shows (`Command::Pixels`, `Update::Screen`),
+  keeps frames within the byte budget and drops those it has no room for;
+  a click goes to its point of the viewport (`PageAction::ClickPoint`,
+  `Command::Point`), the wheel scrolls, and keys without Ctrl or Alt go to
+  the page (`PageAction::Key`, `Command::Key`; rs-rich-embed's
+  `chrome::key_events` is now public). Without Kitty graphics it says so
+  and the projection shows. A benchmark (`tests/pixels.rs`) measures bytes
+  a frame, whole frames against tiles: scrolling 2.46 MB against 1.85 MB,
+  a blinking caret 2.46 MB against 16 kB.
+- **Breaking (noctiluca 0.0.x):** `Options` gains `control`, `Config`
+  gains `agent` (`Agent`, `SendTo`), `Args` gains `control` and
+  `read_only`, `Run` gains `Ls`, `Action` and `ControlHelp` (and is no
+  longer `Eq`), and `View`, `PageAction`, `Command` and `Update` gain
+  variants. Recorded in `api/semver-breaks.toml`.
+- **Not verified here:** a real Kitty, WezTerm or Ghostty showing the
+  pixel view (the tests read the escapes); the pixel view against a live
+  Chrome's screencast (its live test runs in CI only); Ctrl+G into a real
+  tmux or WezTerm pane; macOS's and the BSDs' `getpeereid` path (built and
+  tested on Linux only). No tape was recorded for either feature.
+
 ## 0.0.23 cohort — published 2026-10-27
 
 Published on 2026-10-27 from `2624ce5` by one `release.yml` run (tag

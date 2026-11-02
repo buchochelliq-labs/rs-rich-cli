@@ -144,3 +144,43 @@ has no real pixels to show.
 If pictures come out as half blocks in a terminal that can do better,
 name its protocol. A site's table can turn pictures off there with
 `images = false`.
+
+## The pixel view
+
+In a terminal with Kitty graphics (kitty, WezTerm, Ghostty), `Alt+X`
+(`view.pixels`), `--pixels` or `--view pixels` shows the page as Chrome
+paints it, pixel for pixel, instead of the projection: a canvas, a map, a
+page whose layout the projection gets wrong. `Alt+X` again goes back. The
+projection stays the default, as it works in every terminal and a screen
+reader can read it.
+
+- **Only what changed is sent.** Chrome's screencast sends whole frames;
+  Noctiluca cuts each into tiles of 8 by 4 cells and sends the terminal
+  only the tiles whose pixels changed. A blinking caret or a spinner is
+  one tile.
+- **Within the byte budget.** A frame the [budget](#images) has no room
+  for is dropped, never queued, so the view stays current rather than
+  falling behind.
+- **Input goes to the page.** A click lands at its point of the page (to
+  the pixel where the terminal reports pixels), the wheel scrolls it, and
+  keys go to it as typed. Keys with Ctrl or Alt, and the F keys, stay
+  Noctiluca's: `Alt+X` to leave, `F1` for the actions. A key the page
+  takes (`q` in the vim preset) reaches the page, so leave first to use
+  it.
+- **Without Kitty graphics** the view says so and the projection shows:
+  Sixel or half blocks of a whole page would be too slow to follow it.
+
+What it costs, measured by the crate's benchmark
+(`cargo test -p noctiluca --test pixels benchmark -- --nocapture`) on a
+synthetic text page in 100 by 36 cells, through Kitty, against a budget
+of 4 MB a second:
+
+| Case | Whole frames: bytes a frame | Frames a second | Tiles: bytes a frame | Frames a second |
+|---|---|---|---|---|
+| Scrolling, three rows a frame | 2.46 MB | 1.7 | 1.85 MB | 2.3 |
+| A caret blinking on a still page | 2.46 MB | 1.7 | 16 kB | 30 (the cap) |
+
+Scrolling moves every row, so nearly every tile changes and tiles save
+only a quarter; a page that holds still while something small moves costs
+next to nothing. Scrolling in the projection, which sends text, stays far
+cheaper.

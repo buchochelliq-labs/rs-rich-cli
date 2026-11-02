@@ -35,7 +35,11 @@
 //!   that can each be switched off; [`pictures`] draws pictures and moving
 //!   GIFs over their regions. [`widgets`] gives controls their intuiTUIve widgets.
 //! - [`app`]: the browser as an intuiTUIve app; [`actions`] is the one
-//!   list of what it can do, with the keys of both presets.
+//!   list of what it can do, with the keys of both presets;
+//!   [`pixel_view`] is the page in Chrome's own pixels, sent as tiles
+//!   where they change (#818).
+//! - [`control`]: the control socket's verbs and the `noctiluca ls` and
+//!   `noctiluca action` client, for scripts and coding agents (#816).
 //! - [`config`], [`bookmarks`], [`args`], [`dump`] (`--dump`) and
 //!   [`url`]: the rest of the binary, usable on their own.
 //! - [`testing`]: [`FakeEngine`](testing::FakeEngine), an engine over
@@ -125,12 +129,14 @@ pub mod bookmarks;
 pub mod cdp;
 pub mod clean;
 pub mod config;
+pub mod control;
 pub mod draft;
 pub mod dump;
 pub mod engine;
 pub mod layout;
 pub mod model;
 pub mod pictures;
+pub mod pixel_view;
 pub mod ssh;
 pub mod start;
 pub mod tab;

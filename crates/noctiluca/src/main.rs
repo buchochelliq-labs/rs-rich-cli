@@ -16,6 +16,10 @@ use noctiluca::file_url;
 /// How long the way out waits for the tabs to stop their browsers.
 const STOP: Duration = Duration::from_secs(5);
 
+/// The control socket this session listens on, closed on every way out.
+static CONTROL: std::sync::Mutex<Option<noctiluca::control::ControlLink>> =
+    std::sync::Mutex::new(None);
+
 fn main() -> ExitCode {
     // Every way out stops the tabs, so each browser stops and its
     // temporary profile is removed: the end of `main` below, a panic, and
@@ -43,6 +47,9 @@ fn main() -> ExitCode {
 /// profile goes), then end any browser still running: the raster view's,
 /// or a tab's that did not stop in time.
 fn stop_browsers() {
+    if let Some(link) = CONTROL.lock().unwrap_or_else(|e| e.into_inner()).take() {
+        link.close();
+    }
     noctiluca::tab::stop_all(STOP);
     rich_embed::ChromeEngine::end_all();
 }
@@ -58,6 +65,12 @@ fn run(args: &[String]) -> std::io::Result<ExitCode> {
             Ok(())
         }
         Ok(Run::Keys { site, config }) => keys(site.as_deref(), config.as_deref()),
+        Ok(Run::ControlHelp) => {
+            println!("{}", noctiluca::control::ACTION_USAGE);
+            Ok(())
+        }
+        Ok(Run::Ls { json }) => ls(json),
+        Ok(Run::Action(action)) => return Ok(control_action(&action)),
         Ok(Run::Browse(parsed)) if parsed.split.is_some() => split(&parsed, args),
         Ok(Run::Browse(args)) => browse(args),
         Err(error) => {
@@ -66,6 +79,64 @@ fn run(args: &[String]) -> std::io::Result<ExitCode> {
         }
     };
     result.map(|()| ExitCode::SUCCESS)
+}
+
+/// `noctiluca ls`.
+#[cfg(unix)]
+fn ls(json: bool) -> std::io::Result<()> {
+    println!("{}", noctiluca::control::ls(json)?);
+    Ok(())
+}
+
+#[cfg(not(unix))]
+fn ls(_json: bool) -> std::io::Result<()> {
+    Err(noctiluca::control::unix_only())
+}
+
+/// `noctiluca action …`: its reply on stdout; a refusal on stderr, and
+/// exit status 1.
+#[cfg(unix)]
+fn control_action(action: &noctiluca::control::ActionArgs) -> ExitCode {
+    match noctiluca::control::action(action) {
+        Ok(out) => {
+            println!("{out}");
+            ExitCode::SUCCESS
+        }
+        Err(error) => {
+            eprintln!("noctiluca: {error}");
+            ExitCode::FAILURE
+        }
+    }
+}
+
+#[cfg(not(unix))]
+fn control_action(_action: &noctiluca::control::ActionArgs) -> ExitCode {
+    eprintln!("noctiluca: {}", noctiluca::control::unix_only());
+    ExitCode::FAILURE
+}
+
+/// `--control`, `--read-only` or `[agent] control`: listen on the control
+/// socket, kept for the way out to close.
+fn listen(
+    args: &Args,
+    config: &Config,
+) -> std::io::Result<Option<noctiluca::control::ControlLink>> {
+    if !(args.control || args.read_only || config.agent.control) {
+        return Ok(None);
+    }
+    let read_only = args.read_only || config.agent.read_only;
+    // With a kept profile an agent acts signed in, and what pages say
+    // reaches it: say so (`--read-only` lets it read only).
+    if !read_only && (args.profile.is_some() || config.profile.is_some()) {
+        eprintln!(
+            "noctiluca: note: --control with a kept profile lets scripts act on your signed-in \
+             sites; --read-only lets them read only"
+        );
+    }
+    let link = noctiluca::control::ControlLink::bind(read_only)
+        .map_err(|e| std::io::Error::new(e.kind(), format!("--control: {e}")))?;
+    *CONTROL.lock().unwrap_or_else(|e| e.into_inner()) = Some(link.clone());
+    Ok(Some(link))
 }
 
 /// `--split DIR`: the same command line, less `--split`, in a new pane of
@@ -304,6 +375,7 @@ fn browse(args: Args) -> std::io::Result<()> {
         return raster(&args, url.unwrap_or_else(|| "about:blank".into()), switches);
     }
     let engine = engine(&args, &config, &switches)?;
+    let control = listen(&args, &config)?;
     noctiluca::app::app(
         engine,
         noctiluca::app::Options {
@@ -313,6 +385,7 @@ fn browse(args: Args) -> std::io::Result<()> {
             view: args.view,
             images: args.images,
             tunnel,
+            control,
         },
     )
     // `--no-mouse`: never captured; else captured full-screen, intuiTUIve's

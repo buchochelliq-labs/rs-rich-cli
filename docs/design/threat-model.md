@@ -346,8 +346,9 @@ link goes where); the DevTools channel, which controls the whole browser.
   the page says arrives as DevTools JSON;
 - Noctiluca and the user's terminal;
 - other local processes and users and the DevTools endpoint;
-- (planned) an agent or script and the control socket of
-  [#816](https://github.com/buchochelliq-labs/rs-rich-cli/issues/816);
+- an agent or script and the control socket
+  ([#816](https://github.com/buchochelliq-labs/rs-rich-cli/issues/816),
+  `--control`), and other local users and that socket;
 - with `--ssh HOST`: this machine and the SSH server, which carries every
   request; and other local users and the tunnel's loopback port.
 
@@ -356,7 +357,8 @@ targets, alt text, option labels, dialog text, download names; the
 bookmarks file; DevTools events (`Runtime.bindingCalled`,
 `Browser.downloadWillBegin`); the address bar; Chrome's switches; `--chrome`
 and `RICH_EMBED_CHROME`; `--ssh HOST`, `--ssh-arg` and what ssh writes on
-standard error.
+standard error; the control socket's requests; the screencast's pixels in
+the pixel view.
 
 | | Threat | Mitigation | State |
 |---|---|---|---|
@@ -376,6 +378,12 @@ standard error.
 | I | Requests leave this machine directly despite `--ssh` (DNS, WebRTC, QUIC, loopback) | Chrome's resolver maps every name to "not found" but the proxy's own address, so names go to the far side (SOCKS5 remote DNS); `<-loopback>` sends loopback through the proxy; WebRTC only over the proxy (`disable_non_proxied_udp`); QUIC off (`chrome_switches`) | verified (switches), unverified (Chrome's behaviour: the live test needs Chrome) |
 | T | ssh's messages corrupt the screen, or carry escapes | ssh's standard error is read on a thread, kept (eight lines) and cleaned (`clean`) before the status bar shows one; prompts go to `/dev/tty` before the browser takes the screen; a reconnect never prompts (`BatchMode=yes`) | verified |
 | D | A killed Noctiluca leaves the tunnel running | The tunnel is a child, killed when the `Tunnel` drops; on Linux `PR_SET_PDEATHSIG` stops it if Noctiluca dies | verified (drop), documented (death signal) |
+| S, E | Another local user drives the browser through the control socket | Off unless asked (`--control`, `--read-only`, `[agent] control`); the socket's directory is the user's own, mode 700, made with that mode before the bind, and an existing one that is another user's, open to others or a link is refused; each peer's user is checked where the platform tells (`SO_PEERCRED`, `getpeereid`), and the client checks the server's (`rich_interact::control`: `private_dir`, `peer_allowed`) | verified (tests: the mode, an open or linked directory refused, the peer check) |
+| T | A symbolic link redirects the socket to another file | The socket path and its directory are read without following links; a link is refused by the server and the client, and a file that is not a left-over socket of the user's is never replaced | verified (tests) |
+| E | A read-only session changes the page | The server refuses every verb marked as changing anything before the handler runs; unknown verbs are refused too | verified (tests: every changing verb refused, the page untouched) |
+| D | A client holds the socket or floods it | Requests of at most 64 kB, replies of at most 16 MB, 5-second read and write timeouts, at most 8 connections answered at once | verified (tests: an oversized request, a silent client) |
+| I | The control socket is reachable from the network | A Unix socket only; nothing listens on a port | verified (by construction) |
+| T | The pixel view's frames carry escapes to the terminal | The page's pixels are only pixels: Noctiluca encodes them itself into Kitty's protocol (`rich_art::tiles`, `Picture`); nothing the page says reaches those escapes | documented |
 
 **Gaps:**
 
@@ -388,19 +396,19 @@ standard error.
 - **Downloads by quarantine** are designed (ask first, a cleaned name, never
   run) but not wired into Noctiluca; when they are, the review covers the
   quarantine's location, its permissions and the move. **planned**.
-- **The agent-control CLI (#816):** a control socket, `noctiluca ls` and
-  `action`, Ctrl+G and `--read-only`, off by default and generic in the
-  framework, with the agent's verbs in Noctiluca. To review when it lands:
-  - the socket's location and mode (this user only), and that it refuses
-    other users' connections (peer credentials on Unix; a named pipe's
-    ACL on Windows);
-  - `--read-only` enforced by the server, not by the client asking nicely;
-  - an agent driving a kept, signed-in profile: page text is attacker
-    input to the agent (prompt injection), so what a page says must not
-    turn into actions the user did not approve; consider refusing control
-    with a kept profile unless the user says so;
-  - every action recorded somewhere the user can read (repudiation).
-  **planned**.
+- **The agent-control CLI (#816):** in, with the rows above. What is
+  left:
+  - **Windows** has no control socket yet (a named pipe with an ACL for
+    the user): the commands say "Unix only for now". **gap** (low).
+  - **Page text reaches the agent.** A snapshot is the page's own text,
+    cleaned of control characters but not of meaning, so a page can write
+    instructions aimed at an agent. The agent must treat it as data. With
+    a kept profile, a session that is not read-only lets an agent act
+    signed in; Noctiluca prints a note when both are on. **gap** (medium):
+    consider refusing control with a kept profile unless the user says so.
+  - **Repudiation.** Every action shows in the status bar as it happens,
+    but nothing is written to a log that outlives the session. **gap**
+    (low).
 - **The SGR-Pixels mouse (#819):** no new parser. A report in pixels has
   the same shape as one in cells (`CSI < b ; x ; y M`), so crossterm's,
   termion's and termwiz's own SGR parsers read it; the session divides it
