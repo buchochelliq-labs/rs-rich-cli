@@ -5509,6 +5509,7 @@ impl App {
         let mut shown: Vec<crate::help::Hint> = Vec::new();
         for &id in path.iter().rev() {
             with_node(&self.top().root, id, &mut |node| {
+                let name = node.group_name();
                 for bound in node.keys.borrow().iter() {
                     // One a keymap unbound has no key to show.
                     if bound.description.is_empty() || bound.hidden || bound.keys.is_empty() {
@@ -5527,6 +5528,7 @@ impl App {
                             keys,
                             description: bound.description.clone(),
                             disabled,
+                            section: bound.section.clone().unwrap_or_else(|| name.clone()),
                         }),
                     }
                 }

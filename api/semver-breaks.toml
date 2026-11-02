@@ -105,3 +105,10 @@ version = "0.0.3"
 lint = "enum_variant_added"
 items = ["variant View:Pixels", "variant Update:Screen", "variant PageAction:ClickPoint", "variant Command:Pixels", "variant Command:Point"]
 why = "the pixel view (#818): the view, its screencast frames, and clicks at a point of the viewport"
+
+[[break]]
+crate = "rs-rich-intuituive"
+version = "0.0.9"
+lint = "constructible_struct_adds_field"
+items = ["field TableOptions.freeze_rows"]
+why = "frozen rows in tables, Textual's fixed_rows, are a TableOptions field like the rest of its options (#814, 0.0.24 plan)"

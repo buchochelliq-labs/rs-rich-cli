@@ -42,6 +42,7 @@ bounds are in `fuzz/src/lib.rs`.
 | `marketplace_artifact` | rs-rich-marketplace | a micro pack's zip and `pack.json`, a theme file, a WASM header |
 | `plugin_manifest` | rs-rich-plugin-api | the ABI's manifest text; one that parses must read back the same after `to_manifest` |
 | `plugin_wasm` | rs-rich-ext | a WASM plugin loaded with the default limits (fuel cut to 5 million per call), each capability called |
+| `terminal_host` | rs-rich-interact | the terminal host client's reply parser (`host::parse_reply`), then a reply's panes (`host::panes_of`) |
 
 Not reached, because they are crate-private: rs-rich-web's own message
 parser (`parse_message`) and HTTP request-head reader. `web_frames` reaches

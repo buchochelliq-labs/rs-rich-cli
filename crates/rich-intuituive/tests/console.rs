@@ -77,6 +77,6 @@ fn without_the_variable_nothing_is_opened() {
 fn the_variable_names_the_socket() {
     assert!(
         intuituive::log::default_console_socket()
-            .is_none_or(|path| path.ends_with("intuituive/console.sock"))
+            .is_none_or(|path| path.ends_with("intuituive/console/console.sock"))
     );
 }

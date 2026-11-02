@@ -111,6 +111,7 @@ mod datetime;
 mod dialog;
 mod diff_view;
 mod digits;
+mod editor_theme;
 mod effect;
 mod facts;
 mod feed;
@@ -218,6 +219,7 @@ pub use controls::{
 };
 pub use dialog::{ConfirmOptions, PickOptions, PromptOptions};
 pub use digits::digits;
+pub use editor_theme::EditorTheme;
 pub use effect::{effect, fill};
 pub use facts::{facts, facts_of};
 pub use feed::{
@@ -250,7 +252,7 @@ pub use node::{
     repeating, row, scroll, scroll_both, scroll_both_with, scroll_with, scroll_x, switch, text,
 };
 pub use node::{described, drawn, drawn_described};
-pub use node_list::list_of;
+pub use node_list::{list_of, list_of_virtual};
 pub use notify::{Corner, Level};
 pub use palette::Palette;
 pub use parity::{

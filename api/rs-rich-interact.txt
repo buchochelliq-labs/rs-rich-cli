@@ -4015,6 +4015,7 @@ pub fn rich_interact::host::Zellij::supports(&self, rich_interact::host::Method)
 pub fn rich_interact::host::detect() -> core::option::Option<alloc::boxed::Box<dyn rich_interact::host::TerminalHost>>
 pub fn rich_interact::host::detect_in(&dyn core::ops::function::Fn(&str) -> core::option::Option<alloc::string::String>) -> core::option::Option<alloc::boxed::Box<dyn rich_interact::host::TerminalHost>>
 pub fn rich_interact::host::neighbor_of(&str, &[(alloc::string::String, [i64; 4])], rich_interact::host::Direction) -> core::option::Option<alloc::string::String>
+pub fn rich_interact::host::panes_of(&serde_json::value::Value) -> rich_interact::host::Result<alloc::vec::Vec<rich_interact::host::Pane>>
 pub fn rich_interact::host::parse_reply(&str) -> rich_interact::host::Result<serde_json::value::Value>
 pub fn rich_interact::host::shell_quote(&[alloc::string::String]) -> alloc::string::String
 pub type rich_interact::host::Result<T> = core::result::Result<T, rich_interact::host::HostError>

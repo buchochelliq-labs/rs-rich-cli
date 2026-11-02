@@ -24,6 +24,42 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and the out-of-workspace lockfiles with them, so they are taken by hand in
   a release.
 
+### Wave 3d: Textual parity leftovers, CLI divergences and hardening
+
+- **Frozen rows** (#814): `TableOptions::freeze_rows(n)` and
+  `Node::freeze_rows(n)` keep the first rows in view under the header while
+  the rest scroll, in tables, virtual tables, lists and virtual lists
+  (Textual's `fixed_rows`). The cursor still moves through them.
+- **Bracket matching and editor themes** (#814): `Node::match_brackets()`
+  styles the bracket at a text area's caret and its match;
+  `EditorTheme` (with `named("monokai" | "dracula" | "vscode_dark" |
+  "github_light")`, `styles()` and `apply(theme)`) styles the base, the
+  gutter, the caret, its line, the selection and the matched bracket as one
+  theme, on one area (`Node::editor_theme`) or in the app theme as
+  `editor.*` styles over the `text_area.*` ones.
+- **`list_of_virtual`** (#811): `list_of(…)`'s rows over `scroll_virtual`,
+  built only near the view, with the same keys, skips and options.
+- **The key panel's sections** (#813): `key_panel()` groups the bindings
+  under the help's sections, each with a heading (`key_panel.section`).
+- **`rich console` is Unix only for now** (#815): on Windows it says so and
+  `install_console` does nothing; a named pipe is a follow-up. The default
+  socket is now `console/console.sock` in intuiTUIve's state directory.
+- **The log console's socket is now protected:** it is only ever the
+  user's own, from the moment it exists, and takes connections only from
+  the user's own processes; the app sends its events only to a console of
+  its own user. A `--socket` in a directory others can use is refused, with
+  how to fix it ([threat model §8](docs/design/threat-model.md#8-the-log-console-rich-console)).
+- **Noctiluca `--ssh`:** the tunnel's local port is now drawn at random.
+  The guide says what remains on a machine shared with other users.
+- **A fuzz target for the terminal host client's replies**
+  (`terminal_host`), and `rich_interact::host::panes_of`, which reads the
+  panes in a `listPanes` reply.
+- **DIVERGENCES §51 to §53** record the CLI's three meaning differences
+  from rich-cli 1.8.1: `--theme` (a style theme; the code theme is
+  `--code-theme`), `--inspect` (structured data, not a Python expression)
+  and `rich` with no arguments (the capability demo). PORTING's CLI rows
+  are all complete.
+
 ### Versions: the 0.0.24 versions are open
 
 - Every package moves one patch past the 0.0.23 cohort, as the

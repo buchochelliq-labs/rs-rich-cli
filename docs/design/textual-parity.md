@@ -50,14 +50,14 @@ Modules are under `crates/rich-intuituive/src/`.
 | `Checkbox` | `checkbox`, `checkbox_tri`, `checkbox_of` (`controls.rs`) | ✓ | Has a mixed state, which Textual's lacks |
 | `Collapsible` | `collapsible(title, open, child)` (`collapsible.rs`) | partial | The title is a fixed `String`. A tool-call card needs a title that follows state, plus a status slot (spinner, ✓/✗) and a summary line. Core. |
 | `ContentSwitcher` | `switch(key, build)`, `keyed`, `.keep_last(n)` (`builtin.rs`) | ✓ | |
-| `DataTable` | `table`, `table_with`, `virtual_table`, `TableOptions` (`widgets.rs`) | partial | Already has sorting, a row cursor, a cell cursor (`.cells`), column highlight, frozen columns, zebra rows (`row_style`), resizable columns, rows from a closure (so cell updates are signal writes) and virtual rows. Missing: fixed (frozen) **rows**, row labels, and cells holding renderables rather than markup. Core. |
+| `DataTable` | `table`, `table_with`, `virtual_table`, `TableOptions` (`widgets.rs`) | partial | Already has sorting, a row cursor, a cell cursor (`.cells`), column highlight, frozen columns and rows (`freeze_rows`, 0.0.24), zebra rows (`row_style`), resizable columns, rows from a closure (so cell updates are signal writes) and virtual rows. Missing: row labels, and cells holding renderables rather than markup. Core. |
 | `Digits` | `digits` (`digits.rs`) | ✓ | |
 | `DirectoryTree` | `files::miller`, `files::file_list`, `files::pick_file` (`files` feature); generic `tree_lazy` | partial | No tree view of a directory. Plugin: `files::dir_tree` on the core's `tree_lazy`. |
 | `Footer` | `key_hints`, `key_hints_with` (`bars.rs`) | ✓ | Built from described bindings, greyed when unavailable |
 | `Header` | `status_bar` segments (`bars.rs`) | partial | Nothing gives an app a title and subtitle (set per screen) with an optional clock and a tall mode. Core: `header()` on `status_bar`. |
 | `HelpPanel` | `cx.help()`, `HelpOptions` (`help.rs`) | partial | The help is a modal. Textual's panel is docked beside the app and follows the focus. Core: `key_panel()` node. |
 | `Input` | `input`, `number_input`, `.validate`, `.complete`, `.history`, `.mask`, `.max_length` (`input.rs`, `complete.rs`, `text_edit.rs`) | ✓ | Ghost-text completion is the equivalent of Textual's `Suggester` |
-| `KeyPanel` | `key_panel()` (`parity.rs`), shown or hidden by the palette's *Keys* system command (#803) | ✓ | |
+| `KeyPanel` | `key_panel()` (`parity.rs`), `cx.toggle_key_panel()` (0.0.24), with the help's sections; shown or hidden by the palette's *Keys* system command (#803) | ✓ | A docked panel following the focus, its bindings under the help's sections |
 | `Label` | `label` (`node.rs`) | ✓ | |
 | `Link` | `[link=url]` markup gives an OSC 8 hyperlink (`screen.rs` keeps it on the style) | partial | No focusable link that Enter or a click opens (through `open`), and markup cannot run an action (Textual's `@click`). Core. |
 | `ListItem` | `ListRow` (markup, trailing, marker, style) (`list.rs`) | partial | A row is markup, not a node. See `ListView`. |
@@ -84,7 +84,7 @@ Modules are under `crates/rich-intuituive/src/`.
 | `TabPane` | a `switch` page, kept with `keep_last` | ✓ | |
 | `TabbedContent` | `tabs` + `switch`; `tab_set`, `tabs_for` for tabs that open and close (`tab_set.rs`) | ✓ | Composed from two nodes, not one widget. The guide shows how. |
 | `Tabs` | `tabs`, `.divider`, `.fit`, `.auto_hide`, `.on_select` | ✓ | |
-| `TextArea` | `text_area`, `.language`, `.line_numbers`, `.soft_wrap`, `.read_only`, `.cursor_line`, `search_bar`, `.vim` (`text_area.rs`, `text_edit.rs`) | ✓ | Already has undo and redo, selection with the mouse, highlighting (syntect, or tree-sitter through rs-rich-lumis), a find bar and Vim mode. Missing: bracket matching, an editor theme (the gutter, the cursor line and the selection as one theme), and highlighting state carried from above the view. Core. |
+| `TextArea` | `text_area`, `.language`, `.line_numbers`, `.soft_wrap`, `.read_only`, `.cursor_line`, `search_bar`, `.vim` (`text_area.rs`, `text_edit.rs`) | ✓ | Already has undo and redo, selection with the mouse, highlighting (syntect, or tree-sitter through rs-rich-lumis), a find bar and Vim mode; bracket matching (`.match_brackets`) and editor themes (`EditorTheme`, 0.0.24). Missing: highlighting state carried from above the view. Core. |
 | `Toast` | `cx.toast`, `cx.notify(Level, ..)`, `App::toasts_at` (`notify.rs`) | ✓ | |
 | `ToggleButton` | the base of `checkbox`, `radio`, `switch_toggle` | ✓ | |
 | `Tooltip` | `.tooltip(markup)` (`node.rs`) | ✓ | |
@@ -129,8 +129,8 @@ Modules are under `crates/rich-intuituive/src/`.
 | **Web** | `textual serve`, textual-web | `rich serve` / rs-rich-web: xterm.js or a DOM renderer with ARIA, a session per tab | ✓ | |
 | **Accessibility** | limited | roles, states, announcements, linear text mode, screen-reader guide (`a11y.rs`) | ✓ | More than Textual |
 | **Markdown streaming** | `Markdown.append`, `Markdown.get_stream` → `MarkdownStream.write` (batches fragments that arrive faster than they can be drawn) | — | ✗ | The top gap for Cornacai |
-| **TextArea** | tree-sitter highlighting, `TextAreaTheme`s, undo and redo, selection, soft wrap, read-only, line numbers, bracket matching, tab behaviour | all but bracket matching and editor themes; highlighting through the console's highlighter (syntect, or tree-sitter through rs-rich-lumis); Vim mode | partial | Bracket matching, editor themes, highlighting state from above the view |
-| **DataTable** | sorting, cell, row, column and no cursor, fixed rows and columns, zebra stripes, `update_cell`, virtual size | all but fixed rows, row labels and renderable cells | partial | Fixed rows |
+| **TextArea** | tree-sitter highlighting, `TextAreaTheme`s, undo and redo, selection, soft wrap, read-only, line numbers, bracket matching, tab behaviour | all, bracket matching and editor themes included (0.0.24); highlighting through the console's highlighter (syntect, or tree-sitter through rs-rich-lumis); Vim mode | partial | Highlighting state from above the view |
+| **DataTable** | sorting, cell, row, column and no cursor, fixed rows and columns, zebra stripes, `update_cell`, virtual size | all but row labels and renderable cells (fixed rows: `freeze_rows`, 0.0.24) | partial | Row labels, renderable cells |
 | **Inline apps** | `run(inline=True)` | `App::inline(height)`, `print_above` | ✓ | |
 
 **Counts:** 35 areas. 15 ✓, 16 partial, 3 ✗, 1 won't-do.

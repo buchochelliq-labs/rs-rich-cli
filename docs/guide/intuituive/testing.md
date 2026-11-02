@@ -143,21 +143,26 @@ rich console                              # terminal 1: listens and prints
 INTUITUIVE_CONSOLE=1 cargo run --example demo   # terminal 2
 ```
 
-- `INTUITUIVE_CONSOLE=1` uses the default socket, `console.sock` in
-  intuiTUIve's state directory; any other value is the socket's path, and
+- `INTUITUIVE_CONSOLE=1` uses the default socket, `console/console.sock`
+  in intuiTUIve's state directory; any other value is the socket's path, and
   `rich console --socket PATH` listens there. Unset (or `0`), nothing is
   opened. `log::console_layer(path)` adds the console to a subscriber of
   your own.
-- The socket is a Unix domain socket, never a TCP port: `rich console`
-  makes it 0600, in a directory only you can enter. Events go through a
+- The socket is a Unix domain socket, never a TCP port, and only yours:
+  `rich console` creates it 0600, in a directory only you can use (made
+  0700 when missing; a `--socket` in a directory others can enter or write
+  is refused, as is a symbolic link), and drops another user's
+  connection; the app connects only to a socket, and a listener, of its
+  own user. Events go through a
   bounded queue on a thread of their own, so a slow console drops events
   rather than slowing the app.
 - The inspector's trace (keys, focus, screens, signal writes) goes too,
   while no inspector shows it: `rich console --trace` prints it.
   `-x TARGET` leaves a target out, `-v` puts each event's fields on lines
   of their own.
-- On Windows, `install_console` does nothing (std has no local socket
-  there; a named pipe is a follow-up), and `rich console` says so.
+- Unix only for now: on Windows, `install_console` does nothing (std has
+  no local socket there; a named pipe is a follow-up), and `rich console`
+  says so.
 
 ## Inspector
 

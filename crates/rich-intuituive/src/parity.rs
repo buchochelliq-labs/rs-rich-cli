@@ -409,7 +409,10 @@ pub(crate) struct KeyPanel {
 /// A panel of the keys that work now, one a row (`key  description`),
 /// following the focus as [`key_hints`](crate::widgets::key_hints) does:
 /// each described binding of the focused node and its ancestors, innermost
-/// first, those whose condition does not hold greyed. Textual's
+/// first, those whose condition does not hold greyed. They are grouped by
+/// the help's sections (a binding's [`section`](Node::section), else its
+/// node's [name](Node::name)) under a heading each, in the theme's
+/// `key_panel.section` style. Textual's
 /// `KeyPanel`, for the right of a layout; 30 cells wide unless sized.
 /// [`Ctx::toggle_key_panel`] hides and shows it.
 ///
@@ -457,50 +460,97 @@ impl Widget for KeyPanel {
     }
 
     fn measure(&mut self, _cx: &MeasureCx, axis: Axis, _width: u16, _height: u16) -> u16 {
-        self.hints.with(|hints| match axis {
-            Axis::Vertical => hints.len().min(u16::MAX as usize) as u16,
-            Axis::Horizontal => hints
-                .iter()
-                .map(|hint| {
-                    crate::help::KeyFormat::Default
-                        .keys(&hint.keys, false)
-                        .len()
-                        + 2
-                        + hint.description.len()
-                })
-                .max()
-                .unwrap_or(0)
-                .min(u16::MAX as usize) as u16,
+        self.hints.with(|hints| {
+            let lines = panel_lines(hints);
+            match axis {
+                Axis::Vertical => lines.len().min(u16::MAX as usize) as u16,
+                Axis::Horizontal => lines
+                    .iter()
+                    .map(|line| match line {
+                        PanelLine::Heading(name) => rich::cells::cell_len(name),
+                        PanelLine::Hint(hint) => {
+                            rich::cells::cell_len(&key_text(hint))
+                                + 2
+                                + rich::cells::cell_len(&hint.description)
+                        }
+                    })
+                    .max()
+                    .unwrap_or(0)
+                    .min(u16::MAX as usize) as u16,
+            }
         })
     }
 
     fn draw(&mut self, cx: &mut DrawCx, canvas: &mut Canvas) {
         let (key, dim) = (cx.style("key_hints.key", "bold"), cx.style("dim", "dim"));
+        let heading = cx.style("key_panel.section", "bold underline");
         self.hints.with(|hints| {
-            let keys: Vec<String> = hints
+            let lines = panel_lines(hints);
+            let column = hints
                 .iter()
-                .map(|hint| crate::help::KeyFormat::Default.keys(&hint.keys, false))
-                .collect();
-            let column = keys
-                .iter()
-                .map(|k| rich::cells::cell_len(k))
+                .map(|hint| rich::cells::cell_len(&key_text(hint)))
                 .max()
                 .unwrap_or(0) as u16;
-            for (row, (hint, keys)) in hints.iter().zip(&keys).enumerate() {
+            for (row, line) in lines.iter().enumerate() {
                 let row = row as u16;
                 if row >= canvas.height() {
                     break;
                 }
+                let hint = match line {
+                    PanelLine::Heading(name) => {
+                        canvas.print(0, row, name, Some(&heading));
+                        continue;
+                    }
+                    PanelLine::Hint(hint) => hint,
+                };
                 let (key_style, text_style) = if hint.disabled {
                     (dim.clone(), Some(dim.clone()))
                 } else {
                     (key.clone(), None)
                 };
-                canvas.print(0, row, keys, Some(&key_style));
+                canvas.print(0, row, &key_text(hint), Some(&key_style));
                 canvas.print(column + 2, row, &hint.description, text_style.as_ref());
             }
         });
     }
+}
+
+/// A line of the key panel: a section's heading, or a binding.
+enum PanelLine<'a> {
+    Heading(&'a str),
+    Hint(&'a crate::help::Hint),
+}
+
+/// A hint's keys as the panel says them.
+fn key_text(hint: &crate::help::Hint) -> String {
+    crate::help::KeyFormat::Default.keys(&hint.keys, false)
+}
+
+/// The panel's lines: the hints grouped by the help's sections, in the
+/// order each section first comes (the focused node's first), under a
+/// heading for each named section, as the help lists them. Hints with no
+/// section come first, under no heading.
+fn panel_lines(hints: &[crate::help::Hint]) -> Vec<PanelLine<'_>> {
+    let mut sections: Vec<&str> = Vec::new();
+    for hint in hints {
+        if !sections.contains(&hint.section.as_str()) {
+            sections.push(&hint.section);
+        }
+    }
+    sections.sort_by_key(|section| !section.is_empty());
+    let mut lines = Vec::with_capacity(hints.len() + sections.len());
+    for section in sections {
+        if !section.is_empty() {
+            lines.push(PanelLine::Heading(section));
+        }
+        lines.extend(
+            hints
+                .iter()
+                .filter(|hint| hint.section == section)
+                .map(PanelLine::Hint),
+        );
+    }
+    lines
 }
 
 // Masked input.

@@ -378,6 +378,18 @@ pub fn parse_reply(line: &str) -> Result<Value> {
     Ok(reply.get("result").cloned().unwrap_or(reply))
 }
 
+/// The panes in a `listPanes` reply's result: an array of panes, or an
+/// object with one under `panes`; entries that are not panes are skipped.
+/// A refusal when there is no array.
+pub fn panes_of(result: &Value) -> Result<Vec<Pane>> {
+    let panes = result
+        .get("panes")
+        .unwrap_or(result)
+        .as_array()
+        .ok_or_else(|| HostError::Refused("no panes in the reply".into()))?;
+    Ok(panes.iter().filter_map(pane_of).collect())
+}
+
 /// A pane from a reply: an object with an `id` (or `paneId`), a string or
 /// a number, and `title` and `focused` when given.
 fn pane_of(value: &Value) -> Option<Pane> {
@@ -461,12 +473,7 @@ impl TerminalHost for SocketHost {
 
     fn list_panes(&self) -> Result<Vec<Pane>> {
         let reply = self.call(Method::ListPanes, json!({}))?;
-        let panes = reply
-            .get("panes")
-            .unwrap_or(&reply)
-            .as_array()
-            .ok_or_else(|| HostError::Refused("no panes in the reply".into()))?;
-        Ok(panes.iter().filter_map(pane_of).collect())
+        panes_of(&reply)
     }
 
     fn neighbor(&self, direction: Direction) -> Result<Option<Pane>> {
@@ -1051,6 +1058,15 @@ mod tests {
         assert!(refused(r#"{"ok":false}"#).contains("said no"));
         assert!(refused("not json").contains("not a JSON reply"));
         assert!(parse_reply(r#"{"id":1,"result":null,"error":null}"#).is_ok());
+    }
+
+    #[test]
+    fn a_list_of_panes_skips_what_is_not_a_pane() {
+        let panes = panes_of(&json!({"panes": [{"id": "p1"}, 3, {"paneId": 7}]})).unwrap();
+        let ids: Vec<&str> = panes.iter().map(|p| p.id.as_str()).collect();
+        assert_eq!(ids, ["p1", "7"]);
+        assert_eq!(panes_of(&json!([{"id": "a"}])).unwrap().len(), 1);
+        assert!(panes_of(&json!({"panes": "none"})).is_err());
     }
 
     #[test]

@@ -64,6 +64,15 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   CSS selectors as `click` targets, an action log, tapes for both, and the
   pixel view in a real Kitty and against live Chrome.
 
+- **Wave 3d** (branch `024-w3d`, backup
+  `claude/next-priority-items-3c5p8e-wip-w3d`): wave 2b's leftovers are
+  done: `freeze_rows` (tables and lists), `match_brackets` and
+  `EditorTheme` (#814), `list_of_virtual` (#811), the key panel's
+  sections (#813); #815's console is Unix only for now (the Windows named
+  pipe stays a follow-up). DIVERGENCES §51 to §53 record the CLI's three
+  meaning differences. Hardening round: the console's socket, Noctiluca's
+  tunnel port, and a `terminal_host` fuzz target (threat model §8).
+
 ## Where things stood (2026-11-01)
 
 - **0.0.24 is planned** ([plan](../plans/0.0.24.md)), with the maintainer's

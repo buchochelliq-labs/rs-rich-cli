@@ -4,7 +4,7 @@ use std::cell::RefCell;
 use std::rc::Rc;
 
 use intuituive::prelude::*;
-use intuituive::{button, list_of};
+use intuituive::{button, list_of, list_of_virtual};
 
 /// Three cards, each a title and a button; the selection and the presses
 /// are written to `log`.
@@ -119,4 +119,79 @@ fn the_cursor_stays_in_view() {
     );
     driver.press("home");
     assert!(driver.screen().plain()[0].starts_with("row 0"));
+}
+
+/// `list_of_virtual` (#811): the same cursor, skips and selection over a
+/// million rows, building only those near the view.
+#[test]
+fn a_virtual_list_of_nodes_builds_only_the_rows_near_the_view() {
+    let built = Rc::new(std::cell::Cell::new(0usize));
+    let log = Rc::new(RefCell::new(Vec::new()));
+    let (count, picked) = (built.clone(), log.clone());
+    let app = App::new(move || {
+        let selected = signal(0usize);
+        let (count, picked) = (count.clone(), picked.clone());
+        column([
+            text!("at {selected}").fixed(1),
+            list_of_virtual(
+                || 1_000_000,
+                |_| 1,
+                move |i| {
+                    count.set(count.get() + 1);
+                    label(format!("row {i}")).class("title")
+                },
+                selected,
+            )
+            .separator_after(|i| i == 0)
+            .item_disabled_when(|i| i == 1)
+            .on_select(move |i, _| picked.borrow_mut().push(i))
+            .name("rows"),
+        ])
+    });
+    let mut driver = app.driver(16, 6);
+    driver.settle();
+    driver.assert_focused("rows");
+    // The separator after row 0, and the disabled row 1, are skipped.
+    driver.press("down");
+    assert_eq!(driver.screen().plain()[0].trim_end(), "at 2");
+    driver.press("end");
+    let lines = driver.screen().plain();
+    assert_eq!(lines[0].trim_end(), "at 999999");
+    assert!(
+        lines.iter().any(|l| l.starts_with("row 999999")),
+        "{lines:?}"
+    );
+    driver.press("pageup");
+    let lines = driver.screen().plain();
+    let at: usize = lines[0].trim_end()[3..].parse().unwrap();
+    assert!(at < 999_999 && at > 999_990, "{lines:?}");
+    assert!(
+        lines.iter().any(|l| l.starts_with(&format!("row {at}"))),
+        "{lines:?}"
+    );
+    driver.press("enter");
+    assert_eq!(*log.borrow(), vec![at]);
+    assert!(built.get() < 200, "built {} rows", built.get());
+    driver.press("home");
+    assert!(driver.screen().plain()[1].starts_with("row 0"));
+}
+
+/// The selected row of a virtual list matches `:selected`.
+#[test]
+fn a_virtual_lists_selected_row_matches_selected() {
+    let app = App::new(|| {
+        list_of_virtual(
+            || 100,
+            |_| 1,
+            |i| label(format!("row {i}")).class("title"),
+            signal(0usize),
+        )
+    })
+    .stylesheet(":selected .title { text-style: bold; }");
+    let mut driver = app.driver(12, 4);
+    driver.press("down down");
+    let styled = intuituive::testing::styled(&driver);
+    let bold: Vec<&str> = styled.lines().filter(|l| l.contains("bold")).collect();
+    assert_eq!(bold.len(), 1, "{styled}");
+    assert!(bold[0].contains("row 2"), "{styled}");
 }
