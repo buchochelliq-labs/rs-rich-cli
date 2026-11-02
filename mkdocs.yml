@@ -221,6 +221,7 @@ nav:
       - Live logs and adaptations: guide/noctiluca/adaptations.md
       - Configuration: guide/noctiluca/config.md
       - Over SSH: guide/noctiluca/ssh.md
+      - Scripts and coding agents: guide/noctiluca/agents.md
       - Privacy and security: guide/noctiluca/privacy.md
       - Using it as a library: guide/noctiluca/library.md
       - Troubleshooting and FAQ: guide/noctiluca/troubleshooting.md

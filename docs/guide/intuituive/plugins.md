@@ -183,6 +183,14 @@ cover.get(), view)` draw an image in memory (a cover embedded in a song).
   app's source a Sixel or iTerm2 view is plain half blocks, so the
   frame stays exact in any terminal.
 
+- **A whole frame as tiles:** `tiles_of(|| tiles, Pixels::Kitty)` draws
+  the tiles of rs-rich-art's `tiles::Tiler`, which fits each frame (a
+  browser's screencast, an emulator's screen) to its cells and cuts it
+  into tiles of 8 by 4 cells; a tile whose pixels did not change keeps its
+  picture's id and version, so with `image_graphics` only the tiles that
+  changed go up again. A caret blinking is one tile; a page scrolling
+  changes nearly all of them. Noctiluca's pixel view is built on it.
+
 Any other picture drawn in pixels goes the same way: `App::graphics(source)`
 takes an rs-rich-ext `PlacementSource` (`image_graphics()` is the image
 nodes') and draws its Kitty, iTerm2 or Sixel images over the cells after

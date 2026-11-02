@@ -159,7 +159,7 @@ fn noctiluca(run: &Run, args: &[&str]) -> (String, bool) {
 
 #[test]
 fn a_script_lists_the_session_reads_it_and_clicks_by_id() {
-    let mut run = Run::start(
+    let run = Run::start(
         &["--control", "https://fixture.example/reader.html"],
         "xterm-256color",
     );

@@ -125,6 +125,14 @@ fn listen(
         return Ok(None);
     }
     let read_only = args.read_only || config.agent.read_only;
+    // With a kept profile an agent acts signed in, and what pages say
+    // reaches it: say so (`--read-only` lets it read only).
+    if !read_only && (args.profile.is_some() || config.profile.is_some()) {
+        eprintln!(
+            "noctiluca: note: --control with a kept profile lets scripts act on your signed-in \
+             sites; --read-only lets them read only"
+        );
+    }
     let link = noctiluca::control::ControlLink::bind(read_only)
         .map_err(|e| std::io::Error::new(e.kind(), format!("--control: {e}")))?;
     *CONTROL.lock().unwrap_or_else(|e| e.into_inner()) = Some(link.clone());

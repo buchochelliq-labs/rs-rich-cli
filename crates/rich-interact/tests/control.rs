@@ -44,7 +44,7 @@ fn serve(name: &str, read_only: bool, timeout: Duration) -> (PathBuf, control::C
     (path, closer)
 }
 
-fn call(path: &PathBuf, verb: &str) -> Result<Value, String> {
+fn call(path: &std::path::Path, verb: &str) -> Result<Value, String> {
     control::call(
         path,
         &Request::new(verb, json!({"url": "x"})),

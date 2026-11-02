@@ -290,7 +290,7 @@ pub fn find_rows(lines: &[String], query: &str) -> Vec<Value> {
         .enumerate()
         .filter(|(_, line)| !layout::matches(line, query).is_empty())
         .take(50)
-        .map(|(row, line)| json!({"row": row, "text": line.trim_end()}))
+        .map(|(row, line)| json!({"row": row, "text": line.trim()}))
         .collect()
 }
 
@@ -709,7 +709,7 @@ pub fn action(args: &ActionArgs) -> std::io::Result<String> {
                     .map(|m| {
                         format!(
                             "{:>5}  {}",
-                            m["row"],
+                            m["row"].as_u64().unwrap_or_default(),
                             m["text"].as_str().unwrap_or_default()
                         )
                     })

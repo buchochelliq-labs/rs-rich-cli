@@ -119,6 +119,37 @@ login needs a password, quit and run again.
 the status bar says `via ssh HOST`: without `--ssh`, `localhost` is this
 machine.
 
+## Scripts and the pixel view
+
+**`noctiluca ls` says no Noctiluca is listening.** Only a session started
+with `--control`, `--read-only` or `[agent] control = true` listens, and
+only to scripts with the same `XDG_RUNTIME_DIR` (a script under `sudo`, or
+in another login, looks elsewhere).
+
+**"--control: … is open to other users" or "… is another user's".** The
+socket's directory (`$XDG_RUNTIME_DIR/noctiluca`, else
+`/tmp/noctiluca-UID`) must be yours with mode 700. Noctiluca does not
+change it for you: remove it, or fix its owner and mode, and run again.
+
+**"N sessions are listening".** Name one: `noctiluca action --session PID
+…`, with a pid from `noctiluca ls`.
+
+**"read-only session".** That session runs with `--read-only` (or
+`[agent] read_only = true`): it answers `info`, `snapshot` and `find`
+only.
+
+**The control commands say "Unix only for now".** On Windows there is no
+control socket yet.
+
+**"The pixel view needs Kitty graphics".** It draws through Kitty's
+protocol only. In kitty, WezTerm or Ghostty, name it if it was not
+detected: `--images kitty --pixels`.
+
+**The pixel view lags while scrolling.** Scrolling changes every tile, so
+each frame costs nearly a whole frame of pixels; frames the byte budget
+cannot carry are dropped. Raise `[media] bandwidth` if your terminal takes
+more, or scroll in the projection and switch back.
+
 ## FAQ
 
 **Is it a real browser?** Yes: Chrome loads and runs every page, with its

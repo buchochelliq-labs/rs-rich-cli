@@ -830,6 +830,50 @@ reply itself, and an `error` as a string or an object with a `message`),
 and the kitty, WezTerm and zellij adapters against those terminals (their
 arguments are unit tested; tmux is tested against a real server).
 
+## A control socket: driven by scripts and agents
+
+Behind the `control` feature (Unix only for now), `rich_interact::control`
+lets a running program answer requests from scripts and agents of the same
+user: one JSON line in, `{"verb": "open", "args": {…}}`, and one JSON line
+out, `{"ok": true, "result": …}` or `{"ok": false, "error": "…"}`. The
+program names its verbs and says which change anything; Noctiluca's
+`noctiluca action` is built on it.
+
+```rust
+use rich_interact::control::{self, ControlServer, Request, Verb};
+use serde_json::json;
+
+const VERBS: &[Verb] = &[Verb::read("info", "who is here"), Verb::write("open", "open it")];
+let dir = control::runtime_dir("my-app")?; // $XDG_RUNTIME_DIR/my-app, mode 700
+let server = ControlServer::bind(dir.join("my-app-1.sock"), VERBS)?.read_only(true);
+std::thread::spawn(move || server.serve(|request: &Request| match request.verb.as_str() {
+    "info" => Ok(json!({"name": "my-app"})),
+    _ => Err("not here".into()),
+}));
+let reply = control::call(&dir.join("my-app-1.sock"), &Request::new("info", json!({})), control::IO_TIMEOUT)?;
+```
+
+What it protects:
+
+- **This user only.** The socket's directory is made the user's own with
+  mode 700 before the socket is bound (`private_dir`); one that is
+  another user's, open to others, or a symbolic link is refused. Where the
+  platform tells (Linux, macOS, the BSDs), each peer's user is checked
+  (`peer_uid`, `peer_allowed`), and `call` checks the server's.
+- **No links followed:** the server and `call` refuse a symbolic link at
+  the socket's path or its directory, and `bind` replaces only a socket of
+  the user's that no one answers.
+- **Read-only sessions** (`ControlServer::read_only`) refuse every verb
+  that mutates before the handler runs; a verb the program did not name is
+  refused too.
+- **Bounded:** requests up to `MAX_REQUEST` (64 kB), replies up to
+  `MAX_REPLY` (16 MB), reads and writes timing out (`IO_TIMEOUT`, 5 s, or
+  `ControlServer::timeout`), at most `MAX_CONNECTIONS` answered at once.
+- **No network listener.**
+
+`sessions(dir, prefix)` lists the sockets of a program's running sessions;
+`Closer::close` stops `serve` from another thread and removes the socket.
+
 ## Several at once: the event loop
 
 `EventLoop` runs several mounted components together:

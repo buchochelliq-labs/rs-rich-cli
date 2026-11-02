@@ -243,6 +243,9 @@ pub fn picture_of(picture: impl Fn() -> Option<Picture> + 'static, view: ImageVi
     .what("image")
 }
 
+/// A tile's picture version and the lines drawn of it.
+type TileLines = (u32, Vec<Vec<Segment>>);
+
 /// A node over a whole frame cut into tiles (#818): `tiles` returns them
 /// (a closure that may read signals; [`rich_art::tiles::Tiler::tiles`]),
 /// each drawn at its place in cells through `pixels`. A tile that did not
@@ -268,7 +271,7 @@ pub fn picture_of(picture: impl Fn() -> Option<Picture> + 'static, view: ImageVi
 /// ```
 pub fn tiles_of(tiles: impl Fn() -> Vec<rich_art::tiles::Tile> + 'static, pixels: Pixels) -> Node {
     // Each tile's lines, by picture id, with the version they are of.
-    let drawn: RefCell<HashMap<u32, (u32, Vec<Vec<Segment>>)>> = RefCell::new(HashMap::new());
+    let drawn: RefCell<HashMap<u32, TileLines>> = RefCell::new(HashMap::new());
     leaf(move |console, width, height| {
         let (width, height) = (width as usize, height as usize);
         let mut tiles: Vec<_> = tiles()
