@@ -33,10 +33,16 @@ fn engine() -> FakeEngine {
     engine
 }
 
-/// A private directory for one test's socket.
+/// A private directory for one test's socket. It sits under `/tmp`, not
+/// `TMPDIR`: macOS's `TMPDIR` is long enough that the socket's path
+/// would pass the 104 bytes a Unix socket's address holds.
 fn socket(name: &str) -> PathBuf {
-    let base =
-        std::env::temp_dir().join(format!("noctiluca-control-{}-{name}", std::process::id()));
+    let tmp = if std::path::Path::new("/tmp").is_dir() {
+        PathBuf::from("/tmp")
+    } else {
+        std::env::temp_dir()
+    };
+    let base = tmp.join(format!("nc-ctl-{}-{name}", std::process::id()));
     let _ = std::fs::remove_dir_all(&base);
     std::fs::create_dir_all(&base).unwrap();
     let dir = base.join("run");

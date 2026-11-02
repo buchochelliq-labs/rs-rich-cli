@@ -234,16 +234,17 @@ fn benchmark_whole_frames_against_tiles() {
     let (mut full, mut tiled) = (0usize, 0usize);
     for k in 0..30u32 {
         let view = rich_art::image::imageops::crop_imm(&page, 0, k * 54, width, height).to_image();
-        full += whole(&view, cols, rows);
         let changed = tiler.update(&view, cols, rows);
+        // The first frame is the same for both: it is not counted. (Two
+        // encodings of one frame need not be the same length, so it is
+        // skipped rather than added and taken away.)
         if k > 0 {
+            full += whole(&view, cols, rows);
             tiled += tiler
                 .encode(&changed, Pixels::Kitty)
                 .iter()
                 .map(String::len)
                 .sum::<usize>();
-        } else {
-            full -= whole(&view, cols, rows);
         }
     }
     let frames = 29.0;
