@@ -46,44 +46,6 @@ why = "the collapse-gaps adaptation collapses rows blank in every column (#786, 
 [[break]]
 crate = "rs-rich-intuituive"
 version = "0.0.9"
-lint = "enum_variant_added"
-items = [
-    "variant Easing:InSine",
-    "variant Easing:OutSine",
-    "variant Easing:InOutSine",
-    "variant Easing:InQuad",
-    "variant Easing:OutQuad",
-    "variant Easing:InOutQuad",
-    "variant Easing:InCubic",
-    "variant Easing:OutCubic",
-    "variant Easing:InOutCubic",
-    "variant Easing:InQuart",
-    "variant Easing:OutQuart",
-    "variant Easing:InOutQuart",
-    "variant Easing:InQuint",
-    "variant Easing:OutQuint",
-    "variant Easing:InOutQuint",
-    "variant Easing:InExpo",
-    "variant Easing:OutExpo",
-    "variant Easing:InOutExpo",
-    "variant Easing:InCirc",
-    "variant Easing:OutCirc",
-    "variant Easing:InOutCirc",
-    "variant Easing:InBack",
-    "variant Easing:OutBack",
-    "variant Easing:InOutBack",
-    "variant Easing:InElastic",
-    "variant Easing:OutElastic",
-    "variant Easing:InOutElastic",
-    "variant Easing:InBounce",
-    "variant Easing:OutBounce",
-    "variant Easing:InOutBounce",
-]
-why = "Textual's easings, each in, out and in-out (#814, 0.0.24 plan); Easing is #[non_exhaustive] from this release, so later ones are not breaks"
-
-[[break]]
-crate = "rs-rich-intuituive"
-version = "0.0.9"
 lint = "enum_marked_non_exhaustive"
 items = ["enum Easing"]
-why = "Easing is #[non_exhaustive] so easings added later are not breaks (#814, 0.0.24 plan)"
+why = "Textual's easings join Easing (#814, 0.0.24 plan), which is #[non_exhaustive] from this release so later ones are not breaks; the variants it gains are not reported apart"

@@ -9671,6 +9671,15 @@ pub rich_ext::frame::SvgOptions::title: &'a str
 pub rich_ext::frame::SvgOptions::unique_id: &'a str
 pub rich_ext::frame::SvgOptions::width: core::option::Option<usize>
 pub rich_ext::frame::SvgOptions::window: bool
+impl<'a> rich_ext::frame::SvgOptions<'a>
+pub fn rich_ext::frame::SvgOptions<'a>::caption(self, &'a str) -> Self
+pub fn rich_ext::frame::SvgOptions<'a>::cursor(self, usize, usize) -> Self
+pub fn rich_ext::frame::SvgOptions<'a>::font_aspect_ratio(self, f64) -> Self
+pub fn rich_ext::frame::SvgOptions<'a>::theme(self, &'a rich::terminal_theme::TerminalTheme) -> Self
+pub fn rich_ext::frame::SvgOptions<'a>::title(self, &'a str) -> Self
+pub fn rich_ext::frame::SvgOptions<'a>::unique_id(self, &'a str) -> Self
+pub fn rich_ext::frame::SvgOptions<'a>::width(self, usize) -> Self
+pub fn rich_ext::frame::SvgOptions<'a>::window(self, bool) -> Self
 impl core::default::Default for rich_ext::frame::SvgOptions<'_>
 pub fn rich_ext::frame::SvgOptions<'_>::default() -> Self
 impl<'a> core::clone::Clone for rich_ext::frame::SvgOptions<'a>
@@ -15504,6 +15513,7 @@ pub fn rich_ext::surface::Screen::scrolled(&self) -> &[(rich_ext::surface::Rect,
 pub fn rich_ext::surface::Screen::style(&self, rich_ext::frame::StyleId) -> core::option::Option<&rich::style::Style>
 pub fn rich_ext::surface::Screen::style_count(&self) -> usize
 pub fn rich_ext::surface::Screen::styles_piled_up(&self) -> bool
+pub fn rich_ext::surface::Screen::to_svg(&self, &rich_ext::frame::SvgOptions<'_>) -> alloc::string::String
 pub fn rich_ext::surface::Screen::underlay(&mut self, u16, u16, &rich::style::Style)
 pub fn rich_ext::surface::Screen::write_lines(&mut self, rich_ext::surface::Rect, &[alloc::vec::Vec<rich::segment::Segment>])
 pub fn rich_ext::surface::Screen::write_runs<'t, L: core::convert::AsRef<[rich_ext::surface::TextRun<'t>]>>(&mut self, rich_ext::surface::Rect, &[L])
