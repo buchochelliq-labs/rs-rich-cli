@@ -18,7 +18,7 @@
  Image: Boats at anchor in the harbour at night, with the                                          ┃
  town's lights on the water                                                                        ┃
  LIVE The bay glows blue for a third night as the bloom spreads along the coast                    ┃
- Crowds gathered on the quay to watch the waves light up as they broke.                            │
+ Crowds gathered on the quay to watch the waves light up as they broke.                            ┃
                                                                                                    │
  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                                          │
  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                                          │
@@ -36,5 +36,5 @@
  ▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀▀                                          │
                                                                                                    │
  Watch: the bloom from the air                                                                     │
- projection | media PLAYING <time> muted | sound off (--audio) | row 1/72
+ projection | media PLAYING <time> muted | sound off (--audio) | row 1/69
  f1 actions | f hints | o open | r reader | p play/pause | [/] seek | alt+m mute | q quit

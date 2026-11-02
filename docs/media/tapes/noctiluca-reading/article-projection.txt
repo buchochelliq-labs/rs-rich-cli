@@ -3,9 +3,7 @@
  Fixture News
  World Science
 
-
  The glowing coast
-
 
  By A. Writer, 25 October 2026
 
@@ -18,8 +16,10 @@
 
  Related
 
-
       • Why plankton glow
+
+
+
 
 
 

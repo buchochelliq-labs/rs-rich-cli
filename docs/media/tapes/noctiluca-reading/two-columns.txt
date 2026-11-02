@@ -1,16 +1,11 @@
  NOCTILUCA   PROJECTION + CELLS   ◀ ▶ ↻   Noctiluca fixture
  https://fixture.example/page.html
-
  Sea
  sparkle
 
-
-
  Noctiluca makes the waves glow at night.
 
-
  Where it lives                 Escape test
-
 
  Coastal water, all over the    Before[31mafter
  world.
@@ -26,5 +21,10 @@
 
 
 
- projection | row 1/16
+
+
+
+
+
+ projection | row 1/11
  f1 actions | f hints | o open | r reader | q quit
