@@ -91,6 +91,29 @@ let picked: Option<usize> = App::new(|| {
   with `?` like any other. What the builder made is dropped, and its
   `latest` threads never start.
 
+### Maximizing a pane
+
+A pane can take the whole screen for a while, as Textual's
+`Screen.maximize` does:
+
+```rust
+row([files_pane(), diff_pane().maximizable()])
+App::new(build).maximize_key("ctrl+m")   // off unless set
+```
+
+- **`.maximizable()`** (or `.maximizable_when(|| ..)`) says which nodes may
+  be maximized. **`cx.maximize()`** maximizes the nearest maximizable node
+  on the focus's path (the focused node, or the pane round it);
+  `cx.maximize_node(id)` maximizes that node; `cx.minimize()` restores.
+  `cx.is_maximized()` says whether one is.
+- The node draws over the whole screen, keeping its state and its focus.
+  The rest of the tree keeps its state but does not draw: clicks miss it,
+  and Tab stays inside the maximized node. Signals written meanwhile redraw
+  the hidden panes when the layout is restored.
+- Esc that nothing used restores it, and so does the `maximize_key` again.
+  The inspector marks the node *maximized*, and assistive technology hears
+  "maximized" and "restored".
+
 ### Pop-ups
 
 `cx.popup(anchor, placement, width, height, build)` opens a box like a

@@ -27,6 +27,17 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   on crates.io) and removed; its test now accepts an empty list, as the
   check itself does.
 
+### intuiTUIve: maximize, modes, Pilot helpers, screenshots and more (#807 to #815)
+
+- **Maximize a pane** (#807): `Node::maximizable()` and
+  `maximizable_when(..)`, `Ctx::maximize()` (the nearest maximizable node
+  on the focus's path), `maximize_node(id)`, `minimize()` and
+  `is_maximized()`, and `App::maximize_key(..)` (off unless set). The node
+  draws over the whole screen with its state and focus; the rest keeps its
+  state but neither draws nor takes clicks, and Tab stays inside. Esc that
+  nothing used restores it. The inspector marks it, and assistive
+  technology hears "maximized" and "restored".
+
 ### The docs on Zensical
 
 - Both docs sites build with [Zensical](https://zensical.org/) 0.0.74,

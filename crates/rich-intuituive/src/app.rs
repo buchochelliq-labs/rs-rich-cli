@@ -94,6 +94,8 @@ pub struct Ctx {
     layers: usize,
     /// The handler passed its key on ([`pass_key`](Ctx::pass_key)).
     pub(crate) passed: bool,
+    /// A node is maximized on the top screen.
+    maximized: bool,
 }
 
 /// The user's editor: `$VISUAL` (a program and its arguments), else
@@ -286,6 +288,10 @@ enum Nav {
     /// Run binding `index` of node `id` (a key sequence's, if `true`), as
     /// its key would.
     Run(NodeId, usize, bool),
+    /// Maximize a node, or (`None`) the nearest maximizable ancestor of
+    /// the focus.
+    Maximize(Option<NodeId>),
+    Minimize,
 }
 
 /// Whether a screen is open over the first one, as a binding's condition
@@ -319,6 +325,7 @@ impl Ctx {
             releases: Releases::None,
             layers: 1,
             passed: false,
+            maximized: false,
         }
     }
 
@@ -863,6 +870,33 @@ impl Ctx {
     /// focus it had. Does nothing on the first screen.
     pub fn pop(&mut self) {
         self.nav.push(Nav::Pop);
+    }
+
+    /// Draw the nearest [maximizable](crate::Node::maximizable) node on
+    /// the focus's path (the focused node itself, or a pane round it) over
+    /// the whole screen, keeping its state and its focus. The rest of the
+    /// tree keeps its state but does not draw; [`minimize`](Self::minimize)
+    /// or Esc that nothing used restores it. Nothing when no node on the
+    /// path is maximizable.
+    pub fn maximize(&mut self) {
+        self.nav.push(Nav::Maximize(None));
+    }
+
+    /// [`maximize`](Self::maximize) node `id`, maximizable or not.
+    pub fn maximize_node(&mut self, id: NodeId) {
+        self.nav.push(Nav::Maximize(Some(id)));
+    }
+
+    /// Restore the maximized node, if any: the layout is back, with the
+    /// focus where it was.
+    pub fn minimize(&mut self) {
+        self.nav.push(Nav::Minimize);
+    }
+
+    /// Whether a node is maximized on the top screen (as it was when the
+    /// handler was called).
+    pub fn is_maximized(&self) -> bool {
+        self.maximized
     }
 
     /// Replace the top screen with the one `build` makes.
@@ -1546,6 +1580,9 @@ struct Layer {
     /// The focus went to the first focusable node because no node asked
     /// for it; an `autofocus` node built later takes it over.
     fallback: bool,
+    /// The node drawn over the whole screen instead of the root
+    /// ([`Ctx::maximize`]).
+    maximized: Option<NodeId>,
 }
 
 thread_local! {
@@ -1850,6 +1887,8 @@ pub struct App {
     placements: Vec<rich_ext::frame::Placement>,
     /// Keys that open the command palette and the help, if any.
     palette_key: Vec<Key>,
+    /// Maximizes the focused pane, or restores it ([`App::maximize_key`]).
+    maximize_key: Vec<Key>,
     help_key: Vec<Key>,
     /// Read keys as a legacy terminal sends them, even where the kitty
     /// keyboard protocol could be on.
@@ -2204,6 +2243,7 @@ impl App {
                 watches,
                 order: Vec::new(),
                 fallback: false,
+                maximized: None,
             }],
             restack: false,
             floats_drawn: Vec::new(),
@@ -2229,6 +2269,7 @@ impl App {
             graphics: None,
             placements: Vec::new(),
             palette_key: Vec::new(),
+            maximize_key: Vec::new(),
             help_key: Vec::new(),
             legacy_keys: false,
             synchronized_output: None,
@@ -2862,6 +2903,16 @@ impl App {
     #[must_use]
     pub fn palette_key(mut self, keys: &str) -> App {
         self.palette_key = crate::node::parse_keys(keys);
+        self
+    }
+
+    /// Maximize the focused pane (the nearest
+    /// [maximizable](crate::Node::maximizable) node on the focus's path)
+    /// with `keys` (say `"ctrl+m"`), or restore it, when no binding of the
+    /// app used them. Off unless set; Esc that nothing used restores too.
+    #[must_use]
+    pub fn maximize_key(mut self, keys: &str) -> App {
+        self.maximize_key = crate::node::parse_keys(keys);
         self
     }
 
@@ -3954,6 +4005,17 @@ impl App {
             .iter()
             .zip(&rects)
             .any(|(layer, rect)| layer.modal.is_some() && layer.drawn.is_some_and(|d| d != *rect));
+        // A maximized node that left the tree: the layout is back.
+        for layer in &mut self.layers[base..] {
+            if let Some(id) = layer.maximized {
+                let mut found = false;
+                with_node(&layer.root, id, &mut |_| found = true);
+                if !found {
+                    layer.maximized = None;
+                    self.restack = true;
+                }
+            }
+        }
         let mut full = full || moved || std::mem::take(&mut self.restack);
         // The stylesheet as it applies at this size: crossing an `@media`
         // rule's bounds matches every node again and draws everything.
@@ -4069,10 +4131,22 @@ impl App {
                 if let Some(sheet) = &frame.sheet {
                     layer.root.resolve(sheet, &mut frame.chain);
                 }
-                layer.root.draw(&mut frame, *rect, screen, force);
+                // A maximized node draws in the root's place, over its
+                // whole rectangle.
+                let mut painted = Vec::new();
+                match layer.maximized {
+                    Some(id) => with_node(&layer.root, id, &mut |node| {
+                        node.draw(&mut frame, *rect, screen, force);
+                        painted = crate::float::paint(&runtime, node, screen, area);
+                    }),
+                    None => {
+                        layer.root.draw(&mut frame, *rect, screen, force);
+                        painted = crate::float::paint(&runtime, &layer.root, screen, area);
+                    }
+                }
                 layer.drawn = Some(*rect);
                 // What the screen's widgets draw over their neighbours.
-                for (id, at) in crate::float::paint(&runtime, &layer.root, screen, area) {
+                for (id, at) in painted {
                     frame.damage.push(at);
                     floats_now.push((id, at));
                 }
@@ -4245,6 +4319,7 @@ impl App {
                 damage: &damage,
                 focus: all.last().and_then(|layer| layer.focus),
                 focus_path: &focus_path,
+                maximized: all.last().and_then(|layer| layer.maximized),
                 hover: &hover,
                 stats: FrameStats {
                     bytes: self.bytes_before,
@@ -4318,6 +4393,7 @@ impl App {
         cx.pointer = self.pointer;
         cx.layers = self.layers.len();
         cx.releases = self.releases;
+        cx.maximized = self.top().maximized.is_some();
         cx
     }
 
@@ -4428,7 +4504,7 @@ impl App {
             Nav::Replace(_) => Some("screen replaced"),
             Nav::Palette => Some("command palette opened"),
             Nav::Help(_) => Some("help opened"),
-            Nav::Run(..) => None,
+            Nav::Run(..) | Nav::Maximize(_) | Nav::Minimize => None,
         };
         if let Some(what) = what {
             self.runtime.tracer.push(Traced::Screen(what));
@@ -4482,8 +4558,64 @@ impl App {
                 top.look = look;
             }
             Nav::Run(id, index, sequence) => return self.run_binding(id, index, sequence),
+            Nav::Maximize(id) => self.maximize(id),
+            Nav::Minimize => self.minimize(),
         }
         false
+    }
+
+    /// Maximize node `target`, or with `None` the nearest
+    /// [maximizable](crate::Node::maximizable) node on the focus's path,
+    /// on the top screen. Nothing when there is none.
+    fn maximize(&mut self, target: Option<NodeId>) {
+        let id = match target {
+            Some(id) => (!self.path_to(id).is_empty()).then_some(id),
+            None => {
+                let path = self.focus().map(|f| self.path_to(f)).unwrap_or_default();
+                let root = &self.top().root;
+                path.iter().rev().copied().find(|&id| {
+                    let mut can = false;
+                    with_node(root, id, &mut |node| can = node.can_maximize());
+                    can
+                })
+            }
+        };
+        let Some(id) = id else { return };
+        if self.top().maximized == Some(id) {
+            return;
+        }
+        let top = self.top_mut();
+        top.maximized = Some(id);
+        // Nothing of the rest of the tree is shown or clicked: it keeps its
+        // state, and draws afresh on restore.
+        top.root.hide();
+        self.restack = true;
+        self.announce(
+            crate::a11y::Announcement {
+                text: "maximized".into(),
+                urgent: false,
+            },
+            true,
+        );
+        // The focus stays inside it, or goes to its first focusable node.
+        let inside = self.focus().is_some_and(|f| self.path_to(f).contains(&id));
+        if !inside {
+            self.focus_inside(id);
+        }
+    }
+
+    /// Restore the maximized node of the top screen, if any.
+    fn minimize(&mut self) {
+        if self.top_mut().maximized.take().is_some() {
+            self.restack = true;
+            self.announce(
+                crate::a11y::Announcement {
+                    text: "restored".into(),
+                    urgent: false,
+                },
+                true,
+            );
+        }
     }
 
     /// The described bindings of the focused node and its ancestors,
@@ -4792,6 +4924,7 @@ impl App {
             watches,
             order: Vec::new(),
             fallback: false,
+            maximized: None,
         });
         self.restack = true;
         self.runtime.layers.set(self.layers.len());
@@ -4904,7 +5037,12 @@ impl App {
     /// [hidden](crate::Node::access_hidden) from assistive technology.
     fn focusable(&self) -> Vec<NodeId> {
         let mut ids = Vec::new();
-        self.top().root.walk_accessible(&mut |node, _| {
+        // While a node is maximized, only what is inside it.
+        let maximized = self.top().maximized;
+        self.top().root.walk_accessible(&mut |node, path| {
+            if maximized.is_some_and(|m| !path.contains(&m)) {
+                return;
+            }
             // A wrapper whose focus passes inside is not a stop of its own.
             if node.takes_focus() && node.focus_target().is_none() {
                 ids.push(node.id);
@@ -5437,6 +5575,14 @@ impl App {
         if key.matches_any(&self.palette_key) {
             return self.navigate(Nav::Palette);
         }
+        if key.matches_any(&self.maximize_key) {
+            if self.top().maximized.is_some() {
+                self.minimize();
+            } else {
+                self.maximize(None);
+            }
+            return false;
+        }
         if key.matches_any(&self.help_key) {
             return self.navigate(Nav::Help(crate::help::HelpOptions::new()));
         }
@@ -5446,6 +5592,7 @@ impl App {
                 self.move_focus(key.code == KeyCode::Tab);
             }
             KeyCode::Escape if self.top().is_popup() => return self.navigate(Nav::Pop),
+            KeyCode::Escape if self.top().maximized.is_some() => self.minimize(),
             _ => {}
         }
         false

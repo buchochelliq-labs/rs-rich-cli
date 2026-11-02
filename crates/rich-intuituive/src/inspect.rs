@@ -1491,6 +1491,9 @@ impl Inspector {
         } else if report.focus_path.contains(&id) {
             focus.push("focus inside");
         }
+        if report.maximized == Some(id) {
+            focus.push("[reverse]maximized[/]");
+        }
         if facts.access_hidden {
             focus.push("hidden from assistive technology");
         }
@@ -1699,6 +1702,8 @@ pub(crate) struct Report<'a> {
     pub damage: &'a [Rect],
     pub focus: Option<NodeId>,
     pub focus_path: &'a [NodeId],
+    /// The node maximized on the top screen, if any.
+    pub maximized: Option<NodeId>,
     /// The nodes under the pointer, outermost first.
     pub hover: &'a [NodeId],
     /// The frame before this one (this one's bytes are not known yet).
