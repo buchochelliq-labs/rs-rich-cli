@@ -206,6 +206,41 @@ fn a_hunk_by_hunk_review_writes_only_what_was_accepted() {
     finish(&mut driver, &handle);
 }
 
+/// Writing before any hunk is decided writes nothing: no hunk was
+/// accepted, so the write is refused and the file is left alone.
+#[test]
+fn writing_before_deciding_any_hunk_refuses_the_write() {
+    let dir = workspace("undecided");
+    let old = "one\ntwo\n";
+    std::fs::write(dir.join("a.txt"), old).unwrap();
+    let transcript = format!(
+        "{}\n{}\n{}\n{}\n{}\n{}\n{}\n{}\n",
+        r#"{"client": {"method": "initialize"}}"#,
+        r#"{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1}}}"#,
+        r#"{"client": {"method": "session/new"}}"#,
+        r#"{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "s"}}}"#,
+        r#"{"client": {"method": "session/prompt"}}"#,
+        serde_json::json!({"agent": {"jsonrpc": "2.0", "id": 9, "method": "fs/write_text_file",
+            "params": {"sessionId": "s", "path": "$WORKSPACE/a.txt", "content": "one\nTWO\n"}}}),
+        r#"{"client": {"id": 9, "error": {"code": -32800}}}"#,
+        r#"{"agent": {"jsonrpc": "2.0", "id": 2, "result": {"stopReason": "end_turn"}}}"#,
+    );
+    let (mut driver, handle) = start_with(Options::new(
+        Launch::Replay {
+            transcript: Transcript::parse(&transcript).unwrap(),
+            timeout: Some(WAIT),
+        },
+        &dir,
+    ));
+    wait_for(&mut driver, "Prompt", WAIT);
+    send(&mut driver, "Shout the second line");
+    wait_for(&mut driver, "Review the edit", WAIT);
+    driver.press("y");
+    wait_for(&mut driver, "Rejected the write to a.txt", WAIT);
+    assert_eq!(std::fs::read_to_string(dir.join("a.txt")).unwrap(), old);
+    finish(&mut driver, &handle);
+}
+
 #[test]
 fn an_at_mention_completes_and_goes_as_a_resource_link() {
     let dir = workspace("mention");
@@ -287,6 +322,43 @@ fn the_shell_pane_opens_beside_the_conversation_and_is_the_users_own() {
     driver.type_text("x");
     driver.settle();
     assert_eq!(shell.written(), b"ls");
+    finish(&mut driver, &handle);
+}
+
+/// The shell pane starts in the workspace, not where Cornacai was run.
+#[cfg(unix)]
+#[test]
+fn the_shell_pane_starts_in_the_workspace() {
+    let dir = workspace("shell-cwd");
+    assert_ne!(std::env::current_dir().unwrap(), dir);
+    let transcript = Transcript::parse(
+        r#"{"client": {"method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1}}}
+{"client": {"method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "s"}}}
+{"quiet": 300}"#,
+    )
+    .unwrap();
+    let options = Options::new(
+        Launch::Replay {
+            transcript,
+            timeout: Some(WAIT),
+        },
+        &dir,
+    )
+    .shell_command(vec![
+        "sh".into(),
+        "-c".into(),
+        format!(
+            "[ \"$(pwd -P)\" = '{}' ] && echo in-the-workspace || echo elsewhere; sleep 5",
+            dir.display()
+        ),
+    ]);
+    let (mut driver, handle) = start_with(options);
+    wait_for(&mut driver, "Prompt", WAIT);
+    driver.press("ctrl+t");
+    wait_for(&mut driver, "in-the-workspace", WAIT);
+    driver.press("ctrl+t");
     finish(&mut driver, &handle);
 }
 

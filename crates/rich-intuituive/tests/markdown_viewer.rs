@@ -216,3 +216,54 @@ fn a_loader_that_fails_shows_its_error_and_the_app_goes_on() {
         shown(&driver)
     );
 }
+
+/// A load slow enough that frames are drawn while it is in flight: the
+/// anchor asked for waits for its own document, not the one still shown.
+#[test]
+fn an_anchor_waits_for_a_slow_document() {
+    fn slow(path: &str) -> Result<String, String> {
+        if path == "b.md" {
+            std::thread::sleep(std::time::Duration::from_millis(300));
+        }
+        load(path)
+    }
+    let slot = std::rc::Rc::new(std::cell::RefCell::new(None::<MarkdownViewer>));
+    let inner = slot.clone();
+    let app = App::new(move || {
+        let viewer = markdown_viewer(slow).open("a.md");
+        *inner.borrow_mut() = Some(viewer.clone());
+        let go = viewer.clone();
+        viewer.view().on_key("f1", move |_| go.go("b.md#usage"))
+    });
+    let mut driver = app.driver(70, 12);
+    let start = std::time::Instant::now();
+    while !shown(&driver).contains("Guide") {
+        assert!(start.elapsed().as_secs() < 10, "a.md never came");
+        driver.settle();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    driver.press("f1");
+    // Frames while b.md loads, one laid out again (a resize): the old
+    // document's rows are reported while the anchor waits.
+    driver.resize(66, 12);
+    for _ in 0..5 {
+        driver.settle();
+        std::thread::sleep(std::time::Duration::from_millis(20));
+    }
+    let start = std::time::Instant::now();
+    while !shown(&driver).contains("Use it, 1.") {
+        assert!(
+            start.elapsed().as_secs() < 10,
+            "b.md never came: {}",
+            shown(&driver)
+        );
+        driver.settle();
+        std::thread::sleep(std::time::Duration::from_millis(10));
+    }
+    driver.settle();
+    assert!(
+        document_row(&driver, 0).contains("Usage"),
+        "{}",
+        shown(&driver)
+    );
+}

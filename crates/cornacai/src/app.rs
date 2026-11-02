@@ -84,10 +84,14 @@ impl Options {
         }
     }
 
-    /// A shell pane running `command` on a PTY ([`rich_embed::LocalPty`]).
+    /// A shell pane running `command` on a PTY ([`rich_embed::LocalPty`]),
+    /// started in the workspace (`cwd`), as the agent is.
     #[must_use]
     pub fn shell_command(mut self, command: Vec<String>) -> Options {
-        self.shell = Some(Box::new(move || rich_embed::terminal(command)));
+        let cwd = self.cwd.clone();
+        self.shell = Some(Box::new(move || {
+            rich_embed::terminal(rich_embed::Command::from(command).cwd(cwd))
+        }));
         self
     }
 
@@ -366,10 +370,14 @@ impl Ui {
                 move |cx: &mut Ctx, decided: Option<Vec<Decision>>| {
                     let review = match decided {
                         None => Review::Reject,
-                        Some(d) if d.is_empty() => Review::Write {
+                        // No decision at all: only a diff with no hunks
+                        // (the texts are the same) is written; otherwise
+                        // nothing was accepted.
+                        Some(d) if d.is_empty() && old == new => Review::Write {
                             text: new.clone(),
                             accepted: (0, 0),
                         },
+                        Some(d) if d.is_empty() => Review::Reject,
                         Some(d) => {
                             let accepted = d.iter().filter(|d| **d == Decision::Accepted).count();
                             if accepted == 0 {

@@ -54,6 +54,9 @@ struct State {
     pending: Option<Pending>,
     /// Bumped by each load, so a slower older one is dropped.
     generation: u64,
+    /// A load is in flight: `pending` waits for its document, and the
+    /// rows reported meanwhile are the old one's.
+    loading: bool,
 }
 
 /// A Markdown viewer: build its node with [`view`](Self::view), and steer
@@ -127,6 +130,7 @@ pub fn markdown_viewer<E: Display>(
             forward: Vec::new(),
             pending: None,
             generation: 0,
+            loading: false,
         })),
         on_link: Rc::new(RefCell::new(None)),
     }
@@ -265,6 +269,7 @@ impl MarkdownViewer {
         let (load, generation) = {
             let mut state = self.state.borrow_mut();
             state.generation += 1;
+            state.loading = true;
             state.pending = Some(pending);
             (state.load.clone(), state.generation)
         };
@@ -278,6 +283,7 @@ impl MarkdownViewer {
                 if viewer.state.borrow().generation != generation {
                     return;
                 }
+                viewer.state.borrow_mut().loading = false;
                 match text {
                     Ok(text) => {
                         let (text, headings) = outline(&text);
@@ -395,7 +401,15 @@ impl MarkdownViewer {
     /// Scroll as the last navigation asked, now that the blocks are laid
     /// out.
     fn apply_pending(&self, starts: &[u16]) {
-        let Some(pending) = self.state.borrow_mut().pending.take() else {
+        let Some(pending) = ({
+            let mut state = self.state.borrow_mut();
+            // Rows of the document still shown, not the one asked for.
+            if state.loading {
+                None
+            } else {
+                state.pending.take()
+            }
+        }) else {
             return;
         };
         let offset = match pending {
