@@ -9,6 +9,21 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
 
 ## [Unreleased]
 
+### Fixes from wave 2's review
+
+- **intuiTUIve's diff view:** when either text changes, every hunk's
+  decision goes back to pending. A decision belongs to the hunk it was made
+  on, so it no longer moves onto another hunk that took its place.
+- **intuiTUIve's keymaps:** a binding a keymap unbinds (`none`) is no longer
+  listed in the command palette, the help or the footer, and can't be run
+  from them. Running one panicked before.
+- **Noctiluca:** a new document is watched for at least a second
+  (`tab::SETTLE_MIN`) before its layout counts as settled. A script that
+  moves the layout a little after the first reading is now read.
+- **Dependabot** no longer proposes major versions. They need code changes,
+  and the out-of-workspace lockfiles with them, so they are taken by hand in
+  a release.
+
 ### Versions: the 0.0.24 versions are open
 
 - Every package moves one patch past the 0.0.23 cohort, as the

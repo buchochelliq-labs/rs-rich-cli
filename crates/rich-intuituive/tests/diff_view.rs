@@ -233,6 +233,38 @@ fn a_new_text_is_diffed_again() {
 }
 
 #[test]
+fn a_new_text_sets_the_decisions_back_to_pending() {
+    let seen = out();
+    let app = App::new({
+        let seen = seen.clone();
+        move || {
+            let (old, new) = texts();
+            let (old, new) = (signal(old), signal(new));
+            let decisions = signal(Vec::<Decision>::new());
+            seen.set(Some((old, new, decisions)));
+            diff_view_with(old, new, DiffOptions::new().decide(decisions))
+        }
+    });
+    let mut driver = app.driver(60, 12);
+    driver.press("A");
+    let (old, new, decisions) = seen.get().unwrap();
+    assert_eq!(decisions.get(), [Decision::Accepted; 3]);
+    // A hunk joins the others: no decision moves onto it, or onto any.
+    new.set(new.get().replacen("line 6\n", "line six\n", 1));
+    driver.settle();
+    assert_eq!(decisions.get(), [Decision::Pending; 4]);
+    assert_eq!(
+        accepted_text(&old.get(), &new.get(), &decisions.get()),
+        old.get()
+    );
+    let screen = driver.screen().plain();
+    assert_eq!(
+        screen.last().unwrap().trim_end(),
+        "4 hunks · 0 of 4 decided"
+    );
+}
+
+#[test]
 fn the_keys_are_in_the_help() {
     let app = App::new(|| {
         let (old, new) = texts();

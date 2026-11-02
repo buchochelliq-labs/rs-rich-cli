@@ -18,6 +18,7 @@ use super::*;
 use rich_ext::cli_doc::{ArgSpec, CommandSpec};
 
 /// The target the app's inspector trace comes with.
+#[cfg_attr(not(unix), allow(dead_code))]
 const TRACE_TARGET: &str = "intuituive::trace";
 
 /// Whether the command line is `rich console …`.
@@ -178,6 +179,7 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
 }
 
 /// Whether to show an event read from the socket.
+#[cfg_attr(not(unix), allow(dead_code))]
 fn shown(event: &serde_json::Value, args: &ConsoleArgs) -> bool {
     let target = event
         .get("target")

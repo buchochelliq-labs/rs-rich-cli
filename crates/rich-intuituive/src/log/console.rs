@@ -31,6 +31,7 @@ pub const CONSOLE_VAR: &str = "INTUITUIVE_CONSOLE";
 pub const TRACE_TARGET: &str = "intuituive::trace";
 
 /// Events that may wait for the socket before more are dropped.
+#[cfg(unix)]
 const BACKLOG: usize = 4_096;
 
 /// Whether an app's trace is sent to a console.

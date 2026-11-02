@@ -1,10 +1,10 @@
 //! `--ssh HOST` (#817) against a stand-in for ssh: this test binary, run
 //! as `ssh` by a two-line script, serves SOCKS5 on the `-D` address as
 //! `ssh -D` does, and connects what it is asked for on "the far side". A
-//! connection to the far side's `localhost:1` reaches the test's dev
+//! connection to the far side's `localhost:8000` reaches the test's dev
 //! server, which listens elsewhere, so only a request that went through
 //! the tunnel can reach it. With `RICH_EMBED_CHROME` set, Chrome itself
-//! opens `http://localhost:1/` through it; without, that test skips.
+//! opens `http://localhost:8000/` through it; without, that test skips.
 
 use std::io::{Read, Write};
 use std::net::{Ipv4Addr, SocketAddrV4, TcpListener, TcpStream};
@@ -13,8 +13,9 @@ use std::time::{Duration, Instant};
 
 use noctiluca::ssh::{SshOptions, Tunnel, TunnelState, socks_greets};
 
-/// The far side's port that leads to the dev server.
-const FAR_PORT: u16 = 1;
+/// The far side's port that leads to the dev server. Not one of the
+/// ports Chrome refuses as unsafe (port 1 is), so Chrome asks for it.
+const FAR_PORT: u16 = 8000;
 
 /// The stand-in ssh, when the script runs this binary as it: SOCKS5 on
 /// `-D`'s address; with `-o FakeExitAfter=1`, it exits after one
@@ -47,7 +48,7 @@ fn fake_ssh() {
 }
 
 /// One SOCKS5 connection, as `ssh -D` serves it: no authentication, then
-/// CONNECT to a name or an IPv4 address. The far side's `localhost:1` is
+/// CONNECT to a name or an IPv4 address. The far side's `localhost:8000` is
 /// the dev server.
 fn serve(mut client: TcpStream, dev: u16) {
     let mut head = [0u8; 2];
@@ -239,7 +240,7 @@ fn a_dropped_tunnel_says_so_and_comes_back_on_its_port() {
     assert_eq!(tunnel.port(), port, "Chrome's proxy switch names the port");
 }
 
-/// Chrome itself, through the tunnel: `http://localhost:1/` is the far
+/// Chrome itself, through the tunnel: `http://localhost:8000/` is the far
 /// side's, so the page arrives only if Chrome sent `localhost` through
 /// the proxy (`<-loopback>`) and resolved nothing itself.
 #[test]

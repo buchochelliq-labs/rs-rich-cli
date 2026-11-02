@@ -62,6 +62,20 @@ fn several_keys_and_none() {
 }
 
 #[test]
+fn an_unbound_action_is_not_in_the_palette_or_the_footer() {
+    // F9 opens the palette here, whatever else the features bind.
+    let app =
+        App::new(|| editor().on_key("f9", |cx| cx.palette())).keymap([("editor.save", "none")]);
+    let mut driver = app.driver(60, 14);
+    let footer = driver.screen().plain().last().unwrap().to_lowercase();
+    assert!(!footer.contains("save"), "{footer}");
+    driver.press("f9");
+    let palette = driver.screen().plain().join("\n");
+    assert!(palette.contains("Quit"), "{palette}");
+    assert!(!palette.contains("Save"), "{palette}");
+}
+
+#[test]
 fn an_unknown_id_is_reported_once_as_a_warning() {
     let app = App::new(editor).keymap([("editor.sav", "f2")]);
     let mut driver = app.driver(60, 14);

@@ -5331,7 +5331,11 @@ impl App {
             with_node(&self.top().root, id, &mut |node| {
                 let name = node.group_name();
                 for (index, bound) in node.keys.borrow().iter().enumerate() {
-                    if bound.description.is_empty() || (bound.hidden && !palette) {
+                    // A keymap's `none` unbinds it: neither listed nor run.
+                    if bound.description.is_empty()
+                        || bound.keys.is_empty()
+                        || (bound.hidden && !palette)
+                    {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::new(
@@ -5371,7 +5375,10 @@ impl App {
                     });
                 }
                 for (index, bound) in node.sequences.borrow().iter().enumerate() {
-                    if bound.description.is_empty() || (bound.hidden && !palette) {
+                    if bound.description.is_empty()
+                        || bound.keys.is_empty()
+                        || (bound.hidden && !palette)
+                    {
                         continue;
                     }
                     let binding = rich_interact::keymap::Binding::sequence(
@@ -5430,7 +5437,8 @@ impl App {
         for &id in path.iter().rev() {
             with_node(&self.top().root, id, &mut |node| {
                 for bound in node.keys.borrow().iter() {
-                    if bound.description.is_empty() || bound.hidden {
+                    // One a keymap unbound has no key to show.
+                    if bound.description.is_empty() || bound.hidden || bound.keys.is_empty() {
                         continue;
                     }
                     let keys = bound.shown.clone().unwrap_or_else(|| bound.keys.clone());
@@ -5554,9 +5562,11 @@ impl App {
                 };
                 // One that stopped applying, or became unavailable, since
                 // it was listed (in the palette, say) does not run.
-                if let Some(bound) = list.get_mut(index).filter(|bound| bound.active()) {
+                // One a keymap unbound has no key to run as.
+                if let Some(bound) = list.get_mut(index).filter(|bound| bound.active())
+                    && let Some(key) = key.or_else(|| bound.keys.first().copied())
+                {
                     // As its first key would, unless told the key.
-                    let key = key.unwrap_or(bound.keys[0]);
                     cx.key = Some(key);
                     (bound.handler)(&mut cx, key);
                 }

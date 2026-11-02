@@ -2153,6 +2153,7 @@ impl core::panic::unwind_safe::RefUnwindSafe for noctiluca::tab::Tab
 impl core::panic::unwind_safe::UnwindSafe for noctiluca::tab::Tab
 pub const noctiluca::tab::DEBOUNCE: core::time::Duration
 pub const noctiluca::tab::SETTLE_MAX: core::time::Duration
+pub const noctiluca::tab::SETTLE_MIN: core::time::Duration
 pub const noctiluca::tab::SETTLE_STEP: core::time::Duration
 pub fn noctiluca::tab::describe(&noctiluca::model::Control) -> alloc::string::String
 pub fn noctiluca::tab::stop_all(core::time::Duration)
