@@ -1191,7 +1191,8 @@ impl Widget for TextArea {
         };
         use crate::editor_theme::{Part, part_style};
         let own = self.options.editing.editor_theme.clone();
-        let part = |part, old, fallback| part_style(cx.console(), own.as_ref(), part, old, fallback);
+        let part =
+            |part, old, fallback| part_style(cx.console(), own.as_ref(), part, old, fallback);
         let number = part(Part::Gutter, "text_area.line_number", "dim");
         let hint = cx.style("text_area.placeholder", "dim");
         let base = crate::editor_theme::base_style(cx.console(), own.as_ref());
@@ -1308,8 +1309,7 @@ impl Widget for TextArea {
         }
         // The bracket at the caret and its match.
         if let Some(look) = &bracket
-            && let Some((here, there)) =
-                crate::editor_theme::matching_bracket(&self.buffer, caret)
+            && let Some((here, there)) = crate::editor_theme::matching_bracket(&self.buffer, caret)
         {
             for pos in [here, there] {
                 let Some((y, row)) = rows.iter().enumerate().find(|(_, row)| {

@@ -157,7 +157,10 @@ fn a_virtual_list_of_nodes_builds_only_the_rows_near_the_view() {
     driver.press("end");
     let lines = driver.screen().plain();
     assert_eq!(lines[0].trim_end(), "at 999999");
-    assert!(lines.iter().any(|l| l.starts_with("row 999999")), "{lines:?}");
+    assert!(
+        lines.iter().any(|l| l.starts_with("row 999999")),
+        "{lines:?}"
+    );
     driver.press("pageup");
     let lines = driver.screen().plain();
     let at: usize = lines[0].trim_end()[3..].parse().unwrap();

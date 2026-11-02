@@ -1011,8 +1011,13 @@ impl List {
         let frozen = laid.len();
         let view = height as usize - used;
         let first = {
-            let mut height_of =
-                |i: usize| if multiline { lines(i + frozen).len() } else { 1 };
+            let mut height_of = |i: usize| {
+                if multiline {
+                    lines(i + frozen).len()
+                } else {
+                    1
+                }
+            };
             frozen
                 + first_in_view(
                     len - frozen,

@@ -290,12 +290,9 @@ fn a_lists_frozen_items_stay_at_the_top() {
     let app = App::new(|| {
         let selected = signal(0usize);
         column([
-            list(
-                || (0..30).map(|i| format!("item {i}")).collect(),
-                selected,
-            )
-            .freeze_rows(1)
-            .fixed(4),
+            list(|| (0..30).map(|i| format!("item {i}")).collect(), selected)
+                .freeze_rows(1)
+                .fixed(4),
             text!("at {selected}").fixed(1),
         ])
     });

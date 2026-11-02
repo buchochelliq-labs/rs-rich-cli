@@ -452,9 +452,7 @@ impl Widget for NodeList {
                 Body::Scroll(_) => self.row_rect(at).map_or(1, |r| r.height.max(1)),
                 Body::Virtual => self
                     .child
-                    .widget_mut(|view: &mut crate::scroll_virtual::VirtualScroll| {
-                        view.rows_of(at)
-                    })
+                    .widget_mut(|view: &mut crate::scroll_virtual::VirtualScroll| view.rows_of(at))
                     .unwrap_or(1)
                     .max(1),
             };

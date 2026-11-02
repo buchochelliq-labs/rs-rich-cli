@@ -354,7 +354,10 @@ fn frozen_rows_stay_under_the_header() {
     let shown = plain(&driver);
     assert_eq!(shown[1], "row 0", "{shown:?}");
     assert_ne!(shown[2], "row 1", "{shown:?}");
-    assert!(shown.iter().any(|row| row.starts_with("row 8")), "{shown:?}");
+    assert!(
+        shown.iter().any(|row| row.starts_with("row 8")),
+        "{shown:?}"
+    );
     // Back to the top: the frozen row is selected, and the view returns.
     driver.press("home");
     assert_eq!(plain(&driver)[6], "at 0");
@@ -383,7 +386,10 @@ fn frozen_rows_in_virtual_and_multiline_tables() {
     driver.settle();
     let shown = plain(&driver);
     assert_eq!(&shown[1..3], ["row 0", "row 1"], "{shown:?}");
-    assert!(shown.iter().any(|row| row.starts_with("row 500")), "{shown:?}");
+    assert!(
+        shown.iter().any(|row| row.starts_with("row 500")),
+        "{shown:?}"
+    );
 
     let app = App::new(|| {
         let columns = vec![Column::new("Name", Size::Fixed(6))];
@@ -403,5 +409,8 @@ fn frozen_rows_in_virtual_and_multiline_tables() {
     driver.settle();
     let shown = plain(&driver);
     assert_eq!(&shown[1..3], ["pinned", "header"], "{shown:?}");
-    assert!(shown.iter().any(|row| row.starts_with("row 20")), "{shown:?}");
+    assert!(
+        shown.iter().any(|row| row.starts_with("row 20")),
+        "{shown:?}"
+    );
 }
