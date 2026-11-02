@@ -115,6 +115,14 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   and `:light` follow the theme (`:dark #logo` holds at the top of the app
   too); `:blur`, `:enabled` and `:can-focus`. Like the other states, they
   change colours and text styles, not layout.
+- **Stylesheets: `margin`, `visibility` and scrollbar colours (#812, slice
+  3).** `margin` (one to four numbers) keeps room round a node's border,
+  which its colours do not fill; `visibility: hidden` keeps the node's
+  room but draws nothing there and takes it out of the Tab order, where
+  `display: none` gives the room up; `scrollbar-color` and
+  `scrollbar-background` colour a node's scrollbars, through the theme
+  styles `scrollbar.thumb` and `scrollbar` the sheet gives the node (code's
+  `theme_styles` go over them).
 
 ### intuiTUIve: maximize, modes, Pilot helpers, screenshots and more (#807 to #815)
 

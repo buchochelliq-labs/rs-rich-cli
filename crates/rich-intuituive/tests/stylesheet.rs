@@ -574,3 +574,61 @@ fn dark_and_light_follow_the_theme() {
     frame(&mut driver, press("n"));
     assert_eq!(style_at(&driver, 0, 0), style("white"));
 }
+
+#[test]
+fn visibility_hidden_keeps_the_room_but_display_none_does_not() {
+    let build = || {
+        column([
+            label("first").name("x").focusable(),
+            label("second").focusable(),
+        ])
+    };
+    let mut hidden = App::new(build)
+        .stylesheet("#x { visibility: hidden; }")
+        .driver(10, 3);
+    let rows = frame(&mut hidden, None);
+    assert_eq!(rows[0].trim_end(), "");
+    assert_eq!(rows[1].trim_end(), "second");
+    // It is out of the Tab order, as it is out of sight.
+    assert_eq!(hidden.focused_name().as_deref(), Some("second"));
+    hidden.press("tab");
+    assert_eq!(hidden.focused_name().as_deref(), Some("second"));
+    let mut gone = App::new(build)
+        .stylesheet("#x { display: none; }")
+        .driver(10, 3);
+    let rows = frame(&mut gone, None);
+    assert_eq!(rows[0].trim_end(), "second");
+}
+
+#[test]
+fn margin_keeps_room_round_the_border_and_the_colours() {
+    let app = App::new(|| column([label("hi").name("m").fixed(5), label("next")]))
+        .stylesheet("#m { margin: 1 2; border: round; background: blue; }");
+    let mut driver = app.driver(10, 6);
+    let rows = frame(&mut driver, None);
+    assert_eq!(rows[0].trim_end(), "");
+    assert_eq!(rows[1].trim_end(), "  ╭────╮");
+    assert_eq!(rows[2].trim_end(), "  │hi  │");
+    assert_eq!(rows[3].trim_end(), "  ╰────╯");
+    assert_eq!(rows[5].trim_end(), "next");
+    // The margin takes none of the background.
+    assert_eq!(style_at(&driver, 0, 2), Style::default());
+    assert_eq!(
+        style_at(&driver, 3, 2).bgcolor(),
+        style("on blue").bgcolor()
+    );
+}
+
+#[test]
+fn scrollbar_colours_come_from_the_sheet() {
+    let app = App::new(|| scroll(column((0..20).map(|n| label(format!("line {n}"))))).name("view"))
+        .stylesheet("#view { scrollbar-color: red; scrollbar-background: grey15; }");
+    let mut driver = app.driver(10, 4);
+    frame(&mut driver, None);
+    // The thumb at the top of the bar, the track under it.
+    assert_eq!(style_at(&driver, 9, 0).color(), style("red").color());
+    assert_eq!(
+        style_at(&driver, 9, 3).bgcolor(),
+        style("on grey15").bgcolor()
+    );
+}

@@ -21,6 +21,10 @@
 //! flattened forms, and `$name: value;` at the top level declares a
 //! variable later values use (a `$name` not declared is a theme style).
 //!
+//! Besides colours, text styles and layout, a rule may set `margin` (room
+//! round the border), `visibility: hidden` (room kept, nothing drawn) and
+//! `scrollbar-color` and `scrollbar-background`.
+//!
 //! Colours and text styles follow the states and
 //! [`class_when`](crate::Node::class_when); layout (sizes, padding, the
 //! border, `display`, `dock`, gaps and grid tracks) is decided by the kind,
@@ -203,6 +207,11 @@ struct Decls {
     min: Option<u16>,
     max: Option<u16>,
     padding: Option<[u16; 4]>,
+    margin: Option<[u16; 4]>,
+    /// `visibility`: `Some(false)` is `hidden`.
+    visible: Option<bool>,
+    scrollbar_color: Option<Paint>,
+    scrollbar_background: Option<Paint>,
     gap: Option<u16>,
     grid_columns: Option<Vec<Size>>,
     grid_rows: Option<Vec<Size>>,
@@ -224,6 +233,13 @@ pub(crate) struct Layout {
     pub max: Option<u16>,
     /// Top, right, bottom, left.
     pub padding: [u16; 4],
+    /// Room kept round the node's border, the same way round.
+    pub margin: [u16; 4],
+    /// `visibility: hidden`: its room is kept, and nothing in it drawn.
+    pub invisible: bool,
+    /// Theme styles the sheet gives the node, as
+    /// [`theme_styles`](crate::Node::theme_styles) does (the scrollbar's).
+    pub theme_styles: Vec<(String, String)>,
     pub border: Option<(Border, Style)>,
     /// `border: none` was said, which takes a panel's own border away.
     pub no_border: bool,
@@ -262,12 +278,23 @@ impl Layout {
             Some((kind, _)) => crate::border::insets(*kind, self.sides(), &self.titles()),
             None => [0; 4],
         };
-        let [t, r, b, l] = self.padding;
-        let mut out = [t, r, b, l];
-        for (side, edge) in out.iter_mut().zip(frame) {
-            *side = side.saturating_add(edge);
+        let mut out = self.padding;
+        for ((side, edge), margin) in out.iter_mut().zip(frame).zip(self.margin) {
+            *side = side.saturating_add(edge).saturating_add(margin);
         }
         out
+    }
+
+    /// `rect` less the margin: where the node's box (its border and
+    /// colours) goes.
+    pub(crate) fn boxed(&self, rect: crate::screen::Rect) -> crate::screen::Rect {
+        let [top, right, bottom, left] = self.margin;
+        crate::screen::Rect::new(
+            rect.x.saturating_add(left),
+            rect.y.saturating_add(top),
+            rect.width.saturating_sub(left.saturating_add(right)),
+            rect.height.saturating_sub(top.saturating_add(bottom)),
+        )
     }
 
     /// The sides its border draws: all, unless `border-sides` says.
@@ -404,6 +431,7 @@ impl Stylesheet {
     pub(crate) fn layout(&self, chain: &[Element], vars: Vars, viewport: (u16, u16)) -> Layout {
         let mut out = Layout::default();
         let mut border: Option<Option<(Border, Option<Paint>)>> = None;
+        let (mut scrollbar_color, mut scrollbar_background) = (None, None);
         for rule in self.rules.iter().filter(|rule| rule.applies(viewport)) {
             if !rule.selector.matches(chain, Mode::Fixed) {
                 continue;
@@ -413,6 +441,14 @@ impl Stylesheet {
             out.min = d.min.or(out.min);
             out.max = d.max.or(out.max);
             out.padding = d.padding.unwrap_or(out.padding);
+            out.margin = d.margin.unwrap_or(out.margin);
+            out.invisible = d.visible.map_or(out.invisible, |visible| !visible);
+            if let Some(paint) = &d.scrollbar_color {
+                scrollbar_color = Some(paint.clone());
+            }
+            if let Some(paint) = &d.scrollbar_background {
+                scrollbar_background = Some(paint.clone());
+            }
             if d.border.is_some() {
                 border = d.border.clone();
             }
@@ -445,6 +481,25 @@ impl Stylesheet {
             if d.grid_rows.is_some() {
                 out.grid_rows = d.grid_rows.clone();
             }
+        }
+        // The scrollbar draws in theme styles: the thumb's colour, and the
+        // track's ground under its usual line.
+        let named = |paint: Option<Paint>| {
+            paint
+                .and_then(|paint| paint_style(&paint, vars))
+                .map(|(color, _)| color.name.to_string())
+        };
+        if let Some(color) = named(scrollbar_color) {
+            out.theme_styles
+                .push(("scrollbar.thumb".to_string(), color));
+        }
+        if let Some(ground) = named(scrollbar_background) {
+            out.theme_styles
+                .push(("scrollbar".to_string(), format!("bright_black on {ground}")));
+            out.theme_styles.push((
+                "scrollbar.arrow".to_string(),
+                format!("bright_black on {ground}"),
+            ));
         }
         out.no_border = matches!(border, Some(None));
         out.border = border.flatten().map(|(kind, paint)| {
@@ -1307,6 +1362,28 @@ fn declare(decls: &mut Decls, property: &str, value: &str) -> Result<(), String>
                 _ => return Err(format!("`{value}`: padding takes one to four numbers")),
             });
         }
+        "margin" => {
+            let n = value
+                .split_whitespace()
+                .map(cells)
+                .collect::<Result<Vec<_>, _>>()?;
+            decls.margin = Some(match n[..] {
+                [all] => [all; 4],
+                [v, h] => [v, h, v, h],
+                [t, h, b] => [t, h, b, h],
+                [t, r, b, l] => [t, r, b, l],
+                _ => return Err(format!("`{value}`: margin takes one to four numbers")),
+            });
+        }
+        "visibility" => {
+            decls.visible = Some(match value {
+                "visible" => true,
+                "hidden" => false,
+                _ => return Err(format!("`{value}`: visibility is visible or hidden")),
+            })
+        }
+        "scrollbar-color" => decls.scrollbar_color = Some(paint(value)?),
+        "scrollbar-background" => decls.scrollbar_background = Some(paint(value)?),
         "gap" => decls.gap = Some(cells(value)?),
         "grid-columns" | "grid-rows" => {
             let sizes = value
@@ -1874,6 +1951,53 @@ mod tests {
         // Structural states, like the others, do not lay out.
         let sheet = Stylesheet::parse(":first-child { size: 3; }").unwrap();
         assert_eq!(sheet.layout(&[at(0, 2)], &no_vars, WIDE).size, None);
+    }
+
+    #[test]
+    fn margin_visibility_and_scrollbar_properties() {
+        let sheet = Stylesheet::parse(
+            "#help { visibility: hidden; margin: 1 2; padding: 1; border: round; \
+             scrollbar-color: $accent; scrollbar-background: grey15; } \
+             #help.shown { visibility: visible; }",
+        )
+        .unwrap();
+        let accent = |name: &str| (name == "accent").then(|| Style::parse("magenta").unwrap());
+        let help = sheet.layout(&[element("scroll", Some("help"), &[])], &accent, WIDE);
+        assert!(help.invisible && !help.hidden);
+        assert_eq!(help.margin, [1, 2, 1, 2]);
+        // Margin, border and padding, each side.
+        assert_eq!(help.insets(), [3, 4, 3, 4]);
+        assert_eq!(
+            help.theme_styles,
+            [
+                ("scrollbar.thumb".to_string(), "magenta".to_string()),
+                (
+                    "scrollbar".to_string(),
+                    "bright_black on grey15".to_string()
+                ),
+                (
+                    "scrollbar.arrow".to_string(),
+                    "bright_black on grey15".to_string()
+                ),
+            ]
+        );
+        let shown = sheet.layout(
+            &[element("scroll", Some("help"), &["shown"])],
+            &accent,
+            WIDE,
+        );
+        assert!(!shown.invisible);
+        for (css, message) in [
+            ("a { visibility: gone; }", "visibility is visible or hidden"),
+            (
+                "a { margin: 1 2 3 4 5; }",
+                "margin takes one to four numbers",
+            ),
+            ("a { scrollbar-color: nope; }", "`nope` is not a colour"),
+        ] {
+            let error = Stylesheet::parse(css).unwrap_err().to_string();
+            assert!(error.contains(message), "{css}: {error}");
+        }
     }
 
     #[test]

@@ -2766,7 +2766,8 @@ impl Node {
     /// made again when they changed; `None` without theme styles. While
     /// measuring, `theme` is not at hand: any copy made already does.
     fn scope_over(&self, console: &Console, theme: Option<&Theme>) -> Option<Rc<Scope>> {
-        if self.theme_styles.is_empty() {
+        let from_sheet = self.sheet.borrow().layout.theme_styles.clone();
+        if self.theme_styles.is_empty() && from_sheet.is_empty() {
             return None;
         }
         let size = (console.width(), console.height());
@@ -2782,7 +2783,10 @@ impl Node {
                 return Some(scope.clone());
             }
         }
-        let scope = Rc::new(Scope::new(console, theme, &self.theme_styles));
+        // The sheet's first: code's go over them.
+        let mut styles = from_sheet;
+        styles.extend(self.theme_styles.iter().cloned());
+        let scope = Rc::new(Scope::new(console, theme, &styles));
         *self.scope.borrow_mut() = Some(scope.clone());
         Some(scope)
     }
@@ -3022,13 +3026,17 @@ impl Node {
             .or_else(|| self.widget_mut(|grid: &mut Grid| collapse(&mut grid.collapse)))
             .unwrap_or(false);
         let (decor, insets) = if is_panel {
-            (None, [0; 4])
+            (None, layout.margin)
         } else if collapsed {
             (None, layout.padding)
         } else {
             (layout.border.clone(), layout.insets())
         };
         let mut sheet = self.sheet.borrow_mut();
+        if sheet.layout.theme_styles != layout.theme_styles {
+            // Its scope is made again with the sheet's theme styles.
+            *self.scope.borrow_mut() = None;
+        }
         sheet.generation = cx.generation;
         sheet.layout = layout;
         sheet.watch = watch;
@@ -3075,7 +3083,10 @@ impl Node {
         accessible: bool,
         f: &mut dyn FnMut(&Node, &[NodeId]),
     ) {
-        if self.hidden() || (accessible && self.access_hidden) {
+        if self.hidden()
+            || (accessible && self.access_hidden)
+            || self.sheet.borrow().layout.invisible
+        {
             // A stylesheet's `display: none`: not shown, nor anything inside.
             return;
         }
@@ -3196,6 +3207,15 @@ impl Node {
         // whatever room its parent gave it (a split's pane, a scroll's or a
         // switch's child), so nothing inside it is shown or clicked.
         if self.hidden() {
+            self.hide();
+            return;
+        }
+        // `visibility: hidden`: its room is kept, empty.
+        if self.sheet.borrow().layout.invisible {
+            if self.drawn.get().is_some() || force {
+                screen.clear(rect);
+                frame.damage.push(rect);
+            }
             self.hide();
             return;
         }
@@ -3384,7 +3404,8 @@ impl Node {
                     titles: &titles,
                     flush: false,
                 };
-                for edge in crate::border::draw_frame(screen, console, &look, rect) {
+                let boxed = self.sheet.borrow().layout.boxed(rect);
+                for edge in crate::border::draw_frame(screen, console, &look, boxed) {
                     frame.damage.push(edge);
                 }
             }
@@ -3615,6 +3636,8 @@ impl Node {
             (sheet, own) => own.or(sheet),
         };
         if let Some(style) = under {
+            // Inside the margin, if the sheet gave it one.
+            let rect = self.sheet.borrow().layout.boxed(rect);
             let mut parts: Vec<Rect> = frame.damage[mark..]
                 .iter()
                 .map(|area| area.intersection(rect))
