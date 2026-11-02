@@ -145,7 +145,7 @@ pub struct Browser {
     pub read_only: Signal<bool>,
     /// The hints under way pick an element to send to the agent
     /// (`agent.send`), not one to use.
-    agent_pick: Signal<bool>,
+    pub(crate) agent_pick: Signal<bool>,
     /// The pixel view's tiler and pace ([`crate::pixel_view`]).
     pub(crate) screen: Signal<Rc<RefCell<crate::pixel_view::Screen>>>,
     /// The pixel view's tiles, as shown.
@@ -511,7 +511,6 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
         "agent.send" => {
             start_hints(b);
             b.agent_pick.set(true);
-            b.say("[cyan]Send to agent:[/] type a hint · Esc cancels");
         }
         "view.pixels" => {
             b.view.update(|v| {

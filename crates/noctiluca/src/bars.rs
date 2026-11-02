@@ -136,8 +136,13 @@ pub fn status(b: Browser) -> Node {
     let keys_for = move |id: &str| b.keymap.with(|k| keys_label(k, id));
     let state = text(move || {
         if let Some(hints) = b.hints.get() {
+            let what = if b.agent_pick.get() {
+                "send to agent: type a label"
+            } else {
+                "type a label"
+            };
             return format!(
-                " [bold black on yellow] hints [/] type a label: {}  [dim]Esc cancels[/]",
+                " [bold black on yellow] hints [/] {what}: {}  [dim]Esc cancels[/]",
                 markup(&hints.typed)
             );
         }
