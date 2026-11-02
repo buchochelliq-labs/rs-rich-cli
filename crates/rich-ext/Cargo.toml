@@ -72,7 +72,7 @@ wasmi = { version = "2", default-features = false, features = ["std", "validate"
 # version) before wasmi reads it: wasmi 2.0.0 divides by zero on a code
 # section that declares no functions but holds bytes (found by the
 # `plugin_wasm` fuzz target), and the validator refuses that section first.
-wasmparser = { version = "0.228", default-features = false, features = ["std", "validate", "features"], optional = true }
+wasmparser = { version = "0.262", default-features = false, features = ["std", "validate", "features"], optional = true }
 # `fs::local_time`: the local time zone (chrono's `clock`, through
 # iana-time-zone). Already in the tree through arrow; off by default.
 chrono = { version = "0.4.45", default-features = false, features = ["clock", "std"], optional = true }
