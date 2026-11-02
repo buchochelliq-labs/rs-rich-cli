@@ -66,6 +66,19 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `accepted_text(old, new, decisions)` applies the accepted hunks. Only
   the rows in view are rendered, so a 10,000-line diff scrolls as a short
   one does.
+- **`Palette`, `Theme::from_palette`, `Theme::named`, `Theme::builtin`
+  and `Ctx::set_theme_named`** (#801): semantic colours (primary,
+  secondary, accent, warning, error, success, foreground, background,
+  surface, panel, boost, dark) from which the shades are generated as
+  Textual's `ColorSystem` generates them, by its names and to its values
+  (`primary-lighten-2`, `primary-muted`, `text-primary`, `text-muted`,
+  `surface`, …; a golden table captured from Textual 8.2.8 by
+  `scripts/capture_textual_themes.py`). Each is a named style for markup
+  and `$name` in stylesheets, and the presets' names (`accent`, `muted`,
+  `good`, `warn`, `bad`, `selected`, the buttons, the borders) are derived
+  from the palette. Textual's 21 themes are built in beside `dark`,
+  `light` and `mono`, which are unchanged; their palettes are Textual's
+  (MIT), credited in the crate's new `THIRD_PARTY.md`.
 
 ### intuiTUIve: Cornacai's parity items (wave 1, WS2)
 

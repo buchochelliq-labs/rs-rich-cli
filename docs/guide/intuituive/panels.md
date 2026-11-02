@@ -179,6 +179,59 @@ presets also name the [stock buttons](controls.md#buttons)' faces,
 [form controls](controls.md#the-theme-styles) fall back to `accent`,
 `good` and `muted`.
 
+### Semantic palettes and built-in themes
+
+New in 0.0.24: a theme can be generated from a `Palette` of semantic
+colours, as Textual's themes are, and the 21 Textual themes are built in.
+
+```rust
+use intuituive::{Palette, Theme};
+use rich::Color;
+
+let palette = Palette::new(Color::parse("#0178D4")?)
+    .secondary(Color::parse("#004578")?)
+    .accent(Color::parse("#ffa62b")?)
+    .dark(true);
+App::new(build).theme(Theme::from_palette(palette));
+App::new(build).theme(Theme::named("nord").unwrap());
+cx.set_theme_named("gruvbox");        // at run time; false for an unknown name
+Theme::builtin()                      // [(name, Theme)], for a picker
+```
+
+- **The roles** are Textual's: `primary`, `secondary`, `accent`,
+  `warning`, `error`, `success`, `foreground`, `background`, `surface`,
+  `panel` and `boost`, and whether it is dark. Only `primary` is needed;
+  the others default as Textual's do.
+- **The shades** are generated as Textual's `ColorSystem` generates them,
+  by its names and to its values (checked against Textual 8.2.8 for every
+  built-in theme): `primary-lighten-1` to `-3`, `primary-darken-1` to
+  `-3`, `primary-muted`, `text-primary`, `text`, `text-muted`,
+  `text-disabled`, `foreground-muted`, `border`, `border-blurred`,
+  `surface-active`, `scrollbar`, `block-cursor-background`, and the same
+  for each role. Each is a named style: a foreground, or for the grounds
+  (`background`, `surface`, `panel`, `boost` and their shades) a
+  background. So they work in markup (`[primary-muted]…[/]`) and as
+  `$name` in a stylesheet (`background: $surface;`). A colour with an
+  alpha is laid over the background.
+- **The names the presets have** come from the palette, so an app written
+  for them follows a palette theme: `accent`, `muted` (`text-muted`),
+  `good`, `warn` and `bad` (`text-success`, `text-warning`, bold
+  `text-error`), `selected` (the block cursor), the buttons' faces, and
+  the borders (`border.focused` is `border`). `screen` is the foreground
+  on the background: `.style("screen")` on the app's root paints the
+  whole screen in the theme.
+- **Built in:** `dark`, `light` and `mono` (the presets, unchanged), then
+  `textual-dark`, `textual-light`, `nord`, `gruvbox`, `catppuccin-mocha`,
+  `dracula`, `tokyo-night`, `monokai`, `flexoki`, `catppuccin-latte`,
+  `catppuccin-frappe`, `catppuccin-macchiato`, `solarized-light`,
+  `solarized-dark`, `rose-pine`, `rose-pine-moon`, `rose-pine-dawn`,
+  `atom-one-dark`, `atom-one-light`, `ansi-dark` and `ansi-light` (the
+  last two in the terminal's own colours). The palettes are Textual's (MIT,
+  credited in the crate's `THIRD_PARTY.md`). No text style of any of them
+  is under 3:1 against its background in rs-rich-ext's contrast check; a
+  few warning and success texts of the light ones are under AA's 4.5:1,
+  as they are in Textual.
+
 ### Theme files, reloaded live
 
 ```rust

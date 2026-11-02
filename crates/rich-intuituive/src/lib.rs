@@ -138,6 +138,7 @@ pub mod micro_sprite;
 pub mod miller;
 pub mod node;
 mod notify;
+mod palette;
 pub mod pixels;
 mod place;
 pub mod preview;
@@ -243,6 +244,7 @@ pub use node::{
 };
 pub use node::{described, drawn, drawn_described};
 pub use notify::{Corner, Level};
+pub use palette::Palette;
 pub use place::{Offset, Origin, RectHandle};
 pub use preview::{PreviewOfOptions, preview_of, preview_of_with};
 pub use reactive::{Memo, Proxy, Signal, memo, on_write, on_write_ref, signal, viewport, watch};
