@@ -404,10 +404,12 @@ impl Ui {
                     markup(&title)
                 ))
                 .auto(),
-                diff_view_with(signal(old.clone()), signal(new.clone()), options).flex(1),
+                diff_view_with(signal(old.clone()), signal(new.clone()), options)
+                    .autofocus()
+                    .flex(1),
                 label(
-                    "[dim]a/r accept or reject a hunk · A/R all of them · y write what is \
-                     accepted · n or Esc reject the write[/]",
+                    "[dim]n/p next or previous hunk · a/r accept or reject it · A/R all of \
+                     them · y write what is accepted · x or Esc reject the write[/]",
                 )
                 .auto(),
             ])
@@ -417,7 +419,7 @@ impl Ui {
                 let finish = finish.clone();
                 move |cx| finish(cx, Some(decisions.get_untracked()))
             })
-            .on_key("n escape", {
+            .on_key("x escape", {
                 let finish = finish.clone();
                 move |cx| finish(cx, None)
             })
@@ -726,7 +728,7 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
         let esc = if busy { "Esc cancel · " } else { "" };
         format!(
             "[dim]Enter send · Alt+Enter new line · @ file · {esc}Ctrl+N new session · \
-             Ctrl+PgUp/PgDn switch · Ctrl+T shell · F2 agent log · Ctrl+Q quit[/]"
+             Alt+N/P switch · Ctrl+T shell · F2 agent log · Ctrl+Q quit[/]"
         )
     })
     .fixed(1);
@@ -735,7 +737,7 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
     let screen = match shell {
         Some(build) => {
             let pane = build()
-                .release_keys("ctrl+t ctrl+q ctrl+pageup ctrl+pagedown")
+                .release_keys("ctrl+t ctrl+q alt+n alt+p")
                 .node()
                 .panel("Shell");
             *shell_id.borrow_mut() = Some(pane.id());
@@ -752,6 +754,16 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
             }
         }
     };
+    let mut screen = screen;
+    for n in 1..=9usize {
+        let focus_prompt = focus_prompt.clone();
+        screen = screen.on_key(&format!("alt+{n}"), move |cx| {
+            if n <= ui.sessions.with_untracked(Vec::len) {
+                ui.active.set(n - 1);
+                let _ = cx.after(Duration::ZERO, focus_prompt.clone());
+            }
+        });
+    }
     screen
         .on_key("ctrl+q", |cx| cx.quit())
         .on_key("ctrl+n", {
@@ -771,7 +783,7 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 let _ = cx.after(Duration::ZERO, focus_prompt.clone());
             }
         })
-        .on_key("ctrl+pagedown", {
+        .on_key("alt+n", {
             let focus_prompt = focus_prompt.clone();
             move |cx| {
                 let n = ui.sessions.with_untracked(Vec::len);
@@ -779,7 +791,7 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 let _ = cx.after(Duration::ZERO, focus_prompt.clone());
             }
         })
-        .on_key("ctrl+pageup", {
+        .on_key("alt+p", {
             let focus_prompt = focus_prompt.clone();
             move |cx| {
                 let n = ui.sessions.with_untracked(Vec::len);
@@ -798,7 +810,9 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
                 let open = !ui.shell_open.get_untracked();
                 ui.shell_open.set(open);
                 match (*shell_id.borrow(), open) {
-                    (Some(id), true) => cx.focus(id),
+                    (Some(id), true) => {
+                        let _ = cx.after(Duration::ZERO, move |cx| cx.focus_within(id));
+                    }
                     _ => focus_prompt(cx),
                 }
             }
@@ -984,7 +998,8 @@ fn entry_view(s: Session, i: usize) -> Node {
     }
 }
 
-/// The last non-empty line of `text`, cut to `width` characters.
+/// The last non-empty line of `text`, cut to `width` characters: plain
+/// text, as a collapsible's summary is.
 fn last_line(text: &str, width: usize) -> String {
     let line = text
         .lines()
@@ -995,7 +1010,7 @@ fn last_line(text: &str, width: usize) -> String {
     if line.chars().count() > width {
         cut.push('…');
     }
-    markup(&cut)
+    reveal(&cut)
 }
 
 /// A tool call: a folded card, its title and status following updates.
@@ -1028,24 +1043,25 @@ fn tool_view(s: Session, call: Signal<ToolCall>, open: Signal<bool>) -> Node {
     .summary(move || call.with(summary))
 }
 
-/// A closed tool call's one line: its file, or its output's last line.
+/// A closed tool call's one line (plain text): its file, or its output's
+/// last line.
 fn summary(call: &ToolCall) -> String {
     let cwd = CWD.with(|c| c.borrow().clone());
     for content in call.content.iter().rev() {
         match content {
             ToolCallContent::Diff(diff) => {
-                return format!("[dim]diff[/] {}", markup(&display(&diff.path, &cwd)));
+                return format!("diff {}", reveal(&display(&diff.path, &cwd)));
             }
             ToolCallContent::Content(wrapped) => {
                 if let Some(text) = wrapped.content.as_text() {
-                    return format!("[dim]{}[/]", last_line(&clean(text), 70));
+                    return last_line(text, 70);
                 }
             }
             _ => {}
         }
     }
     match call.locations.first() {
-        Some(location) => format!("[dim]{}[/]", markup(&display(&location.path, &cwd))),
+        Some(location) => reveal(&display(&location.path, &cwd)),
         None => String::new(),
     }
 }

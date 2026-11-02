@@ -26,7 +26,7 @@ Options:
   -V, --version     the version
 
 Keys: Enter sends, Alt+Enter adds a line, @ names a file, Esc cancels the
-turn, Ctrl+N opens a session, Ctrl+PgUp/PgDn switch sessions, Ctrl+T the
+turn, Ctrl+N opens a session, Alt+N and Alt+P switch sessions (Alt+1…9 picks one), Ctrl+T the
 shell pane, F2 the agent's log, Ctrl+Q quits.
 
 The configuration is cornacai/config.toml in $XDG_CONFIG_HOME (else

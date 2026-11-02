@@ -184,6 +184,14 @@ impl rich_acp::Client for Bridge {
         if rx.recv().unwrap_or(false) {
             self.terminals.create(&request)
         } else {
+            let line = std::iter::once(request.command.as_str())
+                .chain(request.args.iter().map(String::as_str))
+                .collect::<Vec<_>>()
+                .join(" ");
+            self.notice(
+                &request.session_id,
+                format!("[yellow]Refused[/] the command {}", markup(&line)),
+            );
             Err(refused("the command"))
         }
     }
