@@ -314,3 +314,49 @@ fn a_command_is_asked_about_then_runs_and_its_output_shows_in_its_card() {
     assert!(text.contains("▾ execute Run the tests"), "{text}");
     assert!(text.contains("tests passed"), "{text}");
 }
+
+/// The docs tape's transcript (`docs/tapes/fixtures/cornacai/demo.jsonl`),
+/// driven as the tape drives it, so the tape cannot drift from the app.
+#[test]
+fn the_docs_tape_replays() {
+    let dir = workspace("tape");
+    std::fs::create_dir_all(dir.join("src")).unwrap();
+    std::fs::write(
+        dir.join("src/main.rs"),
+        "fn main() {\n    println!(\"Hello\");\n}\n",
+    )
+    .unwrap();
+    let transcript = Transcript::read(
+        Path::new(env!("CARGO_MANIFEST_DIR")).join("../../docs/tapes/fixtures/cornacai/demo.jsonl"),
+    )
+    .unwrap();
+    let (mut driver, handle) = start_with(Options::new(
+        Launch::Replay {
+            transcript,
+            timeout: Some(WAIT),
+        },
+        &dir,
+    ));
+    wait_for(&mut driver, "demo-agent 1.0", WAIT);
+    wait_for(&mut driver, "mode ask", WAIT);
+    driver.type_text("Greet by name in @src/ma");
+    wait_for(&mut driver, "src/main.rs", WAIT);
+    driver.press("enter");
+    driver.type_text("please");
+    driver.press("enter");
+    wait_for(&mut driver, "Review the edit", WAIT);
+    driver.press("A");
+    wait_for(&mut driver, "The agent asks to run", WAIT);
+    assert!(screen(&driver).contains("$ cargo test"));
+    driver.press("1");
+    wait_for(&mut driver, "and the tests pass.", WAIT);
+    let text = screen(&driver);
+    assert!(text.contains("1 Greeting by name"), "{text}");
+    assert!(text.contains("✓ Run the tests"), "{text}");
+    assert!(
+        std::fs::read_to_string(dir.join("src/main.rs"))
+            .unwrap()
+            .contains("Hello, {name}!")
+    );
+    finish(&mut driver, &handle);
+}

@@ -1,0 +1,34 @@
+ 1 Greeting by name …   · demo-agent 1.0
+
+❯ Greet by name in @src/main.rs please
+  with @src/main.rs
+
+▸ Thinking
+  The program prints a fixed greeting; the name can come from …
+
+The change
+
+main prints a fixed Hello. I will read the name from the first argument, with world as the default:
+
+           ╭─ Permission ─────────────────────────────────────────────────────────────────────────╮
+ let name =│ The agent asks to run · Greeting by name                                             │
+     .nth(1│ “Run the tests” (the agent's words)                                                  │
+     .unwra│ $ cargo test                                                                         │
+           │                                                                                      │
+           │  1 Allow once  2 Always allow cargo test  3 Reject                                   │
+▸ edit Edit│                                                                                      │          ✓
+  diff src/│ 1–9 choose · Esc rejects once                                                        │
+Wrote src/m╰──────────────────────────────────────────────────────────────────────────────────────╯
+▸ execute Run the tests                                                                                pending
+
+
+
+
+Plan
+ ✓ Read src/main.rs
+ ✓ Take the name from the arguments
+ ▸ Run the tests
+╭─ the agent is working (Esc cancels) · mode ask ────────────────────────────────────────────────────────────╮
+│Ask the agent…  @ names a file                                                                              │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+Enter send · Alt+Enter line · @ file · Esc cancel · Ctrl+N new · Alt+N/P switch · Ctrl+T shell · F2 log ·

@@ -299,7 +299,7 @@ impl Ui {
                 .collect();
             let mut root = column([
                 label(format!(
-                    "[b]The agent asks to {}[/] [dim]{}[/]",
+                    "[b]The agent asks to {}[/] [dim]· {}[/]",
                     kind_word(&call.kind),
                     markup(&title)
                 ))
@@ -400,7 +400,7 @@ impl Ui {
             let what = if fresh { "create" } else { "change" };
             column([
                 label(format!(
-                    "[b]The agent wants to {what}[/] {shown}{warning} [dim]{}[/]",
+                    "[b]The agent wants to {what}[/] {shown}{warning} [dim]· {}[/]",
                     markup(&title)
                 ))
                 .auto(),
@@ -727,8 +727,8 @@ fn view(ui: Ui, hub: Arc<Hub>, shell: Option<ShellPane>) -> Node {
         let busy = ui.current_tracked().busy.get();
         let esc = if busy { "Esc cancel · " } else { "" };
         format!(
-            "[dim]Enter send · Alt+Enter new line · @ file · {esc}Ctrl+N new session · \
-             Alt+N/P switch · Ctrl+T shell · F2 agent log · Ctrl+Q quit[/]"
+            "[dim]Enter send · Alt+Enter line · @ file · {esc}Ctrl+N new · Alt+N/P switch · \
+             Ctrl+T shell · F2 log · Ctrl+Q quit[/]"
         )
     })
     .fixed(1);
@@ -986,7 +986,7 @@ fn entry_view(s: Session, i: usize) -> Node {
             }
             label(shown).padding(1, 0)
         }
-        Entry::Agent { doc, .. } => markdown(doc),
+        Entry::Agent { doc, .. } => markdown(doc).padding(1, 0),
         Entry::Thought { doc, open, .. } => collapsible_with(
             || "[dim i]Thinking[/]".to_string(),
             open,
@@ -994,7 +994,7 @@ fn entry_view(s: Session, i: usize) -> Node {
         )
         .summary(move || doc.with(|d| last_line(d, 60))),
         Entry::Tool { call, open } => tool_view(s, call, open),
-        Entry::Notice(markup) => label(markup),
+        Entry::Notice(markup) => label(markup).style("dim"),
     }
 }
 

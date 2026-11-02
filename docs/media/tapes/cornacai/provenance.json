@@ -1,0 +1,14 @@
+{
+  "tape": "docs/tapes/cornacai.tape",
+  "tape_fnv1a64": "f21da7d1f37aaa0f",
+  "recorder": "rs-rich-record 0.0.12",
+  "rich": null,
+  "commit": "2209779cc230957540038ea84501b5a35a868e91",
+  "screenshots": [
+    "mention",
+    "review",
+    "permission",
+    "done"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

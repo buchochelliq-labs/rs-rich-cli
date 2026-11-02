@@ -1,0 +1,53 @@
+{"note": "Cornacai's docs tape (docs/tapes/cornacai.tape): a fake agent, replayed by the binary built with the test-only fake-agent feature. $WORKSPACE is the tape's workspace."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "agentInfo": {"name": "demo-agent", "version": "1.0"}}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_demo", "modes": {"currentModeId": "ask", "availableModes": [{"id": "ask", "name": "Ask"}]}}}}
+{"client": {"id": 2, "method": "session/prompt", "params": {"sessionId": "sess_demo", "prompt": [{"type": "text", "text": "Greet by name in @src/main.rs please"}, {"type": "resource_link", "uri": "file://$WORKSPACE/src/main.rs", "name": "main.rs"}]}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "plan", "entries": [{"content": "Read src/main.rs", "priority": "high", "status": "in_progress"}, {"content": "Take the name from the arguments", "priority": "high", "status": "pending"}, {"content": "Run the tests", "priority": "medium", "status": "pending"}]}}}}
+{"quiet": 300}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_thought_chunk", "content": {"type": "text", "text": "The program prints a fixed greeting; the name can come from the first argument."}}}}}
+{"quiet": 300}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "session_info_update", "title": "Greeting by name"}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "## The "}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "change\n\n"}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "`main` prints "}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "a fixed **Hello**. "}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "I will read the name "}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "from the first argument, "}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "with `world` "}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "as the default:\n\n"}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "```rust\nlet name = std::env::args()"}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "\n    .nth(1)\n    .unwrap_or(\"world\".into());\n```\n"}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "plan", "entries": [{"content": "Read src/main.rs", "priority": "high", "status": "completed"}, {"content": "Take the name from the arguments", "priority": "high", "status": "in_progress"}, {"content": "Run the tests", "priority": "medium", "status": "pending"}]}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "tool_call", "toolCallId": "call_edit", "title": "Edit src/main.rs", "kind": "edit", "status": "in_progress", "locations": [{"path": "$WORKSPACE/src/main.rs"}], "content": [{"type": "diff", "path": "$WORKSPACE/src/main.rs", "oldText": "fn main() {\n    println!(\"Hello\");\n}\n", "newText": "fn main() {\n    let name = std::env::args().nth(1).unwrap_or(\"world\".into());\n    println!(\"Hello, {name}!\");\n}\n"}]}}}}
+{"agent": {"jsonrpc": "2.0", "id": 100, "method": "fs/write_text_file", "params": {"sessionId": "sess_demo", "path": "$WORKSPACE/src/main.rs", "content": "fn main() {\n    let name = std::env::args().nth(1).unwrap_or(\"world\".into());\n    println!(\"Hello, {name}!\");\n}\n"}}}
+{"client": {"id": 100, "result": {}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call_edit", "status": "completed"}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "plan", "entries": [{"content": "Read src/main.rs", "priority": "high", "status": "completed"}, {"content": "Take the name from the arguments", "priority": "high", "status": "completed"}, {"content": "Run the tests", "priority": "medium", "status": "in_progress"}]}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "tool_call", "toolCallId": "call_test", "title": "Run the tests", "kind": "execute", "status": "pending", "rawInput": {"command": "cargo test"}}}}}
+{"agent": {"jsonrpc": "2.0", "id": "perm-1", "method": "session/request_permission", "params": {"sessionId": "sess_demo", "toolCall": {"toolCallId": "call_test", "title": "Run the tests", "kind": "execute", "rawInput": {"command": "cargo test"}}, "options": [{"optionId": "once", "name": "Allow once", "kind": "allow_once"}, {"optionId": "always", "name": "Always allow cargo test", "kind": "allow_always"}, {"optionId": "no", "name": "Reject", "kind": "reject_once"}]}}}
+{"client": {"id": "perm-1", "result": {"outcome": {"outcome": "selected", "optionId": "once"}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call_test", "status": "in_progress"}}}}
+{"quiet": 600}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call_test", "status": "completed", "content": [{"type": "content", "content": {"type": "text", "text": "running 3 tests\ntest greets_world ... ok\ntest greets_by_name ... ok\ntest result: ok. 3 passed"}}]}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "plan", "entries": [{"content": "Read src/main.rs", "priority": "high", "status": "completed"}, {"content": "Take the name from the arguments", "priority": "high", "status": "completed"}, {"content": "Run the tests", "priority": "medium", "status": "completed"}]}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "\n\nDone: "}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "`cargo run -- Ada` "}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "now prints *Hello, Ada!*, "}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_demo", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "and the tests pass."}}}}}
+{"quiet": 120}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {"stopReason": "end_turn"}}}

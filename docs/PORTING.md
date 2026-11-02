@@ -380,6 +380,17 @@ depends on no crate of ours and has no terminal code; Cornacai (#794)
 builds on it. Core is unchanged and no golden fixture covers it. See
 [the design note](design/cornacai.md).
 
+### Cornacai, the terminal client for coding agents (cornacai, not upstream)
+
+`cornacai` (`crates/cornacai`, 0.0.1) has no upstream module to port:
+Python `rich` has no agents. It drives an agent through `rs-rich-acp`'s
+public `Connection` and `Client`, draws with `rs-rich-intuituive`'s stock
+nodes (`markdown`, `collapsible_with`, `follow_end`, the prompt editor,
+`files::path_completer`, `widgets::diff_view_with`) and runs its shell pane
+on `rs-rich-embed`'s `PtyHost`. It adds nothing to intuiTUIve core. Core is
+unchanged and no golden fixture covers it. See
+[the design note](design/cornacai.md) and [the guide](guide/cornacai.md).
+
 ## The stable set outside core (not upstream)
 
 The packages that go to 1.0.0 with core ([the plan to 1.0.0](plans/1.0.0.md#what-100-covers))
@@ -493,12 +504,17 @@ Each area has its page in [the guide](guide/ext/index.md).
 |---|---|:---:|---|
 | the protocol | ACP version 1 over JSON-RPC on an agent's standard streams: `Connection`, typed messages, the `Client` trait | 🟢 | `tests/replay.rs`, replaying `tests/fixtures/claude_agent.jsonl` (a real agent's turn, recorded on 2026-11-02) |
 | the client's answers | `Workspace`, `fs` and `Terminals`, inside the session's roots, offered only when asked | 🟢 | `tests/replay.rs` and the unit tests |
+| the fake agent | `replay`: a recorded transcript replayed as the agent over in-process pipes, for testing clients | 🟢 | `tests/replay.rs` (its own tests run on it), the module's doctest |
 
 ### cornacai
 
 | area | what it offers | status | tests |
 |---|---|:---:|---|
-| the app | a terminal client for coding agents on rs-rich-acp and intuiTUIve ([the design note](design/cornacai.md)) | ⬜ #794's phases 3 and 4, 0.0.24's wave 3; not yet a crate | — |
+| the conversation | streamed Markdown answers that follow the end, thoughts and tool calls as folded cards with a live status, the plan, the agent's session title | 🟢 | `tests/app.rs` (on the driver, against rs-rich-acp's fake agent) |
+| the prompt | the prompt editor with history, `@` file mentions completed over the workspace and sent as `resource_link`s | 🟢 | `tests/app.rs`, `mention.rs`'s unit tests |
+| what the agent asks | permission prompts (one button per option), writes reviewed as a diff hunk by hunk, commands asked about and run on pipes, reads inside the workspace | 🟢 | `tests/app.rs` |
+| sessions and the shell | several sessions on one connection as tabs; a shell pane on a PTY, the user's own | 🟡 no resume (`session/load`) or session store yet; agent terminals on pipes, not a PTY | `tests/app.rs` (the shell over a `ReplayHost`) |
+| finding agents | the known agents on `PATH`, the choice saved in the config | 🟡 the marketplace's `agent` kind is not built yet | `config.rs`'s unit tests |
 
 ### `rs-rich` on PyPI (crates/rich-py)
 
