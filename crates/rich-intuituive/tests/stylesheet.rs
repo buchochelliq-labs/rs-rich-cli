@@ -526,7 +526,7 @@ fn screen_column(driver: &intuituive::Driver, row: usize, text: &str) -> u16 {
 fn odd_stripes_the_rows_of_an_each_and_moves_when_a_row_is_inserted() {
     let app = App::new(|| {
         let items = signal(vec!["b", "c", "d"]);
-        each(move || items.get(), |item| label(item))
+        each(move || items.get(), label)
             .class("rows")
             .on_key("i", move |_| items.update(|v| v.insert(0, "a")))
             .on_key("e", move |_| items.update(|v| v.push("e")))
