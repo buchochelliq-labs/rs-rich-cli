@@ -1,0 +1,17 @@
+error: expected `skip`, `nested` or `with = path`
+ --> tests/ui/inspect_bad_attribute.rs:5:15
+  |
+5 |     #[inspect(rename = "y")]
+  |               ^^^^^^
+
+error: use one of `skip`, `nested` and `with`
+  --> tests/ui/inspect_bad_attribute.rs:11:5
+   |
+11 |     #[inspect(skip, nested)]
+   |     ^
+
+error: expected `methods` (the methods recorded by `#[inspect]` on an impl block)
+  --> tests/ui/inspect_bad_attribute.rs:16:11
+   |
+16 | #[inspect(title = "no")]
+   |           ^^^^^

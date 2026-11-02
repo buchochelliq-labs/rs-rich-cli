@@ -83,6 +83,9 @@ pub fn complete_words<S: Into<String>>(
 /// What gives an input's candidates: the text and the caret's byte.
 pub(crate) type Completer = Rc<dyn Fn(&str, usize) -> Vec<Completion>>;
 
+/// What gives the candidates after a trigger: the query typed after it.
+pub(crate) type QueryFn = Rc<dyn Fn(&str) -> Vec<Completion>>;
+
 /// How an input completes: whether the pop-up opens as you type (or only
 /// on Tab, the default), whether the top candidate's rest shows as ghost
 /// text (on by default), and how many rows the pop-up shows.
@@ -171,16 +174,33 @@ pub(crate) struct Assist {
     pub history: Option<HistoryFn>,
     /// Browsing the history: how far back, and what was typed before.
     pub browse: Option<(usize, String)>,
+    /// [`Node::complete_at`]'s triggers and what each completes from.
+    pub triggers: Vec<(char, QueryFn)>,
+    /// Where the trigger word starts whose pop-up Esc closed: it stays
+    /// closed until another word.
+    pub dismissed: Option<usize>,
 }
 
 impl Assist {
     /// The candidates for `text` with the caret at byte `caret`, those
     /// that fit the text.
     pub fn candidates(&self, text: &str, caret: usize) -> Vec<Completion> {
-        let Some(completer) = &self.completer else {
-            return Vec::new();
+        let mut found = match &self.completer {
+            Some(completer) => completer(text, caret),
+            None => Vec::new(),
         };
-        completer(text, caret)
+        if let Some((start, source)) = self.trigger(text, caret) {
+            // The source's ranges count from the query's start.
+            let query = &text[start..caret.min(text.len())];
+            found.extend(source(query).into_iter().map(|mut c| {
+                c.replace = c.replace.start + start..c.replace.end + start;
+                if !c.text.ends_with(char::is_whitespace) {
+                    c.text.push(' ');
+                }
+                c
+            }));
+        }
+        found
             .into_iter()
             .filter(|c| {
                 c.replace.start <= c.replace.end
@@ -193,6 +213,35 @@ impl Assist {
 
     pub fn history(&self) -> Option<InputHistory> {
         self.history.as_ref().and_then(|h| h())
+    }
+
+    /// Whether it completes at all: a completer, or a trigger.
+    pub fn completes(&self) -> bool {
+        self.completer.is_some() || !self.triggers.is_empty()
+    }
+
+    /// The trigger the word before the caret starts with: where its query
+    /// starts (after the trigger) and its source.
+    fn trigger(&self, text: &str, caret: usize) -> Option<(usize, &QueryFn)> {
+        if self.triggers.is_empty() {
+            return None;
+        }
+        let word = word_before(text, caret);
+        let first = text[word.clone()].chars().next()?;
+        let (_, source) = self.triggers.iter().find(|(t, _)| *t == first)?;
+        Some((word.start + first.len_utf8(), source))
+    }
+
+    /// Whether the caret is in a word that starts with a trigger, and Esc
+    /// has not closed its pop-up.
+    pub fn at_trigger(&self, text: &str, caret: usize) -> bool {
+        self.trigger(text, caret)
+            .is_some_and(|(start, _)| self.dismissed != Some(start))
+    }
+
+    /// Esc closed the pop-up: keep it closed for this trigger word.
+    pub fn dismiss(&mut self, text: &str, caret: usize) {
+        self.dismissed = self.trigger(text, caret).map(|(start, _)| start);
     }
 }
 
@@ -279,9 +328,14 @@ impl InputHistory {
     }
 
     /// Add `entry` as the newest (moving it there if it was older), and
-    /// write the file. Empty entries and line breaks are left out.
+    /// write the file. Empty entries are left out, and so are entries of
+    /// more than one line in a history kept in a file (one entry a line);
+    /// one kept for the session holds them (a [`text_area`]'s prompt).
+    ///
+    /// [`text_area`]: crate::text_area
     pub fn push(&self, entry: &str) {
-        if entry.trim().is_empty() || entry.contains(['\n', '\r']) {
+        let lines = entry.contains(['\n', '\r']);
+        if entry.trim().is_empty() || (lines && self.file.get_untracked().is_some()) {
             return;
         }
         let limit = self.limit.get_untracked();
@@ -376,6 +430,50 @@ impl Node {
         options: CompleteOptions,
     ) -> Node {
         self.completer(Some(Rc::new(complete)), options)
+    }
+
+    /// Complete what follows `trigger` in an [`input`](crate::input) or a
+    /// [`text_area`](crate::text_area): once a word starts with `trigger`
+    /// (`@` for a mention, `/` for a command), the pop-up opens at it with
+    /// the candidates `source` gives for the query, what is typed from the
+    /// trigger to the caret. A candidate's `replace` counts bytes of the
+    /// query (`0..query.len()` replaces all of it, and the trigger stays);
+    /// a space follows a candidate taken. Typing narrows the pop-up, ↑/↓
+    /// and Tab move through it, Enter takes the selected candidate and Esc
+    /// closes it until the next trigger. Call it once for each trigger; it
+    /// works beside [`complete`](Self::complete). The `files` feature's
+    /// `files::path_completer` completes paths under a directory.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    /// use intuituive::complete::Completion;
+    ///
+    /// let app = App::new(|| {
+    ///     let prompt = signal(String::new());
+    ///     text_area(prompt).complete_at('/', |query| {
+    ///         ["help", "history", "quit"]
+    ///             .into_iter()
+    ///             .filter(|c| c.starts_with(query))
+    ///             .map(|c| Completion::new(0..query.len(), c))
+    ///             .collect()
+    ///     })
+    /// });
+    /// let mut driver = app.driver(20, 4);
+    /// driver.type_text("/h");
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), " help");
+    /// assert_eq!(driver.screen().plain()[2].trim_end(), " history");
+    /// driver.press("down enter");
+    /// driver.type_text("x");
+    /// assert_eq!(driver.screen().plain()[0].trim_end(), "/history x");
+    /// ```
+    pub fn complete_at(
+        self,
+        trigger: char,
+        source: impl Fn(&str) -> Vec<Completion> + 'static,
+    ) -> Node {
+        let source: QueryFn = Rc::new(source);
+        self.widget_mut(|area: &mut TextArea| area.assist.triggers.push((trigger, source)));
+        self
     }
 
     pub(crate) fn completer(self, completer: Option<Completer>, options: CompleteOptions) -> Node {

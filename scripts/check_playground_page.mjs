@@ -3,7 +3,7 @@
 //
 //     node scripts/check_playground_page.mjs [SITE]     # default: site/dev, else site
 //
-// SITE is a `mkdocs build` output whose assets/playground/ holds the modules
+// SITE is a `zensical build` output whose assets/playground/ holds the modules
 // (playground/build.sh). It checks that:
 //
 //   - the playground page offers "Try it", and a click loads the lean
@@ -87,7 +87,7 @@ async function frameText(page, scope) {
 
 async function main() {
   if (!existsSync(path.join(SITE, "assets", "playground", "playground.json"))) {
-    throw new Error(`${SITE} has no assets/playground/playground.json: run playground/build.sh, then mkdocs build`);
+    throw new Error(`${SITE} has no assets/playground/playground.json: run playground/build.sh, then zensical build`);
   }
   const server = await serve(SITE);
   const base = `http://127.0.0.1:${server.address().port}/`;

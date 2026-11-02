@@ -11,8 +11,9 @@ linking to the section of the parity table it counts) and prints the totals.
 The SVG is **inlined** into the page, not referenced with <img> or <object>:
 links inside an embedded SVG resolve against the SVG's own URL and navigate
 inside its frame, so an embedded chart looks clickable and goes nowhere. Its
-hrefs are therefore relative to a *top-level* page (`../PORTING/`), which is
-where it is included from.
+hrefs are written as a Markdown link in `docs/parity.md` would be, relative to
+that source file (`PORTING/`): Zensical rebases every href in a page, raw HTML
+included, from the source file to the built page.
 
 Deliberately NOT a single "percent done" number. Most modules are partial, and
 one number would hide that: a bar that is 78% amber says something true, while
@@ -129,7 +130,7 @@ def svg(sections):
         w = width * n / total
         pct = 100 * n / total
         parts.append(
-            f'<a href="../PORTING/" '
+            f'<a href="PORTING/" '
             f'aria-label="{LABELS[status]}: {n} of {total} modules">'
             f'<rect class="seg" x="{x:.1f}" y="24" width="{w:.1f}" height="{bar_h}" '
             f'fill="{COLOURS[status]}">'
@@ -156,7 +157,7 @@ def svg(sections):
         part = sum(1 for _, s in mods if s == PARTIAL)
         started = done + part
         frac = started / len(mods)
-        parts.append(f'<a href="../PORTING/#{anchor(title)}" '
+        parts.append(f'<a href="PORTING/#{anchor(title)}" '
                      f'aria-label="{label(title)}: {started} of {len(mods)} modules started">')
         parts.append(f'<rect class="rowbg" x="0" y="{y - 14}" width="{width}" height="{row_h - 4}" rx="3"/>')
         parts.append(f'<text class="sm" x="8" y="{y + 2}">{label(title)}</text>')

@@ -1,6 +1,6 @@
-"""Tests for scripts/build_versioned_docs.py's playground download: a release's
-module goes into its docs when the release has one, and nothing breaks when it
-does not."""
+"""Tests for scripts/build_versioned_docs.py: which tool builds a version, and
+the playground download (a release's module goes into its docs when the
+release has one, and nothing breaks when it does not)."""
 
 import io
 import json
@@ -131,6 +131,26 @@ class Fetch(unittest.TestCase):
         with mock.patch("urllib.request.urlopen", lambda url, timeout: big):
             with self.assertRaises(ValueError):
                 docs.fetch("https://example/x")
+
+
+class Builder(unittest.TestCase):
+    """Each version builds with the tool its tree pins."""
+
+    def tree(self, pins=None):
+        root = Path(self.enterContext(tempfile.TemporaryDirectory()))
+        if pins is not None:
+            (root / "requirements-docs.txt").write_text(pins)
+        return root
+
+    def test_a_tree_pinning_zensical_builds_with_it(self):
+        self.assertEqual(docs.builder(self.tree("# tools\nzensical==0.0.74\nmkdocs==1.6.1\n")), "zensical")
+
+    def test_a_tree_from_before_the_move_builds_with_mkdocs(self):
+        self.assertEqual(docs.builder(self.tree()), "mkdocs")
+        self.assertEqual(docs.builder(self.tree("mkdocs==1.6.1\n# not zensical\n")), "mkdocs")
+
+    def test_this_tree_builds_with_zensical(self):
+        self.assertEqual(docs.builder(docs.ROOT), "zensical")
 
 
 class RepoUrl(unittest.TestCase):

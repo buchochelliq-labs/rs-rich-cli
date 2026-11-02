@@ -197,3 +197,202 @@ fn no_control_character_reaches_the_model() {
     assert_eq!(pick.name, "pick[1m");
     assert_eq!(pick.options[1].label, "two");
 }
+
+/// The page in `tests/fixtures/hidden-text.html` as Chrome lays it out
+/// at 800 CSS pixels: four channel links in a sidebar, each with a hint
+/// hidden a different way, and an icon link named by hidden text only.
+fn hidden_text() -> Page {
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let hint = "Use the Right Arrow Key to show more information.";
+    let mut p = PageBuilder::new(
+        "file:///noctiluca/fixtures/hidden-text.html",
+        "Hidden text fixture",
+        800.0,
+        400.0,
+    );
+    let body = p.body();
+    let nav = p.element(
+        body,
+        "NAV",
+        &[("aria-label", "Followed channels")],
+        &[("position", "absolute")],
+        Some(Rect::new(0.0, 0.0, 240.0, 210.0)),
+    );
+    let names = ["Glowworm", "Tidepool", "Sea Sparkle", "Night Swim"];
+    for (k, name) in names.iter().enumerate() {
+        let y = 42.0 * k as f64;
+        let href = format!("#{k}");
+        let a = p.element(
+            nav,
+            "A",
+            &[("href", href.as_str())],
+            &[("position", "relative")],
+            Some(Rect::new(0.0, y, 240.0, 42.0)),
+        );
+        let src = format!("file:///noctiluca/fixtures/media/avatar-{}.png", k + 1);
+        p.image(a, &src, "", Rect::new(0.0, y + 6.0, 30.0, 30.0));
+        p.text(
+            a,
+            &format!(" {name}"),
+            Rect::new(30.0, y + 18.0, 100.0, 18.0),
+        );
+        match k {
+            // A "visually hidden" class: a 1 x 1 box, overflow hidden,
+            // clipped to nothing. Its text still has its own boxes, one
+            // word a line in the box's one pixel.
+            0 => {
+                let sr = p.element(
+                    a,
+                    "SPAN",
+                    &[("class", "sr-only")],
+                    &[
+                        ("display", "inline"),
+                        ("position", "absolute"),
+                        ("overflow-y", "hidden"),
+                        ("clip", "rect(0px, 0px, 0px, 0px)"),
+                        ("white-space", "nowrap"),
+                    ],
+                    Some(Rect::new(130.0, y + 18.0, 1.0, 1.0)),
+                );
+                p.text(sr, hint, Rect::new(130.0, y + 18.0, 380.0, 18.0));
+            }
+            // A transparent tooltip beside the sidebar.
+            1 => {
+                let faded = p.element(
+                    a,
+                    "DIV",
+                    &[("class", "faded")],
+                    &[("position", "absolute"), ("opacity", "0")],
+                    Some(Rect::new(250.0, y, 390.0, 18.0)),
+                );
+                let para = p.element(faded, "P", &[], &[], Some(Rect::new(250.0, y, 390.0, 18.0)));
+                p.text(para, hint, Rect::new(250.0, y, 380.0, 18.0));
+            }
+            // Clipped by an inset of half its size.
+            2 => {
+                let inset = p.element(
+                    a,
+                    "SPAN",
+                    &[("class", "inset")],
+                    &[
+                        ("display", "inline"),
+                        ("position", "absolute"),
+                        ("clip-path", "inset(50%)"),
+                    ],
+                    Some(Rect::new(50.0, y + 20.0, 380.0, 18.0)),
+                );
+                p.text(inset, hint, Rect::new(50.0, y + 20.0, 380.0, 18.0));
+            }
+            // `visibility: hidden`, inherited by its text.
+            _ => {
+                let shut = p.element(
+                    a,
+                    "SPAN",
+                    &[("class", "shut")],
+                    &[("display", "inline"), ("visibility", "hidden")],
+                    Some(Rect::new(130.0, y + 18.0, 380.0, 18.0)),
+                );
+                let inner = p.element(
+                    shut,
+                    "SPAN",
+                    &[],
+                    &[("display", "inline")],
+                    Some(Rect::new(130.0, y + 18.0, 380.0, 18.0)),
+                );
+                p.text(inner, hint, Rect::new(130.0, y + 18.0, 380.0, 18.0));
+            }
+        }
+    }
+    let search = p.element(
+        nav,
+        "A",
+        &[("href", "#search")],
+        &[("position", "relative")],
+        Some(Rect::new(0.0, 168.0, 240.0, 42.0)),
+    );
+    let sr = p.element(
+        search,
+        "SPAN",
+        &[("class", "sr-only")],
+        &[
+            ("display", "inline"),
+            ("position", "absolute"),
+            ("overflow-y", "hidden"),
+            ("clip", "rect(0px, 0px, 0px, 0px)"),
+        ],
+        Some(Rect::new(0.0, 168.0, 1.0, 1.0)),
+    );
+    p.text(sr, "Search channels", Rect::new(0.0, 168.0, 8.0, 36.0));
+    let main = p.element(
+        body,
+        "MAIN",
+        &[],
+        &[],
+        Some(Rect::new(260.0, 0.0, 540.0, 100.0)),
+    );
+    let h1 = p.element(
+        main,
+        "H1",
+        &[],
+        &[("font-weight", "700")],
+        Some(Rect::new(260.0, 21.0, 540.0, 37.0)),
+    );
+    p.text(h1, "Live channels", Rect::new(260.0, 21.0, 200.0, 37.0));
+    let para = p.element(
+        main,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(260.0, 80.0, 540.0, 18.0)),
+    );
+    p.text(
+        para,
+        "Four channels are live.",
+        Rect::new(260.0, 80.0, 180.0, 18.0),
+    );
+    build(&p.snapshot(), &mut Revisions::new())
+}
+
+#[test]
+fn visually_hidden_text_is_left_out_unless_it_names_a_link() {
+    use noctiluca::layout::{Line, Marks, Piece, projection, reader};
+    let page = hidden_text();
+    let all: String = page.blocks.iter().map(|b| b.text() + "\n").collect();
+    assert!(!all.contains("Right Arrow"), "{all}");
+    for name in [
+        "Glowworm",
+        "Tidepool",
+        "Sea Sparkle",
+        "Night Swim",
+        "Live channels",
+    ] {
+        assert!(all.contains(name), "{name}: {all}");
+    }
+    // The icon link's only text is hidden: it is its name, and it reads.
+    assert!(all.contains("Search channels"), "{all}");
+    let lines: Vec<String> = projection(&page, 100, (8.0, 18.0), &Marks::default())
+        .iter()
+        .map(Line::plain)
+        .collect();
+    assert!(
+        !lines.iter().any(|l| l.contains("Right Arrow")),
+        "{lines:#?}"
+    );
+    assert!(
+        lines.iter().any(|l| l.contains("Sea Sparkle")),
+        "{lines:#?}"
+    );
+    let read: Vec<String> = reader(&page, 80, &Marks::default())
+        .iter()
+        .flat_map(|piece| match piece {
+            Piece::Text(lines) => lines.iter().map(Line::plain).collect(),
+            _ => Vec::new(),
+        })
+        .collect();
+    assert!(!read.iter().any(|l| l.contains("Right Arrow")), "{read:#?}");
+    assert!(
+        read.iter().any(|l| l.contains("Search channels")),
+        "{read:#?}"
+    );
+}

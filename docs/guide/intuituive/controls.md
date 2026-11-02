@@ -298,6 +298,45 @@ the Tab order. The section is as tall as what it shows. The title is in
 `[-]`. The header is read as `Advanced, button, collapsed` (or
 `expanded`).
 
+### Titles that follow state, a status and a summary
+
+New in 0.0.24: a tool call's card, as an agent's front end draws one.
+
+```rust
+use intuituive::{collapsible_with, Status};
+
+collapsible_with(move || format!("[b]bash[/] {}", command.get()), open, output)
+    .status(move || match run.get() {
+        Run::Going => Status::Spinner("dots"),
+        Run::Ok => Status::Markup("[green]✓[/]".into()),
+        Run::Failed(code) => Status::Markup(format!("[red]✗ {code}[/]")),
+    })
+    .summary(move || last_line.get())
+    .symbols("▶", "▼")
+```
+
+```text
+▶ bash cargo test                ⠋
+  test result: ok. 12 passed
+```
+
+- **`collapsible_with(title, open, child)`** takes the title as a closure,
+  read again whenever a signal it reads changes. Only the header draws
+  again.
+- **`.status(|| Status)`** draws at the right of the header:
+  `Status::Spinner(name)`, one of rich's spinners turning on the app's
+  clock (the header is busy for a screen reader meanwhile), or
+  `Status::Markup(markup)`, which is said after the title
+  (`bash ls, ✓, button, collapsed`). In `collapsible.status` (else
+  unstyled).
+- **`.summary(|| line)`** is one line under the header while it is
+  closed: plain text, its first line, cut off at the width, in
+  `collapsible.summary` (else `dim`). Opening the section shows the child
+  in its place.
+- **`.symbols(closed, open)`** draws its own markers over `▸` and `▾`
+  (Textual's `collapsed_symbol` and `expanded_symbol`). Text mode keeps
+  `[+]` and `[-]`.
+
 ## Spinners and loading
 
 ```rust
@@ -342,6 +381,8 @@ form.panel("Settings").loading_when(move || saving.get())
 | `slider.filled`, `slider.track`, `slider.knob` | `accent`, `muted`, `slider.filled` | a slider |
 | `select` | none | a select field |
 | `collapsible.title` | `bold` | a section's header |
+| `collapsible.status` | none | a section's status ([`.status`](#titles-that-follow-state-a-status-and-a-summary)) |
+| `collapsible.summary` | `dim` | a closed section's summary |
 | `spinner` | `accent` | a spinner's glyph |
 | `loading` | `dim` | a node shown as loading |
 | `control.focus` | `reverse` | a focused control's text, a slider's knob |

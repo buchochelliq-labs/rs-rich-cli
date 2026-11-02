@@ -1,4 +1,4 @@
- NOCTILUCA   READER + CELLS   ◀▶   Reader fixture
+ NOCTILUCA   READER + CELLS   ◀ ▶ ↻   Reader fixture
  https://fixture.example/reader.html
 Plank╭─ Bind a key on this site: to what? ────────────────────────────────────────────────────╮    ┃
      │▸ link "open sea"                                                                       │    ┃

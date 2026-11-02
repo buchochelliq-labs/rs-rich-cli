@@ -15,21 +15,30 @@ the files it loaded.
 - **Pictures** come from the page's own files (an `<img>`, a `<picture>`,
   a CSS background on a box with no text), at their own quality, when
   they are PNG, JPEG, GIF or WebP; else from Chrome's pixels (an SVG, an
-  AVIF). Each fills the box Chrome gave it. A
+  inline `<svg>` drawing, an AVIF). Each fills the box Chrome gave it. A
+  build with the `avif` feature (`cargo install noctiluca --features avif`)
+  decodes AVIF from the page's own files too; it links the C library
+  libdav1d, which must be installed first (`apt install libdav1d-dev`,
+  `brew install dav1d`, vcpkg's `dav1d` on Windows). A
   picture with alt text and no caption of the page's gets an
   `Image: …` line under it.
 - **Small pictures in a line** (a chat's badges and emotes, an icon) are
   drawn in their line.
 - **Animated GIFs and WebPs** move. Kitty plays them itself, for no further bytes;
   elsewhere each frame is sent only when the terminal has room for it,
-  at most eight a second. `F4` freezes every moving picture, and their
+  at most `[media] fps` a second (30 unless you set it). `F4` freezes every moving picture, and their
   bytes stop.
 - **Video** shows its poster with a play mark. `p` plays it in its region,
-  from frames Chrome paints, only while it plays; `[` and `]` seek five
-  seconds; `Alt+M` mutes. The status line says `media PLAYING 0:03 / 0:05`.
+  from frames Chrome paints, only while it plays: up to 30 frames a
+  second, evenly spaced, as many as your terminal can take; `[` and `]`
+  seek five seconds; `Alt+M` mutes. The status line says
+  `media PLAYING 0:03 / 0:05`. Any `<video>` plays the same way, whatever
+  the site.
 - **Within the terminal's bandwidth.** Moving pictures share a byte budget
-  (`[media] bandwidth`, else 4 MB a second here and 256 kB over SSH), at
-  most `[media] fps` frames a second. Short of it, a picture steps down:
+  (`[media] bandwidth`, else 4 MB a second here and 256 kB over SSH to
+  start, then the rate your terminal is measured taking output at: here
+  up to 32 MB a second, so a fast terminal gets the full frame rate; over
+  SSH only ever lower), at most `[media] fps` frames a second. Short of it, a picture steps down:
   Kitty, then iTerm2, then Sixel, then half blocks. Over SSH, video starts
   as half blocks unless `--images` names a protocol.
 

@@ -110,6 +110,16 @@ target/release/rich record --bin-dir target/release --output docs/media/tapes do
 target/release/rich record --check --bin-dir target/release --output docs/media/tapes docs/tapes/*.tape
 ```
 
+Build both docs sites strictly with the pinned Zensical (`requirements-docs.txt`,
+as the docs job does), and check the built pages' raw-HTML URLs:
+
+```bash
+pip install -r requirements-docs.txt
+zensical build --strict -f mkdocs.yml
+zensical build --strict -f mkdocs-python.yml
+python scripts/check_site_links.py site
+```
+
 Before calling the PR ready, take and report the final readiness snapshot:
 
 ```bash

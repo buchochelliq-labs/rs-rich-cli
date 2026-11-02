@@ -7,7 +7,7 @@ bookmarks and the F1 overlay. The keys here are the default `vim` set;
 `plain` set too.
 
 <div class="tape-player" data-cast="../../../media/tapes/noctiluca-reading/noctiluca-reading.cast" data-poster="npt:0:3">
-  <img src="../../../media/tapes/noctiluca-reading/noctiluca-reading.gif" alt="Noctiluca showing a two-column page in the projection, an article in the projection and in reader mode, and finding a word">
+  <img src="../../media/tapes/noctiluca-reading/noctiluca-reading.gif" alt="Noctiluca showing a two-column page in the projection, an article in the projection and in reader mode, and finding a word">
 </div>
 
 ## The projection
@@ -91,6 +91,7 @@ gets a short label of home-row letters. Type a label to use it:
 - a field, a select or a slider gets its widget: focused in reader mode,
   or in a box over the page in the projection (Esc closes the box).
 
+A click with the mouse on a link or a control does the same as its label.
 Backspace takes back a letter, and Esc puts the hints away. A letter that
 starts no label puts them away too, and says so.
 

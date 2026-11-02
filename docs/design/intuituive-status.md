@@ -3,7 +3,19 @@
 Status: handoff note, updated when a session ends mid-round. The loop and its
 rules are in [the demo gaps](intuituive-demo-gaps.md).
 
-## Where things stand (2026-11-01)
+## Where things stand (2026-11-02)
+
+- **Wave 0 is merged** (#828, the plan; #829, edition 2024).
+- **Wave 1 is integrated** on `claude/next-priority-items-3c5p8e-wip-wave1`
+  and goes up as one pull request: WS1 phases 1–2 (`docs/design/cornacai.md`,
+  `rs-rich-acp`), WS2 (below), WS4 (`#[derive(Inspect)]`, `rich_inspect!`),
+  WS5 (Noctiluca's fixes, opt-in AVIF), WS8 (the signer's GitHub App, in
+  the mirror), WS9 (the threat model, `SECURITY.md`), WS12 (Zensical,
+  modern design), and Noctiluca's mouse, 30 fps video, start page and
+  lanternfish with the animated banner.
+- **Next:** wave 2 (the plan's Order of work), once wave 1 merges.
+
+## Where things stood (2026-11-01)
 
 - **0.0.24 is planned** ([plan](../plans/0.0.24.md)), with the maintainer's
   calls of 2026-11-01: everything ready on the apps track, lumis 0.17
@@ -11,6 +23,14 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
 - **Wave 0 is in flight:** the plan's pull request (with the live Chrome
   test's fix), then edition 2024 in a pull request of its own. Waves 1 to 3
   branch from the 2024 tree.
+- **Wave 1, WS2 (Cornacai's parity items) is done** on
+  `claude/next-priority-items-3c5p8e-wip-ws2`: #798 `follow_end`, #804
+  `collapsible_with` with a status and a summary, #800 the prompt editor
+  (`grow`, `submit_on`, `complete_at`, `history`; `files::path_completer`
+  in the plugin), #797 `markdown(doc)` and `MarkdownStream`. Left for a
+  later round: a tape of a streamed answer (no media recorded), a
+  `timedemo` measurement of 10 000 appends, and `scroll`'s viewport
+  reporting its whole view as damaged when anything inside changes.
 - **Waiting on the maintainer:**
   - approving the marketplace's signing run for the 0.0.23 listings;
   - moving `RS_RICH_CLI_REF` to `release-0.0.23`;

@@ -483,6 +483,12 @@ The docs site keeps a copy of each release's docs
 Docs fixed for X.Y.Z later show under **dev**; to show them under X.Y.Z too,
 move its line to a newer commit that still has X.Y.Z's versions.
 
+Each version builds with the tool its own tree pins: Zensical when its
+`requirements-docs.txt` names it (0.0.24 on), else MkDocs and Material, which
+built 0.0.23 and older (Zensical does not build those trees unchanged; their
+raw HTML's URLs were written for MkDocs). The docs job installs both from
+`requirements-docs.txt`.
+
 #### Release 0.0.19
 
 Release 0.0.19 was cut (2fc9772) before release tags: that commit's

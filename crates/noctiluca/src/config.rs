@@ -197,6 +197,9 @@ pub struct Config {
     pub sites: Vec<Site>,
     /// The terminal adaptations that are on.
     pub adapt: Adapt,
+    /// `[startup] transparent`: where a page sets no background of its
+    /// own, the terminal's own background shows (see `--transparent`).
+    pub transparent: bool,
     /// What was not understood, for the user.
     pub warnings: Vec<String>,
     /// The file it came from, which edits go to.
@@ -268,12 +271,13 @@ impl Default for Config {
             home: None,
             view: View::Projection,
             audio: false,
-            fps: 8,
+            fps: 30,
             images: Images::Auto,
             bandwidth: None,
             profile: None,
             sites: Vec::new(),
             adapt: Adapt::default(),
+            transparent: false,
             warnings: Vec::new(),
             path: None,
         }
@@ -370,7 +374,8 @@ impl Config {
         let mut preset = Preset::Vim;
         let mut keys = Vec::new();
         let (mut home, mut view) = (None, View::Projection);
-        let (mut audio, mut fps, mut images) = (false, 8u32, Images::Auto);
+        let mut transparent = false;
+        let (mut audio, mut fps, mut images) = (false, 30u32, Images::Auto);
         let mut bandwidth = None;
         let mut profile = None;
         let mut sites = Vec::new();
@@ -462,6 +467,13 @@ impl Config {
                 }
                 "startup" => {
                     for (key, value) in body {
+                        if key == "transparent" {
+                            match value.as_bool() {
+                                Some(on) => transparent = on,
+                                None => warn("startup.transparent: expected true or false".into()),
+                            }
+                            continue;
+                        }
                         match (key.as_str(), value.as_str()) {
                             ("home", Some(h)) => home = Some(h.to_string()),
                             ("view", Some(v)) => match View::parse(v) {
@@ -544,6 +556,7 @@ impl Config {
         config.profile = profile;
         config.sites = sites;
         config.adapt = adapt;
+        config.transparent = transparent;
         Ok(config)
     }
 

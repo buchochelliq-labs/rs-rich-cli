@@ -284,7 +284,7 @@ session, and one from another site is refused. Ctrl+C then stops it. The
 tape is [`docs/tapes/serve.tape`](../../tapes/serve.tape).
 
 <div class="tape-player" data-cast="../../../media/tapes/serve/serve.cast" data-poster="npt:0:3">
-  <img src="../../../media/tapes/serve/serve.gif" alt="rich serve printing its address, then curl asking for the page and a session">
+  <img src="../../media/tapes/serve/serve.gif" alt="rich serve printing its address, then curl asking for the page and a session">
 </div>
 
 | Started | The token and the origin checked |

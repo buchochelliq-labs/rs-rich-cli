@@ -1,4 +1,4 @@
- NOCTILUCA   READER + CELLS   ◀▶   Reader fixture
+ NOCTILUCA   READER + CELLS   ◀ ▶ ↻   Reader fixture
  https://fixture.example/reader.html
 Plank╭─ Site shortcuts ───────────────────────────────────────────────────────────────────────╮    ┃
      │▸          n  link "the second page"  [fixture.example]                                 │    ┃

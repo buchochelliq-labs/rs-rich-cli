@@ -127,9 +127,10 @@ fn pictures_are_decoded_from_the_files_the_page_loaded() {
 
 #[test]
 fn a_picture_in_a_format_we_cannot_decode_is_taken_from_chromes_pixels() {
-    // The Guardian serves AVIF to Chrome (it asks for it). rs-rich-art does
-    // not read AVIF, so the picture is Chrome's pixels of its box, not a
-    // picture that never comes.
+    // The Guardian serves AVIF to Chrome (it asks for it). rs-rich-art
+    // does not read AVIF without its `avif` feature, and with it not this
+    // file, which is a head only: the picture is Chrome's pixels of its
+    // box, not a picture that never comes.
     let engine =
         FakeEngine::from_dir(&Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/snapshots"))
             .unwrap();
@@ -144,7 +145,7 @@ fn a_picture_in_a_format_we_cannot_decode_is_taken_from_chromes_pixels() {
             .expect("harbour.jpg")
             .clone()
     };
-    // An AVIF file's head: recognised as AVIF, not readable here.
+    // An AVIF file's head: recognised as AVIF, not readable.
     let mut avif = b"\0\0\0\x1cftypavif\0\0\0\0avifmif1miaf".to_vec();
     avif.resize(256, 0);
     assert_eq!(
@@ -278,4 +279,188 @@ fn an_animated_webp_keeps_its_frames() {
         .unwrap();
     assert!(picture.is_animated());
     assert_eq!(picture.frames().map(<[_]>::len), Some(16));
+}
+
+#[test]
+fn an_inline_svg_drawing_gets_chromes_pixels() {
+    // tests/fixtures/svg-logo.html as Chrome lays it out: two inline
+    // <svg> drawings in the header (a logo and a wordmark), a link.
+    use noctiluca::engine::Rect;
+    use noctiluca::model::MediaKind;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new(
+        "file:///noctiluca/fixtures/svg-logo.html",
+        "SVG logo fixture",
+        800.0,
+        100.0,
+    );
+    let body = p.body();
+    let header = p.element(
+        body,
+        "HEADER",
+        &[],
+        &[("display", "flex")],
+        Some(Rect::new(0.0, 0.0, 800.0, 48.0)),
+    );
+    for (x, width, label) in [(8.0, 96.0, "Glow"), (120.0, 80.0, "News")] {
+        p.element(
+            header,
+            "svg",
+            &[("role", "img"), ("aria-label", label)],
+            &[("display", "inline")],
+            Some(Rect::new(x, 10.0, width, 28.0)),
+        );
+    }
+    let a = p.element(
+        header,
+        "A",
+        &[("href", "#live")],
+        &[("display", "inline")],
+        Some(Rect::new(216.0, 15.0, 88.0, 18.0)),
+    );
+    p.text(a, "Watch Live", Rect::new(216.0, 15.0, 88.0, 18.0));
+    let para = p.element(body, "P", &[], &[], Some(Rect::new(0.0, 64.0, 800.0, 18.0)));
+    p.text(para, "The first story.", Rect::new(0.0, 64.0, 130.0, 18.0));
+    let engine = FakeEngine::from_dir(&std::env::temp_dir().join("noctiluca-no-snapshots"))
+        .unwrap_or_else(|_| {
+            let dir = std::env::temp_dir().join(format!("noctiluca-svg-{}", std::process::id()));
+            std::fs::create_dir_all(&dir).unwrap();
+            FakeEngine::from_dir(&dir).unwrap()
+        });
+    engine
+        .state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("svg-logo".into(), p.snapshot());
+    let (send, updates) = mpsc::channel();
+    let tab = Tab::spawn(Box::new(engine), move |u| {
+        let _ = send.send(u);
+    });
+    tab.send(Command::Open("svg-logo.html".into()));
+    let page = wait_for(&updates, Duration::from_secs(10), |p| {
+        let drawings: Vec<_> = p
+            .media
+            .iter()
+            .filter(|m| m.kind == MediaKind::Svg)
+            .collect();
+        drawings.len() == 2 && drawings.iter().all(|m| m.picture.is_some())
+    });
+    assert!(page.is_some(), "the drawings were never given pictures");
+}
+
+#[test]
+fn every_picture_of_a_long_page_gets_its_still_with_no_more_pings() {
+    // tests/fixtures/many-pictures.html as Chrome lays it out: thirty
+    // stories down the page, each with a picture, all loaded. One batch
+    // of stills follows each reading; the rest follow on their own.
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new(
+        "file:///noctiluca/fixtures/many-pictures.html",
+        "Many pictures fixture",
+        800.0,
+        6000.0,
+    );
+    let body = p.body();
+    for k in 0..30 {
+        let y = 200.0 * k as f64;
+        let article = p.element(
+            body,
+            "ARTICLE",
+            &[],
+            &[],
+            Some(Rect::new(0.0, y, 800.0, 200.0)),
+        );
+        let src = format!("file:///noctiluca/fixtures/media/field.jpg?{}", k + 1);
+        p.image(
+            article,
+            &src,
+            &format!("Field {}", k + 1),
+            Rect::new(0.0, y, 160.0, 120.0),
+        );
+        let para = p.element(
+            article,
+            "P",
+            &[],
+            &[],
+            Some(Rect::new(0.0, y + 136.0, 800.0, 18.0)),
+        );
+        p.text(
+            para,
+            &format!("Story {}", k + 1),
+            Rect::new(0.0, y + 136.0, 70.0, 18.0),
+        );
+    }
+    let dir = std::env::temp_dir().join(format!("noctiluca-many-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let engine = FakeEngine::from_dir(&dir).unwrap();
+    engine
+        .state
+        .lock()
+        .unwrap()
+        .pages
+        .insert("many-pictures".into(), p.snapshot());
+    let (send, updates) = mpsc::channel();
+    let tab = Tab::spawn(Box::new(engine), move |u| {
+        let _ = send.send(u);
+    });
+    tab.send(Command::Open("many-pictures.html".into()));
+    let page = wait_for(&updates, Duration::from_secs(10), |p| {
+        p.media.len() == 30 && p.media.iter().all(|m| m.still.is_some())
+    });
+    assert!(
+        page.is_some(),
+        "pictures past the first batches never got stills"
+    );
+}
+
+#[test]
+fn an_avif_picture_is_decoded_with_the_feature_and_taken_from_chrome_without() {
+    // tests/fixtures/avif.html as Chrome lays it out.
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let src = "file:///noctiluca/fixtures/glow.avif";
+    let mut p = PageBuilder::new(
+        src.replace("glow.avif", "avif.html").as_str(),
+        "AVIF fixture",
+        800.0,
+        120.0,
+    );
+    let body = p.body();
+    let para = p.element(body, "P", &[], &[], Some(Rect::new(8.0, 16.0, 784.0, 18.0)));
+    p.text(
+        para,
+        "A picture in AVIF:",
+        Rect::new(8.0, 16.0, 140.0, 18.0),
+    );
+    p.image(body, src, "A glow", Rect::new(8.0, 50.0, 64.0, 64.0));
+    let avif =
+        std::fs::read(Path::new(env!("CARGO_MANIFEST_DIR")).join("tests/fixtures/glow.avif"))
+            .unwrap();
+    let dir = std::env::temp_dir().join(format!("noctiluca-avif-{}", std::process::id()));
+    std::fs::create_dir_all(&dir).unwrap();
+    let engine = FakeEngine::from_dir(&dir).unwrap();
+    {
+        let mut state = engine.state.lock().unwrap();
+        state.pages.insert("avif".into(), p.snapshot());
+        state.resources.insert(src.into(), avif.clone());
+    }
+    let (send, updates) = mpsc::channel();
+    let tab = Tab::spawn(Box::new(engine), move |u| {
+        let _ = send.send(u);
+    });
+    tab.send(Command::Open("avif.html".into()));
+    let page = wait_for(&updates, Duration::from_secs(10), |p| {
+        p.media.first().is_some_and(|m| m.picture.is_some())
+    })
+    .expect("the picture was never drawn");
+    let still = page.media[0].still.clone().unwrap();
+    if cfg!(feature = "avif") {
+        // The page's own bytes, decoded.
+        assert_eq!(&still[..], &avif[..]);
+    } else {
+        // Chrome's pixels of the box, as PNG.
+        assert!(still.starts_with(b"\x89PNG"));
+    }
 }

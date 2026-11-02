@@ -22,6 +22,8 @@ exclude_docs: |
 
 theme:
   name: material
+  # Zensical's modern design (Inter, JetBrains Mono, Lucide icons).
+  variant: modern
   # No request leaves the site: the fonts are served with it
   # (docs/assets/fonts.css), and the overrides' partials/source.html keeps
   # the repository link without Material's call to the GitHub API.
@@ -140,6 +142,7 @@ nav:
           - Files, spectra and warm-ups: guide/ext/files-and-signals.md
           - Dependency graphs and JSON Schemas: guide/ext/sources.md
           - Macros and derive: guide/ext/macros.md
+          - Inspect: guide/ext/inspect.md
           - Structured data: guide/ext/structured-data.md
           - Documents (Org, AsciiDoc, man pages): guide/ext/documents.md
           - Transforms: guide/ext/transforms.md
@@ -293,7 +296,10 @@ nav:
       - "Design: what the intuiTUIve demos are missing": design/intuituive-demo-gaps.md
       - "Design: the demo loop, where things stand": design/intuituive-status.md
       - "Design: Noctiluca, a terminal web browser": design/browser.md
+      - "Design: Cornacai, a terminal client for coding agents (#794)": design/cornacai.md
       - "Design: fuzzing": design/fuzzing.md
+      - "Design: the threat model": design/threat-model.md
+      - "Security policy": https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/SECURITY.md
       - "Design: the clones' gap reports":
           - "git (gitui)": design/gaps/git.md
           - "top (bottom)": design/gaps/top.md

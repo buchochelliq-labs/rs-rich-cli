@@ -86,6 +86,38 @@ enough for a game: a widget writes cells with
 [`canvas.put_rgb(..)`](widgets.md#your-own-widgets), building no styles,
 and styles no cell uses any more are dropped between frames.
 
+## An animated banner
+
+`intuituive::banner` (the `art` feature, 0.0.24) plays rs-rich-art's
+[animated banners](../art/banners.md#animated-banners) on the app's
+clock. A `Play` is the clock of one run: it starts when something first
+reads it, runs for its length once (or `.looping(true)`), then holds the
+still frame and asks for no more frames. `banner(art, play)` draws the
+art's frame at the play's time; anything that keeps time with it (a
+light that pulses with the glow, a sprite that swims in) reads the same
+play's `elapsed()` or `progress()` and draws again with each frame.
+`play.skip_on_key(node)` makes any key inside `node` jump to the end; the
+key then does what it does.
+
+```rust
+use intuituive::banner::{banner, Play};
+use rich_art::animate::AnimatedBanner;
+use rich_art::FigletFont;
+
+let art = AnimatedBanner::new("Hello", &FigletFont::standard()).wave(true).specks(true);
+let play = Play::new(art.duration_of());
+let title = play.skip_on_key(banner(art, play.clone()).label("Hello"));
+```
+
+The theme can recolour it: `banner.dark`, `banner.lit`, `banner.lit-end`,
+`banner.crest`, `banner.wave` and `banner.speck`. It does not move at all,
+the still frame from the start, when
+`a11y::motion_allowed()` says no: `RICH_ANIMATION=0`, `RICH_A11Y`
+naming `reduced-motion`, `no-animation` or `screen-reader`, or `NO_COLOR`
+(`RICH_ANIMATION=1` wins over the rest). Text mode holds it still too.
+`a11y::set_motion(Some(true))` overrides the environment for the whole
+process, for tests and recordings; `Play::motion(bool)` for one play.
+
 ## Sprites, stages and pixel buffers
 
 A game, a map or an animation draws things that move over a background.

@@ -1,0 +1,16 @@
+# The docs sites' tools, pinned (.github/workflows/docs.yml installs these):
+#
+#     pip install -r requirements-docs.txt
+#     zensical build --strict                        # the main site, into site/
+#     zensical build --strict -f mkdocs-python.yml   # the Python site, into site/python/
+#
+# Zensical builds both sites from mkdocs.yml and mkdocs-python.yml, and the
+# Python site's API reference with mkdocstrings.
+zensical==0.0.74
+mkdocstrings[python]==1.0.8
+mkdocstrings-python==2.0.10
+# MkDocs and Material build the releases whose docs predate the move to
+# Zensical (0.0.23 and older): scripts/build_versioned_docs.py builds a
+# version with Zensical only when its tree has this file naming zensical.
+mkdocs==1.6.1
+mkdocs-material==9.8.0

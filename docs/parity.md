@@ -12,7 +12,7 @@ The point of this project is that output is **byte-identical** to Python
 <figcaption>
 <strong>60 of 65 upstream modules (92%) have a working implementation.</strong>
 Click any bar to jump to that part of the
-<a href="../PORTING/">module status table</a>.
+<a href="PORTING/">module status table</a>.
 </figcaption>
 </figure>
 

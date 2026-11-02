@@ -299,3 +299,326 @@ fn a_tables_rows_keep_their_order_among_blocks_on_the_same_terminal_row() {
         last = at;
     }
 }
+
+#[test]
+fn a_cell_belongs_to_the_control_its_span_is() {
+    use noctiluca::layout::{Line, Span, control_at};
+    let link = Span {
+        control: Some(3),
+        ..Span::new("open sea", "underline")
+    };
+    let line = Line {
+        spans: vec![Span::new("the ", ""), link, Span::new(" — 海", "")],
+    };
+    assert_eq!(control_at(&line, 3), None);
+    assert_eq!(
+        (control_at(&line, 4), control_at(&line, 11)),
+        (Some(3), Some(3))
+    );
+    assert_eq!(control_at(&line, 12), None);
+    // Wide characters count their cells; past the end is nothing.
+    assert_eq!(control_at(&line, 16), None);
+    assert_eq!(control_at(&line, 40), None);
+}
+
+/// The page in `tests/fixtures/caption-grid.html` as Chrome lays it out
+/// at 800 CSS pixels (100 columns): a grid of a wide story (528 pixels)
+/// and a narrow one (264), the wide one's picture 297 pixels tall with
+/// long alt text and no caption of the page's.
+fn caption_grid() -> Page {
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new(
+        "file:///noctiluca/fixtures/caption-grid.html",
+        "Caption grid fixture",
+        800.0,
+        400.0,
+    );
+    let body = p.body();
+    let row = p.element(
+        body,
+        "DIV",
+        &[("class", "row")],
+        &[("display", "grid")],
+        Some(Rect::new(0.0, 0.0, 800.0, 333.0)),
+    );
+    let lead = p.element(
+        row,
+        "DIV",
+        &[("class", "lead")],
+        &[],
+        Some(Rect::new(0.0, 0.0, 528.0, 333.0)),
+    );
+    p.image(
+        lead,
+        "file:///noctiluca/fixtures/media/harbour.jpg",
+        "Boats rest in the harbour at dusk while the tide turns and the first lights of the town come on along the sea wall",
+        Rect::new(0.0, 0.0, 528.0, 297.0),
+    );
+    let h2 = p.element(
+        lead,
+        "H2",
+        &[],
+        &[("font-weight", "700")],
+        Some(Rect::new(0.0, 297.0, 528.0, 36.0)),
+    );
+    p.text(
+        h2,
+        "The harbour at night",
+        Rect::new(0.0, 306.0, 190.0, 18.0),
+    );
+    let side = p.element(
+        row,
+        "DIV",
+        &[("class", "side")],
+        &[],
+        Some(Rect::new(536.0, 0.0, 264.0, 80.0)),
+    );
+    let h3 = p.element(
+        side,
+        "H3",
+        &[],
+        &[("font-weight", "700")],
+        Some(Rect::new(536.0, 0.0, 264.0, 18.0)),
+    );
+    p.text(h3, "Tides this week", Rect::new(536.0, 0.0, 130.0, 18.0));
+    let para = p.element(
+        side,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(536.0, 34.0, 264.0, 36.0)),
+    );
+    p.text(
+        para,
+        "High water comes an hour later each day.",
+        Rect::new(536.0, 34.0, 250.0, 36.0),
+    );
+    let under = p.element(
+        body,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 349.0, 800.0, 18.0)),
+    );
+    p.text(under, "Under the row.", Rect::new(0.0, 349.0, 110.0, 18.0));
+    build(&p.snapshot(), &mut Revisions::new())
+}
+
+#[test]
+fn a_pictures_caption_in_a_narrowed_grid_item_wraps_and_shows_in_full() {
+    let page = caption_grid();
+    let lines: Vec<String> = projection(&page, 100, (8.0, 18.0), &Marks::default())
+        .iter()
+        .map(Line::plain)
+        .collect();
+    // The caption's words, in order, over as many rows as it takes: none
+    // cut at the narrowed item's edge.
+    let caption: String = lines
+        .iter()
+        .filter(|l| !l.contains('░'))
+        .map(|l| l.split("  ").next().unwrap_or_default().trim())
+        .collect::<Vec<_>>()
+        .join(" ");
+    assert!(
+        caption.contains(
+            "Image: Boats rest in the harbour at dusk while the tide turns and the first \
+             lights of the town come on along the sea wall"
+        ),
+        "{lines:#?}"
+    );
+    // The story beside it keeps its column, and what is under the row
+    // comes after the caption.
+    let at = |text: &str| {
+        lines
+            .iter()
+            .position(|l| l.contains(text))
+            .unwrap_or_else(|| panic!("{text}: {lines:#?}"))
+    };
+    assert!(at("Tides this week") < at("sea wall"));
+    assert!(at("sea wall") < at("Under the row."));
+}
+
+/// The page in `tests/fixtures/gaps.html` as Chrome lays it out at 800
+/// CSS pixels: a header, an empty 216-pixel ad slot, the first story, a
+/// sidebar of six links beside one short paragraph, an empty 180-pixel
+/// spacer, and a last paragraph.
+fn gaps() -> Page {
+    use noctiluca::engine::Rect;
+    use noctiluca::testing::PageBuilder;
+    let mut p = PageBuilder::new(
+        "file:///noctiluca/fixtures/gaps.html",
+        "Gaps fixture",
+        800.0,
+        700.0,
+    );
+    let body = p.body();
+    let header = p.element(
+        body,
+        "HEADER",
+        &[],
+        &[("display", "flex")],
+        Some(Rect::new(0.0, 0.0, 800.0, 36.0)),
+    );
+    let menu = p.element(
+        header,
+        "A",
+        &[("href", "#menu")],
+        &[("display", "inline")],
+        Some(Rect::new(8.0, 9.0, 80.0, 18.0)),
+    );
+    p.text(menu, "Open menu", Rect::new(8.0, 9.0, 80.0, 18.0));
+    let live = p.element(
+        header,
+        "A",
+        &[("href", "#live")],
+        &[("display", "inline")],
+        Some(Rect::new(704.0, 9.0, 88.0, 18.0)),
+    );
+    p.text(live, "Watch Live", Rect::new(704.0, 9.0, 88.0, 18.0));
+    p.element(
+        body,
+        "DIV",
+        &[("class", "slot")],
+        &[],
+        Some(Rect::new(0.0, 36.0, 800.0, 216.0)),
+    );
+    let h2 = p.element(
+        body,
+        "H2",
+        &[],
+        &[("font-weight", "700")],
+        Some(Rect::new(0.0, 270.0, 800.0, 18.0)),
+    );
+    p.text(h2, "The first story", Rect::new(0.0, 270.0, 140.0, 18.0));
+    let para = p.element(
+        body,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 306.0, 800.0, 18.0)),
+    );
+    p.text(
+        para,
+        "Its first paragraph.",
+        Rect::new(0.0, 306.0, 150.0, 18.0),
+    );
+    let columns = p.element(
+        body,
+        "DIV",
+        &[("class", "columns")],
+        &[("display", "flex")],
+        Some(Rect::new(0.0, 342.0, 800.0, 108.0)),
+    );
+    let aside = p.element(
+        columns,
+        "ASIDE",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 342.0, 200.0, 108.0)),
+    );
+    for (k, name) in ["One", "Two", "Three", "Four", "Five", "Six"]
+        .iter()
+        .enumerate()
+    {
+        let y = 342.0 + 18.0 * k as f64;
+        let href = format!("#{k}");
+        let item = p.element(
+            aside,
+            "LI",
+            &[],
+            &[("display", "list-item")],
+            Some(Rect::new(0.0, y, 200.0, 18.0)),
+        );
+        let a = p.element(
+            item,
+            "A",
+            &[("href", href.as_str())],
+            &[("display", "inline")],
+            Some(Rect::new(0.0, y, 40.0, 18.0)),
+        );
+        p.text(a, name, Rect::new(0.0, y, 40.0, 18.0));
+    }
+    let main = p.element(
+        columns,
+        "MAIN",
+        &[],
+        &[],
+        Some(Rect::new(200.0, 342.0, 600.0, 34.0)),
+    );
+    let beside = p.element(
+        main,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(200.0, 342.0, 600.0, 18.0)),
+    );
+    p.text(
+        beside,
+        "Beside the sidebar.",
+        Rect::new(200.0, 342.0, 150.0, 18.0),
+    );
+    p.element(
+        body,
+        "DIV",
+        &[("class", "spacer")],
+        &[],
+        Some(Rect::new(0.0, 450.0, 800.0, 180.0)),
+    );
+    let last = p.element(
+        body,
+        "P",
+        &[],
+        &[],
+        Some(Rect::new(0.0, 646.0, 800.0, 18.0)),
+    );
+    p.text(
+        last,
+        "After the spacer.",
+        Rect::new(0.0, 646.0, 140.0, 18.0),
+    );
+    build(&p.snapshot(), &mut Revisions::new())
+}
+
+#[test]
+fn rows_blank_in_every_column_collapse_and_rows_beside_a_sidebar_stay() {
+    use noctiluca::adapt::{Adapt, Rule};
+    let page = gaps();
+    let lines_with = |marks: &Marks| -> Vec<String> {
+        projection(&page, 100, (8.0, 18.0), marks)
+            .iter()
+            .map(Line::plain)
+            .collect()
+    };
+    let lines = lines_with(&Marks::default());
+    let at = |lines: &[String], text: &str| {
+        lines
+            .iter()
+            .position(|l| l.contains(text))
+            .unwrap_or_else(|| panic!("{text}: {lines:#?}"))
+    };
+    // The empty ad slot and the spacer take one blank row each.
+    assert_eq!(
+        at(&lines, "The first story"),
+        at(&lines, "Open menu") + 2,
+        "{lines:#?}"
+    );
+    assert_eq!(
+        at(&lines, "After the spacer"),
+        at(&lines, "Six") + 2,
+        "{lines:#?}"
+    );
+    // The paragraph beside the sidebar stays on the sidebar's first row,
+    // and the sidebar keeps its six rows, though only one has main text.
+    assert_eq!(at(&lines, "Beside the sidebar"), at(&lines, "One"));
+    assert_eq!(at(&lines, "Six"), at(&lines, "One") + 5);
+    // Off, the rows stay where Chrome put them.
+    let faithful = lines_with(&Marks {
+        adapt: Adapt::default().with(Rule::CollapseGaps, false),
+        ..Marks::default()
+    });
+    assert!(
+        at(&faithful, "The first story") >= at(&faithful, "Open menu") + 12,
+        "{faithful:#?}"
+    );
+}

@@ -4,6 +4,12 @@
 //! public FIGlet API (`FigletFont`, `figlet::render`) and rs-rich-ext's
 //! `palette::gradient`, behind the CLI's `art` feature.
 //!
+//! With `--effect`, `--wave`, `--specks`, `--loop` or `--duration` it is
+//! animated (0.0.24): rs-rich-art's `animate::AnimatedBanner` frames played
+//! on stdout for about two seconds, then the still final frame; any key
+//! skips to it. Only on a terminal, with colour and motion allowed: else
+//! the still frame alone.
+//!
 //! The bundled font is `standard`; `--font` also takes a FIGfont (`.flf`)
 //! file, or the name of one in `$FIGLET_FONTDIR` or figlet's own font
 //! directories, so an installed figlet's fonts work by name.
@@ -11,6 +17,7 @@ use super::*;
 
 use rich::{Color, Segment, Style};
 use rich_art::Justify as FigletJustify;
+use rich_art::animate::{AnimatedBanner, Effect};
 use rich_art::figlet::{self, FigletFont};
 use rich_ext::cli_doc::{ArgSpec, CommandSpec};
 
@@ -20,6 +27,12 @@ const FONT_LIMIT: u64 = 4 * 1024 * 1024;
 /// The widest `--width`: wide enough for any terminal, small enough that a
 /// layout of that many columns stays cheap.
 const MAX_WIDTH: usize = 10_000;
+
+/// The longest `--duration`, in seconds.
+const MAX_DURATION: f64 = 60.0;
+
+/// How often an animated banner draws a frame.
+const FRAME: std::time::Duration = std::time::Duration::from_millis(33);
 
 /// Named gradients for `--gradient`.
 const PRESETS: &[(&str, &[&str])] = &[
@@ -107,6 +120,36 @@ pub(super) fn command() -> CommandSpec {
                 )
                 .choices(["wrap", "plain", "none"]),
         )
+        .arg(
+            ArgSpec::option("effect")
+                .value_name("E")
+                .help(
+                    "Animate the banner: glow (the default when animating: a band of blue-green \
+                     light travels through dark letters), shimmer, typewriter, fade, or still. \
+                     It plays once (about 2 s), then holds the still final frame; any key \
+                     skips to it. Not combined with --style or --gradient",
+                )
+                .choices(Effect::ALL.map(Effect::name)),
+        )
+        .arg(ArgSpec::flag("once").help("Play the animation once, then hold still (the default)"))
+        .arg(
+            ArgSpec::flag("loop")
+                .help("Play the animation again and again, until a key is pressed (or Ctrl+C)"),
+        )
+        .arg(
+            ArgSpec::option("duration")
+                .value_name("SECS")
+                .help("How long one play of the animation lasts (default 2, up to 60)"),
+        )
+        .arg(ArgSpec::flag("wave").help("Animate, with a wave line under the banner"))
+        .arg(ArgSpec::flag("specks").help(
+            "Animate, with specks of light (·∘°) rising around the letters and a row above them",
+        ))
+        .arg(
+            ArgSpec::option("seed")
+                .value_name("N")
+                .help("Where the specks start (default 0): the same seed draws the same specks"),
+        )
         .arg(ArgSpec::flag("force-terminal").help(
             "Write colour and styles even when stdout is not a terminal (for a pager or a file)",
         ))
@@ -118,6 +161,14 @@ pub(super) fn command() -> CommandSpec {
         .example(
             "rich banner --font slant --fit plain Release",
             "An installed figlet font; plain text on a narrow terminal",
+        )
+        .example(
+            "rich banner --wave --specks Noctiluca",
+            "Glowing letters over a wave, specks of light rising; still when piped",
+        )
+        .example(
+            "rich banner --effect typewriter --loop 'On air'",
+            "Typed out again and again until a key is pressed",
         )
 }
 
@@ -150,6 +201,19 @@ struct Args {
     width: Option<usize>,
     fit: Fit,
     force_terminal: bool,
+    effect: Option<Effect>,
+    looping: bool,
+    duration: Option<f64>,
+    wave: bool,
+    specks: bool,
+    seed: u64,
+}
+
+impl Args {
+    /// Whether an animation flag was given.
+    fn animated(&self) -> bool {
+        self.effect.is_some() || self.looping || self.duration.is_some() || self.wave || self.specks
+    }
 }
 
 /// The colours a `--gradient` value names.
@@ -202,6 +266,12 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
         width: None,
         fit: Fit::Wrap,
         force_terminal: false,
+        effect: None,
+        looping: false,
+        duration: None,
+        wave: false,
+        specks: false,
+        seed: 0,
     };
     let mut seen_command = false;
     let mut iter = args.iter();
@@ -286,6 +356,37 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
                 }
             }
             "--force-terminal" => parsed.force_terminal = true,
+            "--effect" => {
+                let text = value()?;
+                parsed.effect = Some(Effect::from_name(&text).ok_or_else(|| {
+                    format!(
+                        "--effect takes {}, not {text:?}",
+                        Effect::ALL.map(Effect::name).join(", ")
+                    )
+                })?);
+            }
+            "--once" => parsed.looping = false,
+            "--loop" => parsed.looping = true,
+            "--duration" => {
+                let text = value()?;
+                match text.parse::<f64>() {
+                    Ok(n) if n > 0.0 && n <= MAX_DURATION => parsed.duration = Some(n),
+                    _ => {
+                        return Err(format!(
+                            "--duration takes seconds, more than 0 and up to {MAX_DURATION}, not \
+                             {text:?}"
+                        ));
+                    }
+                }
+            }
+            "--wave" => parsed.wave = true,
+            "--specks" => parsed.specks = true,
+            "--seed" => {
+                let text = value()?;
+                parsed.seed = text
+                    .parse()
+                    .map_err(|_| format!("--seed takes a whole number, not {text:?}"))?;
+            }
             "--help" => parsed.help = true,
             "--no-color" | "--color" | "--no-config" => {}
             "--report" => {
@@ -293,6 +394,13 @@ fn parse_args(args: &[String]) -> Result<Args, String> {
             }
             other => return Err(format!("unknown option {other} for `rich banner`")),
         }
+    }
+    if parsed.animated() && (parsed.style.is_some() || !parsed.gradient.is_empty()) {
+        return Err(
+            "--style and --gradient colour a still banner; an animated one (--effect, --wave, \
+             --specks, --loop, --duration) has its own colours"
+                .into(),
+        );
     }
     Ok(parsed)
 }
@@ -552,6 +660,33 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
     };
     let width = builder().build().width();
     let lines = layout(&text, &font, width, &parsed);
+    if parsed.animated() {
+        let art = AnimatedBanner::from_lines(&lines)
+            .effect(parsed.effect.unwrap_or_default())
+            .duration(std::time::Duration::from_secs_f64(
+                parsed.duration.unwrap_or(2.0),
+            ))
+            .wave(parsed.wave)
+            .specks(parsed.specks)
+            .seed(parsed.seed);
+        let widest = art.size().0;
+        let console = builder().width(width.max(widest)).build();
+        let env = rich_ext::capabilities::SystemEnvironment;
+        let animate = std::io::stdout().is_terminal()
+            && !no_color
+            && rich_ext::capabilities::Environment::var(&env, "NO_COLOR")
+                .is_none_or(|v| v.is_empty())
+            && super::spin::animation_allowed(&env);
+        if !animate {
+            authoring::out(&format!("{}\n", console.render_to_string(&art.still())));
+            return ExitCode::SUCCESS;
+        }
+        return match play(&art, &console, parsed.looping) {
+            Ok(true) => ExitCode::from(130),
+            Ok(false) => ExitCode::SUCCESS,
+            Err(error) => emit_error(json, ExitClass::Input, &format!("cannot write: {error}")),
+        };
+    }
     let painted = Painted {
         lines,
         style: parsed.style.clone(),
@@ -568,6 +703,165 @@ pub(super) fn dispatch(args: &[String]) -> ExitCode {
     let console = builder().width(width.max(widest)).build();
     authoring::out(&format!("{}\n", console.render_to_string(&painted)));
     ExitCode::SUCCESS
+}
+
+/// Play `art` on stdout, a terminal: frames over each other until it is
+/// done (or, looping, until a key), then the still frame. Whether Ctrl+C
+/// ended it.
+fn play(art: &AnimatedBanner, console: &Console, looping: bool) -> std::io::Result<bool> {
+    use std::time::{Duration, Instant};
+    let mut stdout = std::io::stdout().lock();
+    let keys = keys::Keys::new();
+    let (_, height) = art.size();
+    let up = if height > 1 {
+        format!("\x1b[{}A\r", height - 1)
+    } else {
+        "\r".to_string()
+    };
+    let cycle = art.duration_of() + Duration::from_secs(1);
+    let start = Instant::now();
+    let mut first = true;
+    let mut interrupted = false;
+    // Hide the cursor while frames draw.
+    write!(stdout, "\x1b[?25l")?;
+    loop {
+        let mut t = start.elapsed();
+        if looping {
+            t = Duration::from_nanos((t.as_nanos() % cycle.as_nanos().max(1)) as u64);
+        }
+        let done = !looping && t >= art.duration_of();
+        let frame = if done { art.still() } else { art.frame(t) };
+        if !first {
+            write!(stdout, "{up}")?;
+        }
+        first = false;
+        write!(stdout, "{}", console.render_to_string(&frame))?;
+        stdout.flush()?;
+        if done {
+            break;
+        }
+        match keys.wait(FRAME) {
+            Some(keys::Pressed::Interrupt) => {
+                interrupted = true;
+                write!(stdout, "{up}{}", console.render_to_string(&art.still()))?;
+                break;
+            }
+            Some(keys::Pressed::Key) => {
+                write!(stdout, "{up}{}", console.render_to_string(&art.still()))?;
+                break;
+            }
+            None => {}
+        }
+    }
+    writeln!(stdout, "\x1b[?25h")?;
+    stdout.flush()?;
+    Ok(interrupted)
+}
+
+/// Keys pressed while a banner plays: stdin in non-canonical mode, no
+/// echo, so one key ends the animation without Enter.
+mod keys {
+    use std::time::Duration;
+
+    /// What was pressed. Only unix reads keys; elsewhere none is made.
+    #[cfg_attr(not(unix), allow(dead_code))]
+    pub(super) enum Pressed {
+        Key,
+        /// Ctrl+C: read as a byte, since signals are off while it plays.
+        Interrupt,
+    }
+
+    #[cfg(unix)]
+    pub(super) struct Keys {
+        saved: Option<libc::termios>,
+    }
+
+    #[cfg(unix)]
+    impl Keys {
+        /// Keys from stdin, when it is a terminal; none otherwise.
+        pub(super) fn new() -> Keys {
+            use std::io::IsTerminal;
+            if !std::io::stdin().is_terminal() {
+                return Keys { saved: None };
+            }
+            // SAFETY: tcgetattr and tcsetattr on stdin with a termios we own.
+            #[allow(unsafe_code)]
+            let saved = unsafe {
+                let mut termios: libc::termios = std::mem::zeroed();
+                if libc::tcgetattr(libc::STDIN_FILENO, &mut termios) != 0 {
+                    return Keys { saved: None };
+                }
+                let saved = termios;
+                termios.c_lflag &= !(libc::ICANON | libc::ECHO | libc::ISIG);
+                termios.c_cc[libc::VMIN] = 0;
+                termios.c_cc[libc::VTIME] = 0;
+                if libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &termios) != 0 {
+                    return Keys { saved: None };
+                }
+                saved
+            };
+            Keys { saved: Some(saved) }
+        }
+
+        /// Wait up to `timeout` for a key.
+        pub(super) fn wait(&self, timeout: Duration) -> Option<Pressed> {
+            if self.saved.is_none() {
+                std::thread::sleep(timeout);
+                return None;
+            }
+            let mut fd = libc::pollfd {
+                fd: libc::STDIN_FILENO,
+                events: libc::POLLIN,
+                revents: 0,
+            };
+            let ms = timeout.as_millis().min(i32::MAX as u128) as i32;
+            // SAFETY: poll on one pollfd we own; read into a buffer we own.
+            #[allow(unsafe_code)]
+            unsafe {
+                if libc::poll(&mut fd, 1, ms) <= 0 {
+                    return None;
+                }
+                let mut buffer = [0u8; 64];
+                let n = libc::read(libc::STDIN_FILENO, buffer.as_mut_ptr().cast(), buffer.len());
+                if n <= 0 {
+                    return None;
+                }
+                if buffer[..n as usize].contains(&3) {
+                    return Some(Pressed::Interrupt);
+                }
+            }
+            Some(Pressed::Key)
+        }
+    }
+
+    #[cfg(unix)]
+    impl Drop for Keys {
+        fn drop(&mut self) {
+            if let Some(saved) = self.saved {
+                // SAFETY: restoring the termios read in `new`.
+                #[allow(unsafe_code)]
+                unsafe {
+                    libc::tcsetattr(libc::STDIN_FILENO, libc::TCSANOW, &saved);
+                }
+            }
+        }
+    }
+
+    /// Elsewhere no key ends it early: it plays to its end.
+    #[cfg(not(unix))]
+    pub(super) struct Keys;
+
+    #[cfg(not(unix))]
+    impl Keys {
+        pub(super) fn new() -> Keys {
+            Keys
+        }
+
+        pub(super) fn wait(&self, timeout: Duration) -> Option<Pressed> {
+            std::thread::sleep(timeout);
+            None
+        }
+    }
 }
 
 #[cfg(test)]
@@ -621,9 +915,43 @@ mod tests {
             &["banner", "--style", "not a style"],
             &["banner", "--bogus"],
             &["banner", "--font"],
+            &["banner", "--effect", "sparkle"],
+            &["banner", "--duration", "0"],
+            &["banner", "--duration", "61"],
+            &["banner", "--seed", "x"],
+            &["banner", "--wave", "--gradient", "ocean"],
+            &["banner", "--effect", "glow", "--style", "bold"],
         ] {
             assert!(parse_args(&args(bad)).is_err(), "{bad:?}");
         }
+    }
+
+    #[test]
+    fn animation_flags_parse() {
+        let parsed = parse_args(&args(&[
+            "banner",
+            "--effect",
+            "shimmer",
+            "--loop",
+            "--duration=1.5",
+            "--wave",
+            "--specks",
+            "--seed",
+            "9",
+            "Hi",
+        ]))
+        .unwrap();
+        assert!(parsed.animated());
+        assert_eq!(parsed.effect, Some(Effect::Shimmer));
+        assert!(parsed.looping && parsed.wave && parsed.specks);
+        assert_eq!(parsed.duration, Some(1.5));
+        assert_eq!(parsed.seed, 9);
+        assert!(!parse_args(&args(&["banner", "Hi"])).unwrap().animated());
+        assert!(
+            !parse_args(&args(&["banner", "--once", "Hi"]))
+                .unwrap()
+                .animated()
+        );
     }
 
     #[test]

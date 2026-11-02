@@ -1,0 +1,13 @@
+{
+  "tape": "docs/tapes/noctiluca-start.tape",
+  "tape_fnv1a64": "b8026096585065b8",
+  "recorder": "rs-rich-record 0.0.12",
+  "rich": null,
+  "commit": "133ea8ef1a7afc3bfa787185e9a409fc061cbf87",
+  "screenshots": [
+    "start",
+    "about",
+    "back"
+  ],
+  "note": "Every frame is real output of the program under test on a PTY."
+}

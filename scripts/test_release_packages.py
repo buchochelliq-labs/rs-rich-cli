@@ -71,7 +71,7 @@ class StagedCargoTests(unittest.TestCase):
             root = Path(directory)
             target = root / "target"
             (root / "Cargo.toml").write_text(
-                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","diagram","mermaid","lumis","record","interact","micro","data","ratatui","intuituive","web","embed","marketplace","noctiluca","cli"]\n')
+                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","diagram","mermaid","lumis","record","interact","micro","data","ratatui","intuituive","web","embed","marketplace","acp","noctiluca","cli"]\n')
             for folder, name in [("core", "rs-rich"), ("plugin-api", "rs-rich-plugin-api"),
                                  ("macros", "rs-rich-macros"),
                                  ("ext", "rs-rich-ext"), ("art", "rs-rich-art"),
@@ -85,6 +85,7 @@ class StagedCargoTests(unittest.TestCase):
                                  ("web", "rs-rich-web"),
                                  ("embed", "rs-rich-embed"),
                                  ("marketplace", "rs-rich-marketplace"),
+                                 ("acp", "rs-rich-acp"),
                                  ("noctiluca", "noctiluca"),
                                  ("cli", "rs-rich-cli")]:
                 crate = root / folder
@@ -137,7 +138,7 @@ class StagedCargoTests(unittest.TestCase):
         with tempfile.TemporaryDirectory(prefix="restage-regression-") as directory:
             root = Path(directory)
             (root / "Cargo.toml").write_text(
-                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","diagram","mermaid","lumis","record","interact","micro","data","ratatui","intuituive","web","embed","marketplace","noctiluca","cli"]\n')
+                '[workspace]\nresolver="2"\nmembers=["core","plugin-api","macros","ext","art","diagram","mermaid","lumis","record","interact","micro","data","ratatui","intuituive","web","embed","marketplace","acp","noctiluca","cli"]\n')
             for folder, name, dependency in [("core", "rs-rich", None),
                                              ("plugin-api", "rs-rich-plugin-api", None),
                                              ("macros", "rs-rich-macros", None),
@@ -155,6 +156,7 @@ class StagedCargoTests(unittest.TestCase):
                                              ("web", "rs-rich-web", None),
                                              ("embed", "rs-rich-embed", None),
                                              ("marketplace", "rs-rich-marketplace", None),
+                                             ("acp", "rs-rich-acp", None),
                                              ("noctiluca", "noctiluca", None),
                                              ("cli", "rs-rich-cli", ("rs-rich-ext", "ext"))]:
                 crate = root / folder

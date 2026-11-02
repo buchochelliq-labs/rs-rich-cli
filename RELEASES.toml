@@ -129,6 +129,14 @@ registry = "crates.io"
 manifest = "crates/rich-marketplace/Cargo.toml"
 version = "0.0.3"
 
+# The Agent Client Protocol client (Cornacai's protocol layer): no
+# workspace dependencies.
+[[package]]
+name = "rs-rich-acp"
+registry = "crates.io"
+manifest = "crates/rich-acp/Cargo.toml"
+version = "0.0.1"
+
 # Noctiluca, the terminal web browser: a leaf, a binary of its own.
 [[package]]
 name = "noctiluca"

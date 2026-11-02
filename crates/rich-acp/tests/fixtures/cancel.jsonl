@@ -1,0 +1,14 @@
+{"note": "The user cancels while a permission prompt is open: the client sends session/cancel and the permission request is answered cancelled; the agent ends the turn with stopReason cancelled. The handler's late answer must never reach the agent."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_cancel"}}}
+{"client": {"id": 2, "method": "session/prompt", "params": {"sessionId": "sess_cancel"}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_cancel", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "Running the tests."}}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_cancel", "update": {"sessionUpdate": "tool_call", "toolCallId": "call_run", "title": "cargo test", "kind": "execute", "status": "pending"}}}}
+{"agent": {"jsonrpc": "2.0", "id": 7, "method": "session/request_permission", "params": {"sessionId": "sess_cancel", "toolCall": {"toolCallId": "call_run"}, "options": [{"optionId": "allow", "name": "Allow", "kind": "allow_once"}, {"optionId": "reject", "name": "Reject", "kind": "reject_once"}]}}}
+{"client": {"jsonrpc": "2.0", "method": "session/cancel", "params": {"sessionId": "sess_cancel"}}}
+{"client": {"jsonrpc": "2.0", "id": 7, "result": {"outcome": {"outcome": "cancelled"}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_cancel", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call_run", "status": "failed"}}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {"stopReason": "cancelled"}}}
+{"quiet": 600}

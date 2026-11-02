@@ -11,7 +11,7 @@
 // and reading stats.json, nulls and bad links included.
 //
 // Then, unless --unit, the page in headless Chromium (Playwright), on SITE
-// (a `mkdocs build` output; default site/dev, else site), with the
+// (a `zensical build` output; default site/dev, else site), with the
 // marketplace's URLs answered from the fixture and every other outside
 // request refused. It checks that:
 //
@@ -232,7 +232,7 @@ function market(extra = []) {
 
 async function browser() {
   if (!existsSync(path.join(SITE, "marketplace", "index.html"))) {
-    throw new Error(`${SITE} has no marketplace/index.html: run mkdocs build first`);
+    throw new Error(`${SITE} has no marketplace/index.html: run zensical build first`);
   }
   const server = await serve(SITE);
   const base = `http://127.0.0.1:${server.address().port}/`;
@@ -457,7 +457,10 @@ async function browser() {
         else if (name.endsWith(".html")) {
           const html = readFileSync(file, "utf8");
           for (const tag of html.match(/<(img|script|link|iframe|source|video|audio|object|embed)\b[^>]*>/gi) || []) {
-            if (/^<link\b/i.test(tag) && /rel="?(canonical|alternate)/i.test(tag)) continue;
+            // canonical, alternate, next and prev are links to pages, not
+            // something the page loads (Zensical writes rel=next for the
+            // nav's absolute Python site entry).
+            if (/^<link\b/i.test(tag) && /rel="?(canonical|alternate|next|prev)\b/i.test(tag)) continue;
             const url = (tag.match(/\b(?:src|href|data|poster)\s*=\s*"([^"]*)"/i) || [])[1] || "";
             if (/^(https?:)?\/\//i.test(url)) external.push(`${path.relative(SITE, file)}: ${url}`);
           }
@@ -482,7 +485,7 @@ async function browser() {
       await page.evaluate(() => document.fonts.ready);
       if (at === "") {
         const fonts = await page.evaluate(() => [...document.fonts].filter((f) => f.status === "loaded").map((f) => f.family.replace(/"/g, "")));
-        check(fonts.includes("Roboto"), "the site's own Roboto loads");
+        check(fonts.includes("Inter"), "the site's own Inter loads");
         check(await page.locator(".md-source").count() > 0, "the header still links to the repository");
       }
       same(asked, [], `/${at} asks nothing of another site`);

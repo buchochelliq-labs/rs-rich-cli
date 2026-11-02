@@ -15,13 +15,21 @@
 # a required reviewer (the maintainer) approves the run. The backup key
 # never enters GitHub.
 #
-# The signed index is pushed to main over SSH with a deploy key (the
-# environment's MARKETPLACE_DEPLOY_KEY), which main's ruleset lets bypass
-# it; the workflow's own token only reads. A push by a deploy key starts
-# workflows, unlike one by GITHUB_TOKEN, but the signer's commit changes
-# only index.json and index.json.minisig: this workflow's push trigger is
-# limited to packages/** and keys/**, and check-listings.yml runs on pull
-# requests only, so the commit starts neither.
+# The signed index is pushed to main with a short-lived installation token
+# of the signer's GitHub App, which main's ruleset lets bypass it. The App's
+# client id (the environment variable SIGNER_APP_CLIENT_ID) and private key
+# (the environment secret SIGNER_APP_PRIVATE_KEY) live in the same
+# environment; the App has one repository permission, Contents: read and
+# write, and is installed on this repository only. The token is asked for
+# with contents: write on this repository alone, expires within the hour and
+# is revoked when the job ends; the workflow's own token only reads. The
+# commit is authored by the App's bot user, `<app-slug>[bot]`.
+#
+# A push with an App's token starts workflows, unlike one with
+# GITHUB_TOKEN, but the signer's commit changes only index.json and
+# index.json.minisig: this workflow's push trigger is limited to
+# packages/** and keys/**, and check-listings.yml runs on pull requests
+# only, so the commit starts neither.
 name: Sign the index
 
 on:
@@ -84,13 +92,50 @@ jobs:
     permissions:
       contents: read
     steps:
-      # The deploy key, not the workflow's token, pushes the signed index:
-      # main's ruleset lets the key bypass it. persist-credentials stays at
-      # its default (true) here so the final `git push` uses the key.
+      # Before anything is minted or checked out: every secret and variable
+      # the job needs is there, so a half-set-up environment fails here,
+      # naming what is missing, and not in the token action or at the push.
+      # Only whether each is set is read, never its value.
+      - name: The marketplace-signing environment is set up
+        env:
+          HAS_MINISIGN_KEY: ${{ secrets.MARKETPLACE_MINISIGN_KEY != '' }}
+          HAS_MINISIGN_PASSWORD: ${{ secrets.MARKETPLACE_MINISIGN_PASSWORD != '' }}
+          HAS_APP_CLIENT_ID: ${{ vars.SIGNER_APP_CLIENT_ID != '' }}
+          HAS_APP_PRIVATE_KEY: ${{ secrets.SIGNER_APP_PRIVATE_KEY != '' }}
+        run: |
+          set -euo pipefail
+          missing=""
+          [ "$HAS_MINISIGN_KEY" = "true" ] || missing="$missing secret:MARKETPLACE_MINISIGN_KEY"
+          [ "$HAS_MINISIGN_PASSWORD" = "true" ] || missing="$missing secret:MARKETPLACE_MINISIGN_PASSWORD"
+          [ "$HAS_APP_CLIENT_ID" = "true" ] || missing="$missing variable:SIGNER_APP_CLIENT_ID"
+          [ "$HAS_APP_PRIVATE_KEY" = "true" ] || missing="$missing secret:SIGNER_APP_PRIVATE_KEY"
+          if [ -n "$missing" ]; then
+            echo "::error::the marketplace-signing environment has no$missing (see the marketplace README, \"Installing it\", steps 3 and 4)"
+            exit 1
+          fi
+
+      # The signer App's installation token, not the workflow's, pushes the
+      # signed index: main's ruleset lets the App bypass it. It is asked for
+      # with contents: write on this repository only, whatever else the
+      # App might be granted, and is revoked when the job ends.
+      - name: Mint the signer App's token
+        id: app-token
+        uses: actions/create-github-app-token@64ab729a6294000f5aa4a4bc0b73d1f32bc45510 # v3.3.0
+        with:
+          client-id: ${{ vars.SIGNER_APP_CLIENT_ID }}
+          private-key: ${{ secrets.SIGNER_APP_PRIVATE_KEY }}
+          repositories: ${{ github.event.repository.name }}
+          permission-contents: write
+
+      # Checked out with the App's token, which is not left in .git/config
+      # (persist-credentials: false): the steps between here and the push
+      # run Python from this repository and from rs-rich-cli, and none of
+      # them needs to write. The push step hands git the token itself.
       - uses: actions/checkout@v7
         with:
           ref: main
-          ssh-key: ${{ secrets.MARKETPLACE_DEPLOY_KEY }}
+          token: ${{ steps.app-token.outputs.token }}
+          persist-credentials: false
 
       - name: Fetch rs-rich-cli's validator and schemas
         uses: actions/checkout@v7
@@ -124,18 +169,9 @@ jobs:
         env:
           MINISIGN_KEY: ${{ secrets.MARKETPLACE_MINISIGN_KEY }}
           MINISIGN_PASSWORD: ${{ secrets.MARKETPLACE_MINISIGN_PASSWORD }}
-          HAS_DEPLOY_KEY: ${{ secrets.MARKETPLACE_DEPLOY_KEY != '' }}
           SERIAL: ${{ steps.index.outputs.serial }}
         run: |
           set -euo pipefail
-          missing=""
-          [ -n "$MINISIGN_KEY" ] || missing="$missing MARKETPLACE_MINISIGN_KEY"
-          [ -n "$MINISIGN_PASSWORD" ] || missing="$missing MARKETPLACE_MINISIGN_PASSWORD"
-          [ "$HAS_DEPLOY_KEY" = "true" ] || missing="$missing MARKETPLACE_DEPLOY_KEY"
-          if [ -n "$missing" ]; then
-            echo "::error::the marketplace-signing environment has no$missing"
-            exit 1
-          fi
           umask 077
           key="$RUNNER_TEMP/main.key"
           trap 'rm -f "$key"' EXIT
@@ -183,12 +219,29 @@ jobs:
           grep -qx "Trusted comment: rs-rich-marketplace index serial=$SERIAL" verify.log
           rm verify.log
 
+      # The commit is the App's bot user's: `<app-slug>[bot]`, with the
+      # noreply address GitHub gives it, `<user id>+<app-slug>[bot]@...`.
+      # The slug comes from the token action; the bot user's id is public,
+      # read from the users API with the App's token.
       - name: Commit the signed index to main
         env:
           SERIAL: ${{ steps.index.outputs.serial }}
+          APP_SLUG: ${{ steps.app-token.outputs.app-slug }}
+          GH_TOKEN: ${{ steps.app-token.outputs.token }}
         run: |
-          git config user.name "rs-rich-marketplace signer"
-          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          set -euo pipefail
+          bot="${APP_SLUG}[bot]"
+          bot_id="$(gh api "/users/${bot}" --jq .id)"
+          case "$bot_id" in
+            ''|*[!0-9]*) echo "::error::no user id for the signer App's bot user $bot"; exit 1 ;;
+          esac
+          git config user.name "$bot"
+          git config user.email "${bot_id}+${bot}@users.noreply.github.com"
           git add index.json index.json.minisig
           git commit -m "Sign the index, serial $SERIAL"
-          git push origin HEAD:main
+          # The token goes to this one command as an HTTP header, as
+          # actions/checkout would have set it, and is never written to disk.
+          auth="$(printf 'x-access-token:%s' "$GH_TOKEN" | base64 -w0)"
+          echo "::add-mask::$auth"
+          git -c "http.${GITHUB_SERVER_URL}/.extraheader=AUTHORIZATION: basic $auth" \
+            push origin HEAD:main

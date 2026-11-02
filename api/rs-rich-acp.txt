@@ -1,0 +1,2100 @@
+pub mod rich_acp
+pub mod rich_acp::fs
+pub fn rich_acp::fs::read_text_file(&rich_acp::Workspace, &rich_acp::ReadTextFileRequest) -> core::result::Result<rich_acp::ReadTextFileResponse, rich_acp::RpcError>
+pub fn rich_acp::fs::write_text_file(&rich_acp::Workspace, &rich_acp::WriteTextFileRequest) -> core::result::Result<rich_acp::WriteTextFileResponse, rich_acp::RpcError>
+#[non_exhaustive] pub enum rich_acp::ContentBlock
+pub rich_acp::ContentBlock::Audio(rich_acp::AudioContent)
+pub rich_acp::ContentBlock::Image(rich_acp::ImageContent)
+pub rich_acp::ContentBlock::Resource(rich_acp::EmbeddedResource)
+pub rich_acp::ContentBlock::ResourceLink(rich_acp::ResourceLink)
+pub rich_acp::ContentBlock::Text(rich_acp::TextContent)
+pub rich_acp::ContentBlock::Unknown
+pub rich_acp::ContentBlock::Unknown::kind: alloc::string::String
+pub rich_acp::ContentBlock::Unknown::value: serde_json::value::Value
+impl rich_acp::ContentBlock
+pub fn rich_acp::ContentBlock::as_text(&self) -> core::option::Option<&str>
+pub fn rich_acp::ContentBlock::text(impl core::convert::Into<alloc::string::String>) -> rich_acp::ContentBlock
+impl rich_acp::ContentBlock
+pub fn rich_acp::ContentBlock::kind(&self) -> &str
+impl core::clone::Clone for rich_acp::ContentBlock
+pub fn rich_acp::ContentBlock::clone(&self) -> rich_acp::ContentBlock
+impl core::cmp::PartialEq for rich_acp::ContentBlock
+pub fn rich_acp::ContentBlock::eq(&self, &rich_acp::ContentBlock) -> bool
+impl core::convert::From<&str> for rich_acp::ContentBlock
+pub fn rich_acp::ContentBlock::from(&str) -> rich_acp::ContentBlock
+impl core::convert::From<alloc::string::String> for rich_acp::ContentBlock
+pub fn rich_acp::ContentBlock::from(alloc::string::String) -> rich_acp::ContentBlock
+impl core::fmt::Debug for rich_acp::ContentBlock
+pub fn rich_acp::ContentBlock::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::ContentBlock
+impl serde_core::ser::Serialize for rich_acp::ContentBlock
+pub fn rich_acp::ContentBlock::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ContentBlock
+pub fn rich_acp::ContentBlock::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+impl core::marker::Freeze for rich_acp::ContentBlock
+impl core::marker::Send for rich_acp::ContentBlock
+impl core::marker::Sync for rich_acp::ContentBlock
+impl core::marker::Unpin for rich_acp::ContentBlock
+impl core::marker::UnsafeUnpin for rich_acp::ContentBlock
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ContentBlock
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ContentBlock
+#[non_exhaustive] pub enum rich_acp::Error
+pub rich_acp::Error::Closed
+pub rich_acp::Error::Io(std::io::error::Error)
+pub rich_acp::Error::Json(serde_json::error::Error)
+pub rich_acp::Error::Rpc(rich_acp::RpcError)
+pub rich_acp::Error::Timeout
+pub rich_acp::Error::UnsupportedVersion
+pub rich_acp::Error::UnsupportedVersion::answered: u16
+pub rich_acp::Error::UnsupportedVersion::offered: u16
+impl core::convert::From<rich_acp::RpcError> for rich_acp::Error
+pub fn rich_acp::Error::from(rich_acp::RpcError) -> rich_acp::Error
+impl core::convert::From<serde_json::error::Error> for rich_acp::Error
+pub fn rich_acp::Error::from(serde_json::error::Error) -> rich_acp::Error
+impl core::convert::From<std::io::error::Error> for rich_acp::Error
+pub fn rich_acp::Error::from(std::io::error::Error) -> rich_acp::Error
+impl core::error::Error for rich_acp::Error
+pub fn rich_acp::Error::source(&self) -> core::option::Option<&(dyn core::error::Error + 'static)>
+impl core::fmt::Debug for rich_acp::Error
+pub fn rich_acp::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::Error
+pub fn rich_acp::Error::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Freeze for rich_acp::Error
+impl core::marker::Send for rich_acp::Error
+impl core::marker::Sync for rich_acp::Error
+impl core::marker::Unpin for rich_acp::Error
+impl core::marker::UnsafeUnpin for rich_acp::Error
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_acp::Error
+impl !core::panic::unwind_safe::UnwindSafe for rich_acp::Error
+pub enum rich_acp::PermissionOptionKind
+pub rich_acp::PermissionOptionKind::AllowAlways
+pub rich_acp::PermissionOptionKind::AllowOnce
+pub rich_acp::PermissionOptionKind::RejectAlways
+pub rich_acp::PermissionOptionKind::RejectOnce
+pub rich_acp::PermissionOptionKind::Unknown(alloc::string::String)
+impl rich_acp::PermissionOptionKind
+pub fn rich_acp::PermissionOptionKind::allows(&self) -> bool
+impl rich_acp::PermissionOptionKind
+pub fn rich_acp::PermissionOptionKind::as_str(&self) -> &str
+impl core::clone::Clone for rich_acp::PermissionOptionKind
+pub fn rich_acp::PermissionOptionKind::clone(&self) -> rich_acp::PermissionOptionKind
+impl core::cmp::Eq for rich_acp::PermissionOptionKind
+impl core::cmp::PartialEq for rich_acp::PermissionOptionKind
+pub fn rich_acp::PermissionOptionKind::eq(&self, &rich_acp::PermissionOptionKind) -> bool
+impl core::convert::From<&str> for rich_acp::PermissionOptionKind
+pub fn rich_acp::PermissionOptionKind::from(&str) -> Self
+impl core::fmt::Debug for rich_acp::PermissionOptionKind
+pub fn rich_acp::PermissionOptionKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::PermissionOptionKind
+pub fn rich_acp::PermissionOptionKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_acp::PermissionOptionKind
+pub fn rich_acp::PermissionOptionKind::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_acp::PermissionOptionKind
+impl serde_core::ser::Serialize for rich_acp::PermissionOptionKind
+pub fn rich_acp::PermissionOptionKind::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::PermissionOptionKind
+pub fn rich_acp::PermissionOptionKind::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+impl core::marker::Freeze for rich_acp::PermissionOptionKind
+impl core::marker::Send for rich_acp::PermissionOptionKind
+impl core::marker::Sync for rich_acp::PermissionOptionKind
+impl core::marker::Unpin for rich_acp::PermissionOptionKind
+impl core::marker::UnsafeUnpin for rich_acp::PermissionOptionKind
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::PermissionOptionKind
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::PermissionOptionKind
+pub enum rich_acp::PlanEntryPriority
+pub rich_acp::PlanEntryPriority::High
+pub rich_acp::PlanEntryPriority::Low
+pub rich_acp::PlanEntryPriority::Medium
+pub rich_acp::PlanEntryPriority::Unknown(alloc::string::String)
+impl rich_acp::PlanEntryPriority
+pub fn rich_acp::PlanEntryPriority::as_str(&self) -> &str
+impl core::clone::Clone for rich_acp::PlanEntryPriority
+pub fn rich_acp::PlanEntryPriority::clone(&self) -> rich_acp::PlanEntryPriority
+impl core::cmp::Eq for rich_acp::PlanEntryPriority
+impl core::cmp::PartialEq for rich_acp::PlanEntryPriority
+pub fn rich_acp::PlanEntryPriority::eq(&self, &rich_acp::PlanEntryPriority) -> bool
+impl core::convert::From<&str> for rich_acp::PlanEntryPriority
+pub fn rich_acp::PlanEntryPriority::from(&str) -> Self
+impl core::fmt::Debug for rich_acp::PlanEntryPriority
+pub fn rich_acp::PlanEntryPriority::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::PlanEntryPriority
+pub fn rich_acp::PlanEntryPriority::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_acp::PlanEntryPriority
+pub fn rich_acp::PlanEntryPriority::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_acp::PlanEntryPriority
+impl serde_core::ser::Serialize for rich_acp::PlanEntryPriority
+pub fn rich_acp::PlanEntryPriority::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::PlanEntryPriority
+pub fn rich_acp::PlanEntryPriority::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+impl core::marker::Freeze for rich_acp::PlanEntryPriority
+impl core::marker::Send for rich_acp::PlanEntryPriority
+impl core::marker::Sync for rich_acp::PlanEntryPriority
+impl core::marker::Unpin for rich_acp::PlanEntryPriority
+impl core::marker::UnsafeUnpin for rich_acp::PlanEntryPriority
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::PlanEntryPriority
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::PlanEntryPriority
+pub enum rich_acp::PlanEntryStatus
+pub rich_acp::PlanEntryStatus::Completed
+pub rich_acp::PlanEntryStatus::InProgress
+pub rich_acp::PlanEntryStatus::Pending
+pub rich_acp::PlanEntryStatus::Unknown(alloc::string::String)
+impl rich_acp::PlanEntryStatus
+pub fn rich_acp::PlanEntryStatus::as_str(&self) -> &str
+impl core::clone::Clone for rich_acp::PlanEntryStatus
+pub fn rich_acp::PlanEntryStatus::clone(&self) -> rich_acp::PlanEntryStatus
+impl core::cmp::Eq for rich_acp::PlanEntryStatus
+impl core::cmp::PartialEq for rich_acp::PlanEntryStatus
+pub fn rich_acp::PlanEntryStatus::eq(&self, &rich_acp::PlanEntryStatus) -> bool
+impl core::convert::From<&str> for rich_acp::PlanEntryStatus
+pub fn rich_acp::PlanEntryStatus::from(&str) -> Self
+impl core::fmt::Debug for rich_acp::PlanEntryStatus
+pub fn rich_acp::PlanEntryStatus::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::PlanEntryStatus
+pub fn rich_acp::PlanEntryStatus::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_acp::PlanEntryStatus
+pub fn rich_acp::PlanEntryStatus::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_acp::PlanEntryStatus
+impl serde_core::ser::Serialize for rich_acp::PlanEntryStatus
+pub fn rich_acp::PlanEntryStatus::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::PlanEntryStatus
+pub fn rich_acp::PlanEntryStatus::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+impl core::marker::Freeze for rich_acp::PlanEntryStatus
+impl core::marker::Send for rich_acp::PlanEntryStatus
+impl core::marker::Sync for rich_acp::PlanEntryStatus
+impl core::marker::Unpin for rich_acp::PlanEntryStatus
+impl core::marker::UnsafeUnpin for rich_acp::PlanEntryStatus
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::PlanEntryStatus
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::PlanEntryStatus
+pub enum rich_acp::RequestPermissionOutcome
+pub rich_acp::RequestPermissionOutcome::Cancelled
+pub rich_acp::RequestPermissionOutcome::Selected
+pub rich_acp::RequestPermissionOutcome::Selected::option_id: rich_acp::PermissionOptionId
+impl core::clone::Clone for rich_acp::RequestPermissionOutcome
+pub fn rich_acp::RequestPermissionOutcome::clone(&self) -> rich_acp::RequestPermissionOutcome
+impl core::cmp::Eq for rich_acp::RequestPermissionOutcome
+impl core::cmp::PartialEq for rich_acp::RequestPermissionOutcome
+pub fn rich_acp::RequestPermissionOutcome::eq(&self, &rich_acp::RequestPermissionOutcome) -> bool
+impl core::fmt::Debug for rich_acp::RequestPermissionOutcome
+pub fn rich_acp::RequestPermissionOutcome::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::RequestPermissionOutcome
+impl serde_core::ser::Serialize for rich_acp::RequestPermissionOutcome
+pub fn rich_acp::RequestPermissionOutcome::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::RequestPermissionOutcome
+pub fn rich_acp::RequestPermissionOutcome::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::RequestPermissionOutcome
+impl core::marker::Send for rich_acp::RequestPermissionOutcome
+impl core::marker::Sync for rich_acp::RequestPermissionOutcome
+impl core::marker::Unpin for rich_acp::RequestPermissionOutcome
+impl core::marker::UnsafeUnpin for rich_acp::RequestPermissionOutcome
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::RequestPermissionOutcome
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::RequestPermissionOutcome
+pub enum rich_acp::ResourceContents
+pub rich_acp::ResourceContents::Blob(rich_acp::BlobResourceContents)
+pub rich_acp::ResourceContents::Text(rich_acp::TextResourceContents)
+impl core::clone::Clone for rich_acp::ResourceContents
+pub fn rich_acp::ResourceContents::clone(&self) -> rich_acp::ResourceContents
+impl core::cmp::PartialEq for rich_acp::ResourceContents
+pub fn rich_acp::ResourceContents::eq(&self, &rich_acp::ResourceContents) -> bool
+impl core::fmt::Debug for rich_acp::ResourceContents
+pub fn rich_acp::ResourceContents::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::ResourceContents
+impl serde_core::ser::Serialize for rich_acp::ResourceContents
+pub fn rich_acp::ResourceContents::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ResourceContents
+pub fn rich_acp::ResourceContents::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::ResourceContents
+impl core::marker::Send for rich_acp::ResourceContents
+impl core::marker::Sync for rich_acp::ResourceContents
+impl core::marker::Unpin for rich_acp::ResourceContents
+impl core::marker::UnsafeUnpin for rich_acp::ResourceContents
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ResourceContents
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ResourceContents
+#[non_exhaustive] pub enum rich_acp::SessionUpdate
+pub rich_acp::SessionUpdate::AgentMessageChunk(rich_acp::ContentChunk)
+pub rich_acp::SessionUpdate::AgentThoughtChunk(rich_acp::ContentChunk)
+pub rich_acp::SessionUpdate::AvailableCommandsUpdate(rich_acp::AvailableCommandsUpdate)
+pub rich_acp::SessionUpdate::CurrentModeUpdate(rich_acp::CurrentModeUpdate)
+pub rich_acp::SessionUpdate::Plan(rich_acp::Plan)
+pub rich_acp::SessionUpdate::ToolCall(rich_acp::ToolCall)
+pub rich_acp::SessionUpdate::ToolCallUpdate(rich_acp::ToolCallUpdate)
+pub rich_acp::SessionUpdate::Unknown
+pub rich_acp::SessionUpdate::Unknown::kind: alloc::string::String
+pub rich_acp::SessionUpdate::Unknown::value: serde_json::value::Value
+pub rich_acp::SessionUpdate::UsageUpdate(rich_acp::UsageUpdate)
+pub rich_acp::SessionUpdate::UserMessageChunk(rich_acp::ContentChunk)
+impl rich_acp::SessionUpdate
+pub fn rich_acp::SessionUpdate::kind(&self) -> &str
+impl core::clone::Clone for rich_acp::SessionUpdate
+pub fn rich_acp::SessionUpdate::clone(&self) -> rich_acp::SessionUpdate
+impl core::cmp::PartialEq for rich_acp::SessionUpdate
+pub fn rich_acp::SessionUpdate::eq(&self, &rich_acp::SessionUpdate) -> bool
+impl core::fmt::Debug for rich_acp::SessionUpdate
+pub fn rich_acp::SessionUpdate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::SessionUpdate
+impl serde_core::ser::Serialize for rich_acp::SessionUpdate
+pub fn rich_acp::SessionUpdate::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::SessionUpdate
+pub fn rich_acp::SessionUpdate::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+impl core::marker::Freeze for rich_acp::SessionUpdate
+impl core::marker::Send for rich_acp::SessionUpdate
+impl core::marker::Sync for rich_acp::SessionUpdate
+impl core::marker::Unpin for rich_acp::SessionUpdate
+impl core::marker::UnsafeUnpin for rich_acp::SessionUpdate
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::SessionUpdate
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::SessionUpdate
+pub enum rich_acp::StopReason
+pub rich_acp::StopReason::Cancelled
+pub rich_acp::StopReason::EndTurn
+pub rich_acp::StopReason::MaxTokens
+pub rich_acp::StopReason::MaxTurnRequests
+pub rich_acp::StopReason::Refusal
+pub rich_acp::StopReason::Unknown(alloc::string::String)
+impl rich_acp::StopReason
+pub fn rich_acp::StopReason::as_str(&self) -> &str
+impl core::clone::Clone for rich_acp::StopReason
+pub fn rich_acp::StopReason::clone(&self) -> rich_acp::StopReason
+impl core::cmp::Eq for rich_acp::StopReason
+impl core::cmp::PartialEq for rich_acp::StopReason
+pub fn rich_acp::StopReason::eq(&self, &rich_acp::StopReason) -> bool
+impl core::convert::From<&str> for rich_acp::StopReason
+pub fn rich_acp::StopReason::from(&str) -> Self
+impl core::fmt::Debug for rich_acp::StopReason
+pub fn rich_acp::StopReason::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::StopReason
+pub fn rich_acp::StopReason::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_acp::StopReason
+pub fn rich_acp::StopReason::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_acp::StopReason
+impl serde_core::ser::Serialize for rich_acp::StopReason
+pub fn rich_acp::StopReason::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::StopReason
+pub fn rich_acp::StopReason::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+impl core::marker::Freeze for rich_acp::StopReason
+impl core::marker::Send for rich_acp::StopReason
+impl core::marker::Sync for rich_acp::StopReason
+impl core::marker::Unpin for rich_acp::StopReason
+impl core::marker::UnsafeUnpin for rich_acp::StopReason
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::StopReason
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::StopReason
+#[non_exhaustive] pub enum rich_acp::ToolCallContent
+pub rich_acp::ToolCallContent::Content(rich_acp::WrappedContent)
+pub rich_acp::ToolCallContent::Diff(rich_acp::Diff)
+pub rich_acp::ToolCallContent::Terminal(rich_acp::TerminalContent)
+pub rich_acp::ToolCallContent::Unknown
+pub rich_acp::ToolCallContent::Unknown::kind: alloc::string::String
+pub rich_acp::ToolCallContent::Unknown::value: serde_json::value::Value
+impl rich_acp::ToolCallContent
+pub fn rich_acp::ToolCallContent::kind(&self) -> &str
+impl core::clone::Clone for rich_acp::ToolCallContent
+pub fn rich_acp::ToolCallContent::clone(&self) -> rich_acp::ToolCallContent
+impl core::cmp::PartialEq for rich_acp::ToolCallContent
+pub fn rich_acp::ToolCallContent::eq(&self, &rich_acp::ToolCallContent) -> bool
+impl core::fmt::Debug for rich_acp::ToolCallContent
+pub fn rich_acp::ToolCallContent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::ToolCallContent
+impl serde_core::ser::Serialize for rich_acp::ToolCallContent
+pub fn rich_acp::ToolCallContent::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ToolCallContent
+pub fn rich_acp::ToolCallContent::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+impl core::marker::Freeze for rich_acp::ToolCallContent
+impl core::marker::Send for rich_acp::ToolCallContent
+impl core::marker::Sync for rich_acp::ToolCallContent
+impl core::marker::Unpin for rich_acp::ToolCallContent
+impl core::marker::UnsafeUnpin for rich_acp::ToolCallContent
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ToolCallContent
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ToolCallContent
+pub enum rich_acp::ToolCallStatus
+pub rich_acp::ToolCallStatus::Completed
+pub rich_acp::ToolCallStatus::Failed
+pub rich_acp::ToolCallStatus::InProgress
+pub rich_acp::ToolCallStatus::Pending
+pub rich_acp::ToolCallStatus::Unknown(alloc::string::String)
+impl rich_acp::ToolCallStatus
+pub fn rich_acp::ToolCallStatus::as_str(&self) -> &str
+impl core::clone::Clone for rich_acp::ToolCallStatus
+pub fn rich_acp::ToolCallStatus::clone(&self) -> rich_acp::ToolCallStatus
+impl core::cmp::Eq for rich_acp::ToolCallStatus
+impl core::cmp::PartialEq for rich_acp::ToolCallStatus
+pub fn rich_acp::ToolCallStatus::eq(&self, &rich_acp::ToolCallStatus) -> bool
+impl core::convert::From<&str> for rich_acp::ToolCallStatus
+pub fn rich_acp::ToolCallStatus::from(&str) -> Self
+impl core::default::Default for rich_acp::ToolCallStatus
+pub fn rich_acp::ToolCallStatus::default() -> rich_acp::ToolCallStatus
+impl core::fmt::Debug for rich_acp::ToolCallStatus
+pub fn rich_acp::ToolCallStatus::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::ToolCallStatus
+pub fn rich_acp::ToolCallStatus::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_acp::ToolCallStatus
+pub fn rich_acp::ToolCallStatus::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_acp::ToolCallStatus
+impl serde_core::ser::Serialize for rich_acp::ToolCallStatus
+pub fn rich_acp::ToolCallStatus::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ToolCallStatus
+pub fn rich_acp::ToolCallStatus::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+impl core::marker::Freeze for rich_acp::ToolCallStatus
+impl core::marker::Send for rich_acp::ToolCallStatus
+impl core::marker::Sync for rich_acp::ToolCallStatus
+impl core::marker::Unpin for rich_acp::ToolCallStatus
+impl core::marker::UnsafeUnpin for rich_acp::ToolCallStatus
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ToolCallStatus
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ToolCallStatus
+pub enum rich_acp::ToolKind
+pub rich_acp::ToolKind::Delete
+pub rich_acp::ToolKind::Edit
+pub rich_acp::ToolKind::Execute
+pub rich_acp::ToolKind::Fetch
+pub rich_acp::ToolKind::Move
+pub rich_acp::ToolKind::Other
+pub rich_acp::ToolKind::Read
+pub rich_acp::ToolKind::Search
+pub rich_acp::ToolKind::SwitchMode
+pub rich_acp::ToolKind::Think
+pub rich_acp::ToolKind::Unknown(alloc::string::String)
+impl rich_acp::ToolKind
+pub fn rich_acp::ToolKind::as_str(&self) -> &str
+impl core::clone::Clone for rich_acp::ToolKind
+pub fn rich_acp::ToolKind::clone(&self) -> rich_acp::ToolKind
+impl core::cmp::Eq for rich_acp::ToolKind
+impl core::cmp::PartialEq for rich_acp::ToolKind
+pub fn rich_acp::ToolKind::eq(&self, &rich_acp::ToolKind) -> bool
+impl core::convert::From<&str> for rich_acp::ToolKind
+pub fn rich_acp::ToolKind::from(&str) -> Self
+impl core::default::Default for rich_acp::ToolKind
+pub fn rich_acp::ToolKind::default() -> rich_acp::ToolKind
+impl core::fmt::Debug for rich_acp::ToolKind
+pub fn rich_acp::ToolKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::ToolKind
+pub fn rich_acp::ToolKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_acp::ToolKind
+pub fn rich_acp::ToolKind::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_acp::ToolKind
+impl serde_core::ser::Serialize for rich_acp::ToolKind
+pub fn rich_acp::ToolKind::serialize<S: serde_core::ser::Serializer>(&self, S) -> core::result::Result<<S as serde_core::ser::Serializer>::Ok, <S as serde_core::ser::Serializer>::Error>
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ToolKind
+pub fn rich_acp::ToolKind::deserialize<D: serde_core::de::Deserializer<'de>>(D) -> core::result::Result<Self, <D as serde_core::de::Deserializer>::Error>
+impl core::marker::Freeze for rich_acp::ToolKind
+impl core::marker::Send for rich_acp::ToolKind
+impl core::marker::Sync for rich_acp::ToolKind
+impl core::marker::Unpin for rich_acp::ToolKind
+impl core::marker::UnsafeUnpin for rich_acp::ToolKind
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ToolKind
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ToolKind
+pub struct rich_acp::AgentCapabilities
+pub rich_acp::AgentCapabilities::load_session: bool
+pub rich_acp::AgentCapabilities::mcp_capabilities: rich_acp::McpCapabilities
+pub rich_acp::AgentCapabilities::prompt_capabilities: rich_acp::PromptCapabilities
+pub rich_acp::AgentCapabilities::session_capabilities: core::option::Option<serde_json::value::Value>
+impl core::clone::Clone for rich_acp::AgentCapabilities
+pub fn rich_acp::AgentCapabilities::clone(&self) -> rich_acp::AgentCapabilities
+impl core::cmp::PartialEq for rich_acp::AgentCapabilities
+pub fn rich_acp::AgentCapabilities::eq(&self, &rich_acp::AgentCapabilities) -> bool
+impl core::default::Default for rich_acp::AgentCapabilities
+pub fn rich_acp::AgentCapabilities::default() -> rich_acp::AgentCapabilities
+impl core::fmt::Debug for rich_acp::AgentCapabilities
+pub fn rich_acp::AgentCapabilities::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::AgentCapabilities
+impl serde_core::ser::Serialize for rich_acp::AgentCapabilities
+pub fn rich_acp::AgentCapabilities::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::AgentCapabilities
+pub fn rich_acp::AgentCapabilities::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::AgentCapabilities
+impl core::marker::Send for rich_acp::AgentCapabilities
+impl core::marker::Sync for rich_acp::AgentCapabilities
+impl core::marker::Unpin for rich_acp::AgentCapabilities
+impl core::marker::UnsafeUnpin for rich_acp::AgentCapabilities
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::AgentCapabilities
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::AgentCapabilities
+pub struct rich_acp::AudioContent
+pub rich_acp::AudioContent::annotations: core::option::Option<serde_json::value::Value>
+pub rich_acp::AudioContent::data: alloc::string::String
+pub rich_acp::AudioContent::mime_type: alloc::string::String
+impl core::clone::Clone for rich_acp::AudioContent
+pub fn rich_acp::AudioContent::clone(&self) -> rich_acp::AudioContent
+impl core::cmp::PartialEq for rich_acp::AudioContent
+pub fn rich_acp::AudioContent::eq(&self, &rich_acp::AudioContent) -> bool
+impl core::default::Default for rich_acp::AudioContent
+pub fn rich_acp::AudioContent::default() -> rich_acp::AudioContent
+impl core::fmt::Debug for rich_acp::AudioContent
+pub fn rich_acp::AudioContent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::AudioContent
+impl serde_core::ser::Serialize for rich_acp::AudioContent
+pub fn rich_acp::AudioContent::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::AudioContent
+pub fn rich_acp::AudioContent::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::AudioContent
+impl core::marker::Send for rich_acp::AudioContent
+impl core::marker::Sync for rich_acp::AudioContent
+impl core::marker::Unpin for rich_acp::AudioContent
+impl core::marker::UnsafeUnpin for rich_acp::AudioContent
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::AudioContent
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::AudioContent
+pub struct rich_acp::AuthMethod
+pub rich_acp::AuthMethod::description: core::option::Option<alloc::string::String>
+pub rich_acp::AuthMethod::id: rich_acp::AuthMethodId
+pub rich_acp::AuthMethod::kind: core::option::Option<alloc::string::String>
+pub rich_acp::AuthMethod::name: alloc::string::String
+impl core::clone::Clone for rich_acp::AuthMethod
+pub fn rich_acp::AuthMethod::clone(&self) -> rich_acp::AuthMethod
+impl core::cmp::PartialEq for rich_acp::AuthMethod
+pub fn rich_acp::AuthMethod::eq(&self, &rich_acp::AuthMethod) -> bool
+impl core::default::Default for rich_acp::AuthMethod
+pub fn rich_acp::AuthMethod::default() -> rich_acp::AuthMethod
+impl core::fmt::Debug for rich_acp::AuthMethod
+pub fn rich_acp::AuthMethod::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::AuthMethod
+impl serde_core::ser::Serialize for rich_acp::AuthMethod
+pub fn rich_acp::AuthMethod::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::AuthMethod
+pub fn rich_acp::AuthMethod::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::AuthMethod
+impl core::marker::Send for rich_acp::AuthMethod
+impl core::marker::Sync for rich_acp::AuthMethod
+impl core::marker::Unpin for rich_acp::AuthMethod
+impl core::marker::UnsafeUnpin for rich_acp::AuthMethod
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::AuthMethod
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::AuthMethod
+pub struct rich_acp::AuthMethodId(pub alloc::string::String)
+impl rich_acp::AuthMethodId
+pub fn rich_acp::AuthMethodId::as_str(&self) -> &str
+impl core::clone::Clone for rich_acp::AuthMethodId
+pub fn rich_acp::AuthMethodId::clone(&self) -> rich_acp::AuthMethodId
+impl core::cmp::Eq for rich_acp::AuthMethodId
+impl core::cmp::Ord for rich_acp::AuthMethodId
+pub fn rich_acp::AuthMethodId::cmp(&self, &rich_acp::AuthMethodId) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_acp::AuthMethodId
+pub fn rich_acp::AuthMethodId::eq(&self, &rich_acp::AuthMethodId) -> bool
+impl core::cmp::PartialOrd for rich_acp::AuthMethodId
+pub fn rich_acp::AuthMethodId::partial_cmp(&self, &rich_acp::AuthMethodId) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<&str> for rich_acp::AuthMethodId
+pub fn rich_acp::AuthMethodId::from(&str) -> Self
+impl core::convert::From<alloc::string::String> for rich_acp::AuthMethodId
+pub fn rich_acp::AuthMethodId::from(alloc::string::String) -> Self
+impl core::default::Default for rich_acp::AuthMethodId
+pub fn rich_acp::AuthMethodId::default() -> rich_acp::AuthMethodId
+impl core::fmt::Debug for rich_acp::AuthMethodId
+pub fn rich_acp::AuthMethodId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::AuthMethodId
+pub fn rich_acp::AuthMethodId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_acp::AuthMethodId
+pub fn rich_acp::AuthMethodId::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_acp::AuthMethodId
+impl serde_core::ser::Serialize for rich_acp::AuthMethodId
+pub fn rich_acp::AuthMethodId::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::AuthMethodId
+pub fn rich_acp::AuthMethodId::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::AuthMethodId
+impl core::marker::Send for rich_acp::AuthMethodId
+impl core::marker::Sync for rich_acp::AuthMethodId
+impl core::marker::Unpin for rich_acp::AuthMethodId
+impl core::marker::UnsafeUnpin for rich_acp::AuthMethodId
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::AuthMethodId
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::AuthMethodId
+pub struct rich_acp::AuthenticateRequest
+pub rich_acp::AuthenticateRequest::method_id: rich_acp::AuthMethodId
+impl core::clone::Clone for rich_acp::AuthenticateRequest
+pub fn rich_acp::AuthenticateRequest::clone(&self) -> rich_acp::AuthenticateRequest
+impl core::cmp::PartialEq for rich_acp::AuthenticateRequest
+pub fn rich_acp::AuthenticateRequest::eq(&self, &rich_acp::AuthenticateRequest) -> bool
+impl core::fmt::Debug for rich_acp::AuthenticateRequest
+pub fn rich_acp::AuthenticateRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::AuthenticateRequest
+impl serde_core::ser::Serialize for rich_acp::AuthenticateRequest
+pub fn rich_acp::AuthenticateRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::AuthenticateRequest
+pub fn rich_acp::AuthenticateRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::AuthenticateRequest
+impl core::marker::Send for rich_acp::AuthenticateRequest
+impl core::marker::Sync for rich_acp::AuthenticateRequest
+impl core::marker::Unpin for rich_acp::AuthenticateRequest
+impl core::marker::UnsafeUnpin for rich_acp::AuthenticateRequest
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::AuthenticateRequest
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::AuthenticateRequest
+pub struct rich_acp::AvailableCommand
+pub rich_acp::AvailableCommand::description: alloc::string::String
+pub rich_acp::AvailableCommand::input: core::option::Option<serde_json::value::Value>
+pub rich_acp::AvailableCommand::name: alloc::string::String
+impl core::clone::Clone for rich_acp::AvailableCommand
+pub fn rich_acp::AvailableCommand::clone(&self) -> rich_acp::AvailableCommand
+impl core::cmp::PartialEq for rich_acp::AvailableCommand
+pub fn rich_acp::AvailableCommand::eq(&self, &rich_acp::AvailableCommand) -> bool
+impl core::default::Default for rich_acp::AvailableCommand
+pub fn rich_acp::AvailableCommand::default() -> rich_acp::AvailableCommand
+impl core::fmt::Debug for rich_acp::AvailableCommand
+pub fn rich_acp::AvailableCommand::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::AvailableCommand
+impl serde_core::ser::Serialize for rich_acp::AvailableCommand
+pub fn rich_acp::AvailableCommand::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::AvailableCommand
+pub fn rich_acp::AvailableCommand::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::AvailableCommand
+impl core::marker::Send for rich_acp::AvailableCommand
+impl core::marker::Sync for rich_acp::AvailableCommand
+impl core::marker::Unpin for rich_acp::AvailableCommand
+impl core::marker::UnsafeUnpin for rich_acp::AvailableCommand
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::AvailableCommand
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::AvailableCommand
+pub struct rich_acp::AvailableCommandsUpdate
+pub rich_acp::AvailableCommandsUpdate::available_commands: alloc::vec::Vec<rich_acp::AvailableCommand>
+impl core::clone::Clone for rich_acp::AvailableCommandsUpdate
+pub fn rich_acp::AvailableCommandsUpdate::clone(&self) -> rich_acp::AvailableCommandsUpdate
+impl core::cmp::PartialEq for rich_acp::AvailableCommandsUpdate
+pub fn rich_acp::AvailableCommandsUpdate::eq(&self, &rich_acp::AvailableCommandsUpdate) -> bool
+impl core::default::Default for rich_acp::AvailableCommandsUpdate
+pub fn rich_acp::AvailableCommandsUpdate::default() -> rich_acp::AvailableCommandsUpdate
+impl core::fmt::Debug for rich_acp::AvailableCommandsUpdate
+pub fn rich_acp::AvailableCommandsUpdate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::AvailableCommandsUpdate
+impl serde_core::ser::Serialize for rich_acp::AvailableCommandsUpdate
+pub fn rich_acp::AvailableCommandsUpdate::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::AvailableCommandsUpdate
+pub fn rich_acp::AvailableCommandsUpdate::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::AvailableCommandsUpdate
+impl core::marker::Send for rich_acp::AvailableCommandsUpdate
+impl core::marker::Sync for rich_acp::AvailableCommandsUpdate
+impl core::marker::Unpin for rich_acp::AvailableCommandsUpdate
+impl core::marker::UnsafeUnpin for rich_acp::AvailableCommandsUpdate
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::AvailableCommandsUpdate
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::AvailableCommandsUpdate
+pub struct rich_acp::BlobResourceContents
+pub rich_acp::BlobResourceContents::blob: alloc::string::String
+pub rich_acp::BlobResourceContents::mime_type: core::option::Option<alloc::string::String>
+pub rich_acp::BlobResourceContents::uri: alloc::string::String
+impl core::clone::Clone for rich_acp::BlobResourceContents
+pub fn rich_acp::BlobResourceContents::clone(&self) -> rich_acp::BlobResourceContents
+impl core::cmp::PartialEq for rich_acp::BlobResourceContents
+pub fn rich_acp::BlobResourceContents::eq(&self, &rich_acp::BlobResourceContents) -> bool
+impl core::default::Default for rich_acp::BlobResourceContents
+pub fn rich_acp::BlobResourceContents::default() -> rich_acp::BlobResourceContents
+impl core::fmt::Debug for rich_acp::BlobResourceContents
+pub fn rich_acp::BlobResourceContents::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::BlobResourceContents
+impl serde_core::ser::Serialize for rich_acp::BlobResourceContents
+pub fn rich_acp::BlobResourceContents::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::BlobResourceContents
+pub fn rich_acp::BlobResourceContents::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::BlobResourceContents
+impl core::marker::Send for rich_acp::BlobResourceContents
+impl core::marker::Sync for rich_acp::BlobResourceContents
+impl core::marker::Unpin for rich_acp::BlobResourceContents
+impl core::marker::UnsafeUnpin for rich_acp::BlobResourceContents
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::BlobResourceContents
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::BlobResourceContents
+pub struct rich_acp::CancelNotification
+pub rich_acp::CancelNotification::session_id: rich_acp::SessionId
+impl core::clone::Clone for rich_acp::CancelNotification
+pub fn rich_acp::CancelNotification::clone(&self) -> rich_acp::CancelNotification
+impl core::cmp::PartialEq for rich_acp::CancelNotification
+pub fn rich_acp::CancelNotification::eq(&self, &rich_acp::CancelNotification) -> bool
+impl core::fmt::Debug for rich_acp::CancelNotification
+pub fn rich_acp::CancelNotification::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::CancelNotification
+impl serde_core::ser::Serialize for rich_acp::CancelNotification
+pub fn rich_acp::CancelNotification::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::CancelNotification
+pub fn rich_acp::CancelNotification::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::CancelNotification
+impl core::marker::Send for rich_acp::CancelNotification
+impl core::marker::Sync for rich_acp::CancelNotification
+impl core::marker::Unpin for rich_acp::CancelNotification
+impl core::marker::UnsafeUnpin for rich_acp::CancelNotification
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::CancelNotification
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::CancelNotification
+pub struct rich_acp::ClientCapabilities
+pub rich_acp::ClientCapabilities::fs: rich_acp::FileSystemCapabilities
+pub rich_acp::ClientCapabilities::terminal: bool
+impl rich_acp::ClientCapabilities
+pub fn rich_acp::ClientCapabilities::allows(&self, &str) -> bool
+pub fn rich_acp::ClientCapabilities::none() -> rich_acp::ClientCapabilities
+pub fn rich_acp::ClientCapabilities::read_files(self, bool) -> rich_acp::ClientCapabilities
+pub fn rich_acp::ClientCapabilities::terminals(self, bool) -> rich_acp::ClientCapabilities
+pub fn rich_acp::ClientCapabilities::write_files(self, bool) -> rich_acp::ClientCapabilities
+impl core::clone::Clone for rich_acp::ClientCapabilities
+pub fn rich_acp::ClientCapabilities::clone(&self) -> rich_acp::ClientCapabilities
+impl core::cmp::Eq for rich_acp::ClientCapabilities
+impl core::cmp::PartialEq for rich_acp::ClientCapabilities
+pub fn rich_acp::ClientCapabilities::eq(&self, &rich_acp::ClientCapabilities) -> bool
+impl core::default::Default for rich_acp::ClientCapabilities
+pub fn rich_acp::ClientCapabilities::default() -> rich_acp::ClientCapabilities
+impl core::fmt::Debug for rich_acp::ClientCapabilities
+pub fn rich_acp::ClientCapabilities::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_acp::ClientCapabilities
+impl core::marker::StructuralPartialEq for rich_acp::ClientCapabilities
+impl serde_core::ser::Serialize for rich_acp::ClientCapabilities
+pub fn rich_acp::ClientCapabilities::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ClientCapabilities
+pub fn rich_acp::ClientCapabilities::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::ClientCapabilities
+impl core::marker::Send for rich_acp::ClientCapabilities
+impl core::marker::Sync for rich_acp::ClientCapabilities
+impl core::marker::Unpin for rich_acp::ClientCapabilities
+impl core::marker::UnsafeUnpin for rich_acp::ClientCapabilities
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ClientCapabilities
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ClientCapabilities
+pub struct rich_acp::Connection
+impl rich_acp::Connection
+pub fn rich_acp::Connection::agent_capabilities(&self) -> core::option::Option<rich_acp::AgentCapabilities>
+pub fn rich_acp::Connection::authenticate(&self, impl core::convert::Into<rich_acp::AuthMethodId>) -> core::result::Result<(), rich_acp::Error>
+pub fn rich_acp::Connection::cancel(&self, &rich_acp::SessionId) -> core::result::Result<(), rich_acp::Error>
+pub fn rich_acp::Connection::client_capabilities(&self) -> rich_acp::ClientCapabilities
+pub fn rich_acp::Connection::from_streams(impl std::io::Read + core::marker::Send + 'static, impl std::io::Write + core::marker::Send + 'static, impl rich_acp::Client) -> core::result::Result<rich_acp::Connection, rich_acp::Error>
+pub fn rich_acp::Connection::initialize(&self, rich_acp::InitializeRequest) -> core::result::Result<rich_acp::InitializeResponse, rich_acp::Error>
+pub fn rich_acp::Connection::is_closed(&self) -> bool
+pub fn rich_acp::Connection::load_session(&self, rich_acp::LoadSessionRequest) -> core::result::Result<rich_acp::LoadSessionResponse, rich_acp::Error>
+pub fn rich_acp::Connection::new_session(&self, rich_acp::NewSessionRequest) -> core::result::Result<rich_acp::NewSessionResponse, rich_acp::Error>
+pub fn rich_acp::Connection::notify(&self, &str, &impl serde_core::ser::Serialize) -> core::result::Result<(), rich_acp::Error>
+pub fn rich_acp::Connection::prompt(&self, rich_acp::PromptRequest) -> core::result::Result<rich_acp::PromptResponse, rich_acp::Error>
+pub fn rich_acp::Connection::request<R: serde_core::de::DeserializeOwned>(&self, &str, &impl serde_core::ser::Serialize) -> core::result::Result<rich_acp::Pending<R>, rich_acp::Error>
+pub fn rich_acp::Connection::set_session_mode(&self, rich_acp::SetSessionModeRequest) -> core::result::Result<(), rich_acp::Error>
+pub fn rich_acp::Connection::shutdown(&self, core::time::Duration) -> core::result::Result<core::option::Option<std::process::ExitStatus>, rich_acp::Error>
+pub fn rich_acp::Connection::spawn(std::process::Command, impl rich_acp::Client) -> core::result::Result<rich_acp::Connection, rich_acp::Error>
+pub fn rich_acp::Connection::start_prompt(&self, rich_acp::PromptRequest) -> core::result::Result<rich_acp::Pending<rich_acp::PromptResponse>, rich_acp::Error>
+impl core::ops::drop::Drop for rich_acp::Connection
+pub fn rich_acp::Connection::drop(&mut self)
+impl !core::marker::Freeze for rich_acp::Connection
+impl core::marker::Send for rich_acp::Connection
+impl core::marker::Sync for rich_acp::Connection
+impl core::marker::Unpin for rich_acp::Connection
+impl core::marker::UnsafeUnpin for rich_acp::Connection
+impl !core::panic::unwind_safe::RefUnwindSafe for rich_acp::Connection
+impl !core::panic::unwind_safe::UnwindSafe for rich_acp::Connection
+pub struct rich_acp::ContentChunk
+pub rich_acp::ContentChunk::content: rich_acp::ContentBlock
+pub rich_acp::ContentChunk::message_id: core::option::Option<alloc::string::String>
+impl core::clone::Clone for rich_acp::ContentChunk
+pub fn rich_acp::ContentChunk::clone(&self) -> rich_acp::ContentChunk
+impl core::cmp::PartialEq for rich_acp::ContentChunk
+pub fn rich_acp::ContentChunk::eq(&self, &rich_acp::ContentChunk) -> bool
+impl core::fmt::Debug for rich_acp::ContentChunk
+pub fn rich_acp::ContentChunk::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::ContentChunk
+impl serde_core::ser::Serialize for rich_acp::ContentChunk
+pub fn rich_acp::ContentChunk::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ContentChunk
+pub fn rich_acp::ContentChunk::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::ContentChunk
+impl core::marker::Send for rich_acp::ContentChunk
+impl core::marker::Sync for rich_acp::ContentChunk
+impl core::marker::Unpin for rich_acp::ContentChunk
+impl core::marker::UnsafeUnpin for rich_acp::ContentChunk
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ContentChunk
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ContentChunk
+pub struct rich_acp::Cost
+pub rich_acp::Cost::amount: f64
+pub rich_acp::Cost::currency: alloc::string::String
+impl core::clone::Clone for rich_acp::Cost
+pub fn rich_acp::Cost::clone(&self) -> rich_acp::Cost
+impl core::cmp::PartialEq for rich_acp::Cost
+pub fn rich_acp::Cost::eq(&self, &rich_acp::Cost) -> bool
+impl core::default::Default for rich_acp::Cost
+pub fn rich_acp::Cost::default() -> rich_acp::Cost
+impl core::fmt::Debug for rich_acp::Cost
+pub fn rich_acp::Cost::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::Cost
+impl serde_core::ser::Serialize for rich_acp::Cost
+pub fn rich_acp::Cost::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::Cost
+pub fn rich_acp::Cost::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::Cost
+impl core::marker::Send for rich_acp::Cost
+impl core::marker::Sync for rich_acp::Cost
+impl core::marker::Unpin for rich_acp::Cost
+impl core::marker::UnsafeUnpin for rich_acp::Cost
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::Cost
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::Cost
+pub struct rich_acp::CreateTerminalRequest
+pub rich_acp::CreateTerminalRequest::args: alloc::vec::Vec<alloc::string::String>
+pub rich_acp::CreateTerminalRequest::command: alloc::string::String
+pub rich_acp::CreateTerminalRequest::cwd: core::option::Option<std::path::PathBuf>
+pub rich_acp::CreateTerminalRequest::env: alloc::vec::Vec<rich_acp::EnvVariable>
+pub rich_acp::CreateTerminalRequest::output_byte_limit: core::option::Option<u64>
+pub rich_acp::CreateTerminalRequest::session_id: rich_acp::SessionId
+impl core::clone::Clone for rich_acp::CreateTerminalRequest
+pub fn rich_acp::CreateTerminalRequest::clone(&self) -> rich_acp::CreateTerminalRequest
+impl core::cmp::PartialEq for rich_acp::CreateTerminalRequest
+pub fn rich_acp::CreateTerminalRequest::eq(&self, &rich_acp::CreateTerminalRequest) -> bool
+impl core::default::Default for rich_acp::CreateTerminalRequest
+pub fn rich_acp::CreateTerminalRequest::default() -> rich_acp::CreateTerminalRequest
+impl core::fmt::Debug for rich_acp::CreateTerminalRequest
+pub fn rich_acp::CreateTerminalRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::CreateTerminalRequest
+impl serde_core::ser::Serialize for rich_acp::CreateTerminalRequest
+pub fn rich_acp::CreateTerminalRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::CreateTerminalRequest
+pub fn rich_acp::CreateTerminalRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::CreateTerminalRequest
+impl core::marker::Send for rich_acp::CreateTerminalRequest
+impl core::marker::Sync for rich_acp::CreateTerminalRequest
+impl core::marker::Unpin for rich_acp::CreateTerminalRequest
+impl core::marker::UnsafeUnpin for rich_acp::CreateTerminalRequest
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::CreateTerminalRequest
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::CreateTerminalRequest
+pub struct rich_acp::CreateTerminalResponse
+pub rich_acp::CreateTerminalResponse::terminal_id: rich_acp::TerminalId
+impl core::clone::Clone for rich_acp::CreateTerminalResponse
+pub fn rich_acp::CreateTerminalResponse::clone(&self) -> rich_acp::CreateTerminalResponse
+impl core::cmp::PartialEq for rich_acp::CreateTerminalResponse
+pub fn rich_acp::CreateTerminalResponse::eq(&self, &rich_acp::CreateTerminalResponse) -> bool
+impl core::fmt::Debug for rich_acp::CreateTerminalResponse
+pub fn rich_acp::CreateTerminalResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::CreateTerminalResponse
+impl serde_core::ser::Serialize for rich_acp::CreateTerminalResponse
+pub fn rich_acp::CreateTerminalResponse::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::CreateTerminalResponse
+pub fn rich_acp::CreateTerminalResponse::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::CreateTerminalResponse
+impl core::marker::Send for rich_acp::CreateTerminalResponse
+impl core::marker::Sync for rich_acp::CreateTerminalResponse
+impl core::marker::Unpin for rich_acp::CreateTerminalResponse
+impl core::marker::UnsafeUnpin for rich_acp::CreateTerminalResponse
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::CreateTerminalResponse
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::CreateTerminalResponse
+pub struct rich_acp::CurrentModeUpdate
+pub rich_acp::CurrentModeUpdate::current_mode_id: rich_acp::SessionModeId
+impl core::clone::Clone for rich_acp::CurrentModeUpdate
+pub fn rich_acp::CurrentModeUpdate::clone(&self) -> rich_acp::CurrentModeUpdate
+impl core::cmp::PartialEq for rich_acp::CurrentModeUpdate
+pub fn rich_acp::CurrentModeUpdate::eq(&self, &rich_acp::CurrentModeUpdate) -> bool
+impl core::default::Default for rich_acp::CurrentModeUpdate
+pub fn rich_acp::CurrentModeUpdate::default() -> rich_acp::CurrentModeUpdate
+impl core::fmt::Debug for rich_acp::CurrentModeUpdate
+pub fn rich_acp::CurrentModeUpdate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::CurrentModeUpdate
+impl serde_core::ser::Serialize for rich_acp::CurrentModeUpdate
+pub fn rich_acp::CurrentModeUpdate::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::CurrentModeUpdate
+pub fn rich_acp::CurrentModeUpdate::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::CurrentModeUpdate
+impl core::marker::Send for rich_acp::CurrentModeUpdate
+impl core::marker::Sync for rich_acp::CurrentModeUpdate
+impl core::marker::Unpin for rich_acp::CurrentModeUpdate
+impl core::marker::UnsafeUnpin for rich_acp::CurrentModeUpdate
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::CurrentModeUpdate
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::CurrentModeUpdate
+pub struct rich_acp::Diff
+pub rich_acp::Diff::new_text: alloc::string::String
+pub rich_acp::Diff::old_text: core::option::Option<alloc::string::String>
+pub rich_acp::Diff::path: std::path::PathBuf
+impl core::clone::Clone for rich_acp::Diff
+pub fn rich_acp::Diff::clone(&self) -> rich_acp::Diff
+impl core::cmp::PartialEq for rich_acp::Diff
+pub fn rich_acp::Diff::eq(&self, &rich_acp::Diff) -> bool
+impl core::default::Default for rich_acp::Diff
+pub fn rich_acp::Diff::default() -> rich_acp::Diff
+impl core::fmt::Debug for rich_acp::Diff
+pub fn rich_acp::Diff::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::Diff
+impl serde_core::ser::Serialize for rich_acp::Diff
+pub fn rich_acp::Diff::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::Diff
+pub fn rich_acp::Diff::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::Diff
+impl core::marker::Send for rich_acp::Diff
+impl core::marker::Sync for rich_acp::Diff
+impl core::marker::Unpin for rich_acp::Diff
+impl core::marker::UnsafeUnpin for rich_acp::Diff
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::Diff
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::Diff
+pub struct rich_acp::EmbeddedResource
+pub rich_acp::EmbeddedResource::annotations: core::option::Option<serde_json::value::Value>
+pub rich_acp::EmbeddedResource::resource: rich_acp::ResourceContents
+impl core::clone::Clone for rich_acp::EmbeddedResource
+pub fn rich_acp::EmbeddedResource::clone(&self) -> rich_acp::EmbeddedResource
+impl core::cmp::PartialEq for rich_acp::EmbeddedResource
+pub fn rich_acp::EmbeddedResource::eq(&self, &rich_acp::EmbeddedResource) -> bool
+impl core::fmt::Debug for rich_acp::EmbeddedResource
+pub fn rich_acp::EmbeddedResource::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::EmbeddedResource
+impl serde_core::ser::Serialize for rich_acp::EmbeddedResource
+pub fn rich_acp::EmbeddedResource::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::EmbeddedResource
+pub fn rich_acp::EmbeddedResource::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::EmbeddedResource
+impl core::marker::Send for rich_acp::EmbeddedResource
+impl core::marker::Sync for rich_acp::EmbeddedResource
+impl core::marker::Unpin for rich_acp::EmbeddedResource
+impl core::marker::UnsafeUnpin for rich_acp::EmbeddedResource
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::EmbeddedResource
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::EmbeddedResource
+pub struct rich_acp::EnvVariable
+pub rich_acp::EnvVariable::name: alloc::string::String
+pub rich_acp::EnvVariable::value: alloc::string::String
+impl rich_acp::EnvVariable
+pub fn rich_acp::EnvVariable::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> rich_acp::EnvVariable
+impl core::clone::Clone for rich_acp::EnvVariable
+pub fn rich_acp::EnvVariable::clone(&self) -> rich_acp::EnvVariable
+impl core::cmp::Eq for rich_acp::EnvVariable
+impl core::cmp::PartialEq for rich_acp::EnvVariable
+pub fn rich_acp::EnvVariable::eq(&self, &rich_acp::EnvVariable) -> bool
+impl core::default::Default for rich_acp::EnvVariable
+pub fn rich_acp::EnvVariable::default() -> rich_acp::EnvVariable
+impl core::fmt::Debug for rich_acp::EnvVariable
+pub fn rich_acp::EnvVariable::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::EnvVariable
+impl serde_core::ser::Serialize for rich_acp::EnvVariable
+pub fn rich_acp::EnvVariable::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::EnvVariable
+pub fn rich_acp::EnvVariable::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::EnvVariable
+impl core::marker::Send for rich_acp::EnvVariable
+impl core::marker::Sync for rich_acp::EnvVariable
+impl core::marker::Unpin for rich_acp::EnvVariable
+impl core::marker::UnsafeUnpin for rich_acp::EnvVariable
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::EnvVariable
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::EnvVariable
+pub struct rich_acp::FileSystemCapabilities
+pub rich_acp::FileSystemCapabilities::read_text_file: bool
+pub rich_acp::FileSystemCapabilities::write_text_file: bool
+impl core::clone::Clone for rich_acp::FileSystemCapabilities
+pub fn rich_acp::FileSystemCapabilities::clone(&self) -> rich_acp::FileSystemCapabilities
+impl core::cmp::Eq for rich_acp::FileSystemCapabilities
+impl core::cmp::PartialEq for rich_acp::FileSystemCapabilities
+pub fn rich_acp::FileSystemCapabilities::eq(&self, &rich_acp::FileSystemCapabilities) -> bool
+impl core::default::Default for rich_acp::FileSystemCapabilities
+pub fn rich_acp::FileSystemCapabilities::default() -> rich_acp::FileSystemCapabilities
+impl core::fmt::Debug for rich_acp::FileSystemCapabilities
+pub fn rich_acp::FileSystemCapabilities::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_acp::FileSystemCapabilities
+impl core::marker::StructuralPartialEq for rich_acp::FileSystemCapabilities
+impl serde_core::ser::Serialize for rich_acp::FileSystemCapabilities
+pub fn rich_acp::FileSystemCapabilities::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::FileSystemCapabilities
+pub fn rich_acp::FileSystemCapabilities::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::FileSystemCapabilities
+impl core::marker::Send for rich_acp::FileSystemCapabilities
+impl core::marker::Sync for rich_acp::FileSystemCapabilities
+impl core::marker::Unpin for rich_acp::FileSystemCapabilities
+impl core::marker::UnsafeUnpin for rich_acp::FileSystemCapabilities
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::FileSystemCapabilities
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::FileSystemCapabilities
+pub struct rich_acp::HttpHeader
+pub rich_acp::HttpHeader::name: alloc::string::String
+pub rich_acp::HttpHeader::value: alloc::string::String
+impl core::clone::Clone for rich_acp::HttpHeader
+pub fn rich_acp::HttpHeader::clone(&self) -> rich_acp::HttpHeader
+impl core::cmp::Eq for rich_acp::HttpHeader
+impl core::cmp::PartialEq for rich_acp::HttpHeader
+pub fn rich_acp::HttpHeader::eq(&self, &rich_acp::HttpHeader) -> bool
+impl core::default::Default for rich_acp::HttpHeader
+pub fn rich_acp::HttpHeader::default() -> rich_acp::HttpHeader
+impl core::fmt::Debug for rich_acp::HttpHeader
+pub fn rich_acp::HttpHeader::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::HttpHeader
+impl serde_core::ser::Serialize for rich_acp::HttpHeader
+pub fn rich_acp::HttpHeader::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::HttpHeader
+pub fn rich_acp::HttpHeader::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::HttpHeader
+impl core::marker::Send for rich_acp::HttpHeader
+impl core::marker::Sync for rich_acp::HttpHeader
+impl core::marker::Unpin for rich_acp::HttpHeader
+impl core::marker::UnsafeUnpin for rich_acp::HttpHeader
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::HttpHeader
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::HttpHeader
+pub struct rich_acp::ImageContent
+pub rich_acp::ImageContent::annotations: core::option::Option<serde_json::value::Value>
+pub rich_acp::ImageContent::data: alloc::string::String
+pub rich_acp::ImageContent::mime_type: alloc::string::String
+pub rich_acp::ImageContent::uri: core::option::Option<alloc::string::String>
+impl core::clone::Clone for rich_acp::ImageContent
+pub fn rich_acp::ImageContent::clone(&self) -> rich_acp::ImageContent
+impl core::cmp::PartialEq for rich_acp::ImageContent
+pub fn rich_acp::ImageContent::eq(&self, &rich_acp::ImageContent) -> bool
+impl core::default::Default for rich_acp::ImageContent
+pub fn rich_acp::ImageContent::default() -> rich_acp::ImageContent
+impl core::fmt::Debug for rich_acp::ImageContent
+pub fn rich_acp::ImageContent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::ImageContent
+impl serde_core::ser::Serialize for rich_acp::ImageContent
+pub fn rich_acp::ImageContent::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ImageContent
+pub fn rich_acp::ImageContent::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::ImageContent
+impl core::marker::Send for rich_acp::ImageContent
+impl core::marker::Sync for rich_acp::ImageContent
+impl core::marker::Unpin for rich_acp::ImageContent
+impl core::marker::UnsafeUnpin for rich_acp::ImageContent
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ImageContent
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ImageContent
+pub struct rich_acp::Implementation
+pub rich_acp::Implementation::name: alloc::string::String
+pub rich_acp::Implementation::title: core::option::Option<alloc::string::String>
+pub rich_acp::Implementation::version: alloc::string::String
+impl rich_acp::Implementation
+pub fn rich_acp::Implementation::display_name(&self) -> &str
+pub fn rich_acp::Implementation::new(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> rich_acp::Implementation
+impl core::clone::Clone for rich_acp::Implementation
+pub fn rich_acp::Implementation::clone(&self) -> rich_acp::Implementation
+impl core::cmp::PartialEq for rich_acp::Implementation
+pub fn rich_acp::Implementation::eq(&self, &rich_acp::Implementation) -> bool
+impl core::default::Default for rich_acp::Implementation
+pub fn rich_acp::Implementation::default() -> rich_acp::Implementation
+impl core::fmt::Debug for rich_acp::Implementation
+pub fn rich_acp::Implementation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::Implementation
+impl serde_core::ser::Serialize for rich_acp::Implementation
+pub fn rich_acp::Implementation::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::Implementation
+pub fn rich_acp::Implementation::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::Implementation
+impl core::marker::Send for rich_acp::Implementation
+impl core::marker::Sync for rich_acp::Implementation
+impl core::marker::Unpin for rich_acp::Implementation
+impl core::marker::UnsafeUnpin for rich_acp::Implementation
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::Implementation
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::Implementation
+pub struct rich_acp::InitializeRequest
+pub rich_acp::InitializeRequest::client_capabilities: rich_acp::ClientCapabilities
+pub rich_acp::InitializeRequest::client_info: core::option::Option<rich_acp::Implementation>
+pub rich_acp::InitializeRequest::protocol_version: u16
+impl rich_acp::InitializeRequest
+pub fn rich_acp::InitializeRequest::new(rich_acp::ClientCapabilities, rich_acp::Implementation) -> rich_acp::InitializeRequest
+impl core::clone::Clone for rich_acp::InitializeRequest
+pub fn rich_acp::InitializeRequest::clone(&self) -> rich_acp::InitializeRequest
+impl core::cmp::PartialEq for rich_acp::InitializeRequest
+pub fn rich_acp::InitializeRequest::eq(&self, &rich_acp::InitializeRequest) -> bool
+impl core::fmt::Debug for rich_acp::InitializeRequest
+pub fn rich_acp::InitializeRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::InitializeRequest
+impl serde_core::ser::Serialize for rich_acp::InitializeRequest
+pub fn rich_acp::InitializeRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::InitializeRequest
+pub fn rich_acp::InitializeRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::InitializeRequest
+impl core::marker::Send for rich_acp::InitializeRequest
+impl core::marker::Sync for rich_acp::InitializeRequest
+impl core::marker::Unpin for rich_acp::InitializeRequest
+impl core::marker::UnsafeUnpin for rich_acp::InitializeRequest
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::InitializeRequest
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::InitializeRequest
+pub struct rich_acp::InitializeResponse
+pub rich_acp::InitializeResponse::agent_capabilities: rich_acp::AgentCapabilities
+pub rich_acp::InitializeResponse::agent_info: core::option::Option<rich_acp::Implementation>
+pub rich_acp::InitializeResponse::auth_methods: alloc::vec::Vec<rich_acp::AuthMethod>
+pub rich_acp::InitializeResponse::protocol_version: u16
+impl core::clone::Clone for rich_acp::InitializeResponse
+pub fn rich_acp::InitializeResponse::clone(&self) -> rich_acp::InitializeResponse
+impl core::cmp::PartialEq for rich_acp::InitializeResponse
+pub fn rich_acp::InitializeResponse::eq(&self, &rich_acp::InitializeResponse) -> bool
+impl core::fmt::Debug for rich_acp::InitializeResponse
+pub fn rich_acp::InitializeResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::InitializeResponse
+impl serde_core::ser::Serialize for rich_acp::InitializeResponse
+pub fn rich_acp::InitializeResponse::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::InitializeResponse
+pub fn rich_acp::InitializeResponse::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::InitializeResponse
+impl core::marker::Send for rich_acp::InitializeResponse
+impl core::marker::Sync for rich_acp::InitializeResponse
+impl core::marker::Unpin for rich_acp::InitializeResponse
+impl core::marker::UnsafeUnpin for rich_acp::InitializeResponse
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::InitializeResponse
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::InitializeResponse
+pub struct rich_acp::LoadSessionRequest
+pub rich_acp::LoadSessionRequest::cwd: std::path::PathBuf
+pub rich_acp::LoadSessionRequest::mcp_servers: alloc::vec::Vec<rich_acp::McpServer>
+pub rich_acp::LoadSessionRequest::session_id: rich_acp::SessionId
+impl core::clone::Clone for rich_acp::LoadSessionRequest
+pub fn rich_acp::LoadSessionRequest::clone(&self) -> rich_acp::LoadSessionRequest
+impl core::cmp::PartialEq for rich_acp::LoadSessionRequest
+pub fn rich_acp::LoadSessionRequest::eq(&self, &rich_acp::LoadSessionRequest) -> bool
+impl core::fmt::Debug for rich_acp::LoadSessionRequest
+pub fn rich_acp::LoadSessionRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::LoadSessionRequest
+impl serde_core::ser::Serialize for rich_acp::LoadSessionRequest
+pub fn rich_acp::LoadSessionRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::LoadSessionRequest
+pub fn rich_acp::LoadSessionRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::LoadSessionRequest
+impl core::marker::Send for rich_acp::LoadSessionRequest
+impl core::marker::Sync for rich_acp::LoadSessionRequest
+impl core::marker::Unpin for rich_acp::LoadSessionRequest
+impl core::marker::UnsafeUnpin for rich_acp::LoadSessionRequest
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::LoadSessionRequest
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::LoadSessionRequest
+pub struct rich_acp::LoadSessionResponse
+pub rich_acp::LoadSessionResponse::modes: core::option::Option<rich_acp::SessionModeState>
+impl core::clone::Clone for rich_acp::LoadSessionResponse
+pub fn rich_acp::LoadSessionResponse::clone(&self) -> rich_acp::LoadSessionResponse
+impl core::cmp::PartialEq for rich_acp::LoadSessionResponse
+pub fn rich_acp::LoadSessionResponse::eq(&self, &rich_acp::LoadSessionResponse) -> bool
+impl core::default::Default for rich_acp::LoadSessionResponse
+pub fn rich_acp::LoadSessionResponse::default() -> rich_acp::LoadSessionResponse
+impl core::fmt::Debug for rich_acp::LoadSessionResponse
+pub fn rich_acp::LoadSessionResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::LoadSessionResponse
+impl serde_core::ser::Serialize for rich_acp::LoadSessionResponse
+pub fn rich_acp::LoadSessionResponse::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::LoadSessionResponse
+pub fn rich_acp::LoadSessionResponse::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::LoadSessionResponse
+impl core::marker::Send for rich_acp::LoadSessionResponse
+impl core::marker::Sync for rich_acp::LoadSessionResponse
+impl core::marker::Unpin for rich_acp::LoadSessionResponse
+impl core::marker::UnsafeUnpin for rich_acp::LoadSessionResponse
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::LoadSessionResponse
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::LoadSessionResponse
+pub struct rich_acp::McpCapabilities
+pub rich_acp::McpCapabilities::http: bool
+pub rich_acp::McpCapabilities::sse: bool
+impl core::clone::Clone for rich_acp::McpCapabilities
+pub fn rich_acp::McpCapabilities::clone(&self) -> rich_acp::McpCapabilities
+impl core::cmp::Eq for rich_acp::McpCapabilities
+impl core::cmp::PartialEq for rich_acp::McpCapabilities
+pub fn rich_acp::McpCapabilities::eq(&self, &rich_acp::McpCapabilities) -> bool
+impl core::default::Default for rich_acp::McpCapabilities
+pub fn rich_acp::McpCapabilities::default() -> rich_acp::McpCapabilities
+impl core::fmt::Debug for rich_acp::McpCapabilities
+pub fn rich_acp::McpCapabilities::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_acp::McpCapabilities
+impl core::marker::StructuralPartialEq for rich_acp::McpCapabilities
+impl serde_core::ser::Serialize for rich_acp::McpCapabilities
+pub fn rich_acp::McpCapabilities::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::McpCapabilities
+pub fn rich_acp::McpCapabilities::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::McpCapabilities
+impl core::marker::Send for rich_acp::McpCapabilities
+impl core::marker::Sync for rich_acp::McpCapabilities
+impl core::marker::Unpin for rich_acp::McpCapabilities
+impl core::marker::UnsafeUnpin for rich_acp::McpCapabilities
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::McpCapabilities
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::McpCapabilities
+pub struct rich_acp::McpServer
+pub rich_acp::McpServer::args: core::option::Option<alloc::vec::Vec<alloc::string::String>>
+pub rich_acp::McpServer::command: core::option::Option<std::path::PathBuf>
+pub rich_acp::McpServer::env: core::option::Option<alloc::vec::Vec<rich_acp::EnvVariable>>
+pub rich_acp::McpServer::headers: core::option::Option<alloc::vec::Vec<rich_acp::HttpHeader>>
+pub rich_acp::McpServer::kind: core::option::Option<alloc::string::String>
+pub rich_acp::McpServer::name: alloc::string::String
+pub rich_acp::McpServer::url: core::option::Option<alloc::string::String>
+impl rich_acp::McpServer
+pub fn rich_acp::McpServer::http(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<alloc::string::String>) -> rich_acp::McpServer
+pub fn rich_acp::McpServer::stdio(impl core::convert::Into<alloc::string::String>, impl core::convert::Into<std::path::PathBuf>, alloc::vec::Vec<alloc::string::String>) -> rich_acp::McpServer
+impl core::clone::Clone for rich_acp::McpServer
+pub fn rich_acp::McpServer::clone(&self) -> rich_acp::McpServer
+impl core::cmp::PartialEq for rich_acp::McpServer
+pub fn rich_acp::McpServer::eq(&self, &rich_acp::McpServer) -> bool
+impl core::default::Default for rich_acp::McpServer
+pub fn rich_acp::McpServer::default() -> rich_acp::McpServer
+impl core::fmt::Debug for rich_acp::McpServer
+pub fn rich_acp::McpServer::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::McpServer
+impl serde_core::ser::Serialize for rich_acp::McpServer
+pub fn rich_acp::McpServer::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::McpServer
+pub fn rich_acp::McpServer::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::McpServer
+impl core::marker::Send for rich_acp::McpServer
+impl core::marker::Sync for rich_acp::McpServer
+impl core::marker::Unpin for rich_acp::McpServer
+impl core::marker::UnsafeUnpin for rich_acp::McpServer
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::McpServer
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::McpServer
+pub struct rich_acp::NewSessionRequest
+pub rich_acp::NewSessionRequest::cwd: std::path::PathBuf
+pub rich_acp::NewSessionRequest::mcp_servers: alloc::vec::Vec<rich_acp::McpServer>
+impl rich_acp::NewSessionRequest
+pub fn rich_acp::NewSessionRequest::new(impl core::convert::Into<std::path::PathBuf>) -> rich_acp::NewSessionRequest
+impl core::clone::Clone for rich_acp::NewSessionRequest
+pub fn rich_acp::NewSessionRequest::clone(&self) -> rich_acp::NewSessionRequest
+impl core::cmp::PartialEq for rich_acp::NewSessionRequest
+pub fn rich_acp::NewSessionRequest::eq(&self, &rich_acp::NewSessionRequest) -> bool
+impl core::fmt::Debug for rich_acp::NewSessionRequest
+pub fn rich_acp::NewSessionRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::NewSessionRequest
+impl serde_core::ser::Serialize for rich_acp::NewSessionRequest
+pub fn rich_acp::NewSessionRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::NewSessionRequest
+pub fn rich_acp::NewSessionRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::NewSessionRequest
+impl core::marker::Send for rich_acp::NewSessionRequest
+impl core::marker::Sync for rich_acp::NewSessionRequest
+impl core::marker::Unpin for rich_acp::NewSessionRequest
+impl core::marker::UnsafeUnpin for rich_acp::NewSessionRequest
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::NewSessionRequest
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::NewSessionRequest
+pub struct rich_acp::NewSessionResponse
+pub rich_acp::NewSessionResponse::config_options: core::option::Option<serde_json::value::Value>
+pub rich_acp::NewSessionResponse::modes: core::option::Option<rich_acp::SessionModeState>
+pub rich_acp::NewSessionResponse::session_id: rich_acp::SessionId
+impl core::clone::Clone for rich_acp::NewSessionResponse
+pub fn rich_acp::NewSessionResponse::clone(&self) -> rich_acp::NewSessionResponse
+impl core::cmp::PartialEq for rich_acp::NewSessionResponse
+pub fn rich_acp::NewSessionResponse::eq(&self, &rich_acp::NewSessionResponse) -> bool
+impl core::fmt::Debug for rich_acp::NewSessionResponse
+pub fn rich_acp::NewSessionResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::NewSessionResponse
+impl serde_core::ser::Serialize for rich_acp::NewSessionResponse
+pub fn rich_acp::NewSessionResponse::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::NewSessionResponse
+pub fn rich_acp::NewSessionResponse::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::NewSessionResponse
+impl core::marker::Send for rich_acp::NewSessionResponse
+impl core::marker::Sync for rich_acp::NewSessionResponse
+impl core::marker::Unpin for rich_acp::NewSessionResponse
+impl core::marker::UnsafeUnpin for rich_acp::NewSessionResponse
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::NewSessionResponse
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::NewSessionResponse
+pub struct rich_acp::Pending<R>
+impl<R: serde_core::de::DeserializeOwned> rich_acp::Pending<R>
+pub fn rich_acp::Pending<R>::id(&self) -> u64
+pub fn rich_acp::Pending<R>::wait(self) -> core::result::Result<R, rich_acp::Error>
+pub fn rich_acp::Pending<R>::wait_timeout(&self, core::time::Duration) -> core::result::Result<R, rich_acp::Error>
+impl<R> core::marker::Freeze for rich_acp::Pending<R>
+impl<R> core::marker::Send for rich_acp::Pending<R>
+impl<R> !core::marker::Sync for rich_acp::Pending<R>
+impl<R> core::marker::Unpin for rich_acp::Pending<R>
+impl<R> core::marker::UnsafeUnpin for rich_acp::Pending<R>
+impl<R> core::panic::unwind_safe::RefUnwindSafe for rich_acp::Pending<R>
+impl<R> core::panic::unwind_safe::UnwindSafe for rich_acp::Pending<R>
+pub struct rich_acp::PermissionOption
+pub rich_acp::PermissionOption::kind: rich_acp::PermissionOptionKind
+pub rich_acp::PermissionOption::name: alloc::string::String
+pub rich_acp::PermissionOption::option_id: rich_acp::PermissionOptionId
+impl core::clone::Clone for rich_acp::PermissionOption
+pub fn rich_acp::PermissionOption::clone(&self) -> rich_acp::PermissionOption
+impl core::cmp::PartialEq for rich_acp::PermissionOption
+pub fn rich_acp::PermissionOption::eq(&self, &rich_acp::PermissionOption) -> bool
+impl core::fmt::Debug for rich_acp::PermissionOption
+pub fn rich_acp::PermissionOption::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::PermissionOption
+impl serde_core::ser::Serialize for rich_acp::PermissionOption
+pub fn rich_acp::PermissionOption::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::PermissionOption
+pub fn rich_acp::PermissionOption::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::PermissionOption
+impl core::marker::Send for rich_acp::PermissionOption
+impl core::marker::Sync for rich_acp::PermissionOption
+impl core::marker::Unpin for rich_acp::PermissionOption
+impl core::marker::UnsafeUnpin for rich_acp::PermissionOption
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::PermissionOption
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::PermissionOption
+pub struct rich_acp::PermissionOptionId(pub alloc::string::String)
+impl rich_acp::PermissionOptionId
+pub fn rich_acp::PermissionOptionId::as_str(&self) -> &str
+impl core::clone::Clone for rich_acp::PermissionOptionId
+pub fn rich_acp::PermissionOptionId::clone(&self) -> rich_acp::PermissionOptionId
+impl core::cmp::Eq for rich_acp::PermissionOptionId
+impl core::cmp::Ord for rich_acp::PermissionOptionId
+pub fn rich_acp::PermissionOptionId::cmp(&self, &rich_acp::PermissionOptionId) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_acp::PermissionOptionId
+pub fn rich_acp::PermissionOptionId::eq(&self, &rich_acp::PermissionOptionId) -> bool
+impl core::cmp::PartialOrd for rich_acp::PermissionOptionId
+pub fn rich_acp::PermissionOptionId::partial_cmp(&self, &rich_acp::PermissionOptionId) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<&str> for rich_acp::PermissionOptionId
+pub fn rich_acp::PermissionOptionId::from(&str) -> Self
+impl core::convert::From<alloc::string::String> for rich_acp::PermissionOptionId
+pub fn rich_acp::PermissionOptionId::from(alloc::string::String) -> Self
+impl core::default::Default for rich_acp::PermissionOptionId
+pub fn rich_acp::PermissionOptionId::default() -> rich_acp::PermissionOptionId
+impl core::fmt::Debug for rich_acp::PermissionOptionId
+pub fn rich_acp::PermissionOptionId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::PermissionOptionId
+pub fn rich_acp::PermissionOptionId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_acp::PermissionOptionId
+pub fn rich_acp::PermissionOptionId::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_acp::PermissionOptionId
+impl serde_core::ser::Serialize for rich_acp::PermissionOptionId
+pub fn rich_acp::PermissionOptionId::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::PermissionOptionId
+pub fn rich_acp::PermissionOptionId::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::PermissionOptionId
+impl core::marker::Send for rich_acp::PermissionOptionId
+impl core::marker::Sync for rich_acp::PermissionOptionId
+impl core::marker::Unpin for rich_acp::PermissionOptionId
+impl core::marker::UnsafeUnpin for rich_acp::PermissionOptionId
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::PermissionOptionId
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::PermissionOptionId
+pub struct rich_acp::Plan
+pub rich_acp::Plan::entries: alloc::vec::Vec<rich_acp::PlanEntry>
+impl core::clone::Clone for rich_acp::Plan
+pub fn rich_acp::Plan::clone(&self) -> rich_acp::Plan
+impl core::cmp::PartialEq for rich_acp::Plan
+pub fn rich_acp::Plan::eq(&self, &rich_acp::Plan) -> bool
+impl core::default::Default for rich_acp::Plan
+pub fn rich_acp::Plan::default() -> rich_acp::Plan
+impl core::fmt::Debug for rich_acp::Plan
+pub fn rich_acp::Plan::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::Plan
+impl serde_core::ser::Serialize for rich_acp::Plan
+pub fn rich_acp::Plan::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::Plan
+pub fn rich_acp::Plan::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::Plan
+impl core::marker::Send for rich_acp::Plan
+impl core::marker::Sync for rich_acp::Plan
+impl core::marker::Unpin for rich_acp::Plan
+impl core::marker::UnsafeUnpin for rich_acp::Plan
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::Plan
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::Plan
+pub struct rich_acp::PlanEntry
+pub rich_acp::PlanEntry::content: alloc::string::String
+pub rich_acp::PlanEntry::priority: rich_acp::PlanEntryPriority
+pub rich_acp::PlanEntry::status: rich_acp::PlanEntryStatus
+impl core::clone::Clone for rich_acp::PlanEntry
+pub fn rich_acp::PlanEntry::clone(&self) -> rich_acp::PlanEntry
+impl core::cmp::PartialEq for rich_acp::PlanEntry
+pub fn rich_acp::PlanEntry::eq(&self, &rich_acp::PlanEntry) -> bool
+impl core::fmt::Debug for rich_acp::PlanEntry
+pub fn rich_acp::PlanEntry::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::PlanEntry
+impl serde_core::ser::Serialize for rich_acp::PlanEntry
+pub fn rich_acp::PlanEntry::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::PlanEntry
+pub fn rich_acp::PlanEntry::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::PlanEntry
+impl core::marker::Send for rich_acp::PlanEntry
+impl core::marker::Sync for rich_acp::PlanEntry
+impl core::marker::Unpin for rich_acp::PlanEntry
+impl core::marker::UnsafeUnpin for rich_acp::PlanEntry
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::PlanEntry
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::PlanEntry
+pub struct rich_acp::PromptCapabilities
+pub rich_acp::PromptCapabilities::audio: bool
+pub rich_acp::PromptCapabilities::embedded_context: bool
+pub rich_acp::PromptCapabilities::image: bool
+impl core::clone::Clone for rich_acp::PromptCapabilities
+pub fn rich_acp::PromptCapabilities::clone(&self) -> rich_acp::PromptCapabilities
+impl core::cmp::Eq for rich_acp::PromptCapabilities
+impl core::cmp::PartialEq for rich_acp::PromptCapabilities
+pub fn rich_acp::PromptCapabilities::eq(&self, &rich_acp::PromptCapabilities) -> bool
+impl core::default::Default for rich_acp::PromptCapabilities
+pub fn rich_acp::PromptCapabilities::default() -> rich_acp::PromptCapabilities
+impl core::fmt::Debug for rich_acp::PromptCapabilities
+pub fn rich_acp::PromptCapabilities::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_acp::PromptCapabilities
+impl core::marker::StructuralPartialEq for rich_acp::PromptCapabilities
+impl serde_core::ser::Serialize for rich_acp::PromptCapabilities
+pub fn rich_acp::PromptCapabilities::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::PromptCapabilities
+pub fn rich_acp::PromptCapabilities::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::PromptCapabilities
+impl core::marker::Send for rich_acp::PromptCapabilities
+impl core::marker::Sync for rich_acp::PromptCapabilities
+impl core::marker::Unpin for rich_acp::PromptCapabilities
+impl core::marker::UnsafeUnpin for rich_acp::PromptCapabilities
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::PromptCapabilities
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::PromptCapabilities
+pub struct rich_acp::PromptRequest
+pub rich_acp::PromptRequest::prompt: alloc::vec::Vec<rich_acp::ContentBlock>
+pub rich_acp::PromptRequest::session_id: rich_acp::SessionId
+impl rich_acp::PromptRequest
+pub fn rich_acp::PromptRequest::text(impl core::convert::Into<rich_acp::SessionId>, impl core::convert::Into<alloc::string::String>) -> rich_acp::PromptRequest
+impl core::clone::Clone for rich_acp::PromptRequest
+pub fn rich_acp::PromptRequest::clone(&self) -> rich_acp::PromptRequest
+impl core::cmp::PartialEq for rich_acp::PromptRequest
+pub fn rich_acp::PromptRequest::eq(&self, &rich_acp::PromptRequest) -> bool
+impl core::fmt::Debug for rich_acp::PromptRequest
+pub fn rich_acp::PromptRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::PromptRequest
+impl serde_core::ser::Serialize for rich_acp::PromptRequest
+pub fn rich_acp::PromptRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::PromptRequest
+pub fn rich_acp::PromptRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::PromptRequest
+impl core::marker::Send for rich_acp::PromptRequest
+impl core::marker::Sync for rich_acp::PromptRequest
+impl core::marker::Unpin for rich_acp::PromptRequest
+impl core::marker::UnsafeUnpin for rich_acp::PromptRequest
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::PromptRequest
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::PromptRequest
+pub struct rich_acp::PromptResponse
+pub rich_acp::PromptResponse::stop_reason: rich_acp::StopReason
+impl core::clone::Clone for rich_acp::PromptResponse
+pub fn rich_acp::PromptResponse::clone(&self) -> rich_acp::PromptResponse
+impl core::cmp::PartialEq for rich_acp::PromptResponse
+pub fn rich_acp::PromptResponse::eq(&self, &rich_acp::PromptResponse) -> bool
+impl core::fmt::Debug for rich_acp::PromptResponse
+pub fn rich_acp::PromptResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::PromptResponse
+impl serde_core::ser::Serialize for rich_acp::PromptResponse
+pub fn rich_acp::PromptResponse::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::PromptResponse
+pub fn rich_acp::PromptResponse::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::PromptResponse
+impl core::marker::Send for rich_acp::PromptResponse
+impl core::marker::Sync for rich_acp::PromptResponse
+impl core::marker::Unpin for rich_acp::PromptResponse
+impl core::marker::UnsafeUnpin for rich_acp::PromptResponse
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::PromptResponse
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::PromptResponse
+pub struct rich_acp::ReadTextFileRequest
+pub rich_acp::ReadTextFileRequest::limit: core::option::Option<u32>
+pub rich_acp::ReadTextFileRequest::line: core::option::Option<u32>
+pub rich_acp::ReadTextFileRequest::path: std::path::PathBuf
+pub rich_acp::ReadTextFileRequest::session_id: rich_acp::SessionId
+impl core::clone::Clone for rich_acp::ReadTextFileRequest
+pub fn rich_acp::ReadTextFileRequest::clone(&self) -> rich_acp::ReadTextFileRequest
+impl core::cmp::PartialEq for rich_acp::ReadTextFileRequest
+pub fn rich_acp::ReadTextFileRequest::eq(&self, &rich_acp::ReadTextFileRequest) -> bool
+impl core::fmt::Debug for rich_acp::ReadTextFileRequest
+pub fn rich_acp::ReadTextFileRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::ReadTextFileRequest
+impl serde_core::ser::Serialize for rich_acp::ReadTextFileRequest
+pub fn rich_acp::ReadTextFileRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ReadTextFileRequest
+pub fn rich_acp::ReadTextFileRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::ReadTextFileRequest
+impl core::marker::Send for rich_acp::ReadTextFileRequest
+impl core::marker::Sync for rich_acp::ReadTextFileRequest
+impl core::marker::Unpin for rich_acp::ReadTextFileRequest
+impl core::marker::UnsafeUnpin for rich_acp::ReadTextFileRequest
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ReadTextFileRequest
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ReadTextFileRequest
+pub struct rich_acp::ReadTextFileResponse
+pub rich_acp::ReadTextFileResponse::content: alloc::string::String
+impl core::clone::Clone for rich_acp::ReadTextFileResponse
+pub fn rich_acp::ReadTextFileResponse::clone(&self) -> rich_acp::ReadTextFileResponse
+impl core::cmp::PartialEq for rich_acp::ReadTextFileResponse
+pub fn rich_acp::ReadTextFileResponse::eq(&self, &rich_acp::ReadTextFileResponse) -> bool
+impl core::fmt::Debug for rich_acp::ReadTextFileResponse
+pub fn rich_acp::ReadTextFileResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::ReadTextFileResponse
+impl serde_core::ser::Serialize for rich_acp::ReadTextFileResponse
+pub fn rich_acp::ReadTextFileResponse::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ReadTextFileResponse
+pub fn rich_acp::ReadTextFileResponse::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::ReadTextFileResponse
+impl core::marker::Send for rich_acp::ReadTextFileResponse
+impl core::marker::Sync for rich_acp::ReadTextFileResponse
+impl core::marker::Unpin for rich_acp::ReadTextFileResponse
+impl core::marker::UnsafeUnpin for rich_acp::ReadTextFileResponse
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ReadTextFileResponse
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ReadTextFileResponse
+pub struct rich_acp::RequestPermissionRequest
+pub rich_acp::RequestPermissionRequest::options: alloc::vec::Vec<rich_acp::PermissionOption>
+pub rich_acp::RequestPermissionRequest::session_id: rich_acp::SessionId
+pub rich_acp::RequestPermissionRequest::tool_call: rich_acp::ToolCallUpdate
+impl rich_acp::RequestPermissionRequest
+pub fn rich_acp::RequestPermissionRequest::option(&self, &rich_acp::PermissionOptionKind) -> core::option::Option<&rich_acp::PermissionOption>
+impl core::clone::Clone for rich_acp::RequestPermissionRequest
+pub fn rich_acp::RequestPermissionRequest::clone(&self) -> rich_acp::RequestPermissionRequest
+impl core::cmp::PartialEq for rich_acp::RequestPermissionRequest
+pub fn rich_acp::RequestPermissionRequest::eq(&self, &rich_acp::RequestPermissionRequest) -> bool
+impl core::fmt::Debug for rich_acp::RequestPermissionRequest
+pub fn rich_acp::RequestPermissionRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::RequestPermissionRequest
+impl serde_core::ser::Serialize for rich_acp::RequestPermissionRequest
+pub fn rich_acp::RequestPermissionRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::RequestPermissionRequest
+pub fn rich_acp::RequestPermissionRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::RequestPermissionRequest
+impl core::marker::Send for rich_acp::RequestPermissionRequest
+impl core::marker::Sync for rich_acp::RequestPermissionRequest
+impl core::marker::Unpin for rich_acp::RequestPermissionRequest
+impl core::marker::UnsafeUnpin for rich_acp::RequestPermissionRequest
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::RequestPermissionRequest
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::RequestPermissionRequest
+pub struct rich_acp::RequestPermissionResponse
+pub rich_acp::RequestPermissionResponse::outcome: rich_acp::RequestPermissionOutcome
+impl rich_acp::RequestPermissionResponse
+pub fn rich_acp::RequestPermissionResponse::cancelled() -> rich_acp::RequestPermissionResponse
+pub fn rich_acp::RequestPermissionResponse::selected(impl core::convert::Into<rich_acp::PermissionOptionId>) -> rich_acp::RequestPermissionResponse
+impl core::clone::Clone for rich_acp::RequestPermissionResponse
+pub fn rich_acp::RequestPermissionResponse::clone(&self) -> rich_acp::RequestPermissionResponse
+impl core::cmp::Eq for rich_acp::RequestPermissionResponse
+impl core::cmp::PartialEq for rich_acp::RequestPermissionResponse
+pub fn rich_acp::RequestPermissionResponse::eq(&self, &rich_acp::RequestPermissionResponse) -> bool
+impl core::fmt::Debug for rich_acp::RequestPermissionResponse
+pub fn rich_acp::RequestPermissionResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::RequestPermissionResponse
+impl serde_core::ser::Serialize for rich_acp::RequestPermissionResponse
+pub fn rich_acp::RequestPermissionResponse::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::RequestPermissionResponse
+pub fn rich_acp::RequestPermissionResponse::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::RequestPermissionResponse
+impl core::marker::Send for rich_acp::RequestPermissionResponse
+impl core::marker::Sync for rich_acp::RequestPermissionResponse
+impl core::marker::Unpin for rich_acp::RequestPermissionResponse
+impl core::marker::UnsafeUnpin for rich_acp::RequestPermissionResponse
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::RequestPermissionResponse
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::RequestPermissionResponse
+pub struct rich_acp::ResourceLink
+pub rich_acp::ResourceLink::description: core::option::Option<alloc::string::String>
+pub rich_acp::ResourceLink::mime_type: core::option::Option<alloc::string::String>
+pub rich_acp::ResourceLink::name: alloc::string::String
+pub rich_acp::ResourceLink::size: core::option::Option<u64>
+pub rich_acp::ResourceLink::title: core::option::Option<alloc::string::String>
+pub rich_acp::ResourceLink::uri: alloc::string::String
+impl core::clone::Clone for rich_acp::ResourceLink
+pub fn rich_acp::ResourceLink::clone(&self) -> rich_acp::ResourceLink
+impl core::cmp::PartialEq for rich_acp::ResourceLink
+pub fn rich_acp::ResourceLink::eq(&self, &rich_acp::ResourceLink) -> bool
+impl core::default::Default for rich_acp::ResourceLink
+pub fn rich_acp::ResourceLink::default() -> rich_acp::ResourceLink
+impl core::fmt::Debug for rich_acp::ResourceLink
+pub fn rich_acp::ResourceLink::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::ResourceLink
+impl serde_core::ser::Serialize for rich_acp::ResourceLink
+pub fn rich_acp::ResourceLink::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ResourceLink
+pub fn rich_acp::ResourceLink::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::ResourceLink
+impl core::marker::Send for rich_acp::ResourceLink
+impl core::marker::Sync for rich_acp::ResourceLink
+impl core::marker::Unpin for rich_acp::ResourceLink
+impl core::marker::UnsafeUnpin for rich_acp::ResourceLink
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ResourceLink
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ResourceLink
+pub struct rich_acp::RpcError
+pub rich_acp::RpcError::code: i64
+pub rich_acp::RpcError::data: core::option::Option<serde_json::value::Value>
+pub rich_acp::RpcError::message: alloc::string::String
+impl rich_acp::RpcError
+pub const rich_acp::RpcError::AUTH_REQUIRED: i64
+pub const rich_acp::RpcError::INTERNAL_ERROR: i64
+pub const rich_acp::RpcError::INVALID_PARAMS: i64
+pub const rich_acp::RpcError::INVALID_REQUEST: i64
+pub const rich_acp::RpcError::METHOD_NOT_FOUND: i64
+pub const rich_acp::RpcError::PARSE_ERROR: i64
+pub const rich_acp::RpcError::REQUEST_CANCELLED: i64
+pub const rich_acp::RpcError::RESOURCE_NOT_FOUND: i64
+pub fn rich_acp::RpcError::cancelled() -> rich_acp::RpcError
+pub fn rich_acp::RpcError::internal(impl core::convert::Into<alloc::string::String>) -> rich_acp::RpcError
+pub fn rich_acp::RpcError::invalid_params(impl core::convert::Into<alloc::string::String>) -> rich_acp::RpcError
+pub fn rich_acp::RpcError::is_auth_required(&self) -> bool
+pub fn rich_acp::RpcError::method_not_found(&str) -> rich_acp::RpcError
+pub fn rich_acp::RpcError::new(i64, impl core::convert::Into<alloc::string::String>) -> rich_acp::RpcError
+pub fn rich_acp::RpcError::not_found(impl core::convert::Into<alloc::string::String>) -> rich_acp::RpcError
+pub fn rich_acp::RpcError::with_data(self, serde_json::value::Value) -> rich_acp::RpcError
+impl core::clone::Clone for rich_acp::RpcError
+pub fn rich_acp::RpcError::clone(&self) -> rich_acp::RpcError
+impl core::cmp::PartialEq for rich_acp::RpcError
+pub fn rich_acp::RpcError::eq(&self, &rich_acp::RpcError) -> bool
+impl core::convert::From<rich_acp::RpcError> for rich_acp::Error
+pub fn rich_acp::Error::from(rich_acp::RpcError) -> rich_acp::Error
+impl core::convert::From<std::io::error::Error> for rich_acp::RpcError
+pub fn rich_acp::RpcError::from(std::io::error::Error) -> rich_acp::RpcError
+impl core::error::Error for rich_acp::RpcError
+impl core::fmt::Debug for rich_acp::RpcError
+pub fn rich_acp::RpcError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::RpcError
+pub fn rich_acp::RpcError::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::RpcError
+impl serde_core::ser::Serialize for rich_acp::RpcError
+pub fn rich_acp::RpcError::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::RpcError
+pub fn rich_acp::RpcError::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::RpcError
+impl core::marker::Send for rich_acp::RpcError
+impl core::marker::Sync for rich_acp::RpcError
+impl core::marker::Unpin for rich_acp::RpcError
+impl core::marker::UnsafeUnpin for rich_acp::RpcError
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::RpcError
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::RpcError
+pub struct rich_acp::SessionId(pub alloc::string::String)
+impl rich_acp::SessionId
+pub fn rich_acp::SessionId::as_str(&self) -> &str
+impl core::clone::Clone for rich_acp::SessionId
+pub fn rich_acp::SessionId::clone(&self) -> rich_acp::SessionId
+impl core::cmp::Eq for rich_acp::SessionId
+impl core::cmp::Ord for rich_acp::SessionId
+pub fn rich_acp::SessionId::cmp(&self, &rich_acp::SessionId) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_acp::SessionId
+pub fn rich_acp::SessionId::eq(&self, &rich_acp::SessionId) -> bool
+impl core::cmp::PartialOrd for rich_acp::SessionId
+pub fn rich_acp::SessionId::partial_cmp(&self, &rich_acp::SessionId) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<&str> for rich_acp::SessionId
+pub fn rich_acp::SessionId::from(&str) -> Self
+impl core::convert::From<alloc::string::String> for rich_acp::SessionId
+pub fn rich_acp::SessionId::from(alloc::string::String) -> Self
+impl core::default::Default for rich_acp::SessionId
+pub fn rich_acp::SessionId::default() -> rich_acp::SessionId
+impl core::fmt::Debug for rich_acp::SessionId
+pub fn rich_acp::SessionId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::SessionId
+pub fn rich_acp::SessionId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_acp::SessionId
+pub fn rich_acp::SessionId::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_acp::SessionId
+impl serde_core::ser::Serialize for rich_acp::SessionId
+pub fn rich_acp::SessionId::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::SessionId
+pub fn rich_acp::SessionId::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::SessionId
+impl core::marker::Send for rich_acp::SessionId
+impl core::marker::Sync for rich_acp::SessionId
+impl core::marker::Unpin for rich_acp::SessionId
+impl core::marker::UnsafeUnpin for rich_acp::SessionId
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::SessionId
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::SessionId
+pub struct rich_acp::SessionMode
+pub rich_acp::SessionMode::description: core::option::Option<alloc::string::String>
+pub rich_acp::SessionMode::id: rich_acp::SessionModeId
+pub rich_acp::SessionMode::name: alloc::string::String
+impl core::clone::Clone for rich_acp::SessionMode
+pub fn rich_acp::SessionMode::clone(&self) -> rich_acp::SessionMode
+impl core::cmp::PartialEq for rich_acp::SessionMode
+pub fn rich_acp::SessionMode::eq(&self, &rich_acp::SessionMode) -> bool
+impl core::default::Default for rich_acp::SessionMode
+pub fn rich_acp::SessionMode::default() -> rich_acp::SessionMode
+impl core::fmt::Debug for rich_acp::SessionMode
+pub fn rich_acp::SessionMode::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::SessionMode
+impl serde_core::ser::Serialize for rich_acp::SessionMode
+pub fn rich_acp::SessionMode::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::SessionMode
+pub fn rich_acp::SessionMode::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::SessionMode
+impl core::marker::Send for rich_acp::SessionMode
+impl core::marker::Sync for rich_acp::SessionMode
+impl core::marker::Unpin for rich_acp::SessionMode
+impl core::marker::UnsafeUnpin for rich_acp::SessionMode
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::SessionMode
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::SessionMode
+pub struct rich_acp::SessionModeId(pub alloc::string::String)
+impl rich_acp::SessionModeId
+pub fn rich_acp::SessionModeId::as_str(&self) -> &str
+impl core::clone::Clone for rich_acp::SessionModeId
+pub fn rich_acp::SessionModeId::clone(&self) -> rich_acp::SessionModeId
+impl core::cmp::Eq for rich_acp::SessionModeId
+impl core::cmp::Ord for rich_acp::SessionModeId
+pub fn rich_acp::SessionModeId::cmp(&self, &rich_acp::SessionModeId) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_acp::SessionModeId
+pub fn rich_acp::SessionModeId::eq(&self, &rich_acp::SessionModeId) -> bool
+impl core::cmp::PartialOrd for rich_acp::SessionModeId
+pub fn rich_acp::SessionModeId::partial_cmp(&self, &rich_acp::SessionModeId) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<&str> for rich_acp::SessionModeId
+pub fn rich_acp::SessionModeId::from(&str) -> Self
+impl core::convert::From<alloc::string::String> for rich_acp::SessionModeId
+pub fn rich_acp::SessionModeId::from(alloc::string::String) -> Self
+impl core::default::Default for rich_acp::SessionModeId
+pub fn rich_acp::SessionModeId::default() -> rich_acp::SessionModeId
+impl core::fmt::Debug for rich_acp::SessionModeId
+pub fn rich_acp::SessionModeId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::SessionModeId
+pub fn rich_acp::SessionModeId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_acp::SessionModeId
+pub fn rich_acp::SessionModeId::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_acp::SessionModeId
+impl serde_core::ser::Serialize for rich_acp::SessionModeId
+pub fn rich_acp::SessionModeId::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::SessionModeId
+pub fn rich_acp::SessionModeId::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::SessionModeId
+impl core::marker::Send for rich_acp::SessionModeId
+impl core::marker::Sync for rich_acp::SessionModeId
+impl core::marker::Unpin for rich_acp::SessionModeId
+impl core::marker::UnsafeUnpin for rich_acp::SessionModeId
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::SessionModeId
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::SessionModeId
+pub struct rich_acp::SessionModeState
+pub rich_acp::SessionModeState::available_modes: alloc::vec::Vec<rich_acp::SessionMode>
+pub rich_acp::SessionModeState::current_mode_id: rich_acp::SessionModeId
+impl core::clone::Clone for rich_acp::SessionModeState
+pub fn rich_acp::SessionModeState::clone(&self) -> rich_acp::SessionModeState
+impl core::cmp::PartialEq for rich_acp::SessionModeState
+pub fn rich_acp::SessionModeState::eq(&self, &rich_acp::SessionModeState) -> bool
+impl core::default::Default for rich_acp::SessionModeState
+pub fn rich_acp::SessionModeState::default() -> rich_acp::SessionModeState
+impl core::fmt::Debug for rich_acp::SessionModeState
+pub fn rich_acp::SessionModeState::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::SessionModeState
+impl serde_core::ser::Serialize for rich_acp::SessionModeState
+pub fn rich_acp::SessionModeState::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::SessionModeState
+pub fn rich_acp::SessionModeState::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::SessionModeState
+impl core::marker::Send for rich_acp::SessionModeState
+impl core::marker::Sync for rich_acp::SessionModeState
+impl core::marker::Unpin for rich_acp::SessionModeState
+impl core::marker::UnsafeUnpin for rich_acp::SessionModeState
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::SessionModeState
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::SessionModeState
+pub struct rich_acp::SessionNotification
+pub rich_acp::SessionNotification::session_id: rich_acp::SessionId
+pub rich_acp::SessionNotification::update: rich_acp::SessionUpdate
+impl core::clone::Clone for rich_acp::SessionNotification
+pub fn rich_acp::SessionNotification::clone(&self) -> rich_acp::SessionNotification
+impl core::cmp::PartialEq for rich_acp::SessionNotification
+pub fn rich_acp::SessionNotification::eq(&self, &rich_acp::SessionNotification) -> bool
+impl core::fmt::Debug for rich_acp::SessionNotification
+pub fn rich_acp::SessionNotification::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::SessionNotification
+impl serde_core::ser::Serialize for rich_acp::SessionNotification
+pub fn rich_acp::SessionNotification::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::SessionNotification
+pub fn rich_acp::SessionNotification::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::SessionNotification
+impl core::marker::Send for rich_acp::SessionNotification
+impl core::marker::Sync for rich_acp::SessionNotification
+impl core::marker::Unpin for rich_acp::SessionNotification
+impl core::marker::UnsafeUnpin for rich_acp::SessionNotification
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::SessionNotification
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::SessionNotification
+pub struct rich_acp::SetSessionModeRequest
+pub rich_acp::SetSessionModeRequest::mode_id: rich_acp::SessionModeId
+pub rich_acp::SetSessionModeRequest::session_id: rich_acp::SessionId
+impl core::clone::Clone for rich_acp::SetSessionModeRequest
+pub fn rich_acp::SetSessionModeRequest::clone(&self) -> rich_acp::SetSessionModeRequest
+impl core::cmp::PartialEq for rich_acp::SetSessionModeRequest
+pub fn rich_acp::SetSessionModeRequest::eq(&self, &rich_acp::SetSessionModeRequest) -> bool
+impl core::fmt::Debug for rich_acp::SetSessionModeRequest
+pub fn rich_acp::SetSessionModeRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::SetSessionModeRequest
+impl serde_core::ser::Serialize for rich_acp::SetSessionModeRequest
+pub fn rich_acp::SetSessionModeRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::SetSessionModeRequest
+pub fn rich_acp::SetSessionModeRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::SetSessionModeRequest
+impl core::marker::Send for rich_acp::SetSessionModeRequest
+impl core::marker::Sync for rich_acp::SetSessionModeRequest
+impl core::marker::Unpin for rich_acp::SetSessionModeRequest
+impl core::marker::UnsafeUnpin for rich_acp::SetSessionModeRequest
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::SetSessionModeRequest
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::SetSessionModeRequest
+pub struct rich_acp::TerminalContent
+pub rich_acp::TerminalContent::terminal_id: rich_acp::TerminalId
+impl core::clone::Clone for rich_acp::TerminalContent
+pub fn rich_acp::TerminalContent::clone(&self) -> rich_acp::TerminalContent
+impl core::cmp::PartialEq for rich_acp::TerminalContent
+pub fn rich_acp::TerminalContent::eq(&self, &rich_acp::TerminalContent) -> bool
+impl core::default::Default for rich_acp::TerminalContent
+pub fn rich_acp::TerminalContent::default() -> rich_acp::TerminalContent
+impl core::fmt::Debug for rich_acp::TerminalContent
+pub fn rich_acp::TerminalContent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::TerminalContent
+impl serde_core::ser::Serialize for rich_acp::TerminalContent
+pub fn rich_acp::TerminalContent::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::TerminalContent
+pub fn rich_acp::TerminalContent::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::TerminalContent
+impl core::marker::Send for rich_acp::TerminalContent
+impl core::marker::Sync for rich_acp::TerminalContent
+impl core::marker::Unpin for rich_acp::TerminalContent
+impl core::marker::UnsafeUnpin for rich_acp::TerminalContent
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::TerminalContent
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::TerminalContent
+pub struct rich_acp::TerminalExitStatus
+pub rich_acp::TerminalExitStatus::exit_code: core::option::Option<u32>
+pub rich_acp::TerminalExitStatus::signal: core::option::Option<alloc::string::String>
+impl core::clone::Clone for rich_acp::TerminalExitStatus
+pub fn rich_acp::TerminalExitStatus::clone(&self) -> rich_acp::TerminalExitStatus
+impl core::cmp::Eq for rich_acp::TerminalExitStatus
+impl core::cmp::PartialEq for rich_acp::TerminalExitStatus
+pub fn rich_acp::TerminalExitStatus::eq(&self, &rich_acp::TerminalExitStatus) -> bool
+impl core::default::Default for rich_acp::TerminalExitStatus
+pub fn rich_acp::TerminalExitStatus::default() -> rich_acp::TerminalExitStatus
+impl core::fmt::Debug for rich_acp::TerminalExitStatus
+pub fn rich_acp::TerminalExitStatus::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::TerminalExitStatus
+impl serde_core::ser::Serialize for rich_acp::TerminalExitStatus
+pub fn rich_acp::TerminalExitStatus::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::TerminalExitStatus
+pub fn rich_acp::TerminalExitStatus::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::TerminalExitStatus
+impl core::marker::Send for rich_acp::TerminalExitStatus
+impl core::marker::Sync for rich_acp::TerminalExitStatus
+impl core::marker::Unpin for rich_acp::TerminalExitStatus
+impl core::marker::UnsafeUnpin for rich_acp::TerminalExitStatus
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::TerminalExitStatus
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::TerminalExitStatus
+pub struct rich_acp::TerminalId(pub alloc::string::String)
+impl rich_acp::TerminalId
+pub fn rich_acp::TerminalId::as_str(&self) -> &str
+impl core::clone::Clone for rich_acp::TerminalId
+pub fn rich_acp::TerminalId::clone(&self) -> rich_acp::TerminalId
+impl core::cmp::Eq for rich_acp::TerminalId
+impl core::cmp::Ord for rich_acp::TerminalId
+pub fn rich_acp::TerminalId::cmp(&self, &rich_acp::TerminalId) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_acp::TerminalId
+pub fn rich_acp::TerminalId::eq(&self, &rich_acp::TerminalId) -> bool
+impl core::cmp::PartialOrd for rich_acp::TerminalId
+pub fn rich_acp::TerminalId::partial_cmp(&self, &rich_acp::TerminalId) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<&str> for rich_acp::TerminalId
+pub fn rich_acp::TerminalId::from(&str) -> Self
+impl core::convert::From<alloc::string::String> for rich_acp::TerminalId
+pub fn rich_acp::TerminalId::from(alloc::string::String) -> Self
+impl core::default::Default for rich_acp::TerminalId
+pub fn rich_acp::TerminalId::default() -> rich_acp::TerminalId
+impl core::fmt::Debug for rich_acp::TerminalId
+pub fn rich_acp::TerminalId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::TerminalId
+pub fn rich_acp::TerminalId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_acp::TerminalId
+pub fn rich_acp::TerminalId::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_acp::TerminalId
+impl serde_core::ser::Serialize for rich_acp::TerminalId
+pub fn rich_acp::TerminalId::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::TerminalId
+pub fn rich_acp::TerminalId::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::TerminalId
+impl core::marker::Send for rich_acp::TerminalId
+impl core::marker::Sync for rich_acp::TerminalId
+impl core::marker::Unpin for rich_acp::TerminalId
+impl core::marker::UnsafeUnpin for rich_acp::TerminalId
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::TerminalId
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::TerminalId
+pub struct rich_acp::TerminalOutputResponse
+pub rich_acp::TerminalOutputResponse::exit_status: core::option::Option<rich_acp::TerminalExitStatus>
+pub rich_acp::TerminalOutputResponse::output: alloc::string::String
+pub rich_acp::TerminalOutputResponse::truncated: bool
+impl core::clone::Clone for rich_acp::TerminalOutputResponse
+pub fn rich_acp::TerminalOutputResponse::clone(&self) -> rich_acp::TerminalOutputResponse
+impl core::cmp::PartialEq for rich_acp::TerminalOutputResponse
+pub fn rich_acp::TerminalOutputResponse::eq(&self, &rich_acp::TerminalOutputResponse) -> bool
+impl core::default::Default for rich_acp::TerminalOutputResponse
+pub fn rich_acp::TerminalOutputResponse::default() -> rich_acp::TerminalOutputResponse
+impl core::fmt::Debug for rich_acp::TerminalOutputResponse
+pub fn rich_acp::TerminalOutputResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::TerminalOutputResponse
+impl serde_core::ser::Serialize for rich_acp::TerminalOutputResponse
+pub fn rich_acp::TerminalOutputResponse::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::TerminalOutputResponse
+pub fn rich_acp::TerminalOutputResponse::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::TerminalOutputResponse
+impl core::marker::Send for rich_acp::TerminalOutputResponse
+impl core::marker::Sync for rich_acp::TerminalOutputResponse
+impl core::marker::Unpin for rich_acp::TerminalOutputResponse
+impl core::marker::UnsafeUnpin for rich_acp::TerminalOutputResponse
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::TerminalOutputResponse
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::TerminalOutputResponse
+pub struct rich_acp::TerminalRequest
+pub rich_acp::TerminalRequest::session_id: rich_acp::SessionId
+pub rich_acp::TerminalRequest::terminal_id: rich_acp::TerminalId
+impl core::clone::Clone for rich_acp::TerminalRequest
+pub fn rich_acp::TerminalRequest::clone(&self) -> rich_acp::TerminalRequest
+impl core::cmp::PartialEq for rich_acp::TerminalRequest
+pub fn rich_acp::TerminalRequest::eq(&self, &rich_acp::TerminalRequest) -> bool
+impl core::fmt::Debug for rich_acp::TerminalRequest
+pub fn rich_acp::TerminalRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::TerminalRequest
+impl serde_core::ser::Serialize for rich_acp::TerminalRequest
+pub fn rich_acp::TerminalRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::TerminalRequest
+pub fn rich_acp::TerminalRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::TerminalRequest
+impl core::marker::Send for rich_acp::TerminalRequest
+impl core::marker::Sync for rich_acp::TerminalRequest
+impl core::marker::Unpin for rich_acp::TerminalRequest
+impl core::marker::UnsafeUnpin for rich_acp::TerminalRequest
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::TerminalRequest
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::TerminalRequest
+pub struct rich_acp::Terminals
+impl rich_acp::Terminals
+pub fn rich_acp::Terminals::create(&self, &rich_acp::CreateTerminalRequest) -> core::result::Result<rich_acp::CreateTerminalResponse, rich_acp::RpcError>
+pub fn rich_acp::Terminals::kill(&self, &rich_acp::TerminalRequest) -> core::result::Result<(), rich_acp::RpcError>
+pub fn rich_acp::Terminals::new(rich_acp::Workspace) -> rich_acp::Terminals
+pub fn rich_acp::Terminals::output(&self, &rich_acp::TerminalRequest) -> core::result::Result<rich_acp::TerminalOutputResponse, rich_acp::RpcError>
+pub fn rich_acp::Terminals::release(&self, &rich_acp::TerminalRequest) -> core::result::Result<(), rich_acp::RpcError>
+pub fn rich_acp::Terminals::wait_for_exit(&self, &rich_acp::TerminalRequest) -> core::result::Result<rich_acp::TerminalExitStatus, rich_acp::RpcError>
+impl core::ops::drop::Drop for rich_acp::Terminals
+pub fn rich_acp::Terminals::drop(&mut self)
+impl !core::marker::Freeze for rich_acp::Terminals
+impl core::marker::Send for rich_acp::Terminals
+impl core::marker::Sync for rich_acp::Terminals
+impl core::marker::Unpin for rich_acp::Terminals
+impl core::marker::UnsafeUnpin for rich_acp::Terminals
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::Terminals
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::Terminals
+pub struct rich_acp::TextContent
+pub rich_acp::TextContent::annotations: core::option::Option<serde_json::value::Value>
+pub rich_acp::TextContent::text: alloc::string::String
+impl core::clone::Clone for rich_acp::TextContent
+pub fn rich_acp::TextContent::clone(&self) -> rich_acp::TextContent
+impl core::cmp::PartialEq for rich_acp::TextContent
+pub fn rich_acp::TextContent::eq(&self, &rich_acp::TextContent) -> bool
+impl core::default::Default for rich_acp::TextContent
+pub fn rich_acp::TextContent::default() -> rich_acp::TextContent
+impl core::fmt::Debug for rich_acp::TextContent
+pub fn rich_acp::TextContent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::TextContent
+impl serde_core::ser::Serialize for rich_acp::TextContent
+pub fn rich_acp::TextContent::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::TextContent
+pub fn rich_acp::TextContent::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::TextContent
+impl core::marker::Send for rich_acp::TextContent
+impl core::marker::Sync for rich_acp::TextContent
+impl core::marker::Unpin for rich_acp::TextContent
+impl core::marker::UnsafeUnpin for rich_acp::TextContent
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::TextContent
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::TextContent
+pub struct rich_acp::TextResourceContents
+pub rich_acp::TextResourceContents::mime_type: core::option::Option<alloc::string::String>
+pub rich_acp::TextResourceContents::text: alloc::string::String
+pub rich_acp::TextResourceContents::uri: alloc::string::String
+impl core::clone::Clone for rich_acp::TextResourceContents
+pub fn rich_acp::TextResourceContents::clone(&self) -> rich_acp::TextResourceContents
+impl core::cmp::PartialEq for rich_acp::TextResourceContents
+pub fn rich_acp::TextResourceContents::eq(&self, &rich_acp::TextResourceContents) -> bool
+impl core::default::Default for rich_acp::TextResourceContents
+pub fn rich_acp::TextResourceContents::default() -> rich_acp::TextResourceContents
+impl core::fmt::Debug for rich_acp::TextResourceContents
+pub fn rich_acp::TextResourceContents::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::TextResourceContents
+impl serde_core::ser::Serialize for rich_acp::TextResourceContents
+pub fn rich_acp::TextResourceContents::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::TextResourceContents
+pub fn rich_acp::TextResourceContents::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::TextResourceContents
+impl core::marker::Send for rich_acp::TextResourceContents
+impl core::marker::Sync for rich_acp::TextResourceContents
+impl core::marker::Unpin for rich_acp::TextResourceContents
+impl core::marker::UnsafeUnpin for rich_acp::TextResourceContents
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::TextResourceContents
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::TextResourceContents
+pub struct rich_acp::ToolCall
+pub rich_acp::ToolCall::content: alloc::vec::Vec<rich_acp::ToolCallContent>
+pub rich_acp::ToolCall::kind: rich_acp::ToolKind
+pub rich_acp::ToolCall::locations: alloc::vec::Vec<rich_acp::ToolCallLocation>
+pub rich_acp::ToolCall::name: core::option::Option<alloc::string::String>
+pub rich_acp::ToolCall::raw_input: core::option::Option<serde_json::value::Value>
+pub rich_acp::ToolCall::raw_output: core::option::Option<serde_json::value::Value>
+pub rich_acp::ToolCall::status: rich_acp::ToolCallStatus
+pub rich_acp::ToolCall::title: alloc::string::String
+pub rich_acp::ToolCall::tool_call_id: rich_acp::ToolCallId
+impl rich_acp::ToolCall
+pub fn rich_acp::ToolCall::apply(&mut self, &rich_acp::ToolCallUpdate)
+impl core::clone::Clone for rich_acp::ToolCall
+pub fn rich_acp::ToolCall::clone(&self) -> rich_acp::ToolCall
+impl core::cmp::PartialEq for rich_acp::ToolCall
+pub fn rich_acp::ToolCall::eq(&self, &rich_acp::ToolCall) -> bool
+impl core::default::Default for rich_acp::ToolCall
+pub fn rich_acp::ToolCall::default() -> rich_acp::ToolCall
+impl core::fmt::Debug for rich_acp::ToolCall
+pub fn rich_acp::ToolCall::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::ToolCall
+impl serde_core::ser::Serialize for rich_acp::ToolCall
+pub fn rich_acp::ToolCall::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ToolCall
+pub fn rich_acp::ToolCall::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::ToolCall
+impl core::marker::Send for rich_acp::ToolCall
+impl core::marker::Sync for rich_acp::ToolCall
+impl core::marker::Unpin for rich_acp::ToolCall
+impl core::marker::UnsafeUnpin for rich_acp::ToolCall
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ToolCall
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ToolCall
+pub struct rich_acp::ToolCallId(pub alloc::string::String)
+impl rich_acp::ToolCallId
+pub fn rich_acp::ToolCallId::as_str(&self) -> &str
+impl core::clone::Clone for rich_acp::ToolCallId
+pub fn rich_acp::ToolCallId::clone(&self) -> rich_acp::ToolCallId
+impl core::cmp::Eq for rich_acp::ToolCallId
+impl core::cmp::Ord for rich_acp::ToolCallId
+pub fn rich_acp::ToolCallId::cmp(&self, &rich_acp::ToolCallId) -> core::cmp::Ordering
+impl core::cmp::PartialEq for rich_acp::ToolCallId
+pub fn rich_acp::ToolCallId::eq(&self, &rich_acp::ToolCallId) -> bool
+impl core::cmp::PartialOrd for rich_acp::ToolCallId
+pub fn rich_acp::ToolCallId::partial_cmp(&self, &rich_acp::ToolCallId) -> core::option::Option<core::cmp::Ordering>
+impl core::convert::From<&str> for rich_acp::ToolCallId
+pub fn rich_acp::ToolCallId::from(&str) -> Self
+impl core::convert::From<alloc::string::String> for rich_acp::ToolCallId
+pub fn rich_acp::ToolCallId::from(alloc::string::String) -> Self
+impl core::default::Default for rich_acp::ToolCallId
+pub fn rich_acp::ToolCallId::default() -> rich_acp::ToolCallId
+impl core::fmt::Debug for rich_acp::ToolCallId
+pub fn rich_acp::ToolCallId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::fmt::Display for rich_acp::ToolCallId
+pub fn rich_acp::ToolCallId::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::hash::Hash for rich_acp::ToolCallId
+pub fn rich_acp::ToolCallId::hash<__H: core::hash::Hasher>(&self, &mut __H)
+impl core::marker::StructuralPartialEq for rich_acp::ToolCallId
+impl serde_core::ser::Serialize for rich_acp::ToolCallId
+pub fn rich_acp::ToolCallId::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ToolCallId
+pub fn rich_acp::ToolCallId::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::ToolCallId
+impl core::marker::Send for rich_acp::ToolCallId
+impl core::marker::Sync for rich_acp::ToolCallId
+impl core::marker::Unpin for rich_acp::ToolCallId
+impl core::marker::UnsafeUnpin for rich_acp::ToolCallId
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ToolCallId
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ToolCallId
+pub struct rich_acp::ToolCallLocation
+pub rich_acp::ToolCallLocation::line: core::option::Option<u32>
+pub rich_acp::ToolCallLocation::path: std::path::PathBuf
+impl core::clone::Clone for rich_acp::ToolCallLocation
+pub fn rich_acp::ToolCallLocation::clone(&self) -> rich_acp::ToolCallLocation
+impl core::cmp::Eq for rich_acp::ToolCallLocation
+impl core::cmp::PartialEq for rich_acp::ToolCallLocation
+pub fn rich_acp::ToolCallLocation::eq(&self, &rich_acp::ToolCallLocation) -> bool
+impl core::default::Default for rich_acp::ToolCallLocation
+pub fn rich_acp::ToolCallLocation::default() -> rich_acp::ToolCallLocation
+impl core::fmt::Debug for rich_acp::ToolCallLocation
+pub fn rich_acp::ToolCallLocation::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::ToolCallLocation
+impl serde_core::ser::Serialize for rich_acp::ToolCallLocation
+pub fn rich_acp::ToolCallLocation::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ToolCallLocation
+pub fn rich_acp::ToolCallLocation::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::ToolCallLocation
+impl core::marker::Send for rich_acp::ToolCallLocation
+impl core::marker::Sync for rich_acp::ToolCallLocation
+impl core::marker::Unpin for rich_acp::ToolCallLocation
+impl core::marker::UnsafeUnpin for rich_acp::ToolCallLocation
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ToolCallLocation
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ToolCallLocation
+pub struct rich_acp::ToolCallUpdate
+pub rich_acp::ToolCallUpdate::content: core::option::Option<alloc::vec::Vec<rich_acp::ToolCallContent>>
+pub rich_acp::ToolCallUpdate::kind: core::option::Option<rich_acp::ToolKind>
+pub rich_acp::ToolCallUpdate::locations: core::option::Option<alloc::vec::Vec<rich_acp::ToolCallLocation>>
+pub rich_acp::ToolCallUpdate::name: core::option::Option<alloc::string::String>
+pub rich_acp::ToolCallUpdate::raw_input: core::option::Option<serde_json::value::Value>
+pub rich_acp::ToolCallUpdate::raw_output: core::option::Option<serde_json::value::Value>
+pub rich_acp::ToolCallUpdate::status: core::option::Option<rich_acp::ToolCallStatus>
+pub rich_acp::ToolCallUpdate::title: core::option::Option<alloc::string::String>
+pub rich_acp::ToolCallUpdate::tool_call_id: rich_acp::ToolCallId
+impl core::clone::Clone for rich_acp::ToolCallUpdate
+pub fn rich_acp::ToolCallUpdate::clone(&self) -> rich_acp::ToolCallUpdate
+impl core::cmp::PartialEq for rich_acp::ToolCallUpdate
+pub fn rich_acp::ToolCallUpdate::eq(&self, &rich_acp::ToolCallUpdate) -> bool
+impl core::default::Default for rich_acp::ToolCallUpdate
+pub fn rich_acp::ToolCallUpdate::default() -> rich_acp::ToolCallUpdate
+impl core::fmt::Debug for rich_acp::ToolCallUpdate
+pub fn rich_acp::ToolCallUpdate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::ToolCallUpdate
+impl serde_core::ser::Serialize for rich_acp::ToolCallUpdate
+pub fn rich_acp::ToolCallUpdate::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::ToolCallUpdate
+pub fn rich_acp::ToolCallUpdate::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::ToolCallUpdate
+impl core::marker::Send for rich_acp::ToolCallUpdate
+impl core::marker::Sync for rich_acp::ToolCallUpdate
+impl core::marker::Unpin for rich_acp::ToolCallUpdate
+impl core::marker::UnsafeUnpin for rich_acp::ToolCallUpdate
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::ToolCallUpdate
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::ToolCallUpdate
+pub struct rich_acp::UsageUpdate
+pub rich_acp::UsageUpdate::cost: core::option::Option<rich_acp::Cost>
+pub rich_acp::UsageUpdate::size: u64
+pub rich_acp::UsageUpdate::used: u64
+impl core::clone::Clone for rich_acp::UsageUpdate
+pub fn rich_acp::UsageUpdate::clone(&self) -> rich_acp::UsageUpdate
+impl core::cmp::PartialEq for rich_acp::UsageUpdate
+pub fn rich_acp::UsageUpdate::eq(&self, &rich_acp::UsageUpdate) -> bool
+impl core::default::Default for rich_acp::UsageUpdate
+pub fn rich_acp::UsageUpdate::default() -> rich_acp::UsageUpdate
+impl core::fmt::Debug for rich_acp::UsageUpdate
+pub fn rich_acp::UsageUpdate::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::UsageUpdate
+impl serde_core::ser::Serialize for rich_acp::UsageUpdate
+pub fn rich_acp::UsageUpdate::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::UsageUpdate
+pub fn rich_acp::UsageUpdate::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::UsageUpdate
+impl core::marker::Send for rich_acp::UsageUpdate
+impl core::marker::Sync for rich_acp::UsageUpdate
+impl core::marker::Unpin for rich_acp::UsageUpdate
+impl core::marker::UnsafeUnpin for rich_acp::UsageUpdate
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::UsageUpdate
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::UsageUpdate
+pub struct rich_acp::Workspace
+impl rich_acp::Workspace
+pub fn rich_acp::Workspace::check(&self, &std::path::Path) -> core::result::Result<std::path::PathBuf, rich_acp::RpcError>
+pub fn rich_acp::Workspace::contains(&self, &std::path::Path) -> bool
+pub fn rich_acp::Workspace::cwd(&self) -> &std::path::Path
+pub fn rich_acp::Workspace::new(impl core::convert::AsRef<std::path::Path>) -> std::io::error::Result<rich_acp::Workspace>
+pub fn rich_acp::Workspace::roots(&self) -> &[std::path::PathBuf]
+pub fn rich_acp::Workspace::with_root(self, impl core::convert::AsRef<std::path::Path>) -> std::io::error::Result<rich_acp::Workspace>
+impl core::clone::Clone for rich_acp::Workspace
+pub fn rich_acp::Workspace::clone(&self) -> rich_acp::Workspace
+impl core::cmp::Eq for rich_acp::Workspace
+impl core::cmp::PartialEq for rich_acp::Workspace
+pub fn rich_acp::Workspace::eq(&self, &rich_acp::Workspace) -> bool
+impl core::fmt::Debug for rich_acp::Workspace
+pub fn rich_acp::Workspace::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::Workspace
+impl core::marker::Freeze for rich_acp::Workspace
+impl core::marker::Send for rich_acp::Workspace
+impl core::marker::Sync for rich_acp::Workspace
+impl core::marker::Unpin for rich_acp::Workspace
+impl core::marker::UnsafeUnpin for rich_acp::Workspace
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::Workspace
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::Workspace
+pub struct rich_acp::WrappedContent
+pub rich_acp::WrappedContent::content: rich_acp::ContentBlock
+impl core::clone::Clone for rich_acp::WrappedContent
+pub fn rich_acp::WrappedContent::clone(&self) -> rich_acp::WrappedContent
+impl core::cmp::PartialEq for rich_acp::WrappedContent
+pub fn rich_acp::WrappedContent::eq(&self, &rich_acp::WrappedContent) -> bool
+impl core::fmt::Debug for rich_acp::WrappedContent
+pub fn rich_acp::WrappedContent::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::WrappedContent
+impl serde_core::ser::Serialize for rich_acp::WrappedContent
+pub fn rich_acp::WrappedContent::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::WrappedContent
+pub fn rich_acp::WrappedContent::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::WrappedContent
+impl core::marker::Send for rich_acp::WrappedContent
+impl core::marker::Sync for rich_acp::WrappedContent
+impl core::marker::Unpin for rich_acp::WrappedContent
+impl core::marker::UnsafeUnpin for rich_acp::WrappedContent
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::WrappedContent
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::WrappedContent
+pub struct rich_acp::WriteTextFileRequest
+pub rich_acp::WriteTextFileRequest::content: alloc::string::String
+pub rich_acp::WriteTextFileRequest::path: std::path::PathBuf
+pub rich_acp::WriteTextFileRequest::session_id: rich_acp::SessionId
+impl core::clone::Clone for rich_acp::WriteTextFileRequest
+pub fn rich_acp::WriteTextFileRequest::clone(&self) -> rich_acp::WriteTextFileRequest
+impl core::cmp::PartialEq for rich_acp::WriteTextFileRequest
+pub fn rich_acp::WriteTextFileRequest::eq(&self, &rich_acp::WriteTextFileRequest) -> bool
+impl core::fmt::Debug for rich_acp::WriteTextFileRequest
+pub fn rich_acp::WriteTextFileRequest::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::WriteTextFileRequest
+impl serde_core::ser::Serialize for rich_acp::WriteTextFileRequest
+pub fn rich_acp::WriteTextFileRequest::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::WriteTextFileRequest
+pub fn rich_acp::WriteTextFileRequest::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::WriteTextFileRequest
+impl core::marker::Send for rich_acp::WriteTextFileRequest
+impl core::marker::Sync for rich_acp::WriteTextFileRequest
+impl core::marker::Unpin for rich_acp::WriteTextFileRequest
+impl core::marker::UnsafeUnpin for rich_acp::WriteTextFileRequest
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::WriteTextFileRequest
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::WriteTextFileRequest
+pub struct rich_acp::WriteTextFileResponse
+impl core::clone::Clone for rich_acp::WriteTextFileResponse
+pub fn rich_acp::WriteTextFileResponse::clone(&self) -> rich_acp::WriteTextFileResponse
+impl core::cmp::Eq for rich_acp::WriteTextFileResponse
+impl core::cmp::PartialEq for rich_acp::WriteTextFileResponse
+pub fn rich_acp::WriteTextFileResponse::eq(&self, &rich_acp::WriteTextFileResponse) -> bool
+impl core::default::Default for rich_acp::WriteTextFileResponse
+pub fn rich_acp::WriteTextFileResponse::default() -> rich_acp::WriteTextFileResponse
+impl core::fmt::Debug for rich_acp::WriteTextFileResponse
+pub fn rich_acp::WriteTextFileResponse::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_acp::WriteTextFileResponse
+impl serde_core::ser::Serialize for rich_acp::WriteTextFileResponse
+pub fn rich_acp::WriteTextFileResponse::serialize<__S>(&self, __S) -> core::result::Result<<__S as serde_core::ser::Serializer>::Ok, <__S as serde_core::ser::Serializer>::Error> where __S: serde_core::ser::Serializer
+impl<'de> serde_core::de::Deserialize<'de> for rich_acp::WriteTextFileResponse
+pub fn rich_acp::WriteTextFileResponse::deserialize<__D>(__D) -> core::result::Result<Self, <__D as serde_core::de::Deserializer>::Error> where __D: serde_core::de::Deserializer<'de>
+impl core::marker::Freeze for rich_acp::WriteTextFileResponse
+impl core::marker::Send for rich_acp::WriteTextFileResponse
+impl core::marker::Sync for rich_acp::WriteTextFileResponse
+impl core::marker::Unpin for rich_acp::WriteTextFileResponse
+impl core::marker::UnsafeUnpin for rich_acp::WriteTextFileResponse
+impl core::panic::unwind_safe::RefUnwindSafe for rich_acp::WriteTextFileResponse
+impl core::panic::unwind_safe::UnwindSafe for rich_acp::WriteTextFileResponse
+pub const rich_acp::DEFAULT_OUTPUT_LIMIT: usize
+pub const rich_acp::PROTOCOL_VERSION: u16
+pub trait rich_acp::Client: core::marker::Send + core::marker::Sync + 'static
+pub fn rich_acp::Client::agent_log(&self, &str)
+pub fn rich_acp::Client::create_terminal(&self, rich_acp::CreateTerminalRequest) -> core::result::Result<rich_acp::CreateTerminalResponse, rich_acp::RpcError>
+pub fn rich_acp::Client::ext_method(&self, &str, serde_json::value::Value) -> core::result::Result<serde_json::value::Value, rich_acp::RpcError>
+pub fn rich_acp::Client::ext_notification(&self, &str, serde_json::value::Value)
+pub fn rich_acp::Client::kill_terminal(&self, rich_acp::TerminalRequest) -> core::result::Result<(), rich_acp::RpcError>
+pub fn rich_acp::Client::protocol_error(&self, &rich_acp::Error)
+pub fn rich_acp::Client::read_text_file(&self, rich_acp::ReadTextFileRequest) -> core::result::Result<rich_acp::ReadTextFileResponse, rich_acp::RpcError>
+pub fn rich_acp::Client::release_terminal(&self, rich_acp::TerminalRequest) -> core::result::Result<(), rich_acp::RpcError>
+pub fn rich_acp::Client::request_permission(&self, rich_acp::RequestPermissionRequest) -> core::result::Result<rich_acp::RequestPermissionResponse, rich_acp::RpcError>
+pub fn rich_acp::Client::session_update(&self, rich_acp::SessionNotification)
+pub fn rich_acp::Client::terminal_output(&self, rich_acp::TerminalRequest) -> core::result::Result<rich_acp::TerminalOutputResponse, rich_acp::RpcError>
+pub fn rich_acp::Client::wait_for_terminal_exit(&self, rich_acp::TerminalRequest) -> core::result::Result<rich_acp::TerminalExitStatus, rich_acp::RpcError>
+pub fn rich_acp::Client::write_text_file(&self, rich_acp::WriteTextFileRequest) -> core::result::Result<rich_acp::WriteTextFileResponse, rich_acp::RpcError>
+impl<C: rich_acp::Client> rich_acp::Client for alloc::sync::Arc<C>
+pub fn alloc::sync::Arc<C>::agent_log(&self, &str)
+pub fn alloc::sync::Arc<C>::create_terminal(&self, rich_acp::CreateTerminalRequest) -> core::result::Result<rich_acp::CreateTerminalResponse, rich_acp::RpcError>
+pub fn alloc::sync::Arc<C>::ext_method(&self, &str, serde_json::value::Value) -> core::result::Result<serde_json::value::Value, rich_acp::RpcError>
+pub fn alloc::sync::Arc<C>::ext_notification(&self, &str, serde_json::value::Value)
+pub fn alloc::sync::Arc<C>::kill_terminal(&self, rich_acp::TerminalRequest) -> core::result::Result<(), rich_acp::RpcError>
+pub fn alloc::sync::Arc<C>::protocol_error(&self, &rich_acp::Error)
+pub fn alloc::sync::Arc<C>::read_text_file(&self, rich_acp::ReadTextFileRequest) -> core::result::Result<rich_acp::ReadTextFileResponse, rich_acp::RpcError>
+pub fn alloc::sync::Arc<C>::release_terminal(&self, rich_acp::TerminalRequest) -> core::result::Result<(), rich_acp::RpcError>
+pub fn alloc::sync::Arc<C>::request_permission(&self, rich_acp::RequestPermissionRequest) -> core::result::Result<rich_acp::RequestPermissionResponse, rich_acp::RpcError>
+pub fn alloc::sync::Arc<C>::session_update(&self, rich_acp::SessionNotification)
+pub fn alloc::sync::Arc<C>::terminal_output(&self, rich_acp::TerminalRequest) -> core::result::Result<rich_acp::TerminalOutputResponse, rich_acp::RpcError>
+pub fn alloc::sync::Arc<C>::wait_for_terminal_exit(&self, rich_acp::TerminalRequest) -> core::result::Result<rich_acp::TerminalExitStatus, rich_acp::RpcError>
+pub fn alloc::sync::Arc<C>::write_text_file(&self, rich_acp::WriteTextFileRequest) -> core::result::Result<rich_acp::WriteTextFileResponse, rich_acp::RpcError>
+pub fn rich_acp::controls_execution(&std::path::Path) -> bool
+pub type rich_acp::WaitForTerminalExitResponse = rich_acp::TerminalExitStatus

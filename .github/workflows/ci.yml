@@ -97,9 +97,10 @@ jobs:
       - uses: Swatinem/rust-cache@v2
 
       # `cargo package --all-features` builds rs-rich-intuituive's `audio`
-      # feature, whose cpal needs ALSA's headers on Linux.
-      - name: Install ALSA headers
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      # feature, whose cpal needs ALSA's headers on Linux, and rs-rich-art's
+      # `avif`, which links libdav1d.
+      - name: Install ALSA and libdav1d headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libdav1d-dev
 
       # Needs live crates.io access; registry failures are failures, never skips.
       # Unpublished siblings are staged by Cargo. This is not a publish dry run.
@@ -318,6 +319,10 @@ jobs:
             args: ""
           - crate: rs-rich-marketplace
             args: "--no-default-features"
+          # The ACP client: transcripts replayed by a fake agent on in-process
+          # pipes, and a spawned `sh` agent (no agent installed, no network).
+          - crate: rs-rich-acp
+            args: ""
           # Noctiluca, the terminal browser: its model, layout, config and
           # app tests on Chrome's saved snapshots of its fixture pages, and
           # its binary on a PTY (the test-only `fake-engine` feature; the
@@ -355,11 +360,54 @@ jobs:
         if: matrix.crate == 'rs-rich-intuituive'
         run: sudo apt-get update && sudo apt-get install -y libasound2-dev
 
+      # `--all-features` takes in rs-rich-art's `avif` (the CLI's too),
+      # which links libdav1d.
+      - name: Install libdav1d
+        if: matrix.crate == 'rs-rich-art' || matrix.crate == 'rs-rich-cli'
+        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev
+
       - name: Clippy (${{ matrix.crate }} ${{ matrix.args }})
         run: cargo clippy -p ${{ matrix.crate }} --all-targets ${{ matrix.args }} -- -D warnings
 
       - name: Test (${{ matrix.crate }} ${{ matrix.args }})
         run: cargo test -p ${{ matrix.crate }} ${{ matrix.args }}
+
+  # AVIF decoding (#792), off by default since it links the C library
+  # libdav1d: rs-rich-art's `avif` decodes its fixture, and Noctiluca's takes
+  # an AVIF picture from the bytes the page loaded rather than from Chrome's
+  # pixels. The CLI's `avif` is in the `features` job's `--all-features`.
+  avif:
+    name: avif (${{ matrix.crate }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - crate: rs-rich-art
+            args: "--features avif"
+          - crate: noctiluca
+            args: "--features fake-engine,avif"
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          ref: ${{ inputs.checkout_ref || github.ref }}
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: clippy
+
+      - name: Cache cargo
+        uses: Swatinem/rust-cache@v2
+
+      - name: Install libdav1d
+        run: sudo apt-get update && sudo apt-get install -y libdav1d-dev
+
+      - name: Clippy (${{ matrix.crate }} ${{ matrix.args }})
+        run: cargo clippy -p ${{ matrix.crate }} --all-targets ${{ matrix.args }} --locked -- -D warnings
+
+      - name: Test (${{ matrix.crate }} ${{ matrix.args }})
+        run: cargo test -p ${{ matrix.crate }} ${{ matrix.args }} --locked
 
   # rs-rich-interact's termion and termwiz backends (#677, #678), each on its
   # own, on Linux and macOS: the PTY conformance suites (interact's
@@ -544,9 +592,10 @@ jobs:
       - name: Cache cargo
         uses: Swatinem/rust-cache@v2
 
-      # `--all-features` takes in intuiTUIve's `audio` (cpal: ALSA on Linux).
-      - name: Install ALSA headers
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      # `--all-features` takes in intuiTUIve's `audio` (cpal: ALSA on Linux)
+      # and rs-rich-art's `avif` (libdav1d).
+      - name: Install ALSA and libdav1d headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libdav1d-dev
 
       # The CLI's `lumis` feature pulls in rs-rich-lumis, so here the CLI is
       # checked with every other feature, and with `lumis` on lumis's MSRV below.
@@ -1041,9 +1090,10 @@ jobs:
         with:
           key: api
 
-      # All features: intuiTUIve's `audio` needs ALSA's headers.
-      - name: Install ALSA headers
-        run: sudo apt-get update && sudo apt-get install -y libasound2-dev
+      # All features: intuiTUIve's `audio` needs ALSA's headers, and
+      # rs-rich-art's `avif` libdav1d.
+      - name: Install ALSA and libdav1d headers
+        run: sudo apt-get update && sudo apt-get install -y libasound2-dev libdav1d-dev
 
       - name: Public API snapshots match (python scripts/public_api.py --bless to update)
         run: python3 scripts/public_api.py --check
@@ -1053,7 +1103,7 @@ jobs:
 
   ci-ok:
     name: ci-ok
-    needs: [check, features, macos, msrv, parity, release-tests, api, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, paint-bench, wasm, wasm-plugins-release, plugin-compatibility, browser]
+    needs: [check, features, avif, macos, msrv, parity, release-tests, api, windows-pager, windows-web, packages, mermaid-cli, tapes, guide-screenshots, ratatui-gate, paint-bench, wasm, wasm-plugins-release, plugin-compatibility, browser]
     # `always()` so this reports failure rather than being skipped when a
     # dependency fails — a skipped required check blocks the PR forever.
     if: always()

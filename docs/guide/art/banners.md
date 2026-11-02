@@ -86,6 +86,35 @@ set and code-tagged characters (decimal, `0x` hex and octal). Layout supports
 full width, kerning, controlled smushing rules 1–6, universal overlapping and
 hardblanks. A malformed font is a `FontError`, not a panic.
 
+## Animated banners
+
+`rich_art::animate` (0.0.24) turns a banner into frames: `AnimatedBanner`
+lays the text out once, and `frame(t)` gives the frame at time `t`, a grid
+of characters with true-colour foregrounds. It is a pure function of the
+banner and the time, with no clock and no terminal: a CLI prints frames on
+a timer, a TUI draws them on its clock, a test snapshots any instant. At
+and after its `duration` (two seconds by default) every frame is the still
+one, `still()`, which is also what to show with no colour, with reduced
+motion, or when output is not a terminal.
+
+```rust
+--8<-- "crates/rich-art/examples/guide_banners.rs:animated"
+```
+
+![A banner halfway through its glow, then its still frame, each over a wave with specks of light](../../media/guide/guide_banners-animated.svg)
+
+The effects: `Glow` (dark letters, a soft band of blue-green light
+travelling left to right through them and leaving them lit, like plankton
+glowing where the water moves), `Shimmer` (a narrow highlight sweeping
+across lit letters), `Typewriter` (a column at a time), `Fade` (dark to
+lit) and `Still`. Colours come from a `BannerPalette`; through a console
+they drop to 256 or 16 colours, or none, as its colour system needs.
+`pulse(t)` gives a brightness from 0 to 1 that pulses while the
+animation runs and stays at 1 once still, for a light drawn beside the
+banner. intuiTUIve plays it on its clock with
+[`banner::banner` and `banner::Play`](../intuituive/timers.md#an-animated-banner),
+and `rich banner --effect`, `--wave` and `--specks` play it in the CLI.
+
 ## Gotchas
 
 - Only the `standard` font ships with the crate. Other fonts are separate

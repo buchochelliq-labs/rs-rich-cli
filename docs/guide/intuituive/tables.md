@@ -49,6 +49,15 @@ column([
     what changed inside draws, and the rows in view are copied out.
   - `scroll_with(child, offset)` puts the first row in view in a signal
     you can read and set.
+- **`.follow_end()`** (new in 0.0.24), on `scroll` or `scroll_virtual`,
+  keeps the view on the end while content arrives, the last item growing
+  included (an answer streaming in): a chat, a transcript, a log. A
+  scroll up (a key, the wheel, the bar, or an offset set from code) stops
+  it following, and the view stays where the reader left it. End, or a
+  scroll that reaches the end, follows again. `.follow_end_with(follow)`
+  puts whether it follows in a `Signal<bool>`: read it to show that new
+  content waits below, or set it to `true` to jump back. Textual's
+  `anchor()`.
 - **`scroll_x(child)`** scrolls across instead, for content wider than
   the view (up to 2000 columns), and **`scroll_both(child)`** both ways,
   with a bar along the bottom too. ←/→, Shift+wheel and Shift+PgUp/PgDn

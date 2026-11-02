@@ -380,9 +380,14 @@ index's serial, so a signature cannot be moved to another index.
   maintainer approves the run. When a listing pull request merges, the
   workflow rebuilds `index.json`, bumps the serial and signs it:
   `minisign -S -s main.key -m index.json -t "rs-rich-marketplace index serial=42"`.
-  It commits the signed index to `main` with a deploy key, a secret of the
-  same environment that main's ruleset lets bypass it; the workflow's own
-  token only reads.
+  It commits the signed index to `main` with a short-lived installation
+  token of the signer's GitHub App (since 0.0.24; a deploy key before),
+  minted per run from the App's client id and private key, a variable and
+  a secret of the same environment. The App has only Contents: read and
+  write, is installed on the marketplace repository alone, and main's
+  ruleset lets it bypass; the token is scoped to `contents: write` on that
+  repository and revoked when the job ends, and the commit is the App's
+  bot user's. The workflow's own token only reads.
 - **The backup key** signs nothing but key rotations. It never enters
   GitHub: it stays offline, apart from the main key, so a leaked main key
   can be rotated out (below).

@@ -62,6 +62,7 @@ The command line wins over the file: `--reader` over `[startup] view`,
 |---|---|---|---|
 | `home` | string | none: an empty page | The page to open when none is named on the command line, and when the address bar is left empty |
 | `view` | `"projection"`, `"reader"` or `"raster"` | `"projection"` | The first view. `raster` starts the debugging view |
+| `transparent` | boolean | `false` | Where a page sets no background of its own, let the terminal's background show: in the faithful projection (a page with a background keeps it), and in Chrome's pixels, whose transparency Kitty keeps. `--transparent` sets it for one run |
 
 ## `[search]`
 
@@ -99,9 +100,9 @@ name Noctiluca does not know is a warning, and only that line is skipped
 | Key | Type | Default | Meaning |
 |---|---|---|---|
 | `audio` | boolean | `false` | Let pages play sound. It plays on the machine Chrome runs on |
-| `fps` | integer, 1 to 60 | `8` | The most frames a second a moving picture (a GIF, a video) shows: a ceiling, not a target; video never goes above 8 |
+| `fps` | integer, 1 to 60 | `30` | The most frames a second a moving picture (a GIF, a video) shows: a ceiling, not a target (the `bandwidth` decides how many your terminal is sent); video never goes above 30 |
 | `images` | `"auto"`, `"ansi"`, `"kitty"`, `"sixel"`, `"iterm2"` or `"none"` | `"auto"` | How pictures reach the terminal. See [Images](media.md#how-pictures-reach-your-terminal) |
-| `bandwidth` | bytes a second, as `"4M"`, `"256K"` or a number | 4M here, 256K over SSH | What moving pictures may send the terminal, shared by those in view. Short of it, a picture steps down Kitty, iTerm2, Sixel, then half blocks |
+| `bandwidth` | bytes a second, as `"4M"`, `"256K"` or a number | 4M here, 256K over SSH, then what your terminal is measured taking | What moving pictures may send the terminal, shared by those in view. Unset, it starts as the guess and follows the rate your terminal takes output at: lowered to it, and here (not over SSH) raised to it too, up to 32M. Short of it, a picture steps down Kitty, iTerm2, Sixel, then half blocks |
 
 ## `[adapt]`
 

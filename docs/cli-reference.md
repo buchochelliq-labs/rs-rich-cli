@@ -2196,6 +2196,13 @@ rich banner [OPTIONS] [TEXT]...
 | `--align <A>` | Position the banner within the width (default left) Possible values: `left`, `center`, `right`. |
 | `-w`, `--width <N>` | Lay the banner out to N columns (default: the terminal's width) |
 | `--fit <F>` | When the banner is wider than the width: wrap it at spaces onto more rows (the default, as figlet does), print TEXT as plain text instead (plain), or let it overflow (none) Possible values: `wrap`, `plain`, `none`. |
+| `--effect <E>` | Animate the banner: glow (the default when animating: a band of blue-green light travels through dark letters), shimmer, typewriter, fade, or still. It plays once (about 2 s), then holds the still final frame; any key skips to it. Not combined with --style or --gradient. Possible values: `glow`, `shimmer`, `typewriter`, `fade`, `still`. |
+| `--once` | Play the animation once, then hold still (the default) |
+| `--loop` | Play the animation again and again, until a key is pressed (or Ctrl+C) |
+| `--duration <SECS>` | How long one play of the animation lasts (default 2, up to 60) |
+| `--wave` | Animate, with a wave line under the banner. |
+| `--specks` | Animate, with specks of light (·∘°) rising around the letters and a row above them. |
+| `--seed <N>` | Where the specks start (default 0): the same seed draws the same specks. |
 | `--force-terminal` | Write colour and styles even when stdout is not a terminal (for a pager or a file) |
 
 #### Arguments
@@ -2222,6 +2229,18 @@ An installed figlet font; plain text on a narrow terminal
 
 ```sh
 rich banner --font slant --fit plain Release
+```
+
+Glowing letters over a wave, specks of light rising; still when piped
+
+```sh { .rich-playground data-kind="cli" }
+rich banner --wave --specks Noctiluca
+```
+
+Typed out again and again until a key is pressed
+
+```sh
+rich banner --effect typewriter --loop 'On air'
 ```
 
 ### rich shell

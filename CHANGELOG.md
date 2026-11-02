@@ -27,6 +27,187 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   on crates.io) and removed; its test now accepts an empty list, as the
   check itself does.
 
+### The docs on Zensical
+
+- Both docs sites build with [Zensical](https://zensical.org/) 0.0.74,
+  Material for MkDocs' successor, from the same `mkdocs.yml` and
+  `mkdocs-python.yml`, in Zensical's modern design, pinned in the new
+  `requirements-docs.txt`. Its faces, Inter and JetBrains Mono, are served
+  with the site in place of Roboto, so the no-outside-requests rule holds;
+  the theme override is unchanged. The versioned
+  site builds 0.0.24's docs on with Zensical and 0.0.23's and older with
+  MkDocs, as they were built.
+- Zensical rebases raw HTML's URLs like Markdown links', so the raw
+  `<video>`, `<img>` and `<a>` URLs (the recordings, the demos, the
+  Noctiluca pages, the parity chart) are now relative to their source
+  file, and `scripts/check_site_links.py` checks every relative URL in
+  the built sites. Six anchors to em-dash headings, broken under MkDocs
+  too, are fixed.
+
+### A threat model and a security policy (docs, wave 1, WS9)
+
+- [`docs/design/threat-model.md`](docs/design/threat-model.md) sets out the
+  assets, trust boundaries, entry points, threats, mitigations and gaps of
+  the plugins, the marketplace and its signer, `rich serve`, Noctiluca and
+  Chrome, the embed PTY, TLS and redirects, and Cornacai's ACP agents, and
+  ends with the checklist stage 4's security review works through. A root
+  [`SECURITY.md`](SECURITY.md) says how to report a vulnerability privately.
+
+### intuiTUIve: Cornacai's parity items (wave 1, WS2)
+
+- **`Node::follow_end` and `follow_end_with(signal)`** (#798), on `scroll`
+  and `scroll_virtual`: the view keeps to the end while content arrives
+  and the last item grows, stops following when the reader scrolls up,
+  and follows again at the end. Textual's `anchor()`.
+- **`collapsible_with(title, open, child)`** (#804), a title that follows
+  state, with `.status(|| Status)` (a spinner on the app's clock, or
+  markup) at the right of the header, `.summary(|| line)` under it while
+  closed and `.symbols(closed, open)`: a tool call's card. The header is
+  busy while its spinner turns, and says a markup status after its title.
+- **A prompt editor on `text_area`** (#800): `.grow(min, max)` rows,
+  `.submit_on(keys)` and `.newline_on(keys)` (Shift+Enter and Alt+Enter
+  add a line by default once a key submits), `.history(h)` in a text
+  area (↑ on the first line, ↓ back to the draft, every entry), and
+  `Node::complete_at(trigger, source)`, the completion pop-up after `@`
+  or `/` at a word's start, on a text area or an input. The completion
+  pop-up and ghost now work in a text area, on the caret's line. The
+  `files` feature's `files::path_completer(walk)` completes paths for `@`
+  mentions. `InputHistory::push` keeps entries of more than one line in
+  a history kept for the session.
+- **`markdown(doc)` and `MarkdownStream`** (#797, the default `syntax`
+  feature): Markdown kept as blocks, each rs-rich's Markdown port
+  rendered once per source and width; when the document grows only its
+  last block is split, rendered and drawn again, and an open fence draws
+  as code. `MarkdownStream::new(doc)` is a `Clone + Send` handle whose
+  `append` batches fragments into one update a turn. Blocks with links
+  take the focus: Tab moves through the links, Enter or a click calls
+  `.on_link(|url, cx| ..)`; `.code_theme(name)` picks the code theme.
+
+### Noctiluca's fixes from the real-site gallery
+
+- **Captions** (#785): a picture's `Image:` caption wraps to its box's
+  final width; a snapped grid that narrowed the item cut it at its edge.
+- **Hidden text** (#788): text is not drawn when a box conceals it:
+  `opacity: 0` on an ancestor, positioned and clipped to no area, a
+  `clip-path` inset of 50%, or a box at most a pixel wide or tall that
+  hides its overflow (a visually hidden class). Kept only as the name of
+  a link with nothing else to show. The snapshot asks for `clip`,
+  `clip-path` and `position` too.
+- **Blank rows** (#786, #789): a new adaptation, `collapse-gaps` (on),
+  collapses rows blank in every column (an empty ad slot, a hidden menu, a
+  spacer) to one blank row, none at the top; rows blank beside a sidebar
+  stay. An inline `<svg>` drawing takes Chrome's pixels of its box instead
+  of a grey placeholder.
+- **Settling** (#787): a new document is read again every 250 ms until its
+  boxes hold still (at most 3 s), and the isolated world pings on font
+  loads, root and body resizes and layout shifts, so a first reading taken
+  mid-layout (a header over the code) is replaced.
+- **Lazy pictures** (#784): stills come eight at a time and the next batch
+  follows on the next tick, with no new reading, and after every scroll;
+  pictures Chrome loaded before the reader reached them no longer stay
+  placeholders.
+- **`--transparent`** (#821), or `[startup] transparent = true`: where a
+  page sets no background, the terminal's own shows, in the faithful
+  projection (which drew a white or black backdrop) and in Chrome's
+  pixels (`Emulation.setDefaultBackgroundColorOverride`). `Page::background`
+  is the page's own background colour.
+- **AVIF** (#792): an off-by-default `avif` feature in rs-rich-art
+  (`image`'s `avif-native`, which links libdav1d), the CLI and Noctiluca;
+  Noctiluca then decodes AVIF from the page's own bytes. A CI job installs
+  libdav1d and tests both crates with it; the `--all-features` jobs
+  install it too. `testing::PageBuilder` writes Chrome-shaped snapshots of
+  reduced fixture pages by hand.
+
+### The marketplace's signer pushes with a GitHub App (wave 1, WS8)
+
+- **`docs/marketplace-repo/.github/workflows/sign-index.yml`** pushes the
+  signed index with a short-lived installation token from
+  `actions/create-github-app-token` (pinned to v3.3.0's commit), not a
+  deploy key: the token is minted from the `marketplace-signing`
+  environment's `SIGNER_APP_CLIENT_ID` variable and `SIGNER_APP_PRIVATE_KEY`
+  secret, scoped to `contents: write` on the marketplace repository,
+  checked out with but not left in `.git/config`, and revoked when the
+  job ends. The commit is the App's bot user's, `<app-slug>[bot]` with its
+  noreply address. A first step names every missing secret or variable
+  before anything runs. How the index is signed is unchanged.
+- The mirror's README gives the maintainer's steps (create the App with
+  Contents: read and write only, install it on the marketplace repository
+  alone, add its id and key to the environment, put it on main's ruleset
+  bypass, then delete the deploy key and `MARKETPLACE_DEPLOY_KEY`); the
+  marketplace design note, PLUGINS and the 1.0.0 plan follow.
+
+### Cornacai's protocol layer: rs-rich-acp (#794, phases 1 and 2)
+
+- **Design note:** [Cornacai](docs/design/cornacai.md), a terminal client
+  for coding agents on the Agent Client Protocol: the scope by phase, ACP
+  version 1, the split between `rs-rich-acp` and the `cornacai` app, how the
+  app maps onto intuiTUIve (#797, #798, #800, #804, #799) and rs-rich-embed's
+  `PtyHost`, the security model, the marketplace's `agent` kind and the
+  first run. Clean room: written from the public specification; Toad's
+  (AGPL) source is never read.
+- **rs-rich-acp 0.0.1 (new crate, `rich_acp`):** an ACP v1 client with no
+  terminal code and no crate of ours below it. `Connection` spawns an agent
+  (its standard error goes to the client's log) or runs over any streams,
+  and calls `initialize`, `authenticate`, `session/new`, `session/load`,
+  `session/set_mode`, `session/prompt` and `session/cancel`; the app's
+  `Client` gets the streamed `session/update`s (chunks, thoughts, tool calls
+  and updates, plans, commands, modes, usage) and answers
+  `session/request_permission`, `fs/*` and `terminal/*`, each request on a
+  thread of its own. Messages are typed and tolerant (unknown fields
+  ignored, unknown variants kept as `Unknown` with their JSON).
+  Capabilities are opt-in, and a file or terminal request the client did
+  not offer is refused before the app sees it; `cancel` answers open
+  permission requests `cancelled` itself. `Workspace`, `fs` and `Terminals`
+  answer inside the session's root set. Tests replay transcripts through a
+  fake agent; `examples/agent.rs` drives a real agent named by
+  `RICH_ACP_AGENT` and skips otherwise.
+
+### Animated banners and Noctiluca's start page
+
+- **rs-rich-art:** `animate::AnimatedBanner`, FIGlet text with an effect
+  as frames: `frame(t)` is a pure function of the banner and the time,
+  `still()` the final frame. Effects `glow` (the default: a blue-green
+  band travelling through dark letters), `shimmer`, `typewriter`, `fade`
+  and `still`; a wave line and seeded specks of light as decoration;
+  `pulse(t)` for a light that keeps time with it; colours from a
+  `BannerPalette`, reduced by the console's colour system.
+- **intuiTUIve:** `banner::banner(art, play)` and `banner::Play` (the
+  `art` feature) play it on the app's clock, once or looping, any key
+  skipping to the still frame; `a11y::motion_allowed()` (from
+  `RICH_ANIMATION`, `RICH_A11Y` and `NO_COLOR`) and `a11y::set_motion`.
+- **Noctiluca:** started with no address and no `home`, a start page:
+  the animated NOCTILUCA banner, the lanternfish swimming in beside it
+  (its lure pulsing with the glow; Enter or a click opens
+  `about:noctiluca`), the tagline and version, key hints from the keymap,
+  and the bookmarks to pick from. Chrome starts behind it; opening an
+  address leaves it.
+- **CLI:** `rich banner --effect E`, `--once`/`--loop`, `--duration SECS`,
+  `--wave`, `--specks`, `--seed N` animate a banner on a terminal (the
+  still frame off one, with no colour or reduced motion).
+
+### `inspect` for Rust values (ext, macros)
+
+- **rs-rich-ext:** `inspect::Inspect`, upstream's `rich.inspect` report
+  for a Rust value (#796): a fitted panel titled `<struct '…'>` or
+  `<enum '…'>`, the doc comment, the value in a green panel and a grid of
+  `name = value` rows, in upstream's `inspect.*` styles. Upstream's
+  options (`methods`, `docs`, `help`, `private`, `sort`, `value`, `all`,
+  `title`) and our `types`, `variants`, `label` and `max_depth`, on
+  `Inspect` and `InspectOptions`; `inspect(&value, options)` and
+  `rich_inspect!(value, name = option, …)` print it. The data comes from
+  the `Inspectable` trait, which a type can implement by hand.
+- **rs-rich-macros:** `#[derive(Inspect)]` writes `Inspectable` at compile
+  time: the type's name and doc comment, each field's name, type as
+  written, doc comment, visibility and `Debug` value, and an enum's
+  variants. `#[inspect(skip)]`, `#[inspect(with = path)]` and
+  `#[inspect(nested)]` (a nested report, cut at `max_depth`) on fields;
+  generic parameters get bounds on the field types that use them; unions
+  are refused. `#[inspect]` on an inherent `impl` block records its
+  methods' signatures and doc comments for `#[inspect(methods)]`.
+- **Docs:** a guide page, [Inspect](docs/guide/ext/inspect.md), with
+  Python's report next to ours; DIVERGENCES §19 says what differs (no
+  runtime reflection, no `dunder`, methods only from a marked `impl`).
+
 ## 0.0.23 cohort — published 2026-10-27
 
 Published on 2026-10-27 from `2624ce5` by one `release.yml` run (tag

@@ -277,6 +277,7 @@ drawn and by the media scheduler read the same set.
 | Buttons as `[ label ]` (`icon-buttons`) | A button reads as its accessible name in brackets, an icon-only one too; a face wider than its box pushes the controls after it on its row. Off, an icon-only button is a shaded box, as its picture would be | on | layout | `adapt.rs`: `icon_buttons_read_as_their_name` |
 | Grids fit the terminal (`snap-grids`) | A grid's (or a wrapping flex row's) items get equal cell widths that tile it, and when a column would be under `MIN_GRID_CELLS` (16) cells, fewer columns, the items flowing into more rows; what is under the grid moves by the rows it grew | on | layout | `adapt.rs`: `grids_snap_their_columns_to_the_cells` |
 | Navigation collapses on narrow terminals (`collapse-nav`) | Under `NARROW_COLUMNS` (100), a navigation or complementary landmark with no field and no live log in it becomes one row: its name, then its links (each still a hint target). A sidebar gives its columns to what is beside it | on | layout | `adapt.rs`: `navigation_collapses_to_a_row_on_a_narrow_terminal` |
+| Blank rows collapse (`collapse-gaps`) | Rows no box draws on in any column (the place of an empty ad slot, a hidden menu, a sticky spacer) collapse to one blank row, none at the top; every box under them moves up by the rows taken out, so what is beside it keeps its place. Rows blank in one column but not another (beside a tall sidebar) stay | on | layout | `tests/layout.rs`: `rows_blank_in_every_column_collapse_and_rows_beside_a_sidebar_stay` |
 | Text over pictures of text (`text-over-pictures`) | A picture with alt text inside a heading, a link or a button, or a banner (four times wider than tall, at most three rows), is drawn as its alt text in one row | off: it changes meaning | layout | `adapt.rs`: `a_picture_of_text_reads_as_its_text_when_asked` |
 | A live log shows its tail (`live-tail`) | A `role=log`, `aria-live` or appended scroll box shows its newest entries that fit, and holds still while the user has scrolled it up (`{`, `}`); off, it shows from the entry Chrome shows first | on | layout | `logs.rs`, `live_logs.rs`, `app.rs` |
 | Page colours, readable (`page-colors`) | Every run keeps the page's colour as CSS. A saturated colour (a red "LIVE", an author's name) is drawn, mixed toward white on a dark terminal or toward black on a light one until it reads; a grey, or a colour near black or white (chroma under 0.25), takes the terminal's own foreground. The background is dark unless `COLORFGBG` says light. Links keep their link style. Off, the page's raw colours, links' too: on a light terminal as written, on a white backdrop behind the projected page; on a dark one with their lightness inverted in OKLab (`L` to `1 - L`, hue and chroma kept, so near-black text is light and a red stays red; inverting RGB would make it cyan), on black | on | layout | `adapt.rs`: `raw_colours_invert_lightness_on_a_dark_terminal_and_keep_their_hue` and the rule's unit tests; `pictures.rs`: `the_backdrop_fills_the_row_under_the_text`; `logs.rs`: `authors_keep_their_colour` |
@@ -388,6 +389,16 @@ The script also samples the form fields' values every 500 ms (passwords
 left out), as the PoC did, so a value a page script sets with no event
 is still seen.
 
+A layout can move with no DOM change: web fonts arriving, a header a
+script puts in place with a stylesheet rule, content shifted by what
+loaded above it. The script pings for those too (`document.fonts`, a
+`ResizeObserver` on the root and the body, `layout-shift` entries), and
+the tab reads a new document again every `SETTLE_STEP` (250 ms) until two
+readings in a row put its boxes in the same places, for at most
+`SETTLE_MAX` (3 s). So a first reading taken while the layout still moved
+(a header drawn over the code under it) is replaced (built in 0.0.24,
+`tests/settle.rs`).
+
 The lead's direction asked for `Runtime.addBinding` with a
 MutationObserver. Doing that in the page's main world would bring back the
 PoC's exposure, since the binding would be a global the page can call or
@@ -480,6 +491,10 @@ to one row. The algorithm:
   scroll. So lazy loading and infinite scroll fire, and near the end of
   the projection Chrome is scrolled to its bottom and the page read again
   on its change ping.
+  Pictures get their stills eight at a time, nearest Chrome's view
+  first; the next batch follows on the next tick, with no new reading, and
+  a scroll starts one, so a picture Chrome loaded before the reader got to
+  it (no ping comes then) still arrives (0.0.24, `tests/images.rs`).
 
 A test can check the invariants on every fixture page: no two text runs
 share a cell, reading order is kept within a column band, and every
@@ -636,8 +651,15 @@ rate instead of `ByteBudget::guess`.
   (`ScreencastFrame::crop`). A region Chrome's viewport does not hold is
   captured on its own; a paused region whose time moved (a seek) gets one
   new frame.
-- **The frame budget.** Frames are cut at most eight a second a region,
-  or as the pacing asks. The app runs one rs-rich-art `Pacer` per region
+- **The frame budget.** Frames are cut at most thirty a second a region
+  (`video::MAX_FPS`), or as the pacing asks, on even slots a frame apart:
+  the tab sleeps until the next is due (`Frames::next_due`) instead of
+  polling on a tick, and the pacers keep to slots too, so a frame a few
+  milliseconds early is not dropped for a whole frame more. The pixel
+  protocols' escapes are made on `video::Encoder`'s thread, not by the
+  painter; character art asks Chrome for a scaled screencast
+  (`set_screencast_scale`); on demand, rs-rich-embed keeps Chrome one
+  frame ahead of the takes. The app runs one rs-rich-art `Pacer` per region
   (`video::Pacing`): equal shares of the `ByteBudget`, paced ten percent
   under the share since a frame can cost more than the ones before it,
   each frame's cost read from the painter's `picture_bytes`, and the step
@@ -770,6 +792,27 @@ plays them.
   short label; type it to act, Shift to open in a new tab. Hints come from
   the action registry, so they follow the same availability rules.
 - **The mouse** works throughout: click, wheel, and drag-select in text.
+
+### The start page: what is generic and what is Noctiluca's (0.0.24)
+
+Started with no address and no `home`, Noctiluca shows a start page
+(`crates/noctiluca/src/start.rs`) while Chrome starts behind it. Following
+AGENTS.md's rule that core components are generic, each piece went where
+another app could reuse it, or stayed in Noctiluca when it names
+Noctiluca's own things:
+
+| Piece | Where | Why |
+|---|---|---|
+| Frames of animated FIGlet text, the effects (glow, shimmer, typewriter, fade), the wave line and seeded specks, `pulse` | rs-rich-art, `animate` | Generic: text, time and a seed in, a frame out; no terminal, usable by the CLI and any app |
+| The play clock (`Play`: once, looping, skip, skip on a key) and the `banner` node | intuiTUIve, `banner` (`art` feature) | Generic: plays any `AnimatedBanner`, and anything else can keep time with it |
+| Whether animations may move (`a11y::motion_allowed`, `set_motion`) | intuiTUIve, `a11y` | Generic: reads rs-rich's `RICH_A11Y`, `RICH_ANIMATION` and `NO_COLOR` |
+| A half-block pixel sprite, a stage, a click on a sprite | intuiTUIve, `pixels` and `sprite` (already there) | Generic, reused as is |
+| The NOCTILUCA title, the tagline, the lanternfish's art and its lure's pulse, the fish opening `about:noctiluca`, the layout and its fallbacks, the bookmarks list, the key hints | Noctiluca, `start` | Domain: Noctiluca's name, mascot, action and data |
+| `rich banner --effect`, `--wave`, `--specks`, `--loop` | rich-cli, `banner.rs` | A binary-boundary convenience composing rs-rich-art's public API |
+
+The about page opens as a box over the start page, so Esc returns to it;
+opening an address or moving in the history leaves it
+(`start::leaves`, checked in the one place commands are sent).
 
 ### Going places: shortcuts, switches and keys
 

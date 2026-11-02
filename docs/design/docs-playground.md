@@ -27,17 +27,17 @@ nothing to install. There are three tiers:
 ## What runs where
 
 Everything runs client-side. The site is a static GitHub Pages site
-(`mkdocs build`, deployed by `.github/workflows/docs.yml`), so there's no
+(`zensical build`, deployed by `.github/workflows/docs.yml`; MkDocs until 0.0.24), so there's no
 server to run anything on, and there won't be one.
 
 ```text
-docs page (MkDocs) ─▶ playground.js (loaded with the page, a few KB)
-                          │  on the reader's first click, not before:
-                          ▼
+docs page (Zensical) ─▶ playground.js (loaded with the page, a few KB)
+                            │  on the reader's first click, not before:
+                            ▼
               rich_playground_bg.wasm + glue ─▶ ANSI text ─▶ xterm.js
                 (one module per docs version)   (or HTML from Console::export_html)
-                          ▲
-                          └── keys, mouse and resizes from xterm.js (tier 3)
+                            ▲
+                            └── keys, mouse and resizes from xterm.js (tier 3)
 ```
 
 - The **wasm module** is rs-rich compiled for `wasm32-unknown-unknown`,
@@ -47,7 +47,7 @@ docs page (MkDocs) ─▶ playground.js (loaded with the page, a few KB)
   (`crates/rich-web/assets/xterm/`: `@xterm/xterm` 6.0.0, MIT, with the
   licence file beside it and its hashes pinned by `build.rs`). The
   playground copies those files, so there's one pinned copy in the repo.
-- The **page** is plain MkDocs. A small script finds the playground blocks
+- The **page** is a plain docs page. A small script finds the playground blocks
   and wires them up.
 
 ## Measured: what builds for wasm
@@ -286,7 +286,7 @@ class and attributes:
 Without JavaScript, this is an ordinary code block showing the input. With
 JavaScript, `docs/assets/playground.js` (listed in `extra_javascript`, as
 `tapes.js` is) finds `.rich-playground` blocks on each page change.
-Material's instant navigation fires `document$`, as `tapes.js` already
+The theme's instant navigation fires `document$`, as `tapes.js` already
 handles. The script adds a **Try it** button. On the first click it loads
 the module and xterm.js, turns the block into an editor, and shows the
 output below it. Kinds are `markup`, `markdown`, `table` (CSV), `json`,
@@ -394,7 +394,7 @@ iframe, as the spike does.
   `scripts/test_build_versioned_docs.py` covers the download.
 - **Pipeline (decision 3).** `docs.yml` builds main's modules (tests,
   `build.sh` with `wasm-opt` required) into `docs/assets/playground/`
-  before both MkDocs builds, runs both checks and the download tests, and
+  before both docs builds, runs both checks and the download tests, and
   now also runs on changes to `playground/`, `crates/rich/` and
   `crates/rich-ext/`, so a crate change that breaks a block fails its PR
   and dev's module follows main. `release.yml`'s `playground` job, after

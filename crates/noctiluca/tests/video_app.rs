@@ -62,6 +62,13 @@ fn screen(driver: &Driver) -> String {
     driver.screen().plain().join("\n")
 }
 
+/// The page's rows: the screen without the header (its `◀ ▶ ↻`) and the
+/// status bar, where the play mark is looked for.
+fn body(driver: &Driver) -> String {
+    let rows = driver.screen().plain();
+    rows[2..rows.len().saturating_sub(2)].join("\n")
+}
+
 fn wait(driver: &mut Driver, what: &str, ok: impl Fn(&Driver) -> bool) {
     let start = Instant::now();
     loop {
@@ -135,7 +142,7 @@ fn the_header_and_status_bar_say_the_mode_the_address_and_the_media() {
     assert!(keys.contains("p play/pause"), "{keys}");
     assert!(keys.contains("[/] seek"), "{keys}");
     // The play mark on the paused video.
-    assert!(screen(&driver).contains(" ▶ "), "{}", screen(&driver));
+    assert!(body(&driver).contains(" ▶ "), "{}", screen(&driver));
 }
 
 #[test]
@@ -153,6 +160,11 @@ fn a_playing_video_shows_its_frames_and_the_keys_seek() {
     // Playing on screen: the screencast runs, and its frames show in the
     // region in place of the play mark.
     state_is(&mut driver, &state, "the screencast", |s| s.screencast);
+    // Drawn as character art, two pixels a cell: Chrome is asked for a
+    // fraction of the page's pixels (an eighth of 8 x 18 pixel cells).
+    state_is(&mut driver, &state, "a scaled screencast", |s| {
+        s.screencast_scale == 0.125
+    });
     state.lock().unwrap().frames.push(frame([255, 0, 0]));
     // The region's middle row, at its column: half blocks of the frame.
     let row = 2 + ((rect.y + rect.height / 2.0) / 18.0) as usize;
@@ -165,7 +177,7 @@ fn a_playing_video_shows_its_frames_and_the_keys_seek() {
             .style(cell.style)
             .is_some_and(|s| s.color() == Some(&red) && s.bgcolor() == Some(&red))
     });
-    assert!(!screen(&driver).contains(" ▶ "), "{}", screen(&driver));
+    assert!(!body(&driver).contains(" ▶ "), "{}", screen(&driver));
     // `]` seeks five seconds on, `[` five back.
     driver.press("]");
     driver.press("[");
@@ -195,5 +207,21 @@ fn a_playing_video_shows_its_frames_and_the_keys_seek() {
     driver.press("p");
     wait_for(&mut driver, "media PAUSED");
     state_is(&mut driver, &state, "the screencast off", |s| !s.screencast);
-    wait_for(&mut driver, " ▶ ");
+    wait(&mut driver, "the play mark", |d| body(d).contains(" ▶ "));
+}
+
+#[test]
+fn a_click_on_the_video_plays_and_pauses_it() {
+    let engine = engine();
+    let state = engine.state.clone();
+    let page = build(&state.lock().unwrap().pages["video"], &mut Revisions::new());
+    let rect = page.media.iter().find(|m| m.node == VIDEO).unwrap().rect;
+    let mut driver = app(Box::new(engine), options(View::Projection)).driver(100, 40);
+    wait_for(&mut driver, "media PAUSED");
+    let row = 2 + ((rect.y + rect.height / 2.0) / 18.0) as u16;
+    let column = (rect.x / 8.0) as u16 + 2;
+    driver.click(column, row);
+    wait_for(&mut driver, "media PLAYING");
+    driver.click(column, row);
+    wait_for(&mut driver, "media PAUSED");
 }

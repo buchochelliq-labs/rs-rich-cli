@@ -66,7 +66,7 @@ rich plugin browse                          # all of it in a selector
 ```
 
 <div class="tape-player" data-cast="../media/tapes/plugin-search/plugin-search.cast" data-poster="npt:0:6">
-  <img src="../media/tapes/plugin-search/plugin-search.gif" alt="rich plugin search filtering by tier and kind, rich plugin info, and rich plugin browse, against a fixture marketplace">
+  <img src="media/tapes/plugin-search/plugin-search.gif" alt="rich plugin search filtering by tier and kind, rich plugin info, and rich plugin browse, against a fixture marketplace">
 </div>
 
 [Tape](tapes/plugin-search.tape) · [Cast](media/tapes/plugin-search/plugin-search.cast) ·

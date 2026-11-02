@@ -1,11 +1,9 @@
- NOCTILUCA   PROJECTION + CELLS   ◀▶   The glowing coast - Fixture News
+ NOCTILUCA   PROJECTION + CELLS   ◀ ▶ ↻   The glowing coast - Fixture News
  https://fixture.example/article.html
  Fixture News
  World Science
 
-
  The glowing coast
-
 
  By A. Writer, 25 October 2026
 
@@ -18,8 +16,10 @@
 
  Related
 
-
       • Why plankton glow
+
+
+
 
 
 

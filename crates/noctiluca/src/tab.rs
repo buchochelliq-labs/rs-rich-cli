@@ -24,8 +24,9 @@
 //!   published again with them.
 //! - **Frames**: while a video plays in a region the view shows, the
 //!   screencast runs and each playing region's frames are cut from it
-//!   ([`crate::video`]), at most eight a second, or as the app's pacing
-//!   asks ([`Command::Regions`]). A video's still is its poster.
+//!   ([`crate::video`]), at most thirty a second, or as the app's pacing
+//!   asks ([`Command::Regions`]), each when its slot comes, at the scale
+//!   the regions are drawn in. A video's still is its poster.
 
 use std::collections::{HashMap, HashSet};
 use std::sync::atomic::{AtomicBool, Ordering};
@@ -47,6 +48,12 @@ use rich_intuituive::Picture;
 
 /// How long after the first change ping the page is read again.
 pub const DEBOUNCE: Duration = Duration::from_millis(100);
+/// How long after a new document's reading it is read again, to see
+/// whether its layout has settled (web fonts, a sticky header put in
+/// place, a script's rendering move boxes without changing the DOM).
+pub const SETTLE_STEP: Duration = Duration::from_millis(250);
+/// How long a new document is watched for its layout to settle.
+pub const SETTLE_MAX: Duration = Duration::from_secs(3);
 /// How often the tab looks at its engine when nothing happens.
 const TICK: Duration = Duration::from_millis(25);
 /// At most this many stills are captured per reading.
@@ -56,6 +63,9 @@ const PLAYBACK: Duration = Duration::from_millis(500);
 /// How long without a screencast frame before playing regions are
 /// captured on their own.
 const QUIET: Duration = Duration::from_millis(400);
+/// How often the tab looks for the browser's next frame while one is due
+/// and has not come.
+const FRAME_POLL: Duration = Duration::from_millis(3);
 
 /// What an action does to its control.
 #[derive(Clone, Debug, PartialEq)]
@@ -113,11 +123,14 @@ pub enum Command {
     Resize(u16, u16),
     /// Read the page again now.
     Refresh,
-    /// The media regions the view shows now, and how long the app's pacing
-    /// wants between two frames of each (none: [`crate::video::MAX_FPS`]).
+    /// The media regions the view shows now, how long the app's pacing
+    /// wants between two frames of each (none: [`crate::video::MAX_FPS`]),
+    /// and the screencast's scale: the fraction of the page's pixels the
+    /// regions are drawn in (character art needs two pixels a cell).
     Regions {
         on_screen: Vec<NodeId>,
         intervals: Vec<(NodeId, Duration)>,
+        scale: f64,
     },
 }
 
@@ -367,6 +380,12 @@ struct Worker<'a> {
     intervals: HashMap<NodeId, Duration>,
     /// When the last screencast frame came.
     last_frame: Option<Instant>,
+    /// A frame was due and the browser had none yet: look again soon.
+    starved: bool,
+    /// The screencast's scale the app asks for, and the one the engine
+    /// was last given.
+    scale: f64,
+    scale_given: f64,
     /// A paused region's time when its frame was last taken: a seek while
     /// paused takes one more.
     shown_time: HashMap<NodeId, f64>,
@@ -374,6 +393,27 @@ struct Worker<'a> {
     live: HashMap<NodeId, HashMap<u64, Vec<Run>>>,
     /// The scroll boxes the page appends to, as the engine last said.
     appended: HashSet<NodeId>,
+    /// A new document whose layout may still move: when to read it
+    /// again, when to stop looking, and its last layout's key.
+    settle: Option<(Instant, Instant, u64)>,
+    /// Pictures are still waiting for their stills: more were ready than
+    /// one batch takes, or Chrome's view moved. The next tick takes the
+    /// next batch, with no new reading.
+    stills_pending: bool,
+}
+
+/// A key of where the page's boxes are: it changes when its layout moves.
+fn layout_key(page: &Page) -> u64 {
+    let mut hasher = std::collections::hash_map::DefaultHasher::new();
+    let rect = |r: &Rect| [r.x, r.y, r.width, r.height].map(|v| v.round() as i64);
+    for block in &page.blocks {
+        std::hash::Hash::hash(&(block.node, rect(&block.rect)), &mut hasher);
+    }
+    for media in &page.media {
+        std::hash::Hash::hash(&(media.node, rect(&media.rect)), &mut hasher);
+    }
+    std::hash::Hash::hash(&(page.height.round() as i64), &mut hasher);
+    std::hash::Hasher::finish(&hasher)
 }
 
 impl Worker<'_> {
@@ -398,6 +438,21 @@ impl Worker<'_> {
             media.picture = self.pictures.get(&key).cloned();
         }
         self.probe(&mut page);
+        // A new document is read again until its layout holds still: the
+        // first reading can come from a layout still moving, and nothing
+        // in the DOM may say when it stops.
+        let now = Instant::now();
+        let key = layout_key(&page);
+        let new_document = self.page.as_ref().map(|p| p.document) != Some(page.document);
+        self.settle = match self.settle {
+            _ if new_document => Some((now + SETTLE_STEP, now + SETTLE_MAX, key)),
+            // It moved: look again a step later.
+            Some((_, end, last)) if last != key && now < end => Some((now + SETTLE_STEP, end, key)),
+            // Read early (a ping): the step still counts from the move.
+            Some((next, end, last)) if now < next && now < end => Some((next, end, last)),
+            // A step with no move: settled.
+            _ => None,
+        };
         let page = Arc::new(page);
         if self.page.as_deref() != Some(&*page) {
             (self.update)(Update::Page(page.clone()));
@@ -567,17 +622,23 @@ impl Worker<'_> {
         // at the reading after.
         let view = self.metrics.map_or(0.0, |m| m.scroll_y);
         // A video with no poster to fetch shows what Chrome paints in its
-        // region: its poster, or its first frame.
+        // region: its poster, or its first frame. An inline `<svg>` is a
+        // drawing Noctiluca does not decode: Chrome's pixels of it too.
         let mut candidates: Vec<_> = page
             .media
             .iter()
-            .filter(|m| matches!(m.kind, MediaKind::Image | MediaKind::Video) && m.still.is_none())
+            .filter(|m| {
+                matches!(m.kind, MediaKind::Image | MediaKind::Video | MediaKind::Svg)
+                    && m.still.is_none()
+            })
             .filter(|m| m.rect.width >= 4.0 && m.rect.height >= 4.0)
             .collect();
         candidates.sort_by(|a, b| (a.rect.y - view).abs().total_cmp(&(b.rect.y - view).abs()));
         let mut wanted = Vec::new();
+        self.stills_pending = false;
         for m in candidates {
             if wanted.len() == STILLS_PER_READ {
+                self.stills_pending = true;
                 break;
             }
             if self.engine.image_ready(TabId(0), m.node).unwrap_or(true) {
@@ -670,6 +731,8 @@ impl Worker<'_> {
     /// soon.
     fn scroll(&mut self, action: PageAction) -> std::io::Result<()> {
         self.engine.act(TabId(0), &action)?;
+        // Pictures near the new view, loaded already, are captured first.
+        self.stills_pending = true;
         if let Ok(metrics) = self.engine.metrics(TabId(0)) {
             let read = self.page.as_ref().map_or(0.0, |p| p.height);
             if metrics.content_height > read + 1.0 {
@@ -705,6 +768,11 @@ impl Worker<'_> {
         let regions = self.regions();
         let now = Instant::now();
         let plan = self.frames.plan(&regions, now);
+        // The scale first, so the screencast starts at it.
+        if self.scale != self.scale_given && (self.frames.on || plan.screencast == Some(true)) {
+            self.scale_given = self.scale;
+            let _ = self.engine.set_screencast_scale(TabId(0), self.scale);
+        }
         if let Some(on) = plan.screencast {
             let _ = self.engine.set_screencast(TabId(0), on);
             self.last_frame = on.then_some(now);
@@ -725,7 +793,8 @@ impl Worker<'_> {
         let quiet = self
             .last_frame
             .is_none_or(|at| now.duration_since(at) >= QUIET);
-        if frame.is_none() && !quiet {
+        self.starved = frame.is_none() && !quiet;
+        if self.starved {
             return;
         }
         let (cut, missing) = self.frames.cut(&regions, frame.as_ref(), now);
@@ -749,6 +818,22 @@ impl Worker<'_> {
         } else {
             self.capture_regions(&missing, now);
         }
+    }
+
+    /// How long the tab may wait for a command before it looks at its
+    /// engine again: until the next video frame is due (so frames are
+    /// taken on their slots, not on the tick after), a moment while a due
+    /// frame has not come, else the tick.
+    fn wait(&self) -> Duration {
+        if !self.frames.on {
+            return TICK;
+        }
+        if self.starved {
+            return FRAME_POLL;
+        }
+        self.frames
+            .next_due(&self.regions(), Instant::now())
+            .map_or(TICK, |due| due.min(TICK))
     }
 
     /// Frames of regions taken with a capture of each.
@@ -823,9 +908,11 @@ impl Worker<'_> {
             Command::Regions {
                 on_screen,
                 intervals,
+                scale,
             } => {
                 self.on_screen = on_screen.into_iter().collect();
                 self.intervals = intervals.into_iter().collect();
+                self.scale = scale;
                 Ok(())
             }
 
@@ -905,7 +992,18 @@ type Job = (StillKey, Arc<[u8]>);
 /// instead; taken as decodable, it failed on the decoder thread and the
 /// picture never came.
 fn decodable(bytes: &[u8]) -> bool {
-    image::guess_format(bytes).is_ok_and(|format| format.reading_enabled())
+    // `image` decodes AVIF with `avif-native` (the `avif` feature), but its
+    // `reading_enabled` answers for its encoder's feature: with the feature,
+    // an AVIF file is decodable when its decoder opens it (a file it cannot
+    // read still falls back to Chrome's pixels).
+    image::guess_format(bytes).is_ok_and(|format| {
+        format.reading_enabled()
+            || cfg!(feature = "avif")
+                && format == image::ImageFormat::Avif
+                && image::ImageReader::with_format(std::io::Cursor::new(bytes), format)
+                    .into_dimensions()
+                    .is_ok()
+    })
 }
 
 /// The bytes of a `data:` address's body (after `data:`), when it is
@@ -982,9 +1080,14 @@ fn run(
         on_screen: HashSet::new(),
         intervals: HashMap::new(),
         last_frame: None,
+        starved: false,
+        scale: 1.0,
+        scale_given: 1.0,
         shown_time: HashMap::new(),
         live: HashMap::new(),
         appended: HashSet::new(),
+        settle: None,
+        stills_pending: false,
     };
     let mut live_due = false;
     // Read once at the start, then whenever something says to.
@@ -994,7 +1097,7 @@ fn run(
         if stop.load(Ordering::SeqCst) {
             return;
         }
-        match commands.recv_timeout(TICK) {
+        match commands.recv_timeout(worker.wait()) {
             Ok((id, command)) => {
                 let acts = matches!(
                     command,
@@ -1042,7 +1145,10 @@ fn run(
         worker.video();
         let due = worker
             .dirty
-            .is_some_and(|since| since.elapsed() >= DEBOUNCE);
+            .is_some_and(|since| since.elapsed() >= DEBOUNCE)
+            || worker
+                .settle
+                .is_some_and(|(next, _, _)| Instant::now() >= next);
         if read_now || due {
             // A refused reading stays due, and is tried at the next tick.
             if worker.read().is_some() {
@@ -1056,6 +1162,8 @@ fn run(
             // The isolated world debounced it already: read the logs now.
             live_due = false;
             worker.read_live();
+        } else if worker.stills_pending {
+            worker.capture_stills();
         }
     }
 }

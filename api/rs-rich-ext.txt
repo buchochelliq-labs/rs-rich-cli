@@ -1,5 +1,7 @@
 pub mod rich_ext
+pub use rich_ext::Inspect
 pub use rich_ext::Rich
+pub use rich_ext::inspect
 pub use rich_ext::markup
 pub use rich_ext::plugin
 pub use rich_ext::richf
@@ -10016,6 +10018,319 @@ impl core::marker::Unpin for rich_ext::hyperlink::Link
 impl core::marker::UnsafeUnpin for rich_ext::hyperlink::Link
 impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::hyperlink::Link
 impl core::panic::unwind_safe::UnwindSafe for rich_ext::hyperlink::Link
+pub mod rich_ext::inspect
+#[non_exhaustive] pub enum rich_ext::inspect::FieldValue
+pub rich_ext::inspect::FieldValue::Debug
+pub rich_ext::inspect::FieldValue::Debug::compact: alloc::string::String
+pub rich_ext::inspect::FieldValue::Debug::expanded: alloc::string::String
+pub rich_ext::inspect::FieldValue::Elided(alloc::string::String)
+pub rich_ext::inspect::FieldValue::Nested(alloc::boxed::Box<rich_ext::inspect::Nested>)
+impl rich_ext::inspect::FieldValue
+pub fn rich_ext::inspect::FieldValue::debug<T: core::fmt::Debug + ?core::marker::Sized>(&T) -> Self
+pub fn rich_ext::inspect::FieldValue::debug_with<T: ?core::marker::Sized>(&T, fn(&T, &mut core::fmt::Formatter<'_>) -> core::fmt::Result) -> Self
+impl core::clone::Clone for rich_ext::inspect::FieldValue
+pub fn rich_ext::inspect::FieldValue::clone(&self) -> rich_ext::inspect::FieldValue
+impl core::cmp::PartialEq for rich_ext::inspect::FieldValue
+pub fn rich_ext::inspect::FieldValue::eq(&self, &rich_ext::inspect::FieldValue) -> bool
+impl core::fmt::Debug for rich_ext::inspect::FieldValue
+pub fn rich_ext::inspect::FieldValue::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_ext::inspect::FieldValue
+impl core::marker::Freeze for rich_ext::inspect::FieldValue
+impl core::marker::Send for rich_ext::inspect::FieldValue
+impl core::marker::Sync for rich_ext::inspect::FieldValue
+impl core::marker::Unpin for rich_ext::inspect::FieldValue
+impl core::marker::UnsafeUnpin for rich_ext::inspect::FieldValue
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::inspect::FieldValue
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::inspect::FieldValue
+pub enum rich_ext::inspect::Shape
+pub rich_ext::inspect::Shape::Named
+pub rich_ext::inspect::Shape::Tuple
+pub rich_ext::inspect::Shape::Unit
+impl core::clone::Clone for rich_ext::inspect::Shape
+pub fn rich_ext::inspect::Shape::clone(&self) -> rich_ext::inspect::Shape
+impl core::cmp::Eq for rich_ext::inspect::Shape
+impl core::cmp::PartialEq for rich_ext::inspect::Shape
+pub fn rich_ext::inspect::Shape::eq(&self, &rich_ext::inspect::Shape) -> bool
+impl core::fmt::Debug for rich_ext::inspect::Shape
+pub fn rich_ext::inspect::Shape::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_ext::inspect::Shape
+impl core::marker::StructuralPartialEq for rich_ext::inspect::Shape
+impl core::marker::Freeze for rich_ext::inspect::Shape
+impl core::marker::Send for rich_ext::inspect::Shape
+impl core::marker::Sync for rich_ext::inspect::Shape
+impl core::marker::Unpin for rich_ext::inspect::Shape
+impl core::marker::UnsafeUnpin for rich_ext::inspect::Shape
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::inspect::Shape
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::inspect::Shape
+#[non_exhaustive] pub enum rich_ext::inspect::TypeKind
+pub rich_ext::inspect::TypeKind::Enum
+pub rich_ext::inspect::TypeKind::Struct
+impl core::clone::Clone for rich_ext::inspect::TypeKind
+pub fn rich_ext::inspect::TypeKind::clone(&self) -> rich_ext::inspect::TypeKind
+impl core::cmp::Eq for rich_ext::inspect::TypeKind
+impl core::cmp::PartialEq for rich_ext::inspect::TypeKind
+pub fn rich_ext::inspect::TypeKind::eq(&self, &rich_ext::inspect::TypeKind) -> bool
+impl core::fmt::Debug for rich_ext::inspect::TypeKind
+pub fn rich_ext::inspect::TypeKind::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_ext::inspect::TypeKind
+impl core::marker::StructuralPartialEq for rich_ext::inspect::TypeKind
+impl core::marker::Freeze for rich_ext::inspect::TypeKind
+impl core::marker::Send for rich_ext::inspect::TypeKind
+impl core::marker::Sync for rich_ext::inspect::TypeKind
+impl core::marker::Unpin for rich_ext::inspect::TypeKind
+impl core::marker::UnsafeUnpin for rich_ext::inspect::TypeKind
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::inspect::TypeKind
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::inspect::TypeKind
+#[non_exhaustive] pub struct rich_ext::inspect::Field
+pub rich_ext::inspect::Field::doc: &'static str
+pub rich_ext::inspect::Field::name: alloc::borrow::Cow<'static, str>
+pub rich_ext::inspect::Field::public: bool
+pub rich_ext::inspect::Field::ty: &'static str
+pub rich_ext::inspect::Field::value: rich_ext::inspect::FieldValue
+impl rich_ext::inspect::Field
+pub fn rich_ext::inspect::Field::doc(self, &'static str) -> Self
+pub fn rich_ext::inspect::Field::new(impl core::convert::Into<alloc::borrow::Cow<'static, str>>, &'static str, rich_ext::inspect::FieldValue) -> Self
+pub fn rich_ext::inspect::Field::public(self, bool) -> Self
+impl core::clone::Clone for rich_ext::inspect::Field
+pub fn rich_ext::inspect::Field::clone(&self) -> rich_ext::inspect::Field
+impl core::cmp::PartialEq for rich_ext::inspect::Field
+pub fn rich_ext::inspect::Field::eq(&self, &rich_ext::inspect::Field) -> bool
+impl core::fmt::Debug for rich_ext::inspect::Field
+pub fn rich_ext::inspect::Field::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_ext::inspect::Field
+impl core::marker::Freeze for rich_ext::inspect::Field
+impl core::marker::Send for rich_ext::inspect::Field
+impl core::marker::Sync for rich_ext::inspect::Field
+impl core::marker::Unpin for rich_ext::inspect::Field
+impl core::marker::UnsafeUnpin for rich_ext::inspect::Field
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::inspect::Field
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::inspect::Field
+pub struct rich_ext::inspect::Inspect<'a>
+impl<'a> rich_ext::inspect::Inspect<'a>
+pub fn rich_ext::inspect::Inspect<'a>::all(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::docs(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::help(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::label(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::max_depth(self, usize) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::methods(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::new(&'a dyn rich_ext::inspect::Inspectable) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::options(self, rich_ext::inspect::InspectOptions) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::private(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::sort(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::title(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::types(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::value(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::variants(self, bool) -> Self
+impl rich::protocol::Renderable for rich_ext::inspect::Inspect<'_>
+pub fn rich_ext::inspect::Inspect<'_>::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_ext::inspect::Inspect<'_>::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl<'a> core::marker::Freeze for rich_ext::inspect::Inspect<'a>
+impl<'a> !core::marker::Send for rich_ext::inspect::Inspect<'a>
+impl<'a> !core::marker::Sync for rich_ext::inspect::Inspect<'a>
+impl<'a> core::marker::Unpin for rich_ext::inspect::Inspect<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_ext::inspect::Inspect<'a>
+impl<'a> !core::panic::unwind_safe::RefUnwindSafe for rich_ext::inspect::Inspect<'a>
+impl<'a> !core::panic::unwind_safe::UnwindSafe for rich_ext::inspect::Inspect<'a>
+#[non_exhaustive] pub struct rich_ext::inspect::InspectOptions
+pub rich_ext::inspect::InspectOptions::docs: bool
+pub rich_ext::inspect::InspectOptions::help: bool
+pub rich_ext::inspect::InspectOptions::label: core::option::Option<alloc::string::String>
+pub rich_ext::inspect::InspectOptions::max_depth: usize
+pub rich_ext::inspect::InspectOptions::methods: bool
+pub rich_ext::inspect::InspectOptions::private: bool
+pub rich_ext::inspect::InspectOptions::sort: bool
+pub rich_ext::inspect::InspectOptions::title: core::option::Option<alloc::string::String>
+pub rich_ext::inspect::InspectOptions::types: bool
+pub rich_ext::inspect::InspectOptions::value: bool
+pub rich_ext::inspect::InspectOptions::variants: bool
+impl rich_ext::inspect::InspectOptions
+pub fn rich_ext::inspect::InspectOptions::all(self, bool) -> Self
+pub fn rich_ext::inspect::InspectOptions::docs(self, bool) -> Self
+pub fn rich_ext::inspect::InspectOptions::help(self, bool) -> Self
+pub fn rich_ext::inspect::InspectOptions::label(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_ext::inspect::InspectOptions::max_depth(self, usize) -> Self
+pub fn rich_ext::inspect::InspectOptions::methods(self, bool) -> Self
+pub fn rich_ext::inspect::InspectOptions::new() -> Self
+pub fn rich_ext::inspect::InspectOptions::private(self, bool) -> Self
+pub fn rich_ext::inspect::InspectOptions::sort(self, bool) -> Self
+pub fn rich_ext::inspect::InspectOptions::title(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_ext::inspect::InspectOptions::types(self, bool) -> Self
+pub fn rich_ext::inspect::InspectOptions::value(self, bool) -> Self
+pub fn rich_ext::inspect::InspectOptions::variants(self, bool) -> Self
+impl core::clone::Clone for rich_ext::inspect::InspectOptions
+pub fn rich_ext::inspect::InspectOptions::clone(&self) -> rich_ext::inspect::InspectOptions
+impl core::cmp::Eq for rich_ext::inspect::InspectOptions
+impl core::cmp::PartialEq for rich_ext::inspect::InspectOptions
+pub fn rich_ext::inspect::InspectOptions::eq(&self, &rich_ext::inspect::InspectOptions) -> bool
+impl core::default::Default for rich_ext::inspect::InspectOptions
+pub fn rich_ext::inspect::InspectOptions::default() -> Self
+impl core::fmt::Debug for rich_ext::inspect::InspectOptions
+pub fn rich_ext::inspect::InspectOptions::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_ext::inspect::InspectOptions
+impl core::marker::Freeze for rich_ext::inspect::InspectOptions
+impl core::marker::Send for rich_ext::inspect::InspectOptions
+impl core::marker::Sync for rich_ext::inspect::InspectOptions
+impl core::marker::Unpin for rich_ext::inspect::InspectOptions
+impl core::marker::UnsafeUnpin for rich_ext::inspect::InspectOptions
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::inspect::InspectOptions
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::inspect::InspectOptions
+#[non_exhaustive] pub struct rich_ext::inspect::Method
+pub rich_ext::inspect::Method::doc: &'static str
+pub rich_ext::inspect::Method::is_async: bool
+pub rich_ext::inspect::Method::name: &'static str
+pub rich_ext::inspect::Method::prefix: &'static str
+pub rich_ext::inspect::Method::public: bool
+pub rich_ext::inspect::Method::signature: &'static str
+impl rich_ext::inspect::Method
+pub const fn rich_ext::inspect::Method::doc(self, &'static str) -> Self
+pub const fn rich_ext::inspect::Method::is_async(self, bool) -> Self
+pub const fn rich_ext::inspect::Method::new(&'static str, &'static str, &'static str) -> Self
+pub const fn rich_ext::inspect::Method::public(self, bool) -> Self
+impl core::clone::Clone for rich_ext::inspect::Method
+pub fn rich_ext::inspect::Method::clone(&self) -> rich_ext::inspect::Method
+impl core::cmp::Eq for rich_ext::inspect::Method
+impl core::cmp::PartialEq for rich_ext::inspect::Method
+pub fn rich_ext::inspect::Method::eq(&self, &rich_ext::inspect::Method) -> bool
+impl core::fmt::Debug for rich_ext::inspect::Method
+pub fn rich_ext::inspect::Method::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_ext::inspect::Method
+impl core::marker::StructuralPartialEq for rich_ext::inspect::Method
+impl core::marker::Freeze for rich_ext::inspect::Method
+impl core::marker::Send for rich_ext::inspect::Method
+impl core::marker::Sync for rich_ext::inspect::Method
+impl core::marker::Unpin for rich_ext::inspect::Method
+impl core::marker::UnsafeUnpin for rich_ext::inspect::Method
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::inspect::Method
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::inspect::Method
+pub struct rich_ext::inspect::Nested
+pub rich_ext::inspect::Nested::record: rich_ext::inspect::Record
+pub rich_ext::inspect::Nested::ty: rich_ext::inspect::TypeInfo
+impl core::clone::Clone for rich_ext::inspect::Nested
+pub fn rich_ext::inspect::Nested::clone(&self) -> rich_ext::inspect::Nested
+impl core::cmp::PartialEq for rich_ext::inspect::Nested
+pub fn rich_ext::inspect::Nested::eq(&self, &rich_ext::inspect::Nested) -> bool
+impl core::fmt::Debug for rich_ext::inspect::Nested
+pub fn rich_ext::inspect::Nested::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_ext::inspect::Nested
+impl core::marker::Freeze for rich_ext::inspect::Nested
+impl core::marker::Send for rich_ext::inspect::Nested
+impl core::marker::Sync for rich_ext::inspect::Nested
+impl core::marker::Unpin for rich_ext::inspect::Nested
+impl core::marker::UnsafeUnpin for rich_ext::inspect::Nested
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::inspect::Nested
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::inspect::Nested
+#[non_exhaustive] pub struct rich_ext::inspect::Record
+pub rich_ext::inspect::Record::fields: alloc::vec::Vec<rich_ext::inspect::Field>
+pub rich_ext::inspect::Record::shape: rich_ext::inspect::Shape
+pub rich_ext::inspect::Record::skipped: bool
+pub rich_ext::inspect::Record::variant: core::option::Option<usize>
+impl rich_ext::inspect::Record
+pub fn rich_ext::inspect::Record::new(rich_ext::inspect::Shape, alloc::vec::Vec<rich_ext::inspect::Field>) -> Self
+pub fn rich_ext::inspect::Record::skipped(self, bool) -> Self
+pub fn rich_ext::inspect::Record::variant(self, usize) -> Self
+impl core::clone::Clone for rich_ext::inspect::Record
+pub fn rich_ext::inspect::Record::clone(&self) -> rich_ext::inspect::Record
+impl core::cmp::PartialEq for rich_ext::inspect::Record
+pub fn rich_ext::inspect::Record::eq(&self, &rich_ext::inspect::Record) -> bool
+impl core::fmt::Debug for rich_ext::inspect::Record
+pub fn rich_ext::inspect::Record::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::StructuralPartialEq for rich_ext::inspect::Record
+impl core::marker::Freeze for rich_ext::inspect::Record
+impl core::marker::Send for rich_ext::inspect::Record
+impl core::marker::Sync for rich_ext::inspect::Record
+impl core::marker::Unpin for rich_ext::inspect::Record
+impl core::marker::UnsafeUnpin for rich_ext::inspect::Record
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::inspect::Record
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::inspect::Record
+#[non_exhaustive] pub struct rich_ext::inspect::TypeInfo
+pub rich_ext::inspect::TypeInfo::doc: &'static str
+pub rich_ext::inspect::TypeInfo::ident: &'static str
+pub rich_ext::inspect::TypeInfo::kind: rich_ext::inspect::TypeKind
+pub rich_ext::inspect::TypeInfo::name: &'static str
+pub rich_ext::inspect::TypeInfo::variants: &'static [rich_ext::inspect::Variant]
+impl rich_ext::inspect::TypeInfo
+pub fn rich_ext::inspect::TypeInfo::doc(self, &'static str) -> Self
+pub fn rich_ext::inspect::TypeInfo::new(&'static str, &'static str, rich_ext::inspect::TypeKind) -> Self
+pub fn rich_ext::inspect::TypeInfo::variants(self, &'static [rich_ext::inspect::Variant]) -> Self
+impl core::clone::Clone for rich_ext::inspect::TypeInfo
+pub fn rich_ext::inspect::TypeInfo::clone(&self) -> rich_ext::inspect::TypeInfo
+impl core::cmp::Eq for rich_ext::inspect::TypeInfo
+impl core::cmp::PartialEq for rich_ext::inspect::TypeInfo
+pub fn rich_ext::inspect::TypeInfo::eq(&self, &rich_ext::inspect::TypeInfo) -> bool
+impl core::fmt::Debug for rich_ext::inspect::TypeInfo
+pub fn rich_ext::inspect::TypeInfo::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_ext::inspect::TypeInfo
+impl core::marker::StructuralPartialEq for rich_ext::inspect::TypeInfo
+impl core::marker::Freeze for rich_ext::inspect::TypeInfo
+impl core::marker::Send for rich_ext::inspect::TypeInfo
+impl core::marker::Sync for rich_ext::inspect::TypeInfo
+impl core::marker::Unpin for rich_ext::inspect::TypeInfo
+impl core::marker::UnsafeUnpin for rich_ext::inspect::TypeInfo
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::inspect::TypeInfo
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::inspect::TypeInfo
+#[non_exhaustive] pub struct rich_ext::inspect::Variant
+pub rich_ext::inspect::Variant::doc: &'static str
+pub rich_ext::inspect::Variant::name: &'static str
+pub rich_ext::inspect::Variant::shape: rich_ext::inspect::Shape
+impl rich_ext::inspect::Variant
+pub const fn rich_ext::inspect::Variant::doc(self, &'static str) -> Self
+pub const fn rich_ext::inspect::Variant::new(&'static str, rich_ext::inspect::Shape) -> Self
+impl core::clone::Clone for rich_ext::inspect::Variant
+pub fn rich_ext::inspect::Variant::clone(&self) -> rich_ext::inspect::Variant
+impl core::cmp::Eq for rich_ext::inspect::Variant
+impl core::cmp::PartialEq for rich_ext::inspect::Variant
+pub fn rich_ext::inspect::Variant::eq(&self, &rich_ext::inspect::Variant) -> bool
+impl core::fmt::Debug for rich_ext::inspect::Variant
+pub fn rich_ext::inspect::Variant::fmt(&self, &mut core::fmt::Formatter<'_>) -> core::fmt::Result
+impl core::marker::Copy for rich_ext::inspect::Variant
+impl core::marker::StructuralPartialEq for rich_ext::inspect::Variant
+impl core::marker::Freeze for rich_ext::inspect::Variant
+impl core::marker::Send for rich_ext::inspect::Variant
+impl core::marker::Sync for rich_ext::inspect::Variant
+impl core::marker::Unpin for rich_ext::inspect::Variant
+impl core::marker::UnsafeUnpin for rich_ext::inspect::Variant
+impl core::panic::unwind_safe::RefUnwindSafe for rich_ext::inspect::Variant
+impl core::panic::unwind_safe::UnwindSafe for rich_ext::inspect::Variant
+pub trait rich_ext::inspect::InspectField
+pub fn rich_ext::inspect::InspectField::inspect_field(&self, usize) -> rich_ext::inspect::FieldValue
+impl<T: rich_ext::inspect::InspectField> rich_ext::inspect::InspectField for core::option::Option<T>
+pub fn core::option::Option<T>::inspect_field(&self, usize) -> rich_ext::inspect::FieldValue
+impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::InspectField for T
+pub fn T::inspect_field(&self, usize) -> rich_ext::inspect::FieldValue
+pub trait rich_ext::inspect::InspectMethods
+pub const rich_ext::inspect::InspectMethods::METHODS: &'static [rich_ext::inspect::Method]
+pub trait rich_ext::inspect::Inspectable
+pub fn rich_ext::inspect::Inspectable::inspect_head(&self) -> rich_ext::inspect::Record
+pub fn rich_ext::inspect::Inspectable::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
+pub fn rich_ext::inspect::Inspectable::inspect_record(&self, usize) -> rich_ext::inspect::Record
+pub fn rich_ext::inspect::Inspectable::inspect_type(&self) -> rich_ext::inspect::TypeInfo
+impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for &T
+pub fn &T::inspect_head(&self) -> rich_ext::inspect::Record
+pub fn &T::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
+pub fn &T::inspect_record(&self, usize) -> rich_ext::inspect::Record
+pub fn &T::inspect_type(&self) -> rich_ext::inspect::TypeInfo
+impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for &mut T
+pub fn &mut T::inspect_head(&self) -> rich_ext::inspect::Record
+pub fn &mut T::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
+pub fn &mut T::inspect_record(&self, usize) -> rich_ext::inspect::Record
+pub fn &mut T::inspect_type(&self) -> rich_ext::inspect::TypeInfo
+impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::inspect_head(&self) -> rich_ext::inspect::Record
+pub fn alloc::boxed::Box<T>::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
+pub fn alloc::boxed::Box<T>::inspect_record(&self, usize) -> rich_ext::inspect::Record
+pub fn alloc::boxed::Box<T>::inspect_type(&self) -> rich_ext::inspect::TypeInfo
+impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::inspect_head(&self) -> rich_ext::inspect::Record
+pub fn alloc::rc::Rc<T>::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
+pub fn alloc::rc::Rc<T>::inspect_record(&self, usize) -> rich_ext::inspect::Record
+pub fn alloc::rc::Rc<T>::inspect_type(&self) -> rich_ext::inspect::TypeInfo
+impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::inspect_head(&self) -> rich_ext::inspect::Record
+pub fn alloc::sync::Arc<T>::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
+pub fn alloc::sync::Arc<T>::inspect_record(&self, usize) -> rich_ext::inspect::Record
+pub fn alloc::sync::Arc<T>::inspect_type(&self) -> rich_ext::inspect::TypeInfo
+pub fn rich_ext::inspect::clean_doc(&str) -> alloc::string::String
+pub fn rich_ext::inspect::inspect(&dyn rich_ext::inspect::Inspectable, rich_ext::inspect::InspectOptions)
 pub mod rich_ext::layout
 pub enum rich_ext::layout::Alignment
 pub rich_ext::layout::Alignment::Center
@@ -18182,6 +18497,7 @@ pub macro rich_ext::assert_rich_json_eq!
 pub macro rich_ext::assert_snapshot_eq!
 pub macro rich_ext::rich_dbg!
 pub macro rich_ext::rich_eprintln!
+pub macro rich_ext::rich_inspect!
 pub macro rich_ext::rich_panel!
 pub macro rich_ext::rich_println!
 pub macro rich_ext::rich_progress!
@@ -18287,6 +18603,32 @@ impl core::marker::Unpin for rich_ext::registry::ExtensionRegistry
 impl core::marker::UnsafeUnpin for rich_ext::registry::ExtensionRegistry
 impl !core::panic::unwind_safe::RefUnwindSafe for rich_ext::registry::ExtensionRegistry
 impl !core::panic::unwind_safe::UnwindSafe for rich_ext::registry::ExtensionRegistry
+pub struct rich_ext::Inspect<'a>
+impl<'a> rich_ext::inspect::Inspect<'a>
+pub fn rich_ext::inspect::Inspect<'a>::all(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::docs(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::help(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::label(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::max_depth(self, usize) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::methods(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::new(&'a dyn rich_ext::inspect::Inspectable) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::options(self, rich_ext::inspect::InspectOptions) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::private(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::sort(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::title(self, impl core::convert::Into<alloc::string::String>) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::types(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::value(self, bool) -> Self
+pub fn rich_ext::inspect::Inspect<'a>::variants(self, bool) -> Self
+impl rich::protocol::Renderable for rich_ext::inspect::Inspect<'_>
+pub fn rich_ext::inspect::Inspect<'_>::measure(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> rich::measure::Measurement
+pub fn rich_ext::inspect::Inspect<'_>::rich_render(&self, &rich::console::Console, &rich::console::ConsoleOptions) -> alloc::vec::Vec<rich::segment::Segment>
+impl<'a> core::marker::Freeze for rich_ext::inspect::Inspect<'a>
+impl<'a> !core::marker::Send for rich_ext::inspect::Inspect<'a>
+impl<'a> !core::marker::Sync for rich_ext::inspect::Inspect<'a>
+impl<'a> core::marker::Unpin for rich_ext::inspect::Inspect<'a>
+impl<'a> core::marker::UnsafeUnpin for rich_ext::inspect::Inspect<'a>
+impl<'a> !core::panic::unwind_safe::RefUnwindSafe for rich_ext::inspect::Inspect<'a>
+impl<'a> !core::panic::unwind_safe::UnwindSafe for rich_ext::inspect::Inspect<'a>
 pub struct rich_ext::NumberHighlighter
 impl rich_ext::highlighter::NumberHighlighter
 pub fn rich_ext::highlighter::NumberHighlighter::new() -> Self
@@ -18353,6 +18695,37 @@ pub trait rich_ext::ConsoleExt
 pub fn rich_ext::ConsoleExt::install_extensions(&mut self) -> &mut Self
 impl rich_ext::ConsoleExt for rich::console::Console
 pub fn rich::console::Console::install_extensions(&mut self) -> &mut Self
+pub trait rich_ext::Inspectable
+pub fn rich_ext::Inspectable::inspect_head(&self) -> rich_ext::inspect::Record
+pub fn rich_ext::Inspectable::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
+pub fn rich_ext::Inspectable::inspect_record(&self, usize) -> rich_ext::inspect::Record
+pub fn rich_ext::Inspectable::inspect_type(&self) -> rich_ext::inspect::TypeInfo
+impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for &T
+pub fn &T::inspect_head(&self) -> rich_ext::inspect::Record
+pub fn &T::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
+pub fn &T::inspect_record(&self, usize) -> rich_ext::inspect::Record
+pub fn &T::inspect_type(&self) -> rich_ext::inspect::TypeInfo
+impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for &mut T
+pub fn &mut T::inspect_head(&self) -> rich_ext::inspect::Record
+pub fn &mut T::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
+pub fn &mut T::inspect_record(&self, usize) -> rich_ext::inspect::Record
+pub fn &mut T::inspect_type(&self) -> rich_ext::inspect::TypeInfo
+impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for alloc::boxed::Box<T>
+pub fn alloc::boxed::Box<T>::inspect_head(&self) -> rich_ext::inspect::Record
+pub fn alloc::boxed::Box<T>::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
+pub fn alloc::boxed::Box<T>::inspect_record(&self, usize) -> rich_ext::inspect::Record
+pub fn alloc::boxed::Box<T>::inspect_type(&self) -> rich_ext::inspect::TypeInfo
+impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for alloc::rc::Rc<T>
+pub fn alloc::rc::Rc<T>::inspect_head(&self) -> rich_ext::inspect::Record
+pub fn alloc::rc::Rc<T>::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
+pub fn alloc::rc::Rc<T>::inspect_record(&self, usize) -> rich_ext::inspect::Record
+pub fn alloc::rc::Rc<T>::inspect_type(&self) -> rich_ext::inspect::TypeInfo
+impl<T: rich_ext::inspect::Inspectable + ?core::marker::Sized> rich_ext::inspect::Inspectable for alloc::sync::Arc<T>
+pub fn alloc::sync::Arc<T>::inspect_head(&self) -> rich_ext::inspect::Record
+pub fn alloc::sync::Arc<T>::inspect_methods(&self) -> &'static [rich_ext::inspect::Method]
+pub fn alloc::sync::Arc<T>::inspect_record(&self, usize) -> rich_ext::inspect::Record
+pub fn alloc::sync::Arc<T>::inspect_type(&self) -> rich_ext::inspect::TypeInfo
 pub fn rich_ext::extended_theme() -> rich::theme::Theme
+pub fn rich_ext::inspect(&dyn rich_ext::inspect::Inspectable, rich_ext::inspect::InspectOptions)
 pub fn rich_ext::install_defaults(&mut rich::console::Console)
 pub fn rich_ext::sanitize_terminal_controls(&str) -> alloc::string::String

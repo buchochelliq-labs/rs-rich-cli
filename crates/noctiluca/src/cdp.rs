@@ -51,6 +51,9 @@ pub const SNAPSHOT_STYLES: &[&str] = &[
     "background-image",
     "overflow-y",
     "flex-wrap",
+    "clip",
+    "clip-path",
+    "position",
 ];
 
 /// The script of the isolated world. It reports only that something
@@ -223,6 +226,22 @@ pub const PING_SCRIPT: &str = r#"(function start(tries) {
   for (const type of ['input', 'change', 'load', 'toggle', 'play', 'playing', 'pause', 'ended',
                       'volumechange', 'seeked', 'loadedmetadata'])
     document.addEventListener(type, event, true);
+  // The layout can move with no change to the DOM: web fonts arriving, a
+  // box resized by a script's styles, content shifted by what loaded
+  // above it. Each says so too.
+  try {
+    if (document.fonts) {
+      document.fonts.addEventListener('loadingdone', changed);
+      document.fonts.ready.then(changed, () => {});
+    }
+    if (typeof ResizeObserver === 'function') {
+      const sizes = new ResizeObserver(changed);
+      sizes.observe(document.documentElement);
+      if (document.body) sizes.observe(document.body);
+    }
+    if (typeof PerformanceObserver === 'function')
+      new PerformanceObserver(changed).observe({ type: 'layout-shift', buffered: true });
+  } catch (e) {}
   let last = '';
   setInterval(() => {
     const fields = document.querySelectorAll('input,select,textarea');
@@ -276,6 +295,9 @@ pub struct ChromeOptions {
     pub quarantine: Option<PathBuf>,
     /// Turn the page's script off.
     pub no_js: bool,
+    /// Chrome's default background transparent, not white: where a page
+    /// sets none, its captured pixels keep their alpha (`--transparent`).
+    pub transparent: bool,
     /// The page's size in cells.
     pub columns: u16,
     pub rows: u16,
@@ -357,6 +379,13 @@ impl ChromeBackend {
             devtools.call(
                 "Emulation.setScriptExecutionDisabled",
                 json!({"value": true}),
+                CALL,
+            )?;
+        }
+        if options.transparent {
+            devtools.call(
+                "Emulation.setDefaultBackgroundColorOverride",
+                json!({"color": {"r": 0, "g": 0, "b": 0, "a": 0}}),
                 CALL,
             )?;
         }
@@ -828,6 +857,10 @@ impl Engine for ChromeBackend {
 
     fn set_screencast(&mut self, _tab: TabId, on: bool) -> io::Result<()> {
         self.engine.set_screencast(on)
+    }
+
+    fn set_screencast_scale(&mut self, _tab: TabId, scale: f64) -> io::Result<()> {
+        self.engine.set_screencast_scale(scale)
     }
 
     fn screencast_frame(&mut self, _tab: TabId) -> Option<ScreencastFrame> {

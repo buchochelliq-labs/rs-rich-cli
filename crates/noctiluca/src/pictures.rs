@@ -12,7 +12,7 @@
 //! **Animated GIFs**: Kitty plays an animated picture on its own clock,
 //! with no bytes from us per frame. Elsewhere a [`Player`] steps the
 //! frames of each one in view, each frame only when its [`Pacer`] (the
-//! picture's share of the [`ByteBudget`], at most 8 frames a second) has
+//! picture's share of the [`ByteBudget`], at most `[media] fps` a second) has
 //! room, stepping down a protocol when the budget is short. Freezing
 //! (`media.freeze`) holds every animation on its frame and stops the
 //! bytes: Kitty is sent the still frame in place of the animation.

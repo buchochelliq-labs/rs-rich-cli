@@ -197,6 +197,96 @@ so linear mode reads the line the caret moves to.
 `text_area(text, language="rust", line_numbers=True)` takes the options as
 keywords.
 
+### A prompt editor
+
+New in 0.0.24: the parts of a chat's prompt, on `text_area`.
+
+```rust
+use intuituive::complete::{Completion, history_session};
+use intuituive::files::path_completer; // the `files` feature
+use rich_ext::listing::walk;
+
+text_area(prompt)
+    .grow(1, 10)                                   // rows: at least 1, at most 10, then it scrolls
+    .submit_on("enter")                            // Shift+Enter and Alt+Enter add a line
+    .placeholder("Ask anything")
+    .history("prompt")                             // ↑ on the first line, ↓ back to the draft
+    .complete_at('@', path_completer(walk(&root).skip_dir("target")))
+    .complete_at('/', |query| commands(query))     // a Vec<Completion>
+    .on_submit(move |text, cx| send(text, cx))
+```
+
+- **`.grow(min, max)`** makes it as tall as its rows (wrapped lines
+  counted), from `min` to `max`, then it scrolls to the caret. The rows
+  around it lay out again as it grows and shrinks, and when the app
+  clears it.
+- **`.submit_on(keys)`** names the keys (as `on_key` takes them) that
+  call `on_submit` with the text, after adding it to the history.
+  Shift+Enter and Alt+Enter then add a line; a terminal that cannot tell
+  Shift+Enter from Enter still sends Alt+Enter. **`.newline_on(keys)`**
+  names other keys for that.
+- **`.history(h)`**, as on an input: ↑ on the first line recalls the
+  newest entry, ↑ again goes back, and ↓ forward to the draft. A text
+  area goes through every entry (an input, through those that start with
+  what was typed). A history for the session keeps entries of more than
+  one line; one kept in a file (one entry a line) leaves them out.
+- **`.complete_at(trigger, source)`** opens the completion pop-up once a
+  word starts with `trigger`: `source(query)` gives the candidates for
+  what is typed from the trigger to the caret, each `Completion`'s range
+  counted in the query's bytes (`0..query.len()` for all of it). Typing
+  narrows it, ↑/↓ and Tab move, Enter takes the candidate and a space
+  after it, and Esc closes it until the next trigger. It works on an
+  input too, and beside `.complete(..)`.
+- **`files::path_completer(walk)`** (the `files` feature) is such a source
+  over the paths a walk finds, relative to its root, fuzzy-matched as the
+  finder matches them: `@src/ma` offers `src/main.rs`.
+
+## Markdown that streams
+
+New in 0.0.24: `markdown(doc)` draws the Markdown a `Signal<String>`
+holds, and keeps up as it grows: an agent's answer arriving.
+
+```rust
+use intuituive::{markdown, MarkdownStream};
+
+let doc = signal(String::new());
+let stream = MarkdownStream::new(doc);   // Clone + Send
+std::thread::spawn(move || {
+    for fragment in reply() {
+        stream.append(&fragment);       // joined, delivered once a turn
+    }
+    stream.finish();
+});
+scroll(
+    markdown(doc)
+        .on_link(|url, cx| cx.copy(url.to_string()))
+        .code_theme("ansi_dark"),
+)
+.follow_end()
+```
+
+- **Blocks.** The document is kept as blocks, each a node: the runs of
+  lines between blank lines, outside fenced code. Each is rs-rich's
+  Markdown port (headings, lists, quotes, tables, highlighted code),
+  rendered at the node's width and kept until its source or the width
+  changes.
+- **Streaming.** When the document grows, it is split again only from its
+  last block. The blocks above neither render nor draw again: an append
+  damages only the last block's rows. A fence still open draws as code,
+  as CommonMark reads it, so nothing jumps when it closes. Streamed in
+  one-byte fragments, an answer ends exactly as it does set at once.
+- **`MarkdownStream::new(doc)`**, made on the app's thread, is a `Clone +
+  Send` handle: `append(fragment)` from any thread, fragments arriving
+  faster than the app's loop turns joined into one update.
+- **Links.** A block with links takes the focus. Tab and Shift+Tab go
+  through its links, then on, the focused one drawn in
+  `markdown.link.focus` (else `reverse`); Enter or a click calls
+  `.on_link(|url, cx| ..)`.
+- **Limits.** A reference-style link whose definition sits in another
+  block is not resolved, and list items separated by blank lines draw as
+  lists of one item each (a line indented under an item stays with it).
+  A table draws as a table once its delimiter row arrives.
+
 ## Calendars and dates
 
 ```rust

@@ -15,6 +15,7 @@
 use proc_macro::TokenStream;
 
 mod derive;
+mod inspect;
 mod markup;
 mod template;
 
@@ -80,6 +81,40 @@ pub fn theme_key(input: TokenStream) -> TokenStream {
 #[proc_macro_derive(Rich, attributes(rich))]
 pub fn derive_rich(input: TokenStream) -> TokenStream {
     derive::rich(syn::parse_macro_input!(input as syn::DeriveInput))
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Record what `rich_ext::inspect` reports on a struct or enum: the type's
+/// name and doc comment, each field's name, type as written, doc comment,
+/// visibility and value, and an enum's variants.
+///
+/// Field values are their `Debug` output, so every field's type must
+/// implement `Debug` unless it is marked. Field attributes:
+/// `#[inspect(skip)]` (left out; the value reads `Name { a: 1, .. }`),
+/// `#[inspect(with = path)]` (formatted by `path`, a function with
+/// `Debug::fmt`'s signature) and `#[inspect(nested)]` (a nested report of
+/// a field that is itself `Inspectable`, or an `Option` of one).
+///
+/// Type attribute: `#[inspect(methods)]` lists the methods recorded by
+/// [`macro@inspect`] on the type's inherent `impl` block.
+///
+/// A generic parameter used in a field's type gets a `Debug` bound on that
+/// type (`InspectField` for a nested field). Unions are refused.
+#[proc_macro_derive(Inspect, attributes(inspect))]
+pub fn derive_inspect(input: TokenStream) -> TokenStream {
+    inspect::derive(syn::parse_macro_input!(input as syn::DeriveInput))
+        .unwrap_or_else(syn::Error::into_compile_error)
+        .into()
+}
+
+/// Record an inherent `impl` block's methods for `rich_ext::inspect`: each
+/// `fn`'s name, signature as written, doc comment, and whether it is `pub`
+/// or `async`. Mark the type `#[inspect(methods)]` to list them; one block
+/// per type. `#[inspect(skip)]` on a method leaves it out.
+#[proc_macro_attribute]
+pub fn inspect(args: TokenStream, item: TokenStream) -> TokenStream {
+    inspect::methods(args.into(), syn::parse_macro_input!(item as syn::ItemImpl))
         .unwrap_or_else(syn::Error::into_compile_error)
         .into()
 }

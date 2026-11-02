@@ -15,6 +15,7 @@ playback** and **perceptual image diffs** in the terminal.
 | `sixel` — real pixels through the Sixel graphics protocol | off | `image` + `icy_sixel` |
 | `kitty` — the Kitty graphics protocol with Unicode placeholders | off | `image` |
 | `iterm` — iTerm2 inline images (also WezTerm) | off | `image` |
+| `avif` — AVIF decoding | off | `image`'s `avif-native`: links the C library libdav1d, which must be installed (`apt install libdav1d-dev`, `brew install dav1d`, vcpkg's `dav1d` on Windows) |
 
 With `image`, the `graphics` module fits an image to an exact number of cells,
 decodes and resamples animations under a memory budget, and draws an image

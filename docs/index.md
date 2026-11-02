@@ -259,6 +259,7 @@ published or not. Each crate versions independently; see
 | [`rs-rich-web`](https://crates.io/crates/rs-rich-web) | `0.0.7` |
 | [`rs-rich-embed`](https://crates.io/crates/rs-rich-embed) | `0.0.7` |
 | [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.3` |
+| [`rs-rich-acp`](https://crates.io/crates/rs-rich-acp) | `0.0.1` |
 | [`noctiluca`](https://crates.io/crates/noctiluca) | `0.0.3` |
 <!-- END MANIFEST VERSIONS -->
 

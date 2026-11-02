@@ -9,8 +9,8 @@ is a crate of its own, [`noctiluca`](https://crates.io/crates/noctiluca),
 built on intuiTUIve and rs-rich-embed.
 
 <video controls muted playsinline preload="none" poster="../../assets/noctiluca/promo-poster.jpg" style="width:100%;max-width:960px" aria-label="Noctiluca's promo: a moonlit sea where glowing plankton blooms into a ring, a swarm of plankton, a network of glowing terminal windows with a Noctiluca window and the lanternfish, and the title Noctiluca, powered by intuiTUIve">
-  <source src="../../assets/noctiluca/promo.mp4" type="video/mp4">
-  <a href="../../assets/noctiluca/promo.mp4">Noctiluca's promo (MP4)</a>
+  <source src="../assets/noctiluca/promo.mp4" type="video/mp4">
+  <a href="../assets/noctiluca/promo.mp4">Noctiluca's promo (MP4)</a>
 </video>
 
 *Noctiluca's promo (AI-generated, made for rs-rich; MIT). 36 seconds,
@@ -22,7 +22,7 @@ sent, and an article in reader mode with its small picture drawn as Kitty
 graphics.
 
 <div class="tape-player" data-cast="../../media/tapes/noctiluca-chrome/noctiluca-chrome.cast" data-poster="npt:0:3">
-  <img src="../../media/tapes/noctiluca-chrome/noctiluca-chrome.gif" alt="Noctiluca driving a real Chrome: a two-column page, a link hint, a form filled in and sent, and an article with its picture">
+  <img src="../media/tapes/noctiluca-chrome/noctiluca-chrome.gif" alt="Noctiluca driving a real Chrome: a two-column page, a link hint, a form filled in and sent, and an article with its picture">
 </div>
 
 Its name is the "sea sparkle" plankton that makes waves glow at night. Its

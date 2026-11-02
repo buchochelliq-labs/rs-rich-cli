@@ -102,7 +102,7 @@ pub use crate::miller::Move;
 /// The core's [`hex_view`], here too.
 pub use crate::widgets::hex_view;
 pub use crumb::{home_dir, path_crumb, path_crumb_at, path_parts};
-pub use finder::{Finder, finder, finder_with};
+pub use finder::{Finder, finder, finder_with, path_completer};
 pub use frecency::{Frecency, Visit, frecency, frecency_at, state_dir};
 pub use miller::{Miller, MillerOptions, miller};
 pub use model::{DirModel, dir_model, dir_model_with, git_status};

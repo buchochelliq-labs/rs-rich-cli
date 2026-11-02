@@ -72,6 +72,7 @@ PLAYGROUND_COMMANDS = {
     'rich -p --emoji "Deploying :micro:status/loading: done :micro:status/success:"',
     "rich banner Hello",
     "rich banner --gradient rainbow --align center 'Ship it'",
+    "rich banner --wave --specks Noctiluca",
     "rich shell status --exit 101 --duration 4.2 --command 'cargo test'",
 }
 PLAYGROUND_MARK = '```sh { .rich-playground data-kind="cli" }'

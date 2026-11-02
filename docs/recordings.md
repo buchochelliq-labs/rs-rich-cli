@@ -68,7 +68,7 @@ motion turned on in your system settings the cards stay still.
 Markdown, CSV and source code, each rendered from a plain `rich FILE`.
 
 <div class="tape-player" data-cast="../media/tapes/hero/hero.cast" data-poster="npt:0:4">
-  <img src="../media/tapes/hero/hero.gif" alt="rich rendering a Markdown file, a CSV table and Python source">
+  <img src="media/tapes/hero/hero.gif" alt="rich rendering a Markdown file, a CSV table and Python source">
 </div>
 
 | Markdown | CSV | Code |
@@ -83,7 +83,7 @@ Markdown, CSV and source code, each rendered from a plain `rich FILE`.
 tape edits `service.json` from outside the terminal while `rich` watches it.
 
 <div class="tape-player" data-cast="../media/tapes/watch/watch.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/watch/watch.gif" alt="rich --watch re-rendering a JSON file after an edit">
+  <img src="media/tapes/watch/watch.gif" alt="rich --watch re-rendering a JSON file after an edit">
 </div>
 
 | Before the edit | After the edit |
@@ -98,7 +98,7 @@ tape edits `service.json` from outside the terminal while `rich` watches it.
 page down, then `/characters` to search.
 
 <div class="tape-player" data-cast="../media/tapes/pager/pager.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/pager/pager.gif" alt="rich view paging a Rust file through less and searching it">
+  <img src="media/tapes/pager/pager.gif" alt="rich view paging a Rust file through less and searching it">
 </div>
 
 | Opened | Paged down | Searched |
@@ -114,7 +114,7 @@ the line is empty, and `--required` refuses an empty answer with an error under
 the line. The answer is captured with `$(…)`.
 
 <div class="tape-player" data-cast="../media/tapes/input/input.cast" data-poster="npt:0:4">
-  <img src="../media/tapes/input/input.gif" alt="rich input showing a placeholder, refusing an empty answer, then taking one">
+  <img src="media/tapes/input/input.gif" alt="rich input showing a placeholder, refusing an empty answer, then taking one">
 </div>
 
 | Placeholder | Required | Answered |
@@ -138,7 +138,7 @@ fixture project:
 See [Interactive components](guide/interact/index.md#ready-made-components).
 
 <div class="tape-player" data-cast="../media/tapes/components/components.cast" data-poster="npt:0:5">
-  <img src="../media/tapes/components/components.gif" alt="rs-rich-interact's components, one after another">
+  <img src="media/tapes/components/components.gif" alt="rs-rich-interact's components, one after another">
 </div>
 
 | Select | Input | Confirm |
@@ -158,7 +158,7 @@ names and the palette, and an emoji and a box style used together. See
 [Ask in a script](cli.md#ask-in-a-script).
 
 <div class="tape-player" data-cast="../media/tapes/file/file.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/file/file.gif" alt="rich file browsing a project and picking a file">
+  <img src="media/tapes/file/file.gif" alt="rich file browsing a project and picking a file">
 </div>
 
 | rich write | rich file | rich file |
@@ -180,7 +180,7 @@ the JSONPath captured by the script. See
 [Explore it interactively](cli.md#explore-it-interactively).
 
 <div class="tape-player" data-cast="../media/tapes/explore/explore.cast" data-poster="npt:0:4">
-  <img src="../media/tapes/explore/explore.gif" alt="rich explore folding, searching and picking a node of a YAML file">
+  <img src="media/tapes/explore/explore.gif" alt="rich explore folding, searching and picking a node of a YAML file">
 </div>
 
 | Folded | Opened | Searched |
@@ -197,7 +197,7 @@ Enter gives the terminal back, as it was, with the line it was left at. See
 [Interactive components](guide/interact/index.md).
 
 <div class="tape-player" data-cast="../media/tapes/viewport/viewport.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/viewport/viewport.gif" alt="A Markdown file paged in rich_interact's Viewport">
+  <img src="media/tapes/viewport/viewport.gif" alt="A Markdown file paged in rich_interact's Viewport">
 </div>
 
 | Opened | Paged down | Given back |
@@ -218,7 +218,7 @@ region's actions in a modal. See
 [Overlays and chrome](guide/interact/overlays.md).
 
 <div class="tape-player" data-cast="../media/tapes/palette/palette.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/palette/palette.gif" alt="The command palette over a file list, searched and run">
+  <img src="media/tapes/palette/palette.gif" alt="The command palette over a file list, searched and run">
 </div>
 
 | The palette | Searched | Run |
@@ -254,7 +254,7 @@ calendar and a virtual list of a hundred thousand rows), with a toast and
 then the command palette. See [Terminal apps](guide/intuituive/index.md).
 
 <div class="tape-player" data-cast="../media/tapes/intuituive/intuituive.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/intuituive/intuituive.gif" alt="intuiTUIve's to-do, screens, inline, meters and planner examples">
+  <img src="media/tapes/intuituive/intuituive.gif" alt="intuiTUIve's to-do, screens, inline, meters and planner examples">
 </div>
 
 | To-do | Inspector |
@@ -300,7 +300,7 @@ right-click menu, the command palette and a second tab. See
 [Porting a ratatui app](guide/intuituive/porting.md#worked-example-a-yazi-style-file-manager).
 
 <div class="tape-player" data-cast="../media/tapes/files/files.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/files/files.gif" alt="A Yazi-style file manager browsing the fixture project">
+  <img src="media/tapes/files/files.gif" alt="A Yazi-style file manager browsing the fixture project">
 </div>
 
 | Browsing | Which-key |
@@ -327,7 +327,7 @@ keys. See
 [Porting a ratatui app](guide/intuituive/porting.md#worked-example-scope-tui-an-oscilloscope).
 
 <div class="tape-player" data-cast="../media/tapes/scope/scope.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/scope/scope.gif" alt="scope-tui rebuilt on intuiTUIve, cycling through its three scopes">
+  <img src="media/tapes/scope/scope.gif" alt="scope-tui rebuilt on intuiTUIve, cycling through its three scopes">
 </div>
 
 | Oscilloscope | Vectorscope |
@@ -349,7 +349,7 @@ line it cannot parse is reported in a toast while the last good sheet
 stays. See [Stylesheets](guide/intuituive/panels.md#stylesheets).
 
 <div class="tape-player" data-cast="../media/tapes/stylesheet/stylesheet.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/stylesheet/stylesheet.gif" alt="A status page styled by a stylesheet, restyled when the sheet changes">
+  <img src="media/tapes/stylesheet/stylesheet.gif" alt="A status page styled by a stylesheet, restyled when the sheet changes">
 </div>
 
 | Styled | `:focus` and `:hover` |
@@ -369,7 +369,7 @@ and dragging the gap after a header resizes the column. See
 [Sorting, resizing and a cell cursor](guide/intuituive/tables.md#sorting-resizing-and-a-cell-cursor).
 
 <div class="tape-player" data-cast="../media/tapes/tables/tables.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/tables/tables.gif" alt="A process table sorted by clicks on its headers, then resized">
+  <img src="media/tapes/tables/tables.gif" alt="A process table sorted by clicks on its headers, then resized">
 </div>
 
 | Sorted by a click | The cell cursor, sorted with `s` | Resized |
@@ -387,7 +387,7 @@ fails. The pointer resting on a card shows its tooltip, and a card dragged
 to another lane moves there. See [The mouse](guide/intuituive/input.md#the-mouse).
 
 <div class="tape-player" data-cast="../media/tapes/board/board.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/board/board.gif" alt="A sprint board: a lazy tree loading, a tooltip, and a card dragged to Done">
+  <img src="media/tapes/board/board.gif" alt="A sprint board: a lazy tree loading, a tooltip, and a card dragged to Done">
 </div>
 
 | Loading | Loaded, and a failure |
@@ -407,7 +407,7 @@ its line with `align_self`. See
 [Alignment and wrapping](guide/intuituive/layout.md#alignment-and-wrapping).
 
 <div class="tape-player" data-cast="../media/tapes/align/align.cast" data-poster="npt:0:2">
-  <img src="../media/tapes/align/align.gif" alt="Cards in a row, placed by align-items, justify, wrap and align-content">
+  <img src="media/tapes/align/align.gif" alt="Cards in a row, placed by align-items, justify, wrap and align-content">
 </div>
 
 | Stretched | Centred |
@@ -431,7 +431,7 @@ the app is written as lines of text, then only the lines that change. See
 [Accessibility](guide/intuituive/accessibility.md#accessibility).
 
 <div class="tape-player" data-cast="../media/tapes/access/access.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/access/access.gif" alt="The access example in text mode, then in linear mode">
+  <img src="media/tapes/access/access.gif" alt="The access example in text mode, then in linear mode">
 </div>
 
 | Text mode | Linear mode |
@@ -449,7 +449,7 @@ with Ctrl+Z, and Escape then Tab moves on to the notes. See
 [Text areas](guide/intuituive/components.md#text-areas).
 
 <div class="tape-player" data-cast="../media/tapes/editor/editor.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/editor/editor.gif" alt="Rust source in a text area: a line typed, a line selected, the typing undone, then notes typed below">
+  <img src="media/tapes/editor/editor.gif" alt="Rust source in a text area: a line typed, a line selected, the typing undone, then notes typed below">
 </div>
 
 | Highlighted | A line selected |
@@ -470,7 +470,7 @@ screen when the program ends. See
 [Positioned drawing](guide/ext/surface.md).
 
 <div class="tape-player" data-cast="../media/tapes/surface/surface.cast" data-poster="npt:0:2">
-  <img src="../media/tapes/surface/surface.gif" alt="A dashboard below the prompt, its rollout time ticking up in place">
+  <img src="media/tapes/surface/surface.gif" alt="A dashboard below the prompt, its rollout time ticking up in place">
 </div>
 
 | Ticking | Done |
@@ -488,7 +488,7 @@ are printed in ISO 8601 form, for a script to read. See
 [Ask in a script](cli.md#ask-in-a-script).
 
 <div class="tape-player" data-cast="../media/tapes/date/date.cast" data-poster="npt:0:2">
-  <img src="../media/tapes/date/date.gif" alt="rich date picking a day, then a date and time">
+  <img src="media/tapes/date/date.gif" alt="rich date picking a day, then a date and time">
 </div>
 
 | A day | Refused | Answered |
@@ -506,7 +506,7 @@ source with `--syntax`. See
 [Org, AsciiDoc and man pages](cli.md#org-asciidoc-and-man-pages).
 
 <div class="tape-player" data-cast="../media/tapes/documents/documents.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/documents/documents.gif" alt="rich rendering an Org file, an AsciiDoc file and a man page, then the man page's source">
+  <img src="media/tapes/documents/documents.gif" alt="rich rendering an Org file, an AsciiDoc file and a man page, then the man page's source">
 </div>
 
 | Org | AsciiDoc | Man page | Source |
@@ -524,7 +524,7 @@ repeats, and grouped by trace id with a summary of the levels and the
 traces that failed. See [Logs: `rich log`](cli.md#logs-rich-log).
 
 <div class="tape-player" data-cast="../media/tapes/log/log.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/log/log.gif" alt="rich log reading a mixed log, filtering it, folding repeats and grouping by trace">
+  <img src="media/tapes/log/log.gif" alt="rich log reading a mixed log, filtering it, folding repeats and grouping by trace">
 </div>
 
 | Records | Filtered | Folded | Groups |
@@ -545,7 +545,7 @@ the sample data are ours. See
 ### The classic demo
 
 <div class="tape-player" data-cast="../media/tapes/demo/demo.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/demo/demo.gif" alt="ratatui's demo on intuiTUIve: gauges, a sparkline, lists, bars, a chart, a world map">
+  <img src="media/tapes/demo/demo.gif" alt="ratatui's demo on intuiTUIve: gauges, a sparkline, lists, bars, a chart, a world map">
 </div>
 
 | Graphs | World | Colours |
@@ -557,7 +557,7 @@ the sample data are ours. See
 ### The showcase
 
 <div class="tape-player" data-cast="../media/tapes/demo2/demo2.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/demo2/demo2.gif" alt="ratatui's demo2 on intuiTUIve: about, recipe, email, traceroute and weather tabs">
+  <img src="media/tapes/demo2/demo2.gif" alt="ratatui's demo2 on intuiTUIve: about, recipe, email, traceroute and weather tabs">
 </div>
 
 | About | Email | Weather |
@@ -569,7 +569,7 @@ the sample data are ours. See
 ### Widgets, charts and layout
 
 <div class="tape-player" data-cast="../media/tapes/widgets/widgets.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/widgets/widgets.gif" alt="A gallery of intuiTUIve widgets in the style of ratatui's widget examples">
+  <img src="media/tapes/widgets/widgets.gif" alt="A gallery of intuiTUIve widgets in the style of ratatui's widget examples">
 </div>
 
 | Blocks | Table | Popup |
@@ -579,7 +579,7 @@ the sample data are ours. See
 [Tape](tapes/widgets.tape) · [Cast](media/tapes/widgets/widgets.cast) · [GIF](media/tapes/widgets/widgets.gif) · [Page](media/tapes/widgets/widgets.html)
 
 <div class="tape-player" data-cast="../media/tapes/charts/charts.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/charts/charts.gif" alt="A gallery of gauges, sparklines, bars, charts and the canvas">
+  <img src="media/tapes/charts/charts.gif" alt="A gallery of gauges, sparklines, bars, charts and the canvas">
 </div>
 
 | Gauges | Chart | Canvas |
@@ -589,7 +589,7 @@ the sample data are ours. See
 [Tape](tapes/charts.tape) · [Cast](media/tapes/charts/charts.cast) · [GIF](media/tapes/charts/charts.gif) · [Page](media/tapes/charts/charts.html)
 
 <div class="tape-player" data-cast="../media/tapes/layout/layout.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/layout/layout.gif" alt="A layout explorer: sizes, flex modes and spacing">
+  <img src="media/tapes/layout/layout.gif" alt="A layout explorer: sizes, flex modes and spacing">
 </div>
 
 | Explorer | Flex |
@@ -601,7 +601,7 @@ the sample data are ours. See
 ### Apps
 
 <div class="tape-player" data-cast="../media/tapes/apps/apps.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/apps/apps.gif" alt="Four of ratatui's apps on intuiTUIve: colours, the canvas, a form and a calendar">
+  <img src="media/tapes/apps/apps.gif" alt="Four of ratatui's apps on intuiTUIve: colours, the canvas, a form and a calendar">
 </div>
 
 | Colours | Canvas | Form | Calendar |
@@ -617,7 +617,7 @@ of types, then a table styled by value with `--style-rule`. See
 [Nested JSON Lines](cli.md#nested-json-lines-0019).
 
 <div class="tape-player" data-cast="../media/tapes/profile-nested/profile-nested.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/profile-nested/profile-nested.gif" alt="rich profile profiling nested JSON Lines, then style rules on a table">
+  <img src="media/tapes/profile-nested/profile-nested.gif" alt="rich profile profiling nested JSON Lines, then style rules on a table">
 </div>
 
 | Nested | Rules |
@@ -632,7 +632,7 @@ Micro assets two rows high (0.0.19): a 2×2 icon in text and a table, and
 a 3×2 animation. See [Micro assets](guide/micro/index.md).
 
 <div class="tape-player" data-cast="../media/tapes/micro-rows/micro-rows.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/micro-rows/micro-rows.gif" alt="A two-row micro icon in text and a table, and a two-row animation">
+  <img src="media/tapes/micro-rows/micro-rows.gif" alt="A two-row micro icon in text and a table, and a two-row animation">
 </div>
 
 | Icon | Animation |
@@ -649,7 +649,7 @@ finds a file, a heading, a symbol or a command from one fuzzy box. See
 [Review and jump](cli.md#review-and-jump).
 
 <div class="tape-player" data-cast="../media/tapes/approve/approve.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/approve/approve.gif" alt="rich approve reviewing a queue of items">
+  <img src="media/tapes/approve/approve.gif" alt="rich approve reviewing a queue of items">
 </div>
 
 | Queue | Reason | Decisions |
@@ -659,7 +659,7 @@ finds a file, a heading, a symbol or a command from one fuzzy box. See
 [Tape](tapes/approve.tape) · [Cast](media/tapes/approve/approve.cast) · [GIF](media/tapes/approve/approve.gif) · [Page](media/tapes/approve/approve.html)
 
 <div class="tape-player" data-cast="../media/tapes/jump/jump.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/jump/jump.gif" alt="rich jump searching files, headings, symbols and commands">
+  <img src="media/tapes/jump/jump.gif" alt="rich jump searching files, headings, symbols and commands">
 </div>
 
 | Groups | Narrowed | Answer |
@@ -676,7 +676,7 @@ prints a status line after a command and links to files. See
 [Shell integration](cli.md#shell-integration-0019).
 
 <div class="tape-player" data-cast="../media/tapes/banner/banner.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/banner/banner.gif" alt="rich banner drawing FIGlet text in gradients">
+  <img src="media/tapes/banner/banner.gif" alt="rich banner drawing FIGlet text in gradients">
 </div>
 
 | Gradient | Vertical | Fit and status |
@@ -693,7 +693,7 @@ the redacted capture is shared as a PNG. See
 [Preview a redaction before you share](cli.md#preview-a-redaction-before-you-share-0019).
 
 <div class="tape-player" data-cast="../media/tapes/share/share.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/share/share.gif" alt="rich capture previewing a redaction, then sharing the output">
+  <img src="media/tapes/share/share.gif" alt="rich capture previewing a redaction, then sharing the output">
 </div>
 
 | Preview | Shared |
@@ -713,7 +713,7 @@ site is refused. Ctrl+C stops the server and the programs. See
 [`rich serve`](guide/intuituive/web.md#from-the-command-line-rich-serve).
 
 <div class="tape-player" data-cast="../media/tapes/serve/serve.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/serve/serve.gif" alt="rich serve printing its address, then curl asking for the page and a session">
+  <img src="media/tapes/serve/serve.gif" alt="rich serve printing its address, then curl asking for the page and a session">
 </div>
 
 | Started | The token and the origin checked |
@@ -731,7 +731,7 @@ shows a local page and Ctrl+L opens another. See
 [Embedding programs and pages](guide/intuituive/embed.md).
 
 <div class="tape-player" data-cast="../media/tapes/embed/embed.cast" data-poster="npt:0:4">
-  <img src="../media/tapes/embed/embed.gif" alt="A shell in a terminal pane running rich, beside w3m in a web view">
+  <img src="media/tapes/embed/embed.gif" alt="A shell in a terminal pane running rich, beside w3m in a web view">
 </div>
 
 | The shell | Another address |
@@ -749,7 +749,7 @@ Chrome's saved snapshots of the crate's fixture pages, since the tape job
 runs no browser. See [the design note](design/browser.md).
 
 <div class="tape-player" data-cast="../media/tapes/noctiluca/noctiluca.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/noctiluca/noctiluca.gif" alt="Noctiluca reading a local page in reader mode, following a link by its hint, and listing its actions">
+  <img src="media/tapes/noctiluca/noctiluca.gif" alt="Noctiluca reading a local page in reader mode, following a link by its hint, and listing its actions">
 </div>
 
 | Reader mode | Link hints | F1 | The projection |
@@ -770,7 +770,7 @@ Chrome's recorded frames of the video), so the log does not move here;
 the live tests follow it in Chrome.
 
 <div class="tape-player" data-cast="../media/tapes/stream-with-log/stream-with-log.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/stream-with-log/stream-with-log.gif" alt="Noctiluca showing a chat log beside a stream, scrolling the log up and back, listing its terminal adaptations and switching to the faithful projection">
+  <img src="media/tapes/stream-with-log/stream-with-log.gif" alt="Noctiluca showing a chat log beside a stream, scrolling the log up and back, listing its terminal adaptations and switching to the faithful projection">
 </div>
 
 | The log beside the stream | Scrolled up | The adaptations | Faithful |
@@ -791,7 +791,7 @@ files, Chrome's recorded frames of the video), since the tape job runs no
 browser.
 
 <div class="tape-player" data-cast="../media/tapes/news/news.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/news/news.gif" alt="Noctiluca showing a news page with its pictures and captions, playing its video in place, then the stories in a grid">
+  <img src="media/tapes/news/news.gif" alt="Noctiluca showing a news page with its pictures and captions, playing its video in place, then the stories in a grid">
 </div>
 
 | The page | Its video playing | The stories |
@@ -808,7 +808,7 @@ buttons as `[ labels ]`, thumbnails side by side with their titles under
 them, and a compact comment list with small avatars.
 
 <div class="tape-player" data-cast="../media/tapes/media-grid/media-grid.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/media-grid/media-grid.gif" alt="Noctiluca showing a video page, playing its video in place, then its thumbnails and comments">
+  <img src="media/tapes/media-grid/media-grid.gif" alt="Noctiluca showing a video page, playing its video in place, then its thumbnails and comments">
 </div>
 
 | The player | Playing | Up next and comments |
@@ -817,10 +817,12 @@ them, and a compact comment list with small avatars.
 
 [Tape](tapes/media-grid.tape) · [Cast](media/tapes/media-grid/media-grid.cast) · [GIF](media/tapes/media-grid/media-grid.gif) · [Page](media/tapes/media-grid/media-grid.html)
 
-Three more tapes over the same saved pages show
+Four more tapes over the same saved pages show
 [forms and controls](tapes/noctiluca-forms.tape),
-[reading, find and media](tapes/noctiluca-reading.tape), and
-[keywords and site keys](tapes/noctiluca-keys.tape). One more,
+[reading, find and media](tapes/noctiluca-reading.tape),
+[keywords and site keys](tapes/noctiluca-keys.tape), and
+[the start page](tapes/noctiluca-start.tape) (0.0.24: the animated banner,
+the lanternfish and the bookmarks). One more,
 [`tapes/live/noctiluca-chrome.tape`](tapes/live/noctiluca-chrome.tape),
 runs a real Chrome on the crate's test pages, served from `127.0.0.1`. The
 tape job runs no browser, so that one is recorded by hand and not checked;
@@ -837,7 +839,7 @@ heatmap, and a column that is not there refused with the ones that are. See
 [the charts guide](guide/ext/charts.md#from-the-shell-rich-chart).
 
 <div class="tape-player" data-cast="../media/tapes/chart/chart.cast" data-poster="npt:0:4">
-  <img src="../media/tapes/chart/chart.gif" alt="rich chart drawing a CSV file as bars, lines, a sparkline and a heatmap">
+  <img src="media/tapes/chart/chart.gif" alt="rich chart drawing a CSV file as bars, lines, a sparkline and a heatmap">
 </div>
 
 | Bars | Lines | Piped in, and a mistake |
@@ -855,7 +857,7 @@ crates resolved at several versions, `--why` for what pulls a crate in, and
 [Dependencies and schemas](guide/ext/sources.md).
 
 <div class="tape-player" data-cast="../media/tapes/deps/deps.cast" data-poster="npt:0:4">
-  <img src="../media/tapes/deps/deps.gif" alt="rich deps showing a tree, the paths to syn, and a graph">
+  <img src="media/tapes/deps/deps.gif" alt="rich deps showing a tree, the paths to syn, and a graph">
 </div>
 
 | Tree | Why `syn` | Graph |
@@ -872,7 +874,7 @@ dependencies), and which crates asked for them (0.0.16). `--package` picks
 one crate; here `syn`, resolved at two versions.
 
 <div class="tape-player" data-cast="../media/tapes/deps-features/deps-features.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/deps-features/deps-features.gif" alt="rich deps --features --package syn listing both versions' features and who requested them">
+  <img src="media/tapes/deps-features/deps-features.gif" alt="rich deps --features --package syn listing both versions' features and who requested them">
 </div>
 
 ![rich deps --features --package syn](media/tapes/deps-features/features.png)
@@ -888,7 +890,7 @@ a fixture in the repository. See
 [Dependency sizes, baselines and licence policy](cli.md#dependency-sizes-baselines-and-licence-policy-0019).
 
 <div class="tape-player" data-cast="../media/tapes/deps-policy/deps-policy.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/deps-policy/deps-policy.gif" alt="rich deps reporting sizes, comparing them with a baseline, and checking a licence policy">
+  <img src="media/tapes/deps-policy/deps-policy.gif" alt="rich deps reporting sizes, comparing them with a baseline, and checking a licence policy">
 </div>
 
 | Sizes | Baseline | Policy |
@@ -905,7 +907,7 @@ are (0.0.16). `rich FILE.csv --infer` puts the same types on the table
 itself. See [Profile a data file](cli.md#profile-a-data-file-0016).
 
 <div class="tape-player" data-cast="../media/tapes/profile/profile.cast" data-poster="npt:0:4">
-  <img src="../media/tapes/profile/profile.gif" alt="rich profile describing three columns of orders.csv, then the table with inferred types">
+  <img src="media/tapes/profile/profile.gif" alt="rich profile describing three columns of orders.csv, then the table with inferred types">
 </div>
 
 | Profile | `--infer` |
@@ -923,7 +925,7 @@ an edge per foreign key (0.0.16). See
 [Schemas](cli.md#schemas-json-schema-sql-ddl-and-arrow-0016).
 
 <div class="tape-player" data-cast="../media/tapes/schema/schema.cast" data-poster="npt:0:4">
-  <img src="../media/tapes/schema/schema.gif" alt="rich schema drawing shop.sql as a tree of tables, then as an ER diagram">
+  <img src="media/tapes/schema/schema.gif" alt="rich schema drawing shop.sql as a tree of tables, then as an ER diagram">
 </div>
 
 | Tree | `--er` |
@@ -940,7 +942,7 @@ and a count at the end (0.0.16). See
 [Merge conflicts](cli.md#merge-conflicts).
 
 <div class="tape-player" data-cast="../media/tapes/conflicts/conflicts.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/conflicts/conflicts.gif" alt="rich diff --conflicts merge.rs showing two conflicts">
+  <img src="media/tapes/conflicts/conflicts.gif" alt="rich diff --conflicts merge.rs showing two conflicts">
 </div>
 
 ![rich diff --conflicts merge.rs](media/tapes/conflicts/conflicts.png)
@@ -954,7 +956,7 @@ code block; `--dot-backend off` leaves it as code, as upstream renders it.
 See [the diagrams guide](guide/diagram/index.md).
 
 <div class="tape-player" data-cast="../media/tapes/dot-fence/dot-fence.cast" data-poster="npt:0:3">
-  <img src="../media/tapes/dot-fence/dot-fence.gif" alt="A Markdown document with a DOT fence, drawn and then left as code">
+  <img src="media/tapes/dot-fence/dot-fence.gif" alt="A Markdown document with a DOT fence, drawn and then left as code">
 </div>
 
 | Drawn | `--dot-backend off` |
@@ -972,7 +974,7 @@ terminal draws the image itself in the same cells. See
 [the built-in library](guide/micro/library.md) for the images.
 
 <div class="tape-player" data-cast="../media/tapes/micro-modes/micro-modes.cast" data-poster="npt:0:6">
-  <img src="../media/tapes/micro-modes/micro-modes.gif" alt="The same line with emoji and half-blocks, then fun/heart previewed">
+  <img src="media/tapes/micro-modes/micro-modes.gif" alt="The same line with emoji and half-blocks, then fun/heart previewed">
 </div>
 
 [Tape](tapes/micro-modes.tape) · [Cast](media/tapes/micro-modes/micro-modes.cast) · [GIF](media/tapes/micro-modes/micro-modes.gif) · [Page](media/tapes/micro-modes/micro-modes.html)
@@ -981,7 +983,7 @@ Making an asset: a 128×128 PNG previewed through the pipeline, written
 into the user layer with `rich micro create --add`, listed and used.
 
 <div class="tape-player" data-cast="../media/tapes/micro-create/micro-create.cast" data-poster="npt:0:5">
-  <img src="../media/tapes/micro-create/micro-create.gif" alt="rich micro create making team/rocket from a PNG">
+  <img src="media/tapes/micro-create/micro-create.gif" alt="rich micro create making team/rocket from a PNG">
 </div>
 
 | Through the pipeline | Added and used |
@@ -1001,7 +1003,7 @@ kitty and iTerm2 set.
 `:micro:` codes in `--print --emoji` text.
 
 <div class="tape-player" data-cast="../media/tapes/micro/micro.cast" data-poster="npt:0:4">
-  <img src="../media/tapes/micro/micro.gif" alt="rich micro list, preview and markup">
+  <img src="media/tapes/micro/micro.gif" alt="rich micro list, preview and markup">
 </div>
 
 | List | Preview | In text |
@@ -1015,7 +1017,7 @@ status bar, an icon on the first crumb and before each of the command
 palette's categories, then `rich explore --icons`.
 
 <div class="tape-player" data-cast="../media/tapes/micro-chrome/micro-chrome.cast" data-poster="npt:0:4">
-  <img src="../media/tapes/micro-chrome/micro-chrome.gif" alt="Micro assets in the status bar, breadcrumbs, rows and command palette">
+  <img src="media/tapes/micro-chrome/micro-chrome.gif" alt="Micro assets in the status bar, breadcrumbs, rows and command palette">
 </div>
 
 | Chrome | Palette | Explorer |

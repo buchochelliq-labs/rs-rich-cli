@@ -1,0 +1,36 @@
+ NOCTILUCA   PROJECTION + CELLS   ◀ ▶ ↻
+
+      ╭─ About Noctiluca ────────────────────────────────────────────────────────────────────────────────────────╮
+      │Noctiluca 0.0.3                                                                                          ┃│
+   _  │Browser: (replayed)
+  | \ │                                                                                                         ┃│
+  |  \│Terminal adaptations (active rules):                                                                     ┃│
+  | |\│ on  decorative-images    drop spacers, tracking pixels and icons marked decorative                      ┃│
+  |_| │ on  inline-pictures      keep small pictures (emotes, badges, icons) in their line                      ┃│
+  ~-..│ on  cap-pictures         cap picture heights; what is under them moves up                               ┃│
+  a we│ on  captions             an Image: line under a picture with alt text and no caption                    ┃│
+      │ on  icon-buttons         show buttons, icon-only ones too, as [ label ] from their name                 ┃│
+      │ on  snap-grids           snap grids to the width, columns from the cells there are                      ┃│
+      │ on  collapse-nav         collapse navigation and sidebars to a row on narrow terminals                  ┃│
+      │ on  collapse-gaps        collapse rows blank across the page to one blank row                           ┃│
+      │ off text-over-pictures   draw a picture of text as its text (changes meaning: off)                      ┃│
+      │ on  live-tail            live logs show their newest entries unless scrolled up                         ┃│
+      │ on  page-colors          keep saturated text colours, readable; greys follow the terminal               ┃│
+      │ on  bandwidth            lower frame rate and tier when the terminal is short of bandwidth              ┃│
+      │                                                                                                         ┃│
+  o op│Codecs: what this browser says it can play (canPlayType). DRM playback is never tried.                   ┃│
+      │ H.264 (MP4)    no              video/mp4; codecs="avc1.42E01E"                                          ┃│
+  Book│ H.265 (MP4)    no              video/mp4; codecs="hev1.1.6.L93.B0"                                      ┃│
+  › Ti│ AV1 (MP4)      no              video/mp4; codecs="av01.0.05M.08"                                        ┃│
+    A │ VP8 (WebM)     no              video/webm; codecs="vp8"                                                 ┃│
+      │ VP9 (WebM)     no              video/webm; codecs="vp9"                                                 ┃│
+      │ AV1 (WebM)     no              video/webm; codecs="av01.0.05M.08"                                       ┃│
+      │ Theora (Ogg)   no              video/ogg; codecs="theora"                                               ┃│
+      │ AAC (MP4)      no              audio/mp4; codecs="mp4a.40.2"                                            ┃│
+      │ MP3            no              audio/mpeg                                                               ││
+      │ Opus (WebM)    no              audio/webm; codecs="opus"                                                ││
+      │ Opus (Ogg)     no              audio/ogg; codecs="opus"                                                 ││
+      │ Vorbis (Ogg)   no              audio/ogg; codecs="vorbis"                                               ││
+      ╰──────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+ projection | row 1/1
+ f1 actions | f hints | o open | r reader | q quit

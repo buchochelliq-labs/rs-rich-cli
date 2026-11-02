@@ -35,8 +35,10 @@ crates/rich-art/examples/assets/waving_cat.gif
 
 # Terminal screenshot harness (scripts/terminal_shots)
 node_modules/
-# The versioned build writes this beside mkdocs.yml while it runs
+# The versioned build writes these beside mkdocs.yml while it runs
 .mkdocs-versioned.yml
+.mkdocs-python-versioned.yml
+/.versioned-site/
 
 # The docs playground's modules: built by playground/build.sh (and CI), never committed.
 /docs/assets/playground/
