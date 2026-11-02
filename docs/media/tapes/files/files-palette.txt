@@ -16,7 +16,7 @@
             │       │  mgr Move cursor down half page        ctrl+d/shift+pgdn │
             │       │  mgr Move cursor up one page                 ctrl+b/pgup │
             │       │  mgr Move cursor down one page               ctrl+f/pgdn │
-            │       │  94/94 · ↑↓ move · enter run · esc close                 │
+            │       │  98 · ↑↓ move · enter run · esc close                    │
             │       ╰──────────────────────────────────────────────────────────╯
             │                                                 │
             │                                                 │
