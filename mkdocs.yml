@@ -226,6 +226,7 @@ nav:
       - Troubleshooting and FAQ: guide/noctiluca/troubleshooting.md
       - "What works today and what's next": guide/noctiluca/status.md
       - Noctiluca on real sites: guide/noctiluca/real-sites.md
+  - Cornacai: guide/cornacai.md
   - Gallery: gallery.md
   - Terminal recordings: recordings.md
   - CLI and art videos: demos.md

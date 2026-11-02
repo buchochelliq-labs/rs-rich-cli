@@ -30,6 +30,18 @@ rules are in [the demo gaps](intuituive-demo-gaps.md).
   `match_brackets`/`EditorTheme` left. Also left: `list_of_virtual` (#811's
   variant on `scroll_virtual`), the key panel's help sections (#813), and
   #815's Windows named pipe.
+- **Wave 3a** (branch `024-w3a`, backup
+  `claude/next-priority-items-3c5p8e-wip-w3a`): Cornacai (#794) phase 3
+  and most of phase 4. The new `cornacai` crate (binary and library):
+  sessions as tabs on one connection, streamed Markdown that follows the
+  end, folded tool-call cards, permission prompts, writes reviewed as a
+  diff hunk by hunk, commands asked about, `@` mentions as resource
+  links, the shell pane on `PtyHost`, the guide page and a checked tape
+  over a fake agent. rs-rich-acp's `replay` (the fake agent) is public;
+  intuiTUIve core is unchanged. Left: the marketplace's `agent` kind (not
+  a small change: a kind with no artifact, `requires.acp`, the schema,
+  validator, client and CLI), resume and a session store, agent terminals
+  on a PTY, "send to the agent" from the shell.
 
 ## Where things stood (2026-11-01)
 

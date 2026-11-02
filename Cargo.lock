@@ -688,6 +688,18 @@ dependencies = [
 ]
 
 [[package]]
+name = "cornacai"
+version = "0.0.1"
+dependencies = [
+ "rs-rich-acp",
+ "rs-rich-embed",
+ "rs-rich-ext",
+ "rs-rich-intuituive",
+ "serde_json",
+ "toml",
+]
+
+[[package]]
 name = "cpal"
 version = "0.18.2"
 source = "registry+https://github.com/rust-lang/crates.io-index"

@@ -831,6 +831,24 @@ its header says how. So are the tapes beside it that open real sites
 [Noctiluca on real sites](guide/noctiluca/real-sites.md). All of them are on
 [Noctiluca's guide pages](guide/noctiluca.md).
 
+## Cornacai, a client for coding agents
+
+Cornacai (0.0.24) against a fake agent, rs-rich-acp's replay of a recorded
+conversation: an `@` file mention completed from the workspace, a plan and
+an answer streaming in as Markdown, the agent's edit reviewed as a diff and
+accepted, a permission prompt for a command, and the finished turn. See
+[Cornacai's guide](guide/cornacai.md).
+
+<div class="tape-player" data-cast="../media/tapes/cornacai/cornacai.cast" data-poster="npt:0:3">
+  <img src="media/tapes/cornacai/cornacai.gif" alt="Cornacai: a prompt with a file mention, a streamed answer, an edit reviewed as a diff, a permission prompt and the finished turn">
+</div>
+
+| An `@` mention | An edit to review | A permission prompt | Done |
+|---|---|---|---|
+| ![The prompt completing @src/main.rs](media/tapes/cornacai/mention.png) | ![The agent's edit as a diff](media/tapes/cornacai/review.png) | ![The agent asking to run cargo test](media/tapes/cornacai/permission.png) | ![The finished turn](media/tapes/cornacai/done.png) |
+
+[Tape](tapes/cornacai.tape) · [Cast](media/tapes/cornacai/cornacai.cast) · [GIF](media/tapes/cornacai/cornacai.gif) · [Page](media/tapes/cornacai/cornacai.html)
+
 ## Charts from data
 
 `rich chart` draws CSV, JSON or numbers piped in: bars labelled by a

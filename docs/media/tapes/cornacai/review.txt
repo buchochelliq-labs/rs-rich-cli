@@ -1,0 +1,34 @@
+ 1 Greeting by name …   · demo-agent 1.0
+
+❯ Greet by name in @src/main.rs please
+  wit╭─ Review the edit ───────────────────────────────────────────────────────────────────────────────╮
+     │ The agent wants to change src/main.rs · Greeting by name                                        │
+▸ Thi│  @@ -2 +2,2 @@                                                                                  │
+  The│  1 1   fn main() {                                                                              │
+     │  2   -     println!("Hello");                                                                   │
+The c│    2 +     let name = std::env::args().nth(1).unwrap_or("world".into());                        │
+     │    3 +     println!("Hello, {name}!");                                                          │
+main │  3 4   }                                                                                        │
+     │                                                                                                 │
+     │                                                                                                 │
+ let │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+▸ edi│                                                                                                 │     ⠋
+  dif│                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+     │                                                                                                 │
+Plan │                                                                                                 │
+ ✓ Re│ 1 hunks · 0 of 1 decided                                                                        │
+ ▸ Ta│ n/p next or previous hunk · a/r accept or reject it · A/R all of them · y write what is         │
+ ○ Ru│ accepted · x or Esc reject the write                                                            │
+╭─ th╰─────────────────────────────────────────────────────────────────────────────────────────────────╯─────╮
+│Ask the agent…  @ names a file                                                                              │
+╰────────────────────────────────────────────────────────────────────────────────────────────────────────────╯
+Enter send · Alt+Enter line · @ file · Esc cancel · Ctrl+N new · Alt+N/P switch · Ctrl+T shell · F2 log ·

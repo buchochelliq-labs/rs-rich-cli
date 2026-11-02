@@ -1,0 +1,12 @@
+{"note": "A permission prompt answered: the agent asks before an edit; the user chooses the second option, Always."}
+{"client": {"id": 0, "method": "initialize"}}
+{"agent": {"jsonrpc": "2.0", "id": 0, "result": {"protocolVersion": 1, "agentInfo": {"name": "replay-agent", "version": "0.1"}}}}
+{"client": {"id": 1, "method": "session/new"}}
+{"agent": {"jsonrpc": "2.0", "id": 1, "result": {"sessionId": "sess_p"}}}
+{"client": {"id": 2, "method": "session/prompt", "params": {"sessionId": "sess_p", "prompt": [{"type": "text", "text": "Fix the config"}]}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_p", "update": {"sessionUpdate": "tool_call", "toolCallId": "call_1", "title": "Editing config.json", "kind": "edit", "status": "pending", "locations": [{"path": "$WORKSPACE/config.json", "line": 3}]}}}}
+{"agent": {"jsonrpc": "2.0", "id": "perm-1", "method": "session/request_permission", "params": {"sessionId": "sess_p", "toolCall": {"toolCallId": "call_1", "title": "Editing config.json", "kind": "edit"}, "options": [{"optionId": "allow-once", "name": "Allow once", "kind": "allow_once"}, {"optionId": "allow-always", "name": "Always allow edits", "kind": "allow_always"}, {"optionId": "reject-once", "name": "Reject", "kind": "reject_once"}]}}}
+{"client": {"jsonrpc": "2.0", "id": "perm-1", "result": {"outcome": {"outcome": "selected", "optionId": "allow-always"}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_p", "update": {"sessionUpdate": "tool_call_update", "toolCallId": "call_1", "status": "completed", "content": [{"type": "content", "content": {"type": "text", "text": "Set debug to true."}}]}}}}
+{"agent": {"jsonrpc": "2.0", "method": "session/update", "params": {"sessionId": "sess_p", "update": {"sessionUpdate": "agent_message_chunk", "content": {"type": "text", "text": "The config is fixed."}}}}}
+{"agent": {"jsonrpc": "2.0", "id": 2, "result": {"stopReason": "end_turn"}}}

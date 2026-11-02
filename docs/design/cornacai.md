@@ -1,7 +1,9 @@
 # Cornacai: a terminal client for coding agents
 
-Status: proposal, with phase 2 (`rs-rich-acp`) on branch `024-ws1`.
-Written 1 November 2026. Tracking issue:
+Status: phases 1 and 2 merged (wave 1); phase 3 and most of phase 4 in
+the `cornacai` crate (wave 3, branch `024-w3a`): the marketplace's `agent`
+kind, resume and agent terminals on a PTY are left. Written 1 November
+2026. Tracking issue:
 [#794](https://github.com/buchochelliq-labs/rs-rich-cli/issues/794).
 
 **Cornacai** (kor-NAH-kai: Portuguese *cornaca*, the elephant's rider and

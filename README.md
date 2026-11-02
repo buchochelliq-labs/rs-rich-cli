@@ -116,6 +116,7 @@ in the release notes; the crates.io links show available packages.
 | [`rs-rich-marketplace`](https://crates.io/crates/rs-rich-marketplace) | `0.0.3` |
 | [`rs-rich-acp`](https://crates.io/crates/rs-rich-acp) | `0.0.1` |
 | [`noctiluca`](https://crates.io/crates/noctiluca) | `0.0.3` |
+| [`cornacai`](https://crates.io/crates/cornacai) | `0.0.1` |
 <!-- END MANIFEST VERSIONS -->
 
 | | Package | Role | Import / installed name |
@@ -140,6 +141,7 @@ in the release notes; the crates.io links show available packages.
 | <img src="docs/assets/intuituive/mascot/crates/rs-rich-marketplace.svg" width="56" alt=""> | `rs-rich-marketplace` | the plugin marketplace client: a minisign-signed index and its key chain, listings, version resolution, verified installs and the lockfile | `use rich_marketplace` |
 | | `rs-rich-acp` | a client for the Agent Client Protocol: drive coding agents over JSON-RPC on stdio, with typed messages, permission requests and file and terminal capabilities sandboxed to the workspace (Cornacai's protocol layer) | `use rich_acp` |
 | <img src="docs/assets/noctiluca/lanternfish-hero.svg" width="56" alt=""> | `noctiluca` | a terminal web browser on intuiTUIve and rs-rich-embed's Chrome engine: page text as terminal text, controls as widgets, images as media regions | the `noctiluca` binary; `use noctiluca` |
+| | `cornacai` | a terminal client for coding agents over the Agent Client Protocol (kor-NAH-kai: Portuguese *cornaca*, the elephant's rider, plus "AI"): streamed answers, permission prompts, edits reviewed as diffs, a shell pane | the `cornacai` binary; `use cornacai` |
 | <img src="docs/assets/intuituive/mascot/crates/rs-rich-py.svg" width="56" alt=""> | `rs-rich` (PyPI) | Python bindings: Rich's API over the Rust core, plus the port's crates (`rs_rich.ext`, `rs_rich.chart`, `rs_rich.diagram`, `rs_rich.interact`, `rs_rich.tui`, ...) | `import rs_rich` |
 
 The published package names carry an `rs-` prefix because `rich` is already taken

@@ -342,6 +342,45 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   fake agent; `examples/agent.rs` drives a real agent named by
   `RICH_ACP_AGENT` and skips otherwise.
 
+### Cornacai, the app (#794, phases 3 and 4)
+
+- **cornacai 0.0.1 (new crate, the `cornacai` binary and its library):** a
+  terminal client for coding agents over ACP, on rs-rich-acp, intuiTUIve
+  and rs-rich-embed, written clean-room. One connection to the agent, its
+  sessions as tabs (Ctrl+N opens one, Alt+N/Alt+P or Alt+1…9 switch). Each
+  conversation streams in as Markdown (intuiTUIve's `markdown` node, #797)
+  and follows its end until the reader scrolls up (`follow_end`, #798);
+  thoughts and tool calls are folded cards whose title and status follow
+  their updates (`collapsible_with`, #804); the plan is shown whole; the
+  agent's `session_info_update` titles the tab. The prompt editor (#800)
+  completes `@` file mentions over the workspace (`files::path_completer`)
+  and sends each as a `resource_link`. Permission prompts show the
+  operation, its files and command in full, mark the agent's own words, and
+  offer one button per option (1–9; Esc rejects once). Every
+  `fs/write_text_file` is reviewed as a diff (`widgets::diff_view_with`,
+  #799), hunk by hunk: what is accepted is written, a write rejected whole
+  is refused, and files that control execution are flagged. Each
+  `terminal/create` is asked about, then runs on rs-rich-acp's `Terminals`;
+  its output shows in its card. Ctrl+T opens a shell pane (rs-rich-embed's
+  `LocalPty`), the user's own: nothing typed there reaches the agent. F2
+  shows the agent's log. Agent text is untrusted: control characters are
+  neutralised and hidden characters revealed. The first run picks a known
+  agent on `PATH` and saves it in `cornacai/config.toml`. Tests drive the
+  app on intuiTUIve's `Driver` against transcripts: a streamed reply, a
+  permission prompt answered, edits accepted, rejected and decided hunk by
+  hunk, a command asked about, an `@` mention, a session switch and the
+  shell pane. A `fake-agent` feature lets the binary replay a transcript
+  (the docs tape). [The guide](docs/guide/cornacai.md).
+- **rs-rich-acp: `replay`, the fake agent, is public:** `Transcript`
+  (`parse`, `read`, `var` for `$WORKSPACE`-style placeholders), `connect`
+  and `connect_with` (a step timeout, or none for a person typing),
+  `FakeAgent::finish` with a `ReplayError`, and `matches`. The crate's own
+  tests run on it.
+- **Not yet:** the marketplace's `agent` kind (a new listing kind with no
+  artifact, a `requires.acp` and the launch command: schema, validator,
+  client and CLI changes), resume (`session/load`) and a session store,
+  agent terminals on a PTY, and "send to the agent" from the shell pane.
+
 ### Animated banners and Noctiluca's start page
 
 - **rs-rich-art:** `animate::AnimatedBanner`, FIGlet text with an effect
