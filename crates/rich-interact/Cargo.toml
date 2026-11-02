@@ -49,6 +49,10 @@ vim = []
 termion = ["dep:termion"]
 # The termwiz backend (#678): `BackendKind::Termwiz`, on Unix and Windows.
 termwiz = ["dep:termwiz"]
+# `host`: a client for the terminal's own API (#820): open a split, send
+# text to a pane, focus one; over terminal-browser's socket protocol, or
+# tmux, kitty, WezTerm and zellij. Off by default.
+host = ["dep:serde_json"]
 
 [[example]]
 name = "explore"
@@ -67,6 +71,10 @@ name = "explore"
 required-features = ["data"]
 
 [[test]]
+name = "host"
+required-features = ["host"]
+
+[[test]]
 name = "explore_scale"
 required-features = ["data"]
 
@@ -82,6 +90,8 @@ rich-micro = { workspace = true, optional = true }
 # The termwiz backend (MIT), off by default: wezterm's terminal layer, with
 # its own input parser and capability probe.
 termwiz = { version = "0.23", optional = true }
+# `host`: the terminal socket protocol's JSON messages.
+serde_json = { workspace = true, optional = true }
 
 [target.'cfg(not(target_arch = "wasm32"))'.dependencies]
 # Raw mode, the alternate screen, and key and mouse events on every platform.
@@ -116,6 +126,8 @@ libc = "0.2"
 windows-sys = { version = "0.61", features = ["Win32_Foundation", "Win32_System_Time"] }
 
 [dev-dependencies]
+# The terminal host tests' fake terminal speaks JSON.
+serde_json.workspace = true
 # Every format the data explorer reads, in its tests.
 rich-ext = { workspace = true, features = ["data", "yaml", "toml", "xml"] }
 # Plugin-registered actions (#491), in tests.

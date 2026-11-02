@@ -938,6 +938,11 @@ listed as unavailable, with the reason.
   punycode for confusable names.
 - Downloads always ask first and never run.
 - Password fields: their value is never read and shows as a fixed mask.
+- `--ssh HOST` (#817) keeps Chrome and the profile here and sends its
+  requests through an `ssh -D` tunnel on `127.0.0.1` only; Chrome resolves
+  no name itself and sends nothing past the tunnel (loopback, WebRTC and
+  QUIC included). The threat model has what it means for other local
+  users.
 
 ## What is reused and what is new
 

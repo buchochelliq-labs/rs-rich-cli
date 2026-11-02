@@ -347,13 +347,16 @@ link goes where); the DevTools channel, which controls the whole browser.
 - Noctiluca and the user's terminal;
 - other local processes and users and the DevTools endpoint;
 - (planned) an agent or script and the control socket of
-  [#816](https://github.com/buchochelliq-labs/rs-rich-cli/issues/816).
+  [#816](https://github.com/buchochelliq-labs/rs-rich-cli/issues/816);
+- with `--ssh HOST`: this machine and the SSH server, which carries every
+  request; and other local users and the tunnel's loopback port.
 
 **Entry points:** DOM snapshots and accessibility trees; titles, URLs, link
 targets, alt text, option labels, dialog text, download names; the
 bookmarks file; DevTools events (`Runtime.bindingCalled`,
 `Browser.downloadWillBegin`); the address bar; Chrome's switches; `--chrome`
-and `RICH_EMBED_CHROME`.
+and `RICH_EMBED_CHROME`; `--ssh HOST`, `--ssh-arg` and what ssh writes on
+standard error.
 
 | | Threat | Mitigation | State |
 |---|---|---|---|
@@ -367,6 +370,12 @@ and `RICH_EMBED_CHROME`.
 | I | Password fields reach the screen, the model or `--dump` | Never read; shown as a fixed mask; the change-watcher leaves them out | documented |
 | E | A page navigates to `file://` or `chrome://` | Links are followed by clicking them in the page, so Chrome's own rules apply; only the user's address bar and bookmarks call `Page.navigate` directly | verified (link path), unverified (Chrome's behaviour for every scheme) |
 | I | Noctiluca phones home | No telemetry, update check or account; searches go to the configured engine | documented |
+| E | `--ssh`'s host is read as an ssh option (`-oProxyCommand=…` runs a command) | A host starting with `-`, or with spaces or control characters, is refused; the host goes after `--`; the user's own options only through `--ssh-arg` ([`ssh.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/noctiluca/src/ssh.rs), `check_host`) | verified |
+| I | `--ssh`'s tunnel is reachable from the network | `-D 127.0.0.1:PORT`: loopback only, whatever `GatewayPorts` says; nothing listens on any other address | verified (arguments) |
+| S, I | Another local user's program takes the tunnel's port first and sees every request | `ExitOnForwardFailure=yes`, so ssh fails rather than run without the port; ready only once the port answers SOCKS5 while ssh lives; on Linux the listener's owner in `/proc/net/tcp` must be this user, or Chrome is not started (`listener_uid`) | verified (Linux) |
+| I | Requests leave this machine directly despite `--ssh` (DNS, WebRTC, QUIC, loopback) | Chrome's resolver maps every name to "not found" but the proxy's own address, so names go to the far side (SOCKS5 remote DNS); `<-loopback>` sends loopback through the proxy; WebRTC only over the proxy (`disable_non_proxied_udp`); QUIC off (`chrome_switches`) | verified (switches), unverified (Chrome's behaviour: the live test needs Chrome) |
+| T | ssh's messages corrupt the screen, or carry escapes | ssh's standard error is read on a thread, kept (eight lines) and cleaned (`clean`) before the status bar shows one; prompts go to `/dev/tty` before the browser takes the screen; a reconnect never prompts (`BatchMode=yes`) | verified |
+| D | A killed Noctiluca leaves the tunnel running | The tunnel is a child, killed when the `Tunnel` drops; on Linux `PR_SET_PDEATHSIG` stops it if Noctiluca dies | verified (drop), documented (death signal) |
 
 **Gaps:**
 
@@ -392,13 +401,54 @@ and `RICH_EMBED_CHROME`.
     with a kept profile unless the user says so;
   - every action recorded somewhere the user can read (repudiation).
   **planned**.
-- **The SGR-Pixels mouse (#819) and terminal hosts' APIs (#820):** new
-  input parsers (fuzz them) and, for #820, a client that talks to the
-  terminal's own control channel (kitty's or WezTerm's remote control, for
-  example), which can run commands in the terminal. It should use only the
-  verbs it needs, and only on the user's own terminal. **planned**.
-- **`--ssh HOST` (#817):** where Chrome and the profile live, and what
-  crosses the connection. **planned**.
+- **The SGR-Pixels mouse (#819):** no new parser. A report in pixels has
+  the same shape as one in cells (`CSI < b ; x ; y M`), so crossterm's,
+  termion's and termwiz's own SGR parsers read it; the session divides it
+  back into cells by the cell size the kernel's window size gives
+  (never by 0: no size, no pixel mode) and clamps what overflows. The one
+  new answer, DECRQM's for mode 1016, goes through the start-up query's
+  existing reader. A page sees only where it was clicked, inside the box
+  clicked (`ClickAt`, kept inside the element's border box), which a
+  click at the cell's centre already told it. **verified** (PTY tests).
+- **Terminal hosts' APIs (#820):** `rich_interact::host` talks to the
+  terminal's own control channel (terminal-browser's socket, tmux, kitty's
+  or WezTerm's remote control, zellij), which can run commands and type
+  into panes. What holds:
+  - **Commands are words:** every adapter runs its program with an
+    argument list, never `sh -c`; tmux, which hands a pane's command to a
+    shell, gets each word single-quoted (`shell_quote`, tested against
+    `sh` with `$(…)`, `;` and quotes). **verified**.
+  - **Only methods the terminal lists** in `hello` are sent; the rest fail
+    before anything is written. **verified** (a fake socket server).
+  - **Only this user's socket:** a path that is not a socket, or is
+    another user's, is refused; a reply is read up to 1 MB with a 5 s
+    timeout, and parsed by serde_json (no fuzz target of its own).
+    **verified**.
+  - **Who calls it:** Noctiluca only for `--split`, which runs its own
+    binary with the user's own command line. `send_text` is for #816's
+    "send to agent", and must stay a user's action, never driven by page
+    text. **to review with #816**.
+  - **`TERMINAL_BROWSER_TERMINAL_SOCKET` and `TMUX` come from the
+    environment:** whoever sets them already runs as the user.
+    **accepted**.
+- **`--ssh HOST` (#817):** Chrome and the profile stay on this machine;
+  the SSH server carries every request and resolves every name, as a
+  network would (HTTPS stays end to end; plain HTTP is readable there).
+  Gaps that remain:
+  - **Other local users can use the tunnel** while it runs: `ssh -D`
+    takes SOCKS5 with no authentication, and Chrome cannot speak SOCKS5's
+    password method, so a user of this machine who finds the port reaches
+    the remote's network as you. Documented in the guide (on a shared
+    machine, run Noctiluca on the remote instead). The fix is a relay of
+    Noctiluca's own on the port that checks each connection's owner (in
+    `/proc/net/tcp` on Linux) and forwards over ssh's control socket
+    (`-W`). **gap** (medium, shared machines only).
+  - **A kept profile mixes the two `localhost`s:** `--profile` with and
+    without `--ssh` shares one site's cookies and storage between this
+    machine's `localhost` and the remote's. Warned on start and
+    documented. **accepted**.
+  - **macOS and Windows** have no listener-owner check (no
+    `/proc/net/tcp`), and no death signal for ssh. **gap** (low).
 - **Bot checks:** the `Runtime` domain is visible to pages; accepted and
   documented, not a security gap.
 
@@ -612,8 +662,14 @@ says, not in a public issue.
 - [ ] Navigation to `file://`, `chrome://` and `javascript:` from a page.
 - [ ] The control socket (#816), `--read-only`, and prompt injection
       through page text, once it lands.
-- [ ] The terminal hosts' API client (#820) and the pixel mouse parser
-      (#819), once they land.
+- [ ] `--ssh`: the host never read as an option, the tunnel on loopback
+      only, the port's owner checked, no direct DNS, WebRTC or QUIC (the
+      live test with Chrome), and the shared-machine gap.
+- [ ] The terminal hosts' API client (#820): commands as words, tmux's
+      quoting, methods only from `hello`, the socket's owner, and that
+      `send_text` stays a user's action.
+- [ ] The pixel mouse (#819): pixel mode only with a known cell size, and
+      `RICH_PIXEL_MOUSE=0` turns it off.
 
 ### The embed PTY host
 

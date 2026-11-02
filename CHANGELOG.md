@@ -253,6 +253,44 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   Python's report next to ours; DIVERGENCES §19 says what differs (no
   runtime reflection, no `dunder`, methods only from a marked `impl`).
 
+### Noctiluca's larger features (wave 2, WS6 part 1)
+
+- **The mouse to the pixel (#819):** a terminal that knows SGR-Pixels
+  (mode 1016) reports the mouse in pixels. rs-rich-interact asks for it in
+  the start-up query (DECRQM), turns it on after 1006 when the terminal
+  knows it and the window size gives the cells' size in pixels, and reads
+  each report back into cells: `Mouse::pixel` (a `Subcell`) says where in
+  the cell the pointer was, `Mouse::precise` gives fractional cells (the
+  cell's centre without pixels), `Mouse::from_pixels` builds one, and
+  `RICH_PIXEL_MOUSE=0` turns it off. intuiTUIve passes it to nodes as it
+  is (it is relative to the cell, so it survives every move into a node's
+  coordinates) and adds `Driver::click_pixel`. Noctiluca sends a click on
+  a picture, a canvas, a drawing or a frame to the page at that point of
+  it (`PageAction::ClickAt`, `Command::ClickAt`), to the pixel where the
+  terminal reports pixels and at the cell's centre elsewhere.
+- **Noctiluca's `--ssh HOST` (#817):** Chrome runs here and every request
+  goes through HOST, so the remote's `localhost` opens as if it were
+  local. Noctiluca runs `ssh -N -D 127.0.0.1:PORT -- HOST` (loopback only,
+  `ExitOnForwardFailure`, keep-alives; `--ssh-arg` passes the user's own
+  options, and `~/.ssh/config` applies), waits for the SOCKS port (and on
+  Linux checks it is the user's own), and gives Chrome a SOCKS5 proxy with
+  names resolved on the far side, loopback through the proxy, and no
+  direct WebRTC or QUIC. The status bar says `via ssh HOST`; a dropped
+  tunnel says so and reconnects without prompting, at once on reload.
+  Errors are one line: no ssh, a refused login, a port taken. The new
+  guide page "Over SSH" says when to use it and when to run Noctiluca on
+  the remote; the threat model has its rows and its gaps.
+- **A terminal host client (#820):** rs-rich-interact's new, off-by-default
+  `host` feature has `rich_interact::host`: a `TerminalHost` that opens a
+  split beside the program, lists panes, finds a neighbour, types into a
+  pane and moves the focus. `SocketHost` speaks terminal-browser's socket
+  protocol (JSON lines, `hello` first, only the methods it lists);
+  `Tmux`, `WezTerm`, `Kitty` and `Zellij` adapt the terminals that do not;
+  `detect` picks one from the environment. Commands are passed as words
+  (tmux's quoted for its shell). Noctiluca's `--split DIR` opens the same
+  command line in a new pane beside this one and returns. Tested against a
+  fake socket server and a real tmux server.
+
 ## 0.0.23 cohort — published 2026-10-27
 
 Published on 2026-10-27 from `2624ce5` by one `release.yml` run (tag

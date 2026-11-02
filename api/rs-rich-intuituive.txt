@@ -351,6 +351,7 @@ pub fn intuituive::app::Driver::assert_focused(&self, &str)
 pub fn intuituive::app::Driver::button(&mut self, rich_interact::event::Button, u16, u16)
 pub fn intuituive::app::Driver::check_focused(&self, &str) -> core::result::Result<(), alloc::string::String>
 pub fn intuituive::app::Driver::click(&mut self, u16, u16)
+pub fn intuituive::app::Driver::click_pixel(&mut self, u32, u32, (u16, u16))
 pub fn intuituive::app::Driver::click_text(&mut self, &str) -> bool
 pub fn intuituive::app::Driver::copied(&mut self, &str)
 pub fn intuituive::app::Driver::cursor(&self) -> core::option::Option<(u16, u16)>
@@ -7744,6 +7745,7 @@ pub fn intuituive::app::Driver::assert_focused(&self, &str)
 pub fn intuituive::app::Driver::button(&mut self, rich_interact::event::Button, u16, u16)
 pub fn intuituive::app::Driver::check_focused(&self, &str) -> core::result::Result<(), alloc::string::String>
 pub fn intuituive::app::Driver::click(&mut self, u16, u16)
+pub fn intuituive::app::Driver::click_pixel(&mut self, u32, u32, (u16, u16))
 pub fn intuituive::app::Driver::click_text(&mut self, &str) -> bool
 pub fn intuituive::app::Driver::copied(&mut self, &str)
 pub fn intuituive::app::Driver::cursor(&self) -> core::option::Option<(u16, u16)>

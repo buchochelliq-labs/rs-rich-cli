@@ -6956,6 +6956,47 @@ impl Driver {
         self.settle();
     }
 
+    /// Click the left button at pixel `x`, `y` of the screen (0-based) in
+    /// cells of `cell` pixels (width, height), as a terminal reporting the
+    /// mouse in pixels (SGR-Pixels, mode 1016) sends it, then
+    /// [`settle`](Self::settle): each event's column and row are the cell
+    /// the pixel is in, and its [`pixel`](rich_interact::Mouse::pixel)
+    /// where in that cell (#819). Nothing for a cell size of 0.
+    ///
+    /// ```
+    /// use intuituive::prelude::*;
+    ///
+    /// let app = App::new(|| {
+    ///     let at = signal(String::new());
+    ///     column([
+    ///         label("here").on_mouse(move |_, mouse| {
+    ///             let (x, y) = mouse.precise();
+    ///             at.set(format!("{x:.2} {y:.2}"));
+    ///             true
+    ///         }),
+    ///         text!("{at}"),
+    ///     ])
+    /// });
+    /// let mut driver = app.driver(10, 2);
+    /// // Cells of 10 by 20 pixels: pixel (25, 5) is a quarter of the way
+    /// // down column 2 of row 0.
+    /// driver.click_pixel(25, 5, (10, 20));
+    /// assert_eq!(driver.screen().plain()[1].trim_end(), "2.50 0.25");
+    /// ```
+    pub fn click_pixel(&mut self, x: u32, y: u32, cell: (u16, u16)) {
+        self.settle();
+        for kind in [MouseKind::Down(Button::Left), MouseKind::Up(Button::Left)] {
+            if self.done {
+                return;
+            }
+            let Some(mouse) = rich_interact::Mouse::from_pixels(kind, x, y, cell) else {
+                return;
+            };
+            self.event(Event::Mouse(mouse));
+        }
+        self.settle();
+    }
+
     /// Click the first cell of the first place `text` shows on the screen
     /// (reading rows top to bottom), then [`settle`](Self::settle).
     /// Whether it was found.

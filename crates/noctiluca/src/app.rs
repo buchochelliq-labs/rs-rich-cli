@@ -62,6 +62,9 @@ pub struct Options {
     pub view: Option<View>,
     /// How images show; else the config's.
     pub images: Option<Images>,
+    /// `--ssh HOST`'s tunnel, which the app watches and reconnects: the
+    /// status bar says when it drops ([`crate::ssh`]).
+    pub tunnel: Option<crate::ssh::TunnelLink>,
 }
 
 /// The app's state, all of it in signals so it can be copied into every
@@ -126,6 +129,11 @@ pub struct Browser {
     /// Whether the start page shows: started with no address, until the
     /// first page is opened ([`crate::start`]).
     pub start: Signal<bool>,
+    /// What the status bar says about `--ssh`'s tunnel, as markup; `None`
+    /// without one.
+    pub tunnel: Signal<Option<String>>,
+    /// Reconnect a dropped tunnel now, not after its wait (reload asks).
+    tunnel_now: Signal<bool>,
 }
 
 impl Browser {
@@ -470,7 +478,11 @@ pub fn run(b: Browser, id: &str, cx: &mut Ctx) {
         "hints" => start_hints(b),
         "back" => drop(b.send(Command::History(HistoryStep::Back))),
         "forward" => drop(b.send(Command::History(HistoryStep::Forward))),
-        "reload" => drop(b.send(Command::History(HistoryStep::Reload))),
+        "reload" => {
+            // A dropped tunnel is reconnected first, at once.
+            b.tunnel_now.set(true);
+            b.send(Command::History(HistoryStep::Reload));
+        }
         "media.freeze" => {
             let frozen = !b.frozen.get_untracked();
             b.frozen.set(frozen);
@@ -1959,7 +1971,19 @@ fn reader_view(b: Browser) -> Node {
                         })
                 });
                 let view = rich_intuituive::ImageView::new().pixels(b.pixels.get_untracked());
-                let picture = picture_of(move || shown_picture(b, node).map(|(p, _)| p), view);
+                let picture = picture_of(move || shown_picture(b, node).map(|(p, _)| p), view)
+                    // A click on a picture, a canvas or a frame reaches the
+                    // page where the pointer was in it (#819).
+                    .on_mouse(move |cx, mouse| {
+                        mouse.is_click()
+                            && click_media_at(
+                                b,
+                                node,
+                                mouse.precise(),
+                                (width.into(), rows.into()),
+                                cx,
+                            )
+                    });
                 row([picture.fixed(width), label("").flex(1)]).fixed(rows)
             }
             PieceKey::Controls(nodes) => web_widget(b, nodes),
@@ -2055,6 +2079,45 @@ fn click_row(b: Browser, row: usize, column: usize, cx: &mut Ctx) -> bool {
         }
         None => false,
     }
+}
+
+/// A click at `at` (fractional cells from the drawing's top left) of the
+/// media box `node` drawn in `cells` (columns, rows): a picture, a canvas,
+/// an SVG drawing or a frame is clicked in the page at that point, to the
+/// pixel when the terminal reports the mouse in pixels (#819), else at the
+/// cell's centre. Whether it was one of those.
+fn click_media_at(
+    b: Browser,
+    node: NodeId,
+    at: (f32, f32),
+    cells: (usize, usize),
+    _cx: &mut Ctx,
+) -> bool {
+    let target = b.page.with_untracked(|p| {
+        let page = p.as_ref()?;
+        let media = page.media.iter().find(|m| m.node == node)?;
+        let pointable = matches!(
+            media.kind,
+            MediaKind::Image | MediaKind::Canvas | MediaKind::Svg | MediaKind::Frame
+        );
+        pointable.then(|| (page.document, media.rect.width, media.rect.height))
+    });
+    let Some((document, width, height)) = target else {
+        return false;
+    };
+    let (x, y) = layout::point_in(width, height, cells.0, cells.1, at);
+    let id = b.send(Command::ClickAt {
+        document,
+        node,
+        x,
+        y,
+    });
+    b.after(id, |result, cx| {
+        if let Err(refusal) = result {
+            cx.toast(format!("[red]{}[/]", markup(&refusal.to_string())));
+        }
+    });
+    true
 }
 
 /// A click on the page's control `index`: what a link hint does.
@@ -2163,6 +2226,38 @@ fn projection_view(b: Browser) -> Node {
                     .collect(),
                 None => drawn,
             }
+        })
+        // A click on a picture, a canvas or a frame, not on a control, is
+        // the page's at that point of it (#819).
+        .on_mouse(move |cx, mouse| {
+            if !mouse.is_click() {
+                return false;
+            }
+            let (x, y) = mouse.precise();
+            let column = usize::from(mouse.column);
+            let target = b.layout.with_untracked(|l| {
+                let row = l.rows.get(&key).copied().unwrap_or(i);
+                let line = l.lines.get(row)?;
+                if layout::control_at(line, column).is_some() {
+                    return None;
+                }
+                let region = l
+                    .regions
+                    .iter()
+                    .find(|r| r.on(row) && (r.column..r.column + r.cols).contains(&column))?;
+                let at = (
+                    x - region.column as f32,
+                    (row - region.row) as f32 + (y - f32::from(mouse.row)),
+                );
+                Some((region.media, at, (region.cols, region.rows)))
+            });
+            let Some((media, at, cells)) = target else {
+                return false;
+            };
+            let node = b
+                .page
+                .with_untracked(|p| p.as_ref()?.media.get(media).map(|m| m.node));
+            node.is_some_and(|node| click_media_at(b, node, at, cells, cx))
         })
         .on_click_at(move |cx, column, _| {
             let row = b
@@ -2296,6 +2391,82 @@ fn video_pacing(config: &Config, images: Images) -> Pacing {
     Pacing::new(budget, Pacing::start_for(asked, Pixels::detect()))
 }
 
+/// How often the app looks at `--ssh`'s tunnel.
+const TUNNEL_LOOK: Duration = Duration::from_millis(500);
+/// The first wait before a dropped tunnel is reconnected, doubled after
+/// each failed try up to [`TUNNEL_WAIT_MAX`].
+const TUNNEL_WAIT: Duration = Duration::from_secs(2);
+const TUNNEL_WAIT_MAX: Duration = Duration::from_secs(30);
+
+/// The app's watch over `--ssh`'s tunnel: it says in the status bar what
+/// the tunnel does, and reconnects a dropped one after a wait that grows
+/// (without prompting: ssh's `BatchMode`), or at once on reload.
+struct TunnelWatch {
+    link: crate::ssh::TunnelLink,
+    host: String,
+    wait: Duration,
+    retry_at: Option<Instant>,
+}
+
+impl TunnelWatch {
+    fn new(link: crate::ssh::TunnelLink) -> TunnelWatch {
+        TunnelWatch {
+            host: link.host(),
+            link,
+            wait: TUNNEL_WAIT,
+            retry_at: None,
+        }
+    }
+
+    /// The status bar's words for `state`.
+    fn says(&self, state: &crate::ssh::TunnelState) -> String {
+        use crate::ssh::TunnelState;
+        let host = markup(&self.host);
+        match state {
+            TunnelState::Up => format!("[dim]via ssh {host}[/]"),
+            TunnelState::Connecting => format!("[yellow]ssh {host}: reconnecting…[/]"),
+            TunnelState::Down(why) => {
+                let left = self.retry_at.map_or(0, |at| {
+                    at.saturating_duration_since(Instant::now()).as_secs()
+                });
+                format!(
+                    "[red]ssh {host} dropped: {}[/] · retrying in {left} s (reload: now)",
+                    markup(why)
+                )
+            }
+        }
+    }
+
+    fn look(&mut self, b: Browser) {
+        use crate::ssh::TunnelState;
+        let mut state = self.link.check();
+        if let TunnelState::Down(_) = &state {
+            let now = Instant::now();
+            let retry_at = *self.retry_at.get_or_insert(now + self.wait);
+            if now >= retry_at || b.tunnel_now.get_untracked() {
+                self.retry_at = None;
+                self.wait = (self.wait * 2).min(TUNNEL_WAIT_MAX);
+                state = match self.link.reconnect() {
+                    Ok(()) => TunnelState::Connecting,
+                    Err(error) => TunnelState::Down(error.to_string()),
+                };
+            }
+        } else if state == TunnelState::Up {
+            self.wait = TUNNEL_WAIT;
+            self.retry_at = None;
+        }
+        if b.tunnel_now.get_untracked() {
+            b.tunnel_now.set(false);
+        }
+        let says = self.says(&state);
+        if b.tunnel
+            .with_untracked(|t| t.as_deref() != Some(says.as_str()))
+        {
+            b.tunnel.set(Some(says));
+        }
+    }
+}
+
 /// The browser app over `engine`.
 pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
     let Options {
@@ -2304,6 +2475,7 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
         url,
         view,
         images,
+        tunnel,
     } = options;
     let start_page = url.is_none() && config.home.is_none();
     let start = url
@@ -2414,7 +2586,14 @@ pub fn app(engine: Box<dyn Engine>, options: Options) -> App {
             encoder: signal(Rc::new(encoder)),
             regions_sent: signal((Vec::new(), Vec::new(), 1.0)),
             start: signal(false),
+            tunnel: signal(None),
+            tunnel_now: signal(false),
         };
+        if let Some(link) = tunnel.clone() {
+            let mut watch = TunnelWatch::new(link);
+            b.tunnel.set(Some(watch.says(&crate::ssh::TunnelState::Up)));
+            every(TUNNEL_LOOK, move |_| watch.look(b));
+        }
         spawn_stream(move |stream| {
             let proxy = stream.proxy().clone();
             while let Ok(update) = receive.recv() {

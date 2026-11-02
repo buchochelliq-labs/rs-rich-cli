@@ -492,6 +492,27 @@ pub struct Mouse {
     pub column: u16,
     pub row: u16,
     pub modifiers: Modifiers,
+    /// Where in its cell the pointer was, from a terminal that reports the
+    /// mouse in pixels (SGR-Pixels, mode 1016; #819); `None` from one that
+    /// reports cells. It is relative to the cell, not the screen, so it
+    /// stays right however the column and row are moved into a view's or
+    /// a node's own coordinates. [`precise`](Self::precise) reads it.
+    pub pixel: Option<Subcell>,
+}
+
+/// Where in a cell a pixel-precise mouse event was ([`Mouse::pixel`]): the
+/// pixel's offset from the cell's top left corner, and the cell's size in
+/// pixels.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Hash)]
+pub struct Subcell {
+    /// Pixels from the cell's left edge, below [`width`](Self::width).
+    pub x: u16,
+    /// Pixels from the cell's top edge, below [`height`](Self::height).
+    pub y: u16,
+    /// The cell's width in pixels, never 0.
+    pub width: u16,
+    /// The cell's height in pixels, never 0.
+    pub height: u16,
 }
 
 impl Mouse {
@@ -501,7 +522,73 @@ impl Mouse {
             column,
             row,
             modifiers: Modifiers::NONE,
+            pixel: None,
         }
+    }
+
+    /// A mouse event a terminal reported in pixels (SGR-Pixels, mode
+    /// 1016): `x` and `y` from the screen's top left, 0-based, in cells of
+    /// `cell` pixels (width, height). `None` for a cell size of 0.
+    ///
+    /// ```
+    /// use rich_interact::{Mouse, MouseKind, Button, Subcell};
+    ///
+    /// // 10 by 20 pixel cells: pixel (25, 47) is in column 2, row 2.
+    /// let mouse = Mouse::from_pixels(MouseKind::Down(Button::Left), 25, 47, (10, 20)).unwrap();
+    /// assert_eq!((mouse.column, mouse.row), (2, 2));
+    /// assert_eq!(mouse.pixel, Some(Subcell { x: 5, y: 7, width: 10, height: 20 }));
+    /// let (column, row) = mouse.precise();
+    /// assert_eq!(format!("{column:.2} {row:.2}"), "2.50 2.35");
+    /// ```
+    pub fn from_pixels(kind: MouseKind, x: u32, y: u32, cell: (u16, u16)) -> Option<Mouse> {
+        let (width, height) = cell;
+        if width == 0 || height == 0 {
+            return None;
+        }
+        let (w, h) = (u32::from(width), u32::from(height));
+        let cells = |at: u32, size: u32| u16::try_from(at / size).unwrap_or(u16::MAX);
+        Some(Mouse {
+            pixel: Some(Subcell {
+                x: (x % w) as u16,
+                y: (y % h) as u16,
+                width,
+                height,
+            }),
+            ..Mouse::new(kind, cells(x, w), cells(y, h))
+        })
+    }
+
+    /// Where the pointer was, in fractional cells (column, row) of the
+    /// same coordinates as [`column`](Self::column) and [`row`](Self::row):
+    /// to the pixel from a pixel-precise terminal, else the cell's centre
+    /// (`column + 0.5`, `row + 0.5`).
+    ///
+    /// ```
+    /// use rich_interact::{Mouse, MouseKind};
+    ///
+    /// assert_eq!(Mouse::new(MouseKind::Moved, 3, 1).precise(), (3.5, 1.5));
+    /// ```
+    pub fn precise(&self) -> (f32, f32) {
+        match self.pixel {
+            Some(p) if p.width > 0 && p.height > 0 => (
+                f32::from(self.column) + f32::from(p.x) / f32::from(p.width),
+                f32::from(self.row) + f32::from(p.y) / f32::from(p.height),
+            ),
+            _ => (f32::from(self.column) + 0.5, f32::from(self.row) + 0.5),
+        }
+    }
+
+    /// The same event read as a pixel report: a terminal with mode 1016 on
+    /// sends pixels where the column and row are, and a library that
+    /// parses SGR mouse reports (crossterm, termion, termwiz) reads them
+    /// as cells. `None` for a cell size of 0.
+    pub fn reread_as_pixels(self, cell: (u16, u16)) -> Option<Mouse> {
+        Mouse::from_pixels(self.kind, u32::from(self.column), u32::from(self.row), cell).map(
+            |read| Mouse {
+                modifiers: self.modifiers,
+                ..read
+            },
+        )
     }
 
     /// A press of the left button: the start of a click.
@@ -848,6 +935,7 @@ fn translate(event: crossterm::event::Event, exact: bool) -> Option<Event> {
             column: mouse.column,
             row: mouse.row,
             modifiers: modifiers(mouse.modifiers),
+            pixel: None,
         }),
         E::Resize(columns, rows) => Event::Resize { columns, rows },
         E::Paste(text) => Event::Paste(text),
