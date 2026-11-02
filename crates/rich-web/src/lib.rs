@@ -95,7 +95,10 @@
 //!   WebSocket to a localhost port, so the upgrade must come from this
 //!   server's own page (its address, which must also be the `Host` asked
 //!   for, against DNS rebinding) or from an origin allowed with
-//!   [`Server::allow_origin`].
+//!   [`Server::allow_origin`]. The `Host` must be one the server answers
+//!   to even when it is bound to every interface: the loopback addresses,
+//!   `localhost`, this machine's name, the address the connection arrived
+//!   on, and any [`Server::allow_host`] names.
 //! - **Sessions are capped** ([`DEFAULT_MAX_SESSIONS`] unless set with
 //!   [`Server::max_sessions`]); one more is refused with `503`.
 //! - **Requests are timed**: a connection has 10 seconds to send its whole

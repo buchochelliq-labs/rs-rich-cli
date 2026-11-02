@@ -139,8 +139,9 @@ struct Shared {
     compress: Option<usize>,
     origins: Vec<String>,
     title: String,
-    /// The `Host` values the server answers to (`None`: any).
-    hosts: Option<Vec<String>>,
+    /// The `Host` values the server answers to, besides each connection's
+    /// own address (`http::allowed_hosts`, then `allow_host`'s).
+    hosts: Vec<String>,
     /// Sessions running.
     sessions: AtomicUsize,
     /// Connections still sending their request.
@@ -349,6 +350,24 @@ impl Server {
             "a token is ASCII letters, digits, '-', '_', '.' and '~'"
         );
         self.shared.token = token;
+        self
+    }
+
+    /// Also answer to `host` (say `"box.lan"`, or `"box.lan:9000"`): a name
+    /// this machine is reached by that the server does not know itself. The
+    /// server's port is added unless `host` names one. The `Host` of a
+    /// WebSocket upgrade must be one the server answers to: its bound
+    /// address (with `localhost` for a loopback one), or, bound to all
+    /// interfaces, the loopback addresses, `localhost`, this machine's own
+    /// name and the address the connection arrived on; plus these. That is
+    /// what stops a page whose name was pointed here (DNS rebinding). The
+    /// token is still required.
+    #[must_use]
+    pub fn allow_host(mut self, host: impl AsRef<str>) -> Server {
+        let port = self.local_addr().port();
+        self.shared
+            .hosts
+            .extend(http::host_entries(host.as_ref(), port));
         self
     }
 
@@ -717,7 +736,11 @@ fn page(stream: &mut TcpStream, head: &Head, shared: &Shared) {
 
 /// Why an upgrade is refused, as a status and a message; `None` when it
 /// may go ahead.
-fn check_upgrade(head: &Head, shared: &Shared) -> Option<(&'static str, &'static str)> {
+fn check_upgrade(
+    head: &Head,
+    shared: &Shared,
+    local: Option<SocketAddr>,
+) -> Option<(&'static str, &'static str)> {
     if http::websocket_key(head).is_none() {
         return Some(("400 Bad Request", "Expected a WebSocket upgrade."));
     }
@@ -727,10 +750,12 @@ fn check_upgrade(head: &Head, shared: &Shared) -> Option<(&'static str, &'static
     {
         return Some(("403 Forbidden", "Wrong or missing token."));
     }
+    let mut hosts = shared.hosts.clone();
+    hosts.extend(local.map(http::connection_hosts).unwrap_or_default());
     if !http::origin_allowed(
         head.header("origin"),
         head.header("host"),
-        shared.hosts.as_deref(),
+        &hosts,
         &shared.origins,
     ) {
         return Some(("403 Forbidden", "This origin may not open a session."));
@@ -740,7 +765,7 @@ fn check_upgrade(head: &Head, shared: &Shared) -> Option<(&'static str, &'static
 
 /// Upgrade to a WebSocket and run a session on it, or refuse.
 fn websocket(mut stream: TcpStream, head: &Head, shared: &Arc<Shared>, pending: Pending) {
-    if let Some((status, why)) = check_upgrade(head, shared) {
+    if let Some((status, why)) = check_upgrade(head, shared, stream.local_addr().ok()) {
         let _ = http::refuse(&mut stream, status, why);
         return;
     }

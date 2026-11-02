@@ -110,9 +110,11 @@ data-encoding = { version = "2", optional = true }
 getrandom = { version = "0.4", optional = true }
 
 # A session's process: its memory and CPU limits (`setrlimit`) and ending its
-# process group, through safe calls (the crate keeps `unsafe_code = "deny"`).
+# process group, through safe calls (the crate keeps `unsafe_code = "deny"`);
+# `system` for this machine's name (`uname`), which a server bound to every
+# interface answers to.
 [target.'cfg(unix)'.dependencies]
-rustix = { version = "1", features = ["process"], optional = true }
+rustix = { version = "1", features = ["process", "system"], optional = true }
 
 # A session's process on Windows: a job object that ends it, and everything
 # it started, when the session ends or the server dies (kill on close),

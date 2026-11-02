@@ -266,6 +266,7 @@ Serving htop at http://127.0.0.1:8080/?token=9b1e4c…
 | `--port N` | `8080` | The port; `0` picks a free one. |
 | `--max-sessions N` | `8` | Programs (tabs) at once; one more is refused until one ends. |
 | `--allow-origin ORIGIN` | | Also accept the page from ORIGIN, where a reverse proxy serves it. Repeatable. |
+| `--allow-host HOST` | | Also answer to HOST (`box.lan`, `box.lan:9000`; the port is added unless given): a name this computer is reached by that it does not know as its own. Repeatable. |
 | `--compress` | off | Compress frames of 1 KiB or more with deflate, for pages that can undo it. Worth it over a slow link (frames shrink to 5 to 30% of their size); on this computer it only adds work. |
 
 Everything after `--` (or after the first word that is not an option) is
@@ -391,7 +392,11 @@ them do. The server is therefore closed by default:
   WebSocket to a localhost port, so the upgrade must come from this
   server's own page. That means `http://` plus the address the server is
   bound to (or `localhost` and its port), which must also be the `Host`
-  the request was sent to. This guards against DNS rebinding. It can also
+  the request was sent to. This guards against DNS rebinding. Bound to
+  every interface (`0.0.0.0`, `::`), the `Host` must still be one the
+  server answers to: the loopback addresses, `localhost`, this computer's
+  name (and `NAME.local`), the address the connection arrived on, or a
+  name allowed with `allow_host` (`rich serve --allow-host`). It can also
   come from an origin allowed with `allow_origin`. A request with no
   origin is refused.
 - **Sessions are capped.** One more than `max_sessions` is refused with

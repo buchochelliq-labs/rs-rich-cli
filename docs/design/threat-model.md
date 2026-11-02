@@ -292,8 +292,8 @@ process connects back to; `RS_RICH_WEB_SESSION`.
 |---|---|---|---|
 | E | Someone on the network opens a session | Listens on `127.0.0.1` by default; any other address prints a warning ([`serve.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-cli/src/serve.rs)) | verified |
 | S | A request without the printed address opens a session | A 128-bit token from the OS's random source, required by the page and the upgrade, compared in constant time ([`server.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-web/src/server.rs), [`http.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-web/src/http.rs), `same_token`) | verified |
-| S | Another site's page opens a WebSocket to the local port (cross-site WebSocket hijacking) | The `Origin` must be `http://` plus the `Host` the request was sent to, and that `Host` must be the bound address (or `localhost`) unless bound to all interfaces; or an origin given with `--allow-origin`. No origin, no session (`origin_allowed`) | verified |
-| S | DNS rebinding makes the attacker's name resolve to `127.0.0.1` | For a loopback or specific address, `Host` must be that address or `localhost` | verified |
+| S | Another site's page opens a WebSocket to the local port (cross-site WebSocket hijacking) | The `Origin` must be `http://` plus the `Host` the request was sent to, and that `Host` must be one the server answers to (the bound address or `localhost`; bound to all interfaces, the machine's names and addresses and `--allow-host` names); or an origin given with `--allow-origin`. No origin, no session (`origin_allowed`) | verified |
+| S | DNS rebinding makes the attacker's name resolve to `127.0.0.1` | For a loopback or specific address, `Host` must be that address or `localhost`; bound to all interfaces, one of the machine's names and addresses or an `allow_host` name (0.0.24) | verified |
 | T | The page is framed, or loads another site's script | CSP `default-src 'none'`, scripts and styles from itself, `connect-src` to itself, `frame-ancestors 'none'`, `X-Frame-Options: DENY`; xterm.js is vendored, nothing from a CDN; the title is HTML-escaped and the `Host` filtered before it enters the CSP | verified |
 | D | Slow or many connections, or many tabs | 10 seconds to send a request; 64 pending at most, then `503`; sessions capped (8 by default) | verified |
 | D | A huge frame or a flood of input | WebSocket messages and frames at most 1 MiB; terminal size bounded (`MAX_CELLS`); output backpressure (`max_buffered`) and 1 MiB of unread input | verified (limits), documented (backpressure) |
@@ -308,9 +308,16 @@ process connects back to; `RS_RICH_WEB_SESSION`.
   long as the server. Behind a reverse proxy, the proxy's logs need care.
   Consider moving the token to a cookie or the first WebSocket message after
   the page loads. **gap** (documented as "use a proxy with TLS").
-- **Bound to all interfaces,** any `Host` is accepted as long as the origin
-  matches it, so DNS rebinding is stopped by the token alone. **gap**
-  (low; the bind already warns).
+- **Bound to all interfaces,** any `Host` was accepted as long as the
+  origin matched it, so DNS rebinding was stopped by the token alone. The
+  server now keeps a `Host` allow-list there too: the loopback addresses,
+  `localhost`, the machine's name (and `NAME.local`), the address each
+  connection arrived on, and names given with `Server::allow_host` (`rich
+  serve --allow-host`)
+  ([`http.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-web/src/http.rs),
+  `allowed_hosts`, `connection_hosts`; tested in
+  [`serve.rs`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-web/tests/serve.rs)).
+  **mitigated** (0.0.24).
 - **Session processes inherit the server's whole environment,** secrets
   included; a served program can read them. Document it, or offer an
   allow-list. **gap** (low).

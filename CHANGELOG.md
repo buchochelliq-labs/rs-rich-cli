@@ -64,6 +64,13 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   not read (the chain is fetched again). Directories the marketplace
   creates (the install directory, package folders) are mode 700 on Unix:
   `rich_marketplace::create_private_dir_all` (new).
+- **`rich serve` keeps its `Host` check on every interface.** Bound to
+  `0.0.0.0` or `::`, rs-rich-web accepted any `Host` whose origin matched
+  it; it now answers only to the loopback addresses, `localhost`, the
+  machine's name (and `NAME.local`), the address each connection arrived
+  on, and names added with the new `Server::allow_host` or `rich serve
+  --allow-host HOST` (repeatable). Reaching the server by a LAN name it does
+  not know as its own now needs `--allow-host`.
 
 ### The docs on Zensical
 

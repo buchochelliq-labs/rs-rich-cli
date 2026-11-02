@@ -131,27 +131,107 @@ pub(crate) fn same_token(given: &str, expected: &str) -> bool {
 
 /// The `Host` values the server answers to, from the address it is bound
 /// to: for a loopback address, that address and `localhost`, with its port;
-/// for another address, that address; for an unspecified address (all
-/// interfaces), `None`: any host, as long as the origin matches it.
-pub(crate) fn allowed_hosts(local: SocketAddr) -> Option<Vec<String>> {
-    let port = local.port();
+/// for another address, that address. For an unspecified address (all
+/// interfaces), still a list, never any host: the loopback addresses,
+/// `localhost` and this machine's own name ([`machine_names`]), to which
+/// each connection adds the address it arrived on ([`connection_hosts`])
+/// and [`Server::allow_host`](crate::Server::allow_host) adds more. A name
+/// someone else's DNS points here (DNS rebinding) is none of these.
+pub(crate) fn allowed_hosts(local: SocketAddr) -> Vec<String> {
     let ip = local.ip();
-    if ip.is_unspecified() {
-        return None;
-    }
-    let mut names = vec![match ip {
-        IpAddr::V4(v4) => v4.to_string(),
-        IpAddr::V6(v6) => format!("[{v6}]"),
-    }];
-    if ip.is_loopback() {
-        names.push("localhost".into());
-    }
-    // Browsers leave HTTP's default port out of `Host` and the origin.
+    let names = if ip.is_unspecified() {
+        let mut names = vec![
+            "127.0.0.1".to_string(),
+            "[::1]".to_string(),
+            "localhost".to_string(),
+        ];
+        names.extend(machine_names());
+        names
+    } else {
+        let mut names = vec![ip_host(ip)];
+        if ip.is_loopback() {
+            names.push("localhost".into());
+        }
+        names
+    };
+    with_port(&names, local.port())
+}
+
+/// `names` with `:port`, and bare too on port 80: browsers leave HTTP's
+/// default port out of `Host` and the origin.
+fn with_port(names: &[String], port: u16) -> Vec<String> {
     let mut hosts: Vec<String> = names.iter().map(|name| format!("{name}:{port}")).collect();
     if port == 80 {
-        hosts.extend(names);
+        hosts.extend(names.iter().cloned());
     }
-    Some(hosts)
+    hosts
+}
+
+/// An address as a `Host` names it: IPv6 in brackets, an IPv4-mapped IPv6
+/// address (a v4 client of a socket bound to `::`) as the IPv4 one.
+fn ip_host(ip: IpAddr) -> String {
+    match ip {
+        IpAddr::V4(v4) => v4.to_string(),
+        IpAddr::V6(v6) => match v6.to_ipv4_mapped() {
+            Some(v4) => v4.to_string(),
+            None => format!("[{v6}]"),
+        },
+    }
+}
+
+/// The `Host` values for the address a connection arrived on (its local
+/// address): what a browser sends when it was given that address.
+pub(crate) fn connection_hosts(local: SocketAddr) -> Vec<String> {
+    with_port(&[ip_host(local.ip())], local.port())
+}
+
+/// The `Host` values for a name given to
+/// [`Server::allow_host`](crate::Server::allow_host): as given when it has
+/// a port (`name:8080`, `[::1]:8080`), else with the server's.
+pub(crate) fn host_entries(given: &str, port: u16) -> Vec<String> {
+    let given = given.trim().to_ascii_lowercase();
+    let has_port = match given.rsplit_once(':') {
+        Some((head, tail)) => {
+            !tail.is_empty()
+                && tail.bytes().all(|b| b.is_ascii_digit())
+                && (!head.contains(':') || head.ends_with(']'))
+        }
+        None => false,
+    };
+    if has_port {
+        vec![given]
+    } else {
+        with_port(&[given], port)
+    }
+}
+
+/// This machine's own name, as a browser on the network might be given it:
+/// its host name and, when that has no dot, `NAME.local` (mDNS). Names
+/// with anything but letters, digits, `-` and `.` are left out.
+pub(crate) fn machine_names() -> Vec<String> {
+    #[cfg(unix)]
+    let name = rustix::system::uname()
+        .nodename()
+        .to_string_lossy()
+        .into_owned();
+    #[cfg(windows)]
+    let name = std::env::var("COMPUTERNAME").unwrap_or_default();
+    #[cfg(not(any(unix, windows)))]
+    let name = String::new();
+    let name = name.trim().trim_end_matches('.').to_ascii_lowercase();
+    if name.is_empty()
+        || name == "localhost"
+        || !name
+            .bytes()
+            .all(|b| b.is_ascii_alphanumeric() || b == b'-' || b == b'.')
+    {
+        return Vec::new();
+    }
+    let mut names = vec![name.clone()];
+    if !name.contains('.') {
+        names.push(format!("{name}.local"));
+    }
+    names
 }
 
 /// Whether a WebSocket upgrade may come from `origin`, sent to `host`.
@@ -166,7 +246,7 @@ pub(crate) fn allowed_hosts(local: SocketAddr) -> Option<Vec<String>> {
 pub(crate) fn origin_allowed(
     origin: Option<&str>,
     host: Option<&str>,
-    hosts: Option<&[String]>,
+    hosts: &[String],
     extra: &[String],
 ) -> bool {
     let Some(origin) = origin else {
@@ -182,11 +262,7 @@ pub(crate) fn origin_allowed(
     let Some(host) = host else {
         return false;
     };
-    let host_allowed = match hosts {
-        Some(hosts) => hosts.iter().any(|h| h.eq_ignore_ascii_case(host)),
-        None => true,
-    };
-    host_allowed
+    hosts.iter().any(|h| h.eq_ignore_ascii_case(host))
         && origin
             .strip_prefix("http://")
             .is_some_and(|o| o.eq_ignore_ascii_case(host))
@@ -342,41 +418,91 @@ mod tests {
         let local: SocketAddr = "127.0.0.1:8080".parse().unwrap();
         assert_eq!(
             allowed_hosts(local),
-            Some(vec!["127.0.0.1:8080".into(), "localhost:8080".into()])
+            vec!["127.0.0.1:8080".to_string(), "localhost:8080".into()]
         );
         let v6: SocketAddr = "[::1]:8080".parse().unwrap();
         assert_eq!(
             allowed_hosts(v6),
-            Some(vec!["[::1]:8080".into(), "localhost:8080".into()])
+            vec!["[::1]:8080".to_string(), "localhost:8080".into()]
         );
         // On port 80 browsers send no port: both forms are this server.
         let lan: SocketAddr = "192.168.1.5:80".parse().unwrap();
         assert_eq!(
             allowed_hosts(lan),
-            Some(vec!["192.168.1.5:80".into(), "192.168.1.5".into()])
+            vec!["192.168.1.5:80".to_string(), "192.168.1.5".into()]
         );
         let local80: SocketAddr = "127.0.0.1:80".parse().unwrap();
-        let hosts = allowed_hosts(local80).unwrap();
+        let hosts = allowed_hosts(local80);
         assert!(origin_allowed(
             Some("http://127.0.0.1"),
             Some("127.0.0.1"),
-            Some(hosts.as_slice()),
+            &hosts,
             &[]
         ));
         assert!(origin_allowed(
             Some("http://localhost"),
             Some("localhost"),
-            Some(hosts.as_slice()),
+            &hosts,
             &[]
         ));
-        let all: SocketAddr = "0.0.0.0:80".parse().unwrap();
-        assert_eq!(allowed_hosts(all), None);
+    }
+
+    #[test]
+    fn every_interface_still_has_a_host_list() {
+        let all: SocketAddr = "0.0.0.0:8080".parse().unwrap();
+        let hosts = allowed_hosts(all);
+        for host in ["127.0.0.1:8080", "[::1]:8080", "localhost:8080"] {
+            assert!(hosts.iter().any(|h| h == host), "{host}: {hosts:?}");
+        }
+        for name in machine_names() {
+            assert!(hosts.contains(&format!("{name}:8080")), "{hosts:?}");
+        }
+        // A rebound name is not on it, though its origin matches its host.
+        assert!(!origin_allowed(
+            Some("http://evil.example:8080"),
+            Some("evil.example:8080"),
+            &hosts,
+            &[]
+        ));
+        // The address a connection arrived on is added for it, an IPv4
+        // client of `::` included.
+        let mut with_lan = hosts.clone();
+        with_lan.extend(connection_hosts("10.0.0.2:8080".parse().unwrap()));
+        assert!(origin_allowed(
+            Some("http://10.0.0.2:8080"),
+            Some("10.0.0.2:8080"),
+            &with_lan,
+            &[]
+        ));
+        assert!(!origin_allowed(
+            Some("http://evil.example"),
+            Some("10.0.0.2:8080"),
+            &with_lan,
+            &[]
+        ));
+        assert_eq!(
+            connection_hosts("[::ffff:10.0.0.2]:8080".parse().unwrap()),
+            ["10.0.0.2:8080"]
+        );
+        assert_eq!(
+            connection_hosts("[fd00::2]:80".parse().unwrap()),
+            ["[fd00::2]:80", "[fd00::2]"]
+        );
+    }
+
+    #[test]
+    fn allowed_hosts_take_the_port_unless_they_name_one() {
+        assert_eq!(host_entries("Box.LAN", 8080), ["box.lan:8080"]);
+        assert_eq!(host_entries("box.lan:9000", 8080), ["box.lan:9000"]);
+        assert_eq!(host_entries("[fd00::2]", 8080), ["[fd00::2]:8080"]);
+        assert_eq!(host_entries("[fd00::2]:9000", 8080), ["[fd00::2]:9000"]);
+        assert_eq!(host_entries("box", 80), ["box:80", "box"]);
     }
 
     #[test]
     fn origins_are_checked() {
-        let hosts = allowed_hosts("127.0.0.1:8080".parse().unwrap()).unwrap();
-        let hosts = Some(hosts.as_slice());
+        let hosts = allowed_hosts("127.0.0.1:8080".parse().unwrap());
+        let hosts = hosts.as_slice();
         let ok =
             |origin: Option<&str>, host: Option<&str>| origin_allowed(origin, host, hosts, &[]);
         // The server's own page.
@@ -404,19 +530,6 @@ mod tests {
             Some("anything"),
             hosts,
             &extra
-        ));
-        // Bound to every interface: any host, but the origin must match it.
-        assert!(origin_allowed(
-            Some("http://10.0.0.2:80"),
-            Some("10.0.0.2:80"),
-            None,
-            &[]
-        ));
-        assert!(!origin_allowed(
-            Some("http://evil.example"),
-            Some("10.0.0.2:80"),
-            None,
-            &[]
         ));
     }
 
