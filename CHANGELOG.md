@@ -235,6 +235,16 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   Errors are one line: no ssh, a refused login, a port taken. The new
   guide page "Over SSH" says when to use it and when to run Noctiluca on
   the remote; the threat model has its rows and its gaps.
+- **A terminal host client (#820):** rs-rich-interact's new, off-by-default
+  `host` feature has `rich_interact::host`: a `TerminalHost` that opens a
+  split beside the program, lists panes, finds a neighbour, types into a
+  pane and moves the focus. `SocketHost` speaks terminal-browser's socket
+  protocol (JSON lines, `hello` first, only the methods it lists);
+  `Tmux`, `WezTerm`, `Kitty` and `Zellij` adapt the terminals that do not;
+  `detect` picks one from the environment. Commands are passed as words
+  (tmux's quoted for its shell). Noctiluca's `--split DIR` opens the same
+  command line in a new pane beside this one and returns. Tested against a
+  fake socket server and a real tmux server.
 
 ## 0.0.23 cohort — published 2026-10-27
 

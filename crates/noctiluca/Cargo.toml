@@ -46,6 +46,9 @@ avif = ["rich-art/avif"]
 rich.workspace = true
 rich-embed = { workspace = true, features = ["chrome"] }
 rich-intuituive = { workspace = true, features = ["art"] }
+# `--split DIR`: open Noctiluca in a split of the terminal (its `host`
+# client, #820).
+rich-interact = { workspace = true, features = ["host"] }
 # Pictures: decoding, animations, the byte budget and its step down;
 # video frames' pacing and the protocol each region steps down to.
 rich-art = { workspace = true, features = ["frames"] }

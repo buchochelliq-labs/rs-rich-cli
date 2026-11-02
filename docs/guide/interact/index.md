@@ -783,6 +783,53 @@ cell's centre without pixels. `RICH_PIXEL_MOUSE=0` turns it off, and the
 restore turns 1016 off before the other mouse modes. `Mouse::from_pixels`
 builds one from a pixel position, for a backend or a test of your own.
 
+## The terminal host: splits, panes and focus
+
+Behind the `host` feature, `rich_interact::host` asks the terminal itself
+(or the multiplexer it runs in) to open a split beside the program, type
+into another pane, or move the focus: an app can open itself beside a
+coding agent, or hand it some text.
+
+```rust
+use rich_interact::host::{detect, Direction, Split};
+
+if let Some(host) = detect() {
+    let pane = host.split(&Split::new(Direction::Right, vec!["htop".into()]))?;
+    println!("opened {} in {}", pane.id, host.name());
+}
+```
+
+`detect` reads the environment, innermost first:
+
+| Host | Found by | What it can do |
+|---|---|---|
+| a terminal with terminal-browser's socket protocol (`SocketHost`) | `TERMINAL_BROWSER_TERMINAL_SOCKET` | what its `hello` lists |
+| tmux (`Tmux`) | `TMUX`, `TMUX_PANE` | splits, panes, neighbours, text, focus |
+| zellij (`Zellij`) | `ZELLIJ` | splits right and down |
+| WezTerm (`WezTerm`) | `WEZTERM_PANE` | splits, panes, text, focus |
+| kitty (`Kitty`) | `KITTY_WINDOW_ID`, with `allow_remote_control` on | splits right and down, text, focus |
+
+- **The socket protocol** is one JSON request a connection, ending in a
+  newline, and one JSON reply; `hello` first, which lists the terminal's
+  methods (`getCurrentPane`, `listPanes`, `neighbor`, `split`, `sendText`,
+  `pasteKey`, `focusPane`). A method it does not list is never sent: the
+  call fails with `HostError::Unsupported`, as it does for what an adapter
+  cannot do. An error reply is `HostError::Refused` with its reason.
+- **Commands are words, not shell lines.** A split's command is a list;
+  each adapter passes it as arguments, and tmux, which runs a pane's
+  command through a shell, gets each word quoted (`host::shell_quote`).
+- **Only this user's socket:** `SocketHost::connect` refuses a path that is
+  not a socket or is another user's.
+- **What it can do is real:** a split runs a command and `send_text` types
+  into a pane that may be a shell. Call them for what the user asked, never
+  for what a page, a file or a model's output says.
+
+Not verified here: the socket protocol's exact message shapes against
+terminal-browser's own implementation (the client reads `result` or the
+reply itself, and an `error` as a string or an object with a `message`),
+and the kitty, WezTerm and zellij adapters against those terminals (their
+arguments are unit tested; tmux is tested against a real server).
+
 ## Several at once: the event loop
 
 `EventLoop` runs several mounted components together:

@@ -45,6 +45,9 @@ pub struct Args {
     pub ssh: Option<String>,
     /// `--ssh-arg ARG`, repeatable: the user's own options for that ssh.
     pub ssh_args: Vec<String>,
+    /// `--split DIR`: open in a new pane of the terminal, beside this one
+    /// (`right`, `left`, `up`, `down`), and return.
+    pub split: Option<rich_interact::host::Direction>,
 }
 
 /// What the command line asks for.
@@ -84,6 +87,9 @@ usage: noctiluca [OPTIONS] [URL | FILE | KEYWORD WORDS…]
                                        through HOST (its localhost is localhost)
   --ssh-arg ARG                        an option for that ssh (repeatable:
                                        --ssh-arg=-p --ssh-arg=2222)
+  --split right|left|up|down           open in a new pane beside this one (tmux,
+                                       WezTerm, kitty, zellij, or a terminal with
+                                       terminal-browser's socket) and return
   --adapt -RULE,+RULE,…                switch terminal adaptations off or on
                                        (decorative-images, collapse-nav, …;
                                        ? while browsing lists them)
@@ -179,6 +185,12 @@ pub fn parse_args(args: &[String]) -> Result<Run, String> {
                 parsed.ssh = Some(host);
             }
             "--ssh-arg" => parsed.ssh_args.push(value_of(name, inline, &mut rest)?),
+            "--split" => {
+                let value = value_of(name, inline, &mut rest)?;
+                parsed.split = Some(rich_interact::host::Direction::parse(&value).ok_or_else(
+                    || format!("--split takes right, left, up or down, not {value:?}"),
+                )?);
+            }
             "--chrome" => parsed.chrome = Some(PathBuf::from(value_of(name, inline, &mut rest)?)),
             "--config" => parsed.config = Some(PathBuf::from(value_of(name, inline, &mut rest)?)),
             "--images" => {
@@ -239,6 +251,29 @@ pub fn adapt_of(
         adapt = crate::adapt::Adapt::none();
     }
     Ok(adapt)
+}
+
+/// The command line `args` without `--split` and its value: what the new
+/// pane runs.
+pub fn without_split(args: &[String]) -> Vec<String> {
+    let mut out = Vec::new();
+    let mut rest = args.iter();
+    while let Some(arg) = rest.next() {
+        if arg == "--" {
+            out.push(arg.clone());
+            out.extend(rest.cloned());
+            break;
+        }
+        if arg == "--split" {
+            rest.next();
+            continue;
+        }
+        if arg.starts_with("--split=") {
+            continue;
+        }
+        out.push(arg.clone());
+    }
+    out
 }
 
 /// `--name=value` as the name and the value.
@@ -312,6 +347,28 @@ mod tests {
         assert_eq!(args.ssh.as_deref(), Some("me@devbox"));
         assert_eq!(args.ssh_args, ["-p", "2222"]);
         assert_eq!(args.target, ["http://localhost:3000"]);
+    }
+
+    #[test]
+    fn split_opens_beside_with_the_rest_of_the_line() {
+        let Run::Browse(args) = parse(&["--split", "right", "--reader", "x.html"]).unwrap() else {
+            panic!()
+        };
+        assert_eq!(args.split, Some(rich_interact::host::Direction::Right));
+        assert!(
+            parse(&["--split=sideways"])
+                .unwrap_err()
+                .contains("right, left")
+        );
+        let line = |words: &[&str]| words.iter().map(|w| w.to_string()).collect::<Vec<_>>();
+        assert_eq!(
+            without_split(&line(&["--split", "right", "--reader", "x.html"])),
+            ["--reader", "x.html"]
+        );
+        assert_eq!(
+            without_split(&line(&["--split=down", "--", "--split"])),
+            ["--", "--split"]
+        );
     }
 
     #[test]

@@ -58,6 +58,7 @@ fn run(args: &[String]) -> std::io::Result<ExitCode> {
             Ok(())
         }
         Ok(Run::Keys { site, config }) => keys(site.as_deref(), config.as_deref()),
+        Ok(Run::Browse(parsed)) if parsed.split.is_some() => split(&parsed, args),
         Ok(Run::Browse(args)) => browse(args),
         Err(error) => {
             eprintln!("noctiluca: {error}\n\n{USAGE}");
@@ -65,6 +66,36 @@ fn run(args: &[String]) -> std::io::Result<ExitCode> {
         }
     };
     result.map(|()| ExitCode::SUCCESS)
+}
+
+/// `--split DIR`: the same command line, less `--split`, in a new pane of
+/// the terminal beside this one; this process returns at once.
+fn split(args: &Args, line: &[String]) -> std::io::Result<()> {
+    use rich_interact::host::{Split, detect};
+    let direction = args.split.expect("--split");
+    let host = detect().ok_or_else(|| {
+        std::io::Error::new(
+            std::io::ErrorKind::Unsupported,
+            "--split needs a terminal that can split: tmux, WezTerm, kitty (with remote \
+             control on), zellij, or one with terminal-browser's socket",
+        )
+    })?;
+    let mut command = vec![std::env::current_exe()?.display().to_string()];
+    command.extend(noctiluca::args::without_split(line));
+    let pane = host
+        .split(&Split::new(direction, command))
+        .map_err(|e| std::io::Error::other(format!("--split: {e} ({})", host.name())))?;
+    if pane.id.is_empty() {
+        eprintln!("noctiluca: opened {} in {}", direction.name(), host.name());
+    } else {
+        eprintln!(
+            "noctiluca: opened {} in {} (pane {})",
+            direction.name(),
+            host.name(),
+            pane.id
+        );
+    }
+    Ok(())
 }
 
 /// `noctiluca keys`: every action's keys, and a site's own.

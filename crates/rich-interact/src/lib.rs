@@ -104,6 +104,8 @@ pub mod event;
 pub mod event_loop;
 pub mod fuzzy;
 pub mod headless;
+#[cfg(all(feature = "host", not(target_arch = "wasm32")))]
+pub mod host;
 pub mod item;
 pub mod keymap;
 pub mod kit;

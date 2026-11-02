@@ -376,10 +376,27 @@ standard error.
   existing reader. A page sees only where it was clicked, inside the box
   clicked (`ClickAt`, kept inside the element's border box), which a
   click at the cell's centre already told it. **verified** (PTY tests).
-- **Terminal hosts' APIs (#820):** a client that talks to the terminal's
-  own control channel (kitty's or WezTerm's remote control, for example),
-  which can run commands in the terminal. It should use only the verbs it
-  needs, and only on the user's own terminal. **planned**.
+- **Terminal hosts' APIs (#820):** `rich_interact::host` talks to the
+  terminal's own control channel (terminal-browser's socket, tmux, kitty's
+  or WezTerm's remote control, zellij), which can run commands and type
+  into panes. What holds:
+  - **Commands are words:** every adapter runs its program with an
+    argument list, never `sh -c`; tmux, which hands a pane's command to a
+    shell, gets each word single-quoted (`shell_quote`, tested against
+    `sh` with `$(…)`, `;` and quotes). **verified**.
+  - **Only methods the terminal lists** in `hello` are sent; the rest fail
+    before anything is written. **verified** (a fake socket server).
+  - **Only this user's socket:** a path that is not a socket, or is
+    another user's, is refused; a reply is read up to 1 MB with a 5 s
+    timeout, and parsed by serde_json (no fuzz target of its own).
+    **verified**.
+  - **Who calls it:** Noctiluca only for `--split`, which runs its own
+    binary with the user's own command line. `send_text` is for #816's
+    "send to agent", and must stay a user's action, never driven by page
+    text. **to review with #816**.
+  - **`TERMINAL_BROWSER_TERMINAL_SOCKET` and `TMUX` come from the
+    environment:** whoever sets them already runs as the user.
+    **accepted**.
 - **`--ssh HOST` (#817):** Chrome and the profile stay on this machine;
   the SSH server carries every request and resolves every name, as a
   network would (HTTPS stays end to end; plain HTTP is readable there).
@@ -603,7 +620,9 @@ says, not in a public issue.
 - [ ] `--ssh`: the host never read as an option, the tunnel on loopback
       only, the port's owner checked, no direct DNS, WebRTC or QUIC (the
       live test with Chrome), and the shared-machine gap.
-- [ ] The terminal hosts' API client (#820), once it lands.
+- [ ] The terminal hosts' API client (#820): commands as words, tmux's
+      quoting, methods only from `hello`, the socket's owner, and that
+      `send_text` stays a user's action.
 - [ ] The pixel mouse (#819): pixel mode only with a known cell size, and
       `RICH_PIXEL_MOUSE=0` turns it off.
 
