@@ -50,11 +50,14 @@ accept a host key, as it always does; `Ctrl+C` stops waiting.
 ### What it means for privacy
 
 - The tunnel listens on `127.0.0.1` only: nothing on the network can use
-  it. Other users of **this** machine could connect to that port while it
-  runs and reach the remote's network as you. On a machine you share,
-  run Noctiluca on the remote instead. On Linux, Noctiluca checks the port
-  is ssh's own and refuses to start Chrome if another user's program took
-  it.
+  it. Its port is drawn at random each run, not handed out in order. On
+  Linux, Noctiluca checks the port is ssh's own and refuses to start
+  Chrome if another user's program took it.
+- **On a machine you share, run Noctiluca on the remote instead.** Chrome
+  only takes a proxy on a TCP port, and ssh's proxy asks for no password,
+  so another user of **this** machine who finds the port while the tunnel
+  runs can still reach the remote's network as you. The random port makes
+  it harder to find, not impossible.
 - WebRTC sends nothing past the tunnel, and QUIC is off, so no request
   leaves this machine directly.
 - The remote sees every request, as your network would. HTTPS is still
