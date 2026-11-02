@@ -3989,6 +3989,9 @@ impl App {
     /// the runtime notes nothing.
     fn sync_tracer(&self) {
         let on = !self.linear && self.inspector.as_ref().is_some_and(Inspector::tracing);
+        // A log console takes the trace while no inspector shows it.
+        #[cfg(feature = "tracing")]
+        let on = on || crate::log::console_tracing();
         self.runtime.tracer.set_on(on);
     }
 
@@ -4739,6 +4742,19 @@ impl App {
         }
         self.write_screenshots(screen);
         damage
+    }
+
+    /// Send the trace no inspector shows to a log console.
+    #[cfg(feature = "tracing")]
+    fn send_console_trace(&self) {
+        if crate::log::console_tracing() && !self.inspector.as_ref().is_some_and(Inspector::tracing)
+        {
+            let (events, gone) = self.runtime.tracer.take();
+            if !events.is_empty() {
+                let names = Names::of(self.layers.iter().map(|layer| &layer.root)).with(&gone);
+                crate::log::send_trace(crate::inspect::described(&events, &names));
+            }
+        }
     }
 
     /// Write the screenshots asked for since the last frame: `screen` as an
@@ -7205,6 +7221,8 @@ impl Driver {
         }
         self.app.refresh_hints();
         self.app.refresh_heading();
+        #[cfg(feature = "tracing")]
+        self.app.send_console_trace();
         let out = self.needs_render().then(|| {
             let mut out = String::new();
             if !self.started {

@@ -76,6 +76,15 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   `api/semver-breaks.toml`). The `files` plugin's `dir_tree(root)`
   (`.filter`, `.on_open`, `.view()`) loads folders off-thread on
   `tree_lazy`.
+- **A log console in another terminal** (#815): with the `tracing`
+  feature, `log::install_console()` (on when `INTUITUIVE_CONSOLE` is set),
+  `log::console_layer(path)`, `console_socket()`,
+  `default_console_socket()` and `Ctx::log(..)` send an app's `tracing`
+  events, and the inspector's trace, as JSON lines over a Unix socket. The
+  CLI's new `rich console [--socket PATH] [--trace] [-v] [-x TARGET]`
+  listens (socket 0600, never TCP) and prints them as `rich log` does; a
+  binary-boundary convenience (`docs/PORTING.md`). No new dependencies.
+  Windows is a documented no-op for now.
 
 ### The docs on Zensical
 

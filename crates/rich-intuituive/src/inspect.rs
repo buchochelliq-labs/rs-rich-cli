@@ -1747,6 +1747,15 @@ impl Names {
 }
 
 /// A trace line's kind and text for `event`.
+/// Trace events as the trace pane says them.
+#[cfg(feature = "tracing")]
+pub(crate) fn described(events: &[(Duration, Traced)], names: &Names) -> Vec<(TraceKind, String)> {
+    events
+        .iter()
+        .map(|(_, event)| describe(event, names))
+        .collect()
+}
+
 fn describe(event: &Traced, names: &Names) -> (TraceKind, String) {
     let used = |used: &Used| match used {
         Some((id, how)) => format!(" → {} {how}", names.get(*id)),
