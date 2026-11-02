@@ -144,20 +144,23 @@ kind needs the same explicit decision.
 
 ## `rich-cli` (tool — tracks upstream 1.8.1, see UPSTREAM.toml)
 
+Statuses checked on 2026-11-02 against the code, its tests and the rich-cli
+1.8.1 oracle (in a virtualenv of its own, for semantics only).
+
 | upstream feature | rust `crates/rich-cli/src/…` | status |
 |------------------|------------------------------|:------:|
-| arg parsing, plain-file print, capability demo | `lib.rs` | 🟡 |
-| rendering options (#542): `-h/--head`, `-t/--tail` (for source, CSV rows and notebook cells, keeping upstream's `--tail` arithmetic), `-n/--line-numbers`, `-g/--guides`, `--lexer`, `--emoji` (off by default, as upstream), `--soft`, `--no-wrap`, `-W/--max-width`, `-L/-C/-R/-F` (`--text-*`), `--rule-style`, `--rule-char`, `--force-terminal`, and the short aliases `-J -u -d -a -c -l -r -v`; help is `--help` only, since `-h` is `--head`. `-j`/`-x` keep this CLI's meanings (DIVERGENCES §34) | `lib.rs` + `cli_spec.rs` | 🟡 done; semantics checked against the rich-cli 1.8.1 oracle, `--soft` byte-identical to rich 15.0.0's `print(soft_wrap=True)` (`tests/rich_cli_options.rs`) |
-| `--rst` (rich-rst 2.2.0's `RestructuredText`, pinned in UPSTREAM.toml; 1.3.2 until 0.0.23) | `rich-ext/src/rst/` (`doctree.rs`, `parse.rs`, `transforms.rs`, `render.rs`) + `lib.rs` | 🟡 done for the reStructuredText subset in DIVERGENCES §35, docutils' transforms included; byte-identical to rich-rst 2.2.0 on rich 15.0.0 (`rich-ext/tests/rst.rs`, goldens from `scripts/capture_rst_golden.py`) |
-| `--print` / `--markdown` / `--json` / `--syntax` / `--csv` / `--rule`, width + justify, stdin, extension auto-detect | `lib.rs` | 🟡; highlighted with rich's `ReprHighlighter` alone, as upstream (since 0.0.23 rs-rich-ext's example `NumberHighlighter` is not installed on the rendering consoles) |
-| `csv`/`tsv` table render (blue border, numeric-column bold-green, quoted-field parse, `csv.Sniffer`) | `lib.rs` (table) + `rs-rich-data` `csv.rs` (sniffer and reader, moved from the CLI in 0.0.16) | 🟡 sniffer agrees with CPython's on 42/42 samples |
-| HTML export (`--export-html`) + SVG export (`--export-svg`) | `lib.rs` | 🟡 both done |
-| `--panel`/`--padding` decorators (+ title/caption/style), `--ipynb`, URL fetch (`fetch` feature) | `lib.rs` | 🟡 done; since 0.0.24 an `https://` to `http://` redirect is refused and a URL's content is sanitized by default (DIVERGENCES §50) |
-| paging (`--pager`) | `pager.rs` + `lib.rs` | 🟡 done |
-| preferred subcommands (`print`, `markdown`, `syntax`, `json`, `csv`/`tsv`, `ipynb`, `jsonl`, `log`, `gif`, `diff`, `image`, `rule`) while preserving flat flags | `lib.rs` | 🟡 done; `image` is a local rich-art convenience, and the tool commands (`inspect`, `ansi explain`, `view`, …) are listed under the conveniences below |
-| stable exit-code classes and `--report json` / `--machine-json` result/error envelopes | `lib.rs` | 🟡 done |
-| JSONL / NDJSON and structured-log streaming from files/stdin | `lib.rs` + `logs.rs` | 🟡 done; `rich log`'s filters, follow mode and groups are listed under the conveniences below |
-| 0.0.7 binary-boundary `--watch` polling for files and fetch-enabled URLs | `lib.rs` | 🟡 done; deliberate CLI convenience |
+| arg parsing, plain-file print, capability demo | `lib.rs` | 🟡 every one of rich-cli 1.8.1's 41 options is accepted (checked on 2026-11-02 against the 1.8.1 oracle's `--help`; `tests/rich_cli_options.rs`, `tests/cli.rs`, `scripts/smoke_cli.py`), `-j`/`-x` as DIVERGENCES §34 records. Not yet recorded in DIVERGENCES, so not 🟢: `--theme` names a config theme (the code theme is `--code-theme`; see the `--highlighter` row below), `--inspect` reads structured data rather than a Python object (reflection, §19), and with no arguments `rich` shows its capability demo where rich-cli prints its usage line |
+| rendering options (#542): `-h/--head`, `-t/--tail` (for source, CSV rows and notebook cells, keeping upstream's `--tail` arithmetic), `-n/--line-numbers`, `-g/--guides`, `--lexer`, `--emoji` (off by default, as upstream), `--soft`, `--no-wrap`, `-W/--max-width`, `-L/-C/-R/-F` (`--text-*`), `--rule-style`, `--rule-char`, `--force-terminal`, and the short aliases `-J -u -d -a -c -l -r -v`; help is `--help` only, since `-h` is `--head`. `-j`/`-x` keep this CLI's meanings (DIVERGENCES §34) | `lib.rs` + `cli_spec.rs` | 🟢 semantics checked against the rich-cli 1.8.1 oracle, `--soft` byte-identical to rich 15.0.0's `print(soft_wrap=True)` (`tests/rich_cli_options.rs`) |
+| `--rst` (rich-rst 2.2.0's `RestructuredText`, pinned in UPSTREAM.toml; 1.3.2 until 0.0.23) | `rich-ext/src/rst/` (`doctree.rs`, `parse.rs`, `transforms.rs`, `render.rs`) + `lib.rs` | 🟢 the reStructuredText subset in DIVERGENCES §35, docutils' transforms included; byte-identical to rich-rst 2.2.0 on rich 15.0.0 (`rich-ext/tests/rst.rs`, goldens from `scripts/capture_rst_golden.py`) |
+| `--print` / `--markdown` / `--json` / `--syntax` / `--csv` / `--rule`, width + justify, stdin, extension auto-detect | `lib.rs` | 🟢 highlighted with rich's `ReprHighlighter` alone, as upstream (since 0.0.23 rs-rich-ext's example `NumberHighlighter` is not installed on the rendering consoles); code colours are syntect's (DIVERGENCES §9, §18); `tests/cli.rs`, `tests/console_contract.rs` |
+| `csv`/`tsv` table render (blue border, numeric-column bold-green, quoted-field parse, `csv.Sniffer`) | `lib.rs` (table) + `rs-rich-data` `csv.rs` (sniffer and reader, moved from the CLI in 0.0.16) | 🟢 the sniffer is a port of `csv.Sniffer` (`sniff`, `has_header`), which agreed with CPython's on 42/42 samples when it was ported (a one-off comparison, not a test); `rs-rich-data`'s `csv` unit tests and the CLI's CSV cases in `tests/cli.rs` (#80's header guess) |
+| HTML export (`--export-html`) + SVG export (`--export-svg`) | `lib.rs` | 🟢 both, through core's `rich::export` and `rich::svg` (`tests/cli.rs`, `tests/hardening.rs`) |
+| `--panel`/`--padding` decorators (+ title/caption/style), `--ipynb`, URL fetch (`fetch` feature) | `lib.rs` | 🟢 since 0.0.24 an `https://` to `http://` redirect is refused and a URL's content is sanitized by default (DIVERGENCES §50); notebooks in `tests/cli.rs`, URLs in `tests/url_fetch.rs` |
+| paging (`--pager`) | `lib.rs` | 🟢 through core's `rich::pager::SystemPager` (`tests/pager_v8.rs`) |
+| preferred subcommands (`print`, `markdown`, `syntax`, `json`, `csv`/`tsv`, `ipynb`, `jsonl`, `log`, `gif`, `diff`, `image`, `rule`) while preserving flat flags | `lib.rs` | 🟢 not upstream (rich-cli has no subcommands); `image` is a local rich-art convenience, and the tool commands (`inspect`, `ansi explain`, `view`, …) are listed under the conveniences below |
+| stable exit-code classes and `--report json` / `--machine-json` result/error envelopes | `lib.rs` | 🟢 not upstream: rich-cli exits 255 on its own usage errors, this CLI 2 (DIVERGENCES §34); `tests/cli.rs`, `scripts/smoke_cli.py`'s `exit-*` and `report-*` cases |
+| JSONL / NDJSON and structured-log streaming from files/stdin | `lib.rs` + `logs.rs` | 🟢 not upstream (`tests/log_stream.rs`); `rich log`'s filters, follow mode and groups are listed under the conveniences below |
+| 0.0.7 binary-boundary `--watch` polling for files and fetch-enabled URLs | `lib.rs` | 🟢 a deliberate CLI convenience, not upstream (`tests/watch_multi.rs`, `tests/cli.rs`) |
 
 ### Binary-boundary conveniences (not upstream `rich-cli`)
 
@@ -375,3 +378,131 @@ workspace, file and terminal helpers a client answers the agent with. It
 depends on no crate of ours and has no terminal code; Cornacai (#794)
 builds on it. Core is unchanged and no golden fixture covers it. See
 [the design note](design/cornacai.md).
+
+## The stable set outside core (not upstream)
+
+The packages that go to 1.0.0 with core ([the plan to 1.0.0](plans/1.0.0.md#what-100-covers))
+port nothing: Python `rich` has no counterpart, so there is no golden
+fixture and no row to mirror. These tables say what each one offers, how
+far it is, and what tests it. Status, here: 🟢 shipped and tested ·
+🟡 shipped, with the gaps named · ⬜ planned. The CLI's table is the
+`rich-cli` one above, with its conveniences. Checked on 2026-11-02.
+
+### rs-rich-plugin-api
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| the Rust contract | `Plugin`, `PluginRegistrar` and its capabilities (highlighters, code highlighters, themes, box styles, renderers, fences, transforms, actions, components), `PLUGIN_API_VERSION` | 🟢 | `tests/external_plugin.rs` (a third-party plugin against public items only) |
+| linked plugins | `export_plugin!`, collected at link time, sorted by id | 🟢 | `tests/linked.rs`; rs-rich-ext's `linked_plugins*.rs` |
+| the runtime ABI | `abi`: the text-only ABI 1.0 for native and WASM plugins, `export_dylib_plugin!`, the WASM exports, `is_supported` | 🟢 | the unit tests; rs-rich-ext's `wasm_plugins.rs`, `dylib_plugins.rs` and `wasm_plugin_template.rs` (the template built for wasm32 and loaded) |
+| plugin components | `component`: `PluginComponent`, its events, views and bindings | 🟢 | `tests/external_plugin.rs`; rs-rich-interact's `plugin_component.rs` |
+| the dependency rule | depends on core and `inventory` only | 🟢 | `tests/dependencies.rs` |
+
+### rs-rich-macros
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| checked markup | `richf!`, `markup!`, `style!`, `theme_key!` and the print macros, checked with core's own parsers at compile time | 🟢 | rs-rich-ext's `tests/macros.rs` and its `trybuild` cases (`tests/ui`) |
+| derives | `#[derive(Rich)]`, and `#[derive(Inspect)]` for `inspect` (0.0.24) | 🟢 | rs-rich-ext's `tests/macros.rs`, `tests/inspect.rs` |
+
+### rs-rich-ext
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| the extension registry and plugin hosting | `ExtensionRegistry`, linked plugins, native and sandboxed WASM loading (`dylib-plugins`, `wasm-plugins`) | 🟢 | `wasm_plugins.rs`, `dylib_plugins.rs`, `linked_plugins*.rs`, `wasm_plugin_template.rs`, `conflicts.rs`, the `plugin_wasm` fuzz target |
+| diagnostics, logging and tracing | diagnostics, stack traces, `log` and `tracing` adapters, spans | 🟢 | `diagnostics.rs`, `diagnostic_model.rs`, `stacktrace.rs`, `tracing_spans.rs`, `tracing_channel.rs` |
+| live output and layout | live regions, frames and cell diffs, targets, positioned drawing | 🟢 | `live_regions.rs`, `live_cell_diff.rs`, `live_terminal.rs`, `live_graphics.rs`, `frame_*.rs`, `layout.rs`, `targets.rs` |
+| data, documents and sources | structured data, schemas, documents (Org, AsciiDoc, man), reStructuredText, SQL, dependency graphs | 🟢 | `data.rs`, `schemas.rs`, `documents.rs`, `rst.rs` (byte-identical to rich-rst 2.2.0), `sources.rs`, `deps_reports.rs` |
+| renderables | charts, tables, badges, workflows, diffs and test reports, KPIs, QR codes, `inspect` | 🟢 | `charts*.rs`, `tables.rs`, `virtual_tables.rs`, `badges.rs`, `workflow.rs`, `diff.rs`, `kpi.rs`, `qr.rs`, `inspect.rs` |
+| QA and accessibility | snapshots, the conformance kit, capabilities and fidelity, accessibility checks, ANSI explain | 🟢 | `qa.rs`, `snapshots.rs`, `conformance.rs`, `capabilities.rs`, `a11y.rs`, `ansi_explain.rs` |
+
+Each area has its page in [the guide](guide/ext/index.md).
+
+### rs-rich-marketplace
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| keys and the index | `KeySet` and its generations, `verify_index` (signature, serial, rollback, expiry) | 🟢 | `tests/marketplace.rs`, with test keys in `tests/fixtures/keys` |
+| listings and resolution | `read_listing`, the rules beyond the schema, `resolve` with the plugin API's own checks | 🟢 | `tests/marketplace.rs`; the CLI's `plugin_marketplace.rs` and CI's compatibility job |
+| installing and loading | `Installer` over HTTPS through a `Transport`, checks by kind, the lockfile | 🟢 | `tests/marketplace.rs`, `tests/https_trust.rs` (the system store first) |
+
+### rs-rich-art
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| banners | FIGlet fonts, `animate` effects (0.0.24) | 🟢 | `tests/figlet_parity.rs` (byte parity with pyfiglet 1.0.4, `tests/golden/figlet.tsv`) |
+| images | ASCII, Braille, half blocks, quadrants, Sixel, Kitty, iTerm2; colour, transforms, AVIF and WebP | 🟢 | `image_modes.rs`, `image_color.rs`, `transforms.rs`, `alpha_backgrounds.rs`, `native_sizing_edges.rs`, `raster_acceptance.rs`, `avif.rs`, `webp.rs` |
+| GIFs and image diffs | animated GIFs, perceptual image diffs | 🟢 | `imagediff_parity.rs` (against the Python oracle) |
+
+### rs-rich-micro
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| assets and packages | `MicroAsset`, `.richmicro` packages read under hard limits, `create` | 🟢 | `tests/package.rs` |
+| the registry | layers (built-in < user < trusted project < inline), aliases, collisions, `explain` | 🟢 | `tests/registry.rs`, `tests/builtin.rs` |
+| markup and layout | `:micro:name:` in markup, text and Markdown; two-row assets | 🟢 | `tests/markup.rs`, `tests/rows.rs`, `tests/layout.rs` |
+| terminal graphics | Kitty, iTerm2, Sixel, half blocks or text, chosen per terminal; the cache | 🟢 | `tests/graphics.rs`, `tests/pty.rs` |
+
+### rs-rich-record
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| tapes | the tape language, a run on a real PTY with a pinned environment, a VT emulator | 🟢 | `tests/record.rs`, `tests/playground_tape.rs`; every tape in the docs is checked with `rich record --check` in CI |
+| outputs | PNG, SVG and text screenshots; asciinema casts; GIF, APNG and MP4; an HTML player | 🟢 | `tests/record.rs`, `tests/kitty_raw.rs`, `tests/surface_on_a_terminal.rs` |
+| audio | a recording's sound | 🟢 | `tests/audio.rs` |
+
+### rs-rich-interact
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| components and drivers | `Component`, blocking `run` and the `EventLoop`; the non-terminal policy | 🟢 | `event_loop.rs`, `compose.rs`, `push.rs` |
+| the session | raw mode, alternate screen, mouse (SGR-Pixels, 0.0.24), paste and hand-off, restored on every exit; crossterm, termion or termwiz | 🟢 | `pty*.rs` (on a real PTY), `mouse_actions.rs`, `host.rs` |
+| the components | pickers, inputs, forms, pagers, explorers, approval queues, overlays | 🟢 | `pickers.rs`, `select.rs`, `input_confirm.rs`, `form_*.rs`, `explore*.rs`, `overlays.rs`, `approve_jump.rs`, `wide_tables.rs` |
+| keys and editing | keymaps and rebinding, the text buffer, vim keys | 🟢 | `rebind*.rs`, `edit_under_load.rs` |
+
+### rs-rich-intuituive
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| the framework | signals, the retained tree, layout, focus, the cell screen and its paint strategies, screens and pop-ups, tasks | 🟢 | 131 test files under `tests/`, among them `app.rs`, `layout.rs`, `flex*.rs`, `driver.rs`; the `versus_ratatui` and `paint_bench` gates |
+| widgets | the [widget index](guide/intuituive/widget-index.md): lists, tables, trees, tabs, inputs, text editing, controls, charts, Markdown, logs, a diff view (#799) | 🟡 Textual parity's remaining gaps (#803, #805, #807 to #815) are 0.0.24's waves 2 and 3: [the audit](design/textual-parity.md#prioritised-gaps) | per widget, e.g. `components.rs`, `controls.rs`, `list_*.rs`, `table*.rs`, `markdown_stream.rs`, `log_view.rs` |
+| themes and keymaps | stylesheets, a semantic theme with Textual's palettes (#801), user keymaps (#806) | 🟡 stylesheet coverage (#812) is wave 3 | `colors.rs`, `bindings.rs`, `keys.rs` |
+| plugins | `art`, `pcm`/`audio`, `wav`, `watch`, `files`, `archive`, `viz`, `micro` | 🟢 | `files*.rs`, `audio_*.rs`, `charts*.rs`, `music.rs` |
+| testing and the inspector | a headless driver, snapshots, the inspector | 🟡 Pilot-style helpers (#810) and SVG snapshots (#809) are wave 2 | `inspector.rs`, `driver.rs` |
+
+### rs-rich-embed
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| a terminal pane | `PtyHost`, `LocalPty` (PTY or ConPTY), `ReplayHost`, scrollback | 🟢 | `tests/local_pty.rs`, `tests/pane.rs`, `tests/end_all.rs` |
+| a web view | `WebEngine`: a terminal browser in a pane by default, Chrome over DevTools (`chrome`), Browsh (`browsh`) | 🟢 | `tests/web.rs`, `tests/chrome.rs` (live, in CI's browser job), `tests/browsh.rs` |
+
+### noctiluca
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| reading pages | Chrome's layout drawn in cells, links, forms and controls, the mouse (#819) | 🟡 [known limits](guide/noctiluca/status.md#known-limits-in-0023): one tab, no fixed or sticky layer, inline SVG, canvas and frames as alt text | `app.rs`, `layout.rs`, `model.rs`, `mouse.rs`, `pixel_mouse.rs`, `settle.rs`, the snapshots |
+| pictures, video and sound | images and GIFs, video at up to 30 frames a second, audio | 🟢 | `pictures.rs`, `images.rs`, `video*.rs`, `audio.rs` |
+| live logs, SSH, split | live logs, `--ssh HOST` (#817), `--split` (#820) | 🟢 | `live*.rs`, `logs.rs`, `ssh.rs`, `split.rs` |
+| the start page | `about:noctiluca` and the animated banner | 🟢 | `start.rs`, `start_still.rs` |
+
+### rs-rich-acp
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| the protocol | ACP version 1 over JSON-RPC on an agent's standard streams: `Connection`, typed messages, the `Client` trait | 🟢 | `tests/replay.rs`, replaying `tests/fixtures/claude_agent.jsonl` (a real agent's turn, recorded on 2026-11-02) |
+| the client's answers | `Workspace`, `fs` and `Terminals`, inside the session's roots, offered only when asked | 🟢 | `tests/replay.rs` and the unit tests |
+
+### cornacai
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| the app | a terminal client for coding agents on rs-rich-acp and intuiTUIve ([the design note](design/cornacai.md)) | ⬜ #794's phases 3 and 4, 0.0.24's wave 3; not yet a crate | — |
+
+### `rs-rich` on PyPI (crates/rich-py)
+
+| area | what it offers | status | tests |
+|---|---|:---:|---|
+| the core | `rs_rich`'s console, text, styles, tables, panels, live displays, protocol | 🟢 | `test_console.py`, `test_text*.py`, `test_style.py`, `test_table.py`, `test_panel.py`, `test_live.py`, `test_protocol.py`, `test_compat.py` |
+| the extensions | ext, art, micro, diagrams, data, plugins, the CLI | 🟢 | `test_ext*.py`, `test_art.py`, `test_micro.py`, `test_diagram.py`, `test_data.py`, `test_plugins.py`, `test_cli.py` |
+| apps | `rs_rich.interact` and `rs_rich.tui` | 🟡 `rs_rich.tui` and the other wrappers of 0.x crates stay provisional, outside the promise ([the plan](plans/1.0.0.md#what-100-covers)) | `test_interact*.py`, `test_tui*.py` |

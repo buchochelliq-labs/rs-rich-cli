@@ -141,6 +141,24 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   plain text. A log holding one draws its rows in full and scrolls by
   entries, and still follows its end.
 
+### The call for a community plugin (docs, templates, wave 2, WS10)
+
+- **`templates/wasm-plugin/`**, a cargo-generate template for a sandboxed
+  WASM plugin in Rust: a crate with no dependencies whose module imports
+  nothing, its manifest read from the package's name and version, three
+  example capabilities (a `title-case` transform, a `todo` highlighter, a
+  `callout` fence), a `cargo wasm` alias and a release workflow that
+  attaches the module to a tag's GitHub release. rs-rich-ext's
+  `tests/wasm_plugin_template.rs` expands it, runs its unit tests, builds
+  it for `wasm32-unknown-unknown` and loads the module in the sandbox, as
+  `--plugin` and `rich plugin install` do; CI's "WASM plugins (release)"
+  job installs the target and requires the test to run. The maintainer
+  makes a GitHub template repository from it.
+- **A guide page, [Write a plugin](docs/guide/write-a-plugin.md):** from
+  the template to a build, a try with `rich --plugin`, a listing written
+  by `rich plugin publish` and a pull request to the marketplace, with
+  what the host enforces and how the plugin's version and the ABI relate.
+
 ### intuiTUIve: Cornacai's parity items (wave 1, WS2)
 
 - **`Node::follow_end` and `follow_end_with(signal)`** (#798), on `scroll`

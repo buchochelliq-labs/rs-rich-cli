@@ -241,6 +241,12 @@ or linked with `export_plugin!`, and `rich plugins list` shows it as
   `rich_plugin_manifest` and `rich_plugin_call` (see `abi::wasm`) and imports
   nothing. See the hand-written
   [`examples/wasm/shout.wat`](https://github.com/buchochelliq-labs/rs-rich-cli/blob/main/crates/rich-plugin-api/examples/wasm/shout.wat).
+  To write one in Rust, start from the template,
+  [`templates/wasm-plugin/`](https://github.com/buchochelliq-labs/rs-rich-cli/tree/main/templates/wasm-plugin)
+  (0.0.24): a crate with no dependencies whose module the host loads, built
+  and loaded by rs-rich-ext's `tests/wasm_plugin_template.rs`. The guide,
+  [Write a plugin](guide/write-a-plugin.md), goes from the template to a
+  listing on the marketplace.
 
 The ABI is versioned separately from `PLUGIN_API_VERSION`: it is
 `abi::ABI_MAJOR.abi::ABI_MINOR`, 1.0. A host refuses a plugin built for
