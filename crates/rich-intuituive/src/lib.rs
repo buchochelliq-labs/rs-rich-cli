@@ -103,6 +103,7 @@ mod builtin;
 mod calendar;
 mod clock;
 mod collapsible;
+mod commands;
 pub mod command_line;
 pub mod complete;
 mod controls;
@@ -204,6 +205,7 @@ pub use big_text::big_text;
 pub use bindings::{ModePage, Scaled, Stepped};
 pub use border::{Border, BorderSet, Edge, Shadow, Sides};
 pub use collapsible::{Status, collapsible, collapsible_with};
+pub use commands::{Hit, HitSink, Provider, SystemCommands, Themes};
 pub use command_line::{CommandLine, CommandLineOptions, command_line, command_line_with};
 pub use complete::{
     CompleteOptions, Completion, InputHistory, complete_words, history_file, history_in,

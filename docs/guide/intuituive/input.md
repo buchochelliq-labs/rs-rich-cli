@@ -460,6 +460,46 @@ and no key reaches the screen beneath while it is open.
 })
 ```
 
+### Providers and system commands
+
+The palette also lists the app's **system commands**, after Textual's:
+*Theme* (a picker of the built-in themes), *Keys* (shows or hides the
+`key_panel()`, or opens the help when there is none), *Maximize* or
+*Minimize* (the focused pane), *Screenshot* and *Quit*.
+`App::system_commands(SystemCommands::default().without("quit"))` turns
+one off, and `SystemCommands::none()` all of them.
+
+A **`Provider`** adds hits of its own (files, symbols, sessions): its
+`discover()` gives the hits shown before anything is typed, and its
+`search(query, sink)` sends a `Hit` for each match to the sink. A hit has
+an id, a label, a help line, a shortcut, a score and the characters to
+highlight, and a closure that runs once the palette closes;
+`Hit::matching(query)` scores and highlights it with the palette's fuzzy
+match. The palette merges every hit by score as it arrives. A slow search
+moves to a thread of its own with `sink.background(|sink| …)`; typing again
+cancels it (`sink.cancelled()` turns true, and what it sends after is
+dropped), and an app that waits for its tasks waits for it.
+
+```rust
+struct Colours;
+impl Provider for Colours {
+    fn name(&self) -> &str { "colour" }
+    fn search(&self, query: &str, sink: &HitSink) {
+        for name in ["red", "green", "blue"] {
+            let hit = Hit::new(name, name, move |cx| cx.toast(name));
+            if let Some(hit) = hit.matching(query) {
+                sink.send(hit);
+            }
+        }
+    }
+}
+
+App::new(build).provider(Colours).palette_key("ctrl+p")
+```
+
+`cx.palette_of(provider)` opens a palette of one provider alone, as
+*Theme* opens one of `Themes`.
+
 ### Bindings in a state, sections and help options
 
 ```rust

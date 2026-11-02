@@ -111,7 +111,7 @@ from an off-by-default feature name it: `art`, `micro`, `viz`, `files` and
 | ![](../../assets/intuituive/widgets/pick.svg){ .tui-icon width="20" } | [pick](screens.md#pop-ups) | `cx.pick` | A list in a pop-up, picked with a key |
 | ![](../../assets/intuituive/widgets/confirm.svg){ .tui-icon width="20" } | [confirm](screens.md#confirming) | `cx.confirm` | A yes-or-no question |
 | ![](../../assets/intuituive/widgets/context_menu.svg){ .tui-icon width="20" } | [context_menu](screens.md#menus) | `context_menu`, `open_menu` | A menu at the pointer or an anchor |
-| ![](../../assets/intuituive/widgets/palette.svg){ .tui-icon width="20" } | [palette](input.md#the-command-palette-and-help) | `cx.palette`, `cx.action_palette`, `action_overlay` | Every command, or actions of your own, found by typing, live while open |
+| ![](../../assets/intuituive/widgets/palette.svg){ .tui-icon width="20" } | [palette](input.md#the-command-palette-and-help) | `cx.palette`, `cx.palette_of`, `Provider`, `SystemCommands`, `cx.action_palette`, `action_overlay` | Every command, the system commands, providers' hits as they arrive, or actions of your own, found by typing, live while open |
 | ![](../../assets/intuituive/widgets/help.svg){ .tui-icon width="20" } | [help](input.md#the-command-palette-and-help) | `cx.help` | The bindings, listed by section |
 | ![](../../assets/intuituive/widgets/toast.svg){ .tui-icon width="20" } | [toast](screens.md#toasts-and-animations) | `cx.toast` | A short message that goes away on its own |
 | ![](../../assets/intuituive/widgets/notify.svg){ .tui-icon width="20" } | [notify](screens.md#toasts-and-animations) | `cx.notify` | A notification with a level and a title |

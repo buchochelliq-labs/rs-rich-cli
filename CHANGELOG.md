@@ -72,6 +72,27 @@ The format loosely follows [Keep a Changelog](https://keepachangelog.com/).
   --allow-host HOST` (repeatable). Reaching the server by a LAN name it does
   not know as its own now needs `--allow-host`.
 
+### intuiTUIve: palette providers, a Markdown viewer, stylesheet coverage (wave 3, #803, #805, #812)
+
+- **Command palette providers (#803).** A `Provider` (`name`, `discover`,
+  `search(query, &HitSink)`) adds `Hit`s to the palette, registered with
+  `App::provider`. A hit has an id, a label, a help line, a shortcut, a
+  score, the characters to highlight and a closure run once the palette
+  closes; `Hit::matching(query)` scores and highlights it with
+  rs-rich-interact's fuzzy match. The palette lists the focused path's
+  bindings at once and merges each provider's hits by score as they
+  arrive; `HitSink::background` moves a slow search to a thread of its
+  own, and the next query cancels it (`HitSink::cancelled`, and what it
+  sends after is dropped). `cx.palette_of(provider)` opens a palette of
+  one provider alone.
+- **System commands (#803).** The palette offers Textual's system
+  commands: *Theme* (a picker of the built-in `Themes`), *Keys* (shows or
+  hides the `key_panel`, or opens the help), *Maximize* or *Minimize*,
+  *Screenshot* and *Quit*. `App::system_commands(SystemCommands)` turns
+  them off one by one (`without`, `with`, `none`). The palette's rows now
+  show a hit's help line, and its footer counts the hits listed (and says
+  when a search is still running).
+
 ### intuiTUIve: maximize, modes, Pilot helpers, screenshots and more (#807 to #815)
 
 - **Maximize a pane** (#807): `Node::maximizable()` and
